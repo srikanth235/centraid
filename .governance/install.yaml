@@ -1,0 +1,19 @@
+version: "3"
+generated_at: 2026-05-07T13:27:27Z
+owner: srikanth235
+repo: centraid
+hook_strategy: githooks
+constitution: true
+ci_workflow: .github/workflows/governance.yml
+tests_dir: .governance
+agents_md_directive: true
+agents_md_created: true
+setup_clone_script: scripts/setup-clone.sh
+install_assets_seeded:
+  - QUALITY.md
+  - COSTS.md
+  - STEERING.md
+  - .github/ISSUE_TEMPLATE/bug.yml
+  - .github/ISSUE_TEMPLATE/config.yml
+  - .github/ISSUE_TEMPLATE/proposal.yml
+collisions: []

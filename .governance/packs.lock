@@ -1,0 +1,18 @@
+version: '2'
+packs:
+- id: governance-kit/core
+  version: '0.2'
+  source: builtin
+  directives:
+  - agent-steering-accounting
+  - agent-token-accounting
+  - commit-issue-receipt-match
+  - commit-message-format
+  - issue-templates
+  - issues-tracked
+  - no-broken-internal-doc-links
+  - no-orphan-todos
+  - receipt-per-issue
+  - repo-hygiene
+  - required-docs
+  - secrets-hygiene

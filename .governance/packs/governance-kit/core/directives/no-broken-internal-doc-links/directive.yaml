@@ -1,0 +1,6 @@
+# no-broken-internal-doc-links — Markdown links to local paths resolve.
+category: SystemOfRecord
+recommended: true
+summary: Markdown links to local paths resolve.
+surface: repo-state
+hook: pre-commit

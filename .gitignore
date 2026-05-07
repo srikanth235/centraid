@@ -1,0 +1,9 @@
+node_modules
+dist
+out
+.turbo
+.expo
+.DS_Store
+*.log
+.meridian-cache
+.env
