@@ -15,7 +15,16 @@ See the **Compliance** section of [CONSTITUTION.md](CONSTITUTION.md) for the ful
 
 ## What this repo is
 
-<!-- TODO(@you): Replace this placeholder. Describe what the repo does, the top-level layout (apps/, packages/), and the runtime stack (bun, turbo). The required-docs directive enforces 30-250 lines and ≥ 3 internal doc links here. -->
+Centraid is a personal app builder shipped as two surfaces — an Electron desktop app under [`apps/desktop`](apps/desktop) and an Expo mobile app under [`apps/mobile`](apps/mobile). Both surfaces share visual identity through [`packages/design-tokens`](packages/design-tokens) and per-runtime TypeScript settings through [`packages/tsconfig`](packages/tsconfig). The full layout, build orchestration, and design-token sharing model live in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+The runtime stack is [Bun](https://bun.sh) (package manager + runtime, pinned in `packageManager`), [Turborepo](https://turbo.build) (task graph), and TypeScript. Linting and formatting are [oxlint](https://oxc.rs) and [oxfmt](https://github.com/oxc-project/oxfmt). See [README.md](README.md) for the develop / build / check commands.
+
+## Conventions agents should know
+
+- **Issue first, then receipt.** Substantive work starts as a GitHub issue using the `proposal.yml` form (Context / Decision / Scope / Acceptance criteria / Validation / Open questions). The implementing commit lands a `receipts/issue-<N>.md` file with `## Checklist`, `## What changed`, `## Out of scope`, and `## Verification` — each `[x]` checklist item must appear (case-insensitive substring) in *What changed* or *Verification*. The directives `receipt-per-issue` and `commit-issue-receipt-match` enforce this.
+- **Conventional Commits + issue ref.** Commit messages match `<type>(scope)?!?: subject (#N)`. The `commit-message-format` directive enforces this and merge / revert commits are exempt.
+- **Token + steering trailers are auto-stamped.** The `agent-token-accounting` and `agent-steering-accounting` hooks read your active session JSONL and stamp `Token-Input/Output/Total/Cost-USD` and `Steer-Count/Types/Tiers` trailers, plus a matching row in [COSTS.md](COSTS.md) and (when steering events exist) in [STEERING.md](STEERING.md). Don't hand-write these trailers.
+- **Open quality issues go in [QUALITY.md](QUALITY.md).** Use `## Open` / `## Resolved`. Bug or proposal issues on GitHub use the forms in `.github/ISSUE_TEMPLATE/`.
 
 ## Where work lives
 
