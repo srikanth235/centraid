@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Centraid",
+    "slug": "centraid",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#e8e9ec",
+      "resizeMode": "contain"
+    },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.centraid.mobile" },
+    "android": { "package": "com.centraid.mobile" },
+    "assetBundlePatterns": ["**/*"]
+  }
+}

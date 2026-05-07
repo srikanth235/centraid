@@ -1,0 +1,6 @@
+# Use hoisted node_modules layout so React Native / Metro / Electron native
+# loaders can resolve transitive deps via the conventional node_modules walk.
+# Bun's default "isolated" layout (with .bun/<pkg>@<ver>+<hash>/) confuses
+# Metro and various RN tooling.
+[install]
+linker = "hoisted"

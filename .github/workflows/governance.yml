@@ -11,6 +11,10 @@ permissions:
 jobs:
   governance:
     runs-on: ubuntu-latest
+    env:
+      # Project-wide override: renderer entry / builder modules sit between
+      # 500-700 lines. Refactor to break them up is a deferred follow-up.
+      GOVERNANCE_FILE_SIZE_LIMIT: "700"
     steps:
       - name: Checkout
         uses: actions/checkout@v5

@@ -1,0 +1,10 @@
+{
+  "name": "@centraid/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "base.json",
+    "electron.json",
+    "expo.json"
+  ]
+}

@@ -1,0 +1,231 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, ScrollView, Pressable, TextInput, Alert, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { apps as BUILTIN_APPS } from '@centraid/design-tokens';
+import { Store } from '../storage';
+import Tile from '../components/Tile';
+import Icon from '../components/Icon';
+import { colors, t, family } from '../theme';
+import type { RootScreenProps } from '../navigation';
+
+const COLS = 4;
+const H_PADDING = 22;
+
+export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): React.JSX.Element {
+  const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<TextInput | null>(null);
+
+  useEffect(() => {
+    Store.hydrate<string[]>('home.deletedBuiltins', []).then((arr) => setDeleted(new Set(arr)));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setDeleted(new Set(Store.get<string[]>('home.deletedBuiltins', [])));
+    }, []),
+  );
+
+  const visibleApps = BUILTIN_APPS.filter((a) => !deleted.has(a.id));
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? visibleApps.filter(
+        (a) => a.name.toLowerCase().includes(q) || (a.desc || '').toLowerCase().includes(q),
+      )
+    : visibleApps;
+
+  const openSearch = (): void => {
+    setSearching(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+  const closeSearch = (): void => {
+    setSearching(false);
+    setQuery('');
+  };
+
+  const handleLongPress = (app: (typeof BUILTIN_APPS)[number]): void => {
+    Alert.alert(app.name, 'Remove this app from your home screen?', [
+      { style: 'cancel', text: 'Cancel' },
+      {
+        onPress: () => {
+          const next = new Set(deleted);
+          next.add(app.id);
+          setDeleted(next);
+          Store.set('home.deletedBuiltins', [...next]);
+        },
+        style: 'destructive',
+        text: 'Remove',
+      },
+    ]);
+  };
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.header}>
+        {searching ? (
+          <View style={styles.searchField}>
+            <Icon name="Search" size={16} color={colors.ink3} strokeWidth={1.75} />
+            <TextInput
+              ref={inputRef}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search apps"
+              placeholderTextColor={colors.ink3}
+              style={styles.searchInput}
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            <Pressable onPress={closeSearch} hitSlop={8} accessibilityLabel="Close search">
+              <Icon name="X" size={18} color={colors.ink2} strokeWidth={1.75} />
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.title}>Apps</Text>
+            <Pressable
+              onPress={openSearch}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+              accessibilityLabel="Search"
+            >
+              <Icon name="Search" size={18} color={colors.ink} strokeWidth={1.75} />
+            </Pressable>
+          </>
+        )}
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.gridWrap}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {matches.length === 0 ? (
+          <Text style={styles.empty}>No apps match "{query}".</Text>
+        ) : (
+          <View style={styles.grid}>
+            {matches.map((app) => (
+              <View key={app.id} style={styles.cell}>
+                <Tile
+                  app={app}
+                  onPress={() => navigation.navigate('AppDetail', { appId: app.id })}
+                  onLongPress={() => handleLongPress(app)}
+                />
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      {!searching && (
+        <View style={styles.dots}>
+          <View style={[styles.dot, styles.dotActive]} />
+          <View style={styles.dot} />
+        </View>
+      )}
+
+      <Pressable
+        onPress={() => navigation.navigate('MobileFallback')}
+        style={({ pressed }) => [styles.fab, pressed && { transform: [{ scale: 0.96 }] }]}
+        accessibilityLabel="New app"
+      >
+        <Icon name="Plus" size={26} color="#fff" strokeWidth={2.2} />
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  cell: {
+    alignItems: 'center',
+    width: `${100 / COLS}%`,
+  },
+  dot: {
+    backgroundColor: colors.ink4,
+    borderRadius: 3,
+    height: 6,
+    width: 6,
+  },
+  dotActive: { backgroundColor: colors.ink2 },
+  dots: {
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    paddingBottom: 14,
+  },
+  empty: {
+    ...t('small'),
+    color: colors.ink3,
+    marginTop: 32,
+    textAlign: 'center',
+  },
+  fab: {
+    alignItems: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: 28,
+    bottom: 96,
+    elevation: 6,
+    height: 56,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 22,
+    shadowColor: colors.accent,
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    width: 56,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 22,
+  },
+  gridWrap: {
+    paddingBottom: 24,
+    paddingHorizontal: H_PADDING,
+    paddingTop: 18,
+  },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    paddingHorizontal: H_PADDING,
+    paddingVertical: 4,
+  },
+  iconBtn: {
+    alignItems: 'center',
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  safe: { backgroundColor: colors.bg, flex: 1 },
+  searchField: {
+    alignItems: 'center',
+    backgroundColor: colors.bgElev,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+    height: 36,
+    paddingHorizontal: 10,
+  },
+  searchInput: {
+    flex: 1,
+    ...t('body'),
+    color: colors.ink,
+    padding: 0,
+  },
+  title: {
+    color: colors.ink,
+    fontFamily: family.displayBold,
+    fontSize: 22,
+    letterSpacing: -0.4,
+  },
+});

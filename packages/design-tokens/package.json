@@ -1,0 +1,25 @@
+{
+  "name": "@centraid/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared design tokens (colors, type, spacing, app metadata, icon paths) for Centraid desktop and mobile.",
+  "files": [
+    "dist",
+    "index.ts",
+    "palette.ts",
+    "icons.ts",
+    "apps.ts"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "react-native": "./index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@centraid/tsconfig": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
