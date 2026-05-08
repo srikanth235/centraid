@@ -1,0 +1,29 @@
+{
+  "name": "@centraid/agent-harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi-coding-agent customization for centraid: agent that knows how to author apps in the @centraid/openclaw-plugin format, plus scaffold + publish helpers.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "templates", "README.md"],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@centraid/openclaw-plugin": "workspace:*",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "tar": "^7.4.3"
+  },
+  "devDependencies": {
+    "@centraid/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "@types/tar": "^6.1.13",
+    "typescript": "catalog:"
+  }
+}
