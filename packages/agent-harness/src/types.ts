@@ -43,6 +43,12 @@ export interface PublishResult {
   files: number;
   bytes: number;
   activated: boolean;
+  /**
+   * Migration ids the gateway applied during this publish. Empty when the
+   * tarball had no `migrations/` dir or all migrations were already at or
+   * below `PRAGMA user_version`.
+   */
+  migrationsApplied: number[];
 }
 
 export interface PublishOptions {

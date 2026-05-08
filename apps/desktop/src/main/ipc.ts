@@ -126,6 +126,7 @@ export function registerIpcHandlers(): void {
       const session = await createCentraidAgentSession({
         projectDir,
         sessionMode: input.sessionMode,
+        liveSchema: { config: settings, appId: input.projectId },
       });
 
       const unsubscribe = session.subscribe((evt) => {

@@ -22,6 +22,7 @@ You are working inside a centraid app project folder. Your job is to author or m
   queries/<name>.ts        # GET /centraid/<id>/_data/<name> handler
   actions/<name>.ts        # POST /centraid/<id>/_run handler (body.action picks)
   crons/<name>.ts          # schedule + task + ingest handler in one module
+  migrations/NNNN_<slug>.sql  # schema migrations (numbered, plain DDL)
 \`\`\`
 
 The runtime file is the **.js** sibling of each .ts (compiled in place by tsc).
@@ -34,7 +35,7 @@ The runtime file is the **.js** sibling of each .ts (compiled in place by tsc).
 
 ### Static asset extension allowlist (anything else is rejected at upload)
 
-\`.html .htm .css .js .mjs .ts .json .md .txt .svg .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map\`
+\`.html .htm .css .js .mjs .ts .json .md .txt .svg .sql .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map\`
 
 ### Handler contract
 
@@ -71,8 +72,9 @@ export const timeoutMs = 30000;
 
 export default (async ({ payload, db, log }) => {
   const rows = payload.json ?? JSON.parse(payload.text);
-  db.exec(\\\`CREATE TABLE IF NOT EXISTS issues (number INTEGER PRIMARY KEY, ...)\\\`);
-  // upsert via parameterized statement, wrapped in db.transaction(...)
+  // The \\\`issues\\\` table must already exist from a migration — see
+  // "Schema migrations" below. Handlers must never run DDL.
+  // Upsert via parameterized statement, wrapped in db.transaction(...).
 }) satisfies CronHandler;
 \`\`\`
 
@@ -80,7 +82,25 @@ export default (async ({ payload, db, log }) => {
 
 \`db.prepare(sql).run/get/all\` round-trip through a worker boundary. Use parameterized SQL — never interpolate untrusted strings. Wrap multi-row writes in \`db.transaction(...)\` for atomicity.
 
-\`db.exec\` is for DDL (\`CREATE TABLE IF NOT EXISTS …\`). Always make schema setup idempotent — handlers run independently and may be the first to touch the database after a fresh upload.
+\`db.exec\` is reserved for DML on tables that already exist. **Never run DDL inside a handler** — no \`CREATE TABLE\`, no \`ALTER TABLE\`, no \`CREATE INDEX\`, no \`DROP …\`. All schema lives in \`migrations/\` (see below).
+
+### Schema migrations
+
+The plugin owns \`data.sqlite\` and persists it across versions. Schema changes ship as numbered SQL files under \`migrations/\`:
+
+- File names must match \`NNNN_<slug>.sql\` exactly (e.g. \`0001_init.sql\`, \`0002_add_tags.sql\`). Numbers are contiguous integers starting at \`0001\` — no gaps, no skips, no duplicates.
+- Plain SQLite DDL only. **Do not** include \`BEGIN\`, \`COMMIT\`, \`ROLLBACK\`, or \`PRAGMA user_version\` — the plugin wraps the whole batch in a single transaction and bumps \`user_version\` itself.
+- Each migration is applied **at most once per database**. The plugin tracks progress via \`PRAGMA user_version\`; on every publish it skips any migration whose id ≤ \`user_version\` and applies the rest in order.
+- A migration that fails (any SQL error) rolls back the whole batch, the publish is rejected with HTTP 422, and the previously active version keeps serving. Fix the file and re-publish.
+
+Rules:
+
+- **All schema lives in migrations.** Tables, indexes, and views are created exclusively by migration files. Handlers presume the schema is already there.
+- **Never edit a migration that has already been published.** If you need to change the schema, write the next-numbered file. Editing an applied file would silently diverge live databases from your code.
+- **Always re-ship every migration in every publish.** Don't delete old files — they're idempotent (skipped when already applied) and required for any fresh database.
+- **Ask before destructive ops.** \`DROP TABLE\`, \`DROP COLUMN\`, anything that deletes user data — confirm with the user in chat first and surface what will be lost.
+
+When a session begins on a project that has a live published version, the harness injects the live schema (a \`### Live schema\` block listing \`PRAGMA user_version\` and every \`CREATE TABLE\`/\`CREATE INDEX\`/\`CREATE VIEW\`) just below this section. Use it to decide what id the next migration must take and what the database currently looks like. If that block is absent, treat the database as empty and start at \`0001\`.
 
 ### Cron handler design rules
 

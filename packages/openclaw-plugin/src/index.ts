@@ -15,6 +15,7 @@
  */
 
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { Registry, RegistryError } from './lib/registry.js';
 import { OpenClawCron } from './lib/openclaw-cron.js';
@@ -27,6 +28,10 @@ import { serveStatic } from './lib/static-server.js';
 import { getHeader, isLoopback, readBody, sendError, sendJson } from './lib/http-utils.js';
 import { timingSafeEqual } from './lib/security.js';
 import { appCodeDir, appDataDir } from './lib/app-paths.js';
+import { runPendingMigrations, MigrationError } from './lib/migrate.js';
+import { readAppSchema } from './lib/schema.js';
+import { extractAgentFinalText, tryParseJson } from './lib/payload.js';
+import { makeAppUploadLocks } from './lib/upload-lock.js';
 import type { AppRef, RegistryEntry } from './types.js';
 
 // Re-export public handler types so apps written in TypeScript can do:
@@ -43,6 +48,16 @@ export type {
   ScopedLog,
   AppRef,
 } from './types.js';
+
+// Live-schema shape returned by `GET /centraid/_apps/<id>/schema`. Consumed
+// by `@centraid/agent-harness` to inject schema into the agent's prompt.
+export type {
+  AppSchema,
+  AppSchemaTable,
+  AppSchemaColumn,
+  AppSchemaIndex,
+  AppSchemaView,
+} from './lib/schema.js';
 
 export default definePluginEntry({
   id: 'centraid',
@@ -65,6 +80,8 @@ export default definePluginEntry({
     const versions = new VersionStore();
     let cronAdapter = new OpenClawCron(); // Path B by default (shell out).
     let cronSync = new CronSync({ registry, cron: cronAdapter, versions, gatewayBaseUrl });
+
+    const withAppUploadLock = makeAppUploadLocks();
 
     // Resolve the active code dir for an entry (uploaded → version dir).
     const resolveCodeDir = async (entry: RegistryEntry): Promise<string | undefined> => {
@@ -180,41 +197,68 @@ export default definePluginEntry({
             }
 
             case 'app-upload': {
-              const entry = await registry.ensureUploaded(route.appId);
+              return await withAppUploadLock(route.appId, async () => {
+                const entry = await registry.ensureUploaded(route.appId);
 
-              let result;
-              try {
-                result = await ingestUpload(req, appsDir, route.appId);
-              } catch (err) {
-                if (err instanceof UploadError) {
-                  const status = err.code === 'too_large' ? 413 : 400;
-                  return sendError(res, status, err.code, err.message);
+                let result;
+                try {
+                  result = await ingestUpload(req, appsDir, route.appId);
+                } catch (err) {
+                  if (err instanceof UploadError) {
+                    const status = err.code === 'too_large' ? 413 : 400;
+                    return sendError(res, status, err.code, err.message);
+                  }
+                  throw err;
                 }
-                throw err;
-              }
 
-              await versions.commit(entry.path, result.extractedDir, {
-                versionId: result.versionId,
-                sha256: result.sha256,
-                declaredVersion: result.declaredVersion,
-                uploadedAt: new Date().toISOString(),
-                bytes: result.bytes,
-                files: result.files,
-              });
+                // Apply pending migrations to the persistent data.sqlite BEFORE
+                // flipping `current.json`. On failure, the extracted dir is
+                // discarded and the previously active version keeps serving.
+                let migrationsApplied: number[] = [];
+                try {
+                  const dataDbFile = path.join(entry.path, 'data.sqlite');
+                  const out = await runPendingMigrations(result.extractedDir, dataDbFile);
+                  migrationsApplied = out.applied;
+                } catch (err) {
+                  await fs
+                    .rm(result.extractedDir, { recursive: true, force: true })
+                    .catch(() => {});
+                  if (err instanceof MigrationError) {
+                    const status = err.code === 'sql_failed' ? 422 : 400;
+                    return sendJson(res, status, {
+                      error: err.code,
+                      message: err.message,
+                      file: err.file,
+                      sqlError: err.sqlError,
+                    });
+                  }
+                  throw err;
+                }
 
-              await versions.prune(entry.path, versionRetention).catch(() => {});
+                await versions.commit(entry.path, result.extractedDir, {
+                  versionId: result.versionId,
+                  sha256: result.sha256,
+                  declaredVersion: result.declaredVersion,
+                  uploadedAt: new Date().toISOString(),
+                  bytes: result.bytes,
+                  files: result.files,
+                });
 
-              // Clear stale cron tokens that don't exist in the new version.
-              await cronSync.syncApp(entry.id);
+                await versions.prune(entry.path, versionRetention).catch(() => {});
 
-              return sendJson(res, 201, {
-                id: entry.id,
-                versionId: result.versionId,
-                declaredVersion: result.declaredVersion,
-                sha256: result.sha256,
-                files: result.files,
-                bytes: result.bytes,
-                activated: true,
+                // Clear stale cron tokens that don't exist in the new version.
+                await cronSync.syncApp(entry.id);
+
+                return sendJson(res, 201, {
+                  id: entry.id,
+                  versionId: result.versionId,
+                  declaredVersion: result.declaredVersion,
+                  sha256: result.sha256,
+                  files: result.files,
+                  bytes: result.bytes,
+                  activated: true,
+                  migrationsApplied,
+                });
               });
             }
 
@@ -261,6 +305,26 @@ export default definePluginEntry({
               }
               await versions.deleteVersion(entry.path, route.versionId);
               return sendJson(res, 200, { id: route.appId, versionId: route.versionId });
+            }
+
+            case 'app-schema': {
+              const entry = registry.get(route.appId);
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
+              if (entry.mode !== 'uploaded') {
+                return sendError(
+                  res,
+                  409,
+                  'not_uploaded',
+                  'Schema endpoint is uploaded-mode only.',
+                );
+              }
+              const active = await versions.getActiveVersion(entry.path);
+              if (!active) {
+                return sendError(res, 503, 'no_active_version', 'App has no active version yet.');
+              }
+              const dataDbFile = path.join(entry.path, 'data.sqlite');
+              const schema = readAppSchema(dataDbFile);
+              return sendJson(res, 200, schema);
             }
 
             case 'app-index':
@@ -438,29 +502,3 @@ export default definePluginEntry({
   },
 });
 
-/**
- * OpenClaw's webhook payload format isn't fully documented; we accept either
- * a raw JSON body or a wrapped shape and try to pull out the "final text" the
- * agent produced. Anything we can't parse is passed through as `payload.text`
- * and the handler decides.
- */
-function extractAgentFinalText(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== 'object') return undefined;
-  const p = payload as Record<string, unknown>;
-  if (typeof p.text === 'string') return p.text;
-  if (typeof p.finalText === 'string') return p.finalText;
-  if (typeof p.summary === 'string') return p.summary;
-  if (p.message && typeof p.message === 'object') {
-    const m = p.message as Record<string, unknown>;
-    if (typeof m.text === 'string') return m.text;
-  }
-  return undefined;
-}
-
-function tryParseJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}

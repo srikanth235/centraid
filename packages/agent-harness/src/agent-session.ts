@@ -7,7 +7,10 @@ import {
   type AgentSession,
   type CreateAgentSessionOptions,
 } from '@earendil-works/pi-coding-agent';
+import type { AppSchema } from '@centraid/openclaw-plugin';
 import { CENTRAID_APPEND_PROMPT } from './system-prompt.js';
+import { fetchAppSchema } from './gateway-client.js';
+import type { HarnessConfig } from './types.js';
 
 export type CentraidSessionMode = 'fresh' | 'continue' | 'in-memory';
 
@@ -30,6 +33,14 @@ export interface CreateCentraidAgentSessionOptions extends Pick<
    * pi's default location, scoped per project directory.
    */
   sessionMode?: CentraidSessionMode;
+  /**
+   * When provided, the harness fetches the app's live `data.sqlite` schema
+   * once at session start and injects a `### Live schema` block into the
+   * system prompt so the agent can author the next migration against the
+   * correct current state. Failures (gateway down, app not yet published)
+   * are silently skipped — the agent then treats the DB as empty.
+   */
+  liveSchema?: { config: HarnessConfig; appId: string };
 }
 
 /**
@@ -50,11 +61,25 @@ export async function createCentraidAgentSession(
   const agentDir = getAgentDir();
   const mode: CentraidSessionMode = opts.sessionMode ?? 'continue';
 
+  let liveSchemaBlock: string | undefined;
+  if (opts.liveSchema) {
+    try {
+      const schema = await fetchAppSchema(opts.liveSchema.config, opts.liveSchema.appId);
+      if (schema) liveSchemaBlock = renderLiveSchemaBlock(schema);
+    } catch {
+      // Gateway unreachable / unauthenticated. The agent simply won't see a
+      // live-schema block, which is what we want for offline / first-time use.
+    }
+  }
+
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir,
     settingsManager: SettingsManager.create(cwd, agentDir),
-    appendSystemPromptOverride: (base) => [...base, CENTRAID_APPEND_PROMPT],
+    appendSystemPromptOverride: (base) =>
+      liveSchemaBlock
+        ? [...base, CENTRAID_APPEND_PROMPT, liveSchemaBlock]
+        : [...base, CENTRAID_APPEND_PROMPT],
   });
   await loader.reload();
 
@@ -76,4 +101,45 @@ export async function createCentraidAgentSession(
   });
 
   return session;
+}
+
+/**
+ * Render a `### Live schema` block for the system prompt. Lists user_version,
+ * the next migration id, and every CREATE TABLE/INDEX/VIEW currently in the
+ * live database verbatim from sqlite_master.
+ */
+function renderLiveSchemaBlock(schema: AppSchema): string {
+  const next = String(schema.schemaVersion + 1).padStart(4, '0');
+  const lines: string[] = [
+    '### Live schema',
+    '',
+    `PRAGMA user_version = ${schema.schemaVersion}`,
+    `Next migration must be ${next}_<slug>.sql.`,
+    '',
+  ];
+
+  if (schema.tables.length === 0 && schema.indexes.length === 0 && schema.views.length === 0) {
+    lines.push('(database is empty — write 0001_init.sql to create your first tables)');
+    return lines.join('\n');
+  }
+
+  if (schema.tables.length > 0) {
+    lines.push('-- tables');
+    for (const t of schema.tables) {
+      lines.push(`${t.sql ?? `-- ${t.name} (no DDL recorded)`};`);
+    }
+    lines.push('');
+  }
+  if (schema.indexes.length > 0) {
+    lines.push('-- indexes');
+    for (const i of schema.indexes) lines.push(`${i.sql};`);
+    lines.push('');
+  }
+  if (schema.views.length > 0) {
+    lines.push('-- views');
+    for (const v of schema.views) lines.push(`${v.sql};`);
+    lines.push('');
+  }
+
+  return lines.join('\n');
 }

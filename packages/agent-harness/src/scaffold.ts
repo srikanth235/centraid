@@ -62,6 +62,7 @@ export async function scaffoldProject(
   await fs.mkdir(path.join(dir, 'queries'));
   await fs.mkdir(path.join(dir, 'actions'));
   await fs.mkdir(path.join(dir, 'crons'));
+  await fs.mkdir(path.join(dir, 'migrations'));
 
   // README so the human/agent has a clear starting brief in-folder.
   await fs.writeFile(path.join(dir, 'README.md'), README_TEMPLATE(id));
@@ -216,6 +217,7 @@ The runtime loads \`.js\` files; \`.ts\` sources travel along.
 - \`queries/<name>.ts\` — GET \`/centraid/${id}/_data/<name>\`
 - \`actions/<name>.ts\` — POST \`/centraid/${id}/_run\` (body picks \`action\`)
 - \`crons/<name>.ts\` — schedule + agent task + ingest handler in one module
+- \`migrations/NNNN_<slug>.sql\` — schema migrations applied on publish
 - \`app.json\` — metadata (\`name\`, \`version\`)
 
 See \`@centraid/openclaw-plugin\` for the full handler-arg types.

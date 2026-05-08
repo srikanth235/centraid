@@ -32,6 +32,7 @@ const UPLOAD_EXT_ALLOWLIST = new Set([
   '.md',
   '.txt',
   '.svg',
+  '.sql',
   '.png',
   '.jpg',
   '.jpeg',

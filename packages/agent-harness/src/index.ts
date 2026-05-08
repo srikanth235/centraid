@@ -28,9 +28,18 @@ export {
   activateVersion,
   deregisterApp,
   appLiveUrl,
+  fetchAppSchema,
   type VersionRecord,
   type AppRegistryRow,
 } from './gateway-client.js';
+
+export type {
+  AppSchema,
+  AppSchemaTable,
+  AppSchemaColumn,
+  AppSchemaIndex,
+  AppSchemaView,
+} from '@centraid/openclaw-plugin';
 
 export { readProjectFiles, type ProjectFile, type ProjectFileLanguage } from './project-files.js';
 

@@ -14,6 +14,7 @@ export type Route =
   | { kind: 'app-versions-list'; appId: string }
   | { kind: 'app-version-activate'; appId: string }
   | { kind: 'app-version-delete'; appId: string; versionId: string }
+  | { kind: 'app-schema'; appId: string }
   | { kind: 'app-index'; appId: string }
   | { kind: 'app-static'; appId: string; rel: string }
   | { kind: 'app-data'; appId: string; queryName: string; query: Record<string, string> }
@@ -57,6 +58,9 @@ export function parseRoute(method: string, rawUrl: string): Route {
     }
     if (sub === 'activate' && segments.length === 3 && m === 'POST') {
       return { kind: 'app-version-activate', appId };
+    }
+    if (sub === 'schema' && segments.length === 3 && m === 'GET') {
+      return { kind: 'app-schema', appId };
     }
     if (sub === 'versions') {
       if (segments.length === 3 && m === 'GET') {

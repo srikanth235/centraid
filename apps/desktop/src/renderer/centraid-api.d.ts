@@ -24,6 +24,8 @@ export interface CentraidPublishResult {
   files: number;
   bytes: number;
   activated: boolean;
+  /** Migration ids the gateway applied during this publish. */
+  migrationsApplied: number[];
 }
 
 export interface CentraidSettings {

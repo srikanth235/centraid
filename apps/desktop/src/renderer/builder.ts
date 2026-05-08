@@ -488,11 +488,12 @@
       const has = !!currentPreviewSrc;
       urlbar.dataset.empty = String(!has);
       urlbarKindDot.dataset.kind = currentPreviewKind ?? 'none';
-      urlbarKindDot.title = currentPreviewKind === 'live'
-        ? 'Live (gateway)'
-        : currentPreviewKind === 'local'
-          ? 'Local files'
-          : 'No preview';
+      urlbarKindDot.title =
+        currentPreviewKind === 'live'
+          ? 'Live (gateway)'
+          : currentPreviewKind === 'local'
+            ? 'Local files'
+            : 'No preview';
       urlbarPath.textContent = has ? formatPreviewUrl(currentPreviewSrc!) : 'No preview yet';
       urlbarPath.title = currentPreviewSrc ?? '';
       (urlbarOpenBtn as HTMLButtonElement).disabled = !has;
@@ -621,9 +622,7 @@
             const dot = el('span', { class: 'tg-dot', 'data-state': c.state });
             const name = el('span', { class: 'tg-row-name' }, toolVerb(c.tool));
             const target = el('span', { class: 'tg-row-target' }, c.summary ?? '');
-            list.append(
-              el('div', { class: 'tg-row', 'data-state': c.state }, [dot, name, target]),
-            );
+            list.append(el('div', { class: 'tg-row', 'data-state': c.state }, [dot, name, target]));
           }
           wrap.append(list);
         }
@@ -1277,9 +1276,7 @@
             const cur = out[idx];
             if (cur && cur.kind === 'toolGroup') {
               cur.calls = cur.calls.map((c) =>
-                c.id === tr.toolCallId
-                  ? { ...c, state: tr.isError ? 'error' : 'ok' }
-                  : c,
+                c.id === tr.toolCallId ? { ...c, state: tr.isError ? 'error' : 'ok' } : c,
               );
             }
           }
@@ -1554,11 +1551,14 @@
         const result = await Api().publish({ id: projectId });
         lastPublishedVersionId = result.versionId;
         liveUrl = (await Api().appLiveUrl({ id: projectId })).url;
+        const migCount = result.migrationsApplied?.length ?? 0;
+        const migText =
+          migCount > 0 ? ` · ${migCount} migration${migCount === 1 ? '' : 's'} applied` : '';
         updateMessage(statusIdx, {
           kind: 'status',
-          text: `Published ${shortVersionTitle(result)} (${result.files} files, ${(result.bytes / 1024).toFixed(1)} KB)`,
+          text: `Published ${shortVersionTitle(result)} (${result.files} files, ${(result.bytes / 1024).toFixed(1)} KB)${migText}`,
         });
-        showToast(`Published ${shortVersionTitle(result)}`);
+        showToast(`Published ${shortVersionTitle(result)}${migText}`);
         if (chatView === 'history') renderChatPane();
         if (tab === 'preview') renderRight();
         if (opts.andAddToHome && onAddToHome) {
@@ -1593,6 +1593,20 @@
             'Open Settings',
             () => void window.Centraid?.openSettings?.(),
           );
+        } else if (/HTTP 422/i.test(msg)) {
+          // Migration error from the gateway. Pull the offending file out of
+          // the JSON-in-error-message body for a friendlier line.
+          const fileMatch = msg.match(/"file"\s*:\s*"([^"]+)"/);
+          const errMatch = msg.match(/"sqlError"\s*:\s*"([^"]+)"/);
+          const file = fileMatch?.[1];
+          const sqlError = errMatch?.[1];
+          const detail = file
+            ? sqlError
+              ? `Migration ${file} failed: ${sqlError}`
+              : `Migration ${file} failed`
+            : `Migration failed: ${msg}`;
+          updateMessage(statusIdx, { kind: 'status', text: detail });
+          showToast(file ? `Migration ${file} failed` : 'Migration failed');
         } else {
           updateMessage(statusIdx, { kind: 'status', text: `Publish failed: ${msg}` });
         }
