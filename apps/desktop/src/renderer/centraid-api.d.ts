@@ -52,6 +52,39 @@ export interface CentraidProjectFile {
 }
 
 /**
+ * Live `data.sqlite` schema for the Cloud → Database panel. Mirrors
+ * `AppSchema` from `@centraid/openclaw-plugin` — kept independent so the
+ * renderer typings don't pull the gateway plugin as a build-time dep.
+ */
+export interface CentraidAppSchemaColumn {
+  name: string;
+  type: string;
+  notnull: boolean;
+  pk: boolean;
+  dflt_value: string | null;
+}
+export interface CentraidAppSchemaTable {
+  name: string;
+  sql: string | null;
+  columns: CentraidAppSchemaColumn[];
+}
+export interface CentraidAppSchemaIndex {
+  name: string;
+  tbl_name: string;
+  sql: string;
+}
+export interface CentraidAppSchemaView {
+  name: string;
+  sql: string;
+}
+export interface CentraidAppSchema {
+  schemaVersion: number;
+  tables: CentraidAppSchemaTable[];
+  indexes: CentraidAppSchemaIndex[];
+  views: CentraidAppSchemaView[];
+}
+
+/**
  * Subset of pi-ai's content-block types that the renderer hydrates into the
  * chat pane on session resume. Other block types (e.g. images) pass through
  * as opaque objects and are ignored.
@@ -160,12 +193,57 @@ interface CentraidApi {
   }): Promise<{ activeVersion?: string; versions: CentraidVersionRecord[] }>;
   activateVersion(input: { id: string; versionId: string }): Promise<{ activeVersion: string }>;
   appLiveUrl(input: { id: string }): Promise<{ url: string }>;
+  /**
+   * Live schema for the Cloud → Database panel. `undefined` when the gateway
+   * has nothing for this app yet (unregistered, or never published).
+   */
+  appSchema(input: { id: string }): Promise<CentraidAppSchema | undefined>;
   deregisterApp(input: { id: string }): Promise<{ id: string }>;
 }
 
 declare global {
   interface Window {
     CentraidApi: CentraidApi;
+  }
+
+  // Renderer scripts are IIFE-style (no imports) and reference these types
+  // by bare name. The interfaces below mirror the module exports above so
+  // the call sites stay tidy without `Awaited<ReturnType<…>>` boilerplate.
+  interface CentraidAppSchemaColumn {
+    name: string;
+    type: string;
+    notnull: boolean;
+    pk: boolean;
+    dflt_value: string | null;
+  }
+  interface CentraidAppSchemaTable {
+    name: string;
+    sql: string | null;
+    columns: CentraidAppSchemaColumn[];
+  }
+  interface CentraidAppSchemaIndex {
+    name: string;
+    tbl_name: string;
+    sql: string;
+  }
+  interface CentraidAppSchemaView {
+    name: string;
+    sql: string;
+  }
+  interface CentraidAppSchema {
+    schemaVersion: number;
+    tables: CentraidAppSchemaTable[];
+    indexes: CentraidAppSchemaIndex[];
+    views: CentraidAppSchemaView[];
+  }
+  interface CentraidVersionRecord {
+    versionId: string;
+    sha256: string;
+    declaredVersion?: string;
+    uploadedAt: string;
+    bytes: number;
+    files: number;
+    current?: boolean;
   }
 }
 

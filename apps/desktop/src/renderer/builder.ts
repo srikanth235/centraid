@@ -33,7 +33,7 @@
     // across re-renders.
     | { kind: 'toolGroup'; id: string; calls: ToolCall[]; open: boolean };
 
-  type Tab = 'preview' | 'code';
+  type Tab = 'preview' | 'code' | 'cloud';
   type ChatView = 'chat' | 'history';
   type DeviceKey = 'mobile' | 'desktop';
 
@@ -49,6 +49,27 @@
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
   const MonitorIcon = (size = 13): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
+  // Cloud-tab icons. The Cloud tab is a Lovable-style data-browser panel
+  // that lives next to Preview/Code; these glyphs label the tab itself and
+  // the left-rail sub-sections (Database, Users, Storage, etc.).
+  const CloudIcon = (size = 13): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`;
+  const CloudOverviewIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`;
+  const DatabaseIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>`;
+  const UsersIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+  const StorageIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><line x1="7" y1="7" x2="7.01" y2="7"/><line x1="7" y1="17" x2="7.01" y2="17"/></svg>`;
+  const SecretsIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 9.65-9.65"/><path d="m18 5 3 3"/><path d="m15 8 3 3"/></svg>`;
+  const FunctionsIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H6a2 2 0 0 0-2 2v3"/><path d="M4 15v3a2 2 0 0 0 2 2h3"/><path d="M15 4h3a2 2 0 0 1 2 2v3"/><path d="M20 15v3a2 2 0 0 1-2 2h-3"/><path d="M10 9c1 0 1 .5 1 1.5S10.5 12 11 13s2 1.5 2 1.5"/></svg>`;
+  const SqlIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 9 12 5 16"/><line x1="13" y1="16" x2="19" y2="16"/></svg>`;
+  const LogsIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>`;
   // Tool-group icons. Bolt = activity glyph on the consolidated pill;
   // ChevronDownIcon = expand/collapse affordance (rotates 180° when open).
   const BoltIcon = (size = 13): string =>
@@ -334,9 +355,13 @@
       isUpdateMode ? 'Editing existing app' : 'Designing your new app',
     );
 
-    const tabDefs: [Tab, string, IconNameType][] = [
-      ['preview', 'Preview', 'Eye'],
-      ['code', 'Code', 'Code'],
+    // Mode tabs render as icon-only pills by default; the active tab expands
+    // to icon+label (Lovable pattern). Each entry's third field is a render
+    // fn so we can mix design-token icons (Eye, Code) with inline SVGs (Cloud).
+    const tabDefs: [Tab, string, () => string][] = [
+      ['preview', 'Preview', () => Icon.Eye({ size: 13 })],
+      ['code', 'Code', () => Icon.Code({ size: 13 })],
+      ['cloud', 'Cloud', () => CloudIcon(13)],
     ];
 
     // History toggle — swaps the chat pane between live chat and version
@@ -445,10 +470,12 @@
       el(
         'div',
         { class: 'mode-tabs' },
-        tabDefs.map(([key, label, iconKey]) => {
+        tabDefs.map(([key, label, renderIcon]) => {
           const btn = el('button', {
+            'aria-label': label,
             class: 'mode-tab',
             'data-active': String(tab === key),
+            title: label,
             onClick: () => {
               tab = key;
               renderRight();
@@ -456,7 +483,7 @@
               renderUrlbar();
             },
           });
-          btn.innerHTML = `${Icon[iconKey]({ size: 13 })}<span>${label}</span>`;
+          btn.innerHTML = `${renderIcon()}<span>${label}</span>`;
           return btn;
         }),
       ),
@@ -468,8 +495,8 @@
     ]);
 
     function refreshTabs(): void {
+      const keys: Tab[] = tabDefs.map(([k]) => k);
       topbar.querySelectorAll('.mode-tab').forEach((b, i) => {
-        const keys: Tab[] = ['preview', 'code'];
         (b as HTMLElement).dataset.active = String(tab === keys[i]);
       });
     }
@@ -761,6 +788,7 @@
       rightPane.innerHTML = '';
       rightPane.classList.remove('preview-pane', 'has-phone');
       if (tab === 'preview') void renderPreview();
+      else if (tab === 'cloud') renderCloud();
       else void renderCode();
     }
 
@@ -1070,6 +1098,327 @@
 
       drawTree();
       drawViewer();
+    }
+
+    // Cloud view — Lovable-style data-browser. The Overview and Database
+    // sections are wired to real gateway data (publish state + live
+    // `data.sqlite` schema via CentraidApi.appSchema). The remaining
+    // sections (Users, Storage, Secrets, Edge functions, SQL editor, Logs)
+    // show "Not yet available" placeholders until their backends ship.
+    function renderCloud(): void {
+      type CloudSection =
+        | 'overview'
+        | 'database'
+        | 'users'
+        | 'storage'
+        | 'secrets'
+        | 'functions'
+        | 'sql'
+        | 'logs';
+      const sections: [CloudSection, string, (n?: number) => string, boolean][] = [
+        ['overview', 'Overview', CloudOverviewIcon, true],
+        ['database', 'Database', DatabaseIcon, true],
+        ['users', 'Users', UsersIcon, false],
+        ['storage', 'Storage', StorageIcon, false],
+        ['secrets', 'Secrets', SecretsIcon, false],
+        ['functions', 'Edge functions', FunctionsIcon, false],
+        ['sql', 'SQL editor', SqlIcon, false],
+        ['logs', 'Logs', LogsIcon, false],
+      ];
+
+      const cloudPane = el('div', { class: 'cloud-pane' });
+      const rail = el('div', { class: 'cloud-rail' });
+      const stage = el('div', { class: 'cloud-stage' });
+      cloudPane.append(rail);
+      cloudPane.append(stage);
+      rightPane.append(cloudPane);
+
+      let active: CloudSection = 'overview';
+      // Cache the schema across rail clicks so flipping Overview ↔ Database
+      // doesn't re-hit the gateway. Reset by the explicit refresh button.
+      let schemaCache: CentraidAppSchema | undefined | 'pending' | 'error';
+      let schemaError: string | undefined;
+      // Cache versions for the Overview tile (active version + count).
+      let versionsCache:
+        | { activeVersion?: string; versions: CentraidVersionRecord[] }
+        | undefined
+        | 'pending'
+        | 'error';
+      let openTable: string | undefined;
+
+      const drawRail = (): void => {
+        rail.innerHTML = '';
+        for (const [key, label, renderIcon, ready] of sections) {
+          const btn = el('button', {
+            class: 'cloud-rail-item',
+            'data-active': String(active === key),
+            'data-ready': String(ready),
+            onClick: () => {
+              if (active === key) return;
+              active = key;
+              openTable = undefined;
+              drawRail();
+              drawStage();
+            },
+          });
+          const badge = ready
+            ? ''
+            : '<span class="cloud-rail-badge" title="Not yet available">Soon</span>';
+          btn.innerHTML = `${renderIcon(14)}<span class="cloud-rail-label">${escapeHtml(label)}</span>${badge}`;
+          rail.append(btn);
+        }
+      };
+
+      async function ensureSchema(force = false): Promise<void> {
+        if (!projectId) {
+          schemaCache = undefined;
+          return;
+        }
+        if (!force && schemaCache !== undefined && schemaCache !== 'error') return;
+        schemaCache = 'pending';
+        schemaError = undefined;
+        if (active === 'database' || active === 'overview') drawStage();
+        try {
+          schemaCache = await Api().appSchema({ id: projectId });
+        } catch (err) {
+          schemaCache = 'error';
+          schemaError = err instanceof Error ? err.message : String(err);
+        }
+        if (active === 'database' || active === 'overview') drawStage();
+      }
+
+      async function ensureVersions(force = false): Promise<void> {
+        if (!projectId) {
+          versionsCache = undefined;
+          return;
+        }
+        if (!force && versionsCache !== undefined && versionsCache !== 'error') return;
+        versionsCache = 'pending';
+        if (active === 'overview') drawStage();
+        try {
+          versionsCache = await Api().listVersions({ id: projectId });
+        } catch {
+          // The gateway returns 404/409 before the first publish; treat all
+          // failures as "no versions yet" rather than surfacing the raw error.
+          versionsCache = { versions: [] };
+        }
+        if (active === 'overview') drawStage();
+      }
+
+      const drawStage = (): void => {
+        stage.innerHTML = '';
+        const def = sections.find(([k]) => k === active);
+        const title = def?.[1] ?? '';
+        const subtitle =
+          active === 'database'
+            ? 'Tables, columns, and indexes from your live app database.'
+            : active === 'overview'
+              ? 'Status of your app on the gateway.'
+              : 'View and manage the data stored in your app.';
+
+        const head = el('div', { class: 'cloud-stage-head' });
+        const headLeft = el('div', {});
+        headLeft.innerHTML = `<h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p>`;
+        head.append(headLeft);
+
+        if (active === 'database') {
+          const refreshBtn = el('button', {
+            'aria-label': 'Refresh schema',
+            class: 'btn btn-ghost cloud-refresh-btn',
+            title: 'Refresh schema',
+            onClick: () => void ensureSchema(true),
+          });
+          refreshBtn.innerHTML = `${RefreshIcon(13)}<span>Refresh</span>`;
+          head.append(refreshBtn);
+        }
+        stage.append(head);
+
+        if (active === 'overview') {
+          drawOverview();
+        } else if (active === 'database') {
+          drawDatabase();
+        } else {
+          const empty = el('div', { class: 'cloud-empty' });
+          empty.textContent =
+            'Not yet available. The backend for this section will land in a future release.';
+          stage.append(empty);
+        }
+      };
+
+      function drawOverview(): void {
+        if (!projectId) {
+          const empty = el('div', { class: 'cloud-empty' });
+          empty.textContent = 'No project yet.';
+          stage.append(empty);
+          return;
+        }
+
+        // Kick off both fetches once, in parallel — they are cached and
+        // re-rendered when each resolves.
+        void ensureSchema();
+        void ensureVersions();
+
+        const grid = el('div', { class: 'cloud-stat-grid' });
+
+        const liveCard = el('div', { class: 'cloud-stat-card' });
+        liveCard.innerHTML = liveUrl
+          ? `<div class="cloud-stat-label">Live URL</div><div class="cloud-stat-value cloud-stat-mono">${escapeHtml(formatPreviewUrl(liveUrl))}</div>`
+          : '<div class="cloud-stat-label">Live URL</div><div class="cloud-stat-value cloud-stat-muted">Not published</div>';
+        grid.append(liveCard);
+
+        const versionCard = el('div', { class: 'cloud-stat-card' });
+        if (versionsCache === 'pending' || versionsCache === undefined) {
+          versionCard.innerHTML =
+            '<div class="cloud-stat-label">Versions</div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+        } else if (versionsCache === 'error') {
+          versionCard.innerHTML =
+            '<div class="cloud-stat-label">Versions</div><div class="cloud-stat-value cloud-stat-muted">—</div>';
+        } else {
+          const v = versionsCache;
+          versionCard.innerHTML = `<div class="cloud-stat-label">Versions</div><div class="cloud-stat-value">${v.versions.length}</div><div class="cloud-stat-sub">${v.activeVersion ? `Active: ${escapeHtml(v.activeVersion.slice(0, 18))}…` : 'No active version'}</div>`;
+        }
+        grid.append(versionCard);
+
+        const schemaCard = el('div', { class: 'cloud-stat-card' });
+        if (schemaCache === 'pending' || schemaCache === undefined) {
+          schemaCard.innerHTML =
+            '<div class="cloud-stat-label">Schema version</div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+        } else if (schemaCache === 'error') {
+          schemaCard.innerHTML = `<div class="cloud-stat-label">Schema version</div><div class="cloud-stat-value cloud-stat-muted">Unavailable</div><div class="cloud-stat-sub">${escapeHtml(schemaError ?? 'gateway error')}</div>`;
+        } else if (!schemaCache) {
+          schemaCard.innerHTML =
+            '<div class="cloud-stat-label">Schema version</div><div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">Publish to create the database</div>';
+        } else {
+          schemaCard.innerHTML = `<div class="cloud-stat-label">Schema version</div><div class="cloud-stat-value">v${schemaCache.schemaVersion}</div>`;
+        }
+        grid.append(schemaCard);
+
+        const tableCard = el('div', { class: 'cloud-stat-card' });
+        if (schemaCache === 'pending' || schemaCache === undefined) {
+          tableCard.innerHTML =
+            '<div class="cloud-stat-label">Tables</div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+        } else if (!schemaCache || schemaCache === 'error') {
+          tableCard.innerHTML =
+            '<div class="cloud-stat-label">Tables</div><div class="cloud-stat-value cloud-stat-muted">—</div>';
+        } else {
+          const s = schemaCache;
+          tableCard.innerHTML = `<div class="cloud-stat-label">Tables</div><div class="cloud-stat-value">${s.tables.length}</div><div class="cloud-stat-sub">${s.indexes.length} indexes · ${s.views.length} views</div>`;
+        }
+        grid.append(tableCard);
+
+        stage.append(grid);
+      }
+
+      function drawDatabase(): void {
+        if (!projectId) {
+          const empty = el('div', { class: 'cloud-empty' });
+          empty.textContent = 'No project yet.';
+          stage.append(empty);
+          return;
+        }
+
+        void ensureSchema();
+
+        if (schemaCache === 'pending' || schemaCache === undefined) {
+          const loading = el('div', { class: 'cloud-empty cloud-empty-quiet' });
+          loading.textContent = 'Loading schema…';
+          stage.append(loading);
+          return;
+        }
+
+        if (schemaCache === 'error') {
+          const err = el('div', { class: 'cloud-empty' });
+          err.innerHTML = `Could not load schema.<br><span class="cloud-stat-sub">${escapeHtml(schemaError ?? 'unknown error')}</span>`;
+          stage.append(err);
+          return;
+        }
+
+        if (!schemaCache) {
+          const empty = el('div', { class: 'cloud-empty' });
+          empty.innerHTML =
+            'No database yet.<br><span class="cloud-stat-sub">Publish your app to create <code>data.sqlite</code> on the gateway.</span>';
+          stage.append(empty);
+          return;
+        }
+
+        const s = schemaCache;
+        if (s.tables.length === 0) {
+          const empty = el('div', { class: 'cloud-empty' });
+          empty.innerHTML = `Database is empty.<br><span class="cloud-stat-sub">Schema version v${s.schemaVersion}. Add a migration to create tables.</span>`;
+          stage.append(empty);
+          return;
+        }
+
+        const grid = el('div', { class: 'cloud-table-grid' });
+        for (const t of s.tables) {
+          const card = el('button', {
+            class: 'cloud-table-card',
+            'data-active': String(openTable === t.name),
+            onClick: () => {
+              openTable = openTable === t.name ? undefined : t.name;
+              drawDatabase();
+            },
+          });
+          card.innerHTML = `${DatabaseIcon(16)}<div class="cloud-table-card-text"><div class="cloud-table-card-name">${escapeHtml(t.name)}</div><div class="cloud-table-card-sub">${t.columns.length} ${t.columns.length === 1 ? 'column' : 'columns'}</div></div>`;
+          grid.append(card);
+        }
+        stage.append(grid);
+
+        if (openTable) {
+          const t = s.tables.find((x) => x.name === openTable);
+          if (t) stage.append(renderTableDetail(t, s));
+        }
+      }
+
+      function renderTableDetail(t: CentraidAppSchemaTable, s: CentraidAppSchema): HTMLElement {
+        const wrap = el('div', { class: 'cloud-table-detail' });
+        const header = el('div', { class: 'cloud-table-detail-head' });
+        header.innerHTML = `<h3>${escapeHtml(t.name)}</h3><span class="cloud-stat-sub">${t.columns.length} columns</span>`;
+        wrap.append(header);
+
+        const table = el('div', { class: 'cloud-cols' });
+        const rowHead = el('div', { class: 'cloud-cols-row cloud-cols-head' });
+        rowHead.innerHTML = '<span>Name</span><span>Type</span><span>Constraints</span>';
+        table.append(rowHead);
+        for (const c of t.columns) {
+          const flags: string[] = [];
+          if (c.pk) flags.push('PK');
+          if (c.notnull) flags.push('NOT NULL');
+          if (c.dflt_value !== null) flags.push(`default ${c.dflt_value}`);
+          const row = el('div', { class: 'cloud-cols-row' });
+          row.innerHTML = `<span class="cloud-cols-name">${escapeHtml(c.name)}</span><span class="cloud-cols-type">${escapeHtml(c.type || '—')}</span><span class="cloud-cols-flags">${flags.map((f) => `<em>${escapeHtml(f)}</em>`).join(' ') || '—'}</span>`;
+          table.append(row);
+        }
+        wrap.append(table);
+
+        const tableIndexes = s.indexes.filter((i) => i.tbl_name === t.name);
+        if (tableIndexes.length > 0) {
+          const idxHead = el('div', { class: 'cloud-table-detail-head' });
+          idxHead.innerHTML = `<h3>Indexes</h3><span class="cloud-stat-sub">${tableIndexes.length}</span>`;
+          wrap.append(idxHead);
+          const idxList = el('div', { class: 'cloud-sql-list' });
+          for (const i of tableIndexes) {
+            const row = el('div', { class: 'cloud-sql-row' });
+            row.innerHTML = `<div class="cloud-cols-name">${escapeHtml(i.name)}</div><pre>${escapeHtml(i.sql)}</pre>`;
+            idxList.append(row);
+          }
+          wrap.append(idxList);
+        }
+
+        if (t.sql) {
+          const sqlHead = el('div', { class: 'cloud-table-detail-head' });
+          sqlHead.innerHTML = '<h3>CREATE TABLE</h3>';
+          wrap.append(sqlHead);
+          const pre = el('pre', { class: 'cloud-sql-block' });
+          pre.textContent = t.sql;
+          wrap.append(pre);
+        }
+
+        return wrap;
+      }
+
+      drawRail();
+      drawStage();
     }
 
     // Renders the version list into the supplied container. Used by the

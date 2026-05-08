@@ -28,6 +28,7 @@ const Channel = {
   VERSIONS_LIST: 'centraid:versions:list',
   VERSIONS_ACTIVATE: 'centraid:versions:activate',
   APP_LIVE_URL: 'centraid:app:live-url',
+  APP_SCHEMA: 'centraid:app:schema',
   APPS_DEREGISTER: 'centraid:apps:deregister',
 } as const;
 
@@ -90,5 +91,6 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   activateVersion: (input: { id: string; versionId: string }) =>
     ipcRenderer.invoke(Channel.VERSIONS_ACTIVATE, input),
   appLiveUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_LIVE_URL, input),
+  appSchema: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_SCHEMA, input),
   deregisterApp: (input: { id: string }) => ipcRenderer.invoke(Channel.APPS_DEREGISTER, input),
 });

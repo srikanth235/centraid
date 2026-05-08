@@ -1061,7 +1061,7 @@ textarea {
 .mode-tab {
   border: 0;
   background: transparent;
-  padding: 7px 14px;
+  padding: 7px 8px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
@@ -1069,14 +1069,27 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  cursor: pointer;
+  transition: padding 0.12s ease;
+}
+.mode-tab:hover {
+  color: var(--ink);
 }
 .mode-tab[data-active='true'] {
   background: var(--bg-elev);
   color: var(--ink);
   box-shadow: var(--shadow-sm);
+  padding: 7px 14px;
 }
 .mode-tab svg {
   display: block;
+}
+/* Icon-only by default; the active tab expands to icon+label. */
+.mode-tab span {
+  display: none;
+}
+.mode-tab[data-active='true'] span {
+  display: inline;
 }
 
 .builder-body {
@@ -1527,6 +1540,308 @@ textarea {
     transform: translate(-50%, 0);
     opacity: 1;
   }
+}
+
+/* Cloud — left rail (sections) + stage (content). UI placeholder for a
+   Lovable-style data browser; sections render empty states until wired
+   to a real backend. */
+.cloud-pane {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 0;
+  background: var(--bg);
+}
+.cloud-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 10px;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  min-height: 0;
+}
+.cloud-rail-item {
+  border: 0;
+  background: transparent;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.cloud-rail-item:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.cloud-rail-item[data-active='true'] {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.cloud-rail-item svg {
+  flex: none;
+  opacity: 0.85;
+}
+.cloud-rail-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.cloud-rail-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  flex: none;
+}
+.cloud-rail-item[data-ready='false'] .cloud-rail-label {
+  opacity: 0.7;
+}
+.cloud-stage {
+  padding: 32px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.cloud-stage-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.cloud-stage-head h2 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cloud-stage-head p {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.cloud-refresh-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+.cloud-refresh-btn svg {
+  display: block;
+}
+.cloud-empty {
+  margin-top: 24px;
+  padding: 40px 24px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--ink-3);
+  font-size: 13px;
+  text-align: center;
+}
+.cloud-empty-quiet {
+  border-style: solid;
+  border-color: transparent;
+}
+.cloud-empty code {
+  background: var(--bg-sunken);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* Overview — stat-card grid */
+.cloud-stat-grid {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.cloud-stat-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--bg-elev);
+}
+.cloud-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.cloud-stat-value {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  word-break: break-all;
+}
+.cloud-stat-value.cloud-stat-mono {
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 13px;
+  font-weight: 500;
+}
+.cloud-stat-value.cloud-stat-muted {
+  color: var(--ink-3);
+  font-weight: 500;
+  font-size: 14px;
+}
+.cloud-stat-sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* Database — table-card grid + detail drawer */
+.cloud-table-grid {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.cloud-table-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--bg-elev);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.cloud-table-card:hover {
+  border-color: var(--ink-3);
+}
+.cloud-table-card[data-active='true'] {
+  border-color: var(--ink);
+  background: var(--bg-sunken);
+}
+.cloud-table-card svg {
+  flex: none;
+  opacity: 0.85;
+}
+.cloud-table-card-text {
+  flex: 1;
+  min-width: 0;
+}
+.cloud-table-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-table-card-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.cloud-table-detail {
+  margin-top: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  background: var(--bg-elev);
+}
+.cloud-table-detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.cloud-table-detail-head:not(:first-child) {
+  margin-top: 24px;
+}
+.cloud-table-detail-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cloud-cols {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cloud-cols-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(80px, 0.7fr) minmax(120px, 1.2fr);
+  gap: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+.cloud-cols-row:last-child {
+  border-bottom: 0;
+}
+.cloud-cols-head {
+  background: var(--bg-sunken);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.cloud-cols-name {
+  font-weight: 500;
+  color: var(--ink);
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 12px;
+}
+.cloud-cols-type {
+  color: var(--ink-2, var(--ink));
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 12px;
+}
+.cloud-cols-flags em {
+  font-style: normal;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+  margin-right: 4px;
+}
+.cloud-sql-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cloud-sql-row pre {
+  margin: 4px 0 0 0;
+  padding: 8px 10px;
+  background: var(--bg-sunken);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.cloud-sql-block {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg-sunken);
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Code — file tree (left) + viewer (right) */

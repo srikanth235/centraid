@@ -28,6 +28,7 @@ export const Channel = {
   VERSIONS_LIST: 'centraid:versions:list',
   VERSIONS_ACTIVATE: 'centraid:versions:activate',
   APP_LIVE_URL: 'centraid:app:live-url',
+  APP_SCHEMA: 'centraid:app:schema',
   APPS_DEREGISTER: 'centraid:apps:deregister',
 } as const;
 
@@ -202,6 +203,15 @@ export function registerIpcHandlers(): void {
     const settings = await loadSettings();
     const { appLiveUrl } = await import('@centraid/agent-harness');
     return { url: appLiveUrl(settings, input.id) };
+  });
+
+  // Live schema for the Cloud → Database panel. Returns `undefined` when
+  // the gateway has nothing for this app yet (404 / 503 / 409 from the
+  // schema endpoint — see fetchAppSchema for the exact semantics).
+  ipcMain.handle(Channel.APP_SCHEMA, async (_e, input: { id: string }) => {
+    const settings = await loadSettings();
+    const { fetchAppSchema } = await import('@centraid/agent-harness');
+    return fetchAppSchema(settings, input.id);
   });
 
   ipcMain.handle(Channel.APPS_DEREGISTER, async (_e, input: { id: string }) => {
