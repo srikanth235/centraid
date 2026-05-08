@@ -1,0 +1,42 @@
+{
+  "name": "@centraid/openclaw-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw plugin that mounts a single /centraid prefix on the gateway and dispatches to user-generated apps (static assets + sqlite-backed queries + cron-fed ingest).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "openclaw.plugin.json", "templates", "README.md"],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    },
+    "build": {
+      "openclawVersion": "2026.3.24-beta.2",
+      "pluginSdkVersion": "2026.3.24-beta.2"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "tar": "^7.4.3"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.24-beta.2"
+  },
+  "devDependencies": {
+    "@centraid/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "@types/tar": "^6.1.13",
+    "openclaw": "^2026.5.7",
+    "typescript": "catalog:"
+  }
+}

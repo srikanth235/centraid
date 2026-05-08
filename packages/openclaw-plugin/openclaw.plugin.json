@@ -1,0 +1,33 @@
+{
+  "id": "centraid",
+  "name": "Centraid",
+  "description": "Mounts /centraid on the gateway. Each registered app is a folder with static assets, a sqlite database, and JS handlers for queries / actions / cron-fed ingest.",
+  "contracts": {
+    "tools": []
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "appsDir": {
+        "type": "string",
+        "description": "Absolute or plugin-root-relative path where app folders live. Defaults to 'centraid' under the plugin root.",
+        "default": "centraid"
+      },
+      "gatewayBaseUrl": {
+        "type": "string",
+        "description": "Loopback URL used to point cron webhooks back at the gateway. Must resolve to 127.0.0.1.",
+        "default": "http://127.0.0.1:7575"
+      },
+      "versionRetention": {
+        "type": "integer",
+        "description": "Maximum number of versions to retain per uploaded app (active version always kept). Minimum 2.",
+        "default": 5,
+        "minimum": 2
+      }
+    }
+  }
+}
