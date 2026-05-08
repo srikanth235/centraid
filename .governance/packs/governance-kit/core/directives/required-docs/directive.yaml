@@ -1,8 +1,0 @@
-# required-docs — consolidated presence checks for repo-root artefacts and
-# local-hook scaffolding (constitution, agents, readme, license, security,
-# architecture, CI workflow, .env.example sync, githooks).
-category: Foundation
-recommended: true
-summary: Baseline root-level docs and hook scaffolding exist.
-surface: repo-state
-hook: pre-commit

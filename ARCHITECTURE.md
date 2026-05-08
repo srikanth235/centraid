@@ -46,15 +46,3 @@ Both `apps/desktop` and `apps/mobile` depend on the package via the workspace pr
 - `lint` — depends on upstream `^lint`; run via `oxlint .` at the root.
 
 The desktop app builds the main process (`tsc`), the preload bundle (`bun build`, CommonJS, `electron` external), and copies static assets in three sub-tasks. The mobile app delegates dev / build to the Expo CLI.
-
-## Governance overlay
-
-Independent of the product code, the repo carries a governance-kit installation:
-
-- `CONSTITUTION.md` — the directive set every change must satisfy.
-- `.governance/` — directive folders + the runner.
-- `.githooks/` — generated dispatchers wired into `core.hooksPath`.
-- `.github/workflows/governance.yml` — CI backstop that re-enforces the directives.
-- `COSTS.md`, `QUALITY.md`, `STEERING.md` — durable ledgers for agent-token spend, open quality issues, and human steering events.
-
-The governance overlay does not couple to bun / turbo; it runs in pure bash and python (`uv`) so the directive suite is not tied to the project's runtime choices.

@@ -1,6 +1,0 @@
-# issue-templates - GitHub issue forms encode the agent brainstorming handoff.
-category: AgentDiscipline
-recommended: true
-summary: GitHub issue forms include the required proposal and bug handoff fields.
-surface: repo-state
-hook: pre-commit

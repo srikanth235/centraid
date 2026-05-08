@@ -1,8 +1,0 @@
-# repo-hygiene — consolidated hygiene greps (merge markers, large files,
-# build artefacts, debug statements, overlong source files).
-category: Quality
-recommended: true
-summary: No merge markers, oversized files, build artefacts, debug statements, or overlong source files.
-surface: repo-state
-hook: pre-commit
-always_install: true

@@ -1,6 +1,0 @@
-# commit-issue-receipt-match — Each commit's trailing issue reference matches a touched receipt file.
-category: AgentDiscipline
-recommended: true
-summary: "Each commit's trailing issue reference matches a touched receipt file."
-surface: change-set
-hook: commit-msg

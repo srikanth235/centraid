@@ -1,6 +1,0 @@
-# issues-tracked — QUALITY.md exists at repo root with Open and Resolved sections.
-category: AgentDiscipline
-recommended: true
-summary: QUALITY.md exists at repo root with Open and Resolved sections.
-surface: repo-state
-hook: pre-commit

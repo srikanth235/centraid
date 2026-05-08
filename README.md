@@ -28,11 +28,7 @@ bun run check          # oxfmt --check + oxlint
 bun run ci             # check + typecheck (what CI runs)
 ```
 
-## Governance
-
-Every change must satisfy [CONSTITUTION.md](CONSTITUTION.md). The directives are enforced locally by the pre-commit hook and in CI by [`.github/workflows/governance.yml`](.github/workflows/governance.yml). On a fresh clone, run [`./scripts/setup-clone.sh`](scripts/setup-clone.sh) once to wire up `core.hooksPath`. Run `bash .governance/run.sh` to check directives manually.
-
-See [AGENTS.md](AGENTS.md) for the durable-docs map agents and humans use to orient in this repo, [QUALITY.md](QUALITY.md) for the open-issues ledger, [COSTS.md](COSTS.md) for the agent-token ledger, and [STEERING.md](STEERING.md) for the human-steering ledger.
+See [AGENTS.md](AGENTS.md) for the durable-docs map agents and humans use to orient in this repo.
 
 ## License
 
