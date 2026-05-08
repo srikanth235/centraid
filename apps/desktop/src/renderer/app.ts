@@ -14,6 +14,39 @@
   let userApps = Store.get<UserAppMeta[]>('home.userApps', []);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Renderer prefs — appearance settings live here (vs gateway settings,
+  // which live in the main process via window.CentraidApi.getSettings).
+  type ThemeName = 'light' | 'dark';
+  type Density = 'compact' | 'regular' | 'comfy';
+  type TileVariant = 'solid' | 'gradient' | 'glassy' | 'flat';
+  interface AppearancePrefs {
+    theme: ThemeName;
+    density: Density;
+    tileVariant: TileVariant;
+  }
+  const DEFAULT_PREFS: AppearancePrefs = {
+    density: 'regular',
+    theme: 'light',
+    tileVariant: 'solid',
+  };
+  let prefs: AppearancePrefs = {
+    ...DEFAULT_PREFS,
+    ...Store.get<Partial<AppearancePrefs>>('appearance', {}),
+  };
+
+  function applyPrefs(): void {
+    const html = document.documentElement;
+    html.dataset.theme = prefs.theme;
+    html.dataset.density = prefs.density;
+  }
+  applyPrefs();
+
+  function setPrefs(patch: Partial<AppearancePrefs>): void {
+    prefs = { ...prefs, ...patch };
+    Store.set('appearance', prefs);
+    applyPrefs();
+  }
+
   function persist(): void {
     Store.set('home.deletedBuiltins', [...deletedBuiltins]);
     Store.set('home.userApps', userApps);
@@ -246,11 +279,26 @@
         },
       },
       [
-        el('div', {
-          class: 'app-icon',
-          trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 28, strokeWidth: 1.75 }) : '',
-          style: { background: app.color },
-        }),
+        (() => {
+          // Compute the tile's visual treatment in TS (single source of
+          // truth, shared with mobile) and apply directly as inline style —
+          // no per-variant CSS rules in styles.css, no `--tile-color` plumbing.
+          const finish = window.CentraidTokens.tileFinish(app.color, prefs.tileVariant);
+          const iconEl = el('div', {
+            class: 'app-icon',
+            trustedHtml: Icon[app.iconKey]
+              ? Icon[app.iconKey]({ size: 28, strokeWidth: 1.75 })
+              : '',
+          });
+          iconEl.style.background = finish.background;
+          iconEl.style.color = finish.glyphColor;
+          if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
+          if (finish.backdropFilter) {
+            iconEl.style.backdropFilter = finish.backdropFilter;
+            iconEl.style.setProperty('-webkit-backdrop-filter', finish.backdropFilter);
+          }
+          return iconEl;
+        })(),
         el('div', { class: 'app-tile-name' }, app.name),
         el('div', { class: 'app-tile-desc' }, app.desc),
         (() => {
@@ -291,7 +339,7 @@
   }
 
   interface CtxItem {
-    id: 'open' | 'update' | 'delete';
+    id: 'open' | 'update' | 'delete' | 'share';
     label: string;
     icon: IconNameType;
     danger?: boolean;
@@ -309,8 +357,9 @@
     });
     document.body.append(ctxBackdrop);
 
-    // Drafts have no published runtime, so "Open" is hidden — only Edit
-    // (back to builder) and Delete (rm the project dir) make sense.
+    // Drafts have no published runtime, so "Open" and "Share" are hidden
+    // — only Edit (back to builder) and Delete (rm the project dir) make
+    // sense. Published apps additionally get Share.
     const items: (CtxItem | 'sep')[] = isDraft(app)
       ? [
           { icon: 'Sparkle', id: 'update', label: 'Continue editing' },
@@ -320,6 +369,7 @@
       : [
           { icon: 'Eye', id: 'open', label: 'Open' },
           { icon: 'Sparkle', id: 'update', label: 'Edit with Centraid' },
+          { icon: 'Share', id: 'share', label: 'Share' },
           'sep',
           { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
         ];
@@ -358,6 +408,8 @@
       enterBuilder({ appContext: app });
     } else if (id === 'delete') {
       deleteApp(app);
+    } else if (id === 'share') {
+      openShareDialog(app);
     }
   }
 
@@ -574,8 +626,7 @@
     if (existing) {
       // Republished — refresh metadata, keep tile in place.
       existing.name = input.name || existing.name;
-      existing.desc =
-        input.prompt && input.prompt.length <= 60 ? input.prompt : existing.desc;
+      existing.desc = input.prompt && input.prompt.length <= 60 ? input.prompt : existing.desc;
       existing.centraidProjectId = input.projectId ?? existing.centraidProjectId;
       persist();
       renderHome();
@@ -753,7 +804,11 @@
     container.append(stub);
   }
 
-  // ---------- Settings sheet ----------
+  // ---------- Settings drawer ----------
+  // Right-side panel per the design system. Two groups:
+  //  - Appearance: theme / density / tile treatment (renderer prefs).
+  //  - Gateway: openclaw URL / token / projects dir (main-process prefs).
+  // Appearance changes apply on click (no save needed); gateway needs a save.
   async function openSettingsSheet(): Promise<void> {
     const current = await window.CentraidApi.getSettings().catch(() => ({
       gatewayUrl: 'http://127.0.0.1:7575',
@@ -761,23 +816,60 @@
       projectsDir: '~/centraid-projects',
     }));
 
-    const backdrop = el('div', { class: 'modal-backdrop' });
-    const card = el('div', { class: 'modal-card' });
+    const backdrop = el('div', { class: 'drawer-backdrop' });
+    const panel = el('div', { class: 'drawer-panel', role: 'dialog', 'aria-label': 'Settings' });
 
+    const close = (): void => {
+      backdrop.remove();
+      panel.remove();
+    };
+    backdrop.addEventListener('click', close);
+
+    // Header
+    const closeBtn = el('button', {
+      'aria-label': 'Close settings',
+      class: 'btn-icon',
+      trustedHtml: Icon.X({ size: 16 }),
+      onClick: close,
+    });
+    panel.append(el('div', { class: 'drawer-head' }, [el('h3', {}, 'Settings'), closeBtn]));
+
+    const body = el('div', { class: 'drawer-body' });
+
+    // ---- Appearance group ----
+    const themeSeg = makeSegmented<ThemeName>(['light', 'dark'], prefs.theme, (v) => {
+      setPrefs({ theme: v });
+    });
+    const densitySeg = makeSegmented<Density>(['compact', 'regular', 'comfy'], prefs.density, (v) =>
+      setPrefs({ density: v }),
+    );
+    const tileSeg = makeSegmented<TileVariant>(
+      ['solid', 'gradient', 'glassy', 'flat'],
+      prefs.tileVariant,
+      (v) => {
+        setPrefs({ tileVariant: v });
+        if (root.querySelector('.home')) renderHome();
+      },
+    );
+
+    body.append(
+      drawerGroup('Appearance', [drawerRow('Theme', themeSeg), drawerRow('Density', densitySeg)]),
+      drawerGroup('App tiles', [drawerRow('Treatment', tileSeg)]),
+    );
+
+    // ---- Gateway group ----
     const gatewayUrl = el('input', {
       class: 'input',
       type: 'text',
       placeholder: 'http://127.0.0.1:7575',
       value: current.gatewayUrl,
     }) as HTMLInputElement;
-
     const gatewayToken = el('input', {
       class: 'input',
       type: 'password',
       placeholder: 'paste your gateway.auth.token (leave empty for loopback no-auth)',
       value: current.gatewayToken ?? '',
     }) as HTMLInputElement;
-
     const projectsDir = el('input', {
       class: 'input',
       type: 'text',
@@ -785,18 +877,20 @@
       value: current.projectsDir,
     }) as HTMLInputElement;
 
-    const close = (): void => {
-      backdrop.remove();
-      card.remove();
-    };
+    const labeled = (label: string, hint: string, input: HTMLElement): HTMLElement =>
+      el('div', { class: 'drawer-row' }, [
+        el('span', { class: 'drawer-row-label' }, label),
+        input,
+        el('div', { class: 'settings-hint' }, hint),
+      ]);
 
     const saveBtn = el('button', {
       class: 'btn btn-primary',
       onClick: async () => {
         try {
           await window.CentraidApi.saveSettings({
-            gatewayUrl: gatewayUrl.value.trim(),
             gatewayToken: gatewayToken.value,
+            gatewayUrl: gatewayUrl.value.trim(),
             projectsDir: projectsDir.value.trim(),
           });
           close();
@@ -808,46 +902,192 @@
     });
     saveBtn.innerHTML = Icon.Save({ size: 13 }) + '<span>Save</span>';
 
-    const cancelBtn = el('button', { class: 'btn btn-ghost', onClick: close }, 'Cancel');
+    body.append(
+      drawerGroup('Gateway', [
+        labeled(
+          'Gateway URL',
+          'Base URL of the openclaw gateway (typically loopback).',
+          gatewayUrl,
+        ),
+        labeled(
+          'Gateway token',
+          'From ~/.openclaw/openclaw.json → gateway.auth.token. Leave empty if the gateway runs in mode "none".',
+          gatewayToken,
+        ),
+        labeled(
+          'Projects directory',
+          'Where each app project is scaffolded. Tilde is expanded to your home directory.',
+          projectsDir,
+        ),
+        el('div', { class: 'sheet-actions' }, [saveBtn]),
+      ]),
+    );
 
-    const labeled = (label: string, hint: string, input: HTMLElement): HTMLElement =>
-      el('div', { class: 'settings-field' }, [
-        el('label', { class: 'settings-label' }, label),
-        input,
-        el('div', { class: 'settings-hint' }, hint),
-      ]);
+    panel.append(body);
+    panel.append(el('div', { class: 'drawer-foot' }, 'Centraid'));
 
-    card.append(el('h3', {}, 'Settings'));
-    card.append(
-      el(
-        'p',
-        {},
-        'Where centraid stores your projects on disk and how to reach the openclaw gateway that hosts published apps.',
-      ),
-    );
-    card.append(
-      labeled('Gateway URL', 'Base URL of the openclaw gateway (typically loopback).', gatewayUrl),
-    );
-    card.append(
-      labeled(
-        'Gateway token',
-        'From ~/.openclaw/openclaw.json → gateway.auth.token. Leave empty if the gateway runs in mode "none".',
-        gatewayToken,
-      ),
-    );
-    card.append(
-      labeled(
-        'Projects directory',
-        'Where each app project is scaffolded. Tilde is expanded to your home directory.',
-        projectsDir,
-      ),
-    );
-    card.append(el('div', { class: 'sheet-actions' }, [cancelBtn, saveBtn]));
+    document.body.append(backdrop);
+    document.body.append(panel);
+  }
 
+  function drawerGroup(label: string, rows: HTMLElement[]): HTMLElement {
+    return el('div', { class: 'drawer-group' }, [
+      el('div', { class: 'drawer-group-label' }, label),
+      ...rows,
+    ]);
+  }
+  function drawerRow(label: string, control: HTMLElement): HTMLElement {
+    return el('div', { class: 'drawer-row' }, [
+      el('span', { class: 'drawer-row-label' }, label),
+      control,
+    ]);
+  }
+  function makeSegmented<T extends string>(
+    options: readonly T[],
+    selected: T,
+    onSelect: (value: T) => void,
+  ): HTMLElement {
+    const wrap = el('div', { class: 'seg', role: 'tablist' });
+    for (const opt of options) {
+      const btn = el(
+        'button',
+        {
+          'data-active': String(opt === selected),
+          onClick: () => {
+            for (const child of wrap.children) {
+              (child as HTMLElement).dataset.active = 'false';
+            }
+            btn.dataset.active = 'true';
+            onSelect(opt);
+          },
+          role: 'tab',
+        },
+        opt,
+      );
+      wrap.append(btn);
+    }
+    return wrap;
+  }
+
+  // ---------- Share dialog ----------
+  // Centered modal with a read-only share link + access radios. Link is a
+  // local fake (centraid.app/s/...) — wire to real share URLs once the
+  // gateway exposes a share endpoint.
+  function openShareDialog(app: AppMetaResolvedType): void {
+    const slug = app.name
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '');
+    const link = `centraid.app/s/${app.id}-${slug}`;
+    let access: 'private' | 'link' | 'public' = 'link';
+    // ^ also declared as `Access` below; the union keeps both call sites narrow.
+
+    const backdrop = el('div', { class: 'modal-backdrop' });
+    const card = el('div', {
+      class: 'share-card',
+      role: 'dialog',
+      'aria-label': `Share ${app.name}`,
+    });
+    const close = (): void => {
+      backdrop.remove();
+      card.remove();
+    };
     backdrop.addEventListener('click', close);
+
+    const closeBtn = el('button', {
+      'aria-label': 'Close',
+      class: 'btn-icon',
+      trustedHtml: Icon.X({ size: 16 }),
+      onClick: close,
+    });
+
+    card.append(
+      el('div', { class: 'flex between' }, [
+        el('div', {}, [
+          el('h3', {}, `Share ${app.name}`),
+          el('p', { class: 'share-sub' }, 'Anyone with the link can open a read-only copy.'),
+        ]),
+        closeBtn,
+      ]),
+    );
+
+    const linkInput = el('input', {
+      class: 'share-link-input',
+      readonly: '',
+      value: link,
+    }) as HTMLInputElement;
+    let copyTimer: ReturnType<typeof setTimeout> | null = null;
+    const copyBtn = el(
+      'button',
+      {
+        class: 'btn btn-primary',
+        onClick: () => {
+          void navigator.clipboard
+            .writeText(link)
+            .then(() => {
+              copyBtn.textContent = 'Copied';
+              if (copyTimer) clearTimeout(copyTimer);
+              copyTimer = setTimeout(() => {
+                copyBtn.textContent = 'Copy';
+              }, 1400);
+            })
+            .catch(() => showToast('Could not copy to clipboard'));
+        },
+        style: { minWidth: '80px' },
+      },
+      'Copy',
+    );
+    card.append(el('div', { class: 'share-link-row' }, [linkInput, copyBtn]));
+
+    type Access = 'private' | 'link' | 'public';
+    const options: { id: Access; label: string; hint: string }[] = [
+      { hint: 'App is private. No one else can open it.', id: 'private', label: 'Only me' },
+      {
+        hint: 'Read-only. They can fork it into their own Centraid.',
+        id: 'link',
+        label: 'Anyone with the link',
+      },
+      { hint: 'Listed in Centraid Discover.', id: 'public', label: 'Public' },
+    ];
+    const accessWrap = el('div', { class: 'share-access' });
+    const rows: HTMLElement[] = [];
+    for (const o of options) {
+      const radio = el('input', {
+        type: 'radio',
+        name: 'share-access',
+        checked: o.id === access ? '' : null,
+      }) as HTMLInputElement;
+      const row = el(
+        'label',
+        {
+          class: 'share-access-row',
+          'data-active': String(o.id === access),
+          onClick: () => {
+            access = o.id;
+            for (const r of rows) r.dataset.active = 'false';
+            row.dataset.active = 'true';
+            radio.checked = true;
+          },
+        },
+        [
+          radio,
+          el('span', {}, [
+            el('div', { class: 'label' }, o.label),
+            el('div', { class: 'hint' }, o.hint),
+          ]),
+        ],
+      );
+      rows.push(row);
+      accessWrap.append(row);
+    }
+    card.append(accessWrap);
+
+    const doneBtn = el('button', { class: 'btn btn-soft', onClick: close }, 'Done');
+    card.append(el('div', { class: 'share-actions' }, [doneBtn]));
+
     document.body.append(backdrop);
     document.body.append(card);
-    setTimeout(() => gatewayUrl.focus(), 30);
+    setTimeout(() => linkInput.select(), 30);
   }
 
   // Expose helpers to other modules.

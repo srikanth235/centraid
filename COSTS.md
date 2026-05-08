@@ -13,3 +13,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-dc76d768-3ce-1778162838 | claude-code | dc76d768-3ce3-45db-8042-0acf66446395 | #3 | claude-opus-4-7 | 85 | 71487 | 11201404 | 54822 | 126394 | 7.4185 | fix: ci.yml oxfmt --check failures (#3) |
 | claude-code-0af3d7b8-33c-1778239827 | claude-code | 0af3d7b8-33c2-479a-9f80-26556f110ac7 | #4 | claude-opus-4-7 | 5 | 10073 | 14820 | 24 | 10102 | 0.0710 | feat: add @centraid/agent-harness package (#4) |
 | claude-code-3e1ed331-091-1778240323 | claude-code | 3e1ed331-0916-4bea-9a0d-4ac13b0f22e4 | #7 | claude-opus-4-7 | 10 | 20466 | 29640 | 124 | 20600 | 0.1459 | refactor(governance): exclude desktop renderer entry points from file-size-limit |
+| claude-code-e26f2396-10e-1778247300 | claude-code | e26f2396-10e1-4eb9-a153-d75e246ca003 | #9 | claude-opus-4-7 | 5 | 10690 | 14820 | 24 | 10719 | 0.0748 | feat: centralize design system in @centraid/design-tokens (#9) |

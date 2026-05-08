@@ -1,25 +1,15 @@
-/* Centraid — components.
-   Color/spacing/radii tokens come from @centraid/design-tokens via
-   renderer/theme-vars.js — do not redefine them here. This file owns
-   only Electron-renderer-specific concerns: font stacks (with platform
-   fallback chain), compound shadows, and the --device-wall gradient. */
+/* Centraid — Electron renderer component CSS.
+   All design tokens (colors per theme, density spacing, shadows, device-wall,
+   palette, radii) come from @centraid/design-tokens via theme-vars.ts,
+   which injects the generated tokens.css into a <style> tag at boot.
+   This file owns only component-shape rules and the platform-specific
+   font-family fallback chain. To tweak design values, edit the TS in
+   packages/design-tokens — not this file. */
 
 :root {
   --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: 'Space Grotesk', 'Geist', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
-}
-
-[data-theme='light'] {
-  --shadow-sm: 0 1px 0 rgba(20, 24, 32, 0.06);
-  --shadow-md: 0 1px 0 rgba(20, 24, 32, 0.06), 0 12px 32px -8px rgba(20, 24, 32, 0.1);
-  --shadow-lg: 0 1px 0 rgba(20, 24, 32, 0.06), 0 28px 64px -16px rgba(20, 24, 32, 0.18);
-
-  /* Signature crosshatch backdrop — subtle 24px grid */
-  --device-wall:
-    repeating-linear-gradient(0deg, transparent 0 23px, rgba(20, 24, 32, 0.04) 23px 24px),
-    repeating-linear-gradient(90deg, transparent 0 23px, rgba(20, 24, 32, 0.04) 23px 24px),
-    linear-gradient(180deg, #dee0e4 0%, #d2d5db 100%);
 }
 
 *,
@@ -1097,8 +1087,8 @@ textarea {
 .chat-tool-row .tool-icon-err {
   color: #c0392b;
 }
-.chat-tool-row[data-state="error"] .tool-name,
-.chat-tool-row[data-state="error"] .tool-arg {
+.chat-tool-row[data-state='error'] .tool-name,
+.chat-tool-row[data-state='error'] .tool-arg {
   color: #c0392b;
 }
 .chat-tool-row .tool-spinner {
@@ -1141,7 +1131,7 @@ textarea {
   background: var(--ink-3);
   opacity: 0.55;
 }
-.chat-thinking[data-streaming="true"] .thinking-dot {
+.chat-thinking[data-streaming='true'] .thinking-dot {
   background: var(--accent);
   animation: pulse-fade 1s infinite;
 }
@@ -1696,10 +1686,12 @@ textarea {
   height: 720px;
   flex-shrink: 0;
   border-radius: 54px;
-  background: #14181f;
+  /* Bezel + inner ring inherit from theme tokens so the frame flips with
+     [data-theme] without a re-render. */
+  background: var(--bezel);
   padding: 11px;
   box-shadow:
-    0 0 0 2px #1f242d,
+    0 0 0 2px var(--bezel-inner),
     0 50px 100px -30px rgba(0, 0, 0, 0.45),
     0 12px 32px -8px rgba(0, 0, 0, 0.25);
   overflow: hidden;
@@ -1735,7 +1727,10 @@ textarea {
   transform: translateX(-50%);
   width: 134px;
   height: 5px;
-  background: rgba(255, 255, 255, 0.85);
+  /* Home-indicator color sits on the running app's surface, so it tracks
+     ink rather than a fixed white — keeps it readable on dark wallpapers. */
+  background: var(--ink);
+  opacity: 0.85;
   border-radius: 999px;
   z-index: 30;
   pointer-events: none;
@@ -1901,4 +1896,234 @@ textarea {
 }
 .preview-toast.preview-toast-action .tiny-btn {
   margin-left: 6px;
+}
+
+/* App-icon tile finishes are computed in TS via `tileFinish(color, variant)`
+   from @centraid/design-tokens and applied as inline styles per tile.
+   See app.ts → renderTile. The "new app" dashed tile is the one exception:
+   it keeps its empty-state look regardless of the user's variant pref. */
+.app-tile-add .app-icon {
+  background: transparent !important;
+  color: var(--ink-3) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ---------- Settings drawer (right-side panel) ----------
+   Replaces the older centered-modal settings sheet. Content stacks
+   vertically; segmented controls span the panel width so 4-option groups
+   (tile treatment) don't collide with their row label. */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 80;
+  animation: m-fade 0.18s ease-out;
+}
+.drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 400px;
+  max-width: 90vw;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  z-index: 81;
+  display: flex;
+  flex-direction: column;
+  animation: drawer-slide 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes drawer-slide {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.drawer-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--ink);
+}
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 22px;
+}
+.drawer-foot {
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.drawer-group {
+  margin-bottom: 22px;
+}
+.drawer-group + .drawer-group {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.drawer-group-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin-bottom: 10px;
+}
+.drawer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+}
+.drawer-row + .drawer-row {
+  border-top: 0.5px dashed var(--line);
+}
+.drawer-row-label {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.drawer-row-static {
+  font-size: 13px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+/* Segmented control inside the drawer (theme/density/tile treatment) */
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+.seg button {
+  border: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  text-transform: capitalize;
+  min-width: 0;
+}
+.seg button[data-active='true'] {
+  background: var(--bg-elev);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Share dialog ----------
+   Centered modal. Read-only link + radio access controls. Dimmed
+   backdrop with a 2px blur — matches the design system's blur-on-floating
+   rule (sheets/cards stay solid, only floating chrome blurs). */
+.share-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 48px));
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2xl, 20px);
+  padding: 24px;
+  z-index: 65;
+  box-shadow: var(--shadow-lg);
+  animation: m-rise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.share-card h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+.share-card p.share-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.share-link-row {
+  margin-top: 18px;
+  display: flex;
+  gap: 8px;
+}
+.share-link-input {
+  flex: 1;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  outline: none;
+}
+.share-access {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.share-access-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  cursor: pointer;
+  padding: 12px;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: 0 0 0 0.5px var(--line);
+  transition: background 0.12s;
+}
+.share-access-row[data-active='true'] {
+  background: var(--bg-app);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.share-access-row input[type='radio'] {
+  accent-color: var(--accent);
+  margin-top: 3px;
+}
+.share-access-row .label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.share-access-row .hint {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.share-actions {
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

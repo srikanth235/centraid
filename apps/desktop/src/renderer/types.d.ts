@@ -9,6 +9,10 @@ import type {
   AppMetaResolved,
   ColorHex,
   ColorKey,
+  Theme,
+  ThemeName,
+  TileVariant,
+  TileFinish,
 } from '@centraid/design-tokens';
 
 // Make this file a module so `declare global` augments globals.
@@ -21,7 +25,12 @@ declare global {
   type IconRenderer = (opts?: IconOptions) => string;
 
   interface CentraidTokensBridge {
-    colors: Record<string, string | Palette>;
+    /** Generated CSS — `:root` + theme + density blocks. Injected at boot. */
+    cssText: string;
+    /** Light theme — kept as alias of `themes.light` for legacy call sites. */
+    colors: Theme;
+    /** Both themes; flip via `<html data-theme="light|dark">`. */
+    themes: Record<ThemeName, Theme>;
     palette: Palette;
     icons: Record<IconName, readonly { d: string; fill?: 'currentColor' }[]>;
     apps: AppMetaResolved[];
@@ -29,6 +38,11 @@ declare global {
     radii: Record<string, number>;
     fonts: Record<string, string>;
     type: Record<string, { size: number; lineHeight: number; family: string; weight: string }>;
+    /**
+     * Computes a tile's visual treatment for a given hue + variant.
+     * Pure; safe to call on every tile render.
+     */
+    tileFinish: (color: string, variant: TileVariant) => TileFinish;
   }
 
   interface CentraidStore {

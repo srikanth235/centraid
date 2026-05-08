@@ -20,3 +20,4 @@ silent fallback for when the runtime CLI is unreachable).
 
 | steer-key | session | issue | type | tier | user-reason | commit |
 | --- | --- | --- | --- | --- | --- | --- |
+| steer-4fb6a682da3-1778247224-1 | 4fb6a682-da3e-420f-aff2-2c82496271a8 |  | correction | classifier | rejected framing; clarified shared design system is the goal for both apps | feat: centralize design system in @centraid/design-tokens |

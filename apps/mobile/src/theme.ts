@@ -1,21 +1,35 @@
-// Mobile theme — re-exports shared tokens and resolves them to the actual
-// font-family names produced by @expo-google-fonts. RN doesn't combine
-// `fontFamily` + `fontWeight` reliably across platforms, so each weight
-// becomes its own family name.
+// Mobile theme — re-exports the shared design system from
+// @centraid/design-tokens and resolves type styles to the actual
+// font-family names produced by @expo-google-fonts. RN doesn't
+// combine `fontFamily` + `fontWeight` reliably across platforms,
+// so each weight becomes its own family name.
+//
+// Tokens (colors per theme, density, palette, radii, tile finishes) come
+// from the package — this file only owns the RN-specific font resolution.
 
 import {
-  colors,
+  themes,
+  densities,
+  spacing,
   palette,
   radii,
-  spacing,
-  type as typeTokens,
   fonts,
+  type as typeTokens,
+  tileFinish,
+  TILE_VARIANTS,
 } from '@centraid/design-tokens';
-import type { TypeKey } from '@centraid/design-tokens';
+import type {
+  Theme,
+  ThemeName,
+  DensityName,
+  TypeKey,
+  TileVariant,
+  TileFinish,
+} from '@centraid/design-tokens';
 import type { TextStyle } from 'react-native';
 
-// One family name per (family, weight) pair. Keep in sync with the imports
-// in App.tsx — anything referenced here must be loaded there.
+// One family name per (family, weight) pair. Keep in sync with the
+// imports in App.tsx — anything referenced here must be loaded there.
 export const family = {
   displayBold: 'SpaceGrotesk_600SemiBold',
   displayMedium: 'SpaceGrotesk_500Medium',
@@ -46,4 +60,10 @@ export const t = (key: TypeKey): Pick<TextStyle, 'fontSize' | 'lineHeight' | 'fo
   };
 };
 
-export { colors, palette, radii, spacing, fonts };
+// `colors` is the active theme. Today this is hard-wired to light; once
+// mobile adds theme-switching, swap to `themes[currentTheme]` driven by
+// useColorScheme() or a user pref.
+export const colors: Theme = themes.light;
+
+export { themes, densities, spacing, palette, radii, fonts, tileFinish, TILE_VARIANTS };
+export type { Theme, ThemeName, DensityName, TileVariant, TileFinish };

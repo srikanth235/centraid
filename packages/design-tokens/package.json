@@ -7,6 +7,12 @@
     "dist",
     "index.ts",
     "palette.ts",
+    "themes.ts",
+    "density.ts",
+    "radii.ts",
+    "typography.ts",
+    "tile.ts",
+    "css.ts",
     "icons.ts",
     "apps.ts"
   ],

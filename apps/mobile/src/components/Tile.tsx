@@ -2,7 +2,8 @@ import React from 'react';
 import { Pressable, View, Text, StyleSheet } from 'react-native';
 import type { AppMetaResolved } from '@centraid/design-tokens';
 import Icon from './Icon';
-import { colors, t } from '../theme';
+import { colors, t, tileFinish } from '../theme';
+import type { TileVariant } from '../theme';
 
 const ICON_SIZE = 60;
 const ICON_RADIUS = 16;
@@ -11,17 +12,31 @@ export interface TileProps {
   app: AppMetaResolved;
   onPress: () => void;
   onLongPress?: () => void;
+  /**
+   * Tile finish — defaults to "solid". `gradient` falls back to solid
+   * fill on RN (no built-in gradient component); `glassy` falls back
+   * to solid translucent (no backdrop-filter on Android). Both are
+   * approximations on purpose; the design pixels match the desktop
+   * variant rendering.
+   */
+  variant?: TileVariant;
 }
 
-export default function Tile({ app, onPress, onLongPress }: TileProps): React.JSX.Element {
+export default function Tile({
+  app,
+  onPress,
+  onLongPress,
+  variant = 'solid',
+}: TileProps): React.JSX.Element {
+  const finish = tileFinish(app.color, variant);
   return (
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
       style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
     >
-      <View style={[styles.iconWrap, { backgroundColor: app.color }]}>
-        <Icon name={app.iconKey} size={30} color="#fff" strokeWidth={1.75} />
+      <View style={[styles.iconWrap, { backgroundColor: finish.backgroundColor }]}>
+        <Icon name={app.iconKey} size={30} color={finish.glyphColor} strokeWidth={1.75} />
       </View>
       <Text style={styles.name} numberOfLines={1}>
         {app.name}
