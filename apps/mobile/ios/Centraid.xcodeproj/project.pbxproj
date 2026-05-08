@@ -8,28 +8,28 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		278084FAEC7667C5888FAE9E /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975DF59CE84D8A4E914D79BF /* ExpoModulesProvider.swift */; };
-		3D27931873783D319A7497D7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7652D394B531B9C1D2752166 /* PrivacyInfo.xcprivacy */; };
+		16E99EE290E59E5B44D2AE18 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6B59F3E946CE3ED29CEADBCE /* PrivacyInfo.xcprivacy */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		50488329FEF232486DFE3757 /* libPods-Meridian.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 78AA4142C52DE941399F00FA /* libPods-Meridian.a */; };
+		83CF788FB536A4DF75DDC4EF /* libPods-Centraid.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A8084E4C0254B41FD1BF0DA3 /* libPods-Centraid.a */; };
+		9186C9E8C27B8C5680E73FD9 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFF470D87577DF8FC52E704 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		13B07F961A680F5B00A75B9A /* Meridian.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Meridian.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Meridian/Images.xcassets; sourceTree = "<group>"; };
-		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Meridian/Info.plist; sourceTree = "<group>"; };
-		7652D394B531B9C1D2752166 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Meridian/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		78AA4142C52DE941399F00FA /* libPods-Meridian.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Meridian.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		90CB57833F2FA06C99F84DF7 /* Pods-Meridian.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Meridian.release.xcconfig"; path = "Target Support Files/Pods-Meridian/Pods-Meridian.release.xcconfig"; sourceTree = "<group>"; };
-		975DF59CE84D8A4E914D79BF /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Meridian/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Meridian/SplashScreen.storyboard; sourceTree = "<group>"; };
+		13B07F961A680F5B00A75B9A /* Centraid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Centraid.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Centraid/Images.xcassets; sourceTree = "<group>"; };
+		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Centraid/Info.plist; sourceTree = "<group>"; };
+		6B59F3E946CE3ED29CEADBCE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Centraid/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A8084E4C0254B41FD1BF0DA3 /* libPods-Centraid.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Centraid.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Centraid/SplashScreen.storyboard; sourceTree = "<group>"; };
+		B10CB87B539C42A4A7943664 /* Pods-Centraid.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Centraid.debug.xcconfig"; path = "Target Support Files/Pods-Centraid/Pods-Centraid.debug.xcconfig"; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		EBD644E79D0ADF7ADC97BC1A /* Pods-Meridian.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Meridian.debug.xcconfig"; path = "Target Support Files/Pods-Meridian/Pods-Meridian.debug.xcconfig"; sourceTree = "<group>"; };
+		D4F76AEA15F529A61F167785 /* Pods-Centraid.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Centraid.release.xcconfig"; path = "Target Support Files/Pods-Centraid/Pods-Centraid.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Meridian/AppDelegate.swift; sourceTree = "<group>"; };
-		F11748442D0722820044C1D9 /* Meridian-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Meridian-Bridging-Header.h"; path = "Meridian/Meridian-Bridging-Header.h"; sourceTree = "<group>"; };
+		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Centraid/AppDelegate.swift; sourceTree = "<group>"; };
+		F11748442D0722820044C1D9 /* Centraid-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Centraid-Bridging-Header.h"; path = "Centraid/Centraid-Bridging-Header.h"; sourceTree = "<group>"; };
+		FAFF470D87577DF8FC52E704 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Centraid/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -37,52 +37,42 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				50488329FEF232486DFE3757 /* libPods-Meridian.a in Frameworks */,
+				83CF788FB536A4DF75DDC4EF /* libPods-Centraid.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		13B07FAE1A68108700A75B9A /* Meridian */ = {
+		0D0E20FDA9127AC87EF6708B /* Centraid */ = {
+			isa = PBXGroup;
+			children = (
+				FAFF470D87577DF8FC52E704 /* ExpoModulesProvider.swift */,
+			);
+			name = Centraid;
+			sourceTree = "<group>";
+		};
+		13B07FAE1A68108700A75B9A /* Centraid */ = {
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
-				F11748442D0722820044C1D9 /* Meridian-Bridging-Header.h */,
+				F11748442D0722820044C1D9 /* Centraid-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				7652D394B531B9C1D2752166 /* PrivacyInfo.xcprivacy */,
+				6B59F3E946CE3ED29CEADBCE /* PrivacyInfo.xcprivacy */,
 			);
-			name = Meridian;
-			sourceTree = "<group>";
-		};
-		24A7072F988FC70792AE758B /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				EBD644E79D0ADF7ADC97BC1A /* Pods-Meridian.debug.xcconfig */,
-				90CB57833F2FA06C99F84DF7 /* Pods-Meridian.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
+			name = Centraid;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				78AA4142C52DE941399F00FA /* libPods-Meridian.a */,
+				A8084E4C0254B41FD1BF0DA3 /* libPods-Centraid.a */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		74DD3CB2141F74D4B7263CDE /* Meridian */ = {
-			isa = PBXGroup;
-			children = (
-				975DF59CE84D8A4E914D79BF /* ExpoModulesProvider.swift */,
-			);
-			name = Meridian;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -95,12 +85,12 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
-				13B07FAE1A68108700A75B9A /* Meridian */,
+				13B07FAE1A68108700A75B9A /* Centraid */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				24A7072F988FC70792AE758B /* Pods */,
-				9CF59FEF2624B190D28D41E6 /* ExpoModulesProviders */,
+				AB7197EFB6D73D1B468907FB /* Pods */,
+				B4BFCF638037B21DF113CC6D /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -110,15 +100,25 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* Meridian.app */,
+				13B07F961A680F5B00A75B9A /* Centraid.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		9CF59FEF2624B190D28D41E6 /* ExpoModulesProviders */ = {
+		AB7197EFB6D73D1B468907FB /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				74DD3CB2141F74D4B7263CDE /* Meridian */,
+				B10CB87B539C42A4A7943664 /* Pods-Centraid.debug.xcconfig */,
+				D4F76AEA15F529A61F167785 /* Pods-Centraid.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		B4BFCF638037B21DF113CC6D /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				0D0E20FDA9127AC87EF6708B /* Centraid */,
 			);
 			name = ExpoModulesProviders;
 			sourceTree = "<group>";
@@ -129,32 +129,32 @@
 				BB2F792C24A3F905000567C9 /* Expo.plist */,
 			);
 			name = Supporting;
-			path = Meridian/Supporting;
+			path = Centraid/Supporting;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		13B07F861A680F5B00A75B9A /* Meridian */ = {
+		13B07F861A680F5B00A75B9A /* Centraid */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Meridian" */;
+			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Centraid" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				5FF15ADAA21B365C5276190E /* [Expo] Configure project */,
+				0F80D0A1C744EEE4D01D0799 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				ECA163D3C419DEE33942F151 /* [CP] Embed Pods Frameworks */,
+				632970EFAB083B550E69D911 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = Meridian;
-			productName = Meridian;
-			productReference = 13B07F961A680F5B00A75B9A /* Meridian.app */;
+			name = Centraid;
+			productName = Centraid;
+			productReference = 13B07F961A680F5B00A75B9A /* Centraid.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -170,7 +170,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "Meridian" */;
+			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "Centraid" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -183,7 +183,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				13B07F861A680F5B00A75B9A /* Meridian */,
+				13B07F861A680F5B00A75B9A /* Centraid */,
 			);
 		};
 /* End PBXProject section */
@@ -196,7 +196,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				3D27931873783D319A7497D7 /* PrivacyInfo.xcprivacy in Resources */,
+				16E99EE290E59E5B44D2AE18 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -235,14 +235,14 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-Meridian-checkManifestLockResult.txt",
+				"$(DERIVED_FILE_DIR)/Pods-Centraid-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		5FF15ADAA21B365C5276190E /* [Expo] Configure project */ = {
+		0F80D0A1C744EEE4D01D0799 /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -253,18 +253,40 @@
 			inputPaths = (
 				"$(SRCROOT)/.xcode.env",
 				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/Meridian/Meridian.entitlements",
-				"$(SRCROOT)/Pods/Target Support Files/Pods-Meridian/expo-configure-project.sh",
+				"$(SRCROOT)/Centraid/Centraid.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Centraid/expo-configure-project.sh",
 			);
 			name = "[Expo] Configure project";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(SRCROOT)/Pods/Target Support Files/Pods-Meridian/ExpoModulesProvider.swift",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-Centraid/ExpoModulesProvider.swift",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Meridian/expo-configure-project.sh\"\n";
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Centraid/expo-configure-project.sh\"\n";
+		};
+		632970EFAB083B550E69D911 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Centraid/Pods-Centraid-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Centraid/Pods-Centraid-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
 		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -272,7 +294,7 @@
 			files = (
 			);
 			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Meridian/Pods-Meridian-resources.sh",
+				"${PODS_ROOT}/Target Support Files/Pods-Centraid/Pods-Centraid-resources.sh",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem_privacy.bundle",
@@ -293,29 +315,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Meridian/Pods-Meridian-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		ECA163D3C419DEE33942F151 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Meridian/Pods-Meridian-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Meridian/Pods-Meridian-frameworks.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Centraid/Pods-Centraid-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -326,7 +326,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				278084FAEC7667C5888FAE9E /* ExpoModulesProvider.swift in Sources */,
+				9186C9E8C27B8C5680E73FD9 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -335,18 +335,18 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = EBD644E79D0ADF7ADC97BC1A /* Pods-Meridian.debug.xcconfig */;
+			baseConfigurationReference = B10CB87B539C42A4A7943664 /* Pods-Centraid.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Meridian/Meridian.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Centraid/Centraid.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
 				);
-				INFOPLIST_FILE = Meridian/Info.plist;
+				INFOPLIST_FILE = Centraid/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -359,9 +359,9 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.meridian.mobile;
-				PRODUCT_NAME = Meridian;
-				SWIFT_OBJC_BRIDGING_HEADER = "Meridian/Meridian-Bridging-Header.h";
+				PRODUCT_BUNDLE_IDENTIFIER = com.centraid.mobile;
+				PRODUCT_NAME = Centraid;
+				SWIFT_OBJC_BRIDGING_HEADER = "Centraid/Centraid-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -371,13 +371,13 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 90CB57833F2FA06C99F84DF7 /* Pods-Meridian.release.xcconfig */;
+			baseConfigurationReference = D4F76AEA15F529A61F167785 /* Pods-Centraid.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Meridian/Meridian.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Centraid/Centraid.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
-				INFOPLIST_FILE = Meridian/Info.plist;
+				INFOPLIST_FILE = Centraid/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -390,9 +390,9 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.meridian.mobile;
-				PRODUCT_NAME = Meridian;
-				SWIFT_OBJC_BRIDGING_HEADER = "Meridian/Meridian-Bridging-Header.h";
+				PRODUCT_BUNDLE_IDENTIFIER = com.centraid.mobile;
+				PRODUCT_NAME = Centraid;
+				SWIFT_OBJC_BRIDGING_HEADER = "Centraid/Centraid-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
@@ -520,7 +520,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Meridian" */ = {
+		13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Centraid" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				13B07F941A680F5B00A75B9A /* Debug */,
@@ -529,7 +529,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "Meridian" */ = {
+		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "Centraid" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,

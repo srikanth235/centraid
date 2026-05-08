@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "Meridian.app"
-               BlueprintName = "Meridian"
-               ReferencedContainer = "container:Meridian.xcodeproj">
+               BuildableName = "Centraid.app"
+               BlueprintName = "Centraid"
+               ReferencedContainer = "container:Centraid.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "MeridianTests.xctest"
-               BlueprintName = "MeridianTests"
-               ReferencedContainer = "container:Meridian.xcodeproj">
+               BuildableName = "CentraidTests.xctest"
+               BlueprintName = "CentraidTests"
+               ReferencedContainer = "container:Centraid.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "Meridian.app"
-            BlueprintName = "Meridian"
-            ReferencedContainer = "container:Meridian.xcodeproj">
+            BuildableName = "Centraid.app"
+            BlueprintName = "Centraid"
+            ReferencedContainer = "container:Centraid.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "Meridian.app"
-            BlueprintName = "Meridian"
-            ReferencedContainer = "container:Meridian.xcodeproj">
+            BuildableName = "Centraid.app"
+            BlueprintName = "Centraid"
+            ReferencedContainer = "container:Centraid.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
