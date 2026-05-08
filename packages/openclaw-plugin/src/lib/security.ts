@@ -1,56 +1,56 @@
-import path from "node:path";
+import path from 'node:path';
 
 const STATIC_EXT_ALLOWLIST = new Set([
-  ".html",
-  ".htm",
-  ".css",
-  ".js",
-  ".mjs",
-  ".json",
-  ".svg",
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".webp",
-  ".gif",
-  ".ico",
-  ".woff",
-  ".woff2",
-  ".ttf",
-  ".otf",
-  ".map",
+  '.html',
+  '.htm',
+  '.css',
+  '.js',
+  '.mjs',
+  '.json',
+  '.svg',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+  '.ico',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+  '.map',
 ]);
 
 const CONTENT_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".htm": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".mjs": "application/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".gif": "image/gif",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".otf": "font/otf",
-  ".map": "application/json; charset=utf-8",
+  '.html': 'text/html; charset=utf-8',
+  '.htm': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.map': 'application/json; charset=utf-8',
 };
 
 /** Files whose names are reserved and never served as static. */
-const RESERVED_FILENAMES = new Set(["data.sqlite", "_registry.json", "app.json"]);
+const RESERVED_FILENAMES = new Set(['data.sqlite', '_registry.json', 'app.json']);
 
 /** Directories whose contents are never served as static. */
-const RESERVED_DIRS = new Set(["queries", "actions", "crons"]);
+const RESERVED_DIRS = new Set(['queries', 'actions', 'crons']);
 
 /** Apps whose ids start with `_` are reserved for plugin internals. */
 export function isReservedAppId(id: string): boolean {
-  return id.startsWith("_") || id === "" || id.includes("/") || id.includes("..");
+  return id.startsWith('_') || id === '' || id.includes('/') || id.includes('..');
 }
 
 /**
@@ -60,9 +60,9 @@ export function isReservedAppId(id: string): boolean {
  */
 export function resolveStaticPath(appDir: string, relRequest: string): string | null {
   // Strip leading slash, normalize.
-  const rel = relRequest.replace(/^\/+/, "");
-  if (rel === "" || rel === "/") {
-    return path.join(appDir, "index.html");
+  const rel = relRequest.replace(/^\/+/, '');
+  if (rel === '' || rel === '/') {
+    return path.join(appDir, 'index.html');
   }
 
   const resolved = path.resolve(appDir, rel);
@@ -72,7 +72,7 @@ export function resolveStaticPath(appDir: string, relRequest: string): string | 
   const segments = path.relative(appDir, resolved).split(path.sep);
   const first = segments[0];
   if (first && RESERVED_DIRS.has(first)) return null;
-  const last = segments[segments.length - 1] ?? "";
+  const last = segments[segments.length - 1] ?? '';
   if (RESERVED_FILENAMES.has(last)) return null;
 
   const ext = path.extname(resolved).toLowerCase();
@@ -83,7 +83,7 @@ export function resolveStaticPath(appDir: string, relRequest: string): string | 
 
 export function contentTypeFor(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
-  return CONTENT_TYPES[ext] ?? "application/octet-stream";
+  return CONTENT_TYPES[ext] ?? 'application/octet-stream';
 }
 
 /**
@@ -92,10 +92,10 @@ export function contentTypeFor(filePath: string): string {
  */
 export function staticSecurityHeaders(): Record<string, string> {
   return {
-    "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy":
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy':
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'",
-    "Referrer-Policy": "no-referrer",
+    'Referrer-Policy': 'no-referrer',
   };
 }
 

@@ -1,11 +1,11 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-import type { Registry } from "./registry.js";
-import type { OpenClawCron, CliCronJobDefinition } from "./openclaw-cron.js";
-import type { VersionStore } from "./version-store.js";
-import { appCodeDir } from "./app-paths.js";
-import type { AppId, CronModule, RegistryEntry } from "../types.js";
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import type { Registry } from './registry.js';
+import type { OpenClawCron, CliCronJobDefinition } from './openclaw-cron.js';
+import type { VersionStore } from './version-store.js';
+import { appCodeDir } from './app-paths.js';
+import type { AppId, CronModule, RegistryEntry } from '../types.js';
 
 export interface CronSyncOptions {
   registry: Registry;
@@ -33,7 +33,7 @@ export class CronSync {
 
   /** Resolve the active code dir for an app (uploaded → version dir; path → folder). */
   private async codeDirOf(entry: RegistryEntry): Promise<string | undefined> {
-    if (entry.mode === "uploaded") {
+    if (entry.mode === 'uploaded') {
       const active = await this.opts.versions.getActiveVersion(entry.path);
       if (!active) return undefined;
       return appCodeDir(entry, active);
@@ -45,22 +45,22 @@ export class CronSync {
   async loadAppCronModules(
     appDir: string,
   ): Promise<Array<{ cronId: string; module: CronModule; file: string }>> {
-    const cronsDir = path.join(appDir, "crons");
+    const cronsDir = path.join(appDir, 'crons');
     let entries: string[] = [];
     try {
       entries = await fs.readdir(cronsDir);
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
       throw err;
     }
 
     const modules: Array<{ cronId: string; module: CronModule; file: string }> = [];
     for (const name of entries) {
-      if (!name.endsWith(".js") && !name.endsWith(".mjs")) continue;
+      if (!name.endsWith('.js') && !name.endsWith('.mjs')) continue;
       const file = path.join(cronsDir, name);
-      const cronId = name.replace(/\.m?js$/, "");
+      const cronId = name.replace(/\.m?js$/, '');
       const mod = (await import(pathToFileURL(file).href)) as Partial<CronModule>;
-      if (!mod.schedule || !mod.task || typeof mod.default !== "function") {
+      if (!mod.schedule || !mod.task || typeof mod.default !== 'function') {
         // Skip malformed modules — not our place to throw on user code load.
         continue;
       }
@@ -128,11 +128,11 @@ export class CronSync {
     return {
       id,
       schedule: module.schedule,
-      execution: module.execution ?? "isolated",
+      execution: module.execution ?? 'isolated',
       prompt: module.task.prompt,
       toolAllow: module.task.toolAllow,
       model: module.task.model,
-      delivery: { mode: "webhook", url, token },
+      delivery: { mode: 'webhook', url, token },
     };
   }
 }

@@ -886,17 +886,156 @@ textarea {
   align-items: center;
   border-bottom: 1px solid var(--line);
   background: var(--bg-elev);
-  gap: 16px;
+  gap: 12px;
 }
-.builder-topbar-left,
+.builder-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  min-width: 0;
+}
 .builder-topbar-right {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
-}
-.builder-topbar-right {
+  flex: none;
+  margin-left: auto;
   justify-content: flex-end;
+}
+
+/* Topbar icon-button cluster: history toggle + sidebar toggle */
+.topbar-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.topbar-icon-btn {
+  border: 0;
+  background: transparent;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.topbar-icon-btn:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.topbar-icon-btn[data-active='true'] {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+
+/* URL bar slot — flexes to absorb middle slack; hidden when not in Preview */
+.urlbar-slot {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.urlbar-slot[data-visible='false'] {
+  visibility: hidden;
+}
+.urlbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  max-width: 560px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 4px 3px 4px;
+  height: 32px;
+  box-sizing: border-box;
+}
+.urlbar-device {
+  display: inline-flex;
+  background: var(--bg-elev);
+  border-radius: 999px;
+  padding: 2px;
+  flex: none;
+}
+.urlbar-device-btn {
+  border: 0;
+  background: transparent;
+  width: 24px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.urlbar-device-btn[data-active='true'] {
+  background: var(--ink);
+  color: var(--ink-inv);
+}
+.urlbar-field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow: hidden;
+}
+.urlbar-kind {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-4, var(--ink-3));
+  flex: none;
+}
+.urlbar-kind[data-kind='live'] {
+  background: #2ea043;
+}
+.urlbar-kind[data-kind='local'] {
+  background: var(--accent);
+}
+.urlbar-path {
+  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.urlbar[data-empty='true'] .urlbar-path {
+  font-style: italic;
+  color: var(--ink-4, var(--ink-3));
+}
+.urlbar-action-btn {
+  border: 0;
+  background: transparent;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  cursor: pointer;
+  flex: none;
+}
+.urlbar-action-btn:hover:not(:disabled) {
+  background: var(--bg-elev);
+  color: var(--ink);
+}
+.urlbar-action-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .proj-name {
   display: flex;
@@ -945,6 +1084,14 @@ textarea {
   display: grid;
   grid-template-columns: minmax(360px, 420px) 1fr;
   min-height: 0;
+  transition: grid-template-columns 0.18s ease;
+}
+.builder-body[data-sidebar='closed'] {
+  grid-template-columns: 0 1fr;
+}
+.builder-body[data-sidebar='closed'] .chat-pane {
+  visibility: hidden;
+  border-right: 0;
 }
 
 /* ---- Chat pane ---- */
@@ -954,6 +1101,31 @@ textarea {
   border-right: 1px solid var(--line);
   background: var(--bg);
   min-height: 0;
+  overflow: hidden;
+}
+
+/* Header shown when chat pane is in History view */
+.chatpane-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.chatpane-head-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.history-list.chatpane-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .chat-scroll {
   flex: 1;
@@ -1040,31 +1212,108 @@ textarea {
   display: flex;
 }
 
-/* ---- Tool activity rows (left-aligned, tightly stacked) ----
-   Replaces the old centered-pill rendering. Reads as a quiet activity log:
-   one row per tool call, with state + name + the actual file/command. */
-.chat-tool-row {
+/* ---- Tool group (consolidated pill + expandable per-call list) ----
+   Adjacent tool calls within an AI turn are folded into one chat bubble.
+   The pill shows a verb-and-count summary ("Reading ×3"); clicking expands
+   into one row per call with status + tool + target. Mirrors the design
+   system's `tcg` component (preview/components-tool-calls.html). */
+.tool-group {
+  margin: 10px 0;
+}
+.tool-group-pill {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 4px 0;
-  padding: 2px 2px 2px 0;
-  font-size: 12px;
-  color: var(--ink-3);
-  line-height: 1.45;
-}
-/* Collapse vertical space between consecutive tool rows so they group. */
-.chat-tool-row + .chat-tool-row {
-  margin-top: 0;
-}
-.chat-tool-row .tool-name {
-  color: var(--ink-2, var(--ink));
+  gap: 10px;
+  padding: 9px 14px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
   font-weight: 500;
-  letter-spacing: 0.01em;
+  color: var(--ink-2);
+  text-align: left;
+  transition: background 140ms ease-out;
 }
-.chat-tool-row .tool-arg {
+.tool-group-pill:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+.tool-group-pill .tg-bolt,
+.tool-group-pill .tg-chev {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-3);
+}
+.tool-group-pill .tg-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.tool-group-pill .tg-chev {
+  transition: transform 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.tool-group[data-open='true'] .tool-group-pill .tg-chev {
+  transform: rotate(180deg);
+}
+/* Subtle accent tint while any call is still running so the user sees
+   the pill is live without expanding. Errors win over running. */
+.tool-group[data-running='true'] .tool-group-pill .tg-bolt {
+  color: var(--accent);
+  animation: tool-group-bolt 1.4s ease-in-out infinite;
+}
+.tool-group[data-error='true'] .tool-group-pill .tg-bolt {
+  color: #c0392b;
+  animation: none;
+}
+@keyframes tool-group-bolt {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.tool-group .tg-list {
+  margin: 6px 0 0 14px;
+  padding: 6px 0 6px 14px;
+  border-left: 0.5px solid var(--line);
+}
+.tool-group .tg-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.tool-group .tg-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--ink-3);
+  flex-shrink: 0;
+}
+.tool-group .tg-dot[data-state='running'] {
+  background: var(--accent);
+  animation: tool-group-bolt 1.4s ease-in-out infinite;
+}
+.tool-group .tg-dot[data-state='error'] {
+  background: #c0392b;
+  animation: none;
+}
+.tool-group .tg-row-name {
+  color: var(--ink);
+  font-weight: 500;
+}
+.tool-group .tg-row-target {
   color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1072,39 +1321,9 @@ textarea {
   min-width: 0;
   flex: 1;
 }
-.chat-tool-row .tool-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  flex: none;
-}
-.chat-tool-row .tool-icon-ok {
-  color: var(--ink-3);
-}
-.chat-tool-row .tool-icon-err {
+.tool-group .tg-row[data-state='error'] .tg-row-name,
+.tool-group .tg-row[data-state='error'] .tg-row-target {
   color: #c0392b;
-}
-.chat-tool-row[data-state='error'] .tool-name,
-.chat-tool-row[data-state='error'] .tool-arg {
-  color: #c0392b;
-}
-.chat-tool-row .tool-spinner {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1.5px solid var(--ink-3);
-  border-top-color: transparent;
-  animation: tool-spin 0.9s linear infinite;
-  flex: none;
-  margin-left: 3px;
-}
-@keyframes tool-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* ---- Thinking trace (faint, italic, left-aligned) ---- */
@@ -1257,20 +1476,30 @@ textarea {
 /* Preview */
 .preview-stage {
   flex: 1;
-  padding: 32px;
+  padding: 12px;
   overflow: auto;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: center;
 }
 .preview-card {
   width: 100%;
-  min-height: 100%;
   background: var(--bg-app);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  padding: 28px 32px 32px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.preview-card.preview-card-mobile {
+  max-width: 420px;
   box-shadow: var(--shadow-md);
+}
+.preview-card > iframe {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 0;
+  border-radius: inherit;
 }
 .preview-toast {
   position: absolute;
@@ -1300,34 +1529,129 @@ textarea {
   }
 }
 
-/* Code */
-.code-tabs {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-elev);
+/* Code — file tree (left) + viewer (right) */
+.code-pane {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  min-height: 0;
 }
-.code-tab {
-  border: 0;
-  background: transparent;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-family: var(--font-sans);
+.code-tree {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--bg);
+  min-height: 0;
+}
+.code-search {
+  flex: none;
+  margin: 12px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink);
   font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.code-search::placeholder {
   color: var(--ink-3);
 }
-.code-tab[data-active='true'] {
-  background: var(--bg);
+.code-search:focus {
+  border-color: var(--ink-4, var(--ink-3));
+  background: var(--bg-elev);
+}
+.code-tree-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 6px 12px;
+}
+.code-tree-row {
+  --depth: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 5px 8px 5px calc(8px + var(--depth) * 14px);
+  border-radius: 6px;
+  color: var(--ink-2, var(--ink));
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.code-tree-row:hover {
+  background: var(--bg-sunken);
+}
+.code-tree-row[data-active='true'] {
+  background: var(--bg-sunken);
   color: var(--ink);
   font-weight: 500;
 }
-.code-meta {
-  margin-left: auto;
+.code-tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  color: var(--ink-3);
+  transition: transform 0.12s;
+}
+.code-tree-chevron[data-open='true'] {
+  transform: rotate(90deg);
+}
+.code-tree-chevron-spacer {
+  width: 12px;
+  flex: none;
+}
+.code-tree-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  flex: none;
+}
+.code-tree-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-size: 12px;
+}
+.code-tree-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.code-viewer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+.code-viewer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elev);
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--ink-3);
+}
+.code-viewer-path {
+  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+.code-viewer-meta {
+  letter-spacing: 0.04em;
 }
 .code-body {
   flex: 1;
@@ -1665,166 +1989,15 @@ textarea {
   margin-top: 22px;
 }
 
-/* ---------- Phone frame (Builder preview) ---------- */
+/* ---------- Mobile preview backdrop ---------- */
 .preview-pane.has-phone {
   background:
     radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 22px 22px,
     var(--device-wall);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  overflow: hidden;
-}
-.phone-scale {
-  transform-origin: center center;
-  transition: transform 0.2s ease-out;
-}
-.phone {
-  position: relative;
-  width: 390px;
-  height: 720px;
-  flex-shrink: 0;
-  border-radius: 54px;
-  /* Bezel + inner ring inherit from theme tokens so the frame flips with
-     [data-theme] without a re-render. */
-  background: var(--bezel);
-  padding: 11px;
-  box-shadow:
-    0 0 0 2px var(--bezel-inner),
-    0 50px 100px -30px rgba(0, 0, 0, 0.45),
-    0 12px 32px -8px rgba(0, 0, 0, 0.25);
-  overflow: hidden;
-  isolation: isolate;
-}
-.phone-screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 44px;
-  overflow: hidden;
-  background: var(--bg-app);
-  color: var(--ink);
-  display: flex;
-  flex-direction: column;
-}
-.phone-notch {
-  position: absolute;
-  top: 11px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 110px;
-  height: 30px;
-  background: #000;
-  border-radius: 999px;
-  z-index: 30;
-  pointer-events: none;
-}
-.phone-indicator {
-  position: absolute;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 134px;
-  height: 5px;
-  /* Home-indicator color sits on the running app's surface, so it tracks
-     ink rather than a fixed white — keeps it readable on dark wallpapers. */
-  background: var(--ink);
-  opacity: 0.85;
-  border-radius: 999px;
-  z-index: 30;
-  pointer-events: none;
-}
-.status-bar {
-  position: relative;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 28px 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink);
-  z-index: 5;
-  flex-shrink: 0;
-  font-feature-settings: 'tnum';
-}
-.status-bar .status-right {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.phone-content {
-  flex: 1;
-  overflow-y: auto;
-  position: relative;
-  padding: 8px 22px 28px;
-}
-.phone-content .app-header {
-  margin-bottom: 18px;
-}
-.phone-content .app-title {
-  font-size: 26px;
 }
 
-/* Mobile/Desktop toggle */
-.preview-device-toggle {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  display: inline-flex;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 3px;
-  gap: 2px;
-  z-index: 15;
-  box-shadow: var(--shadow-sm);
-}
-.preview-device-toggle button {
-  border: 0;
-  background: transparent;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.preview-device-toggle button[data-active='true'] {
-  background: var(--ink);
-  color: var(--ink-inv);
-}
-
-/* Source-of-truth tag in the preview pane: "Preview · live" (gateway, after
-   publish) vs "Preview · local files" (centraid-preview://, pre-publish). */
-.preview-source-label {
-  position: absolute;
-  top: 22px;
-  left: 24px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-3);
-  z-index: 14;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.preview-source-label::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink-3);
-}
-.preview-source-label[data-kind='live']::before {
-  background: #2ea043;
-}
-.preview-source-label[data-kind='local']::before {
-  background: var(--accent);
-}
+/* Mobile/Desktop toggle and preview source label moved to the topbar URL bar
+   (see .urlbar-device, .urlbar-kind above). */
 
 /* ---------- Misc utilities ---------- */
 .flex {

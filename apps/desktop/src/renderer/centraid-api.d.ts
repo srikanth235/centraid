@@ -46,7 +46,7 @@ export interface CentraidProjectFile {
   path: string;
   content: string;
   size: number;
-  language: "ts" | "js" | "html" | "css" | "json" | "md" | "other";
+  language: 'ts' | 'js' | 'html' | 'css' | 'json' | 'md' | 'other';
 }
 
 /**
@@ -55,9 +55,9 @@ export interface CentraidProjectFile {
  * as opaque objects and are ignored.
  */
 export type CentraidContentBlock =
-  | { type: "text"; text: string }
-  | { type: "thinking"; thinking: string }
-  | { type: "toolCall"; id: string; name: string; arguments: Record<string, unknown> }
+  | { type: 'text'; text: string }
+  | { type: 'thinking'; thinking: string }
+  | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> }
   | { type: string; [k: string]: unknown };
 
 /**
@@ -66,14 +66,14 @@ export type CentraidContentBlock =
  * passed through as `{ role: string }` and skipped during hydration.
  */
 export type CentraidAgentMessage =
-  | { role: "user"; content: string | CentraidContentBlock[]; timestamp?: number }
+  | { role: 'user'; content: string | CentraidContentBlock[]; timestamp?: number }
   | {
-      role: "assistant";
+      role: 'assistant';
       content: CentraidContentBlock[];
       timestamp?: number;
     }
   | {
-      role: "toolResult";
+      role: 'toolResult';
       toolCallId: string;
       toolName: string;
       isError: boolean;
@@ -87,37 +87,37 @@ export type CentraidAgentMessage =
  * type only the fields the renderer reads. See `@earendil-works/pi-agent-core`.
  */
 export type CentraidAgentEvent =
-  | { type: "agent_start" }
-  | { type: "agent_end"; messages: unknown[] }
-  | { type: "turn_start" }
-  | { type: "turn_end"; message: unknown; toolResults: unknown[] }
-  | { type: "message_start"; message: unknown }
+  | { type: 'agent_start' }
+  | { type: 'agent_end'; messages: unknown[] }
+  | { type: 'turn_start' }
+  | { type: 'turn_end'; message: unknown; toolResults: unknown[] }
+  | { type: 'message_start'; message: unknown }
   | {
-      type: "message_update";
+      type: 'message_update';
       message: unknown;
       assistantMessageEvent:
-        | { type: "text_delta"; delta: string }
-        | { type: "text_end"; content?: string }
-        | { type: "thinking_delta"; delta: string }
-        | { type: "thinking_end"; content?: string }
+        | { type: 'text_delta'; delta: string }
+        | { type: 'text_end'; content?: string }
+        | { type: 'thinking_delta'; delta: string }
+        | { type: 'thinking_end'; content?: string }
         | { type: string; [k: string]: unknown };
     }
-  | { type: "message_end"; message: unknown }
+  | { type: 'message_end'; message: unknown }
   | {
-      type: "tool_execution_start";
+      type: 'tool_execution_start';
       toolCallId: string;
       toolName: string;
       args: unknown;
     }
   | {
-      type: "tool_execution_update";
+      type: 'tool_execution_update';
       toolCallId: string;
       toolName: string;
       args: unknown;
       partialResult: unknown;
     }
   | {
-      type: "tool_execution_end";
+      type: 'tool_execution_end';
       toolCallId: string;
       toolName: string;
       result: unknown;
@@ -146,25 +146,17 @@ interface CentraidApi {
 
   startAgent(input: {
     projectId: string;
-    sessionMode?: "fresh" | "continue" | "in-memory";
+    sessionMode?: 'fresh' | 'continue' | 'in-memory';
   }): Promise<{ ok: true; messages: CentraidAgentMessage[] }>;
   promptAgent(input: { text: string }): Promise<{ ok: true }>;
   stopAgent(): Promise<{ ok: true }>;
-  onAgentEvent(
-    cb: (msg: { projectId: string; event: CentraidAgentEvent }) => void,
-  ): () => void;
+  onAgentEvent(cb: (msg: { projectId: string; event: CentraidAgentEvent }) => void): () => void;
 
-  publish(input: {
-    id: string;
-    skipBuild?: boolean;
-  }): Promise<CentraidPublishResult>;
+  publish(input: { id: string; skipBuild?: boolean }): Promise<CentraidPublishResult>;
   listVersions(input: {
     id: string;
   }): Promise<{ activeVersion?: string; versions: CentraidVersionRecord[] }>;
-  activateVersion(input: {
-    id: string;
-    versionId: string;
-  }): Promise<{ activeVersion: string }>;
+  activateVersion(input: { id: string; versionId: string }): Promise<{ activeVersion: string }>;
   appLiveUrl(input: { id: string }): Promise<{ url: string }>;
   deregisterApp(input: { id: string }): Promise<{ id: string }>;
 }

@@ -1,8 +1,8 @@
-import { app } from "electron";
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import os from "node:os";
-import type { HarnessConfig } from "@centraid/agent-harness";
+import { app } from 'electron';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import type { HarnessConfig } from '@centraid/agent-harness';
 
 /**
  * Persisted desktop settings. Lives at <userData>/centraid-settings.json with
@@ -10,23 +10,23 @@ import type { HarnessConfig } from "@centraid/agent-harness";
  */
 export interface DesktopSettings extends HarnessConfig {}
 
-const FILE_NAME = "centraid-settings.json";
+const FILE_NAME = 'centraid-settings.json';
 
 function settingsPath(): string {
-  return path.join(app.getPath("userData"), FILE_NAME);
+  return path.join(app.getPath('userData'), FILE_NAME);
 }
 
 function defaults(): DesktopSettings {
   return {
-    projectsDir: path.join(os.homedir(), "centraid-projects"),
-    gatewayUrl: "http://127.0.0.1:7575",
-    gatewayToken: "",
+    projectsDir: path.join(os.homedir(), 'centraid-projects'),
+    gatewayUrl: 'http://127.0.0.1:7575',
+    gatewayToken: '',
   };
 }
 
 export async function loadSettings(): Promise<DesktopSettings> {
   try {
-    const raw = await fs.readFile(settingsPath(), "utf8");
+    const raw = await fs.readFile(settingsPath(), 'utf8');
     const parsed = JSON.parse(raw) as Partial<DesktopSettings>;
     const base = defaults();
     return {
@@ -35,8 +35,8 @@ export async function loadSettings(): Promise<DesktopSettings> {
       gatewayToken: parsed.gatewayToken ?? base.gatewayToken,
     };
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.error("[centraid] failed to read settings:", err);
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error('[centraid] failed to read settings:', err);
     }
     return defaults();
   }

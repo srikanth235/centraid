@@ -14,20 +14,20 @@
  * See README.md for the full URL surface and security model.
  */
 
-import path from "node:path";
-import { definePluginEntry, type OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
-import { Registry, RegistryError } from "./lib/registry.js";
-import { OpenClawCron } from "./lib/openclaw-cron.js";
-import { CronSync } from "./lib/cron-sync.js";
-import { VersionStore, VersionStoreError } from "./lib/version-store.js";
-import { ingestUpload, UploadError } from "./lib/upload.js";
-import { runHandler } from "./lib/handler-runner.js";
-import { parseRoute } from "./lib/router.js";
-import { serveStatic } from "./lib/static-server.js";
-import { getHeader, isLoopback, readBody, sendError, sendJson } from "./lib/http-utils.js";
-import { timingSafeEqual } from "./lib/security.js";
-import { appCodeDir, appDataDir } from "./lib/app-paths.js";
-import type { AppRef, RegistryEntry } from "./types.js";
+import path from 'node:path';
+import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
+import { Registry, RegistryError } from './lib/registry.js';
+import { OpenClawCron } from './lib/openclaw-cron.js';
+import { CronSync } from './lib/cron-sync.js';
+import { VersionStore, VersionStoreError } from './lib/version-store.js';
+import { ingestUpload, UploadError } from './lib/upload.js';
+import { runHandler } from './lib/handler-runner.js';
+import { parseRoute } from './lib/router.js';
+import { serveStatic } from './lib/static-server.js';
+import { getHeader, isLoopback, readBody, sendError, sendJson } from './lib/http-utils.js';
+import { timingSafeEqual } from './lib/security.js';
+import { appCodeDir, appDataDir } from './lib/app-paths.js';
+import type { AppRef, RegistryEntry } from './types.js';
 
 // Re-export public handler types so apps written in TypeScript can do:
 //   import type { QueryHandler, ActionHandler, CronHandler } from "@centraid/openclaw-plugin";
@@ -42,13 +42,13 @@ export type {
   ScopedDb,
   ScopedLog,
   AppRef,
-} from "./types.js";
+} from './types.js';
 
 export default definePluginEntry({
-  id: "centraid",
-  name: "Centraid",
+  id: 'centraid',
+  name: 'Centraid',
   description:
-    "Mounts /centraid on the gateway. Apps may be registered by path or uploaded as versioned tar.gz archives; each app has static assets, a persistent sqlite database, and JS handlers for queries / actions / cron-fed ingest.",
+    'Mounts /centraid on the gateway. Apps may be registered by path or uploaded as versioned tar.gz archives; each app has static assets, a persistent sqlite database, and JS handlers for queries / actions / cron-fed ingest.',
 
   register(api: OpenClawPluginApi) {
     const pluginConfig = (api.pluginConfig ?? {}) as {
@@ -56,9 +56,9 @@ export default definePluginEntry({
       gatewayBaseUrl?: string;
       versionRetention?: number;
     };
-    const appsDirRaw = pluginConfig.appsDir ?? "centraid";
+    const appsDirRaw = pluginConfig.appsDir ?? 'centraid';
     const appsDir = path.isAbsolute(appsDirRaw) ? appsDirRaw : api.resolvePath(appsDirRaw);
-    const gatewayBaseUrl = pluginConfig.gatewayBaseUrl ?? "http://127.0.0.1:7575";
+    const gatewayBaseUrl = pluginConfig.gatewayBaseUrl ?? 'http://127.0.0.1:7575';
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
     const registry = new Registry(appsDir);
@@ -68,7 +68,7 @@ export default definePluginEntry({
 
     // Resolve the active code dir for an entry (uploaded → version dir).
     const resolveCodeDir = async (entry: RegistryEntry): Promise<string | undefined> => {
-      if (entry.mode === "uploaded") {
+      if (entry.mode === 'uploaded') {
         const active = await versions.getActiveVersion(entry.path);
         if (!active) return undefined;
         return appCodeDir(entry, active);
@@ -83,12 +83,12 @@ export default definePluginEntry({
 
     // ---------- Lifecycle ----------
 
-    api.on("gateway_start", async (_event, ctx) => {
+    api.on('gateway_start', async (_event, ctx) => {
       await registry.load();
 
       // Recovery pass for any uploaded app whose current.json is missing/torn.
       for (const entry of registry.list()) {
-        if (entry.mode !== "uploaded") continue;
+        if (entry.mode !== 'uploaded') continue;
         try {
           const repaired = await versions.recover(entry.path);
           if (repaired) {
@@ -118,18 +118,14 @@ export default definePluginEntry({
       }
     });
 
-    api.on("cron_changed", async (event) => {
-      const parts = event.jobId.split(":");
-      if (parts.length !== 3 || parts[0] !== "centraid") return;
+    api.on('cron_changed', async (event) => {
+      const parts = event.jobId.split(':');
+      if (parts.length !== 3 || parts[0] !== 'centraid') return;
       const [, appId, cronId] = parts as [string, string, string];
       await registry
         .setCronStatus(appId, cronId, {
           lastRunStatus:
-            event.status === "ok"
-              ? "success"
-              : event.status === "error"
-                ? "failure"
-                : undefined,
+            event.status === 'ok' ? 'success' : event.status === 'error' ? 'failure' : undefined,
           lastError: event.error,
           nextRunAtMs: event.nextRunAtMs ?? event.job?.state?.nextRunAtMs,
           lastRunAtMs: event.job?.state?.lastRunAtMs,
@@ -140,15 +136,15 @@ export default definePluginEntry({
     // ---------- HTTP route ----------
 
     api.registerHttpRoute({
-      path: "/centraid",
-      match: "prefix",
-      auth: "gateway",
+      path: '/centraid',
+      match: 'prefix',
+      auth: 'gateway',
       handler: async (req, res) => {
-        const route = parseRoute(req.method ?? "GET", req.url ?? "/");
+        const route = parseRoute(req.method ?? 'GET', req.url ?? '/');
 
         try {
           switch (route.kind) {
-            case "registry-list": {
+            case 'registry-list': {
               return sendJson(
                 res,
                 200,
@@ -163,27 +159,27 @@ export default definePluginEntry({
               );
             }
 
-            case "registry-register": {
-              const body = JSON.parse((await readBody(req)).toString("utf8")) as {
+            case 'registry-register': {
+              const body = JSON.parse((await readBody(req)).toString('utf8')) as {
                 id?: string;
                 path?: string;
               };
               if (!body.id || !body.path) {
-                return sendError(res, 400, "bad_request", "Body must include { id, path }.");
+                return sendError(res, 400, 'bad_request', 'Body must include { id, path }.');
               }
-              const entry = await registry.register({ id: body.id, path: body.path, mode: "path" });
+              const entry = await registry.register({ id: body.id, path: body.path, mode: 'path' });
               await cronSync.syncApp(entry.id);
               return sendJson(res, 201, { id: entry.id, path: entry.path, mode: entry.mode });
             }
 
-            case "registry-deregister": {
+            case 'registry-deregister': {
               await cronSync.removeAppCrons(route.appId);
               const removed = await registry.deregister(route.appId);
-              if (!removed) return sendError(res, 404, "not_found", "App not registered.");
+              if (!removed) return sendError(res, 404, 'not_found', 'App not registered.');
               return sendJson(res, 200, { id: route.appId });
             }
 
-            case "app-upload": {
+            case 'app-upload': {
               const entry = await registry.ensureUploaded(route.appId);
 
               let result;
@@ -191,7 +187,7 @@ export default definePluginEntry({
                 result = await ingestUpload(req, appsDir, route.appId);
               } catch (err) {
                 if (err instanceof UploadError) {
-                  const status = err.code === "too_large" ? 413 : 400;
+                  const status = err.code === 'too_large' ? 413 : 400;
                   return sendError(res, status, err.code, err.message);
                 }
                 throw err;
@@ -222,15 +218,15 @@ export default definePluginEntry({
               });
             }
 
-            case "app-versions-list": {
+            case 'app-versions-list': {
               const entry = registry.get(route.appId);
-              if (!entry) return sendError(res, 404, "not_found", "App not registered.");
-              if (entry.mode !== "uploaded") {
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
+              if (entry.mode !== 'uploaded') {
                 return sendError(
                   res,
                   409,
-                  "not_uploaded",
-                  "Versioning is only available for uploaded apps.",
+                  'not_uploaded',
+                  'Versioning is only available for uploaded apps.',
                 );
               }
               const { activeVersion, versions: history } = await versions.listVersions(entry.path);
@@ -240,98 +236,98 @@ export default definePluginEntry({
               });
             }
 
-            case "app-version-activate": {
+            case 'app-version-activate': {
               const entry = registry.get(route.appId);
-              if (!entry) return sendError(res, 404, "not_found", "App not registered.");
-              if (entry.mode !== "uploaded") {
-                return sendError(res, 409, "not_uploaded", "Activate is uploaded-mode only.");
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
+              if (entry.mode !== 'uploaded') {
+                return sendError(res, 409, 'not_uploaded', 'Activate is uploaded-mode only.');
               }
-              const body = JSON.parse((await readBody(req)).toString("utf8")) as {
+              const body = JSON.parse((await readBody(req)).toString('utf8')) as {
                 versionId?: string;
               };
               if (!body.versionId) {
-                return sendError(res, 400, "bad_request", "Body must include { versionId }.");
+                return sendError(res, 400, 'bad_request', 'Body must include { versionId }.');
               }
               await versions.activate(entry.path, body.versionId);
               await cronSync.syncApp(entry.id);
               return sendJson(res, 200, { activeVersion: body.versionId });
             }
 
-            case "app-version-delete": {
+            case 'app-version-delete': {
               const entry = registry.get(route.appId);
-              if (!entry) return sendError(res, 404, "not_found", "App not registered.");
-              if (entry.mode !== "uploaded") {
-                return sendError(res, 409, "not_uploaded", "Versioning is uploaded-mode only.");
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
+              if (entry.mode !== 'uploaded') {
+                return sendError(res, 409, 'not_uploaded', 'Versioning is uploaded-mode only.');
               }
               await versions.deleteVersion(entry.path, route.versionId);
               return sendJson(res, 200, { id: route.appId, versionId: route.versionId });
             }
 
-            case "app-index":
-            case "app-static": {
+            case 'app-index':
+            case 'app-static': {
               const entry = registry.get(route.appId);
-              if (!entry) return sendError(res, 404, "not_found", "App not registered.");
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
               const codeDir = await resolveCodeDir(entry);
               if (!codeDir) {
-                return sendError(res, 503, "no_active_version", "App has no active version yet.");
+                return sendError(res, 503, 'no_active_version', 'App has no active version yet.');
               }
-              const rel = route.kind === "app-index" ? "index.html" : route.rel;
+              const rel = route.kind === 'app-index' ? 'index.html' : route.rel;
               return await serveStatic(res, codeDir, rel);
             }
 
-            case "app-data": {
+            case 'app-data': {
               const entry = registry.get(route.appId);
-              if (!entry) return sendError(res, 404, "not_found", "App not registered.");
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
               const codeDir = await resolveCodeDir(entry);
               if (!codeDir) {
-                return sendError(res, 503, "no_active_version", "App has no active version yet.");
+                return sendError(res, 503, 'no_active_version', 'App has no active version yet.');
               }
-              const file = path.join(codeDir, "queries", `${route.queryName}.js`);
+              const file = path.join(codeDir, 'queries', `${route.queryName}.js`);
               const outcome = await runHandler({
                 app: refOf(entry),
                 handlerFile: file,
-                handlerKind: "query",
+                handlerKind: 'query',
                 args: { params: {}, query: route.query },
                 timeoutMs: 10_000,
               });
               if (!outcome.ok) {
-                return sendError(res, 500, "handler_error", outcome.error ?? "query failed");
+                return sendError(res, 500, 'handler_error', outcome.error ?? 'query failed');
               }
               return sendJson(res, 200, outcome.value ?? null);
             }
 
-            case "app-run": {
+            case 'app-run': {
               const entry = registry.get(route.appId);
-              if (!entry) return sendError(res, 404, "not_found", "App not registered.");
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
               const codeDir = await resolveCodeDir(entry);
               if (!codeDir) {
-                return sendError(res, 503, "no_active_version", "App has no active version yet.");
+                return sendError(res, 503, 'no_active_version', 'App has no active version yet.');
               }
-              const body = JSON.parse((await readBody(req)).toString("utf8")) as {
+              const body = JSON.parse((await readBody(req)).toString('utf8')) as {
                 action?: string;
                 args?: unknown;
               };
               if (!body.action) {
-                return sendError(res, 400, "bad_request", "Body must include { action }.");
+                return sendError(res, 400, 'bad_request', 'Body must include { action }.');
               }
-              const file = path.join(codeDir, "actions", `${body.action}.js`);
+              const file = path.join(codeDir, 'actions', `${body.action}.js`);
               const outcome = await runHandler({
                 app: refOf(entry),
                 handlerFile: file,
-                handlerKind: "action",
+                handlerKind: 'action',
                 args: { params: {}, body: body.args },
                 timeoutMs: 30_000,
               });
               if (!outcome.ok) {
-                return sendError(res, 500, "handler_error", outcome.error ?? "action failed");
+                return sendError(res, 500, 'handler_error', outcome.error ?? 'action failed');
               }
               const result = (outcome.value ?? {}) as { status?: number; body?: unknown };
               return sendJson(res, result.status ?? 200, result.body ?? null);
             }
 
-            case "app-crons-list": {
+            case 'app-crons-list': {
               const entry = registry.get(route.appId);
-              if (!entry) return sendError(res, 404, "not_found", "App not registered.");
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
               return sendJson(
                 res,
                 200,
@@ -343,32 +339,32 @@ export default definePluginEntry({
               );
             }
 
-            case "app-cron-runnow": {
+            case 'app-cron-runnow': {
               const entry = registry.get(route.appId);
-              if (!entry) return sendError(res, 404, "not_found", "App not registered.");
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
               const id = cronSync.jobIdFor(entry.id, route.cronId);
               await cronAdapter.runJobNow(id);
               return sendJson(res, 202, { jobId: id });
             }
 
-            case "app-ingest": {
+            case 'app-ingest': {
               if (!isLoopback(req)) {
-                return sendError(res, 403, "loopback_only", "Ingest accepts loopback only.");
+                return sendError(res, 403, 'loopback_only', 'Ingest accepts loopback only.');
               }
               const entry = registry.get(route.appId);
-              if (!entry) return sendError(res, 404, "not_found", "App not registered.");
+              if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
               const codeDir = await resolveCodeDir(entry);
               if (!codeDir) {
-                return sendError(res, 503, "no_active_version", "App has no active version yet.");
+                return sendError(res, 503, 'no_active_version', 'App has no active version yet.');
               }
 
               const expected = registry.cronToken(route.appId, route.cronId);
-              const auth = (getHeader(req, "authorization") ?? "").replace(/^Bearer\s+/i, "");
+              const auth = (getHeader(req, 'authorization') ?? '').replace(/^Bearer\s+/i, '');
               if (!expected || !auth || !timingSafeEqual(auth, expected)) {
-                return sendError(res, 401, "unauthorized", "Invalid bearer token.");
+                return sendError(res, 401, 'unauthorized', 'Invalid bearer token.');
               }
 
-              const raw = (await readBody(req)).toString("utf8");
+              const raw = (await readBody(req)).toString('utf8');
               let parsedJson: unknown;
               try {
                 parsedJson = JSON.parse(raw);
@@ -377,12 +373,12 @@ export default definePluginEntry({
               }
 
               const text = extractAgentFinalText(parsedJson) ?? raw;
-              const handlerFile = path.join(codeDir, "crons", `${route.cronId}.js`);
+              const handlerFile = path.join(codeDir, 'crons', `${route.cronId}.js`);
 
               const outcome = await runHandler({
                 app: refOf(entry),
                 handlerFile,
-                handlerKind: "cron",
+                handlerKind: 'cron',
                 args: {
                   payload: {
                     text,
@@ -391,49 +387,49 @@ export default definePluginEntry({
                     headers: Object.fromEntries(
                       Object.entries(req.headers).map(([k, v]) => [
                         k,
-                        Array.isArray(v) ? v.join(",") : (v ?? ""),
+                        Array.isArray(v) ? v.join(',') : (v ?? ''),
                       ]),
                     ),
                     jobId: cronSync.jobIdFor(entry.id, route.cronId),
-                    runId: getHeader(req, "x-openclaw-run-id"),
+                    runId: getHeader(req, 'x-openclaw-run-id'),
                   },
                 },
                 timeoutMs: 60_000,
               });
 
               if (!outcome.ok) {
-                return sendError(res, 500, "ingest_error", outcome.error ?? "ingest failed");
+                return sendError(res, 500, 'ingest_error', outcome.error ?? 'ingest failed');
               }
               return sendJson(res, 200, { ok: true, logs: outcome.logs.length });
             }
 
-            case "not-found":
-              return sendError(res, 404, "not_found", "Unknown centraid path.");
+            case 'not-found':
+              return sendError(res, 404, 'not_found', 'Unknown centraid path.');
           }
         } catch (err) {
           if (err instanceof RegistryError) {
             const status =
-              err.code === "invalid_id"
+              err.code === 'invalid_id'
                 ? 400
-                : err.code === "already_registered"
+                : err.code === 'already_registered'
                   ? 409
-                  : err.code === "not_a_directory"
+                  : err.code === 'not_a_directory'
                     ? 400
                     : 404;
             return sendError(res, status, err.code, err.message);
           }
           if (err instanceof VersionStoreError) {
-            const status = err.code === "not_found" ? 404 : 409;
+            const status = err.code === 'not_found' ? 404 : 409;
             return sendError(res, status, err.code, err.message);
           }
           if (err instanceof UploadError) {
-            const status = err.code === "too_large" ? 413 : 400;
+            const status = err.code === 'too_large' ? 413 : 400;
             return sendError(res, status, err.code, err.message);
           }
           return sendError(
             res,
             500,
-            "internal_error",
+            'internal_error',
             err instanceof Error ? err.message : String(err),
           );
         }
@@ -449,14 +445,14 @@ export default definePluginEntry({
  * and the handler decides.
  */
 function extractAgentFinalText(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== "object") return undefined;
+  if (!payload || typeof payload !== 'object') return undefined;
   const p = payload as Record<string, unknown>;
-  if (typeof p.text === "string") return p.text;
-  if (typeof p.finalText === "string") return p.finalText;
-  if (typeof p.summary === "string") return p.summary;
-  if (p.message && typeof p.message === "object") {
+  if (typeof p.text === 'string') return p.text;
+  if (typeof p.finalText === 'string') return p.finalText;
+  if (typeof p.summary === 'string') return p.summary;
+  if (p.message && typeof p.message === 'object') {
     const m = p.message as Record<string, unknown>;
-    if (typeof m.text === "string") return m.text;
+    if (typeof m.text === 'string') return m.text;
   }
   return undefined;
 }

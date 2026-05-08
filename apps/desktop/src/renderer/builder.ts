@@ -3,27 +3,84 @@
 //   - the project folder on disk (readProjectFiles for the Code tab)
 //   - the openclaw centraid plugin (publish, listVersions, activateVersion)
 //
-// Three tabs on the right pane: Preview / Code / History.
-//   Preview: iframe → <gatewayUrl>/centraid/<id>/  after first publish.
-//   Code:    real files from <projectsDir>/<id>/, syntax-highlighted.
-//   History: real version list from the gateway, with restore.
+// Layout (modeled on Lovable's IA):
+//   Topbar:    [back][project] [history-btn][sidebar-btn] {Preview|Code} [device|URL|↗|⟳] [Share][primary]
+//   Chat pane: swaps between live chat (chatView='chat') and version history
+//              (chatView='history'). Sidebar-btn collapses the whole pane.
+//   Right pane: Preview (iframe → live gateway URL or local centraid-preview://)
+//               or Code (project files, syntax-highlighted).
 
 (function () {
+  // A single tool invocation. Multiple of these are consolidated into a
+  // toolGroup chat bubble (see below).
+  type ToolCall = {
+    id: string;
+    tool: string;
+    summary?: string;
+    state: 'running' | 'ok' | 'error';
+  };
+
   type ChatMsg =
     | { kind: 'divider'; text: string }
     | { kind: 'status'; text: string; spinning?: boolean }
     | { kind: 'user'; text: string }
     | { kind: 'ai'; text: string; streaming?: boolean }
     | { kind: 'thinking'; text: string; streaming?: boolean }
-    | {
-        kind: 'tool';
-        tool: string;
-        summary?: string;
-        state: 'running' | 'ok' | 'error';
-      };
+    // Adjacent tool calls (no AI text or thinking between them) are folded
+    // into one toolGroup bubble — a single collapsible pill labelled with a
+    // verb-and-count summary like "Reading ×3, Writing". `id` is the first
+    // call's toolCallId and serves as a stable identity for click handlers
+    // across re-renders.
+    | { kind: 'toolGroup'; id: string; calls: ToolCall[]; open: boolean };
 
-  type Tab = 'preview' | 'code' | 'history';
+  type Tab = 'preview' | 'code';
+  type ChatView = 'chat' | 'history';
   type DeviceKey = 'mobile' | 'desktop';
+
+  // Inline SVGs for icons not in @centraid/design-tokens. Kept tiny so they
+  // can live next to the topbar buttons that need them.
+  const SidebarIcon = (size = 16): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>`;
+  const ExternalIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>`;
+  const RefreshIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>`;
+  const SmartphoneIcon = (size = 13): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
+  const MonitorIcon = (size = 13): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
+  // Tool-group icons. Bolt = activity glyph on the consolidated pill;
+  // ChevronDownIcon = expand/collapse affordance (rotates 180° when open).
+  const BoltIcon = (size = 13): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>`;
+  const ChevronDownIcon = (size = 13): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+  // File-tree icons (used by the Code view).
+  const ChevronIcon = (size = 12): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+  const FolderIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+  // Per-extension file glyphs. Defaults to a generic page outline.
+  function fileIcon(path: string, size = 14): string {
+    const ext = path.split('.').pop()?.toLowerCase() ?? '';
+    if (['svg', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif'].includes(ext)) {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/></svg>`;
+    }
+    if (['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext)) {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 8 5 12 9 16"/><polyline points="15 8 19 12 15 16"/></svg>`;
+    }
+    if (['css', 'scss', 'sass', 'less'].includes(ext)) {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>`;
+    }
+    if (['json', 'toml', 'yaml', 'yml'].includes(ext) || path.startsWith('.env')) {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`;
+    }
+    if (ext === 'md') {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`;
+    }
+    // generic page
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg>`;
+  }
 
   const Api = (): Window['CentraidApi'] => window.CentraidApi;
 
@@ -31,33 +88,54 @@
     return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   }
 
-  function tokenize(src: string, lang: 'html' | 'js' | 'ts' | 'css' | 'json' | 'md' | 'other'): string {
+  function tokenize(
+    src: string,
+    lang: 'html' | 'js' | 'ts' | 'css' | 'json' | 'md' | 'other',
+  ): string {
+    // Each pass below wraps tokens in placeholder control chars instead of
+    // real <span> markup. Without this, a later regex can match the literal
+    // text of an earlier injection — e.g. `\s[\w-]+=` happily eats the
+    // ` class=` inside an inserted `<span class="tok-tag">`, leaking class
+    // names into the rendered code view. We swap placeholders → spans only
+    // at the very end, after all passes have run.
+    const TAG = '\x01';
+    const ATTR = '\x02';
+    const STR = '\x03';
+    const KEY = '\x04';
+    const COM = '\x05';
+    const END = '\x06';
     let html = escapeHtml(src);
     if (lang === 'html') {
       html = html
-        .replaceAll(/(&lt;\/?[\w-]+)/g, '<span class="tok-tag">$1</span>')
-        .replaceAll(/(\s[\w-]+)=/g, '<span class="tok-attr">$1</span>=')
-        .replaceAll(/("[^"]*")/g, '<span class="tok-str">$1</span>');
+        .replaceAll(/(&lt;\/?[\w-]+)/g, `${TAG}$1${END}`)
+        .replaceAll(/(\s[\w-]+)=/g, `${ATTR}$1${END}=`)
+        .replaceAll(/("[^"]*")/g, `${STR}$1${END}`);
     } else if (lang === 'js' || lang === 'ts') {
       html = html
-        .replaceAll(/\/\/[^\n]*/g, (m) => `<span class="tok-com">${m}</span>`)
+        .replaceAll(/\/\/[^\n]*/g, (m) => `${COM}${m}${END}`)
         .replaceAll(
           /\b(const|let|var|function|return|if|else|for|new|try|catch|throw|async|await|export|import|from|type|interface|class|extends|implements|satisfies)\b/g,
-          '<span class="tok-key">$1</span>',
+          `${KEY}$1${END}`,
         )
-        .replaceAll(/('[^']*'|"[^"]*"|`[^`]*`)/g, '<span class="tok-str">$1</span>');
+        .replaceAll(/('[^']*'|"[^"]*"|`[^`]*`)/g, `${STR}$1${END}`);
     } else if (lang === 'css') {
       html = html
-        .replaceAll(/(\/\*[\s\S]*?\*\/)/g, '<span class="tok-com">$1</span>')
-        .replaceAll(/(--[\w-]+)/g, '<span class="tok-key">$1</span>')
-        .replaceAll(/(#[0-9a-f]{3,8}|\d+px|\d+%)/g, '<span class="tok-str">$1</span>');
+        .replaceAll(/(\/\*[\s\S]*?\*\/)/g, `${COM}$1${END}`)
+        .replaceAll(/(--[\w-]+)/g, `${KEY}$1${END}`)
+        .replaceAll(/(#[0-9a-f]{3,8}|\d+px|\d+%)/g, `${STR}$1${END}`);
     } else if (lang === 'json') {
       html = html
-        .replaceAll(/("[^"]*")(\s*:)/g, '<span class="tok-attr">$1</span>$2')
-        .replaceAll(/:\s*("[^"]*")/g, ': <span class="tok-str">$1</span>')
-        .replaceAll(/\b(true|false|null)\b/g, '<span class="tok-key">$1</span>');
+        .replaceAll(/("[^"]*")(\s*:)/g, `${ATTR}$1${END}$2`)
+        .replaceAll(/:\s*("[^"]*")/g, `: ${STR}$1${END}`)
+        .replaceAll(/\b(true|false|null)\b/g, `${KEY}$1${END}`);
     }
-    return html;
+    return html
+      .replaceAll(TAG, '<span class="tok-tag">')
+      .replaceAll(ATTR, '<span class="tok-attr">')
+      .replaceAll(STR, '<span class="tok-str">')
+      .replaceAll(KEY, '<span class="tok-key">')
+      .replaceAll(COM, '<span class="tok-com">')
+      .replaceAll(END, '</span>');
   }
 
   function languageHint(p: string): 'html' | 'js' | 'ts' | 'css' | 'json' | 'md' | 'other' {
@@ -122,13 +200,17 @@
     let projectId: string | undefined = opts.projectId;
     let chat: ChatMsg[] = [];
     let tab: Tab = 'preview';
-    let previewDevice: DeviceKey = 'mobile';
+    let chatView = 'chat' as ChatView;
+    let sidebarOpen = true;
+    let previewDevice = 'mobile' as DeviceKey;
     let generating = false;
     let publishing = false;
     let lastPublishedVersionId: string | undefined;
-    let resizeHandler: (() => void) | null = null;
     let unsubscribeAgent: (() => void) | null = null;
     let liveUrl: string | undefined;
+    // URL-bar state — populated by renderPreview() each time it resolves a src.
+    let currentPreviewSrc: string | undefined;
+    let currentPreviewKind: 'live' | 'local' | undefined;
     let currentAiMsgIndex = -1; // index in `chat` of the streaming AI bubble
     let currentThinkingMsgIndex = -1; // index of the streaming thinking block
     let pendingToolStarts = new Map<string, number>(); // toolCallId → chat index
@@ -137,6 +219,43 @@
     // user sees their changes without manually reloading.
     let previewReloadPending = false;
     const FILE_WRITING_TOOLS = new Set(['write', 'edit', 'multi_edit']);
+
+    // Verb form of a tool name, used as the pill label and per-row name.
+    // Falls back to a capitalised tool key for anything we don't have a verb
+    // for so unknown tools still read sensibly.
+    function toolVerb(tool: string): string {
+      switch (tool) {
+        case 'read':
+          return 'Reading';
+        case 'write':
+          return 'Writing';
+        case 'edit':
+        case 'multi_edit':
+          return 'Editing';
+        case 'bash':
+          return 'Running';
+        case 'glob':
+          return 'Listing';
+        case 'grep':
+          return 'Searching';
+        default:
+          return tool.charAt(0).toUpperCase() + tool.slice(1);
+      }
+    }
+
+    // Build the consolidated pill label. Adjacent calls with the same verb
+    // collapse into "Verb ×N"; distinct verbs are joined by commas. Mirrors
+    // the design system's `tcg-pill` examples like "Reading ×3, Writing".
+    function summarizeGroup(calls: ToolCall[]): string {
+      const segs: { verb: string; count: number }[] = [];
+      for (const c of calls) {
+        const verb = toolVerb(c.tool);
+        const last = segs[segs.length - 1];
+        if (last && last.verb === verb) last.count += 1;
+        else segs.push({ verb, count: 1 });
+      }
+      return segs.map((s) => (s.count > 1 ? `${s.verb} ×${s.count}` : s.verb)).join(', ');
+    }
 
     // Build a one-line, human-readable summary of a tool call's args.
     // Mirrors the fields pi's built-in tools actually emit (path / command /
@@ -218,8 +337,98 @@
     const tabDefs: [Tab, string, IconNameType][] = [
       ['preview', 'Preview', 'Eye'],
       ['code', 'Code', 'Code'],
-      ['history', 'History', 'History'],
     ];
+
+    // History toggle — swaps the chat pane between live chat and version
+    // history (matches Lovable; keeps the right pane on Preview/Code so the
+    // user can still see the rendered app while browsing past versions).
+    const historyBtn = el('button', {
+      'aria-label': 'View history',
+      class: 'topbar-icon-btn',
+      'data-active': String(chatView === 'history'),
+      trustedHtml: Icon.History({ size: 16 }),
+      title: 'View history',
+      onClick: () => {
+        chatView = chatView === 'history' ? 'chat' : 'history';
+        renderChatPane();
+        refreshTopbarToggles();
+      },
+    });
+
+    // Sidebar toggle — collapses the whole chat pane so the preview gets
+    // the full canvas. Sets data-sidebar on .builder-body.
+    const sidebarBtn = el('button', {
+      'aria-label': 'Toggle sidebar',
+      class: 'topbar-icon-btn',
+      'data-active': String(sidebarOpen),
+      trustedHtml: SidebarIcon(16),
+      title: 'Toggle sidebar',
+      onClick: () => {
+        sidebarOpen = !sidebarOpen;
+        body.dataset.sidebar = sidebarOpen ? 'open' : 'closed';
+        refreshTopbarToggles();
+      },
+    });
+
+    // URL bar group — device toggle + current preview URL + open-in-new-tab + reload.
+    // Visibility is bound to tab === 'preview'; populated by renderUrlbar().
+    const deviceMobileBtn = el('button', {
+      'aria-label': 'Mobile',
+      class: 'urlbar-device-btn',
+      'data-active': String(previewDevice === 'mobile'),
+      title: 'Mobile preview',
+      trustedHtml: SmartphoneIcon(13),
+      onClick: () => {
+        if (previewDevice === 'mobile') return;
+        previewDevice = 'mobile';
+        if (tab === 'preview') renderRight();
+        refreshTopbarToggles();
+      },
+    });
+    const deviceDesktopBtn = el('button', {
+      'aria-label': 'Desktop',
+      class: 'urlbar-device-btn',
+      'data-active': String(previewDevice === 'desktop'),
+      title: 'Desktop preview',
+      trustedHtml: MonitorIcon(13),
+      onClick: () => {
+        if (previewDevice === 'desktop') return;
+        previewDevice = 'desktop';
+        if (tab === 'preview') renderRight();
+        refreshTopbarToggles();
+      },
+    });
+    const urlbarKindDot = el('span', {
+      class: 'urlbar-kind',
+      'data-kind': 'none',
+      title: 'No preview',
+    });
+    const urlbarPath = el('span', { class: 'urlbar-path' }, '—');
+    const urlbarOpenBtn = el('button', {
+      'aria-label': 'Open in browser',
+      class: 'urlbar-action-btn',
+      trustedHtml: ExternalIcon(13),
+      title: 'Open in browser',
+      onClick: () => {
+        if (currentPreviewSrc) window.open(currentPreviewSrc, '_blank');
+      },
+    });
+    const urlbarReloadBtn = el('button', {
+      'aria-label': 'Reload preview',
+      class: 'urlbar-action-btn',
+      trustedHtml: RefreshIcon(13),
+      title: 'Reload preview',
+      onClick: () => {
+        if (tab === 'preview') renderRight();
+      },
+    });
+    const urlbar = el('div', { class: 'urlbar' }, [
+      el('div', { class: 'urlbar-device' }, [deviceMobileBtn, deviceDesktopBtn]),
+      el('div', { class: 'urlbar-field' }, [urlbarKindDot, urlbarPath]),
+      urlbarOpenBtn,
+      urlbarReloadBtn,
+    ]);
+    const urlbarSlot = el('div', { class: 'urlbar-slot' }, [urlbar]);
 
     const topbar = el('div', { class: 'builder-topbar' }, [
       el('div', { class: 'builder-topbar-left' }, [
@@ -232,6 +441,7 @@
         projIconEl,
         el('div', { class: 'proj-name' }, [el('b', {}, projName), projSubtitleEl]),
       ]),
+      el('div', { class: 'topbar-toggles' }, [historyBtn, sidebarBtn]),
       el(
         'div',
         { class: 'mode-tabs' },
@@ -243,12 +453,14 @@
               tab = key;
               renderRight();
               refreshTabs();
+              renderUrlbar();
             },
           });
           btn.innerHTML = `${Icon[iconKey]({ size: 13 })}<span>${label}</span>`;
           return btn;
         }),
       ),
+      urlbarSlot,
       el('div', { class: 'builder-topbar-right' }, [
         el('button', { class: 'btn btn-ghost' }, 'Share'),
         primaryBtn,
@@ -257,9 +469,50 @@
 
     function refreshTabs(): void {
       topbar.querySelectorAll('.mode-tab').forEach((b, i) => {
-        const keys: Tab[] = ['preview', 'code', 'history'];
+        const keys: Tab[] = ['preview', 'code'];
         (b as HTMLElement).dataset.active = String(tab === keys[i]);
       });
+    }
+
+    // Keep the topbar toggle buttons (history, sidebar, device) and URL-bar
+    // visibility in sync with state. Called whenever any of those changes.
+    function refreshTopbarToggles(): void {
+      historyBtn.dataset.active = String(chatView === 'history');
+      sidebarBtn.dataset.active = String(sidebarOpen);
+      deviceMobileBtn.dataset.active = String(previewDevice === 'mobile');
+      deviceDesktopBtn.dataset.active = String(previewDevice === 'desktop');
+      urlbarSlot.dataset.visible = String(tab === 'preview');
+    }
+
+    function renderUrlbar(): void {
+      const has = !!currentPreviewSrc;
+      urlbar.dataset.empty = String(!has);
+      urlbarKindDot.dataset.kind = currentPreviewKind ?? 'none';
+      urlbarKindDot.title = currentPreviewKind === 'live'
+        ? 'Live (gateway)'
+        : currentPreviewKind === 'local'
+          ? 'Local files'
+          : 'No preview';
+      urlbarPath.textContent = has ? formatPreviewUrl(currentPreviewSrc!) : 'No preview yet';
+      urlbarPath.title = currentPreviewSrc ?? '';
+      (urlbarOpenBtn as HTMLButtonElement).disabled = !has;
+      (urlbarReloadBtn as HTMLButtonElement).disabled = tab !== 'preview';
+      urlbarSlot.dataset.visible = String(tab === 'preview');
+    }
+
+    // Trim noisy URL prefixes for display while preserving the full URL on
+    // hover (set as title attr by the caller). centraid-preview:// gets
+    // shortened to "/<id>/<file>".
+    function formatPreviewUrl(src: string): string {
+      try {
+        const u = new URL(src);
+        if (u.protocol === 'centraid-preview:') {
+          return (u.pathname || '/').replace(/^\/+/, '/');
+        }
+        return u.host + (u.pathname === '/' ? '' : u.pathname);
+      } catch {
+        return src;
+      }
     }
 
     function setSubtitle(text: string): void {
@@ -271,7 +524,8 @@
       if (existing) existing.remove();
       const toast = el('div', {
         class: 'preview-toast',
-        trustedHtml: Icon.Check({ size: 13, strokeWidth: 2.5 }) + ` <span>${escapeHtml(text)}</span>`,
+        trustedHtml:
+          Icon.Check({ size: 13, strokeWidth: 2.5 }) + ` <span>${escapeHtml(text)}</span>`,
       });
       body.append(toast);
       setTimeout(() => toast.remove(), 2400);
@@ -281,7 +535,9 @@
       const existing = body.querySelector('.preview-toast');
       if (existing) existing.remove();
       const toast = el('div', { class: 'preview-toast preview-toast-action' });
-      const iconHost = el('span', { trustedHtml: Icon.X ? Icon.X({ size: 13, strokeWidth: 2.5 }) : '!' });
+      const iconHost = el('span', {
+        trustedHtml: Icon.X ? Icon.X({ size: 13, strokeWidth: 2.5 }) : '!',
+      });
       const msg = el('span', {}, text);
       const btn = el(
         'button',
@@ -303,16 +559,18 @@
     }
 
     // ---------- Body / panes ----------
-    const body = el('div', { class: 'builder-body' });
+    // data-sidebar drives the .builder-body grid columns (open vs collapsed).
+    const body = el('div', { class: 'builder-body', 'data-sidebar': 'open' });
     const chatPane = el('div', { class: 'chat-pane' });
     const rightPane = el('div', { class: 'right-pane' });
     body.append(chatPane);
     body.append(rightPane);
 
-    const chatScroll = el('div', { class: 'chat-scroll' });
-    const inputWrap = el('div', { class: 'chat-input-wrap' });
-    chatPane.append(chatScroll);
-    chatPane.append(inputWrap);
+    // chat-scroll + chat-input-wrap are recreated by renderChatPane() each
+    // time chatView changes, so the same pane can host either view without
+    // leaking listeners. We hold references for renderChat() / renderInput().
+    let chatScroll: HTMLElement = el('div', { class: 'chat-scroll' });
+    let inputWrap: HTMLElement = el('div', { class: 'chat-input-wrap' });
 
     function renderMessage(m: ChatMsg): HTMLElement {
       if (m.kind === 'divider') {
@@ -328,27 +586,48 @@
           ]),
         ]);
       }
-      if (m.kind === 'tool') {
-        const stateIcon =
-          m.state === 'running'
-            ? el('span', { class: 'tool-spinner' })
-            : m.state === 'error'
-              ? el('span', {
-                  class: 'tool-icon tool-icon-err',
-                  trustedHtml: Icon.X ? Icon.X({ size: 11, strokeWidth: 2.5 }) : '✗',
-                })
-              : el('span', {
-                  class: 'tool-icon tool-icon-ok',
-                  trustedHtml: Icon.Check({ size: 11, strokeWidth: 2.5 }),
-                });
-        const children: HTMLElement[] = [
-          stateIcon,
-          el('span', { class: 'tool-name' }, m.tool),
-        ];
-        if (m.summary) {
-          children.push(el('span', { class: 'tool-arg' }, m.summary));
+      if (m.kind === 'toolGroup') {
+        const groupId = m.id;
+        const isRunning = m.calls.some((c) => c.state === 'running');
+        const hasError = m.calls.some((c) => c.state === 'error');
+        const wrap = el('div', {
+          class: 'tool-group',
+          'data-open': String(m.open),
+          'data-running': String(isRunning),
+          'data-error': String(hasError),
+        });
+        const pill = el('button', {
+          class: 'tool-group-pill',
+          type: 'button',
+          'aria-expanded': String(m.open),
+        });
+        // Bolt + label + chevron, in that order, matching the design.
+        pill.innerHTML =
+          `<span class="tg-bolt">${BoltIcon(13)}</span>` +
+          `<span class="tg-label">${escapeHtml(summarizeGroup(m.calls))}</span>` +
+          `<span class="tg-chev">${ChevronDownIcon(13)}</span>`;
+        pill.addEventListener('click', () => {
+          // Re-find by stable id — `m` may be a stale reference after
+          // sibling chat updates rebuild the array.
+          chat = chat.map((x) =>
+            x.kind === 'toolGroup' && x.id === groupId ? { ...x, open: !x.open } : x,
+          );
+          renderChat();
+        });
+        wrap.append(pill);
+        if (m.open) {
+          const list = el('div', { class: 'tg-list' });
+          for (const c of m.calls) {
+            const dot = el('span', { class: 'tg-dot', 'data-state': c.state });
+            const name = el('span', { class: 'tg-row-name' }, toolVerb(c.tool));
+            const target = el('span', { class: 'tg-row-target' }, c.summary ?? '');
+            list.append(
+              el('div', { class: 'tg-row', 'data-state': c.state }, [dot, name, target]),
+            );
+          }
+          wrap.append(list);
         }
-        return el('div', { class: 'chat-tool-row', 'data-state': m.state }, children);
+        return wrap;
       }
       if (m.kind === 'thinking') {
         const txt = m.text || (m.streaming ? '…' : '');
@@ -445,17 +724,45 @@
       inputWrap.append(wrap);
     }
 
+    // ---------- Chat pane swap (chat ↔ history) ----------
+    function renderChatPane(): void {
+      chatPane.innerHTML = '';
+      if (chatView === 'history') {
+        const head = el('div', { class: 'chatpane-head' }, [
+          el('button', {
+            'aria-label': 'Back to chat',
+            class: 'btn-icon',
+            trustedHtml: Icon.ArrowLeft({ size: 14 }),
+            onClick: () => {
+              chatView = 'chat';
+              renderChatPane();
+              refreshTopbarToggles();
+            },
+          }),
+          el('span', { class: 'chatpane-head-title' }, 'Version history'),
+        ]);
+        const list = el('div', { class: 'history-list chatpane-history' });
+        chatPane.append(head);
+        chatPane.append(list);
+        void renderHistoryInto(list);
+        return;
+      }
+      // Default: live chat view. Recreate fresh containers; renderChat /
+      // renderInput repopulate them.
+      chatScroll = el('div', { class: 'chat-scroll' });
+      inputWrap = el('div', { class: 'chat-input-wrap' });
+      chatPane.append(chatScroll);
+      chatPane.append(inputWrap);
+      renderChat();
+      renderInput();
+    }
+
     // ---------- Right pane ----------
     function renderRight(): void {
       rightPane.innerHTML = '';
       rightPane.classList.remove('preview-pane', 'has-phone');
-      if (resizeHandler) {
-        window.removeEventListener('resize', resizeHandler);
-        resizeHandler = null;
-      }
       if (tab === 'preview') void renderPreview();
-      else if (tab === 'code') void renderCode();
-      else void renderHistory();
+      else void renderCode();
     }
 
     // Preview iframes are sandboxed for safety, but `allow-same-origin` is
@@ -504,31 +811,11 @@
       rightPane.classList.add('preview-pane');
       if (previewDevice === 'mobile') rightPane.classList.add('has-phone');
 
-      const toggle = el(
-        'div',
-        { class: 'preview-device-toggle' },
-        (
-          [
-            ['mobile', 'Mobile'],
-            ['desktop', 'Desktop'],
-          ] as [DeviceKey, string][]
-        ).map(([key, label]) =>
-          el(
-            'button',
-            {
-              'data-active': String(previewDevice === key),
-              onClick: () => {
-                previewDevice = key;
-                renderRight();
-              },
-            },
-            label,
-          ),
-        ),
-      );
-      rightPane.append(toggle);
-
       const resolved = projectId ? await resolvePreviewSrc() : undefined;
+      // Tell the topbar URL bar what we're showing (or that we have nothing).
+      currentPreviewSrc = resolved?.src;
+      currentPreviewKind = resolved?.kind;
+      renderUrlbar();
 
       if (!resolved) {
         const empty = el('div', { class: 'empty' });
@@ -542,66 +829,29 @@
         return;
       }
 
-      const sourceLabel = el(
-        'div',
-        { class: 'preview-source-label', 'data-kind': resolved.kind },
-        resolved.kind === 'live' ? 'Preview · live' : 'Preview · local files',
-      );
-      rightPane.append(sourceLabel);
-
-      if (previewDevice === 'desktop') {
-        const stage = el('div', { class: 'preview-stage' });
-        const card = el('div', { class: 'preview-card' });
-        card.style.setProperty('--accent-color', projColor as string);
-        card.append(makePreviewFrame(resolved.src));
-        stage.append(card);
-        rightPane.append(stage);
-        return;
-      }
-
-      const scaler = el('div', { class: 'phone-scale' });
-      const phone = el('div', { class: 'phone' });
-      const notch = el('div', { class: 'phone-notch' });
-      const indicator = el('div', { class: 'phone-indicator' });
-      const screen = el('div', { class: 'phone-screen' });
-      const statusBar = el('div', { class: 'status-bar' });
-      statusBar.innerHTML =
-        `<span>9:41</span>` +
-        `<span class="status-right">${Icon.Cellular({ size: 15 })}${Icon.Wifi({ size: 15 })}${Icon.Battery({ size: 20 })}</span>`;
-      const content = el('div', { class: 'phone-content' });
-      content.style.setProperty('--accent-color', projColor as string);
-      screen.append(statusBar);
-      screen.append(content);
-      phone.append(notch);
-      phone.append(screen);
-      phone.append(indicator);
-      scaler.append(phone);
-      rightPane.append(scaler);
-
-      content.append(makePreviewFrame(resolved.src));
-
-      const fit = (): void => {
-        const r = rightPane.getBoundingClientRect();
-        const pad = 64;
-        const availW = r.width - pad;
-        const availH = r.height - pad;
-        if (availW <= 0 || availH <= 0) return;
-        const s = Math.min(1, availW / 390, availH / 720);
-        scaler.style.transform = `scale(${s})`;
-      };
-      fit();
-      resizeHandler = fit;
-      window.addEventListener('resize', resizeHandler);
+      const stage = el('div', { class: 'preview-stage' });
+      const cardClass =
+        previewDevice === 'mobile' ? 'preview-card preview-card-mobile' : 'preview-card';
+      const card = el('div', { class: cardClass });
+      card.style.setProperty('--accent-color', projColor as string);
+      card.append(makePreviewFrame(resolved.src));
+      stage.append(card);
+      rightPane.append(stage);
     }
 
+    // Code view — file-tree on the left + viewer on the right (Lovable-style).
+    // Tree state (expanded folders, search query, active file) is per-render
+    // so re-mounts return to a sensible default instead of stale state.
     async function renderCode(): Promise<void> {
-      const tabsRow = el('div', { class: 'code-tabs' });
-      const codeBody = el('div', { class: 'code-body' });
-      rightPane.append(tabsRow);
-      rightPane.append(codeBody);
+      const codePane = el('div', { class: 'code-pane' });
+      const treeWrap = el('div', { class: 'code-tree' });
+      const viewer = el('div', { class: 'code-viewer' });
+      codePane.append(treeWrap);
+      codePane.append(viewer);
+      rightPane.append(codePane);
 
       if (!projectId) {
-        codeBody.innerHTML = '<div class="empty">No project yet.</div>';
+        viewer.innerHTML = '<div class="empty">No project yet.</div>';
         return;
       }
 
@@ -609,69 +859,224 @@
       try {
         files = await Api().readProjectFiles({ id: projectId });
       } catch (err) {
-        codeBody.innerHTML = `<div class="empty">Could not read files: ${escapeHtml(String(err))}</div>`;
+        viewer.innerHTML = `<div class="empty">Could not read files: ${escapeHtml(String(err))}</div>`;
         return;
       }
 
       if (files.length === 0) {
-        codeBody.innerHTML = '<div class="empty">Empty project.</div>';
+        viewer.innerHTML = '<div class="empty">Empty project.</div>';
         return;
       }
 
-      // Sensible default: prefer index.html if present, else first file.
+      type TreeNode = {
+        name: string;
+        path: string; // full path (matches files[].path for files)
+        kind: 'file' | 'folder';
+        children: TreeNode[];
+      };
+
+      // Walk each file's path segments, lazily creating folder nodes. Folder
+      // nodes are sorted before files at every level — Lovable does this.
+      function buildTree(): TreeNode[] {
+        const root: TreeNode[] = [];
+        for (const f of files) {
+          const parts = f.path.split('/');
+          let level = root;
+          let acc = '';
+          for (let i = 0; i < parts.length; i++) {
+            const part = parts[i]!;
+            acc = acc ? `${acc}/${part}` : part;
+            const isFile = i === parts.length - 1;
+            let node = level.find((n) => n.name === part);
+            if (!node) {
+              node = {
+                name: part,
+                path: acc,
+                kind: isFile ? 'file' : 'folder',
+                children: [],
+              };
+              level.push(node);
+            }
+            level = node.children;
+          }
+        }
+        const sortLevel = (nodes: TreeNode[]): void => {
+          nodes.sort((a, b) => {
+            if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+            return a.name.localeCompare(b.name);
+          });
+          for (const n of nodes) sortLevel(n.children);
+        };
+        sortLevel(root);
+        return root;
+      }
+
+      const tree = buildTree();
+
+      // Sensible default selection: index.html if present, else first file.
       let active = files.find((f) => f.path === 'index.html')?.path ?? files[0]!.path;
 
-      const drawCode = (): void => {
-        codeBody.innerHTML = '';
+      // Folders containing the active file start expanded so the user can
+      // see where it lives. Search auto-expands matching paths too.
+      const expanded = new Set<string>();
+      {
+        const parts = active.split('/');
+        let acc = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+          acc = acc ? `${acc}/${parts[i]}` : parts[i]!;
+          expanded.add(acc);
+        }
+      }
+
+      let search = '';
+
+      // Pure filter — returns a copy of the tree containing only nodes whose
+      // path matches the (lowercased) query, plus their ancestors. Folders
+      // along the way are auto-added to expanded so matches are visible.
+      function filterTree(nodes: TreeNode[], q: string): TreeNode[] {
+        if (!q) return nodes;
+        const out: TreeNode[] = [];
+        for (const n of nodes) {
+          if (n.kind === 'file') {
+            if (n.path.toLowerCase().includes(q)) out.push(n);
+          } else {
+            const kids = filterTree(n.children, q);
+            if (kids.length > 0 || n.path.toLowerCase().includes(q)) {
+              expanded.add(n.path);
+              out.push({ ...n, children: kids });
+            }
+          }
+        }
+        return out;
+      }
+
+      const drawViewer = (): void => {
+        viewer.innerHTML = '';
         const file = files.find((f) => f.path === active);
         if (!file) {
-          codeBody.innerHTML = '<div class="empty">File not found.</div>';
+          viewer.innerHTML = '<div class="empty">File not found.</div>';
           return;
         }
+        const head = el('div', { class: 'code-viewer-head' }, [
+          el('span', { class: 'code-viewer-path' }, file.path),
+          el(
+            'span',
+            { class: 'code-viewer-meta' },
+            `${file.content.split('\n').length} lines · read-only`,
+          ),
+        ]);
+        const body = el('div', { class: 'code-body' });
         const lines = file.content.split('\n');
         const gutter = el('div', { class: 'code-gutter' });
         lines.forEach((_, i) => gutter.append(el('div', {}, String(i + 1))));
         const text = el('pre', { class: 'code-text' });
         text.innerHTML = tokenize(file.content, languageHint(file.path));
-        codeBody.append(gutter);
-        codeBody.append(text);
+        body.append(gutter);
+        body.append(text);
+        viewer.append(head);
+        viewer.append(body);
       };
 
-      const drawTabs = (): void => {
-        tabsRow.innerHTML = '';
-        for (const f of files) {
-          tabsRow.append(
-            el(
+      const drawTree = (): void => {
+        treeWrap.innerHTML = '';
+
+        const searchInput = el('input', {
+          class: 'code-search',
+          placeholder: 'Search code',
+          value: search,
+        }) as HTMLInputElement;
+        searchInput.addEventListener('input', () => {
+          search = searchInput.value.trim().toLowerCase();
+          drawTree();
+          // Keep the input focused after re-render.
+          const next = treeWrap.querySelector('.code-search') as HTMLInputElement | null;
+          if (next) {
+            next.focus();
+            next.setSelectionRange(search.length, search.length);
+          }
+        });
+        treeWrap.append(searchInput);
+
+        const list = el('div', { class: 'code-tree-list' });
+        const visible = filterTree(tree, search);
+
+        const renderRow = (node: TreeNode, depth: number): HTMLElement => {
+          if (node.kind === 'folder') {
+            const isOpen = expanded.has(node.path);
+            const row = el(
               'button',
               {
-                class: 'code-tab',
-                'data-active': String(active === f.path),
+                class: 'code-tree-row code-tree-folder',
+                'data-depth': String(depth),
                 onClick: () => {
-                  active = f.path;
-                  drawTabs();
-                  drawCode();
+                  if (expanded.has(node.path)) expanded.delete(node.path);
+                  else expanded.add(node.path);
+                  drawTree();
                 },
               },
-              f.path,
-            ),
+              [
+                el('span', {
+                  class: 'code-tree-chevron',
+                  'data-open': String(isOpen),
+                  trustedHtml: ChevronIcon(11),
+                }),
+                el('span', { class: 'code-tree-icon', trustedHtml: FolderIcon(13) }),
+                el('span', { class: 'code-tree-name' }, node.name),
+              ],
+            );
+            row.style.setProperty('--depth', String(depth));
+            return row;
+          }
+          const row = el(
+            'button',
+            {
+              class: 'code-tree-row code-tree-file',
+              'data-active': String(active === node.path),
+              'data-depth': String(depth),
+              onClick: () => {
+                active = node.path;
+                drawTree();
+                drawViewer();
+              },
+            },
+            [
+              el('span', { class: 'code-tree-chevron-spacer' }),
+              el('span', {
+                class: 'code-tree-icon',
+                trustedHtml: fileIcon(node.path, 13),
+              }),
+              el('span', { class: 'code-tree-name' }, node.name),
+            ],
           );
+          row.style.setProperty('--depth', String(depth));
+          return row;
+        };
+
+        const walk = (nodes: TreeNode[], depth: number): void => {
+          for (const n of nodes) {
+            list.append(renderRow(n, depth));
+            if (n.kind === 'folder' && expanded.has(n.path)) {
+              walk(n.children, depth + 1);
+            }
+          }
+        };
+        walk(visible, 0);
+
+        if (visible.length === 0) {
+          list.append(el('div', { class: 'empty code-tree-empty' }, 'No matches'));
         }
-        const meta = el(
-          'div',
-          { class: 'code-meta' },
-          `${files.length} files · read-only`,
-        );
-        tabsRow.append(meta);
+
+        treeWrap.append(list);
       };
 
-      drawTabs();
-      drawCode();
+      drawTree();
+      drawViewer();
     }
 
-    async function renderHistory(): Promise<void> {
-      const list = el('div', { class: 'history-list' });
-      rightPane.append(list);
-
+    // Renders the version list into the supplied container. Used by the
+    // chat-pane History view (chatView === 'history'); kept generic so a
+    // future right-pane history view could reuse it.
+    async function renderHistoryInto(list: HTMLElement): Promise<void> {
       if (!projectId) {
         list.innerHTML = '<div class="empty">No project yet.</div>';
         return;
@@ -693,66 +1098,60 @@
         return;
       }
 
-      const sorted = [...result.versions].sort((a, b) =>
-        b.uploadedAt.localeCompare(a.uploadedAt),
-      );
+      const sorted = [...result.versions].sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
 
       const draw = (): void => {
         list.innerHTML = '';
         for (const v of sorted) {
           const isCurrent = v.versionId === result.activeVersion;
-          const item = el(
-            'div',
-            { class: 'history-item', 'data-active': String(isCurrent) },
-            [
-              el('div', { class: 'history-thumb' }, [el('div', { class: 'thumb-shimmer' })]),
-              el('div', { class: 'history-meta' }, [
-                el(
-                  'div',
-                  { class: 'history-title' },
-                  [
-                    el('b', {}, shortVersionTitle(v)),
-                    isCurrent ? el('span', { class: 'current-tag' }, '● current') : null,
-                  ].filter((x): x is HTMLElement => x !== null),
-                ),
-                el('div', { class: 'history-when' }, relativeWhen(v.uploadedAt)),
-                el(
-                  'p',
-                  { class: 'history-prompt' },
-                  `${v.files} files · ${(v.bytes / 1024).toFixed(1)} KB · sha ${v.sha256.slice(0, 8)}`,
-                ),
-              ]),
+          const item = el('div', { class: 'history-item', 'data-active': String(isCurrent) }, [
+            el('div', { class: 'history-thumb' }, [el('div', { class: 'thumb-shimmer' })]),
+            el('div', { class: 'history-meta' }, [
               el(
                 'div',
-                { class: 'history-actions' },
+                { class: 'history-title' },
                 [
-                  !isCurrent
-                    ? el(
-                        'button',
-                        {
-                          class: 'btn btn-soft tiny-btn',
-                          onClick: async () => {
-                            try {
-                              await Api().activateVersion({
-                                id: projectId!,
-                                versionId: v.versionId,
-                              });
-                              showToast(`Restored to ${shortVersionTitle(v)}`);
-                              lastPublishedVersionId = v.versionId;
-                              if (tab === 'history') renderRight();
-                              if (tab === 'preview') renderRight();
-                            } catch (err) {
-                              showToast(`Restore failed: ${String(err)}`);
-                            }
-                          },
-                        },
-                        'Restore',
-                      )
-                    : null,
+                  el('b', {}, shortVersionTitle(v)),
+                  isCurrent ? el('span', { class: 'current-tag' }, '● current') : null,
                 ].filter((x): x is HTMLElement => x !== null),
               ),
-            ],
-          );
+              el('div', { class: 'history-when' }, relativeWhen(v.uploadedAt)),
+              el(
+                'p',
+                { class: 'history-prompt' },
+                `${v.files} files · ${(v.bytes / 1024).toFixed(1)} KB · sha ${v.sha256.slice(0, 8)}`,
+              ),
+            ]),
+            el(
+              'div',
+              { class: 'history-actions' },
+              [
+                !isCurrent
+                  ? el(
+                      'button',
+                      {
+                        class: 'btn btn-soft tiny-btn',
+                        onClick: async () => {
+                          try {
+                            await Api().activateVersion({
+                              id: projectId!,
+                              versionId: v.versionId,
+                            });
+                            showToast(`Restored to ${shortVersionTitle(v)}`);
+                            lastPublishedVersionId = v.versionId;
+                            if (chatView === 'history') renderChatPane();
+                            if (tab === 'preview') renderRight();
+                          } catch (err) {
+                            showToast(`Restore failed: ${String(err)}`);
+                          }
+                        },
+                      },
+                      'Restore',
+                    )
+                  : null,
+              ].filter((x): x is HTMLElement => x !== null),
+            ),
+          ]);
           list.append(item);
         }
       };
@@ -788,7 +1187,9 @@
       messages: import('./centraid-api.js').CentraidAgentMessage[],
     ): ChatMsg[] {
       const out: ChatMsg[] = [];
-      const toolIdxByCallId = new Map<string, number>();
+      // toolCallId → index of the toolGroup that contains it. Lets a
+      // toolResult message later patch the matching call's state.
+      const groupIdxByCallId = new Map<string, number>();
       const extractText = (
         content: string | import('./centraid-api.js').CentraidContentBlock[],
       ): string => {
@@ -841,10 +1242,28 @@
               flushText();
               flushThink();
               const tc = c as { id: string; name: string; arguments: Record<string, unknown> };
-              const summary = summarizeToolArgs(tc.name, tc.arguments);
-              const idx = out.length;
-              out.push({ kind: 'tool', tool: tc.name, summary, state: 'ok' });
-              toolIdxByCallId.set(tc.id, idx);
+              const newCall: ToolCall = {
+                id: tc.id,
+                tool: tc.name,
+                summary: summarizeToolArgs(tc.name, tc.arguments),
+                state: 'ok',
+              };
+              const last = out[out.length - 1];
+              if (last && last.kind === 'toolGroup') {
+                // Same group as the previous adjacent tool call — append.
+                last.calls.push(newCall);
+                groupIdxByCallId.set(tc.id, out.length - 1);
+              } else {
+                // Historical groups start collapsed; the user already saw
+                // them once and this view is retrospective.
+                out.push({
+                  kind: 'toolGroup',
+                  id: tc.id,
+                  calls: [newCall],
+                  open: false,
+                });
+                groupIdxByCallId.set(tc.id, out.length - 1);
+              }
             }
           }
           flushText();
@@ -853,11 +1272,15 @@
         }
         if (m.role === 'toolResult') {
           const tr = m as { toolCallId: string; isError: boolean };
-          const idx = toolIdxByCallId.get(tr.toolCallId);
+          const idx = groupIdxByCallId.get(tr.toolCallId);
           if (idx !== undefined) {
             const cur = out[idx];
-            if (cur && cur.kind === 'tool') {
-              out[idx] = { ...cur, state: tr.isError ? 'error' : 'ok' };
+            if (cur && cur.kind === 'toolGroup') {
+              cur.calls = cur.calls.map((c) =>
+                c.id === tr.toolCallId
+                  ? { ...c, state: tr.isError ? 'error' : 'ok' }
+                  : c,
+              );
             }
           }
           continue;
@@ -945,28 +1368,49 @@
         case 'tool_execution_start': {
           // A tool call is the agent acting; any in-flight reasoning is done.
           closeThinking();
-          const summary = summarizeToolArgs(event.toolName, event.args);
-          const idx = pushMessage({
-            kind: 'tool',
+          const newCall: ToolCall = {
+            id: event.toolCallId,
             tool: event.toolName,
-            summary,
+            summary: summarizeToolArgs(event.toolName, event.args),
             state: 'running',
-          });
-          pendingToolStarts.set(event.toolCallId, idx);
+          };
+          const lastIdx = chat.length - 1;
+          const last = chat[lastIdx];
+          // Consolidate adjacent tool calls into one bubble. AI text or
+          // thinking content between calls breaks the group, so a fresh one
+          // is created when the previous chat msg isn't a toolGroup.
+          if (last && last.kind === 'toolGroup') {
+            const updated: ChatMsg = { ...last, calls: [...last.calls, newCall] };
+            chat = chat.map((m, i) => (i === lastIdx ? updated : m));
+            renderChat();
+            pendingToolStarts.set(event.toolCallId, lastIdx);
+          } else {
+            // New groups start expanded so the user sees what's running as
+            // it happens; they can collapse for retrospective compactness.
+            const idx = pushMessage({
+              kind: 'toolGroup',
+              id: event.toolCallId,
+              calls: [newCall],
+              open: true,
+            });
+            pendingToolStarts.set(event.toolCallId, idx);
+          }
           break;
         }
         case 'tool_execution_end': {
-          const idx = pendingToolStarts.get(event.toolCallId);
+          const groupIdx = pendingToolStarts.get(event.toolCallId);
           pendingToolStarts.delete(event.toolCallId);
-          if (idx !== undefined) {
-            const prev = chat[idx];
-            const summary = prev && prev.kind === 'tool' ? prev.summary : undefined;
-            updateMessage(idx, {
-              kind: 'tool',
-              tool: event.toolName,
-              summary,
-              state: event.isError ? 'error' : 'ok',
-            });
+          if (groupIdx !== undefined) {
+            const grp = chat[groupIdx];
+            if (grp && grp.kind === 'toolGroup') {
+              const calls = grp.calls.map((c) =>
+                c.id === event.toolCallId
+                  ? { ...c, state: event.isError ? ('error' as const) : ('ok' as const) }
+                  : c,
+              );
+              chat = chat.map((m, i) => (i === groupIdx ? { ...grp, calls } : m));
+              renderChat();
+            }
           }
           if (!event.isError && FILE_WRITING_TOOLS.has(event.toolName)) {
             previewReloadPending = true;
@@ -1115,7 +1559,7 @@
           text: `Published ${shortVersionTitle(result)} (${result.files} files, ${(result.bytes / 1024).toFixed(1)} KB)`,
         });
         showToast(`Published ${shortVersionTitle(result)}`);
-        if (tab === 'history') renderRight();
+        if (chatView === 'history') renderChatPane();
         if (tab === 'preview') renderRight();
         if (opts.andAddToHome && onAddToHome) {
           onAddToHome({
@@ -1137,7 +1581,9 @@
             'Open Settings',
             () => void window.Centraid?.openSettings?.(),
           );
-        } else if (/gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/i.test(msg)) {
+        } else if (
+          /gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/i.test(msg)
+        ) {
           updateMessage(statusIdx, {
             kind: 'status',
             text: 'Gateway not reachable. Is openclaw running?',
@@ -1165,9 +1611,12 @@
     const builder = el('div', { class: 'builder' }, [topbar, body]);
     root.append(builder);
 
-    renderChat();
-    renderInput();
+    // renderChatPane() mounts chat-scroll + input the first time, then
+    // renderChat()/renderInput() repaint via the references it sets up.
+    renderChatPane();
     renderRight();
+    refreshTopbarToggles();
+    renderUrlbar();
 
     // Kick off async setup.
     void bootstrap();
@@ -1178,8 +1627,9 @@
         unsubscribeAgent();
         unsubscribeAgent = null;
       }
-      void Api().stopAgent().catch(() => undefined);
-      if (resizeHandler) window.removeEventListener('resize', resizeHandler);
+      void Api()
+        .stopAgent()
+        .catch(() => undefined);
     };
   }
 

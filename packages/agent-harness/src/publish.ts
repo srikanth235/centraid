@@ -1,22 +1,22 @@
-import { promises as fs } from "node:fs";
-import { spawn } from "node:child_process";
-import path from "node:path";
-import * as tar from "tar";
-import type { HarnessConfig, PublishOptions, PublishResult } from "./types.js";
-import { HarnessError } from "./types.js";
+import { promises as fs } from 'node:fs';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import * as tar from 'tar';
+import type { HarnessConfig, PublishOptions, PublishResult } from './types.js';
+import { HarnessError } from './types.js';
 
 /** Files/folders we never include in the upload. */
 const EXCLUDE = new Set([
-  "node_modules",
-  ".git",
-  ".DS_Store",
-  "dist",
-  "data.sqlite",
-  "current.json",
-  "_registry.json",
-  "versions",
-  "_uploads",
-  "_trash",
+  'node_modules',
+  '.git',
+  '.DS_Store',
+  'dist',
+  'data.sqlite',
+  'current.json',
+  '_registry.json',
+  'versions',
+  '_uploads',
+  '_trash',
 ]);
 
 /**
@@ -32,7 +32,7 @@ export async function publishProject(
   options: PublishOptions = {},
 ): Promise<PublishResult> {
   if (!(await dirExists(projectDir))) {
-    throw new HarnessError("no_project", `Project directory not found: ${projectDir}`);
+    throw new HarnessError('no_project', `Project directory not found: ${projectDir}`);
   }
 
   if (!options.skipBuild) {
@@ -46,20 +46,20 @@ export async function publishProject(
       // Preserve relative paths; refuse anything outside the project dir.
       preservePaths: false,
       filter: (relPath) => {
-        const top = relPath.split("/")[0] ?? "";
+        const top = relPath.split('/')[0] ?? '';
         if (EXCLUDE.has(top)) return false;
         // Strip dotfiles at top level except a small allowlist (currently none).
-        if (top.startsWith(".")) return false;
+        if (top.startsWith('.')) return false;
         return true;
       },
     },
-    ["."],
+    ['.'],
   );
 
   // Buffer the tar.gz so we can compute Content-Length and retry safely.
   const chunks: Buffer[] = [];
   for await (const chunk of tarStream as unknown as AsyncIterable<Buffer | string>) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
   }
   const body = Buffer.concat(chunks);
 
@@ -69,19 +69,19 @@ export async function publishProject(
   ).toString();
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/gzip",
-    "Content-Length": String(body.byteLength),
+    'Content-Type': 'application/gzip',
+    'Content-Length': String(body.byteLength),
   };
   if (config.gatewayToken && config.gatewayToken.length > 0) {
-    headers["Authorization"] = `Bearer ${config.gatewayToken}`;
+    headers['Authorization'] = `Bearer ${config.gatewayToken}`;
   }
 
   let res: Response;
   try {
-    res = await fetch(url, { method: "POST", headers, body });
+    res = await fetch(url, { method: 'POST', headers, body });
   } catch (err) {
     throw new HarnessError(
-      "gateway_unreachable",
+      'gateway_unreachable',
       `Could not reach gateway at ${config.gatewayUrl}: ${
         err instanceof Error ? err.message : String(err)
       }`,
@@ -91,12 +91,12 @@ export async function publishProject(
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
       throw new HarnessError(
-        "auth_required",
+        'auth_required',
         `Gateway rejected upload (HTTP ${res.status}). Configure your gateway token in Settings.`,
       );
     }
     throw new HarnessError(
-      "upload_failed",
+      'upload_failed',
       `Upload failed (HTTP ${res.status}): ${text || res.statusText}`,
     );
   }
@@ -106,7 +106,7 @@ export async function publishProject(
     parsed = JSON.parse(text);
   } catch {
     throw new HarnessError(
-      "upload_failed",
+      'upload_failed',
       `Upload succeeded but response was not JSON: ${text.slice(0, 200)}`,
     );
   }
@@ -116,7 +116,7 @@ export async function publishProject(
 
 async function runBuild(
   projectDir: string,
-  override?: PublishOptions["buildCommand"],
+  override?: PublishOptions['buildCommand'],
 ): Promise<void> {
   const cmd = override ?? (await pickBuildCommand(projectDir));
   if (!cmd) return; // nothing to build
@@ -124,25 +124,20 @@ async function runBuild(
   await new Promise<void>((resolve, reject) => {
     const child = spawn(cmd.bin, cmd.args, {
       cwd: projectDir,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
-    let stderr = "";
-    child.stderr.on("data", (c: Buffer) => (stderr += c.toString("utf8")));
-    child.on("error", (err) =>
-      reject(
-        new HarnessError(
-          "build_failed",
-          `Failed to spawn ${cmd.bin}: ${err.message}`,
-        ),
-      ),
+    let stderr = '';
+    child.stderr.on('data', (c: Buffer) => (stderr += c.toString('utf8')));
+    child.on('error', (err) =>
+      reject(new HarnessError('build_failed', `Failed to spawn ${cmd.bin}: ${err.message}`)),
     );
-    child.on("close", (code) => {
+    child.on('close', (code) => {
       if (code === 0) resolve();
       else
         reject(
           new HarnessError(
-            "build_failed",
-            `${cmd.bin} ${cmd.args.join(" ")} exited with code ${code}: ${stderr.trim()}`,
+            'build_failed',
+            `${cmd.bin} ${cmd.args.join(' ')} exited with code ${code}: ${stderr.trim()}`,
           ),
         );
     });
@@ -154,17 +149,17 @@ async function pickBuildCommand(
 ): Promise<{ bin: string; args: string[] } | undefined> {
   // Prefer `bun run build` if a build script exists; otherwise fall back to `tsc`.
   try {
-    const pkg = JSON.parse(
-      await fs.readFile(path.join(projectDir, "package.json"), "utf8"),
-    ) as { scripts?: Record<string, string> };
-    if (pkg.scripts && typeof pkg.scripts.build === "string") {
-      return { bin: "bun", args: ["run", "build"] };
+    const pkg = JSON.parse(await fs.readFile(path.join(projectDir, 'package.json'), 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    if (pkg.scripts && typeof pkg.scripts.build === 'string') {
+      return { bin: 'bun', args: ['run', 'build'] };
     }
   } catch {
     /* no package.json — try tsc */
   }
-  if (await fileExists(path.join(projectDir, "tsconfig.json"))) {
-    return { bin: "tsc", args: ["-p", "tsconfig.json"] };
+  if (await fileExists(path.join(projectDir, 'tsconfig.json'))) {
+    return { bin: 'tsc', args: ['-p', 'tsconfig.json'] };
   }
   return undefined;
 }

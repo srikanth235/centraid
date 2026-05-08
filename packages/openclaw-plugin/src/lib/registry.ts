@@ -1,8 +1,8 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import crypto from "node:crypto";
-import type { AppId, AppMode, RegistryEntry, CronStatus } from "../types.js";
-import { isReservedAppId } from "./security.js";
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import type { AppId, AppMode, RegistryEntry, CronStatus } from '../types.js';
+import { isReservedAppId } from './security.js';
 
 /**
  * Persistent registry of registered apps stored at <appsDir>/_registry.json.
@@ -15,21 +15,24 @@ export class Registry {
   constructor(private readonly appsDir: string) {}
 
   private get filePath(): string {
-    return path.join(this.appsDir, "_registry.json");
+    return path.join(this.appsDir, '_registry.json');
   }
 
   async load(): Promise<void> {
     if (this.loaded) return;
     await fs.mkdir(this.appsDir, { recursive: true });
     try {
-      const raw = await fs.readFile(this.filePath, "utf8");
+      const raw = await fs.readFile(this.filePath, 'utf8');
       const parsed = JSON.parse(raw) as { apps: Array<RegistryEntry & { mode?: AppMode }> };
       // Backfill: older registry rows didn't have `mode`. Default to "path".
       this.cache = new Map(
-        parsed.apps.map((a) => [a.id, { ...a, mode: a.mode ?? ("path" as const) } as RegistryEntry]),
+        parsed.apps.map((a) => [
+          a.id,
+          { ...a, mode: a.mode ?? ('path' as const) } as RegistryEntry,
+        ]),
       );
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       this.cache = new Map();
       await this.persist();
     }
@@ -54,10 +57,10 @@ export class Registry {
 
   async register(input: { id: AppId; path: string; mode?: AppMode }): Promise<RegistryEntry> {
     if (isReservedAppId(input.id)) {
-      throw new RegistryError("invalid_id", `App id "${input.id}" is reserved or invalid.`);
+      throw new RegistryError('invalid_id', `App id "${input.id}" is reserved or invalid.`);
     }
     if (this.cache.has(input.id)) {
-      throw new RegistryError("already_registered", `App "${input.id}" is already registered.`);
+      throw new RegistryError('already_registered', `App "${input.id}" is already registered.`);
     }
 
     const absPath = path.isAbsolute(input.path)
@@ -66,13 +69,13 @@ export class Registry {
 
     const stat = await fs.stat(absPath).catch(() => null);
     if (!stat || !stat.isDirectory()) {
-      throw new RegistryError("not_a_directory", `App path "${absPath}" is not a directory.`);
+      throw new RegistryError('not_a_directory', `App path "${absPath}" is not a directory.`);
     }
 
     const entry: RegistryEntry = {
       id: input.id,
       path: absPath,
-      mode: input.mode ?? "path",
+      mode: input.mode ?? 'path',
       registeredAt: new Date().toISOString(),
       cronTokens: {},
       cronStatus: {},
@@ -89,13 +92,13 @@ export class Registry {
    */
   async ensureUploaded(id: AppId): Promise<RegistryEntry> {
     if (isReservedAppId(id)) {
-      throw new RegistryError("invalid_id", `App id "${id}" is reserved or invalid.`);
+      throw new RegistryError('invalid_id', `App id "${id}" is reserved or invalid.`);
     }
     const existing = this.cache.get(id);
     if (existing) {
-      if (existing.mode !== "uploaded") {
+      if (existing.mode !== 'uploaded') {
         throw new RegistryError(
-          "already_registered",
+          'already_registered',
           `App "${id}" was registered as a path-mode app; upload is only supported for uploaded-mode apps.`,
         );
       }
@@ -106,7 +109,7 @@ export class Registry {
     const entry: RegistryEntry = {
       id,
       path: dir,
-      mode: "uploaded",
+      mode: 'uploaded',
       registeredAt: new Date().toISOString(),
       cronTokens: {},
       cronStatus: {},
@@ -127,8 +130,8 @@ export class Registry {
   /** Mint a fresh per-cron webhook token, persist it, and return. */
   async mintCronToken(appId: AppId, cronId: string): Promise<string> {
     const entry = this.cache.get(appId);
-    if (!entry) throw new RegistryError("unknown_app", `Unknown app "${appId}".`);
-    const token = crypto.randomBytes(32).toString("hex");
+    if (!entry) throw new RegistryError('unknown_app', `Unknown app "${appId}".`);
+    const token = crypto.randomBytes(32).toString('hex');
     entry.cronTokens[cronId] = token;
     await this.persist();
     return token;
@@ -156,14 +159,10 @@ export class Registry {
 
 export class RegistryError extends Error {
   constructor(
-    public readonly code:
-      | "invalid_id"
-      | "already_registered"
-      | "not_a_directory"
-      | "unknown_app",
+    public readonly code: 'invalid_id' | 'already_registered' | 'not_a_directory' | 'unknown_app',
     message: string,
   ) {
     super(message);
-    this.name = "RegistryError";
+    this.name = 'RegistryError';
   }
 }

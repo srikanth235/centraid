@@ -1,5 +1,5 @@
-import path from "node:path";
-import type { RegistryEntry } from "../types.js";
+import path from 'node:path';
+import type { RegistryEntry } from '../types.js';
 
 /**
  * Resolve where an app's persistent data file lives.
@@ -24,24 +24,24 @@ export function appDataDir(entry: RegistryEntry): string {
  * caller (typically `VersionStore.getActiveVersion`).
  */
 export function appCodeDir(entry: RegistryEntry, activeVersion?: string): string {
-  if (entry.mode === "uploaded") {
+  if (entry.mode === 'uploaded') {
     if (!activeVersion) {
       throw new AppPathError(
-        "no_active_version",
+        'no_active_version',
         `App "${entry.id}" is uploaded mode but has no active version.`,
       );
     }
-    return path.join(entry.path, "versions", activeVersion);
+    return path.join(entry.path, 'versions', activeVersion);
   }
   return entry.path;
 }
 
 export class AppPathError extends Error {
   constructor(
-    public readonly code: "no_active_version",
+    public readonly code: 'no_active_version',
     message: string,
   ) {
     super(message);
-    this.name = "AppPathError";
+    this.name = 'AppPathError';
   }
 }

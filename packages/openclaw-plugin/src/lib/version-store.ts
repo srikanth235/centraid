@@ -1,5 +1,5 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 
 export interface VersionRecord {
   versionId: string;
@@ -31,18 +31,18 @@ interface CurrentFile {
 export class VersionStore {
   private async readCurrent(appDir: string): Promise<CurrentFile | undefined> {
     try {
-      const raw = await fs.readFile(path.join(appDir, "current.json"), "utf8");
+      const raw = await fs.readFile(path.join(appDir, 'current.json'), 'utf8');
       const parsed = JSON.parse(raw) as CurrentFile;
       if (!parsed.activeVersion || !Array.isArray(parsed.history)) return undefined;
       return parsed;
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
       return undefined;
     }
   }
 
   private async writeCurrent(appDir: string, data: CurrentFile): Promise<void> {
-    const file = path.join(appDir, "current.json");
+    const file = path.join(appDir, 'current.json');
     const tmp = `${file}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
     await fs.rename(tmp, file);
@@ -71,12 +71,8 @@ export class VersionStore {
    * `extractedDir` must be the absolute path of the new version contents.
    * The function moves it into `<appDir>/versions/<versionId>/`.
    */
-  async commit(
-    appDir: string,
-    extractedDir: string,
-    record: VersionRecord,
-  ): Promise<void> {
-    const versionsDir = path.join(appDir, "versions");
+  async commit(appDir: string, extractedDir: string, record: VersionRecord): Promise<void> {
+    const versionsDir = path.join(appDir, 'versions');
     await fs.mkdir(versionsDir, { recursive: true });
     const target = path.join(versionsDir, record.versionId);
 
@@ -89,7 +85,7 @@ export class VersionStore {
       await fs.rename(extractedDir, target);
     }
 
-    const current = (await this.readCurrent(appDir)) ?? { activeVersion: "", history: [] };
+    const current = (await this.readCurrent(appDir)) ?? { activeVersion: '', history: [] };
     // Replace any prior history entry with the same versionId (idempotent re-upload).
     const filtered = current.history.filter((h) => h.versionId !== record.versionId);
     filtered.push(record);
@@ -104,14 +100,15 @@ export class VersionStore {
    * version dir doesn't exist.
    */
   async activate(appDir: string, versionId: string): Promise<void> {
-    const versionDir = path.join(appDir, "versions", versionId);
+    const versionDir = path.join(appDir, 'versions', versionId);
     try {
       const stat = await fs.stat(versionDir);
-      if (!stat.isDirectory()) throw new VersionStoreError("not_found", `Version "${versionId}" not found.`);
+      if (!stat.isDirectory())
+        throw new VersionStoreError('not_found', `Version "${versionId}" not found.`);
     } catch {
-      throw new VersionStoreError("not_found", `Version "${versionId}" not found.`);
+      throw new VersionStoreError('not_found', `Version "${versionId}" not found.`);
     }
-    const current = (await this.readCurrent(appDir)) ?? { activeVersion: "", history: [] };
+    const current = (await this.readCurrent(appDir)) ?? { activeVersion: '', history: [] };
     if (current.activeVersion === versionId) return;
     await this.writeCurrent(appDir, {
       activeVersion: versionId,
@@ -123,9 +120,9 @@ export class VersionStore {
   async deleteVersion(appDir: string, versionId: string): Promise<void> {
     const current = await this.readCurrent(appDir);
     if (current && current.activeVersion === versionId) {
-      throw new VersionStoreError("active", `Cannot delete active version "${versionId}".`);
+      throw new VersionStoreError('active', `Cannot delete active version "${versionId}".`);
     }
-    const versionDir = path.join(appDir, "versions", versionId);
+    const versionDir = path.join(appDir, 'versions', versionId);
     await fs.rm(versionDir, { recursive: true, force: true });
 
     if (current) {
@@ -145,9 +142,7 @@ export class VersionStore {
     const current = await this.readCurrent(appDir);
     if (!current) return { removed: [] };
 
-    const sorted = [...current.history].sort((a, b) =>
-      a.uploadedAt.localeCompare(b.uploadedAt),
-    );
+    const sorted = [...current.history].sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt));
     const active = current.activeVersion;
     const removed: string[] = [];
 
@@ -162,7 +157,7 @@ export class VersionStore {
       }
       sorted.shift();
       try {
-        await fs.rm(path.join(appDir, "versions", oldest.versionId), {
+        await fs.rm(path.join(appDir, 'versions', oldest.versionId), {
           recursive: true,
           force: true,
         });
@@ -190,18 +185,17 @@ export class VersionStore {
    * Returns `true` if anything was repaired.
    */
   async recover(appDir: string): Promise<boolean> {
-    const versionsDir = path.join(appDir, "versions");
+    const versionsDir = path.join(appDir, 'versions');
     let entries: string[];
     try {
-      entries = (await fs.readdir(versionsDir)).filter((n) => n.startsWith("v_"));
+      entries = (await fs.readdir(versionsDir)).filter((n) => n.startsWith('v_'));
     } catch {
       return false; // No versions/ → not an uploaded app
     }
     if (entries.length === 0) return false;
 
     const current = await this.readCurrent(appDir);
-    const activeStillThere =
-      current?.activeVersion && entries.includes(current.activeVersion);
+    const activeStillThere = current?.activeVersion && entries.includes(current.activeVersion);
     if (current && activeStillThere) return false;
 
     entries.sort(); // lexicographic == chronological by our v_<ISO>_<hash> scheme
@@ -212,7 +206,7 @@ export class VersionStore {
       history: current?.history ?? [
         {
           versionId: fallback,
-          sha256: "",
+          sha256: '',
           uploadedAt: new Date().toISOString(),
           bytes: 0,
           files: 0,
@@ -225,10 +219,10 @@ export class VersionStore {
 
 export class VersionStoreError extends Error {
   constructor(
-    public readonly code: "not_found" | "active",
+    public readonly code: 'not_found' | 'active',
     message: string,
   ) {
     super(message);
-    this.name = "VersionStoreError";
+    this.name = 'VersionStoreError';
   }
 }

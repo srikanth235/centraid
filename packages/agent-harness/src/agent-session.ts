@@ -6,13 +6,15 @@ import {
   SettingsManager,
   type AgentSession,
   type CreateAgentSessionOptions,
-} from "@earendil-works/pi-coding-agent";
-import { CENTRAID_APPEND_PROMPT } from "./system-prompt.js";
+} from '@earendil-works/pi-coding-agent';
+import { CENTRAID_APPEND_PROMPT } from './system-prompt.js';
 
-export type CentraidSessionMode = "fresh" | "continue" | "in-memory";
+export type CentraidSessionMode = 'fresh' | 'continue' | 'in-memory';
 
-export interface CreateCentraidAgentSessionOptions
-  extends Pick<CreateAgentSessionOptions, "model" | "thinkingLevel" | "tools" | "customTools"> {
+export interface CreateCentraidAgentSessionOptions extends Pick<
+  CreateAgentSessionOptions,
+  'model' | 'thinkingLevel' | 'tools' | 'customTools'
+> {
   /** Project directory the agent operates in (its cwd). */
   projectDir: string;
   /**
@@ -46,7 +48,7 @@ export async function createCentraidAgentSession(
 ): Promise<AgentSession> {
   const cwd = opts.projectDir;
   const agentDir = getAgentDir();
-  const mode: CentraidSessionMode = opts.sessionMode ?? "continue";
+  const mode: CentraidSessionMode = opts.sessionMode ?? 'continue';
 
   const loader = new DefaultResourceLoader({
     cwd,
@@ -57,9 +59,9 @@ export async function createCentraidAgentSession(
   await loader.reload();
 
   const sessionManager =
-    mode === "in-memory"
+    mode === 'in-memory'
       ? SessionManager.inMemory(cwd)
-      : mode === "continue"
+      : mode === 'continue'
         ? SessionManager.continueRecent(cwd)
         : SessionManager.create(cwd);
 

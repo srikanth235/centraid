@@ -1,5 +1,5 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 
 export interface ProjectFile {
   /** Path relative to the project root, posix style (e.g. "queries/foo.ts"). */
@@ -11,23 +11,32 @@ export interface ProjectFile {
   language: ProjectFileLanguage;
 }
 
-export type ProjectFileLanguage = "ts" | "js" | "html" | "css" | "json" | "md" | "other";
+export type ProjectFileLanguage = 'ts' | 'js' | 'html' | 'css' | 'json' | 'md' | 'other';
 
 const TEXT_EXT = new Set([
-  ".ts", ".js", ".mjs", ".html", ".htm", ".css", ".json", ".md", ".txt", ".svg",
+  '.ts',
+  '.js',
+  '.mjs',
+  '.html',
+  '.htm',
+  '.css',
+  '.json',
+  '.md',
+  '.txt',
+  '.svg',
 ]);
 const SKIP_TOP = new Set([
-  "node_modules",
-  ".git",
-  ".DS_Store",
-  "dist",
-  "data.sqlite",
-  "current.json",
-  "_registry.json",
-  "versions",
-  "_uploads",
-  "_trash",
-  "tsconfig.tsbuildinfo",
+  'node_modules',
+  '.git',
+  '.DS_Store',
+  'dist',
+  'data.sqlite',
+  'current.json',
+  '_registry.json',
+  'versions',
+  '_uploads',
+  '_trash',
+  'tsconfig.tsbuildinfo',
 ]);
 const MAX_FILE_BYTES = 256 * 1024; // skip giant files for the code viewer
 
@@ -38,22 +47,22 @@ const MAX_FILE_BYTES = 256 * 1024; // skip giant files for the code viewer
  */
 export async function readProjectFiles(projectDir: string): Promise<ProjectFile[]> {
   const out: ProjectFile[] = [];
-  await walk(projectDir, "", out);
+  await walk(projectDir, '', out);
   out.sort((a, b) => a.path.localeCompare(b.path));
   return out;
 }
 
 async function walk(root: string, rel: string, out: ProjectFile[]): Promise<void> {
   const here = rel ? path.join(root, rel) : root;
-  let entries: import("node:fs").Dirent[];
+  let entries: import('node:fs').Dirent[];
   try {
     entries = await fs.readdir(here, { withFileTypes: true });
   } catch {
     return;
   }
   for (const e of entries) {
-    if (rel === "" && SKIP_TOP.has(e.name)) continue;
-    if (e.name.startsWith(".")) continue;
+    if (rel === '' && SKIP_TOP.has(e.name)) continue;
+    if (e.name.startsWith('.')) continue;
     const r = rel ? path.posix.join(rel, e.name) : e.name;
     if (e.isDirectory()) {
       await walk(root, r, out);
@@ -76,21 +85,28 @@ async function walk(root: string, rel: string, out: ProjectFile[]): Promise<void
       });
       continue;
     }
-    const content = await fs.readFile(abs, "utf8").catch(() => "");
+    const content = await fs.readFile(abs, 'utf8').catch(() => '');
     out.push({ path: r, content, size: stat.size, language: languageOf(ext) });
   }
 }
 
 function languageOf(ext: string): ProjectFileLanguage {
   switch (ext) {
-    case ".ts": return "ts";
-    case ".js":
-    case ".mjs": return "js";
-    case ".html":
-    case ".htm": return "html";
-    case ".css": return "css";
-    case ".json": return "json";
-    case ".md": return "md";
-    default: return "other";
+    case '.ts':
+      return 'ts';
+    case '.js':
+    case '.mjs':
+      return 'js';
+    case '.html':
+    case '.htm':
+      return 'html';
+    case '.css':
+      return 'css';
+    case '.json':
+      return 'json';
+    case '.md':
+      return 'md';
+    default:
+      return 'other';
   }
 }

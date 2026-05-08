@@ -2,8 +2,8 @@
   "name": "@centraid/desktop",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "description": "Centraid desktop — Electron shell + vanilla-TS renderer. Consumes @centraid/design-tokens.",
+  "type": "module",
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run build:ts && bun run build:preload && bun run build:assets",

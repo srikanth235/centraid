@@ -58,17 +58,17 @@ export interface PublishOptions {
 export class HarnessError extends Error {
   constructor(
     public readonly code:
-      | "no_project"
-      | "build_failed"
-      | "upload_failed"
-      | "auth_required"
-      | "gateway_unreachable"
-      | "invalid_id"
-      | "already_exists"
-      | "config_invalid",
+      | 'no_project'
+      | 'build_failed'
+      | 'upload_failed'
+      | 'auth_required'
+      | 'gateway_unreachable'
+      | 'invalid_id'
+      | 'already_exists'
+      | 'config_invalid',
     message: string,
   ) {
     super(message);
-    this.name = "HarnessError";
+    this.name = 'HarnessError';
   }
 }

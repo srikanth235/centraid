@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn } from 'node:child_process';
 
 /**
  * Structural shape of the cron service exposed via `ctx.getCron?.()` in
@@ -36,7 +36,7 @@ export interface CronJobSnapshot {
     nextRunAtMs?: number;
     runningAtMs?: number;
     lastRunAtMs?: number;
-    lastRunStatus?: "ok" | "error" | "skipped";
+    lastRunStatus?: 'ok' | 'error' | 'skipped';
     lastError?: string;
     lastDurationMs?: number;
   };
@@ -64,7 +64,7 @@ export class OpenClawCron {
   ) {}
 
   private get cli(): string {
-    return this.opts.cliBin ?? "openclaw";
+    return this.opts.cliBin ?? 'openclaw';
   }
 
   /**
@@ -80,16 +80,16 @@ export class OpenClawCron {
       await this.opts.handle.remove(id).catch(() => undefined);
       return;
     }
-    await this.runCli(["cron", "remove", "--id", id]);
+    await this.runCli(['cron', 'remove', '--id', id]);
   }
 
   async listJobs(): Promise<CronJobSnapshot[]> {
     if (this.opts.handle) {
       return await this.opts.handle.list();
     }
-    const out = await this.runCli(["cron", "list", "--json"]);
+    const out = await this.runCli(['cron', 'list', '--json']);
     try {
-      const parsed: unknown = JSON.parse(out.stdout || "[]");
+      const parsed: unknown = JSON.parse(out.stdout || '[]');
       if (!Array.isArray(parsed)) return [];
       return parsed as CronJobSnapshot[];
     } catch {
@@ -98,43 +98,43 @@ export class OpenClawCron {
   }
 
   async runJobNow(id: string): Promise<void> {
-    await this.runCli(["cron", "run", id]);
+    await this.runCli(['cron', 'run', id]);
   }
 
   /** Translate a CronJobDefinition into `openclaw cron add` flags. */
   private async cliAdd(def: CliCronJobDefinition): Promise<void> {
-    const args: string[] = ["cron", "add", "--id", def.id, "--prompt", def.prompt];
+    const args: string[] = ['cron', 'add', '--id', def.id, '--prompt', def.prompt];
 
-    if ("cron" in def.schedule) {
-      args.push("--cron", def.schedule.cron);
-      if (def.schedule.tz) args.push("--tz", def.schedule.tz);
-      if (def.schedule.exact) args.push("--exact");
-    } else if ("every" in def.schedule) {
-      args.push("--every", def.schedule.every);
-    } else if ("at" in def.schedule) {
-      args.push("--at", def.schedule.at);
-      if (def.schedule.tz) args.push("--tz", def.schedule.tz);
+    if ('cron' in def.schedule) {
+      args.push('--cron', def.schedule.cron);
+      if (def.schedule.tz) args.push('--tz', def.schedule.tz);
+      if (def.schedule.exact) args.push('--exact');
+    } else if ('every' in def.schedule) {
+      args.push('--every', def.schedule.every);
+    } else if ('at' in def.schedule) {
+      args.push('--at', def.schedule.at);
+      if (def.schedule.tz) args.push('--tz', def.schedule.tz);
     }
 
-    if (typeof def.execution === "string") {
-      args.push("--execution", def.execution);
-    } else if (def.execution && "session" in def.execution) {
-      args.push("--execution", `session:${def.execution.session}`);
+    if (typeof def.execution === 'string') {
+      args.push('--execution', def.execution);
+    } else if (def.execution && 'session' in def.execution) {
+      args.push('--execution', `session:${def.execution.session}`);
     }
 
     if (def.toolAllow && def.toolAllow.length > 0) {
-      args.push("--tool-allow", def.toolAllow.join(","));
+      args.push('--tool-allow', def.toolAllow.join(','));
     }
 
-    if (def.model) args.push("--model", def.model);
-    if (def.keepAfterRun) args.push("--keep-after-run");
+    if (def.model) args.push('--model', def.model);
+    if (def.keepAfterRun) args.push('--keep-after-run');
 
-    if (def.delivery.mode === "webhook") {
-      args.push("--webhook", def.delivery.url, "--webhook-token", def.delivery.token);
-    } else if (def.delivery.mode === "announce") {
-      args.push("--announce");
-    } else if (def.delivery.mode === "none") {
-      args.push("--no-deliver");
+    if (def.delivery.mode === 'webhook') {
+      args.push('--webhook', def.delivery.url, '--webhook-token', def.delivery.token);
+    } else if (def.delivery.mode === 'announce') {
+      args.push('--announce');
+    } else if (def.delivery.mode === 'none') {
+      args.push('--no-deliver');
     }
 
     await this.runCli(args);
@@ -142,13 +142,13 @@ export class OpenClawCron {
 
   private runCli(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve, reject) => {
-      const child = spawn(this.cli, args, { stdio: ["ignore", "pipe", "pipe"] });
-      let stdout = "";
-      let stderr = "";
-      child.stdout.on("data", (c: Buffer) => (stdout += c.toString("utf8")));
-      child.stderr.on("data", (c: Buffer) => (stderr += c.toString("utf8")));
-      child.on("error", reject);
-      child.on("close", (code) => {
+      const child = spawn(this.cli, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (c: Buffer) => (stdout += c.toString('utf8')));
+      child.stderr.on('data', (c: Buffer) => (stderr += c.toString('utf8')));
+      child.on('error', reject);
+      child.on('close', (code) => {
         if (code === 0) resolve({ stdout, stderr, code });
         else reject(new OpenClawCliError(this.cli, args, code ?? -1, stderr));
       });
@@ -167,14 +167,14 @@ export interface CliCronJobDefinition {
     | { cron: string; tz?: string; exact?: boolean }
     | { every: string }
     | { at: string; tz?: string };
-  execution: "main" | "isolated" | "current" | { session: string };
+  execution: 'main' | 'isolated' | 'current' | { session: string };
   prompt: string;
   toolAllow?: string[];
   model?: string;
   delivery:
-    | { mode: "webhook"; url: string; token: string }
-    | { mode: "announce" }
-    | { mode: "none" };
+    | { mode: 'webhook'; url: string; token: string }
+    | { mode: 'announce' }
+    | { mode: 'none' };
   keepAfterRun?: boolean;
 }
 
@@ -188,7 +188,7 @@ export class OpenClawCliError extends Error {
     public readonly exitCode: number,
     public readonly stderr: string,
   ) {
-    super(`${bin} ${args.join(" ")} exited with code ${exitCode}: ${stderr.trim()}`);
-    this.name = "OpenClawCliError";
+    super(`${bin} ${args.join(' ')} exited with code ${exitCode}: ${stderr.trim()}`);
+    this.name = 'OpenClawCliError';
   }
 }

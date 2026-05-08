@@ -9,7 +9,7 @@
 export type AppId = string;
 
 /** A registered app's metadata persisted in <appsDir>/_registry.json. */
-export type AppMode = "uploaded" | "path";
+export type AppMode = 'uploaded' | 'path';
 
 export interface RegistryEntry {
   id: AppId;
@@ -33,7 +33,7 @@ export interface RegistryEntry {
 
 export interface CronStatus {
   lastRunAtMs?: number;
-  lastRunStatus?: "success" | "failure" | "running" | "scheduled";
+  lastRunStatus?: 'success' | 'failure' | 'running' | 'scheduled';
   lastError?: string;
   nextRunAtMs?: number;
 }
@@ -44,7 +44,7 @@ export interface CronModule {
     | { cron: string; tz?: string; exact?: boolean }
     | { every: string }
     | { at: string; tz?: string };
-  execution?: "main" | "isolated" | "current" | { session: string };
+  execution?: 'main' | 'isolated' | 'current' | { session: string };
   task: {
     prompt: string;
     toolAllow?: string[];
