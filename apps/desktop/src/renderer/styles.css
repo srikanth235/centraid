@@ -1050,6 +1050,110 @@ textarea {
   display: flex;
 }
 
+/* ---- Tool activity rows (left-aligned, tightly stacked) ----
+   Replaces the old centered-pill rendering. Reads as a quiet activity log:
+   one row per tool call, with state + name + the actual file/command. */
+.chat-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 2px 2px 2px 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.45;
+}
+/* Collapse vertical space between consecutive tool rows so they group. */
+.chat-tool-row + .chat-tool-row {
+  margin-top: 0;
+}
+.chat-tool-row .tool-name {
+  color: var(--ink-2, var(--ink));
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.chat-tool-row .tool-arg {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+.chat-tool-row .tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex: none;
+}
+.chat-tool-row .tool-icon-ok {
+  color: var(--ink-3);
+}
+.chat-tool-row .tool-icon-err {
+  color: #c0392b;
+}
+.chat-tool-row[data-state="error"] .tool-name,
+.chat-tool-row[data-state="error"] .tool-arg {
+  color: #c0392b;
+}
+.chat-tool-row .tool-spinner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-3);
+  border-top-color: transparent;
+  animation: tool-spin 0.9s linear infinite;
+  flex: none;
+  margin-left: 3px;
+}
+@keyframes tool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- Thinking trace (faint, italic, left-aligned) ---- */
+.chat-thinking {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--line);
+  background: transparent;
+}
+.chat-thinking .thinking-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+.chat-thinking .thinking-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  opacity: 0.55;
+}
+.chat-thinking[data-streaming="true"] .thinking-dot {
+  background: var(--accent);
+  animation: pulse-fade 1s infinite;
+}
+.chat-thinking .thinking-body {
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.55;
+  color: var(--ink-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---- Chat input ---- */
 .chat-input-wrap {
   flex: none;
@@ -1458,6 +1562,20 @@ textarea {
   border-radius: 3px;
   pointer-events: none;
 }
+.tile-badge[data-kind='draft'] {
+  /* Drafts read as in-progress / not-yet-runnable. Use a subdued amber so
+     they're visually distinct from published "NEW" tiles. */
+  color: #b78a14;
+  background: color-mix(in oklab, #b78a14 14%, var(--bg-app));
+}
+/* Drafts are clickable but behave differently — give them a slightly
+   muted look so the difference reads at a glance. */
+.app-tile[data-draft='true'] {
+  opacity: 0.92;
+}
+.app-tile[data-draft='true']:hover {
+  opacity: 1;
+}
 
 /* ---------- Chips (used in modal starter prompts) ---------- */
 .chip {
@@ -1683,6 +1801,36 @@ textarea {
   color: var(--ink-inv);
 }
 
+/* Source-of-truth tag in the preview pane: "Preview · live" (gateway, after
+   publish) vs "Preview · local files" (centraid-preview://, pre-publish). */
+.preview-source-label {
+  position: absolute;
+  top: 22px;
+  left: 24px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  z-index: 14;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.preview-source-label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.preview-source-label[data-kind='live']::before {
+  background: #2ea043;
+}
+.preview-source-label[data-kind='local']::before {
+  background: var(--accent);
+}
+
 /* ---------- Misc utilities ---------- */
 .flex {
   display: flex;
@@ -1720,4 +1868,37 @@ textarea {
 }
 .hide {
   display: none !important;
+}
+
+/* Settings modal & titlebar action */
+.titlebar-action {
+  margin-left: auto;
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+.settings-label {
+  color: var(--ink-2, rgba(0, 0, 0, 0.78));
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.settings-hint {
+  color: var(--ink-3, rgba(0, 0, 0, 0.55));
+  font-size: 11px;
+  line-height: 1.4;
+}
+.modal-card .input[type='password'] {
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+}
+.preview-toast.preview-toast-action {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+.preview-toast.preview-toast-action .tiny-btn {
+  margin-left: 6px;
 }

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self';"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; frame-src centraid-preview: http://127.0.0.1:* http://localhost:*;"
     />
     <title>Centraid</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -18,18 +18,18 @@
   <body>
     <main id="root"></main>
 
-    <script src="theme-vars.js"></script>
-    <script src="icons.js"></script>
-    <script src="store.js"></script>
-    <script src="apps/todos.js"></script>
-    <script src="apps/habits.js"></script>
-    <script src="apps/journal.js"></script>
-    <script src="apps/focus.js"></script>
-    <script src="apps/plants.js"></script>
-    <script src="apps/hydrate.js"></script>
-    <script src="apps/gifts.js"></script>
-    <script src="apps/mood.js"></script>
-    <script src="builder.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="theme-vars.js"></script>
+    <script type="module" src="icons.js"></script>
+    <script type="module" src="store.js"></script>
+    <script type="module" src="apps/todos.js"></script>
+    <script type="module" src="apps/habits.js"></script>
+    <script type="module" src="apps/journal.js"></script>
+    <script type="module" src="apps/focus.js"></script>
+    <script type="module" src="apps/plants.js"></script>
+    <script type="module" src="apps/hydrate.js"></script>
+    <script type="module" src="apps/gifts.js"></script>
+    <script type="module" src="apps/mood.js"></script>
+    <script type="module" src="builder.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

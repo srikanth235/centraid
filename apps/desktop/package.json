@@ -2,12 +2,13 @@
   "name": "@centraid/desktop",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Centraid desktop — Electron shell + vanilla-TS renderer. Consumes @centraid/design-tokens.",
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run build:ts && bun run build:preload && bun run build:assets",
     "build:ts": "tsc -p tsconfig.json",
-    "build:preload": "bun build src/preload.ts --target=node --format=cjs --external electron --outfile dist/preload.js",
+    "build:preload": "bun build src/preload.ts --target=node --format=cjs --external electron --outfile dist/preload.cjs",
     "build:assets": "mkdir -p dist/renderer && cp src/renderer/index.html src/renderer/styles.css dist/renderer/",
     "dev": "bun run build && electron .",
     "start": "electron .",
@@ -15,6 +16,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@centraid/agent-harness": "workspace:*",
     "@centraid/design-tokens": "workspace:*"
   },
   "devDependencies": {

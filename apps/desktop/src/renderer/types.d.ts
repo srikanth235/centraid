@@ -68,6 +68,7 @@ declare global {
     openApp: (id: string) => void;
     renderHome: () => void;
     openBuilder: () => void;
+    openSettings: () => void | Promise<void>;
   }
 
   interface BuilderOptions {
@@ -76,7 +77,40 @@ declare global {
     onExit: () => void;
     initialPrompt?: string;
     appContext?: AppMetaResolved;
-    onAddToHome?: (input: { prompt?: string }) => void;
+    /**
+     * Centraid project id (folder name under <projectsDir>) when reopening an
+     * already-generated user app. Absent for fresh `initialPrompt` flows —
+     * the builder generates an id and scaffolds a project itself.
+     */
+    projectId?: string;
+    /**
+     * Called after a successful publish of a fresh build. Receives the centraid
+     * project id (used to look up the app on subsequent opens) plus the
+     * suggested name/icon/color so the home screen can render a tile.
+     */
+    onAddToHome?: (input: {
+      prompt?: string;
+      projectId: string;
+      name?: string;
+      versionId?: string;
+    }) => void;
+  }
+
+  interface UserAppMeta extends AppMetaResolved {
+    /** Centraid project id (uploaded-mode app on the gateway). */
+    centraidProjectId?: string;
+  }
+
+  /**
+   * A project that exists on disk under `<projectsDir>/<id>/` but has not
+   * been published or pinned to home yet. Rendered with a "DRAFT" badge —
+   * clicking the tile opens the builder in update mode.
+   */
+  interface DraftAppMeta extends AppMetaResolved {
+    /** True for drafts. The home grid's tile/menu logic keys off this. */
+    __draft: true;
+    /** Whether the project has an `index.html` (preview-ready). */
+    hasIndex: boolean;
   }
 
   interface Window {

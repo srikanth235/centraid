@@ -4,8 +4,8 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "noEmit": false,
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "moduleDetection": "auto",
     "target": "ES2023",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
@@ -13,5 +13,5 @@
     "noUncheckedIndexedAccess": false
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "src/preload.ts"]
 }
