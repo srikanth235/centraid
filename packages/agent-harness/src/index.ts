@@ -1,4 +1,4 @@
-/**
+/*
  * @centraid/agent-harness
  *
  * Customizes pi-coding-agent for authoring centraid apps and provides

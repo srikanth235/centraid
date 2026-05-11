@@ -6,7 +6,7 @@ import type { HarnessConfig } from './types.js';
 export function defaultHarnessConfig(): HarnessConfig {
   return {
     projectsDir: path.join(os.homedir(), 'centraid-projects'),
-    gatewayUrl: 'http://127.0.0.1:7575',
+    gatewayUrl: 'http://127.0.0.1:18789',
     gatewayToken: '',
   };
 }

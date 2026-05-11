@@ -65,9 +65,6 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
   function getAppsWithDrafts(): AppMetaResolvedType[] {
     return [...getApps(), ...drafts];
   }
-  function isDraftApp(id: string): boolean {
-    return drafts.some((d) => d.id === id);
-  }
   function findApp(id: string): AppMetaResolvedType | undefined {
     return getAppsWithDrafts().find((a) => a.id === id);
   }
@@ -199,8 +196,9 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
 
     const settingsBtn = el('button', {
       'aria-label': 'Settings',
-      class: 'btn-icon titlebar-action',
-      trustedHtml: Icon.Settings({ size: 16 }),
+      title: 'Settings',
+      class: 'btn-icon btn-settings titlebar-action',
+      trustedHtml: `${Icon.Settings({ size: 15 })}<span class="btn-settings-label">Settings</span>`,
       onClick: () => void openSettingsSheet(),
     });
 
@@ -673,8 +671,17 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     const titlebar = el('div', { class: 'titlebar' }, [
       el('div', { class: 'titlebar-side' }),
       el('div', { class: 'titlebar-brand' }, [
-        el('span', { class: 'wordmark', onClick: renderHome, style: { cursor: 'pointer' }, trustedHtml: LOGO_SVG }),
-        el('span', { class: 'crumb', onClick: renderHome, style: { cursor: 'pointer' } }, 'Centraid'),
+        el('span', {
+          class: 'wordmark',
+          onClick: renderHome,
+          style: { cursor: 'pointer' },
+          trustedHtml: LOGO_SVG,
+        }),
+        el(
+          'span',
+          { class: 'crumb', onClick: renderHome, style: { cursor: 'pointer' } },
+          'Centraid',
+        ),
         el('span', { class: 'crumb-sep' }, '/'),
         el('span', {}, app.name),
       ]),
@@ -819,7 +826,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
   // Appearance changes apply on click (no save needed); gateway needs a save.
   async function openSettingsSheet(): Promise<void> {
     const current = await window.CentraidApi.getSettings().catch(() => ({
-      gatewayUrl: 'http://127.0.0.1:7575',
+      gatewayUrl: 'http://127.0.0.1:18789',
       gatewayToken: '',
       projectsDir: '~/centraid-projects',
     }));
@@ -869,7 +876,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     const gatewayUrl = el('input', {
       class: 'input',
       type: 'text',
-      placeholder: 'http://127.0.0.1:7575',
+      placeholder: 'http://127.0.0.1:18789',
       value: current.gatewayUrl,
     }) as HTMLInputElement;
     const gatewayToken = el('input', {

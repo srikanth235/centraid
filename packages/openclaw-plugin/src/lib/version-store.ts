@@ -217,6 +217,7 @@ export class VersionStore {
   }
 }
 
+// eslint-disable-next-line max-classes-per-file -- error class is colocated with its module
 export class VersionStoreError extends Error {
   constructor(
     public readonly code: 'not_found' | 'active',

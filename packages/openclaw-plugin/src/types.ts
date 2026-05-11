@@ -97,9 +97,7 @@ export interface ScopedLog {
   error(msg: string): void;
 }
 
-export interface ScopedFetch {
-  (input: string, init?: RequestInit): Promise<Response>;
-}
+export type ScopedFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 export interface AppRef {
   readonly id: AppId;

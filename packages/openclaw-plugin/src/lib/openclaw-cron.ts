@@ -181,6 +181,7 @@ export interface CliCronJobDefinition {
 // Keep older imports working — re-export under the legacy name.
 export type { CliCronJobDefinition as CronJobDefinition };
 
+// eslint-disable-next-line max-classes-per-file -- error class is colocated with its module
 export class OpenClawCliError extends Error {
   constructor(
     public readonly bin: string,

@@ -107,7 +107,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   };
 
   return await new Promise<HandlerOutcome>((resolve) => {
+    let resolved = false;
     const finish = (outcome: HandlerOutcome) => {
+      if (resolved) return;
+      resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       try {
         db.close();
@@ -116,6 +119,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       }
       worker.removeAllListeners();
       worker.terminate().catch(() => {});
+      // The `resolved` guard above makes this safe across multiple finish() callers
+      // eslint-disable-next-line promise/no-multiple-resolved
       resolve(outcome);
     };
 
@@ -123,6 +128,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       if (msg.type === 'db') {
         const call = msg as unknown as DbCall;
         const reply = handleDb(call);
+        // node:worker_threads postMessage signature has no targetOrigin
+        // eslint-disable-next-line unicorn/require-post-message-target-origin
         worker.postMessage({ type: 'db-reply', id: call.id, ...reply });
       } else if (msg.type === 'log') {
         const m = msg as unknown as { level: 'info' | 'warn' | 'error'; msg: string };

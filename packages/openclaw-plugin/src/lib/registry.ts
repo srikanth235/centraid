@@ -8,8 +8,9 @@ import { isReservedAppId } from './security.js';
  * Persistent registry of registered apps stored at <appsDir>/_registry.json.
  * File is created with mode 0600 so per-job webhook tokens aren't world-readable.
  */
+/* eslint-disable max-classes-per-file -- error class is colocated with its module */
 export class Registry {
-  private cache: Map<AppId, RegistryEntry> = new Map();
+  private cache = new Map<AppId, RegistryEntry>();
   private loaded = false;
 
   constructor(private readonly appsDir: string) {}

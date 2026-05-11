@@ -246,5 +246,3 @@ declare global {
     current?: boolean;
   }
 }
-
-export {};

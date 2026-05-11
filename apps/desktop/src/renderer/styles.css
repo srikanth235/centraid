@@ -2361,6 +2361,24 @@ textarea {
 .titlebar-action {
   margin-left: auto;
 }
+.btn-settings {
+  width: auto;
+  padding: 0 12px 0 9px;
+  gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.btn-settings-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
 .settings-field {
   display: flex;
   flex-direction: column;

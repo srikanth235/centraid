@@ -5,7 +5,7 @@
 export interface HarnessConfig {
   /** Where new app projects are scaffolded by default. */
   projectsDir: string;
-  /** OpenClaw gateway base URL — e.g. http://127.0.0.1:7575 */
+  /** OpenClaw gateway base URL — e.g. http://127.0.0.1:18789 */
   gatewayUrl: string;
   /**
    * Bearer token sent as `Authorization: Bearer <token>` to the gateway.

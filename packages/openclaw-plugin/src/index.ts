@@ -1,4 +1,4 @@
-/**
+/*
  * @centraid/openclaw-plugin
  *
  * Mounts a single `/centraid` prefix on the OpenClaw gateway and dispatches
