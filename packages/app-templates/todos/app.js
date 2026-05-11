@@ -1,8 +1,13 @@
 // Todos — frontend.
 // All state lives on the gateway (SQLite). The page is a thin shell that
 // fetches the list, renders it, and forwards mutations to actions/.
+//
+// Mobile bridge: when running inside the Centraid mobile WebView, the shell
+// injects `window.centraid` (see apps/mobile/src/lib/bridge). Feature-detect
+// so the same template still works in the desktop iframe.
 
 const $ = (id) => document.getElementById(id);
+const bridge = typeof window !== 'undefined' ? window.centraid : undefined;
 
 let todos = [];
 
@@ -54,7 +59,9 @@ function renderRow(t) {
   circle.setAttribute('aria-label', t.done ? 'Mark as not done' : 'Mark as done');
   if (t.done) circle.textContent = '✓';
   circle.addEventListener('click', async () => {
-    await run('toggle', { id: t.id });
+    const result = await run('toggle', { id: t.id });
+    if (result && !t.done) bridge?.haptic?.success?.();
+    else bridge?.haptic?.selection?.();
     await refresh();
   });
 
