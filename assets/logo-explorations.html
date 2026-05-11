@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Centraid — Color Position Study</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F1F5F9; color: #0F172A;
+    }
+    section { padding: 48px 48px 56px; }
+    section.dark { background: #111827; }
+    h2 {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: #94A3B8; margin-bottom: 6px;
+    }
+    .subtitle { font-size: 13px; color: #94A3B8; margin-bottom: 36px; }
+    section.dark h2      { color: #374151; }
+    section.dark .subtitle { color: #374151; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      max-width: 1000px;
+    }
+
+    .card {
+      background: #fff; border-radius: 20px;
+      padding: 28px 16px 20px;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.07);
+      position: relative;
+    }
+    .card.dark {
+      background: #1F2937;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .card.current::after {
+      content: 'current';
+      position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+      background: #6B7280; color: #fff;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; padding: 2px 8px; border-radius: 99px;
+    }
+    .card.pick::after {
+      content: '★ pick';
+      position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+      background: #E11D48; color: #fff;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; padding: 2px 8px; border-radius: 99px;
+    }
+    .card svg { width: 130px; height: 130px; }
+
+    /* position diagram */
+    .diagram {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto auto;
+      gap: 3px 6px;
+      width: 100%;
+    }
+    .pos {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 9px; font-weight: 600; letter-spacing: 0.05em;
+      text-transform: uppercase; color: #CBD5E1;
+    }
+    .card.dark .pos { color: #374151; }
+    .pip { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .pip.dot { width: 7px; height: 7px; }
+    .divider {
+      grid-column: 1 / -1;
+      height: 1px; background: #F1F5F9; margin: 2px 0;
+    }
+    .card.dark .divider { background: #374151; }
+  </style>
+</head>
+<body>
+
+<!--
+  4 colors: Amber #F59E0B · Violet #8B5CF6 · Cyan #06B6D4 · Rose dot #E11D48
+  Exploring which arc each color sits on.
+-->
+
+<!-- ── Light ── -->
+<section>
+  <h2>Color Position Study</h2>
+  <p class="subtitle">Same 4 colors · different positions · rose dot fixed at center</p>
+  <div class="grid">
+
+    <!-- A · Current: Amber top · Violet left · Cyan bottom -->
+    <div class="card current">
+      <svg viewBox="0 0 240 240">
+        <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#F59E0B"/>
+        <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#8B5CF6"/>
+        <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/>
+        <circle cx="120" cy="120" r="12" fill="#E11D48"/>
+      </svg>
+      <div class="diagram">
+        <div class="pos"><div class="pip" style="background:#F59E0B"></div>Amber top</div>
+        <div class="pos"><div class="pip" style="background:#8B5CF6"></div>Violet left</div>
+        <div class="divider"></div>
+        <div class="pos"><div class="pip" style="background:#06B6D4"></div>Cyan btm</div>
+        <div class="pos"><div class="pip dot" style="background:#E11D48"></div>Rose dot</div>
+      </div>
+    </div>
+
+    <!-- B · Violet top · Amber left · Cyan bottom ★ pick -->
+    <div class="card pick">
+      <svg viewBox="0 0 240 240">
+        <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/>
+        <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/>
+        <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/>
+        <circle cx="120" cy="120" r="12" fill="#E11D48"/>
+      </svg>
+      <div class="diagram">
+        <div class="pos"><div class="pip" style="background:#8B5CF6"></div>Violet top</div>
+        <div class="pos"><div class="pip" style="background:#F59E0B"></div>Amber left</div>
+        <div class="divider"></div>
+        <div class="pos"><div class="pip" style="background:#06B6D4"></div>Cyan btm</div>
+        <div class="pos"><div class="pip dot" style="background:#E11D48"></div>Rose dot</div>
+      </div>
+    </div>
+
+    <!-- C · Cyan top · Amber left · Violet bottom -->
+    <div class="card">
+      <svg viewBox="0 0 240 240">
+        <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#06B6D4"/>
+        <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/>
+        <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#8B5CF6"/>
+        <circle cx="120" cy="120" r="12" fill="#E11D48"/>
+      </svg>
+      <div class="diagram">
+        <div class="pos"><div class="pip" style="background:#06B6D4"></div>Cyan top</div>
+        <div class="pos"><div class="pip" style="background:#F59E0B"></div>Amber left</div>
+        <div class="divider"></div>
+        <div class="pos"><div class="pip" style="background:#8B5CF6"></div>Violet btm</div>
+        <div class="pos"><div class="pip dot" style="background:#E11D48"></div>Rose dot</div>
+      </div>
+    </div>
+
+    <!-- D · Violet top · Cyan left · Amber bottom -->
+    <div class="card">
+      <svg viewBox="0 0 240 240">
+        <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/>
+        <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#06B6D4"/>
+        <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#F59E0B"/>
+        <circle cx="120" cy="120" r="12" fill="#E11D48"/>
+      </svg>
+      <div class="diagram">
+        <div class="pos"><div class="pip" style="background:#8B5CF6"></div>Violet top</div>
+        <div class="pos"><div class="pip" style="background:#06B6D4"></div>Cyan left</div>
+        <div class="divider"></div>
+        <div class="pos"><div class="pip" style="background:#F59E0B"></div>Amber btm</div>
+        <div class="pos"><div class="pip dot" style="background:#E11D48"></div>Rose dot</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── Dark ── -->
+<section class="dark">
+  <h2>On Dark</h2>
+  <p class="subtitle" style="color:#374151">Dot flips to near-white · arcs unchanged</p>
+  <div class="grid">
+
+    <div class="card dark current">
+      <svg viewBox="0 0 240 240">
+        <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#F59E0B"/>
+        <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#8B5CF6"/>
+        <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/>
+        <circle cx="120" cy="120" r="12" fill="#F9FAFB"/>
+      </svg>
+      <div class="diagram">
+        <div class="pos"><div class="pip" style="background:#F59E0B"></div>Amber top</div>
+        <div class="pos"><div class="pip" style="background:#8B5CF6"></div>Violet left</div>
+        <div class="divider"></div>
+        <div class="pos"><div class="pip" style="background:#06B6D4"></div>Cyan btm</div>
+        <div class="pos"><div class="pip dot" style="background:#F9FAFB"></div>Rose dot</div>
+      </div>
+    </div>
+
+    <div class="card dark pick">
+      <svg viewBox="0 0 240 240">
+        <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/>
+        <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/>
+        <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/>
+        <circle cx="120" cy="120" r="12" fill="#F9FAFB"/>
+      </svg>
+      <div class="diagram">
+        <div class="pos"><div class="pip" style="background:#8B5CF6"></div>Violet top</div>
+        <div class="pos"><div class="pip" style="background:#F59E0B"></div>Amber left</div>
+        <div class="divider"></div>
+        <div class="pos"><div class="pip" style="background:#06B6D4"></div>Cyan btm</div>
+        <div class="pos"><div class="pip dot" style="background:#F9FAFB"></div>Rose dot</div>
+      </div>
+    </div>
+
+    <div class="card dark">
+      <svg viewBox="0 0 240 240">
+        <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#06B6D4"/>
+        <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/>
+        <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#8B5CF6"/>
+        <circle cx="120" cy="120" r="12" fill="#F9FAFB"/>
+      </svg>
+      <div class="diagram">
+        <div class="pos"><div class="pip" style="background:#06B6D4"></div>Cyan top</div>
+        <div class="pos"><div class="pip" style="background:#F59E0B"></div>Amber left</div>
+        <div class="divider"></div>
+        <div class="pos"><div class="pip" style="background:#8B5CF6"></div>Violet btm</div>
+        <div class="pos"><div class="pip dot" style="background:#F9FAFB"></div>Rose dot</div>
+      </div>
+    </div>
+
+    <div class="card dark">
+      <svg viewBox="0 0 240 240">
+        <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/>
+        <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#06B6D4"/>
+        <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#F59E0B"/>
+        <circle cx="120" cy="120" r="12" fill="#F9FAFB"/>
+      </svg>
+      <div class="diagram">
+        <div class="pos"><div class="pip" style="background:#8B5CF6"></div>Violet top</div>
+        <div class="pos"><div class="pip" style="background:#06B6D4"></div>Cyan left</div>
+        <div class="divider"></div>
+        <div class="pos"><div class="pip" style="background:#F59E0B"></div>Amber btm</div>
+        <div class="pos"><div class="pip dot" style="background:#F9FAFB"></div>Rose dot</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</body>
+</html>

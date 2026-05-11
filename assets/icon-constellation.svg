@@ -1,0 +1,22 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Centraid">
+  <defs>
+    <radialGradient id="hub" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6b70f9"/>
+      <stop offset="100%" stop-color="#4950F6"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Spokes: center → each satellite -->
+  <line x1="128" y1="128" x2="54"  y2="128" stroke="#7C5BD9" stroke-width="1.5" opacity="0.4"/>
+  <line x1="128" y1="128" x2="182" y2="74"  stroke="#E55772" stroke-width="1.5" opacity="0.4"/>
+  <line x1="128" y1="128" x2="182" y2="182" stroke="#2EA098" stroke-width="1.5" opacity="0.4"/>
+
+  <!-- Satellites -->
+  <circle cx="54"  cy="128" r="15" fill="#7C5BD9"/>
+  <circle cx="182" cy="74"  r="15" fill="#E55772"/>
+  <circle cx="182" cy="182" r="15" fill="#2EA098"/>
+
+  <!-- Center hub -->
+  <circle cx="128" cy="128" r="40" fill="#4950F6" opacity="0.15"/>
+  <circle cx="128" cy="128" r="28" fill="url(#hub)"/>
+</svg>

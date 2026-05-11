@@ -2,6 +2,8 @@
 // Built-in apps register on window.CentraidApps with { mount(container) }.
 // User-built apps live in localStorage and render via a generic mock view.
 
+const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="display:block;width:100%;height:100%"><path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/><path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/><path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/><circle cx="120" cy="120" r="12" fill="#E11D48"/></svg>`;
+
 (function () {
   const root = document.querySelector('#root') as HTMLElement;
 
@@ -203,14 +205,16 @@
     });
 
     const titlebar = el('div', { class: 'titlebar' }, [
-      el('span', { class: 'wordmark' }, 'M'),
-      el('span', { class: 'crumb' }, 'Centraid'),
-      el('div', { class: 'spacer' }),
-      settingsBtn,
+      el('div', { class: 'titlebar-side' }),
+      el('div', { class: 'titlebar-brand' }, [
+        el('span', { class: 'wordmark', trustedHtml: LOGO_SVG }),
+        el('span', { class: 'crumb' }, 'Centraid'),
+      ]),
+      el('div', { class: 'titlebar-side is-end' }, [settingsBtn]),
     ]);
 
     const hero = el('div', { class: 'home-hero' }, [
-      el('div', { class: 'wordmark' }, 'M'),
+      el('div', { class: 'wordmark', trustedHtml: LOGO_SVG }),
       el('div', {}, [
         el('h1', {}, 'Your tiny apps.'),
         el(
@@ -667,10 +671,14 @@
     clear();
 
     const titlebar = el('div', { class: 'titlebar' }, [
-      el('span', { class: 'wordmark', onClick: renderHome, style: { cursor: 'pointer' } }, 'M'),
-      el('span', { class: 'crumb', onClick: renderHome, style: { cursor: 'pointer' } }, 'Centraid'),
-      el('span', { class: 'crumb-sep' }, '/'),
-      el('span', {}, app.name),
+      el('div', { class: 'titlebar-side' }),
+      el('div', { class: 'titlebar-brand' }, [
+        el('span', { class: 'wordmark', onClick: renderHome, style: { cursor: 'pointer' }, trustedHtml: LOGO_SVG }),
+        el('span', { class: 'crumb', onClick: renderHome, style: { cursor: 'pointer' } }, 'Centraid'),
+        el('span', { class: 'crumb-sep' }, '/'),
+        el('span', {}, app.name),
+      ]),
+      el('div', { class: 'titlebar-side is-end' }),
     ]);
 
     const topbar = el('div', { class: 'app-topbar' }, [

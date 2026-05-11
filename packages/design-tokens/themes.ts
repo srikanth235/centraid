@@ -10,7 +10,7 @@ import type { Palette } from './palette';
 
 // Single accent across both themes today. If we ever ship a "vivid" or
 // "muted" accent, lift this into a per-theme override.
-const ACCENT = '#4950F6';
+const ACCENT = '#8B5CF6';
 
 export interface Theme {
   /** Single brand accent — FAB, sparkle, primary CTAs, focus rings. */

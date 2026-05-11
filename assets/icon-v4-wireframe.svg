@@ -1,0 +1,43 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Centraid – Wireframe">
+  <defs>
+    <linearGradient id="wf-spoke-left" x1="128" y1="128" x2="54"  y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4950F6"/>
+      <stop offset="100%" stop-color="#7C5BD9"/>
+    </linearGradient>
+    <linearGradient id="wf-spoke-ur" x1="128" y1="128" x2="182" y2="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4950F6"/>
+      <stop offset="100%" stop-color="#E55772"/>
+    </linearGradient>
+    <linearGradient id="wf-spoke-lr" x1="128" y1="128" x2="182" y2="182" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4950F6"/>
+      <stop offset="100%" stop-color="#2EA098"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Transparent background — works on any surface -->
+
+  <!-- Outer orbit ring (subtle) -->
+  <circle cx="128" cy="128" r="88" fill="none" stroke="#4950F6" stroke-width="0.6" opacity="0.12" stroke-dasharray="4 6"/>
+
+  <!-- Spokes — gradient hairlines -->
+  <line x1="128" y1="128" x2="54"  y2="128" stroke="url(#wf-spoke-left)" stroke-width="1.2"/>
+  <line x1="128" y1="128" x2="182" y2="74"  stroke="url(#wf-spoke-ur)"   stroke-width="1.2"/>
+  <line x1="128" y1="128" x2="182" y2="182" stroke="url(#wf-spoke-lr)"   stroke-width="1.2"/>
+
+  <!-- Satellite outer rings -->
+  <circle cx="54"  cy="128" r="14" fill="none" stroke="#7C5BD9" stroke-width="1.5"/>
+  <circle cx="182" cy="74"  r="14" fill="none" stroke="#E55772" stroke-width="1.5"/>
+  <circle cx="182" cy="182" r="14" fill="none" stroke="#2EA098" stroke-width="1.5"/>
+
+  <!-- Satellite inner dots -->
+  <circle cx="54"  cy="128" r="4" fill="#7C5BD9"/>
+  <circle cx="182" cy="74"  r="4" fill="#E55772"/>
+  <circle cx="182" cy="182" r="4" fill="#2EA098"/>
+
+  <!-- Hub outer ring -->
+  <circle cx="128" cy="128" r="30" fill="none" stroke="#4950F6" stroke-width="1.8" opacity="0.35"/>
+  <!-- Hub mid ring -->
+  <circle cx="128" cy="128" r="22" fill="none" stroke="#4950F6" stroke-width="1.2" opacity="0.6"/>
+  <!-- Hub center dot -->
+  <circle cx="128" cy="128" r="7" fill="#4950F6"/>
+</svg>

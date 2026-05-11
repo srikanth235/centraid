@@ -69,15 +69,15 @@ textarea {
   -webkit-app-region: drag;
   height: 40px;
   flex: none;
-  display: flex;
+  /* 3-column grid keeps the brand visually centered regardless of
+     action-button width on either side. Left/right padding match so
+     the centerline is the true window centerline. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  /* Leave room for the macOS traffic-light buttons (positioned at x:16 in
-     main.ts with hiddenInset style) so the wordmark/crumb don't collide
-     with them. */
+  /* Left = room for macOS traffic lights; right matched to keep center true. */
   padding-left: 84px;
-  padding-right: 12px;
+  padding-right: 84px;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
@@ -85,6 +85,21 @@ textarea {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   user-select: none;
+}
+.titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+.titlebar-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.titlebar-side.is-end {
+  justify-content: flex-end;
 }
 .titlebar .crumb {
   color: var(--ink);
@@ -97,31 +112,19 @@ textarea {
   -webkit-app-region: no-drag;
 }
 
-/* Wordmark — square ink chip, mono "M" in accent, with centraid tick. */
+/* Wordmark — SVG logo mark. */
 .wordmark {
   width: 22px;
   height: 22px;
-  border-radius: 3px;
-  background: var(--ink);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  position: relative;
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.wordmark::after {
-  content: '';
-  position: absolute;
-  left: 3px;
-  right: 3px;
-  bottom: 4px;
-  height: 1px;
-  background: var(--accent);
-  opacity: 0.55;
+.wordmark svg {
+  width: 22px;
+  height: 22px;
+  display: block;
 }
 
 /* ---------- Buttons ---------- */
@@ -234,18 +237,14 @@ textarea {
   gap: 28px;
 }
 .home-hero .wordmark {
-  width: 64px;
-  height: 64px;
-  border-radius: 6px;
-  font-size: 36px;
+  width: 88px;
+  height: 88px;
   flex: none;
-  margin-top: 6px;
+  margin-top: -4px;
 }
-.home-hero .wordmark::after {
-  left: 8px;
-  right: 8px;
-  bottom: 12px;
-  height: 2px;
+.home-hero .wordmark svg {
+  width: 88px;
+  height: 88px;
 }
 .home-hero h1 {
   margin: 0;

@@ -6,6 +6,7 @@ import { apps as BUILTIN_APPS } from '@centraid/design-tokens';
 import { Store } from '../storage';
 import Tile from '../components/Tile';
 import Icon from '../components/Icon';
+import Logo from '../components/Logo';
 import { colors, t, family } from '../theme';
 import type { RootScreenProps } from '../navigation';
 
@@ -84,7 +85,10 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
           </View>
         ) : (
           <>
-            <Text style={styles.title}>Apps</Text>
+            <View style={styles.wordmark}>
+              <Logo size={26} />
+              <Text style={styles.title}>centraid</Text>
+            </View>
             <Pressable
               onPress={openSearch}
               style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
@@ -225,7 +229,12 @@ const styles = StyleSheet.create({
   title: {
     color: colors.ink,
     fontFamily: family.displayBold,
-    fontSize: 22,
+    fontSize: 18,
     letterSpacing: -0.4,
+  },
+  wordmark: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
 });

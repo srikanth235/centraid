@@ -1,0 +1,46 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Centraid – Neon Glow">
+  <defs>
+    <filter id="ng-glow-purple" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="5" result="b1"/>
+      <feGaussianBlur stdDeviation="10" result="b2"/>
+      <feMerge><feMergeNode in="b2"/><feMergeNode in="b1"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="ng-glow-pink" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="5" result="b1"/>
+      <feGaussianBlur stdDeviation="10" result="b2"/>
+      <feMerge><feMergeNode in="b2"/><feMergeNode in="b1"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="ng-glow-teal" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="5" result="b1"/>
+      <feGaussianBlur stdDeviation="10" result="b2"/>
+      <feMerge><feMergeNode in="b2"/><feMergeNode in="b1"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="ng-glow-hub" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="7" result="b1"/>
+      <feGaussianBlur stdDeviation="14" result="b2"/>
+      <feMerge><feMergeNode in="b2"/><feMergeNode in="b1"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background: near-black with very faint blue tint -->
+  <rect width="256" height="256" rx="58" fill="#08090f"/>
+
+  <!-- Grid lines (subtle) -->
+  <line x1="0" y1="128" x2="256" y2="128" stroke="#1a1f40" stroke-width="0.5"/>
+  <line x1="128" y1="0"  x2="128" y2="256" stroke="#1a1f40" stroke-width="0.5"/>
+
+  <!-- Spokes — neon lines -->
+  <line x1="128" y1="128" x2="54"  y2="128" stroke="#b06ff5" stroke-width="1.5" opacity="0.7"/>
+  <line x1="128" y1="128" x2="182" y2="74"  stroke="#ff4d80" stroke-width="1.5" opacity="0.7"/>
+  <line x1="128" y1="128" x2="182" y2="182" stroke="#00e8cc" stroke-width="1.5" opacity="0.7"/>
+
+  <!-- Satellites -->
+  <circle cx="54"  cy="128" r="13" fill="#b06ff5" filter="url(#ng-glow-purple)"/>
+  <circle cx="182" cy="74"  r="13" fill="#ff4d80" filter="url(#ng-glow-pink)"/>
+  <circle cx="182" cy="182" r="13" fill="#00e8cc" filter="url(#ng-glow-teal)"/>
+
+  <!-- Hub -->
+  <circle cx="128" cy="128" r="26" fill="#5560ff" filter="url(#ng-glow-hub)"/>
+  <!-- Hub specular -->
+  <circle cx="121" cy="121" r="6" fill="#fff" opacity="0.15"/>
+</svg>

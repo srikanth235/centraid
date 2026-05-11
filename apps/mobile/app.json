@@ -5,12 +5,20 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "../../assets/icon.png",
     "splash": {
-      "backgroundColor": "#e8e9ec",
+      "image": "../../assets/splash.png",
+      "backgroundColor": "#14181F",
       "resizeMode": "contain"
     },
     "ios": { "supportsTablet": true, "bundleIdentifier": "com.centraid.mobile" },
-    "android": { "package": "com.centraid.mobile" },
+    "android": {
+      "package": "com.centraid.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "../../assets/adaptive-icon.png",
+        "backgroundColor": "#14181F"
+      }
+    },
     "assetBundlePatterns": ["**/*"]
   }
 }

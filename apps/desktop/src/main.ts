@@ -1,10 +1,15 @@
-import { app, BrowserWindow, protocol, shell } from 'electron';
+import { app, BrowserWindow, nativeImage, protocol, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { disposeWindowSession, registerIpcHandlers } from './main/ipc.js';
 import { PREVIEW_SCHEME, registerPreviewProtocol } from './main/preview-protocol.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Icon lives at the package root (../../icon.png from dist/main.js); used
+// for the BrowserWindow on Windows/Linux and the macOS dock during dev.
+// Packaged builds will pick up the .icns via electron-builder config.
+const ICON_PATH = path.join(__dirname, '..', 'icon.png');
 
 // Custom scheme that serves an unpublished project's local files into the
 // builder's preview iframe. Must be marked privileged BEFORE `app.whenReady`
@@ -35,6 +40,7 @@ function createWindow(): void {
   const win = new BrowserWindow({
     backgroundColor: '#e8e9ec',
     height: 900,
+    icon: ICON_PATH,
     minHeight: 720,
     minWidth: 1100,
     titleBarStyle: 'hiddenInset',
@@ -68,6 +74,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
+  }
   registerPreviewProtocol();
   registerIpcHandlers();
   createWindow();
