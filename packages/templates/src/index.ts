@@ -3,8 +3,9 @@
  *
  * Bundled, pre-built Centraid apps that the desktop gallery offers as
  * "clone and deploy" starting points. Each template folder under
- * `templates/<id>/` is a fully-formed app (HTML/CSS/JS + queries/ + actions/
- * + migrations/) — identical in shape to an app the user authors themselves.
+ * `app-templates/<id>/` is a fully-formed app (HTML/CSS/JS + queries/ +
+ * actions/ + migrations/) — identical in shape to an app the user authors
+ * themselves.
  *
  * Two layers stack on top of the bundle:
  *   - A user-data cache that can hold newer copies pulled from a remote URL.
@@ -30,13 +31,13 @@ const DIST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(DIST_DIR, '..');
 
 /** Absolute path to the bundled templates directory. */
-export const templatesDir: string = path.join(PACKAGE_ROOT, 'templates');
+export const templatesDir: string = path.join(PACKAGE_ROOT, 'app-templates');
 
 /** Manifest file name — same on bundle and cache. */
 const MANIFEST_FILE = 'manifest.json';
 
 /**
- * Read the bundled manifest at `templates/manifest.json`. Throws if the
+ * Read the bundled manifest at `app-templates/manifest.json`. Throws if the
  * manifest is missing or unparseable — those are build-system failures and
  * the caller can't do anything useful with the gallery.
  */

@@ -10,7 +10,7 @@ import type { ColorKey, IconName } from '@centraid/design-tokens';
  * a `files` list (so the remote fetcher knows what to download).
  */
 export interface TemplateMeta {
-  /** Unique template id; also the folder name under `templates/`. */
+  /** Unique template id; also the folder name under `app-templates/`. */
   id: string;
   /** Display name shown in the gallery. */
   name: string;
@@ -31,7 +31,7 @@ export interface TemplateMeta {
 }
 
 /**
- * Shape of `templates/manifest.json` — the bundled (and remotely-served)
+ * Shape of `app-templates/manifest.json` — the bundled (and remotely-served)
  * manifest.
  */
 export interface TemplateManifest {

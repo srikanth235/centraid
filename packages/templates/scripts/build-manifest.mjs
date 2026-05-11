@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Generates `templates/manifest.json` from `templates/index.json` plus a
- * directory walk of each template's files.
+ * Generates `app-templates/manifest.json` from `app-templates/index.json` plus
+ * a directory walk of each template's files.
  *
  * The runtime reads this manifest (both the bundled copy at
- * `<package>/templates/manifest.json` and any cached copy in user-data).
+ * `<package>/app-templates/manifest.json` and any cached copy in user-data).
  * The bundled file is checked into git so the same path on GitHub raw can
  * serve as the remote manifest — no separate publish step.
  *
@@ -15,7 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TEMPLATES_DIR = path.resolve(here, '..', 'templates');
+const TEMPLATES_DIR = path.resolve(here, '..', 'app-templates');
 const SOURCE_INDEX = path.join(TEMPLATES_DIR, 'index.json');
 const OUTPUT = path.join(TEMPLATES_DIR, 'manifest.json');
 

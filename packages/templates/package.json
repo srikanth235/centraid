@@ -5,7 +5,7 @@
   "description": "Bundled app templates for centraid — pre-built Centraid apps users can clone and deploy from the gallery.",
   "files": [
     "dist",
-    "templates",
+    "app-templates",
     "README.md"
   ],
   "type": "module",
