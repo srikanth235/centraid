@@ -1,11 +1,11 @@
 /*
- * @centraid/templates
+ * @centraid/app-templates
  *
  * Bundled, pre-built Centraid apps that the desktop gallery offers as
- * "clone and deploy" starting points. Each template folder under
- * `app-templates/<id>/` is a fully-formed app (HTML/CSS/JS + queries/ +
- * actions/ + migrations/) — identical in shape to an app the user authors
- * themselves.
+ * "clone and deploy" starting points. Each template folder sits directly at
+ * the package root (`hydrate/`, `journal/`, `todos/`) and is a fully-formed
+ * app (HTML/CSS/JS + queries/ + actions/ + migrations/) — identical in shape
+ * to an app the user authors themselves.
  *
  * Two layers stack on top of the bundle:
  *   - A user-data cache that can hold newer copies pulled from a remote URL.
@@ -13,7 +13,7 @@
  *     higher semver version.
  *
  * Public surface:
- *   - templatesDir: string                                       — bundled dir
+ *   - appTemplatesDir: string                                       — bundled dir
  *   - listTemplates(): Promise<TemplateMeta[]>                   — bundled manifest
  *   - resolveTemplates({ cacheDir? }): Promise<ResolvedTemplate[]>
  *   - templateSourceDir(id, { cacheDir?, source? }): string
@@ -30,19 +30,19 @@ export type { ResolvedTemplate, TemplateManifest, TemplateMeta, TemplateSource }
 const DIST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(DIST_DIR, '..');
 
-/** Absolute path to the bundled templates directory. */
-export const templatesDir: string = path.join(PACKAGE_ROOT, 'app-templates');
+/** Absolute path to the bundled templates directory (the package root). */
+export const appTemplatesDir: string = PACKAGE_ROOT;
 
 /** Manifest file name — same on bundle and cache. */
 const MANIFEST_FILE = 'manifest.json';
 
 /**
- * Read the bundled manifest at `app-templates/manifest.json`. Throws if the
+ * Read the bundled manifest at `<package>/manifest.json`. Throws if the
  * manifest is missing or unparseable — those are build-system failures and
  * the caller can't do anything useful with the gallery.
  */
 export async function listTemplates(): Promise<TemplateMeta[]> {
-  return (await readManifest(templatesDir)).templates;
+  return (await readManifest(appTemplatesDir)).templates;
 }
 
 /**
@@ -53,7 +53,7 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
 export async function resolveTemplates(
   opts: { cacheDir?: string } = {},
 ): Promise<ResolvedTemplate[]> {
-  const bundle = await readManifest(templatesDir).catch(() => emptyManifest());
+  const bundle = await readManifest(appTemplatesDir).catch(() => emptyManifest());
   const cache = opts.cacheDir
     ? await readManifest(opts.cacheDir).catch(() => emptyManifest())
     : emptyManifest();
@@ -86,7 +86,7 @@ export function templateSourceDir(
   templateId: string,
   opts: { cacheDir?: string; source?: TemplateSource } = {},
 ): string {
-  const base = opts.source === 'cache' && opts.cacheDir ? opts.cacheDir : templatesDir;
+  const base = opts.source === 'cache' && opts.cacheDir ? opts.cacheDir : appTemplatesDir;
   return path.join(base, templateId);
 }
 
@@ -122,7 +122,7 @@ export async function fetchRemoteTemplates(opts: {
   }
   if (!remote || !Array.isArray(remote.templates)) return;
 
-  const bundle = await readManifest(templatesDir).catch(() => emptyManifest());
+  const bundle = await readManifest(appTemplatesDir).catch(() => emptyManifest());
   const cached = await readManifest(cacheDir).catch(() => emptyManifest());
   const bundleById = new Map(bundle.templates.map((t) => [t.id, t]));
   const cachedById = new Map(cached.templates.map((t) => [t.id, t]));

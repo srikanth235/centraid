@@ -17,8 +17,8 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/agent-harness": "workspace:*",
+        "@centraid/app-templates": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
-        "@centraid/templates": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -72,6 +72,18 @@
         "typescript": "catalog:",
       },
     },
+    "packages/app-templates": {
+      "name": "@centraid/app-templates",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/design-tokens": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "typescript": "catalog:",
+      },
+    },
     "packages/design-tokens": {
       "name": "@centraid/design-tokens",
       "version": "0.1.0",
@@ -96,18 +108,6 @@
       },
       "peerDependencies": {
         "openclaw": ">=2026.3.24-beta.2",
-      },
-    },
-    "packages/templates": {
-      "name": "@centraid/templates",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/design-tokens": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "typescript": "catalog:",
       },
     },
     "packages/tsconfig": {
@@ -399,6 +399,8 @@
 
     "@centraid/agent-harness": ["@centraid/agent-harness@workspace:packages/agent-harness"],
 
+    "@centraid/app-templates": ["@centraid/app-templates@workspace:packages/app-templates"],
+
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
@@ -406,8 +408,6 @@
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
 
     "@centraid/openclaw-plugin": ["@centraid/openclaw-plugin@workspace:packages/openclaw-plugin"],
-
-    "@centraid/templates": ["@centraid/templates@workspace:packages/templates"],
 
     "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
 

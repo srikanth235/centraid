@@ -543,7 +543,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
   }
 
   // ---------- Templates (inline tiles) ----------
-  // Renderer-side mirror of @centraid/templates' `TemplateMeta`. We don't
+  // Renderer-side mirror of @centraid/app-templates' `TemplateMeta`. We don't
   // import the package here — the IPC layer carries plain JSON.
   interface TemplateEntry {
     id: string;

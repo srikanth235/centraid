@@ -225,7 +225,7 @@ export function registerIpcHandlers(): void {
 
   // ----- Templates -----
   ipcMain.handle(Channel.TEMPLATES_LIST, async () => {
-    const { resolveTemplates } = await import('@centraid/templates');
+    const { resolveTemplates } = await import('@centraid/app-templates');
     // Strip `files` + `source` from the wire response — the renderer only
     // needs the display metadata, and the lists can be sizable.
     const resolved = await resolveTemplates({ cacheDir: templatesCacheDir() });
@@ -243,7 +243,7 @@ export function registerIpcHandlers(): void {
     Channel.TEMPLATES_CLONE,
     async (_e, input: { templateId: string; newAppId?: string; newName?: string }) => {
       const settings = await loadSettings();
-      const { resolveTemplates, templateSourceDir } = await import('@centraid/templates');
+      const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
       const { cloneTemplate, suggestAppId, publishProject } =
         await import('@centraid/agent-harness');
 

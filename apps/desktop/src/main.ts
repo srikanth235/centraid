@@ -96,7 +96,7 @@ async function backgroundFetchTemplates(): Promise<void> {
   try {
     const settings = await loadSettings();
     if (!settings.remoteTemplatesUrl) return;
-    const { fetchRemoteTemplates } = await import('@centraid/templates');
+    const { fetchRemoteTemplates } = await import('@centraid/app-templates');
     await fetchRemoteTemplates({
       cacheDir: templatesCacheDir(),
       remoteUrl: settings.remoteTemplatesUrl,

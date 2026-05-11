@@ -86,7 +86,7 @@ export interface CentraidAppSchema {
 
 /**
  * A bundled template, as surfaced by the desktop's templates IPC. Mirrors
- * `TemplateMeta` from `@centraid/templates` — duplicated here so the
+ * `TemplateMeta` from `@centraid/app-templates` — duplicated here so the
  * renderer typings stay independent of the templates package at build time.
  */
 export interface CentraidTemplateMeta {
@@ -223,7 +223,7 @@ interface CentraidApi {
   appSchema(input: { id: string }): Promise<CentraidAppSchema | undefined>;
   deregisterApp(input: { id: string }): Promise<{ id: string }>;
 
-  /** List bundled templates from `@centraid/templates`. */
+  /** List bundled templates from `@centraid/app-templates`. */
   listTemplates(): Promise<CentraidTemplateMeta[]>;
   /**
    * Clone a bundled template into the user's projects dir and publish it

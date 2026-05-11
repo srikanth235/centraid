@@ -13,5 +13,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules", "templates"]
+  "exclude": ["dist", "node_modules", "hydrate", "journal", "todos"]
 }

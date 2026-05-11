@@ -12,7 +12,7 @@ export interface CloneTemplateOptions {
   projectsDir: string;
   /** Id for the new app (folder name). Validated against the standard rules. */
   newAppId: string;
-  /** Absolute path to the template's source directory (e.g. from `@centraid/templates`). */
+  /** Absolute path to the template's source directory (e.g. from `@centraid/app-templates`). */
   templateDir: string;
   /** Optional display name; defaults to whatever the template's `app.json` had. */
   newName?: string;

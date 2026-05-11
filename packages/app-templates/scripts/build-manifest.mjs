@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Generates `app-templates/manifest.json` from `app-templates/index.json` plus
- * a directory walk of each template's files.
+ * Generates `manifest.json` from `index.json` plus a directory walk of each
+ * template's files.
  *
- * The runtime reads this manifest (both the bundled copy at
- * `<package>/app-templates/manifest.json` and any cached copy in user-data).
- * The bundled file is checked into git so the same path on GitHub raw can
- * serve as the remote manifest — no separate publish step.
+ * The runtime reads this manifest (both the bundled copy at the package root
+ * and any cached copy in user-data). The bundled file is checked into git so
+ * the same path on GitHub raw can serve as the remote manifest — no separate
+ * publish step.
  *
  * Run via `bun run build:manifest` (or as part of `bun run build`).
  */
@@ -15,9 +15,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const TEMPLATES_DIR = path.resolve(here, '..', 'app-templates');
-const SOURCE_INDEX = path.join(TEMPLATES_DIR, 'index.json');
-const OUTPUT = path.join(TEMPLATES_DIR, 'manifest.json');
+const PACKAGE_ROOT = path.resolve(here, '..');
+const SOURCE_INDEX = path.join(PACKAGE_ROOT, 'index.json');
+const OUTPUT = path.join(PACKAGE_ROOT, 'manifest.json');
 
 async function walk(dir, base = dir) {
   const out = [];
@@ -41,7 +41,7 @@ const enriched = {
 };
 
 for (const tmpl of src.templates) {
-  const dir = path.join(TEMPLATES_DIR, tmpl.id);
+  const dir = path.join(PACKAGE_ROOT, tmpl.id);
   let files = [];
   try {
     files = await walk(dir);

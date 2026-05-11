@@ -1,5 +1,5 @@
 /**
- * Public types for @centraid/templates.
+ * Public types for @centraid/app-templates.
  */
 
 import type { ColorKey, IconName } from '@centraid/design-tokens';
@@ -10,7 +10,7 @@ import type { ColorKey, IconName } from '@centraid/design-tokens';
  * a `files` list (so the remote fetcher knows what to download).
  */
 export interface TemplateMeta {
-  /** Unique template id; also the folder name under `app-templates/`. */
+  /** Unique template id; also the folder name at the package root. */
   id: string;
   /** Display name shown in the gallery. */
   name: string;
@@ -31,7 +31,7 @@ export interface TemplateMeta {
 }
 
 /**
- * Shape of `app-templates/manifest.json` — the bundled (and remotely-served)
+ * Shape of `manifest.json` — the bundled (and remotely-served)
  * manifest.
  */
 export interface TemplateManifest {
