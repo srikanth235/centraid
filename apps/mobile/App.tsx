@@ -6,6 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import type { Theme as NavTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
+import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { colors } from '@centraid/design-tokens';
 
@@ -22,6 +23,7 @@ import JetBrainsMono_600SemiBold from '@expo-google-fonts/jetbrains-mono/600Semi
 
 import HomeScreen from './src/screens/Home';
 import AppDetailScreen from './src/screens/AppDetail';
+import SettingsScreen from './src/screens/Settings';
 import MobileFallbackScreen from './src/screens/MobileFallback';
 import type { RootStackParamList } from './src/navigation';
 
@@ -29,6 +31,18 @@ import type { RootStackParamList } from './src/navigation';
 // system-font text on first render.
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* noop */
+});
+
+// Surface scheduled notifications even when the app is foregrounded —
+// otherwise the OS swallows them silently, which is confusing for things
+// like Focus timers and Hydrate reminders. See issue #14 (Phase C bridges).
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
 });
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -93,6 +107,7 @@ export default function App(): React.JSX.Element | null {
           >
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="AppDetail" component={AppDetailScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen
               name="MobileFallback"
               component={MobileFallbackScreen}

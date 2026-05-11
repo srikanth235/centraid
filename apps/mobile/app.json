@@ -19,6 +19,7 @@
         "backgroundColor": "#14181F"
       }
     },
-    "assetBundlePatterns": ["**/*"]
+    "assetBundlePatterns": ["**/*"],
+    "plugins": ["expo-notifications"]
   }
 }

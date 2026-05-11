@@ -1,35 +1,78 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, Alert, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  TextInput,
+  StyleSheet,
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { apps as BUILTIN_APPS } from '@centraid/design-tokens';
-import { Store } from '../storage';
+import type { AppMetaResolved } from '@centraid/design-tokens';
 import Tile from '../components/Tile';
 import Icon from '../components/Icon';
 import Logo from '../components/Logo';
-import { colors, t, family } from '../theme';
+import Button from '../components/Button';
+import { colors, spacing, t, family } from '../theme';
+import { GatewayError, hydrateGatewayUrl, listApps, resolveAppMeta } from '../lib/gateway';
 import type { RootScreenProps } from '../navigation';
 
 const COLS = 4;
 const H_PADDING = 22;
 
+type HomeState =
+  | { kind: 'loading' }
+  | { kind: 'no-gateway' }
+  | { kind: 'ready'; apps: AppMetaResolved[] }
+  | { kind: 'error'; message: string };
+
 export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): React.JSX.Element {
-  const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [state, setState] = useState<HomeState>({ kind: 'loading' });
+  const [refreshing, setRefreshing] = useState(false);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const inputRef = useRef<TextInput | null>(null);
 
-  useEffect(() => {
-    Store.hydrate<string[]>('home.deletedBuiltins', []).then((arr) => setDeleted(new Set(arr)));
+  const load = useCallback(async (): Promise<void> => {
+    const gatewayUrl = await hydrateGatewayUrl();
+    if (!gatewayUrl) {
+      setState({ kind: 'no-gateway' });
+      return;
+    }
+    try {
+      const rows = await listApps();
+      setState({ apps: rows.map(resolveAppMeta), kind: 'ready' });
+    } catch (err) {
+      const message =
+        err instanceof GatewayError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not load apps.';
+      setState({ kind: 'error', message });
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
-      setDeleted(new Set(Store.get<string[]>('home.deletedBuiltins', [])));
-    }, []),
+      void load();
+    }, [load]),
   );
 
-  const visibleApps = BUILTIN_APPS.filter((a) => !deleted.has(a.id));
+  const onRefresh = useCallback(async (): Promise<void> => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
+  const visibleApps = state.kind === 'ready' ? state.apps : [];
   const q = query.trim().toLowerCase();
   const matches = q
     ? visibleApps.filter(
@@ -44,22 +87,6 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
   const closeSearch = (): void => {
     setSearching(false);
     setQuery('');
-  };
-
-  const handleLongPress = (app: (typeof BUILTIN_APPS)[number]): void => {
-    Alert.alert(app.name, 'Remove this app from your home screen?', [
-      { style: 'cancel', text: 'Cancel' },
-      {
-        onPress: () => {
-          const next = new Set(deleted);
-          next.add(app.id);
-          setDeleted(next);
-          Store.set('home.deletedBuiltins', [...next]);
-        },
-        style: 'destructive',
-        text: 'Remove',
-      },
-    ]);
   };
 
   return (
@@ -89,13 +116,22 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
               <Logo size={26} />
               <Text style={styles.title}>centraid</Text>
             </View>
-            <Pressable
-              onPress={openSearch}
-              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
-              accessibilityLabel="Search"
-            >
-              <Icon name="Search" size={18} color={colors.ink} strokeWidth={1.75} />
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={openSearch}
+                style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+                accessibilityLabel="Search"
+              >
+                <Icon name="Search" size={18} color={colors.ink} strokeWidth={1.75} />
+              </Pressable>
+              <Pressable
+                onPress={() => navigation.navigate('Settings')}
+                style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+                accessibilityLabel="Settings"
+              >
+                <Icon name="Settings" size={18} color={colors.ink} strokeWidth={1.75} />
+              </Pressable>
+            </View>
           </>
         )}
       </View>
@@ -104,22 +140,11 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
         contentContainerStyle={styles.gridWrap}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink3} />
+        }
       >
-        {matches.length === 0 ? (
-          <Text style={styles.empty}>No apps match "{query}".</Text>
-        ) : (
-          <View style={styles.grid}>
-            {matches.map((app) => (
-              <View key={app.id} style={styles.cell}>
-                <Tile
-                  app={app}
-                  onPress={() => navigation.navigate('AppDetail', { appId: app.id })}
-                  onLongPress={() => handleLongPress(app)}
-                />
-              </View>
-            ))}
-          </View>
-        )}
+        {renderBody(state, matches, query, () => navigation.navigate('Settings'), navigation)}
       </ScrollView>
 
       {!searching && (
@@ -140,11 +165,79 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
   );
 }
 
+function renderBody(
+  state: HomeState,
+  matches: AppMetaResolved[],
+  query: string,
+  openSettings: () => void,
+  navigation: RootScreenProps<'Home'>['navigation'],
+): React.JSX.Element {
+  if (state.kind === 'loading') {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.ink3} />
+      </View>
+    );
+  }
+  if (state.kind === 'no-gateway') {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>Connect to your desktop.</Text>
+        <Text style={styles.emptyCopy}>
+          Apps you build on your Mac show up here over your local network. Set your gateway URL to
+          get started.
+        </Text>
+        <View style={styles.emptyAction}>
+          <Button label="Open Settings" icon="Settings" onPress={openSettings} />
+        </View>
+      </View>
+    );
+  }
+  if (state.kind === 'error') {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>Gateway unreachable.</Text>
+        <Text style={styles.emptyCopy}>{state.message}</Text>
+        <Text style={styles.emptyHint}>
+          Make sure Centraid is running on your Mac and that both devices are on the same Wi-Fi.
+          Pull to refresh once reconnected.
+        </Text>
+        <View style={styles.emptyAction}>
+          <Button label="Check Settings" icon="Settings" variant="soft" onPress={openSettings} />
+        </View>
+      </View>
+    );
+  }
+  if (matches.length === 0) {
+    if (query) {
+      return <Text style={styles.searchEmpty}>No apps match "{query}".</Text>;
+    }
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>No apps yet.</Text>
+        <Text style={styles.emptyCopy}>
+          Open Centraid on your Mac and create your first app. It'll appear here.
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.grid}>
+      {matches.map((app) => (
+        <View key={app.id} style={styles.cell}>
+          <Tile app={app} onPress={() => navigation.navigate('AppDetail', { appId: app.id })} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   cell: {
     alignItems: 'center',
     width: `${100 / COLS}%`,
   },
+  center: { alignItems: 'center', paddingVertical: 80 },
   dot: {
     backgroundColor: colors.ink4,
     borderRadius: 3,
@@ -159,11 +252,14 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   empty: {
-    ...t('small'),
-    color: colors.ink3,
-    marginTop: 32,
-    textAlign: 'center',
+    alignItems: 'flex-start',
+    paddingHorizontal: 4,
+    paddingTop: 32,
   },
+  emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
+  emptyCopy: { ...t('body'), color: colors.ink2, marginBottom: spacing[3] },
+  emptyHint: { ...t('small'), color: colors.ink3 },
+  emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
   fab: {
     alignItems: 'center',
     backgroundColor: colors.accent,
@@ -198,6 +294,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: H_PADDING,
     paddingVertical: 4,
   },
+  headerActions: { flexDirection: 'row', gap: 10 },
   iconBtn: {
     alignItems: 'center',
     borderColor: colors.line,
@@ -208,6 +305,12 @@ const styles = StyleSheet.create({
     width: 36,
   },
   safe: { backgroundColor: colors.bg, flex: 1 },
+  searchEmpty: {
+    ...t('small'),
+    color: colors.ink3,
+    marginTop: 32,
+    textAlign: 'center',
+  },
   searchField: {
     alignItems: 'center',
     backgroundColor: colors.bgElev,
