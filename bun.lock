@@ -17,6 +17,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/agent-harness": "workspace:*",
+        "@centraid/app-templates": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
       },
       "devDependencies": {
@@ -68,6 +69,18 @@
         "@centraid/tsconfig": "workspace:*",
         "@types/node": "^22.0.0",
         "@types/tar": "^6.1.13",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/app-templates": {
+      "name": "@centraid/app-templates",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/design-tokens": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
     },
@@ -385,6 +398,8 @@
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
     "@centraid/agent-harness": ["@centraid/agent-harness@workspace:packages/agent-harness"],
+
+    "@centraid/app-templates": ["@centraid/app-templates@workspace:packages/app-templates"],
 
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 

@@ -20,6 +20,8 @@ export {
 
 export { scaffoldProject, listProjects, deleteProject, validateAppId } from './scaffold.js';
 
+export { cloneTemplate, suggestAppId, type CloneTemplateOptions } from './clone.js';
+
 export { publishProject } from './publish.js';
 
 export {

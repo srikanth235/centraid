@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { disposeWindowSession, registerIpcHandlers } from './main/ipc.js';
 import { PREVIEW_SCHEME, registerPreviewProtocol } from './main/preview-protocol.js';
+import { loadSettings, templatesCacheDir } from './main/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,12 +81,30 @@ app.whenReady().then(() => {
   registerPreviewProtocol();
   registerIpcHandlers();
   createWindow();
+  // Kick off a background check for template updates. Fire-and-forget — the
+  // fetcher is silent on every failure (offline, 404, parse error, etc.) so
+  // the home grid keeps showing whatever's in cache + bundle regardless.
+  void backgroundFetchTemplates();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
 });
+
+async function backgroundFetchTemplates(): Promise<void> {
+  try {
+    const settings = await loadSettings();
+    if (!settings.remoteTemplatesUrl) return;
+    const { fetchRemoteTemplates } = await import('@centraid/app-templates');
+    await fetchRemoteTemplates({
+      cacheDir: templatesCacheDir(),
+      remoteUrl: settings.remoteTemplatesUrl,
+    });
+  } catch (err) {
+    console.error('[centraid] templates background fetch failed:', err);
+  }
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

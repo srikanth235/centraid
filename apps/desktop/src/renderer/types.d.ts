@@ -73,10 +73,6 @@ declare global {
   type ElChild = Node | string | null | false | undefined;
   type ElHelper = (tag: string, attrs?: ElAttrs, children?: ElChild | ElChild[]) => HTMLElement;
 
-  interface CentraidAppDef {
-    mount: (root: HTMLElement, ctx?: { app: AppMetaResolved; el: ElHelper }) => (() => void) | void;
-  }
-
   interface CentraidRoot {
     el: ElHelper;
     openApp: (id: string) => void;
@@ -133,7 +129,6 @@ declare global {
     ICON_PALETTE: Palette;
     Store: CentraidStore;
     DateUtil: CentraidDateUtil;
-    CentraidApps: Record<string, CentraidAppDef>;
     Centraid: CentraidRoot;
     openBuilder: (opts: BuilderOptions) => () => void;
   }
@@ -150,6 +145,5 @@ declare global {
   var ICON_PALETTE: Palette;
   var Store: CentraidStore;
   var DateUtil: CentraidDateUtil;
-  var CentraidApps: Record<string, CentraidAppDef>;
   var Centraid: CentraidRoot;
 }

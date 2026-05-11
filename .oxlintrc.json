@@ -4,7 +4,14 @@
     "./node_modules/ultracite/config/oxlint/core/.oxlintrc.json",
     "./node_modules/ultracite/config/oxlint/react/.oxlintrc.json"
   ],
-  "ignorePatterns": ["**/dist/**", "**/.expo/**", "**/node_modules/**"],
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/.expo/**",
+    "**/node_modules/**",
+    "packages/app-templates/hydrate/**",
+    "packages/app-templates/journal/**",
+    "packages/app-templates/todos/**"
+  ],
   "rules": {
     "arrow-body-style": "off",
     "class-methods-use-this": "off",

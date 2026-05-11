@@ -1,0 +1,29 @@
+{
+  "manifestVersion": 1,
+  "templates": [
+    {
+      "id": "hydrate",
+      "name": "Hydrate",
+      "desc": "Track 8 cups a day.",
+      "colorKey": "indigo",
+      "iconKey": "Water",
+      "version": "0.1.0"
+    },
+    {
+      "id": "todos",
+      "name": "Todos",
+      "desc": "Capture and clear small things.",
+      "colorKey": "violet",
+      "iconKey": "Todo",
+      "version": "0.1.0"
+    },
+    {
+      "id": "journal",
+      "name": "Journal",
+      "desc": "A clean place to write each day.",
+      "colorKey": "amber",
+      "iconKey": "Journal",
+      "version": "0.1.0"
+    }
+  ]
+}

@@ -30,6 +30,9 @@ const Channel = {
   APP_LIVE_URL: 'centraid:app:live-url',
   APP_SCHEMA: 'centraid:app:schema',
   APPS_DEREGISTER: 'centraid:apps:deregister',
+
+  TEMPLATES_LIST: 'centraid:templates:list',
+  TEMPLATES_CLONE: 'centraid:templates:clone',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -93,4 +96,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   appLiveUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_LIVE_URL, input),
   appSchema: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_SCHEMA, input),
   deregisterApp: (input: { id: string }) => ipcRenderer.invoke(Channel.APPS_DEREGISTER, input),
+
+  // Templates
+  listTemplates: () => ipcRenderer.invoke(Channel.TEMPLATES_LIST),
+  cloneTemplate: (input: { templateId: string; newAppId?: string; newName?: string }) =>
+    ipcRenderer.invoke(Channel.TEMPLATES_CLONE, input),
 });

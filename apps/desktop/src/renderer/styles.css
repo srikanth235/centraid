@@ -224,9 +224,13 @@ textarea {
   flex: 1;
   overflow-y: auto;
   padding: 0 64px 80px;
-  max-width: 1100px;
-  width: 100%;
-  margin: 0 auto;
+}
+/* Scrollbar lives on the window edge (full-width .home), but each direct
+   child is capped at 972px = 1100 − 2×64 so the content lands at the same
+   x position as when .home itself was the 1100-wide centered container. */
+.home > * {
+  max-width: 972px;
+  margin-inline: auto;
 }
 .home-hero {
   padding: 56px 0 44px;
@@ -267,9 +271,16 @@ textarea {
   font-size: 11px;
   font-weight: 500;
   color: var(--ink-3);
-  margin: 0 0 20px;
+  /* Only set block-axis margins; inline-axis stays `auto` from `.home > *`
+     so the section title centers on the same x as the grid below it. */
+  margin-block: 0 20px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+/* Give the section title breathing room when it follows a previous grid
+   (e.g. "Templates" section title under the "Apps" grid). */
+.home-grid + .home-section-title {
+  margin-top: 36px;
 }
 .home-grid {
   display: grid;
@@ -2306,6 +2317,12 @@ textarea {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 22px;
+}
+
+/* ---------- Template tiles (in the Templates section) ---------- */
+.app-tile-installing {
+  pointer-events: none;
+  opacity: 0.55;
 }
 
 /* ---------- Mobile preview backdrop ---------- */

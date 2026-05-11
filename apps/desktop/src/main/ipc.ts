@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { loadSettings, saveSettings, type DesktopSettings } from './settings.js';
+import { loadSettings, saveSettings, templatesCacheDir, type DesktopSettings } from './settings.js';
 import { PREVIEW_SCHEME } from './preview-protocol.js';
 
 /**
@@ -30,6 +30,9 @@ export const Channel = {
   APP_LIVE_URL: 'centraid:app:live-url',
   APP_SCHEMA: 'centraid:app:schema',
   APPS_DEREGISTER: 'centraid:apps:deregister',
+
+  TEMPLATES_LIST: 'centraid:templates:list',
+  TEMPLATES_CLONE: 'centraid:templates:clone',
 } as const;
 
 interface AgentSessionHandle {
@@ -219,6 +222,73 @@ export function registerIpcHandlers(): void {
     const { deregisterApp } = await import('@centraid/agent-harness');
     return deregisterApp(settings, input.id);
   });
+
+  // ----- Templates -----
+  ipcMain.handle(Channel.TEMPLATES_LIST, async () => {
+    const { resolveTemplates } = await import('@centraid/app-templates');
+    // Strip `files` + `source` from the wire response — the renderer only
+    // needs the display metadata, and the lists can be sizable.
+    const resolved = await resolveTemplates({ cacheDir: templatesCacheDir() });
+    return resolved.map((t) => ({
+      id: t.id,
+      name: t.name,
+      desc: t.desc,
+      colorKey: t.colorKey,
+      iconKey: t.iconKey,
+      version: t.version,
+    }));
+  });
+
+  ipcMain.handle(
+    Channel.TEMPLATES_CLONE,
+    async (_e, input: { templateId: string; newAppId?: string; newName?: string }) => {
+      const settings = await loadSettings();
+      const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
+      const { cloneTemplate, suggestAppId, publishProject } =
+        await import('@centraid/agent-harness');
+
+      const cacheDir = templatesCacheDir();
+      const templates = await resolveTemplates({ cacheDir });
+      const tmpl = templates.find((t) => t.id === input.templateId);
+      if (!tmpl) {
+        throw new Error(`Unknown template "${input.templateId}".`);
+      }
+
+      // Auto-suffix the suggested id if it collides with an existing project.
+      // Caller can pass an explicit `newAppId` to override.
+      const newAppId = await suggestAppId(settings.projectsDir, input.newAppId ?? tmpl.id);
+
+      const project = await cloneTemplate({
+        projectsDir: settings.projectsDir,
+        newAppId,
+        // The resolver tells us which copy is newer (cache vs bundle); clone
+        // from that one so a remote update reaches users without a desktop
+        // release.
+        templateDir: templateSourceDir(tmpl.id, { cacheDir, source: tmpl.source }),
+        newName: input.newName ?? tmpl.name,
+      });
+
+      // Templates ship pre-built `.js` next to `.ts`, so no compile step is
+      // needed on the user's machine. Skipping the build avoids requiring
+      // them to run `bun install` inside the cloned dir before first publish.
+      const publish = await publishProject(project.dir, newAppId, settings, {
+        skipBuild: true,
+      });
+
+      return {
+        project,
+        publish,
+        template: {
+          id: tmpl.id,
+          name: tmpl.name,
+          desc: tmpl.desc,
+          colorKey: tmpl.colorKey,
+          iconKey: tmpl.iconKey,
+          version: tmpl.version,
+        },
+      };
+    },
+  );
 }
 
 /** Stop and forget the session associated with a closing window. */

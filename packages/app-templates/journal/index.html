@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Journal</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main>
+      <header class="head">
+        <div>
+          <h1>Journal</h1>
+          <p id="dateLabel" class="muted"></p>
+        </div>
+        <div class="head-actions">
+          <button id="todayBtn" type="button" class="soft">Today</button>
+          <button id="deleteBtn" type="button" class="soft danger" hidden>Delete</button>
+        </div>
+      </header>
+
+      <textarea
+        id="body"
+        class="body"
+        placeholder="What happened today?"
+        autocomplete="off"
+        autocapitalize="sentences"
+        spellcheck="true"
+      ></textarea>
+
+      <p id="status" class="status muted"></p>
+
+      <section class="past">
+        <p class="muted small">Past entries</p>
+        <div id="list" class="list"></div>
+      </section>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

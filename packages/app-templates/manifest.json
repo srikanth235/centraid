@@ -1,0 +1,76 @@
+{
+  "manifestVersion": 1,
+  "templates": [
+    {
+      "id": "hydrate",
+      "name": "Hydrate",
+      "desc": "Track 8 cups a day.",
+      "colorKey": "indigo",
+      "iconKey": "Water",
+      "version": "0.1.0",
+      "files": [
+        "actions/set-cups.js",
+        "actions/set-cups.ts",
+        "app.css",
+        "app.js",
+        "app.json",
+        "index.html",
+        "migrations/0001_init.sql",
+        "package.json",
+        "queries/get-today.js",
+        "queries/get-today.ts",
+        "tsconfig.json"
+      ]
+    },
+    {
+      "id": "todos",
+      "name": "Todos",
+      "desc": "Capture and clear small things.",
+      "colorKey": "violet",
+      "iconKey": "Todo",
+      "version": "0.1.0",
+      "files": [
+        "actions/add.js",
+        "actions/add.ts",
+        "actions/delete.js",
+        "actions/delete.ts",
+        "actions/toggle.js",
+        "actions/toggle.ts",
+        "app.css",
+        "app.js",
+        "app.json",
+        "index.html",
+        "migrations/0001_init.sql",
+        "package.json",
+        "queries/list.js",
+        "queries/list.ts",
+        "tsconfig.json"
+      ]
+    },
+    {
+      "id": "journal",
+      "name": "Journal",
+      "desc": "A clean place to write each day.",
+      "colorKey": "amber",
+      "iconKey": "Journal",
+      "version": "0.1.0",
+      "files": [
+        "actions/delete.js",
+        "actions/delete.ts",
+        "actions/save.js",
+        "actions/save.ts",
+        "app.css",
+        "app.js",
+        "app.json",
+        "index.html",
+        "migrations/0001_init.sql",
+        "package.json",
+        "queries/get.js",
+        "queries/get.ts",
+        "queries/list-dates.js",
+        "queries/list-dates.ts",
+        "tsconfig.json"
+      ]
+    }
+  ]
+}

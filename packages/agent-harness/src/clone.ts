@@ -1,0 +1,190 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import type { ProjectInfo } from './types.js';
+import { HarnessError } from './types.js';
+import { validateAppId } from './scaffold.js';
+
+/**
+ * Options for {@link cloneTemplate}.
+ */
+export interface CloneTemplateOptions {
+  /** Absolute path under which the new project folder is created. */
+  projectsDir: string;
+  /** Id for the new app (folder name). Validated against the standard rules. */
+  newAppId: string;
+  /** Absolute path to the template's source directory (e.g. from `@centraid/app-templates`). */
+  templateDir: string;
+  /** Optional display name; defaults to whatever the template's `app.json` had. */
+  newName?: string;
+}
+
+/**
+ * Copy a bundled template into `<projectsDir>/<newAppId>/` and rewrite the
+ * pieces that need to be unique to the new instance:
+ *
+ *   - `app.json#name`    → `newName` (or the template's existing name)
+ *   - `app.json#version` → `"0.1.0"` (the clone is a fresh app, not the template)
+ *   - `package.json#name` → `centraid-app-<newAppId>` (only if it followed the
+ *      `centraid-app-*` convention; foreign names are left alone)
+ *
+ * Throws `HarnessError`:
+ *   - `invalid_id`     — `newAppId` fails the id regex
+ *   - `already_exists` — destination dir already exists
+ *   - `no_project`     — `templateDir` is missing or not a directory
+ */
+export async function cloneTemplate(opts: CloneTemplateOptions): Promise<ProjectInfo> {
+  validateAppId(opts.newAppId);
+
+  const destDir = path.join(opts.projectsDir, opts.newAppId);
+  if (await pathExists(destDir)) {
+    throw new HarnessError(
+      'already_exists',
+      `Project "${opts.newAppId}" already exists at ${destDir}.`,
+    );
+  }
+
+  if (!(await dirExists(opts.templateDir))) {
+    throw new HarnessError('no_project', `Template source not found: ${opts.templateDir}`);
+  }
+
+  await fs.mkdir(opts.projectsDir, { recursive: true });
+  await copyDir(opts.templateDir, destDir);
+
+  await rewriteAppJson(destDir, opts.newName);
+  await rewritePackageJson(destDir, opts.newAppId);
+
+  const stat = await fs.stat(destDir);
+  const hasIndex = await fileExists(path.join(destDir, 'index.html'));
+  const built = await hasAnyBuiltJs(destDir);
+  const finalName = await readAppName(destDir);
+
+  return {
+    id: opts.newAppId,
+    dir: destDir,
+    built,
+    modifiedAt: stat.mtime.toISOString(),
+    name: finalName,
+    hasIndex,
+  };
+}
+
+/**
+ * Suggest a non-colliding app id starting from `preferred`. If `preferred`
+ * is free, returns it; otherwise tries `preferred-2`, `preferred-3`, ...
+ * until one is free (capped at 1000 attempts as a safety bound).
+ */
+export async function suggestAppId(projectsDir: string, preferred: string): Promise<string> {
+  validateAppId(preferred);
+  for (let i = 1; i <= 1000; i++) {
+    const candidate = i === 1 ? preferred : `${preferred}-${i}`;
+    if (!(await pathExists(path.join(projectsDir, candidate)))) {
+      return candidate;
+    }
+  }
+  // Astronomically unlikely; surface as a clear error rather than loop forever.
+  throw new HarnessError(
+    'already_exists',
+    `Could not find a free id starting from "${preferred}".`,
+  );
+}
+
+async function copyDir(src: string, dest: string): Promise<void> {
+  await fs.mkdir(dest, { recursive: true });
+  const entries = await fs.readdir(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await copyDir(srcPath, destPath);
+    } else if (entry.isFile()) {
+      await fs.copyFile(srcPath, destPath);
+    }
+    // Symlinks/other types: skip. Templates only ship plain files.
+  }
+}
+
+async function rewriteAppJson(destDir: string, newName?: string): Promise<void> {
+  const appJsonPath = path.join(destDir, 'app.json');
+  let parsed: { name?: unknown; version?: unknown } & Record<string, unknown> = {};
+  try {
+    const raw = await fs.readFile(appJsonPath, 'utf8');
+    parsed = JSON.parse(raw);
+  } catch {
+    // No app.json in the template (or unparseable). Write a fresh one.
+  }
+  const next: Record<string, unknown> = {
+    ...parsed,
+    name: newName ?? (typeof parsed.name === 'string' ? parsed.name : 'Untitled'),
+    version: '0.1.0',
+  };
+  await fs.writeFile(appJsonPath, JSON.stringify(next, null, 2) + '\n');
+}
+
+async function rewritePackageJson(destDir: string, newAppId: string): Promise<void> {
+  const pkgPath = path.join(destDir, 'package.json');
+  let raw: string;
+  try {
+    raw = await fs.readFile(pkgPath, 'utf8');
+  } catch {
+    return; // template doesn't ship a package.json; nothing to rewrite.
+  }
+  let parsed: { name?: unknown } & Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return; // unparseable; leave alone.
+  }
+  const currentName = typeof parsed.name === 'string' ? parsed.name : '';
+  // Only rewrite names that follow the `centraid-app-*` convention; leave
+  // unrelated names alone so we don't clobber author intent.
+  if (!currentName.startsWith('centraid-app-')) return;
+  parsed.name = `centraid-app-${newAppId}`;
+  await fs.writeFile(pkgPath, JSON.stringify(parsed, null, 2) + '\n');
+}
+
+async function readAppName(projectDir: string): Promise<string | undefined> {
+  try {
+    const raw = await fs.readFile(path.join(projectDir, 'app.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { name?: unknown };
+    if (typeof parsed.name === 'string' && parsed.name.length > 0) return parsed.name;
+  } catch {
+    /* swallow */
+  }
+  return undefined;
+}
+
+async function hasAnyBuiltJs(projectDir: string): Promise<boolean> {
+  for (const sub of ['queries', 'actions', 'crons']) {
+    const dir = path.join(projectDir, sub);
+    const entries = await fs.readdir(dir).catch(() => []);
+    if (entries.some((n) => n.endsWith('.js') || n.endsWith('.mjs'))) return true;
+  }
+  return false;
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function dirExists(p: string): Promise<boolean> {
+  try {
+    const s = await fs.stat(p);
+    return s.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    const s = await fs.stat(p);
+    return s.isFile();
+  } catch {
+    return false;
+  }
+}
