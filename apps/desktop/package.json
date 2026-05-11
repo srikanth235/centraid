@@ -17,8 +17,8 @@
   },
   "dependencies": {
     "@centraid/agent-harness": "workspace:*",
-    "@centraid/design-tokens": "workspace:*",
-    "@centraid/app-templates": "workspace:*"
+    "@centraid/app-templates": "workspace:*",
+    "@centraid/design-tokens": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

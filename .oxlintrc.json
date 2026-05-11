@@ -8,7 +8,9 @@
     "**/dist/**",
     "**/.expo/**",
     "**/node_modules/**",
-    "packages/templates/templates/**"
+    "packages/app-templates/hydrate/**",
+    "packages/app-templates/journal/**",
+    "packages/app-templates/todos/**"
   ],
   "rules": {
     "arrow-body-style": "off",
