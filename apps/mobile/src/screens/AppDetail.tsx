@@ -1,76 +1,223 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, BackHandler, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { apps as BUILTIN_APPS } from '@centraid/design-tokens';
-import type { AppMetaResolved } from '@centraid/design-tokens';
+import { WebView } from 'react-native-webview';
+import type {
+  WebViewErrorEvent,
+  WebViewHttpErrorEvent,
+  WebViewMessageEvent,
+  WebViewNavigation,
+} from 'react-native-webview/lib/WebViewTypes';
 import AppHeader from '../components/AppHeader';
+import Button from '../components/Button';
 import { colors, spacing, t } from '../theme';
+import { appLiveUrl, GatewayError, resolveAppMeta, type AppRegistryRow } from '../lib/gateway';
+import { dispatch } from '../lib/bridge/dispatch';
+import { INJECTED_JS } from '../lib/bridge/injected';
+import { CENTRAID_HANDSHAKE, type BridgeRequest } from '../lib/bridge/protocol';
 import type { RootScreenProps } from '../navigation';
 
-import TodosApp from '../apps/todos';
-import HabitsApp from '../apps/habits';
-import JournalApp from '../apps/journal';
-import FocusApp from '../apps/focus';
-import PlantsApp from '../apps/plants';
-import HydrateApp from '../apps/hydrate';
-import GiftsApp from '../apps/gifts';
-import MoodApp from '../apps/mood';
-
-export interface AppComponentProps {
-  app: AppMetaResolved;
-}
-
-const REGISTRY: Record<string, React.ComponentType<AppComponentProps>> = {
-  focus: FocusApp,
-  gifts: GiftsApp,
-  habits: HabitsApp,
-  hydrate: HydrateApp,
-  journal: JournalApp,
-  mood: MoodApp,
-  plants: PlantsApp,
-  todos: TodosApp,
-};
-
+/**
+ * Renders a Centraid app inside a WebView pointing at the user's gateway.
+ * The native shell owns the titlebar + back button; the app's UI runs in
+ * the WebView. See issue #14 (Phase B) for the architecture.
+ */
 export default function AppDetailScreen({
   navigation,
   route,
 }: RootScreenProps<'AppDetail'>): React.JSX.Element {
   const { appId } = route.params;
-  const app = BUILTIN_APPS.find((a) => a.id === appId);
-  const Component = REGISTRY[appId];
 
-  if (!app || !Component) {
-    return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <AppHeader
-          title="Not found"
-          color={colors.ink3}
-          iconKey="X"
-          onBack={() => navigation.goBack()}
-        />
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>That app isn't available on mobile yet.</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const liveUrlOrError = useMemo(() => {
+    try {
+      return { kind: 'ok' as const, url: appLiveUrl(appId) };
+    } catch (err) {
+      const message =
+        err instanceof GatewayError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Gateway not configured.';
+      return { kind: 'err' as const, message };
+    }
+  }, [appId]);
+
+  // Display metadata: a fabricated RegistryRow gives `resolveAppMeta` the
+  // shape it wants — we only need the id at this layer; resolution falls
+  // back to a derived tile for unknown ids.
+  const meta = useMemo(() => {
+    const row: AppRegistryRow = {
+      id: appId,
+      path: '',
+      mode: 'uploaded',
+      registeredAt: '',
+      crons: [],
+      cronStatus: {},
+    };
+    return resolveAppMeta(row);
+  }, [appId]);
+
+  const webViewRef = useRef<WebView | null>(null);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | undefined>(undefined);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const handleNavStateChange = useCallback((event: WebViewNavigation): void => {
+    setCanGoBack(event.canGoBack);
+  }, []);
+
+  const handleError = useCallback((event: WebViewErrorEvent): void => {
+    const ne = event.nativeEvent;
+    setLoadError(ne.description || `Error ${ne.code}`);
+    setLoading(false);
+  }, []);
+
+  const handleHttpError = useCallback((event: WebViewHttpErrorEvent): void => {
+    const ne = event.nativeEvent;
+    setLoadError(ne.description || `HTTP ${ne.statusCode}`);
+    setLoading(false);
+  }, []);
+
+  // postMessage envelope from the injected bridge. We narrow on the
+  // handshake string so other window.postMessage senders (3rd-party
+  // libs inside the WebView) can't impersonate the bridge.
+  const handleMessage = useCallback(
+    async (event: WebViewMessageEvent): Promise<void> => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(event.nativeEvent.data);
+      } catch {
+        return;
+      }
+      if (!parsed || typeof parsed !== 'object') return;
+      const envelope = parsed as { __centraid?: string } & BridgeRequest;
+      if (envelope.__centraid !== CENTRAID_HANDSHAKE) return;
+      const response = await dispatch(appId, envelope);
+      const js = `window.__centraidResolve && window.__centraidResolve(${JSON.stringify(
+        response,
+      )}); true;`;
+      webViewRef.current?.injectJavaScript(js);
+    },
+    [appId],
+  );
+
+  const reload = useCallback((): void => {
+    setLoadError(undefined);
+    setLoading(true);
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  // Android hardware back: step inside the WebView's history first; if
+  // we're at the entry page, fall through to React Navigation's default
+  // (pop the screen). iOS edge-swipe always pops the screen — fine.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (canGoBack && webViewRef.current) {
+        webViewRef.current.goBack();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [canGoBack]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <AppHeader
-        title={app.name}
-        subtitle={app.desc}
-        color={app.color}
-        iconKey={app.iconKey}
+        title={meta.name}
+        subtitle={meta.desc || undefined}
+        color={meta.color}
+        iconKey={meta.iconKey}
         onBack={() => navigation.goBack()}
       />
-      <Component app={app} />
+      {liveUrlOrError.kind === 'err' ? (
+        <ErrorState
+          title="Gateway not set"
+          message={liveUrlOrError.message}
+          actionLabel="Open Settings"
+          onAction={() => navigation.navigate('Settings')}
+        />
+      ) : loadError ? (
+        <ErrorState
+          title="Could not load app"
+          message={loadError}
+          actionLabel="Retry"
+          onAction={reload}
+        />
+      ) : (
+        <View style={styles.webWrap}>
+          <WebView
+            key={reloadKey}
+            ref={webViewRef}
+            source={{ uri: liveUrlOrError.url }}
+            onNavigationStateChange={handleNavStateChange}
+            onLoadStart={() => {
+              setLoading(true);
+              setLoadError(undefined);
+            }}
+            onLoadEnd={() => setLoading(false)}
+            onError={handleError}
+            onHttpError={handleHttpError}
+            onMessage={(event) => {
+              void handleMessage(event);
+            }}
+            injectedJavaScriptBeforeContentLoaded={INJECTED_JS}
+            style={styles.web}
+            allowsBackForwardNavigationGestures={false}
+            originWhitelist={['*']}
+          />
+          {loading ? (
+            <View style={styles.loadingOverlay} pointerEvents="none">
+              <ActivityIndicator color={colors.ink3} />
+            </View>
+          ) : null}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
 
+interface ErrorStateProps {
+  title: string;
+  message: string;
+  actionLabel: string;
+  onAction: () => void;
+}
+
+function ErrorState({ title, message, actionLabel, onAction }: ErrorStateProps): React.JSX.Element {
+  return (
+    <View style={styles.empty}>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyMsg}>{message}</Text>
+      <View style={styles.emptyAction}>
+        <Button label={actionLabel} onPress={onAction} variant="soft" />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  empty: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: spacing[5] },
-  emptyText: { ...t('body'), color: colors.ink3 },
+  empty: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing[5],
+  },
+  emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
+  emptyMsg: { ...t('body'), color: colors.ink2 },
+  emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
+  loadingOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
   safe: { backgroundColor: colors.bg, flex: 1 },
+  web: { backgroundColor: colors.bg, flex: 1 },
+  webWrap: { flex: 1 },
 });

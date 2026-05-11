@@ -4,7 +4,7 @@ import { Store } from '../storage';
 import { todayKey, daysAgoKey } from '../dateUtil';
 import Skeleton from '../components/Skeleton';
 import { colors, radii, spacing, t, family } from '../theme';
-import type { AppComponentProps } from '../screens/AppDetail';
+import type { AppComponentProps } from './_types';
 
 type MoodLog = Record<string, number>;
 

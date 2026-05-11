@@ -2,8 +2,15 @@
 // Fetches today's state from the query, mutates via the set-cups action.
 // All paths are relative to /centraid/<app-id>/, so the iframe's same-origin
 // fetch hits this app's handlers automatically.
+//
+// Mobile bridge: when running inside the Centraid mobile WebView, the shell
+// injects `window.centraid` (see apps/mobile/src/lib/bridge). We feature-
+// detect everything so the same template still works in the desktop
+// iframe, which doesn't have the bridge.
 
 const $ = (id) => document.getElementById(id);
+
+const bridge = typeof window !== 'undefined' ? window.centraid : undefined;
 
 let state = { date: '', cups: 0, goal: 8 };
 
@@ -22,7 +29,25 @@ async function setCups(n) {
   });
   if (!res.ok) return;
   state = await res.json();
+  if (n > 0) bridge?.haptic?.selection?.();
   render();
+}
+
+async function remindIn(ms) {
+  if (!bridge?.notify) return;
+  try {
+    await bridge.notify.schedule({
+      id: 'hydrate-next',
+      title: 'Time to hydrate',
+      body: 'Log your next cup of water.',
+      at: Date.now() + ms,
+    });
+    bridge.haptic?.success?.();
+  } catch (err) {
+    if (err && err.code === 'permission_denied') {
+      alert('Enable notifications in system settings to use reminders.');
+    }
+  }
 }
 
 function render() {
@@ -56,6 +81,16 @@ function render() {
 
   const reset = $('reset');
   reset.onclick = () => void setCups(0);
+
+  const remind = $('remind');
+  if (remind) {
+    if (bridge?.notify) {
+      remind.hidden = false;
+      remind.onclick = () => void remindIn(60 * 60 * 1000);
+    } else {
+      remind.hidden = true;
+    }
+  }
 
   $('done').hidden = state.cups < state.goal;
 }

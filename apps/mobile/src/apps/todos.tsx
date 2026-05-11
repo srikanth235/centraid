@@ -4,7 +4,7 @@ import { Store } from '../storage';
 import Icon from '../components/Icon';
 import Skeleton from '../components/Skeleton';
 import { colors, radii, spacing, t } from '../theme';
-import type { AppComponentProps } from '../screens/AppDetail';
+import type { AppComponentProps } from './_types';
 
 interface Todo {
   id: number;

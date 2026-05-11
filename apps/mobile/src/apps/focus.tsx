@@ -6,7 +6,7 @@ import { todayKey } from '../dateUtil';
 import Icon from '../components/Icon';
 import Skeleton from '../components/Skeleton';
 import { colors, radii, spacing, t, family } from '../theme';
-import type { AppComponentProps } from '../screens/AppDetail';
+import type { AppComponentProps } from './_types';
 
 type ModeKey = 'work' | 'shortBreak' | 'longBreak';
 interface ModeDef {
