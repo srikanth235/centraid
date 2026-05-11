@@ -37,8 +37,8 @@ export async function scaffoldProject(
   }
   await fs.mkdir(dir, { recursive: true });
 
-  // Copy the plugin's per-app templates as-is.
-  await copyPluginTemplate('app-tsconfig.json', path.join(dir, 'tsconfig.json'));
+  // Copy the plugin's per-app package.json template. There is no tsconfig
+  // — handlers are .js with JSDoc, no compile step.
   await copyPluginTemplate('app-package.json', path.join(dir, 'package.json'), (raw) =>
     raw.replace('"name": "centraid-app-example"', `"name": "centraid-app-${id}"`),
   );
@@ -201,22 +201,29 @@ const README_TEMPLATE = (id: string): string => `# ${id}
 
 Centraid app project. Files here are the source for the published app.
 
-## Author handlers in TypeScript
+## Author handlers in JavaScript
 
-\`\`\`sh
-bun install
-bun run build      # tsc → emits .js next to each .ts
-bun run watch      # incremental build during development
+Handlers are \`.js\` ES modules. There is no build step — the runtime loads
+them directly. Type-check via JSDoc annotations:
+
+\`\`\`js
+/** @type {import('@centraid/openclaw-plugin').QueryHandler} */
+export default async ({ query, db }) => { /* ... */ };
 \`\`\`
 
-The runtime loads \`.js\` files; \`.ts\` sources travel along.
+For editor IntelliSense, run \`bun install\` once so the type package
+resolves locally:
+
+\`\`\`sh
+bun install   # or: npm install
+\`\`\`
 
 ## Layout
 
 - \`index.html\`, \`app.css\`, \`app.js\` — static, served from \`/centraid/${id}/\`
-- \`queries/<name>.ts\` — GET \`/centraid/${id}/_data/<name>\`
-- \`actions/<name>.ts\` — POST \`/centraid/${id}/_run\` (body picks \`action\`)
-- \`crons/<name>.ts\` — schedule + agent task + ingest handler in one module
+- \`queries/<name>.js\` — GET \`/centraid/${id}/_data/<name>\`
+- \`actions/<name>.js\` — POST \`/centraid/${id}/_run\` (body picks \`action\`)
+- \`crons/<name>.js\` — schedule + agent task + ingest handler in one module
 - \`migrations/NNNN_<slug>.sql\` — schema migrations applied on publish
 - \`app.json\` — metadata (\`name\`, \`version\`)
 

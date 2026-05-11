@@ -10,16 +10,13 @@
       "version": "0.1.0",
       "files": [
         "actions/set-cups.js",
-        "actions/set-cups.ts",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
         "migrations/0001_init.sql",
         "package.json",
-        "queries/get-today.js",
-        "queries/get-today.ts",
-        "tsconfig.json"
+        "queries/get-today.js"
       ]
     },
     {
@@ -31,20 +28,15 @@
       "version": "0.1.0",
       "files": [
         "actions/add.js",
-        "actions/add.ts",
         "actions/delete.js",
-        "actions/delete.ts",
         "actions/toggle.js",
-        "actions/toggle.ts",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
         "migrations/0001_init.sql",
         "package.json",
-        "queries/list.js",
-        "queries/list.ts",
-        "tsconfig.json"
+        "queries/list.js"
       ]
     },
     {
@@ -56,9 +48,7 @@
       "version": "0.1.0",
       "files": [
         "actions/delete.js",
-        "actions/delete.ts",
         "actions/save.js",
-        "actions/save.ts",
         "app.css",
         "app.js",
         "app.json",
@@ -66,10 +56,7 @@
         "migrations/0001_init.sql",
         "package.json",
         "queries/get.js",
-        "queries/get.ts",
-        "queries/list-dates.js",
-        "queries/list-dates.ts",
-        "tsconfig.json"
+        "queries/list-dates.js"
       ]
     }
   ]

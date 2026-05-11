@@ -20,14 +20,20 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MiB total tarball
 const MAX_ENTRY_BYTES = 5 * 1024 * 1024; //  5 MiB per file
 const MAX_ENTRIES = 5000;
 
-/** Files we accept inside an upload. Broader than the static-serve allowlist. */
+/**
+ * Files we accept inside an upload. Broader than the static-serve allowlist
+ * (it includes `.json`, `.sql`, etc. that the static handler doesn't serve),
+ * but does NOT include `.ts`: centraid apps are authored as `.js` with JSDoc
+ * types — there is no compile step on the gateway, so `.ts` files would just
+ * be dead weight that can drift from the live `.js`. See the agent-harness
+ * system prompt for the authoring contract.
+ */
 const UPLOAD_EXT_ALLOWLIST = new Set([
   '.html',
   '.htm',
   '.css',
   '.js',
   '.mjs',
-  '.ts',
   '.json',
   '.md',
   '.txt',
@@ -48,6 +54,57 @@ const UPLOAD_EXT_ALLOWLIST = new Set([
 
 /** Filenames forbidden inside an upload. `data.sqlite` lives outside versions. */
 const FORBIDDEN_FILES = new Set(['data.sqlite', '_registry.json', 'current.json']);
+
+/**
+ * Validate a single tar entry against the upload policy: type, path-traversal,
+ * forbidden basename, extension allowlist, and per-entry size cap. Throws
+ * UploadError on any violation. Exported so tests can hit the policy directly
+ * without going through tar's stream + pipeline (which surfaces filter throws
+ * as uncaughtException rather than a clean pipeline rejection).
+ */
+export function validateUploadEntry(
+  entryPath: string,
+  entryType: 'File' | 'Directory' | string,
+  entrySize?: number,
+): void {
+  if (entryType !== 'File' && entryType !== 'Directory') {
+    throw new UploadError(
+      'bad_entry_type',
+      `Entry "${entryPath}" has disallowed type "${entryType}".`,
+    );
+  }
+  const normalized = path.posix.normalize(entryPath);
+  if (
+    normalized.startsWith('/') ||
+    normalized.startsWith('../') ||
+    normalized === '..' ||
+    normalized.includes('/../')
+  ) {
+    throw new UploadError('bad_path', `Entry "${entryPath}" escapes archive root.`);
+  }
+  if (entryType === 'Directory') return;
+
+  const base = path.posix.basename(normalized);
+  if (FORBIDDEN_FILES.has(base)) {
+    throw new UploadError(
+      'forbidden_file',
+      `"${base}" is not part of the versioned code; it persists across versions outside this archive.`,
+    );
+  }
+  const ext = path.posix.extname(normalized).toLowerCase();
+  if (!UPLOAD_EXT_ALLOWLIST.has(ext)) {
+    throw new UploadError(
+      'bad_extension',
+      `Entry "${entryPath}" has disallowed extension "${ext}".`,
+    );
+  }
+  if (entrySize != null && entrySize > MAX_ENTRY_BYTES) {
+    throw new UploadError(
+      'entry_too_large',
+      `Entry "${entryPath}" exceeds ${MAX_ENTRY_BYTES} bytes.`,
+    );
+  }
+}
 
 export class UploadError extends Error {
   constructor(
@@ -131,7 +188,19 @@ export async function ingestUpload(
   const sha256 = hash.digest('hex');
 
   // Step 2: extract with strict filter.
+  //
+  // Throwing synchronously from inside tar's `filter` / `onwarn` callbacks
+  // surfaces the error *twice*: once via the pipeline rejection and once as
+  // a process-level `uncaughtException` (tar emits it on the parser stream
+  // before the pipeline tears down). We capture the first violation in a
+  // closure instead and skip every subsequent entry, then re-throw cleanly
+  // after the pipeline settles.
   let fileCount = 0;
+  let captured: UploadError | null = null;
+  const capture = (err: UploadError): false => {
+    if (!captured) captured = err;
+    return false;
+  };
   try {
     await pipeline(
       Readable.from(await fs.readFile(tarPath)),
@@ -144,58 +213,26 @@ export async function ingestUpload(
         preserveOwner: false,
         unlink: true,
         filter: (entryPath: string, statOrEntry: import('node:fs').Stats | tar.ReadEntry) => {
+          if (captured) return false;
           // We only run this in extract mode, so the filter receives ReadEntry.
           const entry = statOrEntry as tar.ReadEntry;
-          // Reject anything that's not a normal file or directory.
-          if (entry.type !== 'File' && entry.type !== 'Directory') {
-            throw new UploadError(
-              'bad_entry_type',
-              `Entry "${entryPath}" has disallowed type "${entry.type}".`,
-            );
-          }
-          // Path-traversal guard. tar already normalizes but verify.
-          const normalized = path.posix.normalize(entryPath);
-          if (
-            normalized.startsWith('/') ||
-            normalized.startsWith('../') ||
-            normalized === '..' ||
-            normalized.includes('/../')
-          ) {
-            throw new UploadError('bad_path', `Entry "${entryPath}" escapes archive root.`);
+          try {
+            validateUploadEntry(entryPath, entry.type, entry.size ?? undefined);
+          } catch (e) {
+            return capture(e as UploadError);
           }
           if (entry.type === 'Directory') return true;
-
-          const base = path.posix.basename(normalized);
-          if (FORBIDDEN_FILES.has(base)) {
-            throw new UploadError(
-              'forbidden_file',
-              `"${base}" is not part of the versioned code; it persists across versions outside this archive.`,
-            );
-          }
-
-          const ext = path.posix.extname(normalized).toLowerCase();
-          if (!UPLOAD_EXT_ALLOWLIST.has(ext)) {
-            throw new UploadError(
-              'bad_extension',
-              `Entry "${entryPath}" has disallowed extension "${ext}".`,
-            );
-          }
-
-          if (entry.size != null && entry.size > MAX_ENTRY_BYTES) {
-            throw new UploadError(
-              'entry_too_large',
-              `Entry "${entryPath}" exceeds ${MAX_ENTRY_BYTES} bytes.`,
-            );
-          }
           fileCount += 1;
           if (fileCount > MAX_ENTRIES) {
-            throw new UploadError('too_many_files', `Archive has more than ${MAX_ENTRIES} files.`);
+            return capture(
+              new UploadError('too_many_files', `Archive has more than ${MAX_ENTRIES} files.`),
+            );
           }
           return true;
         },
         onwarn: (_code, message) => {
           // Treat tar warnings (typically about strict-mode violations) as fatal.
-          throw new UploadError('bad_archive', `tar: ${message}`);
+          capture(new UploadError('bad_archive', `tar: ${message}`));
         },
       }),
     );
@@ -204,6 +241,11 @@ export async function ingestUpload(
     await safeRm(extractDir);
     if (err instanceof UploadError) throw err;
     throw new UploadError('bad_archive', err instanceof Error ? err.message : String(err));
+  }
+  if (captured) {
+    await safeRm(tarPath);
+    await safeRm(extractDir);
+    throw captured;
   }
 
   // Step 3: read declaredVersion from extracted app.json (best-effort).

@@ -1,5 +1,13 @@
+/**
+ * Flip a todo's done bit. 404 when the id is unknown.
+ *
+ * @typedef {Object} Input
+ * @property {number} [id]
+ *
+ * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ */
 export default async ({ body, db }) => {
-  const input = body;
+  const input = /** @type {Input | undefined} */ (body);
   const id = Number(input?.id ?? 0);
   if (!Number.isFinite(id) || id <= 0) {
     return { status: 400, body: { error: 'id is required' } };

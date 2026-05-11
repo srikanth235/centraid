@@ -1,7 +1,16 @@
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * Upsert a journal entry for a given date.
+ *
+ * @typedef {Object} SaveInput
+ * @property {string} [date]
+ * @property {string} [body]
+ *
+ * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ */
 export default async ({ body, db }) => {
-  const input = body;
+  const input = /** @type {SaveInput | undefined} */ (body);
   const date = String(input?.date ?? '');
   if (!DATE_RE.test(date)) {
     return { status: 400, body: { error: 'invalid_date' } };
