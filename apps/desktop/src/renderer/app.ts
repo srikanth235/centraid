@@ -1,18 +1,16 @@
 // Centraid shell — renders the home screen and routes to apps.
-// Built-in apps register on window.CentraidApps with { mount(container) }.
-// User-built apps live in localStorage and render via a generic mock view.
+// Every app the user sees is centraid-backed: cloned from a template or
+// authored in the builder, published to the gateway, rendered through a
+// sandboxed iframe. The home grid also shows uninstalled templates inline
+// so they're one tap away from being cloned & deployed.
 
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="display:block;width:100%;height:100%"><path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/><path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/><path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/><circle cx="120" cy="120" r="12" fill="#E11D48"/></svg>`;
 
 (function () {
   const root = document.querySelector('#root') as HTMLElement;
 
-  // Built-in app catalog comes from @centraid/design-tokens via preload —
-  // shared with mobile so both home grids stay in sync.
-  const BUILTIN_APPS: AppMetaResolvedType[] = window.CentraidTokens?.apps ?? [];
-
-  // Persistent state: which built-ins the user removed, and user-built apps.
-  const deletedBuiltins = new Set<string>(Store.get<string[]>('home.deletedBuiltins', []));
+  // Apps the user has installed (cloned from a template or built themselves).
+  // The home grid renders these plus uninstalled templates inline.
   let userApps = Store.get<UserAppMeta[]>('home.userApps', []);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -50,7 +48,6 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
   }
 
   function persist(): void {
-    Store.set('home.deletedBuiltins', [...deletedBuiltins]);
     Store.set('home.userApps', userApps);
   }
 
@@ -60,7 +57,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
   let drafts: DraftAppMeta[] = [];
 
   function getApps(): AppMetaResolvedType[] {
-    return BUILTIN_APPS.filter((a) => !deletedBuiltins.has(a.id)).concat(userApps);
+    return userApps;
   }
   function getAppsWithDrafts(): AppMetaResolvedType[] {
     return [...getApps(), ...drafts];
@@ -223,19 +220,17 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
       ]),
     ]);
 
-    const grid = el('div', { class: 'home-grid' });
+    // Apps section: installed user apps + on-disk drafts + the "New app"
+    // tile (the entry point for authoring from scratch). Always rendered —
+    // on a clean install it just contains the "New app" tile.
+    const appsGrid = el('div', { class: 'home-grid' });
     for (const app of getApps()) {
-      grid.append(renderTile(app));
+      appsGrid.append(renderTile(app));
     }
-
-    // Refresh drafts from disk and append after the published apps so the
-    // user sees in-progress projects without losing them when they back out
-    // of the builder before publishing.
     await hydrateDrafts();
     for (const d of drafts) {
-      grid.append(renderTile(d));
+      appsGrid.append(renderTile(d));
     }
-
     const newTile = el(
       'button',
       {
@@ -251,13 +246,29 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
         el('div', { class: 'app-tile-desc' }, 'Describe what you want.'),
       ],
     );
-    grid.append(newTile);
+    appsGrid.append(newTile);
 
-    const home = el('div', { class: 'home' }, [
+    // Templates section: pre-built apps available to clone. Hidden once the
+    // user has installed everything; reappears when they delete a clone.
+    const availableTemplates = await loadAvailableTemplates();
+    const homeChildren: (Node | null)[] = [
       hero,
       el('div', { class: 'home-section-title' }, 'Apps'),
-      grid,
-    ]);
+      appsGrid,
+    ];
+    if (availableTemplates.length > 0) {
+      const templatesGrid = el('div', { class: 'home-grid' });
+      for (const tmpl of availableTemplates) {
+        templatesGrid.append(renderTemplateTile(tmpl));
+      }
+      homeChildren.push(el('div', { class: 'home-section-title' }, 'Templates'), templatesGrid);
+    }
+
+    const home = el(
+      'div',
+      { class: 'home' },
+      homeChildren.filter((c): c is Node => c != null),
+    );
 
     root.append(titlebar);
     root.append(home);
@@ -427,19 +438,15 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
         .catch((err) => showToast(`Could not delete draft: ${String(err)}`));
       return;
     }
-    if (isUserApp(app.id)) {
-      // Best-effort: tell the gateway to forget the app too.
-      const ua = findUserApp(app.id);
-      if (ua?.centraidProjectId) {
-        void window.CentraidApi.deregisterApp({ id: ua.centraidProjectId }).catch(() => undefined);
-      }
-      // Also remove the project files on disk so a freshly-deleted user
-      // app doesn't reappear as a draft on the next render.
-      void window.CentraidApi.deleteProject({ id: app.id }).catch(() => undefined);
-      userApps = userApps.filter((a) => a.id !== app.id);
-    } else {
-      deletedBuiltins.add(app.id);
+    // Best-effort: tell the gateway to forget the app too.
+    const ua = findUserApp(app.id);
+    if (ua?.centraidProjectId) {
+      void window.CentraidApi.deregisterApp({ id: ua.centraidProjectId }).catch(() => undefined);
     }
+    // Also remove the project files on disk so a freshly-deleted user
+    // app doesn't reappear as a draft on the next render.
+    void window.CentraidApi.deleteProject({ id: app.id }).catch(() => undefined);
+    userApps = userApps.filter((a) => a.id !== app.id);
     persist();
     showToast(`Removed "${app.name}"`);
     renderHome();
@@ -533,6 +540,96 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
       backdrop.remove();
       card.remove();
     }
+  }
+
+  // ---------- Templates (inline tiles) ----------
+  // Renderer-side mirror of @centraid/templates' `TemplateMeta`. We don't
+  // import the package here — the IPC layer carries plain JSON.
+  interface TemplateEntry {
+    id: string;
+    name: string;
+    desc: string;
+    colorKey: string;
+    iconKey: string;
+    version: string;
+  }
+
+  /**
+   * Returns the bundled templates that aren't already installed (by exact id
+   * match against `userApps`). Failures are swallowed — an offline or broken
+   * templates IPC just hides the inline strip; the rest of the home keeps
+   * rendering.
+   */
+  async function loadAvailableTemplates(): Promise<TemplateEntry[]> {
+    try {
+      const all = (await window.CentraidApi.listTemplates()) as TemplateEntry[];
+      const installedIds = new Set(userApps.map((u) => u.id));
+      return all.filter((t) => !installedIds.has(t.id));
+    } catch {
+      return [];
+    }
+  }
+
+  function renderTemplateTile(tmpl: TemplateEntry): HTMLElement {
+    const palette = window.CentraidTokens.palette as unknown as Record<string, ColorHexType>;
+    const color: ColorHexType = palette[tmpl.colorKey] ?? ('#5847e0' as ColorHexType);
+    const finish = window.CentraidTokens.tileFinish(color, prefs.tileVariant);
+
+    const iconRenderer = (Icon as unknown as Record<string, IconRenderer>)[tmpl.iconKey];
+    const iconEl = el('div', {
+      class: 'app-icon',
+      trustedHtml: iconRenderer ? iconRenderer({ size: 28, strokeWidth: 1.75 }) : '',
+    });
+    iconEl.style.background = finish.background;
+    iconEl.style.color = finish.glyphColor;
+    if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
+    if (finish.backdropFilter) {
+      iconEl.style.backdropFilter = finish.backdropFilter;
+      iconEl.style.setProperty('-webkit-backdrop-filter', finish.backdropFilter);
+    }
+
+    // The "Templates" section title carries the "this is a template" cue,
+    // so no per-tile badge — keeps the tile visually identical to a real
+    // app, which is honest about what happens on tap.
+    const tile = el(
+      'button',
+      {
+        class: 'app-tile app-tile-template',
+        'data-template-id': tmpl.id,
+      },
+      [
+        iconEl,
+        el('div', { class: 'app-tile-name' }, tmpl.name),
+        el('div', { class: 'app-tile-desc' }, tmpl.desc),
+      ],
+    );
+
+    tile.addEventListener('click', () => {
+      if (tile.dataset.installing === 'true') return;
+      tile.dataset.installing = 'true';
+      tile.classList.add('app-tile-installing');
+      void (async () => {
+        try {
+          const result = await window.CentraidApi.cloneTemplate({ templateId: tmpl.id });
+          // addUserApp persists localStorage + re-renders home, which will
+          // drop this template tile (now matched against installedIds) and
+          // show the new user-app tile in its place.
+          addUserApp({
+            projectId: result.project.id,
+            name: result.template.name,
+            versionId: result.publish.versionId,
+            color,
+            iconKey: tmpl.iconKey as IconNameType,
+          });
+        } catch (err) {
+          tile.dataset.installing = 'false';
+          tile.classList.remove('app-tile-installing');
+          showToast(`Clone failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      })();
+    });
+
+    return tile;
   }
 
   function enterBuilder(
@@ -658,14 +755,9 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     if (!app) {
       return;
     }
-    const ua = isUserApp(id) ? findUserApp(id) : undefined;
-    const def = isUserApp(id)
-      ? { mount: (c: HTMLElement) => mountUserApp(app, ua, c) }
-      : window.CentraidApps?.[id];
-    if (!def) {
-      console.error('No implementation for app:', id);
-      return;
-    }
+    // Every app on the grid is a user app now (built-ins were retired in
+    // favour of templates), so we always mount via the iframe-backed path.
+    const ua = findUserApp(id);
     clear();
 
     const titlebar = el('div', { class: 'titlebar' }, [
@@ -722,7 +814,8 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     root.append(view);
 
     try {
-      currentCleanup = (def.mount(inner, { app, el }) as (() => void) | void) ?? null;
+      mountUserApp(app, ua, inner);
+      currentCleanup = null;
     } catch (error) {
       console.error('App crashed:', error);
       inner.append(el('div', { class: 'empty' }, `Something went wrong loading ${app.name}.`));

@@ -1,0 +1,31 @@
+{
+  "name": "@centraid/templates",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bundled app templates for centraid — pre-built Centraid apps users can clone and deploy from the gallery.",
+  "files": [
+    "dist",
+    "templates",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build:manifest": "node scripts/build-manifest.mjs",
+    "build": "bun run build:manifest && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@centraid/design-tokens": "workspace:*"
+  },
+  "devDependencies": {
+    "@centraid/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

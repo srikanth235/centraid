@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Hydrate</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main>
+      <div id="count" class="count" aria-live="polite">0<span class="count-small"> / 8</span></div>
+      <div id="grid" class="grid" role="group" aria-label="Cups"></div>
+      <div class="actions">
+        <button id="add" class="primary" type="button">Log a cup</button>
+        <button id="reset" class="soft" type="button">Reset</button>
+      </div>
+      <p id="done" class="done" hidden>Done for today.</p>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

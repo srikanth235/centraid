@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS hydrate_daily (
+  date TEXT PRIMARY KEY,
+  cups INTEGER NOT NULL DEFAULT 0
+);

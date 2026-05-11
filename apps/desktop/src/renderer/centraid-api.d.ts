@@ -85,6 +85,29 @@ export interface CentraidAppSchema {
 }
 
 /**
+ * A bundled template, as surfaced by the desktop's templates IPC. Mirrors
+ * `TemplateMeta` from `@centraid/templates` — duplicated here so the
+ * renderer typings stay independent of the templates package at build time.
+ */
+export interface CentraidTemplateMeta {
+  id: string;
+  name: string;
+  desc: string;
+  colorKey: string;
+  iconKey: string;
+  version: string;
+}
+
+/**
+ * Result of cloning + publishing a template in one IPC round-trip.
+ */
+export interface CentraidCloneTemplateResult {
+  project: CentraidProjectInfo;
+  publish: CentraidPublishResult;
+  template: CentraidTemplateMeta;
+}
+
+/**
  * Subset of pi-ai's content-block types that the renderer hydrates into the
  * chat pane on session resume. Other block types (e.g. images) pass through
  * as opaque objects and are ignored.
@@ -199,6 +222,19 @@ interface CentraidApi {
    */
   appSchema(input: { id: string }): Promise<CentraidAppSchema | undefined>;
   deregisterApp(input: { id: string }): Promise<{ id: string }>;
+
+  /** List bundled templates from `@centraid/templates`. */
+  listTemplates(): Promise<CentraidTemplateMeta[]>;
+  /**
+   * Clone a bundled template into the user's projects dir and publish it
+   * to the gateway in one round-trip. `newAppId` is optional — the main
+   * process auto-suffixes on collision (e.g. `hydrate` → `hydrate-2`).
+   */
+  cloneTemplate(input: {
+    templateId: string;
+    newAppId?: string;
+    newName?: string;
+  }): Promise<CentraidCloneTemplateResult>;
 }
 
 declare global {

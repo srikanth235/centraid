@@ -1,0 +1,138 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --accent: #5847e0;
+  --ink: #0f172a;
+  --ink-soft: #475569;
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --line: #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #f8fafc;
+    --ink-soft: #94a3b8;
+    --bg: #0b0b0d;
+    --surface: #161618;
+    --line: #2a2a30;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  max-width: 28rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 0 2rem;
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(3rem, 14vw, 4rem);
+  font-weight: 600;
+  line-height: 1;
+  margin: 0.5rem 0 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.count-small {
+  color: var(--ink-soft);
+  font-size: 0.4em;
+  font-weight: 500;
+  margin-left: 0.25rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+.cup {
+  aspect-ratio: 1 / 1;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  border-radius: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 80ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cup:active {
+  transform: scale(0.96);
+}
+
+.cup.filled {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  justify-content: center;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.primary,
+.soft {
+  height: 2.75rem;
+  padding: 0 1.25rem;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 120ms ease;
+}
+
+.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.soft {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+  font-weight: 500;
+}
+
+.done {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin: 1.25rem 0 0;
+}

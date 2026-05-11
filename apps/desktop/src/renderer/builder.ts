@@ -322,11 +322,22 @@
     }
 
     // ---------- Top bars ----------
+    // `.titlebar` is a 3-column grid (1fr / auto / 1fr). The brand+breadcrumb
+    // pieces have to live inside one centered cell — leaving them as raw
+    // siblings makes the 4th span wrap onto a second row.
     const titlebar = el('div', { class: 'titlebar' }, [
-      el('span', { class: 'wordmark', onClick: handleExit, style: { cursor: 'pointer' } }, 'M'),
-      el('span', { class: 'crumb', onClick: handleExit, style: { cursor: 'pointer' } }, 'Centraid'),
-      el('span', { class: 'crumb-sep' }, '/'),
-      el('span', {}, isUpdateMode ? `Editing ${projName}` : 'Builder'),
+      el('div', { class: 'titlebar-side' }),
+      el('div', { class: 'titlebar-brand' }, [
+        el('span', { class: 'wordmark', onClick: handleExit, style: { cursor: 'pointer' } }, 'M'),
+        el(
+          'span',
+          { class: 'crumb', onClick: handleExit, style: { cursor: 'pointer' } },
+          'Centraid',
+        ),
+        el('span', { class: 'crumb-sep' }, '/'),
+        el('span', {}, isUpdateMode ? `Editing ${projName}` : 'Builder'),
+      ]),
+      el('div', { class: 'titlebar-side is-end' }),
     ]);
 
     const primaryBtn = el('button', { class: 'btn btn-primary' });
