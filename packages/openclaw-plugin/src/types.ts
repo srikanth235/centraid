@@ -73,22 +73,28 @@ export type HandlerFn<Args, Ret = void> = (args: Args) => Promise<Ret>;
  * ```ts
  * import type { QueryHandler } from "@centraid/openclaw-plugin";
  * export default (async ({ db, query }) => {
- *   return db.prepare("SELECT * FROM issues WHERE state = ?").all(query.state ?? "open");
+ *   return await db
+ *     .prepare("SELECT * FROM issues WHERE state = ?")
+ *     .all(query.state ?? "open");
  * }) satisfies QueryHandler;
  * ```
+ *
+ * The `ScopedDb` API is fully async — every `exec` / `run` / `get` / `all`
+ * call round-trips through the worker boundary to the parent process. Always
+ * `await` your db calls.
  */
 export type QueryHandler = HandlerFn<QueryHandlerArgs, unknown>;
 export type ActionHandler = HandlerFn<ActionHandlerArgs, ActionResult>;
 export type CronHandler = HandlerFn<CronHandlerArgs, void>;
 
 export interface ScopedDb {
-  exec(sql: string): void;
+  exec(sql: string): Promise<void>;
   prepare(sql: string): {
-    run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
-    get<T = unknown>(...params: unknown[]): T | undefined;
-    all<T = unknown>(...params: unknown[]): T[];
+    run(...params: unknown[]): Promise<{ changes: number; lastInsertRowid: number | bigint }>;
+    get<T = unknown>(...params: unknown[]): Promise<T | undefined>;
+    all<T = unknown>(...params: unknown[]): Promise<T[]>;
   };
-  transaction<Fn extends (...args: unknown[]) => unknown>(fn: Fn): Fn;
+  transaction<Fn extends (...args: unknown[]) => Promise<unknown>>(fn: Fn): Fn;
 }
 
 export interface ScopedLog {

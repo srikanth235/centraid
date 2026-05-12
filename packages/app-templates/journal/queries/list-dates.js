@@ -11,7 +11,7 @@
  */
 export default async ({ db }) => {
   const rows = /** @type {EntryRow[]} */ (
-    db.prepare('SELECT date, body FROM journal_entries ORDER BY date DESC').all()
+    await db.prepare('SELECT date, body FROM journal_entries ORDER BY date DESC').all()
   );
   return rows.map((r) => ({
     date: r.date,

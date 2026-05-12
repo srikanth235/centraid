@@ -14,6 +14,6 @@ export default async ({ body, db }) => {
   if (!DATE_RE.test(date)) {
     return { status: 400, body: { error: 'invalid_date' } };
   }
-  db.prepare('DELETE FROM journal_entries WHERE date = ?').run(date);
+  await db.prepare('DELETE FROM journal_entries WHERE date = ?').run(date);
   return { status: 200, body: { ok: true } };
 };

@@ -13,7 +13,7 @@ export default async ({ body, db }) => {
     return { status: 400, body: { error: 'text is required' } };
   }
   const now = Date.now();
-  const result = db
+  const result = await db
     .prepare('INSERT INTO todos (text, done, created_at) VALUES (?, 0, ?)')
     .run(text, now);
   const id = Number(result.lastInsertRowid);

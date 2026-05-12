@@ -9,6 +9,10 @@
  *
  * It is NOT a security sandbox against hostile code. Hardening to that level
  * (isolated-vm or child-process + permission flags) is a future swap-in.
+ *
+ * The db proxy is async — every `db.exec/run/get/all` returns a Promise that
+ * resolves when the parent has executed the call against the real sqlite
+ * handle. Handlers are expected to `await` their db calls.
  */
 
 import { parentPort, workerData } from 'node:worker_threads';
@@ -80,28 +84,38 @@ function dbCall(method: DbCallMessage['method'], payload: unknown): Promise<unkn
 }
 
 const db = {
-  exec(sql: string): void {
-    void dbCall('exec', { sql });
+  exec(sql: string): Promise<void> {
+    return dbCall('exec', { sql }) as Promise<void>;
   },
   prepare(sql: string) {
     return {
-      run: async (...params: unknown[]) => dbCall('prepare-run', { sql, params }),
-      get: async (...params: unknown[]) => dbCall('prepare-get', { sql, params }),
-      all: async (...params: unknown[]) => dbCall('prepare-all', { sql, params }),
+      run: (...params: unknown[]) =>
+        dbCall('prepare-run', { sql, params }) as Promise<{
+          changes: number;
+          lastInsertRowid: number | bigint;
+        }>,
+      get: <T = unknown>(...params: unknown[]) =>
+        dbCall('prepare-get', { sql, params }) as Promise<T | undefined>,
+      all: <T = unknown>(...params: unknown[]) =>
+        dbCall('prepare-all', { sql, params }) as Promise<T[]>,
     };
   },
-  transaction<Fn extends (...args: unknown[]) => unknown>(fn: Fn): Fn {
-    // Pass-through; each prepare/exec inside fn round-trips to the parent.
-    // The parent's better-sqlite3 owns the actual transaction boundary via
-    // an explicit BEGIN/COMMIT pair invoked here.
-    return ((...args: unknown[]) => {
-      void dbCall('transaction-run', { begin: true });
+  transaction<Fn extends (...args: unknown[]) => Promise<unknown>>(fn: Fn): Fn {
+    // Each await'd prepare/exec inside fn round-trips to the parent. The
+    // parent's sqlite owns the actual transaction boundary via an explicit
+    // BEGIN/COMMIT pair invoked here.
+    return (async (...args: unknown[]) => {
+      await dbCall('transaction-run', { begin: true });
       try {
-        const out = fn(...args);
-        void dbCall('transaction-run', { commit: true });
+        const out = await fn(...args);
+        await dbCall('transaction-run', { commit: true });
         return out;
       } catch (e) {
-        void dbCall('transaction-run', { rollback: true });
+        try {
+          await dbCall('transaction-run', { rollback: true });
+        } catch {
+          /* prefer the original error */
+        }
         throw e;
       }
     }) as Fn;

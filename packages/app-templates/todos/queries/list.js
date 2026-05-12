@@ -11,7 +11,7 @@
  */
 export default async ({ db }) => {
   const rows = /** @type {TodoRow[]} */ (
-    db
+    await db
       .prepare('SELECT id, text, done, created_at FROM todos ORDER BY done ASC, created_at DESC')
       .all()
   );

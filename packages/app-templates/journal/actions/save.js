@@ -17,9 +17,11 @@ export default async ({ body, db }) => {
   }
   const text = String(input?.body ?? '');
   const now = Date.now();
-  db.prepare(
-    `INSERT INTO journal_entries (date, body, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(date) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`,
-  ).run(date, text, now);
+  await db
+    .prepare(
+      `INSERT INTO journal_entries (date, body, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(date) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`,
+    )
+    .run(date, text, now);
   return { status: 200, body: { date, updatedAt: now } };
 };

@@ -19,7 +19,7 @@ function todayKey() {
 export default async ({ db }) => {
   const today = todayKey();
   const row = /** @type {DailyRow | undefined} */ (
-    db.prepare('SELECT cups FROM hydrate_daily WHERE date = ?').get(today)
+    await db.prepare('SELECT cups FROM hydrate_daily WHERE date = ?').get(today)
   );
   const cups = row ? row.cups : 0;
   return { date: today, cups, goal: GOAL };

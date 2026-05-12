@@ -18,7 +18,7 @@ export default async ({ query, db }) => {
     return { error: 'invalid_date' };
   }
   const row = /** @type {EntryRow | undefined} */ (
-    db.prepare('SELECT date, body, updated_at FROM journal_entries WHERE date = ?').get(date)
+    await db.prepare('SELECT date, body, updated_at FROM journal_entries WHERE date = ?').get(date)
   );
   if (!row) {
     return { date, body: '', updatedAt: null };

@@ -45,7 +45,9 @@ Handlers are authored as **plain \`.js\` ES modules** — there is no \`tsconfig
 
 ### Handler contract
 
-All three handler kinds receive \`{ db, log, app, ctx }\` plus kind-specific fields. Type the default export by pointing JSDoc \`@type\` at the alias in \`@centraid/openclaw-plugin\`. Declare row shapes with \`@typedef\` and cast \`db.prepare(...).get/all\` results with a JSDoc \`@type\` cast.
+All three handler kinds receive \`{ db, log, app, ctx }\` plus kind-specific fields. Type the default export by pointing JSDoc \`@type\` at the alias in \`@centraid/openclaw-plugin\`. Declare row shapes with \`@typedef\` and cast \`await db.prepare(...).get/all\` results with a JSDoc \`@type\` cast.
+
+**Every db call is async.** \`db.exec\`, and \`db.prepare(...).run / .get / .all\` all return \`Promise<...>\` — always \`await\` them. Forgetting \`await\` is the #1 bug in handler code; the linter cannot catch it because the cast hides the unawaited Promise.
 
 \`\`\`js
 // queries/<name>.js
@@ -58,7 +60,7 @@ All three handler kinds receive \`{ db, log, app, ctx }\` plus kind-specific fie
  */
 export default async ({ query, db }) => {
   const rows = /** @type {Thing[]} */ (
-    db.prepare('SELECT id, title FROM things WHERE owner = ?').all(query.owner ?? '')
+    await db.prepare('SELECT id, title FROM things WHERE owner = ?').all(query.owner ?? '')
   );
   return rows;
 };
@@ -110,7 +112,7 @@ Files run as JavaScript. The following are **syntax errors** in \`.js\` and must
 - \`x as Foo\` and \`<Foo>x\` — use a JSDoc cast: \`/** @type {Foo} */ (x)\`.
 - \`(...) satisfies Foo\` — use \`/** @type {Foo} */\` on the export instead.
 - \`interface Foo { ... }\`, \`type Foo = ...\`, enums — declare shapes with \`@typedef\` in JSDoc.
-- Generic call type args like \`db.prepare(sql).get<Row>(id)\` — call \`.get(id)\` and cast: \`/** @type {Row | undefined} */ (db.prepare(sql).get(id))\`. Generic call syntax is a parse error in JS.
+- Generic call type args like \`db.prepare(sql).get<Row>(id)\` — call \`.get(id)\` and cast: \`/** @type {Row | undefined} */ (await db.prepare(sql).get(id))\`. Generic call syntax is a parse error in JS.
 - Parameter type annotations like \`({ db }: Args) => ...\` — annotate via the \`@type\` on the export, which infers the parameter shape.
 - Non-null assertions (\`x!\`) and definite-assignment markers — use a real guard or JSDoc cast.
 
@@ -118,11 +120,11 @@ If you catch yourself reaching for any of the above, you've slipped into TS habi
 
 ### Db proxy semantics
 
-\`db.prepare(sql).run/get/all\` round-trip through a worker boundary. Use parameterized SQL — never interpolate untrusted strings. Wrap multi-row writes in \`db.transaction(...)\` for atomicity.
+\`db.prepare(sql).run/get/all\` round-trip through a worker boundary and return Promises. **Always \`await\`.** Use parameterized SQL — never interpolate untrusted strings. Wrap multi-row writes in \`db.transaction(async () => { ... })\` for atomicity; the transaction callback is async too.
 
-\`db.exec\` is reserved for DML on tables that already exist. **Never run DDL inside a handler** — no \`CREATE TABLE\`, no \`ALTER TABLE\`, no \`CREATE INDEX\`, no \`DROP …\`. All schema lives in \`migrations/\` (see below).
+\`db.exec\` is reserved for DML on tables that already exist and also returns a Promise — \`await db.exec(...)\`. **Never run DDL inside a handler** — no \`CREATE TABLE\`, no \`ALTER TABLE\`, no \`CREATE INDEX\`, no \`DROP …\`. All schema lives in \`migrations/\` (see below).
 
-\`.get(...)\` returns \`unknown | undefined\` and \`.all(...)\` returns \`unknown[]\` at the JSDoc level — cast the result to a \`@typedef\`'d row shape so subsequent property access is checked.
+\`await ...get(...)\` resolves to \`unknown | undefined\` and \`await ...all(...)\` resolves to \`unknown[]\` at the JSDoc level — cast the awaited result to a \`@typedef\`'d row shape so subsequent property access is checked.
 
 ### Schema migrations
 

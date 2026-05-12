@@ -103,11 +103,15 @@ All three handler kinds use the **same** `{ db, log, app, ctx }` surface; only t
 
 The plugin **loads `.js` files only** at runtime. You can author in TypeScript (recommended — see below) and ship the compiled `.js` next to it.
 
+All `db.*` calls are async. Always `await` — forgetting it is the #1 handler bug.
+
 ```ts
 // queries/list-pending.ts
 import type { QueryHandler } from "@centraid/openclaw-plugin";
 export default (async ({ query, db }) => {
-  return db.prepare("SELECT * FROM issues WHERE state = ?").all(query.state ?? "open");
+  return await db
+    .prepare("SELECT * FROM issues WHERE state = ?")
+    .all(query.state ?? "open");
 }) satisfies QueryHandler;
 ```
 
@@ -136,14 +140,14 @@ export default (async ({ payload, db, log }) => {
   const issues = (payload.json ?? JSON.parse(payload.text)) as Array<{
     number: number; title: string; state: string; updatedAt: string;
   }>;
-  db.exec(`CREATE TABLE IF NOT EXISTS issues (
-    number INTEGER PRIMARY KEY, title TEXT, state TEXT, updatedAt TEXT
-  )`);
+  // Schema lives in migrations/ — handlers presume the table already exists.
   const upsert = db.prepare(
     `INSERT INTO issues VALUES(@number,@title,@state,@updatedAt)
      ON CONFLICT(number) DO UPDATE SET title=excluded.title, state=excluded.state, updatedAt=excluded.updatedAt`
   );
-  db.transaction(() => { for (const i of issues) upsert.run(i); })();
+  await db.transaction(async () => {
+    for (const i of issues) await upsert.run(i);
+  })();
   log.info(`upserted ${issues.length} issues`);
 }) satisfies CronHandler;
 ```
