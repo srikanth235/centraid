@@ -994,7 +994,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
       const frame = el('iframe', {
         src: 'about:blank',
         style: { border: '0', height: '100%', width: '100%' },
-        sandbox: 'allow-scripts allow-forms',
+        sandbox: 'allow-scripts allow-forms allow-same-origin',
         referrerpolicy: 'no-referrer',
       }) as HTMLIFrameElement;
       frameWrap.append(frame);

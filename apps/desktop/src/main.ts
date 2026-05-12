@@ -1,6 +1,7 @@
 import { app, BrowserWindow, nativeImage, protocol, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installAuthInjector } from './main/auth-injector.js';
 import { disposeWindowSession, registerIpcHandlers } from './main/ipc.js';
 import { PREVIEW_SCHEME, registerPreviewProtocol } from './main/preview-protocol.js';
 import { loadSettings, templatesCacheDir } from './main/settings.js';
@@ -79,6 +80,7 @@ app.whenReady().then(() => {
     app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
   }
   registerPreviewProtocol();
+  void installAuthInjector();
   registerIpcHandlers();
   createWindow();
   // Kick off a background check for template updates. Fire-and-forget — the

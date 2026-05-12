@@ -3,6 +3,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { loadSettings, saveSettings, templatesCacheDir, type DesktopSettings } from './settings.js';
 import { PREVIEW_SCHEME } from './preview-protocol.js';
+import { refreshAuthInjector } from './auth-injector.js';
 
 /**
  * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
@@ -47,9 +48,11 @@ const sessions = new Map<number, AgentSessionHandle>();
 export function registerIpcHandlers(): void {
   // ----- Settings -----
   ipcMain.handle(Channel.SETTINGS_GET, async () => loadSettings());
-  ipcMain.handle(Channel.SETTINGS_SAVE, async (_e, patch: Partial<DesktopSettings>) =>
-    saveSettings(patch),
-  );
+  ipcMain.handle(Channel.SETTINGS_SAVE, async (_e, patch: Partial<DesktopSettings>) => {
+    const next = await saveSettings(patch);
+    await refreshAuthInjector();
+    return next;
+  });
 
   // ----- Projects -----
   ipcMain.handle(Channel.PROJECTS_LIST, async () => {
