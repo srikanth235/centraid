@@ -37,6 +37,9 @@ export {
   deregisterApp,
   appLiveUrl,
   fetchAppSchema,
+  fetchAppTableRows,
+  runAppQuery,
+  fetchAppLogs,
   type VersionRecord,
   type AppRegistryRow,
 } from './gateway-client.js';
@@ -47,6 +50,10 @@ export type {
   AppSchemaColumn,
   AppSchemaIndex,
   AppSchemaView,
+  AppTableRows,
+  RunQueryResult,
+  LogEntry,
+  LogLevel,
 } from '@centraid/openclaw-plugin';
 
 export { readProjectFiles, type ProjectFile, type ProjectFileLanguage } from './project-files.js';

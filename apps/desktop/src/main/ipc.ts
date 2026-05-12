@@ -31,6 +31,9 @@ export const Channel = {
   VERSIONS_ACTIVATE: 'centraid:versions:activate',
   APP_LIVE_URL: 'centraid:app:live-url',
   APP_SCHEMA: 'centraid:app:schema',
+  APP_TABLE_ROWS: 'centraid:app:table-rows',
+  APP_QUERY: 'centraid:app:query',
+  APP_LOGS: 'centraid:app:logs',
   APPS_DEREGISTER: 'centraid:apps:deregister',
 
   TEMPLATES_LIST: 'centraid:templates:list',
@@ -243,6 +246,45 @@ export function registerIpcHandlers(): void {
     const { fetchAppSchema } = await import('@centraid/agent-harness');
     return fetchAppSchema(settings, input.id);
   });
+
+  // Cloud → Database row browser. Pulls one page of rows (default 50,
+  // capped at 200 server-side) from the named table.
+  ipcMain.handle(
+    Channel.APP_TABLE_ROWS,
+    async (_e, input: { id: string; table: string; limit?: number; offset?: number }) => {
+      const settings = await loadSettings();
+      const { fetchAppTableRows } = await import('@centraid/agent-harness');
+      return fetchAppTableRows(settings, input.id, input.table, {
+        limit: input.limit,
+        offset: input.offset,
+      });
+    },
+  );
+
+  // Cloud → SQL editor. Single-statement; gateway distinguishes
+  // SELECT-style ({ kind: 'rows' }) from DML/DDL ({ kind: 'exec' }).
+  ipcMain.handle(Channel.APP_QUERY, async (_e, input: { id: string; sql: string }) => {
+    const settings = await loadSettings();
+    const { runAppQuery } = await import('@centraid/agent-harness');
+    return runAppQuery(settings, input.id, input.sql);
+  });
+
+  // Cloud → Logs. Newest-first tail with optional `sinceTs` for polling.
+  ipcMain.handle(
+    Channel.APP_LOGS,
+    async (
+      _e,
+      input: { id: string; limit?: number; sinceTs?: number; level?: 'info' | 'warn' | 'error' },
+    ) => {
+      const settings = await loadSettings();
+      const { fetchAppLogs } = await import('@centraid/agent-harness');
+      return fetchAppLogs(settings, input.id, {
+        limit: input.limit,
+        sinceTs: input.sinceTs,
+        level: input.level,
+      });
+    },
+  );
 
   ipcMain.handle(Channel.APPS_DEREGISTER, async (_e, input: { id: string }) => {
     const settings = await loadSettings();

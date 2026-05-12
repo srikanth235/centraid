@@ -30,6 +30,9 @@ const Channel = {
   VERSIONS_ACTIVATE: 'centraid:versions:activate',
   APP_LIVE_URL: 'centraid:app:live-url',
   APP_SCHEMA: 'centraid:app:schema',
+  APP_TABLE_ROWS: 'centraid:app:table-rows',
+  APP_QUERY: 'centraid:app:query',
+  APP_LOGS: 'centraid:app:logs',
   APPS_DEREGISTER: 'centraid:apps:deregister',
 
   TEMPLATES_LIST: 'centraid:templates:list',
@@ -98,6 +101,15 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.VERSIONS_ACTIVATE, input),
   appLiveUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_LIVE_URL, input),
   appSchema: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_SCHEMA, input),
+  appTableRows: (input: { id: string; table: string; limit?: number; offset?: number }) =>
+    ipcRenderer.invoke(Channel.APP_TABLE_ROWS, input),
+  appQuery: (input: { id: string; sql: string }) => ipcRenderer.invoke(Channel.APP_QUERY, input),
+  appLogs: (input: {
+    id: string;
+    limit?: number;
+    sinceTs?: number;
+    level?: 'info' | 'warn' | 'error';
+  }) => ipcRenderer.invoke(Channel.APP_LOGS, input),
   deregisterApp: (input: { id: string }) => ipcRenderer.invoke(Channel.APPS_DEREGISTER, input),
 
   // Templates
