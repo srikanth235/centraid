@@ -41,6 +41,7 @@ GitHub issue: [#17](https://github.com/srikanth235/centraid/issues/17)
 
 ## Verification
 
+- `bun run check` is clean: oxfmt format check + oxlint, 0 errors across the new files.
 - `bun run test` at the root passes — 6 turbo tasks, 39 tests across `@centraid/agent-harness` (1) and `@centraid/openclaw-plugin` (38).
 - All four flows PASS sequentially in ~11s on a warm build:
   - `clone-template-and-reopen` — 2.3s

@@ -28,7 +28,10 @@ await runFlow('settings-theme-persists', async (ctx) => {
   // ---- click the Dark button in the appearance segmented control ----
   // The drawer has multiple segmented controls (theme / density / tile);
   // the theme group's buttons are the only ones labeled exactly "light" or "dark".
-  await ctx.page.locator('.drawer-panel button', { hasText: /^dark$/i }).first().click();
+  await ctx.page
+    .locator('.drawer-panel button', { hasText: /^dark$/i })
+    .first()
+    .click();
   await ctx.page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
   await ctx.shot('settings-after-dark');
 
@@ -41,9 +44,7 @@ await runFlow('settings-theme-persists', async (ctx) => {
   // ---- restart Electron, same userData ----
   await ctx.restart();
   await ctx.shot('home-after-restart');
-  const themeAfterRestart = await ctx.page.evaluate(
-    () => document.documentElement.dataset.theme,
-  );
+  const themeAfterRestart = await ctx.page.evaluate(() => document.documentElement.dataset.theme);
   if (themeAfterRestart !== 'dark') {
     throw new Error(
       `dark theme did not persist across restart: html[data-theme="${themeAfterRestart}"]`,

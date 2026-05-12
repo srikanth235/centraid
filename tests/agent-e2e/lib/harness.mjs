@@ -40,8 +40,10 @@ async function waitForCdp(port, timeoutMs = 15000) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json/version`);
       if (res.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 200));
+    } catch {
+      // Endpoint not up yet; fall through to the poll sleep.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
   throw new Error(`CDP did not become ready on 127.0.0.1:${port} within ${timeoutMs}ms`);
 }
@@ -51,7 +53,7 @@ async function waitForPortFree(port, timeoutMs = 5000) {
   while (Date.now() - start < timeoutMs) {
     try {
       await fetch(`http://127.0.0.1:${port}/json/version`);
-      await new Promise((r) => setTimeout(r, 150));
+      await new Promise((resolve) => setTimeout(resolve, 150));
     } catch {
       return;
     }
@@ -76,24 +78,30 @@ function pidAlive(pid) {
 // last-resort fallback for an Electron that's wedged.
 async function killAndWait(pid, { flushMs = 250, timeoutMs = 5000 } = {}) {
   if (!pidAlive(pid)) return;
-  await new Promise((r) => setTimeout(r, flushMs));
+  await new Promise((resolve) => setTimeout(resolve, flushMs));
   try {
     process.kill(pid, 'SIGTERM');
-  } catch {}
+  } catch {
+    // Process already gone — nothing to terminate.
+  }
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (!pidAlive(pid)) return;
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
   try {
     process.kill(pid, 'SIGKILL');
-  } catch {}
+  } catch {
+    // Process won the race and exited before the SIGKILL fallback.
+  }
 }
 
 function killPid(pid) {
   try {
     process.kill(pid, 'SIGTERM');
-  } catch {}
+  } catch {
+    // Process already gone or never started — nothing to kill.
+  }
 }
 
 function defaultRunId() {
@@ -105,16 +113,19 @@ async function ensureBuilt() {
   try {
     await fs.access(DESKTOP_MAIN);
     return;
-  } catch {}
+  } catch {
+    // dist/main.js missing — fall through to the build step.
+  }
   console.log('[harness] dist/main.js missing — running desktop build...');
   await new Promise((resolve, reject) => {
     const proc = spawn('bun', ['run', '--filter=@centraid/desktop', 'build'], {
       cwd: REPO_ROOT,
       stdio: 'inherit',
     });
-    proc.on('exit', (code) =>
-      code === 0 ? resolve() : reject(new Error(`desktop build exited ${code}`)),
-    );
+    proc.on('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`desktop build exited ${code}`));
+    });
     proc.on('error', reject);
   });
 }
@@ -170,14 +181,14 @@ async function loadState(runId) {
 
 export async function setup({ runId } = {}) {
   await ensureBuilt();
-  runId = runId ?? defaultRunId();
-  const runDir = path.join(RUNS_DIR, runId);
+  const id = runId ?? defaultRunId();
+  const runDir = path.join(RUNS_DIR, id);
   await fs.mkdir(runDir, { recursive: true });
   const fresh = await seedFresh(runDir);
   const port = await freePort();
   const pid = await spawnElectron(fresh.userData, port);
   const cdpUrl = `http://127.0.0.1:${port}`;
-  const state = { runId, runDir, ...fresh, port, cdpUrl, pid };
+  const state = { runId: id, runDir, ...fresh, port, cdpUrl, pid };
   await writeState(runDir, state);
   return state;
 }
@@ -261,7 +272,12 @@ export async function runFlow(slug, fn, opts = {}) {
   console.log(`  cdpUrl  : ${state.cdpUrl}`);
 
   let { browser, page } = await connectCdp(state);
-  const ctx = { state, get page() { return page; } };
+  const ctx = {
+    state,
+    get page() {
+      return page;
+    },
+  };
 
   let shotIdx = 0;
   ctx.shot = async (name) => {
@@ -296,7 +312,7 @@ export async function runFlow(slug, fn, opts = {}) {
     console.log(`  note    : ${m}`);
   };
 
-  let result, error;
+  let error, result;
   const t0 = Date.now();
   try {
     result = await fn(ctx);

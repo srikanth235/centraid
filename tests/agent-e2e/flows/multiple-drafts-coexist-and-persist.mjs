@@ -48,8 +48,7 @@ await runFlow('multiple-drafts-coexist-and-persist', async (ctx) => {
   ctx.note('TEMPLATES section still shows all three tiles after cloning');
 
   // ---- APPS section now holds all three drafts ----
-  const appsGrid = () =>
-    ctx.page.locator('.home-section-title:has-text("Apps") + .home-grid');
+  const appsGrid = () => ctx.page.locator('.home-section-title:has-text("Apps") + .home-grid');
   for (const name of TEMPLATES) {
     if (
       (await appsGrid().locator('.app-tile[data-draft="true"]', { hasText: name }).count()) === 0

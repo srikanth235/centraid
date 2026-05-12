@@ -22,11 +22,8 @@ await runFlow('delete-draft-wipes-disk-and-ui', async (ctx) => {
   await ctx.page.waitForSelector('.home', { timeout: 5000 });
   await ctx.shot('after-clone');
 
-  const appsGrid = () =>
-    ctx.page.locator('.home-section-title:has-text("Apps") + .home-grid');
-  const draft = appsGrid()
-    .locator('.app-tile[data-draft="true"]', { hasText: 'Hydrate' })
-    .first();
+  const appsGrid = () => ctx.page.locator('.home-section-title:has-text("Apps") + .home-grid');
+  const draft = appsGrid().locator('.app-tile[data-draft="true"]', { hasText: 'Hydrate' }).first();
   if ((await draft.count()) === 0) {
     throw new Error('Hydrate draft tile not present after clone');
   }
@@ -44,34 +41,28 @@ await runFlow('delete-draft-wipes-disk-and-ui', async (ctx) => {
   await ctx.shot('context-menu-open');
 
   // ---- step 3 — click "Delete draft" → confirm modal opens ----
-  await ctx.page
-    .locator('.ctx-item[data-danger="true"]', { hasText: 'Delete draft' })
-    .click();
+  await ctx.page.locator('.ctx-item[data-danger="true"]', { hasText: 'Delete draft' }).click();
   await ctx.page.waitForSelector('.modal-card[role="dialog"]:has-text("Delete draft?")');
   await ctx.shot('confirm-modal');
 
   // ---- step 4 — confirm ----
   await ctx.page.locator('.modal-card .btn-danger', { hasText: 'Delete' }).click();
   await ctx.page.waitForSelector('.modal-card', { state: 'detached', timeout: 5000 });
-  await ctx.page.waitForFunction(
-    () => !document.querySelector('.app-tile[data-draft="true"]'),
-  );
+  await ctx.page.waitForFunction(() => !document.querySelector('.app-tile[data-draft="true"]'));
   await ctx.shot('after-delete');
 
   // ---- step 5 — disk + UI both clean; template never went anywhere ----
   const afterDelete = await fs.readdir(ctx.state.projectsDir);
   if (afterDelete.length !== 0) {
-    throw new Error(
-      `project dir not removed on delete: still has ${afterDelete.join(', ')}`,
-    );
+    throw new Error(`project dir not removed on delete: still has ${afterDelete.join(', ')}`);
   }
   if ((await ctx.page.locator('.app-tile[data-draft="true"]').count()) !== 0) {
     throw new Error('a draft tile is still rendered after delete');
   }
-  if (
-    (await templatesGrid().locator('.app-tile', { hasText: 'Hydrate' }).count()) === 0
-  ) {
-    throw new Error('Hydrate template tile is missing from TEMPLATES — should always be present unless published');
+  if ((await templatesGrid().locator('.app-tile', { hasText: 'Hydrate' }).count()) === 0) {
+    throw new Error(
+      'Hydrate template tile is missing from TEMPLATES — should always be present unless published',
+    );
   }
   ctx.note('post-delete: 0 drafts, 0 project dirs, Hydrate still under TEMPLATES');
 
@@ -82,9 +73,7 @@ await runFlow('delete-draft-wipes-disk-and-ui', async (ctx) => {
   if ((await ctx.page.locator('.app-tile[data-draft="true"]').count()) !== 0) {
     throw new Error('a draft tile reappeared after restart — delete was not persisted');
   }
-  if (
-    (await templatesGrid().locator('.app-tile', { hasText: 'Hydrate' }).count()) === 0
-  ) {
+  if ((await templatesGrid().locator('.app-tile', { hasText: 'Hydrate' }).count()) === 0) {
     throw new Error('Hydrate template tile missing under TEMPLATES after restart');
   }
   ctx.note('post-restart: clean state preserved');

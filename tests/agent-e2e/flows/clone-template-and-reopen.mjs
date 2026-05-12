@@ -14,9 +14,7 @@ import { runFlow } from '../lib/harness.mjs';
 await runFlow('clone-template-and-reopen', async (ctx) => {
   // ---- step 1 — confirm a Hydrate template tile exists under TEMPLATES ----
   await ctx.shot('home-before');
-  const templatesGrid = ctx.page.locator(
-    '.home-section-title:has-text("Templates") + .home-grid',
-  );
+  const templatesGrid = ctx.page.locator('.home-section-title:has-text("Templates") + .home-grid');
   const hydrateTemplate = templatesGrid.locator('.app-tile', { hasText: 'Hydrate' }).first();
   if ((await hydrateTemplate.count()) === 0) {
     throw new Error('Hydrate template tile not found under TEMPLATES section');
