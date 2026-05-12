@@ -201,7 +201,7 @@ async function handleGatewayFetch(_appId: string, args: unknown): Promise<Gatewa
   // Merge caller headers with the bearer. Caller's existing Authorization
   // wins (lets tests override) but normally there isn't one — the shim
   // strips it before forwarding.
-  const headers: Record<string, string> = { ...authHeader(), ...(a.headers ?? {}) };
+  const headers: Record<string, string> = { ...authHeader(), ...a.headers };
 
   const init: RequestInit = {
     method: a.method ?? 'GET',

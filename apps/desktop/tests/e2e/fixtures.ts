@@ -77,7 +77,13 @@ export async function startMockGateway(): Promise<MockGateway> {
     },
     close() {
       return new Promise<void>((resolve, reject) => {
-        server.close((err) => (err ? reject(err) : resolve()));
+        server.close((err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve();
+        });
       });
     },
   };
