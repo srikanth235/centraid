@@ -218,13 +218,6 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
       el('div', { class: 'home-hero-copy' }, [
         el('h1', {}, 'Your tiny apps.'),
         el('p', {}, 'Build, continue, and open personal apps for the things you do every day.'),
-        el('div', { class: 'home-hero-actions' }, [
-          el('button', {
-            class: 'btn btn-primary',
-            trustedHtml: Icon.Plus({ size: 13, strokeWidth: 2.3 }) + '<span>New app</span>',
-            onClick: openNewAppSheet,
-          }),
-        ]),
       ]),
     ]);
 

@@ -83,16 +83,16 @@ export const lightTheme: Theme = {
 
 export const darkTheme: Theme = {
   accent: ACCENT,
-  bg: '#0d1014',
-  bgApp: '#060709',
-  bgElev: '#161a20',
-  bgSunken: '#090b0e',
-  bezel: '#050608',
-  bezelInner: '#14181F',
+  bg: '#1a1d23',
+  bgApp: '#13161b',
+  bgElev: '#252931',
+  bgSunken: '#15181d',
+  bezel: '#0a0c10',
+  bezelInner: '#181b21',
   deviceWall:
     'repeating-linear-gradient(0deg, transparent 0 23px, rgba(255,255,255,.025) 23px 24px), ' +
     'repeating-linear-gradient(90deg, transparent 0 23px, rgba(255,255,255,.025) 23px 24px), ' +
-    'linear-gradient(180deg, #0a0c10 0%, #050608 100%)',
+    'linear-gradient(180deg, #1d2027 0%, #15181d 100%)',
   ink: '#ECEEF2',
   ink2: 'rgba(236,238,242,0.70)',
   ink3: 'rgba(236,238,242,0.48)',
