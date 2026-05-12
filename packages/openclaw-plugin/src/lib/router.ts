@@ -15,6 +15,14 @@ export type Route =
   | { kind: 'app-version-activate'; appId: string }
   | { kind: 'app-version-delete'; appId: string; versionId: string }
   | { kind: 'app-schema'; appId: string }
+  | {
+      kind: 'app-table-rows';
+      appId: string;
+      tableName: string;
+      query: Record<string, string>;
+    }
+  | { kind: 'app-query'; appId: string }
+  | { kind: 'app-logs'; appId: string; query: Record<string, string> }
   | { kind: 'app-index'; appId: string }
   | { kind: 'app-static'; appId: string; rel: string }
   | { kind: 'app-data'; appId: string; queryName: string; query: Record<string, string> }
@@ -61,6 +69,19 @@ export function parseRoute(method: string, rawUrl: string): Route {
     }
     if (sub === 'schema' && segments.length === 3 && m === 'GET') {
       return { kind: 'app-schema', appId };
+    }
+    if (sub === 'data' && segments.length === 4 && m === 'GET') {
+      const tableName = decodeURIComponent(segments[3] ?? '');
+      if (!tableName) return { kind: 'not-found' };
+      const query = Object.fromEntries(url.searchParams.entries());
+      return { kind: 'app-table-rows', appId, tableName, query };
+    }
+    if (sub === 'query' && segments.length === 3 && m === 'POST') {
+      return { kind: 'app-query', appId };
+    }
+    if (sub === 'logs' && segments.length === 3 && m === 'GET') {
+      const query = Object.fromEntries(url.searchParams.entries());
+      return { kind: 'app-logs', appId, query };
     }
     if (sub === 'versions') {
       if (segments.length === 3 && m === 'GET') {

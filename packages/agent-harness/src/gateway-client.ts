@@ -1,4 +1,10 @@
-import type { AppSchema } from '@centraid/openclaw-plugin';
+import type {
+  AppSchema,
+  AppTableRows,
+  RunQueryResult,
+  LogEntry,
+  LogLevel,
+} from '@centraid/openclaw-plugin';
 import type { HarnessConfig, PublishResult } from './types.js';
 import { HarnessError } from './types.js';
 
@@ -152,6 +158,73 @@ export async function fetchAppSchema(
     return undefined;
   }
   return readJson<AppSchema>(res, 'fetch app schema');
+}
+
+/**
+ * Page of rows from a table (or view) in the app's `data.sqlite`. The
+ * gateway returns 404 if the table doesn't exist — surfaces as
+ * `HarnessError('not_found')`.
+ */
+export async function fetchAppTableRows(
+  config: HarnessConfig,
+  appId: string,
+  tableName: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<AppTableRows> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set('limit', String(opts.limit));
+  if (opts.offset !== undefined) params.set('offset', String(opts.offset));
+  const qs = params.toString();
+  const href = url(
+    config,
+    `/centraid/_apps/${encodeURIComponent(appId)}/data/${encodeURIComponent(tableName)}${qs ? `?${qs}` : ''}`,
+  );
+  const res = await fetchOrThrow(config, href, { method: 'GET', headers: authHeaders(config) });
+  return readJson<AppTableRows>(res, 'fetch table rows');
+}
+
+/**
+ * Run a single SQL statement against the app's `data.sqlite`. Returns
+ * either `{ kind: 'rows', columns, rows, durationMs }` for SELECT-style
+ * statements or `{ kind: 'exec', rowsAffected, lastInsertRowid, durationMs }`
+ * for INSERT / UPDATE / DELETE / DDL.
+ *
+ * Multi-statement input is rejected by the gateway with HTTP 400.
+ */
+export async function runAppQuery(
+  config: HarnessConfig,
+  appId: string,
+  sql: string,
+): Promise<RunQueryResult> {
+  const href = url(config, `/centraid/_apps/${encodeURIComponent(appId)}/query`);
+  const res = await fetchOrThrow(config, href, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(config) },
+    body: JSON.stringify({ sql }),
+  });
+  return readJson<RunQueryResult>(res, 'run query');
+}
+
+/**
+ * Tail of the app's persistent handler log. The gateway returns newest-
+ * first, capped at 500. `sinceTs` is the polling-friendly tail anchor.
+ */
+export async function fetchAppLogs(
+  config: HarnessConfig,
+  appId: string,
+  opts: { limit?: number; sinceTs?: number; level?: LogLevel } = {},
+): Promise<{ entries: LogEntry[] }> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set('limit', String(opts.limit));
+  if (opts.sinceTs !== undefined) params.set('sinceTs', String(opts.sinceTs));
+  if (opts.level) params.set('level', opts.level);
+  const qs = params.toString();
+  const href = url(
+    config,
+    `/centraid/_apps/${encodeURIComponent(appId)}/logs${qs ? `?${qs}` : ''}`,
+  );
+  const res = await fetchOrThrow(config, href, { method: 'GET', headers: authHeaders(config) });
+  return readJson<{ entries: LogEntry[] }>(res, 'fetch app logs');
 }
 
 /** URL the renderer should use to load the app's index.html in an iframe. */

@@ -87,6 +87,49 @@ export interface CentraidAppSchema {
 }
 
 /**
+ * One page of rows from a table or view in the app's `data.sqlite`. SQLite
+ * native values pass through verbatim — numbers, strings, `null`, and
+ * `Buffer` (serialised by `JSON.stringify` as `{ type: 'Buffer', data: [] }`).
+ */
+export interface CentraidAppTableRows {
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  totalCount: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Result of running one SQL statement via the Cloud → SQL editor.
+ * Discriminated on `kind`: SELECT/PRAGMA/EXPLAIN/WITH/VALUES → `'rows'`;
+ * INSERT/UPDATE/DELETE/DDL → `'exec'`.
+ */
+export type CentraidRunQueryResult =
+  | {
+      kind: 'rows';
+      columns: string[];
+      rows: Array<Record<string, unknown>>;
+      durationMs: number;
+    }
+  | {
+      kind: 'exec';
+      rowsAffected: number;
+      lastInsertRowid: number | null;
+      durationMs: number;
+    };
+
+export type CentraidLogLevel = 'info' | 'warn' | 'error';
+
+/** A single line written by `log.info/warn/error` (or a handler failure). */
+export interface CentraidLogEntry {
+  ts: number;
+  level: CentraidLogLevel;
+  msg: string;
+  source: 'query' | 'action' | 'cron';
+  handler: string;
+}
+
+/**
  * A bundled template, as surfaced by the desktop's templates IPC. Mirrors
  * `TemplateMeta` from `@centraid/app-templates` — duplicated here so the
  * renderer typings stay independent of the templates package at build time.
@@ -234,6 +277,31 @@ interface CentraidApi {
    * has nothing for this app yet (unregistered, or never published).
    */
   appSchema(input: { id: string }): Promise<CentraidAppSchema | undefined>;
+  /**
+   * One page of rows from a table or view. The gateway caps `limit` at 200
+   * server-side; defaults to 50. Throws if the table doesn't exist.
+   */
+  appTableRows(input: {
+    id: string;
+    table: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<CentraidAppTableRows>;
+  /**
+   * Run a single SQL statement against the app's `data.sqlite`. Multi-
+   * statement input is rejected by the gateway.
+   */
+  appQuery(input: { id: string; sql: string }): Promise<CentraidRunQueryResult>;
+  /**
+   * Newest-first tail of persistent handler logs. `sinceTs` is the
+   * polling-friendly anchor; pass the highest `ts` you've seen.
+   */
+  appLogs(input: {
+    id: string;
+    limit?: number;
+    sinceTs?: number;
+    level?: CentraidLogLevel;
+  }): Promise<{ entries: CentraidLogEntry[] }>;
   deregisterApp(input: { id: string }): Promise<{ id: string }>;
 
   /** List bundled templates from `@centraid/app-templates`. */
@@ -293,5 +361,33 @@ declare global {
     bytes: number;
     files: number;
     current?: boolean;
+  }
+  interface CentraidAppTableRows {
+    columns: string[];
+    rows: Array<Record<string, unknown>>;
+    totalCount: number;
+    limit: number;
+    offset: number;
+  }
+  type CentraidRunQueryResult =
+    | {
+        kind: 'rows';
+        columns: string[];
+        rows: Array<Record<string, unknown>>;
+        durationMs: number;
+      }
+    | {
+        kind: 'exec';
+        rowsAffected: number;
+        lastInsertRowid: number | null;
+        durationMs: number;
+      };
+  type CentraidLogLevel = 'info' | 'warn' | 'error';
+  interface CentraidLogEntry {
+    ts: number;
+    level: CentraidLogLevel;
+    msg: string;
+    source: 'query' | 'action' | 'cron';
+    handler: string;
   }
 }

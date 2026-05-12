@@ -242,6 +242,17 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
     // URL-bar state — populated by renderPreview() each time it resolves a src.
     let currentPreviewSrc: string | undefined;
     let currentPreviewKind: 'live' | 'local' | undefined;
+    // Cloud → Logs polling handle. Hoisted out of renderCloud's closure so
+    // that any code that tears down the right pane (renderRight, builder
+    // unmount, tab switch) can stop the poll regardless of which renderCloud
+    // call started it.
+    let cloudLogsPoll: ReturnType<typeof setInterval> | undefined;
+    const stopCloudLogsPoll = (): void => {
+      if (cloudLogsPoll) {
+        clearInterval(cloudLogsPoll);
+        cloudLogsPoll = undefined;
+      }
+    };
     let currentAiMsgIndex = -1; // index in `chat` of the streaming AI bubble
     let currentThinkingMsgIndex = -1; // index of the streaming thinking block
     let pendingToolStarts = new Map<string, number>(); // toolCallId → chat index
@@ -946,6 +957,9 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
     function renderRight(): void {
       rightPane.innerHTML = '';
       rightPane.classList.remove('preview-pane', 'has-phone');
+      // Always stop any in-flight cloud polling before re-rendering; the
+      // cloud branch below will restart it if logs is the active section.
+      stopCloudLogsPoll();
       if (tab === 'preview') void renderPreview();
       else if (tab === 'cloud') renderCloud();
       else void renderCode();
@@ -1286,12 +1300,12 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
       const sections: [CloudSection, string, (n?: number) => string, boolean][] = [
         ['overview', 'Overview', CloudOverviewIcon, true],
         ['database', 'Database', DatabaseIcon, true],
+        ['sql', 'SQL editor', SqlIcon, true],
+        ['logs', 'Logs', LogsIcon, true],
         ['users', 'Users', UsersIcon, false],
         ['storage', 'Storage', StorageIcon, false],
         ['secrets', 'Secrets', SecretsIcon, false],
         ['functions', 'Edge functions', FunctionsIcon, false],
-        ['sql', 'SQL editor', SqlIcon, false],
-        ['logs', 'Logs', LogsIcon, false],
       ];
 
       const cloudPane = el('div', { class: 'cloud-pane' });
@@ -1314,6 +1328,33 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
         | 'error';
       let openTable: string | undefined;
 
+      // Row-browser state — keyed by table name so flipping between two open
+      // tables remembers their pages.
+      type RowsState =
+        | { kind: 'idle' }
+        | { kind: 'pending' }
+        | { kind: 'error'; error: string }
+        | { kind: 'ready'; rows: CentraidAppTableRows };
+      const rowsCache = new Map<string, RowsState>();
+      const tablePage = new Map<string, number>();
+      const ROWS_PAGE_SIZE = 50;
+
+      // SQL editor state — survives rail navigation so a draft query isn't
+      // lost when the user pops over to Database and back.
+      let sqlDraft = '';
+      let sqlResult: CentraidRunQueryResult | undefined;
+      let sqlError: string | undefined;
+      let sqlRunning = false;
+
+      // Logs state — newest-first, polled every 3s while the tab is visible.
+      let logsCache: CentraidLogEntry[] | undefined | 'pending' | 'error';
+      let logsError: string | undefined;
+      let logsLevelFilter: CentraidLogLevel | 'all' = 'all';
+      let logsSearch = '';
+      // Uses the hoisted `cloudLogsPoll` + `stopCloudLogsPoll` so renderRight
+      // (which tears down the right pane on tab switch) can clear it.
+      const stopLogsPolling = stopCloudLogsPoll;
+
       const drawRail = (): void => {
         rail.innerHTML = '';
         for (const [key, label, renderIcon, ready] of sections) {
@@ -1325,6 +1366,7 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
               if (active === key) return;
               active = key;
               openTable = undefined;
+              if (key !== 'logs') stopLogsPolling();
               drawRail();
               drawStage();
             },
@@ -1380,7 +1422,11 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
             ? 'Tables, columns, and indexes from your live app database.'
             : active === 'overview'
               ? 'Status of your app on the gateway.'
-              : 'View and manage the data stored in your app.';
+              : active === 'sql'
+                ? 'Run SQL against your live app database. One statement at a time.'
+                : active === 'logs'
+                  ? 'Recent log lines from query, action, and cron handlers.'
+                  : 'View and manage the data stored in your app.';
 
         const head = el('div', { class: 'cloud-stage-head' });
         const headLeft = el('div', {});
@@ -1396,6 +1442,15 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
           });
           refreshBtn.innerHTML = `${RefreshIcon(13)}<span>Refresh</span>`;
           head.append(refreshBtn);
+        } else if (active === 'logs') {
+          const refreshBtn = el('button', {
+            'aria-label': 'Refresh logs',
+            class: 'btn btn-ghost cloud-refresh-btn',
+            title: 'Refresh logs',
+            onClick: () => void refreshLogs(),
+          });
+          refreshBtn.innerHTML = `${RefreshIcon(13)}<span>Refresh</span>`;
+          head.append(refreshBtn);
         }
         stage.append(head);
 
@@ -1403,6 +1458,10 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
           drawOverview();
         } else if (active === 'database') {
           drawDatabase();
+        } else if (active === 'sql') {
+          drawSqlEditor();
+        } else if (active === 'logs') {
+          drawLogs();
         } else {
           const empty = el('div', { class: 'cloud-empty' });
           empty.textContent =
@@ -1557,6 +1616,11 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
         }
         wrap.append(table);
 
+        // Row browser. Lives below the columns table so the user can see
+        // the schema and the data side by side. Kicks off the first fetch
+        // lazily — schema + row data are independent gateway calls.
+        wrap.append(renderRowBrowser(t.name));
+
         const tableIndexes = s.indexes.filter((i) => i.tbl_name === t.name);
         if (tableIndexes.length > 0) {
           const idxHead = el('div', { class: 'cloud-table-detail-head' });
@@ -1581,6 +1645,442 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
         }
 
         return wrap;
+      }
+
+      // Row browser fragment — header + (loading | error | empty | grid).
+      // Fetch + re-render are scoped to one table; switching tables makes a
+      // new fragment with its own cached state.
+      function renderRowBrowser(tableName: string): HTMLElement {
+        const wrap = el('div', { class: 'cloud-rows-wrap' });
+
+        const head = el('div', { class: 'cloud-table-detail-head' });
+        head.innerHTML = `<h3>Data</h3>`;
+        wrap.append(head);
+
+        const body = el('div', { class: 'cloud-rows-body' });
+        wrap.append(body);
+
+        const pager = el('div', { class: 'cloud-rows-pager' });
+        wrap.append(pager);
+
+        const page = tablePage.get(tableName) ?? 0;
+
+        const fetchRows = async (): Promise<void> => {
+          if (!projectId) return;
+          rowsCache.set(tableName, { kind: 'pending' });
+          paint();
+          try {
+            const r = await Api().appTableRows({
+              id: projectId,
+              table: tableName,
+              limit: ROWS_PAGE_SIZE,
+              offset: page * ROWS_PAGE_SIZE,
+            });
+            rowsCache.set(tableName, { kind: 'ready', rows: r });
+          } catch (err) {
+            rowsCache.set(tableName, {
+              kind: 'error',
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+          paint();
+        };
+
+        const paint = (): void => {
+          body.innerHTML = '';
+          pager.innerHTML = '';
+
+          const state = rowsCache.get(tableName) ?? { kind: 'idle' };
+          if (state.kind === 'idle' || state.kind === 'pending') {
+            body.append(el('div', { class: 'cloud-empty cloud-empty-quiet' }, 'Loading rows…'));
+            return;
+          }
+          if (state.kind === 'error') {
+            const e = el('div', { class: 'cloud-empty' });
+            e.innerHTML = `Could not load rows.<br><span class="cloud-stat-sub">${escapeHtml(state.error)}</span>`;
+            body.append(e);
+            return;
+          }
+
+          const r = state.rows;
+          if (r.totalCount === 0) {
+            body.append(el('div', { class: 'cloud-empty cloud-empty-quiet' }, 'No rows yet.'));
+            return;
+          }
+
+          const grid = el('div', { class: 'cloud-rows-grid' });
+          grid.style.gridTemplateColumns = `repeat(${r.columns.length}, minmax(120px, 1fr))`;
+
+          for (const c of r.columns) {
+            const cell = el('div', { class: 'cloud-rows-cell cloud-rows-head-cell' });
+            cell.textContent = c;
+            grid.append(cell);
+          }
+          for (const row of r.rows) {
+            for (const c of r.columns) {
+              const cell = el('div', { class: 'cloud-rows-cell' });
+              const v = row[c];
+              cell.append(renderCellValue(v));
+              grid.append(cell);
+            }
+          }
+          body.append(grid);
+
+          // Pager: show range + prev/next when total > page size.
+          const start = r.offset + 1;
+          const end = Math.min(r.offset + r.rows.length, r.totalCount);
+          const label = el('div', { class: 'cloud-rows-pager-label' });
+          label.textContent = `${start}–${end} of ${r.totalCount}`;
+          pager.append(label);
+
+          const prev = el(
+            'button',
+            {
+              class: 'btn btn-ghost cloud-rows-pager-btn',
+              disabled: page === 0 ? 'true' : null,
+              onClick: () => {
+                if (page === 0) return;
+                tablePage.set(tableName, page - 1);
+                void fetchRows();
+              },
+            },
+            'Prev',
+          );
+          const next = el(
+            'button',
+            {
+              class: 'btn btn-ghost cloud-rows-pager-btn',
+              disabled: end >= r.totalCount ? 'true' : null,
+              onClick: () => {
+                if (end >= r.totalCount) return;
+                tablePage.set(tableName, page + 1);
+                void fetchRows();
+              },
+            },
+            'Next',
+          );
+          pager.append(prev);
+          pager.append(next);
+        };
+
+        paint();
+        if ((rowsCache.get(tableName) ?? { kind: 'idle' }).kind === 'idle') {
+          void fetchRows();
+        }
+
+        return wrap;
+      }
+
+      // Render a single cell value. SQLite native types pass through as
+      // JS primitives; Buffers come through as `{ type: 'Buffer', data: [] }`.
+      // The renderer collapses each to a compact, monospace string.
+      function renderCellValue(v: unknown): HTMLElement {
+        if (v === null || v === undefined) {
+          return el('span', { class: 'cloud-cell-null' }, 'NULL');
+        }
+        if (typeof v === 'string') {
+          const span = el('span', { class: 'cloud-cell-text' });
+          span.textContent = v;
+          return span;
+        }
+        if (typeof v === 'number' || typeof v === 'bigint' || typeof v === 'boolean') {
+          const span = el('span', { class: 'cloud-cell-num' });
+          span.textContent = String(v);
+          return span;
+        }
+        // Object/array — including Buffer-shaped values. Stringify so the
+        // grid stays readable even for BLOB columns.
+        const span = el('span', { class: 'cloud-cell-json' });
+        try {
+          span.textContent = JSON.stringify(v);
+        } catch {
+          span.textContent = '[unserializable]';
+        }
+        return span;
+      }
+
+      // SQL editor section. Textarea + Run (Cmd/Ctrl-Enter) + result panel.
+      // Single statement; destructive statements (DROP/ALTER/DELETE/UPDATE
+      // /TRUNCATE/INSERT without WHERE — anything non-read) get a confirm
+      // dialog. Read-style statements run straight through.
+      function drawSqlEditor(): void {
+        if (!projectId) {
+          stage.append(el('div', { class: 'cloud-empty' }, 'No project yet.'));
+          return;
+        }
+
+        const wrap = el('div', { class: 'cloud-sql-editor' });
+
+        const textarea = el('textarea', {
+          class: 'cloud-sql-textarea',
+          spellcheck: 'false',
+          placeholder: 'SELECT * FROM …',
+        }) as HTMLTextAreaElement;
+        textarea.value = sqlDraft;
+        textarea.addEventListener('input', () => {
+          sqlDraft = textarea.value;
+        });
+        textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            void run();
+          }
+        });
+        wrap.append(textarea);
+
+        const controls = el('div', { class: 'cloud-sql-controls' });
+        const runBtn = el(
+          'button',
+          {
+            class: 'btn btn-primary cloud-sql-run-btn',
+            onClick: () => void run(),
+          },
+          sqlRunning ? 'Running…' : 'Run',
+        );
+        if (sqlRunning) (runBtn as HTMLButtonElement).disabled = true;
+        controls.append(runBtn);
+        const hint = el('span', { class: 'cloud-sql-hint' }, '⌘/Ctrl + Enter to run');
+        controls.append(hint);
+        wrap.append(controls);
+
+        const out = el('div', { class: 'cloud-sql-output' });
+        wrap.append(out);
+
+        const paintOutput = (): void => {
+          out.innerHTML = '';
+          if (sqlError) {
+            const e = el('div', { class: 'cloud-sql-error' });
+            e.textContent = sqlError;
+            out.append(e);
+            return;
+          }
+          if (!sqlResult) return;
+
+          if (sqlResult.kind === 'exec') {
+            const m = el('div', { class: 'cloud-sql-meta' });
+            const idPart =
+              sqlResult.lastInsertRowid !== null
+                ? ` · lastInsertRowid ${sqlResult.lastInsertRowid}`
+                : '';
+            m.textContent = `${sqlResult.rowsAffected} ${sqlResult.rowsAffected === 1 ? 'row' : 'rows'} affected · ${sqlResult.durationMs}ms${idPart}`;
+            out.append(m);
+            return;
+          }
+
+          const m = el('div', { class: 'cloud-sql-meta' });
+          m.textContent = `${sqlResult.rows.length} ${sqlResult.rows.length === 1 ? 'row' : 'rows'} · ${sqlResult.durationMs}ms`;
+          out.append(m);
+          if (sqlResult.rows.length === 0) {
+            out.append(el('div', { class: 'cloud-empty cloud-empty-quiet' }, 'No rows returned.'));
+            return;
+          }
+          const grid = el('div', { class: 'cloud-rows-grid' });
+          grid.style.gridTemplateColumns = `repeat(${sqlResult.columns.length}, minmax(120px, 1fr))`;
+          for (const c of sqlResult.columns) {
+            const cell = el('div', { class: 'cloud-rows-cell cloud-rows-head-cell' });
+            cell.textContent = c;
+            grid.append(cell);
+          }
+          for (const row of sqlResult.rows) {
+            for (const c of sqlResult.columns) {
+              const cell = el('div', { class: 'cloud-rows-cell' });
+              cell.append(renderCellValue(row[c]));
+              grid.append(cell);
+            }
+          }
+          out.append(grid);
+        };
+
+        paintOutput();
+        stage.append(wrap);
+
+        async function run(): Promise<void> {
+          if (sqlRunning) return;
+          const sql = sqlDraft.trim();
+          if (!sql) return;
+
+          // Destructive-statement confirm. Naive prefix check — false
+          // positives are acceptable (the user can still confirm) and
+          // false negatives are guarded by the gateway itself.
+          if (isDestructive(sql)) {
+            const ok = window.confirm(
+              'This SQL is not a read query (SELECT/PRAGMA/EXPLAIN). It may modify or delete data. Continue?',
+            );
+            if (!ok) return;
+          }
+
+          sqlRunning = true;
+          sqlError = undefined;
+          sqlResult = undefined;
+          drawStage(); // re-paint with disabled button + cleared output
+
+          try {
+            const r = await Api().appQuery({ id: projectId!, sql });
+            sqlResult = r;
+          } catch (err) {
+            sqlError = err instanceof Error ? err.message : String(err);
+          } finally {
+            sqlRunning = false;
+            drawStage();
+          }
+        }
+      }
+
+      function isDestructive(sql: string): boolean {
+        const first = sql.replace(/^\s*(--[^\n]*\n|\/\*[\s\S]*?\*\/|\s)+/, '').match(/^(\w+)/);
+        const kw = first?.[1]?.toUpperCase();
+        if (!kw) return false;
+        return !['SELECT', 'PRAGMA', 'EXPLAIN', 'WITH', 'VALUES'].includes(kw);
+      }
+
+      // Logs section. Newest-first list with level chips, search, and a 3s
+      // poll while the section is active. Polling pauses when the user
+      // navigates away (rail click in drawRail clears the handle).
+      function drawLogs(): void {
+        if (!projectId) {
+          stage.append(el('div', { class: 'cloud-empty' }, 'No project yet.'));
+          return;
+        }
+
+        const wrap = el('div', { class: 'cloud-logs' });
+
+        // Filter row — level chips + search box.
+        const filter = el('div', { class: 'cloud-logs-filter' });
+        const levels: Array<CentraidLogLevel | 'all'> = ['all', 'info', 'warn', 'error'];
+        for (const lvl of levels) {
+          const chip = el(
+            'button',
+            {
+              class: 'cloud-logs-chip',
+              'data-active': String(logsLevelFilter === lvl),
+              'data-level': lvl,
+              onClick: () => {
+                if (logsLevelFilter === lvl) return;
+                logsLevelFilter = lvl;
+                drawStage();
+              },
+            },
+            lvl === 'all' ? 'All' : lvl.charAt(0).toUpperCase() + lvl.slice(1),
+          );
+          filter.append(chip);
+        }
+        const search = el('input', {
+          class: 'cloud-logs-search',
+          placeholder: 'Filter…',
+          type: 'search',
+        }) as HTMLInputElement;
+        search.value = logsSearch;
+        search.addEventListener('input', () => {
+          logsSearch = search.value;
+          renderList();
+        });
+        filter.append(search);
+        wrap.append(filter);
+
+        const list = el('div', { class: 'cloud-logs-list' });
+        wrap.append(list);
+
+        const renderList = (): void => {
+          list.innerHTML = '';
+
+          if (logsCache === 'pending' || logsCache === undefined) {
+            list.append(el('div', { class: 'cloud-empty cloud-empty-quiet' }, 'Loading logs…'));
+            return;
+          }
+          if (logsCache === 'error') {
+            const e = el('div', { class: 'cloud-empty' });
+            e.innerHTML = `Could not load logs.<br><span class="cloud-stat-sub">${escapeHtml(logsError ?? 'unknown error')}</span>`;
+            list.append(e);
+            return;
+          }
+
+          const needle = logsSearch.trim().toLowerCase();
+          const filtered = logsCache.filter((entry) => {
+            if (logsLevelFilter !== 'all' && entry.level !== logsLevelFilter) return false;
+            if (!needle) return true;
+            return (
+              entry.msg.toLowerCase().includes(needle) ||
+              entry.handler.toLowerCase().includes(needle) ||
+              entry.source.toLowerCase().includes(needle)
+            );
+          });
+
+          if (filtered.length === 0) {
+            list.append(
+              el(
+                'div',
+                { class: 'cloud-empty cloud-empty-quiet' },
+                logsCache.length === 0
+                  ? 'No logs yet. Run a query or action to produce log lines.'
+                  : 'No logs match the current filter.',
+              ),
+            );
+            return;
+          }
+
+          for (const entry of filtered) {
+            const row = el('div', {
+              class: 'cloud-logs-row',
+              'data-level': entry.level,
+            });
+            const when = new Date(entry.ts);
+            const ts = `${pad2(when.getHours())}:${pad2(when.getMinutes())}:${pad2(when.getSeconds())}`;
+            row.append(el('span', { class: 'cloud-logs-ts' }, ts));
+            row.append(el('span', { class: 'cloud-logs-level' }, entry.level.toUpperCase()));
+            row.append(
+              el('span', { class: 'cloud-logs-source' }, `${entry.source}/${entry.handler}`),
+            );
+            const msg = el('span', { class: 'cloud-logs-msg' });
+            msg.textContent = entry.msg;
+            row.append(msg);
+            list.append(row);
+          }
+        };
+
+        renderList();
+        stage.append(wrap);
+
+        // Kick off first fetch + start polling.
+        if (logsCache === undefined) {
+          void refreshLogs();
+        }
+        stopLogsPolling();
+        cloudLogsPoll = setInterval(() => {
+          if (active !== 'logs') {
+            stopLogsPolling();
+            return;
+          }
+          void refreshLogs();
+        }, 3000);
+      }
+
+      async function refreshLogs(): Promise<void> {
+        if (!projectId) return;
+        if (logsCache === 'pending') return;
+        const prior = logsCache;
+        logsCache = 'pending';
+        // Only redraw if there was no prior data — polling refreshes shouldn't
+        // flash "Loading…" on every tick.
+        if (prior === undefined) {
+          if (active === 'logs') {
+            const list = stage.querySelector('.cloud-logs-list') as HTMLElement | null;
+            if (list)
+              list.innerHTML = '<div class="cloud-empty cloud-empty-quiet">Loading logs…</div>';
+          }
+        }
+        try {
+          const r = await Api().appLogs({ id: projectId, limit: 200 });
+          logsCache = r.entries;
+          logsError = undefined;
+        } catch (err) {
+          logsCache = 'error';
+          logsError = err instanceof Error ? err.message : String(err);
+        }
+        if (active === 'logs') drawStage();
+      }
+
+      function pad2(n: number): string {
+        return n < 10 ? `0${n}` : String(n);
       }
 
       drawRail();
