@@ -7,7 +7,14 @@
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
-import type { BridgeMethod, BridgeRequest, BridgeResponse } from './protocol';
+import { authHeader, getGatewayUrl, parseOrigin } from '../gateway';
+import type {
+  BridgeMethod,
+  BridgeRequest,
+  BridgeResponse,
+  GatewayFetchArgs,
+  GatewayFetchResult,
+} from './protocol';
 
 class BridgeFailureError extends Error {
   constructor(
@@ -165,9 +172,72 @@ async function handleTimerCancel(appId: string, args: unknown): Promise<void> {
   await Notifications.cancelScheduledNotificationAsync(scopedId(appId, `timer:${id}`));
 }
 
+// --- Gateway fetch proxy ---
+//
+// WKWebView/WebView's `source.headers` only attach to the initial document
+// GET — sub-resource fetches inside the page don't inherit the bearer
+// header. So the page's injected `window.fetch` shim routes any request
+// to the configured gateway origin (or relative `/centraid/...` URL)
+// through this method, where we attach the header on the native side.
+
+async function handleGatewayFetch(_appId: string, args: unknown): Promise<GatewayFetchResult> {
+  const a = (args ?? {}) as GatewayFetchArgs;
+  if (typeof a.url !== 'string' || a.url.length === 0) {
+    throw new BridgeFailureError('invalid_args', 'Missing "url"');
+  }
+  const gateway = getGatewayUrl();
+  if (!gateway) {
+    throw new BridgeFailureError('no_gateway', 'Gateway URL not configured.');
+  }
+  const requestedOrigin = parseOrigin(a.url);
+  const allowedOrigin = parseOrigin(gateway);
+  if (!requestedOrigin || requestedOrigin !== allowedOrigin) {
+    throw new BridgeFailureError(
+      'forbidden_origin',
+      `Refusing to proxy cross-origin request to ${requestedOrigin || a.url}`,
+    );
+  }
+
+  // Merge caller headers with the bearer. Caller's existing Authorization
+  // wins (lets tests override) but normally there isn't one — the shim
+  // strips it before forwarding.
+  const headers: Record<string, string> = { ...authHeader(), ...(a.headers ?? {}) };
+
+  const init: RequestInit = {
+    method: a.method ?? 'GET',
+    headers,
+  };
+  if (a.body !== undefined && a.method && a.method.toUpperCase() !== 'GET') {
+    init.body = a.body;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(a.url, init);
+  } catch (err) {
+    throw new BridgeFailureError(
+      'network_error',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
+  const outHeaders: Record<string, string> = {};
+  res.headers.forEach((value, key) => {
+    outHeaders[key] = value;
+  });
+  const body = await res.text();
+  return {
+    status: res.status,
+    statusText: res.statusText,
+    headers: outHeaders,
+    body,
+  };
+}
+
 // --- Public entry ---
 
 const HANDLERS: Record<BridgeMethod, (appId: string, args: unknown) => Promise<unknown>> = {
+  'gateway.fetch': handleGatewayFetch,
   'haptic.impact': (_appId, args) => handleHapticImpact(args),
   'haptic.selection': () => handleHapticSelection(),
   'haptic.success': () => handleHapticSuccess(),

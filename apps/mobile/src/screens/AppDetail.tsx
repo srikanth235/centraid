@@ -11,9 +11,17 @@ import type {
 import AppHeader from '../components/AppHeader';
 import Button from '../components/Button';
 import { colors, spacing, t } from '../theme';
-import { appLiveUrl, GatewayError, resolveAppMeta, type AppRegistryRow } from '../lib/gateway';
+import {
+  appLiveUrl,
+  getGatewayUrl,
+  GatewayError,
+  parseOrigin,
+  resolveAppMeta,
+  type AppRegistryRow,
+} from '../lib/gateway';
+import { fetchInlinedAppDocument, type InlinedDocument } from '../lib/asset-inliner';
 import { dispatch } from '../lib/bridge/dispatch';
-import { INJECTED_JS } from '../lib/bridge/injected';
+import { buildInjectedJs } from '../lib/bridge/injected';
 import { CENTRAID_HANDSHAKE, type BridgeRequest } from '../lib/bridge/protocol';
 import type { RootScreenProps } from '../navigation';
 
@@ -42,6 +50,17 @@ export default function AppDetailScreen({
     }
   }, [appId]);
 
+  // WKWebView's `source.headers` only attaches headers to the initial
+  // document GET — sub-resource loads (<script src>, <link href>) don't
+  // inherit them, so the gateway 401s those and the page's JS never runs.
+  // Workaround: native fetches the HTML + every referenced asset with
+  // the bearer attached and inlines them, then we hand the WebView a
+  // self-contained document. The page's runtime fetch() calls (e.g.
+  // `_data/list`, `_run`) are intercepted by the injected bridge shim
+  // and proxied through native — see lib/bridge/injected.ts.
+  const gatewayOrigin = useMemo(() => parseOrigin(getGatewayUrl()), []);
+  const injectedJs = useMemo(() => buildInjectedJs(gatewayOrigin), [gatewayOrigin]);
+
   // Display metadata: a fabricated RegistryRow gives `resolveAppMeta` the
   // shape it wants — we only need the id at this layer; resolution falls
   // back to a derived tile for unknown ids.
@@ -62,6 +81,29 @@ export default function AppDetailScreen({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>(undefined);
   const [reloadKey, setReloadKey] = useState(0);
+  const [doc, setDoc] = useState<InlinedDocument | undefined>(undefined);
+
+  // Fetch + inline the app's index.html each time we mount or retry.
+  useEffect(() => {
+    if (liveUrlOrError.kind !== 'ok') return;
+    let cancelled = false;
+    setDoc(undefined);
+    setLoadError(undefined);
+    setLoading(true);
+    fetchInlinedAppDocument(appId)
+      .then((d) => {
+        if (cancelled) return;
+        setDoc(d);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appId, reloadKey, liveUrlOrError.kind]);
 
   const handleNavStateChange = useCallback((event: WebViewNavigation): void => {
     setCanGoBack(event.canGoBack);
@@ -148,26 +190,27 @@ export default function AppDetailScreen({
         />
       ) : (
         <View style={styles.webWrap}>
-          <WebView
-            key={reloadKey}
-            ref={webViewRef}
-            source={{ uri: liveUrlOrError.url }}
-            onNavigationStateChange={handleNavStateChange}
-            onLoadStart={() => {
-              setLoading(true);
-              setLoadError(undefined);
-            }}
-            onLoadEnd={() => setLoading(false)}
-            onError={handleError}
-            onHttpError={handleHttpError}
-            onMessage={(event) => {
-              void handleMessage(event);
-            }}
-            injectedJavaScriptBeforeContentLoaded={INJECTED_JS}
-            style={styles.web}
-            allowsBackForwardNavigationGestures={false}
-            originWhitelist={['*']}
-          />
+          {doc ? (
+            <WebView
+              key={reloadKey}
+              ref={webViewRef}
+              source={{ html: doc.html, baseUrl: doc.baseUrl }}
+              onNavigationStateChange={handleNavStateChange}
+              onLoadStart={() => {
+                setLoading(true);
+              }}
+              onLoadEnd={() => setLoading(false)}
+              onError={handleError}
+              onHttpError={handleHttpError}
+              onMessage={(event) => {
+                void handleMessage(event);
+              }}
+              injectedJavaScriptBeforeContentLoaded={injectedJs}
+              style={styles.web}
+              allowsBackForwardNavigationGestures={false}
+              originWhitelist={['*']}
+            />
+          ) : null}
           {loading ? (
             <View style={styles.loadingOverlay} pointerEvents="none">
               <ActivityIndicator color={colors.ink3} />

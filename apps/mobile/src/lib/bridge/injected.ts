@@ -1,15 +1,26 @@
 // Source for the JS injected into every app WebView. Defines
 // `window.centraid` and routes calls through `window.ReactNativeWebView.postMessage`.
 //
-// Kept as a plain string so it can be passed verbatim to react-native-webview's
-// `injectedJavaScriptBeforeContentLoaded` prop. The body is wrapped in an IIFE
-// to avoid leaking helpers onto the page.
+// The body is wrapped in an IIFE to avoid leaking helpers onto the page. We
+// also patch `window.fetch` so that any in-page request to the configured
+// gateway origin (or relative `/centraid/...` path) is proxied through the
+// bridge — that's where native attaches the bearer token. WKWebView's
+// `source.headers` only covers the initial document GET, not sub-resource
+// fetches the page itself makes.
 
 import { CENTRAID_HANDSHAKE } from './protocol';
 
-export const INJECTED_JS = `(function () {
+/**
+ * Build the JS to inject into a WebView pointed at `gatewayOrigin`. The
+ * origin is baked in at injection time so the fetch shim can recognize
+ * which requests to proxy without re-asking native.
+ */
+export function buildInjectedJs(gatewayOrigin: string): string {
+  const origin = JSON.stringify(gatewayOrigin);
+  return `(function () {
   if (window.centraid) return;
   var handshake = ${JSON.stringify(CENTRAID_HANDSHAKE)};
+  var gatewayOrigin = ${origin};
   var pending = new Map();
   var nextId = 1;
 
@@ -65,4 +76,75 @@ export const INJECTED_JS = `(function () {
       cancel: function (id) { return send('timer.cancel', { id: id }); },
     },
   };
+
+  // --- fetch shim ---
+  // Resolve a request URL against the page origin so we can compare against
+  // the configured gateway. Relative URLs (the common case for in-page
+  // _data/_run calls) resolve against the WebView's location, which is the
+  // gateway origin itself.
+  function resolveUrl(input) {
+    if (typeof input === 'string') {
+      try { return new URL(input, window.location.href).toString(); } catch (e) { return input; }
+    }
+    if (input && typeof input.url === 'string') return input.url;
+    return String(input);
+  }
+
+  function isGatewayUrl(u) {
+    if (!gatewayOrigin) return false;
+    try { return new URL(u).origin === gatewayOrigin; } catch (e) { return false; }
+  }
+
+  function headersToObject(h) {
+    var out = {};
+    if (!h) return out;
+    if (typeof Headers !== 'undefined' && h instanceof Headers) {
+      h.forEach(function (v, k) { out[k] = v; });
+      return out;
+    }
+    if (Array.isArray(h)) {
+      for (var i = 0; i < h.length; i++) { out[h[i][0]] = h[i][1]; }
+      return out;
+    }
+    if (typeof h === 'object') {
+      for (var k in h) { if (Object.prototype.hasOwnProperty.call(h, k)) out[k] = h[k]; }
+    }
+    return out;
+  }
+
+  var nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  window.fetch = function (input, init) {
+    var url = resolveUrl(input);
+    if (!isGatewayUrl(url)) {
+      return nativeFetch ? nativeFetch(input, init) : Promise.reject(new Error('fetch unavailable'));
+    }
+    var method = (init && init.method) || (input && input.method) || 'GET';
+    var headers = headersToObject(init && init.headers);
+    var bodyText;
+    if (init && init.body != null) {
+      bodyText = typeof init.body === 'string' ? init.body : String(init.body);
+    }
+    return send('gateway.fetch', {
+      url: url,
+      method: method,
+      headers: headers,
+      body: bodyText,
+    }).then(function (r) {
+      // The bridge returns body as text; reconstruct a Response so callers
+      // can use .json()/.text() as if it had come from the network.
+      return new Response(r.body, {
+        status: r.status,
+        statusText: r.statusText,
+        headers: r.headers,
+      });
+    });
+  };
 })(); true;`;
+}
+
+/**
+ * @deprecated Use `buildInjectedJs(gatewayOrigin)` so the fetch shim can
+ * recognize gateway-origin requests. Kept for callers that don't have an
+ * origin handy; the fetch shim becomes a no-op.
+ */
+export const INJECTED_JS = buildInjectedJs('');

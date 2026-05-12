@@ -4,27 +4,36 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import Button from '../components/Button';
 import { colors, radii, spacing, t } from '../theme';
-import { hydrateGatewayUrl, setGatewayUrl } from '../lib/gateway';
+import {
+  hydrateGatewayToken,
+  hydrateGatewayUrl,
+  setGatewayToken,
+  setGatewayUrl,
+} from '../lib/gateway';
 import type { RootScreenProps } from '../navigation';
 
-// Mobile-only settings — not synced with desktop. v1 is just the gateway
-// URL: user enters their desktop's LAN IP (e.g. http://192.168.1.42:18789)
-// since 127.0.0.1 from a phone points at the phone itself.
+// Mobile-only settings — not synced with desktop. The user enters their
+// desktop's LAN IP (e.g. http://192.168.1.42:18789) since 127.0.0.1 from a
+// phone points at the phone itself, plus the gateway bearer token shown in
+// the desktop app under Settings → Gateway info.
 export default function SettingsScreen({
   navigation,
 }: RootScreenProps<'Settings'>): React.JSX.Element {
-  const [value, setValue] = useState('');
+  const [urlValue, setUrlValue] = useState('');
+  const [tokenValue, setTokenValue] = useState('');
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    hydrateGatewayUrl().then((current) => {
-      setValue(current);
+    Promise.all([hydrateGatewayUrl(), hydrateGatewayToken()]).then(([url, token]) => {
+      setUrlValue(url);
+      setTokenValue(token);
       setHydrated(true);
     });
   }, []);
 
   const save = (): void => {
-    setGatewayUrl(value);
+    setGatewayUrl(urlValue);
+    setGatewayToken(tokenValue);
     navigation.goBack();
   };
 
@@ -51,14 +60,32 @@ export default function SettingsScreen({
           http://192.168.1.42:18789.
         </Text>
         <TextInput
-          value={value}
-          onChangeText={setValue}
+          value={urlValue}
+          onChangeText={setUrlValue}
           placeholder="http://192.168.1.42:18789"
           placeholderTextColor={colors.ink3}
           style={styles.input}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"
+          editable={hydrated}
+        />
+
+        <View style={styles.spacer} />
+        <Text style={styles.sectionLabel}>Gateway token</Text>
+        <Text style={styles.help}>
+          Bearer token from the desktop app's gateway settings. Required when the desktop gateway
+          enforces token auth — leave blank otherwise.
+        </Text>
+        <TextInput
+          value={tokenValue}
+          onChangeText={setTokenValue}
+          placeholder="paste token here"
+          placeholderTextColor={colors.ink3}
+          style={styles.input}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
           editable={hydrated}
         />
 
@@ -100,5 +127,6 @@ const styles = StyleSheet.create({
   },
   safe: { backgroundColor: colors.bg, flex: 1 },
   sectionLabel: { ...t('small'), color: colors.ink2, fontWeight: '600', marginBottom: 6 },
+  spacer: { height: spacing[5] },
   title: { ...t('title'), color: colors.ink },
 });

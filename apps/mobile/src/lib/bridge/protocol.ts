@@ -8,7 +8,31 @@ export type BridgeMethod =
   | 'haptic.selection'
   | 'haptic.success'
   | 'timer.startBackground'
-  | 'timer.cancel';
+  | 'timer.cancel'
+  | 'gateway.fetch';
+
+/**
+ * Args for `gateway.fetch`. The injected `window.fetch` shim intercepts
+ * gateway-origin (and relative `/centraid/...`) requests and routes them
+ * through this method so native can attach the bearer header.
+ */
+export interface GatewayFetchArgs {
+  /** Absolute URL — origin must match the configured gateway. */
+  url: string;
+  method?: string;
+  /** Pre-flattened headers ({} when absent). */
+  headers?: Record<string, string>;
+  /** Body as text. Binary bodies aren't supported (centraid handlers don't need them). */
+  body?: string;
+}
+
+export interface GatewayFetchResult {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  /** Response body as text. */
+  body: string;
+}
 
 export interface BridgeRequest {
   /** Correlator chosen by the WebView caller. */
