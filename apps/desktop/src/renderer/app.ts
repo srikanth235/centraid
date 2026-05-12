@@ -429,36 +429,132 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     } else if (id === 'update') {
       enterBuilder({ appContext: app });
     } else if (id === 'delete') {
-      deleteApp(app);
+      void deleteApp(app);
     } else if (id === 'share') {
       openShareDialog(app);
     }
   }
 
-  function deleteApp(app: AppMetaResolvedType): void {
-    if (isDraft(app)) {
-      // Drafts only live on disk. Wipe the project directory; on success,
-      // re-render so the tile disappears.
-      void window.CentraidApi.deleteProject({ id: app.id })
-        .then(() => {
-          showToast(`Deleted draft "${app.name}"`);
-          renderHome();
-        })
-        .catch((err) => showToast(`Could not delete draft: ${String(err)}`));
+  async function deleteApp(app: AppMetaResolvedType): Promise<void> {
+    const draft = isDraft(app);
+    const ok = await openConfirm({
+      confirmLabel: 'Delete',
+      danger: true,
+      message: draft
+        ? `Delete the draft "${app.name}"? Its project files will be removed from disk.`
+        : `Delete "${app.name}"? This removes it from the gateway and wipes its local project files. Data published to the gateway cannot be recovered.`,
+      title: draft ? 'Delete draft?' : 'Delete app?',
+    });
+    if (!ok) return;
+
+    if (draft) {
+      try {
+        await window.CentraidApi.deleteProject({ id: app.id });
+        showToast(`Deleted draft "${app.name}"`);
+      } catch (err) {
+        showToast(`Could not delete draft: ${String(err)}`);
+      }
+      renderHome();
       return;
     }
-    // Best-effort: tell the gateway to forget the app too.
+
+    // Gateway is the source of truth — if deregister fails for anything other
+    // than 404 (already gone), keep the tile so the user can retry rather than
+    // silently leaking an orphan registration on the gateway.
     const ua = findUserApp(app.id);
     if (ua?.centraidProjectId) {
-      void window.CentraidApi.deregisterApp({ id: ua.centraidProjectId }).catch(() => undefined);
+      try {
+        await window.CentraidApi.deregisterApp({ id: ua.centraidProjectId });
+      } catch (err) {
+        const msg = String(err);
+        if (!/404|not_found/i.test(msg)) {
+          showToast(`Could not delete "${app.name}" from gateway: ${msg}`);
+          return;
+        }
+      }
     }
-    // Also remove the project files on disk so a freshly-deleted user
-    // app doesn't reappear as a draft on the next render.
-    void window.CentraidApi.deleteProject({ id: app.id }).catch(() => undefined);
+
+    // Disk cleanup is best-effort — the gateway side is already consistent.
+    let diskWarn: string | null = null;
+    try {
+      await window.CentraidApi.deleteProject({ id: app.id });
+    } catch (err) {
+      diskWarn = String(err);
+    }
+
     userApps = userApps.filter((a) => a.id !== app.id);
     persist();
-    showToast(`Removed "${app.name}"`);
     renderHome();
+    if (diskWarn) {
+      showToast(`Removed "${app.name}" — local files may linger: ${diskWarn}`);
+    } else {
+      showToast(`Removed "${app.name}"`);
+    }
+  }
+
+  function openConfirm(opts: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    danger?: boolean;
+  }): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result: boolean): void => {
+        if (settled) return;
+        settled = true;
+        document.removeEventListener('keydown', onKey);
+        backdrop.remove();
+        card.remove();
+        resolve(result);
+      };
+
+      const backdrop = el('div', { class: 'modal-backdrop', onClick: () => finish(false) });
+      const card = el('div', {
+        'aria-label': opts.title,
+        class: 'modal-card',
+        role: 'dialog',
+      });
+      const closeBtn = el('button', {
+        'aria-label': 'Close',
+        class: 'btn-icon modal-close',
+        trustedHtml: Icon.X({ size: 16 }),
+        onClick: () => finish(false),
+      });
+      const cancelBtn = el(
+        'button',
+        { class: 'btn btn-ghost', onClick: () => finish(false) },
+        'Cancel',
+      );
+      const confirmBtn = el(
+        'button',
+        {
+          class: opts.danger ? 'btn btn-danger' : 'btn btn-primary',
+          onClick: () => finish(true),
+        },
+        opts.confirmLabel ?? 'Confirm',
+      );
+
+      card.append(closeBtn);
+      card.append(el('h3', {}, opts.title));
+      card.append(el('p', {}, opts.message));
+      card.append(el('div', { class: 'sheet-actions' }, [cancelBtn, confirmBtn]));
+
+      function onKey(e: KeyboardEvent): void {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        }
+      }
+      document.addEventListener('keydown', onKey);
+
+      document.body.append(backdrop);
+      document.body.append(card);
+      setTimeout(() => confirmBtn.focus(), 30);
+    });
   }
 
   // ---------- New app flow ----------
@@ -951,7 +1047,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
           el('button', {
             class: 'btn btn-ghost',
             trustedHtml: Icon.Trash({ size: 14 }) + '<span>Delete</span>',
-            onClick: () => deleteApp(app),
+            onClick: () => void deleteApp(app),
           }),
         ]),
       ]),

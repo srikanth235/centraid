@@ -13,6 +13,7 @@
     "dev": "bun run build && electron .",
     "start": "electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:e2e": "bun run build && playwright test -c tests/e2e/playwright.config.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^22.0.0",
     "electron": "^33.0.0",
     "typescript": "catalog:"

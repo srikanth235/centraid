@@ -157,6 +157,13 @@ textarea {
 .btn-primary:hover {
   background: color-mix(in oklab, var(--accent) 88%, black);
 }
+.btn-danger {
+  background: var(--c-rose);
+  color: white;
+}
+.btn-danger:hover {
+  background: color-mix(in oklab, var(--c-rose) 88%, black);
+}
 .btn-soft {
   background: color-mix(in oklab, var(--ink) 6%, transparent);
   color: var(--ink);

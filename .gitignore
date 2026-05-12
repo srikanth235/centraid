@@ -7,3 +7,5 @@ out
 *.log
 .meridian-cache
 .env
+test-results
+playwright-report

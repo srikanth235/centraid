@@ -29,6 +29,7 @@ import { serveStatic } from './lib/static-server.js';
 import { getHeader, isLoopback, readBody, sendError, sendJson } from './lib/http-utils.js';
 import { timingSafeEqual } from './lib/security.js';
 import { appCodeDir, appDataDir } from './lib/app-paths.js';
+import { cleanupDeregisteredApp } from './lib/deregister-cleanup.js';
 import { runPendingMigrations, MigrationError } from './lib/migrate.js';
 import { readAppSchema } from './lib/schema.js';
 import { extractAgentFinalText, tryParseJson } from './lib/payload.js';
@@ -199,6 +200,7 @@ export default definePluginEntry({
               await cronSync.removeAppCrons(route.appId);
               const removed = await registry.deregister(route.appId);
               if (!removed) return sendError(res, 404, 'not_found', 'App not registered.');
+              await cleanupDeregisteredApp(appsDir, removed, api.logger);
               return sendJson(res, 200, { id: route.appId });
             }
 

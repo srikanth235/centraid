@@ -358,7 +358,7 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
     const primaryBtn = el('button', { class: 'btn btn-primary' });
     primaryBtn.innerHTML = Icon.Plus({ size: 13 }) + '<span>Add to home</span>';
     primaryBtn.addEventListener('click', () => {
-      void handlePublish({ andAddToHome: isNewBuild });
+      void handlePublish();
     });
     if (isUpdateMode) {
       // Update mode reuses the publish flow; the label reflects the gateway
@@ -2050,7 +2050,7 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
     }
 
     // ---------- Publish ----------
-    async function handlePublish(opts: { andAddToHome: boolean }): Promise<void> {
+    async function handlePublish(): Promise<void> {
       if (!projectId) {
         showToast('No project to publish');
         return;
@@ -2077,7 +2077,7 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
         showToast(`Published ${shortVersionTitle(result)}${migText}`);
         if (chatView === 'history') renderChatPane();
         if (tab === 'preview') renderRight();
-        if (opts.andAddToHome && onAddToHome) {
+        if (onAddToHome) {
           onAddToHome({
             prompt: initialPrompt,
             projectId,
