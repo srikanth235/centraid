@@ -10,12 +10,16 @@ which sets the conventions this one inherits).
 A loose, exploratory complement to whatever scripted-mobile tier
 eventually lands in `apps/mobile/tests/e2e/` (Detox is the planned
 inhabitant — not wired up yet). The harness ([`lib/harness.mjs`](lib/harness.mjs))
-discovers a booted iOS Simulator, checks `com.centraid.mobile` is
-installed and Metro is reachable, allocates a run dir, and exposes a
-`ctx` surface (`run`, `restart`, `note`) to the flow body via
-`runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns `maestro test` once
-with cwd set to the run's `screenshots/` dir, so `takeScreenshot:`
-directives land there.
+discovers a booted iOS Simulator **or Android emulator**, checks
+`com.centraid.mobile` is installed and Metro is reachable, allocates a
+run dir, and exposes a `ctx` surface (`run`, `restart`, `note`) to the
+flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns
+`maestro test` once with cwd set to the run's `screenshots/` dir, so
+`takeScreenshot:` directives land there.
+
+`MAESTRO_PLATFORM=ios|android` forces a target when both are running;
+otherwise iOS is preferred. `state.json` and `verdict.md` record the
+chosen platform alongside the udid.
 
 The structural payoff over flat YAML is **`ctx.restart()`** (stopApp +
 relaunch without clearing state) and **on-disk verification via
@@ -90,18 +94,26 @@ workspaces like desktop's `userData`.
   matcher is unreliable on RN `TextInput` values (the value is in
   `inspect_view_hierarchy` under both `text=` and `value=`, but
   `assertVisible: "<substring>"` against it doesn't match). For
-  AsyncStorage assertions, read
-  `<dataDir>/Library/Application Support/com.centraid.mobile/RCTAsyncLocalStorage_V1/manifest.json`
-  directly. Values there are double-JSON-encoded — `JSON.parse`
-  twice.
+  AsyncStorage assertions, read it directly via platform-specific
+  paths:
+  - **iOS**: `xcrun simctl get_app_container <udid> com.centraid.mobile data`
+    then `Library/Application Support/com.centraid.mobile/RCTAsyncLocalStorage_V1/manifest.json`.
+  - **Android**: `adb -s <udid> shell run-as com.centraid.mobile cat databases/RKStorage` —
+    RKStorage is a SQLite DB; query with `sqlite3 :memory: '.read /dev/stdin' "SELECT * FROM catalystLocalStorage WHERE key='centraid.v1.settings.gatewayUrl';"`.
+    Or `adb pull` it to host disk first.
+
+  Values are double-JSON-encoded (Store.set runs JSON.stringify, the
+  storage layer wraps the result) — `JSON.parse` twice.
 - **Batch directives per `ctx.run()`.** Each call costs ~hundreds of
   ms (process spawn + Maestro warm-up + driver handshake). 15
   separate `ctx.run()` calls is a minute of overhead. Group them.
-- **Keep flows short.** Maestro `2.0-dev.1`'s iOS driver gets flaky
-  past ~10 commands on iOS 26.4 — driver disconnects during text
-  input, `kAXErrorInvalidUIElement` from the accessibility tree.
+- **Keep iOS flows short.** Maestro `2.0-dev.1`'s iOS driver gets
+  flaky past ~10 commands on iOS 26.4 — driver disconnects during
+  text input, `kAXErrorInvalidUIElement` from the accessibility tree.
   Not a flow-author bug; it's a known prerelease-toolchain issue.
-  See "Known caveats" in [README.md](README.md#known-caveats).
+  Android (UIAutomator2) is more stable — when a flow needs to be
+  long, validate it on Android first. See "Known caveats" in
+  [README.md](README.md#known-caveats).
 - **Selectors prefer accessibility text over coordinates.** RN
   components expose `accessibilityLabel` as the iOS-level
   accessibility text — Maestro's `tapOn: { text: "..." }` matches

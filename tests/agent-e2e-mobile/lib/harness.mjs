@@ -12,8 +12,8 @@
 //      so flows batch many directives per call instead of one-per-action.
 //
 // Side CLI for ad-hoc debugging:
-//   node lib/harness.mjs setup         -> JSON with runId, udid, runDir
-//   node lib/harness.mjs list-devices  -> JSON with first booted iOS udid
+//   node lib/harness.mjs setup         -> JSON with runId, platform, udid, runDir
+//   node lib/harness.mjs list-devices  -> JSON with first booted device
 
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -71,13 +71,74 @@ async function bootedIosSim() {
   return null;
 }
 
-async function appInstalled(udid, appId) {
+// Pick the first online Android device (emulator or USB). `adb devices`
+// prints "List of devices attached" then `<serial>\t<state>` per line —
+// state is `device` for ready, `offline` / `unauthorized` otherwise.
+async function bootedAndroidEmu() {
   try {
-    await spawnText('xcrun', ['simctl', 'get_app_container', udid, appId, 'app']);
-    return true;
+    const out = await spawnText('adb', ['devices']);
+    for (const line of out.split('\n').slice(1)) {
+      const [serial, state] = line.split('\t');
+      if (state?.trim() === 'device' && serial) return serial.trim();
+    }
+  } catch {
+    // adb not installed or daemon refused — no Android target.
+  }
+  return null;
+}
+
+// Pick a booted device. MAESTRO_PLATFORM=ios|android forces a side;
+// otherwise iOS first (legacy behavior), Android fallback.
+async function bootedDevice() {
+  const force = process.env.MAESTRO_PLATFORM;
+  if (force === 'android') {
+    const udid = await bootedAndroidEmu();
+    return udid ? { udid, platform: 'android' } : null;
+  }
+  if (force === 'ios') {
+    const udid = await bootedIosSim();
+    return udid ? { udid, platform: 'ios' } : null;
+  }
+  const ios = await bootedIosSim();
+  if (ios) return { udid: ios, platform: 'ios' };
+  const android = await bootedAndroidEmu();
+  if (android) return { udid: android, platform: 'android' };
+  return null;
+}
+
+async function appInstalled(device, appId) {
+  if (device.platform === 'ios') {
+    try {
+      await spawnText('xcrun', ['simctl', 'get_app_container', device.udid, appId, 'app']);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  // Android: `adb shell pm list packages <appId>` echoes `package:<appId>`
+  // when installed, empty output otherwise. Exit code is 0 either way.
+  try {
+    const out = await spawnText('adb', [
+      '-s',
+      device.udid,
+      'shell',
+      'pm',
+      'list',
+      'packages',
+      appId,
+    ]);
+    return out.includes(`package:${appId}`);
   } catch {
     return false;
   }
+}
+
+// Forward the Android emulator's `localhost:8081` to the host's
+// `localhost:8081` so the Expo dev client (which fetches the JS bundle
+// from `localhost:8081` by default) can reach Metro on the dev machine.
+// iOS Simulator shares the host network so no reverse is needed there.
+async function ensureMetroReverseForAndroid(udid) {
+  await spawnText('adb', ['-s', udid, 'reverse', 'tcp:8081', 'tcp:8081']);
 }
 
 // The Expo dev build fetches its JS bundle from Metro at runtime. If
@@ -96,17 +157,26 @@ async function metroReachable() {
 }
 
 export async function setup({ runId } = {}) {
-  const udid = await bootedIosSim();
-  if (!udid) {
+  const device = await bootedDevice();
+  if (!device) {
     throw new Error(
-      'No booted iOS Simulator. Open Simulator.app (or `xcrun simctl boot <udid>`), ' +
-        'then run `bun run --filter=@centraid/mobile ios` to install the dev build.',
+      'No booted iOS Simulator or Android emulator. For iOS: open Simulator.app ' +
+        '(or `xcrun simctl boot <udid>`) then `bun run --filter=@centraid/mobile ios`. ' +
+        'For Android: start an AVD via `emulator @<name>` (or Android Studio) then ' +
+        '`bun run --filter=@centraid/mobile android`. Set MAESTRO_PLATFORM=ios|android ' +
+        'to force a side when both are present.',
     );
   }
-  if (!(await appInstalled(udid, APP_ID))) {
+  if (!(await appInstalled(device, APP_ID))) {
     throw new Error(
-      `Centraid.app not installed on sim ${udid}. Run \`bun run --filter=@centraid/mobile ios\` first.`,
+      `${APP_ID} not installed on ${device.platform} device ${device.udid}. ` +
+        `Run \`bun run --filter=@centraid/mobile ${device.platform}\` first.`,
     );
+  }
+  if (device.platform === 'android') {
+    // Must happen before metroReachable(): the dev client reaches Metro via
+    // the reverse forward, but the harness's own fetch goes directly.
+    await ensureMetroReverseForAndroid(device.udid);
   }
   if (!(await metroReachable())) {
     throw new Error(
@@ -121,17 +191,30 @@ export async function setup({ runId } = {}) {
   await fs.mkdir(screenshotsDir, { recursive: true });
   await fs.mkdir(flowsDir, { recursive: true });
 
-  const state = { runId: id, runDir, screenshotsDir, flowsDir, udid, appId: APP_ID };
+  const state = {
+    runId: id,
+    runDir,
+    screenshotsDir,
+    flowsDir,
+    udid: device.udid,
+    platform: device.platform,
+    appId: APP_ID,
+  };
   await fs.writeFile(path.join(runDir, 'state.json'), JSON.stringify(state, null, 2));
   return state;
 }
 
 // Write the YAML chunk into flows/ for the audit trail and execute it with
 // cwd = screenshots/, so `takeScreenshot: foo` lands at runs/.../screenshots/foo.png.
+// `--udid` pins Maestro to the chosen device — without it Maestro picks any
+// connected target, which silently runs flows on the wrong platform when
+// both an iOS sim and an Android emulator are booted.
 async function runMaestroChunk(yaml, { state, label }) {
   const flowFile = path.join(state.flowsDir, `${label}.yaml`);
   await fs.writeFile(flowFile, yaml);
-  await spawnLive('maestro', ['test', flowFile], { cwd: state.screenshotsDir });
+  await spawnLive('maestro', ['--udid', state.udid, 'test', flowFile], {
+    cwd: state.screenshotsDir,
+  });
 }
 
 function renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }) {
@@ -141,6 +224,7 @@ function renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }) {
     `**${pass ? 'PASS' : 'FAIL'}** — ${elapsedMs}ms`,
     '',
     `- run dir: \`${state.runDir}\``,
+    `- platform: \`${state.platform}\``,
     `- udid: \`${state.udid}\``,
     `- app: \`${state.appId}\``,
     '',
@@ -204,7 +288,7 @@ export async function runFlow(slug, fn) {
   const state = await setup({ runId: `${slug}-${defaultRunId()}` });
   console.log(`[runFlow] ${slug}`);
   console.log(`  run dir : ${path.relative(REPO_ROOT, state.runDir)}`);
-  console.log(`  udid    : ${state.udid}`);
+  console.log(`  target  : ${state.platform} ${state.udid}`);
 
   let stepIdx = 0;
   const nextLabel = (hint) => {
@@ -275,7 +359,7 @@ if (cmd) {
   try {
     let out;
     if (cmd === 'setup') out = await setup();
-    else if (cmd === 'list-devices') out = { udid: await bootedIosSim() };
+    else if (cmd === 'list-devices') out = await bootedDevice();
     else {
       console.error(`unknown command: ${cmd}`);
       process.exit(1);
