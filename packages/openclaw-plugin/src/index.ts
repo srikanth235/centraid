@@ -1,7 +1,7 @@
 /*
  * @centraid/openclaw-plugin
  *
- * governance: allow-repo-hygiene file-size-limit single-plugin-entry-point at 503 lines
+ * governance: allow-repo-hygiene file-size-limit single-plugin-entry-point at 540 lines
  *
  * Mounts a single `/centraid` prefix on the OpenClaw gateway and dispatches
  * to user-generated apps. Apps may be:
@@ -34,6 +34,7 @@ import { appCodeDir, appDataDir } from './lib/app-paths.js';
 import { cleanupDeregisteredApp } from './lib/deregister-cleanup.js';
 import { runPendingMigrations, MigrationError } from './lib/migrate.js';
 import { readAppSchema } from './lib/schema.js';
+import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './lib/cloud-routes.js';
 import { extractAgentFinalText, tryParseJson } from './lib/payload.js';
 import { makeAppUploadLocks } from './lib/upload-lock.js';
 import type { AppRef, RegistryEntry } from './types.js';
@@ -62,6 +63,11 @@ export type {
   AppSchemaIndex,
   AppSchemaView,
 } from './lib/schema.js';
+
+// Cloud-panel payloads — row browser, SQL editor, logs.
+export type { AppTableRows } from './lib/table-rows.js';
+export type { RunQueryResult } from './lib/run-query.js';
+export type { LogEntry, LogLevel } from './lib/log-store.js';
 
 export default definePluginEntry({
   id: 'centraid',
@@ -335,6 +341,24 @@ export default definePluginEntry({
               const dataDbFile = path.join(entry.path, 'data.sqlite');
               const schema = readAppSchema(dataDbFile);
               return sendJson(res, 200, schema);
+            }
+
+            case 'app-table-rows': {
+              return await handleTableRowsRoute(
+                res,
+                registry,
+                route.appId,
+                route.tableName,
+                route.query,
+              );
+            }
+
+            case 'app-query': {
+              return await handleQueryRoute(req, res, registry, route.appId);
+            }
+
+            case 'app-logs': {
+              return await handleLogsRoute(res, registry, route.appId, route.query);
             }
 
             case 'app-index':

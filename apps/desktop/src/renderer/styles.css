@@ -1973,6 +1973,226 @@ textarea {
   word-break: break-word;
 }
 
+/* Database — row browser (below the columns table in the detail drawer) */
+.cloud-rows-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.cloud-rows-body {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.cloud-rows-grid {
+  display: grid;
+  gap: 0;
+  min-width: 100%;
+}
+.cloud-rows-cell {
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+.cloud-rows-cell:last-child {
+  border-right: none;
+}
+.cloud-rows-head-cell {
+  background: var(--bg-sunken);
+  color: var(--ink-2);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+.cloud-cell-null {
+  color: var(--ink-3);
+  font-style: italic;
+}
+.cloud-cell-num {
+  color: var(--ink);
+}
+.cloud-cell-text {
+  color: var(--ink);
+}
+.cloud-cell-json {
+  color: var(--ink-2);
+}
+.cloud-rows-pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.cloud-rows-pager-label {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-right: auto;
+}
+.cloud-rows-pager-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.cloud-rows-pager-btn[disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* SQL editor — textarea + Run + result grid */
+.cloud-sql-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cloud-sql-textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  padding: 12px 14px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  outline: none;
+}
+.cloud-sql-textarea:focus {
+  border-color: var(--accent, #5847e0);
+}
+.cloud-sql-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cloud-sql-run-btn {
+  padding: 6px 16px;
+}
+.cloud-sql-hint {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.cloud-sql-output {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 80px;
+}
+.cloud-sql-meta {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.cloud-sql-error {
+  padding: 10px 12px;
+  border: 1px solid var(--danger, #e25555);
+  background: color-mix(in srgb, var(--danger, #e25555) 8%, transparent);
+  color: var(--danger, #e25555);
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  white-space: pre-wrap;
+}
+
+/* Logs — filter chips + newest-first row list */
+.cloud-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cloud-logs-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cloud-logs-chip {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.cloud-logs-chip:hover {
+  background: var(--bg-sunken);
+}
+.cloud-logs-chip[data-active='true'] {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.cloud-logs-search {
+  flex: 1;
+  max-width: 240px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink);
+  font-size: 12px;
+  outline: none;
+}
+.cloud-logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cloud-logs-row {
+  display: grid;
+  grid-template-columns: 64px 56px 180px 1fr;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  border-bottom: 1px solid var(--line);
+}
+.cloud-logs-row:last-child {
+  border-bottom: none;
+}
+.cloud-logs-row[data-level='warn'] {
+  background: color-mix(in srgb, var(--warn, #d49000) 6%, transparent);
+}
+.cloud-logs-row[data-level='error'] {
+  background: color-mix(in srgb, var(--danger, #e25555) 8%, transparent);
+}
+.cloud-logs-ts {
+  color: var(--ink-3);
+}
+.cloud-logs-level {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.cloud-logs-row[data-level='warn'] .cloud-logs-level {
+  color: var(--warn, #d49000);
+}
+.cloud-logs-row[data-level='error'] .cloud-logs-level {
+  color: var(--danger, #e25555);
+}
+.cloud-logs-source {
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-logs-msg {
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Code — file tree (left) + viewer (right) */
 .code-pane {
   flex: 1;
