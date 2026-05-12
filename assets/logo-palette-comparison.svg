@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" width="920" height="520" role="img" aria-label="Centraid logo palette comparison">
+  <title>Centraid Logo Palette Comparison</title>
+  <rect width="920" height="520" fill="#0D1014"/>
+  <text x="80" y="66" fill="#ECEEF2" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" font-weight="650">Current</text>
+  <text x="520" y="66" fill="#ECEEF2" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" font-weight="650">Proposed</text>
+
+  <g transform="translate(90 112) scale(1.2)">
+    <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/>
+    <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/>
+    <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/>
+    <circle cx="120" cy="120" r="12" fill="#E11D48"/>
+  </g>
+
+  <g transform="translate(530 112) scale(1.2)">
+    <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#7C5BD9"/>
+    <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#E89A3C"/>
+    <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#2EA098"/>
+    <circle cx="120" cy="120" r="10" fill="#E55772"/>
+  </g>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="15" fill="#AAB0BC">
+    <text x="80" y="440">#8B5CF6  #F59E0B  #06B6D4  #E11D48</text>
+    <text x="520" y="440">#7C5BD9  #E89A3C  #2EA098  #E55772</text>
+  </g>
+</svg>

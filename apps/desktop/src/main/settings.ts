@@ -27,7 +27,7 @@ function defaults(): DesktopSettings {
   return {
     projectsDir: path.join(os.homedir(), 'centraid-projects'),
     gatewayUrl: 'http://127.0.0.1:18789',
-    gatewayToken: '',
+    gatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN ?? '',
     remoteTemplatesUrl: '',
   };
 }
@@ -37,10 +37,13 @@ export async function loadSettings(): Promise<DesktopSettings> {
     const raw = await fs.readFile(settingsPath(), 'utf8');
     const parsed = JSON.parse(raw) as Partial<DesktopSettings>;
     const base = defaults();
+    // Empty persisted token falls through to the env-var default, so devs
+    // don't have to paste the token into Settings when OPENCLAW_GATEWAY_TOKEN
+    // is set in their shell or repo-root .env.
     return {
       projectsDir: parsed.projectsDir?.trim() || base.projectsDir,
       gatewayUrl: parsed.gatewayUrl?.trim() || base.gatewayUrl,
-      gatewayToken: parsed.gatewayToken ?? base.gatewayToken,
+      gatewayToken: parsed.gatewayToken || base.gatewayToken,
       remoteTemplatesUrl: parsed.remoteTemplatesUrl ?? base.remoteTemplatesUrl,
     };
   } catch (err: unknown) {

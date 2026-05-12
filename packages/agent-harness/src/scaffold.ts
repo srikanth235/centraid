@@ -28,7 +28,7 @@ export function validateAppId(id: string): void {
 export async function scaffoldProject(
   projectsDir: string,
   id: string,
-  opts: { name?: string; version?: string } = {},
+  opts: { name?: string; description?: string; version?: string } = {},
 ): Promise<ProjectInfo> {
   validateAppId(id);
   const dir = path.join(projectsDir, id);
@@ -43,17 +43,12 @@ export async function scaffoldProject(
     raw.replace('"name": "centraid-app-example"', `"name": "centraid-app-${id}"`),
   );
 
-  await fs.writeFile(
-    path.join(dir, 'app.json'),
-    JSON.stringify(
-      {
-        name: opts.name ?? id,
-        version: opts.version ?? '0.1.0',
-      },
-      null,
-      2,
-    ) + '\n',
-  );
+  const appJson: Record<string, unknown> = {
+    name: opts.name ?? id,
+    version: opts.version ?? '0.1.0',
+  };
+  if (opts.description?.trim()) appJson.description = opts.description.trim();
+  await fs.writeFile(path.join(dir, 'app.json'), JSON.stringify(appJson, null, 2) + '\n');
 
   await fs.writeFile(path.join(dir, 'index.html'), DEFAULT_INDEX_HTML(id, opts.name ?? id));
   await fs.writeFile(path.join(dir, 'app.css'), DEFAULT_APP_CSS);
@@ -85,9 +80,9 @@ export async function listProjects(projectsDir: string): Promise<ProjectInfo[]> 
     if (e.name.startsWith('_') || e.name.startsWith('.')) continue;
     const dir = path.join(projectsDir, e.name);
     const stat = await fs.stat(dir);
-    const [built, name, hasIndex] = await Promise.all([
+    const [built, meta, hasIndex] = await Promise.all([
       hasAnyBuiltJs(dir),
-      readAppName(dir),
+      readAppMeta(dir),
       fileExists(path.join(dir, 'index.html')),
     ]);
     out.push({
@@ -95,7 +90,8 @@ export async function listProjects(projectsDir: string): Promise<ProjectInfo[]> 
       dir,
       built,
       modifiedAt: stat.mtime.toISOString(),
-      name,
+      name: meta.name,
+      description: meta.description,
       hasIndex,
     });
   }
@@ -103,16 +99,61 @@ export async function listProjects(projectsDir: string): Promise<ProjectInfo[]> 
   return out;
 }
 
-/** Best-effort read of `app.json#name`. Undefined if missing/unparseable. */
-async function readAppName(projectDir: string): Promise<string | undefined> {
+/**
+ * Patch a project's `app.json` with new `name` and/or `description`.
+ * Preserves all other fields and creates the file if it doesn't exist
+ * (older scaffolds may pre-date the requirement). The directory layout
+ * isn't touched — `id` stays the directory name.
+ *
+ * - Empty/whitespace `name` is rejected (name is mandatory).
+ * - Empty/whitespace `description` clears the field.
+ */
+export async function updateProjectMeta(
+  projectsDir: string,
+  id: string,
+  patch: { name?: string; description?: string },
+): Promise<void> {
+  validateAppId(id);
+  const dir = path.join(projectsDir, id);
+  const appJsonPath = path.join(dir, 'app.json');
+  let parsed: Record<string, unknown> = {};
+  try {
+    const raw = await fs.readFile(appJsonPath, 'utf8');
+    const decoded = JSON.parse(raw) as unknown;
+    if (decoded && typeof decoded === 'object') parsed = decoded as Record<string, unknown>;
+  } catch {
+    /* fall through: write a fresh app.json */
+  }
+  if (patch.name !== undefined) {
+    const trimmed = patch.name.trim();
+    if (!trimmed) {
+      throw new HarnessError('invalid_id', 'Project name cannot be empty.');
+    }
+    parsed.name = trimmed;
+  }
+  if (patch.description !== undefined) {
+    const trimmed = patch.description.trim();
+    if (trimmed) parsed.description = trimmed;
+    else delete parsed.description;
+  }
+  await fs.writeFile(appJsonPath, JSON.stringify(parsed, null, 2) + '\n');
+}
+
+/** Best-effort read of `app.json#{name,description}`. Both may be undefined. */
+async function readAppMeta(projectDir: string): Promise<{ name?: string; description?: string }> {
   try {
     const raw = await fs.readFile(path.join(projectDir, 'app.json'), 'utf8');
-    const parsed = JSON.parse(raw) as { name?: unknown };
-    if (typeof parsed.name === 'string' && parsed.name.length > 0) return parsed.name;
+    const parsed = JSON.parse(raw) as { name?: unknown; description?: unknown };
+    const name =
+      typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : undefined;
+    const description =
+      typeof parsed.description === 'string' && parsed.description.length > 0
+        ? parsed.description
+        : undefined;
+    return { name, description };
   } catch {
-    /* swallow */
+    return {};
   }
-  return undefined;
 }
 
 async function fileExists(p: string): Promise<boolean> {

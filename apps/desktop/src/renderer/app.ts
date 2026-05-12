@@ -166,7 +166,11 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
             __draft: true,
             color,
             colorKey: 'violet',
-            desc: 'Draft — not yet published',
+            // Prefer the real `app.json#description` when present (carried
+            // over from the template manifest on clone, or set by the user
+            // in the builder). Fall back to the status string for older
+            // scaffolds without a description.
+            desc: p.description || 'Draft — not yet published',
             hasIndex: !!p.hasIndex,
             iconKey: 'Sparkle',
             id: p.id,
@@ -210,13 +214,16 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
 
     const hero = el('div', { class: 'home-hero' }, [
       el('div', { class: 'wordmark', trustedHtml: LOGO_SVG }),
-      el('div', {}, [
+      el('div', { class: 'home-hero-copy' }, [
         el('h1', {}, 'Your tiny apps.'),
-        el(
-          'p',
-          {},
-          'A small home screen of personal apps for the things you do every day. Right-click any tile for options.',
-        ),
+        el('p', {}, 'Build, continue, and open personal apps for the things you do every day.'),
+        el('div', { class: 'home-hero-actions' }, [
+          el('button', {
+            class: 'btn btn-primary',
+            trustedHtml: Icon.Plus({ size: 13, strokeWidth: 2.3 }) + '<span>New app</span>',
+            onClick: openNewAppSheet,
+          }),
+        ]),
       ]),
     ]);
 
@@ -243,7 +250,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
           trustedHtml: Icon.Plus({ size: 28, strokeWidth: 1.75 }),
         }),
         el('div', { class: 'app-tile-name' }, 'New app'),
-        el('div', { class: 'app-tile-desc' }, 'Describe what you want.'),
+        el('div', { class: 'app-tile-desc' }, 'Start from a prompt.'),
       ],
     );
     appsGrid.append(newTile);
@@ -314,10 +321,12 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
         })(),
         el('div', { class: 'app-tile-name' }, app.name),
         el('div', { class: 'app-tile-desc' }, app.desc),
+        el('span', { class: 'tile-action-label' }, draft ? 'Continue editing' : 'Open app'),
         (() => {
-          const btn = el('span', {
+          const btn = el('button', {
             'aria-label': 'More',
             class: 'tile-more-btn',
+            type: 'button',
             onClick: (e: Event) => {
               e.stopPropagation();
               e.preventDefault();
@@ -465,7 +474,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
   function openNewAppSheet(): void {
     let text = '';
     const backdrop = el('div', { class: 'modal-backdrop' });
-    const card = el('div', { class: 'modal-card' });
+    const card = el('div', { class: 'modal-card', role: 'dialog', 'aria-label': 'New app' });
 
     const ta = el('textarea', {
       class: 'input',
@@ -523,15 +532,24 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
       );
     }
 
+    const closeBtn = el('button', {
+      'aria-label': 'Close',
+      class: 'btn-icon modal-close',
+      trustedHtml: Icon.X({ size: 16 }),
+      onClick: () => close(),
+    });
     const cancelBtn = el('button', { class: 'btn btn-ghost', onClick: () => close() }, 'Cancel');
 
+    card.append(closeBtn);
     card.append(el('h3', {}, 'What should we build?'));
     card.append(el('p', {}, 'Describe your app in a sentence or two. You can iterate from there.'));
     card.append(ta);
     card.append(chips);
     card.append(el('div', { class: 'sheet-actions' }, [cancelBtn, generateBtn]));
 
-    backdrop.addEventListener('click', () => close());
+    backdrop.addEventListener('click', () => {
+      if (!ta.value.trim()) close();
+    });
     document.body.append(backdrop);
     document.body.append(card);
     setTimeout(() => ta.focus(), 30);
@@ -601,6 +619,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
         iconEl,
         el('div', { class: 'app-tile-name' }, tmpl.name),
         el('div', { class: 'app-tile-desc' }, tmpl.desc),
+        el('span', { class: 'tile-action-label' }, 'Clone template'),
       ],
     );
 
@@ -611,16 +630,24 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
       void (async () => {
         try {
           const result = await window.CentraidApi.cloneTemplate({ templateId: tmpl.id });
-          // addUserApp persists localStorage + re-renders home, which will
-          // drop this template tile (now matched against installedIds) and
-          // show the new user-app tile in its place.
-          addUserApp({
-            projectId: result.project.id,
-            name: result.template.name,
-            versionId: result.publish.versionId,
+          // Clone only lays the project down on disk. Drop the user straight
+          // into the builder so they can edit/preview; on exit, the new
+          // project surfaces as a DRAFT tile (hydrateDrafts picks it up) and
+          // the user explicitly clicks Publish to upload to the gateway.
+          const draft: DraftAppMeta = {
+            __draft: true,
             color,
+            colorKey: tmpl.colorKey as DraftAppMeta['colorKey'],
+            // Surface the real template description in the builder topbar;
+            // cloneTemplate has already persisted it to `app.json` so
+            // hydrateDrafts will pick it up on subsequent renders too.
+            desc: result.project.description || tmpl.desc,
+            hasIndex: true,
             iconKey: tmpl.iconKey as IconNameType,
-          });
+            id: result.project.id,
+            name: result.template.name,
+          };
+          enterBuilder({ appContext: draft });
         } catch (err) {
           tile.dataset.installing = 'false';
           tile.classList.remove('app-tile-installing');
@@ -660,7 +687,27 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
         ...opts,
         ...(projectId ? { projectId } : {}),
         onAddToHome: addUserApp,
+        onMetaChange: syncUserAppMeta,
       }) ?? null;
+  }
+
+  // Mirror builder-side inline title/description edits into the home's
+  // userApps store so a published tile reflects the new metadata
+  // immediately on return. Drafts come back from disk via hydrateDrafts
+  // (reads `app.json#{name,description}`), so we only need to touch
+  // userApps here.
+  function syncUserAppMeta(input: {
+    projectId: string;
+    name?: string;
+    description?: string;
+  }): void {
+    const ua = userApps.find(
+      (a) => a.centraidProjectId === input.projectId || a.id === input.projectId,
+    );
+    if (!ua) return;
+    if (input.name !== undefined) ua.name = input.name;
+    if (input.description !== undefined) ua.desc = input.description || 'Built with Centraid.';
+    persist();
   }
 
   // ---------- Add to home ----------
@@ -961,7 +1008,11 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     );
 
     body.append(
-      drawerGroup('Appearance', [drawerRow('Theme', themeSeg), drawerRow('Density', densitySeg)]),
+      drawerGroup('Appearance', [
+        el('div', { class: 'settings-note' }, 'Appearance changes are saved automatically.'),
+        drawerRow('Theme', themeSeg),
+        drawerRow('Density', densitySeg),
+      ]),
       drawerGroup('App tiles', [drawerRow('Treatment', tileSeg)]),
     );
 
@@ -1010,8 +1061,30 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     });
     saveBtn.innerHTML = Icon.Save({ size: 13 }) + '<span>Save</span>';
 
+    const testBtn = el('button', {
+      class: 'btn btn-soft',
+      onClick: async () => {
+        try {
+          await window.CentraidApi.saveSettings({
+            gatewayToken: gatewayToken.value,
+            gatewayUrl: gatewayUrl.value.trim(),
+            projectsDir: projectsDir.value.trim(),
+          });
+          const base = gatewayUrl.value.trim().replace(/\/+$/, '');
+          const health = await fetch(`${base}/health`).catch(() => null);
+          showToast(
+            health?.ok ? 'Gateway connection works' : 'Gateway saved. Health check unavailable.',
+          );
+        } catch (err) {
+          showToast(`Gateway check failed: ${String(err)}`);
+        }
+      },
+    });
+    testBtn.innerHTML = Icon.Eye({ size: 13 }) + '<span>Test connection</span>';
+
     body.append(
       drawerGroup('Gateway', [
+        el('div', { class: 'settings-note' }, 'Gateway changes are applied when you save.'),
         labeled(
           'Gateway URL',
           'Base URL of the openclaw gateway (typically loopback).',
@@ -1027,7 +1100,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
           'Where each app project is scaffolded. Tilde is expanded to your home directory.',
           projectsDir,
         ),
-        el('div', { class: 'sheet-actions' }, [saveBtn]),
+        el('div', { class: 'sheet-actions' }, [testBtn, saveBtn]),
       ]),
     );
 
@@ -1203,6 +1276,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     el,
     openApp,
     openBuilder: openNewAppSheet,
+    openShare: openShareDialog,
     openSettings: openSettingsSheet,
     renderHome,
   };

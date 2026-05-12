@@ -12,6 +12,8 @@ export interface CentraidProjectInfo {
   modifiedAt: string;
   /** Name from the project's `app.json`, falling back to the id if missing. */
   name?: string;
+  /** One-line description from `app.json#description`, if present. */
+  description?: string;
   /** Whether the project root has an `index.html` (preview-ready). */
   hasIndex?: boolean;
 }
@@ -99,11 +101,11 @@ export interface CentraidTemplateMeta {
 }
 
 /**
- * Result of cloning + publishing a template in one IPC round-trip.
+ * Result of cloning a template — lays down the project on disk as a draft.
+ * Publishing to the gateway is a separate explicit step (see `publish`).
  */
 export interface CentraidCloneTemplateResult {
   project: CentraidProjectInfo;
-  publish: CentraidPublishResult;
   template: CentraidTemplateMeta;
 }
 
@@ -195,6 +197,17 @@ interface CentraidApi {
   readProjectFiles(input: { id: string }): Promise<CentraidProjectFile[]>;
   openProjectFolder(input: { id: string }): Promise<{ ok: true }>;
   deleteProject(input: { id: string }): Promise<{ ok: true }>;
+  /**
+   * Patch `<projectDir>/app.json` with new `name` and/or `description`.
+   * Either field is optional; provide only what should change. Empty
+   * `description` clears the field; empty `name` is rejected (name is
+   * mandatory).
+   */
+  updateProjectMeta(input: {
+    id: string;
+    name?: string;
+    description?: string;
+  }): Promise<{ ok: true }>;
   /**
    * URL the builder iframe can load to preview a project's local files
    * before publish. `available` is false when the project has no

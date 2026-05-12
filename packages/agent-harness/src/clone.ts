@@ -16,6 +16,13 @@ export interface CloneTemplateOptions {
   templateDir: string;
   /** Optional display name; defaults to whatever the template's `app.json` had. */
   newName?: string;
+  /**
+   * Optional one-line description, seeded from the template manifest by the
+   * caller so the cloned project's `app.json` carries it forward (the
+   * builder surfaces it under the title and the home tile uses it as the
+   * tile subtitle).
+   */
+  newDesc?: string;
 }
 
 /**
@@ -50,20 +57,21 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
   await fs.mkdir(opts.projectsDir, { recursive: true });
   await copyDir(opts.templateDir, destDir);
 
-  await rewriteAppJson(destDir, opts.newName);
+  await rewriteAppJson(destDir, opts.newName, opts.newDesc);
   await rewritePackageJson(destDir, opts.newAppId);
 
   const stat = await fs.stat(destDir);
   const hasIndex = await fileExists(path.join(destDir, 'index.html'));
   const built = await hasAnyBuiltJs(destDir);
-  const finalName = await readAppName(destDir);
+  const meta = await readAppMeta(destDir);
 
   return {
     id: opts.newAppId,
     dir: destDir,
     built,
     modifiedAt: stat.mtime.toISOString(),
-    name: finalName,
+    name: meta.name,
+    description: meta.description,
     hasIndex,
   };
 }
@@ -103,9 +111,12 @@ async function copyDir(src: string, dest: string): Promise<void> {
   }
 }
 
-async function rewriteAppJson(destDir: string, newName?: string): Promise<void> {
+async function rewriteAppJson(destDir: string, newName?: string, newDesc?: string): Promise<void> {
   const appJsonPath = path.join(destDir, 'app.json');
-  let parsed: { name?: unknown; version?: unknown } & Record<string, unknown> = {};
+  let parsed: { name?: unknown; description?: unknown; version?: unknown } & Record<
+    string,
+    unknown
+  > = {};
   try {
     const raw = await fs.readFile(appJsonPath, 'utf8');
     parsed = JSON.parse(raw);
@@ -117,6 +128,12 @@ async function rewriteAppJson(destDir: string, newName?: string): Promise<void> 
     name: newName ?? (typeof parsed.name === 'string' ? parsed.name : 'Untitled'),
     version: '0.1.0',
   };
+  // Caller-provided `newDesc` wins; otherwise preserve whatever the template
+  // had. Empty strings clear the field.
+  const descSource = newDesc ?? (typeof parsed.description === 'string' ? parsed.description : '');
+  const descTrimmed = descSource.trim();
+  if (descTrimmed) next.description = descTrimmed;
+  else delete next.description;
   await fs.writeFile(appJsonPath, JSON.stringify(next, null, 2) + '\n');
 }
 
@@ -142,15 +159,20 @@ async function rewritePackageJson(destDir: string, newAppId: string): Promise<vo
   await fs.writeFile(pkgPath, JSON.stringify(parsed, null, 2) + '\n');
 }
 
-async function readAppName(projectDir: string): Promise<string | undefined> {
+async function readAppMeta(projectDir: string): Promise<{ name?: string; description?: string }> {
   try {
     const raw = await fs.readFile(path.join(projectDir, 'app.json'), 'utf8');
-    const parsed = JSON.parse(raw) as { name?: unknown };
-    if (typeof parsed.name === 'string' && parsed.name.length > 0) return parsed.name;
+    const parsed = JSON.parse(raw) as { name?: unknown; description?: unknown };
+    const name =
+      typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : undefined;
+    const description =
+      typeof parsed.description === 'string' && parsed.description.length > 0
+        ? parsed.description
+        : undefined;
+    return { name, description };
   } catch {
-    /* swallow */
+    return {};
   }
-  return undefined;
 }
 
 async function hasAnyBuiltJs(projectDir: string): Promise<boolean> {

@@ -17,6 +17,7 @@ export const Channel = {
   PROJECTS_FILES: 'centraid:projects:files',
   PROJECTS_OPEN: 'centraid:projects:open',
   PROJECTS_DELETE: 'centraid:projects:delete',
+  PROJECTS_UPDATE_META: 'centraid:projects:update-meta',
   PROJECTS_PREVIEW_URL: 'centraid:projects:preview-url',
 
   AGENT_START: 'centraid:agent:start',
@@ -89,6 +90,19 @@ export function registerIpcHandlers(): void {
     await deleteProject(settings.projectsDir, input.id);
     return { ok: true };
   });
+
+  ipcMain.handle(
+    Channel.PROJECTS_UPDATE_META,
+    async (_e, input: { id: string; name?: string; description?: string }) => {
+      const settings = await loadSettings();
+      const { updateProjectMeta } = await import('@centraid/agent-harness');
+      await updateProjectMeta(settings.projectsDir, input.id, {
+        name: input.name,
+        description: input.description,
+      });
+      return { ok: true };
+    },
+  );
 
   // Local-files preview URL for an unpublished project. Returns
   // `{ url, available }` where `available` indicates that `index.html`
@@ -189,8 +203,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.VERSIONS_LIST, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
-    const { listVersions } = await import('@centraid/agent-harness');
-    return listVersions(settings, input.id);
+    const { listVersions, HarnessError } = await import('@centraid/agent-harness');
+    try {
+      return await listVersions(settings, input.id);
+    } catch (err) {
+      // 404 = app not registered, 409 = path-mode (no versioning). Both are
+      // the "never published" probe result the renderer expects — collapse to
+      // an empty list rather than rejecting (which Electron logs noisily).
+      if (err instanceof HarnessError && (err.code === 'not_found' || err.code === 'conflict')) {
+        return { versions: [] };
+      }
+      throw err;
+    }
   });
 
   ipcMain.handle(
@@ -244,8 +268,7 @@ export function registerIpcHandlers(): void {
     async (_e, input: { templateId: string; newAppId?: string; newName?: string }) => {
       const settings = await loadSettings();
       const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
-      const { cloneTemplate, suggestAppId, publishProject } =
-        await import('@centraid/agent-harness');
+      const { cloneTemplate, suggestAppId } = await import('@centraid/agent-harness');
 
       const cacheDir = templatesCacheDir();
       const templates = await resolveTemplates({ cacheDir });
@@ -266,18 +289,17 @@ export function registerIpcHandlers(): void {
         // release.
         templateDir: templateSourceDir(tmpl.id, { cacheDir, source: tmpl.source }),
         newName: input.newName ?? tmpl.name,
+        // Carry the template's description into the cloned project's
+        // `app.json` so the builder topbar + home tile show something
+        // meaningful out of the gate.
+        newDesc: tmpl.desc,
       });
 
-      // Templates ship pre-built `.js` next to `.ts`, so no compile step is
-      // needed on the user's machine. Skipping the build avoids requiring
-      // them to run `bun install` inside the cloned dir before first publish.
-      const publish = await publishProject(project.dir, newAppId, settings, {
-        skipBuild: true,
-      });
-
+      // Cloning only lays the project down on disk as a draft. The user
+      // edits/previews in the builder and explicitly clicks Publish to
+      // upload to the gateway (Channel.PUBLISH).
       return {
         project,
-        publish,
         template: {
           id: tmpl.id,
           name: tmpl.name,

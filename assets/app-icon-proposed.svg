@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Centraid">
+  <title>Centraid App Icon - Proposed Palette</title>
+  <rect width="1024" height="1024" fill="#14181F"/>
+  <g transform="translate(112 112) scale(3.5)">
+    <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#7C5BD9"/>
+    <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#E89A3C"/>
+    <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#2EA098"/>
+    <circle cx="120" cy="120" r="10" fill="#E55772"/>
+  </g>
+</svg>

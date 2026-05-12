@@ -18,7 +18,13 @@ export {
   type CreateCentraidAgentSessionOptions,
 } from './agent-session.js';
 
-export { scaffoldProject, listProjects, deleteProject, validateAppId } from './scaffold.js';
+export {
+  scaffoldProject,
+  listProjects,
+  deleteProject,
+  updateProjectMeta,
+  validateAppId,
+} from './scaffold.js';
 
 export { cloneTemplate, suggestAppId, type CloneTemplateOptions } from './clone.js';
 

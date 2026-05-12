@@ -17,6 +17,7 @@ const Channel = {
   PROJECTS_FILES: 'centraid:projects:files',
   PROJECTS_OPEN: 'centraid:projects:open',
   PROJECTS_DELETE: 'centraid:projects:delete',
+  PROJECTS_UPDATE_META: 'centraid:projects:update-meta',
   PROJECTS_PREVIEW_URL: 'centraid:projects:preview-url',
 
   AGENT_START: 'centraid:agent:start',
@@ -73,6 +74,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   readProjectFiles: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_FILES, input),
   openProjectFolder: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_OPEN, input),
   deleteProject: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_DELETE, input),
+  updateProjectMeta: (input: { id: string; name?: string; description?: string }) =>
+    ipcRenderer.invoke(Channel.PROJECTS_UPDATE_META, input),
   previewUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_PREVIEW_URL, input),
 
   // Agent (one session per window)

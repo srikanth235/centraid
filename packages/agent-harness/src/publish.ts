@@ -46,9 +46,15 @@ export async function publishProject(
       // Preserve relative paths; refuse anything outside the project dir.
       preservePaths: false,
       filter: (relPath) => {
-        const top = relPath.split('/')[0] ?? '';
+        // tar walks the cwd via the "." / "./" prefix — keep that, otherwise
+        // it never recurses and we ship an empty archive (plugin then 400s
+        // with TAR_BAD_ARCHIVE).
+        const stripped = relPath.replace(/^\.\/+/, '');
+        if (stripped === '' || stripped === '.') return true;
+        const top = stripped.split('/')[0] ?? '';
         if (EXCLUDE.has(top)) return false;
-        // Strip dotfiles at top level except a small allowlist (currently none).
+        // Drop top-level dotfiles / dotdirs (.env, .vscode, …) but not the
+        // cwd marker itself, which is already handled above.
         if (top.startsWith('.')) return false;
         return true;
       },

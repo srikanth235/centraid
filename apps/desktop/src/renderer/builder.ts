@@ -10,6 +10,8 @@
 //   Right pane: Preview (iframe → live gateway URL or local centraid-preview://)
 //               or Code (project files, syntax-highlighted).
 
+const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="display:block;width:100%;height:100%"><path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/><path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/><path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/><circle cx="120" cy="120" r="12" fill="#E11D48"/></svg>`;
+
 (function () {
   // A single tool invocation. Multiple of these are consolidated into a
   // toolGroup chat bubble (see below).
@@ -209,11 +211,18 @@
   }
 
   function openBuilder(opts: BuilderOptions): () => void {
-    const { root, el, onExit, initialPrompt, appContext, onAddToHome } = opts;
+    const { root, el, onExit, initialPrompt, appContext, onAddToHome, onMetaChange } = opts;
 
     const isUpdateMode = !!opts.projectId;
     const isNewBuild = !isUpdateMode && !!initialPrompt;
-    const projName = appContext?.name || (isNewBuild ? 'New app' : 'Untitled');
+    let projName = appContext?.name || (isNewBuild ? 'New app' : 'Untitled');
+    // Description is the real `app.json#description` for cloned/edited apps
+    // (carried in via `appContext.desc`). In new-build mode it starts empty
+    // until the user types one.
+    let projDesc = appContext?.desc?.trim() ?? '';
+    const descPlaceholder = isUpdateMode
+      ? 'Add a description…'
+      : 'Designing your new app — click to describe';
     const projColor = appContext?.color || (window.ICON_PALETTE?.rose ?? '#5847e0');
     const projIcon: IconNameType = appContext?.iconKey || 'Sparkle';
 
@@ -325,17 +334,23 @@
     // `.titlebar` is a 3-column grid (1fr / auto / 1fr). The brand+breadcrumb
     // pieces have to live inside one centered cell — leaving them as raw
     // siblings makes the 4th span wrap onto a second row.
+    const crumbProjName = el('span', {}, isUpdateMode ? `Editing ${projName}` : 'Builder');
     const titlebar = el('div', { class: 'titlebar' }, [
       el('div', { class: 'titlebar-side' }),
       el('div', { class: 'titlebar-brand' }, [
-        el('span', { class: 'wordmark', onClick: handleExit, style: { cursor: 'pointer' } }, 'M'),
+        el('span', {
+          class: 'wordmark',
+          onClick: handleExit,
+          style: { cursor: 'pointer' },
+          trustedHtml: BUILDER_LOGO_SVG,
+        }),
         el(
           'span',
           { class: 'crumb', onClick: handleExit, style: { cursor: 'pointer' } },
           'Centraid',
         ),
         el('span', { class: 'crumb-sep' }, '/'),
-        el('span', {}, isUpdateMode ? `Editing ${projName}` : 'Builder'),
+        crumbProjName,
       ]),
       el('div', { class: 'titlebar-side is-end' }),
     ]);
@@ -346,7 +361,10 @@
       void handlePublish({ andAddToHome: isNewBuild });
     });
     if (isUpdateMode) {
-      primaryBtn.innerHTML = (Icon.Save ? Icon.Save({ size: 13 }) : '') + '<span>Save</span>';
+      // Update mode reuses the publish flow; the label reflects the gateway
+      // semantics (this uploads a new version) rather than implying a
+      // local-only save.
+      primaryBtn.innerHTML = (Icon.Save ? Icon.Save({ size: 13 }) : '') + '<span>Publish</span>';
     }
 
     const projIconEl = el('div', {
@@ -360,11 +378,22 @@
       },
     });
 
-    const projSubtitleEl = el(
-      'span',
-      {},
-      isUpdateMode ? 'Editing existing app' : 'Designing your new app',
-    );
+    // Inline-editable description. Renders the live `app.json#description`
+    // when present; falls back to a mode-specific placeholder so the slot
+    // doesn't read as empty. Edits persist via the same updateProjectMeta
+    // IPC the title uses.
+    const projSubtitleEl = el('span', {
+      contenteditable: 'plaintext-only',
+      spellcheck: 'false',
+    });
+    projSubtitleEl.dataset.placeholder = descPlaceholder;
+    projSubtitleEl.setAttribute('title', 'Click to edit description');
+    function paintSubtitle(): void {
+      // Use textContent only when there's a real value; otherwise leave the
+      // node empty so CSS `:empty::before` can show the placeholder.
+      projSubtitleEl.textContent = projDesc;
+    }
+    paintSubtitle();
 
     // Mode tabs render as icon-only pills by default; the active tab expands
     // to icon+label (Lovable pattern). Each entry's third field is a render
@@ -466,6 +495,89 @@
     ]);
     const urlbarSlot = el('div', { class: 'urlbar-slot' }, [urlbar]);
 
+    // Inline-editable title + description. Edits persist to
+    // `app.json#{name,description}` via the updateProjectMeta IPC and also
+    // fire `onMetaChange` so the home pane can refresh its tile metadata
+    // without waiting for a re-publish. In new-build mode no project file
+    // exists yet, so we only update local state — `createProject` picks up
+    // the latest values when the first prompt is sent.
+    const projNameEl = el(
+      'b',
+      { contenteditable: 'plaintext-only', spellcheck: 'false' },
+      projName,
+    );
+    projNameEl.setAttribute('title', 'Click to rename');
+    function commitProjNameEdit(): void {
+      const next = (projNameEl.textContent ?? '').trim();
+      if (!next || next === projName) {
+        projNameEl.textContent = projName; // revert empty / no-op
+        return;
+      }
+      const previous = projName;
+      projName = next;
+      projNameEl.textContent = next;
+      crumbProjName.textContent = isUpdateMode ? `Editing ${next}` : 'Builder';
+      if (projectId) {
+        void Api()
+          .updateProjectMeta({ id: projectId, name: next })
+          .catch((err: unknown) => {
+            // Roll back if persistence fails so the UI stays truthful.
+            projName = previous;
+            projNameEl.textContent = previous;
+            crumbProjName.textContent = isUpdateMode ? `Editing ${previous}` : 'Builder';
+            showToast(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
+          });
+        if (onMetaChange) onMetaChange({ projectId, name: next });
+      }
+    }
+    projNameEl.addEventListener('blur', commitProjNameEdit);
+    projNameEl.addEventListener('keydown', (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === 'Enter') {
+        ke.preventDefault();
+        projNameEl.blur();
+      } else if (ke.key === 'Escape') {
+        ke.preventDefault();
+        projNameEl.textContent = projName;
+        projNameEl.blur();
+      }
+    });
+
+    function commitProjDescEdit(): void {
+      const next = (projSubtitleEl.textContent ?? '').trim();
+      if (next === projDesc) {
+        paintSubtitle(); // normalise whitespace
+        return;
+      }
+      const previous = projDesc;
+      projDesc = next;
+      paintSubtitle();
+      if (projectId) {
+        void Api()
+          .updateProjectMeta({ id: projectId, description: next })
+          .catch((err: unknown) => {
+            projDesc = previous;
+            paintSubtitle();
+            showToast(
+              `Description save failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+        if (onMetaChange) onMetaChange({ projectId, description: next });
+      }
+    }
+    projSubtitleEl.addEventListener('blur', commitProjDescEdit);
+    projSubtitleEl.addEventListener('keydown', (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === 'Enter') {
+        ke.preventDefault();
+        projSubtitleEl.blur();
+      } else if (ke.key === 'Escape') {
+        ke.preventDefault();
+        paintSubtitle();
+        projSubtitleEl.blur();
+      }
+    });
+
     const topbar = el('div', { class: 'builder-topbar' }, [
       el('div', { class: 'builder-topbar-left' }, [
         el('button', {
@@ -475,7 +587,7 @@
           onClick: handleExit,
         }),
         projIconEl,
-        el('div', { class: 'proj-name' }, [el('b', {}, projName), projSubtitleEl]),
+        el('div', { class: 'proj-name' }, [projNameEl, projSubtitleEl]),
       ]),
       el('div', { class: 'topbar-toggles' }, [historyBtn, sidebarBtn]),
       el(
@@ -500,7 +612,24 @@
       ),
       urlbarSlot,
       el('div', { class: 'builder-topbar-right' }, [
-        el('button', { class: 'btn btn-ghost' }, 'Share'),
+        el(
+          'button',
+          {
+            class: 'btn btn-ghost',
+            onClick: () => {
+              if (appContext && window.Centraid?.openShare) {
+                window.Centraid.openShare({
+                  ...appContext,
+                  desc: projDesc || appContext.desc,
+                  name: projName,
+                });
+              } else {
+                showToast('Publish the app before sharing');
+              }
+            },
+          },
+          'Share',
+        ),
         primaryBtn,
       ]),
     ]);
@@ -552,10 +681,6 @@
       } catch {
         return src;
       }
-    }
-
-    function setSubtitle(text: string): void {
-      projSubtitleEl.textContent = text;
     }
 
     function showToast(text: string): void {
@@ -758,6 +883,28 @@
       });
 
       const wrap = el('div', { class: 'chat-input' }, [ta, controls]);
+      const promptStarters = el('div', { class: 'prompt-starters' });
+      for (const suggestion of [
+        'Improve the layout',
+        'Add saved data',
+        'Polish the visual style',
+        'Prepare to publish',
+      ]) {
+        promptStarters.append(
+          el(
+            'button',
+            {
+              class: 'prompt-starter',
+              onClick: () => {
+                ta.value = suggestion;
+                ta.focus();
+              },
+            },
+            suggestion,
+          ),
+        );
+      }
+      inputWrap.append(promptStarters);
       inputWrap.append(wrap);
     }
 
@@ -997,11 +1144,20 @@
         }
         const head = el('div', { class: 'code-viewer-head' }, [
           el('span', { class: 'code-viewer-path' }, file.path),
-          el(
-            'span',
-            { class: 'code-viewer-meta' },
-            `${file.content.split('\n').length} lines · read-only`,
-          ),
+          el('div', { class: 'code-viewer-actions' }, [
+            el('span', { class: 'code-readonly-badge' }, 'Read-only'),
+            el('span', { class: 'code-viewer-meta' }, `${file.content.split('\n').length} lines`),
+            el(
+              'button',
+              {
+                class: 'btn btn-ghost tiny-btn code-open-btn',
+                onClick: () => {
+                  if (projectId) void Api().openProjectFolder({ id: projectId });
+                },
+              },
+              'Open folder',
+            ),
+          ]),
         ]);
         const body = el('div', { class: 'code-body' });
         const lines = file.content.split('\n');
@@ -1188,7 +1344,6 @@
         if (!force && schemaCache !== undefined && schemaCache !== 'error') return;
         schemaCache = 'pending';
         schemaError = undefined;
-        if (active === 'database' || active === 'overview') drawStage();
         try {
           schemaCache = await Api().appSchema({ id: projectId });
         } catch (err) {
@@ -1205,7 +1360,6 @@
         }
         if (!force && versionsCache !== undefined && versionsCache !== 'error') return;
         versionsCache = 'pending';
-        if (active === 'overview') drawStage();
         try {
           versionsCache = await Api().listVersions({ id: projectId });
         } catch {
@@ -1839,12 +1993,13 @@
           chat = chat.concat([
             {
               kind: 'ai',
-              text: `Loaded "${projName}". No prior chat — describe a change to get started.`,
+              text: `Loaded "${projName}". Pick a direction below or describe the next change.`,
             },
           ]);
         }
         renderChat();
-        setSubtitle('Editing existing app · ready');
+        // Subtitle slot now holds the editable `app.json#description`, so
+        // we don't overwrite it here.
         return;
       }
 
@@ -1866,7 +2021,8 @@
       try {
         await Api().createProject({ id, name: projName, version: '0.1.0' });
         projectId = id;
-        setSubtitle(`Designing your new app · ${id}`);
+        // Subtitle holds the editable description, not a status — leave it
+        // alone so the user's placeholder/value isn't clobbered.
       } catch (err) {
         pushMessage({ kind: 'status', text: `Could not create project: ${String(err)}` });
         return;

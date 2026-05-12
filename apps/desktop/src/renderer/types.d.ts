@@ -78,6 +78,7 @@ declare global {
     openApp: (id: string) => void;
     renderHome: () => void;
     openBuilder: () => void;
+    openShare: (app: AppMetaResolved) => void;
     openSettings: () => void | Promise<void>;
   }
 
@@ -104,6 +105,14 @@ declare global {
       name?: string;
       versionId?: string;
     }) => void;
+    /**
+     * Called when the user inline-edits the project title or description
+     * in the builder topbar. The home screen uses this to update its
+     * in-memory userApps entry (and its persisted localStorage copy) so
+     * the tile reflects the new metadata without waiting for a re-publish.
+     * Either `name` or `description` (or both) will be present.
+     */
+    onMetaChange?: (input: { projectId: string; name?: string; description?: string }) => void;
   }
 
   interface UserAppMeta extends AppMetaResolved {

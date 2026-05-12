@@ -63,8 +63,14 @@ async function readJson<T>(res: Response, op: string): Promise<T> {
         `${op}: gateway rejected request (HTTP ${res.status}). Configure your gateway token in Settings.`,
       );
     }
+    if (res.status === 404) {
+      throw new HarnessError('not_found', `${op}: ${text || res.statusText}`);
+    }
+    if (res.status === 409) {
+      throw new HarnessError('conflict', `${op}: ${text || res.statusText}`);
+    }
     throw new HarnessError(
-      'upload_failed',
+      'gateway_error',
       `${op} failed (HTTP ${res.status}): ${text || res.statusText}`,
     );
   }
@@ -72,7 +78,7 @@ async function readJson<T>(res: Response, op: string): Promise<T> {
     return JSON.parse(text) as T;
   } catch {
     throw new HarnessError(
-      'upload_failed',
+      'gateway_error',
       `${op} returned non-JSON response: ${text.slice(0, 200)}`,
     );
   }

@@ -13,6 +13,7 @@
     }
   },
   "scripts": {
+    "reload-plugin": "scripts/reload-plugin.sh",
     "dev:desktop": "turbo run dev --filter=@centraid/desktop",
     "dev:mobile": "turbo run dev --filter=@centraid/mobile",
     "build": "turbo run build",

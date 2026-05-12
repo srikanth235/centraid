@@ -29,6 +29,12 @@ export interface ProjectInfo {
    */
   name?: string;
   /**
+   * Optional one-line description read from `app.json#description`. Templates
+   * seed this when cloned (carried from the template manifest); the user can
+   * edit it inline in the builder topbar.
+   */
+  description?: string;
+  /**
    * Whether `index.html` exists at the project root — i.e. the project is
    * preview-ready as a static site.
    */
@@ -61,17 +67,22 @@ export interface PublishOptions {
   buildCommand?: { bin: string; args: string[] };
 }
 
+export type HarnessErrorCode =
+  | 'no_project'
+  | 'build_failed'
+  | 'upload_failed'
+  | 'auth_required'
+  | 'gateway_unreachable'
+  | 'gateway_error'
+  | 'not_found'
+  | 'conflict'
+  | 'invalid_id'
+  | 'already_exists'
+  | 'config_invalid';
+
 export class HarnessError extends Error {
   constructor(
-    public readonly code:
-      | 'no_project'
-      | 'build_failed'
-      | 'upload_failed'
-      | 'auth_required'
-      | 'gateway_unreachable'
-      | 'invalid_id'
-      | 'already_exists'
-      | 'config_invalid',
+    public readonly code: HarnessErrorCode,
     message: string,
   ) {
     super(message);

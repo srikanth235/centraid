@@ -182,8 +182,8 @@ The handler-arg types are exported from `@centraid/openclaw-plugin`:
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `appsDir` | `centraid` (resolved under plugin root) | Where app folders live |
-| `gatewayBaseUrl` | `http://127.0.0.1:7575` | Loopback URL cron webhooks point at |
+| `appsDir` | `centraid` (resolved under `$OPENCLAW_STATE_DIR`, default `~/.openclaw`) | Where app folders live. Absolute paths are used as-is. |
+| `gatewayBaseUrl` | `http://127.0.0.1:18789` | Loopback URL cron webhooks point at |
 | `versionRetention` | `5` | Max versions kept per uploaded app (active always retained; min 2) |
 
 The registry persists at `<appsDir>/_registry.json` with mode `0600` — it stores per-cron random bearer tokens.

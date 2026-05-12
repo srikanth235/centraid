@@ -17,6 +17,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
+import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
 import { Registry, RegistryError } from './lib/registry.js';
 import { OpenClawCron } from './lib/openclaw-cron.js';
 import { CronSync } from './lib/cron-sync.js';
@@ -71,9 +72,14 @@ export default definePluginEntry({
       gatewayBaseUrl?: string;
       versionRetention?: number;
     };
+    // Relative `appsDir` resolves under OpenClaw's state dir (~/.openclaw by
+    // default, OPENCLAW_STATE_DIR override), NOT the plugin source tree —
+    // runtime state must not live next to code, especially with --link installs.
     const appsDirRaw = pluginConfig.appsDir ?? 'centraid';
-    const appsDir = path.isAbsolute(appsDirRaw) ? appsDirRaw : api.resolvePath(appsDirRaw);
-    const gatewayBaseUrl = pluginConfig.gatewayBaseUrl ?? 'http://127.0.0.1:7575';
+    const appsDir = path.isAbsolute(appsDirRaw)
+      ? appsDirRaw
+      : path.join(resolveStateDir(process.env), appsDirRaw);
+    const gatewayBaseUrl = pluginConfig.gatewayBaseUrl ?? 'http://127.0.0.1:18789';
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
     const registry = new Registry(appsDir);

@@ -10,7 +10,7 @@ Pi-coding-agent customization for **authoring centraid apps**, plus helpers desk
 | `scaffoldProject(projectsDir, id, { name?, version? })` | Creates `<projectsDir>/<id>/` with the canonical layout (index.html, app.json, package.json, tsconfig.json, queries/, actions/, crons/). |
 | `listProjects(projectsDir)` | Enumerate existing projects (most-recent first), with a `built` flag. |
 | `publishProject(projectDir, id, config, opts?)` | Run `bun run build` (or `tsc`), tarball the source, POST to `<gatewayUrl>/centraid/_apps/<id>/upload` with `Authorization: Bearer <gatewayToken>` (omitted when token empty). |
-| `defaultHarnessConfig()` / `resolveHarnessConfig(overrides)` | Defaults: `projectsDir = ~/centraid-projects`, `gatewayUrl = http://127.0.0.1:7575`, `gatewayToken = ""`. |
+| `defaultHarnessConfig()` / `resolveHarnessConfig(overrides)` | Defaults: `projectsDir = ~/centraid-projects`, `gatewayUrl = http://127.0.0.1:18789`, `gatewayToken = ""`. |
 
 ## Auth
 
