@@ -16,6 +16,20 @@ fi
 ROOT="$(git rev-parse --show-toplevel)"
 GOVERNANCE_DIR="$ROOT/.governance"
 
+# ── format + lint guard ────────────────────────────────────────────────
+# Hand-added on top of the governance-kit:managed file (see issue #19).
+# Runs oxfmt --check and oxlint against staged files. Staged-only keeps it
+# fast and avoids complaining about pre-existing issues outside the change
+# set. Bypass with `SKIP_LINT=1 git commit ...` (CI still enforces).
+#
+# If a future `governance kit update` regenerates this hook and drops this
+# block, re-apply it from scripts/lint-staged.sh — that's the canonical
+# implementation; the inline call below is just the wiring.
+if [[ "${SKIP_LINT:-0}" != "1" && -x "$ROOT/scripts/lint-staged.sh" ]]; then
+    bash "$ROOT/scripts/lint-staged.sh" || exit 1
+fi
+# ── /format + lint guard ──────────────────────────────────────────────
+
 directive_field() {
     local manifest="$1" field="$2"
     [[ -f "$manifest" ]] || return 0
