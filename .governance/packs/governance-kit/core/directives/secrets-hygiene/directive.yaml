@@ -1,0 +1,6 @@
+# secrets-hygiene — consolidated secret-scanning and dotenv-tracking checks.
+category: Security
+recommended: true
+summary: No plaintext secrets in tracked files; .env is gitignored and untracked.
+surface: repo-state
+hook: pre-commit

@@ -2,6 +2,7 @@
 //   - the centraid agent (window.CentraidApi.startAgent / promptAgent / onAgentEvent)
 //   - the project folder on disk (readProjectFiles for the Code tab)
 //   - the openclaw centraid plugin (publish, listVersions, activateVersion)
+// governance: allow-repo-hygiene file-size-limit builder-mode pending split into chat/preview/code modules
 //
 // Layout (modeled on Lovable's IA):
 //   Topbar:    [back][project] [history-btn][sidebar-btn] {Preview|Code} [device|URL|↗|⟳] [Share][primary]

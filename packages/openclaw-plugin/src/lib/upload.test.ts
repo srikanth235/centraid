@@ -19,11 +19,7 @@ import { ingestUpload, validateUploadEntry, UploadError } from './upload.ts';
  * test a deterministic, single-throw entry point.
  */
 
-function expectReject(
-  fn: () => void,
-  code: UploadError['code'],
-  msgPattern?: RegExp,
-): void {
+function expectReject(fn: () => void, code: UploadError['code'], msgPattern?: RegExp): void {
   let caught: unknown;
   try {
     fn();

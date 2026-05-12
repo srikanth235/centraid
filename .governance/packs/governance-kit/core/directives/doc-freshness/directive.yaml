@@ -1,0 +1,6 @@
+# doc-freshness — Opted-in docs carry a <!-- last-verified: YYYY-MM-DD --> marker within 90 days.
+category: SystemOfRecord
+recommended: false
+summary: 'Opted-in docs carry a <!-- last-verified: YYYY-MM-DD --> marker within 90 days.'
+surface: repo-state
+hook: pre-commit

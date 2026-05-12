@@ -1,0 +1,6 @@
+### commit-message-format
+
+- **Directive**: Commit messages match `<type>(scope)?!?: subject (#123)` — a Conventional Commits prefix **plus** a trailing GitHub issue reference. Supported types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `revert`, `style`. Extend via `GOVERNANCE_CC_EXTRA_TYPES`.
+- **Rationale**: The typed prefix keeps changelogs scannable; the trailing `(#123)` anchors every commit to a durable work item. Together they make `git log` a readable audit trail instead of a stream of "fix stuff". The two halves are enforced as one rule because a Conventional Commits message without the issue anchor is still a hole in the audit trail this kit cares about.
+- **Enforced by**: `.governance/packs/governance-kit/core/directives/commit-message-format/check.sh` (also wired into the `.githooks/commit-msg` dispatcher).
+- **Exceptions**: Merge and revert commits are skipped automatically.

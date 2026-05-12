@@ -1,0 +1,24 @@
+version: '2'
+packs:
+- id: governance-kit/core
+  version: '0.2'
+  source: gh
+  directives:
+  - agent-steering-accounting
+  - agent-token-accounting
+  - commit-issue-receipt-match
+  - commit-message-format
+  - doc-freshness
+  - issue-templates
+  - issues-tracked
+  - no-broken-internal-doc-links
+  - no-orphan-todos
+  - receipt-per-issue
+  - repo-hygiene
+  - required-docs
+  - secrets-hygiene
+  ref: gh:Duaility/governance-kit/packs/core@main
+  sha: 1d3e8d18114a88b0c066f5a3fbb6a61d14a3171b
+  subpath: packs/core
+  min_governance_kit: '0.2'
+  installed_at: '2026-05-12T05:24:20Z'

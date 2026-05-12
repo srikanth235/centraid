@@ -3,6 +3,7 @@
 // authored in the builder, published to the gateway, rendered through a
 // sandboxed iframe. The home grid also shows uninstalled templates inline
 // so they're one tap away from being cloned & deployed.
+// governance: allow-repo-hygiene file-size-limit shell-entry-point pending split into route modules
 
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="display:block;width:100%;height:100%"><path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/><path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/><path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/><circle cx="120" cy="120" r="12" fill="#E11D48"/></svg>`;
 
