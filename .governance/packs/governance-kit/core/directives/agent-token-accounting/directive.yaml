@@ -1,0 +1,6 @@
+# agent-token-accounting — Every non-merge, non-revert commit carries token trailers + matching COSTS.md row.
+category: AgentDiscipline
+recommended: true
+summary: Every non-merge, non-revert commit carries token trailers + matching COSTS.md row.
+surface: change-set
+hook: commit-msg

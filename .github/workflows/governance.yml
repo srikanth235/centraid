@@ -1,0 +1,29 @@
+# governance-kit:managed kit-version=0.2 generated=2026-05-12
+name: Governance
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # Full history so git-grep-based directives can inspect all tracked files.
+          fetch-depth: 0
+
+      - name: Run bash governance directives
+        run: bash .governance/run.sh
+
+      # Native test runners (pytest / jest / go test) are an opt-in users add
+      # post-init by following governance/references/NATIVE_TESTS.md. They are
+      # not scaffolded by `governance init` — governance is a meta-layer over
+      # the project's code and the directive suite must not depend on the
+      # project's own toolchain.

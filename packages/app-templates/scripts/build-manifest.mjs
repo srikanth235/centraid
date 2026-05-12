@@ -53,6 +53,6 @@ for (const tmpl of src.templates) {
 }
 
 await fs.writeFile(OUTPUT, JSON.stringify(enriched, null, 2) + '\n');
-console.log(
-  `[build-manifest] wrote ${enriched.templates.length} templates → ${path.relative(process.cwd(), OUTPUT)}`,
+process.stdout.write(
+  `[build-manifest] wrote ${enriched.templates.length} templates → ${path.relative(process.cwd(), OUTPUT)}\n`,
 );

@@ -1,6 +1,8 @@
 /*
  * @centraid/openclaw-plugin
  *
+ * governance: allow-repo-hygiene file-size-limit single-plugin-entry-point at 503 lines
+ *
  * Mounts a single `/centraid` prefix on the OpenClaw gateway and dispatches
  * to user-generated apps. Apps may be:
  *
