@@ -138,7 +138,9 @@ export async function seedPublishedApp(
   await seedProjectDir(env, app);
   await page.evaluate((a) => {
     const KEY = 'centraid.v1.home.userApps';
-    const existing = JSON.parse(localStorage.getItem(KEY) ?? '[]') as Array<Record<string, unknown>>;
+    const existing = JSON.parse(localStorage.getItem(KEY) ?? '[]') as Array<
+      Record<string, unknown>
+    >;
     existing.push({
       id: a.id,
       name: a.name,

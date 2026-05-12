@@ -110,7 +110,7 @@ test('skips path-mode entries (user-owned dir, never delete)', async () => {
   assert.deepEqual(result, { kind: 'skipped', reason: 'path-mode' });
   assert.ok((await fs.stat(externalDir)).isDirectory());
   assert.equal(
-    (await fs.readFile(path.join(externalDir, 'precious.txt'), 'utf8')),
+    await fs.readFile(path.join(externalDir, 'precious.txt'), 'utf8'),
     'do not delete me',
   );
 });

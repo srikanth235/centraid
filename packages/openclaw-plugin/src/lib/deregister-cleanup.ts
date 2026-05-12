@@ -31,12 +31,9 @@ export async function cleanupDeregisteredApp(
     return { kind: 'skipped', reason: 'path-mode' };
   }
   const rel = path.relative(appsDir, entry.path);
-  const insideAppsDir =
-    !!rel && !rel.startsWith('..') && !path.isAbsolute(rel) && rel.length > 0;
+  const insideAppsDir = !!rel && !rel.startsWith('..') && !path.isAbsolute(rel) && rel.length > 0;
   if (!insideAppsDir) {
-    logger.warn(
-      `[centraid] deregister: refusing to remove "${entry.path}" — outside appsDir`,
-    );
+    logger.warn(`[centraid] deregister: refusing to remove "${entry.path}" — outside appsDir`);
     return { kind: 'skipped', reason: 'outside-appsdir' };
   }
   try {

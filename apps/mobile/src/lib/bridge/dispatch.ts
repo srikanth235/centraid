@@ -215,10 +215,7 @@ async function handleGatewayFetch(_appId: string, args: unknown): Promise<Gatewa
   try {
     res = await fetch(a.url, init);
   } catch (err) {
-    throw new BridgeFailureError(
-      'network_error',
-      err instanceof Error ? err.message : String(err),
-    );
+    throw new BridgeFailureError('network_error', err instanceof Error ? err.message : String(err));
   }
 
   const outHeaders: Record<string, string> = {};
