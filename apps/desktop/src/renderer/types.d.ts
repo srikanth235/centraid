@@ -155,13 +155,22 @@ declare global {
     onToggleSidebar: () => void;
     sidebar: HTMLElement;
     main: HTMLElement;
+    /** Right-edge chrome cluster — project identity, Publish, brand chip, etc. */
     titlebarRight?: HTMLElement | null;
+    /** Center chrome cluster — mode tabs, device pill, etc. Sits between
+     *  the back/forward nav and the trailing flex spacer. */
+    titlebarCenter?: HTMLElement | null;
     showNewChat?: boolean;
     onNewChat?: () => void;
     canGoBack?: boolean;
     canGoForward?: boolean;
     onBack?: () => void;
     onForward?: () => void;
+    /** When true, a chat-pane toggle is rendered at the trailing edge of
+     *  `.cd-tl-nav` (the chat-pane/canvas boundary). Builder-only today. */
+    showChatToggle?: boolean;
+    chatPaneOpen?: boolean;
+    onToggleChat?: () => void;
   }
 
   interface ChromeBuildSidebarOpts {
@@ -179,6 +188,7 @@ declare global {
     buildWindow: (opts: ChromeBuildWindowOpts) => {
       root: HTMLElement;
       setSidebarOpen: (open: boolean) => void;
+      setChatPaneOpen: (open: boolean) => void;
     };
     buildSidebar: (opts: ChromeBuildSidebarOpts) => HTMLElement;
     tbBtn: (opts: {

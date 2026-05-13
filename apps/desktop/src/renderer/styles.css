@@ -1162,14 +1162,23 @@ textarea {
   display: grid;
   grid-template-columns: minmax(360px, 420px) 1fr;
   min-height: 0;
-  transition: grid-template-columns 0.18s ease;
+  /* Match the cd-window sidebar transition so both panel collapses feel
+     like the same motion (see cd-window grid-template-columns). */
+  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }
-.builder-body[data-sidebar='closed'] {
+/* Chat-pane collapsed — driven by the chat-toggle in the chrome row. The
+   chat-pane width animates to 0 (matching the workspace sidebar pattern)
+   and its border-right vanishes so the canvas reads as having the full
+   floor. cd-tl-main's grid template (when in builder layout) collapses
+   in lockstep so the chrome cells stay aligned with the body below. */
+.builder[data-chat='closed'] .builder-body {
   grid-template-columns: 0 1fr;
 }
-.builder-body[data-sidebar='closed'] .chat-pane {
-  visibility: hidden;
+.builder[data-chat='closed'] .builder-body .chat-pane {
   border-right: 0;
+}
+.builder[data-chat='closed'] .cd-tl-main[data-layout='grid'] {
+  grid-template-columns: auto 1fr;
 }
 
 /* ---- Chat pane ---- */
@@ -1190,8 +1199,8 @@ textarea {
 
 /* In-pane builder header — sits at the top of the chat pane and owns
    the project icon, name + status row, more menu, and Publish button.
-   Replaces the window-wide cd-app-strip + cd-window titlebarRight,
-   matching the v2 mockup's per-pane header pattern. */
+   View-context controls (mode tabs, device pill) live in the window
+   chrome row instead — this header is project-identity only. */
 .builder-pane-header {
   flex: none;
   display: flex;
@@ -1234,7 +1243,7 @@ textarea {
   color: var(--ink);
 }
 /* The header's icon picks up the project's accent — bigger than the old
-   strip's 22px chip, matching the mockup's 32px tile. */
+   strip's 22px chip, matching the v2 mockup's 32px tile. */
 .builder-pane-header .app-topbar-icon {
   width: 32px !important;
   height: 32px !important;
@@ -1244,14 +1253,37 @@ textarea {
   width: 16px;
   height: 16px;
 }
-/* Editable project title sits inside the meta column. The bold tag
-   from builder.ts gets the pane-header weight + size here. */
+/* Editable project title sits inside the meta column. */
 .builder-pane-meta b {
   font-weight: 600;
   font-size: 14.5px;
   letter-spacing: -0.01em;
   color: var(--ink);
   outline: none;
+}
+
+/* Center cluster inside cd-tl-main — mode tabs (Preview/Code/Cloud) +
+   device pill (Phone/Tablet/Desktop). Lives in the right grid cell
+   (.cd-tl-context), which spans the right-pane width. Space-between
+   pins tabs flush-left (against the chat/right boundary) and the device
+   pill flush-right (extreme right of the chrome row). */
+.builder-tl-center {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+/* Inside the chrome row, the urlbar-slot hugs its content (the device
+   pill) rather than flexing to fill, and fully collapses when hidden so
+   the layout stays tight on non-Preview tabs. */
+.cd-tl-main .urlbar-slot {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+.cd-tl-main .urlbar-slot[data-visible='false'] {
+  display: none;
 }
 
 /* Header shown when chat pane is in History view */
@@ -3401,26 +3433,26 @@ textarea {
   flex: 1;
   /* Without min-height: 0 the flex parent (#root) lets cd-window grow to its
      content's min-content height when the main column's content is tall —
-     defeating the inner .cd-main-scroll overflow. minmax(0, 1fr) prevents the
-     same blow-up at the grid-row level. Home doesn't hit it because its
-     content fits in the 1fr slot; Settings does. */
+     defeating the inner .cd-main-scroll overflow. */
   min-height: 0;
   background: var(--bg);
   overflow: visible;
   display: grid;
   grid-template-columns: var(--sidebar-w, 260px) 1fr;
-  grid-template-rows: 44px minmax(0, 1fr);
-  grid-template-areas:
-    'tl-side tl-main'
-    'side    main';
+  /* Codex-style chrome: no dedicated 44px top row. Each pane absorbs its
+     own chrome into its first flex child (see chrome.ts — tlSide is the
+     first child of .cd-sidebar, tlMain is the first child of .cd-main). */
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'side main';
   transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 .cd-window[data-sidebar='closed'] {
   --sidebar-w: 0px;
 }
 
-/* Title-bar halves. The whole strip is draggable so users can move the
-   window from anywhere along it; interactive bits opt back out. */
+/* Title-bar halves. Each lives INSIDE its pane (sidebar / main) as that
+   pane's first row — no longer separate grid areas. The whole strip is
+   draggable; interactive bits opt back out. */
 .cd-tl-side,
 .cd-tl-main {
   -webkit-app-region: drag;
@@ -3428,18 +3460,16 @@ textarea {
   overflow: visible;
 }
 .cd-tl-side {
-  grid-area: tl-side;
+  flex: 0 0 44px;
   display: flex;
   align-items: center;
   padding: 0 14px;
   gap: 10px;
   position: relative;
   z-index: 3;
-  background: var(--sidebar-bg, transparent);
-  border-right: var(--sidebar-divider, 0.5px solid var(--line));
 }
 .cd-tl-main {
-  grid-area: tl-main;
+  flex: 0 0 44px;
   display: flex;
   align-items: center;
   padding: 0 14px;
@@ -3447,6 +3477,41 @@ textarea {
   min-width: 0;
   position: relative;
   z-index: 4;
+}
+/* Grid layout — used by the Builder so the chrome row's two cells line up
+   with the columns of `.builder-body` below it. Col 1 spans the chat-pane
+   width (matches its minmax), col 2 spans the right-pane (1fr). The cells
+   own their own horizontal padding instead of cd-tl-main, so col 1's right
+   edge meets col 2's left edge with no padding gutter. */
+.cd-tl-main[data-layout='grid'] {
+  display: grid;
+  grid-template-columns: minmax(360px, 420px) 1fr;
+  padding: 0;
+  gap: 0;
+  /* Same easing as .builder-body so the chrome cells animate in lockstep
+     with the panes below when the chat-pane collapses. */
+  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.cd-tl-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 14px;
+  min-width: 0;
+}
+/* Chat-pane toggle pinned to the right edge of the nav cell — sits at
+   the chat-pane / canvas boundary, mirroring the affordance pattern of
+   the workspace-sidebar toggle (which lives at the left edge of the
+   sidebar). One toggle per panel, each at its panel's edge. */
+.cd-tl-nav .chat-toggle-wrap {
+  margin-left: auto;
+}
+.cd-tl-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 14px;
+  min-width: 0;
 }
 
 /* Reserve space for the real macOS traffic lights (Electron paints them
@@ -3459,8 +3524,13 @@ textarea {
   flex: 0 0 auto;
   display: inline-block;
 }
+/* When the sidebar collapses, keep tlSide taking its 44px slot — using
+   `visibility: hidden` instead of `display: none` so `.cd-sidebar-inner`
+   (with "New app", "Search", etc.) doesn't slide up into the tlSide slot
+   during the 240ms width animation. The parent cd-sidebar is 0 wide +
+   overflow:hidden once collapsed, so tlSide isn't visible regardless. */
 .cd-window[data-sidebar='closed'] .cd-tl-side {
-  display: none;
+  visibility: hidden;
 }
 .cd-window[data-sidebar='closed'] .cd-tl-main .cd-traffic-lights-spacer {
   display: inline-block;
@@ -3476,7 +3546,10 @@ textarea {
 .cd-tl-main .cd-tb-btn-wrap,
 .cd-tl-side .cd-tb-btn-wrap,
 .cd-tl-main .cd-tabs-pill,
-.cd-tl-main .cd-btn {
+.cd-tl-main .cd-btn,
+/* Project-name contenteditable inside the builder chrome must accept
+   clicks (otherwise the surrounding tl-main drag region eats them). */
+.cd-tl-main [contenteditable] {
   -webkit-app-region: no-drag;
 }
 
@@ -3579,7 +3652,11 @@ textarea {
   width: 260px;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* Was height: 100% — but now tlSide sits above us in the .cd-sidebar
+     flex column, so we need to claim the remaining space via flex: 1
+     and scroll on overflow. */
+  flex: 1;
+  min-height: 0;
   padding: 6px 8px 8px;
   overflow-y: auto;
 }
@@ -3687,44 +3764,6 @@ textarea {
 .cd-sb-section-btn:hover {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
-}
-
-/* Workspace switcher row at the top of the sidebar */
-.cd-sb-workspace {
-  padding-top: 8px;
-  padding-bottom: 8px;
-  margin-bottom: 4px;
-}
-.cd-sb-workspace .cd-sb-label {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.cd-sb-workspace .cd-sb-label .ws-name {
-  color: var(--ink);
-  font-weight: 600;
-  font-size: 13px;
-}
-.cd-sb-workspace .cd-sb-label .ws-host {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--ink-4);
-}
-.cd-sb-workspace .cd-sb-brand {
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  background: var(--bg-sunken);
-  border: 0.5px solid var(--line);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--accent);
-  letter-spacing: -0.04em;
-  flex: 0 0 auto;
 }
 
 /* Small icon tile rendered inline in sidebar app rows. Matches the

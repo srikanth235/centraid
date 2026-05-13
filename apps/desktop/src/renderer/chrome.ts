@@ -44,6 +44,15 @@
       svg('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16"/>', size),
     sidebarClosed: (size = 15): string =>
       svg('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/>', size),
+    // Chat-pane toggle — panel with a chevron pointing the collapse
+    // direction. Distinct from sidebarOpen/Closed (which carry only a
+    // vertical divider) so the two adjacent toggles read as siblings, not
+    // duplicates. Chevron points LEFT when open (click to collapse left),
+    // RIGHT when collapsed (click to expand from left).
+    chatPanelOpen: (size = 15): string =>
+      svg('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M13 9l-3 3 3 3"/>', size),
+    chatPanelClosed: (size = 15): string =>
+      svg('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M10 9l3 3-3 3"/>', size),
     arrowLeft: (size = 15): string => svg('<path d="M19 12H5M12 19l-7-7 7-7"/>', size),
     arrowRight: (size = 15): string => svg('<path d="M5 12h14M12 5l7 7-7 7"/>', size),
     pencil: (size = 15): string =>
@@ -125,13 +134,23 @@
     onToggleSidebar: () => void;
     sidebar: HTMLElement;
     main: HTMLElement;
+    /** Right-edge chrome cluster — project identity, Publish, brand chip, etc. */
     titlebarRight?: HTMLElement | null;
+    /** Center chrome cluster — view-context controls (mode tabs, device pill).
+     *  Sits between the back/forward nav and the trailing flex spacer, so it
+     *  reads as "what's the main canvas showing" rather than identity. */
+    titlebarCenter?: HTMLElement | null;
     showNewChat?: boolean;
     onNewChat?: () => void;
     canGoBack?: boolean;
     canGoForward?: boolean;
     onBack?: () => void;
     onForward?: () => void;
+    /** When true, a chat-pane toggle is rendered at the trailing edge of
+     *  `.cd-tl-nav` — i.e. the chat-pane/canvas boundary. Builder only. */
+    showChatToggle?: boolean;
+    chatPaneOpen?: boolean;
+    onToggleChat?: () => void;
   }
 
   // Builds the full `.cd-window` shell. Returns the root element plus a
@@ -139,6 +158,7 @@
   function buildWindow(opts: WindowOpts): {
     root: HTMLElement;
     setSidebarOpen: (open: boolean) => void;
+    setChatPaneOpen: (open: boolean) => void;
   } {
     const sidebarToggle = (open: boolean): HTMLElement =>
       tbBtn({
@@ -150,7 +170,8 @@
       });
 
     const sidebarToggleLeft = sidebarToggle(true);
-    const sidebarToggleRight = sidebarToggle(false);
+    // The closed-state toggle is now built on-demand inside
+    // `buildTlMainContent`, so we don't need a captured reference here.
     const backButton = (): HTMLElement =>
       tbBtn({
         icon: Glyph.arrowLeft(),
@@ -169,6 +190,17 @@
         disabled: !opts.canGoForward,
         onClick: opts.onForward,
       });
+    const chatToggle = (open: boolean): HTMLElement => {
+      const node = tbBtn({
+        icon: open ? Glyph.chatPanelOpen() : Glyph.chatPanelClosed(),
+        title: open ? 'Hide chat pane' : 'Show chat pane',
+        shortcut: '⌘\\',
+        ariaLabel: open ? 'Hide chat pane' : 'Show chat pane',
+        onClick: opts.onToggleChat,
+      });
+      node.classList.add('chat-toggle-wrap');
+      return node;
+    };
 
     const tlSide = el('div', { class: 'cd-tl-side' }, [
       trafficLightsSpacer(),
@@ -176,72 +208,96 @@
       sidebarToggleLeft,
     ]);
 
-    const tlMainChildren: (HTMLElement | null)[] = [
-      trafficLightsSpacer(),
-      opts.sidebarOpen ? null : sidebarToggleRight,
-      backButton(),
-      forwardButton(),
-    ];
-    if (!opts.sidebarOpen && opts.showNewChat) {
-      tlMainChildren.push(
-        tbBtn({
-          icon: Glyph.pencil(),
-          title: 'New app',
-          shortcut: '⌘N',
-          ariaLabel: 'New app',
-          onClick: opts.onNewChat,
-        }),
-      );
+    // tlMain layout. When `titlebarCenter` is passed, the row uses a
+    // 2-cell grid (`.cd-tl-nav` + `.cd-tl-context`) whose column tracks
+    // mirror `.builder-body` — that aligns the center cluster's left edge
+    // with the right pane's left edge, and lets us push the trailing
+    // cluster (e.g. device pill) to the chrome row's extreme right. When
+    // no center is set, the row stays a flat flex container as before.
+    function buildTlMainContent(open: boolean): HTMLElement[] {
+      const navChildren: (HTMLElement | null)[] = [
+        trafficLightsSpacer(),
+        open ? null : sidebarToggle(false),
+        backButton(),
+        forwardButton(),
+      ];
+      if (!open && opts.showNewChat) {
+        navChildren.push(
+          tbBtn({
+            icon: Glyph.pencil(),
+            title: 'New app',
+            shortcut: '⌘N',
+            ariaLabel: 'New app',
+            onClick: opts.onNewChat,
+          }),
+        );
+      }
+      // Chat-pane toggle pinned to the trailing edge of cd-tl-nav (via
+      // `.chat-toggle-wrap { margin-left: auto }` — see styles.css). Sits at
+      // the chat-pane/canvas boundary, matching the panel-it-controls edge.
+      if (opts.showChatToggle) {
+        navChildren.push(chatToggle(opts.chatPaneOpen !== false));
+      }
+      const nav = navChildren.filter((c): c is HTMLElement => !!c);
+      if (opts.titlebarCenter) {
+        const contextChildren: HTMLElement[] = [opts.titlebarCenter];
+        if (opts.titlebarRight) {
+          contextChildren.push(el('span', { style: { flex: '1' } }));
+          contextChildren.push(opts.titlebarRight);
+        }
+        return [
+          el('div', { class: 'cd-tl-nav' }, nav),
+          el('div', { class: 'cd-tl-context' }, contextChildren),
+        ];
+      }
+      const flat: HTMLElement[] = [...nav, el('span', { style: { flex: '1' } })];
+      if (opts.titlebarRight) flat.push(opts.titlebarRight);
+      return flat;
     }
-    tlMainChildren.push(el('span', { style: { flex: '1' } }));
-    if (opts.titlebarRight) tlMainChildren.push(opts.titlebarRight);
     const tlMain = el(
       'div',
-      { class: 'cd-tl-main' },
-      tlMainChildren.filter((c): c is HTMLElement => !!c),
+      {
+        class: 'cd-tl-main',
+        'data-layout': opts.titlebarCenter ? 'grid' : 'flat',
+      },
+      buildTlMainContent(opts.sidebarOpen),
     );
 
+    // Codex-style chrome: tlSide / tlMain are no longer separate window-
+    // grid rows — they live INSIDE the sidebar column and main element as
+    // each pane's first row. The cd-window collapses to a single grid row,
+    // reclaiming ~44px at the top of the canvas (see styles.css).
     const sidebarColumn = el('aside', { class: 'cd-sidebar' }, [
+      tlSide,
       el('div', { class: 'cd-sidebar-inner' }, opts.sidebar),
     ]);
     opts.main.classList.add('cd-main');
+    opts.main.prepend(tlMain);
 
     const root = el(
       'div',
       { class: 'cd-window', 'data-sidebar': opts.sidebarOpen ? 'open' : 'closed' },
-      [tlSide, tlMain, sidebarColumn, opts.main],
+      [sidebarColumn, opts.main],
     );
 
+    function rebuildTlMain(open: boolean): void {
+      const main = root.querySelector('.cd-tl-main');
+      if (!main) return;
+      main.innerHTML = '';
+      for (const c of buildTlMainContent(open)) main.append(c);
+    }
     return {
       root,
       setSidebarOpen(open: boolean): void {
         root.dataset.sidebar = open ? 'open' : 'closed';
-        // Re-evaluate the toggle/back/forward/new-chat cluster in tl-main since
-        // the new-chat button only appears in the closed state.
-        const main = root.querySelector('.cd-tl-main');
-        if (!main) return;
-        // Drop everything between traffic-lights and the trailing spacer; rebuild.
-        main.innerHTML = '';
-        const rebuilt: (HTMLElement | null)[] = [
-          trafficLightsSpacer(),
-          open ? null : sidebarToggle(false),
-          backButton(),
-          forwardButton(),
-        ];
-        if (!open && opts.showNewChat) {
-          rebuilt.push(
-            tbBtn({
-              icon: Glyph.pencil(),
-              title: 'New app',
-              shortcut: '⌘N',
-              ariaLabel: 'New app',
-              onClick: opts.onNewChat,
-            }),
-          );
-        }
-        rebuilt.push(el('span', { style: { flex: '1' } }));
-        if (opts.titlebarRight) rebuilt.push(opts.titlebarRight);
-        for (const c of rebuilt) if (c) main.append(c);
+        rebuildTlMain(open);
+      },
+      setChatPaneOpen(open: boolean): void {
+        // Mutate the captured opt so the next rebuildTlMain picks the right
+        // chevron direction. cd-tl-main is rebuilt against the CURRENT sidebar
+        // state so the new-app / sidebar-toggle cluster stays consistent.
+        opts.chatPaneOpen = open;
+        rebuildTlMain(root.dataset.sidebar !== 'closed');
       },
     };
   }
@@ -308,16 +364,6 @@
 
   function buildSidebar(opts: SidebarOpts): HTMLElement {
     const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', height: '100%' } });
-
-    // Workspace switcher
-    const ws = el('button', { class: 'cd-sb-item cd-sb-workspace', type: 'button' });
-    ws.append(el('span', { class: 'cd-sb-brand' }, 'C'));
-    const wsLabel = el('span', { class: 'cd-sb-label' });
-    wsLabel.append(el('span', { class: 'ws-name' }, 'Personal'));
-    wsLabel.append(el('span', { class: 'ws-host' }, 'centraid.app'));
-    ws.append(wsLabel);
-    ws.append(el('span', { class: 'cd-sb-icon', trustedHtml: Glyph.chevronDown(12) }));
-    wrap.append(ws);
 
     // Top nav
     wrap.append(

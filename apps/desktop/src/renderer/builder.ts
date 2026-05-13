@@ -600,9 +600,9 @@
 
     // In-pane builder header — lives at the top of the chat pane and owns
     // the project-level affordances (icon, name, status, more menu, Publish).
-    // Replaces the window-wide cd-app-strip + titlebarRight, matching the
-    // v2 mockup where each pane carries its own header instead of a
-    // global app strip.
+    // Project identity belongs to the chat pane (its conversation), not the
+    // global window chrome; the chrome row only carries view-context controls
+    // (mode tabs, device pill).
     const moreBtn = el('button', {
       'aria-label': 'More project actions',
       class: 'builder-pane-more',
@@ -693,22 +693,24 @@
     // data-sidebar drives the .builder-body grid columns (open vs collapsed).
     const body = el('div', { class: 'builder-body', 'data-sidebar': 'open' });
     const chatPane = el('div', { class: 'chat-pane' });
-    // The right pane is now a flex column hosting a persistent toolbar
-    // (tabs + URL bar) plus a renderable content area. Backdrop classes
-    // (`preview-pane`, `has-phone`) stay on `rightPane` so the dotted
-    // wall fills the whole column. Render functions write into
-    // `rightPaneContent`, which is what `renderRight()` clears.
+    // The right pane is now a flat container for the canvas — the mode
+    // tabs + device pill (formerly in `.right-pane-toolbar`) ride in the
+    // window chrome row (cd-tl-main) as `titlebarCenter`. Backdrop classes
+    // (`preview-pane`, `has-phone`) stay on `rightPane` so the dotted wall
+    // fills the column. Render functions write into `rightPaneContent`.
     const rightPane = el('div', { class: 'right-pane' });
-    const rightPaneToolbar = el('div', { class: 'right-pane-toolbar' }, [
-      tabsPill,
-      el('span', { class: 'right-pane-toolbar-spacer' }),
-      urlbarSlot,
-    ]);
     const rightPaneContent = el('div', { class: 'right-pane-content' });
-    rightPane.append(rightPaneToolbar);
     rightPane.append(rightPaneContent);
     body.append(chatPane);
     body.append(rightPane);
+
+    // Center chrome cluster — tabs (Preview / Code / Cloud) followed by the
+    // device pill (Phone / Tablet / Desktop). The device pill hides when
+    // the active tab isn't Preview (driven by .urlbar-slot[data-visible]).
+    const builderTitlebarCenter = el('span', { class: 'builder-tl-center' }, [
+      tabsPill,
+      urlbarSlot,
+    ]);
 
     // chat-scroll + chat-input-wrap are recreated by renderChatPane() each
     // time chatView changes, so the same pane can host either view without
@@ -2740,7 +2742,26 @@
     });
 
     let builderSidebarOpen = Store.get<boolean>('appearance.sidebarOpen', true);
-    const { root: shell, setSidebarOpen: setShellSidebarOpen } = window.Chrome.buildWindow({
+    let builderChatOpen = Store.get<boolean>('builder.chatPaneOpen', true);
+    // Initial chat-pane state on the .builder root — drives the data-chat
+    // CSS rules that collapse .builder-body's first column to 0.
+    main.dataset.chat = builderChatOpen ? 'open' : 'closed';
+    // Assigned after buildWindow() returns; toggleChatPane reads it through
+    // its closure at call-time, so the initial undefined binding is fine.
+    let setShellChatPaneOpen: (open: boolean) => void = () => {
+      /* assigned below */
+    };
+    const toggleChatPane = (): void => {
+      builderChatOpen = !builderChatOpen;
+      Store.set('builder.chatPaneOpen', builderChatOpen);
+      main.dataset.chat = builderChatOpen ? 'open' : 'closed';
+      setShellChatPaneOpen(builderChatOpen);
+    };
+    const {
+      root: shell,
+      setSidebarOpen: setShellSidebarOpen,
+      setChatPaneOpen: chromeSetChatPaneOpen,
+    } = window.Chrome.buildWindow({
       canGoBack: opts.canGoBack,
       canGoForward: opts.canGoForward,
       main,
@@ -2752,13 +2773,37 @@
         Store.set('appearance.sidebarOpen', builderSidebarOpen);
         setShellSidebarOpen(builderSidebarOpen);
       },
+      onToggleChat: toggleChatPane,
+      showChatToggle: true,
+      chatPaneOpen: builderChatOpen,
       showNewChat: true,
       sidebar,
       sidebarOpen: builderSidebarOpen,
-      // No window-titlebar right cluster — Publish + project actions
-      // moved into the in-pane builder header.
+      // Tabs (Preview / Code / Cloud) + device pill (Phone / Tablet /
+      // Desktop) ride in the window chrome row as the center cluster —
+      // killing the old right-pane-toolbar row. Project identity stays
+      // in the chat pane's own header (builder-pane-header), so no
+      // titlebarRight on the chrome row.
+      titlebarCenter: builderTitlebarCenter,
     });
+    setShellChatPaneOpen = chromeSetChatPaneOpen;
     root.append(shell);
+
+    // ⌘\ toggles the chat pane (companion to ⌘B for workspace sidebar).
+    // VS Code / Cursor use this exact pair. Registered on document so it
+    // fires regardless of focus; ignored when a text field is the target
+    // so the user can still type a literal backslash.
+    const onChatToggleKey = (e: KeyboardEvent): void => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key !== '\\') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) {
+        return;
+      }
+      e.preventDefault();
+      toggleChatPane();
+    };
+    document.addEventListener('keydown', onChatToggleKey);
 
     // renderChatPane() mounts chat-scroll + input the first time, then
     // renderChat()/renderInput() repaint via the references it sets up.
@@ -2772,6 +2817,7 @@
 
     // Cleanup
     return () => {
+      document.removeEventListener('keydown', onChatToggleKey);
       if (unsubscribeAgent) {
         unsubscribeAgent();
         unsubscribeAgent = null;

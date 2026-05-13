@@ -95,7 +95,7 @@
   };
   const DEFAULT_PREFS: AppearancePrefs = {
     accent: 'blue',
-    bgL: 18,
+    bgL: 0,
     cardVariant: 'outlined',
     coolBlueCast: true,
     density: 'regular',
@@ -1354,7 +1354,7 @@
     const themeSeg = makeSegmented<ThemeName>(['dark', 'light'], prefs.theme, (v) => {
       setPrefs({ theme: v });
     });
-    const shadeRow = makeSliderRow(prefs.bgL, 10, 35, 1, (v) => setPrefs({ bgL: v }));
+    const shadeRow = makeSliderRow(prefs.bgL, 0, 35, 1, (v) => setPrefs({ bgL: v }));
     const coolCastSwitch = makeSwitch(prefs.coolBlueCast, (v) => setPrefs({ coolBlueCast: v }));
     const accentSwatches = makeSwatches(prefs.accent, (v) => setPrefs({ accent: v }));
 
