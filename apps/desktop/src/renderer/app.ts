@@ -95,7 +95,7 @@
   };
   const DEFAULT_PREFS: AppearancePrefs = {
     accent: 'blue',
-    bgL: 0,
+    bgL: 10,
     cardVariant: 'outlined',
     coolBlueCast: true,
     density: 'regular',
