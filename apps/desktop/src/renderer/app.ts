@@ -5,10 +5,61 @@
 // so they're one tap away from being cloned & deployed.
 // governance: allow-repo-hygiene file-size-limit shell-entry-point pending split into route modules
 
-const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="display:block;width:100%;height:100%"><path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/><path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/><path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/><circle cx="120" cy="120" r="12" fill="#E11D48"/></svg>`;
-
 (function () {
   const root = document.querySelector('#root') as HTMLElement;
+
+  // Canonical icon → palette-hue mapping, lifted from the Centraid Redesign
+  // bold.jsx APPS fixture. Every app type has a fixed colour identity in
+  // the design (Todos is always indigo, Habits always rose, etc.). Used
+  // when minting a new app, when hydrating drafts off disk, and to migrate
+  // existing userApps to their canonical hue. Sparkle is the default icon
+  // for drafts and freshly-prompted apps before an icon is inferred — it
+  // gets the violet sub-accent.
+  const CANONICAL_ICON_COLOR_KEY: Record<string, ColorKeyType> = {
+    Gift: 'violet',
+    Habit: 'rose',
+    Journal: 'amber',
+    Mood: 'violet',
+    Plant: 'slate',
+    Pomodoro: 'forest',
+    Sparkle: 'violet',
+    Spend: 'ochre',
+    Todo: 'indigo',
+    Water: 'teal',
+  };
+
+  function colorForIcon(iconKey: IconNameType | string): ColorHexType {
+    const key = CANONICAL_ICON_COLOR_KEY[iconKey];
+    if (key) {
+      const c = (ICON_PALETTE as unknown as Record<string, ColorHexType>)[key];
+      if (c) return c;
+    }
+    return (
+      (ICON_PALETTE as unknown as Record<string, ColorHexType>)['violet'] ??
+      ('#7C5BD9' as ColorHexType)
+    );
+  }
+
+  // "X ago" relative-time formatter. Mirrors builder.ts:relativeWhen, but
+  // co-located here so app.ts doesn't need to reach into the builder IIFE.
+  function relativeTime(iso?: string): string {
+    if (!iso) return 'Recently';
+    try {
+      const t = new Date(iso).getTime();
+      if (Number.isNaN(t)) return 'Recently';
+      const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+      if (s < 60) return 'just now';
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      const d = Math.floor(h / 24);
+      if (d < 30) return `${d}d ago`;
+      return new Date(iso).toLocaleDateString();
+    } catch {
+      return 'Recently';
+    }
+  }
 
   // Apps the user has installed (cloned from a template or built themselves).
   // The home grid renders these plus uninstalled templates inline.
@@ -24,16 +75,45 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     theme: ThemeName;
     density: Density;
     tileVariant: TileVariant;
+    sidebarOpen: boolean;
   }
   const DEFAULT_PREFS: AppearancePrefs = {
     density: 'regular',
-    theme: 'light',
-    tileVariant: 'solid',
+    sidebarOpen: true,
+    // Bold · Atmospheric is built around the dark blue-tinted ramp + Electric
+    // Blue accent (see Centraid Redesign brief). Light theme still works but
+    // won't carry the atmospheric glow — dark is the design's home turf.
+    theme: 'dark',
+    // Design uses the vertical-darkening gradient for app icons (155deg,
+    // top→bottom hue, -25 shade). Matches the Bold home screenshot.
+    tileVariant: 'gradient',
   };
+
   let prefs: AppearancePrefs = {
     ...DEFAULT_PREFS,
     ...Store.get<Partial<AppearancePrefs>>('appearance', {}),
   };
+
+  // Idempotent enforcement of the design's icon→colour contract and the
+  // `updatedAt` field. Runs on every load; becomes a no-op once every app
+  // already matches. Cheaper than a versioned migration and avoids carrying
+  // dead schema bumps around the codebase.
+  {
+    let touched = false;
+    const nowIso = new Date().toISOString();
+    for (const a of userApps) {
+      const canonical = colorForIcon(a.iconKey);
+      if (a.color !== canonical) {
+        a.color = canonical;
+        touched = true;
+      }
+      if (!a.updatedAt) {
+        a.updatedAt = nowIso;
+        touched = true;
+      }
+    }
+    if (touched) Store.set('home.userApps', userApps);
+  }
 
   function applyPrefs(): void {
     const html = document.documentElement;
@@ -46,6 +126,50 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     prefs = { ...prefs, ...patch };
     Store.set('appearance', prefs);
     applyPrefs();
+  }
+
+  // Track the current cd-window setter so the sidebar toggle can flip the
+  // animated grid without rebuilding the page. Reset on every clear().
+  let currentSetSidebarOpen: ((open: boolean) => void) | null = null;
+  function toggleSidebar(): void {
+    const next = !prefs.sidebarOpen;
+    setPrefs({ sidebarOpen: next });
+    if (currentSetSidebarOpen) currentSetSidebarOpen(next);
+  }
+
+  // Build the sidebar contents for the current home/app-view context. The
+  // builder builds its own (it knows which project is active).
+  function buildHomeSidebar(activeId?: string): HTMLElement {
+    const all = getAppsWithDrafts();
+    const apps: ChromeSidebarApp[] = userApps.map((a) => ({
+      color: a.color,
+      iconKey: a.iconKey,
+      id: a.id,
+      name: a.name,
+      status: 'new',
+    }));
+    const draftEntries: ChromeSidebarApp[] = drafts.map((d) => ({
+      color: d.color,
+      iconKey: d.iconKey,
+      id: d.id,
+      name: d.name,
+      status: 'draft',
+    }));
+    void all;
+    return window.Chrome.buildSidebar({
+      activeId,
+      apps,
+      drafts: draftEntries,
+      onAppClick: (id) => {
+        const app = findApp(id);
+        if (!app) return;
+        if (isDraft(app)) enterBuilder({ appContext: app });
+        else openApp(id);
+      },
+      onHome: renderHome,
+      onNewApp: openNewAppSheet,
+      onSettings: () => void openSettingsSheet(),
+    });
   }
 
   function persist(): void {
@@ -94,6 +218,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
       }
     }
     currentCleanup = null;
+    currentSetSidebarOpen = null;
     closeContextMenu();
     root.innerHTML = '';
   }
@@ -153,19 +278,15 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     try {
       const projs = await window.CentraidApi.listProjects();
       const knownIds = new Set(getApps().map((a) => a.id));
-      const draftPalette = (Object.values(window.ICON_PALETTE ?? {}) as ColorHexType[]) || [];
       drafts = projs
         .filter((p) => !knownIds.has(p.id))
         .map((p) => {
-          // Stable color/icon per id so a draft tile doesn't reshuffle on
-          // every re-render.
-          const seed = hashString(p.id);
-          const color =
-            (draftPalette[seed % Math.max(1, draftPalette.length)] as ColorHexType) ??
-            ('#5847e0' as ColorHexType);
+          // Drafts default to the Sparkle icon (no inference has run yet);
+          // its canonical colour is accent-violet so every draft reads as
+          // "draft" at a glance rather than picking a random hue per id.
           return {
             __draft: true,
-            color,
+            color: colorForIcon('Sparkle'),
             colorKey: 'violet',
             // Prefer the real `app.json#description` when present (carried
             // over from the template manifest on clone, or set by the user
@@ -183,160 +304,216 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     }
   }
 
-  function hashString(s: string): number {
-    let h = 0;
-    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-    return Math.abs(h);
-  }
-
   function renderHome(): void {
     void renderHomeAsync();
   }
 
   async function renderHomeAsync(): Promise<void> {
     clear();
-
-    const settingsBtn = el('button', {
-      'aria-label': 'Settings',
-      title: 'Settings',
-      class: 'btn-icon btn-settings titlebar-action',
-      trustedHtml: `${Icon.Settings({ size: 15 })}<span class="btn-settings-label">Settings</span>`,
-      onClick: () => void openSettingsSheet(),
-    });
-
-    const titlebar = el('div', { class: 'titlebar' }, [
-      el('div', { class: 'titlebar-side' }),
-      el('div', { class: 'titlebar-brand' }, [
-        el('span', { class: 'wordmark', trustedHtml: LOGO_SVG }),
-        el('span', { class: 'crumb' }, 'Centraid'),
-      ]),
-      el('div', { class: 'titlebar-side is-end' }, [settingsBtn]),
-    ]);
-
-    const hero = el('div', { class: 'home-hero' }, [
-      el('div', { class: 'wordmark', trustedHtml: LOGO_SVG }),
-      el('div', { class: 'home-hero-copy' }, [
-        el('h1', {}, 'Your tiny apps.'),
-        el('p', {}, 'Build, continue, and open personal apps for the things you do every day.'),
-      ]),
-    ]);
-
-    // Apps section: installed user apps + on-disk drafts + the "New app"
-    // tile (the entry point for authoring from scratch). Always rendered —
-    // on a clean install it just contains the "New app" tile.
-    const appsGrid = el('div', { class: 'home-grid' });
-    for (const app of getApps()) {
-      appsGrid.append(renderTile(app));
-    }
     await hydrateDrafts();
-    for (const d of drafts) {
-      appsGrid.append(renderTile(d));
-    }
-    const newTile = el(
-      'button',
-      {
-        class: 'app-tile app-tile-add',
-        onClick: openNewAppSheet,
-      },
-      [
-        el('div', {
-          class: 'app-icon app-icon-add',
-          trustedHtml: Icon.Plus({ size: 28, strokeWidth: 1.75 }),
-        }),
-        el('div', { class: 'app-tile-name' }, 'New app'),
-        el('div', { class: 'app-tile-desc' }, 'Start from a prompt.'),
-      ],
-    );
-    appsGrid.append(newTile);
-
-    // Templates section: pre-built apps available to clone. Hidden once the
-    // user has installed everything; reappears when they delete a clone.
     const availableTemplates = await loadAvailableTemplates();
-    const homeChildren: (Node | null)[] = [
-      hero,
-      el('div', { class: 'home-section-title' }, 'Apps'),
-      appsGrid,
-    ];
-    if (availableTemplates.length > 0) {
-      const templatesGrid = el('div', { class: 'home-grid' });
-      for (const tmpl of availableTemplates) {
-        templatesGrid.append(renderTemplateTile(tmpl));
-      }
-      homeChildren.push(el('div', { class: 'home-section-title' }, 'Templates'), templatesGrid);
+
+    // ─ Main column: glass hero + "Your apps" grid + Templates strip ─
+    // `has-wall` paints the device-wall crosshatch behind everything —
+    // matches the Bold home screenshot. (UPDATES.md §5 said don't promote
+    // device-wall to a system token; the rendered design HTML uses it on
+    // Home anyway, so it lives here as a product choice, not a DS token.)
+    const main = el('div', { class: 'has-wall' });
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
+
+    scroll.append(buildHomeHero());
+
+    // Your apps section
+    const totalApps = getApps().length;
+    const totalDrafts = drafts.length;
+    if (totalApps + totalDrafts > 0) {
+      const section = el('section', { class: 'cd-section' });
+      const head = el('div', { class: 'cd-section-head' }, [
+        el('h2', {}, 'Your apps'),
+        el(
+          'span',
+          { class: 'cd-section-meta' },
+          `${totalApps} ${totalApps === 1 ? 'app' : 'apps'}${totalDrafts > 0 ? ` · ${totalDrafts} draft${totalDrafts === 1 ? '' : 's'}` : ''}`,
+        ),
+      ]);
+      const grid = el('div', { class: 'cd-apps-grid' });
+      for (const app of getApps()) grid.append(renderAppCard(app));
+      for (const d of drafts) grid.append(renderAppCard(d));
+      section.append(head);
+      section.append(grid);
+      scroll.append(section);
     }
 
-    const home = el(
-      'div',
-      { class: 'home' },
-      homeChildren.filter((c): c is Node => c != null),
-    );
+    // Templates strip
+    if (availableTemplates.length > 0) {
+      const section = el('section', { class: 'cd-section' });
+      section.append(el('div', { class: 'cd-eyebrow' }, 'Templates · curated'));
+      const grid = el('div', { class: 'cd-tmpl-grid' });
+      for (const tmpl of availableTemplates) grid.append(renderTemplateCard(tmpl));
+      section.append(grid);
+      scroll.append(section);
+    }
 
-    root.append(titlebar);
-    root.append(home);
+    const sidebar = buildHomeSidebar('home');
+    const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
+      main,
+      onNewChat: openNewAppSheet,
+      onToggleSidebar: toggleSidebar,
+      showNewChat: true,
+      sidebar,
+      sidebarOpen: prefs.sidebarOpen,
+    });
+    currentSetSidebarOpen = setSidebarOpen;
+    root.append(shell);
   }
 
-  function renderTile(app: AppMetaResolvedType): HTMLElement {
+  function buildHomeHero(): HTMLElement {
+    const wrap = el('div', { class: 'cd-hero' });
+    wrap.append(el('h1', {}, 'What should we build?'));
+
+    const prompt = el('div', { class: 'cd-hero-prompt' });
+    const ta = el('textarea', {
+      placeholder: 'A habit tracker, a journal, a tiny calculator…',
+      rows: '2',
+    }) as HTMLTextAreaElement;
+    const buildBtn = el('button', { class: 'cd-hero-build-btn', disabled: '' });
+    buildBtn.innerHTML = `<span>Build</span>${Icon.Send({ size: 13 })}`;
+
+    const submit = (): void => {
+      const v = ta.value.trim();
+      if (!v) return;
+      enterBuilder({ initialPrompt: v });
+    };
+    ta.addEventListener('input', () => {
+      if (ta.value.trim()) buildBtn.removeAttribute('disabled');
+      else buildBtn.setAttribute('disabled', '');
+    });
+    ta.addEventListener('keydown', (e) => {
+      const k = e as KeyboardEvent;
+      if (k.key === 'Enter' && (k.metaKey || k.ctrlKey)) {
+        k.preventDefault();
+        submit();
+      }
+    });
+    buildBtn.addEventListener('click', submit);
+
+    const row = el('div', { class: 'cd-hero-prompt-row' });
+    row.append(el('span', { style: { flex: '1' } }));
+    row.append(buildBtn);
+    prompt.append(ta);
+    prompt.append(row);
+    wrap.append(prompt);
+
+    const suggestions = [
+      { icon: 'Habit', label: 'Habit tracker' } as const,
+      { icon: 'Journal', label: 'Daily journal' } as const,
+      { icon: 'Pomodoro', label: 'Pomodoro timer' } as const,
+      { icon: 'Water', label: 'Hydration' } as const,
+    ];
+    const sugRow = el('div', { class: 'cd-hero-suggestions' });
+    for (const s of suggestions) {
+      const chip = el('button', {
+        class: 'cd-chip',
+        onClick: () => {
+          ta.value = s.label;
+          ta.dispatchEvent(new Event('input'));
+          ta.focus();
+        },
+      });
+      chip.innerHTML = `${Icon[s.icon]({ size: 12 })}<span>${s.label}</span>`;
+      sugRow.append(chip);
+    }
+    wrap.append(sugRow);
+    return wrap;
+  }
+
+  function renderAppCard(app: AppMetaResolvedType): HTMLElement {
     const draft = isDraft(app);
-    const badgeLabel = draft ? 'DRAFT' : isUserApp(app.id) ? 'NEW' : null;
-    const tile = el(
+    const status: 'new' | 'draft' | null = draft ? 'draft' : isUserApp(app.id) ? 'new' : null;
+    const card = el('button', {
+      class: 'cd-app-card',
+      type: 'button',
+      onClick: () => (draft ? enterBuilder({ appContext: app }) : openApp(app.id)),
+      onContextmenu: (e: Event) => {
+        e.preventDefault();
+        const me = e as MouseEvent;
+        openContextMenu(app, me.clientX, me.clientY);
+      },
+    });
+
+    // Halo glow tinted by app color — bg.jsx uses `${color}33` (20% alpha)
+    // and no CSS opacity layer. Larger radius than the design (180×180 vs
+    // 140×140) compensates for the desktop renderer's darker default base
+    // background and pushes the glow under the icon a little further.
+    const halo = el('span', { class: 'cd-app-card-halo' });
+    halo.style.background = `radial-gradient(circle, ${app.color}66 0%, ${app.color}22 35%, transparent 70%)`;
+    card.append(halo);
+
+    // Head row: tile icon + status pill
+    const head = el('div', { class: 'cd-app-card-head' });
+    const iconEl = el('div', {
+      class: 'cd-app-card-icon',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 24, strokeWidth: 1.85 }) : '',
+    });
+    const finish = window.CentraidTokens.tileFinish(app.color, prefs.tileVariant);
+    iconEl.style.background = finish.background;
+    iconEl.style.color = finish.glyphColor;
+    if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
+    head.append(iconEl);
+    card.append(head);
+
+    // Status pill — pinned to the card's top-right corner (independent of
+    // the icon row's vertical extent). z-index keeps it above the halo.
+    if (status) {
+      const pill = el('span', { class: 'cd-status cd-status-corner', 'data-tone': status });
+      pill.append(el('span', { class: 'cd-status-dot' }));
+      pill.append(document.createTextNode(status));
+      card.append(pill);
+    }
+
+    // Body
+    const body = el('div', {});
+    body.append(el('div', { class: 'cd-app-card-name' }, app.name));
+    body.append(el('div', { class: 'cd-app-card-desc' }, app.desc));
+    card.append(body);
+
+    // Meta line — "Edited X ago" for published apps (timestamp comes from
+    // userApps[*].updatedAt, backfilled by the v3 migration). Drafts have
+    // no published lineage yet, so they get a verb-cued "Continue editing"
+    // instead of a timestamp.
+    const meta = el('div', { class: 'cd-app-card-meta' });
+    const ua = !draft ? findUserApp(app.id) : undefined;
+    const metaLabel = draft ? 'Continue editing' : `Edited ${relativeTime(ua?.updatedAt)}`;
+    meta.innerHTML = `${Icon.Pencil({ size: 11 })}<span>${metaLabel}</span>`;
+    card.append(meta);
+    return card;
+  }
+
+  function renderTemplateCard(tmpl: TemplateEntry): HTMLElement {
+    const color = (window.ICON_PALETTE as Record<string, string>)[tmpl.colorKey] || '#7C5BD9';
+    const card = el(
       'button',
       {
-        class: 'app-tile',
-        'data-draft': String(draft),
-        // Drafts can't be "opened" — they have no published runtime. Send
-        // the user back into the builder instead.
-        onClick: () => (draft ? enterBuilder({ appContext: app }) : openApp(app.id)),
-        onContextmenu: (e: Event) => {
-          e.preventDefault();
-          const me = e as MouseEvent;
-          openContextMenu(app, me.clientX, me.clientY);
-        },
+        class: 'cd-tmpl-card',
+        type: 'button',
+        onClick: () => void cloneTemplate(tmpl),
       },
-      [
-        (() => {
-          // Compute the tile's visual treatment in TS (single source of
-          // truth, shared with mobile) and apply directly as inline style —
-          // no per-variant CSS rules in styles.css, no `--tile-color` plumbing.
-          const finish = window.CentraidTokens.tileFinish(app.color, prefs.tileVariant);
-          const iconEl = el('div', {
-            class: 'app-icon',
-            trustedHtml: Icon[app.iconKey]
-              ? Icon[app.iconKey]({ size: 28, strokeWidth: 1.75 })
-              : '',
-          });
-          iconEl.style.background = finish.background;
-          iconEl.style.color = finish.glyphColor;
-          if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
-          if (finish.backdropFilter) {
-            iconEl.style.backdropFilter = finish.backdropFilter;
-            iconEl.style.setProperty('-webkit-backdrop-filter', finish.backdropFilter);
-          }
-          return iconEl;
-        })(),
-        el('div', { class: 'app-tile-name' }, app.name),
-        el('div', { class: 'app-tile-desc' }, app.desc),
-        el('span', { class: 'tile-action-label' }, draft ? 'Continue editing' : 'Open app'),
-        (() => {
-          const btn = el('button', {
-            'aria-label': 'More',
-            class: 'tile-more-btn',
-            type: 'button',
-            onClick: (e: Event) => {
-              e.stopPropagation();
-              e.preventDefault();
-              const r = (btn as HTMLElement).getBoundingClientRect();
-              openContextMenu(app, r.right, r.bottom + 4);
-            },
-          });
-          btn.innerHTML = Icon.MoreHoriz({ size: 14 });
-          return btn;
-        })(),
-        badgeLabel
-          ? el('span', { class: 'tile-badge', 'data-kind': draft ? 'draft' : 'new' }, badgeLabel)
-          : null,
-      ],
+      [],
     );
-    return tile;
+    const iconEl = el('div', {
+      class: 'cd-tmpl-card-icon',
+      style: { background: color },
+      trustedHtml: Icon[tmpl.iconKey as IconNameType]
+        ? Icon[tmpl.iconKey as IconNameType]({ size: 16, strokeWidth: 1.85 })
+        : '',
+    });
+    card.append(iconEl);
+    const text = el('div', { style: { minWidth: '0', flex: '1' } });
+    text.append(el('div', { class: 'cd-tmpl-card-name' }, tmpl.name));
+    text.append(el('div', { class: 'cd-tmpl-card-desc' }, tmpl.desc));
+    card.append(text);
+    return card;
   }
 
   // ---------- Context menu ----------
@@ -678,75 +855,28 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     }
   }
 
-  function renderTemplateTile(tmpl: TemplateEntry): HTMLElement {
+  // Clone a template to disk and drop the user straight into the builder.
+  // The new project surfaces as a DRAFT tile on next home render; the user
+  // explicitly clicks Publish to upload it to the gateway.
+  async function cloneTemplate(tmpl: TemplateEntry): Promise<void> {
     const palette = window.CentraidTokens.palette as unknown as Record<string, ColorHexType>;
     const color: ColorHexType = palette[tmpl.colorKey] ?? ('#5847e0' as ColorHexType);
-    const finish = window.CentraidTokens.tileFinish(color, prefs.tileVariant);
-
-    const iconRenderer = (Icon as unknown as Record<string, IconRenderer>)[tmpl.iconKey];
-    const iconEl = el('div', {
-      class: 'app-icon',
-      trustedHtml: iconRenderer ? iconRenderer({ size: 28, strokeWidth: 1.75 }) : '',
-    });
-    iconEl.style.background = finish.background;
-    iconEl.style.color = finish.glyphColor;
-    if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
-    if (finish.backdropFilter) {
-      iconEl.style.backdropFilter = finish.backdropFilter;
-      iconEl.style.setProperty('-webkit-backdrop-filter', finish.backdropFilter);
+    try {
+      const result = await window.CentraidApi.cloneTemplate({ templateId: tmpl.id });
+      const draft: DraftAppMeta = {
+        __draft: true,
+        color,
+        colorKey: tmpl.colorKey as DraftAppMeta['colorKey'],
+        desc: result.project.description || tmpl.desc,
+        hasIndex: true,
+        iconKey: tmpl.iconKey as IconNameType,
+        id: result.project.id,
+        name: result.template.name,
+      };
+      enterBuilder({ appContext: draft });
+    } catch (err) {
+      showToast(`Clone failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    // The "Templates" section title carries the "this is a template" cue,
-    // so no per-tile badge — keeps the tile visually identical to a real
-    // app, which is honest about what happens on tap.
-    const tile = el(
-      'button',
-      {
-        class: 'app-tile app-tile-template',
-        'data-template-id': tmpl.id,
-      },
-      [
-        iconEl,
-        el('div', { class: 'app-tile-name' }, tmpl.name),
-        el('div', { class: 'app-tile-desc' }, tmpl.desc),
-        el('span', { class: 'tile-action-label' }, 'Clone template'),
-      ],
-    );
-
-    tile.addEventListener('click', () => {
-      if (tile.dataset.installing === 'true') return;
-      tile.dataset.installing = 'true';
-      tile.classList.add('app-tile-installing');
-      void (async () => {
-        try {
-          const result = await window.CentraidApi.cloneTemplate({ templateId: tmpl.id });
-          // Clone only lays the project down on disk. Drop the user straight
-          // into the builder so they can edit/preview; on exit, the new
-          // project surfaces as a DRAFT tile (hydrateDrafts picks it up) and
-          // the user explicitly clicks Publish to upload to the gateway.
-          const draft: DraftAppMeta = {
-            __draft: true,
-            color,
-            colorKey: tmpl.colorKey as DraftAppMeta['colorKey'],
-            // Surface the real template description in the builder topbar;
-            // cloneTemplate has already persisted it to `app.json` so
-            // hydrateDrafts will pick it up on subsequent renders too.
-            desc: result.project.description || tmpl.desc,
-            hasIndex: true,
-            iconKey: tmpl.iconKey as IconNameType,
-            id: result.project.id,
-            name: result.template.name,
-          };
-          enterBuilder({ appContext: draft });
-        } catch (err) {
-          tile.dataset.installing = 'false';
-          tile.classList.remove('app-tile-installing');
-          showToast(`Clone failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      })();
-    });
-
-    return tile;
   }
 
   function enterBuilder(
@@ -797,6 +927,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     if (!ua) return;
     if (input.name !== undefined) ua.name = input.name;
     if (input.description !== undefined) ua.desc = input.description || 'Built with Centraid.';
+    ua.updatedAt = new Date().toISOString();
     persist();
   }
 
@@ -811,7 +942,6 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     'Gift',
     'Mood',
   ];
-  const COLOR_POOL: ColorHexType[] = Object.values(ICON_PALETTE) as ColorHexType[];
 
   function inferAppMeta(prompt: string): {
     iconKey: IconNameType;
@@ -837,7 +967,11 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
         break;
       }
     }
-    const color = COLOR_POOL[Math.floor(Math.random() * COLOR_POOL.length)] ?? COLOR_POOL[0]!;
+    // Colour is derived from the icon, not random — matches the design's
+    // fixture (Todos always indigo, Habits always rose, etc.). If no prompt
+    // keywords hit, `iconKey` falls back to a random pool entry; that entry
+    // still has a canonical colour via colorForIcon().
+    const color = colorForIcon(iconKey);
     const cleaned = prompt.replace(/^\s*(a|an)\s+/i, '').trim();
     const words = cleaned.split(/\s+/).slice(0, 3).join(' ');
     const name = words.charAt(0).toUpperCase() + words.slice(1);
@@ -864,6 +998,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
       existing.name = input.name || existing.name;
       existing.desc = input.prompt && input.prompt.length <= 60 ? input.prompt : existing.desc;
       existing.centraidProjectId = input.projectId ?? existing.centraidProjectId;
+      existing.updatedAt = new Date().toISOString();
       persist();
       renderHome();
       showToast(`Updated "${existing.name}"`);
@@ -877,6 +1012,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
       iconKey: input.iconKey || meta.iconKey,
       id,
       name: input.name || meta.name,
+      updatedAt: new Date().toISOString(),
       ...(input.projectId ? { centraidProjectId: input.projectId } : {}),
     };
     userApps.push(newApp);
@@ -897,58 +1033,54 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" 
     const ua = findUserApp(id);
     clear();
 
-    const titlebar = el('div', { class: 'titlebar' }, [
-      el('div', { class: 'titlebar-side' }),
-      el('div', { class: 'titlebar-brand' }, [
-        el('span', {
-          class: 'wordmark',
-          onClick: renderHome,
-          style: { cursor: 'pointer' },
-          trustedHtml: LOGO_SVG,
-        }),
-        el(
-          'span',
-          { class: 'crumb', onClick: renderHome, style: { cursor: 'pointer' } },
-          'Centraid',
-        ),
-        el('span', { class: 'crumb-sep' }, '/'),
-        el('span', {}, app.name),
-      ]),
-      el('div', { class: 'titlebar-side is-end' }),
-    ]);
+    // Titlebar right cluster: brand chip with app icon + name, then the
+    // floating Edit pill that returns to the builder.
+    const brandChip = el('span', { class: 'cd-brand-chip' });
+    brandChip.append(
+      el('span', {
+        class: 'cd-app-strip-icon',
+        style: { background: app.color, width: '18px', height: '18px', borderRadius: '4px' },
+        trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 11, strokeWidth: 2 }) : '',
+      }),
+    );
+    brandChip.append(el('span', { class: 'cd-brand-chip-name' }, app.name));
+    const editPill = el('button', {
+      class: 'cd-edit-pill',
+      type: 'button',
+      onClick: () => enterBuilder({ appContext: app }),
+    });
+    editPill.innerHTML = `${Icon.Sparkle({ size: 11 })}<span>Edit</span>`;
+    const titlebarRight = el('span', {
+      style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
+    });
+    titlebarRight.append(brandChip);
+    titlebarRight.append(editPill);
 
-    const topbar = el('div', { class: 'app-topbar' }, [
-      el('button', {
-        'aria-label': 'Back',
-        class: 'btn-icon',
-        trustedHtml: Icon.ArrowLeft({ size: 18 }),
-        onClick: renderHome,
-      }),
-      el('div', {
-        class: 'app-topbar-icon',
-        trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 16, strokeWidth: 2 }) : '',
-        style: { background: app.color },
-      }),
-      el('div', { class: 'app-topbar-name' }, app.name),
-      el('div', { class: 'spacer' }),
-      el('button', {
-        class: 'btn btn-soft',
-        trustedHtml: Icon.Sparkle({ size: 13 }) + '<span>Edit</span>',
-        onClick: () => enterBuilder({ appContext: app }),
-      }),
-    ]);
-
-    const view = el('div', { class: 'app-view' });
+    // Main area: the running app fills the canvas inside a scrollable column.
+    const main = el('div', {});
+    const view = el('div', {
+      class: 'app-view',
+      style: { flex: '1', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+    });
     const body = el('div', { class: 'app-body' });
     const inner = el('div', { class: 'app-body-inner' });
     body.append(inner);
-    view.append(topbar);
     view.append(body);
-
+    main.append(view);
     inner.style.setProperty('--accent-color', app.color);
 
-    root.append(titlebar);
-    root.append(view);
+    const sidebar = buildHomeSidebar(app.id);
+    const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
+      main,
+      onNewChat: openNewAppSheet,
+      onToggleSidebar: toggleSidebar,
+      showNewChat: true,
+      sidebar,
+      sidebarOpen: prefs.sidebarOpen,
+      titlebarRight,
+    });
+    currentSetSidebarOpen = setSidebarOpen;
+    root.append(shell);
 
     try {
       mountUserApp(app, ua, inner);

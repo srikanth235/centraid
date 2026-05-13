@@ -19,8 +19,19 @@ function block(selector: string, props: Record<string, string>): string {
 }
 
 function themeProps(t: Theme): Record<string, string> {
-  return {
+  const out: Record<string, string> = {
     '--accent': t.accent,
+    '--accent-deep': t.accentDeep,
+    '--accent-light': t.accentLight,
+    '--accent-midnight': t.accentMidnight,
+    '--accent-violet': t.accentViolet,
+    '--danger': t.danger,
+    '--success': t.success,
+  };
+  // --bg-l must precede --bg/--bg-elev/--bg-sunken/--bg-app on dark, since
+  // those reference it via var(). Light theme omits it entirely.
+  if (t.bgL !== undefined) out['--bg-l'] = t.bgL;
+  Object.assign(out, {
     '--bezel': t.bezel,
     '--bezel-inner': t.bezelInner,
     '--bg': t.bg,
@@ -38,7 +49,11 @@ function themeProps(t: Theme): Record<string, string> {
     '--shadow-lg': t.shadowLg,
     '--shadow-md': t.shadowMd,
     '--shadow-sm': t.shadowSm,
-  };
+    '--sidebar-bg': t.sidebarBg,
+    '--sidebar-blur': t.sidebarBlur,
+    '--sidebar-divider': t.sidebarDivider,
+  });
+  return out;
 }
 
 function densityProps(d: DensityScale): Record<string, string> {
@@ -55,7 +70,15 @@ function densityProps(d: DensityScale): Record<string, string> {
  */
 export function toCss(): string {
   const staticProps: Record<string, string> = {};
-  for (const [k, v] of Object.entries(palette)) staticProps[`--c-${k}`] = v;
+  // App-icon palette gets two names: the legacy `--c-<hue>` (still used
+  // throughout the renderer and mobile theme code) and the redesign-spec
+  // `--icon-<hue>` (used by ds-update/02-chrome-components.css and any
+  // markup imported verbatim from the design system). Same hex value
+  // either way — `--icon-*` is an alias for cross-codebase portability.
+  for (const [k, v] of Object.entries(palette)) {
+    staticProps[`--c-${k}`] = v;
+    staticProps[`--icon-${k}`] = v;
+  }
   for (const [k, v] of Object.entries(radii)) staticProps[`--r-${k}`] = `${v}px`;
   Object.assign(staticProps, densityProps(densities.regular));
 

@@ -1,0 +1,431 @@
+// Centraid Bold · Atmospheric chrome — Codex-style window shell.
+// Builds the `.cd-window` grid (sidebar column + main column) with
+// synthetic traffic lights, sidebar toggle, back/forward arrows, and an
+// optional "New app" pencil that surfaces when the sidebar is collapsed.
+// Pure builder — Home, App view, and Builder each compose their own page
+// by passing a sidebar element and a main element. State (sidebarOpen)
+// is owned by the caller; this file exposes a setter that flips the
+// data-attribute so the grid animates without a full rebuild.
+
+(function () {
+  // The renderer's `el` helper is co-located in app.ts; we re-implement a
+  // tiny copy here so chrome.ts can run before app.ts loads.
+  function el(tag: string, attrs: ElAttrs = {}, children: ElChild | ElChild[] = []): HTMLElement {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class' && typeof v === 'string') {
+        node.className = v;
+      } else if (k === 'style' && typeof v === 'object' && v !== null) {
+        Object.assign(node.style, v as Partial<CSSStyleDeclaration>);
+      } else if (k.startsWith('on') && typeof v === 'function') {
+        node.addEventListener(k.slice(2).toLowerCase(), v as EventListener);
+      } else if (k === 'trustedHtml' && typeof v === 'string') {
+        node.innerHTML = v;
+      } else if (v != null && typeof v !== 'function') {
+        node.setAttribute(k, String(v));
+      }
+    }
+    const list = Array.isArray(children) ? children : [children];
+    for (const c of list) {
+      if (c == null || c === false) continue;
+      node.append(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return node;
+  }
+
+  // ── Inline icons used by chrome that aren't in @centraid/design-tokens
+  // (sidebar glyph, project folder, plug icon, etc.). One source of truth so
+  // they paint at the same stroke weight as the tokenised set.
+  function svg(path: string, size = 15, strokeWidth = 1.7): string {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+  }
+  const Glyph = {
+    sidebar: (size = 15): string =>
+      svg('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16"/>', size),
+    arrowLeft: (size = 15): string => svg('<path d="M19 12H5M12 19l-7-7 7-7"/>', size),
+    arrowRight: (size = 15): string => svg('<path d="M5 12h14M12 5l7 7-7 7"/>', size),
+    pencil: (size = 15): string =>
+      svg('<path d="M14 4l6 6L9 21H3v-6z"/><path d="M14 4l3-3 6 6-3 3"/>', size),
+    chevronDown: (size = 11): string => svg('<path d="M6 9l6 6 6-6"/>', size),
+    folder: (size = 14): string =>
+      svg(
+        '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+        size,
+      ),
+    plug: (size = 15): string =>
+      svg('<path d="M9 7V4M15 7V4M7 7h10v6a4 4 0 1 1-10 0z"/><path d="M12 17v3"/>', size),
+    history: (size = 15): string =>
+      svg('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', size),
+    settings: (size = 15): string =>
+      svg(
+        '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+        size,
+      ),
+    search: (size = 15): string =>
+      svg('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>', size),
+    plus: (size = 15): string => svg('<path d="M12 5v14M5 12h14"/>', size),
+    home: (size = 15): string => svg('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>', size),
+    star: (size = 15): string =>
+      svg(
+        '<path d="M12 3l2.6 5.3L20 9.3l-4 3.9.9 5.5L12 16.1 7.1 18.7 8 13.2 4 9.3l5.4-1z"/>',
+        size,
+      ),
+    sparkle: (size = 15): string =>
+      svg(
+        '<path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.6 1.6L21 17l-1.4.4L19 19l-.6-1.6L17 17l1.4-.4z"/>',
+        size,
+        1.5,
+      ),
+  };
+
+  // The Electron window uses `titleBarStyle: 'hiddenInset'` (see
+  // main.ts), which keeps the real macOS traffic lights at (16, 16).
+  // We don't paint synthetic ones — that would stack a second set on
+  // top. Instead, `.cd-tl-side` / `.cd-tl-main` reserve padding-left so
+  // the OS controls have a clean home. A no-op spacer keeps the layout
+  // identical whether or not the lights are present.
+  function trafficLightsSpacer(): HTMLElement {
+    return el('span', {
+      class: 'cd-traffic-lights-spacer',
+      'aria-hidden': 'true',
+    });
+  }
+
+  // Reusable titlebar icon button with tooltip + ⌘-shortcut chip.
+  function tbBtn(opts: {
+    icon: string;
+    title?: string;
+    shortcut?: string;
+    onClick?: () => void;
+    disabled?: boolean;
+    ariaLabel?: string;
+  }): HTMLElement {
+    const wrap = el('span', { class: 'cd-tb-btn-wrap' });
+    const btn = el('button', {
+      class: 'cd-tb-btn',
+      type: 'button',
+      'aria-label': opts.ariaLabel || opts.title,
+      onClick: opts.onClick,
+      trustedHtml: opts.icon,
+    });
+    if (opts.disabled) btn.setAttribute('disabled', '');
+    wrap.append(btn);
+    if (opts.title) {
+      const tip = el('span', { class: 'cd-tooltip' }, opts.title);
+      if (opts.shortcut) tip.append(el('span', { class: 'cd-kbd' }, opts.shortcut));
+      wrap.append(tip);
+    }
+    return wrap;
+  }
+
+  interface WindowOpts {
+    sidebarOpen: boolean;
+    onToggleSidebar: () => void;
+    sidebar: HTMLElement;
+    main: HTMLElement;
+    titlebarRight?: HTMLElement | null;
+    showNewChat?: boolean;
+    onNewChat?: () => void;
+  }
+
+  // Builds the full `.cd-window` shell. Returns the root element plus a
+  // setter that flips data-sidebar so the grid animates without a rebuild.
+  function buildWindow(opts: WindowOpts): {
+    root: HTMLElement;
+    setSidebarOpen: (open: boolean) => void;
+  } {
+    const sidebarToggleLeft = tbBtn({
+      icon: Glyph.sidebar(),
+      title: 'Toggle sidebar',
+      shortcut: '⌘B',
+      ariaLabel: 'Toggle sidebar',
+      onClick: opts.onToggleSidebar,
+    });
+    const sidebarToggleRight = tbBtn({
+      icon: Glyph.sidebar(),
+      title: 'Toggle sidebar',
+      shortcut: '⌘B',
+      ariaLabel: 'Toggle sidebar',
+      onClick: opts.onToggleSidebar,
+    });
+
+    const tlSide = el('div', { class: 'cd-tl-side' }, [
+      trafficLightsSpacer(),
+      el('span', { style: { flex: '1' } }),
+      sidebarToggleLeft,
+    ]);
+
+    const tlMainChildren: (HTMLElement | null)[] = [
+      trafficLightsSpacer(),
+      opts.sidebarOpen ? null : sidebarToggleRight,
+      tbBtn({
+        icon: Glyph.arrowLeft(),
+        title: 'Back',
+        shortcut: '⌘[',
+        ariaLabel: 'Back',
+        disabled: true,
+      }),
+      tbBtn({
+        icon: Glyph.arrowRight(),
+        title: 'Forward',
+        shortcut: '⌘]',
+        ariaLabel: 'Forward',
+        disabled: true,
+      }),
+    ];
+    if (!opts.sidebarOpen && opts.showNewChat) {
+      tlMainChildren.push(
+        tbBtn({
+          icon: Glyph.pencil(),
+          title: 'New app',
+          shortcut: '⌘N',
+          ariaLabel: 'New app',
+          onClick: opts.onNewChat,
+        }),
+      );
+    }
+    tlMainChildren.push(el('span', { style: { flex: '1' } }));
+    if (opts.titlebarRight) tlMainChildren.push(opts.titlebarRight);
+    const tlMain = el(
+      'div',
+      { class: 'cd-tl-main' },
+      tlMainChildren.filter((c): c is HTMLElement => !!c),
+    );
+
+    const sidebarColumn = el('aside', { class: 'cd-sidebar' }, [
+      el('div', { class: 'cd-sidebar-inner' }, opts.sidebar),
+    ]);
+    opts.main.classList.add('cd-main');
+
+    const root = el(
+      'div',
+      { class: 'cd-window', 'data-sidebar': opts.sidebarOpen ? 'open' : 'closed' },
+      [tlSide, tlMain, sidebarColumn, opts.main],
+    );
+
+    return {
+      root,
+      setSidebarOpen(open: boolean): void {
+        root.dataset.sidebar = open ? 'open' : 'closed';
+        // Re-evaluate the toggle/back/forward/new-chat cluster in tl-main since
+        // the new-chat button only appears in the closed state.
+        const main = root.querySelector('.cd-tl-main');
+        if (!main) return;
+        // Drop everything between traffic-lights and the trailing spacer; rebuild.
+        main.innerHTML = '';
+        const rebuilt: (HTMLElement | null)[] = [
+          trafficLightsSpacer(),
+          open ? null : sidebarToggleRight,
+          tbBtn({
+            icon: Glyph.arrowLeft(),
+            title: 'Back',
+            shortcut: '⌘[',
+            ariaLabel: 'Back',
+            disabled: true,
+          }),
+          tbBtn({
+            icon: Glyph.arrowRight(),
+            title: 'Forward',
+            shortcut: '⌘]',
+            ariaLabel: 'Forward',
+            disabled: true,
+          }),
+        ];
+        if (!open && opts.showNewChat) {
+          rebuilt.push(
+            tbBtn({
+              icon: Glyph.pencil(),
+              title: 'New app',
+              shortcut: '⌘N',
+              ariaLabel: 'New app',
+              onClick: opts.onNewChat,
+            }),
+          );
+        }
+        rebuilt.push(el('span', { style: { flex: '1' } }));
+        if (opts.titlebarRight) rebuilt.push(opts.titlebarRight);
+        for (const c of rebuilt) if (c) main.append(c);
+      },
+    };
+  }
+
+  // ── Sidebar ────────────────────────────────────────────────────────
+  // Hybrid contents: live workspace switcher · live New app / Search /
+  // Settings · disabled placeholders for Plugins / Automations / Chats ·
+  // a live Apps section listing user apps and drafts with status dots.
+
+  interface SidebarApp {
+    id: string;
+    name: string;
+    iconKey: IconNameType;
+    color: string;
+    status?: 'new' | 'draft' | 'live' | null;
+  }
+
+  interface SidebarOpts {
+    activeId?: string;
+    apps: SidebarApp[];
+    drafts: SidebarApp[];
+    onHome: () => void;
+    onNewApp: () => void;
+    onSearch?: () => void;
+    onAppClick: (id: string) => void;
+    onSettings: () => void;
+  }
+
+  function sbItem(opts: {
+    icon: string;
+    label: string;
+    meta?: string;
+    active?: boolean;
+    disabled?: boolean;
+    onClick?: () => void;
+    dotColor?: string;
+    iconNode?: HTMLElement;
+  }): HTMLElement {
+    const item = el('button', {
+      class: 'cd-sb-item',
+      type: 'button',
+      'data-active': opts.active ? 'true' : undefined,
+      'data-disabled': opts.disabled ? 'true' : undefined,
+      onClick: opts.onClick,
+    });
+    if (opts.iconNode) {
+      item.append(opts.iconNode);
+    } else {
+      item.append(el('span', { class: 'cd-sb-icon', trustedHtml: opts.icon }));
+    }
+    item.append(el('span', { class: 'cd-sb-label' }, opts.label));
+    if (opts.meta) item.append(el('span', { class: 'cd-sb-meta' }, opts.meta));
+    if (opts.dotColor)
+      item.append(el('span', { class: 'cd-sb-dot', style: { background: opts.dotColor } }));
+    return item;
+  }
+
+  function statusDotColor(status?: string | null): string {
+    if (status === 'new') return 'var(--accent-light)';
+    if (status === 'draft') return 'var(--icon-amber)';
+    if (status === 'live') return 'var(--success)';
+    return 'transparent';
+  }
+
+  function buildSidebar(opts: SidebarOpts): HTMLElement {
+    const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', height: '100%' } });
+
+    // Workspace switcher
+    const ws = el('button', { class: 'cd-sb-item cd-sb-workspace', type: 'button' });
+    ws.append(el('span', { class: 'cd-sb-brand' }, 'C'));
+    const wsLabel = el('span', { class: 'cd-sb-label' });
+    wsLabel.append(el('span', { class: 'ws-name' }, 'Personal'));
+    wsLabel.append(el('span', { class: 'ws-host' }, 'centraid.app'));
+    ws.append(wsLabel);
+    ws.append(el('span', { class: 'cd-sb-icon', trustedHtml: Glyph.chevronDown(12) }));
+    wrap.append(ws);
+
+    // Top nav
+    wrap.append(
+      sbItem({
+        icon: Glyph.plus(),
+        label: 'New app',
+        meta: '⌘N',
+        onClick: opts.onNewApp,
+      }),
+    );
+    wrap.append(
+      sbItem({
+        icon: Glyph.search(),
+        label: 'Search',
+        meta: '⌘K',
+        onClick: opts.onSearch,
+        disabled: !opts.onSearch,
+      }),
+    );
+    wrap.append(sbItem({ icon: Glyph.plug(), label: 'Plugins', disabled: true }));
+    wrap.append(sbItem({ icon: Glyph.history(), label: 'Automations', disabled: true }));
+
+    // Pages
+    wrap.append(el('div', { class: 'cd-sb-section' }, 'Pages'));
+    wrap.append(
+      sbItem({
+        icon: Glyph.home(),
+        label: 'Home',
+        active: opts.activeId === 'home',
+        onClick: opts.onHome,
+      }),
+    );
+    wrap.append(sbItem({ icon: Glyph.star(), label: 'Starred', disabled: true }));
+
+    // Apps section
+    if (opts.apps.length > 0) {
+      wrap.append(el('div', { class: 'cd-sb-section' }, 'Apps'));
+      for (const a of opts.apps) {
+        const iconNode = el('span', {
+          class: 'cd-sb-app-icon',
+          style: { background: a.color },
+          trustedHtml: window.Icon[a.iconKey]
+            ? window.Icon[a.iconKey]({ size: 11, strokeWidth: 1.85 })
+            : '',
+        });
+        wrap.append(
+          sbItem({
+            iconNode,
+            icon: '',
+            label: a.name,
+            active: opts.activeId === a.id,
+            onClick: () => opts.onAppClick(a.id),
+            dotColor: a.status ? statusDotColor(a.status) : undefined,
+          }),
+        );
+      }
+    }
+
+    // Drafts
+    if (opts.drafts.length > 0) {
+      wrap.append(el('div', { class: 'cd-sb-section' }, 'Drafts'));
+      for (const d of opts.drafts) {
+        const iconNode = el('span', {
+          class: 'cd-sb-app-icon',
+          style: { background: d.color },
+          trustedHtml: window.Icon[d.iconKey]
+            ? window.Icon[d.iconKey]({ size: 11, strokeWidth: 1.85 })
+            : window.Icon.Sparkle({ size: 11 }),
+        });
+        wrap.append(
+          sbItem({
+            iconNode,
+            icon: '',
+            label: d.name,
+            active: opts.activeId === d.id,
+            onClick: () => opts.onAppClick(d.id),
+            dotColor: 'var(--c-amber)',
+          }),
+        );
+      }
+    }
+
+    // Placeholder: Chats — visible to preserve the design's information
+    // architecture for future wiring, but disabled today.
+    wrap.append(el('div', { class: 'cd-sb-section' }, 'Chats'));
+    wrap.append(sbItem({ icon: Glyph.sparkle(), label: 'No saved chats yet', disabled: true }));
+
+    // Spacer pushes Settings to the bottom
+    wrap.append(el('span', { style: { flex: '1', minHeight: '12px' } }));
+    wrap.append(
+      sbItem({
+        icon: Glyph.settings(),
+        label: 'Settings',
+        onClick: opts.onSettings,
+      }),
+    );
+
+    return wrap;
+  }
+
+  // Expose for app.ts + builder.ts.
+  window.Chrome = {
+    buildWindow,
+    buildSidebar,
+    tbBtn,
+    glyphs: Glyph,
+  };
+})();
