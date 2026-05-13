@@ -50,6 +50,13 @@
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
   const MonitorIcon = (size = 13): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
+  // Sparkle glyph for the "Try" follow-up label and other contextual hints.
+  // Smaller stroke than the design-token Sparkle so it sits comfortably as a
+  // 11px label adornment.
+  const SparkleIcon = (size = 11): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.6 1.6L21 17l-1.4.4L19 19l-.6-1.6L17 17l1.4-.4z"/></svg>`;
+  const FolderOpenIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 9h18l-2 9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
   // Cloud-tab icons. The Cloud tab is a Lovable-style data-browser panel
   // that lives next to Preview/Code; these glyphs label the tab itself and
   // the left-rail sub-sections (Database, Users, Storage, etc.).
@@ -886,29 +893,43 @@
 
       const controls = el('div', { class: 'chat-input-controls' }, [
         el('button', {
-          class: 'input-pill',
-          trustedHtml: Icon.Plus({ size: 14 }),
+          'aria-label': 'Attach',
+          class: 'input-pill input-pill-icon',
           title: 'Attach',
+          trustedHtml: Icon.Plus({ size: 14 }),
         }),
-        el('button', { class: 'input-pill', title: 'Open project folder' }, 'Open folder'),
+        el('button', {
+          'aria-label': 'Open project folder',
+          class: 'input-pill input-pill-icon',
+          title: 'Open project folder',
+          trustedHtml: FolderOpenIcon(14),
+          onClick: () => {
+            if (projectId) void Api().openProjectFolder({ id: projectId });
+          },
+        }),
         el('div', { class: 'spacer' }),
         sendBtn,
       ]);
-      // Wire "Open folder" pill to opening the project on disk.
-      const openFolderBtn = controls.querySelectorAll('.input-pill')[1] as HTMLElement;
-      openFolderBtn.addEventListener('click', () => {
-        if (projectId) void Api().openProjectFolder({ id: projectId });
-      });
 
       const wrap = el('div', { class: 'chat-input' }, [ta, controls]);
-      const promptStarters = el('div', { class: 'prompt-starters' });
+      // Contextual follow-ups — anchored just above the input, prefixed with
+      // a `Try` label so they read as suggestions rather than empty-state
+      // filler. Same hardcoded set today; future work can swap in
+      // turn-aware suggestions from the agent.
+      const followups = el('div', { class: 'prompt-starters' });
+      followups.append(
+        el('span', {
+          class: 'prompt-starters-label',
+          trustedHtml: `${SparkleIcon(11)}<span>Try</span>`,
+        }),
+      );
       for (const suggestion of [
         'Improve the layout',
         'Add saved data',
         'Polish the visual style',
         'Prepare to publish',
       ]) {
-        promptStarters.append(
+        followups.append(
           el(
             'button',
             {
@@ -922,7 +943,7 @@
           ),
         );
       }
-      inputWrap.append(promptStarters);
+      inputWrap.append(followups);
       inputWrap.append(wrap);
     }
 
