@@ -10,7 +10,7 @@ GitHub issue: [#30](https://github.com/srikanth235/centraid/issues/30)
 - [x] Add change-card affordance to tool groups when files are written
 - [x] Add Tablet device option to mobile/desktop toggle
 - [x] Move Preview / Code / Cloud tabs from window titlebar into right-pane toolbar
-- [ ] Consolidate sync indicators into one canonical header status
+- [x] Consolidate sync indicators into one canonical header status
 
 ## What changed
 
@@ -25,6 +25,8 @@ GitHub issue: [#30](https://github.com/srikanth235/centraid/issues/30)
 **Add Tablet device option to mobile/desktop toggle.** The URL bar's device segment used to be a binary mobile/desktop pair. Tablet was the missing middle — iPad-class viewports (~820pt) map well to the gateway-served preview iframes. `DeviceKey` now includes `'tablet'`, the URL bar group renders a third button between mobile and desktop, `refreshTopbarToggles` syncs its `data-active`, and `renderPreview` paints `.preview-card-tablet` when selected. The `has-phone` dotted-grid backdrop now applies for both mobile and tablet (only desktop gets the plain flex-stretched stage); new `.preview-card.preview-card-tablet` rule caps the max-width at 820px with the same `var(--shadow-md)` lift as mobile.
 
 **Move Preview / Code / Cloud tabs from window titlebar into right-pane toolbar.** The mode tabs and URL bar used to sit in the window titlebar / app-strip — the same chrome that runs across the entire window — even though they only control what appears in the right pane. The tabs now live in a new `.right-pane-toolbar` directly above the surface they control: `[Preview] [Code] [Cloud]   ⋯   [device pill] [URL] [open] [reload]`. The titlebar keeps Share + Publish (project-level actions); the app-strip keeps history + sidebar toggles. The right pane became a flex column hosting the persistent toolbar (built once on mount) and a renderable `.right-pane-content` sub-element, so `renderRight()` clears only the content while the toolbar stays put across mode switches. The `.preview-pane.has-phone` dotted backdrop is now scoped to `.right-pane-content` so the wall paints only behind the device frame, not behind the toolbar above it.
+
+**Consolidate sync indicators into one canonical header status.** The pane used to communicate "what is the builder doing" through three competing signals: a `Thinking…` pulse row in the chat, a `Building & publishing…` chat status row, and a coloured kind-dot in the URL bar (`live` / `local` / `none`). Those fight for attention and don't roll up into a single read. A new `.cd-sync` indicator now sits in the cd-app-strip directly after the project name: a 6px dot + monospace label that derives from `generating`, `publishing`, and `lastPublishedVersionId`. Four states — `idle-draft` (grey · `Draft`), `editing` (accent pulse · `Editing`), `publishing` (accent pulse · `Publishing`), and `idle-live` (green · `Live`). `refreshSyncStatus()` recomputes the state; `renderChat()` calls it for free (covers every `generating` flip), and explicit calls in `handlePublish()` + `bootstrap()` cover `publishing` and `lastPublishedVersionId` flips. The chat-side `Thinking…` pulse stays as a per-message affordance — the header signal is the always-on rollup.
 
 ## Out of scope
 

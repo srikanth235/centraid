@@ -653,6 +653,35 @@
 
     // App-meta strip — Codex-style chip with back + icon + name + desc on
     // the left, history toggle + chat-pane collapse + URL bar on the right.
+    // Single canonical sync indicator. Replaces the three competing status
+    // signals (generating pulse in chat, publishing chat row, live URL kind
+    // dot in URL bar) with one dot + label that always reflects what the
+    // builder is doing right now. State is derived from the `generating`,
+    // `publishing`, and `lastPublishedVersionId` flags via refreshSyncStatus.
+    const syncDot = el('span', { class: 'cd-sync-dot' });
+    const syncLabel = el('span', { class: 'cd-sync-label' }, 'Draft');
+    const syncIndicator = el(
+      'span',
+      { 'data-state': 'idle-draft', class: 'cd-sync', title: 'Project status' },
+      [syncDot, syncLabel],
+    );
+    function refreshSyncStatus(): void {
+      let state: 'editing' | 'publishing' | 'idle-live' | 'idle-draft' = 'idle-draft';
+      let label = 'Draft';
+      if (publishing) {
+        state = 'publishing';
+        label = 'Publishing';
+      } else if (generating) {
+        state = 'editing';
+        label = 'Editing';
+      } else if (lastPublishedVersionId) {
+        state = 'idle-live';
+        label = 'Live';
+      }
+      syncIndicator.dataset.state = state;
+      syncLabel.textContent = label;
+    }
+
     const stripLeft = el(
       'span',
       { style: { display: 'inline-flex', alignItems: 'center', gap: '10px' } },
@@ -666,6 +695,7 @@
         }),
         projIconEl,
         el('span', { class: 'cd-app-strip-meta' }, [projNameEl, projSubtitleEl]),
+        syncIndicator,
       ],
     );
     const stripRight = el(
@@ -921,6 +951,10 @@
         );
       }
       chatScroll.scrollTop = chatScroll.scrollHeight;
+      // The header sync indicator mirrors `generating` — refreshing it
+      // here covers every place that toggles the flag (agent events,
+      // sendUserPrompt, error paths) without a callback per site.
+      refreshSyncStatus();
     }
 
     function pushMessage(m: ChatMsg): number {
@@ -2588,6 +2622,7 @@
             const r = await Api().appLiveUrl({ id: projectId });
             liveUrl = r.url;
             lastPublishedVersionId = versions.activeVersion;
+            refreshSyncStatus();
           }
         } catch {
           /* gateway down, app unknown, or never published — local preview
@@ -2668,6 +2703,7 @@
       }
       if (publishing) return;
       publishing = true;
+      refreshSyncStatus();
       const statusIdx = pushMessage({
         kind: 'status',
         text: 'Building & publishing…',
@@ -2678,6 +2714,7 @@
         const result = await Api().publish({ id: projectId });
         lastPublishedVersionId = result.versionId;
         liveUrl = (await Api().appLiveUrl({ id: projectId })).url;
+        refreshSyncStatus();
         const migCount = result.migrationsApplied?.length ?? 0;
         const migText =
           migCount > 0 ? ` · ${migCount} migration${migCount === 1 ? '' : 's'} applied` : '';
@@ -2739,6 +2776,7 @@
         }
       } finally {
         publishing = false;
+        refreshSyncStatus();
         primaryBtn.removeAttribute('disabled');
       }
     }
@@ -2803,6 +2841,7 @@
     renderRight();
     refreshTopbarToggles();
     renderUrlbar();
+    refreshSyncStatus();
 
     // Kick off async setup.
     void bootstrap();

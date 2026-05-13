@@ -4059,6 +4059,64 @@ textarea {
   margin-top: 1px;
 }
 
+/* Single canonical sync indicator that lives in the cd-app-strip after
+   the project meta. One dot + one label, derived from generating /
+   publishing / lastPublishedVersionId — replaces the three competing
+   status signals (chat 'Thinking…' pulse, Publishing chat row, URL bar
+   kind dot) with one read-anywhere signal in the header. */
+.cd-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  border: 0.5px solid color-mix(in oklab, var(--ink) 8%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-left: 4px;
+}
+.cd-sync-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  flex-shrink: 0;
+}
+.cd-sync-label {
+  letter-spacing: 0.01em;
+}
+.cd-sync[data-state='idle-live'] .cd-sync-dot {
+  background: var(--success, #2ea043);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--success, #2ea043) 70%, transparent);
+}
+.cd-sync[data-state='idle-live'] {
+  color: var(--ink-2);
+}
+.cd-sync[data-state='editing'] .cd-sync-dot,
+.cd-sync[data-state='publishing'] .cd-sync-dot {
+  background: var(--accent);
+  animation: cd-sync-pulse 1.4s ease-in-out infinite;
+}
+.cd-sync[data-state='editing'],
+.cd-sync[data-state='publishing'] {
+  color: var(--ink-2);
+  border-color: color-mix(in oklab, var(--accent) 30%, transparent);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+@keyframes cd-sync-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+}
+
 /* Pill-tab cluster used in titlebar (Preview / Code / Cloud) */
 .cd-tabs-pill {
   display: inline-flex;
