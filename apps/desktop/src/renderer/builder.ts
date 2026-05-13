@@ -57,6 +57,10 @@
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.6 1.6L21 17l-1.4.4L19 19l-.6-1.6L17 17l1.4-.4z"/></svg>`;
   const FolderOpenIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 9h18l-2 9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+  // File-with-edit glyph for the change card that surfaces below tool-group
+  // pills when the agent wrote files. Page outline + a small pen overlay.
+  const FileEditIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="14 3 14 9 20 9"/><path d="M18 13l3 3-5 5h-3v-3z"/></svg>`;
   // Cloud-tab icons. The Cloud tab is a Lovable-style data-browser panel
   // that lives next to Preview/Code; these glyphs label the tab itself and
   // the left-rail sub-sections (Database, Users, Storage, etc.).
@@ -779,11 +783,18 @@
         const groupId = m.id;
         const isRunning = m.calls.some((c) => c.state === 'running');
         const hasError = m.calls.some((c) => c.state === 'error');
+        // File-writing calls that completed successfully — these become the
+        // "change card" rendered below the pill so the user sees which files
+        // changed without expanding the group.
+        const writes = m.calls.filter(
+          (c) => FILE_WRITING_TOOLS.has(c.tool) && c.state === 'ok' && c.summary,
+        );
         const wrap = el('div', {
           class: 'tool-group',
           'data-open': String(m.open),
           'data-running': String(isRunning),
           'data-error': String(hasError),
+          'data-has-changes': String(writes.length > 0),
         });
         const pill = el('button', {
           class: 'tool-group-pill',
@@ -804,6 +815,33 @@
           renderChat();
         });
         wrap.append(pill);
+        if (writes.length > 0) {
+          // Inline change card. Surfaces "N files updated" with up to three
+          // file basenames, so the user sees what shipped without expanding
+          // the row-by-row tool list. Clicking the card toggles the group.
+          const card = el('button', {
+            class: 'tg-change-card',
+            type: 'button',
+            'aria-label': `${writes.length} file${writes.length === 1 ? '' : 's'} updated — toggle details`,
+            onClick: () => {
+              chat = chat.map((x) =>
+                x.kind === 'toolGroup' && x.id === groupId ? { ...x, open: !x.open } : x,
+              );
+              renderChat();
+            },
+          });
+          const basenames = writes.map((c) => (c.summary ?? '').split('/').pop() ?? '');
+          const shown = basenames.slice(0, 3);
+          const moreCount = basenames.length - shown.length;
+          const subtitle = shown.join(' · ') + (moreCount > 0 ? ` · +${moreCount} more` : '');
+          card.innerHTML =
+            `<span class="tg-card-icon">${FileEditIcon(14)}</span>` +
+            `<span class="tg-card-meta">` +
+            `<span class="tg-card-title">${writes.length} file${writes.length === 1 ? '' : 's'} updated</span>` +
+            `<span class="tg-card-sub">${escapeHtml(subtitle)}</span>` +
+            `</span>`;
+          wrap.append(card);
+        }
         if (m.open) {
           const list = el('div', { class: 'tg-list' });
           for (const c of m.calls) {
