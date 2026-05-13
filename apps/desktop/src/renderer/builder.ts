@@ -643,7 +643,11 @@
     const titlebarRight = el('span', {
       style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
     });
-    titlebarRight.append(tabsPill);
+    // tabsPill no longer rides in the window titlebar — it lives in the
+    // right-pane toolbar (built below) so it sits directly above the
+    // surface it controls. Share + Publish stay here; Publish is the
+    // project-level primary action and belongs in the window header
+    // alongside Share, separate from the conversation-level Send button.
     titlebarRight.append(shareBtn);
     titlebarRight.append(primaryBtn);
 
@@ -674,7 +678,10 @@
           gap: '6px',
         },
       },
-      [historyBtn, sidebarBtn, urlbarSlot],
+      // urlbarSlot moved into the right-pane toolbar (alongside the mode
+      // tabs) so URL + reload sit above the surface they describe rather
+      // than across the window from it.
+      [historyBtn, sidebarBtn],
     );
     const topbar = el('div', { class: 'cd-app-strip' }, [stripLeft, stripRight]);
 
@@ -771,7 +778,20 @@
     // data-sidebar drives the .builder-body grid columns (open vs collapsed).
     const body = el('div', { class: 'builder-body', 'data-sidebar': 'open' });
     const chatPane = el('div', { class: 'chat-pane' });
+    // The right pane is now a flex column hosting a persistent toolbar
+    // (tabs + URL bar) plus a renderable content area. Backdrop classes
+    // (`preview-pane`, `has-phone`) stay on `rightPane` so the dotted
+    // wall fills the whole column. Render functions write into
+    // `rightPaneContent`, which is what `renderRight()` clears.
     const rightPane = el('div', { class: 'right-pane' });
+    const rightPaneToolbar = el('div', { class: 'right-pane-toolbar' }, [
+      tabsPill,
+      el('span', { class: 'right-pane-toolbar-spacer' }),
+      urlbarSlot,
+    ]);
+    const rightPaneContent = el('div', { class: 'right-pane-content' });
+    rightPane.append(rightPaneToolbar);
+    rightPane.append(rightPaneContent);
     body.append(chatPane);
     body.append(rightPane);
 
@@ -1036,7 +1056,10 @@
 
     // ---------- Right pane ----------
     function renderRight(): void {
-      rightPane.innerHTML = '';
+      // Clear only the content area — the toolbar (tabs + URL bar) above
+      // it is persistent across renders so the user can switch modes
+      // without the toolbar flashing.
+      rightPaneContent.innerHTML = '';
       rightPane.classList.remove('preview-pane', 'has-phone');
       // Always stop any in-flight cloud polling before re-rendering; the
       // cloud branch below will restart it if logs is the active section.
@@ -1108,7 +1131,7 @@
             The preview shows your app's local files as soon as the agent
             writes an <code>index.html</code>. Click <b>${isNewBuild ? 'Add to home' : 'Save'}</b> to publish to the gateway once you're happy.
           </p>`;
-        rightPane.append(empty);
+        rightPaneContent.append(empty);
         return;
       }
 
@@ -1123,7 +1146,7 @@
       card.style.setProperty('--accent-color', projColor as string);
       card.append(makePreviewFrame(resolved.src));
       stage.append(card);
-      rightPane.append(stage);
+      rightPaneContent.append(stage);
     }
 
     // Code view — file-tree on the left + viewer on the right (Lovable-style).
@@ -1135,7 +1158,7 @@
       const viewer = el('div', { class: 'code-viewer' });
       codePane.append(treeWrap);
       codePane.append(viewer);
-      rightPane.append(codePane);
+      rightPaneContent.append(codePane);
 
       if (!projectId) {
         viewer.innerHTML = '<div class="empty">No project yet.</div>';
@@ -1400,7 +1423,7 @@
       const stage = el('div', { class: 'cloud-stage' });
       cloudPane.append(rail);
       cloudPane.append(stage);
-      rightPane.append(cloudPane);
+      rightPaneContent.append(cloudPane);
 
       let active: CloudSection = 'overview';
       // Cache the schema across rail clicks so flipping Overview ↔ Database

@@ -1694,7 +1694,11 @@ textarea {
   opacity: 0.4;
 }
 
-/* ---- Right pane (preview / code / history) ---- */
+/* ---- Right pane (preview / code / cloud) ----
+   The pane is a flex column hosting a persistent toolbar (mode tabs +
+   URL bar) and a scrollable content area. The toolbar sits *inside* the
+   pane — directly above the surface it controls — instead of riding in
+   the window titlebar. */
 .right-pane {
   display: flex;
   flex-direction: column;
@@ -1703,6 +1707,43 @@ textarea {
   background: var(--bg);
   position: relative;
   overflow: hidden;
+}
+.right-pane-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 30%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  position: relative;
+  z-index: 1;
+}
+.right-pane-toolbar-spacer {
+  flex: 1;
+}
+/* In the toolbar context the URL slot hugs its content (max-width capped)
+   instead of stretching across the toolbar — the spacer above pushes it
+   to the right. When non-preview tabs hide it, collapse fully so the
+   layout stays tidy. */
+.right-pane-toolbar .urlbar-slot {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  max-width: 460px;
+}
+.right-pane-toolbar .urlbar-slot[data-visible='false'] {
+  display: none;
+}
+.right-pane-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 /* Preview */
@@ -2784,15 +2825,18 @@ textarea {
   opacity: 0.55;
 }
 
-/* ---------- Mobile preview backdrop ---------- */
-.preview-pane.has-phone {
+/* ---------- Mobile/tablet preview backdrop ----------
+   Scoped to the content area so the dotted wall only paints behind the
+   device frame, not behind the right-pane toolbar above it (the toolbar
+   has its own translucent surface and would muddy the dots). */
+.preview-pane.has-phone .right-pane-content {
   background:
     radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 22px 22px,
     var(--device-wall);
 }
 
-/* Mobile/Desktop toggle and preview source label moved to the topbar URL bar
-   (see .urlbar-device, .urlbar-kind above). */
+/* Device toggle (mobile / tablet / desktop) and preview source label live
+   in the right-pane toolbar's URL slot (see .urlbar-device above). */
 
 /* ---------- Misc utilities ---------- */
 .flex {
