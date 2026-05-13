@@ -4059,53 +4059,45 @@ textarea {
   margin-top: 1px;
 }
 
-/* Single canonical sync indicator that lives in the cd-app-strip after
-   the project meta. One dot + one label, derived from generating /
-   publishing / lastPublishedVersionId — replaces the three competing
-   status signals (chat 'Thinking…' pulse, Publishing chat row, URL bar
-   kind dot) with one read-anywhere signal in the header. */
-.cd-sync {
+/* In-meta status row — replaces the old editable description subtitle
+   AND the standalone sync chip with a single read-only line that fuses
+   sync state + version + edit time:  ● Live · v3 · edited 14h ago
+   The dot's colour and pulse are driven by the parent's [data-state],
+   set by refreshSyncStatus(). */
+.cd-app-strip-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 9px 3px 8px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
-  border: 0.5px solid color-mix(in oklab, var(--ink) 8%, transparent);
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--ink-3);
-  margin-left: 4px;
+  color: var(--ink-4);
+  margin-top: 2px;
+  letter-spacing: 0;
 }
-.cd-sync-dot {
+.cd-app-strip-status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--ink-3);
+  background: var(--ink-4);
   flex-shrink: 0;
 }
-.cd-sync-label {
-  letter-spacing: 0.01em;
-}
-.cd-sync[data-state='idle-live'] .cd-sync-dot {
+.cd-app-strip-status[data-state='idle-live'] .cd-app-strip-status-dot {
   background: var(--success, #2ea043);
-  box-shadow: 0 0 6px color-mix(in oklab, var(--success, #2ea043) 70%, transparent);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--success, #2ea043) 60%, transparent);
 }
-.cd-sync[data-state='idle-live'] {
-  color: var(--ink-2);
+.cd-app-strip-status[data-state='idle-live'] {
+  color: var(--ink-3);
 }
-.cd-sync[data-state='editing'] .cd-sync-dot,
-.cd-sync[data-state='publishing'] .cd-sync-dot {
+.cd-app-strip-status[data-state='editing'] .cd-app-strip-status-dot,
+.cd-app-strip-status[data-state='publishing'] .cd-app-strip-status-dot {
   background: var(--accent);
-  animation: cd-sync-pulse 1.4s ease-in-out infinite;
+  animation: cd-app-strip-status-pulse 1.4s ease-in-out infinite;
 }
-.cd-sync[data-state='editing'],
-.cd-sync[data-state='publishing'] {
-  color: var(--ink-2);
-  border-color: color-mix(in oklab, var(--accent) 30%, transparent);
-  background: color-mix(in oklab, var(--accent) 8%, transparent);
+.cd-app-strip-status[data-state='editing'],
+.cd-app-strip-status[data-state='publishing'] {
+  color: color-mix(in oklab, var(--accent) 70%, var(--ink-2));
 }
-@keyframes cd-sync-pulse {
+@keyframes cd-app-strip-status-pulse {
   0%,
   100% {
     opacity: 1;

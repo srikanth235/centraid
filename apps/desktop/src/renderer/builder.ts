@@ -229,12 +229,9 @@
     const isNewBuild = !isUpdateMode && !!initialPrompt;
     let projName = appContext?.name || (isNewBuild ? 'New app' : 'Untitled');
     // Description is the real `app.json#description` for cloned/edited apps
-    // (carried in via `appContext.desc`). In new-build mode it starts empty
-    // until the user types one.
+    // (carried in via `appContext.desc`). It still rides on app.json — only
+    // the inline editor was removed; the value is read elsewhere.
     let projDesc = appContext?.desc?.trim() ?? '';
-    const descPlaceholder = isUpdateMode
-      ? 'Add a description…'
-      : 'Designing your new app — click to describe';
     const projColor = appContext?.color || (window.ICON_PALETTE?.rose ?? '#5847e0');
     const projIcon: IconNameType = appContext?.iconKey || 'Sparkle';
 
@@ -382,22 +379,59 @@
       },
     });
 
-    // Inline-editable description. Renders the live `app.json#description`
-    // when present; falls back to a mode-specific placeholder so the slot
-    // doesn't read as empty. Edits persist via the same updateProjectMeta
-    // IPC the title uses.
-    const projSubtitleEl = el('span', {
-      contenteditable: 'plaintext-only',
-      spellcheck: 'false',
-    });
-    projSubtitleEl.dataset.placeholder = descPlaceholder;
-    projSubtitleEl.setAttribute('title', 'Click to edit description');
-    function paintSubtitle(): void {
-      // Use textContent only when there's a real value; otherwise leave the
-      // node empty so CSS `:empty::before` can show the placeholder.
-      projSubtitleEl.textContent = projDesc;
+    // Read-only status row that replaces the old editable description
+    // subtitle (which was 'Built with Centraid.' / 'Add a description…').
+    // Mirrors the v2 mockup's `● Live · v3 · edited 14h ago` pattern: a
+    // colored dot reflects the sync state (driven by `[data-state]` set
+    // by paintStatus), followed by version number + relative edit time
+    // when known. For a draft project the row just reads 'Draft'. The
+    // description data is preserved in app.json — editing moves to a
+    // future settings affordance.
+    const projStatusDot = el('span', { class: 'cd-app-strip-status-dot' });
+    const projStatusText = el('span', { class: 'cd-app-strip-status-text' }, 'Draft');
+    const projSubtitleEl = el(
+      'span',
+      { 'data-state': 'idle-draft', class: 'cd-app-strip-status' },
+      [projStatusDot, projStatusText],
+    );
+    let appVersionCount = 0;
+    let appLastEditedAt: number | undefined;
+    function relTime(ts: number): string {
+      const diff = Math.max(0, Date.now() - ts);
+      if (diff < 60_000) return 'just now';
+      if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+      if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+      return `${Math.floor(diff / 86_400_000)}d ago`;
     }
-    paintSubtitle();
+    function parseVersionTime(versionId: string): number | undefined {
+      // Version IDs come back from the gateway as `v_YYYY-MM-DDTHH-MM-...`
+      // so we can parse the embedded ISO timestamp without a separate
+      // gateway call.
+      const m = versionId.match(/^v_(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})/);
+      if (!m) return undefined;
+      return Date.parse(`${m[1]}T${m[2]}:${m[3]}:00Z`);
+    }
+    function paintStatus(): void {
+      // Status text composition is driven by sync state (publishing /
+      // editing / live / draft) plus version + edit-time facts. The dot
+      // colour is owned by the parent's [data-state] attribute, set by
+      // refreshSyncStatus().
+      let text: string;
+      if (publishing) {
+        text = 'Publishing…';
+      } else if (generating) {
+        text = 'Editing…';
+      } else if (lastPublishedVersionId) {
+        const parts = ['Live'];
+        if (appVersionCount > 0) parts.push(`v${appVersionCount}`);
+        if (appLastEditedAt) parts.push(`edited ${relTime(appLastEditedAt)}`);
+        text = parts.join(' · ');
+      } else {
+        text = 'Draft';
+      }
+      projStatusText.textContent = text;
+    }
+    paintStatus();
 
     // Mode tabs render as icon-only pills by default; the active tab expands
     // to icon+label (Lovable pattern). Each entry's third field is a render
@@ -560,40 +594,11 @@
       }
     });
 
-    function commitProjDescEdit(): void {
-      const next = (projSubtitleEl.textContent ?? '').trim();
-      if (next === projDesc) {
-        paintSubtitle(); // normalise whitespace
-        return;
-      }
-      const previous = projDesc;
-      projDesc = next;
-      paintSubtitle();
-      if (projectId) {
-        void Api()
-          .updateProjectMeta({ id: projectId, description: next })
-          .catch((err: unknown) => {
-            projDesc = previous;
-            paintSubtitle();
-            showToast(
-              `Description save failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          });
-        if (onMetaChange) onMetaChange({ projectId, description: next });
-      }
-    }
-    projSubtitleEl.addEventListener('blur', commitProjDescEdit);
-    projSubtitleEl.addEventListener('keydown', (e: Event) => {
-      const ke = e as KeyboardEvent;
-      if (ke.key === 'Enter') {
-        ke.preventDefault();
-        projSubtitleEl.blur();
-      } else if (ke.key === 'Escape') {
-        ke.preventDefault();
-        paintSubtitle();
-        projSubtitleEl.blur();
-      }
-    });
+    // Description editing was previously bound to the inline subtitle slot.
+    // That slot now shows a read-only sync/version status row, so the
+    // editor moves out of the inline meta and will live in a future
+    // settings affordance. The description data still rides on app.json
+    // and is exposed via `appContext.desc` to the home grid.
 
     // Tab buttons live inside a cd-tabs-pill so they sit in the titlebar
     // alongside Share/Publish. The buttons keep their existing .mode-tab
@@ -651,35 +656,22 @@
     titlebarRight.append(shareBtn);
     titlebarRight.append(primaryBtn);
 
-    // App-meta strip — Codex-style chip with back + icon + name + desc on
-    // the left, history toggle + chat-pane collapse + URL bar on the right.
-    // Single canonical sync indicator. Replaces the three competing status
-    // signals (generating pulse in chat, publishing chat row, live URL kind
-    // dot in URL bar) with one dot + label that always reflects what the
-    // builder is doing right now. State is derived from the `generating`,
-    // `publishing`, and `lastPublishedVersionId` flags via refreshSyncStatus.
-    const syncDot = el('span', { class: 'cd-sync-dot' });
-    const syncLabel = el('span', { class: 'cd-sync-label' }, 'Draft');
-    const syncIndicator = el(
-      'span',
-      { 'data-state': 'idle-draft', class: 'cd-sync', title: 'Project status' },
-      [syncDot, syncLabel],
-    );
+    // App-meta strip — Codex-style chip with back + icon + name + status on
+    // the left, history toggle + chat-pane collapse on the right.
+    //
+    // The single canonical sync signal lives inside the meta's status row
+    // (the dot before the version label), driven by refreshSyncStatus.
+    // refreshSyncStatus owns the [data-state] on the status row (which the
+    // CSS uses to colour and pulse the dot), and delegates the label text
+    // to paintStatus so version + edit-time facts compose with sync state
+    // in one place.
     function refreshSyncStatus(): void {
       let state: 'editing' | 'publishing' | 'idle-live' | 'idle-draft' = 'idle-draft';
-      let label = 'Draft';
-      if (publishing) {
-        state = 'publishing';
-        label = 'Publishing';
-      } else if (generating) {
-        state = 'editing';
-        label = 'Editing';
-      } else if (lastPublishedVersionId) {
-        state = 'idle-live';
-        label = 'Live';
-      }
-      syncIndicator.dataset.state = state;
-      syncLabel.textContent = label;
+      if (publishing) state = 'publishing';
+      else if (generating) state = 'editing';
+      else if (lastPublishedVersionId) state = 'idle-live';
+      projSubtitleEl.dataset.state = state;
+      paintStatus();
     }
 
     const stripLeft = el(
@@ -695,7 +687,6 @@
         }),
         projIconEl,
         el('span', { class: 'cd-app-strip-meta' }, [projNameEl, projSubtitleEl]),
-        syncIndicator,
       ],
     );
     const stripRight = el(
@@ -2570,6 +2561,9 @@
           }
           if (!event.isError && FILE_WRITING_TOOLS.has(event.toolName)) {
             previewReloadPending = true;
+            // Successful file write counts as an edit — bump the header
+            // relative-time so 'edited 14h ago' rolls to 'just now'.
+            appLastEditedAt = Date.now();
           }
           break;
         }
@@ -2606,10 +2600,10 @@
 
     async function bootstrap(): Promise<void> {
       if (isUpdateMode && projectId) {
-        // Show the divider immediately. Real chat history (and a fallback
-        // placeholder for first-time opens) is appended once the persisted
-        // session loads below.
-        chat = [{ kind: 'divider', text: 'Editing existing project' }];
+        // No "Editing existing project" divider — the project context lives
+        // in the header now (icon + name + version + sync state). Real chat
+        // history loads below; nothing to seed.
+        chat = [];
         renderChat();
         // Probe whether this project is actually published on the gateway.
         // `appLiveUrl` only builds a URL string — it never fails — so it
@@ -2622,6 +2616,11 @@
             const r = await Api().appLiveUrl({ id: projectId });
             liveUrl = r.url;
             lastPublishedVersionId = versions.activeVersion;
+            // Hydrate the header status: total version count drives the
+            // `v{N}` label, the active version's embedded timestamp drives
+            // the `edited Xh ago` relative time.
+            appVersionCount = versions.versions.length;
+            appLastEditedAt = parseVersionTime(versions.activeVersion);
             refreshSyncStatus();
           }
         } catch {
@@ -2714,6 +2713,10 @@
         const result = await Api().publish({ id: projectId });
         lastPublishedVersionId = result.versionId;
         liveUrl = (await Api().appLiveUrl({ id: projectId })).url;
+        // Bump the header status: every publish increments the version
+        // count and resets the relative edit time to "just now".
+        appVersionCount += 1;
+        appLastEditedAt = Date.now();
         refreshSyncStatus();
         const migCount = result.migrationsApplied?.length ?? 0;
         const migText =

@@ -31,3 +31,8 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-83b94449006-1778664748-5 | 83b94449-0064-44a5-8b88-a27e20b4c0f3 | #26 | interrupt | structural |  | feat(desktop): port Bold/Atmospheric redesign (#26) |
 | steer-83b94449006-1778665787-1 | 83b94449-0064-44a5-8b88-a27e20b4c0f3 | #26 | interrupt | structural |  | feat(desktop): port Bold/Atmospheric redesign (#26) |
 | steer-2275b5eac39-1778670468-1 | 2275b5ea-c39c-4f61-9eb3-40adfb0097a8 | #29 | correction | classifier | user flags the last commit broke CI and demands a fix | style(desktop): wrap long linear-gradient line per oxfmt (#29) |
+| steer-70619dd81af-1778678345-1 | 70619dd8-1af1-4399-a121-9385d8c297f9 | #30 | correction | classifier | shipped UI does not match the original mockup | feat(desktop): close mockup gaps - drop divider, fuse subtitle into version+t… |
+| steer-70619dd81af-1778678345-2 | 70619dd8-1af1-4399-a121-9385d8c297f9 | #30 | correction | classifier | shipped UI does not match the original mockup | feat(desktop): close mockup gaps - drop divider, fuse subtitle into version+t… |
+| steer-70619dd81af-1778678345-3 | 70619dd8-1af1-4399-a121-9385d8c297f9 | #30 | interrupt | structural |  | feat(desktop): close mockup gaps - drop divider, fuse subtitle into version+t… |
+| steer-70619dd81af-1778678345-4 | 70619dd8-1af1-4399-a121-9385d8c297f9 | #30 | correction | classifier | mockup changes not fully implemented | feat(desktop): close mockup gaps - drop divider, fuse subtitle into version+t… |
+| steer-70619dd81af-1778678345-5 | 70619dd8-1af1-4399-a121-9385d8c297f9 | #30 | correction | classifier | wants full mockup implemented, deferring only agent turns | feat(desktop): close mockup gaps - drop divider, fuse subtitle into version+t… |
