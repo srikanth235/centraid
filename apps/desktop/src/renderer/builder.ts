@@ -40,8 +40,6 @@
 
   // Inline SVGs for icons not in @centraid/design-tokens. Kept tiny so they
   // can live next to the topbar buttons that need them.
-  const ExternalIcon = (size = 14): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>`;
   const RefreshIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>`;
   const SmartphoneIcon = (size = 13): string =>
@@ -243,9 +241,6 @@
     let lastPublishedVersionId: string | undefined;
     let unsubscribeAgent: (() => void) | null = null;
     let liveUrl: string | undefined;
-    // URL-bar state — populated by renderPreview() each time it resolves a src.
-    let currentPreviewSrc: string | undefined;
-    let currentPreviewKind: 'live' | 'local' | undefined;
     // Cloud → Logs polling handle. Hoisted out of renderCloud's closure so
     // that any code that tears down the right pane (renderRight, builder
     // unmount, tab switch) can stop the poll regardless of which renderCloud
@@ -458,8 +453,11 @@
     // duplicate in the old cd-app-strip is gone with the strip itself.
     // `sidebarOpen` is now flipped via Chrome.setSidebarOpen.
 
-    // URL bar group — device toggle + current preview URL + open-in-new-tab + reload.
-    // Visibility is bound to tab === 'preview'; populated by renderUrlbar().
+    // Device segmented control — toggles the preview iframe between
+    // mobile / tablet / desktop framing. Lives in the right-pane toolbar
+    // and is hidden when the active tab isn't Preview (via .urlbar-slot
+    // data-visible). The old URL address bar that used to sit beside it
+    // has been removed — the preview iframe is the source of truth.
     const deviceMobileBtn = el('button', {
       'aria-label': 'Mobile',
       class: 'urlbar-device-btn',
@@ -501,37 +499,12 @@
         refreshTopbarToggles();
       },
     });
-    const urlbarKindDot = el('span', {
-      class: 'urlbar-kind',
-      'data-kind': 'none',
-      title: 'No preview',
-    });
-    const urlbarPath = el('span', { class: 'urlbar-path' }, '—');
-    const urlbarOpenBtn = el('button', {
-      'aria-label': 'Open in browser',
-      class: 'urlbar-action-btn',
-      trustedHtml: ExternalIcon(13),
-      title: 'Open in browser',
-      onClick: () => {
-        if (currentPreviewSrc) window.open(currentPreviewSrc, '_blank');
-      },
-    });
-    const urlbarReloadBtn = el('button', {
-      'aria-label': 'Reload preview',
-      class: 'urlbar-action-btn',
-      trustedHtml: RefreshIcon(13),
-      title: 'Reload preview',
-      onClick: () => {
-        if (tab === 'preview') renderRight();
-      },
-    });
-    const urlbar = el('div', { class: 'urlbar' }, [
-      el('div', { class: 'urlbar-device' }, [deviceMobileBtn, deviceTabletBtn, deviceDesktopBtn]),
-      el('div', { class: 'urlbar-field' }, [urlbarKindDot, urlbarPath]),
-      urlbarOpenBtn,
-      urlbarReloadBtn,
+    const devicePill = el('div', { class: 'urlbar-device' }, [
+      deviceMobileBtn,
+      deviceTabletBtn,
+      deviceDesktopBtn,
     ]);
-    const urlbarSlot = el('div', { class: 'urlbar-slot' }, [urlbar]);
+    const urlbarSlot = el('div', { class: 'urlbar-slot' }, [devicePill]);
 
     // Inline-editable title + description. Edits persist to
     // `app.json#{name,description}` via the updateProjectMeta IPC and also
@@ -603,7 +576,7 @@
             tab = key;
             renderRight();
             refreshTabs();
-            renderUrlbar();
+            refreshTopbarToggles();
           },
         });
         btn.innerHTML = `${renderIcon()}<span>${label}</span>`;
@@ -659,23 +632,6 @@
       deviceMobileBtn.dataset.active = String(previewDevice === 'mobile');
       deviceTabletBtn.dataset.active = String(previewDevice === 'tablet');
       deviceDesktopBtn.dataset.active = String(previewDevice === 'desktop');
-      urlbarSlot.dataset.visible = String(tab === 'preview');
-    }
-
-    function renderUrlbar(): void {
-      const has = !!currentPreviewSrc;
-      urlbar.dataset.empty = String(!has);
-      urlbarKindDot.dataset.kind = currentPreviewKind ?? 'none';
-      urlbarKindDot.title =
-        currentPreviewKind === 'live'
-          ? 'Live (gateway)'
-          : currentPreviewKind === 'local'
-            ? 'Local files'
-            : 'No preview';
-      urlbarPath.textContent = has ? formatPreviewUrl(currentPreviewSrc!) : 'No preview yet';
-      urlbarPath.title = currentPreviewSrc ?? '';
-      (urlbarOpenBtn as HTMLButtonElement).disabled = !has;
-      (urlbarReloadBtn as HTMLButtonElement).disabled = tab !== 'preview';
       urlbarSlot.dataset.visible = String(tab === 'preview');
     }
 
@@ -1101,10 +1057,6 @@
       }
 
       const resolved = projectId ? await resolvePreviewSrc() : undefined;
-      // Tell the topbar URL bar what we're showing (or that we have nothing).
-      currentPreviewSrc = resolved?.src;
-      currentPreviewKind = resolved?.kind;
-      renderUrlbar();
 
       if (!resolved) {
         const empty = el('div', { class: 'empty' });
@@ -2813,7 +2765,6 @@
     renderChatPane();
     renderRight();
     refreshTopbarToggles();
-    renderUrlbar();
     refreshSyncStatus();
 
     // Kick off async setup.

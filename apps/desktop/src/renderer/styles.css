@@ -979,46 +979,43 @@ textarea {
   color: var(--ink);
 }
 
-/* URL bar slot — flexes to absorb middle slack; hidden when not in Preview */
+/* URL bar slot — flexes to absorb middle slack; hidden when not in Preview.
+   Hosts the device segmented control alongside the URL pill, with a small
+   gap so they read as separate controls. */
 .urlbar-slot {
   flex: 1;
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
   min-width: 0;
 }
 .urlbar-slot[data-visible='false'] {
   visibility: hidden;
 }
-.urlbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-  max-width: 200px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 4px 3px 4px;
-  height: 32px;
-  box-sizing: border-box;
-}
+/* Segmented control. Container is clearly recessed (bg-sunken) so the
+   active button — lifted to bg-elev with an inset hairline outline plus a
+   real drop shadow — reads as a confidently floating pill above the track.
+   --shadow-sm alone is just a 1px bottom hairline and gets lost in dark
+   mode; we layer our own shadow here. */
 .urlbar-device {
   display: inline-flex;
-  background: var(--bg-elev);
-  border-radius: 999px;
   padding: 2px;
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  gap: 1px;
   flex: none;
 }
 .urlbar-device-btn {
   border: 0;
   background: transparent;
-  height: 22px;
-  padding: 0 9px;
+  height: 24px;
+  padding: 0 11px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   color: var(--ink-3);
   cursor: pointer;
   font-family: inherit;
@@ -1026,72 +1023,21 @@ textarea {
   font-weight: 500;
   transition:
     background 120ms,
-    color 120ms;
+    color 120ms,
+    box-shadow 120ms;
 }
 .urlbar-device-label {
   letter-spacing: -0.005em;
 }
-.urlbar-device-btn[data-active='true'] {
-  background: var(--ink);
-  color: var(--ink-inv);
-}
-.urlbar-field {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 0 8px;
-  font-size: 12px;
-  color: var(--ink-3);
-  overflow: hidden;
-}
-.urlbar-kind {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink-4, var(--ink-3));
-  flex: none;
-}
-.urlbar-kind[data-kind='live'] {
-  background: #2ea043;
-}
-.urlbar-kind[data-kind='local'] {
-  background: var(--accent);
-}
-.urlbar-path {
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-.urlbar[data-empty='true'] .urlbar-path {
-  font-style: italic;
-  color: var(--ink-4, var(--ink-3));
-}
-.urlbar-action-btn {
-  border: 0;
-  background: transparent;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink-3);
-  cursor: pointer;
-  flex: none;
-}
-.urlbar-action-btn:hover:not(:disabled) {
-  background: var(--bg-elev);
+.urlbar-device-btn:hover {
   color: var(--ink);
 }
-.urlbar-action-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
+.urlbar-device-btn[data-active='true'] {
+  background: var(--bg-elev);
+  color: var(--ink);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line),
+    0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .proj-name {
   display: flex;
@@ -1843,14 +1789,13 @@ textarea {
 .right-pane-toolbar-spacer {
   flex: 1;
 }
-/* In the toolbar context the URL slot hugs its content (max-width capped)
-   instead of stretching across the toolbar — the spacer above pushes it
-   to the right. When non-preview tabs hide it, collapse fully so the
-   layout stays tidy. */
+/* In the toolbar context the URL slot hugs its content instead of
+   stretching across the toolbar — the spacer above pushes it to the
+   right. When non-preview tabs hide it, collapse fully so the layout
+   stays tidy. */
 .right-pane-toolbar .urlbar-slot {
   flex: 0 1 auto;
   justify-content: flex-end;
-  max-width: 460px;
 }
 .right-pane-toolbar .urlbar-slot[data-visible='false'] {
   display: none;
@@ -4261,22 +4206,24 @@ textarea {
   }
 }
 
-/* Pill-tab cluster used in titlebar (Preview / Code / Cloud) */
+/* Pill-tab cluster (Preview / Code / Cloud) — matches .urlbar-device so
+   the two segmented controls in the right-pane toolbar read as one
+   visual system: recessed track + lifted active pill with hairline +
+   drop shadow. */
 .cd-tabs-pill {
   display: inline-flex;
-  padding: 3px;
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  padding: 2px;
+  background: var(--bg-sunken);
   border: 0.5px solid var(--line);
   border-radius: 999px;
-  gap: 2px;
+  gap: 1px;
 }
 .cd-tabs-pill button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
+  gap: 6px;
+  padding: 0 11px;
+  height: 24px;
   border: none;
   border-radius: 999px;
   cursor: pointer;
@@ -4284,10 +4231,20 @@ textarea {
   color: var(--ink-3);
   font-size: 11.5px;
   font-weight: 500;
+  transition:
+    background 120ms,
+    color 120ms,
+    box-shadow 120ms;
+}
+.cd-tabs-pill button:hover {
+  color: var(--ink);
 }
 .cd-tabs-pill button[data-active='true'] {
   background: var(--bg-elev);
   color: var(--ink);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line),
+    0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 /* Floating brand chip used in App view titlebar */

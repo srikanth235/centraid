@@ -19,6 +19,8 @@ GitHub issue: [#30](https://github.com/srikanth235/centraid/issues/30)
 - [x] Add floating `Live · synced` badge to preview pane
 - [x] Add `⋯` more-actions menu placeholder to builder header
 - [x] Polish device pill with text labels (`Phone / Tablet / Desktop`)
+- [x] Unify the two right-pane toolbar segmented controls (mode tabs + device pill) — clear recessed track + lifted active pill
+- [x] Drop the preview URL address bar — the iframe is the source of truth
 
 ## What changed
 
@@ -51,6 +53,10 @@ GitHub issue: [#30](https://github.com/srikanth235/centraid/issues/30)
 **Add `⋯` more-actions menu placeholder to builder header.** A 30×30 ghost icon button sits between the history button and Publish in the in-pane header. Currently visual-only — wiring to a popover (Share, Rename, Edit description, etc.) is follow-up work, but the slot is there and reads complete in the header rather than leaving a hole where the mockup put a menu trigger.
 
 **Polish device pill with text labels (`Phone / Tablet / Desktop`).** The device toggle in the right-pane toolbar used to be icon-only. Each button now carries `[icon] Label` matching the mockup's segmented control (`<span class="urlbar-device-label">`). Hidden visually compact still — pills are 22px tall with 9px horizontal padding — but the labels make the affordances scannable without hovering for tooltips.
+
+**Unify the two right-pane toolbar segmented controls (mode tabs + device pill) — clear recessed track + lifted active pill.** The first cut had two different visual languages competing in the same toolbar: `.cd-tabs-pill` (Preview/Code/Cloud) used a semi-transparent `bg-elev` track at 70% opacity with a blurred backdrop, and `.urlbar-device` (Phone/Tablet/Desktop) used a stark `var(--ink)` inversion for its active state (white-on-black). Side-by-side they read as two unrelated controls, and the device pill's active state was so loud it stole attention from the tab pill. Both rules now share one recipe: container is solid `var(--bg-sunken)` with a 0.5px line border so the track is visibly recessed against the toolbar's `bg-elev`; active pill lifts to `var(--bg-elev)` with `inset 0 0 0 0.5px var(--line)` plus a `0 1px 3px rgba(0,0,0,0.35)` drop shadow — the inset gives the lifted pill its own hairline outline, the drop shadow registers in dark mode where `var(--shadow-sm)` (just a 1px bottom hairline) gets lost. Buttons standardised at 24px tall × 11px horizontal padding with 6px icon/label gap. The two segmented controls now read as a matched pair.
+
+**Drop the preview URL address bar — the iframe is the source of truth.** The right-pane toolbar's URL pill (`.urlbar` with the kind-dot + monospace path + open-in-browser + reload buttons) was real estate dedicated to information the iframe content already shows. Removing it: the `urlbar` wrapper and all four children are gone from the renderer; the `urlbarSlot` now contains only the device pill; the `currentPreviewSrc` / `currentPreviewKind` state vars are gone (only the URL bar consumed them — the `Live · synced` badge uses the local `resolved.kind` directly inside `renderPreview`); `renderUrlbar()` is gone (the visibility toggle was redundant with `refreshTopbarToggles`); the unused `ExternalIcon` glyph is gone; the `.urlbar`, `.urlbar-field`, `.urlbar-kind`, `.urlbar-path`, `.urlbar-action-btn` CSS rules are gone; the `.right-pane-toolbar .urlbar` max-width override is gone. The toolbar now reads: `[Preview | Code | Cloud] ⟶ spacer ⟶ [Phone | Tablet | Desktop]` in Preview mode, with the device pill hidden on Code/Cloud tabs.
 
 ## Out of scope
 
