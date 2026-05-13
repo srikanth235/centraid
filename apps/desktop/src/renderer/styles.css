@@ -3022,3 +3022,834 @@ textarea {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ============================================================
+   Centraid Bold · Atmospheric chrome (v0.6)
+   Window grid, Codex-style sidebar, toolbar buttons w/ tooltip,
+   status pill, glass hero, atmospheric app card. Tokens come from
+   @centraid/design-tokens (--sidebar-bg / --sidebar-blur /
+   --sidebar-divider / --bg-l were added in the previous pass).
+   ============================================================ */
+
+/* Hide native traffic lights — the renderer paints its own. */
+.cd-shell-host {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.cd-window {
+  position: relative;
+  flex: 1;
+  background: var(--bg);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: var(--sidebar-w, 260px) 1fr;
+  grid-template-rows: 44px 1fr;
+  grid-template-areas:
+    'tl-side tl-main'
+    'side    main';
+  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.cd-window[data-sidebar='closed'] {
+  --sidebar-w: 0px;
+}
+
+/* Title-bar halves. The whole strip is draggable so users can move the
+   window from anywhere along it; interactive bits opt back out. */
+.cd-tl-side,
+.cd-tl-main {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.cd-tl-side {
+  grid-area: tl-side;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 10px;
+  position: relative;
+  z-index: 3;
+  background: var(--sidebar-bg, transparent);
+  border-right: var(--sidebar-divider, 0.5px solid var(--line));
+  overflow: hidden;
+}
+.cd-tl-main {
+  grid-area: tl-main;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Reserve space for the real macOS traffic lights (Electron paints them
+   at x=16, y=16 because titleBarStyle is "hiddenInset"). The cluster is
+   52px wide (3 × 12px buttons + 2 × 8px gaps); combined with the strip's
+   14px padding-left and 4px flex gap before the first button, the toggle
+   lands at x=70 — exactly where the design's synthetic traffic-lights
+   sit, so the OS lights and our icons read as one cluster. */
+.cd-tl-side .cd-traffic-lights-spacer {
+  width: 52px;
+  height: 1px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+.cd-window[data-sidebar='closed'] .cd-tl-side {
+  display: none;
+}
+.cd-window[data-sidebar='closed'] .cd-tl-main .cd-traffic-lights-spacer {
+  display: inline-block;
+}
+.cd-tl-main .cd-traffic-lights-spacer {
+  display: none;
+  width: 52px;
+  height: 1px;
+  flex: 0 0 auto;
+}
+.cd-tl-main button,
+.cd-tl-side button,
+.cd-tl-main .cd-tb-btn-wrap,
+.cd-tl-side .cd-tb-btn-wrap,
+.cd-tl-main .cd-tabs-pill,
+.cd-tl-main .cd-btn {
+  -webkit-app-region: no-drag;
+}
+
+/* The real macOS traffic lights are painted by Electron at (16, 16)
+   because `titleBarStyle: 'hiddenInset'`. We don't paint synthetic
+   ones — the `.cd-traffic-lights-spacer` rules above just reserve a
+   70px lead-in so the OS controls land in clear air. */
+
+/* Toolbar icon button + tooltip + ⌘-kbd chip.
+   Buttons are 26×26 to match the design's chrome scale. With
+   align-items:center on the 44px titlebar and the macOS traffic-light
+   cluster also centring at y=22, icons and traffic-lights sit on the
+   same horizontal line. */
+.cd-tb-btn-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.cd-tb-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 140ms,
+    color 140ms,
+    opacity 140ms;
+}
+.cd-tb-btn svg {
+  display: block;
+}
+.cd-tb-btn:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.cd-tb-btn[disabled],
+.cd-tb-btn[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+.cd-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  color: var(--ink);
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms 80ms;
+  z-index: 50;
+  box-shadow: var(--shadow-md);
+}
+.cd-tb-btn-wrap:hover .cd-tooltip {
+  opacity: 1;
+}
+.cd-tooltip .cd-kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin-left: 2px;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-2);
+}
+
+/* Sidebar column */
+.cd-sidebar {
+  grid-area: side;
+  overflow: hidden;
+  position: relative;
+  background: var(--sidebar-bg);
+  backdrop-filter: var(--sidebar-blur, none);
+  -webkit-backdrop-filter: var(--sidebar-blur, none);
+  border-right: var(--sidebar-divider);
+  display: flex;
+  flex-direction: column;
+}
+.cd-sidebar-inner {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 6px 8px 8px;
+  overflow-y: auto;
+}
+.cd-window[data-sidebar='closed'] .cd-sidebar {
+  border-right: none;
+}
+
+/* Sidebar items */
+.cd-sb-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 9px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 100ms,
+    color 100ms;
+}
+.cd-sb-item:hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+}
+.cd-sb-item[aria-current='true'],
+.cd-sb-item[data-active='true'] {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+}
+.cd-sb-item[data-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+.cd-sb-item .cd-sb-icon {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+  display: inline-flex;
+}
+.cd-sb-item[data-active='true'] .cd-sb-icon {
+  color: var(--ink);
+}
+.cd-sb-item .cd-sb-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-sb-item .cd-sb-meta {
+  flex: 0 0 auto;
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.cd-sb-item .cd-sb-dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.cd-sb-section {
+  margin-top: 14px;
+  margin-bottom: 4px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cd-sb-section .cd-sb-section-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 100ms;
+}
+.cd-sb-section:hover .cd-sb-section-actions {
+  opacity: 1;
+}
+.cd-sb-section-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cd-sb-section-btn:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+/* Workspace switcher row at the top of the sidebar */
+.cd-sb-workspace {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+.cd-sb-workspace .cd-sb-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cd-sb-workspace .cd-sb-label .ws-name {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 13px;
+}
+.cd-sb-workspace .cd-sb-label .ws-host {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
+.cd-sb-workspace .cd-sb-brand {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: -0.04em;
+  flex: 0 0 auto;
+}
+
+/* Small icon tile rendered inline in sidebar app rows. Matches the
+   home-grid tile look in miniature so the sidebar tells the user
+   which apps they own at a glance. */
+.cd-sb-app-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+}
+.cd-sb-app-icon svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Status pill — replaces the floating NEW/DRAFT chips on tiles. */
+.cd-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.cd-status[data-tone='new'] {
+  color: var(--accent-light);
+}
+.cd-status[data-tone='draft'] {
+  color: var(--icon-amber);
+}
+.cd-status[data-tone='live'] {
+  color: var(--success);
+}
+.cd-status .cd-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
+}
+/* Top-right corner placement — used on app cards so the pill anchors to
+   the card edge rather than the icon row's height. */
+.cd-status-corner {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+}
+
+/* Main area on Bold pages */
+.cd-main {
+  grid-area: main;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.cd-main.has-wall {
+  background: var(--device-wall);
+}
+.cd-main-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 48px 56px 56px;
+}
+
+/* Hero — "What should we build?" */
+.cd-hero {
+  max-width: 720px;
+  margin: 0 auto 40px;
+}
+.cd-hero h1 {
+  margin: 0 0 22px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+.cd-hero-prompt {
+  background: color-mix(in srgb, var(--bg-elev) 86%, transparent);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 12px 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+}
+.cd-hero-prompt textarea {
+  width: 100%;
+  min-height: 56px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 6px 4px 12px;
+}
+.cd-hero-prompt textarea::placeholder {
+  color: var(--ink-4);
+}
+.cd-hero-prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cd-hero-prompt-row .spacer {
+  flex: 1;
+}
+.cd-hero-build-btn {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.cd-hero-build-btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+.cd-hero-build-btn:hover:not([disabled]) {
+  background: color-mix(in oklab, var(--accent) 88%, white 12%);
+}
+.cd-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.cd-icon-btn:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.cd-hero-suggestions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.cd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 140ms;
+}
+.cd-chip:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink);
+}
+
+/* "Your apps" + "Templates" sections */
+.cd-section {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.cd-section + .cd-section {
+  margin-top: 32px;
+}
+.cd-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.cd-section-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.cd-section-head .cd-section-meta {
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cd-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  margin-bottom: 12px;
+}
+
+.cd-apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.cd-app-card {
+  position: relative;
+  padding: 18px;
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition:
+    transform 200ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    background 200ms,
+    border-color 200ms;
+}
+.cd-app-card:hover {
+  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  transform: translateY(-1px);
+}
+.cd-app-card:active {
+  transform: scale(0.98);
+}
+.cd-app-card-halo {
+  position: absolute;
+  top: -50px;
+  left: -30px;
+  width: 180px;
+  height: 180px;
+  pointer-events: none;
+  filter: blur(2px);
+}
+.cd-app-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+.cd-app-card-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 6px 14px rgba(0, 0, 0, 0.22);
+}
+.cd-app-card-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.cd-app-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cd-app-card-desc {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 4px;
+  line-height: 1.45;
+}
+.cd-app-card-meta {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+
+/* Templates row at the bottom of Home */
+.cd-tmpl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.cd-tmpl-card {
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.cd-tmpl-card:hover {
+  background: color-mix(in srgb, var(--bg-elev) 75%, transparent);
+}
+.cd-tmpl-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex: 0 0 auto;
+}
+.cd-tmpl-card-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.cd-tmpl-card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.cd-tmpl-card-desc {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Builder app-meta strip — sits under the titlebar */
+.cd-app-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 40%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  flex: none;
+}
+.cd-app-strip-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.cd-app-strip-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.cd-app-strip-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+.cd-app-strip-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cd-app-strip-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  margin-top: 1px;
+}
+
+/* Pill-tab cluster used in titlebar (Preview / Code / Cloud) */
+.cd-tabs-pill {
+  display: inline-flex;
+  padding: 3px;
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  gap: 2px;
+}
+.cd-tabs-pill button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.cd-tabs-pill button[data-active='true'] {
+  background: var(--bg-elev);
+  color: var(--ink);
+}
+
+/* Floating brand chip used in App view titlebar */
+.cd-brand-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+}
+.cd-brand-chip-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.cd-edit-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  height: 24px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.cd-edit-pill:hover {
+  background: color-mix(in oklab, var(--accent) 88%, white 12%);
+}
+
+/* Small ghost / primary buttons used in the titlebar */
+.cd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+.cd-btn-ghost {
+  background: transparent;
+  color: var(--ink-2);
+}
+.cd-btn-ghost:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.cd-btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+.cd-btn-primary:hover {
+  background: color-mix(in oklab, var(--accent) 88%, white 12%);
+}
+.cd-btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}

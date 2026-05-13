@@ -11,8 +11,6 @@
 //   Right pane: Preview (iframe → live gateway URL or local centraid-preview://)
 //               or Code (project files, syntax-highlighted).
 
-const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" style="display:block;width:100%;height:100%"><path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/><path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/><path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/><circle cx="120" cy="120" r="12" fill="#E11D48"/></svg>`;
-
 (function () {
   // A single tool invocation. Multiple of these are consolidated into a
   // toolGroup chat bubble (see below).
@@ -343,29 +341,10 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
     }
 
     // ---------- Top bars ----------
-    // `.titlebar` is a 3-column grid (1fr / auto / 1fr). The brand+breadcrumb
-    // pieces have to live inside one centered cell — leaving them as raw
-    // siblings makes the 4th span wrap onto a second row.
+    // The old `.titlebar` breadcrumb is replaced by the cd-window chrome
+    // (built at mount time, below). `crumbProjName` is kept as a no-op span
+    // so existing callers that update its textContent on rename still work.
     const crumbProjName = el('span', {}, isUpdateMode ? `Editing ${projName}` : 'Builder');
-    const titlebar = el('div', { class: 'titlebar' }, [
-      el('div', { class: 'titlebar-side' }),
-      el('div', { class: 'titlebar-brand' }, [
-        el('span', {
-          class: 'wordmark',
-          onClick: handleExit,
-          style: { cursor: 'pointer' },
-          trustedHtml: BUILDER_LOGO_SVG,
-        }),
-        el(
-          'span',
-          { class: 'crumb', onClick: handleExit, style: { cursor: 'pointer' } },
-          'Centraid',
-        ),
-        el('span', { class: 'crumb-sep' }, '/'),
-        crumbProjName,
-      ]),
-      el('div', { class: 'titlebar-side is-end' }),
-    ]);
 
     const primaryBtn = el('button', { class: 'btn btn-primary' });
     primaryBtn.innerHTML = Icon.Plus({ size: 13 }) + '<span>Add to home</span>';
@@ -590,65 +569,92 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
       }
     });
 
-    const topbar = el('div', { class: 'builder-topbar' }, [
-      el('div', { class: 'builder-topbar-left' }, [
+    // Tab buttons live inside a cd-tabs-pill so they sit in the titlebar
+    // alongside Share/Publish. The buttons keep their existing .mode-tab
+    // class so the legacy active/inactive styles still apply.
+    const tabsPill = el(
+      'span',
+      { class: 'cd-tabs-pill' },
+      tabDefs.map(([key, label, renderIcon]) => {
+        const btn = el('button', {
+          'aria-label': label,
+          class: 'mode-tab',
+          'data-active': String(tab === key),
+          title: label,
+          onClick: () => {
+            tab = key;
+            renderRight();
+            refreshTabs();
+            renderUrlbar();
+          },
+        });
+        btn.innerHTML = `${renderIcon()}<span>${label}</span>`;
+        return btn;
+      }),
+    );
+
+    // Share / Publish buttons that ride in the cd-window titlebar right.
+    const shareBtn = el(
+      'button',
+      {
+        class: 'cd-btn cd-btn-ghost',
+        type: 'button',
+        onClick: () => {
+          if (appContext && window.Centraid?.openShare) {
+            window.Centraid.openShare({
+              ...appContext,
+              desc: projDesc || appContext.desc,
+              name: projName,
+            });
+          } else {
+            showToast('Publish the app before sharing');
+          }
+        },
+      },
+      [el('span', { trustedHtml: Icon.Share({ size: 12 }) }), el('span', {}, 'Share')],
+    );
+
+    const titlebarRight = el('span', {
+      style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
+    });
+    titlebarRight.append(tabsPill);
+    titlebarRight.append(shareBtn);
+    titlebarRight.append(primaryBtn);
+
+    // App-meta strip — Codex-style chip with back + icon + name + desc on
+    // the left, history toggle + chat-pane collapse + URL bar on the right.
+    const stripLeft = el(
+      'span',
+      { style: { display: 'inline-flex', alignItems: 'center', gap: '10px' } },
+      [
         el('button', {
           'aria-label': 'Back',
-          class: 'btn-icon',
-          trustedHtml: Icon.ArrowLeft({ size: 16 }),
+          class: 'cd-tb-btn',
+          type: 'button',
+          trustedHtml: Icon.ArrowLeft({ size: 14 }),
           onClick: handleExit,
         }),
         projIconEl,
-        el('div', { class: 'proj-name' }, [projNameEl, projSubtitleEl]),
-      ]),
-      el('div', { class: 'topbar-toggles' }, [historyBtn, sidebarBtn]),
-      el(
-        'div',
-        { class: 'mode-tabs' },
-        tabDefs.map(([key, label, renderIcon]) => {
-          const btn = el('button', {
-            'aria-label': label,
-            class: 'mode-tab',
-            'data-active': String(tab === key),
-            title: label,
-            onClick: () => {
-              tab = key;
-              renderRight();
-              refreshTabs();
-              renderUrlbar();
-            },
-          });
-          btn.innerHTML = `${renderIcon()}<span>${label}</span>`;
-          return btn;
-        }),
-      ),
-      urlbarSlot,
-      el('div', { class: 'builder-topbar-right' }, [
-        el(
-          'button',
-          {
-            class: 'btn btn-ghost',
-            onClick: () => {
-              if (appContext && window.Centraid?.openShare) {
-                window.Centraid.openShare({
-                  ...appContext,
-                  desc: projDesc || appContext.desc,
-                  name: projName,
-                });
-              } else {
-                showToast('Publish the app before sharing');
-              }
-            },
-          },
-          'Share',
-        ),
-        primaryBtn,
-      ]),
-    ]);
+        el('span', { class: 'cd-app-strip-meta' }, [projNameEl, projSubtitleEl]),
+      ],
+    );
+    const stripRight = el(
+      'span',
+      {
+        style: {
+          marginLeft: 'auto',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+        },
+      },
+      [historyBtn, sidebarBtn, urlbarSlot],
+    );
+    const topbar = el('div', { class: 'cd-app-strip' }, [stripLeft, stripRight]);
 
     function refreshTabs(): void {
       const keys: Tab[] = tabDefs.map(([k]) => k);
-      topbar.querySelectorAll('.mode-tab').forEach((b, i) => {
+      tabsPill.querySelectorAll('.mode-tab').forEach((b, i) => {
         (b as HTMLElement).dataset.active = String(tab === keys[i]);
       });
     }
@@ -2638,9 +2644,50 @@ const BUILDER_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
     }
 
     // ---------- Mount ----------
-    root.append(titlebar);
-    const builder = el('div', { class: 'builder' }, [topbar, body]);
-    root.append(builder);
+    // The builder lives inside a cd-window grid (sidebar column + main
+    // column). The sidebar is a slim placeholder for now — the global
+    // home/apps sidebar isn't useful while editing a single project, but
+    // we keep the column so toggling sidebar matches Home's behaviour.
+    const main = el('div', { class: 'builder' }, [topbar, body]);
+    main.style.flexDirection = 'column';
+    main.style.display = 'flex';
+    main.style.minHeight = '0';
+
+    // Build a minimal sidebar for the builder — just workspace switcher +
+    // a "Back to home" item + Settings. Apps list is omitted while editing.
+    const sidebar = window.Chrome.buildSidebar({
+      activeId: opts.projectId,
+      apps: [],
+      drafts: [],
+      onAppClick: () => {
+        /* no live apps in builder sidebar */
+      },
+      onHome: handleExit,
+      onNewApp: () => {
+        /* already in builder; ignore */
+      },
+      onSettings: () => {
+        if (typeof window.Centraid?.openSettings === 'function') {
+          void window.Centraid.openSettings();
+        }
+      },
+    });
+
+    let builderSidebarOpen = Store.get<boolean>('appearance.sidebarOpen', true);
+    const { root: shell, setSidebarOpen: setShellSidebarOpen } = window.Chrome.buildWindow({
+      main,
+      onNewChat: handleExit,
+      onToggleSidebar: () => {
+        builderSidebarOpen = !builderSidebarOpen;
+        Store.set('appearance.sidebarOpen', builderSidebarOpen);
+        setShellSidebarOpen(builderSidebarOpen);
+      },
+      showNewChat: true,
+      sidebar,
+      sidebarOpen: builderSidebarOpen,
+      titlebarRight,
+    });
+    root.append(shell);
 
     // renderChatPane() mounts chat-scroll + input the first time, then
     // renderChat()/renderInput() repaint via the references it sets up.

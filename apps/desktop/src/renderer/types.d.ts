@@ -118,6 +118,12 @@ declare global {
   interface UserAppMeta extends AppMetaResolved {
     /** Centraid project id (uploaded-mode app on the gateway). */
     centraidProjectId?: string;
+    /**
+     * Last-modified timestamp (ISO 8601). Stamped when the app is created,
+     * republished, or its name/description edited inline from the builder.
+     * Renders as "Edited X ago" in the home tile.
+     */
+    updatedAt?: string;
   }
 
   /**
@@ -132,6 +138,52 @@ declare global {
     hasIndex: boolean;
   }
 
+  interface ChromeSidebarApp {
+    id: string;
+    name: string;
+    iconKey: IconName;
+    color: string;
+    status?: 'new' | 'draft' | 'live' | null;
+  }
+
+  interface ChromeBuildWindowOpts {
+    sidebarOpen: boolean;
+    onToggleSidebar: () => void;
+    sidebar: HTMLElement;
+    main: HTMLElement;
+    titlebarRight?: HTMLElement | null;
+    showNewChat?: boolean;
+    onNewChat?: () => void;
+  }
+
+  interface ChromeBuildSidebarOpts {
+    activeId?: string;
+    apps: ChromeSidebarApp[];
+    drafts: ChromeSidebarApp[];
+    onHome: () => void;
+    onNewApp: () => void;
+    onSearch?: () => void;
+    onAppClick: (id: string) => void;
+    onSettings: () => void;
+  }
+
+  interface ChromeApi {
+    buildWindow: (opts: ChromeBuildWindowOpts) => {
+      root: HTMLElement;
+      setSidebarOpen: (open: boolean) => void;
+    };
+    buildSidebar: (opts: ChromeBuildSidebarOpts) => HTMLElement;
+    tbBtn: (opts: {
+      icon: string;
+      title?: string;
+      shortcut?: string;
+      onClick?: () => void;
+      disabled?: boolean;
+      ariaLabel?: string;
+    }) => HTMLElement;
+    glyphs: Record<string, (size?: number) => string>;
+  }
+
   interface Window {
     CentraidTokens: CentraidTokensBridge;
     Icon: Record<IconName, IconRenderer>;
@@ -139,6 +191,7 @@ declare global {
     Store: CentraidStore;
     DateUtil: CentraidDateUtil;
     Centraid: CentraidRoot;
+    Chrome: ChromeApi;
     openBuilder: (opts: BuilderOptions) => () => void;
   }
 
