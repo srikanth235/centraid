@@ -43,7 +43,7 @@ if [[ ! -x "$OXFMT" || ! -x "$OXLINT" ]]; then
     exit 1
 fi
 
-if ! "$OXFMT" --check "${staged[@]}"; then
+if ! "$OXFMT" --check --no-error-on-unmatched-pattern "${staged[@]}"; then
     cat >&2 <<'EOF'
 
 ✗ Commit blocked by oxfmt.

@@ -30,3 +30,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-83b94449006-1778664748-4 | 83b94449-0064-44a5-8b88-a27e20b4c0f3 | #26 | interrupt | structural |  | feat(desktop): port Bold/Atmospheric redesign (#26) |
 | steer-83b94449006-1778664748-5 | 83b94449-0064-44a5-8b88-a27e20b4c0f3 | #26 | interrupt | structural |  | feat(desktop): port Bold/Atmospheric redesign (#26) |
 | steer-83b94449006-1778665787-1 | 83b94449-0064-44a5-8b88-a27e20b4c0f3 | #26 | interrupt | structural |  | feat(desktop): port Bold/Atmospheric redesign (#26) |
+| steer-2275b5eac39-1778670468-1 | 2275b5ea-c39c-4f61-9eb3-40adfb0097a8 | #29 | correction | classifier | user flags the last commit broke CI and demands a fix | style(desktop): wrap long linear-gradient line per oxfmt (#29) |

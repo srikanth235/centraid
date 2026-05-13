@@ -3870,7 +3870,11 @@ textarea {
   --device-wall:
     repeating-linear-gradient(0deg, transparent 0 23px, rgba(255, 255, 255, 0.025) 23px 24px),
     repeating-linear-gradient(90deg, transparent 0 23px, rgba(255, 255, 255, 0.025) 23px 24px),
-    linear-gradient(180deg, hsl(0 0% calc(var(--bg-l) - 2%)) 0%, hsl(0 0% calc(var(--bg-l) - 6%)) 100%);
+    linear-gradient(
+      180deg,
+      hsl(0 0% calc(var(--bg-l) - 2%)) 0%,
+      hsl(0 0% calc(var(--bg-l) - 6%)) 100%
+    );
 }
 
 /* Builder app-meta strip — sits under the titlebar */

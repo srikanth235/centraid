@@ -50,3 +50,4 @@ GitHub issue: [#29](https://github.com/srikanth235/centraid/issues/29)
 - Manual: click each of the five accent swatches; the active state moves, FAB/sparkle/CTAs repaint to the new hue immediately.
 - Manual: flip Cards between Flat/Outlined/Elevated; the home grid's app cards + template cards reflect the change without reload.
 - Manual: flip Sidebar visible; the shell collapses/expands matching the toolbar toggle.
+- Follow-up: CI's repo-wide `oxfmt --check` flagged the cool-cast `--device-wall` fallback in `styles.css`; reformatted (long `linear-gradient(...)` wrapped to multi-line) in a follow-up commit. Same commit also fixes a `scripts/lint-staged.sh` bug — oxfmt errored with "Expected at least one target file" when only `.md` files were staged; added `--no-error-on-unmatched-pattern` so the hook no-ops cleanly.
