@@ -71,13 +71,33 @@
   type ThemeName = 'light' | 'dark';
   type Density = 'compact' | 'regular' | 'comfy';
   type TileVariant = 'solid' | 'gradient' | 'glassy' | 'flat';
+  type AccentKey = 'blue' | 'violet' | 'teal' | 'ochre' | 'rose';
+  type CardVariant = 'flat' | 'outlined' | 'elevated';
   interface AppearancePrefs {
     theme: ThemeName;
     density: Density;
     tileVariant: TileVariant;
     sidebarOpen: boolean;
+    /** Dark ramp lightness anchor (10–35). Drives `--bg-l`. */
+    bgL: number;
+    /** Hue 222 + 11% sat when true, neutral grey (hue 0, 0% sat) when false. */
+    coolBlueCast: boolean;
+    accent: AccentKey;
+    cardVariant: CardVariant;
   }
+  // Accent palette mirrors the Tweaks panel swatches (Centraid Redesign).
+  const ACCENT_PALETTE: Record<AccentKey, { accent: string; light: string; deep: string }> = {
+    blue: { accent: '#4950F6', light: '#6B72FF', deep: '#2D34D9' },
+    ochre: { accent: '#B47B3F', light: '#CB9359', deep: '#92622F' },
+    rose: { accent: '#E55772', light: '#EE7D92', deep: '#BF3E57' },
+    teal: { accent: '#2EA098', light: '#4CBBB1', deep: '#218079' },
+    violet: { accent: '#7C5BD9', light: '#9D80E6', deep: '#5D3EB3' },
+  };
   const DEFAULT_PREFS: AppearancePrefs = {
+    accent: 'blue',
+    bgL: 18,
+    cardVariant: 'outlined',
+    coolBlueCast: true,
     density: 'regular',
     sidebarOpen: true,
     // Bold · Atmospheric is built around the dark blue-tinted ramp + Electric
@@ -119,6 +139,15 @@
     const html = document.documentElement;
     html.dataset.theme = prefs.theme;
     html.dataset.density = prefs.density;
+    html.dataset.cards = prefs.cardVariant;
+    html.dataset.coolCast = prefs.coolBlueCast ? 'on' : 'off';
+    // The dark ramp's lightness anchor — light theme ignores it (its
+    // surfaces are literal hex), but writing it unconditionally is harmless.
+    html.style.setProperty('--bg-l', `${prefs.bgL}%`);
+    const swatch = ACCENT_PALETTE[prefs.accent];
+    html.style.setProperty('--accent', swatch.accent);
+    html.style.setProperty('--accent-light', swatch.light);
+    html.style.setProperty('--accent-deep', swatch.deep);
   }
   applyPrefs();
 
@@ -1291,13 +1320,33 @@
 
     const body = el('div', { class: 'drawer-body' });
 
-    // ---- Appearance group ----
-    const themeSeg = makeSegmented<ThemeName>(['light', 'dark'], prefs.theme, (v) => {
+    // ---- Tweaks — Theme group ----
+    // Mirrors the Centraid Redesign's Tweaks panel: Mode / Dark shade / Cool
+    // blue cast / Accent + Density / Cards / Sidebar visible. Every change
+    // applies live (no save button) and persists via setPrefs.
+    const themeSeg = makeSegmented<ThemeName>(['dark', 'light'], prefs.theme, (v) => {
       setPrefs({ theme: v });
     });
+    const shadeRow = makeSliderRow(prefs.bgL, 10, 35, 1, (v) => setPrefs({ bgL: v }));
+    const coolCastSwitch = makeSwitch(prefs.coolBlueCast, (v) => setPrefs({ coolBlueCast: v }));
+    const accentSwatches = makeSwatches(prefs.accent, (v) => setPrefs({ accent: v }));
+
+    // ---- Tweaks — Layout group ----
     const densitySeg = makeSegmented<Density>(['compact', 'regular', 'comfy'], prefs.density, (v) =>
       setPrefs({ density: v }),
     );
+    const cardsSeg = makeSegmented<CardVariant>(
+      ['flat', 'outlined', 'elevated'],
+      prefs.cardVariant,
+      (v) => setPrefs({ cardVariant: v }),
+    );
+    const sidebarSwitch = makeSwitch(prefs.sidebarOpen, (v) => {
+      setPrefs({ sidebarOpen: v });
+      if (currentSetSidebarOpen) currentSetSidebarOpen(v);
+    });
+
+    // ---- App tiles group (separate — design's Tweaks panel doesn't cover
+    // app-icon treatment, but our existing setting still belongs here). ----
     const tileSeg = makeSegmented<TileVariant>(
       ['solid', 'gradient', 'glassy', 'flat'],
       prefs.tileVariant,
@@ -1308,10 +1357,17 @@
     );
 
     body.append(
-      drawerGroup('Appearance', [
-        el('div', { class: 'settings-note' }, 'Appearance changes are saved automatically.'),
-        drawerRow('Theme', themeSeg),
+      drawerGroup('Theme', [
+        el('div', { class: 'settings-note' }, 'Changes are saved automatically.'),
+        drawerRow('Mode', themeSeg),
+        shadeRow.row,
+        drawerRowInline('Cool blue cast', coolCastSwitch),
+        drawerRow('Accent', accentSwatches),
+      ]),
+      drawerGroup('Layout', [
         drawerRow('Density', densitySeg),
+        drawerRow('Cards', cardsSeg),
+        drawerRowInline('Sidebar visible', sidebarSwitch),
       ]),
       drawerGroup('App tiles', [drawerRow('Treatment', tileSeg)]),
     );
@@ -1422,6 +1478,90 @@
       el('span', { class: 'drawer-row-label' }, label),
       control,
     ]);
+  }
+  // Inline variant — label on the left, control on the right (used by the
+  // Tweaks switches "Cool blue cast" and "Sidebar visible").
+  function drawerRowInline(label: string, control: HTMLElement): HTMLElement {
+    return el('div', { class: 'drawer-row drawer-row-inline' }, [
+      el('span', { class: 'drawer-row-label' }, label),
+      control,
+    ]);
+  }
+  function makeSliderRow(
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+    onChange: (next: number) => void,
+  ): { row: HTMLElement; readout: HTMLElement } {
+    const readout = el('span', { class: 'cd-slider-readout' }, String(value));
+    const input = el('input', {
+      class: 'cd-slider',
+      max: String(max),
+      min: String(min),
+      step: String(step),
+      type: 'range',
+      value: String(value),
+      onInput: (e: Event) => {
+        const next = Number((e.target as HTMLInputElement).value);
+        readout.textContent = String(next);
+        onChange(next);
+      },
+    }) as HTMLInputElement;
+    const row = el('div', { class: 'drawer-row' }, [
+      el('div', { class: 'cd-slider-head' }, [
+        el('span', { class: 'drawer-row-label' }, 'Dark shade'),
+        readout,
+      ]),
+      input,
+    ]);
+    return { readout, row };
+  }
+  function makeSwitch(initial: boolean, onChange: (next: boolean) => void): HTMLElement {
+    let on = initial;
+    const btn = el('button', {
+      'aria-checked': String(on),
+      class: 'cd-switch',
+      'data-on': String(on),
+      role: 'switch',
+      type: 'button',
+    });
+    btn.append(el('span', { class: 'cd-switch-thumb' }));
+    btn.addEventListener('click', () => {
+      on = !on;
+      btn.dataset.on = String(on);
+      btn.setAttribute('aria-checked', String(on));
+      onChange(on);
+    });
+    return btn;
+  }
+  function makeSwatches(selected: AccentKey, onSelect: (value: AccentKey) => void): HTMLElement {
+    const order: AccentKey[] = ['blue', 'violet', 'teal', 'ochre', 'rose'];
+    const wrap = el('div', { class: 'cd-swatches', role: 'radiogroup', 'aria-label': 'Accent' });
+    for (const key of order) {
+      const swatch = ACCENT_PALETTE[key];
+      const btn = el('button', {
+        'aria-checked': String(key === selected),
+        'aria-label': key,
+        class: 'cd-swatch',
+        'data-active': String(key === selected),
+        role: 'radio',
+        style: { background: swatch.accent },
+        type: 'button',
+      });
+      btn.innerHTML = Icon.Check({ size: 14 });
+      btn.addEventListener('click', () => {
+        for (const child of wrap.children) {
+          (child as HTMLElement).dataset.active = 'false';
+          child.setAttribute('aria-checked', 'false');
+        }
+        btn.dataset.active = 'true';
+        btn.setAttribute('aria-checked', 'true');
+        onSelect(key);
+      });
+      wrap.append(btn);
+    }
+    return wrap;
   }
   function makeSegmented<T extends string>(
     options: readonly T[],
