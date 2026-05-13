@@ -1727,6 +1727,13 @@ textarea {
   max-width: 420px;
   box-shadow: var(--shadow-md);
 }
+/* Tablet device frame — sits on the same `has-phone` dotted backdrop as
+   mobile but with a wider canvas. iPad-class viewports (~820pt) map well
+   to the gateway-served preview iframes. */
+.preview-card.preview-card-tablet {
+  max-width: 820px;
+  box-shadow: var(--shadow-md);
+}
 .preview-card > iframe {
   flex: 1 1 auto;
   min-height: 0;

@@ -36,7 +36,7 @@
 
   type Tab = 'preview' | 'code' | 'cloud';
   type ChatView = 'chat' | 'history';
-  type DeviceKey = 'mobile' | 'desktop';
+  type DeviceKey = 'mobile' | 'tablet' | 'desktop';
 
   // Inline SVGs for icons not in @centraid/design-tokens. Kept tiny so they
   // can live next to the topbar buttons that need them.
@@ -48,6 +48,8 @@
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>`;
   const SmartphoneIcon = (size = 13): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
+  const TabletIcon = (size = 13): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
   const MonitorIcon = (size = 13): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
   // Sparkle glyph for the "Try" follow-up label and other contextual hints.
@@ -452,6 +454,19 @@
         refreshTopbarToggles();
       },
     });
+    const deviceTabletBtn = el('button', {
+      'aria-label': 'Tablet',
+      class: 'urlbar-device-btn',
+      'data-active': String(previewDevice === 'tablet'),
+      title: 'Tablet preview',
+      trustedHtml: TabletIcon(13),
+      onClick: () => {
+        if (previewDevice === 'tablet') return;
+        previewDevice = 'tablet';
+        if (tab === 'preview') renderRight();
+        refreshTopbarToggles();
+      },
+    });
     const deviceDesktopBtn = el('button', {
       'aria-label': 'Desktop',
       class: 'urlbar-device-btn',
@@ -490,7 +505,7 @@
       },
     });
     const urlbar = el('div', { class: 'urlbar' }, [
-      el('div', { class: 'urlbar-device' }, [deviceMobileBtn, deviceDesktopBtn]),
+      el('div', { class: 'urlbar-device' }, [deviceMobileBtn, deviceTabletBtn, deviceDesktopBtn]),
       el('div', { class: 'urlbar-field' }, [urlbarKindDot, urlbarPath]),
       urlbarOpenBtn,
       urlbarReloadBtn,
@@ -676,6 +691,7 @@
       historyBtn.dataset.active = String(chatView === 'history');
       sidebarBtn.dataset.active = String(sidebarOpen);
       deviceMobileBtn.dataset.active = String(previewDevice === 'mobile');
+      deviceTabletBtn.dataset.active = String(previewDevice === 'tablet');
       deviceDesktopBtn.dataset.active = String(previewDevice === 'desktop');
       urlbarSlot.dataset.visible = String(tab === 'preview');
     }
@@ -1070,11 +1086,13 @@
     }
 
     async function renderPreview(): Promise<void> {
-      // `has-phone` styles the pane as the dotted-grid backdrop the phone
-      // frame sits on. The desktop view doesn't want that — it wants the
-      // preview-stage to flex-stretch normally — so apply it conditionally.
+      // `has-phone` styles the pane as the dotted-grid backdrop that mobile
+      // and tablet device frames sit on. Desktop wants a plain flex-stretched
+      // stage instead, so apply the backdrop conditionally.
       rightPane.classList.add('preview-pane');
-      if (previewDevice === 'mobile') rightPane.classList.add('has-phone');
+      if (previewDevice === 'mobile' || previewDevice === 'tablet') {
+        rightPane.classList.add('has-phone');
+      }
 
       const resolved = projectId ? await resolvePreviewSrc() : undefined;
       // Tell the topbar URL bar what we're showing (or that we have nothing).
@@ -1096,7 +1114,11 @@
 
       const stage = el('div', { class: 'preview-stage' });
       const cardClass =
-        previewDevice === 'mobile' ? 'preview-card preview-card-mobile' : 'preview-card';
+        previewDevice === 'mobile'
+          ? 'preview-card preview-card-mobile'
+          : previewDevice === 'tablet'
+            ? 'preview-card preview-card-tablet'
+            : 'preview-card';
       const card = el('div', { class: cardClass });
       card.style.setProperty('--accent-color', projColor as string);
       card.append(makePreviewFrame(resolved.src));
