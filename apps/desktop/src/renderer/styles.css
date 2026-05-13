@@ -979,110 +979,65 @@ textarea {
   color: var(--ink);
 }
 
-/* URL bar slot — flexes to absorb middle slack; hidden when not in Preview */
+/* URL bar slot — flexes to absorb middle slack; hidden when not in Preview.
+   Hosts the device segmented control alongside the URL pill, with a small
+   gap so they read as separate controls. */
 .urlbar-slot {
   flex: 1;
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
   min-width: 0;
 }
 .urlbar-slot[data-visible='false'] {
   visibility: hidden;
 }
-.urlbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-  max-width: 200px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 4px 3px 4px;
-  height: 32px;
-  box-sizing: border-box;
-}
+/* Segmented control. Container is clearly recessed (bg-sunken) so the
+   active button — lifted to bg-elev with an inset hairline outline plus a
+   real drop shadow — reads as a confidently floating pill above the track.
+   --shadow-sm alone is just a 1px bottom hairline and gets lost in dark
+   mode; we layer our own shadow here. */
 .urlbar-device {
   display: inline-flex;
-  background: var(--bg-elev);
-  border-radius: 999px;
   padding: 2px;
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  gap: 1px;
   flex: none;
 }
 .urlbar-device-btn {
   border: 0;
   background: transparent;
-  width: 24px;
-  height: 22px;
+  height: 24px;
+  padding: 0 11px;
   border-radius: 999px;
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.urlbar-device-btn[data-active='true'] {
-  background: var(--ink);
-  color: var(--ink-inv);
-}
-.urlbar-field {
-  flex: 1;
-  display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
-  padding: 0 8px;
-  font-size: 12px;
-  color: var(--ink-3);
-  overflow: hidden;
-}
-.urlbar-kind {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink-4, var(--ink-3));
-  flex: none;
-}
-.urlbar-kind[data-kind='live'] {
-  background: #2ea043;
-}
-.urlbar-kind[data-kind='local'] {
-  background: var(--accent);
-}
-.urlbar-path {
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-.urlbar[data-empty='true'] .urlbar-path {
-  font-style: italic;
-  color: var(--ink-4, var(--ink-3));
-}
-.urlbar-action-btn {
-  border: 0;
-  background: transparent;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   color: var(--ink-3);
   cursor: pointer;
-  flex: none;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  transition:
+    background 120ms,
+    color 120ms,
+    box-shadow 120ms;
 }
-.urlbar-action-btn:hover:not(:disabled) {
-  background: var(--bg-elev);
+.urlbar-device-label {
+  letter-spacing: -0.005em;
+}
+.urlbar-device-btn:hover {
   color: var(--ink);
 }
-.urlbar-action-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
+.urlbar-device-btn[data-active='true'] {
+  background: var(--bg-elev);
+  color: var(--ink);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line),
+    0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .proj-name {
   display: flex;
@@ -1226,6 +1181,78 @@ textarea {
   min-height: 0;
   overflow: hidden;
 }
+.chat-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* In-pane builder header — sits at the top of the chat pane and owns
+   the project icon, name + status row, more menu, and Publish button.
+   Replaces the window-wide cd-app-strip + cd-window titlebarRight,
+   matching the v2 mockup's per-pane header pattern. */
+.builder-pane-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 0.5px solid var(--line);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--bg-elev) 28%, transparent),
+    transparent
+  );
+}
+.builder-pane-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.builder-pane-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.builder-pane-more {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.builder-pane-more:hover {
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  color: var(--ink);
+}
+/* The header's icon picks up the project's accent — bigger than the old
+   strip's 22px chip, matching the mockup's 32px tile. */
+.builder-pane-header .app-topbar-icon {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+}
+.builder-pane-header .app-topbar-icon svg {
+  width: 16px;
+  height: 16px;
+}
+/* Editable project title sits inside the meta column. The bold tag
+   from builder.ts gets the pane-header weight + size here. */
+.builder-pane-meta b {
+  font-weight: 600;
+  font-size: 14.5px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  outline: none;
+}
 
 /* Header shown when chat pane is in History view */
 .chatpane-head {
@@ -1319,7 +1346,32 @@ textarea {
 .msg-ai {
   display: flex;
   flex-direction: column;
-  margin: 8px 0;
+  gap: 4px;
+  margin: 14px 0 8px;
+}
+/* Author chip — small accent square + monospace `builder` label that
+   precedes every assistant turn. Grounds the message in the
+   conversation rather than letting it read as floating prose. */
+.msg-ai-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0;
+  margin-bottom: 2px;
+}
+.msg-ai-author-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep, var(--accent)));
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;
+  flex-shrink: 0;
+}
+.msg-ai-author-name {
+  letter-spacing: 0.01em;
 }
 .msg-ai-text p {
   margin: 0 0 8px;
@@ -1400,6 +1452,75 @@ textarea {
   50% {
     opacity: 0.4;
   }
+}
+
+/* Inline change card — shown below the tool-group pill when the agent
+   wrote files in this group. Surfaces "N files updated" + first three
+   basenames so the user sees what shipped without expanding. Clicking
+   the card toggles the group like the pill does. */
+.tg-change-card {
+  margin: 6px 0 0 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+  border: 0.5px solid color-mix(in oklab, var(--accent) 22%, transparent);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition:
+    background 140ms ease-out,
+    border-color 140ms ease-out;
+}
+.tg-change-card:hover {
+  background: color-mix(in oklab, var(--accent) 11%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 32%, transparent);
+}
+.tg-change-card .tg-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.tg-change-card .tg-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.tg-change-card .tg-card-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.tg-change-card .tg-card-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Version stamp on the card right edge — small mono pill that shows the
+   target version this turn lands as ("→ v3" / "→ draft"), giving the
+   user a sense of progression without expanding the tool list. */
+.tg-change-card .tg-card-version {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.01em;
 }
 
 .tool-group .tg-list {
@@ -1492,23 +1613,47 @@ textarea {
   padding: 8px 16px 16px;
   background: var(--bg);
 }
+/* Contextual follow-ups, anchored just above the input. The leading
+   `.prompt-starters-label` ("✨ Try") frames the chips as suggestions
+   tied to the conversation rather than empty-state filler that floats
+   in dead space. */
 .prompt-starters {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-bottom: 8px;
 }
+.prompt-starters-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink-4, var(--ink-3));
+  margin-right: 2px;
+}
+.prompt-starters-label svg {
+  opacity: 0.85;
+}
 .prompt-starter {
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  background: transparent;
   color: var(--ink-3);
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   font-size: 11.5px;
   font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 140ms ease-out,
+    color 140ms ease-out,
+    border-color 140ms ease-out;
 }
 .prompt-starter:hover {
-  background: var(--bg-sunken);
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  border-color: color-mix(in oklab, var(--ink) 14%, transparent);
   color: var(--ink);
 }
 .hint-card {
@@ -1581,10 +1726,20 @@ textarea {
   border-radius: 999px;
   font-size: 12px;
   color: var(--ink-3);
+  cursor: pointer;
 }
 .input-pill:hover {
   background: color-mix(in oklab, var(--ink) 6%, transparent);
   color: var(--ink);
+}
+/* Icon-only variant — square-ish with no horizontal padding overhead so the
+   attach + open-folder buttons cluster tightly without competing with the
+   primary send button on the right. */
+.input-pill-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
 }
 .send-btn {
   width: 32px;
@@ -1604,7 +1759,11 @@ textarea {
   opacity: 0.4;
 }
 
-/* ---- Right pane (preview / code / history) ---- */
+/* ---- Right pane (preview / code / cloud) ----
+   The pane is a flex column hosting a persistent toolbar (mode tabs +
+   URL bar) and a scrollable content area. The toolbar sits *inside* the
+   pane — directly above the surface it controls — instead of riding in
+   the window titlebar. */
 .right-pane {
   display: flex;
   flex-direction: column;
@@ -1613,6 +1772,42 @@ textarea {
   background: var(--bg);
   position: relative;
   overflow: hidden;
+}
+.right-pane-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 30%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  position: relative;
+  z-index: 1;
+}
+.right-pane-toolbar-spacer {
+  flex: 1;
+}
+/* In the toolbar context the URL slot hugs its content instead of
+   stretching across the toolbar — the spacer above pushes it to the
+   right. When non-preview tabs hide it, collapse fully so the layout
+   stays tidy. */
+.right-pane-toolbar .urlbar-slot {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+.right-pane-toolbar .urlbar-slot[data-visible='false'] {
+  display: none;
+}
+.right-pane-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 /* Preview */
@@ -1635,6 +1830,13 @@ textarea {
 }
 .preview-card.preview-card-mobile {
   max-width: 420px;
+  box-shadow: var(--shadow-md);
+}
+/* Tablet device frame — sits on the same `has-phone` dotted backdrop as
+   mobile but with a wider canvas. iPad-class viewports (~820pt) map well
+   to the gateway-served preview iframes. */
+.preview-card.preview-card-tablet {
+  max-width: 820px;
   box-shadow: var(--shadow-md);
 }
 .preview-card > iframe {
@@ -2687,15 +2889,51 @@ textarea {
   opacity: 0.55;
 }
 
-/* ---------- Mobile preview backdrop ---------- */
-.preview-pane.has-phone {
+/* ---------- Mobile/tablet preview backdrop ----------
+   Scoped to the content area so the dotted wall only paints behind the
+   device frame, not behind the right-pane toolbar above it (the toolbar
+   has its own translucent surface and would muddy the dots). */
+.preview-pane.has-phone .right-pane-content {
   background:
     radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 22px 22px,
     var(--device-wall);
 }
 
-/* Mobile/Desktop toggle and preview source label moved to the topbar URL bar
-   (see .urlbar-device, .urlbar-kind above). */
+/* Device toggle (mobile / tablet / desktop) and preview source label live
+   in the right-pane toolbar's URL slot (see .urlbar-device above). */
+
+/* Floating "Live · synced" badge — pinned to the bottom-centre of the
+   preview content area when the iframe is showing the gateway-served
+   live URL. Ambient confirmation that what's on screen reflects the
+   persisted, published project. */
+.preview-live-badge {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  border: 0.5px solid var(--line);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  z-index: 3;
+  pointer-events: none;
+}
+.preview-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success, #2ea043);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--success, #2ea043) 70%, transparent);
+}
 
 /* ---------- Misc utilities ---------- */
 .flex {
@@ -3918,22 +4156,74 @@ textarea {
   margin-top: 1px;
 }
 
-/* Pill-tab cluster used in titlebar (Preview / Code / Cloud) */
+/* In-meta status row — replaces the old editable description subtitle
+   AND the standalone sync chip with a single read-only line that fuses
+   sync state + version + edit time:  ● Live · v3 · edited 14h ago
+   The dot's colour and pulse are driven by the parent's [data-state],
+   set by refreshSyncStatus(). */
+.cd-app-strip-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  margin-top: 2px;
+  letter-spacing: 0;
+}
+.cd-app-strip-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  flex-shrink: 0;
+}
+.cd-app-strip-status[data-state='idle-live'] .cd-app-strip-status-dot {
+  background: var(--success, #2ea043);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--success, #2ea043) 60%, transparent);
+}
+.cd-app-strip-status[data-state='idle-live'] {
+  color: var(--ink-3);
+}
+.cd-app-strip-status[data-state='editing'] .cd-app-strip-status-dot,
+.cd-app-strip-status[data-state='publishing'] .cd-app-strip-status-dot {
+  background: var(--accent);
+  animation: cd-app-strip-status-pulse 1.4s ease-in-out infinite;
+}
+.cd-app-strip-status[data-state='editing'],
+.cd-app-strip-status[data-state='publishing'] {
+  color: color-mix(in oklab, var(--accent) 70%, var(--ink-2));
+}
+@keyframes cd-app-strip-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+}
+
+/* Pill-tab cluster (Preview / Code / Cloud) — matches .urlbar-device so
+   the two segmented controls in the right-pane toolbar read as one
+   visual system: recessed track + lifted active pill with hairline +
+   drop shadow. */
 .cd-tabs-pill {
   display: inline-flex;
-  padding: 3px;
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  padding: 2px;
+  background: var(--bg-sunken);
   border: 0.5px solid var(--line);
   border-radius: 999px;
-  gap: 2px;
+  gap: 1px;
 }
 .cd-tabs-pill button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
+  gap: 6px;
+  padding: 0 11px;
+  height: 24px;
   border: none;
   border-radius: 999px;
   cursor: pointer;
@@ -3941,10 +4231,20 @@ textarea {
   color: var(--ink-3);
   font-size: 11.5px;
   font-weight: 500;
+  transition:
+    background 120ms,
+    color 120ms,
+    box-shadow 120ms;
+}
+.cd-tabs-pill button:hover {
+  color: var(--ink);
 }
 .cd-tabs-pill button[data-active='true'] {
   background: var(--bg-elev);
   color: var(--ink);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line),
+    0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 /* Floating brand chip used in App view titlebar */
