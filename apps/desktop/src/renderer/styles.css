@@ -3399,11 +3399,17 @@ textarea {
 .cd-window {
   position: relative;
   flex: 1;
+  /* Without min-height: 0 the flex parent (#root) lets cd-window grow to its
+     content's min-content height when the main column's content is tall —
+     defeating the inner .cd-main-scroll overflow. minmax(0, 1fr) prevents the
+     same blow-up at the grid-row level. Home doesn't hit it because its
+     content fits in the 1fr slot; Settings does. */
+  min-height: 0;
   background: var(--bg);
   overflow: visible;
   display: grid;
   grid-template-columns: var(--sidebar-w, 260px) 1fr;
-  grid-template-rows: 44px 1fr;
+  grid-template-rows: 44px minmax(0, 1fr);
   grid-template-areas:
     'tl-side tl-main'
     'side    main';
