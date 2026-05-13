@@ -131,6 +131,78 @@
   // Track the current cd-window setter so the sidebar toggle can flip the
   // animated grid without rebuilding the page. Reset on every clear().
   let currentSetSidebarOpen: ((open: boolean) => void) | null = null;
+
+  type ShellRoute =
+    | { kind: 'home' }
+    | { id: string; kind: 'app' }
+    | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' };
+
+  const navStack: ShellRoute[] = [];
+  let navIndex = -1;
+  let applyingNav = false;
+
+  function routeKey(route: ShellRoute): string {
+    if (route.kind === 'home') return 'home';
+    if (route.kind === 'app') return `app:${route.id}`;
+    if (route.appContext) return `builder:${route.appContext.id}`;
+    return `builder:new:${route.initialPrompt ?? ''}`;
+  }
+
+  function recordRoute(route: ShellRoute): void {
+    if (applyingNav) return;
+    if (navIndex >= 0 && routeKey(navStack[navIndex]!) === routeKey(route)) return;
+    navStack.splice(navIndex + 1);
+    navStack.push(route);
+    navIndex = navStack.length - 1;
+  }
+
+  function canGoBack(): boolean {
+    return navIndex > 0;
+  }
+
+  function canGoForward(): boolean {
+    return navIndex >= 0 && navIndex < navStack.length - 1;
+  }
+
+  function chromeNav(): Pick<
+    ChromeBuildWindowOpts,
+    'canGoBack' | 'canGoForward' | 'onBack' | 'onForward'
+  > {
+    return {
+      canGoBack: canGoBack(),
+      canGoForward: canGoForward(),
+      onBack: goBack,
+      onForward: goForward,
+    };
+  }
+
+  function applyRoute(route: ShellRoute): void {
+    applyingNav = true;
+    try {
+      if (route.kind === 'home') {
+        renderHome();
+      } else if (route.kind === 'app') {
+        openApp(route.id);
+      } else {
+        enterBuilder({ appContext: route.appContext, initialPrompt: route.initialPrompt });
+      }
+    } finally {
+      applyingNav = false;
+    }
+  }
+
+  function goBack(): void {
+    if (!canGoBack()) return;
+    navIndex -= 1;
+    applyRoute(navStack[navIndex]!);
+  }
+
+  function goForward(): void {
+    if (!canGoForward()) return;
+    navIndex += 1;
+    applyRoute(navStack[navIndex]!);
+  }
+
   function toggleSidebar(): void {
     const next = !prefs.sidebarOpen;
     setPrefs({ sidebarOpen: next });
@@ -309,6 +381,7 @@
   }
 
   async function renderHomeAsync(): Promise<void> {
+    recordRoute({ kind: 'home' });
     clear();
     await hydrateDrafts();
     const availableTemplates = await loadAvailableTemplates();
@@ -357,6 +430,7 @@
 
     const sidebar = buildHomeSidebar('home');
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
+      ...chromeNav(),
       main,
       onNewChat: openNewAppSheet,
       onToggleSidebar: toggleSidebar,
@@ -882,6 +956,7 @@
   function enterBuilder(
     opts: { initialPrompt?: string; appContext?: AppMetaResolvedType } = {},
   ): void {
+    recordRoute({ kind: 'builder', ...opts });
     clear();
     if (typeof window.openBuilder !== 'function') {
       console.error('Builder not loaded');
@@ -906,6 +981,7 @@
         onExit: renderHome,
         ...opts,
         ...(projectId ? { projectId } : {}),
+        ...chromeNav(),
         onAddToHome: addUserApp,
         onMetaChange: syncUserAppMeta,
       }) ?? null;
@@ -1028,6 +1104,7 @@
     if (!app) {
       return;
     }
+    recordRoute({ id, kind: 'app' });
     // Every app on the grid is a user app now (built-ins were retired in
     // favour of templates), so we always mount via the iframe-backed path.
     const ua = findUserApp(id);
@@ -1071,6 +1148,7 @@
 
     const sidebar = buildHomeSidebar(app.id);
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
+      ...chromeNav(),
       main,
       onNewChat: openNewAppSheet,
       onToggleSidebar: toggleSidebar,
@@ -1506,6 +1584,16 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && ctxMenu) {
       closeContextMenu();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === '[') {
+      e.preventDefault();
+      goBack();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === ']') {
+      e.preventDefault();
+      goForward();
     }
   });
 

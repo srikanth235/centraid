@@ -40,8 +40,10 @@
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
   }
   const Glyph = {
-    sidebar: (size = 15): string =>
+    sidebarOpen: (size = 15): string =>
       svg('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16"/>', size),
+    sidebarClosed: (size = 15): string =>
+      svg('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/>', size),
     arrowLeft: (size = 15): string => svg('<path d="M19 12H5M12 19l-7-7 7-7"/>', size),
     arrowRight: (size = 15): string => svg('<path d="M5 12h14M12 5l7 7-7 7"/>', size),
     pencil: (size = 15): string =>
@@ -126,6 +128,10 @@
     titlebarRight?: HTMLElement | null;
     showNewChat?: boolean;
     onNewChat?: () => void;
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+    onBack?: () => void;
+    onForward?: () => void;
   }
 
   // Builds the full `.cd-window` shell. Returns the root element plus a
@@ -134,20 +140,35 @@
     root: HTMLElement;
     setSidebarOpen: (open: boolean) => void;
   } {
-    const sidebarToggleLeft = tbBtn({
-      icon: Glyph.sidebar(),
-      title: 'Toggle sidebar',
-      shortcut: '⌘B',
-      ariaLabel: 'Toggle sidebar',
-      onClick: opts.onToggleSidebar,
-    });
-    const sidebarToggleRight = tbBtn({
-      icon: Glyph.sidebar(),
-      title: 'Toggle sidebar',
-      shortcut: '⌘B',
-      ariaLabel: 'Toggle sidebar',
-      onClick: opts.onToggleSidebar,
-    });
+    const sidebarToggle = (open: boolean): HTMLElement =>
+      tbBtn({
+        icon: open ? Glyph.sidebarOpen() : Glyph.sidebarClosed(),
+        title: open ? 'Hide sidebar' : 'Show sidebar',
+        shortcut: '⌘B',
+        ariaLabel: open ? 'Hide sidebar' : 'Show sidebar',
+        onClick: opts.onToggleSidebar,
+      });
+
+    const sidebarToggleLeft = sidebarToggle(true);
+    const sidebarToggleRight = sidebarToggle(false);
+    const backButton = (): HTMLElement =>
+      tbBtn({
+        icon: Glyph.arrowLeft(),
+        title: 'Back',
+        shortcut: '⌘[',
+        ariaLabel: 'Back',
+        disabled: !opts.canGoBack,
+        onClick: opts.onBack,
+      });
+    const forwardButton = (): HTMLElement =>
+      tbBtn({
+        icon: Glyph.arrowRight(),
+        title: 'Forward',
+        shortcut: '⌘]',
+        ariaLabel: 'Forward',
+        disabled: !opts.canGoForward,
+        onClick: opts.onForward,
+      });
 
     const tlSide = el('div', { class: 'cd-tl-side' }, [
       trafficLightsSpacer(),
@@ -158,20 +179,8 @@
     const tlMainChildren: (HTMLElement | null)[] = [
       trafficLightsSpacer(),
       opts.sidebarOpen ? null : sidebarToggleRight,
-      tbBtn({
-        icon: Glyph.arrowLeft(),
-        title: 'Back',
-        shortcut: '⌘[',
-        ariaLabel: 'Back',
-        disabled: true,
-      }),
-      tbBtn({
-        icon: Glyph.arrowRight(),
-        title: 'Forward',
-        shortcut: '⌘]',
-        ariaLabel: 'Forward',
-        disabled: true,
-      }),
+      backButton(),
+      forwardButton(),
     ];
     if (!opts.sidebarOpen && opts.showNewChat) {
       tlMainChildren.push(
@@ -215,21 +224,9 @@
         main.innerHTML = '';
         const rebuilt: (HTMLElement | null)[] = [
           trafficLightsSpacer(),
-          open ? null : sidebarToggleRight,
-          tbBtn({
-            icon: Glyph.arrowLeft(),
-            title: 'Back',
-            shortcut: '⌘[',
-            ariaLabel: 'Back',
-            disabled: true,
-          }),
-          tbBtn({
-            icon: Glyph.arrowRight(),
-            title: 'Forward',
-            shortcut: '⌘]',
-            ariaLabel: 'Forward',
-            disabled: true,
-          }),
+          open ? null : sidebarToggle(false),
+          backButton(),
+          forwardButton(),
         ];
         if (!open && opts.showNewChat) {
           rebuilt.push(

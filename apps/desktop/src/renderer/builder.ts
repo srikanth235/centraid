@@ -2675,7 +2675,11 @@
 
     let builderSidebarOpen = Store.get<boolean>('appearance.sidebarOpen', true);
     const { root: shell, setSidebarOpen: setShellSidebarOpen } = window.Chrome.buildWindow({
+      canGoBack: opts.canGoBack,
+      canGoForward: opts.canGoForward,
       main,
+      onBack: opts.onBack,
+      onForward: opts.onForward,
       onNewChat: handleExit,
       onToggleSidebar: () => {
         builderSidebarOpen = !builderSidebarOpen;

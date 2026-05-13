@@ -3031,7 +3031,6 @@ textarea {
    --sidebar-divider / --bg-l were added in the previous pass).
    ============================================================ */
 
-/* Hide native traffic lights — the renderer paints its own. */
 .cd-shell-host {
   flex: 1;
   display: flex;
@@ -3042,7 +3041,7 @@ textarea {
   position: relative;
   flex: 1;
   background: var(--bg);
-  overflow: hidden;
+  overflow: visible;
   display: grid;
   grid-template-columns: var(--sidebar-w, 260px) 1fr;
   grid-template-rows: 44px 1fr;
@@ -3061,6 +3060,7 @@ textarea {
 .cd-tl-main {
   -webkit-app-region: drag;
   user-select: none;
+  overflow: visible;
 }
 .cd-tl-side {
   grid-area: tl-side;
@@ -3072,7 +3072,6 @@ textarea {
   z-index: 3;
   background: var(--sidebar-bg, transparent);
   border-right: var(--sidebar-divider, 0.5px solid var(--line));
-  overflow: hidden;
 }
 .cd-tl-main {
   grid-area: tl-main;
@@ -3081,16 +3080,16 @@ textarea {
   padding: 0 14px;
   gap: 4px;
   min-width: 0;
+  position: relative;
+  z-index: 4;
 }
 
 /* Reserve space for the real macOS traffic lights (Electron paints them
-   at x=16, y=16 because titleBarStyle is "hiddenInset"). The cluster is
-   52px wide (3 × 12px buttons + 2 × 8px gaps); combined with the strip's
-   14px padding-left and 4px flex gap before the first button, the toggle
-   lands at x=70 — exactly where the design's synthetic traffic-lights
-   sit, so the OS lights and our icons read as one cluster. */
+   at x=16, y=16 because titleBarStyle is "hiddenInset"). The spacer is
+   wider than the native control cluster so the first toolbar icon has the
+   same calm breathing room as Codex's chrome. */
 .cd-tl-side .cd-traffic-lights-spacer {
-  width: 52px;
+  width: 64px;
   height: 1px;
   flex: 0 0 auto;
   display: inline-block;
@@ -3103,7 +3102,7 @@ textarea {
 }
 .cd-tl-main .cd-traffic-lights-spacer {
   display: none;
-  width: 52px;
+  width: 64px;
   height: 1px;
   flex: 0 0 auto;
 }
@@ -3129,6 +3128,10 @@ textarea {
 .cd-tb-btn-wrap {
   position: relative;
   display: inline-flex;
+}
+.cd-tl-side .cd-tb-btn-wrap,
+.cd-tl-main .cd-tb-btn-wrap {
+  transform: translateY(2px);
 }
 .cd-tb-btn {
   width: 26px;

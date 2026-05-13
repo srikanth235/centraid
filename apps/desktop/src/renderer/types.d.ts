@@ -113,6 +113,10 @@ declare global {
      * Either `name` or `description` (or both) will be present.
      */
     onMetaChange?: (input: { projectId: string; name?: string; description?: string }) => void;
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+    onBack?: () => void;
+    onForward?: () => void;
   }
 
   interface UserAppMeta extends AppMetaResolved {
@@ -154,6 +158,10 @@ declare global {
     titlebarRight?: HTMLElement | null;
     showNewChat?: boolean;
     onNewChat?: () => void;
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+    onBack?: () => void;
+    onForward?: () => void;
   }
 
   interface ChromeBuildSidebarOpts {
