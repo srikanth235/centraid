@@ -411,6 +411,7 @@
       sbItem({
         icon: Glyph.settings(),
         label: 'Settings',
+        active: opts.activeId === 'settings',
         onClick: opts.onSettings,
       }),
     );

@@ -163,6 +163,7 @@
 
   type ShellRoute =
     | { kind: 'home' }
+    | { kind: 'settings' }
     | { id: string; kind: 'app' }
     | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' };
 
@@ -172,6 +173,7 @@
 
   function routeKey(route: ShellRoute): string {
     if (route.kind === 'home') return 'home';
+    if (route.kind === 'settings') return 'settings';
     if (route.kind === 'app') return `app:${route.id}`;
     if (route.appContext) return `builder:${route.appContext.id}`;
     return `builder:new:${route.initialPrompt ?? ''}`;
@@ -210,6 +212,8 @@
     try {
       if (route.kind === 'home') {
         renderHome();
+      } else if (route.kind === 'settings') {
+        renderSettings();
       } else if (route.kind === 'app') {
         openApp(route.id);
       } else {
@@ -269,7 +273,7 @@
       },
       onHome: renderHome,
       onNewApp: openNewAppSheet,
-      onSettings: () => void openSettingsSheet(),
+      onSettings: renderSettings,
     });
   }
 
@@ -1288,42 +1292,65 @@
     container.append(stub);
   }
 
-  // ---------- Settings drawer ----------
-  // Right-side panel per the design system. Two groups:
-  //  - Appearance: theme / density / tile treatment (renderer prefs).
-  //  - Gateway: openclaw URL / token / projects dir (main-process prefs).
-  // Appearance changes apply on click (no save needed); gateway needs a save.
-  async function openSettingsSheet(): Promise<void> {
+  // ---------- Settings page ----------
+  // Rendered as a top-level page in the main panel (sibling of Home /
+  // App view / Builder), not a drawer. Four groups:
+  //  - Theme / Layout / App tiles: renderer prefs, apply live.
+  //  - Gateway: openclaw URL / token / projects dir (main-process prefs,
+  //    needs explicit Save).
+  function renderSettings(): void {
+    void renderSettingsAsync();
+  }
+
+  async function renderSettingsAsync(): Promise<void> {
+    recordRoute({ kind: 'settings' });
+    clear();
+
     const current = await window.CentraidApi.getSettings().catch(() => ({
       gatewayUrl: 'http://127.0.0.1:18789',
       gatewayToken: '',
       projectsDir: '~/centraid-projects',
     }));
 
-    const backdrop = el('div', { class: 'drawer-backdrop' });
-    const panel = el('div', { class: 'drawer-panel', role: 'dialog', 'aria-label': 'Settings' });
+    const main = el('div');
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
 
-    const close = (): void => {
-      backdrop.remove();
-      panel.remove();
-    };
-    backdrop.addEventListener('click', close);
-
-    // Header
-    const closeBtn = el('button', {
-      'aria-label': 'Close settings',
-      class: 'btn-icon',
-      trustedHtml: Icon.X({ size: 16 }),
-      onClick: close,
+    // Constrain the form to a readable width inside the wider main panel;
+    // the drawer-* classes were authored for a ~360px column so giving them
+    // a similar max-width here preserves their visual rhythm.
+    const page = el('div', {
+      style: {
+        margin: '0 auto',
+        maxWidth: '720px',
+        padding: '28px 32px 48px',
+        width: '100%',
+      },
     });
-    panel.append(el('div', { class: 'drawer-head' }, [el('h3', {}, 'Settings'), closeBtn]));
 
-    const body = el('div', { class: 'drawer-body' });
+    page.append(
+      el(
+        'div',
+        {
+          style: {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            marginBottom: '20px',
+          },
+        },
+        [
+          el('h1', { style: { fontSize: '24px', fontWeight: '600', margin: '0' } }, 'Settings'),
+          el(
+            'div',
+            { class: 'settings-hint', style: { margin: '0' } },
+            'Appearance and gateway preferences for Centraid.',
+          ),
+        ],
+      ),
+    );
 
     // ---- Tweaks — Theme group ----
-    // Mirrors the Centraid Redesign's Tweaks panel: Mode / Dark shade / Cool
-    // blue cast / Accent + Density / Cards / Sidebar visible. Every change
-    // applies live (no save button) and persists via setPrefs.
     const themeSeg = makeSegmented<ThemeName>(['dark', 'light'], prefs.theme, (v) => {
       setPrefs({ theme: v });
     });
@@ -1345,18 +1372,16 @@
       if (currentSetSidebarOpen) currentSetSidebarOpen(v);
     });
 
-    // ---- App tiles group (separate — design's Tweaks panel doesn't cover
-    // app-icon treatment, but our existing setting still belongs here). ----
+    // ---- App tiles group ----
     const tileSeg = makeSegmented<TileVariant>(
       ['solid', 'gradient', 'glassy', 'flat'],
       prefs.tileVariant,
       (v) => {
         setPrefs({ tileVariant: v });
-        if (root.querySelector('.home')) renderHome();
       },
     );
 
-    body.append(
+    page.append(
       drawerGroup('Theme', [
         el('div', { class: 'settings-note' }, 'Changes are saved automatically.'),
         drawerRow('Mode', themeSeg),
@@ -1408,7 +1433,6 @@
             gatewayUrl: gatewayUrl.value.trim(),
             projectsDir: projectsDir.value.trim(),
           });
-          close();
           showToast('Settings saved');
         } catch (err) {
           showToast(`Save failed: ${String(err)}`);
@@ -1438,7 +1462,7 @@
     });
     testBtn.innerHTML = Icon.Eye({ size: 13 }) + '<span>Test connection</span>';
 
-    body.append(
+    page.append(
       drawerGroup('Gateway', [
         el('div', { class: 'settings-note' }, 'Gateway changes are applied when you save.'),
         labeled(
@@ -1460,11 +1484,20 @@
       ]),
     );
 
-    panel.append(body);
-    panel.append(el('div', { class: 'drawer-foot' }, 'Centraid'));
+    scroll.append(page);
 
-    document.body.append(backdrop);
-    document.body.append(panel);
+    const sidebar = buildHomeSidebar('settings');
+    const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
+      ...chromeNav(),
+      main,
+      onNewChat: openNewAppSheet,
+      onToggleSidebar: toggleSidebar,
+      showNewChat: true,
+      sidebar,
+      sidebarOpen: prefs.sidebarOpen,
+    });
+    currentSetSidebarOpen = setSidebarOpen;
+    root.append(shell);
   }
 
   function drawerGroup(label: string, rows: HTMLElement[]): HTMLElement {
@@ -1717,7 +1750,7 @@
     openApp,
     openBuilder: openNewAppSheet,
     openShare: openShareDialog,
-    openSettings: openSettingsSheet,
+    openSettings: renderSettings,
     renderHome,
   };
 

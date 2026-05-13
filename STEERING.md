@@ -31,3 +31,7 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-83b94449006-1778664748-5 | 83b94449-0064-44a5-8b88-a27e20b4c0f3 | #26 | interrupt | structural |  | feat(desktop): port Bold/Atmospheric redesign (#26) |
 | steer-83b94449006-1778665787-1 | 83b94449-0064-44a5-8b88-a27e20b4c0f3 | #26 | interrupt | structural |  | feat(desktop): port Bold/Atmospheric redesign (#26) |
 | steer-2275b5eac39-1778670468-1 | 2275b5ea-c39c-4f61-9eb3-40adfb0097a8 | #29 | correction | classifier | user flags the last commit broke CI and demands a fix | style(desktop): wrap long linear-gradient line per oxfmt (#29) |
+| steer-165e8a66254-1778679479-1 | 165e8a66-254f-414a-9e5d-cf7f07aec752 |  | correction | classifier | Settings page not scrollable — fix scroll behavior | feat(desktop): model Settings as a page in the main panel |
+| steer-165e8a66254-1778679479-2 | 165e8a66-254f-414a-9e5d-cf7f07aec752 |  | interrupt | structural |  | feat(desktop): model Settings as a page in the main panel |
+| steer-165e8a66254-1778679479-3 | 165e8a66-254f-414a-9e5d-cf7f07aec752 |  | interrupt | structural |  | feat(desktop): model Settings as a page in the main panel |
+| steer-165e8a66254-1778679479-4 | 165e8a66-254f-414a-9e5d-cf7f07aec752 |  | correction | classifier | Halt further testing/actions | feat(desktop): model Settings as a page in the main panel |
