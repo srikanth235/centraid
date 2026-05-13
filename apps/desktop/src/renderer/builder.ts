@@ -36,20 +36,29 @@
 
   type Tab = 'preview' | 'code' | 'cloud';
   type ChatView = 'chat' | 'history';
-  type DeviceKey = 'mobile' | 'desktop';
+  type DeviceKey = 'mobile' | 'tablet' | 'desktop';
 
   // Inline SVGs for icons not in @centraid/design-tokens. Kept tiny so they
   // can live next to the topbar buttons that need them.
-  const SidebarIcon = (size = 16): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>`;
-  const ExternalIcon = (size = 14): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>`;
   const RefreshIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>`;
   const SmartphoneIcon = (size = 13): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
+  const TabletIcon = (size = 13): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
   const MonitorIcon = (size = 13): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
+  // Sparkle glyph for the "Try" follow-up label and other contextual hints.
+  // Smaller stroke than the design-token Sparkle so it sits comfortably as a
+  // 11px label adornment.
+  const SparkleIcon = (size = 11): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.6 1.6L21 17l-1.4.4L19 19l-.6-1.6L17 17l1.4-.4z"/></svg>`;
+  const FolderOpenIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 9h18l-2 9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+  // File-with-edit glyph for the change card that surfaces below tool-group
+  // pills when the agent wrote files. Page outline + a small pen overlay.
+  const FileEditIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="14 3 14 9 20 9"/><path d="M18 13l3 3-5 5h-3v-3z"/></svg>`;
   // Cloud-tab icons. The Cloud tab is a Lovable-style data-browser panel
   // that lives next to Preview/Code; these glyphs label the tab itself and
   // the left-rail sub-sections (Database, Users, Storage, etc.).
@@ -215,13 +224,9 @@
     const isUpdateMode = !!opts.projectId;
     const isNewBuild = !isUpdateMode && !!initialPrompt;
     let projName = appContext?.name || (isNewBuild ? 'New app' : 'Untitled');
-    // Description is the real `app.json#description` for cloned/edited apps
-    // (carried in via `appContext.desc`). In new-build mode it starts empty
-    // until the user types one.
-    let projDesc = appContext?.desc?.trim() ?? '';
-    const descPlaceholder = isUpdateMode
-      ? 'Add a description…'
-      : 'Designing your new app — click to describe';
+    // Description still rides on app.json — the inline editor was removed
+    // when the subtitle slot became the read-only status row. The value
+    // continues to surface via appContext.desc to the home grid.
     const projColor = appContext?.color || (window.ICON_PALETTE?.rose ?? '#5847e0');
     const projIcon: IconNameType = appContext?.iconKey || 'Sparkle';
 
@@ -230,16 +235,12 @@
     let chat: ChatMsg[] = [];
     let tab: Tab = 'preview';
     let chatView = 'chat' as ChatView;
-    let sidebarOpen = true;
     let previewDevice = 'mobile' as DeviceKey;
     let generating = false;
     let publishing = false;
     let lastPublishedVersionId: string | undefined;
     let unsubscribeAgent: (() => void) | null = null;
     let liveUrl: string | undefined;
-    // URL-bar state — populated by renderPreview() each time it resolves a src.
-    let currentPreviewSrc: string | undefined;
-    let currentPreviewKind: 'live' | 'local' | undefined;
     // Cloud → Logs polling handle. Hoisted out of renderCloud's closure so
     // that any code that tears down the right pane (renderRight, builder
     // unmount, tab switch) can stop the poll regardless of which renderCloud
@@ -369,22 +370,59 @@
       },
     });
 
-    // Inline-editable description. Renders the live `app.json#description`
-    // when present; falls back to a mode-specific placeholder so the slot
-    // doesn't read as empty. Edits persist via the same updateProjectMeta
-    // IPC the title uses.
-    const projSubtitleEl = el('span', {
-      contenteditable: 'plaintext-only',
-      spellcheck: 'false',
-    });
-    projSubtitleEl.dataset.placeholder = descPlaceholder;
-    projSubtitleEl.setAttribute('title', 'Click to edit description');
-    function paintSubtitle(): void {
-      // Use textContent only when there's a real value; otherwise leave the
-      // node empty so CSS `:empty::before` can show the placeholder.
-      projSubtitleEl.textContent = projDesc;
+    // Read-only status row that replaces the old editable description
+    // subtitle (which was 'Built with Centraid.' / 'Add a description…').
+    // Mirrors the v2 mockup's `● Live · v3 · edited 14h ago` pattern: a
+    // colored dot reflects the sync state (driven by `[data-state]` set
+    // by paintStatus), followed by version number + relative edit time
+    // when known. For a draft project the row just reads 'Draft'. The
+    // description data is preserved in app.json — editing moves to a
+    // future settings affordance.
+    const projStatusDot = el('span', { class: 'cd-app-strip-status-dot' });
+    const projStatusText = el('span', { class: 'cd-app-strip-status-text' }, 'Draft');
+    const projSubtitleEl = el(
+      'span',
+      { 'data-state': 'idle-draft', class: 'cd-app-strip-status' },
+      [projStatusDot, projStatusText],
+    );
+    let appVersionCount = 0;
+    let appLastEditedAt: number | undefined;
+    function relTime(ts: number): string {
+      const diff = Math.max(0, Date.now() - ts);
+      if (diff < 60_000) return 'just now';
+      if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+      if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+      return `${Math.floor(diff / 86_400_000)}d ago`;
     }
-    paintSubtitle();
+    function parseVersionTime(versionId: string): number | undefined {
+      // Version IDs come back from the gateway as `v_YYYY-MM-DDTHH-MM-...`
+      // so we can parse the embedded ISO timestamp without a separate
+      // gateway call.
+      const m = versionId.match(/^v_(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})/);
+      if (!m) return undefined;
+      return Date.parse(`${m[1]}T${m[2]}:${m[3]}:00Z`);
+    }
+    function paintStatus(): void {
+      // Status text composition is driven by sync state (publishing /
+      // editing / live / draft) plus version + edit-time facts. The dot
+      // colour is owned by the parent's [data-state] attribute, set by
+      // refreshSyncStatus().
+      let text: string;
+      if (publishing) {
+        text = 'Publishing…';
+      } else if (generating) {
+        text = 'Editing…';
+      } else if (lastPublishedVersionId) {
+        const parts = ['Live'];
+        if (appVersionCount > 0) parts.push(`v${appVersionCount}`);
+        if (appLastEditedAt) parts.push(`edited ${relTime(appLastEditedAt)}`);
+        text = parts.join(' · ');
+      } else {
+        text = 'Draft';
+      }
+      projStatusText.textContent = text;
+    }
+    paintStatus();
 
     // Mode tabs render as icon-only pills by default; the active tab expands
     // to icon+label (Lovable pattern). Each entry's third field is a render
@@ -411,32 +449,39 @@
       },
     });
 
-    // Sidebar toggle — collapses the whole chat pane so the preview gets
-    // the full canvas. Sets data-sidebar on .builder-body.
-    const sidebarBtn = el('button', {
-      'aria-label': 'Toggle sidebar',
-      class: 'topbar-icon-btn',
-      'data-active': String(sidebarOpen),
-      trustedHtml: SidebarIcon(16),
-      title: 'Toggle sidebar',
-      onClick: () => {
-        sidebarOpen = !sidebarOpen;
-        body.dataset.sidebar = sidebarOpen ? 'open' : 'closed';
-        refreshTopbarToggles();
-      },
-    });
+    // The window chrome (cd-tl-main) owns its own sidebar toggle — the
+    // duplicate in the old cd-app-strip is gone with the strip itself.
+    // `sidebarOpen` is now flipped via Chrome.setSidebarOpen.
 
-    // URL bar group — device toggle + current preview URL + open-in-new-tab + reload.
-    // Visibility is bound to tab === 'preview'; populated by renderUrlbar().
+    // Device segmented control — toggles the preview iframe between
+    // mobile / tablet / desktop framing. Lives in the right-pane toolbar
+    // and is hidden when the active tab isn't Preview (via .urlbar-slot
+    // data-visible). The old URL address bar that used to sit beside it
+    // has been removed — the preview iframe is the source of truth.
     const deviceMobileBtn = el('button', {
       'aria-label': 'Mobile',
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'mobile'),
       title: 'Mobile preview',
-      trustedHtml: SmartphoneIcon(13),
+      // Icon + visible label (Phone / Tablet / Desktop) — matches the
+      // v2 mockup's segmented device pill instead of icon-only.
+      trustedHtml: `${SmartphoneIcon(13)}<span class="urlbar-device-label">Phone</span>`,
       onClick: () => {
         if (previewDevice === 'mobile') return;
         previewDevice = 'mobile';
+        if (tab === 'preview') renderRight();
+        refreshTopbarToggles();
+      },
+    });
+    const deviceTabletBtn = el('button', {
+      'aria-label': 'Tablet',
+      class: 'urlbar-device-btn',
+      'data-active': String(previewDevice === 'tablet'),
+      title: 'Tablet preview',
+      trustedHtml: `${TabletIcon(13)}<span class="urlbar-device-label">Tablet</span>`,
+      onClick: () => {
+        if (previewDevice === 'tablet') return;
+        previewDevice = 'tablet';
         if (tab === 'preview') renderRight();
         refreshTopbarToggles();
       },
@@ -446,7 +491,7 @@
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'desktop'),
       title: 'Desktop preview',
-      trustedHtml: MonitorIcon(13),
+      trustedHtml: `${MonitorIcon(13)}<span class="urlbar-device-label">Desktop</span>`,
       onClick: () => {
         if (previewDevice === 'desktop') return;
         previewDevice = 'desktop';
@@ -454,37 +499,12 @@
         refreshTopbarToggles();
       },
     });
-    const urlbarKindDot = el('span', {
-      class: 'urlbar-kind',
-      'data-kind': 'none',
-      title: 'No preview',
-    });
-    const urlbarPath = el('span', { class: 'urlbar-path' }, '—');
-    const urlbarOpenBtn = el('button', {
-      'aria-label': 'Open in browser',
-      class: 'urlbar-action-btn',
-      trustedHtml: ExternalIcon(13),
-      title: 'Open in browser',
-      onClick: () => {
-        if (currentPreviewSrc) window.open(currentPreviewSrc, '_blank');
-      },
-    });
-    const urlbarReloadBtn = el('button', {
-      'aria-label': 'Reload preview',
-      class: 'urlbar-action-btn',
-      trustedHtml: RefreshIcon(13),
-      title: 'Reload preview',
-      onClick: () => {
-        if (tab === 'preview') renderRight();
-      },
-    });
-    const urlbar = el('div', { class: 'urlbar' }, [
-      el('div', { class: 'urlbar-device' }, [deviceMobileBtn, deviceDesktopBtn]),
-      el('div', { class: 'urlbar-field' }, [urlbarKindDot, urlbarPath]),
-      urlbarOpenBtn,
-      urlbarReloadBtn,
+    const devicePill = el('div', { class: 'urlbar-device' }, [
+      deviceMobileBtn,
+      deviceTabletBtn,
+      deviceDesktopBtn,
     ]);
-    const urlbarSlot = el('div', { class: 'urlbar-slot' }, [urlbar]);
+    const urlbarSlot = el('div', { class: 'urlbar-slot' }, [devicePill]);
 
     // Inline-editable title + description. Edits persist to
     // `app.json#{name,description}` via the updateProjectMeta IPC and also
@@ -534,40 +554,11 @@
       }
     });
 
-    function commitProjDescEdit(): void {
-      const next = (projSubtitleEl.textContent ?? '').trim();
-      if (next === projDesc) {
-        paintSubtitle(); // normalise whitespace
-        return;
-      }
-      const previous = projDesc;
-      projDesc = next;
-      paintSubtitle();
-      if (projectId) {
-        void Api()
-          .updateProjectMeta({ id: projectId, description: next })
-          .catch((err: unknown) => {
-            projDesc = previous;
-            paintSubtitle();
-            showToast(
-              `Description save failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          });
-        if (onMetaChange) onMetaChange({ projectId, description: next });
-      }
-    }
-    projSubtitleEl.addEventListener('blur', commitProjDescEdit);
-    projSubtitleEl.addEventListener('keydown', (e: Event) => {
-      const ke = e as KeyboardEvent;
-      if (ke.key === 'Enter') {
-        ke.preventDefault();
-        projSubtitleEl.blur();
-      } else if (ke.key === 'Escape') {
-        ke.preventDefault();
-        paintSubtitle();
-        projSubtitleEl.blur();
-      }
-    });
+    // Description editing was previously bound to the inline subtitle slot.
+    // That slot now shows a read-only sync/version status row, so the
+    // editor moves out of the inline meta and will live in a future
+    // settings affordance. The description data still rides on app.json
+    // and is exposed via `appContext.desc` to the home grid.
 
     // Tab buttons live inside a cd-tabs-pill so they sit in the titlebar
     // alongside Share/Publish. The buttons keep their existing .mode-tab
@@ -585,7 +576,7 @@
             tab = key;
             renderRight();
             refreshTabs();
-            renderUrlbar();
+            refreshTopbarToggles();
           },
         });
         btn.innerHTML = `${renderIcon()}<span>${label}</span>`;
@@ -593,64 +584,39 @@
       }),
     );
 
-    // Share / Publish buttons that ride in the cd-window titlebar right.
-    const shareBtn = el(
-      'button',
-      {
-        class: 'cd-btn cd-btn-ghost',
-        type: 'button',
-        onClick: () => {
-          if (appContext && window.Centraid?.openShare) {
-            window.Centraid.openShare({
-              ...appContext,
-              desc: projDesc || appContext.desc,
-              name: projName,
-            });
-          } else {
-            showToast('Publish the app before sharing');
-          }
-        },
-      },
-      [el('span', { trustedHtml: Icon.Share({ size: 12 }) }), el('span', {}, 'Share')],
-    );
+    // Single canonical sync signal — drives the dot colour + label inside
+    // the in-pane builder header status row. paintStatus() composes the
+    // label from publishing / generating / lastPublishedVersionId + the
+    // version count + relative edit time, so version facts compose with
+    // sync state in one place.
+    function refreshSyncStatus(): void {
+      let state: 'editing' | 'publishing' | 'idle-live' | 'idle-draft' = 'idle-draft';
+      if (publishing) state = 'publishing';
+      else if (generating) state = 'editing';
+      else if (lastPublishedVersionId) state = 'idle-live';
+      projSubtitleEl.dataset.state = state;
+      paintStatus();
+    }
 
-    const titlebarRight = el('span', {
-      style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
+    // In-pane builder header — lives at the top of the chat pane and owns
+    // the project-level affordances (icon, name, status, more menu, Publish).
+    // Replaces the window-wide cd-app-strip + titlebarRight, matching the
+    // v2 mockup where each pane carries its own header instead of a
+    // global app strip.
+    const moreBtn = el('button', {
+      'aria-label': 'More project actions',
+      class: 'builder-pane-more',
+      title: 'More',
+      // Wired in a future commit (Share, Rename, Edit description, etc.);
+      // for now it's a visual placeholder so the header reads complete.
+      trustedHtml:
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
     });
-    titlebarRight.append(tabsPill);
-    titlebarRight.append(shareBtn);
-    titlebarRight.append(primaryBtn);
-
-    // App-meta strip — Codex-style chip with back + icon + name + desc on
-    // the left, history toggle + chat-pane collapse + URL bar on the right.
-    const stripLeft = el(
-      'span',
-      { style: { display: 'inline-flex', alignItems: 'center', gap: '10px' } },
-      [
-        el('button', {
-          'aria-label': 'Back',
-          class: 'cd-tb-btn',
-          type: 'button',
-          trustedHtml: Icon.ArrowLeft({ size: 14 }),
-          onClick: handleExit,
-        }),
-        projIconEl,
-        el('span', { class: 'cd-app-strip-meta' }, [projNameEl, projSubtitleEl]),
-      ],
-    );
-    const stripRight = el(
-      'span',
-      {
-        style: {
-          marginLeft: 'auto',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-        },
-      },
-      [historyBtn, sidebarBtn, urlbarSlot],
-    );
-    const topbar = el('div', { class: 'cd-app-strip' }, [stripLeft, stripRight]);
+    const builderHeader = el('div', { class: 'builder-pane-header' }, [
+      projIconEl,
+      el('span', { class: 'builder-pane-meta' }, [projNameEl, projSubtitleEl]),
+      el('span', { class: 'builder-pane-actions' }, [historyBtn, moreBtn, primaryBtn]),
+    ]);
 
     function refreshTabs(): void {
       const keys: Tab[] = tabDefs.map(([k]) => k);
@@ -663,26 +629,9 @@
     // visibility in sync with state. Called whenever any of those changes.
     function refreshTopbarToggles(): void {
       historyBtn.dataset.active = String(chatView === 'history');
-      sidebarBtn.dataset.active = String(sidebarOpen);
       deviceMobileBtn.dataset.active = String(previewDevice === 'mobile');
+      deviceTabletBtn.dataset.active = String(previewDevice === 'tablet');
       deviceDesktopBtn.dataset.active = String(previewDevice === 'desktop');
-      urlbarSlot.dataset.visible = String(tab === 'preview');
-    }
-
-    function renderUrlbar(): void {
-      const has = !!currentPreviewSrc;
-      urlbar.dataset.empty = String(!has);
-      urlbarKindDot.dataset.kind = currentPreviewKind ?? 'none';
-      urlbarKindDot.title =
-        currentPreviewKind === 'live'
-          ? 'Live (gateway)'
-          : currentPreviewKind === 'local'
-            ? 'Local files'
-            : 'No preview';
-      urlbarPath.textContent = has ? formatPreviewUrl(currentPreviewSrc!) : 'No preview yet';
-      urlbarPath.title = currentPreviewSrc ?? '';
-      (urlbarOpenBtn as HTMLButtonElement).disabled = !has;
-      (urlbarReloadBtn as HTMLButtonElement).disabled = tab !== 'preview';
       urlbarSlot.dataset.visible = String(tab === 'preview');
     }
 
@@ -744,7 +693,20 @@
     // data-sidebar drives the .builder-body grid columns (open vs collapsed).
     const body = el('div', { class: 'builder-body', 'data-sidebar': 'open' });
     const chatPane = el('div', { class: 'chat-pane' });
+    // The right pane is now a flex column hosting a persistent toolbar
+    // (tabs + URL bar) plus a renderable content area. Backdrop classes
+    // (`preview-pane`, `has-phone`) stay on `rightPane` so the dotted
+    // wall fills the whole column. Render functions write into
+    // `rightPaneContent`, which is what `renderRight()` clears.
     const rightPane = el('div', { class: 'right-pane' });
+    const rightPaneToolbar = el('div', { class: 'right-pane-toolbar' }, [
+      tabsPill,
+      el('span', { class: 'right-pane-toolbar-spacer' }),
+      urlbarSlot,
+    ]);
+    const rightPaneContent = el('div', { class: 'right-pane-content' });
+    rightPane.append(rightPaneToolbar);
+    rightPane.append(rightPaneContent);
     body.append(chatPane);
     body.append(rightPane);
 
@@ -772,11 +734,18 @@
         const groupId = m.id;
         const isRunning = m.calls.some((c) => c.state === 'running');
         const hasError = m.calls.some((c) => c.state === 'error');
+        // File-writing calls that completed successfully — these become the
+        // "change card" rendered below the pill so the user sees which files
+        // changed without expanding the group.
+        const writes = m.calls.filter(
+          (c) => FILE_WRITING_TOOLS.has(c.tool) && c.state === 'ok' && c.summary,
+        );
         const wrap = el('div', {
           class: 'tool-group',
           'data-open': String(m.open),
           'data-running': String(isRunning),
           'data-error': String(hasError),
+          'data-has-changes': String(writes.length > 0),
         });
         const pill = el('button', {
           class: 'tool-group-pill',
@@ -797,6 +766,38 @@
           renderChat();
         });
         wrap.append(pill);
+        if (writes.length > 0) {
+          // Inline change card. Surfaces "N files updated" with up to three
+          // file basenames, so the user sees what shipped without expanding
+          // the row-by-row tool list. Clicking the card toggles the group.
+          const card = el('button', {
+            class: 'tg-change-card',
+            type: 'button',
+            'aria-label': `${writes.length} file${writes.length === 1 ? '' : 's'} updated — toggle details`,
+            onClick: () => {
+              chat = chat.map((x) =>
+                x.kind === 'toolGroup' && x.id === groupId ? { ...x, open: !x.open } : x,
+              );
+              renderChat();
+            },
+          });
+          const basenames = writes.map((c) => (c.summary ?? '').split('/').pop() ?? '');
+          const shown = basenames.slice(0, 3);
+          const moreCount = basenames.length - shown.length;
+          const subtitle = shown.join(' · ') + (moreCount > 0 ? ` · +${moreCount} more` : '');
+          // Version stamp on the card right edge — gives the user a
+          // sense of "what version this lands as" without expanding the
+          // tool list. Falls back to "draft" before the first publish.
+          const versionLabel = appVersionCount > 0 ? `v${appVersionCount + 1}` : 'draft';
+          card.innerHTML =
+            `<span class="tg-card-icon">${FileEditIcon(14)}</span>` +
+            `<span class="tg-card-meta">` +
+            `<span class="tg-card-title">${writes.length} file${writes.length === 1 ? '' : 's'} updated</span>` +
+            `<span class="tg-card-sub">${escapeHtml(subtitle)}</span>` +
+            `</span>` +
+            `<span class="tg-card-version">→ ${escapeHtml(versionLabel)}</span>`;
+          wrap.append(card);
+        }
         if (m.open) {
           const list = el('div', { class: 'tg-list' });
           for (const c of m.calls) {
@@ -822,11 +823,17 @@
       if (m.kind === 'user') {
         return el('div', { class: 'msg-user' }, [el('div', { class: 'msg-user-bubble' }, m.text)]);
       }
-      // AI message — preserve paragraphs from the streaming text.
+      // AI message — preserve paragraphs from the streaming text. Lead
+      // with a small `builder` author chip (gradient dot + monospace
+      // label) that grounds the assistant turn in the conversation
+      // rather than letting it read as floating prose.
+      const author = el('div', { class: 'msg-ai-author' });
+      author.innerHTML =
+        '<span class="msg-ai-author-dot"></span><span class="msg-ai-author-name">builder</span>';
       const para = el('div', { class: 'msg-ai-text' });
       const text = m.text || (m.streaming ? '…' : '');
       text.split('\n\n').forEach((p) => para.append(el('p', {}, p)));
-      return el('div', { class: 'msg-ai' }, [para]);
+      return el('div', { class: 'msg-ai' }, [author, para]);
     }
 
     function renderChat(): void {
@@ -840,6 +847,10 @@
         );
       }
       chatScroll.scrollTop = chatScroll.scrollHeight;
+      // The header sync indicator mirrors `generating` — refreshing it
+      // here covers every place that toggles the flag (agent events,
+      // sendUserPrompt, error paths) without a callback per site.
+      refreshSyncStatus();
     }
 
     function pushMessage(m: ChatMsg): number {
@@ -886,29 +897,43 @@
 
       const controls = el('div', { class: 'chat-input-controls' }, [
         el('button', {
-          class: 'input-pill',
-          trustedHtml: Icon.Plus({ size: 14 }),
+          'aria-label': 'Attach',
+          class: 'input-pill input-pill-icon',
           title: 'Attach',
+          trustedHtml: Icon.Plus({ size: 14 }),
         }),
-        el('button', { class: 'input-pill', title: 'Open project folder' }, 'Open folder'),
+        el('button', {
+          'aria-label': 'Open project folder',
+          class: 'input-pill input-pill-icon',
+          title: 'Open project folder',
+          trustedHtml: FolderOpenIcon(14),
+          onClick: () => {
+            if (projectId) void Api().openProjectFolder({ id: projectId });
+          },
+        }),
         el('div', { class: 'spacer' }),
         sendBtn,
       ]);
-      // Wire "Open folder" pill to opening the project on disk.
-      const openFolderBtn = controls.querySelectorAll('.input-pill')[1] as HTMLElement;
-      openFolderBtn.addEventListener('click', () => {
-        if (projectId) void Api().openProjectFolder({ id: projectId });
-      });
 
       const wrap = el('div', { class: 'chat-input' }, [ta, controls]);
-      const promptStarters = el('div', { class: 'prompt-starters' });
+      // Contextual follow-ups — anchored just above the input, prefixed with
+      // a `Try` label so they read as suggestions rather than empty-state
+      // filler. Same hardcoded set today; future work can swap in
+      // turn-aware suggestions from the agent.
+      const followups = el('div', { class: 'prompt-starters' });
+      followups.append(
+        el('span', {
+          class: 'prompt-starters-label',
+          trustedHtml: `${SparkleIcon(11)}<span>Try</span>`,
+        }),
+      );
       for (const suggestion of [
         'Improve the layout',
         'Add saved data',
         'Polish the visual style',
         'Prepare to publish',
       ]) {
-        promptStarters.append(
+        followups.append(
           el(
             'button',
             {
@@ -922,13 +947,22 @@
           ),
         );
       }
-      inputWrap.append(promptStarters);
+      inputWrap.append(followups);
       inputWrap.append(wrap);
     }
 
+    // The chat pane is composed of a persistent header (project icon +
+    // name + status + Publish) and a body that swaps between live chat
+    // and version history. The header is mounted ONCE during builder
+    // setup; renderChatPane only touches the body so the header doesn't
+    // flash on every chatView flip.
+    const chatBody = el('div', { class: 'chat-body' });
+    chatPane.append(builderHeader);
+    chatPane.append(chatBody);
+
     // ---------- Chat pane swap (chat ↔ history) ----------
     function renderChatPane(): void {
-      chatPane.innerHTML = '';
+      chatBody.innerHTML = '';
       if (chatView === 'history') {
         const head = el('div', { class: 'chatpane-head' }, [
           el('button', {
@@ -944,8 +978,8 @@
           el('span', { class: 'chatpane-head-title' }, 'Version history'),
         ]);
         const list = el('div', { class: 'history-list chatpane-history' });
-        chatPane.append(head);
-        chatPane.append(list);
+        chatBody.append(head);
+        chatBody.append(list);
         void renderHistoryInto(list);
         return;
       }
@@ -953,15 +987,18 @@
       // renderInput repopulate them.
       chatScroll = el('div', { class: 'chat-scroll' });
       inputWrap = el('div', { class: 'chat-input-wrap' });
-      chatPane.append(chatScroll);
-      chatPane.append(inputWrap);
+      chatBody.append(chatScroll);
+      chatBody.append(inputWrap);
       renderChat();
       renderInput();
     }
 
     // ---------- Right pane ----------
     function renderRight(): void {
-      rightPane.innerHTML = '';
+      // Clear only the content area — the toolbar (tabs + URL bar) above
+      // it is persistent across renders so the user can switch modes
+      // without the toolbar flashing.
+      rightPaneContent.innerHTML = '';
       rightPane.classList.remove('preview-pane', 'has-phone');
       // Always stop any in-flight cloud polling before re-rendering; the
       // cloud branch below will restart it if logs is the active section.
@@ -1011,17 +1048,15 @@
     }
 
     async function renderPreview(): Promise<void> {
-      // `has-phone` styles the pane as the dotted-grid backdrop the phone
-      // frame sits on. The desktop view doesn't want that — it wants the
-      // preview-stage to flex-stretch normally — so apply it conditionally.
+      // `has-phone` styles the pane as the dotted-grid backdrop that mobile
+      // and tablet device frames sit on. Desktop wants a plain flex-stretched
+      // stage instead, so apply the backdrop conditionally.
       rightPane.classList.add('preview-pane');
-      if (previewDevice === 'mobile') rightPane.classList.add('has-phone');
+      if (previewDevice === 'mobile' || previewDevice === 'tablet') {
+        rightPane.classList.add('has-phone');
+      }
 
       const resolved = projectId ? await resolvePreviewSrc() : undefined;
-      // Tell the topbar URL bar what we're showing (or that we have nothing).
-      currentPreviewSrc = resolved?.src;
-      currentPreviewKind = resolved?.kind;
-      renderUrlbar();
 
       if (!resolved) {
         const empty = el('div', { class: 'empty' });
@@ -1031,18 +1066,31 @@
             The preview shows your app's local files as soon as the agent
             writes an <code>index.html</code>. Click <b>${isNewBuild ? 'Add to home' : 'Save'}</b> to publish to the gateway once you're happy.
           </p>`;
-        rightPane.append(empty);
+        rightPaneContent.append(empty);
         return;
       }
 
       const stage = el('div', { class: 'preview-stage' });
       const cardClass =
-        previewDevice === 'mobile' ? 'preview-card preview-card-mobile' : 'preview-card';
+        previewDevice === 'mobile'
+          ? 'preview-card preview-card-mobile'
+          : previewDevice === 'tablet'
+            ? 'preview-card preview-card-tablet'
+            : 'preview-card';
       const card = el('div', { class: cardClass });
       card.style.setProperty('--accent-color', projColor as string);
       card.append(makePreviewFrame(resolved.src));
       stage.append(card);
-      rightPane.append(stage);
+      rightPaneContent.append(stage);
+
+      // Floating "Live · synced" badge — ambient confidence signal that
+      // the iframe content reflects the persisted project. Only appears
+      // for the gateway-served live URL (not the local-files fallback).
+      if (resolved.kind === 'live') {
+        const badge = el('div', { class: 'preview-live-badge' });
+        badge.innerHTML = '<span class="preview-live-dot"></span>Live · synced';
+        rightPaneContent.append(badge);
+      }
     }
 
     // Code view — file-tree on the left + viewer on the right (Lovable-style).
@@ -1054,7 +1102,7 @@
       const viewer = el('div', { class: 'code-viewer' });
       codePane.append(treeWrap);
       codePane.append(viewer);
-      rightPane.append(codePane);
+      rightPaneContent.append(codePane);
 
       if (!projectId) {
         viewer.innerHTML = '<div class="empty">No project yet.</div>';
@@ -1319,7 +1367,7 @@
       const stage = el('div', { class: 'cloud-stage' });
       cloudPane.append(rail);
       cloudPane.append(stage);
-      rightPane.append(cloudPane);
+      rightPaneContent.append(cloudPane);
 
       let active: CloudSection = 'overview';
       // Cache the schema across rail clicks so flipping Overview ↔ Database
@@ -2432,6 +2480,9 @@
           }
           if (!event.isError && FILE_WRITING_TOOLS.has(event.toolName)) {
             previewReloadPending = true;
+            // Successful file write counts as an edit — bump the header
+            // relative-time so 'edited 14h ago' rolls to 'just now'.
+            appLastEditedAt = Date.now();
           }
           break;
         }
@@ -2468,10 +2519,10 @@
 
     async function bootstrap(): Promise<void> {
       if (isUpdateMode && projectId) {
-        // Show the divider immediately. Real chat history (and a fallback
-        // placeholder for first-time opens) is appended once the persisted
-        // session loads below.
-        chat = [{ kind: 'divider', text: 'Editing existing project' }];
+        // No "Editing existing project" divider — the project context lives
+        // in the header now (icon + name + version + sync state). Real chat
+        // history loads below; nothing to seed.
+        chat = [];
         renderChat();
         // Probe whether this project is actually published on the gateway.
         // `appLiveUrl` only builds a URL string — it never fails — so it
@@ -2484,6 +2535,12 @@
             const r = await Api().appLiveUrl({ id: projectId });
             liveUrl = r.url;
             lastPublishedVersionId = versions.activeVersion;
+            // Hydrate the header status: total version count drives the
+            // `v{N}` label, the active version's embedded timestamp drives
+            // the `edited Xh ago` relative time.
+            appVersionCount = versions.versions.length;
+            appLastEditedAt = parseVersionTime(versions.activeVersion);
+            refreshSyncStatus();
           }
         } catch {
           /* gateway down, app unknown, or never published — local preview
@@ -2564,6 +2621,7 @@
       }
       if (publishing) return;
       publishing = true;
+      refreshSyncStatus();
       const statusIdx = pushMessage({
         kind: 'status',
         text: 'Building & publishing…',
@@ -2574,6 +2632,11 @@
         const result = await Api().publish({ id: projectId });
         lastPublishedVersionId = result.versionId;
         liveUrl = (await Api().appLiveUrl({ id: projectId })).url;
+        // Bump the header status: every publish increments the version
+        // count and resets the relative edit time to "just now".
+        appVersionCount += 1;
+        appLastEditedAt = Date.now();
+        refreshSyncStatus();
         const migCount = result.migrationsApplied?.length ?? 0;
         const migText =
           migCount > 0 ? ` · ${migCount} migration${migCount === 1 ? '' : 's'} applied` : '';
@@ -2635,6 +2698,7 @@
         }
       } finally {
         publishing = false;
+        refreshSyncStatus();
         primaryBtn.removeAttribute('disabled');
       }
     }
@@ -2645,10 +2709,12 @@
 
     // ---------- Mount ----------
     // The builder lives inside a cd-window grid (sidebar column + main
-    // column). The sidebar is a slim placeholder for now — the global
-    // home/apps sidebar isn't useful while editing a single project, but
-    // we keep the column so toggling sidebar matches Home's behaviour.
-    const main = el('div', { class: 'builder' }, [topbar, body]);
+    // column). There's no more full-width cd-app-strip — the chat pane
+    // owns its own header (project meta + Publish), the right pane
+    // owns its own toolbar (tabs + URL bar), and the window chrome
+    // (cd-tl-main) carries just back/forward/sidebar — matching the
+    // v2 mockup's per-pane layout.
+    const main = el('div', { class: 'builder' }, [body]);
     main.style.flexDirection = 'column';
     main.style.display = 'flex';
     main.style.minHeight = '0';
@@ -2689,7 +2755,8 @@
       showNewChat: true,
       sidebar,
       sidebarOpen: builderSidebarOpen,
-      titlebarRight,
+      // No window-titlebar right cluster — Publish + project actions
+      // moved into the in-pane builder header.
     });
     root.append(shell);
 
@@ -2698,7 +2765,7 @@
     renderChatPane();
     renderRight();
     refreshTopbarToggles();
-    renderUrlbar();
+    refreshSyncStatus();
 
     // Kick off async setup.
     void bootstrap();
