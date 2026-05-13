@@ -13,6 +13,12 @@ GitHub issue: [#30](https://github.com/srikanth235/centraid/issues/30)
 - [x] Consolidate sync indicators into one canonical header status
 - [x] Drop the `Editing existing project` divider (mockup absorbed it into the header)
 - [x] Replace inline description subtitle with `● Live · v3 · edited 14h ago` status row
+- [x] Move project meta + Publish into in-pane builder header (drop full-width cd-app-strip)
+- [x] Add `builder` author chip to assistant messages
+- [x] Add version stamp (`→ v3`) to change cards
+- [x] Add floating `Live · synced` badge to preview pane
+- [x] Add `⋯` more-actions menu placeholder to builder header
+- [x] Polish device pill with text labels (`Phone / Tablet / Desktop`)
 
 ## What changed
 
@@ -33,6 +39,18 @@ GitHub issue: [#30](https://github.com/srikanth235/centraid/issues/30)
 **Drop the `Editing existing project` divider (mockup absorbed it into the header).** The chat used to seed itself with a `kind: 'divider', text: 'Editing existing project'` row on first load — a redundant caption above the starter line, since the project context already lives in the header (icon + name + sync state + version + edit time). The seed is now an empty array; the chat hydrates from real persisted history.
 
 **Replace inline description subtitle with `● Live · v3 · edited 14h ago` status row.** The cd-app-strip subtitle was an editable contenteditable bound to `app.json#description` (default text `Built with Centraid.` / `Add a description…`). The mockup designed a much more functional read-only status row at that slot, fusing sync state + version count + relative edit time into one line. `projSubtitleEl` is now a read-only `.cd-app-strip-status` row containing a coloured dot + monospace text. `paintStatus()` composes the text from `publishing` / `generating` / `lastPublishedVersionId` + new `appVersionCount` (from `versions.versions.length`) + new `appLastEditedAt` (parsed from the active version ID's embedded timestamp via `parseVersionTime`). Edit time updates live: every successful file-write tool execution stamps `appLastEditedAt = Date.now()` so the relative time rolls back to "just now" as the agent works. The standalone `.cd-sync` chip introduced earlier is removed — its signal merged into the dot here. Description data still rides on app.json; only the inline editor is gone (future work: add a settings affordance for editing it).
+
+**Move project meta + Publish into in-pane builder header (drop full-width cd-app-strip).** The biggest visual gap vs the mockup was that the project header lived in the window-wide titlebar / cd-app-strip while the mockup designed an in-pane header at the top of the middle column. The full-width `cd-app-strip` is gone. A new `.builder-pane-header` sits at the top of `.chat-pane`, owning `[icon] Title / status | [history] [⋯] [Publish]`. The window titlebar (cd-tl-main) now carries only back/forward/sidebar — Share is gone, Publish moved. `renderChatPane` is now scoped to a `.chat-body` sub-element so the header is mounted once and never flashes when the chat-view swaps. The duplicate sidebar-toggle button (the one in the old strip, separate from the cd-tl-main one) is also removed since it was redundant.
+
+**Add `builder` author chip to assistant messages.** Each assistant turn now leads with a small gradient `🟪 builder` chip — a 14px accent-tinted square + monospace label — that grounds the AI message in the conversation flow instead of letting it read as floating prose. Matches the mockup's `.assistant-author` pattern. Implemented in `renderMessage`'s AI branch with a new `.msg-ai-author` row.
+
+**Add version stamp (`→ v3`) to change cards.** Tool-group change cards now carry a small mono pill on the right edge that shows the target version the turn lands as. Uses `appVersionCount + 1` for "this edit will land as v{next}" semantics, falls back to `draft` when no publish has happened yet. New `.tg-card-version` class.
+
+**Add floating `Live · synced` badge to preview pane.** A 6px-dot + monospace pill is pinned to the bottom-centre of the preview content area when the iframe is showing the gateway-served live URL (`resolved.kind === 'live'`). Provides ambient confidence that the rendered preview reflects the persisted, published project. Skipped for the local-files fallback — that one's not "synced" with a gateway. New `.preview-live-badge` rule with frosted background + `var(--success)` dot.
+
+**Add `⋯` more-actions menu placeholder to builder header.** A 30×30 ghost icon button sits between the history button and Publish in the in-pane header. Currently visual-only — wiring to a popover (Share, Rename, Edit description, etc.) is follow-up work, but the slot is there and reads complete in the header rather than leaving a hole where the mockup put a menu trigger.
+
+**Polish device pill with text labels (`Phone / Tablet / Desktop`).** The device toggle in the right-pane toolbar used to be icon-only. Each button now carries `[icon] Label` matching the mockup's segmented control (`<span class="urlbar-device-label">`). Hidden visually compact still — pills are 22px tall with 9px horizontal padding — but the labels make the affordances scannable without hovering for tooltips.
 
 ## Out of scope
 

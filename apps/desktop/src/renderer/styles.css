@@ -1013,14 +1013,23 @@ textarea {
 .urlbar-device-btn {
   border: 0;
   background: transparent;
-  width: 24px;
   height: 22px;
+  padding: 0 9px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 5px;
   color: var(--ink-3);
   cursor: pointer;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.urlbar-device-label {
+  letter-spacing: -0.005em;
 }
 .urlbar-device-btn[data-active='true'] {
   background: var(--ink);
@@ -1226,6 +1235,78 @@ textarea {
   min-height: 0;
   overflow: hidden;
 }
+.chat-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* In-pane builder header — sits at the top of the chat pane and owns
+   the project icon, name + status row, more menu, and Publish button.
+   Replaces the window-wide cd-app-strip + cd-window titlebarRight,
+   matching the v2 mockup's per-pane header pattern. */
+.builder-pane-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 0.5px solid var(--line);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--bg-elev) 28%, transparent),
+    transparent
+  );
+}
+.builder-pane-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.builder-pane-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.builder-pane-more {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.builder-pane-more:hover {
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  color: var(--ink);
+}
+/* The header's icon picks up the project's accent — bigger than the old
+   strip's 22px chip, matching the mockup's 32px tile. */
+.builder-pane-header .app-topbar-icon {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+}
+.builder-pane-header .app-topbar-icon svg {
+  width: 16px;
+  height: 16px;
+}
+/* Editable project title sits inside the meta column. The bold tag
+   from builder.ts gets the pane-header weight + size here. */
+.builder-pane-meta b {
+  font-weight: 600;
+  font-size: 14.5px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  outline: none;
+}
 
 /* Header shown when chat pane is in History view */
 .chatpane-head {
@@ -1319,7 +1400,32 @@ textarea {
 .msg-ai {
   display: flex;
   flex-direction: column;
-  margin: 8px 0;
+  gap: 4px;
+  margin: 14px 0 8px;
+}
+/* Author chip — small accent square + monospace `builder` label that
+   precedes every assistant turn. Grounds the message in the
+   conversation rather than letting it read as floating prose. */
+.msg-ai-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0;
+  margin-bottom: 2px;
+}
+.msg-ai-author-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep, var(--accent)));
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;
+  flex-shrink: 0;
+}
+.msg-ai-author-name {
+  letter-spacing: 0.01em;
 }
 .msg-ai-text p {
   margin: 0 0 8px;
@@ -1456,6 +1562,19 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Version stamp on the card right edge — small mono pill that shows the
+   target version this turn lands as ("→ v3" / "→ draft"), giving the
+   user a sense of progression without expanding the tool list. */
+.tg-change-card .tg-card-version {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.01em;
 }
 
 .tool-group .tg-list {
@@ -2837,6 +2956,39 @@ textarea {
 
 /* Device toggle (mobile / tablet / desktop) and preview source label live
    in the right-pane toolbar's URL slot (see .urlbar-device above). */
+
+/* Floating "Live · synced" badge — pinned to the bottom-centre of the
+   preview content area when the iframe is showing the gateway-served
+   live URL. Ambient confirmation that what's on screen reflects the
+   persisted, published project. */
+.preview-live-badge {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  border: 0.5px solid var(--line);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  z-index: 3;
+  pointer-events: none;
+}
+.preview-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success, #2ea043);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--success, #2ea043) 70%, transparent);
+}
 
 /* ---------- Misc utilities ---------- */
 .flex {

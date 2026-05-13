@@ -40,8 +40,6 @@
 
   // Inline SVGs for icons not in @centraid/design-tokens. Kept tiny so they
   // can live next to the topbar buttons that need them.
-  const SidebarIcon = (size = 16): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>`;
   const ExternalIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>`;
   const RefreshIcon = (size = 14): string =>
@@ -228,10 +226,9 @@
     const isUpdateMode = !!opts.projectId;
     const isNewBuild = !isUpdateMode && !!initialPrompt;
     let projName = appContext?.name || (isNewBuild ? 'New app' : 'Untitled');
-    // Description is the real `app.json#description` for cloned/edited apps
-    // (carried in via `appContext.desc`). It still rides on app.json — only
-    // the inline editor was removed; the value is read elsewhere.
-    let projDesc = appContext?.desc?.trim() ?? '';
+    // Description still rides on app.json — the inline editor was removed
+    // when the subtitle slot became the read-only status row. The value
+    // continues to surface via appContext.desc to the home grid.
     const projColor = appContext?.color || (window.ICON_PALETTE?.rose ?? '#5847e0');
     const projIcon: IconNameType = appContext?.iconKey || 'Sparkle';
 
@@ -240,7 +237,6 @@
     let chat: ChatMsg[] = [];
     let tab: Tab = 'preview';
     let chatView = 'chat' as ChatView;
-    let sidebarOpen = true;
     let previewDevice = 'mobile' as DeviceKey;
     let generating = false;
     let publishing = false;
@@ -458,20 +454,9 @@
       },
     });
 
-    // Sidebar toggle — collapses the whole chat pane so the preview gets
-    // the full canvas. Sets data-sidebar on .builder-body.
-    const sidebarBtn = el('button', {
-      'aria-label': 'Toggle sidebar',
-      class: 'topbar-icon-btn',
-      'data-active': String(sidebarOpen),
-      trustedHtml: SidebarIcon(16),
-      title: 'Toggle sidebar',
-      onClick: () => {
-        sidebarOpen = !sidebarOpen;
-        body.dataset.sidebar = sidebarOpen ? 'open' : 'closed';
-        refreshTopbarToggles();
-      },
-    });
+    // The window chrome (cd-tl-main) owns its own sidebar toggle — the
+    // duplicate in the old cd-app-strip is gone with the strip itself.
+    // `sidebarOpen` is now flipped via Chrome.setSidebarOpen.
 
     // URL bar group — device toggle + current preview URL + open-in-new-tab + reload.
     // Visibility is bound to tab === 'preview'; populated by renderUrlbar().
@@ -480,7 +465,9 @@
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'mobile'),
       title: 'Mobile preview',
-      trustedHtml: SmartphoneIcon(13),
+      // Icon + visible label (Phone / Tablet / Desktop) — matches the
+      // v2 mockup's segmented device pill instead of icon-only.
+      trustedHtml: `${SmartphoneIcon(13)}<span class="urlbar-device-label">Phone</span>`,
       onClick: () => {
         if (previewDevice === 'mobile') return;
         previewDevice = 'mobile';
@@ -493,7 +480,7 @@
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'tablet'),
       title: 'Tablet preview',
-      trustedHtml: TabletIcon(13),
+      trustedHtml: `${TabletIcon(13)}<span class="urlbar-device-label">Tablet</span>`,
       onClick: () => {
         if (previewDevice === 'tablet') return;
         previewDevice = 'tablet';
@@ -506,7 +493,7 @@
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'desktop'),
       title: 'Desktop preview',
-      trustedHtml: MonitorIcon(13),
+      trustedHtml: `${MonitorIcon(13)}<span class="urlbar-device-label">Desktop</span>`,
       onClick: () => {
         if (previewDevice === 'desktop') return;
         previewDevice = 'desktop';
@@ -624,47 +611,11 @@
       }),
     );
 
-    // Share / Publish buttons that ride in the cd-window titlebar right.
-    const shareBtn = el(
-      'button',
-      {
-        class: 'cd-btn cd-btn-ghost',
-        type: 'button',
-        onClick: () => {
-          if (appContext && window.Centraid?.openShare) {
-            window.Centraid.openShare({
-              ...appContext,
-              desc: projDesc || appContext.desc,
-              name: projName,
-            });
-          } else {
-            showToast('Publish the app before sharing');
-          }
-        },
-      },
-      [el('span', { trustedHtml: Icon.Share({ size: 12 }) }), el('span', {}, 'Share')],
-    );
-
-    const titlebarRight = el('span', {
-      style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
-    });
-    // tabsPill no longer rides in the window titlebar — it lives in the
-    // right-pane toolbar (built below) so it sits directly above the
-    // surface it controls. Share + Publish stay here; Publish is the
-    // project-level primary action and belongs in the window header
-    // alongside Share, separate from the conversation-level Send button.
-    titlebarRight.append(shareBtn);
-    titlebarRight.append(primaryBtn);
-
-    // App-meta strip — Codex-style chip with back + icon + name + status on
-    // the left, history toggle + chat-pane collapse on the right.
-    //
-    // The single canonical sync signal lives inside the meta's status row
-    // (the dot before the version label), driven by refreshSyncStatus.
-    // refreshSyncStatus owns the [data-state] on the status row (which the
-    // CSS uses to colour and pulse the dot), and delegates the label text
-    // to paintStatus so version + edit-time facts compose with sync state
-    // in one place.
+    // Single canonical sync signal — drives the dot colour + label inside
+    // the in-pane builder header status row. paintStatus() composes the
+    // label from publishing / generating / lastPublishedVersionId + the
+    // version count + relative edit time, so version facts compose with
+    // sync state in one place.
     function refreshSyncStatus(): void {
       let state: 'editing' | 'publishing' | 'idle-live' | 'idle-draft' = 'idle-draft';
       if (publishing) state = 'publishing';
@@ -674,37 +625,25 @@
       paintStatus();
     }
 
-    const stripLeft = el(
-      'span',
-      { style: { display: 'inline-flex', alignItems: 'center', gap: '10px' } },
-      [
-        el('button', {
-          'aria-label': 'Back',
-          class: 'cd-tb-btn',
-          type: 'button',
-          trustedHtml: Icon.ArrowLeft({ size: 14 }),
-          onClick: handleExit,
-        }),
-        projIconEl,
-        el('span', { class: 'cd-app-strip-meta' }, [projNameEl, projSubtitleEl]),
-      ],
-    );
-    const stripRight = el(
-      'span',
-      {
-        style: {
-          marginLeft: 'auto',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-        },
-      },
-      // urlbarSlot moved into the right-pane toolbar (alongside the mode
-      // tabs) so URL + reload sit above the surface they describe rather
-      // than across the window from it.
-      [historyBtn, sidebarBtn],
-    );
-    const topbar = el('div', { class: 'cd-app-strip' }, [stripLeft, stripRight]);
+    // In-pane builder header — lives at the top of the chat pane and owns
+    // the project-level affordances (icon, name, status, more menu, Publish).
+    // Replaces the window-wide cd-app-strip + titlebarRight, matching the
+    // v2 mockup where each pane carries its own header instead of a
+    // global app strip.
+    const moreBtn = el('button', {
+      'aria-label': 'More project actions',
+      class: 'builder-pane-more',
+      title: 'More',
+      // Wired in a future commit (Share, Rename, Edit description, etc.);
+      // for now it's a visual placeholder so the header reads complete.
+      trustedHtml:
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
+    });
+    const builderHeader = el('div', { class: 'builder-pane-header' }, [
+      projIconEl,
+      el('span', { class: 'builder-pane-meta' }, [projNameEl, projSubtitleEl]),
+      el('span', { class: 'builder-pane-actions' }, [historyBtn, moreBtn, primaryBtn]),
+    ]);
 
     function refreshTabs(): void {
       const keys: Tab[] = tabDefs.map(([k]) => k);
@@ -717,7 +656,6 @@
     // visibility in sync with state. Called whenever any of those changes.
     function refreshTopbarToggles(): void {
       historyBtn.dataset.active = String(chatView === 'history');
-      sidebarBtn.dataset.active = String(sidebarOpen);
       deviceMobileBtn.dataset.active = String(previewDevice === 'mobile');
       deviceTabletBtn.dataset.active = String(previewDevice === 'tablet');
       deviceDesktopBtn.dataset.active = String(previewDevice === 'desktop');
@@ -891,12 +829,17 @@
           const shown = basenames.slice(0, 3);
           const moreCount = basenames.length - shown.length;
           const subtitle = shown.join(' · ') + (moreCount > 0 ? ` · +${moreCount} more` : '');
+          // Version stamp on the card right edge — gives the user a
+          // sense of "what version this lands as" without expanding the
+          // tool list. Falls back to "draft" before the first publish.
+          const versionLabel = appVersionCount > 0 ? `v${appVersionCount + 1}` : 'draft';
           card.innerHTML =
             `<span class="tg-card-icon">${FileEditIcon(14)}</span>` +
             `<span class="tg-card-meta">` +
             `<span class="tg-card-title">${writes.length} file${writes.length === 1 ? '' : 's'} updated</span>` +
             `<span class="tg-card-sub">${escapeHtml(subtitle)}</span>` +
-            `</span>`;
+            `</span>` +
+            `<span class="tg-card-version">→ ${escapeHtml(versionLabel)}</span>`;
           wrap.append(card);
         }
         if (m.open) {
@@ -924,11 +867,17 @@
       if (m.kind === 'user') {
         return el('div', { class: 'msg-user' }, [el('div', { class: 'msg-user-bubble' }, m.text)]);
       }
-      // AI message — preserve paragraphs from the streaming text.
+      // AI message — preserve paragraphs from the streaming text. Lead
+      // with a small `builder` author chip (gradient dot + monospace
+      // label) that grounds the assistant turn in the conversation
+      // rather than letting it read as floating prose.
+      const author = el('div', { class: 'msg-ai-author' });
+      author.innerHTML =
+        '<span class="msg-ai-author-dot"></span><span class="msg-ai-author-name">builder</span>';
       const para = el('div', { class: 'msg-ai-text' });
       const text = m.text || (m.streaming ? '…' : '');
       text.split('\n\n').forEach((p) => para.append(el('p', {}, p)));
-      return el('div', { class: 'msg-ai' }, [para]);
+      return el('div', { class: 'msg-ai' }, [author, para]);
     }
 
     function renderChat(): void {
@@ -1046,9 +995,18 @@
       inputWrap.append(wrap);
     }
 
+    // The chat pane is composed of a persistent header (project icon +
+    // name + status + Publish) and a body that swaps between live chat
+    // and version history. The header is mounted ONCE during builder
+    // setup; renderChatPane only touches the body so the header doesn't
+    // flash on every chatView flip.
+    const chatBody = el('div', { class: 'chat-body' });
+    chatPane.append(builderHeader);
+    chatPane.append(chatBody);
+
     // ---------- Chat pane swap (chat ↔ history) ----------
     function renderChatPane(): void {
-      chatPane.innerHTML = '';
+      chatBody.innerHTML = '';
       if (chatView === 'history') {
         const head = el('div', { class: 'chatpane-head' }, [
           el('button', {
@@ -1064,8 +1022,8 @@
           el('span', { class: 'chatpane-head-title' }, 'Version history'),
         ]);
         const list = el('div', { class: 'history-list chatpane-history' });
-        chatPane.append(head);
-        chatPane.append(list);
+        chatBody.append(head);
+        chatBody.append(list);
         void renderHistoryInto(list);
         return;
       }
@@ -1073,8 +1031,8 @@
       // renderInput repopulate them.
       chatScroll = el('div', { class: 'chat-scroll' });
       inputWrap = el('div', { class: 'chat-input-wrap' });
-      chatPane.append(chatScroll);
-      chatPane.append(inputWrap);
+      chatBody.append(chatScroll);
+      chatBody.append(inputWrap);
       renderChat();
       renderInput();
     }
@@ -1172,6 +1130,15 @@
       card.append(makePreviewFrame(resolved.src));
       stage.append(card);
       rightPaneContent.append(stage);
+
+      // Floating "Live · synced" badge — ambient confidence signal that
+      // the iframe content reflects the persisted project. Only appears
+      // for the gateway-served live URL (not the local-files fallback).
+      if (resolved.kind === 'live') {
+        const badge = el('div', { class: 'preview-live-badge' });
+        badge.innerHTML = '<span class="preview-live-dot"></span>Live · synced';
+        rightPaneContent.append(badge);
+      }
     }
 
     // Code view — file-tree on the left + viewer on the right (Lovable-style).
@@ -2790,10 +2757,12 @@
 
     // ---------- Mount ----------
     // The builder lives inside a cd-window grid (sidebar column + main
-    // column). The sidebar is a slim placeholder for now — the global
-    // home/apps sidebar isn't useful while editing a single project, but
-    // we keep the column so toggling sidebar matches Home's behaviour.
-    const main = el('div', { class: 'builder' }, [topbar, body]);
+    // column). There's no more full-width cd-app-strip — the chat pane
+    // owns its own header (project meta + Publish), the right pane
+    // owns its own toolbar (tabs + URL bar), and the window chrome
+    // (cd-tl-main) carries just back/forward/sidebar — matching the
+    // v2 mockup's per-pane layout.
+    const main = el('div', { class: 'builder' }, [body]);
     main.style.flexDirection = 'column';
     main.style.display = 'flex';
     main.style.minHeight = '0';
@@ -2834,7 +2803,8 @@
       showNewChat: true,
       sidebar,
       sidebarOpen: builderSidebarOpen,
-      titlebarRight,
+      // No window-titlebar right cluster — Publish + project actions
+      // moved into the in-pane builder header.
     });
     root.append(shell);
 

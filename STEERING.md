@@ -36,3 +36,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-70619dd81af-1778678345-3 | 70619dd8-1af1-4399-a121-9385d8c297f9 | #30 | interrupt | structural |  | feat(desktop): close mockup gaps - drop divider, fuse subtitle into version+t… |
 | steer-70619dd81af-1778678345-4 | 70619dd8-1af1-4399-a121-9385d8c297f9 | #30 | correction | classifier | mockup changes not fully implemented | feat(desktop): close mockup gaps - drop divider, fuse subtitle into version+t… |
 | steer-70619dd81af-1778678345-5 | 70619dd8-1af1-4399-a121-9385d8c297f9 | #30 | correction | classifier | wants full mockup implemented, deferring only agent turns | feat(desktop): close mockup gaps - drop divider, fuse subtitle into version+t… |
+| steer-70619dd81af-1778679881-1 | 70619dd8-1af1-4399-a121-9385d8c297f9 | #30 | interrupt | structural |  | feat(desktop): finish v2 mockup port - in-pane header, author chip, version sta… |
