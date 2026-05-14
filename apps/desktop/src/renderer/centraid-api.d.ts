@@ -51,7 +51,38 @@ export interface CentraidSettings {
   remoteGatewayUrl: string;
   /** User-configured remote gateway token — only used when `runtimeMode === 'remote'`. */
   remoteGatewayToken?: string;
+  /** Provider/model id (e.g. `openai/gpt-4o`) used by the app-view agentic chat. */
+  chatModel?: string;
 }
+
+export interface CentraidChatModel {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+export type CentraidChatEvent =
+  | { appId: string; turnId: number; kind: 'thinking' }
+  | { appId: string; turnId: number; kind: 'assistant-delta'; delta: string }
+  | {
+      appId: string;
+      turnId: number;
+      kind: 'tool-call';
+      toolName: string;
+      toolArgs?: unknown;
+      sql?: string;
+    }
+  | {
+      appId: string;
+      turnId: number;
+      kind: 'tool-result';
+      toolName: string;
+      toolResult?: unknown;
+    }
+  | { appId: string; turnId: number; kind: 'tool-error'; toolName?: string; text: string }
+  | { appId: string; turnId: number; kind: 'final'; text: string }
+  | { appId: string; turnId: number; kind: 'error'; text: string }
+  | { appId: string; turnId: number; kind: 'aborted' };
 
 export interface CentraidVersionRecord {
   versionId: string;
@@ -333,6 +364,27 @@ interface CentraidApi {
     newAppId?: string;
     newName?: string;
   }): Promise<CentraidCloneTemplateResult>;
+
+  /**
+   * Start (or reset) the app-scoped agentic chat session for this window.
+   * Caches the app's schema so subsequent `chatSend` turns can prompt with it.
+   */
+  chatStart(input: { appId: string; appName: string }): Promise<{ ok: true }>;
+  /**
+   * Send one user turn. Progress + result arrive via `onChatEvent` with the
+   * matching `turnId`. The renderer assigns `turnId` (monotonic per session).
+   */
+  chatSend(input: {
+    appId: string;
+    text: string;
+    turnId: number;
+    model?: string;
+  }): Promise<{ ok: true }>;
+  /** Cancel the in-flight infer for this app, if any. */
+  chatAbort(input: { appId: string }): Promise<{ ok: true }>;
+  /** Models surfaced by `openclaw infer model list --json`. Empty on failure. */
+  listChatModels(): Promise<CentraidChatModel[]>;
+  onChatEvent(cb: (event: CentraidChatEvent) => void): () => void;
 }
 
 declare global {
@@ -407,4 +459,31 @@ declare global {
     source: 'query' | 'action' | 'cron';
     handler: string;
   }
+  interface CentraidChatModel {
+    id: string;
+    name: string;
+    provider: string;
+  }
+  type CentraidChatEvent =
+    | { appId: string; turnId: number; kind: 'thinking' }
+    | { appId: string; turnId: number; kind: 'assistant-delta'; delta: string }
+    | {
+        appId: string;
+        turnId: number;
+        kind: 'tool-call';
+        toolName: string;
+        toolArgs?: unknown;
+        sql?: string;
+      }
+    | {
+        appId: string;
+        turnId: number;
+        kind: 'tool-result';
+        toolName: string;
+        toolResult?: unknown;
+      }
+    | { appId: string; turnId: number; kind: 'tool-error'; toolName?: string; text: string }
+    | { appId: string; turnId: number; kind: 'final'; text: string }
+    | { appId: string; turnId: number; kind: 'error'; text: string }
+    | { appId: string; turnId: number; kind: 'aborted' };
 }

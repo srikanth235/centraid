@@ -22,6 +22,7 @@ import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/p
 import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
 import { Runtime } from '@centraid/runtime-core';
 import { OpenClawScheduler } from './lib/openclaw-cron.js';
+import { registerCentraidTools } from './lib/tools.js';
 
 // Re-export the public handler & payload types from runtime-core so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -102,5 +103,10 @@ export default definePluginEntry({
       auth: 'gateway',
       handler: (req, res) => runtime.handle(req, res),
     });
+
+    // Agent tools — let the OpenClaw agent read a single app's data via
+    // SELECT only. Scope is enforced by the before_tool_call hook inside
+    // registerCentraidTools (uses sessionKey = "centraid-chat:<appId>").
+    registerCentraidTools(api, runtime.registry);
   },
 });

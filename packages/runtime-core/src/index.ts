@@ -66,6 +66,13 @@ export type { AppTableRows } from './table-rows.js';
 export type { RunQueryResult } from './run-query.js';
 export type { LogEntry, LogLevel } from './log-store.js';
 
+// Low-level helpers the openclaw plugin uses to expose SQL + schema as
+// agent tools without round-tripping through the HTTP surface.
+export { runQuery, RunQueryError, RUN_QUERY_ROW_CAP } from './run-query.js';
+export { readAppSchema } from './schema.js';
+export { Registry } from './registry.js';
+export { appDataDir } from './app-paths.js';
+
 // Error classes — hosts that want to translate them to their own response
 // shapes can import these directly. (The Runtime.handle() default handler
 // already converts them to JSON error responses.)

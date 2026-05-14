@@ -3,7 +3,10 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { HarnessConfig } from '@centraid/agent-harness';
-import { ensureLocalRuntime } from './local-runtime.js';
+// `local-runtime` is loaded lazily because it pulls in `@centraid/runtime-core`
+// which uses `node:sqlite` — a built-in Electron's Node doesn't expose.
+// Importing it statically would crash the renderer at boot for remote-mode
+// users who never need the embedded runtime.
 
 /**
  * Persisted desktop settings live at `<userData>/centraid-settings.json`
@@ -28,6 +31,8 @@ export interface PersistedSettings {
   remoteGatewayUrl: string;
   remoteGatewayToken: string;
   remoteTemplatesUrl?: string;
+  /** Model id used by the app-view agentic chat (openclaw infer model run). */
+  chatModel?: string;
 }
 
 export interface DesktopSettings extends HarnessConfig {
@@ -36,6 +41,7 @@ export interface DesktopSettings extends HarnessConfig {
   remoteGatewayUrl: string;
   remoteGatewayToken: string;
   remoteTemplatesUrl?: string;
+  chatModel?: string;
 }
 
 const FILE_NAME = 'centraid-settings.json';
@@ -75,6 +81,7 @@ function migrate(
       remoteGatewayUrl: raw.remoteGatewayUrl?.trim() || base.remoteGatewayUrl,
       remoteGatewayToken: raw.remoteGatewayToken ?? base.remoteGatewayToken,
       remoteTemplatesUrl,
+      chatModel: raw.chatModel,
     };
   }
 
@@ -86,6 +93,7 @@ function migrate(
     remoteGatewayUrl: legacyUrl,
     remoteGatewayToken: legacyToken,
     remoteTemplatesUrl,
+    chatModel: raw.chatModel,
   };
 }
 
@@ -114,6 +122,7 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
 
 async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> {
   if (p.runtimeMode === 'local') {
+    const { ensureLocalRuntime } = await import('./local-runtime.js');
     const handle = await ensureLocalRuntime();
     return {
       ...p,
@@ -147,6 +156,7 @@ export async function saveSettings(patch: Partial<DesktopSettings>): Promise<Des
       patch.remoteTemplatesUrl !== undefined
         ? patch.remoteTemplatesUrl
         : current.remoteTemplatesUrl,
+    chatModel: patch.chatModel !== undefined ? patch.chatModel : current.chatModel,
   };
   await writePersisted(next);
   return resolveEffective(next);
