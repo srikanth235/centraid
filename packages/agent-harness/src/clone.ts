@@ -80,10 +80,20 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
  * Suggest a non-colliding app id starting from `preferred`. If `preferred`
  * is free, returns it; otherwise tries `preferred-2`, `preferred-3`, ...
  * until one is free (capped at 1000 attempts as a safety bound).
+ *
+ * Pass `{ alwaysSuffix: true }` to skip the bare `preferred` candidate and
+ * start at `preferred-2`. Used by the template-clone path so a clone never
+ * consumes the template's own id — keeps templates and clones cleanly
+ * separated even on the first clone.
  */
-export async function suggestAppId(projectsDir: string, preferred: string): Promise<string> {
+export async function suggestAppId(
+  projectsDir: string,
+  preferred: string,
+  opts: { alwaysSuffix?: boolean } = {},
+): Promise<string> {
   validateAppId(preferred);
-  for (let i = 1; i <= 1000; i++) {
+  const start = opts.alwaysSuffix ? 2 : 1;
+  for (let i = start; i <= 1000; i++) {
     const candidate = i === 1 ? preferred : `${preferred}-${i}`;
     if (!(await pathExists(path.join(projectsDir, candidate)))) {
       return candidate;

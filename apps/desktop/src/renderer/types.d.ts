@@ -117,6 +117,13 @@ declare global {
     canGoForward?: boolean;
     onBack?: () => void;
     onForward?: () => void;
+    /**
+     * When true, focus the inline title and select its text on mount so the
+     * user is dropped straight into renaming. Used by the template-clone
+     * flow (Notion-style: duplicate inherits the template name but lands
+     * in rename mode immediately).
+     */
+    focusName?: boolean;
   }
 
   interface UserAppMeta extends AppMetaResolved {

@@ -2970,6 +2970,20 @@
     setShellChatPaneOpen = chromeSetChatPaneOpen;
     root.append(shell);
 
+    // Template-clone path drops the user here with the template's name as
+    // the working title. Auto-focus + select so they can type a new name
+    // immediately (Notion: "Duplicate" lands you in rename mode).
+    if (opts.focusName) {
+      requestAnimationFrame(() => {
+        projNameEl.focus();
+        const range = document.createRange();
+        range.selectNodeContents(projNameEl);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      });
+    }
+
     // ⌘\ toggles the chat pane (companion to ⌘B for workspace sidebar).
     // VS Code / Cursor use this exact pair. Registered on document so it
     // fires regardless of focus; ignored when a text field is the target
