@@ -1038,12 +1038,23 @@
     }
     // Sidebar drafts list — give the builder the same view of WIP projects
     // the home sidebar shows, so users can swap between drafts without
-    // having to bounce through Home. Note: `drafts` is the shell's
-    // module-level cache; it gets refreshed by `hydrateDrafts()` on every
-    // home render and on cloneTemplate. If the user enters the builder
-    // from a cold start (deep-link / restore), the list may be empty until
-    // they next visit Home — acceptable for v1.
-    const builderDrafts: ChromeSidebarApp[] = drafts.map((d) => ({
+    // having to bounce through Home. `drafts` is the shell's module-level
+    // cache (refreshed by `hydrateDrafts()` on home render). It can lag
+    // behind reality in two cases worth covering:
+    //   - cloneTemplate just minted a fresh DraftAppMeta and called us
+    //     directly; the draft isn't in the cache yet.
+    //   - cold start / deep-link before the first home render.
+    // For (1) we splice in `opts.appContext` if it's a draft and missing
+    // from the cache, so the freshly-cloned tile is immediately visible in
+    // the builder sidebar without bouncing through Home. (2) still needs a
+    // home visit to fully populate, which is acceptable for v1.
+    const draftsForSidebar: DraftAppMeta[] =
+      opts.appContext &&
+      isDraft(opts.appContext) &&
+      !drafts.some((d) => d.id === opts.appContext!.id)
+        ? [opts.appContext, ...drafts]
+        : drafts;
+    const builderDrafts: ChromeSidebarApp[] = draftsForSidebar.map((d) => ({
       color: d.color,
       iconKey: d.iconKey,
       id: d.id,

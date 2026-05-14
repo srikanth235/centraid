@@ -55,6 +55,8 @@ The write tool was registered at runtime in `tools.ts`, but `openclaw.plugin.jso
 
 `apps/desktop/src/renderer/builder.ts` passed `drafts: []` to its sidebar — a placeholder masquerading as code. `BuilderOptions` now carries `drafts?: ChromeSidebarApp[]`; the shell's `enterBuilder` maps its hydrated drafts cache and forwards it. The currently-open draft highlights via the existing `activeId` mechanism.
 
+`enterBuilder` also splices `opts.appContext` into the forwarded list when it's a draft and not yet in the module-level cache — the `cloneTemplate` path mints a `DraftAppMeta` and calls `enterBuilder` directly without first writing through `hydrateDrafts`, so without this the freshly-cloned tile would only appear after the user bounced through Home.
+
 ### Clicking a draft inside the builder swaps cleanly to the new draft's builder
 
 The builder's `onAppClick` used to call `handleExit()` (which fires `renderHome` — an `async` function awaiting disk reads) and *then* `Centraid.openApp(id)` synchronously. The sync mount ran first; `renderHomeAsync` then appended a second shell underneath when it finally resolved. Dropped the redundant `handleExit` — `openApp` already calls `clear()`, which fires the active builder's `currentCleanup` before the new view mounts. `openApp` itself was tightened to route drafts to `enterBuilder` so the builder sidebar's plain `Centraid.openApp(id)` call works for both apps and drafts without duplicating the branch.
