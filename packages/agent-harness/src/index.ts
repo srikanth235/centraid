@@ -62,6 +62,14 @@ export { defaultHarnessConfig, resolveHarnessConfig } from './config.js';
 
 export { CENTRAID_APPEND_PROMPT, centraidAppendPrompt } from './system-prompt.js';
 
+export { buildUiGroundingBlocks } from './ui-grounding.js';
+
+export {
+  createPreviewScreenshotTool,
+  type CreatePreviewScreenshotToolOptions,
+  type PreviewScreenshotImage,
+} from './preview-screenshot-tool.js';
+
 export {
   type HarnessConfig,
   type ProjectInfo,

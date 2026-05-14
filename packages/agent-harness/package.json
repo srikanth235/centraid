@@ -18,6 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@centraid/design-tokens": "workspace:*",
     "@centraid/openclaw-plugin": "workspace:*",
     "@centraid/runtime-core": "workspace:*",
     "@earendil-works/pi-coding-agent": "^0.74.0",
