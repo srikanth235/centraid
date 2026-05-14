@@ -4108,14 +4108,6 @@ textarea {
   background: currentColor;
   box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
 }
-/* Top-right corner placement — used on app cards so the pill anchors to
-   the card edge rather than the icon row's height. */
-.cd-status-corner {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 2;
-}
 
 /* Main area on Bold pages */
 .cd-main {
@@ -4301,8 +4293,16 @@ textarea {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
 }
+/* Wrap is the grid item; it hosts the card and a sibling `•••` action
+   button so we don't nest a button inside a button. The wrap itself is
+   the positioning context for the hover-revealed affordance. */
+.cd-app-card-wrap {
+  position: relative;
+  display: block;
+}
 .cd-app-card {
   position: relative;
+  width: 100%;
   padding: 18px;
   background: var(--bg-elev);
   border: 1px solid var(--line);
@@ -4402,8 +4402,17 @@ textarea {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
 }
+.cd-tmpl-card-wrap {
+  position: relative;
+  display: block;
+}
 .cd-tmpl-card {
+  width: 100%;
   padding: 12px;
+  /* Reserve room on the right for the `•••` action so the description
+     never gets clipped by the button on hover. 32px is the button's hit
+     area (26px) plus the inline-edge padding. */
+  padding-right: 32px;
   background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
@@ -4445,6 +4454,151 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Hover-revealed `•••` action trigger. Lives as a sibling of the card so
+   we don't nest a button inside a button; revealed on the wrap's hover or
+   focus-within so keyboard tabbers see it. `data-open="true"` keeps it
+   visible while its menu is mounted (cursor can wander into the menu). */
+.cd-card-more {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  opacity: 0;
+  z-index: 3;
+  transition:
+    opacity 140ms ease,
+    background 120ms,
+    color 120ms;
+}
+.cd-app-card-wrap:hover .cd-card-more,
+.cd-app-card-wrap:focus-within .cd-card-more,
+.cd-tmpl-card-wrap:hover .cd-card-more,
+.cd-tmpl-card-wrap:focus-within .cd-card-more,
+.cd-sb-app-row:hover .cd-card-more,
+.cd-sb-app-row:focus-within .cd-card-more,
+.cd-card-more:focus-visible,
+.cd-card-more[data-open='true'] {
+  opacity: 1;
+}
+.cd-card-more:hover {
+  background: color-mix(in oklab, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.cd-card-more:active {
+  background: color-mix(in oklab, var(--ink) 18%, transparent);
+}
+/* Template cards are shorter — tuck the button against the right edge. */
+.cd-tmpl-card-wrap .cd-card-more {
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+}
+
+/* Sidebar row variant — the row itself is a slim button, so the wrap is
+   the positioning context and the `•••` sits flush with the row's right
+   edge. Vertically centred to match the row's baseline. Sized down a
+   touch from the card variant to stay proportional to the 13px label. */
+.cd-sb-app-row {
+  position: relative;
+  display: block;
+}
+.cd-sb-app-row .cd-card-more {
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  /* Mute the resting tone — sidebar rows already carry a status dot at
+     the same edge, so we want the action to feel like a supporting glyph
+     until the user actually hovers. */
+  color: var(--ink-4);
+}
+.cd-sb-app-row .cd-card-more:hover {
+  color: var(--ink);
+}
+/* When the action is open, the row's own hover state would compete with
+   the `•••` background; nudge the row back to its resting tone so focus
+   reads as "this menu owns the moment". */
+.cd-sb-app-row:has(.cd-card-more[data-open='true']) .cd-sb-item {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+}
+/* The status dot and `•••` both want the trailing edge. When the action
+   is available (hover/focus/open), suppress the dot so the affordances
+   don't overlap. Resting state keeps the dot as a passive status hint. */
+.cd-sb-app-row:hover .cd-sb-item .cd-sb-dot,
+.cd-sb-app-row:focus-within .cd-sb-item .cd-sb-dot,
+.cd-sb-app-row:has(.cd-card-more[data-open='true']) .cd-sb-item .cd-sb-dot {
+  opacity: 0;
+}
+
+/* Inline rename — flips the card title into a contenteditable field
+   styled like a borderless input. We keep the title's typography so the
+   commit feels seamless rather than a focus jump into a new control. */
+.cd-app-card-name-editing {
+  outline: none;
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  box-shadow: 0 0 0 1.5px var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  cursor: text;
+  caret-color: var(--accent);
+}
+
+/* Template preview — the modal-card variant that lets users see what a
+   template is before committing to a clone. Reuses the modal chrome but
+   adds a head row with a tinted icon next to the title (Notion-style). */
+.cd-tmpl-preview .cd-tmpl-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.cd-tmpl-preview-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex: 0 0 auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 6px 14px rgba(0, 0, 0, 0.18);
+}
+.cd-tmpl-preview-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+.cd-tmpl-preview h3 {
+  margin: 0;
+}
+/* Subtle helper line under the description — explains what cloning does
+   so users aren't surprised by a new draft appearing on disk. */
+.cd-tmpl-preview-note {
+  font-size: 12px;
+  color: var(--ink-3);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  line-height: 1.5;
 }
 
 /* Tweaks · Card variant — outlined is the design default (see .cd-app-card
