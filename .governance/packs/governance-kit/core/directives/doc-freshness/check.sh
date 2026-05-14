@@ -46,6 +46,16 @@ while IFS= read -r raw; do
         continue
     fi
 
+    # File-level waiver: a comment `governance: allow-doc-freshness <reason>`
+    # anywhere in the doc opts the doc out of the staleness check for this
+    # commit. Reason required; a bare token does not waive. HTML comment
+    # markers are stripped before matching so `<!-- ... -->` does not count
+    # as the reason.
+    if sed -E 's/<!--//g; s/-->//g' "$path" \
+        | grep -qE 'governance:[[:space:]]*allow-doc-freshness[[:space:]]+[^[:space:]]'; then
+        continue
+    fi
+
     # Extract the last-verified date. Pattern: <!-- last-verified: YYYY-MM-DD -->
     stamp=$(grep -oE 'last-verified:[[:space:]]*[0-9]{4}-[0-9]{2}-[0-9]{2}' "$path" | head -n1 | awk '{print $NF}')
     if [[ -z "$stamp" ]]; then

@@ -1,7 +1,7 @@
 version: '2'
 packs:
 - id: governance-kit/core
-  version: '0.2'
+  version: '0.3'
   source: gh
   directives:
   - agent-steering-accounting
@@ -18,7 +18,7 @@ packs:
   - required-docs
   - secrets-hygiene
   ref: gh:Duaility/governance-kit/packs/core@main
-  sha: 1d3e8d18114a88b0c066f5a3fbb6a61d14a3171b
+  sha: 18098b662377093182186f67a1ab0c6a6ab610d7
   subpath: packs/core
-  min_governance_kit: '0.2'
-  installed_at: '2026-05-12T05:24:20Z'
+  min_governance_kit: '0.3'
+  installed_at: '2026-05-14T17:56:14Z'

@@ -45,6 +45,13 @@
 #       already in main is out of scope. Also validates COSTS.md shape
 #       independently, so post-squash repos still get ledger integrity.
 #
+# No self-bootstrap exemption: `governance init` is responsible for making
+# the install commit pass this directive on the first try (dry-run + inline
+# fix + normal `git commit` with the populators active). The only sanctioned
+# bypass is the `unsupported-runtime` body waiver below, which is a
+# subsequent-commit fallback for runtimes that have no `runtimes/<name>.sh`
+# adapter — not a bootstrap accommodation.
+#
 # Ledger parsing, trailer parsing, and cross-check math are in sibling
 # lib/ledger.py and lib/trailers.py — the directive folder is self-contained.
 # This script is the bash shell — detect mode, walk commits, aggregate
@@ -84,11 +91,27 @@ validate_commit_message() {
     local msg
     msg="$(cat)"
 
+    # Unsupported-runtime waiver — bypass the trailer + ledger requirement
+    # when the agent's runtime has no runtimes/<name>.sh adapter. Requires a
+    # non-empty reason after the colon so the gap is grep-able from
+    # `git log --grep='allow-agent-token-accounting'`.
+    if printf '%s\n' "$msg" | grep -qE '^governance:[[:space:]]+allow-agent-token-accounting[[:space:]]+unsupported-runtime:'; then
+        local reason
+        reason="$(printf '%s\n' "$msg" \
+            | sed -nE 's/^governance:[[:space:]]+allow-agent-token-accounting[[:space:]]+unsupported-runtime:[[:space:]]*(.+)$/\1/p' \
+            | head -n1 \
+            | sed -E 's/[[:space:]]+$//')"
+        if [[ -z "$reason" ]]; then
+            violation "$label — unsupported-runtime waiver requires a reason after the colon (e.g. 'governance: allow-agent-token-accounting unsupported-runtime: cursor runtime not yet supported')"
+        fi
+        return 0
+    fi
+
     # Mandatory: every in-scope commit must carry an Agent: trailer.
     # Caller is responsible for filtering out merge / revert commits before
     # invoking this function.
     if ! printf '%s\n' "$msg" | grep -qE '^Agent:[[:space:]]'; then
-        violation "$label — missing required Agent: trailer (every non-merge, non-revert commit must carry token-accounting trailers; run \`git commit\` through the runtime-aware pre-commit hook)"
+        violation "$label — missing required Agent: trailer (every non-merge, non-revert commit must carry token-accounting trailers; run \`git commit\` through the runtime-aware pre-commit hook, or use a 'governance: allow-agent-token-accounting unsupported-runtime: <reason>' waiver if the runtime has no runtimes/<name>.sh adapter)"
         return 0
     fi
 

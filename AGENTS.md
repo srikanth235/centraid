@@ -33,4 +33,4 @@ The runtime stack is [Bun](https://bun.sh) (package manager + runtime, pinned in
 - [ARCHITECTURE.md](ARCHITECTURE.md) — full layout and design-token sharing model.
 - [README.md](README.md) — develop, build, and check commands.
 - [SECURITY.md](SECURITY.md) — vulnerability disclosure path.
-- [scripts/setup-clone.sh](scripts/setup-clone.sh) — run once per fresh clone to activate the governance hooks.
+- [scripts/enable-governance.sh](scripts/enable-governance.sh) — run once per fresh clone to activate the governance hooks.
