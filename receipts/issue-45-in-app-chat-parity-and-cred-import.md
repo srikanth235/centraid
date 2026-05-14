@@ -16,6 +16,9 @@ GitHub issue: [#45](https://github.com/srikanth235/centraid/issues/45)
 - [x] Settings AI providers panel
 - [x] Re-sync button
 - [x] Typecheck and build clean
+- [x] Tool-call events render in the chat panel
+- [x] Chat can INSERT/UPDATE/DELETE via `centraid_sql_write`
+- [x] Iframe honors the shell's light/dark theme on first paint
 
 ## What changed
 
@@ -41,6 +44,20 @@ GitHub issue: [#45](https://github.com/srikanth235/centraid/issues/45)
 
 **Re-sync button.** A button in the AI providers panel calls `window.CentraidApi.authResync()`, which runs the importer with `overwrite: true` and bumps `authImportedAt`. The renderer refreshes the rows from the returned status and toasts "Imported Codex + Claude Code" / "No new creds to import". This is how the user repairs a stale pi copy after rotating tokens via Codex CLI or Claude Code, since pi's copy keeps refreshing on the prior token until told otherwise.
 
+### Follow-up fixes (post-merge of the parity work)
+
+Three issues surfaced from manual use of the chat panel against a real Todos app:
+
+**Tool-call events render in the chat panel.** `mountAppChat` was rendering tool-group pills correctly, but the chat panel only showed the final assistant text — no inline SQL pills. Two bugs in `apps/desktop/src/main/chat.ts`:
+
+1. *Phase name mismatch.* The openclaw gateway emits the terminal tool event as `phase: "result"` (verified in `node_modules/openclaw/dist/selection-*.js`'s `handleToolExecutionEnd` → `emitAgentEvent({ stream: "tool", data: { phase: "result", … } })`). `handleAgentEvent` only matched `"end"` / `"completed"`, so every tool-result event was silently dropped and pills stayed stuck in the `"running"` state. Added `"result"` to the accept list.
+
+2. *runId race.* The WS event listener was attached before the `agent` RPC returned, but the filter `if (!runId || payload.runId !== runId) return` rejected every event that arrived before `runId` was assigned. On a fast local gateway the first tool call easily fires inside that window. Replaced the unconditional drop with a buffer that holds events until `runId` is known, then flushes the ones matching this run.
+
+**Chat can INSERT/UPDATE/DELETE via `centraid_sql_write`.** Per the original system prompt, the agent could only call `centraid_sql_select`. Added a sibling tool `centraid_sql_write` in `packages/openclaw-plugin/src/lib/tools.ts` that accepts a single `INSERT/UPDATE/DELETE/REPLACE` and returns `{ rowsAffected, lastInsertRowid, durationMs }`. A new `isWriteDml` guard (with tests covering DDL/PRAGMA refusals and the DML-smuggling-DDL case) sits in front of `runQuery`. The existing `before_tool_call` scope guard now covers the write tool, so the cross-app refusal still applies. System prompt in `chat.ts` updated to advertise the new tool and to tell the model to call `centraid_get_schema` (or a quick SELECT) before writing. UI side: empty-state hint, `toolVerb`, `summarizeToolArgs`, and the inline SQL preview all know about `centraid_sql_write`. `lastInsertRowid` is stringified when it's a `bigint` so the tool result remains JSON-serializable.
+
+**Iframe honors the shell's light/dark theme on first paint.** The shell previously relied on `theme-bridge.js` inside each app to read the URL hash and listen for `centraid:theme` postMessage. When the bridge was stale, missing, or hadn't run before first paint — and the host OS was in dark mode — the iframe's `@media (prefers-color-scheme: dark)` fallback won, regardless of the shell's setting. Fix: the runtime now also reads `?theme=…&bgL=…` from the iframe URL (new `Route['app-index'].query` field in `packages/runtime-core/src/router.ts`) and bakes `data-theme` / `--bg-l` into the served `index.html`'s `<html>` tag server-side via a small regex-substitution helper in `packages/runtime-core/src/static-server.ts`. The renderer (`apps/desktop/src/renderer/app.ts`) now sends the theme in both the query string (for the server-side injection) and the hash (kept for backward compat with apps served outside this runtime, and for the bridge's live-update path). The bridge is still wired up for dynamic flips while the iframe is mounted — but it's no longer a hard dependency for the first paint to be correct.
+
 ## Why this is safe
 
 pi-ai already injects the Claude-Code-style request fingerprint when the access token is OAuth: `node_modules/@earendil-works/pi-ai/dist/providers/anthropic.js:638-643` sets `anthropic-beta: claude-code-20250219,oauth-2025-04-20` and `user-agent: claude-cli/<ver>`. Requests are wire-indistinguishable from Claude Code's, so the Pro/Max subscription token is accepted by Anthropic's endpoint exactly as it would be from Claude Code. Codex tokens go through pi-ai's `openaiCodexOAuthProvider` whose refresh hits the same OpenAI auth endpoint Codex CLI uses. We never mint or modify tokens — purely move them between storage locations.
@@ -59,3 +76,5 @@ pi-ai already injects the Claude-Code-style request fingerprint when the access 
 - Repo-hygiene governance check passes (`centraid-api.d.ts` trimmed from 551 → 494 lines via type compression and dropping redundant global aliases; `console.log` in `main.ts` replaced with `void result;`).
 - Manual smoke (paths only — no Electron run yet on this branch): the importer reads the user's existing `~/.codex/auth.json` (Codex Plus subscription, account `b08ec411-…`) and would write it to `~/.pi/agent/auth.json` under `openai-codex` — verified to match the existing entry that pi already wrote during a prior `pi` CLI login. Keychain probe via `security find-generic-password -s "Claude Code-credentials"` on this machine returns the entry silently (already approved); the `-w` form (importer's call site) would read the JSON blob without re-prompting.
 - Renderer smoke pending a full `electron .` run on this branch — covered by the existing in-app chat e2e once it picks up these renderer changes.
+- **Follow-up fixes verified.** `cd packages/openclaw-plugin && bun run test` → 21 / 21 pass, including 6 new `isWriteDml` cases. `bun run typecheck` (root) → 12 / 12 packages clean. `bun run test` (root) → 8 / 8 packages green; `@centraid/runtime-core` 73 tests still pass after the router/static-server changes.
+

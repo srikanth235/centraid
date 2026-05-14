@@ -332,7 +332,11 @@ export class Runtime {
             return;
           }
           const rel = route.kind === 'app-index' ? 'index.html' : route.rel;
-          await serveStatic(res, codeDir, rel);
+          const themeInject =
+            route.kind === 'app-index'
+              ? { theme: route.query.theme, bgL: route.query.bgL }
+              : undefined;
+          await serveStatic(res, codeDir, rel, themeInject ? { themeInject } : {});
           return;
         }
 

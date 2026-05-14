@@ -1271,14 +1271,17 @@
       frameWrap.append(frame);
       container.append(frameWrap);
 
-      // Resolve the live URL and load it. The hash carries the initial
-      // theme so the app paints in the correct mode on first load — without
-      // the hash there's a brief flash of light theme before postMessage
-      // arrives.
+      // Resolve the live URL and load it. We carry the initial theme in
+      // BOTH the query string (so the runtime can bake `data-theme` into the
+      // served `index.html` server-side — works even when an app's
+      // `theme-bridge.js` is stale or missing) AND the hash (read by
+      // `theme-bridge.js` before paint, in case the app is served outside
+      // this runtime).
       void window.CentraidApi.appLiveUrl({ id: ua.centraidProjectId })
         .then((r) => {
-          const sep = r.url.includes('#') ? '&' : '#';
-          frame.src = `${r.url}${sep}theme=${prefs.theme}&bgL=${prefs.bgL}`;
+          const qsep = r.url.includes('?') ? '&' : '?';
+          const themeQs = `theme=${prefs.theme}&bgL=${prefs.bgL}`;
+          frame.src = `${r.url}${qsep}${themeQs}#${themeQs}`;
         })
         .catch(() => {
           frameWrap.innerHTML =
@@ -1392,6 +1395,8 @@
       switch (tool) {
         case 'centraid_sql_select':
           return 'Querying';
+        case 'centraid_sql_write':
+          return 'Writing';
         case 'centraid_get_schema':
           return 'Reading schema';
         default:
@@ -1400,7 +1405,7 @@
     }
 
     function summarizeToolArgs(tool: string, sql?: string, args?: unknown): string | undefined {
-      if (tool === 'centraid_sql_select' && sql) {
+      if ((tool === 'centraid_sql_select' || tool === 'centraid_sql_write') && sql) {
         const firstLine = sql.split('\n').find((l) => l.trim().length > 0) ?? sql;
         return firstLine.trim().replace(/\s+/g, ' ').slice(0, 90);
       }
@@ -1462,7 +1467,7 @@
       el(
         'div',
         { class: 'app-chat-empty-hint' },
-        'Ask questions about this app’s data. The assistant reads your SQLite via read-only SELECTs.',
+        'Ask questions about this app’s data, or have the assistant add, update, or delete records on your behalf.',
       ),
     ]);
 

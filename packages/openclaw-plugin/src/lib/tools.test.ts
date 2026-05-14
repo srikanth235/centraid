@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { appIdFromSessionKey, isSelectOnly, SESSION_PREFIX } from './tools.js';
+import { appIdFromSessionKey, isSelectOnly, isWriteDml, SESSION_PREFIX } from './tools.js';
 
 describe('appIdFromSessionKey', () => {
   it('returns undefined for undefined input', () => {
@@ -80,5 +80,46 @@ describe('isSelectOnly', () => {
   it('rejects WITH-prefixed statements upfront', () => {
     // Conservative — we don't try to parse WITH ... SELECT vs WITH ... DML.
     assert.equal(isSelectOnly('WITH x AS (SELECT 1) SELECT * FROM x'), false);
+  });
+});
+
+describe('isWriteDml', () => {
+  it('accepts INSERT/UPDATE/DELETE/REPLACE', () => {
+    assert.equal(isWriteDml('INSERT INTO todos (text) VALUES (?)'), true);
+    assert.equal(isWriteDml('UPDATE todos SET done = 1 WHERE id = ?'), true);
+    assert.equal(isWriteDml('DELETE FROM todos WHERE id = ?'), true);
+    assert.equal(isWriteDml('REPLACE INTO todos (id, text) VALUES (?, ?)'), true);
+  });
+
+  it('accepts a write with leading whitespace + comments', () => {
+    assert.equal(isWriteDml('  -- new row\n  INSERT INTO todos (text) VALUES (?)'), true);
+    assert.equal(isWriteDml('/* block */ UPDATE todos SET done = 1'), true);
+  });
+
+  it('rejects reads', () => {
+    assert.equal(isWriteDml('SELECT * FROM todos'), false);
+    assert.equal(isWriteDml('EXPLAIN SELECT * FROM todos'), false);
+  });
+
+  it('rejects empty SQL', () => {
+    assert.equal(isWriteDml(''), false);
+    assert.equal(isWriteDml('   '), false);
+    assert.equal(isWriteDml('-- only a comment'), false);
+  });
+
+  it('rejects DDL/PRAGMA/ATTACH/VACUUM/REINDEX', () => {
+    assert.equal(isWriteDml('DROP TABLE todos'), false);
+    assert.equal(isWriteDml('CREATE TABLE x (a INT)'), false);
+    assert.equal(isWriteDml('ALTER TABLE todos ADD COLUMN x INT'), false);
+    assert.equal(isWriteDml('PRAGMA table_info(todos)'), false);
+    assert.equal(isWriteDml('ATTACH DATABASE "x.db" AS x'), false);
+    assert.equal(isWriteDml('VACUUM'), false);
+    assert.equal(isWriteDml('REINDEX todos'), false);
+  });
+
+  it('rejects DML smuggling DDL in the body', () => {
+    // Trailing CREATE inside a value would never parse as SQLite anyway, but
+    // we belt-and-brace the keyword check.
+    assert.equal(isWriteDml('INSERT INTO todos VALUES (1); CREATE TABLE x (a INT)'), false);
   });
 });
