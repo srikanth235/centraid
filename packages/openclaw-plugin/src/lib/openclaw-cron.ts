@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import type { Scheduler, CronJobDefinition, CronJobSnapshot } from '@centraid/runtime-core';
 
 /**
  * Structural shape of the cron service exposed via `ctx.getCron?.()` in
@@ -27,35 +28,20 @@ export interface CronCreateInput {
   payload: { kind: string; text?: string };
 }
 
-export interface CronJobSnapshot {
-  id: string;
-  name?: string;
-  description?: string;
-  enabled?: boolean;
-  state?: {
-    nextRunAtMs?: number;
-    runningAtMs?: number;
-    lastRunAtMs?: number;
-    lastRunStatus?: 'ok' | 'error' | 'skipped';
-    lastError?: string;
-    lastDurationMs?: number;
-  };
-}
-
 /**
- * Adapter over OpenClaw's cron registry.
+ * `Scheduler` implementation that talks to OpenClaw's cron registry.
  *
  * **Path B (default):** shells out to the documented `openclaw cron` CLI.
  * This is the only path that supports webhook delivery, tool allowlists,
- * and model overrides — features we need for centraid's cron → ingest
- * round-trip.
+ * and model overrides — features the centraid cron → ingest round-trip
+ * depends on.
  *
  * **Path A (opt-in):** uses `ctx.getCron?.()` from `gateway_start`. The
  * SDK's `PluginHookGatewayCronService` shape is narrower than the CLI —
  * no webhook delivery — so Path A is currently used only for `list` and
  * `remove`, with `add` delegating to Path B even when a handle is present.
  */
-export class OpenClawCron {
+export class OpenClawScheduler implements Scheduler {
   constructor(
     private readonly opts: {
       cliBin?: string;
@@ -68,10 +54,10 @@ export class OpenClawCron {
   }
 
   /**
-   * `add` always uses CLI — the public cron handle doesn't accept webhook
+   * `addJob` always uses CLI — the public cron handle doesn't accept webhook
    * delivery, which centraid's design depends on.
    */
-  async addJob(def: CliCronJobDefinition): Promise<void> {
+  async addJob(def: CronJobDefinition): Promise<void> {
     await this.cliAdd(def);
   }
 
@@ -102,8 +88,8 @@ export class OpenClawCron {
   }
 
   /** Translate a CronJobDefinition into `openclaw cron add` flags. */
-  private async cliAdd(def: CliCronJobDefinition): Promise<void> {
-    const args: string[] = ['cron', 'add', '--id', def.id, '--prompt', def.prompt];
+  private async cliAdd(def: CronJobDefinition): Promise<void> {
+    const args: string[] = ['cron', 'add', '--id', def.id, '--prompt', def.task.prompt];
 
     if ('cron' in def.schedule) {
       args.push('--cron', def.schedule.cron);
@@ -122,11 +108,11 @@ export class OpenClawCron {
       args.push('--execution', `session:${def.execution.session}`);
     }
 
-    if (def.toolAllow && def.toolAllow.length > 0) {
-      args.push('--tool-allow', def.toolAllow.join(','));
+    if (def.task.toolAllow && def.task.toolAllow.length > 0) {
+      args.push('--tool-allow', def.task.toolAllow.join(','));
     }
 
-    if (def.model) args.push('--model', def.model);
+    if (def.task.model) args.push('--model', def.task.model);
     if (def.keepAfterRun) args.push('--keep-after-run');
 
     if (def.delivery.mode === 'webhook') {
@@ -155,31 +141,6 @@ export class OpenClawCron {
     });
   }
 }
-
-/**
- * Internal richer-than-SDK cron def used by Path B (CLI). Carries the
- * webhook delivery + tool allowlist + model fields the SDK's public
- * cron handle doesn't accept yet.
- */
-export interface CliCronJobDefinition {
-  id: string;
-  schedule:
-    | { cron: string; tz?: string; exact?: boolean }
-    | { every: string }
-    | { at: string; tz?: string };
-  execution: 'main' | 'isolated' | 'current' | { session: string };
-  prompt: string;
-  toolAllow?: string[];
-  model?: string;
-  delivery:
-    | { mode: 'webhook'; url: string; token: string }
-    | { mode: 'announce' }
-    | { mode: 'none' };
-  keepAfterRun?: boolean;
-}
-
-// Keep older imports working — re-export under the legacy name.
-export type { CliCronJobDefinition as CronJobDefinition };
 
 // eslint-disable-next-line max-classes-per-file -- error class is colocated with its module
 export class OpenClawCliError extends Error {

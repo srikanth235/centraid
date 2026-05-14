@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import type { AppId, AppMode, RegistryEntry, CronStatus } from '../types.js';
+import type { AppId, AppMode, RegistryEntry, CronStatus } from './types.js';
 import { isReservedAppId } from './security.js';
 
 /**

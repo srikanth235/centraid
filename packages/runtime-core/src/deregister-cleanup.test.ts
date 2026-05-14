@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { cleanupDeregisteredApp } from './deregister-cleanup.ts';
-import type { RegistryEntry } from '../types.ts';
+import type { RegistryEntry } from './types.ts';
 
 let workspace: string;
 let appsDir: string;

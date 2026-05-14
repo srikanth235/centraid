@@ -1,11 +1,10 @@
 {
-  "name": "@centraid/agent-harness",
+  "name": "@centraid/runtime-core",
   "version": "0.1.0",
   "private": true,
-  "description": "Pi-coding-agent customization for centraid: agent that knows how to author apps in the @centraid/openclaw-plugin format, plus scaffold + publish helpers.",
+  "description": "Centraid runtime engine — handler loader, sqlite-backed apps, versioned uploads, and the /centraid HTTP surface. Transport-agnostic; consumed by the OpenClaw plugin shim and by the desktop in-process runtime.",
   "files": [
     "dist",
-    "templates",
     "README.md"
   ],
   "type": "module",
@@ -18,9 +17,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/openclaw-plugin": "workspace:*",
-    "@centraid/runtime-core": "workspace:*",
-    "@earendil-works/pi-coding-agent": "^0.74.0",
     "tar": "^7.4.3"
   },
   "devDependencies": {

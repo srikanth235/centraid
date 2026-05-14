@@ -1330,6 +1330,9 @@
       gatewayUrl: 'http://127.0.0.1:18789',
       gatewayToken: '',
       projectsDir: '~/centraid-projects',
+      runtimeMode: 'local' as const,
+      remoteGatewayUrl: 'http://127.0.0.1:18789',
+      remoteGatewayToken: '',
     }));
 
     const main = el('div');
@@ -1418,18 +1421,20 @@
       drawerGroup('App tiles', [drawerRow('Treatment', tileSeg)]),
     );
 
-    // ---- Gateway group ----
-    const gatewayUrl = el('input', {
+    // ---- Runtime group ----
+    let runtimeMode: 'local' | 'remote' = current.runtimeMode ?? 'local';
+
+    const remoteUrl = el('input', {
       class: 'input',
       type: 'text',
       placeholder: 'http://127.0.0.1:18789',
-      value: current.gatewayUrl,
+      value: current.remoteGatewayUrl ?? '',
     }) as HTMLInputElement;
-    const gatewayToken = el('input', {
+    const remoteToken = el('input', {
       class: 'input',
       type: 'password',
       placeholder: 'paste your gateway.auth.token (leave empty for loopback no-auth)',
-      value: current.gatewayToken ?? '',
+      value: current.remoteGatewayToken ?? '',
     }) as HTMLInputElement;
     const projectsDir = el('input', {
       class: 'input',
@@ -1445,14 +1450,49 @@
         el('div', { class: 'settings-hint' }, hint),
       ]);
 
+    const remoteRowsHost = el('div');
+    const renderRemoteRows = (): void => {
+      remoteRowsHost.replaceChildren();
+      if (runtimeMode === 'remote') {
+        remoteRowsHost.append(
+          labeled(
+            'Gateway URL',
+            'Base URL of the remote openclaw gateway (typically loopback).',
+            remoteUrl,
+          ),
+          labeled(
+            'Gateway token',
+            'From ~/.openclaw/openclaw.json → gateway.auth.token. Leave empty if the gateway runs in mode "none".',
+            remoteToken,
+          ),
+        );
+      } else {
+        remoteRowsHost.append(
+          el(
+            'div',
+            { class: 'settings-note' },
+            'Local mode: apps run inside this Electron process. No external gateway required.',
+          ),
+        );
+      }
+    };
+
+    const modeSeg = makeSegmented<'local' | 'remote'>(['local', 'remote'], runtimeMode, (v) => {
+      runtimeMode = v;
+      renderRemoteRows();
+    });
+
+    renderRemoteRows();
+
     const saveBtn = el('button', {
       class: 'btn btn-primary',
       onClick: async () => {
         try {
           await window.CentraidApi.saveSettings({
-            gatewayToken: gatewayToken.value,
-            gatewayUrl: gatewayUrl.value.trim(),
             projectsDir: projectsDir.value.trim(),
+            runtimeMode,
+            remoteGatewayUrl: remoteUrl.value.trim(),
+            remoteGatewayToken: remoteToken.value,
           });
           showToast('Settings saved');
         } catch (err) {
@@ -1466,36 +1506,31 @@
       class: 'btn btn-soft',
       onClick: async () => {
         try {
-          await window.CentraidApi.saveSettings({
-            gatewayToken: gatewayToken.value,
-            gatewayUrl: gatewayUrl.value.trim(),
+          const next = await window.CentraidApi.saveSettings({
             projectsDir: projectsDir.value.trim(),
+            runtimeMode,
+            remoteGatewayUrl: remoteUrl.value.trim(),
+            remoteGatewayToken: remoteToken.value,
           });
-          const base = gatewayUrl.value.trim().replace(/\/+$/, '');
+          const base = (next.gatewayUrl ?? '').replace(/\/+$/, '');
           const health = await fetch(`${base}/health`).catch(() => null);
-          showToast(
-            health?.ok ? 'Gateway connection works' : 'Gateway saved. Health check unavailable.',
-          );
+          showToast(health?.ok ? 'Runtime reachable' : 'Settings saved. Health check unavailable.');
         } catch (err) {
-          showToast(`Gateway check failed: ${String(err)}`);
+          showToast(`Runtime check failed: ${String(err)}`);
         }
       },
     });
     testBtn.innerHTML = Icon.Eye({ size: 13 }) + '<span>Test connection</span>';
 
     page.append(
-      drawerGroup('Gateway', [
-        el('div', { class: 'settings-note' }, 'Gateway changes are applied when you save.'),
-        labeled(
-          'Gateway URL',
-          'Base URL of the openclaw gateway (typically loopback).',
-          gatewayUrl,
+      drawerGroup('Runtime', [
+        el(
+          'div',
+          { class: 'settings-note' },
+          'Where centraid runs your apps. Changes apply when you save.',
         ),
-        labeled(
-          'Gateway token',
-          'From ~/.openclaw/openclaw.json → gateway.auth.token. Leave empty if the gateway runs in mode "none".',
-          gatewayToken,
-        ),
+        drawerRow('Mode', modeSeg),
+        remoteRowsHost,
         labeled(
           'Projects directory',
           'Where each app project is scaffolded. Tilde is expanded to your home directory.',

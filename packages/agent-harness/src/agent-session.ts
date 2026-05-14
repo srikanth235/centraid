@@ -7,7 +7,7 @@ import {
   type AgentSession,
   type CreateAgentSessionOptions,
 } from '@earendil-works/pi-coding-agent';
-import type { AppSchema } from '@centraid/openclaw-plugin';
+import type { AppSchema } from '@centraid/runtime-core';
 import { CENTRAID_APPEND_PROMPT } from './system-prompt.js';
 import { fetchAppSchema } from './gateway-client.js';
 import type { HarnessConfig } from './types.js';

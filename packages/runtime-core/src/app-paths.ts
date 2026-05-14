@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { RegistryEntry } from '../types.js';
+import type { RegistryEntry } from './types.js';
 
 /**
  * Resolve where an app's persistent data file lives.

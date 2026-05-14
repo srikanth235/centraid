@@ -19,6 +19,7 @@
         "@centraid/agent-harness": "workspace:*",
         "@centraid/app-templates": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
+        "@centraid/runtime-core": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -66,6 +67,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/openclaw-plugin": "workspace:*",
+        "@centraid/runtime-core": "workspace:*",
         "@earendil-works/pi-coding-agent": "^0.74.0",
         "tar": "^7.4.3",
       },
@@ -101,18 +103,31 @@
       "name": "@centraid/openclaw-plugin",
       "version": "0.1.0",
       "dependencies": {
-        "tar": "^7.4.3",
+        "@centraid/runtime-core": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
         "@types/node": "^22.0.0",
-        "@types/tar": "^6.1.13",
         "openclaw": "^2026.5.7",
         "tsx": "^4.20.3",
         "typescript": "catalog:",
       },
       "peerDependencies": {
         "openclaw": ">=2026.3.24-beta.2",
+      },
+    },
+    "packages/runtime-core": {
+      "name": "@centraid/runtime-core",
+      "version": "0.1.0",
+      "dependencies": {
+        "tar": "^7.4.3",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "@types/tar": "^6.1.13",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
       },
     },
     "packages/tsconfig": {
@@ -413,6 +428,8 @@
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
 
     "@centraid/openclaw-plugin": ["@centraid/openclaw-plugin@workspace:packages/openclaw-plugin"],
+
+    "@centraid/runtime-core": ["@centraid/runtime-core@workspace:packages/runtime-core"],
 
     "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
 

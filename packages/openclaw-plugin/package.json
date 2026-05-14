@@ -19,12 +19,11 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "tar": "^7.4.3"
+    "@centraid/runtime-core": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
-    "@types/tar": "^6.1.13",
     "openclaw": "^2026.5.7",
     "tsx": "^4.20.3",
     "typescript": "catalog:"

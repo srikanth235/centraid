@@ -2,15 +2,10 @@ import { Worker } from 'node:worker_threads';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import type { AppRef } from '../types.js';
+import type { AppRef } from './types.js';
 import { appendLogs, type LogEntry } from './log-store.js';
 
-const WORKER_FILE = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'worker',
-  'runner.js',
-);
+const WORKER_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'worker', 'runner.js');
 
 export interface RunHandlerOptions {
   app: AppRef;
