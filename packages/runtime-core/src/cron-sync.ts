@@ -2,14 +2,14 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Registry } from './registry.js';
-import type { OpenClawCron, CliCronJobDefinition } from './openclaw-cron.js';
+import type { Scheduler, CronJobDefinition } from './scheduler.js';
 import type { VersionStore } from './version-store.js';
 import { appCodeDir } from './app-paths.js';
-import type { AppId, CronModule, RegistryEntry } from '../types.js';
+import type { AppId, CronModule, RegistryEntry } from './types.js';
 
 export interface CronSyncOptions {
   registry: Registry;
-  cron: OpenClawCron;
+  scheduler: Scheduler;
   versions: VersionStore;
   /** Loopback URL that webhooks should target. */
   gatewayBaseUrl: string;
@@ -17,15 +17,30 @@ export interface CronSyncOptions {
 
 /**
  * Reconciles cron jobs declared in each registered app's `crons/` directory
- * with the OpenClaw cron registry.
+ * with whichever `Scheduler` backend the host provides.
  *
  * Scoping convention: every job we own has id `centraid:<app_id>:<cron_id>`.
  * That namespace is exclusively ours — anything matching that prefix in
- * OpenClaw's cron registry but not in our app folders is treated as stale
+ * the scheduler's registry but not in our app folders is treated as stale
  * and removed during reconciliation.
  */
 export class CronSync {
   constructor(private readonly opts: CronSyncOptions) {}
+
+  /** Swap the scheduler backend (e.g., when an SDK handle becomes available
+   * mid-process). */
+  setScheduler(scheduler: Scheduler): void {
+    (this.opts as { scheduler: Scheduler }).scheduler = scheduler;
+  }
+
+  /**
+   * Update the base URL used to construct cron ingest webhook targets.
+   * Needed by the desktop's in-process embed, which only learns its own
+   * loopback URL after the HTTP server binds to an ephemeral port.
+   */
+  setGatewayBaseUrl(url: string): void {
+    (this.opts as { gatewayBaseUrl: string }).gatewayBaseUrl = url;
+  }
 
   jobIdFor(appId: AppId, cronId: string): string {
     return `centraid:${appId}:${cronId}`;
@@ -83,15 +98,15 @@ export class CronSync {
     const declared = new Set(modules.map((m) => m.cronId));
     for (const stale of Object.keys(entry.cronTokens)) {
       if (!declared.has(stale)) {
-        await this.opts.cron.removeJob(this.jobIdFor(appId, stale)).catch(() => {});
+        await this.opts.scheduler.removeJob(this.jobIdFor(appId, stale)).catch(() => {});
         await this.opts.registry.forgetCron(appId, stale);
       }
     }
 
     for (const { cronId, module } of modules) {
       const def = await this.buildJobDefinition(appId, cronId, module);
-      await this.opts.cron.removeJob(def.id).catch(() => {});
-      await this.opts.cron.addJob(def);
+      await this.opts.scheduler.removeJob(def.id).catch(() => {});
+      await this.opts.scheduler.addJob(def);
     }
   }
 
@@ -101,12 +116,12 @@ export class CronSync {
     if (!entry) return;
     for (const cronId of Object.keys(entry.cronTokens)) {
       const id = this.jobIdFor(appId, cronId);
-      await this.opts.cron.removeJob(id).catch(() => {});
+      await this.opts.scheduler.removeJob(id).catch(() => {});
       await this.opts.registry.forgetCron(appId, cronId);
     }
   }
 
-  /** Reconcile every registered app — called from `gateway_start`. */
+  /** Reconcile every registered app — called at host startup. */
   async syncAll(): Promise<void> {
     for (const entry of this.opts.registry.list()) {
       await this.syncApp(entry.id);
@@ -117,7 +132,7 @@ export class CronSync {
     appId: AppId,
     cronId: string,
     module: CronModule,
-  ): Promise<CliCronJobDefinition> {
+  ): Promise<CronJobDefinition> {
     const id = this.jobIdFor(appId, cronId);
     const token = await this.opts.registry.mintCronToken(appId, cronId);
     const url = new URL(
@@ -129,9 +144,11 @@ export class CronSync {
       id,
       schedule: module.schedule,
       execution: module.execution ?? 'isolated',
-      prompt: module.task.prompt,
-      toolAllow: module.task.toolAllow,
-      model: module.task.model,
+      task: {
+        prompt: module.task.prompt,
+        toolAllow: module.task.toolAllow,
+        model: module.task.model,
+      },
       delivery: { mode: 'webhook', url, token },
     };
   }

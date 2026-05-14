@@ -54,7 +54,7 @@ export type {
   RunQueryResult,
   LogEntry,
   LogLevel,
-} from '@centraid/openclaw-plugin';
+} from '@centraid/runtime-core';
 
 export { readProjectFiles, type ProjectFile, type ProjectFileLanguage } from './project-files.js';
 

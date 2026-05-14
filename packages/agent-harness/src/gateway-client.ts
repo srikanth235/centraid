@@ -4,14 +4,16 @@ import type {
   RunQueryResult,
   LogEntry,
   LogLevel,
-} from '@centraid/openclaw-plugin';
+} from '@centraid/runtime-core';
 import type { HarnessConfig, PublishResult } from './types.js';
 import { HarnessError } from './types.js';
 
 /**
- * Thin client over the openclaw-plugin HTTP surface for routes that the
- * desktop / mobile UIs need beyond uploading. All methods take the resolved
- * HarnessConfig (gatewayUrl + optional bearer token).
+ * Thin HTTP client over the runtime-core `/centraid/...` surface for routes
+ * the desktop / mobile UIs need beyond uploading. All methods take the
+ * resolved HarnessConfig (gatewayUrl + optional bearer token). The base URL
+ * may be a remote OpenClaw gateway or a local in-process embed — the
+ * client treats both identically.
  */
 
 export interface VersionRecord {

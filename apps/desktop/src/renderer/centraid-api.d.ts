@@ -32,8 +32,25 @@ export interface CentraidPublishResult {
 
 export interface CentraidSettings {
   projectsDir: string;
+  /**
+   * Where centraid runs apps. `local` (default) spawns an in-process
+   * runtime inside the Electron main; `remote` points at an externally
+   * hosted gateway (e.g., OpenClaw).
+   */
+  runtimeMode: 'local' | 'remote';
+  /**
+   * Effective base URL for the runtime — automatically set to the local
+   * loopback URL when `runtimeMode === 'local'`, otherwise the configured
+   * `remoteGatewayUrl`. The renderer should read this for all runtime HTTP
+   * calls; do not write to it.
+   */
   gatewayUrl: string;
+  /** Effective bearer token; companion to `gatewayUrl`. Read-only. */
   gatewayToken?: string;
+  /** User-configured remote gateway URL — only used when `runtimeMode === 'remote'`. */
+  remoteGatewayUrl: string;
+  /** User-configured remote gateway token — only used when `runtimeMode === 'remote'`. */
+  remoteGatewayToken?: string;
 }
 
 export interface CentraidVersionRecord {
