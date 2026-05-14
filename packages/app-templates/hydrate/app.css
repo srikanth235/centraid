@@ -4,9 +4,9 @@
   --accent: #5847e0;
   --ink: #0f172a;
   --ink-soft: #475569;
-  --bg: #FCFCFC;
+  --bg: #fcfcfc;
   --surface: #ffffff;
-  --line: rgba(31,31,35,0.07);
+  --line: rgba(31, 31, 35, 0.07);
 }
 
 :root[data-theme='dark'] {
