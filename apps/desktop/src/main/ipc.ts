@@ -147,10 +147,20 @@ export function registerIpcHandlers(): void {
       const { createCentraidAgentSession } = await import('@centraid/agent-harness');
       const projectDir = path.join(settings.projectsDir, input.projectId);
 
+      // Visual-feedback loop: give the agent a `previewScreenshot` tool
+      // that captures the preview iframe via the window's webContents.
+      // The harness detects the tool by name and turns on the matching
+      // system-prompt guidance.
+      const { createPreviewScreenshotTool } = await import('@centraid/agent-harness');
+      const previewScreenshot = createPreviewScreenshotTool({
+        capture: async () => capturePreviewIframe(win),
+      });
+
       const session = await createCentraidAgentSession({
         projectDir,
         sessionMode: input.sessionMode,
         liveSchema: { config: settings, appId: input.projectId },
+        customTools: [previewScreenshot],
       });
 
       const unsubscribe = session.subscribe((evt) => {
@@ -356,6 +366,48 @@ export function registerIpcHandlers(): void {
       };
     },
   );
+}
+
+/**
+ * Capture the preview iframe inside `win` and return it as a base64 PNG.
+ *
+ * The renderer tags the preview iframe with `data-centraid-app="1"` (see
+ * `makePreviewFrame` in renderer/builder.ts). We ask the renderer for its
+ * bounding rect via `executeJavaScript`, then `capturePage(rect)` clips
+ * to just that region — so the agent sees the app, not the chat pane
+ * and chrome around it.
+ *
+ * Throws (surfaces as a tool error to the agent) when the preview tab
+ * isn't visible — that's a useful signal: "open the preview, then ask
+ * me to screenshot."
+ */
+async function capturePreviewIframe(
+  win: BrowserWindow,
+): Promise<{ mimeType: string; base64: string }> {
+  const rect = (await win.webContents.executeJavaScript(
+    `(() => {
+      const f = document.querySelector('iframe[data-centraid-app="1"]');
+      if (!f) return null;
+      const r = f.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return null;
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    })()`,
+  )) as { x: number; y: number; width: number; height: number } | null;
+
+  if (!rect) {
+    throw new Error(
+      'Preview iframe not visible. Switch the right pane to the Preview tab and try again.',
+    );
+  }
+
+  const image = await win.webContents.capturePage({
+    x: Math.max(0, Math.round(rect.x)),
+    y: Math.max(0, Math.round(rect.y)),
+    width: Math.max(1, Math.round(rect.width)),
+    height: Math.max(1, Math.round(rect.height)),
+  });
+  const base64 = image.toPNG().toString('base64');
+  return { mimeType: 'image/png', base64 };
 }
 
 /** Stop and forget the session associated with a closing window. */

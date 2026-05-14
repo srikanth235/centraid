@@ -9,6 +9,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import type { AppSchema } from '@centraid/runtime-core';
 import { CENTRAID_APPEND_PROMPT } from './system-prompt.js';
+import { buildUiGroundingBlocks } from './ui-grounding.js';
 import { fetchAppSchema } from './gateway-client.js';
 import type { HarnessConfig } from './types.js';
 
@@ -72,14 +73,23 @@ export async function createCentraidAgentSession(
     }
   }
 
+  // UI/UX grounding is appended after the core centraid prompt. The
+  // `withScreenshotTool` flag turns on the prompt guidance for the
+  // `previewScreenshot` custom tool — caller must pass that tool via
+  // `customTools` for the guidance to make sense.
+  const uiGroundingBlocks = buildUiGroundingBlocks({
+    withScreenshotTool: hasPreviewScreenshotTool(opts.customTools),
+  });
+
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir,
     settingsManager: SettingsManager.create(cwd, agentDir),
-    appendSystemPromptOverride: (base) =>
-      liveSchemaBlock
-        ? [...base, CENTRAID_APPEND_PROMPT, liveSchemaBlock]
-        : [...base, CENTRAID_APPEND_PROMPT],
+    appendSystemPromptOverride: (base) => {
+      const blocks: string[] = [...base, CENTRAID_APPEND_PROMPT, ...uiGroundingBlocks];
+      if (liveSchemaBlock) blocks.push(liveSchemaBlock);
+      return blocks;
+    },
   });
   await loader.reload();
 
@@ -101,6 +111,22 @@ export async function createCentraidAgentSession(
   });
 
   return session;
+}
+
+/**
+ * The `previewScreenshot` tool, when present, unlocks an extra UX
+ * guideline in the system prompt that tells the agent to call it after
+ * meaningful visual changes. Detection is by name so the harness stays
+ * decoupled from the screenshot-tool factory's wiring details.
+ */
+function hasPreviewScreenshotTool(
+  tools: CreateAgentSessionOptions['customTools'] | undefined,
+): boolean {
+  if (!tools) return false;
+  for (const t of tools) {
+    if (t && typeof t === 'object' && 'name' in t && t.name === 'previewScreenshot') return true;
+  }
+  return false;
 }
 
 /**

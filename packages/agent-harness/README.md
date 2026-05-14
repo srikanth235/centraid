@@ -26,4 +26,33 @@ The plugin's upload-side allowlist (extensions only — see `@centraid/openclaw-
 
 ## System prompt
 
-`CENTRAID_APPEND_PROMPT` (also `centraidAppendPrompt()`) is exported so consumers can render it for debugging or layer their own additional context on top.
+`CENTRAID_APPEND_PROMPT` (also `centraidAppendPrompt()`) is exported so consumers can render it for debugging or layer their own additional context on top. It covers the authoring contract: folder layout, handler signatures, db semantics, migrations, security model.
+
+### UI/UX grounding
+
+`createCentraidAgentSession` also appends five generated blocks that ground the look and feel of authored apps:
+
+| Block | Source |
+| --- | --- |
+| `### Design tokens` | `toCss()` from `@centraid/design-tokens` — the live CSS-variable contract (colors, radii, spacing, shadows) the shell uses. Tells the agent to write `var(--accent)` etc. and never hardcode. |
+| `### Icon set` | The Lucide-style paths from `@centraid/design-tokens/icons.ts`. Inlined `<svg>` snippets the agent copy-pastes; no remote SVGs, no emoji-as-icon. |
+| `### Component primitives` | Copy-pasteable HTML for the recurring shapes (header, button + input bar, list row, empty/loading/error). Matches the utility classes shipped in the scaffold's `app.css`. |
+| `### UI/UX rules` | Non-negotiables: viewport/iframe contract, state triad (empty/loading/error), a11y floor (44px targets, focus-visible, semantic landmarks), motion (prefers-reduced-motion). |
+| `### Reference exemplars` | Points the agent at the bundled `@centraid/app-templates/todos` and `journal` as canonical references. |
+
+`buildUiGroundingBlocks({ withScreenshotTool? })` is also exported for debugging or for callers that compose their own prompt.
+
+### Visual feedback loop
+
+`createPreviewScreenshotTool({ capture })` returns a pi `ToolDefinition` you can pass into `customTools`. The agent calls it after meaningful visual changes and receives a PNG of the rendered preview as an `ImageContent` in the next turn.
+
+The desktop wires this up via Electron's `webContents.capturePage()` clipped to the preview iframe's bounding rect — the agent sees the app, not the chat pane and chrome. Headless/CLI callers should omit the tool; the matching system-prompt guidance only turns on when the tool is registered (detected by name).
+
+## What the scaffold writes
+
+`scaffoldProject()` lays down a project that already passes the visual contract:
+
+- `index.html` — loads `theme-bridge.js` synchronously before paint, then `tokens.css`, then `app.css`.
+- `theme-bridge.js` — syncs `data-theme` + `--bg-l` with the shell on load and on `centraid:theme` postMessages.
+- `tokens.css` — a frozen snapshot of `@centraid/design-tokens` at scaffold time. The app stays self-contained; re-running scaffold regenerates this if tokens evolve.
+- `app.css` — utility classes (`.head`, `.add-bar`, `.list`, `.row`, `.surface`, `.primary`, `.ghost`, `.empty`, `.loading`, `.error`, etc.) styled entirely against `var(--…)` tokens, mobile-first with a 720px breakpoint, hit targets ≥ 44px, `:focus-visible` rings, `prefers-reduced-motion` respected.
