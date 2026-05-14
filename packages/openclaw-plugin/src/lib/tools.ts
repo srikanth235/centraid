@@ -59,6 +59,25 @@ export function isSelectOnly(sql: string): boolean {
   );
 }
 
+/**
+ * Returns true when `sql` is a row-mutating DML statement (INSERT/UPDATE/
+ * DELETE/REPLACE) and contains no DDL/PRAGMA/ATTACH verbs. We intentionally
+ * keep DDL out of the write path so the model cannot reshape the schema —
+ * migrations are the app author's responsibility.
+ */
+export function isWriteDml(sql: string): boolean {
+  const stripped = sql
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/--[^\n]*/g, ' ')
+    .trim();
+  if (!stripped) return false;
+  const first = stripped.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase();
+  if (first !== 'INSERT' && first !== 'UPDATE' && first !== 'DELETE' && first !== 'REPLACE') {
+    return false;
+  }
+  return !/\b(drop|alter|create|attach|detach|vacuum|reindex|pragma)\b/i.test(stripped);
+}
+
 interface ToolCtx {
   sessionKey?: string;
 }
@@ -171,6 +190,64 @@ export function registerCentraidTools(api: OpenClawPluginApi, registry: Registry
     },
   });
 
+  // ------- centraid_sql_write -------
+  // Row-mutating DML against a single centraid app. Returns a small JSON
+  // payload describing the side effects (rowsAffected, lastInsertRowid). The
+  // scope guard below enforces the same app-id check that protects the read
+  // tool, so the model cannot mutate another app's data.
+  api.registerTool({
+    name: 'centraid_sql_write',
+    label: 'Centraid: run INSERT/UPDATE/DELETE',
+    description:
+      'Run a single INSERT, UPDATE, DELETE, or REPLACE statement against a centraid app’s SQLite database. Returns rowsAffected and lastInsertRowid. DDL (CREATE/ALTER/DROP) and PRAGMA are not allowed — use centraid_get_schema first to learn the existing tables and columns.',
+    parameters: Type.Object({
+      appId: Type.String({
+        description: 'Centraid app id. Must match the active chat’s scope.',
+      }),
+      sql: Type.String({
+        description:
+          'A single INSERT/UPDATE/DELETE/REPLACE statement. No semicolons mid-statement, no DDL.',
+      }),
+    }),
+    async execute(_id: string, rawParams: unknown, _signal?: AbortSignal, _onUpdate?: unknown) {
+      const params = (rawParams ?? {}) as { appId?: string; sql?: string };
+      const appId = params.appId;
+      const sql = params.sql;
+      if (!appId || !sql) throw new Error('both appId and sql are required.');
+      if (!isWriteDml(sql)) {
+        throw new Error(
+          'only INSERT/UPDATE/DELETE/REPLACE are allowed; DDL and PRAGMA are refused.',
+        );
+      }
+      const reg = await ensureRegistry();
+      const entry = reg.get(appId);
+      if (!entry) throw new Error(`app "${appId}" is not registered.`);
+      try {
+        const result = runQuery(path.join(entry.path, 'data.sqlite'), sql);
+        if (result.kind !== 'exec') {
+          throw new Error('statement produced rows, not an exec result.');
+        }
+        const payload = {
+          rowsAffected: result.rowsAffected,
+          lastInsertRowid:
+            typeof result.lastInsertRowid === 'bigint'
+              ? result.lastInsertRowid.toString()
+              : result.lastInsertRowid,
+          durationMs: result.durationMs,
+        };
+        return textResult(JSON.stringify(payload), payload);
+      } catch (err) {
+        const msg =
+          err instanceof RunQueryError
+            ? `${err.code}: ${err.message}`
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        throw new Error(`SQL error: ${msg}`, { cause: err });
+      }
+    },
+  });
+
   // ------- Scope guard -------
   // The chat client always opens its session as `centraid-chat:<appId>[:<...>]`.
   // Enforce: if a tool call goes to a centraid_* tool, the params.appId must
@@ -179,7 +256,12 @@ export function registerCentraidTools(api: OpenClawPluginApi, registry: Registry
   // Hook signature is `(event, ctx)`. The session key lives on `ctx`.
   api.on('before_tool_call', async (event, ctx) => {
     const name = event.toolName;
-    if (name !== 'centraid_sql_select' && name !== 'centraid_get_schema') return;
+    if (
+      name !== 'centraid_sql_select' &&
+      name !== 'centraid_sql_write' &&
+      name !== 'centraid_get_schema'
+    )
+      return;
     const sessionKey =
       readSessionKey(ctx) ??
       readSessionKey(event) ??

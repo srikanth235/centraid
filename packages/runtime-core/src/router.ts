@@ -23,7 +23,7 @@ export type Route =
     }
   | { kind: 'app-query'; appId: string }
   | { kind: 'app-logs'; appId: string; query: Record<string, string> }
-  | { kind: 'app-index'; appId: string }
+  | { kind: 'app-index'; appId: string; query: Record<string, string> }
   | { kind: 'app-static'; appId: string; rel: string }
   | { kind: 'app-data'; appId: string; queryName: string; query: Record<string, string> }
   | { kind: 'app-run'; appId: string }
@@ -101,7 +101,10 @@ export function parseRoute(method: string, rawUrl: string): Route {
 
   // /centraid/<id> or /centraid/<id>/
   if (segments.length === 1) {
-    if (m === 'GET') return { kind: 'app-index', appId };
+    if (m === 'GET') {
+      const query = Object.fromEntries(url.searchParams.entries());
+      return { kind: 'app-index', appId, query };
+    }
     return { kind: 'not-found' };
   }
 

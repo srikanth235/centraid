@@ -132,12 +132,14 @@ async function runTurn(
   // turn so the agent knows it's app-scoped and which tools to call.
   const system = [
     `You are a data assistant for the centraid app "${session.appName}" (id: ${session.appId}).`,
-    `You can ONLY answer using this app's data. Two tools are available:`,
+    `You can read AND modify this app's data using these tools:`,
     `  - centraid_get_schema({ appId }) → returns tables/columns/views.`,
     `  - centraid_sql_select({ appId, sql }) → runs a single SELECT and returns rows.`,
-    `Always pass appId: "${session.appId}". Cross-app reads are refused by the gateway.`,
-    `SELECT only; writes/DDL/PRAGMA/ATTACH are refused.`,
-    `When you have the answer, write it as plain Markdown — do not invent rows.`,
+    `  - centraid_sql_write({ appId, sql }) → runs a single INSERT/UPDATE/DELETE/REPLACE and returns { rowsAffected, lastInsertRowid }.`,
+    `Always pass appId: "${session.appId}". Cross-app access is refused by the gateway.`,
+    `Schema-changing statements (CREATE/ALTER/DROP) and PRAGMA/ATTACH are refused — use the existing schema.`,
+    `Before writing, call centraid_get_schema (or a quick SELECT) to confirm table/column names; never invent them.`,
+    `Confirm row-mutating writes back to the user in plain Markdown — say what changed (rowsAffected, the new id when inserting).`,
   ].join('\n');
 
   // Provider-qualified model ref → openclaw split. The buildAgentParams in the
@@ -156,13 +158,22 @@ async function runTurn(
   if (modelOnly) params.model = modelOnly;
 
   // Subscribe to events BEFORE issuing the request so we don't miss frames
-  // that arrive between request submission and the response.
+  // that arrive between request submission and the response. Events that
+  // arrive before runId is assigned are buffered and flushed once we know
+  // the runId — without this, the first tool call of a short run could be
+  // dropped if the agent starts emitting before `agent` returns.
   let runId: string | null = null;
+  const buffered: AgentEventPayload[] = [];
   const ourEvents: ((evt: GatewayEvent) => void)[] = [];
   const detach = wsc.onEvent((evt) => {
     const payload = readAgentPayload(evt);
     if (!payload) return;
-    if (!runId || payload.runId !== runId) return;
+    if (!runId) {
+      // Hold until runId is known; we'll filter on flush.
+      buffered.push(payload);
+      return;
+    }
+    if (payload.runId !== runId) return;
     handleAgentEvent(win, session, turnId, payload);
   });
   session.detachEvents = detach;
@@ -173,6 +184,14 @@ async function runTurn(
     runId = typeof res.runId === 'string' ? res.runId : null;
     session.runId = runId;
     if (!runId) throw new Error('gateway did not return a runId for the agent run');
+
+    // Flush any events received between subscribe and runId assignment.
+    if (buffered.length > 0) {
+      const drained = buffered.splice(0);
+      for (const p of drained) {
+        if (p.runId === runId) handleAgentEvent(win, session, turnId, p);
+      }
+    }
 
     // Wait for the run to terminate. `agent.wait` blocks server-side until
     // the run ends (or our wait budget expires). Per the SDK, params are
@@ -254,10 +273,11 @@ function handleAgentEvent(
     const args = data.args ?? data.params;
     const result = data.result ?? data.output;
     if (phase === 'start' || phase === 'started') {
-      // Surface the SQL string when this is a SELECT call so the UI can
-      // show the query inline.
+      // Surface the SQL string when this is a SELECT or WRITE call so the
+      // UI can show the query inline.
       const sql =
-        toolName === 'centraid_sql_select' && typeof (args as { sql?: unknown })?.sql === 'string'
+        (toolName === 'centraid_sql_select' || toolName === 'centraid_sql_write') &&
+        typeof (args as { sql?: unknown })?.sql === 'string'
           ? (args as { sql: string }).sql
           : undefined;
       emit(win, {
@@ -270,7 +290,10 @@ function handleAgentEvent(
       });
       return;
     }
-    if (phase === 'end' || phase === 'completed') {
+    // OpenClaw emits the terminal tool event with `phase: "result"` (see
+    // `handleToolExecutionEnd` in openclaw/dist/selection-*.js). We also
+    // accept "end"/"completed" defensively for older builds.
+    if (phase === 'result' || phase === 'end' || phase === 'completed') {
       const ok = data.error == null && data.isError !== true;
       if (ok) {
         emit(win, {
