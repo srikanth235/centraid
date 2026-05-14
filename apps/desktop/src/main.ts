@@ -2,6 +2,7 @@ import { app, BrowserWindow, nativeImage, protocol, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installAuthInjector } from './main/auth-injector.js';
+import { registerChatIpcHandlers, disposeWindowChatSessions } from './main/chat.js';
 import { disposeWindowSession, registerIpcHandlers } from './main/ipc.js';
 import { PREVIEW_SCHEME, registerPreviewProtocol } from './main/preview-protocol.js';
 import { loadSettings, templatesCacheDir } from './main/settings.js';
@@ -72,6 +73,7 @@ function createWindow(): void {
 
   win.on('closed', () => {
     void disposeWindowSession(win.id);
+    disposeWindowChatSessions(win.id);
   });
 }
 
@@ -82,6 +84,7 @@ app.whenReady().then(() => {
   registerPreviewProtocol();
   void installAuthInjector();
   registerIpcHandlers();
+  registerChatIpcHandlers();
   createWindow();
   // Kick off a background check for template updates. Fire-and-forget — the
   // fetcher is silent on every failure (offline, 404, parse error, etc.) so

@@ -1214,7 +1214,14 @@
 
     try {
       mountUserApp(app, ua, inner);
-      currentCleanup = null;
+      // Per-app agentic chat: only wire it up for centraid-backed apps,
+      // since the agent reads the app's data.sqlite via the gateway.
+      if (ua?.centraidProjectId) {
+        const detachChat = mountAppChat(view, app, ua.centraidProjectId);
+        currentCleanup = detachChat;
+      } else {
+        currentCleanup = null;
+      }
     } catch (error) {
       console.error('App crashed:', error);
       inner.append(el('div', { class: 'empty' }, `Something went wrong loading ${app.name}.`));
@@ -1312,6 +1319,363 @@
     container.append(stub);
   }
 
+  // ---------- App-scoped agentic chat ----------
+  // Floating button at the bottom-right of the app view. Click opens a
+  // slide-out panel that holds a multi-turn conversation. The agent runs
+  // in main via `openclaw infer model run` and can only read this app's
+  // data.sqlite via SELECT queries — see `apps/desktop/src/main/chat.ts`.
+  function mountAppChat(view: HTMLElement, app: AppMetaResolvedType, appId: string): () => void {
+    let started = false;
+    let open = false;
+    let nextTurnId = 1;
+    let activeTurn: number | null = null;
+    let unsubscribe: (() => void) | null = null;
+    const turnNodes = new Map<number, { tools: HTMLElement; answer: HTMLElement }>();
+
+    const fab = el('button', {
+      class: 'app-chat-fab',
+      type: 'button',
+      title: 'Ask about this app',
+      'aria-label': 'Open chat',
+      trustedHtml: Icon.Sparkle({ size: 18 }),
+    });
+
+    const panel = el('aside', {
+      class: 'app-chat-panel',
+      'aria-hidden': 'true',
+    });
+    const head = el('div', { class: 'app-chat-head' }, [
+      el('div', { class: 'app-chat-title' }, [
+        el('span', {
+          class: 'app-chat-dot',
+          style: { background: app.color },
+        }),
+        el('span', {}, `Ask ${app.name}`),
+      ]),
+      el('button', {
+        class: 'app-chat-close',
+        type: 'button',
+        'aria-label': 'Close',
+        trustedHtml:
+          '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+        onClick: () => toggle(false),
+      }),
+    ]);
+    const body = el('div', { class: 'app-chat-body' });
+    const empty = el('div', { class: 'app-chat-empty' }, [
+      el('div', { class: 'app-chat-empty-title' }, `Chat with ${app.name}`),
+      el(
+        'div',
+        { class: 'app-chat-empty-hint' },
+        'Ask questions about this app’s data. The assistant reads your SQLite via read-only SELECTs.',
+      ),
+    ]);
+    body.append(empty);
+
+    const input = el('textarea', {
+      class: 'app-chat-textarea',
+      placeholder: 'Ask about this app’s data…',
+      rows: '1',
+    }) as HTMLTextAreaElement;
+    const sendBtn = el('button', {
+      class: 'app-chat-send',
+      type: 'button',
+      title: 'Send',
+      'aria-label': 'Send',
+      trustedHtml: Icon.Send({ size: 14 }),
+    }) as HTMLButtonElement;
+    // Stop button swaps in for Send while a turn is active. The renderer
+    // keeps both nodes mounted and toggles `hidden`, which avoids a layout
+    // shift each time the user submits.
+    const stopBtn = el('button', {
+      class: 'app-chat-send app-chat-stop',
+      type: 'button',
+      title: 'Stop',
+      'aria-label': 'Stop',
+      hidden: '',
+      trustedHtml:
+        '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5"/></svg>',
+      onClick: () => {
+        void window.CentraidApi.chatAbort({ appId });
+      },
+    }) as HTMLButtonElement;
+    const inputWrap = el('form', { class: 'app-chat-input-wrap' }, [input, sendBtn, stopBtn]);
+    inputWrap.addEventListener('submit', (e) => {
+      e.preventDefault();
+      void submit();
+    });
+
+    panel.append(head, body, inputWrap);
+    view.append(fab, panel);
+
+    function toggle(next?: boolean): void {
+      open = next ?? !open;
+      panel.classList.toggle('open', open);
+      panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+      fab.classList.toggle('hidden', open);
+      if (open) {
+        void ensureStarted();
+        setTimeout(() => input.focus(), 60);
+      }
+    }
+
+    fab.addEventListener('click', () => toggle(true));
+
+    async function ensureStarted(): Promise<void> {
+      if (started) return;
+      started = true;
+      unsubscribe = window.CentraidApi.onChatEvent((event) => {
+        if (!event || event.appId !== appId) return;
+        handleEvent(event);
+      });
+      try {
+        await window.CentraidApi.chatStart({ appId, appName: app.name });
+      } catch (err) {
+        appendError(`Failed to start chat: ${String(err)}`);
+        started = false;
+      }
+    }
+
+    function appendError(text: string): void {
+      empty.remove();
+      const node = el('div', { class: 'app-chat-error' }, text);
+      body.append(node);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function appendUserTurn(text: string, turnId: number): void {
+      empty.remove();
+      const row = el('div', { class: 'app-chat-turn' });
+      const user = el('div', { class: 'app-chat-msg app-chat-msg-user' }, text);
+      const tools = el('div', { class: 'app-chat-tools' });
+      const answer = el('div', { class: 'app-chat-msg app-chat-msg-assistant pending' }, '…');
+      row.append(user, tools, answer);
+      body.append(row);
+      turnNodes.set(turnId, { tools, answer });
+      body.scrollTop = body.scrollHeight;
+    }
+
+    // Streaming-aware. The assistant bubble starts empty and grows by
+    // appending each `assistant-delta`. `final` only overwrites if we
+    // received no deltas (some providers skip deltas and only emit final).
+    const turnState = new Map<number, { streamed: string; hadDelta: boolean }>();
+
+    function handleEvent(event: CentraidChatEvent): void {
+      const nodes = turnNodes.get(event.turnId);
+      if (!nodes) return;
+      const state = turnState.get(event.turnId) ?? { streamed: '', hadDelta: false };
+      turnState.set(event.turnId, state);
+
+      if (event.kind === 'thinking') {
+        if (!state.hadDelta) {
+          nodes.answer.textContent = '…';
+          nodes.answer.classList.add('pending');
+        }
+      } else if (event.kind === 'assistant-delta') {
+        state.hadDelta = true;
+        state.streamed += event.delta;
+        nodes.answer.classList.remove('pending');
+        nodes.answer.textContent = state.streamed;
+      } else if (event.kind === 'tool-call') {
+        const block = el('details', { class: 'app-chat-tool' });
+        const summaryLabel =
+          event.toolName === 'centraid_sql_select'
+            ? `SQL · ${(event.sql ?? '').split('\n')[0].slice(0, 60)}`
+            : event.toolName;
+        const summary = el('summary', {}, summaryLabel);
+        const pre = el(
+          'pre',
+          { class: 'app-chat-tool-sql' },
+          event.sql ?? safeJson(event.toolArgs),
+        );
+        const result = el('div', { class: 'app-chat-tool-result' }, 'Running…');
+        block.append(summary, pre, result);
+        block.dataset.turn = String(event.turnId);
+        block.dataset.tool = event.toolName;
+        nodes.tools.append(block);
+      } else if (event.kind === 'tool-result') {
+        const last = nodes.tools.lastElementChild as HTMLElement | null;
+        const resultEl = last?.querySelector<HTMLElement>('.app-chat-tool-result');
+        if (resultEl) {
+          resultEl.textContent = '';
+          const parsed = parseToolPayload(event.toolResult);
+          if (parsed && Array.isArray(parsed.columns) && Array.isArray(parsed.rows)) {
+            resultEl.append(
+              renderRows(parsed.columns as string[], parsed.rows as Array<Record<string, unknown>>),
+            );
+            if (parsed.truncated) {
+              resultEl.append(
+                el(
+                  'div',
+                  { style: { color: 'var(--ink-3)', fontSize: '11px', marginTop: '4px' } },
+                  `Showing 50 of ${parsed.totalRows} rows.`,
+                ),
+              );
+            }
+          } else {
+            resultEl.textContent = safeJson(event.toolResult);
+          }
+        }
+      } else if (event.kind === 'tool-error') {
+        const last = nodes.tools.lastElementChild as HTMLElement | null;
+        const resultEl = last?.querySelector<HTMLElement>('.app-chat-tool-result');
+        if (resultEl) {
+          resultEl.textContent = `Error: ${event.text}`;
+          resultEl.classList.add('app-chat-tool-err');
+        }
+      } else if (event.kind === 'final') {
+        nodes.answer.classList.remove('pending');
+        if (!state.hadDelta && event.text) {
+          nodes.answer.textContent = event.text;
+        }
+        if (activeTurn === event.turnId) activeTurn = null;
+        setBusy(false);
+      } else if (event.kind === 'error') {
+        nodes.answer.classList.remove('pending');
+        nodes.answer.classList.add('app-chat-msg-error');
+        nodes.answer.textContent = event.text || 'Something went wrong.';
+        if (activeTurn === event.turnId) activeTurn = null;
+        setBusy(false);
+      } else if (event.kind === 'aborted') {
+        nodes.answer.classList.remove('pending');
+        if (!state.streamed) nodes.answer.textContent = '(stopped)';
+        if (activeTurn === event.turnId) activeTurn = null;
+        setBusy(false);
+      }
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function safeJson(v: unknown): string {
+      try {
+        return JSON.stringify(v ?? null);
+      } catch {
+        return String(v);
+      }
+    }
+
+    // Tool results come back as a JSON string in `content[].text` (per the
+    // pi-agent-core AgentToolResult shape). Try to recover the rows payload.
+    function parseToolPayload(v: unknown): Record<string, unknown> | undefined {
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const obj = v as Record<string, unknown>;
+        if ('columns' in obj && 'rows' in obj) return obj;
+        if (Array.isArray(obj.content)) {
+          const text = (obj.content as Array<{ type?: string; text?: string }>)
+            .filter((c) => c?.type === 'text' && typeof c.text === 'string')
+            .map((c) => c.text!)
+            .join('');
+          if (text) {
+            try {
+              return JSON.parse(text) as Record<string, unknown>;
+            } catch {
+              return undefined;
+            }
+          }
+        }
+      }
+      if (typeof v === 'string') {
+        try {
+          return JSON.parse(v) as Record<string, unknown>;
+        } catch {
+          return undefined;
+        }
+      }
+      return undefined;
+    }
+
+    function renderRows(columns: string[], rows: Array<Record<string, unknown>>): HTMLElement {
+      const table = el('table', { class: 'app-chat-rows' });
+      const thead = el('thead');
+      const trh = el('tr');
+      for (const c of columns) trh.append(el('th', {}, c));
+      thead.append(trh);
+      table.append(thead);
+      const tbody = el('tbody');
+      for (const r of rows.slice(0, 20)) {
+        const tr = el('tr');
+        for (const c of columns) {
+          const v = r[c];
+          tr.append(el('td', {}, formatCell(v)));
+        }
+        tbody.append(tr);
+      }
+      table.append(tbody);
+      if (rows.length === 0) {
+        return el('div', { class: 'app-chat-rows-empty' }, 'No rows.');
+      }
+      return table;
+    }
+
+    function formatCell(v: unknown): string {
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'string') return v;
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return String(v);
+      }
+    }
+
+    function setBusy(busy: boolean): void {
+      sendBtn.hidden = busy;
+      stopBtn.hidden = !busy;
+      sendBtn.disabled = busy;
+    }
+
+    async function submit(): Promise<void> {
+      const text = input.value.trim();
+      if (!text || activeTurn !== null) return;
+      const turnId = nextTurnId++;
+      activeTurn = turnId;
+      input.value = '';
+      autosize();
+      setBusy(true);
+      appendUserTurn(text, turnId);
+      await ensureStarted();
+      try {
+        const settings = await window.CentraidApi.getSettings();
+        await window.CentraidApi.chatSend({
+          appId,
+          text,
+          turnId,
+          model: settings.chatModel,
+        });
+      } catch (err) {
+        const nodes = turnNodes.get(turnId);
+        if (nodes) {
+          nodes.answer.classList.remove('pending');
+          nodes.answer.classList.add('app-chat-msg-error');
+          nodes.answer.textContent = `Send failed: ${String(err)}`;
+        }
+        activeTurn = null;
+        setBusy(false);
+      }
+    }
+
+    function autosize(): void {
+      input.style.height = 'auto';
+      input.style.height = `${Math.min(140, input.scrollHeight)}px`;
+    }
+    input.addEventListener('input', autosize);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        void submit();
+      }
+    });
+
+    return () => {
+      try {
+        if (unsubscribe) unsubscribe();
+        if (activeTurn !== null) void window.CentraidApi.chatAbort({ appId });
+      } catch {
+        /* swallow */
+      }
+      fab.remove();
+      panel.remove();
+    };
+  }
+
   // ---------- Settings page ----------
   // Rendered as a top-level page in the main panel (sibling of Home /
   // App view / Builder), not a drawer. Four groups:
@@ -1333,6 +1697,7 @@
       runtimeMode: 'local' as const,
       remoteGatewayUrl: 'http://127.0.0.1:18789',
       remoteGatewayToken: '',
+      chatModel: undefined as string | undefined,
     }));
 
     const main = el('div');
@@ -1449,6 +1814,78 @@
         input,
         el('div', { class: 'settings-hint' }, hint),
       ]);
+
+    // ---- Chat group ----
+    const chatModelSelect = el('select', { class: 'input' }) as HTMLSelectElement;
+    chatModelSelect.append(el('option', { value: '' }, 'Gateway default') as HTMLOptionElement);
+    let chatModelInitial = current.chatModel ?? '';
+    if (chatModelInitial) {
+      // Pre-seed with the persisted choice so the dropdown shows the current
+      // model even before the async list resolves.
+      const seed = el(
+        'option',
+        { value: chatModelInitial, selected: '' },
+        chatModelInitial,
+      ) as HTMLOptionElement;
+      chatModelSelect.append(seed);
+    }
+    async function loadChatModels(): Promise<void> {
+      const models = await window.CentraidApi.listChatModels().catch(() => []);
+      // Replace existing options but keep the leading "Gateway default" entry.
+      while (chatModelSelect.children.length > 1) {
+        chatModelSelect.lastChild?.remove();
+      }
+      for (const m of models) {
+        const opt = el('option', { value: m.id }, `${m.name} · ${m.provider}`) as HTMLOptionElement;
+        if (m.id === chatModelInitial) opt.selected = true;
+        chatModelSelect.append(opt);
+      }
+    }
+    void loadChatModels();
+    chatModelSelect.addEventListener('change', () => {
+      chatModelInitial = chatModelSelect.value;
+      void window.CentraidApi.saveSettings({ chatModel: chatModelSelect.value || undefined });
+    });
+
+    // Refresh button — re-hits `models.list` on the gateway. Useful when the
+    // user adds a provider profile in openclaw and wants the list to update
+    // without restarting the desktop app.
+    const refreshModelsBtn = el('button', {
+      class: 'btn btn-soft app-chat-models-refresh',
+      type: 'button',
+      title: 'Refresh model list',
+      'aria-label': 'Refresh model list',
+      onClick: async () => {
+        refreshModelsBtn.setAttribute('disabled', '');
+        try {
+          await loadChatModels();
+          showToast('Model list refreshed');
+        } finally {
+          refreshModelsBtn.removeAttribute('disabled');
+        }
+      },
+    });
+    refreshModelsBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Refresh</span>';
+
+    const modelRow = el('div', { style: { alignItems: 'center', display: 'flex', gap: '8px' } }, [
+      chatModelSelect,
+      refreshModelsBtn,
+    ]);
+
+    page.append(
+      drawerGroup('Chat', [
+        el(
+          'div',
+          { class: 'settings-note' },
+          'Model used by the in-app chat. The chat is sandboxed to one app at a time and only issues read-only SELECTs.',
+        ),
+        labeled(
+          'Model',
+          'Pick any model exposed by `openclaw infer model list`. "Gateway default" lets openclaw choose.',
+          modelRow,
+        ),
+      ]),
+    );
 
     const remoteRowsHost = el('div');
     const renderRemoteRows = (): void => {

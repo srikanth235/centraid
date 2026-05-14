@@ -20,12 +20,14 @@
     "@centraid/agent-harness": "workspace:*",
     "@centraid/app-templates": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
-    "@centraid/runtime-core": "workspace:*"
+    "@centraid/runtime-core": "workspace:*",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@playwright/test": "^1.60.0",
     "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.0",
     "electron": "^33.0.0",
     "typescript": "catalog:"
   }

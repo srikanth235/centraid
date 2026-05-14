@@ -37,6 +37,12 @@ const Channel = {
 
   TEMPLATES_LIST: 'centraid:templates:list',
   TEMPLATES_CLONE: 'centraid:templates:clone',
+
+  CHAT_START: 'centraid:chat:start',
+  CHAT_SEND: 'centraid:chat:send',
+  CHAT_ABORT: 'centraid:chat:abort',
+  CHAT_EVENT: 'centraid:chat:event',
+  CHAT_MODELS: 'centraid:chat:models',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -116,4 +122,17 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   listTemplates: () => ipcRenderer.invoke(Channel.TEMPLATES_LIST),
   cloneTemplate: (input: { templateId: string; newAppId?: string; newName?: string }) =>
     ipcRenderer.invoke(Channel.TEMPLATES_CLONE, input),
+
+  // App-scoped agentic chat
+  chatStart: (input: { appId: string; appName: string }) =>
+    ipcRenderer.invoke(Channel.CHAT_START, input),
+  chatSend: (input: { appId: string; text: string; turnId: number; model?: string }) =>
+    ipcRenderer.invoke(Channel.CHAT_SEND, input),
+  chatAbort: (input: { appId: string }) => ipcRenderer.invoke(Channel.CHAT_ABORT, input),
+  listChatModels: () => ipcRenderer.invoke(Channel.CHAT_MODELS),
+  onChatEvent: (cb: (msg: unknown) => void) => {
+    const handler = (_e: IpcRendererEvent, msg: unknown): void => cb(msg);
+    ipcRenderer.on(Channel.CHAT_EVENT, handler);
+    return () => ipcRenderer.off(Channel.CHAT_EVENT, handler);
+  },
 });

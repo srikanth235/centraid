@@ -210,6 +210,38 @@ Defense-in-depth that's already in place:
 - Worker `resourceLimits` cap memory; configurable `timeoutMs` per cron (default 60s ingest / 10s query / 30s action).
 - 1 MiB body limit on every request that reads a body.
 
+## Agent tools
+
+The plugin also registers two agent tools used by the desktop app's per-app chat:
+
+| Tool                  | Purpose                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| `centraid_get_schema` | Returns `{tables, views, indexes}` for the calling app's `data.sqlite`.                          |
+| `centraid_sql_select` | Runs one read-only SELECT against the calling app's `data.sqlite`. Multi-statement is rejected. |
+
+Both take `appId` as a parameter. A `before_tool_call` hook on the plugin enforces that `appId` matches the calling session's app — the chat client opens its session as `centraid-chat:<appId>:w<windowId>`, and the hook parses that key. Cross-app reads (and any non-SELECT statement) are refused at the gateway before `execute` runs.
+
+### Enabling the tools in `~/.openclaw/openclaw.json`
+
+Plugin-registered tools don't belong to any built-in tool profile. The cleanest way to expose them without widening the global profile is `tools.alsoAllow`, which is additive on top of the active profile:
+
+```json
+{
+  "tools": {
+    "profile": "coding",
+    "alsoAllow": ["centraid_get_schema", "centraid_sql_select"]
+  }
+}
+```
+
+A small helper script is shipped to patch the user's config idempotently:
+
+```sh
+node packages/openclaw-plugin/scripts/setup-tools.mjs
+```
+
+It reads `~/.openclaw/openclaw.json`, merges the two tool ids into `tools.alsoAllow`, and writes the file back atomically. Safe to re-run.
+
 ## Building
 
 ```sh
