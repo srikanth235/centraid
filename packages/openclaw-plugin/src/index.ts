@@ -23,6 +23,7 @@ import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
 import { Runtime } from '@centraid/runtime-core';
 import { OpenClawScheduler } from './lib/openclaw-cron.js';
 import { registerCentraidTools } from './lib/tools.js';
+import { ChatHistoryStore, makeChatHistoryRouteHandler } from './lib/chat-history.js';
 
 // Re-export the public handler & payload types from runtime-core so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -108,5 +109,30 @@ export default definePluginEntry({
     // SELECT only. Scope is enforced by the before_tool_call hook inside
     // registerCentraidTools (uses sessionKey = "centraid-chat:<appId>").
     registerCentraidTools(api, runtime.registry);
+
+    // Chat-history store — a single shared SQLite holding every app's chat
+    // sessions and messages, exposed at /_centraid-chat. The desktop is the
+    // only client; agent tools have no access. Lives next to appsDir so it
+    // moves with the gateway state dir.
+    //
+    // Lazy init: `register()` runs in every plugin context (gateway + agent
+    // workers — see lib/tools.ts for the why). HTTP route handlers only
+    // fire in the gateway, so we defer opening the SQLite connection until
+    // the first request lands. That keeps worker subprocesses from holding
+    // stray DB handles to a file they never read.
+    const chatHistoryDb = path.join(path.dirname(appsDir), 'centraid-chat-history.sqlite');
+    let chatHistoryStore: ChatHistoryStore | undefined;
+    const getChatHistoryStore = (): ChatHistoryStore => {
+      if (!chatHistoryStore) {
+        chatHistoryStore = new ChatHistoryStore(chatHistoryDb);
+      }
+      return chatHistoryStore;
+    };
+    api.registerHttpRoute({
+      path: '/_centraid-chat',
+      match: 'prefix',
+      auth: 'gateway',
+      handler: makeChatHistoryRouteHandler(getChatHistoryStore),
+    });
   },
 });

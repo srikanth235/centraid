@@ -2902,11 +2902,20 @@
     const sidebar = window.Chrome.buildSidebar({
       activeId: opts.projectId,
       apps: sidebarApps,
-      drafts: [],
+      // Drafts come from the shell's hydrated cache (passed via
+      // BuilderOptions). Older callers may omit them — default to empty.
+      // The currently-open project will appear here too when it's a draft,
+      // and `activeId` highlights it just like the home sidebar does.
+      drafts: opts.drafts ?? [],
       onAppClick: (id: string) => {
-        // Hop back to the shell, then let it open the chosen app. The
-        // shell owns route history, so we exit cleanly first.
-        handleExit();
+        // Let the shell route the click — `openApp` (a) calls `clear()`,
+        // which fires our `currentCleanup` and tears this builder down,
+        // and (b) branches to `enterBuilder` for drafts vs `mountUserApp`
+        // for published apps. We deliberately do NOT call `handleExit()`
+        // here: `onExit` is `renderHome`, which is async, and racing it
+        // against `openApp` ends up appending the home shell underneath
+        // the freshly-mounted builder. The teardown that `clear()` does
+        // is sufficient.
         if (typeof window.Centraid?.openApp === 'function') {
           window.Centraid.openApp(id);
         }

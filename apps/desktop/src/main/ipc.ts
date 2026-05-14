@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import { loadSettings, saveSettings, templatesCacheDir, type DesktopSettings } from './settings.js';
 import { PREVIEW_SCHEME } from './preview-protocol.js';
 import { refreshAuthInjector } from './auth-injector.js';
+import { resetChatHistoryAuthCache } from './chat-history-client.js';
 import {
   importAvailableCreds,
   readAuthStatus,
@@ -62,6 +63,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.SETTINGS_GET, async () => loadSettings());
   ipcMain.handle(Channel.SETTINGS_SAVE, async (_e, patch: Partial<DesktopSettings>) => {
     const next = await saveSettings(patch);
+    // gatewayUrl/token may have flipped; invalidate the chat-history client's
+    // cached auth so the next persistence call picks up the new values.
+    resetChatHistoryAuthCache();
     await refreshAuthInjector();
     return next;
   });

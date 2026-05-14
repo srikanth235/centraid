@@ -3,7 +3,7 @@
   "name": "Centraid",
   "description": "Mounts /centraid on the gateway. Each registered app is a folder with static assets, a sqlite database, and JS handlers for queries / actions / cron-fed ingest.",
   "contracts": {
-    "tools": ["centraid_sql_select", "centraid_get_schema"]
+    "tools": ["centraid_sql_select", "centraid_sql_write", "centraid_get_schema"]
   },
   "activation": {
     "onStartup": true

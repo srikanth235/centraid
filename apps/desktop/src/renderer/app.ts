@@ -1036,6 +1036,31 @@
         projectId = ua?.centraidProjectId;
       }
     }
+    // Sidebar drafts list — give the builder the same view of WIP projects
+    // the home sidebar shows, so users can swap between drafts without
+    // having to bounce through Home. `drafts` is the shell's module-level
+    // cache (refreshed by `hydrateDrafts()` on home render). It can lag
+    // behind reality in two cases worth covering:
+    //   - cloneTemplate just minted a fresh DraftAppMeta and called us
+    //     directly; the draft isn't in the cache yet.
+    //   - cold start / deep-link before the first home render.
+    // For (1) we splice in `opts.appContext` if it's a draft and missing
+    // from the cache, so the freshly-cloned tile is immediately visible in
+    // the builder sidebar without bouncing through Home. (2) still needs a
+    // home visit to fully populate, which is acceptable for v1.
+    const draftsForSidebar: DraftAppMeta[] =
+      opts.appContext &&
+      isDraft(opts.appContext) &&
+      !drafts.some((d) => d.id === opts.appContext!.id)
+        ? [opts.appContext, ...drafts]
+        : drafts;
+    const builderDrafts: ChromeSidebarApp[] = draftsForSidebar.map((d) => ({
+      color: d.color,
+      iconKey: d.iconKey,
+      id: d.id,
+      name: d.name,
+      status: 'draft',
+    }));
     currentCleanup =
       window.openBuilder({
         root,
@@ -1045,6 +1070,7 @@
         ...(projectId ? { projectId } : {}),
         ...(focusName ? { focusName: true } : {}),
         ...chromeNav(),
+        drafts: builderDrafts,
         onAddToHome: addUserApp,
         onMetaChange: syncUserAppMeta,
       }) ?? null;
@@ -1167,6 +1193,14 @@
     if (!app) {
       return;
     }
+    // Drafts can't be "opened" — they don't have a runnable build yet.
+    // Route to the builder so the click is meaningful even when openApp
+    // is called by surfaces (like the builder's own sidebar) that don't
+    // pre-branch on draft status.
+    if (isDraft(app)) {
+      enterBuilder({ appContext: app });
+      return;
+    }
     recordRoute({ id, kind: 'app' });
     // Every app on the grid is a user app now (built-ins were retired in
     // favour of templates), so we always mount via the iframe-backed path.
@@ -1228,8 +1262,12 @@
       // Per-app agentic chat: only wire it up for centraid-backed apps,
       // since the agent reads the app's data.sqlite via the gateway.
       if (ua?.centraidProjectId) {
-        const detachChat = mountAppChat(view, app, ua.centraidProjectId);
-        currentCleanup = detachChat;
+        currentCleanup = window.AppChat.mount({
+          view,
+          app,
+          appId: ua.centraidProjectId,
+          el,
+        });
       } else {
         currentCleanup = null;
       }
@@ -1331,645 +1369,6 @@
       ]),
     ]);
     container.append(stub);
-  }
-
-  // ---------- App-scoped agentic chat ----------
-  // Floating button at the bottom-right of the app view. Click opens a
-  // slide-out panel that holds a multi-turn conversation. The agent runs
-  // in main via `openclaw infer model run` and can only read this app's
-  // data.sqlite via SELECT queries — see `apps/desktop/src/main/chat.ts`.
-  //
-  // Rendering mirrors the builder chat (apps/desktop/src/renderer/builder.ts):
-  // a typed ChatMsg[] that is fully re-rendered on every update, with adjacent
-  // tool calls folded into one collapsible "tool group" pill, an author chip
-  // on assistant turns, and a centered "Thinking…" status while the agent
-  // works. The in-app twist is that each tool row drills in to show the SQL
-  // and the result table inline (the in-app chat's unique surface).
-  function mountAppChat(view: HTMLElement, app: AppMetaResolvedType, appId: string): () => void {
-    type AppToolCall = {
-      id: string;
-      tool: string;
-      sql?: string;
-      args?: unknown;
-      summary?: string;
-      state: 'running' | 'ok' | 'error';
-      result?: unknown;
-      errorText?: string;
-      open?: boolean;
-    };
-    type AppChatMsg =
-      | { kind: 'user'; text: string }
-      | { kind: 'ai'; text: string; streaming?: boolean; error?: boolean }
-      | { kind: 'toolGroup'; id: string; calls: AppToolCall[]; open: boolean };
-
-    let started = false;
-    let open = false;
-    let nextTurnId = 1;
-    let activeTurn: number | null = null;
-    let unsubscribe: (() => void) | null = null;
-    let chat: AppChatMsg[] = [];
-    // Per-turn streaming state. `streamed` accumulates assistant deltas;
-    // `hadContent` flips once we've shown any AI text or tool group, which
-    // hides the centered "Thinking…" status row.
-    const turnState = new Map<
-      number,
-      {
-        streamed: string;
-        hadDelta: boolean;
-        hadContent: boolean;
-        aiIndex: number; // -1 if no AI msg yet
-      }
-    >();
-
-    const escapeHtml = (s: string): string =>
-      s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-
-    // Inline icons (kept tiny — same shape the builder uses for the tool-group
-    // pill) so the in-app chat doesn't need to reach into the builder IIFE.
-    const BoltSvg = (size = 13): string =>
-      `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>`;
-    const ChevSvg = (size = 13): string =>
-      `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-
-    function toolVerb(tool: string): string {
-      switch (tool) {
-        case 'centraid_sql_select':
-          return 'Querying';
-        case 'centraid_sql_write':
-          return 'Writing';
-        case 'centraid_get_schema':
-          return 'Reading schema';
-        default:
-          return tool.charAt(0).toUpperCase() + tool.slice(1);
-      }
-    }
-
-    function summarizeToolArgs(tool: string, sql?: string, args?: unknown): string | undefined {
-      if ((tool === 'centraid_sql_select' || tool === 'centraid_sql_write') && sql) {
-        const firstLine = sql.split('\n').find((l) => l.trim().length > 0) ?? sql;
-        return firstLine.trim().replace(/\s+/g, ' ').slice(0, 90);
-      }
-      if (tool === 'centraid_get_schema') return undefined;
-      if (args && typeof args === 'object') {
-        for (const k of ['name', 'path', 'query']) {
-          const v = (args as Record<string, unknown>)[k];
-          if (typeof v === 'string' && v.length > 0) return v.slice(0, 90);
-        }
-      }
-      return undefined;
-    }
-
-    function summarizeGroup(calls: AppToolCall[]): string {
-      const segs: { verb: string; count: number }[] = [];
-      for (const c of calls) {
-        const verb = toolVerb(c.tool);
-        const last = segs[segs.length - 1];
-        if (last && last.verb === verb) last.count += 1;
-        else segs.push({ verb, count: 1 });
-      }
-      return segs.map((s) => (s.count > 1 ? `${s.verb} ×${s.count}` : s.verb)).join(', ');
-    }
-
-    const fab = el('button', {
-      class: 'app-chat-fab',
-      type: 'button',
-      title: 'Ask about this app',
-      'aria-label': 'Open chat',
-      trustedHtml: Icon.Sparkle({ size: 18 }),
-    });
-
-    const panel = el('aside', {
-      class: 'app-chat-panel',
-      'aria-hidden': 'true',
-    });
-    const head = el('div', { class: 'app-chat-head' }, [
-      el('div', { class: 'app-chat-title' }, [
-        el('span', {
-          class: 'app-chat-dot',
-          style: { background: app.color },
-        }),
-        el('span', {}, `Ask ${app.name}`),
-      ]),
-      el('button', {
-        class: 'app-chat-close',
-        type: 'button',
-        'aria-label': 'Close',
-        trustedHtml:
-          '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
-        onClick: () => toggle(false),
-      }),
-    ]);
-    // chat-scroll mirrors the builder; the panel-specific padding override
-    // lives in styles.css under `.app-chat-panel .chat-scroll`.
-    const scroll = el('div', { class: 'chat-scroll app-chat-scroll' });
-    const empty = el('div', { class: 'app-chat-empty' }, [
-      el('div', { class: 'app-chat-empty-title' }, `Chat with ${app.name}`),
-      el(
-        'div',
-        { class: 'app-chat-empty-hint' },
-        'Ask questions about this app’s data, or have the assistant add, update, or delete records on your behalf.',
-      ),
-    ]);
-
-    const input = el('textarea', {
-      class: 'app-chat-textarea',
-      placeholder: 'Ask about this app’s data…',
-      rows: '1',
-    }) as HTMLTextAreaElement;
-    const sendBtn = el('button', {
-      class: 'app-chat-send',
-      type: 'button',
-      title: 'Send',
-      'aria-label': 'Send',
-      trustedHtml: Icon.Send({ size: 14 }),
-    }) as HTMLButtonElement;
-    // Stop button swaps in for Send while a turn is active. The renderer
-    // keeps both nodes mounted and toggles `hidden`, which avoids a layout
-    // shift each time the user submits.
-    const stopBtn = el('button', {
-      class: 'app-chat-send app-chat-stop',
-      type: 'button',
-      title: 'Stop',
-      'aria-label': 'Stop',
-      hidden: '',
-      trustedHtml:
-        '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5"/></svg>',
-      onClick: () => {
-        void window.CentraidApi.chatAbort({ appId });
-      },
-    }) as HTMLButtonElement;
-    const inputWrap = el('form', { class: 'app-chat-input-wrap' }, [input, sendBtn, stopBtn]);
-    inputWrap.addEventListener('submit', (e) => {
-      e.preventDefault();
-      void submit();
-    });
-
-    panel.append(head, scroll, inputWrap);
-    view.append(fab, panel);
-    scroll.append(empty);
-
-    function toggle(next?: boolean): void {
-      open = next ?? !open;
-      panel.classList.toggle('open', open);
-      panel.setAttribute('aria-hidden', open ? 'false' : 'true');
-      fab.classList.toggle('hidden', open);
-      if (open) {
-        void ensureStarted();
-        setTimeout(() => input.focus(), 60);
-      }
-    }
-
-    fab.addEventListener('click', () => toggle(true));
-
-    async function ensureStarted(): Promise<void> {
-      if (started) return;
-      started = true;
-      unsubscribe = window.CentraidApi.onChatEvent((event) => {
-        if (!event || event.appId !== appId) return;
-        handleEvent(event);
-      });
-      try {
-        await window.CentraidApi.chatStart({ appId, appName: app.name });
-      } catch (err) {
-        appendError(`Failed to start chat: ${String(err)}`);
-        started = false;
-      }
-    }
-
-    function appendError(text: string): void {
-      empty.remove();
-      const node = el('div', { class: 'app-chat-error' }, text);
-      scroll.append(node);
-      scroll.scrollTop = scroll.scrollHeight;
-    }
-
-    // ---------- ChatMsg renderer ----------
-    function renderRows(columns: string[], rows: Array<Record<string, unknown>>): HTMLElement {
-      if (rows.length === 0) {
-        return el('div', { class: 'app-chat-rows-empty' }, 'No rows.');
-      }
-      const table = el('table', { class: 'app-chat-rows' });
-      const trh = el('tr');
-      for (const c of columns) trh.append(el('th', {}, c));
-      table.append(el('thead', {}, [trh]));
-      const tbody = el('tbody');
-      for (const r of rows.slice(0, 20)) {
-        const tr = el('tr');
-        for (const c of columns) tr.append(el('td', {}, formatCell(r[c])));
-        tbody.append(tr);
-      }
-      table.append(tbody);
-      return table;
-    }
-
-    function formatCell(v: unknown): string {
-      if (v === null || v === undefined) return '';
-      if (typeof v === 'string') return v;
-      try {
-        return JSON.stringify(v);
-      } catch {
-        return String(v);
-      }
-    }
-
-    function safeJson(v: unknown): string {
-      try {
-        return JSON.stringify(v ?? null);
-      } catch {
-        return String(v);
-      }
-    }
-
-    // Tool results come back as a JSON string in `content[].text` (per the
-    // pi-agent-core AgentToolResult shape). Try to recover the rows payload.
-    function parseToolPayload(v: unknown): Record<string, unknown> | undefined {
-      if (v && typeof v === 'object' && !Array.isArray(v)) {
-        const obj = v as Record<string, unknown>;
-        if ('columns' in obj && 'rows' in obj) return obj;
-        if (Array.isArray(obj.content)) {
-          const text = (obj.content as Array<{ type?: string; text?: string }>)
-            .filter((c) => c?.type === 'text' && typeof c.text === 'string')
-            .map((c) => c.text!)
-            .join('');
-          if (text) {
-            try {
-              return JSON.parse(text) as Record<string, unknown>;
-            } catch {
-              return undefined;
-            }
-          }
-        }
-      }
-      if (typeof v === 'string') {
-        try {
-          return JSON.parse(v) as Record<string, unknown>;
-        } catch {
-          return undefined;
-        }
-      }
-      return undefined;
-    }
-
-    function renderToolDetail(c: AppToolCall): HTMLElement {
-      const wrap = el('div', { class: 'app-chat-tool-detail' });
-      if (c.sql) {
-        wrap.append(el('pre', { class: 'app-chat-tool-sql' }, c.sql));
-      } else if (c.args !== undefined) {
-        wrap.append(el('pre', { class: 'app-chat-tool-sql' }, safeJson(c.args)));
-      }
-      const result = el('div', { class: 'app-chat-tool-result' });
-      if (c.state === 'running') {
-        result.textContent = 'Running…';
-      } else if (c.state === 'error') {
-        result.classList.add('app-chat-tool-err');
-        result.textContent = `Error: ${c.errorText ?? 'Tool failed.'}`;
-      } else {
-        const parsed = parseToolPayload(c.result);
-        if (parsed && Array.isArray(parsed.columns) && Array.isArray(parsed.rows)) {
-          result.append(
-            renderRows(parsed.columns as string[], parsed.rows as Array<Record<string, unknown>>),
-          );
-          if (parsed.truncated) {
-            result.append(
-              el(
-                'div',
-                { class: 'app-chat-rows-meta' },
-                `Showing ${Math.min(20, (parsed.rows as unknown[]).length)} of ${parsed.totalRows ?? (parsed.rows as unknown[]).length} rows.`,
-              ),
-            );
-          }
-        } else if (c.result !== undefined) {
-          result.textContent = safeJson(c.result);
-        } else {
-          result.textContent = '(no result)';
-        }
-      }
-      wrap.append(result);
-      return wrap;
-    }
-
-    function renderMessage(m: AppChatMsg): HTMLElement {
-      if (m.kind === 'user') {
-        return el('div', { class: 'msg-user' }, [el('div', { class: 'msg-user-bubble' }, m.text)]);
-      }
-      if (m.kind === 'ai') {
-        // Author chip + paragraph-split text, mirroring builder. The chip
-        // uses the app's icon color so each app's chat reads as its own
-        // surface, vs the generic "builder" chip.
-        const author = el('div', { class: 'msg-ai-author' });
-        author.innerHTML =
-          `<span class="msg-ai-author-dot" style="background:${escapeHtml(app.color)}"></span>` +
-          `<span class="msg-ai-author-name">${escapeHtml(app.name.toLowerCase())}</span>`;
-        const para = el('div', { class: 'msg-ai-text' });
-        const text = m.text || (m.streaming ? '…' : '');
-        text.split('\n\n').forEach((p) => para.append(el('p', {}, p)));
-        const cls = m.error ? 'msg-ai msg-ai-error' : 'msg-ai';
-        return el('div', { class: cls }, [author, para]);
-      }
-      // toolGroup
-      const groupId = m.id;
-      const isRunning = m.calls.some((c) => c.state === 'running');
-      const hasError = m.calls.some((c) => c.state === 'error');
-      const wrap = el('div', {
-        class: 'tool-group',
-        'data-open': String(m.open),
-        'data-running': String(isRunning),
-        'data-error': String(hasError),
-      });
-      const pill = el('button', {
-        class: 'tool-group-pill',
-        type: 'button',
-        'aria-expanded': String(m.open),
-      });
-      pill.innerHTML =
-        `<span class="tg-bolt">${BoltSvg(13)}</span>` +
-        `<span class="tg-label">${escapeHtml(summarizeGroup(m.calls))}</span>` +
-        `<span class="tg-chev">${ChevSvg(13)}</span>`;
-      pill.addEventListener('click', () => {
-        chat = chat.map((x) =>
-          x.kind === 'toolGroup' && x.id === groupId ? { ...x, open: !x.open } : x,
-        );
-        renderChat();
-      });
-      wrap.append(pill);
-      if (m.open) {
-        const list = el('div', { class: 'tg-list' });
-        for (const c of m.calls) {
-          const dot = el('span', { class: 'tg-dot', 'data-state': c.state });
-          const name = el('span', { class: 'tg-row-name' }, toolVerb(c.tool));
-          const target = el('span', { class: 'tg-row-target' }, c.summary ?? '');
-          const expand = el('span', {
-            class: 'tg-row-expand',
-            trustedHtml: ChevSvg(11),
-          });
-          const row = el(
-            'button',
-            {
-              type: 'button',
-              class: 'tg-row tg-row-clickable',
-              'data-state': c.state,
-              'data-open': String(!!c.open),
-              onClick: () => {
-                chat = chat.map((x) => {
-                  if (x.kind !== 'toolGroup' || x.id !== groupId) return x;
-                  return {
-                    ...x,
-                    calls: x.calls.map((cc) => (cc.id === c.id ? { ...cc, open: !cc.open } : cc)),
-                  };
-                });
-                renderChat();
-              },
-            },
-            [dot, name, target, expand],
-          );
-          list.append(row);
-          if (c.open) list.append(renderToolDetail(c));
-        }
-        wrap.append(list);
-      }
-      return wrap;
-    }
-
-    function renderChat(): void {
-      scroll.innerHTML = '';
-      if (chat.length === 0) {
-        scroll.append(empty);
-      } else {
-        chat.forEach((m) => scroll.append(renderMessage(m)));
-      }
-      // Centered "Thinking…" pill while the agent is between user prompt and
-      // first assistant content. Mirrors builder's gen-row.
-      if (activeTurn !== null) {
-        const state = turnState.get(activeTurn);
-        if (state && !state.hadContent) {
-          scroll.append(
-            el('div', { class: 'gen-row' }, [
-              el('span', { class: 'msg-status' }, [el('span', { class: 'pulse' }), ' Thinking…']),
-            ]),
-          );
-        }
-      }
-      scroll.scrollTop = scroll.scrollHeight;
-    }
-
-    // ---------- ChatMsg mutators ----------
-    function ensureTurnState(turnId: number): {
-      streamed: string;
-      hadDelta: boolean;
-      hadContent: boolean;
-      aiIndex: number;
-    } {
-      const existing = turnState.get(turnId);
-      if (existing) return existing;
-      const next = { streamed: '', hadDelta: false, hadContent: false, aiIndex: -1 };
-      turnState.set(turnId, next);
-      return next;
-    }
-
-    function pushAi(text: string, streaming: boolean): number {
-      chat = chat.concat([{ kind: 'ai', text, streaming }]);
-      return chat.length - 1;
-    }
-
-    function patchAi(idx: number, patch: Partial<Extract<AppChatMsg, { kind: 'ai' }>>): void {
-      chat = chat.map((m, i) => (i === idx && m.kind === 'ai' ? { ...m, ...patch } : m));
-    }
-
-    function appendOrStartToolCall(call: AppToolCall): void {
-      const lastIdx = chat.length - 1;
-      const last = chat[lastIdx];
-      if (last && last.kind === 'toolGroup') {
-        const updated: AppChatMsg = { ...last, calls: [...last.calls, call] };
-        chat = chat.map((m, i) => (i === lastIdx ? updated : m));
-      } else {
-        chat = chat.concat([{ kind: 'toolGroup', id: call.id, calls: [call], open: true }]);
-      }
-    }
-
-    function patchToolCall(callId: string, patch: Partial<AppToolCall>): void {
-      chat = chat.map((m) => {
-        if (m.kind !== 'toolGroup') return m;
-        if (!m.calls.some((c) => c.id === callId)) return m;
-        return {
-          ...m,
-          calls: m.calls.map((c) => (c.id === callId ? { ...c, ...patch } : c)),
-        };
-      });
-    }
-
-    // The gateway streams tool events without explicit ids — phases just
-    // arrive in order. We mint our own monotonic id per turn so the renderer
-    // can target the correct call when the matching `tool-result`/`tool-error`
-    // arrives.
-    const lastToolIdByTurn = new Map<number, string>();
-    let toolCounter = 0;
-    function mintToolId(turnId: number): string {
-      toolCounter += 1;
-      const id = `t${turnId}-${toolCounter}`;
-      lastToolIdByTurn.set(turnId, id);
-      return id;
-    }
-
-    function handleEvent(event: CentraidChatEvent): void {
-      const state = ensureTurnState(event.turnId);
-      if (event.kind === 'thinking') {
-        // Just keeps the centered "Thinking…" status visible; nothing to
-        // patch on the chat array.
-        renderChat();
-        return;
-      }
-      if (event.kind === 'assistant-delta') {
-        state.hadDelta = true;
-        state.hadContent = true;
-        state.streamed += event.delta;
-        if (state.aiIndex < 0) {
-          state.aiIndex = pushAi(state.streamed, true);
-        } else {
-          patchAi(state.aiIndex, { text: state.streamed, streaming: true });
-        }
-        renderChat();
-        return;
-      }
-      if (event.kind === 'tool-call') {
-        state.hadContent = true;
-        // Tool call after AI text starts a new group; the streaming AI msg
-        // is closed so subsequent deltas don't reattach to it (mirrors
-        // builder's closeAi() on tool_execution_start).
-        if (state.aiIndex >= 0) {
-          patchAi(state.aiIndex, { streaming: false });
-          state.aiIndex = -1;
-        }
-        const id = mintToolId(event.turnId);
-        appendOrStartToolCall({
-          id,
-          tool: event.toolName,
-          sql: event.sql,
-          args: event.toolArgs,
-          summary: summarizeToolArgs(event.toolName, event.sql, event.toolArgs),
-          state: 'running',
-        });
-        renderChat();
-        return;
-      }
-      if (event.kind === 'tool-result') {
-        const id = lastToolIdByTurn.get(event.turnId);
-        if (id) patchToolCall(id, { state: 'ok', result: event.toolResult });
-        renderChat();
-        return;
-      }
-      if (event.kind === 'tool-error') {
-        const id = lastToolIdByTurn.get(event.turnId);
-        if (id) patchToolCall(id, { state: 'error', errorText: event.text });
-        renderChat();
-        return;
-      }
-      if (event.kind === 'final') {
-        if (state.aiIndex >= 0) {
-          patchAi(state.aiIndex, { streaming: false });
-        } else if (event.text) {
-          state.aiIndex = pushAi(event.text, false);
-          state.hadContent = true;
-        }
-        if (activeTurn === event.turnId) activeTurn = null;
-        setBusy(false);
-        renderChat();
-        return;
-      }
-      if (event.kind === 'error') {
-        if (state.aiIndex >= 0) {
-          patchAi(state.aiIndex, {
-            streaming: false,
-            error: true,
-            text: event.text || 'Something went wrong.',
-          });
-        } else {
-          state.aiIndex = pushAi(event.text || 'Something went wrong.', false);
-          patchAi(state.aiIndex, { error: true });
-          state.hadContent = true;
-        }
-        if (activeTurn === event.turnId) activeTurn = null;
-        setBusy(false);
-        renderChat();
-        return;
-      }
-      if (event.kind === 'aborted') {
-        if (state.aiIndex >= 0) {
-          patchAi(state.aiIndex, { streaming: false });
-        } else {
-          state.aiIndex = pushAi('(stopped)', false);
-          state.hadContent = true;
-        }
-        if (activeTurn === event.turnId) activeTurn = null;
-        setBusy(false);
-        renderChat();
-      }
-    }
-
-    function setBusy(busy: boolean): void {
-      sendBtn.hidden = busy;
-      stopBtn.hidden = !busy;
-      sendBtn.disabled = busy;
-    }
-
-    async function submit(): Promise<void> {
-      const text = input.value.trim();
-      if (!text || activeTurn !== null) return;
-      const turnId = nextTurnId++;
-      activeTurn = turnId;
-      input.value = '';
-      autosize();
-      setBusy(true);
-      empty.remove();
-      chat = chat.concat([{ kind: 'user', text }]);
-      ensureTurnState(turnId);
-      renderChat();
-      await ensureStarted();
-      try {
-        const settings = await window.CentraidApi.getSettings();
-        await window.CentraidApi.chatSend({
-          appId,
-          text,
-          turnId,
-          model: settings.chatModel,
-        });
-      } catch (err) {
-        const state = ensureTurnState(turnId);
-        const msg = `Send failed: ${String(err)}`;
-        if (state.aiIndex >= 0) {
-          patchAi(state.aiIndex, { text: msg, error: true, streaming: false });
-        } else {
-          state.aiIndex = pushAi(msg, false);
-          patchAi(state.aiIndex, { error: true });
-          state.hadContent = true;
-        }
-        activeTurn = null;
-        setBusy(false);
-        renderChat();
-      }
-    }
-
-    function autosize(): void {
-      input.style.height = 'auto';
-      input.style.height = `${Math.min(140, input.scrollHeight)}px`;
-    }
-    input.addEventListener('input', autosize);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        void submit();
-      }
-    });
-
-    return () => {
-      try {
-        if (unsubscribe) unsubscribe();
-        if (activeTurn !== null) void window.CentraidApi.chatAbort({ appId });
-      } catch {
-        /* swallow */
-      }
-      fab.remove();
-      panel.remove();
-    };
   }
 
   // ---------- Settings page ----------

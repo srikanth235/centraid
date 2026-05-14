@@ -43,6 +43,10 @@ const Channel = {
   CHAT_ABORT: 'centraid:chat:abort',
   CHAT_EVENT: 'centraid:chat:event',
   CHAT_MODELS: 'centraid:chat:models',
+  CHAT_HISTORY_LIST: 'centraid:chat:history:list',
+  CHAT_HISTORY_LOAD: 'centraid:chat:history:load',
+  CHAT_HISTORY_DELETE: 'centraid:chat:history:delete',
+  CHAT_HISTORY_RENAME: 'centraid:chat:history:rename',
 
   AUTH_STATUS: 'centraid:auth:status',
   AUTH_RESYNC: 'centraid:auth:resync',
@@ -127,7 +131,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.TEMPLATES_CLONE, input),
 
   // App-scoped agentic chat
-  chatStart: (input: { appId: string; appName: string }) =>
+  chatStart: (input: { appId: string; appName: string; sessionId?: string | null }) =>
     ipcRenderer.invoke(Channel.CHAT_START, input),
   chatSend: (input: { appId: string; text: string; turnId: number; model?: string }) =>
     ipcRenderer.invoke(Channel.CHAT_SEND, input),
@@ -138,6 +142,15 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.on(Channel.CHAT_EVENT, handler);
     return () => ipcRenderer.off(Channel.CHAT_EVENT, handler);
   },
+  // App chat history (persisted on the gateway)
+  chatHistoryList: (input: { appId: string }) =>
+    ipcRenderer.invoke(Channel.CHAT_HISTORY_LIST, input),
+  chatHistoryLoad: (input: { sessionId: string }) =>
+    ipcRenderer.invoke(Channel.CHAT_HISTORY_LOAD, input),
+  chatHistoryDelete: (input: { sessionId: string }) =>
+    ipcRenderer.invoke(Channel.CHAT_HISTORY_DELETE, input),
+  chatHistoryRename: (input: { sessionId: string; title: string }) =>
+    ipcRenderer.invoke(Channel.CHAT_HISTORY_RENAME, input),
 
   // Credential import (Claude Code / Codex → pi auth.json)
   authStatus: () => ipcRenderer.invoke(Channel.AUTH_STATUS),
