@@ -1,15 +1,15 @@
-version: '3'
-generated_at: 2026-05-12T05:24:11Z
+version: "3"
+generated_at: 2026-05-14T23:15:00Z
 owner: srikanth235
 repo: centraid
-kit_version: '0.2'
+kit_version: "0.3"
 hook_strategy: githooks
 constitution: true
 ci_workflow: .github/workflows/governance.yml
 tests_dir: .governance
-agents_md_directive: true
+agents_md_snippet: true
 agents_md_created: false
-setup_clone_script: scripts/setup-clone.sh
+enable_governance_script: scripts/enable-governance.sh
 install_assets_seeded:
   - QUALITY.md
   - COSTS.md
