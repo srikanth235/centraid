@@ -16,7 +16,8 @@
         "index.html",
         "migrations/0001_init.sql",
         "package.json",
-        "queries/get-today.js"
+        "queries/get-today.js",
+        "theme-bridge.js"
       ]
     },
     {
@@ -36,7 +37,8 @@
         "index.html",
         "migrations/0001_init.sql",
         "package.json",
-        "queries/list.js"
+        "queries/list.js",
+        "theme-bridge.js"
       ]
     },
     {
@@ -56,7 +58,8 @@
         "migrations/0001_init.sql",
         "package.json",
         "queries/get.js",
-        "queries/list-dates.js"
+        "queries/list-dates.js",
+        "theme-bridge.js"
       ]
     }
   ]

@@ -91,28 +91,6 @@
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
   const FolderIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
-  // Per-extension file glyphs. Defaults to a generic page outline.
-  function fileIcon(path: string, size = 14): string {
-    const ext = path.split('.').pop()?.toLowerCase() ?? '';
-    if (['svg', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif'].includes(ext)) {
-      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/></svg>`;
-    }
-    if (['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext)) {
-      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 8 5 12 9 16"/><polyline points="15 8 19 12 15 16"/></svg>`;
-    }
-    if (['css', 'scss', 'sass', 'less'].includes(ext)) {
-      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>`;
-    }
-    if (['json', 'toml', 'yaml', 'yml'].includes(ext) || path.startsWith('.env')) {
-      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`;
-    }
-    if (ext === 'md') {
-      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`;
-    }
-    // generic page
-    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg>`;
-  }
-
   const Api = (): Window['CentraidApi'] => window.CentraidApi;
 
   function escapeHtml(s: string): string {
@@ -209,6 +187,24 @@
     } catch {
       return iso;
     }
+  }
+
+  // Per-language label shown in the colored pill next to a filename in the
+  // Code view. Kept tiny + uppercase to read as metadata, not a brand mark.
+  const LANG_DISPLAY: Record<'html' | 'js' | 'ts' | 'css' | 'json' | 'md' | 'other', string> = {
+    html: 'HTML',
+    js: 'JS',
+    ts: 'TS',
+    css: 'CSS',
+    json: 'JSON',
+    md: 'MD',
+    other: 'TXT',
+  };
+
+  function formatBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   function shortVersionTitle(v: { versionId: string; declaredVersion?: string }): string {
@@ -1018,12 +1014,35 @@
     const PREVIEW_SANDBOX = 'allow-scripts allow-forms allow-same-origin';
 
     function makePreviewFrame(src: string): HTMLIFrameElement {
-      return el('iframe', {
-        src,
+      // Read live theme from the shell (applyPrefs() writes data-theme +
+      // --bg-l onto <html>). Preview iframe gets both the initial paint
+      // (via #hash) and a postMessage on load so the theme-bridge inside
+      // the iframe stays in sync — same protocol as the running-app view.
+      const html = document.documentElement;
+      const theme = html.dataset.theme || 'dark';
+      const bgL = (html.style.getPropertyValue('--bg-l') || '5%').replace('%', '').trim();
+      const sep = src.includes('#') ? '&' : '#';
+      const themedSrc = `${src}${sep}theme=${theme}&bgL=${bgL}`;
+      const frame = el('iframe', {
+        src: themedSrc,
         style: { border: '0', height: '100%', width: '100%' },
         sandbox: PREVIEW_SANDBOX,
         referrerpolicy: 'no-referrer',
       }) as HTMLIFrameElement;
+      // Tagging lets the shell's broadcastThemeToFrames() find this iframe
+      // when the user retunes from Settings while the builder is open.
+      frame.dataset.centraidApp = '1';
+      frame.addEventListener('load', () => {
+        try {
+          frame.contentWindow?.postMessage(
+            { type: 'centraid:theme', theme, bgL: Number(bgL) },
+            '*',
+          );
+        } catch {
+          /* noop */
+        }
+      });
+      return frame;
     }
 
     async function resolvePreviewSrc(): Promise<
@@ -1213,29 +1232,52 @@
           viewer.innerHTML = '<div class="empty">File not found.</div>';
           return;
         }
-        const head = el('div', { class: 'code-viewer-head' }, [
-          el('span', { class: 'code-viewer-path' }, file.path),
-          el('div', { class: 'code-viewer-actions' }, [
-            el('span', { class: 'code-readonly-badge' }, 'Read-only'),
-            el('span', { class: 'code-viewer-meta' }, `${file.content.split('\n').length} lines`),
-            el(
-              'button',
-              {
-                class: 'btn btn-ghost tiny-btn code-open-btn',
-                onClick: () => {
-                  if (projectId) void Api().openProjectFolder({ id: projectId });
-                },
-              },
-              'Open folder',
-            ),
-          ]),
+        const lang = languageHint(file.path);
+        const langLabel = LANG_DISPLAY[lang] ?? 'TEXT';
+        const lineCount = file.content.split('\n').length;
+        const bytes = new TextEncoder().encode(file.content).byteLength;
+        const pathDir = file.path.includes('/')
+          ? file.path.slice(0, file.path.lastIndexOf('/'))
+          : '';
+        const pathName = file.path.includes('/')
+          ? file.path.slice(file.path.lastIndexOf('/') + 1)
+          : file.path;
+
+        // Filename row: name + colored language pill + Read-only chip.
+        const titleRow = el('div', { class: 'code-viewer-title-row' }, [
+          ...(pathDir ? [el('span', { class: 'code-viewer-dir' }, pathDir + '/')] : []),
+          el('span', { class: 'code-viewer-name' }, pathName),
+          el('span', { class: 'code-lang-pill', 'data-lang': lang }, langLabel),
+          el('span', { class: 'code-readonly-badge' }, 'Read-only'),
         ]);
+        const metaRow = el(
+          'span',
+          { class: 'code-viewer-meta' },
+          `${lineCount} ${lineCount === 1 ? 'line' : 'lines'} · ${formatBytes(bytes)} · synced from gateway`,
+        );
+        const titleStack = el('div', { class: 'code-viewer-title' }, [titleRow, metaRow]);
+
+        const openBtn = el(
+          'button',
+          {
+            class: 'btn btn-ghost tiny-btn code-open-btn',
+            onClick: () => {
+              if (projectId) void Api().openProjectFolder({ id: projectId });
+            },
+          },
+          'Open folder',
+        );
+        const head = el('div', { class: 'code-viewer-head' }, [
+          titleStack,
+          el('div', { class: 'code-viewer-actions' }, [openBtn]),
+        ]);
+
         const body = el('div', { class: 'code-body' });
         const lines = file.content.split('\n');
         const gutter = el('div', { class: 'code-gutter' });
         lines.forEach((_, i) => gutter.append(el('div', {}, String(i + 1))));
         const text = el('pre', { class: 'code-text' });
-        text.innerHTML = tokenize(file.content, languageHint(file.path));
+        text.innerHTML = tokenize(file.content, lang);
         body.append(gutter);
         body.append(text);
         viewer.append(head);
@@ -1292,6 +1334,7 @@
             row.style.setProperty('--depth', String(depth));
             return row;
           }
+          const lang = languageHint(node.path);
           const row = el(
             'button',
             {
@@ -1306,10 +1349,7 @@
             },
             [
               el('span', { class: 'code-tree-chevron-spacer' }),
-              el('span', {
-                class: 'code-tree-icon',
-                trustedHtml: fileIcon(node.path, 13),
-              }),
+              el('span', { class: 'code-tree-lang-dot', 'data-lang': lang }),
               el('span', { class: 'code-tree-name' }, node.name),
             ],
           );
@@ -1325,7 +1365,30 @@
             }
           }
         };
-        walk(visible, 0);
+
+        // Split root-level entries into Frontend (everything the app
+        // template ships to the iframe) and Backend (reserved folders
+        // that the gateway runs server-side: actions, queries, etc.).
+        // Sub-items inside each group keep the existing recursive walk.
+        const BACKEND_DIRS = new Set(['actions', 'queries', 'migrations', 'crons']);
+        const backend = visible.filter((n) => n.kind === 'folder' && BACKEND_DIRS.has(n.name));
+        const frontend = visible.filter((n) => !backend.includes(n));
+
+        // When search is active we let the user see whatever matched —
+        // section headers only appear when both groups are populated.
+        const showHeaders = !search && frontend.length > 0 && backend.length > 0;
+
+        if (showHeaders) {
+          list.append(el('div', { class: 'code-tree-group-head' }, 'Frontend'));
+        }
+        walk(frontend, 0);
+
+        if (backend.length > 0) {
+          if (showHeaders) {
+            list.append(el('div', { class: 'code-tree-group-head' }, 'Backend'));
+          }
+          walk(backend, 0);
+        }
 
         if (visible.length === 0) {
           list.append(el('div', { class: 'empty code-tree-empty' }, 'No matches'));
@@ -1413,12 +1476,18 @@
 
       const drawRail = (): void => {
         rail.innerHTML = '';
-        for (const [key, label, renderIcon, ready] of sections) {
+        const makeBtn = (
+          key: CloudSection,
+          label: string,
+          renderIcon: (n?: number) => string,
+          ready: boolean,
+        ): HTMLElement => {
           const btn = el('button', {
             class: 'cloud-rail-item',
             'data-active': String(active === key),
             'data-ready': String(ready),
             onClick: () => {
+              if (!ready) return;
               if (active === key) return;
               active = key;
               openTable = undefined;
@@ -1427,11 +1496,21 @@
               drawStage();
             },
           });
-          const badge = ready
-            ? ''
-            : '<span class="cloud-rail-badge" title="Not yet available">Soon</span>';
-          btn.innerHTML = `${renderIcon(14)}<span class="cloud-rail-label">${escapeHtml(label)}</span>${badge}`;
-          rail.append(btn);
+          btn.innerHTML = `${renderIcon(14)}<span class="cloud-rail-label">${escapeHtml(label)}</span>`;
+          return btn;
+        };
+        // Ready items first, "Coming soon" group at the bottom under a caps
+        // label — so the four active rows own the top of the rail and don't
+        // get rhythm-broken by Soon pills sitting at the same weight.
+        for (const [key, label, renderIcon, ready] of sections) {
+          if (ready) rail.append(makeBtn(key, label, renderIcon, ready));
+        }
+        const soon = sections.filter((s) => !s[3]);
+        if (soon.length > 0) {
+          rail.append(el('div', { class: 'cloud-rail-group-head' }, 'Coming soon'));
+          for (const [key, label, renderIcon, ready] of soon) {
+            rail.append(makeBtn(key, label, renderIcon, ready));
+          }
         }
       };
 
@@ -1471,6 +1550,10 @@
 
       const drawStage = (): void => {
         stage.innerHTML = '';
+        // Overview opts in to the atmospheric backdrop; every other section
+        // gets the plain canvas. Drop the class on every redraw so the
+        // gradient doesn't leak across tabs.
+        stage.classList.remove('cloud-stage-atmospheric');
         const def = sections.find(([k]) => k === active);
         const title = def?.[1] ?? '';
         const subtitle =
@@ -1539,53 +1622,137 @@
         void ensureSchema();
         void ensureVersions();
 
+        // Atmospheric backdrop — a faint accent-tinted radial behind the
+        // cards. Matches the journal-in-shell treatment.
+        stage.classList.add('cloud-stage-atmospheric');
+
         const grid = el('div', { class: 'cloud-stat-grid' });
 
-        const liveCard = el('div', { class: 'cloud-stat-card' });
-        liveCard.innerHTML = liveUrl
-          ? `<div class="cloud-stat-label">Live URL</div><div class="cloud-stat-value cloud-stat-mono">${escapeHtml(formatPreviewUrl(liveUrl))}</div>`
-          : '<div class="cloud-stat-label">Live URL</div><div class="cloud-stat-value cloud-stat-muted">Not published</div>';
+        // ---- Row 1: LIVE URL (span 2) · Versions · Tables ----
+        const liveCard = el('div', { class: 'cloud-stat-card cloud-stat-card--live' });
+        if (liveUrl) {
+          // Capture into a const so TS keeps the narrowed `string` type
+          // inside the click handler closure (the outer `liveUrl` is
+          // mutable from the project's perspective).
+          const url = liveUrl;
+          const eyebrow = el('div', { class: 'cloud-stat-eyebrow' }, [
+            el('span', { class: 'cloud-status-dot', 'data-status': 'live' }),
+            el('span', {}, 'Live URL'),
+          ]);
+          const value = el(
+            'div',
+            { class: 'cloud-stat-value cloud-stat-mono cloud-stat-url' },
+            formatPreviewUrl(url),
+          );
+          const copyBtn = el(
+            'button',
+            {
+              class: 'cloud-stat-copy',
+              type: 'button',
+              onClick: () => {
+                void navigator.clipboard
+                  .writeText(url)
+                  .then(() => showToast('Copied URL'))
+                  .catch(() => showToast('Copy failed'));
+              },
+            },
+            'Copy',
+          );
+          liveCard.append(eyebrow);
+          liveCard.append(value);
+          liveCard.append(copyBtn);
+        } else {
+          liveCard.innerHTML =
+            '<div class="cloud-stat-eyebrow"><span class="cloud-status-dot" data-status="off"></span><span>Live URL</span></div><div class="cloud-stat-value cloud-stat-muted">Not published</div>';
+        }
         grid.append(liveCard);
 
         const versionCard = el('div', { class: 'cloud-stat-card' });
         if (versionsCache === 'pending' || versionsCache === undefined) {
           versionCard.innerHTML =
-            '<div class="cloud-stat-label">Versions</div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+            '<div class="cloud-stat-eyebrow"><span>Versions</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
         } else if (versionsCache === 'error') {
           versionCard.innerHTML =
-            '<div class="cloud-stat-label">Versions</div><div class="cloud-stat-value cloud-stat-muted">—</div>';
+            '<div class="cloud-stat-eyebrow"><span>Versions</span></div><div class="cloud-stat-value cloud-stat-muted">—</div>';
         } else {
           const v = versionsCache;
-          versionCard.innerHTML = `<div class="cloud-stat-label">Versions</div><div class="cloud-stat-value">${v.versions.length}</div><div class="cloud-stat-sub">${v.activeVersion ? `Active: ${escapeHtml(v.activeVersion.slice(0, 18))}…` : 'No active version'}</div>`;
+          versionCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Versions</span></div><div class="cloud-stat-value">${v.versions.length}</div><div class="cloud-stat-sub">${v.activeVersion ? `Active: ${escapeHtml(v.activeVersion.slice(0, 18))}…` : 'No active version'}</div>`;
         }
         grid.append(versionCard);
-
-        const schemaCard = el('div', { class: 'cloud-stat-card' });
-        if (schemaCache === 'pending' || schemaCache === undefined) {
-          schemaCard.innerHTML =
-            '<div class="cloud-stat-label">Schema version</div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
-        } else if (schemaCache === 'error') {
-          schemaCard.innerHTML = `<div class="cloud-stat-label">Schema version</div><div class="cloud-stat-value cloud-stat-muted">Unavailable</div><div class="cloud-stat-sub">${escapeHtml(schemaError ?? 'gateway error')}</div>`;
-        } else if (!schemaCache) {
-          schemaCard.innerHTML =
-            '<div class="cloud-stat-label">Schema version</div><div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">Publish to create the database</div>';
-        } else {
-          schemaCard.innerHTML = `<div class="cloud-stat-label">Schema version</div><div class="cloud-stat-value">v${schemaCache.schemaVersion}</div>`;
-        }
-        grid.append(schemaCard);
 
         const tableCard = el('div', { class: 'cloud-stat-card' });
         if (schemaCache === 'pending' || schemaCache === undefined) {
           tableCard.innerHTML =
-            '<div class="cloud-stat-label">Tables</div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+            '<div class="cloud-stat-eyebrow"><span>Tables</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
         } else if (!schemaCache || schemaCache === 'error') {
           tableCard.innerHTML =
-            '<div class="cloud-stat-label">Tables</div><div class="cloud-stat-value cloud-stat-muted">—</div>';
+            '<div class="cloud-stat-eyebrow"><span>Tables</span></div><div class="cloud-stat-value cloud-stat-muted">—</div>';
         } else {
           const s = schemaCache;
-          tableCard.innerHTML = `<div class="cloud-stat-label">Tables</div><div class="cloud-stat-value">${s.tables.length}</div><div class="cloud-stat-sub">${s.indexes.length} indexes · ${s.views.length} views</div>`;
+          tableCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Tables</span></div><div class="cloud-stat-value">${s.tables.length}</div><div class="cloud-stat-sub">${s.indexes.length} indexes · ${s.views.length} views</div>`;
         }
         grid.append(tableCard);
+
+        // ---- Row 2: Schema · Last activity · Gateway (span 2) ----
+        const schemaCard = el('div', { class: 'cloud-stat-card' });
+        if (schemaCache === 'pending' || schemaCache === undefined) {
+          schemaCard.innerHTML =
+            '<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+        } else if (schemaCache === 'error') {
+          schemaCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value cloud-stat-muted">Unavailable</div><div class="cloud-stat-sub">${escapeHtml(schemaError ?? 'gateway error')}</div>`;
+        } else if (!schemaCache) {
+          schemaCard.innerHTML =
+            '<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">Publish to create the database</div>';
+        } else {
+          schemaCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value">v${schemaCache.schemaVersion}</div><div class="cloud-stat-sub">${schemaCache.schemaVersion === 1 ? 'Never migrated' : 'Up to date'}</div>`;
+        }
+        grid.append(schemaCard);
+
+        // Last activity — newest version's uploadedAt. Cheap; reuses the
+        // same cache we already populated for the Versions card.
+        const activityCard = el('div', { class: 'cloud-stat-card' });
+        if (versionsCache === 'pending' || versionsCache === undefined) {
+          activityCard.innerHTML =
+            '<div class="cloud-stat-eyebrow"><span>Last activity</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+        } else if (versionsCache === 'error' || versionsCache.versions.length === 0) {
+          activityCard.innerHTML =
+            '<div class="cloud-stat-eyebrow"><span>Last activity</span></div><div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">No publishes yet</div>';
+        } else {
+          const newest = [...versionsCache.versions].sort((a, b) =>
+            b.uploadedAt.localeCompare(a.uploadedAt),
+          )[0]!;
+          activityCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Last activity</span></div><div class="cloud-stat-value cloud-stat-mid">${escapeHtml(relativeWhen(newest.uploadedAt))}</div><div class="cloud-stat-sub">Published from the builder</div>`;
+        }
+        grid.append(activityCard);
+
+        // Gateway reachability — derived from whether either cache resolved
+        // successfully. Avoids a separate ping while still giving the user
+        // a green/red signal in the corner.
+        const anyOk =
+          (versionsCache !== 'pending' &&
+            versionsCache !== 'error' &&
+            versionsCache !== undefined) ||
+          (schemaCache !== 'pending' &&
+            schemaCache !== 'error' &&
+            schemaCache !== undefined &&
+            !!schemaCache);
+        const stillLoading =
+          versionsCache === 'pending' ||
+          versionsCache === undefined ||
+          schemaCache === 'pending' ||
+          schemaCache === undefined;
+        const gatewayCard = el('div', { class: 'cloud-stat-card cloud-stat-card--gateway' });
+        if (stillLoading && !anyOk) {
+          gatewayCard.innerHTML =
+            '<div class="cloud-stat-eyebrow"><span>Gateway</span></div><div class="cloud-stat-value cloud-stat-muted">Checking…</div>';
+        } else if (anyOk) {
+          gatewayCard.innerHTML =
+            '<div class="cloud-stat-eyebrow"><span>Gateway</span></div><div class="cloud-stat-value cloud-stat-mid cloud-stat-inline"><span class="cloud-status-dot" data-status="live"></span>Reachable</div><div class="cloud-stat-sub">openclaw · 18789</div>';
+        } else {
+          gatewayCard.innerHTML =
+            '<div class="cloud-stat-eyebrow"><span>Gateway</span></div><div class="cloud-stat-value cloud-stat-mid cloud-stat-inline"><span class="cloud-status-dot" data-status="off"></span>Unreachable</div><div class="cloud-stat-sub">Check Settings → Gateway</div>';
+        }
+        grid.append(gatewayCard);
 
         stage.append(grid);
       }
@@ -2721,14 +2888,28 @@
     main.style.display = 'flex';
     main.style.minHeight = '0';
 
-    // Build a minimal sidebar for the builder — just workspace switcher +
-    // a "Back to home" item + Settings. Apps list is omitted while editing.
+    // Sidebar matches the home shell — workspace switcher, apps list,
+    // drafts, Settings. Clicking an app exits the builder and routes to
+    // that app via the shell's normal flow.
+    const sidebarUserApps = Store.get<UserAppMeta[]>('home.userApps', []);
+    const sidebarApps: ChromeSidebarApp[] = sidebarUserApps.map((a) => ({
+      color: a.color,
+      iconKey: a.iconKey,
+      id: a.id,
+      name: a.name,
+      status: 'new',
+    }));
     const sidebar = window.Chrome.buildSidebar({
       activeId: opts.projectId,
-      apps: [],
+      apps: sidebarApps,
       drafts: [],
-      onAppClick: () => {
-        /* no live apps in builder sidebar */
+      onAppClick: (id: string) => {
+        // Hop back to the shell, then let it open the chosen app. The
+        // shell owns route history, so we exit cleanly first.
+        handleExit();
+        if (typeof window.Centraid?.openApp === 'function') {
+          window.Centraid.openApp(id);
+        }
       },
       onHome: handleExit,
       onNewApp: () => {

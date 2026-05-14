@@ -95,7 +95,7 @@
   };
   const DEFAULT_PREFS: AppearancePrefs = {
     accent: 'blue',
-    bgL: 10,
+    bgL: 5,
     cardVariant: 'outlined',
     coolBlueCast: true,
     density: 'regular',
@@ -112,6 +112,8 @@
   let prefs: AppearancePrefs = {
     ...DEFAULT_PREFS,
     ...Store.get<Partial<AppearancePrefs>>('appearance', {}),
+    // Dark shade is locked to 5 — slider rendered read-only in Settings.
+    bgL: 5,
   };
 
   // Idempotent enforcement of the design's icon→colour contract and the
@@ -148,6 +150,23 @@
     html.style.setProperty('--accent', swatch.accent);
     html.style.setProperty('--accent-light', swatch.light);
     html.style.setProperty('--accent-deep', swatch.deep);
+    // Broadcast to every mounted user-app iframe so they retune in lock-step
+    // with the shell. The tiny bridge script in each template
+    // (packages/app-templates/*/index.html) listens for this and flips
+    // [data-theme] + --bg-l on its own <html>.
+    broadcastThemeToFrames();
+  }
+
+  function broadcastThemeToFrames(): void {
+    const payload = { type: 'centraid:theme', theme: prefs.theme, bgL: prefs.bgL };
+    const frames = document.querySelectorAll<HTMLIFrameElement>('iframe[data-centraid-app]');
+    frames.forEach((f) => {
+      try {
+        f.contentWindow?.postMessage(payload, '*');
+      } catch {
+        // cross-origin postMessage cannot throw, but contentWindow access can
+      }
+    });
   }
   applyPrefs();
 
@@ -1207,40 +1226,41 @@
     ua: UserAppMeta | undefined,
     container: HTMLElement,
   ): void {
-    const header = el('div', { class: 'app-header' }, [
-      el('div', {}, [
-        el('h1', { class: 'app-title' }, app.name),
-        el('p', { class: 'app-subtitle' }, 'Built with Centraid'),
-      ]),
-    ]);
-    container.append(header);
-
     if (ua?.centraidProjectId) {
       // Real centraid app — host its iframe served by the openclaw plugin.
-      const frameWrap = el('div', {
-        style: {
-          background: 'var(--surface, #fff)',
-          border: '0.5px solid var(--line, rgba(0,0,0,.08))',
-          borderRadius: '14px',
-          height: 'calc(100vh - 220px)',
-          marginTop: '20px',
-          minHeight: '480px',
-          overflow: 'hidden',
-        },
-      });
+      // The frame fills the main pane edge-to-edge; the app supplies its
+      // own header and chrome.
+      container.classList.add('app-view-fullbleed');
+      const frameWrap = el('div', { class: 'app-view-frame' });
       const frame = el('iframe', {
         src: 'about:blank',
-        style: { border: '0', height: '100%', width: '100%' },
         sandbox: 'allow-scripts allow-forms allow-same-origin',
         referrerpolicy: 'no-referrer',
       }) as HTMLIFrameElement;
+      // Tag so applyPrefs() can find every running app iframe and
+      // postMessage the latest theme on slider/toggle changes.
+      frame.dataset.centraidApp = '1';
+      frame.addEventListener('load', () => {
+        try {
+          frame.contentWindow?.postMessage(
+            { type: 'centraid:theme', theme: prefs.theme, bgL: prefs.bgL },
+            '*',
+          );
+        } catch {
+          /* noop */
+        }
+      });
       frameWrap.append(frame);
       container.append(frameWrap);
 
-      // Resolve the live URL and load it.
+      // Resolve the live URL and load it. The hash carries the initial
+      // theme so the app paints in the correct mode on first load — without
+      // the hash there's a brief flash of light theme before postMessage
+      // arrives.
       void window.CentraidApi.appLiveUrl({ id: ua.centraidProjectId })
         .then((r) => {
-          frame.src = r.url;
+          const sep = r.url.includes('#') ? '&' : '#';
+          frame.src = `${r.url}${sep}theme=${prefs.theme}&bgL=${prefs.bgL}`;
         })
         .catch(() => {
           frameWrap.innerHTML =
@@ -1354,7 +1374,8 @@
     const themeSeg = makeSegmented<ThemeName>(['dark', 'light'], prefs.theme, (v) => {
       setPrefs({ theme: v });
     });
-    const shadeRow = makeSliderRow(prefs.bgL, 0, 35, 1, (v) => setPrefs({ bgL: v }));
+    // Dark shade is locked at 5 — slider is presentational only.
+    const shadeRow = makeSliderRow(prefs.bgL, 0, 35, 1, () => {}, { disabled: true });
     const coolCastSwitch = makeSwitch(prefs.coolBlueCast, (v) => setPrefs({ coolBlueCast: v }));
     const accentSwatches = makeSwatches(prefs.accent, (v) => setPrefs({ accent: v }));
 
@@ -1526,9 +1547,10 @@
     max: number,
     step: number,
     onChange: (next: number) => void,
+    opts: { disabled?: boolean } = {},
   ): { row: HTMLElement; readout: HTMLElement } {
     const readout = el('span', { class: 'cd-slider-readout' }, String(value));
-    const input = el('input', {
+    const inputAttrs: ElAttrs = {
       class: 'cd-slider',
       max: String(max),
       min: String(min),
@@ -1540,7 +1562,9 @@
         readout.textContent = String(next);
         onChange(next);
       },
-    }) as HTMLInputElement;
+    };
+    if (opts.disabled) inputAttrs.disabled = '';
+    const input = el('input', inputAttrs) as HTMLInputElement;
     const row = el('div', { class: 'drawer-row' }, [
       el('div', { class: 'cd-slider-head' }, [
         el('span', { class: 'drawer-row-label' }, 'Dark shade'),
@@ -1548,6 +1572,7 @@
       ]),
       input,
     ]);
+    if (opts.disabled) row.dataset.disabled = 'true';
     return { readout, row };
   }
   function makeSwitch(initial: boolean, onChange: (next: boolean) => void): HTMLElement {
