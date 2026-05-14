@@ -966,16 +966,16 @@
   }
 
   /**
-   * Returns the bundled templates that aren't already installed (by exact id
-   * match against `userApps`). Failures are swallowed — an offline or broken
+   * Returns the full template gallery. Templates behave like a catalog
+   * (Notion-style): cloning never depletes the list, so a template the
+   * user has already cloned still shows up and can be cloned again into
+   * an independent app. Failures are swallowed — an offline or broken
    * templates IPC just hides the inline strip; the rest of the home keeps
    * rendering.
    */
   async function loadAvailableTemplates(): Promise<TemplateEntry[]> {
     try {
-      const all = (await window.CentraidApi.listTemplates()) as TemplateEntry[];
-      const installedIds = new Set(userApps.map((u) => u.id));
-      return all.filter((t) => !installedIds.has(t.id));
+      return (await window.CentraidApi.listTemplates()) as TemplateEntry[];
     } catch {
       return [];
     }
@@ -999,16 +999,26 @@
         id: result.project.id,
         name: result.template.name,
       };
-      enterBuilder({ appContext: draft });
+      enterBuilder({ appContext: draft, focusName: true });
     } catch (err) {
       showToast(`Clone failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   function enterBuilder(
-    opts: { initialPrompt?: string; appContext?: AppMetaResolvedType } = {},
+    opts: {
+      initialPrompt?: string;
+      appContext?: AppMetaResolvedType;
+      /**
+       * One-shot: focus + select the inline title on mount so the user lands
+       * in rename mode. Used by the template-clone path; deliberately not
+       * persisted into the route so back/forward replays don't re-focus.
+       */
+      focusName?: boolean;
+    } = {},
   ): void {
-    recordRoute({ kind: 'builder', ...opts });
+    const { focusName, ...routeOpts } = opts;
+    recordRoute({ kind: 'builder', ...routeOpts });
     clear();
     if (typeof window.openBuilder !== 'function') {
       console.error('Builder not loaded');
@@ -1031,8 +1041,9 @@
         root,
         el,
         onExit: renderHome,
-        ...opts,
+        ...routeOpts,
         ...(projectId ? { projectId } : {}),
+        ...(focusName ? { focusName: true } : {}),
         ...chromeNav(),
         onAddToHome: addUserApp,
         onMetaChange: syncUserAppMeta,

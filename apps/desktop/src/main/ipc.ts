@@ -351,9 +351,13 @@ export function registerIpcHandlers(): void {
         throw new Error(`Unknown template "${input.templateId}".`);
       }
 
-      // Auto-suffix the suggested id if it collides with an existing project.
-      // Caller can pass an explicit `newAppId` to override.
-      const newAppId = await suggestAppId(settings.projectsDir, input.newAppId ?? tmpl.id);
+      // Default clones always get a suffixed id (e.g. `todos-2`) so the
+      // template's bare id (`todos`) is never consumed by a clone — keeps
+      // the catalog and the user's workspace cleanly separated. Caller can
+      // pass an explicit `newAppId` to override and claim any free id.
+      const newAppId = await suggestAppId(settings.projectsDir, input.newAppId ?? tmpl.id, {
+        alwaysSuffix: !input.newAppId,
+      });
 
       const project = await cloneTemplate({
         projectsDir: settings.projectsDir,
