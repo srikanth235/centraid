@@ -10,7 +10,11 @@
 #      substring) in `## What changed` or `## Verification`. Unchecked items
 #      (`- [ ] …`) are unconstrained — they represent remaining work.
 #
-# No waivers. Receipts are a fresh discipline; we don't grandfather.
+# File-level waiver: `governance: allow-receipt-per-issue <reason>` in the
+# first 10 lines of a receipt exempts that receipt from all four shape
+# rules. Reason required. Use sparingly — receipts are a fresh discipline,
+# the waiver is for stub / WIP / handoff cases that legitimately can't
+# meet the shape yet.
 #
 # Rationale: Receipts are the durable post-implementation audit trace for
 # work an agent did against a GitHub issue. The one-to-one issue binding
@@ -76,9 +80,25 @@ normalize() {
     printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '`*_' | tr -s '[:space:]' ' '
 }
 
+# File-level waiver: a comment `governance: allow-receipt-per-issue <reason>`
+# in the first 10 lines of a receipt file exempts that receipt from all four
+# shape rules (filename, sections, crosswalk). Reason required; HTML comment
+# markers are stripped before matching so `<!-- ... -->` does not count as
+# the reason. The audit trail is `grep -r 'allow-receipt-per-issue' receipts/`.
+has_receipt_waiver() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+    head -n 10 "$file" 2>/dev/null \
+        | sed -E 's/<!--//g; s/-->//g' \
+        | grep -qE 'governance:[[:space:]]*allow-receipt-per-issue[[:space:]]+[^[:space:]]'
+}
+
 seen_nums=()
 seen_files=()
 for f in "${receipt_files[@]}"; do
+    if has_receipt_waiver "$f"; then
+        continue
+    fi
     base="${f##*/}"
     if [[ "$base" =~ ^issue-([0-9]+)-[a-z0-9]+(-[a-z0-9]+)*\.md$ ]]; then
         num="${BASH_REMATCH[1]}"

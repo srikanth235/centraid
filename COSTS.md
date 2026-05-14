@@ -98,3 +98,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-0e34dd50-f00-1778780798 | claude-code | 0e34dd50-f007-4679-b46a-e8b85aa1f6a9 | #50 | claude-opus-4-7 | 5 | 10820 | 14870 | 66 | 10891 | 0.0767 | chore(governance): kit update 0.2 M-bM^FM^R 0.3 (#50) |
 | claude-code-61662e99-1b9-1778780886 | claude-code | 61662e99-1b9b-4c37-ad4a-43193ebc091a | #50 | claude-opus-4-7 | 225 | 482221 | 12633944 | 98201 | 580647 | 11.7870 | chore(governance): kit update 0.2 M-bM^FM^R 0.3 (#50) |
 | claude-code-61662e99-1b9-1778780935 | claude-code | 61662e99-1b9b-4c37-ad4a-43193ebc091a | #50 | claude-opus-4-7 | 5 | 10016 | 714640 | 6148 | 16169 | 0.5736 | chore(governance): kit update 0.2 M-bM^FM^R 0.3 (#50) |
+| claude-code-f0921330-a63-1778781454 | claude-code | f0921330-a63b-4b41-aeff-30f5467233e8 | #50 | claude-opus-4-7 | 5 | 10929 | 14870 | 5 | 10939 | 0.0759 | chore(governance): pack update governance-kit/core 0.2 M-bM^FM^R 0.3 (#50) |

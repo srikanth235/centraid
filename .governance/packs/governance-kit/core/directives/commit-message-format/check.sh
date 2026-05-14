@@ -45,12 +45,24 @@ validate_subject() {
     return 0
 }
 
+# Returns 0 if the commit body carries a valid waiver line.
+# `governance: allow-commit-message-format <reason>` — reason required.
+# The waiver must live in the body (the subject itself is what's checked).
+msg_has_waiver() {
+    local msg="$1"
+    printf '%s\n' "$msg" \
+        | grep -qE '^[[:space:]]*(<!--)?[[:space:]]*governance:[[:space:]]*allow-commit-message-format[[:space:]]+.+'
+}
+
 if [[ $# -gt 0 ]]; then
     # Mode A — commit-msg hook.
     msg_file="$1"
     [[ ! -f "$msg_file" ]] && { violation "commit-msg file not found: $msg_file"; directive_end; }
     # First non-comment, non-blank line is the subject.
     subject=$(grep -vE '^[[:space:]]*($|#)' "$msg_file" | head -n1)
+    if msg_has_waiver "$(cat "$msg_file")"; then
+        directive_end
+    fi
     validate_subject "$subject" "pending commit"
     directive_end
 fi
@@ -82,6 +94,10 @@ while IFS=$'\t' read -r sha author_email subject; do
     case "$author_email" in
         *dependabot*|*renovate*|*[bot]*@*) continue ;;
     esac
+    body=$(git log -1 --format=%B "$sha" 2>/dev/null || echo "")
+    if msg_has_waiver "$body"; then
+        continue
+    fi
     validate_subject "$subject" "$sha"
 done < <(git log "$base..HEAD" --format='%H%x09%ae%x09%s')
 

@@ -16,145 +16,177 @@ require_git
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
 
+# Per-sub-check waiver: `<!-- governance: allow-required-docs <sub-check>
+# <reason> -->` in CONSTITUTION.md skips the named sub-check. Reason
+# required; HTML comment markers are stripped before matching. The
+# `constitution` sub-check itself is effectively un-waivable because the
+# waiver host is CONSTITUTION.md — if that's missing, there's no host.
+sub_check_waived() {
+    local sub="$1"
+    [[ -f "$ROOT/CONSTITUTION.md" ]] || return 1
+    sed -E 's/<!--//g; s/-->//g' "$ROOT/CONSTITUTION.md" \
+        | grep -qE "governance:[[:space:]]*allow-required-docs[[:space:]]+${sub}[[:space:]]+[^[:space:]]"
+}
+
 # ── constitution ────────────────────────────────────────────────
-FILE="$ROOT/CONSTITUTION.md"
-if [[ ! -f "$FILE" ]]; then
-    violation "CONSTITUTION.md not found at repo root"
-elif [[ ! -s "$FILE" ]]; then
-    violation "CONSTITUTION.md exists but is empty"
-elif [[ $(wc -l < "$FILE") -lt 10 ]]; then
-    violation "CONSTITUTION.md has fewer than 10 lines — looks like a stub"
+if ! sub_check_waived constitution; then
+    FILE="$ROOT/CONSTITUTION.md"
+    if [[ ! -f "$FILE" ]]; then
+        violation "CONSTITUTION.md not found at repo root"
+    elif [[ ! -s "$FILE" ]]; then
+        violation "CONSTITUTION.md exists but is empty"
+    elif [[ $(wc -l < "$FILE") -lt 10 ]]; then
+        violation "CONSTITUTION.md has fewer than 10 lines — looks like a stub"
+    fi
 fi
 
 # ── agents ──────────────────────────────────────────────────────
-FILE="$ROOT/AGENTS.md"
-if [[ ! -f "$FILE" ]]; then
-    violation "AGENTS.md not found at repo root"
-else
-    lines=$(wc -l < "$FILE" | tr -d ' ')
-    MIN_LINES="${GOVERNANCE_AGENTS_MD_MIN:-30}"
-    MAX_LINES="${GOVERNANCE_AGENTS_MD_MAX:-250}"
-    if [[ $lines -lt $MIN_LINES ]]; then
-        violation "AGENTS.md has $lines lines — looks like a stub (min: $MIN_LINES)"
-    fi
-    if [[ $lines -gt $MAX_LINES ]]; then
-        violation "AGENTS.md has $lines lines — drifting toward a manual (max: $MAX_LINES). Move detail into linked docs."
-    fi
-    link_count=$(grep -oE '\]\([^)]+\)' "$FILE" 2>/dev/null \
-        | grep -cvE '\((https?://|mailto:|tel:|#)' 2>/dev/null || true)
-    link_count="${link_count:-0}"
-    MIN_LINKS="${GOVERNANCE_AGENTS_MD_MIN_LINKS:-3}"
-    if [[ $link_count -lt $MIN_LINKS ]]; then
-        violation "AGENTS.md has $link_count internal links — an index should link out (min: $MIN_LINKS)"
-    fi
-    # AGENTS.md should be a map to the bedrock durable docs. The
-    # `constitution` sub-check already mandates CONSTITUTION.md at
-    # root — require AGENTS.md to link to it so a fresh reader has
-    # one anchored hop to the directive set.
-    if [[ -f "$ROOT/CONSTITUTION.md" ]] \
-        && ! grep -qE '\]\((\./)?CONSTITUTION\.md(#[^)]*)?\)' "$FILE"; then
-        violation "AGENTS.md does not link to CONSTITUTION.md — an index should point at the bedrock durable docs"
+if ! sub_check_waived agents; then
+    FILE="$ROOT/AGENTS.md"
+    if [[ ! -f "$FILE" ]]; then
+        violation "AGENTS.md not found at repo root"
+    else
+        lines=$(wc -l < "$FILE" | tr -d ' ')
+        MIN_LINES="${GOVERNANCE_AGENTS_MD_MIN:-30}"
+        MAX_LINES="${GOVERNANCE_AGENTS_MD_MAX:-250}"
+        if [[ $lines -lt $MIN_LINES ]]; then
+            violation "AGENTS.md has $lines lines — looks like a stub (min: $MIN_LINES)"
+        fi
+        if [[ $lines -gt $MAX_LINES ]]; then
+            violation "AGENTS.md has $lines lines — drifting toward a manual (max: $MAX_LINES). Move detail into linked docs."
+        fi
+        link_count=$(grep -oE '\]\([^)]+\)' "$FILE" 2>/dev/null \
+            | grep -cvE '\((https?://|mailto:|tel:|#)' 2>/dev/null || true)
+        link_count="${link_count:-0}"
+        MIN_LINKS="${GOVERNANCE_AGENTS_MD_MIN_LINKS:-3}"
+        if [[ $link_count -lt $MIN_LINKS ]]; then
+            violation "AGENTS.md has $link_count internal links — an index should link out (min: $MIN_LINKS)"
+        fi
+        # AGENTS.md should be a map to the bedrock durable docs. The
+        # `constitution` sub-check already mandates CONSTITUTION.md at
+        # root — require AGENTS.md to link to it so a fresh reader has
+        # one anchored hop to the directive set.
+        if [[ -f "$ROOT/CONSTITUTION.md" ]] \
+            && ! grep -qE '\]\((\./)?CONSTITUTION\.md(#[^)]*)?\)' "$FILE"; then
+            violation "AGENTS.md does not link to CONSTITUTION.md — an index should point at the bedrock durable docs"
+        fi
     fi
 fi
 
 # ── readme ──────────────────────────────────────────────────────
-README=""
-for c in README.md README README.rst; do
-    [[ -f "$ROOT/$c" ]] && { README="$ROOT/$c"; break; }
-done
-if [[ -z "$README" ]]; then
-    violation "no README.md / README / README.rst at repo root"
-else
-    if ! grep -qE '^#[^#]' "$README" 2>/dev/null && ! grep -qE '^=+$' "$README" 2>/dev/null; then
-        violation "$(basename "$README") has no top-level heading"
-    fi
-    if [[ $(wc -w < "$README") -lt 30 ]]; then
-        violation "$(basename "$README") has fewer than 30 words — looks like a stub"
+if ! sub_check_waived readme; then
+    README=""
+    for c in README.md README README.rst; do
+        [[ -f "$ROOT/$c" ]] && { README="$ROOT/$c"; break; }
+    done
+    if [[ -z "$README" ]]; then
+        violation "no README.md / README / README.rst at repo root"
+    else
+        if ! grep -qE '^#[^#]' "$README" 2>/dev/null && ! grep -qE '^=+$' "$README" 2>/dev/null; then
+            violation "$(basename "$README") has no top-level heading"
+        fi
+        if [[ $(wc -w < "$README") -lt 30 ]]; then
+            violation "$(basename "$README") has fewer than 30 words — looks like a stub"
+        fi
     fi
 fi
 
 # ── license ─────────────────────────────────────────────────────
-LICENSE=""
-for c in LICENSE LICENSE.md LICENSE.txt COPYING COPYING.md; do
-    [[ -f "$ROOT/$c" ]] && { LICENSE="$c"; break; }
-done
-if [[ -z "$LICENSE" ]]; then
-    violation "no LICENSE file at repo root (looked for LICENSE, LICENSE.md, LICENSE.txt, COPYING, COPYING.md)"
-elif [[ ! -s "$ROOT/$LICENSE" ]]; then
-    violation "$LICENSE exists but is empty"
+if ! sub_check_waived license; then
+    LICENSE=""
+    for c in LICENSE LICENSE.md LICENSE.txt COPYING COPYING.md; do
+        [[ -f "$ROOT/$c" ]] && { LICENSE="$c"; break; }
+    done
+    if [[ -z "$LICENSE" ]]; then
+        violation "no LICENSE file at repo root (looked for LICENSE, LICENSE.md, LICENSE.txt, COPYING, COPYING.md)"
+    elif [[ ! -s "$ROOT/$LICENSE" ]]; then
+        violation "$LICENSE exists but is empty"
+    fi
 fi
 
 # ── security ────────────────────────────────────────────────────
-SECURITY=""
-for c in SECURITY.md docs/SECURITY.md .github/SECURITY.md; do
-    [[ -f "$ROOT/$c" ]] && { SECURITY="$ROOT/$c"; break; }
-done
-if [[ -z "$SECURITY" ]]; then
-    violation "no SECURITY.md (looked at: SECURITY.md, docs/SECURITY.md, .github/SECURITY.md)"
-elif [[ ! -s "$SECURITY" ]]; then
-    violation "$SECURITY exists but is empty"
-elif ! grep -qE '([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|https?://|hackerone|bugcrowd)' "$SECURITY"; then
-    violation "$SECURITY has no contact email, URL, or vulnerability-disclosure platform reference"
+if ! sub_check_waived security; then
+    SECURITY=""
+    for c in SECURITY.md docs/SECURITY.md .github/SECURITY.md; do
+        [[ -f "$ROOT/$c" ]] && { SECURITY="$ROOT/$c"; break; }
+    done
+    if [[ -z "$SECURITY" ]]; then
+        violation "no SECURITY.md (looked at: SECURITY.md, docs/SECURITY.md, .github/SECURITY.md)"
+    elif [[ ! -s "$SECURITY" ]]; then
+        violation "$SECURITY exists but is empty"
+    elif ! grep -qE '([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|https?://|hackerone|bugcrowd)' "$SECURITY"; then
+        violation "$SECURITY has no contact email, URL, or vulnerability-disclosure platform reference"
+    fi
 fi
 
 # ── architecture ────────────────────────────────────────────────
-ARCH=""
-for c in ARCHITECTURE.md docs/ARCHITECTURE.md ARCHITECTURE.rst docs/architecture.md; do
-    [[ -f "$ROOT/$c" ]] && { ARCH="$ROOT/$c"; break; }
-done
-if [[ -z "$ARCH" ]]; then
-    violation "no ARCHITECTURE.md (looked at: ARCHITECTURE.md, docs/ARCHITECTURE.md, ARCHITECTURE.rst, docs/architecture.md)"
-elif [[ ! -s "$ARCH" ]]; then
-    violation "$ARCH exists but is empty"
-else
-    lines=$(wc -l < "$ARCH" | tr -d ' ')
-    MIN_LINES="${GOVERNANCE_ARCHITECTURE_MIN:-20}"
-    if [[ $lines -lt $MIN_LINES ]]; then
-        violation "$ARCH has $lines lines — looks like a stub (min: $MIN_LINES)"
+if ! sub_check_waived architecture; then
+    ARCH=""
+    for c in ARCHITECTURE.md docs/ARCHITECTURE.md ARCHITECTURE.rst docs/architecture.md; do
+        [[ -f "$ROOT/$c" ]] && { ARCH="$ROOT/$c"; break; }
+    done
+    if [[ -z "$ARCH" ]]; then
+        violation "no ARCHITECTURE.md (looked at: ARCHITECTURE.md, docs/ARCHITECTURE.md, ARCHITECTURE.rst, docs/architecture.md)"
+    elif [[ ! -s "$ARCH" ]]; then
+        violation "$ARCH exists but is empty"
+    else
+        lines=$(wc -l < "$ARCH" | tr -d ' ')
+        MIN_LINES="${GOVERNANCE_ARCHITECTURE_MIN:-20}"
+        if [[ $lines -lt $MIN_LINES ]]; then
+            violation "$ARCH has $lines lines — looks like a stub (min: $MIN_LINES)"
+        fi
     fi
 fi
 
 # ── ci-workflow ─────────────────────────────────────────────────
-WF_DIR="$ROOT/.github/workflows"
-if [[ ! -d "$WF_DIR" ]]; then
-    violation "no .github/workflows/ directory"
-else
-    shopt -s nullglob
-    count=0
-    for f in "$WF_DIR"/*.yml "$WF_DIR"/*.yaml; do
-        bn="$(basename "$f")"
-        [[ "$bn" == "governance.yml" || "$bn" == "governance.yaml" ]] && continue
-        count=$((count + 1))
-    done
-    shopt -u nullglob
-    if [[ $count -eq 0 ]]; then
-        violation ".github/workflows/ has no non-governance workflow (CI is the backstop for skipped hooks)"
+if ! sub_check_waived ci-workflow; then
+    WF_DIR="$ROOT/.github/workflows"
+    if [[ ! -d "$WF_DIR" ]]; then
+        violation "no .github/workflows/ directory"
+    else
+        shopt -s nullglob
+        count=0
+        for f in "$WF_DIR"/*.yml "$WF_DIR"/*.yaml; do
+            bn="$(basename "$f")"
+            [[ "$bn" == "governance.yml" || "$bn" == "governance.yaml" ]] && continue
+            count=$((count + 1))
+        done
+        shopt -u nullglob
+        if [[ $count -eq 0 ]]; then
+            violation ".github/workflows/ has no non-governance workflow (CI is the backstop for skipped hooks)"
+        fi
     fi
 fi
 
 # ── env-example ─────────────────────────────────────────────────
-ENV_FILE="$ROOT/.env"
-EXAMPLE_FILE="$ROOT/.env.example"
-if [[ -f "$ENV_FILE" ]]; then
-    if [[ ! -f "$EXAMPLE_FILE" ]]; then
-        violation ".env exists but .env.example is missing"
-    else
-        _extract_keys() {
-            grep -vE '^[[:space:]]*(#|$)' "$1" | sed -E 's/^[[:space:]]*export[[:space:]]+//' \
-                | awk -F= '{print $1}' | sed 's/[[:space:]]*$//' | sort -u
-        }
-        _env_keys=$(_extract_keys "$ENV_FILE")
-        _example_keys=$(_extract_keys "$EXAMPLE_FILE")
-        while IFS= read -r key; do
-            [[ -z "$key" ]] && continue
-            if ! grep -qxF "$key" <<<"$_example_keys"; then
-                violation ".env has key '$key' but .env.example does not"
-            fi
-        done <<<"$_env_keys"
+if ! sub_check_waived env-example; then
+    ENV_FILE="$ROOT/.env"
+    EXAMPLE_FILE="$ROOT/.env.example"
+    if [[ -f "$ENV_FILE" ]]; then
+        if [[ ! -f "$EXAMPLE_FILE" ]]; then
+            violation ".env exists but .env.example is missing"
+        else
+            _extract_keys() {
+                grep -vE '^[[:space:]]*(#|$)' "$1" | sed -E 's/^[[:space:]]*export[[:space:]]+//' \
+                    | awk -F= '{print $1}' | sed 's/[[:space:]]*$//' | sort -u
+            }
+            _env_keys=$(_extract_keys "$ENV_FILE")
+            _example_keys=$(_extract_keys "$EXAMPLE_FILE")
+            while IFS= read -r key; do
+                [[ -z "$key" ]] && continue
+                if ! grep -qxF "$key" <<<"$_example_keys"; then
+                    violation ".env has key '$key' but .env.example does not"
+                fi
+            done <<<"$_env_keys"
+        fi
     fi
 fi
 
 # ── hooks ───────────────────────────────────────────────────────
+if sub_check_waived hooks; then
+    directive_end
+fi
+
 # The .githooks/ scaffolding is only meaningful when the installed hook
 # strategy is `githooks`. Skip transparently for husky / pre-commit.com
 # repos (the framework has its own tracked hook-config mechanism).

@@ -12,6 +12,10 @@ GitHub issue: [#50](https://github.com/srikanth235/centraid/issues/50)
 - [x] install.yaml field renames applied
 - [x] AGENTS.md link updated for the rename
 - [x] Smoke test re-run after rename fix
+- [x] Core pack re-pinned to upstream SHA 18098b6
+- [x] All 13 installed directive folders overwritten with 0.3 content
+- [x] evals/ and install-assets/ excluded from the target-repo install
+- [x] workflows-hardened directive skipped intentionally
 
 ## What changed
 
@@ -31,6 +35,14 @@ GitHub issue: [#50](https://github.com/srikanth235/centraid/issues/50)
 
 **Smoke test re-run after rename fix.** Initial `bash .governance/run.sh` post-sync flagged the AGENTS.md link as broken (rename ripple). After fixing the link the second smoke run shows 12 directives pass and only the pre-existing `commit-message-format` violation on HEAD remains — that one is commit `49e7929` (101-char subject from #49 merge), not introduced here.
 
+**Core pack re-pinned to upstream SHA 18098b6.** Second commit on this issue (after the kit-runtime sync landed at `1c8a531`). The lockfile now records `governance-kit/core` at version `0.3`, ref `gh:Duaility/governance-kit/packs/core@main`, sha `18098b662377093182186f67a1ab0c6a6ab610d7`, `min_governance_kit: 0.3`. Re-pin done via `packverb lock-add` which upserts by id — the prior `0.2 / 1d3e8d18` entry is replaced atomically, no manual lockfile edits.
+
+**All 13 installed directive folders overwritten with 0.3 content.** Re-fetched the pack from cache, then replaced each directive's `check.sh`, `constitution.md`, `directive.yaml`, and `hooks/` contents in place. Biggest diff was `required-docs` (now supports a per-sub-check waiver via `<!-- governance: allow-required-docs <sub-check> <reason> -->` in CONSTITUTION.md — backward-compatible enhancement, no new mandatory docs). Other directives gained minor refinements to error messages and edge-case handling. Post-update smoke test: `bash .governance/run.sh` → all 13 pass.
+
+**evals/ and install-assets/ excluded from the target-repo install.** Upstream 0.3 ships per-directive `evals/test.sh` and `install-assets/` subdirectories. The kit's own `install_directive_folder` / `copy_tree_without_evals` helpers in `assets/packs/lib/install.sh` explicitly skip these — evals are written for the governance-kit repo's own CI (their `ROOT="$(cd ... ../../../../.. && pwd)"` resolves to the kit repo, not this one) and install-assets are consumed once at install-time and copied elsewhere, not tracked under `.governance/packs/`. Matched the 0.2 install policy.
+
+**workflows-hardened directive skipped intentionally.** Upstream 0.3 added a new `workflows-hardened` directive and promoted it into the `minimal` preset. Per the `pack update` contract, the verb does not auto-install new directives — that's an explicit `directive add` (or `pack add` against a preset). User opted to keep the current 13-directive surface; can be installed later with `governance directive add workflows-hardened`.
+
 ## Verification
 
 - `bash .governance/run.sh` (post-update smoke test): 12 directives pass; the only remaining failure is the pre-existing `commit-message-format` violation on HEAD — not introduced here.
@@ -38,8 +50,11 @@ GitHub issue: [#50](https://github.com/srikanth235/centraid/issues/50)
 - `grep kit_version .governance/install.yaml` → `kit_version: "0.3"`. `grep enable_governance_script` resolves to `scripts/enable-governance.sh`.
 - `grep -R setup-clone . --include='*.md' --include='*.sh' --include='*.yml'` returns no remaining references in tracked content.
 - The 13-line lint-guard block is present in the regenerated `.githooks/pre-commit` between `GOVERNANCE_DIR=` and the `directive_field()` definition; `SKIP_LINT=1 git commit ...` and `bash scripts/lint-staged.sh` continue to behave as before.
+- `grep -E '^(version|sha|min_governance_kit):' .governance/packs.lock` → `version: '0.3'`, `sha: 18098b66...`, `min_governance_kit: '0.3'`.
+- `ls .governance/packs/governance-kit/core/directives/` → 13 directives (no `workflows-hardened`, no `evals/`, no `install-assets/`).
+- Post-pack-update smoke (`bash .governance/run.sh`): all 13 pass; the prior `commit-message-format` failure on HEAD `49e7929` was resolved by the kit-update commit `1c8a531` (whose subject is 79 chars, well under the cap).
 
 ## Out of scope
 
-- **`pack update`.** Disjoint from kit-runtime updates by design. `packs.lock` still pins `governance-kit/core@0.2` at SHA `1d3e8d18...`. Running `governance pack update` separately is the right next step if upstream packs have moved.
-- **Pre-existing `commit-message-format` violation on HEAD.** Commit `49e7929` has a 101-char subject. Smoke-test surface only — not introduced by this PR.
+- **`workflows-hardened` directive.** Available upstream in 0.3, intentionally not installed in this update. Add with `governance directive add workflows-hardened` separately if/when wanted.
+- **Pre-existing `commit-message-format` violation on HEAD.** Was on commit `49e7929` (101-char subject); the kit-update commit `1c8a531` superseded it. No longer a smoke-test issue.

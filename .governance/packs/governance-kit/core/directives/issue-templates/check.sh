@@ -12,6 +12,16 @@ require_git
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
 
+# Whole-directive waiver: `<!-- governance: allow-issue-templates <reason> -->`
+# in CONSTITUTION.md exempts the directive from this commit's check. Reason
+# required; HTML comment markers are stripped before matching. Use when the
+# repo intentionally does not use GitHub Issues (e.g. tracking is in Linear /
+# Jira and templates would be dead code).
+if [[ -f "$ROOT/CONSTITUTION.md" ]] && sed -E 's/<!--//g; s/-->//g' "$ROOT/CONSTITUTION.md" \
+        | grep -qE 'governance:[[:space:]]*allow-issue-templates[[:space:]]+[^[:space:]]'; then
+    directive_end
+fi
+
 require_file() {
     local file="$1"
     if [[ ! -f "$file" ]]; then

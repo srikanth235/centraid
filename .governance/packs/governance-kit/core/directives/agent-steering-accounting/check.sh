@@ -23,11 +23,13 @@
 #       non-merge, non-revert commit against the same summary contract,
 #       deriving "rows added by this commit" from `git show <sha>`. The
 #       row.commit-cell == subject check is skipped here because squash
-#       merges can rewrite the subject after the row was stamped. Mode B
-#       additionally skips any commit whose first parent didn't already
-#       carry this directive's check.sh — that's the self-bootstrapping
-#       exemption, so the install commit isn't held to a contract that
-#       wasn't in the tree before it.
+#       merges can rewrite the subject after the row was stamped.
+#
+# No self-bootstrap exemption: `governance init` is responsible for making
+# the install commit pass this directive on the first try. prepare-commit-msg
+# stamps the zero-default summary triple even when no runtime is detected,
+# so a normal `git commit` from the init flow always satisfies the contract
+# without a waiver. No bootstrap accommodation lives in check.sh.
 #
 # Skips merge commits and revert commits, identical to agent-token-accounting.
 #
@@ -124,6 +126,14 @@ validate_commit_message() {
     done < <(printf '%s' "$msg" | python3 "$LIB/trailers.py" "${args[@]}" || true)
 }
 
+# Returns 0 if the commit body carries a valid waiver line.
+# `governance: allow-agent-steering-accounting <reason>` — reason required.
+msg_has_waiver() {
+    local msg="$1"
+    printf '%s\n' "$msg" \
+        | grep -qE '^[[:space:]]*(<!--)?[[:space:]]*governance:[[:space:]]*allow-agent-steering-accounting[[:space:]]+.+'
+}
+
 # ──────────────────────────────────────────────────────────────
 # Mode A — commit-msg hook
 # ──────────────────────────────────────────────────────────────
@@ -135,6 +145,9 @@ if [[ $# -gt 0 ]]; then
     fi
     pending_subject=$(grep -vE '^[[:space:]]*($|#)' "$msg_file" | head -n1)
     if [[ "$pending_subject" == Revert\ \"* ]]; then
+        directive_end
+    fi
+    if msg_has_waiver "$(cat "$msg_file")"; then
         directive_end
     fi
     validate_commit_message "pending commit" "A" "" "$pending_subject" <"$msg_file"
@@ -170,34 +183,36 @@ is_exempt_commit() {
 }
 
 if [[ -z "$base" ]]; then
+    # No new work on this branch relative to the default — but on `main`
+    # itself, HEAD is the freshly-landed (often squash-merge) commit whose
+    # trailers are the durable record. A squash-merge bypasses the local
+    # commit-msg hook (it runs on GitHub's server), so without this
+    # single-commit fallback its summary triple goes unchecked. Validate
+    # HEAD on its own so the trailer contract still applies post-merge.
+    # `--verify` is what distinguishes "HEAD resolves to a commit" from
+    # the empty-repo case (where `git rev-parse HEAD` prints the literal
+    # string "HEAD" on stdout and exits 128).
+    if git rev-parse --verify HEAD >/dev/null 2>&1; then
+        head_sha=$(git rev-parse HEAD)
+        if ! is_exempt_commit "$head_sha"; then
+            msg=$(git log -1 --format=%B "$head_sha")
+            if ! msg_has_waiver "$msg"; then
+                validate_commit_message "$head_sha" "B" "$head_sha" "" <<<"$msg"
+            fi
+        fi
+    fi
     directive_end
 fi
-
-DIRECTIVE_PATH=".governance/packs/governance-kit/core/directives/agent-steering-accounting/check.sh"
-
-# Self-bootstrapping exemption: the directive applies to a commit only if
-# its first parent already had this directive installed. That exempts the
-# install commit itself (the parent didn't have it yet) while still
-# enforcing on every subsequent commit, and lets the directive be
-# upgraded in place — a commit that *modifies* check.sh inherits the
-# enforcement contract from its parent's version.
-directive_active_for() {
-    local sha="$1"
-    local parent
-    parent="$(git rev-parse "${sha}^" 2>/dev/null || true)"
-    [[ -z "$parent" ]] && return 1
-    [[ -n "$(git ls-tree --name-only "$parent" -- "$DIRECTIVE_PATH" 2>/dev/null)" ]]
-}
 
 while IFS= read -r sha; do
     [[ -z "$sha" ]] && continue
     if is_exempt_commit "$sha"; then
         continue
     fi
-    if ! directive_active_for "$sha"; then
+    msg=$(git log -1 --format=%B "$sha")
+    if msg_has_waiver "$msg"; then
         continue
     fi
-    msg=$(git log -1 --format=%B "$sha")
     validate_commit_message "$sha" "B" "$sha" "" <<<"$msg"
 done < <(git log "$base..HEAD" --format='%H')
 

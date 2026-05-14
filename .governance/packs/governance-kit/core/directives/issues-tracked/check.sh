@@ -10,6 +10,16 @@ require_git
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
 
+# Whole-directive waiver: `<!-- governance: allow-issues-tracked <reason> -->`
+# in CONSTITUTION.md exempts the directive from this commit's check. Reason
+# required; HTML comment markers are stripped before matching. Use when the
+# repo tracks bugs elsewhere (Linear / Jira / GitHub Issues only) and
+# QUALITY.md would be dead state.
+if [[ -f "$ROOT/CONSTITUTION.md" ]] && sed -E 's/<!--//g; s/-->//g' "$ROOT/CONSTITUTION.md" \
+        | grep -qE 'governance:[[:space:]]*allow-issues-tracked[[:space:]]+[^[:space:]]'; then
+    directive_end
+fi
+
 if [[ ! -f "$ROOT/QUALITY.md" ]]; then
     violation "QUALITY.md not found at repo root"
     directive_end
