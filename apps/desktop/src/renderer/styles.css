@@ -385,7 +385,6 @@ textarea {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-app);
 }
 .app-topbar {
   flex: none;
@@ -448,6 +447,37 @@ textarea {
   justify-content: space-between;
   gap: 24px;
   margin-bottom: 28px;
+}
+
+/* ---------- Running app view (mountUserApp) ----------
+   The iframe fills the main pane edge-to-edge: no card, no max-width,
+   no padding. The parent .app-body keeps its scroll behavior in case
+   the host shell ever needs it, but the inner container drops every
+   constraint when carrying a live app. */
+.app-body:has(> .app-body-inner.app-view-fullbleed) {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.app-body-inner.app-view-fullbleed {
+  max-width: none;
+  margin: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.app-view-fullbleed > .app-view-frame {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+.app-view-fullbleed > .app-view-frame > iframe {
+  flex: 1 1 auto;
+  border: 0;
+  width: 100%;
+  min-height: 0;
 }
 
 /* ---------- Cards ---------- */
@@ -2613,6 +2643,258 @@ textarea {
   font-style: italic;
 }
 
+/* ---------- Cloud rail: "Coming soon" group header + soon items ---------- */
+.cloud-rail-group-head {
+  padding: 14px 12px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.cloud-rail-item[data-ready='false'] {
+  cursor: default;
+  color: var(--ink-4);
+}
+.cloud-rail-item[data-ready='false']:hover {
+  background: transparent;
+  color: var(--ink-4);
+}
+.cloud-rail-item[data-ready='false'] svg {
+  opacity: 0.55;
+}
+.cloud-rail-item[data-active='true'] {
+  position: relative;
+  background: hsla(229 91% 63% / 0.1);
+  color: var(--ink);
+}
+.cloud-rail-item[data-active='true']::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.cloud-rail-item[data-active='true'] svg {
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* ---------- Cloud Overview: atmospheric backdrop + new card variants ---------- */
+.cloud-stage.cloud-stage-atmospheric {
+  position: relative;
+  isolation: isolate;
+}
+.cloud-stage.cloud-stage-atmospheric::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(800px 380px at top left, hsla(229 91% 63% / 0.06), transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+.cloud-stat-grid {
+  /* Fixed 4-col grid so a span-2 live URL card and a span-2 gateway card
+     line up across rows. Cards drop to single-column under ~640px. */
+  grid-template-columns: repeat(4, 1fr);
+}
+@media (max-width: 720px) {
+  .cloud-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.cloud-stat-card--live,
+.cloud-stat-card--gateway {
+  grid-column: span 2;
+}
+@media (max-width: 720px) {
+  .cloud-stat-card--live,
+  .cloud-stat-card--gateway {
+    grid-column: auto;
+  }
+}
+.cloud-stat-card--live {
+  border-color: hsla(101 28% 42% / 0.22);
+  background: linear-gradient(180deg, hsla(101 28% 42% / 0.05), transparent 60%), var(--bg-elev);
+}
+.cloud-stat-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cloud-status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ink-4);
+}
+.cloud-status-dot[data-status='live'] {
+  background: var(--c-forest, #5c8a4e);
+  box-shadow: 0 0 0 3px hsla(101 28% 42% / 0.18);
+}
+.cloud-status-dot[data-status='off'] {
+  background: var(--danger, #c44a4a);
+  box-shadow: 0 0 0 3px hsla(0 50% 53% / 0.18);
+}
+.cloud-stat-url {
+  margin-top: 8px;
+  line-height: 1.4;
+}
+.cloud-stat-value.cloud-stat-mid {
+  font-size: 14px;
+  font-weight: 500;
+}
+.cloud-stat-value.cloud-stat-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cloud-stat-copy {
+  margin-top: 10px;
+  align-self: flex-start;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  padding: 5px 11px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.cloud-stat-copy:hover {
+  background: var(--bg-elev);
+  color: var(--ink);
+}
+
+/* ---------- Code view: language pill, stacked metadata, lang dots,
+              tree groups, active-row accent stripe ---------- */
+.code-viewer-head {
+  align-items: flex-start;
+  padding: 12px 18px;
+}
+.code-viewer-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.code-viewer-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.code-viewer-dir {
+  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.code-viewer-name {
+  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.code-lang-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 5px;
+  text-transform: uppercase;
+  background: hsla(213 70% 60% / 0.14);
+  color: var(--c-blue, #4f8fe0);
+}
+.code-lang-pill[data-lang='css'] {
+  background: hsla(28 70% 55% / 0.14);
+  color: var(--c-orange, #e08c45);
+}
+.code-lang-pill[data-lang='js'],
+.code-lang-pill[data-lang='ts'] {
+  background: hsla(48 60% 55% / 0.16);
+  color: var(--c-yellow, #d4b445);
+}
+.code-lang-pill[data-lang='json'] {
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+}
+.code-lang-pill[data-lang='md'] {
+  background: hsla(258 50% 60% / 0.16);
+  color: var(--c-violet, #7c5bd9);
+}
+.code-lang-pill[data-lang='other'] {
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+}
+.code-viewer-meta {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.01em;
+}
+
+/* Tree — group headers + colored dot replaces the per-file glyph + a 2px
+   accent stripe on the active row instead of a heavy background fill. */
+.code-tree-group-head {
+  padding: 14px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.code-tree-group-head:first-child {
+  padding-top: 6px;
+}
+.code-tree-lang-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--ink-4);
+  /* Sit on the same baseline as the chevron spacer beside it. */
+  margin: 0 3px;
+}
+.code-tree-lang-dot[data-lang='html'] {
+  background: var(--c-blue, #4f8fe0);
+}
+.code-tree-lang-dot[data-lang='css'] {
+  background: var(--c-orange, #e08c45);
+}
+.code-tree-lang-dot[data-lang='js'],
+.code-tree-lang-dot[data-lang='ts'] {
+  background: var(--c-yellow, #d4b445);
+}
+.code-tree-lang-dot[data-lang='md'] {
+  background: var(--c-violet, #7c5bd9);
+}
+.code-tree-row[data-active='true'] {
+  position: relative;
+  background: hsla(229 91% 63% / 0.08);
+}
+.code-tree-row[data-active='true']::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
 /* History */
 .history-list {
   flex: 1;
@@ -3254,6 +3536,17 @@ textarea {
   box-shadow: var(--shadow-sm);
   cursor: pointer;
 }
+.cd-slider:disabled,
+.drawer-row[data-disabled='true'] .cd-slider {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.cd-slider:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+}
+.cd-slider:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+}
 
 /* Switch — pill toggle. Off = sunken track, On = success-green track
    with the thumb pushed to the right (matches the design screenshot). */
@@ -3477,6 +3770,7 @@ textarea {
   min-width: 0;
   position: relative;
   z-index: 4;
+  border-bottom: 0.5px solid var(--line-strong);
 }
 /* Grid layout — used by the Builder so the chrome row's two cells line up
    with the columns of `.builder-body` below it. Col 1 spans the chat-pane
@@ -3830,8 +4124,22 @@ textarea {
   flex-direction: column;
   min-height: 0;
 }
-.cd-main.has-wall {
-  background: var(--device-wall);
+/* All `.cd-main` panes share the same vertical gradient so the chrome
+   titlebar (inside .cd-main) and the content below visually flow as one
+   surface. The only structural separator is the vertical sidebar/main
+   divider. */
+.cd-main {
+  background: linear-gradient(
+    180deg,
+    hsl(222 13% calc(var(--bg-l) - 2%)) 0%,
+    hsl(222 14% calc(var(--bg-l) - 6%)) 100%
+  );
+}
+:root[data-theme='light'] .cd-main {
+  /* Notion/Linear-style: flat near-white. Gradients on small lightness
+     ranges read as visible banding in light mode; hierarchy comes from
+     subtle tonal shifts between sidebar / canvas / cards instead. */
+  background: var(--bg);
 }
 .cd-main-scroll {
   flex: 1;
@@ -3994,10 +4302,8 @@ textarea {
 .cd-app-card {
   position: relative;
   padding: 18px;
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
   border-radius: 14px;
   display: flex;
   flex-direction: column;
@@ -4007,14 +4313,30 @@ textarea {
   text-align: left;
   color: inherit;
   font: inherit;
+  box-shadow: var(--shadow-sm);
   transition:
     transform 200ms cubic-bezier(0.2, 0.7, 0.3, 1),
     background 200ms,
-    border-color 200ms;
+    border-color 200ms,
+    box-shadow 200ms;
+}
+/* Dark mode keeps the glassy translucent treatment — works with the
+   gradient canvas. Light mode is opaque white, lifted by a soft shadow
+   (Linear/Notion style). */
+:root[data-theme='dark'] .cd-app-card {
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 0.5px solid var(--line);
+  box-shadow: none;
 }
 .cd-app-card:hover {
-  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
   transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+:root[data-theme='dark'] .cd-app-card:hover {
+  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  box-shadow: none;
 }
 .cd-app-card:active {
   transform: scale(0.98);
