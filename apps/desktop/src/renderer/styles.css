@@ -4759,7 +4759,7 @@ textarea {
   border-radius: 999px;
   display: inline-block;
 }
-.app-chat-close {
+.app-chat-icon-btn {
   border: 0;
   background: transparent;
   width: 28px;
@@ -4770,9 +4770,143 @@ textarea {
   cursor: pointer;
   color: var(--ink-3);
 }
-.app-chat-close:hover {
+.app-chat-icon-btn:hover {
   background: color-mix(in oklab, var(--ink) 6%, transparent);
   color: var(--ink);
+}
+.app-chat-icon-btn[hidden] {
+  display: none;
+}
+.app-chat-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.app-chat-title-text {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Chat history view ---------- */
+.app-chat-history {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-elev);
+}
+.app-chat-history[hidden] {
+  display: none;
+}
+.app-chat-history-searchwrap {
+  flex: none;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.app-chat-history-search {
+  width: 100%;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  padding: 0 10px;
+  font-size: 12.5px;
+  outline: none;
+  font: inherit;
+}
+.app-chat-history-search:focus {
+  border-color: color-mix(in oklab, var(--accent, var(--ink)) 55%, var(--line));
+}
+.app-chat-history-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 6px 6px 12px;
+}
+.app-chat-history-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.app-chat-history-group {
+  padding: 12px 12px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.app-chat-history-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+  margin: 1px 4px;
+}
+.app-chat-history-row:hover {
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+}
+.app-chat-history-rowmain {
+  flex: 1 1 auto;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+}
+.app-chat-history-title {
+  font-size: 13px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.app-chat-history-meta {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.app-chat-history-del {
+  flex: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-3);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  margin-right: 4px;
+  transition: opacity 120ms ease-out;
+}
+.app-chat-history-row:hover .app-chat-history-del,
+.app-chat-history-del:focus-visible {
+  opacity: 1;
+}
+.app-chat-history-del:hover {
+  background: color-mix(in oklab, #d6403a 12%, transparent);
+  color: #b3261e;
+}
+
+.app-chat-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  padding: 18px 4px;
 }
 
 /* The in-app chat panel reuses the builder's chat classes (.msg-user,
@@ -4796,7 +4930,11 @@ textarea {
   font-size: 12px;
 }
 .app-chat-panel .gen-row {
-  justify-content: center;
+  /* Left-align the "Thinking…" pill so it reads as an agent-side status
+     bubble, matching the position the upcoming assistant message will
+     occupy. Builder centers it for its wider canvas; here the panel is
+     narrow and a centered pill looks like it's mid-conversation. */
+  justify-content: flex-start;
   margin: 8px 0;
 }
 .msg-ai-error .msg-ai-text p {

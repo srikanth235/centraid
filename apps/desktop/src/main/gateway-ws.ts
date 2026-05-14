@@ -160,7 +160,12 @@ export class GatewayWsClient {
         platform: process.platform,
         mode: 'backend',
       },
-      caps: [],
+      // Opt into tool-event delivery — without this cap the gateway only
+      // broadcasts assistant/lifecycle frames to us; tool start/result frames
+      // go to the per-conn `toolEventRecipients` registry (see openclaw's
+      // server-chat.js `createAgentEventHandler`, lines ~499–516). The in-app
+      // chat panel needs them to show the "Querying ×N" tool pills.
+      caps: ['tool-events'],
       auth,
       role: 'operator',
       scopes: ['operator.read', 'operator.write'],

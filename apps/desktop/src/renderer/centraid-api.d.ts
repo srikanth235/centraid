@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit ipc-types-bridge pending split into per-feature type modules
 /**
  * Renderer-side typings for the IPC bridge exposed by `preload.ts` under
  * `window.CentraidApi`. The shapes here mirror the public types of
@@ -95,6 +96,38 @@ export type CentraidChatEvent =
   | (ChatEventBase & { kind: 'final'; text: string })
   | (ChatEventBase & { kind: 'error'; text: string })
   | (ChatEventBase & { kind: 'aborted' });
+
+/**
+ * One row from the persisted chat-history index for an app. Sessions list
+ * RPCs return these sorted by `updatedAt` desc.
+ */
+export interface CentraidChatSessionMeta {
+  id: string;
+  appId: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messageCount: number;
+}
+
+/** Coarse-grained persisted shape per message in a chat session. */
+export type CentraidChatHistoryMessage =
+  | { kind: 'user'; text: string }
+  | { kind: 'ai'; text: string; error?: boolean }
+  | {
+      kind: 'tool';
+      id: string;
+      tool: string;
+      sql?: string;
+      args?: unknown;
+      state: 'ok' | 'error';
+      result?: unknown;
+      errorText?: string;
+    };
+
+export interface CentraidChatSessionWithMessages extends CentraidChatSessionMeta {
+  messages: Array<{ idx: number; payload: CentraidChatHistoryMessage; createdAt: number }>;
+}
 
 export interface CentraidVersionRecord {
   versionId: string;
@@ -379,24 +412,43 @@ interface CentraidApi {
 
   /**
    * Start (or reset) the app-scoped agentic chat session for this window.
-   * Caches the app's schema so subsequent `chatSend` turns can prompt with it.
+   * Pass `sessionId` to resume a persisted chat from history; omit it for a
+   * fresh conversation (the row is lazy-created on first `chatSend`).
    */
-  chatStart(input: { appId: string; appName: string }): Promise<{ ok: true }>;
+  chatStart(input: {
+    appId: string;
+    appName: string;
+    sessionId?: string | null;
+  }): Promise<{ ok: true; sessionId: string | null }>;
   /**
    * Send one user turn. Progress + result arrive via `onChatEvent` with the
    * matching `turnId`. The renderer assigns `turnId` (monotonic per session).
+   *
+   * Returns the persisted chat sessionId plus the session's canonical
+   * `title` — which the server auto-derives from the first user message.
+   * The renderer should treat `title` as authoritative (don't compute one
+   * client-side) so the header label and the history list stay in sync.
    */
   chatSend(input: {
     appId: string;
     text: string;
     turnId: number;
     model?: string;
-  }): Promise<{ ok: true }>;
+  }): Promise<{ ok: true; sessionId: string; title: string }>;
   /** Cancel the in-flight infer for this app, if any. */
   chatAbort(input: { appId: string }): Promise<{ ok: true }>;
   /** Models surfaced by `openclaw infer model list --json`. Empty on failure. */
   listChatModels(): Promise<CentraidChatModel[]>;
   onChatEvent(cb: (event: CentraidChatEvent) => void): () => void;
+
+  /** List persisted chat sessions for an app, newest first. */
+  chatHistoryList(input: { appId: string }): Promise<{ sessions: CentraidChatSessionMeta[] }>;
+  /** Load one persisted chat session's metadata + ordered message log. */
+  chatHistoryLoad(input: { sessionId: string }): Promise<CentraidChatSessionWithMessages>;
+  /** Permanently delete one chat session and its messages. */
+  chatHistoryDelete(input: { sessionId: string }): Promise<{ ok: boolean }>;
+  /** Rename a chat session (overrides the auto-generated title). */
+  chatHistoryRename(input: { sessionId: string; title: string }): Promise<CentraidChatSessionMeta>;
 
   /** Snapshot of pi's auth.json + the on-machine source files. */
   authStatus(): Promise<CentraidAuthStatus>;
@@ -491,4 +543,28 @@ declare global {
     | (_ChatEventBaseG & { kind: 'final'; text: string })
     | (_ChatEventBaseG & { kind: 'error'; text: string })
     | (_ChatEventBaseG & { kind: 'aborted' });
+  interface CentraidChatSessionMeta {
+    id: string;
+    appId: string;
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+    messageCount: number;
+  }
+  type CentraidChatHistoryMessage =
+    | { kind: 'user'; text: string }
+    | { kind: 'ai'; text: string; error?: boolean }
+    | {
+        kind: 'tool';
+        id: string;
+        tool: string;
+        sql?: string;
+        args?: unknown;
+        state: 'ok' | 'error';
+        result?: unknown;
+        errorText?: string;
+      };
+  interface CentraidChatSessionWithMessages extends CentraidChatSessionMeta {
+    messages: Array<{ idx: number; payload: CentraidChatHistoryMessage; createdAt: number }>;
+  }
 }

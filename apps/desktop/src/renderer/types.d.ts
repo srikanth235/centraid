@@ -124,6 +124,13 @@ declare global {
      * in rename mode immediately).
      */
     focusName?: boolean;
+    /**
+     * Sidebar drafts list — the user's other in-progress projects on disk
+     * that the shell already knows about. Builder renders these under a
+     * "Drafts" section so the user can switch between WIP apps without
+     * exiting to home. Defaults to `[]` when omitted (older callers).
+     */
+    drafts?: ChromeSidebarApp[];
   }
 
   interface UserAppMeta extends AppMetaResolved {
@@ -209,6 +216,13 @@ declare global {
     glyphs: Record<string, (size?: number) => string>;
   }
 
+  interface AppChatMountOptions {
+    view: HTMLElement;
+    app: AppMetaResolved;
+    appId: string;
+    el: ElHelper;
+  }
+
   interface Window {
     CentraidTokens: CentraidTokensBridge;
     Icon: Record<IconName, IconRenderer>;
@@ -218,6 +232,7 @@ declare global {
     Centraid: CentraidRoot;
     Chrome: ChromeApi;
     openBuilder: (opts: BuilderOptions) => () => void;
+    AppChat: { mount: (opts: AppChatMountOptions) => () => void };
   }
 
   // Convenience type aliases reachable inside renderer scripts.
