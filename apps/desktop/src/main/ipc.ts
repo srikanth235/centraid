@@ -4,6 +4,12 @@ import { promises as fs } from 'node:fs';
 import { loadSettings, saveSettings, templatesCacheDir, type DesktopSettings } from './settings.js';
 import { PREVIEW_SCHEME } from './preview-protocol.js';
 import { refreshAuthInjector } from './auth-injector.js';
+import {
+  importAvailableCreds,
+  readAuthStatus,
+  type AuthImportResult,
+  type AuthStatus,
+} from './auth-import.js';
 
 /**
  * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
@@ -38,6 +44,9 @@ export const Channel = {
 
   TEMPLATES_LIST: 'centraid:templates:list',
   TEMPLATES_CLONE: 'centraid:templates:clone',
+
+  AUTH_STATUS: 'centraid:auth:status',
+  AUTH_RESYNC: 'centraid:auth:resync',
 } as const;
 
 interface AgentSessionHandle {
@@ -55,6 +64,16 @@ export function registerIpcHandlers(): void {
     const next = await saveSettings(patch);
     await refreshAuthInjector();
     return next;
+  });
+
+  // ----- Credential import (Claude Code / Codex → pi auth.json) -----
+  // Status read is silent; the resync handler runs the importer with
+  // overwrite=true so the user can refresh after rotating their tokens.
+  ipcMain.handle(Channel.AUTH_STATUS, async (): Promise<AuthStatus> => readAuthStatus());
+  ipcMain.handle(Channel.AUTH_RESYNC, async (): Promise<AuthImportResult> => {
+    const result = await importAvailableCreds({ overwrite: true });
+    await saveSettings({ authImportedAt: new Date().toISOString() });
+    return result;
   });
 
   // ----- Projects -----

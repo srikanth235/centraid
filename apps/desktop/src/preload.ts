@@ -43,6 +43,9 @@ const Channel = {
   CHAT_ABORT: 'centraid:chat:abort',
   CHAT_EVENT: 'centraid:chat:event',
   CHAT_MODELS: 'centraid:chat:models',
+
+  AUTH_STATUS: 'centraid:auth:status',
+  AUTH_RESYNC: 'centraid:auth:resync',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -135,4 +138,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.on(Channel.CHAT_EVENT, handler);
     return () => ipcRenderer.off(Channel.CHAT_EVENT, handler);
   },
+
+  // Credential import (Claude Code / Codex → pi auth.json)
+  authStatus: () => ipcRenderer.invoke(Channel.AUTH_STATUS),
+  authResync: () => ipcRenderer.invoke(Channel.AUTH_RESYNC),
 });

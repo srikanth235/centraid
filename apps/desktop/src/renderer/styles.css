@@ -4775,13 +4775,32 @@ textarea {
   color: var(--ink);
 }
 
-.app-chat-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+/* The in-app chat panel reuses the builder's chat classes (.msg-user,
+   .msg-ai, .tool-group, etc.) inside `.chat-scroll`. The override below
+   tightens padding for the narrower 420px panel. */
+.app-chat-panel .chat-scroll {
+  padding: 14px 14px 6px;
+}
+.app-chat-panel .msg-ai,
+.app-chat-panel .msg-user {
+  margin: 8px 0;
+}
+.app-chat-panel .msg-ai-text p {
+  font-size: 12.5px;
+}
+.app-chat-panel .tool-group {
+  margin: 8px 0;
+}
+.app-chat-panel .tool-group-pill {
+  padding: 7px 12px;
+  font-size: 12px;
+}
+.app-chat-panel .gen-row {
+  justify-content: center;
+  margin: 8px 0;
+}
+.msg-ai-error .msg-ai-text p {
+  color: #b3261e;
 }
 .app-chat-empty {
   margin: auto 0;
@@ -4800,64 +4819,40 @@ textarea {
   line-height: 1.5;
 }
 
-.app-chat-turn {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* Each tool row inside the in-app chat's tool-group is clickable and drills
+   in to show SQL + the result table. Builder's `.tg-row` is a static div;
+   here we promote it to a button and add a chevron at the right edge. */
+.tool-group .tg-row-clickable {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
 }
-.app-chat-msg {
-  font-size: 13px;
-  line-height: 1.55;
-  border-radius: 12px;
-  padding: 9px 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
+.tool-group .tg-row-clickable:hover {
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
 }
-.app-chat-msg-user {
-  background: var(--accent);
-  color: white;
-  align-self: flex-end;
-  max-width: 86%;
-}
-.app-chat-msg-assistant {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink);
-  align-self: flex-start;
-  max-width: 92%;
-}
-.app-chat-msg.pending {
+.tool-group .tg-row-expand {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
   color: var(--ink-3);
-  font-style: italic;
+  margin-left: auto;
+  transition: transform 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }
-.app-chat-msg-error {
-  background: color-mix(in oklab, #d6403a 14%, transparent);
-  color: #b3261e;
+.tool-group .tg-row-clickable[data-open='true'] .tg-row-expand {
+  transform: rotate(180deg);
 }
 
-.app-chat-tools {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.app-chat-tool {
-  border: 1px solid var(--line);
-  border-radius: 10px;
+/* Per-row drill-in: SQL preview + result table or error. Sits flush below
+   its `.tg-row` inside the group's `.tg-list`. */
+.app-chat-tool-detail {
+  margin: 4px 0 8px 14px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
   background: var(--bg);
-  font-size: 12px;
-}
-.app-chat-tool > summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 6px 10px;
-  color: var(--ink-3);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11.5px;
-}
-.app-chat-tool > summary::-webkit-details-marker {
-  display: none;
-}
-.app-chat-tool[open] > summary {
-  border-bottom: 1px solid var(--line);
 }
 .app-chat-tool-sql {
   margin: 0;
@@ -4868,6 +4863,7 @@ textarea {
   white-space: pre-wrap;
   word-break: break-word;
   background: color-mix(in oklab, var(--ink) 3%, transparent);
+  border-bottom: 0.5px solid var(--line);
 }
 .app-chat-tool-result {
   padding: 8px 10px;
@@ -4898,6 +4894,11 @@ textarea {
 }
 .app-chat-rows-empty {
   font-style: italic;
+}
+.app-chat-rows-meta {
+  color: var(--ink-3);
+  font-size: 11px;
+  margin-top: 4px;
 }
 
 .app-chat-input-wrap {

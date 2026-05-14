@@ -53,6 +53,30 @@ export interface CentraidSettings {
   remoteGatewayToken?: string;
   /** Provider/model id (e.g. `openai/gpt-4o`) used by the app-view agentic chat. */
   chatModel?: string;
+  /** ISO timestamp of the last Claude Code / Codex credential import. */
+  authImportedAt?: string;
+}
+
+export type CentraidAuthSource = 'codex' | 'claude-code' | 'pi';
+
+export interface CentraidProviderStatus {
+  source: CentraidAuthSource;
+  expires?: number;
+  accountId?: string;
+  subscriptionType?: string;
+}
+
+export interface CentraidAuthStatus {
+  codexAvailable: boolean;
+  claudeAvailable: boolean;
+  providers: Partial<Record<'openai-codex' | 'anthropic', CentraidProviderStatus>>;
+}
+
+export interface CentraidAuthImportResult {
+  importedCodex: boolean;
+  importedClaude: boolean;
+  preferred?: 'openai-codex' | 'anthropic';
+  status: CentraidAuthStatus;
 }
 
 export interface CentraidChatModel {
@@ -61,28 +85,16 @@ export interface CentraidChatModel {
   provider: string;
 }
 
+type ChatEventBase = { appId: string; turnId: number };
 export type CentraidChatEvent =
-  | { appId: string; turnId: number; kind: 'thinking' }
-  | { appId: string; turnId: number; kind: 'assistant-delta'; delta: string }
-  | {
-      appId: string;
-      turnId: number;
-      kind: 'tool-call';
-      toolName: string;
-      toolArgs?: unknown;
-      sql?: string;
-    }
-  | {
-      appId: string;
-      turnId: number;
-      kind: 'tool-result';
-      toolName: string;
-      toolResult?: unknown;
-    }
-  | { appId: string; turnId: number; kind: 'tool-error'; toolName?: string; text: string }
-  | { appId: string; turnId: number; kind: 'final'; text: string }
-  | { appId: string; turnId: number; kind: 'error'; text: string }
-  | { appId: string; turnId: number; kind: 'aborted' };
+  | (ChatEventBase & { kind: 'thinking' })
+  | (ChatEventBase & { kind: 'assistant-delta'; delta: string })
+  | (ChatEventBase & { kind: 'tool-call'; toolName: string; toolArgs?: unknown; sql?: string })
+  | (ChatEventBase & { kind: 'tool-result'; toolName: string; toolResult?: unknown })
+  | (ChatEventBase & { kind: 'tool-error'; toolName?: string; text: string })
+  | (ChatEventBase & { kind: 'final'; text: string })
+  | (ChatEventBase & { kind: 'error'; text: string })
+  | (ChatEventBase & { kind: 'aborted' });
 
 export interface CentraidVersionRecord {
   versionId: string;
@@ -385,6 +397,11 @@ interface CentraidApi {
   /** Models surfaced by `openclaw infer model list --json`. Empty on failure. */
   listChatModels(): Promise<CentraidChatModel[]>;
   onChatEvent(cb: (event: CentraidChatEvent) => void): () => void;
+
+  /** Snapshot of pi's auth.json + the on-machine source files. */
+  authStatus(): Promise<CentraidAuthStatus>;
+  /** Re-import Codex / Claude Code creds, overwriting pi's existing entries. */
+  authResync(): Promise<CentraidAuthImportResult>;
 }
 
 declare global {
@@ -464,26 +481,14 @@ declare global {
     name: string;
     provider: string;
   }
+  type _ChatEventBaseG = { appId: string; turnId: number };
   type CentraidChatEvent =
-    | { appId: string; turnId: number; kind: 'thinking' }
-    | { appId: string; turnId: number; kind: 'assistant-delta'; delta: string }
-    | {
-        appId: string;
-        turnId: number;
-        kind: 'tool-call';
-        toolName: string;
-        toolArgs?: unknown;
-        sql?: string;
-      }
-    | {
-        appId: string;
-        turnId: number;
-        kind: 'tool-result';
-        toolName: string;
-        toolResult?: unknown;
-      }
-    | { appId: string; turnId: number; kind: 'tool-error'; toolName?: string; text: string }
-    | { appId: string; turnId: number; kind: 'final'; text: string }
-    | { appId: string; turnId: number; kind: 'error'; text: string }
-    | { appId: string; turnId: number; kind: 'aborted' };
+    | (_ChatEventBaseG & { kind: 'thinking' })
+    | (_ChatEventBaseG & { kind: 'assistant-delta'; delta: string })
+    | (_ChatEventBaseG & { kind: 'tool-call'; toolName: string; toolArgs?: unknown; sql?: string })
+    | (_ChatEventBaseG & { kind: 'tool-result'; toolName: string; toolResult?: unknown })
+    | (_ChatEventBaseG & { kind: 'tool-error'; toolName?: string; text: string })
+    | (_ChatEventBaseG & { kind: 'final'; text: string })
+    | (_ChatEventBaseG & { kind: 'error'; text: string })
+    | (_ChatEventBaseG & { kind: 'aborted' });
 }

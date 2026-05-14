@@ -1324,13 +1324,95 @@
   // slide-out panel that holds a multi-turn conversation. The agent runs
   // in main via `openclaw infer model run` and can only read this app's
   // data.sqlite via SELECT queries — see `apps/desktop/src/main/chat.ts`.
+  //
+  // Rendering mirrors the builder chat (apps/desktop/src/renderer/builder.ts):
+  // a typed ChatMsg[] that is fully re-rendered on every update, with adjacent
+  // tool calls folded into one collapsible "tool group" pill, an author chip
+  // on assistant turns, and a centered "Thinking…" status while the agent
+  // works. The in-app twist is that each tool row drills in to show the SQL
+  // and the result table inline (the in-app chat's unique surface).
   function mountAppChat(view: HTMLElement, app: AppMetaResolvedType, appId: string): () => void {
+    type AppToolCall = {
+      id: string;
+      tool: string;
+      sql?: string;
+      args?: unknown;
+      summary?: string;
+      state: 'running' | 'ok' | 'error';
+      result?: unknown;
+      errorText?: string;
+      open?: boolean;
+    };
+    type AppChatMsg =
+      | { kind: 'user'; text: string }
+      | { kind: 'ai'; text: string; streaming?: boolean; error?: boolean }
+      | { kind: 'toolGroup'; id: string; calls: AppToolCall[]; open: boolean };
+
     let started = false;
     let open = false;
     let nextTurnId = 1;
     let activeTurn: number | null = null;
     let unsubscribe: (() => void) | null = null;
-    const turnNodes = new Map<number, { tools: HTMLElement; answer: HTMLElement }>();
+    let chat: AppChatMsg[] = [];
+    // Per-turn streaming state. `streamed` accumulates assistant deltas;
+    // `hadContent` flips once we've shown any AI text or tool group, which
+    // hides the centered "Thinking…" status row.
+    const turnState = new Map<
+      number,
+      {
+        streamed: string;
+        hadDelta: boolean;
+        hadContent: boolean;
+        aiIndex: number; // -1 if no AI msg yet
+      }
+    >();
+
+    const escapeHtml = (s: string): string =>
+      s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+    // Inline icons (kept tiny — same shape the builder uses for the tool-group
+    // pill) so the in-app chat doesn't need to reach into the builder IIFE.
+    const BoltSvg = (size = 13): string =>
+      `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>`;
+    const ChevSvg = (size = 13): string =>
+      `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+
+    function toolVerb(tool: string): string {
+      switch (tool) {
+        case 'centraid_sql_select':
+          return 'Querying';
+        case 'centraid_get_schema':
+          return 'Reading schema';
+        default:
+          return tool.charAt(0).toUpperCase() + tool.slice(1);
+      }
+    }
+
+    function summarizeToolArgs(tool: string, sql?: string, args?: unknown): string | undefined {
+      if (tool === 'centraid_sql_select' && sql) {
+        const firstLine = sql.split('\n').find((l) => l.trim().length > 0) ?? sql;
+        return firstLine.trim().replace(/\s+/g, ' ').slice(0, 90);
+      }
+      if (tool === 'centraid_get_schema') return undefined;
+      if (args && typeof args === 'object') {
+        for (const k of ['name', 'path', 'query']) {
+          const v = (args as Record<string, unknown>)[k];
+          if (typeof v === 'string' && v.length > 0) return v.slice(0, 90);
+        }
+      }
+      return undefined;
+    }
+
+    function summarizeGroup(calls: AppToolCall[]): string {
+      const segs: { verb: string; count: number }[] = [];
+      for (const c of calls) {
+        const verb = toolVerb(c.tool);
+        const last = segs[segs.length - 1];
+        if (last && last.verb === verb) last.count += 1;
+        else segs.push({ verb, count: 1 });
+      }
+      return segs.map((s) => (s.count > 1 ? `${s.verb} ×${s.count}` : s.verb)).join(', ');
+    }
 
     const fab = el('button', {
       class: 'app-chat-fab',
@@ -1361,7 +1443,9 @@
         onClick: () => toggle(false),
       }),
     ]);
-    const body = el('div', { class: 'app-chat-body' });
+    // chat-scroll mirrors the builder; the panel-specific padding override
+    // lives in styles.css under `.app-chat-panel .chat-scroll`.
+    const scroll = el('div', { class: 'chat-scroll app-chat-scroll' });
     const empty = el('div', { class: 'app-chat-empty' }, [
       el('div', { class: 'app-chat-empty-title' }, `Chat with ${app.name}`),
       el(
@@ -1370,7 +1454,6 @@
         'Ask questions about this app’s data. The assistant reads your SQLite via read-only SELECTs.',
       ),
     ]);
-    body.append(empty);
 
     const input = el('textarea', {
       class: 'app-chat-textarea',
@@ -1405,8 +1488,9 @@
       void submit();
     });
 
-    panel.append(head, body, inputWrap);
+    panel.append(head, scroll, inputWrap);
     view.append(fab, panel);
+    scroll.append(empty);
 
     function toggle(next?: boolean): void {
       open = next ?? !open;
@@ -1439,110 +1523,37 @@
     function appendError(text: string): void {
       empty.remove();
       const node = el('div', { class: 'app-chat-error' }, text);
-      body.append(node);
-      body.scrollTop = body.scrollHeight;
+      scroll.append(node);
+      scroll.scrollTop = scroll.scrollHeight;
     }
 
-    function appendUserTurn(text: string, turnId: number): void {
-      empty.remove();
-      const row = el('div', { class: 'app-chat-turn' });
-      const user = el('div', { class: 'app-chat-msg app-chat-msg-user' }, text);
-      const tools = el('div', { class: 'app-chat-tools' });
-      const answer = el('div', { class: 'app-chat-msg app-chat-msg-assistant pending' }, '…');
-      row.append(user, tools, answer);
-      body.append(row);
-      turnNodes.set(turnId, { tools, answer });
-      body.scrollTop = body.scrollHeight;
-    }
-
-    // Streaming-aware. The assistant bubble starts empty and grows by
-    // appending each `assistant-delta`. `final` only overwrites if we
-    // received no deltas (some providers skip deltas and only emit final).
-    const turnState = new Map<number, { streamed: string; hadDelta: boolean }>();
-
-    function handleEvent(event: CentraidChatEvent): void {
-      const nodes = turnNodes.get(event.turnId);
-      if (!nodes) return;
-      const state = turnState.get(event.turnId) ?? { streamed: '', hadDelta: false };
-      turnState.set(event.turnId, state);
-
-      if (event.kind === 'thinking') {
-        if (!state.hadDelta) {
-          nodes.answer.textContent = '…';
-          nodes.answer.classList.add('pending');
-        }
-      } else if (event.kind === 'assistant-delta') {
-        state.hadDelta = true;
-        state.streamed += event.delta;
-        nodes.answer.classList.remove('pending');
-        nodes.answer.textContent = state.streamed;
-      } else if (event.kind === 'tool-call') {
-        const block = el('details', { class: 'app-chat-tool' });
-        const summaryLabel =
-          event.toolName === 'centraid_sql_select'
-            ? `SQL · ${(event.sql ?? '').split('\n')[0].slice(0, 60)}`
-            : event.toolName;
-        const summary = el('summary', {}, summaryLabel);
-        const pre = el(
-          'pre',
-          { class: 'app-chat-tool-sql' },
-          event.sql ?? safeJson(event.toolArgs),
-        );
-        const result = el('div', { class: 'app-chat-tool-result' }, 'Running…');
-        block.append(summary, pre, result);
-        block.dataset.turn = String(event.turnId);
-        block.dataset.tool = event.toolName;
-        nodes.tools.append(block);
-      } else if (event.kind === 'tool-result') {
-        const last = nodes.tools.lastElementChild as HTMLElement | null;
-        const resultEl = last?.querySelector<HTMLElement>('.app-chat-tool-result');
-        if (resultEl) {
-          resultEl.textContent = '';
-          const parsed = parseToolPayload(event.toolResult);
-          if (parsed && Array.isArray(parsed.columns) && Array.isArray(parsed.rows)) {
-            resultEl.append(
-              renderRows(parsed.columns as string[], parsed.rows as Array<Record<string, unknown>>),
-            );
-            if (parsed.truncated) {
-              resultEl.append(
-                el(
-                  'div',
-                  { style: { color: 'var(--ink-3)', fontSize: '11px', marginTop: '4px' } },
-                  `Showing 50 of ${parsed.totalRows} rows.`,
-                ),
-              );
-            }
-          } else {
-            resultEl.textContent = safeJson(event.toolResult);
-          }
-        }
-      } else if (event.kind === 'tool-error') {
-        const last = nodes.tools.lastElementChild as HTMLElement | null;
-        const resultEl = last?.querySelector<HTMLElement>('.app-chat-tool-result');
-        if (resultEl) {
-          resultEl.textContent = `Error: ${event.text}`;
-          resultEl.classList.add('app-chat-tool-err');
-        }
-      } else if (event.kind === 'final') {
-        nodes.answer.classList.remove('pending');
-        if (!state.hadDelta && event.text) {
-          nodes.answer.textContent = event.text;
-        }
-        if (activeTurn === event.turnId) activeTurn = null;
-        setBusy(false);
-      } else if (event.kind === 'error') {
-        nodes.answer.classList.remove('pending');
-        nodes.answer.classList.add('app-chat-msg-error');
-        nodes.answer.textContent = event.text || 'Something went wrong.';
-        if (activeTurn === event.turnId) activeTurn = null;
-        setBusy(false);
-      } else if (event.kind === 'aborted') {
-        nodes.answer.classList.remove('pending');
-        if (!state.streamed) nodes.answer.textContent = '(stopped)';
-        if (activeTurn === event.turnId) activeTurn = null;
-        setBusy(false);
+    // ---------- ChatMsg renderer ----------
+    function renderRows(columns: string[], rows: Array<Record<string, unknown>>): HTMLElement {
+      if (rows.length === 0) {
+        return el('div', { class: 'app-chat-rows-empty' }, 'No rows.');
       }
-      body.scrollTop = body.scrollHeight;
+      const table = el('table', { class: 'app-chat-rows' });
+      const trh = el('tr');
+      for (const c of columns) trh.append(el('th', {}, c));
+      table.append(el('thead', {}, [trh]));
+      const tbody = el('tbody');
+      for (const r of rows.slice(0, 20)) {
+        const tr = el('tr');
+        for (const c of columns) tr.append(el('td', {}, formatCell(r[c])));
+        tbody.append(tr);
+      }
+      table.append(tbody);
+      return table;
+    }
+
+    function formatCell(v: unknown): string {
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'string') return v;
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return String(v);
+      }
     }
 
     function safeJson(v: unknown): string {
@@ -1583,36 +1594,298 @@
       return undefined;
     }
 
-    function renderRows(columns: string[], rows: Array<Record<string, unknown>>): HTMLElement {
-      const table = el('table', { class: 'app-chat-rows' });
-      const thead = el('thead');
-      const trh = el('tr');
-      for (const c of columns) trh.append(el('th', {}, c));
-      thead.append(trh);
-      table.append(thead);
-      const tbody = el('tbody');
-      for (const r of rows.slice(0, 20)) {
-        const tr = el('tr');
-        for (const c of columns) {
-          const v = r[c];
-          tr.append(el('td', {}, formatCell(v)));
+    function renderToolDetail(c: AppToolCall): HTMLElement {
+      const wrap = el('div', { class: 'app-chat-tool-detail' });
+      if (c.sql) {
+        wrap.append(el('pre', { class: 'app-chat-tool-sql' }, c.sql));
+      } else if (c.args !== undefined) {
+        wrap.append(el('pre', { class: 'app-chat-tool-sql' }, safeJson(c.args)));
+      }
+      const result = el('div', { class: 'app-chat-tool-result' });
+      if (c.state === 'running') {
+        result.textContent = 'Running…';
+      } else if (c.state === 'error') {
+        result.classList.add('app-chat-tool-err');
+        result.textContent = `Error: ${c.errorText ?? 'Tool failed.'}`;
+      } else {
+        const parsed = parseToolPayload(c.result);
+        if (parsed && Array.isArray(parsed.columns) && Array.isArray(parsed.rows)) {
+          result.append(
+            renderRows(parsed.columns as string[], parsed.rows as Array<Record<string, unknown>>),
+          );
+          if (parsed.truncated) {
+            result.append(
+              el(
+                'div',
+                { class: 'app-chat-rows-meta' },
+                `Showing ${Math.min(20, (parsed.rows as unknown[]).length)} of ${parsed.totalRows ?? (parsed.rows as unknown[]).length} rows.`,
+              ),
+            );
+          }
+        } else if (c.result !== undefined) {
+          result.textContent = safeJson(c.result);
+        } else {
+          result.textContent = '(no result)';
         }
-        tbody.append(tr);
       }
-      table.append(tbody);
-      if (rows.length === 0) {
-        return el('div', { class: 'app-chat-rows-empty' }, 'No rows.');
-      }
-      return table;
+      wrap.append(result);
+      return wrap;
     }
 
-    function formatCell(v: unknown): string {
-      if (v === null || v === undefined) return '';
-      if (typeof v === 'string') return v;
-      try {
-        return JSON.stringify(v);
-      } catch {
-        return String(v);
+    function renderMessage(m: AppChatMsg): HTMLElement {
+      if (m.kind === 'user') {
+        return el('div', { class: 'msg-user' }, [el('div', { class: 'msg-user-bubble' }, m.text)]);
+      }
+      if (m.kind === 'ai') {
+        // Author chip + paragraph-split text, mirroring builder. The chip
+        // uses the app's icon color so each app's chat reads as its own
+        // surface, vs the generic "builder" chip.
+        const author = el('div', { class: 'msg-ai-author' });
+        author.innerHTML =
+          `<span class="msg-ai-author-dot" style="background:${escapeHtml(app.color)}"></span>` +
+          `<span class="msg-ai-author-name">${escapeHtml(app.name.toLowerCase())}</span>`;
+        const para = el('div', { class: 'msg-ai-text' });
+        const text = m.text || (m.streaming ? '…' : '');
+        text.split('\n\n').forEach((p) => para.append(el('p', {}, p)));
+        const cls = m.error ? 'msg-ai msg-ai-error' : 'msg-ai';
+        return el('div', { class: cls }, [author, para]);
+      }
+      // toolGroup
+      const groupId = m.id;
+      const isRunning = m.calls.some((c) => c.state === 'running');
+      const hasError = m.calls.some((c) => c.state === 'error');
+      const wrap = el('div', {
+        class: 'tool-group',
+        'data-open': String(m.open),
+        'data-running': String(isRunning),
+        'data-error': String(hasError),
+      });
+      const pill = el('button', {
+        class: 'tool-group-pill',
+        type: 'button',
+        'aria-expanded': String(m.open),
+      });
+      pill.innerHTML =
+        `<span class="tg-bolt">${BoltSvg(13)}</span>` +
+        `<span class="tg-label">${escapeHtml(summarizeGroup(m.calls))}</span>` +
+        `<span class="tg-chev">${ChevSvg(13)}</span>`;
+      pill.addEventListener('click', () => {
+        chat = chat.map((x) =>
+          x.kind === 'toolGroup' && x.id === groupId ? { ...x, open: !x.open } : x,
+        );
+        renderChat();
+      });
+      wrap.append(pill);
+      if (m.open) {
+        const list = el('div', { class: 'tg-list' });
+        for (const c of m.calls) {
+          const dot = el('span', { class: 'tg-dot', 'data-state': c.state });
+          const name = el('span', { class: 'tg-row-name' }, toolVerb(c.tool));
+          const target = el('span', { class: 'tg-row-target' }, c.summary ?? '');
+          const expand = el('span', {
+            class: 'tg-row-expand',
+            trustedHtml: ChevSvg(11),
+          });
+          const row = el(
+            'button',
+            {
+              type: 'button',
+              class: 'tg-row tg-row-clickable',
+              'data-state': c.state,
+              'data-open': String(!!c.open),
+              onClick: () => {
+                chat = chat.map((x) => {
+                  if (x.kind !== 'toolGroup' || x.id !== groupId) return x;
+                  return {
+                    ...x,
+                    calls: x.calls.map((cc) => (cc.id === c.id ? { ...cc, open: !cc.open } : cc)),
+                  };
+                });
+                renderChat();
+              },
+            },
+            [dot, name, target, expand],
+          );
+          list.append(row);
+          if (c.open) list.append(renderToolDetail(c));
+        }
+        wrap.append(list);
+      }
+      return wrap;
+    }
+
+    function renderChat(): void {
+      scroll.innerHTML = '';
+      if (chat.length === 0) {
+        scroll.append(empty);
+      } else {
+        chat.forEach((m) => scroll.append(renderMessage(m)));
+      }
+      // Centered "Thinking…" pill while the agent is between user prompt and
+      // first assistant content. Mirrors builder's gen-row.
+      if (activeTurn !== null) {
+        const state = turnState.get(activeTurn);
+        if (state && !state.hadContent) {
+          scroll.append(
+            el('div', { class: 'gen-row' }, [
+              el('span', { class: 'msg-status' }, [el('span', { class: 'pulse' }), ' Thinking…']),
+            ]),
+          );
+        }
+      }
+      scroll.scrollTop = scroll.scrollHeight;
+    }
+
+    // ---------- ChatMsg mutators ----------
+    function ensureTurnState(turnId: number): {
+      streamed: string;
+      hadDelta: boolean;
+      hadContent: boolean;
+      aiIndex: number;
+    } {
+      const existing = turnState.get(turnId);
+      if (existing) return existing;
+      const next = { streamed: '', hadDelta: false, hadContent: false, aiIndex: -1 };
+      turnState.set(turnId, next);
+      return next;
+    }
+
+    function pushAi(text: string, streaming: boolean): number {
+      chat = chat.concat([{ kind: 'ai', text, streaming }]);
+      return chat.length - 1;
+    }
+
+    function patchAi(idx: number, patch: Partial<Extract<AppChatMsg, { kind: 'ai' }>>): void {
+      chat = chat.map((m, i) => (i === idx && m.kind === 'ai' ? { ...m, ...patch } : m));
+    }
+
+    function appendOrStartToolCall(call: AppToolCall): void {
+      const lastIdx = chat.length - 1;
+      const last = chat[lastIdx];
+      if (last && last.kind === 'toolGroup') {
+        const updated: AppChatMsg = { ...last, calls: [...last.calls, call] };
+        chat = chat.map((m, i) => (i === lastIdx ? updated : m));
+      } else {
+        chat = chat.concat([{ kind: 'toolGroup', id: call.id, calls: [call], open: true }]);
+      }
+    }
+
+    function patchToolCall(callId: string, patch: Partial<AppToolCall>): void {
+      chat = chat.map((m) => {
+        if (m.kind !== 'toolGroup') return m;
+        if (!m.calls.some((c) => c.id === callId)) return m;
+        return {
+          ...m,
+          calls: m.calls.map((c) => (c.id === callId ? { ...c, ...patch } : c)),
+        };
+      });
+    }
+
+    // The gateway streams tool events without explicit ids — phases just
+    // arrive in order. We mint our own monotonic id per turn so the renderer
+    // can target the correct call when the matching `tool-result`/`tool-error`
+    // arrives.
+    const lastToolIdByTurn = new Map<number, string>();
+    let toolCounter = 0;
+    function mintToolId(turnId: number): string {
+      toolCounter += 1;
+      const id = `t${turnId}-${toolCounter}`;
+      lastToolIdByTurn.set(turnId, id);
+      return id;
+    }
+
+    function handleEvent(event: CentraidChatEvent): void {
+      const state = ensureTurnState(event.turnId);
+      if (event.kind === 'thinking') {
+        // Just keeps the centered "Thinking…" status visible; nothing to
+        // patch on the chat array.
+        renderChat();
+        return;
+      }
+      if (event.kind === 'assistant-delta') {
+        state.hadDelta = true;
+        state.hadContent = true;
+        state.streamed += event.delta;
+        if (state.aiIndex < 0) {
+          state.aiIndex = pushAi(state.streamed, true);
+        } else {
+          patchAi(state.aiIndex, { text: state.streamed, streaming: true });
+        }
+        renderChat();
+        return;
+      }
+      if (event.kind === 'tool-call') {
+        state.hadContent = true;
+        // Tool call after AI text starts a new group; the streaming AI msg
+        // is closed so subsequent deltas don't reattach to it (mirrors
+        // builder's closeAi() on tool_execution_start).
+        if (state.aiIndex >= 0) {
+          patchAi(state.aiIndex, { streaming: false });
+          state.aiIndex = -1;
+        }
+        const id = mintToolId(event.turnId);
+        appendOrStartToolCall({
+          id,
+          tool: event.toolName,
+          sql: event.sql,
+          args: event.toolArgs,
+          summary: summarizeToolArgs(event.toolName, event.sql, event.toolArgs),
+          state: 'running',
+        });
+        renderChat();
+        return;
+      }
+      if (event.kind === 'tool-result') {
+        const id = lastToolIdByTurn.get(event.turnId);
+        if (id) patchToolCall(id, { state: 'ok', result: event.toolResult });
+        renderChat();
+        return;
+      }
+      if (event.kind === 'tool-error') {
+        const id = lastToolIdByTurn.get(event.turnId);
+        if (id) patchToolCall(id, { state: 'error', errorText: event.text });
+        renderChat();
+        return;
+      }
+      if (event.kind === 'final') {
+        if (state.aiIndex >= 0) {
+          patchAi(state.aiIndex, { streaming: false });
+        } else if (event.text) {
+          state.aiIndex = pushAi(event.text, false);
+          state.hadContent = true;
+        }
+        if (activeTurn === event.turnId) activeTurn = null;
+        setBusy(false);
+        renderChat();
+        return;
+      }
+      if (event.kind === 'error') {
+        if (state.aiIndex >= 0) {
+          patchAi(state.aiIndex, {
+            streaming: false,
+            error: true,
+            text: event.text || 'Something went wrong.',
+          });
+        } else {
+          state.aiIndex = pushAi(event.text || 'Something went wrong.', false);
+          patchAi(state.aiIndex, { error: true });
+          state.hadContent = true;
+        }
+        if (activeTurn === event.turnId) activeTurn = null;
+        setBusy(false);
+        renderChat();
+        return;
+      }
+      if (event.kind === 'aborted') {
+        if (state.aiIndex >= 0) {
+          patchAi(state.aiIndex, { streaming: false });
+        } else {
+          state.aiIndex = pushAi('(stopped)', false);
+          state.hadContent = true;
+        }
+        if (activeTurn === event.turnId) activeTurn = null;
+        setBusy(false);
+        renderChat();
       }
     }
 
@@ -1630,7 +1903,10 @@
       input.value = '';
       autosize();
       setBusy(true);
-      appendUserTurn(text, turnId);
+      empty.remove();
+      chat = chat.concat([{ kind: 'user', text }]);
+      ensureTurnState(turnId);
+      renderChat();
       await ensureStarted();
       try {
         const settings = await window.CentraidApi.getSettings();
@@ -1641,14 +1917,18 @@
           model: settings.chatModel,
         });
       } catch (err) {
-        const nodes = turnNodes.get(turnId);
-        if (nodes) {
-          nodes.answer.classList.remove('pending');
-          nodes.answer.classList.add('app-chat-msg-error');
-          nodes.answer.textContent = `Send failed: ${String(err)}`;
+        const state = ensureTurnState(turnId);
+        const msg = `Send failed: ${String(err)}`;
+        if (state.aiIndex >= 0) {
+          patchAi(state.aiIndex, { text: msg, error: true, streaming: false });
+        } else {
+          state.aiIndex = pushAi(msg, false);
+          patchAi(state.aiIndex, { error: true });
+          state.hadContent = true;
         }
         activeTurn = null;
         setBusy(false);
+        renderChat();
       }
     }
 
@@ -1886,6 +2166,177 @@
         ),
       ]),
     );
+
+    // ---- AI providers (Claude Code / Codex credential import) ----
+    // Centraid's coding agent (pi-mono) uses pi-ai's first-party OAuth
+    // providers. We ride on whichever subscription the user already has on
+    // disk: Codex creds in ~/.codex/auth.json, Claude Code creds in the
+    // macOS keychain. The importer copies them into ~/.pi/agent/auth.json
+    // — Codex is preferred when both exist so pi defaults to Codex models.
+    const authStatusHost = el('div', {
+      style: { display: 'flex', flexDirection: 'column', gap: '8px' },
+    });
+
+    type AuthStatusSnapshot = Awaited<ReturnType<Window['CentraidApi']['authStatus']>>;
+    const renderAuthStatus = (status: AuthStatusSnapshot | null): void => {
+      authStatusHost.replaceChildren();
+      if (!status) {
+        authStatusHost.append(el('div', { class: 'settings-note' }, 'Reading credential status…'));
+        return;
+      }
+      const formatExpires = (ms?: number): string => {
+        if (!ms) return '';
+        const left = ms - Date.now();
+        if (left <= 0) return 'expired';
+        const hours = Math.floor(left / 3_600_000);
+        if (hours < 1) return 'expires <1h';
+        if (hours < 48) return `expires in ${hours}h`;
+        return `expires in ${Math.floor(hours / 24)}d`;
+      };
+      const providerRow = (params: {
+        title: string;
+        subtitle: string;
+        connected: boolean;
+        accent: string;
+      }): HTMLElement => {
+        const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
+        return el(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '8px 10px',
+              border: '0.5px solid var(--line)',
+              borderRadius: '8px',
+              background: 'var(--bg-elev)',
+            },
+          },
+          [
+            el('span', {
+              style: {
+                width: '8px',
+                height: '8px',
+                borderRadius: '999px',
+                background: dotColor,
+                flexShrink: '0',
+              },
+            }),
+            el(
+              'div',
+              {
+                style: {
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1px',
+                  flex: '1',
+                  minWidth: '0',
+                },
+              },
+              [
+                el('span', { style: { fontSize: '13px', fontWeight: '500' } }, params.title),
+                el(
+                  'span',
+                  { style: { fontSize: '11.5px', color: 'var(--ink-3)' } },
+                  params.subtitle,
+                ),
+              ],
+            ),
+          ],
+        );
+      };
+
+      const codex = status.providers['openai-codex'];
+      const claude = status.providers['anthropic'];
+
+      // Codex row first — preferred when both subscriptions are present.
+      const codexConnected = !!codex;
+      const codexExpiry = formatExpires(codex?.expires);
+      const codexSub: string[] = [];
+      if (codexConnected) codexSub.push('connected via pi auth.json');
+      else if (status.codexAvailable) codexSub.push('available locally — click Re-sync to import');
+      else codexSub.push('not found on this machine');
+      if (codexExpiry) codexSub.push(codexExpiry);
+      authStatusHost.append(
+        providerRow({
+          title: 'Codex (ChatGPT Plus/Pro) — preferred',
+          subtitle: codexSub.join(' · '),
+          connected: codexConnected,
+          accent: '#10b981',
+        }),
+      );
+
+      const claudeConnected = !!claude;
+      const claudeExpiry = formatExpires(claude?.expires);
+      const claudeSub: string[] = [];
+      if (claudeConnected) {
+        const sub = claude?.subscriptionType ? ` (${claude.subscriptionType})` : '';
+        claudeSub.push(`connected via pi auth.json${sub}`);
+      } else if (status.claudeAvailable) {
+        claudeSub.push(
+          status.codexAvailable
+            ? 'available — held back because Codex is preferred'
+            : 'available locally — click Re-sync to import',
+        );
+      } else {
+        claudeSub.push('not found in keychain');
+      }
+      if (claudeExpiry) claudeSub.push(claudeExpiry);
+      authStatusHost.append(
+        providerRow({
+          title: 'Claude Code (Pro/Max)',
+          subtitle: claudeSub.join(' · '),
+          connected: claudeConnected,
+          accent: '#a855f7',
+        }),
+      );
+    };
+
+    const resyncBtn = el('button', {
+      class: 'btn btn-soft',
+      type: 'button',
+    }) as HTMLButtonElement;
+    resyncBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Re-sync</span>';
+    resyncBtn.addEventListener('click', async () => {
+      resyncBtn.setAttribute('disabled', '');
+      try {
+        const result = await window.CentraidApi.authResync();
+        renderAuthStatus(result.status);
+        const parts: string[] = [];
+        if (result.importedCodex) parts.push('Codex');
+        if (result.importedClaude) parts.push('Claude Code');
+        showToast(parts.length ? `Imported ${parts.join(' + ')}` : 'No new creds to import');
+      } catch (err) {
+        showToast(`Re-sync failed: ${String(err)}`);
+      } finally {
+        resyncBtn.removeAttribute('disabled');
+      }
+    });
+
+    page.append(
+      drawerGroup('AI providers', [
+        el(
+          'div',
+          { class: 'settings-note' },
+          'Centraid auto-imports your Claude Code and Codex credentials on first launch so the coding agent rides on your existing subscription. Codex is preferred when both are present.',
+        ),
+        authStatusHost,
+        el('div', { class: 'sheet-actions' }, [resyncBtn]),
+      ]),
+    );
+
+    // Initial status load — populates the rows after the page mounts.
+    renderAuthStatus(null);
+    void window.CentraidApi.authStatus()
+      .then(renderAuthStatus)
+      .catch(() =>
+        renderAuthStatus({
+          codexAvailable: false,
+          claudeAvailable: false,
+          providers: {},
+        }),
+      );
 
     const remoteRowsHost = el('div');
     const renderRemoteRows = (): void => {

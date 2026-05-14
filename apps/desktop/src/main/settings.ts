@@ -33,6 +33,13 @@ export interface PersistedSettings {
   remoteTemplatesUrl?: string;
   /** Model id used by the app-view agentic chat (openclaw infer model run). */
   chatModel?: string;
+  /**
+   * ISO timestamp of the most recent Claude Code / Codex credential
+   * auto-import. Empty/undefined on first launch — main.ts uses that as
+   * the trigger to run the importer once. The Settings → AI providers
+   * "Re-sync" button is independent of this field.
+   */
+  authImportedAt?: string;
 }
 
 export interface DesktopSettings extends HarnessConfig {
@@ -42,6 +49,7 @@ export interface DesktopSettings extends HarnessConfig {
   remoteGatewayToken: string;
   remoteTemplatesUrl?: string;
   chatModel?: string;
+  authImportedAt?: string;
 }
 
 const FILE_NAME = 'centraid-settings.json';
@@ -82,6 +90,7 @@ function migrate(
       remoteGatewayToken: raw.remoteGatewayToken ?? base.remoteGatewayToken,
       remoteTemplatesUrl,
       chatModel: raw.chatModel,
+      authImportedAt: raw.authImportedAt,
     };
   }
 
@@ -94,6 +103,7 @@ function migrate(
     remoteGatewayToken: legacyToken,
     remoteTemplatesUrl,
     chatModel: raw.chatModel,
+    authImportedAt: raw.authImportedAt,
   };
 }
 
@@ -157,6 +167,8 @@ export async function saveSettings(patch: Partial<DesktopSettings>): Promise<Des
         ? patch.remoteTemplatesUrl
         : current.remoteTemplatesUrl,
     chatModel: patch.chatModel !== undefined ? patch.chatModel : current.chatModel,
+    authImportedAt:
+      patch.authImportedAt !== undefined ? patch.authImportedAt : current.authImportedAt,
   };
   await writePersisted(next);
   return resolveEffective(next);

@@ -2,10 +2,11 @@ import { app, BrowserWindow, nativeImage, protocol, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installAuthInjector } from './main/auth-injector.js';
+import { importAvailableCreds } from './main/auth-import.js';
 import { registerChatIpcHandlers, disposeWindowChatSessions } from './main/chat.js';
 import { disposeWindowSession, registerIpcHandlers } from './main/ipc.js';
 import { PREVIEW_SCHEME, registerPreviewProtocol } from './main/preview-protocol.js';
-import { loadSettings, templatesCacheDir } from './main/settings.js';
+import { loadSettings, saveSettings, templatesCacheDir } from './main/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -90,6 +91,12 @@ app.whenReady().then(() => {
   // fetcher is silent on every failure (offline, 404, parse error, etc.) so
   // the home grid keeps showing whatever's in cache + bundle regardless.
   void backgroundFetchTemplates();
+  // First-launch credential import. Reads Claude Code (macOS keychain) and
+  // Codex (`~/.codex/auth.json`); writes whichever exist into pi's auth.json
+  // so the coding agent can use the user's existing subscription. Codex is
+  // preferred when both are present. Subsequent launches no-op — the user
+  // can re-sync explicitly from Settings → AI providers.
+  void firstLaunchAuthImport();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -108,6 +115,23 @@ async function backgroundFetchTemplates(): Promise<void> {
     });
   } catch (err) {
     console.error('[centraid] templates background fetch failed:', err);
+  }
+}
+
+async function firstLaunchAuthImport(): Promise<void> {
+  try {
+    const settings = await loadSettings();
+    if (settings.authImportedAt) return;
+    const result = await importAvailableCreds({ overwrite: false });
+    // Always stamp the marker — even when nothing was found, so we don't
+    // re-prompt the macOS keychain dialog on every subsequent launch. The
+    // user can still trigger an explicit import via Settings → Re-sync,
+    // which always overwrites and refreshes the marker.
+    await saveSettings({ authImportedAt: new Date().toISOString() });
+    // The Settings → AI providers panel surfaces the result; nothing to do here.
+    void result;
+  } catch (err) {
+    console.error('[centraid] first-launch auth import failed:', err);
   }
 }
 
