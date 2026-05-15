@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit pending split into changes-feed / app-routes modules
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Registry, RegistryError } from './registry.js';
@@ -15,6 +16,8 @@ import { readAppSchema } from './schema.js';
 import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './cloud-routes.js';
 import { makeAppUploadLocks } from './upload-lock.js';
 import { handleAppIngest, handleAppUpload } from './route-handlers.js';
+import { ChangeBus } from './change-bus.js';
+import { handleAppChanges } from './changes-sse.js';
 import type { AppRef, RegistryEntry } from './types.js';
 
 export interface RuntimeLogger {
@@ -34,6 +37,12 @@ export interface RuntimeOptions {
   /** Scheduler backend (OpenClaw, Claude Agent SDK, etc.). */
   scheduler: Scheduler;
   logger?: RuntimeLogger;
+  /**
+   * Optional change bus. When omitted the runtime constructs an internal
+   * one, exposed as `runtime.changeBus` for hosts that want to subscribe
+   * from outside (e.g. OpenClaw's `centraid_sql_write` agent tool).
+   */
+  changeBus?: ChangeBus;
 }
 
 const noopLogger: RuntimeLogger = {
@@ -54,6 +63,13 @@ export class Runtime {
   readonly registry: Registry;
   readonly versions: VersionStore;
   readonly cronSync: CronSync;
+  /**
+   * Per-app change notification bus. Subscribed by the `/centraid/<id>/_changes`
+   * SSE endpoint and emitted by `runQuery` (HTTP path + openclaw legacy tool)
+   * and `handler-runner` (app action/cron writes). Hosts can subscribe from
+   * outside too — e.g. to add a write-driven log line.
+   */
+  readonly changeBus: ChangeBus;
   private readonly appsDir: string;
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
@@ -67,6 +83,7 @@ export class Runtime {
     this.scheduler = opts.scheduler;
     this.registry = new Registry(opts.appsDir);
     this.versions = new VersionStore();
+    this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
     this.cronSync = new CronSync({
       registry: this.registry,
       scheduler: this.scheduler,
@@ -74,6 +91,18 @@ export class Runtime {
       gatewayBaseUrl: opts.gatewayBaseUrl,
     });
     this.withAppUploadLock = makeAppUploadLocks();
+  }
+
+  /**
+   * Build a closure that emits a change for the given app. Passed to
+   * `runQuery` and `runHandler` so they can fire the bus without knowing
+   * the appId-to-bus wiring.
+   */
+  private emitForApp(appId: string): (tables: string[]) => void {
+    return (tables) => {
+      if (tables.length === 0) return;
+      this.changeBus.emit({ appId, tables, ts: Date.now() });
+    };
   }
 
   /**
@@ -148,6 +177,7 @@ export class Runtime {
       cronSync: this.cronSync,
       withAppUploadLock: this.withAppUploadLock,
       resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
+      emitForApp: (appId: string) => this.emitForApp(appId),
     };
   }
 
@@ -310,7 +340,18 @@ export class Runtime {
         }
 
         case 'app-query': {
-          await handleQueryRoute(req, res, this.registry, route.appId);
+          await handleQueryRoute(
+            req,
+            res,
+            this.registry,
+            route.appId,
+            this.emitForApp(route.appId),
+          );
+          return;
+        }
+
+        case 'app-changes': {
+          await handleAppChanges(req, res, this.changeBus, route.appId);
           return;
         }
 
@@ -393,6 +434,7 @@ export class Runtime {
             handlerKind: 'action',
             args: { params: {}, body: body.args },
             timeoutMs: 30_000,
+            onWrite: this.emitForApp(route.appId),
           });
           if (!outcome.ok) {
             sendError(res, 500, 'handler_error', outcome.error ?? 'action failed');
