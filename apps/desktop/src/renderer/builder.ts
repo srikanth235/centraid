@@ -1030,7 +1030,7 @@
         sandbox: PREVIEW_SANDBOX,
         referrerpolicy: 'no-referrer',
       }) as HTMLIFrameElement;
-      // Tagging lets the shell's broadcastThemeToFrames() find this iframe
+      // Tagging lets the shell's broadcastSettingsToFrames() find this iframe
       // when the user retunes from Settings while the builder is open.
       frame.dataset.centraidApp = '1';
       frame.addEventListener('load', () => {

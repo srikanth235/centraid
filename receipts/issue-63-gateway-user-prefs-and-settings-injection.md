@@ -17,6 +17,7 @@ GitHub issue: [#63](https://github.com/srikanth235/centraid/issues/63)
 - [x] Builder agent grounding (system-prompt) updated so new code never references `theme-bridge.js`
 - [x] Standalone fallback preserved — templates keep working defaults via `:root` in their `app.css`
 - [x] Tests + typecheck + format/lint all clean
+- [x] PR review fixes: CSP nonce for inline bridge, accent key persists separately, live-update payload carries all known prefs
 - [ ] **Out of scope (deferred):** mobile parity (Expo `WKURLSchemeHandler` / `injectedJavaScriptBeforeContentLoaded`)
 
 ## What changed
@@ -46,6 +47,14 @@ GitHub issue: [#63](https://github.com/srikanth235/centraid/issues/63)
 **Standalone fallback preserved — templates keep working defaults via `:root` in their `app.css`.** Each template declares working defaults under `:root` (light theme via the literal `--bg`, `--ink`, etc.; dark theme overrides via `:root[data-theme='dark']`). With no shell, no runtime, and no `data-theme` attribute, the light defaults render as-is — the inline bridge silently no-ops and the page remains usable.
 
 **Tests + typecheck + format/lint all clean.** See Verification below.
+
+**PR review fixes: CSP nonce for inline bridge, accent key persists separately, live-update payload carries all known prefs.** Three follow-up fixes after the initial PR landed:
+
+1. **CSP nonce.** The runtime serves apps with `script-src 'self'`, which would block the inline bridge baked into each `index.html`. `static-server.serveStatic` now mints a per-response nonce (16 random bytes, base64), stamps `nonce="<nonce>"` onto every inline `<script>` it emits via `stampInlineScriptNonces`, and forwards the nonce to `staticSecurityHeaders` so `script-src` becomes `'self' 'nonce-<nonce>'`. External-src `<script>` tags and any tag already carrying a `nonce` attr are left untouched. New tests in `packages/runtime-core/src/static-server.test.ts` cover the round-trip, the no-double-stamp path, freshness across responses, and the no-nonce fallback for non-HTML responses.
+
+2. **Accent key persists separately.** `pickAppearance` previously rejected the gateway's `accent` field because `toRemoteShape` overwrote the semantic key (e.g. `"teal"`) with the hex swatch (`"#2EA098"`), leaving second-device launches stuck on the default accent. Renamed the wire fields: `accentKey` carries the semantic palette key (round-tripped for renderer state recovery), while `accent` / `accentLight` / `accentDeep` carry the resolved hex values that the runtime bakes into `<html style="…">`. `pickAppearance` reads `accentKey` first and falls back to `accent` for any prefs persisted before the fix.
+
+3. **Live-update payload carries all known prefs.** `broadcastThemeToFrames` only sent `{ theme, bgL }`, so density / cards / coolCast / accent changes wouldn't retune mounted iframes until reload. Replaced with `broadcastSettingsToFrames` (which sends a `centraid:settings` payload with full `dataAttrs` + `cssVars` derived from `toRemoteShape`, plus the legacy `centraid:theme` payload for any old bridges still in the wild). The inline bridge in each template (and the scaffolder's `INLINE_SETTINGS_BRIDGE`) now accepts both message shapes — `centraid:settings` applies the full set via `setAttribute('data-…')` + `setProperty('--…')`, and `centraid:theme` falls through to the original theme/bgL apply.
 
 ## Verification
 

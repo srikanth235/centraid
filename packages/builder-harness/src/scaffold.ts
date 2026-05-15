@@ -429,13 +429,14 @@ const DEFAULT_APP_JS = `// Runs in the browser. Hit your queries via fetch.
 
 // Inline settings bridge — emitted inside a synchronous <script> in the
 // scaffolded index.html. Initial paint values come from the runtime, which
-// bakes <html data-theme="…" style="--bg-l:…"> before serving. This bridge
-// covers two extras:
+// bakes <html data-theme="…" style="--bg-l:…"> before serving and stamps a
+// CSP nonce on this script. This bridge covers two extras:
 //   1. Builder preview (centraid-preview://) bypasses the runtime, so we
 //      read URL hash params as a fallback for the no-bake path.
 //   2. The shell can flip a pref while the iframe is mounted — the
-//      postMessage listener keeps it in lock-step without a reload.
-const INLINE_SETTINGS_BRIDGE = `(function(){var h=document.documentElement;function a(t,b){if(t==='dark'||t==='light')h.dataset.theme=t;if(b!=null&&b!=='')h.style.setProperty('--bg-l',b+'%');}try{var p=new URLSearchParams((location.hash||'').slice(1));a(p.get('theme'),p.get('bgL'));}catch(_){}addEventListener('message',function(e){var d=e&&e.data;if(!d||d.type!=='centraid:theme')return;a(d.theme,d.bgL);});})();`;
+//      postMessage listener accepts both `centraid:settings` (full
+//      data-attrs + CSS vars) and the legacy `centraid:theme` shape.
+const INLINE_SETTINGS_BRIDGE = `(function(){var h=document.documentElement;function aT(t,b){if(t==='dark'||t==='light')h.dataset.theme=t;if(b!=null&&b!=='')h.style.setProperty('--bg-l',b+'%');}function aS(s){if(s.dataAttrs)for(var k in s.dataAttrs)h.setAttribute('data-'+k,s.dataAttrs[k]);if(s.cssVars)for(var k in s.cssVars)h.style.setProperty('--'+k,s.cssVars[k]);}try{var p=new URLSearchParams((location.hash||'').slice(1));aT(p.get('theme'),p.get('bgL'));}catch(_){}addEventListener('message',function(e){var d=e&&e.data;if(!d)return;if(d.type==='centraid:settings')aS(d);else if(d.type==='centraid:theme')aT(d.theme,d.bgL);});})();`;
 
 const README_TEMPLATE = (id: string): string => `# ${id}
 

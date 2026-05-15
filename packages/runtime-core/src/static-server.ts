@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 import { contentTypeFor, resolveStaticPath, staticSecurityHeaders } from './security.js';
 import { sendError } from './http-utils.js';
@@ -45,17 +46,45 @@ export async function serveStatic(
   }
 
   const contentType = contentTypeFor(file);
-  if (contentType.startsWith('text/html') && opts.settingsInject) {
-    buf = Buffer.from(injectSettings(buf.toString('utf8'), opts.settingsInject), 'utf8');
+  // For HTML responses we mint a per-response CSP nonce, stamp it onto every
+  // inline `<script>` tag in the served document, and forward it to the
+  // security headers so `script-src` accepts those tagged inline scripts.
+  // Without this the inline live-settings bridge baked into each app's
+  // `index.html` would be blocked by the default `script-src 'self'`. The
+  // nonce is fresh per response so a leaked old nonce can't whitelist a
+  // future injection.
+  let inlineScriptNonce: string | undefined;
+  if (contentType.startsWith('text/html')) {
+    if (opts.settingsInject) {
+      buf = Buffer.from(injectSettings(buf.toString('utf8'), opts.settingsInject), 'utf8');
+    }
+    inlineScriptNonce = randomBytes(16).toString('base64');
+    buf = Buffer.from(stampInlineScriptNonces(buf.toString('utf8'), inlineScriptNonce), 'utf8');
   }
 
   res.statusCode = 200;
   res.setHeader('Content-Type', contentType);
-  for (const [k, v] of Object.entries(staticSecurityHeaders())) {
+  for (const [k, v] of Object.entries(staticSecurityHeaders({ inlineScriptNonce }))) {
     res.setHeader(k, v);
   }
   res.end(buf);
   return true;
+}
+
+/**
+ * Add `nonce="<nonce>"` to every inline `<script>` tag (i.e. tags without a
+ * `src` attribute). External-src `<script>` tags are left untouched — they're
+ * already covered by `script-src 'self'`. Existing `nonce` attributes are
+ * preserved (no double-stamping). Tags that contain a `>` inside an attribute
+ * value would not parse correctly here; we accept that as a regex-parser
+ * limitation since the runtime only serves HTML it controls.
+ */
+function stampInlineScriptNonces(html: string, nonce: string): string {
+  return html.replace(/<script\b([^>]*)>/gi, (match, attrs: string) => {
+    if (/\bsrc\s*=/i.test(attrs)) return match;
+    if (/\bnonce\s*=/i.test(attrs)) return match;
+    return `<script${attrs} nonce="${nonce}">`;
+  });
 }
 
 // `data-<name>` attribute names: lowercase letters, digits, dashes only.

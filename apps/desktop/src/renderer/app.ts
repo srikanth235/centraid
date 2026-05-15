@@ -156,17 +156,48 @@
     html.style.setProperty('--accent-deep', swatch.deep);
     // Broadcast to every mounted user-app iframe so they retune in lock-step
     // with the shell. The tiny bridge script in each template
-    // (packages/app-templates/*/index.html) listens for this and flips
-    // [data-theme] + --bg-l on its own <html>.
-    broadcastThemeToFrames();
+    // (packages/app-templates/*/index.html) listens for this and flips its
+    // own <html> data-attrs / CSS vars to match.
+    broadcastSettingsToFrames();
   }
 
-  function broadcastThemeToFrames(): void {
-    const payload = { type: 'centraid:theme', theme: prefs.theme, bgL: prefs.bgL };
+  // Project the renderer's typed prefs into the same `dataAttrs` / `cssVars`
+  // shape the runtime uses for server-side injection. The bridge inside each
+  // app applies them as `<html data-…>` attrs and `--…` CSS vars — symmetric
+  // with what the gateway bakes on first paint.
+  function buildIframeSettings(): {
+    dataAttrs: Record<string, string>;
+    cssVars: Record<string, string>;
+  } {
+    const remote = toRemoteShape(prefs);
+    const dataAttrs: Record<string, string> = {};
+    const cssVars: Record<string, string> = {};
+    if (typeof remote.theme === 'string') dataAttrs['theme'] = remote.theme;
+    if (typeof remote.density === 'string') dataAttrs['density'] = remote.density;
+    if (typeof remote.cards === 'string') dataAttrs['cards'] = remote.cards;
+    if (typeof remote.coolCast === 'boolean')
+      dataAttrs['cool-cast'] = remote.coolCast ? 'on' : 'off';
+    if (typeof prefs.bgL === 'number' && Number.isFinite(prefs.bgL))
+      cssVars['bg-l'] = `${prefs.bgL}%`;
+    if (typeof remote.accent === 'string') cssVars['accent'] = remote.accent;
+    if (typeof remote.accentLight === 'string') cssVars['accent-light'] = remote.accentLight;
+    if (typeof remote.accentDeep === 'string') cssVars['accent-deep'] = remote.accentDeep;
+    return { dataAttrs, cssVars };
+  }
+
+  function broadcastSettingsToFrames(): void {
+    const settings = buildIframeSettings();
+    // New canonical payload — full settings update.
+    const settingsPayload = { type: 'centraid:settings', ...settings };
+    // Legacy payload — kept for any old `theme-bridge.js` still in the wild
+    // (older published apps that haven't been re-served since the bridge
+    // moved inline). New inline bridges accept both.
+    const legacyPayload = { type: 'centraid:theme', theme: prefs.theme, bgL: prefs.bgL };
     const frames = document.querySelectorAll<HTMLIFrameElement>('iframe[data-centraid-app]');
     frames.forEach((f) => {
       try {
-        f.contentWindow?.postMessage(payload, '*');
+        f.contentWindow?.postMessage(settingsPayload, '*');
+        f.contentWindow?.postMessage(legacyPayload, '*');
       } catch {
         // cross-origin postMessage cannot throw, but contentWindow access can
       }
@@ -211,7 +242,14 @@
       out.cardVariant = remote.cards;
     }
     if (typeof remote.coolCast === 'boolean') out.coolBlueCast = remote.coolCast;
-    if (typeof remote.accent === 'string' && remote.accent in ACCENT_PALETTE) {
+    // Accent: the semantic key (e.g. "teal") lives under `accentKey`; the
+    // resolved hex swatches under `accent` / `accentLight` / `accentDeep` are
+    // for the runtime's CSS-var injection only and are not re-derivable to
+    // a key. Older gateways may still carry a key in `accent` (pre-fix), so
+    // accept that as a fallback before defaulting.
+    if (typeof remote.accentKey === 'string' && remote.accentKey in ACCENT_PALETTE) {
+      out.accent = remote.accentKey as AccentKey;
+    } else if (typeof remote.accent === 'string' && remote.accent in ACCENT_PALETTE) {
       out.accent = remote.accent as AccentKey;
     }
     return out;
@@ -227,10 +265,12 @@
     if (patch.cardVariant !== undefined) out.cards = patch.cardVariant;
     if (patch.coolBlueCast !== undefined) out.coolCast = patch.coolBlueCast;
     if (patch.accent !== undefined) {
-      out.accent = patch.accent;
-      // Push the resolved palette swatch alongside the key so the
-      // gateway can bake the literal accent colour into `<html style="…">`
-      // without having to know about the renderer's ACCENT_PALETTE.
+      // `accentKey` carries the semantic key (e.g. "teal") so a second device
+      // can restore the exact swatch the user picked. `accent` / `accentLight`
+      // / `accentDeep` carry the resolved hex values for the runtime to bake
+      // directly into `<html style="…">` — the gateway has no knowledge of
+      // the renderer's ACCENT_PALETTE, so resolution must happen here.
+      out.accentKey = patch.accent;
       const swatch = ACCENT_PALETTE[patch.accent];
       if (swatch) {
         out.accent = swatch.accent;

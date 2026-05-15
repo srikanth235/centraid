@@ -144,3 +144,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-060d2206-5ef-1778838568 | claude-code | 060d2206-5ef4-41ec-a2e7-bb8e9bb77c09 | #63 | claude-opus-4-7 | 5 | 9958 | 14870 | 24 | 9987 | 0.0703 | chore(merge): main into claude/sleepy-faraday-7390c1 (#63) |
 | claude-code-9fc87005-699-1778838678 | claude-code | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | claude-opus-4-7 | 62 | 77312 | 13152540 | 28464 | 105838 | 7.7714 | chore(merge): main into claude/sleepy-faraday-7390c1 (#63) |
 | claude-code-9fc87005-699-1778838748 | claude-code | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | claude-opus-4-7 | 7 | 5618 | 1953653 | 3243 | 8868 | 1.0930 | chore(merge): main into claude/sleepy-faraday-7390c1 (#63) |
+| claude-code-9fc87005-699-1778839922 | claude-code | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | claude-opus-4-7 | 84 | 88645 | 22606848 | 47349 | 136078 | 13.0416 | fix(runtime,desktop,templates): PR #66 review fixes (#63) |
