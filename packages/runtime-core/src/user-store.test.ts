@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import { UserStore, MIGRATIONS, makeUserStoreRouteHandler } from './user-store.js';
+import { UserStore, makeUserStoreRouteHandler } from './user-store.js';
+import { makeGatewayDbProvider } from './gateway-db.js';
 import { IncomingMessage, ServerResponse } from 'node:http';
 
 function newStore(): UserStore {
   // Each test gets its own DB file so cases stay isolated.
   const dir = mkdtempSync(join(tmpdir(), 'centraid-user-store-'));
-  return new UserStore(join(dir, 'db.sqlite'));
+  return new UserStore(makeGatewayDbProvider(join(dir, 'db.sqlite')));
 }
 
 describe('UserStore', () => {
@@ -22,11 +22,13 @@ describe('UserStore', () => {
     assert.match(a, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
-  it('persists the UUID across instances', () => {
+  it('persists the UUID across instances pointed at the same file', () => {
     const dir = mkdtempSync(join(tmpdir(), 'centraid-user-store-'));
     const file = join(dir, 'db.sqlite');
-    const a = new UserStore(file).getUserId();
-    const b = new UserStore(file).getUserId();
+    // Two providers, two UserStores, same file — they should agree on
+    // the identity row.
+    const a = new UserStore(makeGatewayDbProvider(file)).getUserId();
+    const b = new UserStore(makeGatewayDbProvider(file)).getUserId();
     assert.equal(a, b);
   });
 
@@ -58,19 +60,6 @@ describe('UserStore', () => {
   it('returns empty object before any prefs are set', () => {
     const s = newStore();
     assert.deepEqual(s.getAllPrefs(), {});
-  });
-
-  it('migrations array advances PRAGMA user_version', () => {
-    // Sanity-check that migration count and the resulting user_version match —
-    // catches accidental edits to shipped slots.
-    const dir = mkdtempSync(join(tmpdir(), 'centraid-user-store-'));
-    const file = join(dir, 'db.sqlite');
-    const s = new UserStore(file);
-    s.getUserId(); // force open
-    const db = new DatabaseSync(file);
-    const v = db.prepare('PRAGMA user_version').get() as { user_version: number };
-    db.close();
-    assert.equal(v.user_version, MIGRATIONS.length);
   });
 });
 

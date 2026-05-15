@@ -2,7 +2,6 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import crypto from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { timingSafeEqual } from './security.js';
-import { ChatHistoryStore } from './chat-history.js';
 import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 import { makeUserStoreRouteHandler } from './user-store.js';
 import type { Runtime } from './runtime.js';
@@ -19,26 +18,18 @@ export interface RuntimeHttpServerOptions {
    */
   token?: string;
   /**
-   * Absolute path to the chat-history SQLite file. When provided, the server
-   * mounts the `/_centraid-chat/*` HTTP surface backed by this database. The
-   * file is opened lazily on the first matching request, so callers can pass
-   * a path even if the chat panel is never opened.
-   *
-   * Omit to disable the chat-history surface entirely — requests hitting the
-   * prefix then 404 through the normal `Runtime.handle` path.
-   */
-  chatHistoryDbPath?: string;
-  /**
-   * When true, the server also mounts `/_centraid-user/*` backed by the
-   * `UserStore` already attached to `runtime.userStore`. This is the
-   * desktop's main entry point for reading user identity and global
-   * preferences over HTTP.
-   *
+   * Whether to mount `/_centraid-user/*` against `runtime.userStore`.
    * Defaults to true when `runtime.userStore` is set; explicit `false`
    * disables the route even if a store is attached (used by hosts that
    * mount their own equivalent route, e.g. the openclaw plugin).
    */
   exposeUserStoreRoute?: boolean;
+  /**
+   * Whether to mount `/_centraid-chat/*` against `runtime.chatHistoryStore`.
+   * Defaults to true when `runtime.chatHistoryStore` is set; same opt-out
+   * pattern as `exposeUserStoreRoute`.
+   */
+  exposeChatHistoryRoute?: boolean;
 }
 
 export interface RuntimeHttpServerHandle {
@@ -80,40 +71,22 @@ export async function startRuntimeHttpServer(
   const port = opts.port ?? 0;
   const token = opts.token ?? crypto.randomBytes(32).toString('hex');
 
-  // The user-store sqlite is owned by the caller (so app-index injection and
-  // the HTTP route share the same file). We only mount the route if a store
-  // is attached AND the host hasn't disabled it.
+  // Both stores are owned by the caller (a single shared gateway DB
+  // provider underneath). We mount the routes only if the corresponding
+  // store is attached AND the host hasn't disabled it. The handlers
+  // resolve the stores lazily through getters so a future runtime that
+  // lazy-creates them still works.
   const userStore = opts.runtime.userStore;
   const exposeUserStore = opts.exposeUserStoreRoute !== false && userStore !== undefined;
   const userStoreHandler = exposeUserStore
     ? makeUserStoreRouteHandler(() => userStore!)
     : undefined;
 
-  // Lazy-init the chat-history store so callers that pass a path but never
-  // open the chat panel don't pay the SQLite-open cost. Mirrors the openclaw
-  // plugin's lazy pattern.
-  //
-  // Chat history is per-user: every session row carries the gateway-side
-  // user UUID from `UserStore`. Without a userStore we have no way to scope
-  // sessions, so we refuse to mount the route — surfacing a config bug
-  // loudly is better than silently writing rows with `user_id = ''`.
-  if (opts.chatHistoryDbPath && !userStore) {
-    throw new Error(
-      'startRuntimeHttpServer: chatHistoryDbPath requires runtime.userStore — chat history is scoped to the user identity',
-    );
-  }
-  let chatHistoryStore: ChatHistoryStore | undefined;
-  const chatHistoryHandler =
-    opts.chatHistoryDbPath && userStore
-      ? makeChatHistoryRouteHandler(() => {
-          if (!chatHistoryStore) {
-            chatHistoryStore = new ChatHistoryStore(opts.chatHistoryDbPath!, () =>
-              userStore.getUserId(),
-            );
-          }
-          return chatHistoryStore;
-        })
-      : undefined;
+  const chatHistoryStore = opts.runtime.chatHistoryStore;
+  const exposeChatHistory = opts.exposeChatHistoryRoute !== false && chatHistoryStore !== undefined;
+  const chatHistoryHandler = exposeChatHistory
+    ? makeChatHistoryRouteHandler(() => chatHistoryStore!)
+    : undefined;
 
   const server = http.createServer((req, res) => {
     void route(req, res);

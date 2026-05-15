@@ -1,123 +1,70 @@
 /*
  * Centraid user store.
  *
- * A single shared SQLite database — `<stateDir>/centraid-user.sqlite` —
- * that holds:
- *   1. The single user identity UUID (generated on first open).
+ * Wraps the shared gateway SQLite (see `gateway-db.ts`) to read/write the
+ * `users` and `user_prefs` tables. Holds:
+ *
+ *   1. The single user identity UUID, generated on first `getUserId()`
+ *      call. The "users" row is the install-hook moment for the gateway —
+ *      a fresh DB picks up its identity here, and the same UUID is handed
+ *      out for the lifetime of the file.
  *   2. Global user preferences (theme, density, accent, …) keyed by
- *      string keys, with arbitrary JSON-serialisable values.
+ *      `(user_id, key)` with JSON-encoded values.
  *
- * The "user" here is the single user of this Claude Code installation —
- * there is no multi-user model. Prefs sync naturally across devices to
- * whichever gateway the desktop is pointed at; identity comes from the
- * gateway, not the OS user.
+ * Single-user model today: `getUserId()` always returns the lone row's
+ * id and `getAllPrefs()`/`setPrefs()` always operate on that user. The
+ * schema is multi-user-ready so a future shift doesn't need a
+ * column-add migration.
  *
- * Exposed over HTTP at the `/_centraid-user` prefix. Mounted in two places
- * with identical surface area:
+ * Exposed over HTTP at the `/_centraid-user` prefix. Mounted in two
+ * places with identical surface area:
  *   - the OpenClaw plugin (remote gateway) via `api.registerHttpRoute`
  *   - `startRuntimeHttpServer` for the desktop's embedded local runtime
  *
  * The desktop main process is the only HTTP client; auth is the same
  * bearer token the surrounding gateway already enforces.
- *
- * Schema layout:
- *   user_meta(key, value)   — one row keyed by `id`, value is the UUID
- *   user_prefs(key, value)  — value is a JSON-encoded scalar/object
- *
- * Schema changes flow through the `MIGRATIONS` ladder, same pattern as
- * `chat-history.ts` — append, never edit shipped slots, tracked via
- * `PRAGMA user_version`.
  */
 
-import { DatabaseSync, type StatementSync } from 'node:sqlite';
+import { type DatabaseSync, type StatementSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-
-export const MIGRATIONS: readonly string[] = [
-  // 0 → 1: baseline schema. Two tiny key/value tables; the identity row
-  // lives alongside prefs so a single sqlite file is all the user-scope
-  // state we keep next to the chat-history db.
-  `
-    CREATE TABLE IF NOT EXISTS user_meta (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS user_prefs (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-  `,
-];
-
-function migrate(db: DatabaseSync): void {
-  const row = db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
-  const current = row?.user_version ?? 0;
-  if (current > MIGRATIONS.length) {
-    throw new Error(
-      `user store DB is at version ${current} but this build only supports up to ${MIGRATIONS.length}. ` +
-        `Please update centraid before opening this database.`,
-    );
-  }
-  if (current === MIGRATIONS.length) return;
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    for (let v = current; v < MIGRATIONS.length; v++) {
-      db.exec(MIGRATIONS[v]!);
-      db.exec(`PRAGMA user_version = ${v + 1}`);
-    }
-    db.exec('COMMIT');
-  } catch (err) {
-    try {
-      db.exec('ROLLBACK');
-    } catch {
-      /* already rolled back */
-    }
-    throw err;
-  }
-}
+import type { DatabaseProvider } from './gateway-db.js';
 
 interface PreparedStatements {
-  getMeta: StatementSync;
-  setMeta: StatementSync;
+  getAnyUser: StatementSync;
+  insertUser: StatementSync;
   listPrefs: StatementSync;
   setPref: StatementSync;
   deletePref: StatementSync;
 }
 
 export class UserStore {
-  private readonly dbPath: string;
-  // Both `db` and `stmts` are populated lazily on first access. The plugin
-  // shim is constructed in every OpenClaw worker subprocess, but only the
-  // gateway worker actually serves the routes that touch this store —
-  // deferring the sqlite open keeps stray DB handles out of workers that
-  // never read or write user state.
+  private readonly dbProvider: DatabaseProvider;
+  // Both `db` and `stmts` are populated lazily on the first method call.
+  // The plugin shim is constructed in every OpenClaw worker subprocess —
+  // the lazy open keeps stray DB handles out of workers that never read
+  // or write user state.
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
 
-  constructor(dbPath: string) {
-    this.dbPath = dbPath;
+  constructor(dbProvider: DatabaseProvider) {
+    this.dbProvider = dbProvider;
   }
 
-  private ensureOpen(): { db: DatabaseSync; stmts: PreparedStatements } {
+  private ensureReady(): { db: DatabaseSync; stmts: PreparedStatements } {
     if (this.db && this.stmts) return { db: this.db, stmts: this.stmts };
-    const db = new DatabaseSync(this.dbPath);
-    db.exec(`
-      PRAGMA journal_mode=WAL;
-      PRAGMA foreign_keys=ON;
-    `);
-    migrate(db);
+    const db = this.dbProvider();
     const stmts: PreparedStatements = {
-      getMeta: db.prepare(`SELECT value FROM user_meta WHERE key = ?`),
-      setMeta: db.prepare(
-        `INSERT INTO user_meta (key, value) VALUES (?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      ),
-      listPrefs: db.prepare(`SELECT key, value FROM user_prefs`),
+      // Single-user model — there's exactly one row in `users`. We just
+      // grab it; ordering doesn't matter because there's only ever one.
+      getAnyUser: db.prepare(`SELECT id FROM users LIMIT 1`),
+      insertUser: db.prepare(`INSERT INTO users (id, created_at) VALUES (?, ?)`),
+      listPrefs: db.prepare(`SELECT key, value FROM user_prefs WHERE user_id = ?`),
       setPref: db.prepare(
-        `INSERT INTO user_prefs (key, value) VALUES (?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        `INSERT INTO user_prefs (user_id, key, value) VALUES (?, ?, ?)
+         ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value`,
       ),
-      deletePref: db.prepare(`DELETE FROM user_prefs WHERE key = ?`),
+      deletePref: db.prepare(`DELETE FROM user_prefs WHERE user_id = ? AND key = ?`),
     };
     this.db = db;
     this.stmts = stmts;
@@ -126,27 +73,29 @@ export class UserStore {
 
   /**
    * Return the user UUID, generating + persisting one on first call. This
-   * is the install-hook moment for the gateway: a fresh sqlite file picks
-   * up its identity here, and the same UUID is handed out for the lifetime
-   * of the file.
+   * is the install-hook moment for the gateway: a fresh DB picks up its
+   * identity here, and the same UUID is handed out for the lifetime of
+   * the file.
    */
   getUserId(): string {
-    const { stmts } = this.ensureOpen();
-    const row = stmts.getMeta.get('id') as { value: string } | undefined;
-    if (row && typeof row.value === 'string' && row.value.length > 0) return row.value;
+    const { stmts } = this.ensureReady();
+    const row = stmts.getAnyUser.get() as { id: string } | undefined;
+    if (row && typeof row.id === 'string' && row.id.length > 0) return row.id;
     const id = randomUUID();
-    stmts.setMeta.run('id', id);
+    stmts.insertUser.run(id, Date.now());
     return id;
   }
 
   /**
-   * Read every pref as a `Record<string, unknown>`. Values are JSON-decoded;
-   * any row that fails to parse is skipped (defensive — should not happen
-   * because we always write through `setPrefs`).
+   * Read every pref for the current user as a `Record<string, unknown>`.
+   * Values are JSON-decoded; any row that fails to parse is skipped
+   * (defensive — should not happen because we always write through
+   * `setPrefs`).
    */
   getAllPrefs(): Record<string, unknown> {
-    const { stmts } = this.ensureOpen();
-    const rows = stmts.listPrefs.all() as Array<{ key: string; value: string }>;
+    const { stmts } = this.ensureReady();
+    const userId = this.getUserId();
+    const rows = stmts.listPrefs.all(userId) as Array<{ key: string; value: string }>;
     const out: Record<string, unknown> = {};
     for (const r of rows) {
       try {
@@ -159,22 +108,24 @@ export class UserStore {
   }
 
   /**
-   * Merge a patch into the prefs store. `undefined` and `null` values are
-   * treated as deletions so callers can clear a key by sending `{ foo: null }`.
-   * The merge is transactional so half-applied patches never appear.
+   * Merge a patch into the prefs store for the current user. `undefined`
+   * and `null` values are treated as deletions so callers can clear a key
+   * by sending `{ foo: null }`. The merge is transactional so half-applied
+   * patches never appear.
    */
   setPrefs(patch: Record<string, unknown>): Record<string, unknown> {
     const keys = Object.keys(patch);
     if (keys.length === 0) return this.getAllPrefs();
-    const { db, stmts } = this.ensureOpen();
+    const { db, stmts } = this.ensureReady();
+    const userId = this.getUserId();
     db.exec('BEGIN IMMEDIATE');
     try {
       for (const k of keys) {
         const v = patch[k];
         if (v === undefined || v === null) {
-          stmts.deletePref.run(k);
+          stmts.deletePref.run(userId, k);
         } else {
-          stmts.setPref.run(k, JSON.stringify(v));
+          stmts.setPref.run(userId, k, JSON.stringify(v));
         }
       }
       db.exec('COMMIT');

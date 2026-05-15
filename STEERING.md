@@ -83,3 +83,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-f421eab36b0-1778833041-1 | f421eab3-6b05-45a1-be7a-20c1f9fdd695 | #63 | correction | lexical | wait | refactor(design-tokens,desktop): extract --bg-wall token, lighten home main pan… |
 | steer-9fc87005699-1778840715-1 | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | interrupt | structural |  | fix(runtime,plugin): scope chat sessions to UserStore identity (#63) |
 | steer-9fc87005699-1778840715-2 | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | correction | classifier | pushed to consolidate migrations into one global migration instead of separate | fix(runtime,plugin): scope chat sessions to UserStore identity (#63) |
+| steer-9fc87005699-1778842413-1 | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | correction | classifier | pushed back on separate DB files, wanted justification | refactor(runtime,plugin,desktop): single gateway sqlite + real FKs (#63) |

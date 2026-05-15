@@ -102,9 +102,19 @@ export {
 } from './chat-history.js';
 export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
-// User-prefs store + HTTP route dispatcher. Mirrors the chat-history wiring
-// — opened lazily by both hosts (openclaw plugin gateway, desktop embedded
-// runtime) so the same on-disk file works in either mode.
+// Shared gateway DB (single SQLite file holding `users`, `user_prefs`,
+// `chat_sessions`, `chat_messages`). Hosts construct one provider and
+// pass it to both UserStore and ChatHistoryStore so they share a
+// connection + a single migration ladder + real cross-table FKs.
+export {
+  openGatewayDb,
+  makeGatewayDbProvider,
+  MIGRATIONS as GATEWAY_MIGRATIONS,
+  type DatabaseProvider,
+} from './gateway-db.js';
+
+// User-prefs store + HTTP route dispatcher. Wraps the gateway DB; mounted
+// by both hosts at `/_centraid-user`.
 export { UserStore, makeUserStoreRouteHandler } from './user-store.js';
 
 // Per-app `__centraid_settings` reader and the settings-merge pipeline that

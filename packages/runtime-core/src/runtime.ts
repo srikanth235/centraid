@@ -19,6 +19,7 @@ import { handleAppIngest, handleAppUpload } from './route-handlers.js';
 import { ChangeBus } from './change-bus.js';
 import { handleAppChanges } from './changes-sse.js';
 import type { UserStore } from './user-store.js';
+import type { ChatHistoryStore } from './chat-history.js';
 import { readAppSettings } from './app-settings.js';
 import { buildSettingsInject } from './settings-merge.js';
 import type { AppRef, RegistryEntry } from './types.js';
@@ -57,6 +58,12 @@ export interface RuntimeOptions {
    * desktop to read/write prefs.
    */
   userStore?: UserStore;
+  /**
+   * Optional chat-history store. Wraps the same gateway DB as `userStore`
+   * (real FK from `chat_sessions.user_id` → `users.id`). When provided,
+   * `startRuntimeHttpServer` mounts `/_centraid-chat/*` against it.
+   */
+  chatHistoryStore?: ChatHistoryStore;
 }
 
 const noopLogger: RuntimeLogger = {
@@ -90,6 +97,8 @@ export class Runtime {
    * (so the desktop can read/write prefs over HTTP).
    */
   readonly userStore?: UserStore;
+  /** Optional chat-history store. See `RuntimeOptions.chatHistoryStore`. */
+  readonly chatHistoryStore?: ChatHistoryStore;
   private readonly appsDir: string;
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
@@ -105,6 +114,7 @@ export class Runtime {
     this.versions = new VersionStore();
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
     this.userStore = opts.userStore;
+    this.chatHistoryStore = opts.chatHistoryStore;
     this.cronSync = new CronSync({
       registry: this.registry,
       scheduler: this.scheduler,

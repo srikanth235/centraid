@@ -2,9 +2,11 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { app } from 'electron';
 import {
+  ChatHistoryStore,
   NullScheduler,
   Runtime,
   UserStore,
+  makeGatewayDbProvider,
   startRuntimeHttpServer,
   type RuntimeHttpServerHandle,
   type Scheduler,
@@ -33,21 +35,14 @@ export function localRuntimeAppsDir(): string {
 }
 
 /**
- * Path of the single shared chat-history SQLite. Lives next to (not inside)
- * the appsDir so it stays out of every individual app's data and is never
- * reachable from the centraid_sql_* tools. Mirrors the OpenClaw plugin's
- * placement (`<stateDir>/centraid-chat-history.sqlite`).
+ * Path of the single SQLite file that holds every per-user gateway record
+ * (identity, prefs, chat sessions, chat messages). Lives next to (not
+ * inside) the appsDir so it stays out of every individual app's data and
+ * is never reachable from the centraid_sql_* tools. Mirrors the OpenClaw
+ * plugin's placement.
  */
-export function localRuntimeChatHistoryDb(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-chat-history.sqlite');
-}
-
-/**
- * Path of the single shared user-prefs / user-id SQLite. Sibling of the
- * chat-history db so all gateway-side per-user state lives in one place.
- */
-export function localRuntimeUserStoreDb(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-user.sqlite');
+export function localRuntimeGatewayDb(): string {
+  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-gateway.sqlite');
 }
 
 /**
@@ -72,18 +67,24 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
         warn: (m) => console.warn(`[local-runtime] ${m}`),
       });
 
+    // One SQLite file holds every per-user gateway record. Both stores
+    // wrap the same lazy provider so they share one connection (real FK
+    // from `chat_sessions.user_id` to `users.id`, single migration ladder,
+    // single backup target). The provider opens the file on first use —
+    // lazy because nothing here actually touches the DB until a request
+    // hits the HTTP server.
+    const gatewayDbProvider = makeGatewayDbProvider(localRuntimeGatewayDb());
+    const userStore = new UserStore(gatewayDbProvider);
+    const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
+
     // gatewayBaseUrl is filled in after the HTTP server binds and we learn
     // the ephemeral port; cron-sync uses it to construct webhook targets.
-    //
-    // The user-store opens eagerly because both the runtime (for app-index
-    // injection) and the HTTP server (for the /_centraid-user route) share
-    // the same instance — lazy-init would race on first concurrent access.
-    const userStore = new UserStore(localRuntimeUserStoreDb());
     const runtime = new Runtime({
       appsDir,
       gatewayBaseUrl: 'http://127.0.0.1:0',
       scheduler: effectiveScheduler,
       userStore,
+      chatHistoryStore,
       logger: {
         info: (m) => console.info(`[local-runtime] ${m}`),
         warn: (m) => console.warn(`[local-runtime] ${m}`),
@@ -91,10 +92,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       },
     });
 
-    const server = await startRuntimeHttpServer({
-      runtime,
-      chatHistoryDbPath: localRuntimeChatHistoryDb(),
-    });
+    const server = await startRuntimeHttpServer({ runtime });
     runtime.setGatewayBaseUrl(server.url);
     await runtime.bootstrap();
 
