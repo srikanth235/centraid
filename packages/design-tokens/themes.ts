@@ -75,10 +75,19 @@ export interface Theme {
   shadowLg: string;
 
   /**
+   * Vertical "wall" gradient for the main pane (.cd-main, .builder) and
+   * the bottom layer of the device-wall composite. Dark theme uses a
+   * blue-tinted gradient anchored on `--bg-l`; light theme is a flat
+   * near-white. Single source of truth — the template iframes pick this
+   * up via packages/design-tokens/wall.css.
+   */
+  bgWall: string;
+
+  /**
    * Signature backdrop behind any "device" surface — preview pane, app
    * canvas. Two repeating-linear-gradients form a 1px crosshatch on top
-   * of a vertical wall gradient. Desktop-only; mobile does not render
-   * this (the phone IS the surface, not framed against a wall).
+   * of `var(--bg-wall)`. Desktop-only; mobile does not render this
+   * (the phone IS the surface, not framed against a wall).
    */
   deviceWall: string;
 
@@ -106,6 +115,7 @@ export const lightTheme: Theme = {
   bgApp: '#FFFFFF',
   bgElev: '#FFFFFF',
   bgSunken: '#F0F1F3',
+  bgWall: '#FCFCFC',
   bezel: '#14181F',
   bezelInner: '#1f242d',
   deviceWall:
@@ -145,12 +155,14 @@ export const darkTheme: Theme = {
   bgApp: 'hsl(222 12% calc(var(--bg-l) - 5%))',
   bgElev: 'hsl(222 11% calc(var(--bg-l) + 4.5%))',
   bgSunken: 'hsl(222 11% calc(var(--bg-l) - 4%))',
+  bgWall:
+    'linear-gradient(180deg, hsl(222 13% calc(var(--bg-l) + 2%)) 0%, hsl(222 14% calc(var(--bg-l) - 2%)) 100%)',
   bezel: '#0a0d13',
   bezelInner: '#14181F',
   deviceWall:
     'repeating-linear-gradient(0deg, transparent 0 23px, rgba(255,255,255,.025) 23px 24px), ' +
     'repeating-linear-gradient(90deg, transparent 0 23px, rgba(255,255,255,.025) 23px 24px), ' +
-    'linear-gradient(180deg, hsl(222 13% calc(var(--bg-l) - 2%)) 0%, hsl(222 14% calc(var(--bg-l) - 6%)) 100%)',
+    'var(--bg-wall)',
   ink: '#ECEEF2',
   ink2: 'rgba(236,238,242,0.72)',
   ink3: 'rgba(236,238,242,0.52)',

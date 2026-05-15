@@ -1,0 +1,36 @@
+/* Centraid — "wall" surface gradient. Single source of truth for the
+   home/app/builder main pane and template-app page background.
+
+   The shell emits the same value via `bgWall` in themes.ts (see
+   ./css.ts). Template iframes can't share the shell's token CSS — they
+   need to work standalone — so this file is copied next to each
+   template's index.html (alongside the also-copied theme-bridge.js).
+   Keep that copy in sync with this file.
+
+   Uses `var(--bg-l)` so it retunes from the host's "Dark shade" knob. */
+
+:root[data-theme='dark'] {
+  --bg-wall: linear-gradient(
+    180deg,
+    hsl(222 13% calc(var(--bg-l) + 2%)) 0%,
+    hsl(222 14% calc(var(--bg-l) - 2%)) 100%
+  );
+}
+
+:root[data-theme='light'] {
+  --bg-wall: #fcfcfc;
+}
+
+/* Standalone fallback — template opened outside the shell with system
+   dark mode and no explicit [data-theme]. Templates set their own
+   --bg-l in this branch (e.g. 10% for the atmospheric template ramp),
+   so the formula still resolves consistently. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg-wall: linear-gradient(
+      180deg,
+      hsl(222 13% calc(var(--bg-l) + 2%)) 0%,
+      hsl(222 14% calc(var(--bg-l) - 2%)) 100%
+    );
+  }
+}

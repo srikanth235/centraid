@@ -80,3 +80,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-b5994de6c42-1778787861-1 | b5994de6-c421-46bc-b87b-366137b1238c | #53 | interrupt | structural |  | feat(desktop): Notion-style action menus for apps and templates (#53) |
 | steer-b5994de6c42-1778787861-2 | b5994de6-c421-46bc-b87b-366137b1238c | #53 | correction | classifier | User expanded scope: sidebar also needs Notion-style actions, not just dots | feat(desktop): Notion-style action menus for apps and templates (#53) |
 | steer-f7a791c9daf-1778820466-1 | f7a791c9-daf7-43ae-8a7a-702b18834172 | #54 | interrupt | structural |  | feat(governance): add query-handlers-read-only - forbid stmt.run / db.exec in q… |
+| steer-f421eab36b0-1778833041-1 | f421eab3-6b05-45a1-be7a-20c1f9fdd695 | #63 | correction | lexical | wait | refactor(design-tokens,desktop): extract --bg-wall token, lighten home main pan… |

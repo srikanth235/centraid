@@ -38,6 +38,7 @@ function themeProps(t: Theme): Record<string, string> {
     '--bg-app': t.bgApp,
     '--bg-elev': t.bgElev,
     '--bg-sunken': t.bgSunken,
+    '--bg-wall': t.bgWall,
     '--device-wall': t.deviceWall,
     '--ink': t.ink,
     '--ink-2': t.ink2,

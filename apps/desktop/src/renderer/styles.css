@@ -955,7 +955,7 @@ textarea {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--bg-wall);
 }
 .builder-topbar {
   flex: none;
@@ -4118,22 +4118,13 @@ textarea {
   flex-direction: column;
   min-height: 0;
 }
-/* All `.cd-main` panes share the same vertical gradient so the chrome
+/* All `.cd-main` panes share the same wall surface so the chrome
    titlebar (inside .cd-main) and the content below visually flow as one
    surface. The only structural separator is the vertical sidebar/main
-   divider. */
+   divider. `--bg-wall` is a gradient in dark mode and a flat near-white
+   in light mode (see packages/design-tokens/themes.ts > bgWall). */
 .cd-main {
-  background: linear-gradient(
-    180deg,
-    hsl(222 13% calc(var(--bg-l) - 2%)) 0%,
-    hsl(222 14% calc(var(--bg-l) - 6%)) 100%
-  );
-}
-:root[data-theme='light'] .cd-main {
-  /* Notion/Linear-style: flat near-white. Gradients on small lightness
-     ranges read as visible banding in light mode; hierarchy comes from
-     subtle tonal shifts between sidebar / canvas / cards instead. */
-  background: var(--bg);
+  background: var(--bg-wall);
 }
 .cd-main-scroll {
   flex: 1;
@@ -4628,14 +4619,14 @@ textarea {
   --bg-elev: hsl(0 0% calc(var(--bg-l) + 4.5%));
   --bg-sunken: hsl(0 0% calc(var(--bg-l) - 4%));
   --sidebar-bg: hsl(0 0% calc(var(--bg-l) + 2%) / 0.65);
-  --device-wall:
-    repeating-linear-gradient(0deg, transparent 0 23px, rgba(255, 255, 255, 0.025) 23px 24px),
-    repeating-linear-gradient(90deg, transparent 0 23px, rgba(255, 255, 255, 0.025) 23px 24px),
-    linear-gradient(
-      180deg,
-      hsl(0 0% calc(var(--bg-l) - 2%)) 0%,
-      hsl(0 0% calc(var(--bg-l) - 6%)) 100%
-    );
+  /* Redefining --bg-wall here neutralises the main panes (.cd-main,
+     .builder) AND the device-wall composite — which references
+     var(--bg-wall) — in one place. */
+  --bg-wall: linear-gradient(
+    180deg,
+    hsl(0 0% calc(var(--bg-l) + 2%)) 0%,
+    hsl(0 0% calc(var(--bg-l) - 2%)) 100%
+  );
 }
 
 /* Builder app-meta strip — sits under the titlebar */
