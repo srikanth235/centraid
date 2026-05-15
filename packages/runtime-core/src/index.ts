@@ -100,3 +100,15 @@ export {
   type ChatMessageRow,
   type AppendBatchResult,
 } from './chat-history.js';
+
+// User-prefs store + HTTP route dispatcher. Mirrors the chat-history wiring
+// — opened lazily by both hosts (openclaw plugin gateway, desktop embedded
+// runtime) so the same on-disk file works in either mode.
+export { UserStore, makeUserStoreRouteHandler } from './user-store.js';
+
+// Per-app `__centraid_settings` reader and the settings-merge pipeline that
+// turns layered prefs/settings into the `SettingsInject` payload baked into
+// each app's index.html.
+export { readAppSettings, APP_SETTINGS_TABLE } from './app-settings.js';
+export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
+export type { SettingsInject } from './static-server.js';

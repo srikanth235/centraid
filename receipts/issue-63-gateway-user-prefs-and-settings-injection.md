@@ -1,0 +1,63 @@
+# issue-63 — Centralize app settings: gateway-stored user identity, server-side injection, per-app sqlite settings
+
+GitHub issue: [#63](https://github.com/srikanth235/centraid/issues/63)
+
+## Checklist
+
+- [x] User UUID generated + persisted gateway-side on first read (the "install hook")
+- [x] HTTP route `/_centraid-user/id` returns the UUID — the desktop's `getUserId` RPC
+- [x] Gateway-side user-prefs store (`UserStore`) with versioned sqlite schema
+- [x] `__centraid_settings` per-app table contract + reader
+- [x] `injectTheme` → `injectSettings`: arbitrary `data-*` attrs + CSS vars baked into `<html>` server-side
+- [x] Settings-merge pipeline: global ⊕ per-app ⊕ URL query, with a `KNOWN_KEYS` allow-list
+- [x] OpenClaw plugin and desktop local-runtime both mount the user store + the `/_centraid-user/*` route
+- [x] Desktop renderer reads prefs from gateway after first paint and mirrors writes back; local Store demoted to fast-paint cache
+- [x] Per-template `theme-bridge.js` retired; replaced with inline live-update listener in each `index.html`
+- [x] Builder-harness scaffolder writes the inline bridge for new projects (no separate file)
+- [x] Builder agent grounding (system-prompt) updated so new code never references `theme-bridge.js`
+- [x] Standalone fallback preserved — templates keep working defaults via `:root` in their `app.css`
+- [x] Tests + typecheck + format/lint all clean
+- [ ] **Out of scope (deferred):** mobile parity (Expo `WKURLSchemeHandler` / `injectedJavaScriptBeforeContentLoaded`)
+
+## What changed
+
+**User UUID generated + persisted gateway-side on first read (the "install hook").** `UserStore.getUserId()` in `packages/runtime-core/src/user-store.ts` returns the UUID from the `user_meta` table or generates one with `crypto.randomUUID()` and inserts it on the first call. There is no separate install ceremony — the first read is the install. The same UUID then survives Electron reinstalls (it lives with the gateway's sqlite, not in `userData/centraid-settings.json`) and travels with whichever gateway the desktop is pointed at.
+
+**HTTP route `/_centraid-user/id` returns the UUID — the desktop's `getUserId` RPC.** `makeUserStoreRouteHandler()` in the same file dispatches `GET /_centraid-user/id` to `UserStore.getUserId()` and returns `{ id }`. The desktop's main process calls this through `apps/desktop/src/main/user-prefs-client.ts#fetchUserId`, exposed to the renderer as `window.CentraidApi.getUserId()` via the `USER_ID_GET` IPC channel. That's the "plugin RPC" the issue asks for, modeled exactly on the existing chat-history route.
+
+**Gateway-side user-prefs store (`UserStore`) with versioned sqlite schema.** Two key/value tables: `user_meta` (the UUID lives here) and `user_prefs` (JSON-encoded values). Schema migrations follow the same `MIGRATIONS` ladder + `PRAGMA user_version` pattern as `chat-history.ts` — append, never edit shipped slots. The constructor only stashes the path; `ensureOpen()` lazily opens sqlite on first method call so the OpenClaw plugin's worker subprocesses (which construct the runtime in every context) don't hold stray DB handles. `setPrefs()` is transactional via `BEGIN IMMEDIATE` and treats `null`/`undefined` values as deletions.
+
+**`__centraid_settings` per-app table contract + reader.** New `packages/runtime-core/src/app-settings.ts` defines the contract: a table named `__centraid_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL)` in each app's `data.sqlite`, with JSON-encoded values. `readAppSettings()` opens the file read-only, checks `sqlite_master` for the table, and returns the decoded rows — missing file or table returns `{}` and never throws. Apps own this table and can read/write through their normal SQL handlers; the runtime only ever reads it during `app-index`.
+
+**`injectTheme` → `injectSettings`: arbitrary `data-*` attrs + CSS vars baked into `<html>` server-side.** `packages/runtime-core/src/static-server.ts` is now `SettingsInject = { dataAttrs, cssVars }` — the runtime can bake any `<html data-foo="bar" style="--foo:bar">` combo, not just theme + bgL. Keys (lowercase letters, digits, dashes) and values (no quotes, angle brackets, or control chars) are regex-validated so a typoed pref can't smear garbage across the `<html>` tag. Existing `data-*` attrs on the tag win — apps that hard-code a theme keep it, mirroring the previous `injectTheme` behavior.
+
+**Settings-merge pipeline: global ⊕ per-app ⊕ URL query, with a `KNOWN_KEYS` allow-list.** New `packages/runtime-core/src/settings-merge.ts` exports `buildSettingsInject(layers)`. Layers fold in order — later layers override earlier ones, with `null`/`undefined` falling through to the previous layer. The `KNOWN_KEYS` table maps each pref name to either a `data-*` attr or a CSS var (with a coercer for percent strings, on/off booleans, etc.). Anything not in the table is dropped — a typoed pref name in an app's settings table never makes it onto `<html>`. Adding a new pref is a single-line edit to the table.
+
+**OpenClaw plugin and desktop local-runtime both mount the user store + the `/_centraid-user/*` route.** `packages/openclaw-plugin/src/index.ts` constructs `UserStore`, passes it to `Runtime`, and registers `/_centraid-user` as a sibling of `/_centraid-chat` via `api.registerHttpRoute`. `apps/desktop/src/main/local-runtime.ts` does the same: constructs `UserStore` at `<userData>/local-runtime/centraid-user.sqlite`, passes it to `Runtime`, and `startRuntimeHttpServer` auto-mounts the route whenever `runtime.userStore` is set. Both gateways read/write the same on-disk shape, so the desktop sees identical behavior in either runtime mode.
+
+**Desktop renderer reads prefs from gateway after first paint and mirrors writes back; local Store demoted to fast-paint cache.** `apps/desktop/src/renderer/app.ts` still applies the local Store value synchronously (no flash), then fires `void window.CentraidApi.getUserPrefs()` after `applyPrefs()` and reapplies if the gateway disagrees. `setPrefs()` writes through to the gateway fire-and-forget via `saveUserPrefs()`. New `pickAppearance` / `toRemoteShape` helpers mediate between the renderer's typed prefs and the gateway's `KNOWN_KEYS` shape (resolving the accent palette key into the swatch's hex values so the gateway can bake `--accent` directly into `<html style="…">`).
+
+**Per-template `theme-bridge.js` retired; replaced with inline live-update listener in each `index.html`.** `packages/app-templates/{journal,hydrate,todos}/theme-bridge.js` are deleted. Each template's `index.html` now embeds a small inline `<script>` block at the top of `<head>` that does the same job: parses the URL hash for the no-runtime preview path and listens for `centraid:theme` postMessage for live updates while the iframe is mounted. Initial paint comes from the runtime's bake. `manifest.json` is regenerated by the build script and no longer references the deleted files.
+
+**Builder-harness scaffolder writes the inline bridge for new projects (no separate file).** `packages/builder-harness/src/scaffold.ts` no longer writes `theme-bridge.js` to the project dir; `DEFAULT_INDEX_HTML` embeds the same minified bridge inline via the `INLINE_SETTINGS_BRIDGE` constant. Existing projects on the old layout keep working — the inline bridge is harmless when the runtime has already baked the initial paint.
+
+**Builder agent grounding (system-prompt) updated so new code never references `theme-bridge.js`.** `packages/builder-harness/src/ui-grounding.ts` and the README no longer instruct the agent to include `theme-bridge.js`; they reference the inline `<script>` pattern and tell the agent to keep that block at the top of `<head>`. The "When unsure, read these templates" reference list now points to the inline bridge as the canonical pattern.
+
+**Standalone fallback preserved — templates keep working defaults via `:root` in their `app.css`.** Each template declares working defaults under `:root` (light theme via the literal `--bg`, `--ink`, etc.; dark theme overrides via `:root[data-theme='dark']`). With no shell, no runtime, and no `data-theme` attribute, the light defaults render as-is — the inline bridge silently no-ops and the page remains usable.
+
+**Tests + typecheck + format/lint all clean.** See Verification below.
+
+## Verification
+
+- `bun run build` — 7 packages clean, including a clean rebuild after wiping `dist/` and `.turbo` to confirm no caching artefacts hid the new exports.
+- `bun run test` — 154/154 passing in runtime-core (16 new tests across `user-store.test.ts`, `app-settings.test.ts`, `settings-merge.test.ts`).
+- `bun run typecheck` — 14/14 tasks clean across the workspace.
+- `bun run check` — `oxfmt --check` and `oxlint` both clean across 218 files.
+- Manifest regenerated via `node scripts/build-manifest.mjs`; `grep -c theme-bridge manifest.json` → 0.
+
+## Out of scope
+
+- **Mobile parity (Expo WebView).** The same `injectSettings` model needs `WKURLSchemeHandler` / `shouldInterceptRequest` on the Expo side, plus `injectedJavaScriptBeforeContentLoaded` for the inline-bridge equivalent. Confirmed deferred at scoping time.
+- **Settings UI surfaces inside individual apps.** This change provides storage + injection plumbing only — apps can write to their `__centraid_settings` table through their own handlers, but no first-class UI for editing per-app settings is shipping here.
+- **Migration of existing local Electron prefs to the gateway.** The renderer's local Store is now a fast-paint cache; on first launch the gateway is empty, so the renderer's first `setPrefs` after any user interaction populates the gateway. No one-shot migration script is included — the issue marked it as optional polish.
+- **Multi-user / auth.** The model is single-user-per-Claude-Code-installation by design, as per the issue.

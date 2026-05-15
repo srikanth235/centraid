@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { timingSafeEqual } from './security.js';
 import { ChatHistoryStore, makeChatHistoryRouteHandler } from './chat-history.js';
+import { makeUserStoreRouteHandler } from './user-store.js';
 import type { Runtime } from './runtime.js';
 
 export interface RuntimeHttpServerOptions {
@@ -26,6 +27,17 @@ export interface RuntimeHttpServerOptions {
    * prefix then 404 through the normal `Runtime.handle` path.
    */
   chatHistoryDbPath?: string;
+  /**
+   * When true, the server also mounts `/_centraid-user/*` backed by the
+   * `UserStore` already attached to `runtime.userStore`. This is the
+   * desktop's main entry point for reading user identity and global
+   * preferences over HTTP.
+   *
+   * Defaults to true when `runtime.userStore` is set; explicit `false`
+   * disables the route even if a store is attached (used by hosts that
+   * mount their own equivalent route, e.g. the openclaw plugin).
+   */
+  exposeUserStoreRoute?: boolean;
 }
 
 export interface RuntimeHttpServerHandle {
@@ -38,6 +50,7 @@ export interface RuntimeHttpServerHandle {
 }
 
 const CHAT_HISTORY_PREFIX = '/_centraid-chat';
+const USER_STORE_PREFIX = '/_centraid-user';
 
 /**
  * Spawn an HTTP server in front of a `Runtime`, suitable for use as the
@@ -79,6 +92,15 @@ export async function startRuntimeHttpServer(
       })
     : undefined;
 
+  // The user-store sqlite is owned by the caller (so app-index injection and
+  // the HTTP route share the same file). We only mount the route if a store
+  // is attached AND the host hasn't disabled it.
+  const userStore = opts.runtime.userStore;
+  const exposeUserStore = opts.exposeUserStoreRoute !== false && userStore !== undefined;
+  const userStoreHandler = exposeUserStore
+    ? makeUserStoreRouteHandler(() => userStore!)
+    : undefined;
+
   const server = http.createServer((req, res) => {
     void route(req, res);
   });
@@ -95,6 +117,10 @@ export async function startRuntimeHttpServer(
     }
     if (chatHistoryHandler && (req.url ?? '').startsWith(CHAT_HISTORY_PREFIX)) {
       const handled = await chatHistoryHandler(req, res);
+      if (handled) return;
+    }
+    if (userStoreHandler && (req.url ?? '').startsWith(USER_STORE_PREFIX)) {
+      const handled = await userStoreHandler(req, res);
       if (handled) return;
     }
     await opts.runtime.handle(req, res);

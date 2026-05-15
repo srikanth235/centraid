@@ -50,6 +50,10 @@ const Channel = {
 
   AUTH_STATUS: 'centraid:auth:status',
   AUTH_RESYNC: 'centraid:auth:resync',
+
+  USER_ID_GET: 'centraid:user:id',
+  USER_PREFS_GET: 'centraid:user:prefs:get',
+  USER_PREFS_SAVE: 'centraid:user:prefs:save',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -155,4 +159,12 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // Credential import (Claude Code / Codex → pi auth.json)
   authStatus: () => ipcRenderer.invoke(Channel.AUTH_STATUS),
   authResync: () => ipcRenderer.invoke(Channel.AUTH_RESYNC),
+
+  // Gateway-side user identity + global prefs (centraid-user.sqlite). The
+  // renderer treats the gateway as source of truth and keeps the local
+  // Store value as a fast-paint cache only.
+  getUserId: () => ipcRenderer.invoke(Channel.USER_ID_GET),
+  getUserPrefs: () => ipcRenderer.invoke(Channel.USER_PREFS_GET),
+  saveUserPrefs: (patch: Record<string, unknown>) =>
+    ipcRenderer.invoke(Channel.USER_PREFS_SAVE, patch),
 });

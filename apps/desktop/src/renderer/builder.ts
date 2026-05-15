@@ -1016,8 +1016,9 @@
     function makePreviewFrame(src: string): HTMLIFrameElement {
       // Read live theme from the shell (applyPrefs() writes data-theme +
       // --bg-l onto <html>). Preview iframe gets both the initial paint
-      // (via #hash) and a postMessage on load so the theme-bridge inside
-      // the iframe stays in sync — same protocol as the running-app view.
+      // (via #hash, which the inline live-settings bridge in each app's
+      // index.html parses on load) and a postMessage on load so the bridge
+      // stays in sync — same protocol as the running-app view.
       const html = document.documentElement;
       const theme = html.dataset.theme || 'dark';
       const bgL = (html.style.getPropertyValue('--bg-l') || '5%').replace('%', '').trim();

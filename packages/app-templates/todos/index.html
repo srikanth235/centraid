@@ -4,7 +4,31 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Todos</title>
-    <script src="theme-bridge.js"></script>
+    <script>
+      // Centraid live settings bridge. Initial values come from the runtime,
+      // which bakes <html data-theme="…" style="--bg-l:…"> into this file
+      // server-side before serving. This inline script covers two extras:
+      //   1. Builder preview (centraid-preview://) bypasses the runtime, so
+      //      we read URL hash params as a fallback for the no-bake path.
+      //   2. The shell can flip a pref while the iframe is mounted — the
+      //      postMessage listener keeps it in lock-step without a reload.
+      (function () {
+        var h = document.documentElement;
+        function apply(t, b) {
+          if (t === 'dark' || t === 'light') h.dataset.theme = t;
+          if (b != null && b !== '') h.style.setProperty('--bg-l', b + '%');
+        }
+        try {
+          var p = new URLSearchParams((location.hash || '').slice(1));
+          apply(p.get('theme'), p.get('bgL'));
+        } catch (_) {}
+        addEventListener('message', function (e) {
+          var d = e && e.data;
+          if (!d || d.type !== 'centraid:theme') return;
+          apply(d.theme, d.bgL);
+        });
+      })();
+    </script>
     <link rel="stylesheet" href="app.css" />
   </head>
   <body>

@@ -20,7 +20,13 @@
 import path from 'node:path';
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
-import { Runtime, ChatHistoryStore, makeChatHistoryRouteHandler } from '@centraid/runtime-core';
+import {
+  Runtime,
+  ChatHistoryStore,
+  makeChatHistoryRouteHandler,
+  UserStore,
+  makeUserStoreRouteHandler,
+} from '@centraid/runtime-core';
 import { OpenClawScheduler } from './lib/openclaw-cron.js';
 import { registerCentraidTools } from './lib/tools.js';
 
@@ -74,11 +80,21 @@ export default definePluginEntry({
     const gatewayBaseUrl = pluginConfig.gatewayBaseUrl ?? 'http://127.0.0.1:18789';
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
+    // The user-store SQLite holds the gateway's single user UUID (generated
+    // on first read — that's our "install hook") plus global user prefs
+    // (theme, density, accent, …). Runtime needs it for app-index settings
+    // injection; the HTTP route below exposes it to the desktop. Both
+    // surfaces share the same instance so a single sqlite file is the source
+    // of truth. Lives next to the chat-history db.
+    const userStoreDb = path.join(path.dirname(appsDir), 'centraid-user.sqlite');
+    const userStore = new UserStore(userStoreDb);
+
     const runtime = new Runtime({
       appsDir,
       gatewayBaseUrl,
       versionRetention,
       scheduler: new OpenClawScheduler(), // Path B by default; upgraded in gateway_start.
+      userStore,
       logger: api.logger,
     });
 
@@ -132,6 +148,18 @@ export default definePluginEntry({
       match: 'prefix',
       auth: 'gateway',
       handler: makeChatHistoryRouteHandler(getChatHistoryStore),
+    });
+
+    // User-prefs route. The store was constructed eagerly above so that the
+    // runtime's app-index injection can read prefs synchronously, but the
+    // route handler still goes through a getter for symmetry with the
+    // chat-history wiring (and so future lazy-init refactors don't have to
+    // touch the route registration).
+    api.registerHttpRoute({
+      path: '/_centraid-user',
+      match: 'prefix',
+      auth: 'gateway',
+      handler: makeUserStoreRouteHandler(() => userStore),
     });
   },
 });

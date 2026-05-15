@@ -4,6 +4,7 @@ import { app } from 'electron';
 import {
   NullScheduler,
   Runtime,
+  UserStore,
   startRuntimeHttpServer,
   type RuntimeHttpServerHandle,
   type Scheduler,
@@ -42,6 +43,14 @@ export function localRuntimeChatHistoryDb(): string {
 }
 
 /**
+ * Path of the single shared user-prefs / user-id SQLite. Sibling of the
+ * chat-history db so all gateway-side per-user state lives in one place.
+ */
+export function localRuntimeUserStoreDb(): string {
+  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-user.sqlite');
+}
+
+/**
  * Override the scheduler used by the embedded runtime. Must be called before
  * `ensureLocalRuntime()` to take effect; defaults to `NullScheduler` (cron
  * execution for the embedded runtime is on the backlog).
@@ -65,10 +74,16 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
 
     // gatewayBaseUrl is filled in after the HTTP server binds and we learn
     // the ephemeral port; cron-sync uses it to construct webhook targets.
+    //
+    // The user-store opens eagerly because both the runtime (for app-index
+    // injection) and the HTTP server (for the /_centraid-user route) share
+    // the same instance — lazy-init would race on first concurrent access.
+    const userStore = new UserStore(localRuntimeUserStoreDb());
     const runtime = new Runtime({
       appsDir,
       gatewayBaseUrl: 'http://127.0.0.1:0',
       scheduler: effectiveScheduler,
+      userStore,
       logger: {
         info: (m) => console.info(`[local-runtime] ${m}`),
         warn: (m) => console.warn(`[local-runtime] ${m}`),

@@ -18,6 +18,9 @@ import { makeAppUploadLocks } from './upload-lock.js';
 import { handleAppIngest, handleAppUpload } from './route-handlers.js';
 import { ChangeBus } from './change-bus.js';
 import { handleAppChanges } from './changes-sse.js';
+import type { UserStore } from './user-store.js';
+import { readAppSettings } from './app-settings.js';
+import { buildSettingsInject } from './settings-merge.js';
 import type { AppRef, RegistryEntry } from './types.js';
 
 export interface RuntimeLogger {
@@ -43,6 +46,17 @@ export interface RuntimeOptions {
    * from outside (e.g. OpenClaw's `centraid_sql_write` agent tool).
    */
   changeBus?: ChangeBus;
+  /**
+   * Optional user-prefs store. When provided, the runtime reads the
+   * gateway-wide user preferences during `app-index` and bakes them into
+   * the served HTML (merged with the app's own `__centraid_settings`
+   * table and any URL-query overrides). Without it, app-index falls back
+   * to URL-query-only injection so single-app/standalone setups still
+   * work. Hosts (openclaw plugin, desktop local-runtime) construct the
+   * store themselves and additionally mount `/_centraid-user/*` for the
+   * desktop to read/write prefs.
+   */
+  userStore?: UserStore;
 }
 
 const noopLogger: RuntimeLogger = {
@@ -70,6 +84,12 @@ export class Runtime {
    * outside too — e.g. to add a write-driven log line.
    */
   readonly changeBus: ChangeBus;
+  /**
+   * Optional user-prefs store. Hosts mount it both here (so app-index can
+   * bake prefs into HTML) and on their own HTTP surface as `/_centraid-user/*`
+   * (so the desktop can read/write prefs over HTTP).
+   */
+  readonly userStore?: UserStore;
   private readonly appsDir: string;
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
@@ -84,6 +104,7 @@ export class Runtime {
     this.registry = new Registry(opts.appsDir);
     this.versions = new VersionStore();
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
+    this.userStore = opts.userStore;
     this.cronSync = new CronSync({
       registry: this.registry,
       scheduler: this.scheduler,
@@ -373,11 +394,20 @@ export class Runtime {
             return;
           }
           const rel = route.kind === 'app-index' ? 'index.html' : route.rel;
-          const themeInject =
-            route.kind === 'app-index'
-              ? { theme: route.query.theme, bgL: route.query.bgL }
-              : undefined;
-          await serveStatic(res, codeDir, rel, themeInject ? { themeInject } : {});
+          if (route.kind === 'app-index') {
+            // Merge global prefs (gateway-side store) with this app's own
+            // `__centraid_settings` rows and any URL-query overrides, then
+            // bake the result into the served HTML so the iframe paints in
+            // the right shape before any script runs.
+            const dataDbFile = path.join(entry.path, 'data.sqlite');
+            const globalPrefs = this.userStore?.getAllPrefs();
+            const appSettings = readAppSettings(dataDbFile);
+            const queryOverrides = route.query as Record<string, unknown>;
+            const settingsInject = buildSettingsInject([globalPrefs, appSettings, queryOverrides]);
+            await serveStatic(res, codeDir, rel, { settingsInject });
+          } else {
+            await serveStatic(res, codeDir, rel);
+          }
           return;
         }
 
