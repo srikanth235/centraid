@@ -16,8 +16,9 @@
       "name": "@centraid/desktop",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/agent-harness": "workspace:*",
         "@centraid/app-templates": "workspace:*",
+        "@centraid/builder-harness": "workspace:*",
+        "@centraid/chat-harness": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@centraid/runtime-core": "workspace:*",
         "ws": "^8.18.0",
@@ -64,8 +65,20 @@
         "typescript": "catalog:",
       },
     },
-    "packages/agent-harness": {
-      "name": "@centraid/agent-harness",
+    "packages/app-templates": {
+      "name": "@centraid/app-templates",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/design-tokens": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/builder-harness": {
+      "name": "@centraid/builder-harness",
       "version": "0.1.0",
       "dependencies": {
         "@centraid/design-tokens": "workspace:*",
@@ -82,15 +95,19 @@
         "typescript": "catalog:",
       },
     },
-    "packages/app-templates": {
-      "name": "@centraid/app-templates",
+    "packages/chat-harness": {
+      "name": "@centraid/chat-harness",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/design-tokens": "workspace:*",
+        "@centraid/builder-harness": "workspace:*",
+        "@centraid/runtime-core": "workspace:*",
+        "@earendil-works/pi-coding-agent": "^0.74.0",
+        "typebox": "^1.1.24",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
         "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
         "typescript": "catalog:",
       },
     },
@@ -421,9 +438,11 @@
 
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
-    "@centraid/agent-harness": ["@centraid/agent-harness@workspace:packages/agent-harness"],
-
     "@centraid/app-templates": ["@centraid/app-templates@workspace:packages/app-templates"],
+
+    "@centraid/builder-harness": ["@centraid/builder-harness@workspace:packages/builder-harness"],
+
+    "@centraid/chat-harness": ["@centraid/chat-harness@workspace:packages/chat-harness"],
 
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 

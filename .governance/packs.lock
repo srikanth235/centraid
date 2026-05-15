@@ -22,3 +22,8 @@ packs:
   subpath: packs/core
   min_governance_kit: '0.3'
   installed_at: '2026-05-14T17:56:14Z'
+- id: srikanth235/centraid
+  version: '0.1'
+  source: local
+  directives:
+  - query-handlers-read-only

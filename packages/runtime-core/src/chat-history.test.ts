@@ -90,7 +90,7 @@ describe('ChatHistoryStore', () => {
     const r = store.appendMessages(s.id, [
       { kind: 'user', text: 'first' },
       { kind: 'ai', text: 'reply' },
-      { kind: 'tool', id: 't1', tool: 'centraid_sql_select', state: 'ok' },
+      { kind: 'tool', id: 't1', tool: 'centraid_sql_read', state: 'ok' },
     ]);
     assert.equal(r?.firstIdx, 0);
     assert.equal(r?.count, 3);

@@ -139,6 +139,13 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/governance-kit/core/directives/receipt-per-issue/check.sh`
 - **Exceptions**: None. Receipts are a fresh discipline; there is no legacy receipt corpus to grandfather.
 
+### query-handlers-read-only
+
+- **Directive**: centraid query handlers (`*/queries/*.js`) must not mutate the database — no `stmt.run()`, no `db.exec()`. Use `actions/*.js` (POST `/_run`) or `crons/*.js` for any writes.
+- **Rationale**: the runtime's handler-runner skips SQLite session tracking for `handlerKind === 'query'` as a perf optimization on the read path (`packages/runtime-core/src/handler-runner.ts`). Writes from a query handler succeed but are invisible to the change-notification SSE feed at `/centraid/<id>/_changes`, so subscribed iframes never re-fetch — UI goes silently stale with no error anywhere. Mutations must live where the bus actually observes them.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/query-handlers-read-only/check.sh`
+- **Exceptions**: per-line waiver `// governance: allow-query-handlers-read-only <reason>` for the rare opt-in case (e.g. lazy view materialization on first access).
+
 ## Amendment process
 
 1. Open a PR that modifies this file **and** the directive folder under `.governance/packs/<owner>/<repo>/directives/` in the same commit.
@@ -149,6 +156,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 ## Evolution Log
 
 - 2026-05-12 — @srikanth235 — Initial constitution bootstrapped via governance-kit with `governance-kit/core` (standard preset + no-orphan-todos; workflows-hardened deferred).
+- 2026-05-15 — @srikanth235 — Add `query-handlers-read-only`: forbid `stmt.run()` and `db.exec()` inside `queries/*.js` so writes are never invisible to the `/_changes` SSE feed.
 
 ## Escape hatches
 

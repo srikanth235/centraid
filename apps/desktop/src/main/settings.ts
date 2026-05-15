@@ -2,7 +2,7 @@ import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { HarnessConfig } from '@centraid/agent-harness';
+import type { HarnessConfig } from '@centraid/builder-harness';
 // `local-runtime` is loaded lazily because it pulls in `@centraid/runtime-core`
 // which uses `node:sqlite` — a built-in Electron's Node doesn't expose.
 // Importing it statically would crash the renderer at boot for remote-mode

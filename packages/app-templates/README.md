@@ -24,4 +24,4 @@ The `version` field follows semver. Bump it when the template's source changes.
 
 ## Cloning at runtime
 
-The desktop main process imports `listTemplates()` to render the gallery, then calls `cloneTemplate()` from `@centraid/agent-harness` to copy a template into the user's projects dir under a new id. The existing publish pipeline takes over from there.
+The desktop main process imports `listTemplates()` to render the gallery, then calls `cloneTemplate()` from `@centraid/builder-harness` to copy a template into the user's projects dir under a new id. The existing publish pipeline takes over from there.

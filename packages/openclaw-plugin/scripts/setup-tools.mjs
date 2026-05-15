@@ -3,19 +3,19 @@
  * setup-tools.mjs
  *
  * Idempotently patches `~/.openclaw/openclaw.json` so the centraid plugin's
- * two agent tools (`centraid_get_schema`, `centraid_sql_select`) are merged
- * into `tools.alsoAllow`. `alsoAllow` is the documented additive form — it
- * does not replace the active profile, so the user's existing tool baseline
- * survives.
+ * three agent tools (`centraid_sql_describe`, `centraid_sql_read`,
+ * `centraid_sql_write`) are merged into `tools.alsoAllow`. `alsoAllow` is
+ * the documented additive form — it does not replace the active profile,
+ * so the user's existing tool baseline survives.
  *
- * No-op when both ids are already in the list. Atomic write via tmpfile +
+ * No-op when all ids are already in the list. Atomic write via tmpfile +
  * rename.
  */
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const TOOLS = ['centraid_get_schema', 'centraid_sql_select'];
+const TOOLS = ['centraid_sql_describe', 'centraid_sql_read', 'centraid_sql_write'];
 
 const stateDir = process.env.OPENCLAW_STATE_DIR ?? path.join(os.homedir(), '.openclaw');
 const configPath = path.join(stateDir, 'openclaw.json');

@@ -32,6 +32,16 @@ export function localRuntimeAppsDir(): string {
 }
 
 /**
+ * Path of the single shared chat-history SQLite. Lives next to (not inside)
+ * the appsDir so it stays out of every individual app's data and is never
+ * reachable from the centraid_sql_* tools. Mirrors the OpenClaw plugin's
+ * placement (`<stateDir>/centraid-chat-history.sqlite`).
+ */
+export function localRuntimeChatHistoryDb(): string {
+  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-chat-history.sqlite');
+}
+
+/**
  * Override the scheduler used by the embedded runtime. Must be called before
  * `ensureLocalRuntime()` to take effect; defaults to `NullScheduler` (cron
  * execution for the embedded runtime is on the backlog).
@@ -66,7 +76,10 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       },
     });
 
-    const server = await startRuntimeHttpServer({ runtime });
+    const server = await startRuntimeHttpServer({
+      runtime,
+      chatHistoryDbPath: localRuntimeChatHistoryDb(),
+    });
     runtime.setGatewayBaseUrl(server.url);
     await runtime.bootstrap();
 

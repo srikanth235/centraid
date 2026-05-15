@@ -1,0 +1,11 @@
+# query-handlers-read-only — query handlers must not mutate data.
+category: Correctness
+recommended: true
+summary: |
+  Centraid query handlers (queries/*.js) must only execute read-style SQL.
+  Calls to stmt.run() or db.exec() inside a query file are forbidden — they
+  mutate the database but are invisible to the change-notification SSE feed
+  (handler-runner skips session tracking for query handlers as a perf
+  optimization), so subscribers go stale silently.
+surface: repo-state
+hook: pre-commit
