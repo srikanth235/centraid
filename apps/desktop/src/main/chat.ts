@@ -77,6 +77,14 @@ interface ChatSession {
    * first send (we want the SQL tools to bind to a known chatSessionId, and
    * creating the session lazily also avoids spinning pi up for empty panels). */
   agent: AgentSession | null;
+  /**
+   * Prior user/assistant turns loaded from the history table when START
+   * was called against an existing chatSessionId. Snapshotted here at
+   * START time — BEFORE any SEND appends the new user message — so the
+   * lazy agent-creation in `ensureAgent` doesn't see the in-flight message
+   * twice. Empty for freshly-opened or new-chat sessions.
+   */
+  priorTurns: Array<{ user: string; assistant?: string }>;
   /** Unsubscribe handle for `agent.subscribe()`. */
   detach: (() => void) | null;
   /** Per-turn id assigned by the renderer; null while idle. */
@@ -174,9 +182,53 @@ async function ensureAgent(session: ChatSession): Promise<AgentSession> {
     appName: session.appName,
     sandboxDir: sandboxDirFor(session.appId),
     sessionMode: 'in-memory',
+    // priorTurns was snapshotted at START time so it doesn't include the
+    // in-flight user message that SEND appends right before invoking us.
+    priorTurns: session.priorTurns,
   });
   session.agent = agent;
   return agent;
+}
+
+/**
+ * Pull user/assistant text pairs out of the persisted history. Tool calls
+ * and tool results are skipped — the model can re-discover schema via
+ * `centraid_sql_describe` if it needs to; what we care about for thread
+ * continuity is the user's words and the assistant's answers. Aborted or
+ * error turns produce a user message with no assistant — those still go
+ * into the block so the model sees the question was asked.
+ */
+async function loadPriorTurns(
+  chatSessionId: string,
+): Promise<Array<{ user: string; assistant?: string }>> {
+  const loaded = await historyLoad(chatSessionId);
+  const turns: Array<{ user: string; assistant?: string }> = [];
+  let pendingUser: string | undefined;
+  for (const entry of loaded.messages) {
+    const payload = entry.payload as
+      | { kind?: string; text?: unknown; error?: unknown }
+      | null
+      | undefined;
+    if (!payload || typeof payload !== 'object') continue;
+    const text = typeof payload.text === 'string' ? payload.text : '';
+    if (payload.kind === 'user') {
+      // Flush the previous user-only turn (no assistant reply) before
+      // starting a new one.
+      if (pendingUser !== undefined) turns.push({ user: pendingUser });
+      pendingUser = text;
+    } else if (payload.kind === 'ai') {
+      // Pair with the most recent user message; if an AI message lands
+      // with no preceding user message (shouldn't happen, but defensive),
+      // drop it rather than fabricating a user turn.
+      if (pendingUser !== undefined) {
+        turns.push({ user: pendingUser, assistant: text });
+        pendingUser = undefined;
+      }
+    }
+    // tool entries are intentionally skipped.
+  }
+  if (pendingUser !== undefined) turns.push({ user: pendingUser });
+  return turns;
 }
 
 /**
@@ -387,11 +439,23 @@ export function registerChatIpcHandlers(): void {
       const key = sessionKey(win.id, input.appId);
       const prior = sessions.get(key);
       if (prior) await disposeSession(prior);
+      // Reopening a saved chat: snapshot prior user/assistant turns NOW so
+      // the lazy ensureAgent() sees the conversation history without the
+      // in-flight user message SEND will append on the very next call.
+      // Failure to load history degrades to "model has no prior context"
+      // (the pre-fix behavior), never worse — the chat still works.
+      const priorTurns = input.sessionId
+        ? await loadPriorTurns(input.sessionId).catch((err) => {
+            console.warn('[centraid] failed to hydrate prior chat turns:', err);
+            return [] as Array<{ user: string; assistant?: string }>;
+          })
+        : [];
       sessions.set(key, {
         appId: input.appId,
         appName: input.appName,
         chatSessionId: input.sessionId ?? null,
         agent: null,
+        priorTurns,
         detach: null,
         turnId: null,
         streaming: false,

@@ -53,6 +53,19 @@ export interface CreateDataChatSessionOptions extends Pick<
   sessionMode?: DataChatSessionMode;
   /** Override the per-SELECT row cap surfaced to the model. */
   selectRowCap?: number;
+  /**
+   * Prior turns from this chat, oldest first. When the panel reopens a saved
+   * conversation, the pi session is created fresh (in-memory mode) but the
+   * model still needs to know what was already discussed. We render these
+   * turns as a "Prior conversation" block inside the system prompt so the
+   * agent picks up the thread without us having to replay every `.prompt()`.
+   *
+   * Tool calls and tool results are intentionally not surfaced here — the
+   * agent can re-discover schema or re-run queries via centraid_sql_*; what
+   * matters for continuity is what the user said and what the agent
+   * answered.
+   */
+  priorTurns?: Array<{ user: string; assistant?: string }>;
 }
 
 /**
@@ -79,6 +92,7 @@ export async function createCentraidDataChatSession(
   const mode: DataChatSessionMode = opts.sessionMode ?? 'in-memory';
 
   const promptBlock = buildDataChatPrompt({ appName: opts.appName, appId: opts.appId });
+  const priorBlock = renderPriorTurnsBlock(opts.priorTurns ?? []);
 
   const loader = new DefaultResourceLoader({
     cwd,
@@ -86,8 +100,10 @@ export async function createCentraidDataChatSession(
     settingsManager: SettingsManager.create(cwd, agentDir),
     // The builder harness uses this hook to append app-authoring guidance;
     // here we replace `base` entirely so the model never sees coding-agent
-    // boilerplate that doesn't apply to read-only data Q&A.
-    appendSystemPromptOverride: () => [promptBlock],
+    // boilerplate that doesn't apply to read-only data Q&A. Prior turns,
+    // when present, slot in right after the role block so the model sees
+    // them as background before any tool guidance.
+    appendSystemPromptOverride: () => (priorBlock ? [promptBlock, priorBlock] : [promptBlock]),
   });
   await loader.reload();
 
@@ -118,4 +134,35 @@ export async function createCentraidDataChatSession(
   });
 
   return session;
+}
+
+/**
+ * Render the prior-turns block injected into the system prompt when a
+ * saved conversation reopens. Returns `undefined` when there's nothing to
+ * inject so the caller can skip the block entirely (vs. emitting an empty
+ * heading the model has to wade through).
+ *
+ * Format is intentionally plain: numbered turns, role-prefixed lines. We
+ * leave assistant turns out when they're missing (e.g. an aborted run)
+ * rather than fabricating placeholder text.
+ */
+function renderPriorTurnsBlock(
+  turns: Array<{ user: string; assistant?: string }>,
+): string | undefined {
+  if (turns.length === 0) return undefined;
+  const lines: string[] = [
+    '## Prior conversation',
+    '',
+    'You are resuming an existing chat. The user already had this exchange with you earlier — pick up the thread without re-introducing yourself or re-running queries you already did, unless the user asks again.',
+    '',
+  ];
+  turns.forEach((turn, i) => {
+    lines.push(`### Turn ${i + 1}`);
+    lines.push(`**User:** ${turn.user}`);
+    if (turn.assistant && turn.assistant.trim().length > 0) {
+      lines.push(`**Assistant:** ${turn.assistant}`);
+    }
+    lines.push('');
+  });
+  return lines.join('\n');
 }
