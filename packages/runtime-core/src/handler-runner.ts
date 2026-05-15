@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import type { AppRef } from './types.js';
 import { appendLogs, type LogEntry } from './log-store.js';
+import { trackChanges } from './change-tracker.js';
 
 const WORKER_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'worker', 'runner.js');
 
@@ -13,6 +14,14 @@ export interface RunHandlerOptions {
   handlerKind: 'query' | 'action' | 'cron';
   args: Record<string, unknown>;
   timeoutMs?: number;
+  /**
+   * Fired once after the handler completes with the list of tables the
+   * handler's writes touched (deduplicated, sorted). Skipped for query
+   * handlers — they're nominally read-only and even if they sneak a write
+   * through we treat it as "library author's problem", not a notify event.
+   * Empty list = no writes; the call is suppressed.
+   */
+  onWrite?: (tables: string[]) => void;
 }
 
 export interface HandlerOutcome {
@@ -34,6 +43,13 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const db = new DatabaseSync(dbFile);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
+
+  // Wrap the connection in a session so we can enumerate touched tables
+  // for the change-notification feed at the end of the turn. Query
+  // handlers skip the session — they're nominally read-only and most
+  // produce empty changesets, but skipping the wrap saves the session
+  // allocation entirely.
+  const tracker = opts.handlerKind !== 'query' && opts.onWrite ? trackChanges(db) : undefined;
 
   const logs: HandlerOutcome['logs'] = [];
 
@@ -111,6 +127,22 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       if (resolved) return;
       resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
+      // Snapshot touched tables BEFORE closing the connection — sessions
+      // are tied to the connection's lifetime. Only fire the notifier on
+      // successful turns; a thrown handler may have rolled back via an
+      // ambient transaction, in which case the changeset is moot. The
+      // notifier itself is wrapped so a thrown listener can't keep us
+      // from closing the db handle.
+      if (tracker && opts.onWrite && outcome.ok) {
+        try {
+          const tables = tracker.extract();
+          if (tables.length > 0) opts.onWrite(tables);
+        } catch {
+          /* never let tracking change the handler outcome */
+        }
+      } else {
+        tracker?.close();
+      }
       try {
         db.close();
       } catch {

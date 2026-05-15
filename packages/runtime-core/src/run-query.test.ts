@@ -145,3 +145,52 @@ test('semicolon inside a string is not a statement separator', () => {
   if (r2.kind !== 'rows') throw new Error('unreachable');
   assert.equal(r2.rows[0]!.v, 'a;b;c');
 });
+
+test('onWrite fires with touched tables for a successful INSERT', () => {
+  seed([`CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)`]);
+  const tables: string[][] = [];
+  const r = runQuery(dbFile, "INSERT INTO t (id, name) VALUES (1, 'a')", {
+    onWrite: (t) => tables.push(t),
+  });
+  assert.equal(r.kind, 'exec');
+  assert.deepEqual(tables, [['t']]);
+});
+
+test('onWrite does NOT fire for SELECT/PRAGMA/EXPLAIN reads', () => {
+  seed([`CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)`, `INSERT INTO t (name) VALUES ('a')`]);
+  const tables: string[][] = [];
+  const onWrite = (t: string[]): void => {
+    tables.push(t);
+  };
+  runQuery(dbFile, 'SELECT * FROM t', { onWrite });
+  runQuery(dbFile, 'PRAGMA user_version', { onWrite });
+  runQuery(dbFile, 'EXPLAIN SELECT * FROM t', { onWrite });
+  assert.deepEqual(tables, [], 'reads should never trigger the change notifier');
+});
+
+test('onWrite does NOT fire when the statement fails (no rollback noise)', () => {
+  seed([`CREATE TABLE t (id INTEGER PRIMARY KEY)`]);
+  const tables: string[][] = [];
+  // PK conflict
+  seed([`INSERT INTO t (id) VALUES (1)`]);
+  assert.throws(
+    () =>
+      runQuery(dbFile, 'INSERT INTO t (id) VALUES (1)', {
+        onWrite: (t) => tables.push(t),
+      }),
+    RunQueryError,
+  );
+  assert.deepEqual(tables, []);
+});
+
+test('a thrown onWrite listener does not change the SQL outcome', () => {
+  seed([`CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)`]);
+  const r = runQuery(dbFile, "INSERT INTO t (id, name) VALUES (1, 'a')", {
+    onWrite: () => {
+      throw new Error('listener boom');
+    },
+  });
+  assert.equal(r.kind, 'exec');
+  if (r.kind !== 'exec') throw new Error('unreachable');
+  assert.equal(r.rowsAffected, 1);
+});

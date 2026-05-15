@@ -20,10 +20,9 @@
 import path from 'node:path';
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
-import { Runtime } from '@centraid/runtime-core';
+import { Runtime, ChatHistoryStore, makeChatHistoryRouteHandler } from '@centraid/runtime-core';
 import { OpenClawScheduler } from './lib/openclaw-cron.js';
 import { registerCentraidTools } from './lib/tools.js';
-import { ChatHistoryStore, makeChatHistoryRouteHandler } from './lib/chat-history.js';
 
 // Re-export the public handler & payload types from runtime-core so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -108,7 +107,7 @@ export default definePluginEntry({
     // Agent tools — let the OpenClaw agent read a single app's data via
     // SELECT only. Scope is enforced by the before_tool_call hook inside
     // registerCentraidTools (uses sessionKey = "centraid-chat:<appId>").
-    registerCentraidTools(api, runtime.registry);
+    registerCentraidTools(api, runtime);
 
     // Chat-history store — a single shared SQLite holding every app's chat
     // sessions and messages, exposed at /_centraid-chat. The desktop is the

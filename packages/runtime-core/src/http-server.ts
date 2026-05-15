@@ -2,6 +2,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import crypto from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { timingSafeEqual } from './security.js';
+import { ChatHistoryStore, makeChatHistoryRouteHandler } from './chat-history.js';
 import type { Runtime } from './runtime.js';
 
 export interface RuntimeHttpServerOptions {
@@ -15,6 +16,16 @@ export interface RuntimeHttpServerOptions {
    * If omitted, a 32-byte random hex token is generated.
    */
   token?: string;
+  /**
+   * Absolute path to the chat-history SQLite file. When provided, the server
+   * mounts the `/_centraid-chat/*` HTTP surface backed by this database. The
+   * file is opened lazily on the first matching request, so callers can pass
+   * a path even if the chat panel is never opened.
+   *
+   * Omit to disable the chat-history surface entirely — requests hitting the
+   * prefix then 404 through the normal `Runtime.handle` path.
+   */
+  chatHistoryDbPath?: string;
 }
 
 export interface RuntimeHttpServerHandle {
@@ -25,6 +36,8 @@ export interface RuntimeHttpServerHandle {
   /** Stop the server. Resolves once the listener is closed. */
   close(): Promise<void>;
 }
+
+const CHAT_HISTORY_PREFIX = '/_centraid-chat';
 
 /**
  * Spawn an HTTP server in front of a `Runtime`, suitable for use as the
@@ -41,6 +54,10 @@ export interface RuntimeHttpServerHandle {
  * bearer — it uses its own per-cron token enforced by `Runtime.handle`.
  * That lets a local scheduler POST results without knowing the server-level
  * bearer.
+ *
+ * When `chatHistoryDbPath` is provided, the server also serves the
+ * `/_centraid-chat/*` HTTP surface (same shape the OpenClaw plugin exposes
+ * on the remote gateway). The same bearer check applies.
  */
 export async function startRuntimeHttpServer(
   opts: RuntimeHttpServerOptions,
@@ -48,6 +65,19 @@ export async function startRuntimeHttpServer(
   const host = opts.host ?? '127.0.0.1';
   const port = opts.port ?? 0;
   const token = opts.token ?? crypto.randomBytes(32).toString('hex');
+
+  // Lazy-init the chat-history store so callers that pass a path but never
+  // open the chat panel don't pay the SQLite-open cost. Mirrors the openclaw
+  // plugin's lazy pattern.
+  let chatHistoryStore: ChatHistoryStore | undefined;
+  const chatHistoryHandler = opts.chatHistoryDbPath
+    ? makeChatHistoryRouteHandler(() => {
+        if (!chatHistoryStore) {
+          chatHistoryStore = new ChatHistoryStore(opts.chatHistoryDbPath!);
+        }
+        return chatHistoryStore;
+      })
+    : undefined;
 
   const server = http.createServer((req, res) => {
     void route(req, res);
@@ -62,6 +92,10 @@ export async function startRuntimeHttpServer(
         res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
         return;
       }
+    }
+    if (chatHistoryHandler && (req.url ?? '').startsWith(CHAT_HISTORY_PREFIX)) {
+      const handled = await chatHistoryHandler(req, res);
+      if (handled) return;
     }
     await opts.runtime.handle(req, res);
   }

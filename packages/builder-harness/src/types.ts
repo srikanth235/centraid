@@ -1,5 +1,5 @@
 /**
- * Public types for @centraid/agent-harness.
+ * Public types for @centraid/builder-harness.
  */
 
 export interface HarnessConfig {

@@ -21,6 +21,12 @@ export interface RouteContext {
   cronSync: CronSync;
   withAppUploadLock: (appId: string, fn: () => Promise<void>) => Promise<void>;
   resolveCodeDir(entry: RegistryEntry): Promise<string | undefined>;
+  /**
+   * Build the change-notifier closure for a given app — fired by handlers
+   * after a successful write turn. Routes that don't trigger writes can
+   * ignore it.
+   */
+  emitForApp(appId: string): (tables: string[]) => void;
 }
 
 const refOf = (entry: RegistryEntry): AppRef => ({ id: entry.id, dir: appDataDir(entry) });
@@ -152,6 +158,7 @@ export async function handleAppIngest(
       },
     },
     timeoutMs: 60_000,
+    onWrite: ctx.emitForApp(entry.id),
   });
 
   if (!outcome.ok) {

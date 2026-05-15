@@ -1,6 +1,6 @@
 // Mobile gateway client. Talks to the openclaw-plugin HTTP surface on the
 // user's desktop gateway over the LAN. Mirrors the subset of routes from
-// @centraid/agent-harness's gateway-client that mobile needs (list apps,
+// @centraid/builder-harness's gateway-client that mobile needs (list apps,
 // build live-app URLs). Gateway URL + bearer token come from Settings.
 
 import { apps as BUILTIN_APPS, palette } from '@centraid/design-tokens';
@@ -12,7 +12,7 @@ export const SETTINGS_TOKEN_KEY = 'settings.gatewayToken';
 
 /**
  * Subset of the gateway's registry row that mobile cares about. Mirrors the
- * shape returned by `GET /centraid/_apps` (see agent-harness gateway-client).
+ * shape returned by `GET /centraid/_apps` (see builder-harness gateway-client).
  */
 export interface AppRegistryRow {
   id: string;

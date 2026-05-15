@@ -83,7 +83,7 @@ export function registerIpcHandlers(): void {
   // ----- Projects -----
   ipcMain.handle(Channel.PROJECTS_LIST, async () => {
     const settings = await loadSettings();
-    const { listProjects } = await import('@centraid/agent-harness');
+    const { listProjects } = await import('@centraid/builder-harness');
     return listProjects(settings.projectsDir);
   });
 
@@ -91,7 +91,7 @@ export function registerIpcHandlers(): void {
     Channel.PROJECTS_CREATE,
     async (_e, input: { id: string; name?: string; version?: string }) => {
       const settings = await loadSettings();
-      const { scaffoldProject } = await import('@centraid/agent-harness');
+      const { scaffoldProject } = await import('@centraid/builder-harness');
       return scaffoldProject(settings.projectsDir, input.id, {
         name: input.name,
         version: input.version,
@@ -101,7 +101,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.PROJECTS_FILES, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
-    const { readProjectFiles } = await import('@centraid/agent-harness');
+    const { readProjectFiles } = await import('@centraid/builder-harness');
     const dir = path.join(settings.projectsDir, input.id);
     return readProjectFiles(dir);
   });
@@ -115,7 +115,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.PROJECTS_DELETE, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
-    const { deleteProject } = await import('@centraid/agent-harness');
+    const { deleteProject } = await import('@centraid/builder-harness');
     await deleteProject(settings.projectsDir, input.id);
     return { ok: true };
   });
@@ -124,7 +124,7 @@ export function registerIpcHandlers(): void {
     Channel.PROJECTS_UPDATE_META,
     async (_e, input: { id: string; name?: string; description?: string }) => {
       const settings = await loadSettings();
-      const { updateProjectMeta } = await import('@centraid/agent-harness');
+      const { updateProjectMeta } = await import('@centraid/builder-harness');
       await updateProjectMeta(settings.projectsDir, input.id, {
         name: input.name,
         description: input.description,
@@ -167,14 +167,14 @@ export function registerIpcHandlers(): void {
       if (prior) await prior.stop().catch(() => {});
 
       const settings = await loadSettings();
-      const { createCentraidAgentSession } = await import('@centraid/agent-harness');
+      const { createCentraidAgentSession } = await import('@centraid/builder-harness');
       const projectDir = path.join(settings.projectsDir, input.projectId);
 
       // Visual-feedback loop: give the agent a `previewScreenshot` tool
       // that captures the preview iframe via the window's webContents.
       // The harness detects the tool by name and turns on the matching
       // system-prompt guidance.
-      const { createPreviewScreenshotTool } = await import('@centraid/agent-harness');
+      const { createPreviewScreenshotTool } = await import('@centraid/builder-harness');
       const previewScreenshot = createPreviewScreenshotTool({
         capture: async () => capturePreviewIframe(win),
       });
@@ -233,7 +233,7 @@ export function registerIpcHandlers(): void {
   // ----- Publish + versions -----
   ipcMain.handle(Channel.PUBLISH, async (_e, input: { id: string; skipBuild?: boolean }) => {
     const settings = await loadSettings();
-    const { publishProject } = await import('@centraid/agent-harness');
+    const { publishProject } = await import('@centraid/builder-harness');
     const projectDir = path.join(settings.projectsDir, input.id);
     return publishProject(projectDir, input.id, settings, {
       skipBuild: input.skipBuild,
@@ -242,7 +242,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.VERSIONS_LIST, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
-    const { listVersions, HarnessError } = await import('@centraid/agent-harness');
+    const { listVersions, HarnessError } = await import('@centraid/builder-harness');
     try {
       return await listVersions(settings, input.id);
     } catch (err) {
@@ -260,14 +260,14 @@ export function registerIpcHandlers(): void {
     Channel.VERSIONS_ACTIVATE,
     async (_e, input: { id: string; versionId: string }) => {
       const settings = await loadSettings();
-      const { activateVersion } = await import('@centraid/agent-harness');
+      const { activateVersion } = await import('@centraid/builder-harness');
       return activateVersion(settings, input.id, input.versionId);
     },
   );
 
   ipcMain.handle(Channel.APP_LIVE_URL, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
-    const { appLiveUrl } = await import('@centraid/agent-harness');
+    const { appLiveUrl } = await import('@centraid/builder-harness');
     return { url: appLiveUrl(settings, input.id) };
   });
 
@@ -276,7 +276,7 @@ export function registerIpcHandlers(): void {
   // schema endpoint — see fetchAppSchema for the exact semantics).
   ipcMain.handle(Channel.APP_SCHEMA, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
-    const { fetchAppSchema } = await import('@centraid/agent-harness');
+    const { fetchAppSchema } = await import('@centraid/builder-harness');
     return fetchAppSchema(settings, input.id);
   });
 
@@ -286,7 +286,7 @@ export function registerIpcHandlers(): void {
     Channel.APP_TABLE_ROWS,
     async (_e, input: { id: string; table: string; limit?: number; offset?: number }) => {
       const settings = await loadSettings();
-      const { fetchAppTableRows } = await import('@centraid/agent-harness');
+      const { fetchAppTableRows } = await import('@centraid/builder-harness');
       return fetchAppTableRows(settings, input.id, input.table, {
         limit: input.limit,
         offset: input.offset,
@@ -298,7 +298,7 @@ export function registerIpcHandlers(): void {
   // SELECT-style ({ kind: 'rows' }) from DML/DDL ({ kind: 'exec' }).
   ipcMain.handle(Channel.APP_QUERY, async (_e, input: { id: string; sql: string }) => {
     const settings = await loadSettings();
-    const { runAppQuery } = await import('@centraid/agent-harness');
+    const { runAppQuery } = await import('@centraid/builder-harness');
     return runAppQuery(settings, input.id, input.sql);
   });
 
@@ -310,7 +310,7 @@ export function registerIpcHandlers(): void {
       input: { id: string; limit?: number; sinceTs?: number; level?: 'info' | 'warn' | 'error' },
     ) => {
       const settings = await loadSettings();
-      const { fetchAppLogs } = await import('@centraid/agent-harness');
+      const { fetchAppLogs } = await import('@centraid/builder-harness');
       return fetchAppLogs(settings, input.id, {
         limit: input.limit,
         sinceTs: input.sinceTs,
@@ -321,7 +321,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.APPS_DEREGISTER, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
-    const { deregisterApp } = await import('@centraid/agent-harness');
+    const { deregisterApp } = await import('@centraid/builder-harness');
     return deregisterApp(settings, input.id);
   });
 
@@ -346,7 +346,7 @@ export function registerIpcHandlers(): void {
     async (_e, input: { templateId: string; newAppId?: string; newName?: string }) => {
       const settings = await loadSettings();
       const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
-      const { cloneTemplate, suggestAppId } = await import('@centraid/agent-harness');
+      const { cloneTemplate, suggestAppId } = await import('@centraid/builder-harness');
 
       const cacheDir = templatesCacheDir();
       const templates = await resolveTemplates({ cacheDir });
