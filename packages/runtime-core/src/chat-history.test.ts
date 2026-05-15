@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import {
   ChatHistoryStore,
+  MIGRATIONS,
   deriveTitle,
   isUserMessage,
   makeChatHistoryRouteHandler,
@@ -177,6 +179,58 @@ describe('ChatHistoryStore', () => {
     const list = store.listSessions('todos');
     assert.equal(list[0]!.id, b.id);
     assert.equal(list[1]!.id, a.id);
+  });
+});
+
+describe('ChatHistoryStore migrations', () => {
+  function freshDbPath(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'centraid-chat-history-mig-'));
+    return join(dir, 'db.sqlite');
+  }
+
+  function readUserVersion(path: string): number {
+    const db = new DatabaseSync(path);
+    try {
+      const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
+      return row.user_version;
+    } finally {
+      db.close();
+    }
+  }
+
+  it('advances user_version to MIGRATIONS.length on a fresh DB', () => {
+    const path = freshDbPath();
+    const store = new ChatHistoryStore(path);
+    assert.ok(store);
+    assert.equal(readUserVersion(path), MIGRATIONS.length);
+  });
+
+  it('re-opening an already-migrated DB is a no-op and preserves data', () => {
+    const path = freshDbPath();
+    const first = new ChatHistoryStore(path);
+    const s = first.createSession('todos', 'kept');
+    first.appendMessages(s.id, [{ kind: 'user', text: 'hello' }]);
+
+    // Open a second handle to the same file. The constructor must accept the
+    // already-migrated DB without error and see the prior data.
+    const second = new ChatHistoryStore(path);
+    const loaded = second.getSession(s.id);
+    assert.equal(loaded?.title, 'kept');
+    assert.equal(loaded?.messages.length, 1);
+    assert.equal(readUserVersion(path), MIGRATIONS.length);
+  });
+
+  it('throws when DB is at a newer version than this build supports', () => {
+    const path = freshDbPath();
+    // Bootstrap the schema, then manually advance past the known ladder to
+    // simulate an older build opening a DB written by a future centraid.
+    const bootstrap = new ChatHistoryStore(path);
+    assert.ok(bootstrap);
+    const db = new DatabaseSync(path);
+    db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);
+    db.close();
+
+    assert.throws(() => new ChatHistoryStore(path), /newer|update centraid/i);
   });
 });
 

@@ -26,6 +26,9 @@
  * doesn't interpret it (beyond peeking inside the first user message to
  * derive a title) — that keeps the schema stable as we evolve the chat UI.
  *
+ * Schema changes are applied through the `MIGRATIONS` ladder below — append
+ * a new entry, never edit a shipped one. See the comment on `MIGRATIONS`.
+ *
  * Append is batched and transactional: one POST carries the full ordered
  * tail of a turn, and the server assigns idx values atomically. This is the
  * only way to preserve ordering across N parallel fire-and-forget posts.
@@ -57,6 +60,83 @@ export interface AppendBatchResult {
   title: string;
 }
 
+/**
+ * Schema migrations for the chat-history DB.
+ *
+ * Each entry is the SQL to advance the DB from version `i` to `i+1`, applied
+ * in order inside a single transaction. We track the applied version in
+ * `PRAGMA user_version` (a free integer slot in the SQLite header) — a fresh
+ * DB starts at 0, and every shipped build runs the pending tail on open.
+ *
+ * MIGRATIONS[0] is the baseline schema. It uses `IF NOT EXISTS` so it is
+ * also safe to apply to DBs that pre-date version tracking — those open with
+ * `user_version=0` but already have the tables; the statements no-op and we
+ * advance to version 1.
+ *
+ * Hard rule: once a slot has shipped, its SQL is never edited. Fix-forward
+ * by appending a new entry to the array.
+ */
+export const MIGRATIONS: readonly string[] = [
+  // 0 → 1: baseline schema (chat_sessions, chat_messages, their indexes).
+  `
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      app_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_sessions_app_updated
+      ON chat_sessions(app_id, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      session_id TEXT NOT NULL,
+      idx INTEGER NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (session_id, idx),
+      FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+      ON chat_messages(session_id);
+  `,
+];
+
+function migrate(db: DatabaseSync): void {
+  const row = db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
+  const current = row?.user_version ?? 0;
+
+  // Downgrade guard: the DB has been advanced by a newer build than this one.
+  // Refusing to open is strictly safer than running queries against a schema
+  // we don't understand — the caller can surface this to the user.
+  if (current > MIGRATIONS.length) {
+    throw new Error(
+      `chat-history DB is at version ${current} but this build only supports up to ${MIGRATIONS.length}. ` +
+        `Please update centraid before opening this database.`,
+    );
+  }
+  if (current === MIGRATIONS.length) return;
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (let v = current; v < MIGRATIONS.length; v++) {
+      db.exec(MIGRATIONS[v]!);
+      // v is a loop index bounded by MIGRATIONS.length — never user input —
+      // so it is safe to interpolate into the PRAGMA statement (which does
+      // not accept bind parameters).
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      /* transaction already aborted — nothing to roll back */
+    }
+    throw err;
+  }
+}
+
 export class ChatHistoryStore {
   private db: DatabaseSync;
   // Cache prepared statements once. node:sqlite reuses them efficiently and
@@ -78,31 +158,13 @@ export class ChatHistoryStore {
 
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath);
+    // Pragmas must run outside any transaction (journal_mode in particular),
+    // so they happen before migrate() opens its BEGIN IMMEDIATE block.
     this.db.exec(`
       PRAGMA journal_mode=WAL;
       PRAGMA foreign_keys=ON;
-
-      CREATE TABLE IF NOT EXISTS chat_sessions (
-        id TEXT PRIMARY KEY,
-        app_id TEXT NOT NULL,
-        title TEXT NOT NULL DEFAULT '',
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_chat_sessions_app_updated
-        ON chat_sessions(app_id, updated_at DESC);
-
-      CREATE TABLE IF NOT EXISTS chat_messages (
-        session_id TEXT NOT NULL,
-        idx INTEGER NOT NULL,
-        payload_json TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        PRIMARY KEY (session_id, idx),
-        FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_chat_messages_session
-        ON chat_messages(session_id);
     `);
+    migrate(this.db);
     this.stmts = {
       list: this.db.prepare(
         `SELECT s.id, s.app_id, s.title, s.created_at, s.updated_at,
