@@ -324,6 +324,33 @@
     onSearch?: () => void;
     onAppClick: (id: string) => void;
     onSettings: () => void;
+    onAppContext?: (id: string, anchor: MenuAnchor) => void;
+  }
+
+  // Hover-revealed `•••` + right-click on a sidebar row, both routing
+  // through `onAppContext` (same handler the home grid uses).
+  function appRow(item: HTMLElement, id: string, cb: SidebarOpts['onAppContext']): HTMLElement {
+    if (!cb) return item;
+    item.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const m = e as MouseEvent;
+      cb(id, { kind: 'point', x: m.clientX, y: m.clientY });
+    });
+    const more = el('button', {
+      class: 'cd-card-more cd-sb-more',
+      type: 'button',
+      'aria-label': 'App actions',
+      'aria-haspopup': 'menu',
+      trustedHtml: window.Icon.MoreHoriz({ size: 14 }),
+      onClick: (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const t = e.currentTarget as HTMLElement;
+        t.dataset.open = 'true';
+        cb(id, { kind: 'rect', rect: t.getBoundingClientRect() });
+      },
+    });
+    return el('div', { class: 'cd-sb-app-row' }, [item, more]);
   }
 
   function sbItem(opts: {
@@ -409,16 +436,15 @@
             ? window.Icon[a.iconKey]({ size: 11, strokeWidth: 1.85 })
             : '',
         });
-        wrap.append(
-          sbItem({
-            iconNode,
-            icon: '',
-            label: a.name,
-            active: opts.activeId === a.id,
-            onClick: () => opts.onAppClick(a.id),
-            dotColor: a.status ? statusDotColor(a.status) : undefined,
-          }),
-        );
+        const item = sbItem({
+          iconNode,
+          icon: '',
+          label: a.name,
+          active: opts.activeId === a.id,
+          onClick: () => opts.onAppClick(a.id),
+          dotColor: a.status ? statusDotColor(a.status) : undefined,
+        });
+        wrap.append(appRow(item, a.id, opts.onAppContext));
       }
     }
 
@@ -433,16 +459,15 @@
             ? window.Icon[d.iconKey]({ size: 11, strokeWidth: 1.85 })
             : window.Icon.Sparkle({ size: 11 }),
         });
-        wrap.append(
-          sbItem({
-            iconNode,
-            icon: '',
-            label: d.name,
-            active: opts.activeId === d.id,
-            onClick: () => opts.onAppClick(d.id),
-            dotColor: 'var(--c-amber)',
-          }),
-        );
+        const item = sbItem({
+          iconNode,
+          icon: '',
+          label: d.name,
+          active: opts.activeId === d.id,
+          onClick: () => opts.onAppClick(d.id),
+          dotColor: 'var(--c-amber)',
+        });
+        wrap.append(appRow(item, d.id, opts.onAppContext));
       }
     }
 

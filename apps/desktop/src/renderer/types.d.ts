@@ -80,6 +80,13 @@ declare global {
     openBuilder: () => void;
     openShare: (app: AppMetaResolved) => void;
     openSettings: () => void | Promise<void>;
+    /**
+     * Opens the per-app actions menu from outside `app.ts` (e.g. the
+     * builder's sidebar rows). Resolves the id against the home shell's
+     * known apps/drafts, so the verb set is identical to what users see
+     * on the home grid.
+     */
+    openAppContext: (id: string, anchor: MenuAnchor) => void;
   }
 
   interface BuilderOptions {
@@ -164,6 +171,15 @@ declare global {
     status?: 'new' | 'draft' | 'live' | null;
   }
 
+  /**
+   * Where the home/sidebar context menu should anchor. `point` is a raw
+   * cursor location (right-click); `rect` is a trigger element's bounding
+   * box (the hover-revealed `•••` button) so the menu drops below it with
+   * predictable edge-flipping. Shared across `app.ts` and `chrome.ts` so
+   * the sidebar can hand the right-click event off to the home shell.
+   */
+  type MenuAnchor = { kind: 'point'; x: number; y: number } | { kind: 'rect'; rect: DOMRect };
+
   interface ChromeBuildWindowOpts {
     sidebarOpen: boolean;
     onToggleSidebar: () => void;
@@ -196,6 +212,13 @@ declare global {
     onSearch?: () => void;
     onAppClick: (id: string) => void;
     onSettings: () => void;
+    /**
+     * Opens the per-app actions menu (Rename · Reveal in Finder · Delete
+     * etc.) from a sidebar row. Wired to the same handler the home grid
+     * uses so both surfaces stay in lockstep. Omit to skip the `•••`
+     * affordance entirely (e.g. test harnesses).
+     */
+    onAppContext?: (id: string, anchor: MenuAnchor) => void;
   }
 
   interface ChromeApi {
