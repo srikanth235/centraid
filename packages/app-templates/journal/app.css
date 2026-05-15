@@ -14,17 +14,14 @@
 /* Dark theme — "Atmospheric" palette (225° cool). Mirrors the shell:
    canvas sits at --bg-l, elevated surfaces at +4.5%. The shell forwards
    its --bg-l via the theme bridge so the iframe retunes from the same
-   "Dark shade" slider as the rest of the app. */
+   "Dark shade" slider as the rest of the app. The page background
+   itself (`--bg-wall`) comes from ./wall.css. */
 :root[data-theme='dark'] {
   --bg-l: 10%;
   --ink: hsl(220 12% 95%);
   --ink-soft: hsl(220 8% 62%);
   --ink-faint: hsl(220 6% 42%);
-  --bg: linear-gradient(
-    180deg,
-    hsl(222 13% calc(var(--bg-l) - 2%)) 0%,
-    hsl(222 14% calc(var(--bg-l) - 6%)) 100%
-  );
+  --bg: var(--bg-wall);
   --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
   --line: hsla(220 25% 70% / 0.07);
 }
@@ -32,10 +29,11 @@
 /* Fallback for standalone use (opened outside the shell). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
+    --bg-l: 10%;
     --ink: hsl(220 12% 95%);
     --ink-soft: hsl(220 8% 62%);
     --ink-faint: hsl(220 6% 42%);
-    --bg: linear-gradient(180deg, hsl(222 13% 8%) 0%, hsl(222 14% 4%) 100%);
+    --bg: var(--bg-wall);
     --surface: hsl(225 11% 14.5%);
     --line: hsla(220 25% 70% / 0.07);
   }

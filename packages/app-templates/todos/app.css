@@ -16,21 +16,18 @@
   --ink: hsl(220 12% 95%);
   --ink-soft: hsl(220 8% 62%);
   --ink-faint: hsl(220 6% 42%);
-  --bg: linear-gradient(
-    180deg,
-    hsl(222 13% calc(var(--bg-l) - 2%)) 0%,
-    hsl(222 14% calc(var(--bg-l) - 6%)) 100%
-  );
+  --bg: var(--bg-wall);
   --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
   --line: hsla(220 25% 70% / 0.07);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
+    --bg-l: 10%;
     --ink: hsl(220 12% 95%);
     --ink-soft: hsl(220 8% 62%);
     --ink-faint: hsl(220 6% 42%);
-    --bg: linear-gradient(180deg, hsl(222 13% 8%) 0%, hsl(222 14% 4%) 100%);
+    --bg: var(--bg-wall);
     --surface: hsl(225 11% 14.5%);
     --line: hsla(220 25% 70% / 0.07);
   }
