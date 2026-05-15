@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        { "value": "sans", "label": "Sans" },
+        { "value": "serif", "label": "Serif" },
+        { "value": "mono", "label": "Mono" }
+      ]
+    },
+    {
+      "key": "appWidth",
+      "label": "Width",
+      "type": "segmented",
+      "default": "narrow",
+      "options": [
+        { "value": "narrow", "label": "Narrow" },
+        { "value": "wide", "label": "Wide" }
+      ]
+    },
+    {
+      "key": "appRadius",
+      "label": "Corners",
+      "type": "segmented",
+      "default": "rounded",
+      "options": [
+        { "value": "sharp", "label": "Sharp" },
+        { "value": "rounded", "label": "Rounded" },
+        { "value": "pill", "label": "Pill" }
+      ]
+    }
+  ]
+}

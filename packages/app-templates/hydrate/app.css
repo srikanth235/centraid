@@ -60,6 +60,46 @@ main {
   }
 }
 
+/* ---------- App-level knobs ----------
+   Per-app aesthetic customizations declared in `app-knobs.json` and
+   persisted in the `__centraid_settings` table. The runtime bakes the
+   selected values onto `<html>` (e.g. `data-app-font="serif"`); the
+   inline live-settings bridge applies subsequent changes from the
+   shell without a reload. Keep CSS additive — every knob has a default
+   that matches the base aesthetic so unselected knobs render unchanged. */
+
+:root[data-app-font='sans'] {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+:root[data-app-font='serif'] {
+  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+}
+:root[data-app-font='mono'] {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+:root[data-app-width='wide'] main {
+  max-width: 36rem;
+}
+@media (min-width: 720px) {
+  :root[data-app-width='wide'] main {
+    max-width: 52rem;
+  }
+}
+
+:root[data-app-radius='sharp'] .cup,
+:root[data-app-radius='sharp'] .primary,
+:root[data-app-radius='sharp'] .soft {
+  border-radius: 0;
+}
+:root[data-app-radius='pill'] .cup {
+  border-radius: 999px;
+}
+:root[data-app-radius='pill'] .primary,
+:root[data-app-radius='pill'] .soft {
+  border-radius: 999px;
+}
+
 .count {
   font-variant-numeric: tabular-nums;
   font-size: clamp(3rem, 14vw, 4rem);
@@ -103,8 +143,8 @@ main {
 }
 
 .cup.filled {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--app-color, var(--accent));
+  border-color: var(--app-color, var(--accent));
 }
 
 .actions {
@@ -135,7 +175,7 @@ button {
 }
 
 .primary {
-  background: var(--accent);
+  background: var(--app-color, var(--accent));
   color: #fff;
 }
 

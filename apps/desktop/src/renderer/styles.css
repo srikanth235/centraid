@@ -1914,8 +1914,9 @@ textarea {
   top: 76px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--ink);
-  color: var(--ink-inv, #f8f6f1);
+  background: var(--bg-elev);
+  color: var(--ink);
+  border: 0.5px solid var(--line);
   padding: 8px 14px;
   border-radius: 999px;
   font-size: 12px;
@@ -1925,6 +1926,32 @@ textarea {
   box-shadow: var(--shadow-md);
   z-index: 10;
   animation: toast-in 0.2s ease-out;
+}
+/* Dark theme: match the glass aesthetic the chrome uses elsewhere —
+   translucent elevated surface with backdrop blur, so the pill reads
+   as part of the same material as floating panels (settings popover,
+   command palette) instead of a stark inverted bubble. */
+:root[data-theme='dark'] .preview-toast {
+  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 0.5px solid var(--line);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    inset 0 0.5px 0 color-mix(in srgb, var(--ink) 8%, transparent);
+}
+/* The check glyph is wrapped in a <span>; the SVG inside defaults to
+   inline baseline alignment, which leaves it sitting low against the
+   text cap-height. Force the wrapper into a flex cell so the SVG
+   centers vertically with the message instead of sitting on the
+   text baseline. */
+.preview-toast > span:has(> svg) {
+  display: inline-flex;
+  align-items: center;
+}
+.preview-toast svg {
+  display: block;
+  color: var(--accent);
 }
 @keyframes toast-in {
   from {
@@ -3496,60 +3523,6 @@ textarea {
   gap: 12px;
 }
 
-/* Slider — "Dark shade" head shows the label + readout value; track
-   uses a custom thumb to match the design's pill aesthetic. */
-.cd-slider-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.cd-slider-readout {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.cd-slider {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  outline: none;
-  margin: 4px 0 2px;
-}
-.cd-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: var(--ink);
-  border: 2px solid var(--bg-elev);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-}
-.cd-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: var(--ink);
-  border: 2px solid var(--bg-elev);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-}
-.cd-slider:disabled,
-.drawer-row[data-disabled='true'] .cd-slider {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.cd-slider:disabled::-webkit-slider-thumb {
-  cursor: not-allowed;
-}
-.cd-slider:disabled::-moz-range-thumb {
-  cursor: not-allowed;
-}
-
 /* Switch — pill toggle. Off = sunken track, On = success-green track
    with the thumb pushed to the right (matches the design screenshot). */
 .cd-switch {
@@ -3582,7 +3555,9 @@ textarea {
   transform: translateX(18px);
 }
 
-/* Accent swatches — 5 squares with a 14px check on the active one. */
+/* Accent swatches — 5 squares; the active one wears a white ring and a
+   white check. The ring marks selection from a distance, the check
+   confirms it close-up. */
 .cd-swatches {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -3609,8 +3584,10 @@ textarea {
   transform: translateY(-1px);
 }
 .cd-swatch svg {
+  display: block;
   opacity: 0;
   transition: opacity 120ms ease;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
 }
 .cd-swatch[data-active='true'] {
   border-color: var(--ink);
@@ -3920,6 +3897,17 @@ textarea {
 }
 .cd-tb-btn-wrap:hover .cd-tooltip {
   opacity: 1;
+}
+/* Titlebar nav cluster sits flush against the traffic-lights / left edge,
+   so centering a tooltip on a button there overflows left and gets
+   clipped. Anchor those tooltips to the button's left edge instead so
+   they grow rightward into the wide-open titlebar space. Covers both
+   the grid layout (`.cd-tl-nav`) and the flat layout (direct children
+   of `.cd-tl-main`) — the Home titlebar uses the latter. */
+.cd-tl-nav .cd-tb-btn-wrap .cd-tooltip,
+.cd-tl-main > .cd-tb-btn-wrap .cd-tooltip {
+  left: 0;
+  transform: none;
 }
 .cd-tooltip .cd-kbd {
   display: inline-block;
@@ -4281,8 +4269,138 @@ textarea {
 
 .cd-apps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 14px;
+  /* Match the template grid exactly — same min, same 1fr upper bound,
+     same gap — so app and template tiles line up width-for-width when
+     viewed on the same page. `auto-fill` (not `auto-fit`) keeps any
+     empty trailing tracks reserved so a single app tile sits in track
+     1 at its natural width instead of stretching across the row. */
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+/* Empty state shown under "Your apps" on a fresh workspace. Designed
+   to carry the visual weight of a populated grid row — same outline
+   family as the app cards, but generously padded and centered so it
+   reads as a deliberate moment rather than a notice. The dashed border
+   communicates "placeholder slot" without feeling cheap. */
+.cd-apps-empty {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  /* Explicit height (not min-height) — some ancestor in the home layout
+     was stretching the card to fill leftover scroll space, leaving the
+     content visually pushed below center. Locking the height keeps the
+     card compact and lets `justify-content: center` actually center. */
+  height: 240px;
+  flex: 0 0 auto;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 8%, transparent) 1px, transparent 0)
+      0 0 / 18px 18px,
+    var(--bg-elev);
+  border: 1px dashed color-mix(in srgb, var(--line-strong) 80%, transparent);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  text-align: center;
+}
+:root[data-theme='dark'] .cd-apps-empty {
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 6%, transparent) 1px, transparent 0)
+      0 0 / 18px 18px,
+    color-mix(in srgb, var(--bg-elev) 60%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px dashed color-mix(in srgb, var(--line-strong) 90%, transparent);
+  box-shadow: none;
+}
+/* Soft accent halo sits directly behind the icon as a centered glow.
+   No bleed from the corners — the card is short enough that a centered
+   halo reads as "this is the focal point" rather than corner decoration. */
+.cd-apps-empty-halo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 220px;
+  height: 140px;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in oklab, var(--accent) 22%, transparent),
+    transparent 70%
+  );
+  filter: blur(10px);
+  pointer-events: none;
+  z-index: 0;
+}
+.cd-apps-empty > * {
+  position: relative;
+  z-index: 1;
+}
+.cd-apps-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--accent) 90%, white 0%),
+      color-mix(in oklab, var(--accent) 60%, black 8%)
+    );
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 8px 22px color-mix(in oklab, var(--accent) 35%, transparent);
+}
+.cd-apps-empty-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 420px;
+}
+.cd-apps-empty-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.cd-apps-empty-hint {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+/* Pair of pointer chips that aim the user at the two paths forward —
+   ↑ at the hero prompt above, ↓ at the Templates grid below. */
+.cd-apps-empty-cues {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.cd-apps-empty-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+}
+.cd-apps-empty-cue:last-child {
+  padding: 5px 8px 5px 10px;
+}
+.cd-apps-empty-cue svg {
+  display: block;
+  color: var(--accent);
 }
 /* Wrap is the grid item; it hosts the card and a sibling `•••` action
    button so we don't nest a button inside a button. The wrap itself is
@@ -4291,100 +4409,136 @@ textarea {
   position: relative;
   display: block;
 }
+/* App card mirrors the template card's top row (icon left, name
+   right), then adds a foot strip below carrying the lifecycle info
+   (last edited + status). This is the key visual rhyme that lets
+   "Your apps" and "Templates · curated" feel like one grid family
+   on the home page, while still letting an app tile be self-evident
+   about its state at a glance. */
 .cd-app-card {
   position: relative;
   width: 100%;
-  padding: 18px;
+  padding: 12px;
+  /* Reserve room on the right for the `•••` action so the name never
+     gets clipped by the button on hover. 32px matches the template
+     card's reservation. */
+  padding-right: 32px;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   cursor: pointer;
   overflow: hidden;
   text-align: left;
   color: inherit;
   font: inherit;
-  box-shadow: var(--shadow-sm);
   transition:
-    transform 200ms cubic-bezier(0.2, 0.7, 0.3, 1),
-    background 200ms,
-    border-color 200ms,
-    box-shadow 200ms;
+    background 160ms,
+    border-color 160ms,
+    box-shadow 160ms,
+    transform 160ms;
 }
-/* Dark mode keeps the glassy translucent treatment — works with the
-   gradient canvas. Light mode is opaque white, lifted by a soft shadow
-   (Linear/Notion style). */
 :root[data-theme='dark'] .cd-app-card {
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 0.5px solid var(--line);
   box-shadow: none;
 }
 .cd-app-card:hover {
-  transform: translateY(-1px);
   box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 :root[data-theme='dark'] .cd-app-card:hover {
-  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-elev) 75%, transparent);
   box-shadow: none;
+  transform: translateY(-1px);
 }
 .cd-app-card:active {
-  transform: scale(0.98);
+  transform: scale(0.99);
 }
-.cd-app-card-halo {
-  position: absolute;
-  top: -50px;
-  left: -30px;
-  width: 180px;
-  height: 180px;
-  pointer-events: none;
-  filter: blur(2px);
-}
-.cd-app-card-head {
+/* Top row — same shape as .cd-tmpl-card: 32px icon, name + desc
+   stacked to its right. Vertical alignment is `flex-start` so a
+   two-line description doesn't push the icon down off the name. */
+.cd-app-card-row {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 10px;
-  position: relative;
-  z-index: 1;
+  min-width: 0;
 }
 .cd-app-card-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #fff;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 6px 14px rgba(0, 0, 0, 0.22);
+  /* Nudge down a hair so the icon's optical center aligns with the
+     name's cap-height rather than its baseline. */
+  margin-top: 1px;
 }
 .cd-app-card-icon svg {
-  width: 24px;
-  height: 24px;
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+.cd-app-card-text {
+  flex: 1;
+  min-width: 0;
 }
 .cd-app-card-name {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.003em;
   color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cd-app-card-desc {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ink-3);
-  margin-top: 4px;
-  line-height: 1.45;
-}
-.cd-app-card-meta {
   margin-top: 2px;
+  line-height: 1.4;
+  /* Clamp to a single line so the foot strip sits at a stable y
+     across the grid row. Long descriptions ellipsize. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Foot strip — sits below the row, separated by a subtle hairline
+   that reads as a structural divider between identity (icon+name)
+   and state (time+status). Status pill is pushed right via
+   space-between so it always anchors the trailing edge. */
+.cd-app-card-foot {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 0.5px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.cd-app-card-foot-time {
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--ink-4);
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Pin the status pill to the trailing edge of the foot strip via
+   `margin-inline-start: auto`. More robust than `justify-content:
+   space-between` because it doesn't depend on the foot having
+   exactly two children — when there's no status, the time hugs the
+   left as expected; when there is, the pill snaps to the right edge
+   regardless of the time's width. */
+.cd-app-card-foot .cd-status {
+  margin-inline-start: auto;
 }
 
 /* Templates row at the bottom of Home */
@@ -4404,11 +4558,10 @@ textarea {
      never gets clipped by the button on hover. 32px is the button's hit
      area (26px) plus the inline-edge padding. */
   padding-right: 32px;
-  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
   border-radius: 12px;
+  box-shadow: var(--shadow-sm);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -4416,9 +4569,31 @@ textarea {
   text-align: left;
   color: inherit;
   font: inherit;
+  transition:
+    background 160ms,
+    border-color 160ms,
+    box-shadow 160ms,
+    transform 160ms;
+}
+/* Light mode: solid elevated surface (like the app cards) so the card
+   reads cleanly against the cream `--bg-wall`. Dark mode keeps the
+   translucent glass treatment that lets the gradient canvas show
+   through — same split the `.cd-app-card` rules use. */
+:root[data-theme='dark'] .cd-tmpl-card {
+  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 0.5px solid var(--line);
+  box-shadow: none;
 }
 .cd-tmpl-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+:root[data-theme='dark'] .cd-tmpl-card:hover {
   background: color-mix(in srgb, var(--bg-elev) 75%, transparent);
+  box-shadow: none;
+  transform: translateY(-1px);
 }
 .cd-tmpl-card-icon {
   width: 32px;
@@ -4457,8 +4632,17 @@ textarea {
   right: 8px;
   width: 26px;
   height: 26px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Buttons inherit a non-zero line-height from `font: inherit`, which
+     adds half-leading above and below the inline content box. Even with
+     flex centering, that half-leading visually biases the icon upward
+     in narrow buttons. Zeroing line-height (and padding/border) here
+     guarantees the SVG's bounding box is the only thing flex centers
+     against. */
+  line-height: 0;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--ink-3);
@@ -4470,6 +4654,9 @@ textarea {
     opacity 140ms ease,
     background 120ms,
     color 120ms;
+}
+.cd-card-more svg {
+  display: block;
 }
 .cd-app-card-wrap:hover .cd-card-more,
 .cd-app-card-wrap:focus-within .cd-card-more,
@@ -4488,11 +4675,11 @@ textarea {
 .cd-card-more:active {
   background: color-mix(in oklab, var(--ink) 18%, transparent);
 }
-/* Template cards are shorter — tuck the button against the right edge. */
+/* Template cards inherit the base top-right placement. Slightly smaller
+   hit area than the home app cards since the template card itself is
+   denser, but anchored to the same corner so the affordance lives in a
+   consistent spot across the page. */
 .cd-tmpl-card-wrap .cd-card-more {
-  top: 50%;
-  right: 6px;
-  transform: translateY(-50%);
   width: 24px;
   height: 24px;
 }
@@ -5246,4 +5433,171 @@ textarea {
   background: color-mix(in oklab, #d6403a 8%, transparent);
   border-radius: 8px;
   padding: 8px 10px;
+}
+
+/* ---------- Per-app settings popover ----------
+   Notion-style customization surface anchored to the gear in the app-view
+   titlebar. The panel hangs from the top-right of `.app-view` (which is
+   `position: relative`); the backdrop captures click-outside without
+   dimming the canvas so the running app stays the protagonist. */
+.cd-app-settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: 0;
+  cursor: default;
+  z-index: 12;
+}
+.cd-app-settings-panel {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  width: 308px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 30px 80px -20px rgba(0, 0, 0, 0.55),
+    0 12px 30px -8px rgba(0, 0, 0, 0.35);
+  z-index: 13;
+  animation: cd-app-settings-pop 140ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@keyframes cd-app-settings-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.cd-app-settings-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 10px;
+  border-bottom: 0.5px solid var(--line);
+}
+.cd-app-settings-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: white;
+  flex: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.cd-app-settings-icon svg {
+  width: 13px;
+  height: 13px;
+}
+.cd-app-settings-header-text {
+  min-width: 0;
+  flex: 1;
+}
+.cd-app-settings-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+.cd-app-settings-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.cd-app-settings-close {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+}
+.cd-app-settings-close:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.cd-app-settings-section {
+  padding: 10px 12px 12px;
+  border-bottom: 0.5px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cd-app-settings-section-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-4);
+}
+.cd-app-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 24px;
+}
+.cd-app-settings-row-label {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.cd-app-settings-manage {
+  padding: 6px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cd-app-settings-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.cd-app-settings-menu-item svg {
+  color: var(--ink-3);
+  flex: none;
+}
+.cd-app-settings-menu-item:hover {
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+}
+.cd-app-settings-menu-item[data-danger='true'] {
+  color: var(--c-rose);
+}
+.cd-app-settings-menu-item[data-danger='true'] svg {
+  color: var(--c-rose);
+}
+.cd-app-settings-menu-item[data-danger='true']:hover {
+  background: color-mix(in oklab, var(--c-rose) 12%, transparent);
+}
+/* Gear in titlebar — `data-open` is set while the panel is mounted so it
+   stays visually "pressed" without needing a stateful class. */
+.cd-tb-btn[data-open='true'] {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
 }

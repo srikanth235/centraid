@@ -49,7 +49,19 @@ for (const tmpl of src.templates) {
     console.warn(`[build-manifest] missing template dir for "${tmpl.id}", skipping`);
     continue;
   }
-  enriched.templates.push({ ...tmpl, files });
+  // Per-app knobs (font, width, radius…) live in `app-knobs.json` at the
+  // template root. Embed the parsed list in the manifest so the desktop
+  // doesn't need a second fetch — `resolveTemplates()` already reads
+  // manifest.json, so this rides along for free.
+  let appKnobs;
+  try {
+    const raw = await fs.readFile(path.join(dir, 'app-knobs.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
+  } catch {
+    /* template doesn't ship knobs — fine, popover just shows manage actions */
+  }
+  enriched.templates.push(appKnobs ? { ...tmpl, files, appKnobs } : { ...tmpl, files });
 }
 
 await fs.writeFile(OUTPUT, JSON.stringify(enriched, null, 2) + '\n');

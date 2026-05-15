@@ -12,7 +12,7 @@ export interface IconPath {
 // then re-typed via `Record<IconName, readonly IconPath[]>` so that consumers
 // see the optional `fill` field on each path entry.
 const ICON_DATA = {
-  Check: [{ d: 'M3 12l2 2 4-4M14 6l4 4-8 8-3-3' }],
+  Check: [{ d: 'M5 12l5 5L20 7' }],
   Plus: [{ d: 'M12 5v14M5 12h14' }],
   X: [{ d: 'M6 6l12 12M18 6L6 18' }],
   ArrowLeft: [{ d: 'M19 12H5M12 19l-7-7 7-7' }],
@@ -40,6 +40,7 @@ const ICON_DATA = {
     { d: 'M19 15l.6 1.6L21 17l-1.4.4L19 19l-.6-1.6L17 17l1.4-.4z' },
   ],
   MoreHoriz: [{ d: 'M6 12h.01M12 12h.01M18 12h.01' }],
+  MoreVert: [{ d: 'M12 6h.01M12 12h.01M12 18h.01' }],
   Folder: [{ d: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z' }],
   Save: [
     { d: 'M5 4h11l4 4v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z' },

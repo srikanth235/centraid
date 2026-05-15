@@ -58,4 +58,27 @@ describe('buildSettingsInject', () => {
     const out = buildSettingsInject([undefined, { theme: 'dark' }, undefined]);
     assert.equal(out.dataAttrs.theme, 'dark');
   });
+
+  it('routes dynamic app-namespace keys to data attrs by default', () => {
+    const out = buildSettingsInject([
+      { appFont: 'serif', appWidth: 'wide', appCornerRadius: 'pill' },
+    ]);
+    assert.deepEqual(out.dataAttrs, {
+      'app-font': 'serif',
+      'app-width': 'wide',
+      'app-corner-radius': 'pill',
+    });
+    assert.deepEqual(out.cssVars, {});
+  });
+
+  it('routes Color/Accent-suffixed app keys to CSS vars', () => {
+    const out = buildSettingsInject([{ appColor: '#5847e0', appAccent: '#2EA098' }]);
+    assert.deepEqual(out.cssVars, { 'app-color': '#5847e0', 'app-accent': '#2EA098' });
+    assert.deepEqual(out.dataAttrs, {});
+  });
+
+  it('ignores bare `app` and `apps` (not the namespace prefix)', () => {
+    const out = buildSettingsInject([{ app: 'x', apps: 'y', appFoo: 'z' }]);
+    assert.deepEqual(out.dataAttrs, { 'app-foo': 'z' });
+  });
 });
