@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { trackChanges } from './change-tracker.js';
 
 /**
  * Execute one SQL statement against an app's `data.sqlite` for the Cloud →
@@ -37,7 +38,26 @@ export class RunQueryError extends Error {
 /** Hard cap on rows returned to the UI — protects from runaway `SELECT *`. */
 export const RUN_QUERY_ROW_CAP = 1000;
 
-export function runQuery(dataDbFile: string, sql: string): RunQueryResult {
+/**
+ * Optional change-tracking hook. When provided, `runQuery` wraps the
+ * statement in a SQLite session and calls `onWrite(tables)` after a
+ * successful exec if any tables were mutated. Read-style statements never
+ * fire the hook (they produce empty changesets). Tracking failures are
+ * swallowed — they never change the SQL outcome.
+ *
+ * Callers compose this with their per-app context (the `ChangeBus`
+ * subscribers want to know *which* app, but runQuery is intentionally
+ * unaware of app identity).
+ */
+export interface RunQueryOptions {
+  onWrite?: (tables: string[]) => void;
+}
+
+export function runQuery(
+  dataDbFile: string,
+  sql: string,
+  opts: RunQueryOptions = {},
+): RunQueryResult {
   const cleaned = stripLeadingTriviaAndCheckSingle(sql);
   if (!cleaned.statement) {
     throw new RunQueryError('bad_request', 'No SQL statement provided.');
@@ -53,6 +73,11 @@ export function runQuery(dataDbFile: string, sql: string): RunQueryResult {
   const db = new DatabaseSync(dataDbFile);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
+
+  // Wrap writes in a session so we can enumerate touched tables for the
+  // change-notification feed. Reads skip the wrap — they can't produce
+  // changesets and we'd waste a session-open per query handler.
+  const tracker = !isRead && opts.onWrite ? trackChanges(db) : undefined;
 
   const started = performance.now();
   try {
@@ -72,6 +97,16 @@ export function runQuery(dataDbFile: string, sql: string): RunQueryResult {
     }
 
     const r = stmt.run();
+    if (tracker && opts.onWrite) {
+      const tables = tracker.extract();
+      if (tables.length > 0) {
+        try {
+          opts.onWrite(tables);
+        } catch {
+          /* never let a notifier error change the SQL outcome */
+        }
+      }
+    }
     return {
       kind: 'exec',
       rowsAffected: Number(r.changes ?? 0),
@@ -81,6 +116,7 @@ export function runQuery(dataDbFile: string, sql: string): RunQueryResult {
   } catch (err) {
     throw new RunQueryError('sql_error', err instanceof Error ? err.message : String(err));
   } finally {
+    tracker?.close();
     try {
       db.close();
     } catch {

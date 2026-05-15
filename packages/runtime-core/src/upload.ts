@@ -25,7 +25,7 @@ const MAX_ENTRIES = 5000;
  * (it includes `.json`, `.sql`, etc. that the static handler doesn't serve),
  * but does NOT include `.ts`: centraid apps are authored as `.js` with JSDoc
  * types — there is no compile step on the gateway, so `.ts` files would just
- * be dead weight that can drift from the live `.js`. See the agent-harness
+ * be dead weight that can drift from the live `.js`. See the builder-harness
  * system prompt for the authoring contract.
  */
 const UPLOAD_EXT_ALLOWLIST = new Set([

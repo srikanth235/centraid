@@ -2920,6 +2920,14 @@
           window.Centraid.openApp(id);
         }
       },
+      // Hover-revealed `•••` + right-click on sidebar rows route through
+      // the home shell so Rename / Delete / Reveal in Finder behave the
+      // same in the builder as on home — no second implementation.
+      onAppContext: (id: string, anchor: MenuAnchor) => {
+        if (typeof window.Centraid?.openAppContext === 'function') {
+          window.Centraid.openAppContext(id, anchor);
+        }
+      },
       onHome: handleExit,
       onNewApp: () => {
         /* already in builder; ignore */

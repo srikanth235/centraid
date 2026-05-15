@@ -14,7 +14,7 @@ GitHub issue: [#58](https://github.com/srikanth235/centraid/issues/58)
 
 ### Introduce a `MIGRATIONS` ladder in `chat-history.ts` with the current schema as `MIGRATIONS[0]`
 
-`packages/openclaw-plugin/src/lib/chat-history.ts` exports a module-level `MIGRATIONS: readonly string[]` whose entries are the SQL to advance the DB from version `i` to `i+1`. `MIGRATIONS[0]` is the baseline schema — the `chat_sessions` / `chat_messages` tables and their indexes, lifted verbatim out of the old constructor body. It retains `IF NOT EXISTS` so DBs that pre-date version tracking adopt cleanly: they open with `user_version=0`, already have the tables, the baseline statements no-op, and `user_version` advances to 1. The hard rule is documented inline — once a slot has shipped, its SQL is never edited; fix-forward by appending a new entry.
+`packages/runtime-core/src/chat-history.ts` exports a module-level `MIGRATIONS: readonly string[]` whose entries are the SQL to advance the DB from version `i` to `i+1`. `MIGRATIONS[0]` is the baseline schema — the `chat_sessions` / `chat_messages` tables and their indexes, lifted verbatim out of the old constructor body. It retains `IF NOT EXISTS` so DBs that pre-date version tracking adopt cleanly: they open with `user_version=0`, already have the tables, the baseline statements no-op, and `user_version` advances to 1. The hard rule is documented inline — once a slot has shipped, its SQL is never edited; fix-forward by appending a new entry.
 
 ### Add a `migrate()` helper that applies the pending tail under a single `BEGIN IMMEDIATE` / `COMMIT`, bumping `PRAGMA user_version` per step
 
@@ -30,7 +30,7 @@ The `ChatHistoryStore` constructor no longer inlines `CREATE TABLE IF NOT EXISTS
 
 ### Tests for the fresh-DB happy path, re-open of an already-migrated DB, and the downgrade guard
 
-`packages/openclaw-plugin/src/lib/chat-history.test.ts` gains a `ChatHistoryStore migrations` suite with three cases. First: constructing a store against a fresh path leaves `PRAGMA user_version` equal to `MIGRATIONS.length` (verified via a throwaway `DatabaseSync` read). Second: opening a store, writing a session + a message, and constructing a second store on the same path returns intact data and leaves `user_version` unchanged — proving the re-open path is a no-op rather than a re-bootstrap. Third: bootstrapping the schema, then manually advancing `user_version` to `MIGRATIONS.length + 1` via a raw `DatabaseSync`, then constructing a new `ChatHistoryStore` — the constructor throws and the error message matches `/newer|update centraid/i`.
+`packages/runtime-core/src/chat-history.test.ts` gains a `ChatHistoryStore migrations` suite with three cases. First: constructing a store against a fresh path leaves `PRAGMA user_version` equal to `MIGRATIONS.length` (verified via a throwaway `DatabaseSync` read). Second: opening a store, writing a session + a message, and constructing a second store on the same path returns intact data and leaves `user_version` unchanged — proving the re-open path is a no-op rather than a re-bootstrap. Third: bootstrapping the schema, then manually advancing `user_version` to `MIGRATIONS.length + 1` via a raw `DatabaseSync`, then constructing a new `ChatHistoryStore` — the constructor throws and the error message matches `/newer|update centraid/i`.
 
 ## Verification
 

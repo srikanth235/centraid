@@ -2,8 +2,8 @@
  * Centraid agent tools.
  *
  * Two tools that let the OpenClaw agent reach into a centraid app's data:
- *   - `centraid_get_schema`: returns tables + columns for one app.
- *   - `centraid_sql_select`: runs a single SELECT against one app's data.sqlite.
+ *   - `centraid_sql_describe`: returns tables + columns for one app.
+ *   - `centraid_sql_read`: runs a single SELECT against one app's data.sqlite.
  *
  * Scoping: each tool takes an `appId` parameter. A `before_tool_call` hook
  * cross-checks that `appId` against the session key — the chat client connects
@@ -20,7 +20,7 @@
 import path from 'node:path';
 import { Type } from '@sinclair/typebox';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
-import { type Registry, readAppSchema, runQuery, RunQueryError } from '@centraid/runtime-core';
+import { type Runtime, readAppSchema, runQuery, RunQueryError } from '@centraid/runtime-core';
 
 export const SESSION_PREFIX = 'centraid-chat:';
 
@@ -44,7 +44,7 @@ export function appIdFromSessionKey(sessionKey: string | undefined): string | un
 /**
  * Returns true only when `sql` is a read-only statement (SELECT or EXPLAIN)
  * and contains no write/DDL/PRAGMA verbs as standalone words. Exported for
- * tests; used inside `centraid_sql_select.execute`.
+ * tests; used inside `centraid_sql_read.execute`.
  */
 export function isSelectOnly(sql: string): boolean {
   const stripped = sql
@@ -90,7 +90,9 @@ function readSessionKey(value: unknown): string | undefined {
   return undefined;
 }
 
-export function registerCentraidTools(api: OpenClawPluginApi, registry: Registry): void {
+export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime): void {
+  const { registry, changeBus } = runtime;
+
   const textResult = (text: string, details: Record<string, unknown> = {}) => ({
     content: [{ type: 'text' as const, text }],
     details,
@@ -100,17 +102,17 @@ export function registerCentraidTools(api: OpenClawPluginApi, registry: Registry
   // worker), and only the gateway's instance gets `gateway_start` → bootstrap.
   // Lazy-load on first tool call so the worker's registry is hydrated too.
   // `Registry.load` is idempotent.
-  const ensureRegistry = async (): Promise<Registry> => {
+  const ensureRegistry = async (): Promise<typeof registry> => {
     await registry.load();
     return registry;
   };
 
-  // ------- centraid_get_schema -------
+  // ------- centraid_sql_describe -------
   api.registerTool({
-    name: 'centraid_get_schema',
+    name: 'centraid_sql_describe',
     label: 'Centraid: get app schema',
     description:
-      'Return the tables, columns, indexes, and views of a centraid app’s SQLite database. Use this before issuing centraid_sql_select to know what to query.',
+      'Return the tables, columns, indexes, and views of a centraid app’s SQLite database. Use this before issuing centraid_sql_read to know what to query.',
     parameters: Type.Object({
       appId: Type.String({
         description: 'Centraid app id. Must match the active chat’s scope.',
@@ -141,9 +143,9 @@ export function registerCentraidTools(api: OpenClawPluginApi, registry: Registry
     },
   });
 
-  // ------- centraid_sql_select -------
+  // ------- centraid_sql_read -------
   api.registerTool({
-    name: 'centraid_sql_select',
+    name: 'centraid_sql_read',
     label: 'Centraid: run SELECT',
     description:
       'Run a single SELECT statement against a centraid app’s SQLite database and return the rows. Reads only; writes/DDL are refused.',
@@ -199,7 +201,7 @@ export function registerCentraidTools(api: OpenClawPluginApi, registry: Registry
     name: 'centraid_sql_write',
     label: 'Centraid: run INSERT/UPDATE/DELETE',
     description:
-      'Run a single INSERT, UPDATE, DELETE, or REPLACE statement against a centraid app’s SQLite database. Returns rowsAffected and lastInsertRowid. DDL (CREATE/ALTER/DROP) and PRAGMA are not allowed — use centraid_get_schema first to learn the existing tables and columns.',
+      'Run a single INSERT, UPDATE, DELETE, or REPLACE statement against a centraid app’s SQLite database. Returns rowsAffected and lastInsertRowid. DDL (CREATE/ALTER/DROP) and PRAGMA are not allowed — use centraid_sql_describe first to learn the existing tables and columns.',
     parameters: Type.Object({
       appId: Type.String({
         description: 'Centraid app id. Must match the active chat’s scope.',
@@ -223,7 +225,15 @@ export function registerCentraidTools(api: OpenClawPluginApi, registry: Registry
       const entry = reg.get(appId);
       if (!entry) throw new Error(`app "${appId}" is not registered.`);
       try {
-        const result = runQuery(path.join(entry.path, 'data.sqlite'), sql);
+        const result = runQuery(path.join(entry.path, 'data.sqlite'), sql, {
+          // Fire the runtime's change bus so app iframes subscribed via
+          // /centraid/<id>/_changes re-fetch after this write — same as
+          // the HTTP query route path does.
+          onWrite: (tables) => {
+            if (tables.length === 0) return;
+            changeBus.emit({ appId, tables, ts: Date.now() });
+          },
+        });
         if (result.kind !== 'exec') {
           throw new Error('statement produced rows, not an exec result.');
         }
@@ -257,9 +267,9 @@ export function registerCentraidTools(api: OpenClawPluginApi, registry: Registry
   api.on('before_tool_call', async (event, ctx) => {
     const name = event.toolName;
     if (
-      name !== 'centraid_sql_select' &&
+      name !== 'centraid_sql_read' &&
       name !== 'centraid_sql_write' &&
-      name !== 'centraid_get_schema'
+      name !== 'centraid_sql_describe'
     )
       return;
     const sessionKey =

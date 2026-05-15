@@ -2,7 +2,7 @@
 /**
  * Renderer-side typings for the IPC bridge exposed by `preload.ts` under
  * `window.CentraidApi`. The shapes here mirror the public types of
- * `@centraid/agent-harness` — kept independent so the renderer doesn't pull
+ * `@centraid/builder-harness` — kept independent so the renderer doesn't pull
  * the harness as a build-time dependency.
  */
 

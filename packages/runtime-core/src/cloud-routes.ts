@@ -48,6 +48,13 @@ export async function handleQueryRoute(
   res: ServerResponse,
   registry: Registry,
   appId: string,
+  /**
+   * Called once after a successful write statement with the list of touched
+   * tables. Skipped for read-style statements (which can't produce changes)
+   * and for failed writes. Optional so callers without a change bus can
+   * still use the route.
+   */
+  onWrite?: (tables: string[]) => void,
 ): Promise<true> {
   const entry = registry.get(appId);
   if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
@@ -65,7 +72,7 @@ export async function handleQueryRoute(
 
   const dataDbFile = path.join(appDataDir(entry), 'data.sqlite');
   try {
-    const result = runQuery(dataDbFile, sql);
+    const result = runQuery(dataDbFile, sql, onWrite ? { onWrite } : undefined);
     return sendJson(res, 200, result);
   } catch (err) {
     if (err instanceof RunQueryError) {

@@ -30,6 +30,7 @@ export type Route =
   | { kind: 'app-crons-list'; appId: string }
   | { kind: 'app-cron-runnow'; appId: string; cronId: string }
   | { kind: 'app-ingest'; appId: string; cronId: string }
+  | { kind: 'app-changes'; appId: string }
   | { kind: 'not-found' };
 
 const PREFIX = '/centraid';
@@ -137,6 +138,13 @@ export function parseRoute(method: string, rawUrl: string): Route {
   if (second === '_ingest') {
     if (m !== 'POST' || segments.length !== 3) return { kind: 'not-found' };
     return { kind: 'app-ingest', appId, cronId: decodeURIComponent(segments[2] ?? '') };
+  }
+
+  // /centraid/<id>/_changes — Server-Sent Events stream of mutations to the
+  // app's data.sqlite. The connection stays open until the client closes.
+  if (second === '_changes') {
+    if (m !== 'GET' || segments.length !== 2) return { kind: 'not-found' };
+    return { kind: 'app-changes', appId };
   }
 
   // Anything else under /centraid/<id>/... is a static asset request.

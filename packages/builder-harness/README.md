@@ -1,6 +1,8 @@
-# @centraid/agent-harness
+# @centraid/builder-harness
 
-Pi-coding-agent customization for **authoring centraid apps**, plus helpers desktop and mobile surfaces use to scaffold and publish those apps.
+Pi-coding-agent customization for **the centraid app builder** — an agent that authors centraid apps in the `@centraid/openclaw-plugin` format, plus helpers desktop and mobile surfaces use to scaffold and publish those apps.
+
+> The in-app **data chat** (talking to a deployed app's SQLite over the chat panel) is a separate surface — see [`@centraid/chat-harness`](../chat-harness).
 
 ## Surfaces
 

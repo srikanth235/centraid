@@ -290,6 +290,14 @@
         if (isDraft(app)) enterBuilder({ appContext: app });
         else openApp(id);
       },
+      // Both right-click on the row and the hover-revealed `•••` route
+      // through the same context menu used on the home grid — keeps the
+      // verb set (Rename, Reveal in Finder, Delete, …) in lockstep across
+      // surfaces.
+      onAppContext: (id, anchor) => {
+        const app = findApp(id);
+        if (app) openContextMenu(app, anchor);
+      },
       onHome: renderHome,
       onNewApp: openNewAppSheet,
       onSettings: renderSettings,
@@ -557,6 +565,11 @@
   function renderAppCard(app: AppMetaResolvedType): HTMLElement {
     const draft = isDraft(app);
     const status: 'new' | 'draft' | null = draft ? 'draft' : isUserApp(app.id) ? 'new' : null;
+
+    // Wrap is the grid item; card is the clickable surface. The wrap also
+    // hosts the hover-revealed `•••` action button as a sibling so we don't
+    // nest a button inside a button.
+    const wrap = el('div', { class: 'cd-app-card-wrap', 'data-app-id': app.id });
     const card = el('button', {
       class: 'cd-app-card',
       type: 'button',
@@ -564,7 +577,7 @@
       onContextmenu: (e: Event) => {
         e.preventDefault();
         const me = e as MouseEvent;
-        openContextMenu(app, me.clientX, me.clientY);
+        openContextMenu(app, { kind: 'point', x: me.clientX, y: me.clientY });
       },
     });
 
@@ -576,7 +589,8 @@
     halo.style.background = `radial-gradient(circle, ${app.color}66 0%, ${app.color}22 35%, transparent 70%)`;
     card.append(halo);
 
-    // Head row: tile icon + status pill
+    // Head row: tile icon only — the status pill used to sit in the corner
+    // but moved to the meta row so the corner can host the `•••` action.
     const head = el('div', { class: 'cd-app-card-head' });
     const iconEl = el('div', {
       class: 'cd-app-card-icon',
@@ -588,15 +602,6 @@
     if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
     head.append(iconEl);
     card.append(head);
-
-    // Status pill — pinned to the card's top-right corner (independent of
-    // the icon row's vertical extent). z-index keeps it above the halo.
-    if (status) {
-      const pill = el('span', { class: 'cd-status cd-status-corner', 'data-tone': status });
-      pill.append(el('span', { class: 'cd-status-dot' }));
-      pill.append(document.createTextNode(status));
-      card.append(pill);
-    }
 
     // Body
     const body = el('div', {});
@@ -612,18 +617,39 @@
     const ua = !draft ? findUserApp(app.id) : undefined;
     const metaLabel = draft ? 'Continue editing' : `Edited ${relativeTime(ua?.updatedAt)}`;
     meta.innerHTML = `${Icon.Pencil({ size: 11 })}<span>${metaLabel}</span>`;
+    if (status) {
+      const pill = el('span', { class: 'cd-status', 'data-tone': status });
+      pill.style.marginLeft = 'auto';
+      pill.append(el('span', { class: 'cd-status-dot' }));
+      pill.append(document.createTextNode(status));
+      meta.append(pill);
+    }
     card.append(meta);
-    return card;
+
+    wrap.append(card);
+    wrap.append(
+      buildMoreButton('App actions', (rect) => openContextMenu(app, { kind: 'rect', rect })),
+    );
+    return wrap;
   }
 
   function renderTemplateCard(tmpl: TemplateEntry): HTMLElement {
     const color = (window.ICON_PALETTE as Record<string, string>)[tmpl.colorKey] || '#7C5BD9';
+    const wrap = el('div', { class: 'cd-tmpl-card-wrap' });
     const card = el(
       'button',
       {
         class: 'cd-tmpl-card',
         type: 'button',
-        onClick: () => void cloneTemplate(tmpl),
+        // Click opens a preview rather than cloning straight away — keeps a
+        // single-tap from becoming a surprise side effect on disk. The
+        // "Use this template" button in the preview commits the clone.
+        onClick: () => openTemplatePreview(tmpl),
+        onContextmenu: (e: Event) => {
+          e.preventDefault();
+          const me = e as MouseEvent;
+          openTemplateContextMenu(tmpl, { kind: 'point', x: me.clientX, y: me.clientY });
+        },
       },
       [],
     );
@@ -639,12 +665,44 @@
     text.append(el('div', { class: 'cd-tmpl-card-name' }, tmpl.name));
     text.append(el('div', { class: 'cd-tmpl-card-desc' }, tmpl.desc));
     card.append(text);
-    return card;
+    wrap.append(card);
+    wrap.append(
+      buildMoreButton('Template actions', (rect) =>
+        openTemplateContextMenu(tmpl, { kind: 'rect', rect }),
+      ),
+    );
+    return wrap;
+  }
+
+  // Hover-revealed `•••` action trigger. Sits as a sibling to the card so we
+  // don't nest a button inside a button; CSS reveals it on hover/focus of
+  // the parent wrap. Marks itself `data-open` while the menu is mounted so
+  // the button stays visible even when the cursor wanders into the menu.
+  function buildMoreButton(label: string, onOpen: (rect: DOMRect) => void): HTMLElement {
+    const btn = el('button', {
+      class: 'cd-card-more',
+      type: 'button',
+      'aria-label': label,
+      'aria-haspopup': 'menu',
+      trustedHtml: Icon.MoreHoriz({ size: 16 }),
+      onClick: (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const target = e.currentTarget as HTMLElement;
+        target.dataset.open = 'true';
+        onOpen(target.getBoundingClientRect());
+      },
+    });
+    return btn;
   }
 
   // ---------- Context menu ----------
   let ctxBackdrop: HTMLElement | null = null;
   let ctxMenu: HTMLElement | null = null;
+  // Element whose `data-open` flag we cleared on close — typically the
+  // hover-revealed `•••` button. Tracked so the button can stay visible
+  // while its menu is mounted and gracefully return to hover-only on close.
+  let ctxTrigger: HTMLElement | null = null;
 
   function closeContextMenu(): void {
     if (ctxBackdrop) {
@@ -653,18 +711,30 @@
     if (ctxMenu) {
       ctxMenu.remove();
     }
+    if (ctxTrigger) {
+      delete ctxTrigger.dataset.open;
+    }
     ctxBackdrop = null;
     ctxMenu = null;
+    ctxTrigger = null;
   }
 
   interface CtxItem {
-    id: 'open' | 'update' | 'delete' | 'share';
+    id: string;
     label: string;
     icon: IconNameType;
     danger?: boolean;
   }
 
-  function openContextMenu(app: AppMetaResolvedType, x: number, y: number): void {
+  // `MenuAnchor` is defined globally in `types.d.ts` so both `app.ts` and
+  // `chrome.ts` (separate IIFEs) can hand right-click events to the same
+  // openMenu without dragging the type through a window bridge.
+
+  function openMenu(
+    items: ReadonlyArray<CtxItem | 'sep'>,
+    anchor: MenuAnchor,
+    onPick: (id: string) => void,
+  ): void {
     closeContextMenu();
     ctxBackdrop = el('div', {
       class: 'ctx-backdrop',
@@ -676,24 +746,7 @@
     });
     document.body.append(ctxBackdrop);
 
-    // Drafts have no published runtime, so "Open" and "Share" are hidden
-    // — only Edit (back to builder) and Delete (rm the project dir) make
-    // sense. Published apps additionally get Share.
-    const items: (CtxItem | 'sep')[] = isDraft(app)
-      ? [
-          { icon: 'Sparkle', id: 'update', label: 'Continue editing' },
-          'sep',
-          { danger: true, icon: 'Trash', id: 'delete', label: 'Delete draft' },
-        ]
-      : [
-          { icon: 'Eye', id: 'open', label: 'Open' },
-          { icon: 'Sparkle', id: 'update', label: 'Edit with Centraid' },
-          { icon: 'Share', id: 'share', label: 'Share' },
-          'sep',
-          { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
-        ];
-
-    ctxMenu = el('div', { class: 'ctx-menu' });
+    ctxMenu = el('div', { class: 'ctx-menu', role: 'menu' });
     for (const it of items) {
       if (it === 'sep') {
         ctxMenu.append(el('div', { class: 'ctx-sep' }));
@@ -701,10 +754,12 @@
       }
       const btn = el('button', {
         class: 'ctx-item',
+        role: 'menuitem',
         'data-danger': String(!!it.danger),
         onClick: () => {
+          const id = it.id;
           closeContextMenu();
-          handleAction(it.id, app);
+          onPick(id);
         },
       });
       btn.innerHTML = `${Icon[it.icon]({ size: 15 })}<span>${it.label}</span>`;
@@ -714,13 +769,73 @@
 
     const w = ctxMenu.offsetWidth;
     const h = ctxMenu.offsetHeight;
-    const px = Math.min(x, window.innerWidth - w - 8);
-    const py = Math.min(y, window.innerHeight - h - 8);
-    ctxMenu.style.left = `${px}px`;
-    ctxMenu.style.top = `${py}px`;
+    let px: number;
+    let py: number;
+    if (anchor.kind === 'point') {
+      px = Math.min(anchor.x, window.innerWidth - w - 8);
+      py = Math.min(anchor.y, window.innerHeight - h - 8);
+    } else {
+      const r = anchor.rect;
+      py = r.bottom + 4;
+      px = r.left;
+      // Flip horizontally if the menu would clip the right edge: align to
+      // the trigger's right edge instead of its left.
+      if (px + w > window.innerWidth - 8) px = r.right - w;
+      // Flip vertically if it would clip the bottom: rise above the trigger.
+      if (py + h > window.innerHeight - 8) py = r.top - h - 4;
+    }
+    ctxMenu.style.left = `${Math.max(8, px)}px`;
+    ctxMenu.style.top = `${Math.max(8, py)}px`;
   }
 
-  function handleAction(id: CtxItem['id'], app: AppMetaResolvedType): void {
+  function openContextMenu(app: AppMetaResolvedType, anchor: MenuAnchor): void {
+    captureTrigger();
+    // Drafts have no published runtime, so "Open" and "Share" are hidden
+    // — only Edit (back to builder) and Delete (rm the project dir) make
+    // sense. Published apps additionally get Share.
+    const items: (CtxItem | 'sep')[] = isDraft(app)
+      ? [
+          { icon: 'Sparkle', id: 'update', label: 'Continue editing' },
+          { icon: 'Pencil', id: 'rename', label: 'Rename' },
+          { icon: 'Folder', id: 'reveal', label: 'Reveal in Finder' },
+          'sep',
+          { danger: true, icon: 'Trash', id: 'delete', label: 'Delete draft' },
+        ]
+      : [
+          { icon: 'Eye', id: 'open', label: 'Open' },
+          { icon: 'Sparkle', id: 'update', label: 'Edit with Centraid' },
+          { icon: 'Pencil', id: 'rename', label: 'Rename' },
+          { icon: 'Share', id: 'share', label: 'Share' },
+          { icon: 'Folder', id: 'reveal', label: 'Reveal in Finder' },
+          'sep',
+          { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
+        ];
+    openMenu(items, anchor, (id) => handleAction(id, app));
+  }
+
+  function openTemplateContextMenu(tmpl: TemplateEntry, anchor: MenuAnchor): void {
+    const items: (CtxItem | 'sep')[] = [
+      { icon: 'Sparkle', id: 'use', label: 'Use this template' },
+      { icon: 'Eye', id: 'preview', label: 'Preview' },
+    ];
+    openMenu(items, anchor, (id) => {
+      if (id === 'use') void cloneTemplate(tmpl);
+      else if (id === 'preview') openTemplatePreview(tmpl);
+    });
+  }
+
+  // The `•••` trigger flips its own `data-open` before calling openMenu so
+  // CSS keeps it visible while the menu is mounted (cursor can wander into
+  // the menu without retracting the affordance). We pick up that flag here
+  // so closeContextMenu can clear it on dismiss. For right-click — no
+  // trigger to capture and ctxTrigger stays null; hover CSS still handles
+  // visibility for that surface.
+  function captureTrigger(): void {
+    const btn = document.querySelector<HTMLElement>('.cd-card-more[data-open="true"]');
+    if (btn) ctxTrigger = btn;
+  }
+
+  function handleAction(id: string, app: AppMetaResolvedType): void {
     if (id === 'open') {
       openApp(app.id);
     } else if (id === 'update') {
@@ -729,7 +844,164 @@
       void deleteApp(app);
     } else if (id === 'share') {
       openShareDialog(app);
+    } else if (id === 'rename') {
+      startInlineRename(app);
+    } else if (id === 'reveal') {
+      void revealApp(app);
     }
+  }
+
+  async function revealApp(app: AppMetaResolvedType): Promise<void> {
+    try {
+      await window.CentraidApi.openProjectFolder({ id: app.id });
+    } catch (err) {
+      showToast(`Could not reveal folder: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Flip the app card's name into a contenteditable inline editor (Notion
+   * style — no modal). Enter or blur commits via `updateProjectMeta`; Esc
+   * cancels. Empty/identical names are treated as no-op cancels. On commit
+   * the home re-renders so the meta timestamp and any title-derived state
+   * (sidebar, drafts) stay consistent.
+   */
+  function startInlineRename(app: AppMetaResolvedType): void {
+    const wrap = document.querySelector<HTMLElement>(`[data-app-id="${CSS.escape(app.id)}"]`);
+    const nameEl = wrap?.querySelector<HTMLElement>('.cd-app-card-name');
+    if (!nameEl) return;
+    const original = app.name;
+    nameEl.setAttribute('contenteditable', 'plaintext-only');
+    nameEl.classList.add('cd-app-card-name-editing');
+
+    let done = false;
+    const finish = async (commit: boolean): Promise<void> => {
+      if (done) return;
+      done = true;
+      nameEl.removeAttribute('contenteditable');
+      nameEl.classList.remove('cd-app-card-name-editing');
+      nameEl.removeEventListener('keydown', onKey);
+      nameEl.removeEventListener('blur', onBlur);
+      nameEl.removeEventListener('click', stop);
+      nameEl.removeEventListener('mousedown', stop);
+      const nextName = (nameEl.textContent ?? '').trim().replace(/\s+/g, ' ');
+      if (!commit || !nextName || nextName === original) {
+        nameEl.textContent = original;
+        return;
+      }
+      try {
+        await window.CentraidApi.updateProjectMeta({ id: app.id, name: nextName });
+        if (!isDraft(app)) {
+          syncUserAppMeta({ projectId: app.id, name: nextName });
+        }
+        showToast(`Renamed to "${nextName}"`);
+        renderHome();
+      } catch (err) {
+        nameEl.textContent = original;
+        showToast(`Could not rename: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    };
+    const onKey = (e: Event): void => {
+      const ke = e as KeyboardEvent;
+      e.stopPropagation();
+      if (ke.key === 'Enter') {
+        e.preventDefault();
+        void finish(true);
+      } else if (ke.key === 'Escape') {
+        e.preventDefault();
+        void finish(false);
+      }
+    };
+    const onBlur = (): void => void finish(true);
+    const stop = (e: Event): void => e.stopPropagation();
+
+    nameEl.addEventListener('keydown', onKey);
+    nameEl.addEventListener('blur', onBlur);
+    nameEl.addEventListener('click', stop);
+    nameEl.addEventListener('mousedown', stop);
+
+    nameEl.focus();
+    const range = document.createRange();
+    range.selectNodeContents(nameEl);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+
+  /**
+   * Notion-style template preview. The previous behaviour was to clone on
+   * click of the tile, which made every accidental tap leave a draft on
+   * disk. The preview shows what the template is and gates cloning behind
+   * an explicit "Use this template" button.
+   */
+  function openTemplatePreview(tmpl: TemplateEntry): void {
+    const color = (window.ICON_PALETTE as Record<string, string>)[tmpl.colorKey] || '#7C5BD9';
+    const backdrop = el('div', { class: 'modal-backdrop' });
+    const card = el('div', {
+      class: 'modal-card cd-tmpl-preview',
+      role: 'dialog',
+      'aria-label': `Preview ${tmpl.name}`,
+    });
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      }
+    }
+    const close = (): void => {
+      backdrop.remove();
+      card.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+    backdrop.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+
+    const closeBtn = el('button', {
+      'aria-label': 'Close',
+      class: 'btn-icon modal-close',
+      trustedHtml: Icon.X({ size: 16 }),
+      onClick: close,
+    });
+    card.append(closeBtn);
+
+    const head = el('div', { class: 'cd-tmpl-preview-head' });
+    const iconEl = el('div', {
+      class: 'cd-tmpl-preview-icon',
+      style: { background: color },
+      trustedHtml: Icon[tmpl.iconKey as IconNameType]
+        ? Icon[tmpl.iconKey as IconNameType]({ size: 28, strokeWidth: 1.85 })
+        : '',
+    });
+    head.append(iconEl);
+    const headText = el('div', { style: { minWidth: '0' } });
+    headText.append(el('div', { class: 'cd-tmpl-preview-eyebrow' }, `Template · v${tmpl.version}`));
+    headText.append(el('h3', {}, tmpl.name));
+    head.append(headText);
+    card.append(head);
+
+    card.append(el('p', {}, tmpl.desc));
+    card.append(
+      el(
+        'div',
+        { class: 'cd-tmpl-preview-note' },
+        'Clones into your projects as a draft. Rename, edit, and publish from there — the original template stays in the catalog.',
+      ),
+    );
+
+    const cancel = el('button', { class: 'btn btn-ghost', onClick: close }, 'Cancel');
+    const useBtn = el('button', {
+      class: 'btn btn-primary',
+      onClick: () => {
+        close();
+        void cloneTemplate(tmpl);
+      },
+    });
+    useBtn.innerHTML = Icon.Sparkle({ size: 13 }) + '<span>Use this template</span>';
+    card.append(el('div', { class: 'sheet-actions' }, [cancel, useBtn]));
+
+    document.body.append(backdrop);
+    document.body.append(card);
+    setTimeout(() => useBtn.focus(), 30);
   }
 
   async function deleteApp(app: AppMetaResolvedType): Promise<void> {
@@ -2111,6 +2383,10 @@
   window.Centraid = {
     el,
     openApp,
+    openAppContext: (id, anchor) => {
+      const app = findApp(id);
+      if (app) openContextMenu(app, anchor);
+    },
     openBuilder: openNewAppSheet,
     openShare: openShareDialog,
     openSettings: renderSettings,

@@ -72,11 +72,11 @@
 
     function toolVerb(tool: string): string {
       switch (tool) {
-        case 'centraid_sql_select':
+        case 'centraid_sql_read':
           return 'Querying';
         case 'centraid_sql_write':
           return 'Writing';
-        case 'centraid_get_schema':
+        case 'centraid_sql_describe':
           return 'Reading schema';
         default:
           return tool.charAt(0).toUpperCase() + tool.slice(1);
@@ -84,11 +84,11 @@
     }
 
     function summarizeToolArgs(tool: string, sql?: string, args?: unknown): string | undefined {
-      if ((tool === 'centraid_sql_select' || tool === 'centraid_sql_write') && sql) {
+      if ((tool === 'centraid_sql_read' || tool === 'centraid_sql_write') && sql) {
         const firstLine = sql.split('\n').find((l) => l.trim().length > 0) ?? sql;
         return firstLine.trim().replace(/\s+/g, ' ').slice(0, 90);
       }
-      if (tool === 'centraid_get_schema') return undefined;
+      if (tool === 'centraid_sql_describe') return undefined;
       if (args && typeof args === 'object') {
         for (const k of ['name', 'path', 'query']) {
           const v = (args as Record<string, unknown>)[k];

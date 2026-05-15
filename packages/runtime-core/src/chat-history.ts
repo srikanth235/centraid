@@ -7,8 +7,16 @@
  * out of each app's user-facing `data.sqlite` and isn't reachable from the
  * agent's centraid_sql_* tools.
  *
- * Exposed over HTTP at the `/_centraid-chat` prefix (mounted by index.ts).
- * The desktop main process is the only client; auth is gateway bearer.
+ * Exposed over HTTP at the `/_centraid-chat` prefix. Two host surfaces
+ * mount it identically:
+ *   - the OpenClaw plugin (remote gateway) via `api.registerHttpRoute`
+ *   - the embedded local runtime (`startRuntimeHttpServer`) intercepts the
+ *     same prefix before delegating to `Runtime.handle`
+ * Both surfaces share the schema and file layout so the same on-disk DB
+ * file works regardless of how the desktop is configured.
+ *
+ * The desktop main process is the only client; auth is the same bearer
+ * token the surrounding HTTP server already enforces.
  *
  * Persistence model:
  *   chat_sessions(id, app_id, title, created_at, updated_at)

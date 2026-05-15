@@ -1,11 +1,10 @@
 {
-  "name": "@centraid/agent-harness",
+  "name": "@centraid/chat-harness",
   "version": "0.1.0",
   "private": true,
-  "description": "Pi-coding-agent customization for centraid: agent that knows how to author apps in the @centraid/openclaw-plugin format, plus scaffold + publish helpers.",
+  "description": "Pi-coding-agent customization for the centraid in-app DATA CHAT: agent that answers questions and runs SQL against a single deployed app's SQLite over the runtime HTTP surface. Works against both the embedded local runtime and remote OpenClaw. (For app authoring see @centraid/builder-harness.)",
   "files": [
     "dist",
-    "templates",
     "README.md"
   ],
   "type": "module",
@@ -18,16 +17,14 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/design-tokens": "workspace:*",
-    "@centraid/openclaw-plugin": "workspace:*",
+    "@centraid/builder-harness": "workspace:*",
     "@centraid/runtime-core": "workspace:*",
     "@earendil-works/pi-coding-agent": "^0.74.0",
-    "tar": "^7.4.3"
+    "typebox": "^1.1.24"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
-    "@types/tar": "^6.1.13",
     "tsx": "^4.20.3",
     "typescript": "catalog:"
   },

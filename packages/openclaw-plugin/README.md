@@ -212,14 +212,17 @@ Defense-in-depth that's already in place:
 
 ## Agent tools
 
-The plugin also registers two agent tools used by the desktop app's per-app chat:
+The plugin also registers three agent tools used by any OpenClaw-side agent that needs to read or mutate a centraid app's data:
 
-| Tool                  | Purpose                                                                                         |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| `centraid_get_schema` | Returns `{tables, views, indexes}` for the calling app's `data.sqlite`.                          |
-| `centraid_sql_select` | Runs one read-only SELECT against the calling app's `data.sqlite`. Multi-statement is rejected. |
+| Tool                    | Purpose                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `centraid_sql_describe` | Returns `{tables, views, indexes}` for the calling app's `data.sqlite`.                                                  |
+| `centraid_sql_read`     | Runs one read-only SELECT against the calling app's `data.sqlite`. Multi-statement is rejected.                          |
+| `centraid_sql_write`    | Runs one INSERT/UPDATE/DELETE/REPLACE against the calling app's `data.sqlite`. DDL and PRAGMA are refused.               |
 
-Both take `appId` as a parameter. A `before_tool_call` hook on the plugin enforces that `appId` matches the calling session's app — the chat client opens its session as `centraid-chat:<appId>:w<windowId>`, and the hook parses that key. Cross-app reads (and any non-SELECT statement) are refused at the gateway before `execute` runs.
+All three take `appId` as a parameter. A `before_tool_call` hook on the plugin enforces that `appId` matches the calling session's app — the chat client opens its session as `centraid-chat:<appId>:w<windowId>`, and the hook parses that key. Cross-app reads/writes (and any disallowed statement shape) are refused at the gateway before `execute` runs. Successful writes also emit through `runtime.changeBus`, so any subscriber on `/centraid/<appId>/_changes` learns about the mutation.
+
+The desktop app's in-app chat uses a parallel implementation in [@centraid/chat-harness](../chat-harness) (pi-coding-agent custom tools backed by the same HTTP endpoints) — these openclaw-registered tools exist for any agent running directly inside the OpenClaw gateway.
 
 ### Enabling the tools in `~/.openclaw/openclaw.json`
 
@@ -229,7 +232,7 @@ Plugin-registered tools don't belong to any built-in tool profile. The cleanest 
 {
   "tools": {
     "profile": "coding",
-    "alsoAllow": ["centraid_get_schema", "centraid_sql_select"]
+    "alsoAllow": ["centraid_sql_describe", "centraid_sql_read", "centraid_sql_write"]
   }
 }
 ```
@@ -240,7 +243,7 @@ A small helper script is shipped to patch the user's config idempotently:
 node packages/openclaw-plugin/scripts/setup-tools.mjs
 ```
 
-It reads `~/.openclaw/openclaw.json`, merges the two tool ids into `tools.alsoAllow`, and writes the file back atomically. Safe to re-run.
+It reads `~/.openclaw/openclaw.json`, merges the three tool ids into `tools.alsoAllow`, and writes the file back atomically. Safe to re-run.
 
 ## Building
 

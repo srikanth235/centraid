@@ -1,0 +1,37 @@
+{
+  "name": "@centraid/builder-harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi-coding-agent customization for the centraid app BUILDER: agent that knows how to author apps in the @centraid/openclaw-plugin format, plus scaffold + publish + gateway HTTP helpers. (For the in-app data chat see @centraid/chat-harness.)",
+  "files": [
+    "dist",
+    "templates",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@centraid/design-tokens": "workspace:*",
+    "@centraid/openclaw-plugin": "workspace:*",
+    "@centraid/runtime-core": "workspace:*",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "tar": "^7.4.3"
+  },
+  "devDependencies": {
+    "@centraid/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "@types/tar": "^6.1.13",
+    "tsx": "^4.20.3",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}
