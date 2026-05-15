@@ -109,6 +109,10 @@
     tileVariant: 'gradient',
   };
 
+  // Local Store value is the FAST-PAINT CACHE — applied synchronously so the
+  // shell renders in the user's chosen theme before any IPC round-trip. The
+  // gateway-side `centraid-user.sqlite` is the source of truth; we hydrate
+  // from it immediately after first paint and reconcile if it disagrees.
   let prefs: AppearancePrefs = {
     ...DEFAULT_PREFS,
     ...Store.get<Partial<AppearancePrefs>>('appearance', {}),
@@ -152,17 +156,48 @@
     html.style.setProperty('--accent-deep', swatch.deep);
     // Broadcast to every mounted user-app iframe so they retune in lock-step
     // with the shell. The tiny bridge script in each template
-    // (packages/app-templates/*/index.html) listens for this and flips
-    // [data-theme] + --bg-l on its own <html>.
-    broadcastThemeToFrames();
+    // (packages/app-templates/*/index.html) listens for this and flips its
+    // own <html> data-attrs / CSS vars to match.
+    broadcastSettingsToFrames();
   }
 
-  function broadcastThemeToFrames(): void {
-    const payload = { type: 'centraid:theme', theme: prefs.theme, bgL: prefs.bgL };
+  // Project the renderer's typed prefs into the same `dataAttrs` / `cssVars`
+  // shape the runtime uses for server-side injection. The bridge inside each
+  // app applies them as `<html data-…>` attrs and `--…` CSS vars — symmetric
+  // with what the gateway bakes on first paint.
+  function buildIframeSettings(): {
+    dataAttrs: Record<string, string>;
+    cssVars: Record<string, string>;
+  } {
+    const remote = toRemoteShape(prefs);
+    const dataAttrs: Record<string, string> = {};
+    const cssVars: Record<string, string> = {};
+    if (typeof remote.theme === 'string') dataAttrs['theme'] = remote.theme;
+    if (typeof remote.density === 'string') dataAttrs['density'] = remote.density;
+    if (typeof remote.cards === 'string') dataAttrs['cards'] = remote.cards;
+    if (typeof remote.coolCast === 'boolean')
+      dataAttrs['cool-cast'] = remote.coolCast ? 'on' : 'off';
+    if (typeof prefs.bgL === 'number' && Number.isFinite(prefs.bgL))
+      cssVars['bg-l'] = `${prefs.bgL}%`;
+    if (typeof remote.accent === 'string') cssVars['accent'] = remote.accent;
+    if (typeof remote.accentLight === 'string') cssVars['accent-light'] = remote.accentLight;
+    if (typeof remote.accentDeep === 'string') cssVars['accent-deep'] = remote.accentDeep;
+    return { dataAttrs, cssVars };
+  }
+
+  function broadcastSettingsToFrames(): void {
+    const settings = buildIframeSettings();
+    // New canonical payload — full settings update.
+    const settingsPayload = { type: 'centraid:settings', ...settings };
+    // Legacy payload — kept for any old `theme-bridge.js` still in the wild
+    // (older published apps that haven't been re-served since the bridge
+    // moved inline). New inline bridges accept both.
+    const legacyPayload = { type: 'centraid:theme', theme: prefs.theme, bgL: prefs.bgL };
     const frames = document.querySelectorAll<HTMLIFrameElement>('iframe[data-centraid-app]');
     frames.forEach((f) => {
       try {
-        f.contentWindow?.postMessage(payload, '*');
+        f.contentWindow?.postMessage(settingsPayload, '*');
+        f.contentWindow?.postMessage(legacyPayload, '*');
       } catch {
         // cross-origin postMessage cannot throw, but contentWindow access can
       }
@@ -170,10 +205,93 @@
   }
   applyPrefs();
 
+  // Reconcile from the gateway after first paint. We pull every key the
+  // renderer recognises, fold it into `prefs`, and reapply — so a fresh
+  // device picks up the user's theme/density/accent on launch without
+  // a flash of default styling. Failures are silent: the local cache is a
+  // perfectly good fallback when the gateway is unreachable.
+  void (async () => {
+    try {
+      const remote = await window.CentraidApi.getUserPrefs();
+      const recognised = pickAppearance(remote);
+      if (Object.keys(recognised).length > 0) {
+        prefs = { ...prefs, ...recognised, bgL: 5 };
+        Store.set('appearance', prefs);
+        applyPrefs();
+      }
+    } catch {
+      /* gateway unreachable — local cache stands in */
+    }
+  })();
+
+  // Project an arbitrary remote prefs object onto the AppearancePrefs shape,
+  // dropping unknown keys and rejecting values that don't match the union
+  // types. Mirrors the gateway-side `KNOWN_KEYS` list — if you add a new
+  // pref there, add it here too.
+  function pickAppearance(remote: Record<string, unknown>): Partial<AppearancePrefs> {
+    const out: Partial<AppearancePrefs> = {};
+    if (remote.theme === 'dark' || remote.theme === 'light') out.theme = remote.theme;
+    if (
+      remote.density === 'compact' ||
+      remote.density === 'regular' ||
+      remote.density === 'comfy'
+    ) {
+      out.density = remote.density;
+    }
+    if (remote.cards === 'flat' || remote.cards === 'outlined' || remote.cards === 'elevated') {
+      out.cardVariant = remote.cards;
+    }
+    if (typeof remote.coolCast === 'boolean') out.coolBlueCast = remote.coolCast;
+    // Accent: the semantic key (e.g. "teal") lives under `accentKey`; the
+    // resolved hex swatches under `accent` / `accentLight` / `accentDeep` are
+    // for the runtime's CSS-var injection only and are not re-derivable to
+    // a key. Older gateways may still carry a key in `accent` (pre-fix), so
+    // accept that as a fallback before defaulting.
+    if (typeof remote.accentKey === 'string' && remote.accentKey in ACCENT_PALETTE) {
+      out.accent = remote.accentKey as AccentKey;
+    } else if (typeof remote.accent === 'string' && remote.accent in ACCENT_PALETTE) {
+      out.accent = remote.accent as AccentKey;
+    }
+    return out;
+  }
+
+  // Convert the renderer's typed prefs back into the wire shape the gateway
+  // expects. Symmetric with `pickAppearance` — the gateway uses the keys in
+  // its `KNOWN_KEYS` map, not our internal type names.
+  function toRemoteShape(patch: Partial<AppearancePrefs>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (patch.theme !== undefined) out.theme = patch.theme;
+    if (patch.density !== undefined) out.density = patch.density;
+    if (patch.cardVariant !== undefined) out.cards = patch.cardVariant;
+    if (patch.coolBlueCast !== undefined) out.coolCast = patch.coolBlueCast;
+    if (patch.accent !== undefined) {
+      // `accentKey` carries the semantic key (e.g. "teal") so a second device
+      // can restore the exact swatch the user picked. `accent` / `accentLight`
+      // / `accentDeep` carry the resolved hex values for the runtime to bake
+      // directly into `<html style="…">` — the gateway has no knowledge of
+      // the renderer's ACCENT_PALETTE, so resolution must happen here.
+      out.accentKey = patch.accent;
+      const swatch = ACCENT_PALETTE[patch.accent];
+      if (swatch) {
+        out.accent = swatch.accent;
+        out.accentLight = swatch.light;
+        out.accentDeep = swatch.deep;
+      }
+    }
+    return out;
+  }
+
   function setPrefs(patch: Partial<AppearancePrefs>): void {
     prefs = { ...prefs, ...patch };
     Store.set('appearance', prefs);
     applyPrefs();
+    // Mirror to the gateway. Fire-and-forget — the local cache is already
+    // updated, so a network failure just means the next device launch will
+    // see the previous gateway value (and reapply it if it diverges).
+    const remotePatch = toRemoteShape(patch);
+    if (Object.keys(remotePatch).length > 0) {
+      void window.CentraidApi.saveUserPrefs(remotePatch).catch(() => undefined);
+    }
   }
 
   // Track the current cd-window setter so the sidebar toggle can flip the
@@ -1582,11 +1700,10 @@
       container.append(frameWrap);
 
       // Resolve the live URL and load it. We carry the initial theme in
-      // BOTH the query string (so the runtime can bake `data-theme` into the
-      // served `index.html` server-side — works even when an app's
-      // `theme-bridge.js` is stale or missing) AND the hash (read by
-      // `theme-bridge.js` before paint, in case the app is served outside
-      // this runtime).
+      // BOTH the query string (so the runtime's settings injection bakes
+      // `data-theme` / `--bg-l` into the served `index.html` server-side)
+      // AND the hash (read by the inline live-settings bridge before paint,
+      // covering the builder-preview path that bypasses the runtime).
       void window.CentraidApi.appLiveUrl({ id: ua.centraidProjectId })
         .then((r) => {
           const qsep = r.url.includes('?') ? '&' : '?';

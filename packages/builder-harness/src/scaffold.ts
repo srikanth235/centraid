@@ -59,7 +59,6 @@ export async function scaffoldProject(
   await fs.writeFile(path.join(dir, 'tokens.css'), toCss());
   await fs.writeFile(path.join(dir, 'app.css'), DEFAULT_APP_CSS);
   await fs.writeFile(path.join(dir, 'app.js'), DEFAULT_APP_JS);
-  await fs.writeFile(path.join(dir, 'theme-bridge.js'), THEME_BRIDGE_JS);
 
   await fs.mkdir(path.join(dir, 'queries'));
   await fs.mkdir(path.join(dir, 'actions'));
@@ -217,18 +216,20 @@ async function copyPluginTemplate(
   await fs.writeFile(dest, transform ? transform(raw) : raw);
 }
 
-// The scaffold's index.html wires the visual contract: theme bridge
-// loads synchronously before paint, then tokens.css (the design-tokens
-// snapshot), then app.css (per-app styles built on top). This is the
-// shape every centraid app should keep — the agent's system prompt
-// reinforces it.
+// The scaffold's index.html wires the visual contract: an inline live-
+// settings bridge runs synchronously before paint, then tokens.css (the
+// design-tokens snapshot), then app.css (per-app styles built on top).
+// The runtime bakes initial theme/density/accent into <html …> before
+// serving, so the bridge only handles two extras: URL-hash fallback for
+// the builder preview path that bypasses the runtime, and postMessage
+// for live updates while the iframe is mounted in the shell.
 const DEFAULT_INDEX_HTML = (id: string, name: string): string => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>${escapeHtml(name)}</title>
-    <script src="theme-bridge.js"></script>
+    <script>${INLINE_SETTINGS_BRIDGE}</script>
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="app.css" />
   </head>
@@ -426,28 +427,16 @@ const DEFAULT_APP_JS = `// Runs in the browser. Hit your queries via fetch.
 // screen readers don't announce all three at once.
 `;
 
-// theme-bridge.js — synchronous, runs before paint. Reads initial
-// theme from the URL hash the shell appends to the iframe src, then
-// listens for `centraid:theme` postMessages so the iframe re-tunes
-// when the user flips dark/light or drags the Dark-shade slider.
-// Must be loaded with a plain <script> (no type=module, no defer).
-const THEME_BRIDGE_JS = `(function () {
-  var h = document.documentElement;
-  function apply(theme, bgL) {
-    if (theme === 'dark' || theme === 'light') h.dataset.theme = theme;
-    if (bgL != null && bgL !== '') h.style.setProperty('--bg-l', bgL + '%');
-  }
-  try {
-    var p = new URLSearchParams((location.hash || '').slice(1));
-    apply(p.get('theme'), p.get('bgL'));
-  } catch (_) { /* noop */ }
-  addEventListener('message', function (e) {
-    var d = e && e.data;
-    if (!d || d.type !== 'centraid:theme') return;
-    apply(d.theme, d.bgL);
-  });
-})();
-`;
+// Inline settings bridge — emitted inside a synchronous <script> in the
+// scaffolded index.html. Initial paint values come from the runtime, which
+// bakes <html data-theme="…" style="--bg-l:…"> before serving and stamps a
+// CSP nonce on this script. This bridge covers two extras:
+//   1. Builder preview (centraid-preview://) bypasses the runtime, so we
+//      read URL hash params as a fallback for the no-bake path.
+//   2. The shell can flip a pref while the iframe is mounted — the
+//      postMessage listener accepts both `centraid:settings` (full
+//      data-attrs + CSS vars) and the legacy `centraid:theme` shape.
+const INLINE_SETTINGS_BRIDGE = `(function(){var h=document.documentElement;function aT(t,b){if(t==='dark'||t==='light')h.dataset.theme=t;if(b!=null&&b!=='')h.style.setProperty('--bg-l',b+'%');}function aS(s){if(s.dataAttrs)for(var k in s.dataAttrs)h.setAttribute('data-'+k,s.dataAttrs[k]);if(s.cssVars)for(var k in s.cssVars)h.style.setProperty('--'+k,s.cssVars[k]);}try{var p=new URLSearchParams((location.hash||'').slice(1));aT(p.get('theme'),p.get('bgL'));}catch(_){}addEventListener('message',function(e){var d=e&&e.data;if(!d)return;if(d.type==='centraid:settings')aS(d);else if(d.type==='centraid:theme')aT(d.theme,d.bgL);});})();`;
 
 const README_TEMPLATE = (id: string): string => `# ${id}
 

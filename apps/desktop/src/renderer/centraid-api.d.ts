@@ -454,6 +454,23 @@ interface CentraidApi {
   authStatus(): Promise<CentraidAuthStatus>;
   /** Re-import Codex / Claude Code creds, overwriting pi's existing entries. */
   authResync(): Promise<CentraidAuthImportResult>;
+
+  /**
+   * Stable user identity, generated on the gateway side on first read.
+   * Persists with the gateway's centraid-user.sqlite — the same UUID survives
+   * Electron reinstalls and travels with whichever gateway you point at.
+   */
+  getUserId(): Promise<string>;
+  /**
+   * Snapshot of every gateway-side global preference (theme, density, accent,
+   * …). Empty object on first launch.
+   */
+  getUserPrefs(): Promise<Record<string, unknown>>;
+  /**
+   * Merge `patch` into the gateway-side prefs store. `null`/`undefined` values
+   * delete the corresponding key. Returns the full prefs map after the write.
+   */
+  saveUserPrefs(patch: Record<string, unknown>): Promise<Record<string, unknown>>;
 }
 
 declare global {

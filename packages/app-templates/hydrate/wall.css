@@ -4,7 +4,7 @@
    The shell emits the same value via `bgWall` in themes.ts (see
    ./css.ts). Template iframes can't share the shell's token CSS — they
    need to work standalone — so this file is copied next to each
-   template's index.html (alongside the also-copied theme-bridge.js).
+   template's index.html. (Each template's index.html also embeds an inline live-settings <script> for theme/bgL postMessage updates from the shell.)
    Keep that copy in sync with this file.
 
    Uses `var(--bg-l)` so it retunes from the host's "Dark shade" knob. */

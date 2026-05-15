@@ -4,7 +4,42 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Hydrate</title>
-    <script src="theme-bridge.js"></script>
+    <script>
+      // Centraid live settings bridge. Initial values come from the runtime,
+      // which bakes <html data-theme="…" style="--bg-l:…"> server-side before
+      // serving and stamps a CSP nonce on this script. This inline script
+      // handles two extras:
+      //   1. Builder preview (centraid-preview://) bypasses the runtime, so
+      //      we read URL hash params as a fallback for the no-bake path.
+      //   2. The shell can flip a pref while the iframe is mounted — the
+      //      postMessage listener accepts both `centraid:settings` (full
+      //      data-attrs + CSS vars) and the legacy `centraid:theme` shape.
+      (function () {
+        var h = document.documentElement;
+        function applyTheme(t, b) {
+          if (t === 'dark' || t === 'light') h.dataset.theme = t;
+          if (b != null && b !== '') h.style.setProperty('--bg-l', b + '%');
+        }
+        function applySettings(s) {
+          if (s.dataAttrs) {
+            for (var k in s.dataAttrs) h.setAttribute('data-' + k, s.dataAttrs[k]);
+          }
+          if (s.cssVars) {
+            for (var k in s.cssVars) h.style.setProperty('--' + k, s.cssVars[k]);
+          }
+        }
+        try {
+          var p = new URLSearchParams((location.hash || '').slice(1));
+          applyTheme(p.get('theme'), p.get('bgL'));
+        } catch (_) {}
+        addEventListener('message', function (e) {
+          var d = e && e.data;
+          if (!d) return;
+          if (d.type === 'centraid:settings') applySettings(d);
+          else if (d.type === 'centraid:theme') applyTheme(d.theme, d.bgL);
+        });
+      })();
+    </script>
     <link rel="stylesheet" href="wall.css" />
     <link rel="stylesheet" href="app.css" />
   </head>

@@ -93,10 +93,33 @@ export { ChangeBus, type AppChange, type ChangeListener } from './change-bus.js'
 //     local runtime, so the desktop sees identical behavior in both modes
 export {
   ChatHistoryStore,
-  makeChatHistoryRouteHandler,
   deriveTitle,
   isUserMessage,
   type ChatSessionMeta,
   type ChatMessageRow,
   type AppendBatchResult,
+  type UserIdProvider,
 } from './chat-history.js';
+export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
+
+// Shared gateway DB (single SQLite file holding `users`, `user_prefs`,
+// `chat_sessions`, `chat_messages`). Hosts construct one provider and
+// pass it to both UserStore and ChatHistoryStore so they share a
+// connection + a single migration ladder + real cross-table FKs.
+export {
+  openGatewayDb,
+  makeGatewayDbProvider,
+  MIGRATIONS as GATEWAY_MIGRATIONS,
+  type DatabaseProvider,
+} from './gateway-db.js';
+
+// User-prefs store + HTTP route dispatcher. Wraps the gateway DB; mounted
+// by both hosts at `/_centraid-user`.
+export { UserStore, makeUserStoreRouteHandler } from './user-store.js';
+
+// Per-app `__centraid_settings` reader and the settings-merge pipeline that
+// turns layered prefs/settings into the `SettingsInject` payload baked into
+// each app's index.html.
+export { readAppSettings, APP_SETTINGS_TABLE } from './app-settings.js';
+export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
+export type { SettingsInject } from './static-server.js';

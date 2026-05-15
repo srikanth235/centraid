@@ -6,6 +6,12 @@ import { PREVIEW_SCHEME } from './preview-protocol.js';
 import { refreshAuthInjector } from './auth-injector.js';
 import { resetChatHistoryAuthCache } from './chat-history-client.js';
 import {
+  fetchUserId,
+  fetchUserPrefs,
+  saveUserPrefs,
+  resetUserPrefsAuthCache,
+} from './user-prefs-client.js';
+import {
   importAvailableCreds,
   readAuthStatus,
   type AuthImportResult,
@@ -48,6 +54,13 @@ export const Channel = {
 
   AUTH_STATUS: 'centraid:auth:status',
   AUTH_RESYNC: 'centraid:auth:resync',
+
+  // Gateway-side user identity + global preferences (theme, density, accent…).
+  // These read/write the centraid-user.sqlite that the runtime exposes at
+  // `/_centraid-user/*` — same file regardless of local vs. remote gateway.
+  USER_ID_GET: 'centraid:user:id',
+  USER_PREFS_GET: 'centraid:user:prefs:get',
+  USER_PREFS_SAVE: 'centraid:user:prefs:save',
 } as const;
 
 interface AgentSessionHandle {
@@ -63,12 +76,20 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.SETTINGS_GET, async () => loadSettings());
   ipcMain.handle(Channel.SETTINGS_SAVE, async (_e, patch: Partial<DesktopSettings>) => {
     const next = await saveSettings(patch);
-    // gatewayUrl/token may have flipped; invalidate the chat-history client's
-    // cached auth so the next persistence call picks up the new values.
+    // gatewayUrl/token may have flipped; invalidate the per-client auth caches
+    // so the next request picks up the new values.
     resetChatHistoryAuthCache();
+    resetUserPrefsAuthCache();
     await refreshAuthInjector();
     return next;
   });
+
+  // ----- User identity + prefs (gateway-backed) -----
+  ipcMain.handle(Channel.USER_ID_GET, async () => fetchUserId());
+  ipcMain.handle(Channel.USER_PREFS_GET, async () => fetchUserPrefs());
+  ipcMain.handle(Channel.USER_PREFS_SAVE, async (_e, patch: Record<string, unknown>) =>
+    saveUserPrefs(patch),
+  );
 
   // ----- Credential import (Claude Code / Codex → pi auth.json) -----
   // Status read is silent; the resync handler runs the importer with

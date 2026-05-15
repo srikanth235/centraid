@@ -20,7 +20,14 @@
 import path from 'node:path';
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
-import { Runtime, ChatHistoryStore, makeChatHistoryRouteHandler } from '@centraid/runtime-core';
+import {
+  Runtime,
+  ChatHistoryStore,
+  makeChatHistoryRouteHandler,
+  UserStore,
+  makeUserStoreRouteHandler,
+  makeGatewayDbProvider,
+} from '@centraid/runtime-core';
 import { OpenClawScheduler } from './lib/openclaw-cron.js';
 import { registerCentraidTools } from './lib/tools.js';
 
@@ -74,11 +81,24 @@ export default definePluginEntry({
     const gatewayBaseUrl = pluginConfig.gatewayBaseUrl ?? 'http://127.0.0.1:18789';
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
+    // Single SQLite file for every per-user record the gateway owns —
+    // identity (`users`), prefs (`user_prefs`), chat sessions, chat
+    // messages. UserStore + ChatHistoryStore share this provider so they
+    // share one connection, one migration ladder, and real cross-table
+    // foreign keys. The provider is lazy: the file is only opened when
+    // a store actually needs it, which keeps OpenClaw worker subprocesses
+    // (which `register()` runs in but which don't serve HTTP) from
+    // holding stray DB handles.
+    const gatewayDbPath = path.join(path.dirname(appsDir), 'centraid-gateway.sqlite');
+    const gatewayDbProvider = makeGatewayDbProvider(gatewayDbPath);
+    const userStore = new UserStore(gatewayDbProvider);
+
     const runtime = new Runtime({
       appsDir,
       gatewayBaseUrl,
       versionRetention,
       scheduler: new OpenClawScheduler(), // Path B by default; upgraded in gateway_start.
+      userStore,
       logger: api.logger,
     });
 
@@ -109,29 +129,33 @@ export default definePluginEntry({
     // registerCentraidTools (uses sessionKey = "centraid-chat:<appId>").
     registerCentraidTools(api, runtime);
 
-    // Chat-history store — a single shared SQLite holding every app's chat
-    // sessions and messages, exposed at /_centraid-chat. The desktop is the
-    // only client; agent tools have no access. Lives next to appsDir so it
-    // moves with the gateway state dir.
+    // Chat-history store — wraps the shared gateway DB above. The store
+    // itself is constructed eagerly because it's cheap (no DB work in the
+    // constructor, just stashing the providers); the underlying file open
+    // still defers to first method call via the shared `gatewayDbProvider`.
     //
-    // Lazy init: `register()` runs in every plugin context (gateway + agent
-    // workers — see lib/tools.ts for the why). HTTP route handlers only
-    // fire in the gateway, so we defer opening the SQLite connection until
-    // the first request lands. That keeps worker subprocesses from holding
-    // stray DB handles to a file they never read.
-    const chatHistoryDb = path.join(path.dirname(appsDir), 'centraid-chat-history.sqlite');
-    let chatHistoryStore: ChatHistoryStore | undefined;
-    const getChatHistoryStore = (): ChatHistoryStore => {
-      if (!chatHistoryStore) {
-        chatHistoryStore = new ChatHistoryStore(chatHistoryDb);
-      }
-      return chatHistoryStore;
-    };
+    // Per-user scoping: every chat_sessions row carries the gateway-side
+    // user UUID from `UserStore` (real FK to `users`, ON DELETE CASCADE).
+    // The provider closure resolves the UUID lazily — UserStore caches it
+    // after the first read.
+    const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
     api.registerHttpRoute({
       path: '/_centraid-chat',
       match: 'prefix',
       auth: 'gateway',
-      handler: makeChatHistoryRouteHandler(getChatHistoryStore),
+      handler: makeChatHistoryRouteHandler(() => chatHistoryStore),
+    });
+
+    // User-prefs route. The store was constructed eagerly above so that the
+    // runtime's app-index injection can read prefs synchronously, but the
+    // route handler still goes through a getter for symmetry with the
+    // chat-history wiring (and so future lazy-init refactors don't have to
+    // touch the route registration).
+    api.registerHttpRoute({
+      path: '/_centraid-user',
+      match: 'prefix',
+      auth: 'gateway',
+      handler: makeUserStoreRouteHandler(() => userStore),
     });
   },
 });

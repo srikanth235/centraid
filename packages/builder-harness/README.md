@@ -54,7 +54,6 @@ The desktop wires this up via Electron's `webContents.capturePage()` clipped to 
 
 `scaffoldProject()` lays down a project that already passes the visual contract:
 
-- `index.html` — loads `theme-bridge.js` synchronously before paint, then `tokens.css`, then `app.css`.
-- `theme-bridge.js` — syncs `data-theme` + `--bg-l` with the shell on load and on `centraid:theme` postMessages.
+- `index.html` — runs an inline live-settings `<script>` synchronously before paint (handles URL-hash fallback for the builder preview path plus `centraid:theme` postMessage for live updates), then `tokens.css`, then `app.css`. The runtime bakes the initial `data-theme` / `--bg-l` into `<html>` server-side so first paint is correct without a script having to run.
 - `tokens.css` — a frozen snapshot of `@centraid/design-tokens` at scaffold time. The app stays self-contained; re-running scaffold regenerates this if tokens evolve.
 - `app.css` — utility classes (`.head`, `.add-bar`, `.list`, `.row`, `.surface`, `.primary`, `.ghost`, `.empty`, `.loading`, `.error`, etc.) styled entirely against `var(--…)` tokens, mobile-first with a 720px breakpoint, hit targets ≥ 44px, `:focus-visible` rings, `prefers-reduced-motion` respected.

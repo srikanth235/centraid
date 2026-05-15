@@ -2,7 +2,8 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import crypto from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { timingSafeEqual } from './security.js';
-import { ChatHistoryStore, makeChatHistoryRouteHandler } from './chat-history.js';
+import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
+import { makeUserStoreRouteHandler } from './user-store.js';
 import type { Runtime } from './runtime.js';
 
 export interface RuntimeHttpServerOptions {
@@ -17,15 +18,18 @@ export interface RuntimeHttpServerOptions {
    */
   token?: string;
   /**
-   * Absolute path to the chat-history SQLite file. When provided, the server
-   * mounts the `/_centraid-chat/*` HTTP surface backed by this database. The
-   * file is opened lazily on the first matching request, so callers can pass
-   * a path even if the chat panel is never opened.
-   *
-   * Omit to disable the chat-history surface entirely — requests hitting the
-   * prefix then 404 through the normal `Runtime.handle` path.
+   * Whether to mount `/_centraid-user/*` against `runtime.userStore`.
+   * Defaults to true when `runtime.userStore` is set; explicit `false`
+   * disables the route even if a store is attached (used by hosts that
+   * mount their own equivalent route, e.g. the openclaw plugin).
    */
-  chatHistoryDbPath?: string;
+  exposeUserStoreRoute?: boolean;
+  /**
+   * Whether to mount `/_centraid-chat/*` against `runtime.chatHistoryStore`.
+   * Defaults to true when `runtime.chatHistoryStore` is set; same opt-out
+   * pattern as `exposeUserStoreRoute`.
+   */
+  exposeChatHistoryRoute?: boolean;
 }
 
 export interface RuntimeHttpServerHandle {
@@ -38,6 +42,7 @@ export interface RuntimeHttpServerHandle {
 }
 
 const CHAT_HISTORY_PREFIX = '/_centraid-chat';
+const USER_STORE_PREFIX = '/_centraid-user';
 
 /**
  * Spawn an HTTP server in front of a `Runtime`, suitable for use as the
@@ -66,17 +71,21 @@ export async function startRuntimeHttpServer(
   const port = opts.port ?? 0;
   const token = opts.token ?? crypto.randomBytes(32).toString('hex');
 
-  // Lazy-init the chat-history store so callers that pass a path but never
-  // open the chat panel don't pay the SQLite-open cost. Mirrors the openclaw
-  // plugin's lazy pattern.
-  let chatHistoryStore: ChatHistoryStore | undefined;
-  const chatHistoryHandler = opts.chatHistoryDbPath
-    ? makeChatHistoryRouteHandler(() => {
-        if (!chatHistoryStore) {
-          chatHistoryStore = new ChatHistoryStore(opts.chatHistoryDbPath!);
-        }
-        return chatHistoryStore;
-      })
+  // Both stores are owned by the caller (a single shared gateway DB
+  // provider underneath). We mount the routes only if the corresponding
+  // store is attached AND the host hasn't disabled it. The handlers
+  // resolve the stores lazily through getters so a future runtime that
+  // lazy-creates them still works.
+  const userStore = opts.runtime.userStore;
+  const exposeUserStore = opts.exposeUserStoreRoute !== false && userStore !== undefined;
+  const userStoreHandler = exposeUserStore
+    ? makeUserStoreRouteHandler(() => userStore!)
+    : undefined;
+
+  const chatHistoryStore = opts.runtime.chatHistoryStore;
+  const exposeChatHistory = opts.exposeChatHistoryRoute !== false && chatHistoryStore !== undefined;
+  const chatHistoryHandler = exposeChatHistory
+    ? makeChatHistoryRouteHandler(() => chatHistoryStore!)
     : undefined;
 
   const server = http.createServer((req, res) => {
@@ -95,6 +104,10 @@ export async function startRuntimeHttpServer(
     }
     if (chatHistoryHandler && (req.url ?? '').startsWith(CHAT_HISTORY_PREFIX)) {
       const handled = await chatHistoryHandler(req, res);
+      if (handled) return;
+    }
+    if (userStoreHandler && (req.url ?? '').startsWith(USER_STORE_PREFIX)) {
+      const handled = await userStoreHandler(req, res);
       if (handled) return;
     }
     await opts.runtime.handle(req, res);

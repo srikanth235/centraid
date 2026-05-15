@@ -88,13 +88,22 @@ export function contentTypeFor(filePath: string): string {
 
 /**
  * Per-response security headers for static asset delivery.
- * Same-origin only, no inline scripts.
+ *
+ * Same-origin only. Inline scripts are blocked by default (`script-src 'self'`).
+ * For HTML responses where the runtime needs to allow specific inline scripts
+ * (e.g. the live-settings bridge baked into each app's `index.html`), pass
+ * `inlineScriptNonce` — `script-src` then accepts the same-origin sources
+ * plus any `<script>` tag carrying `nonce="<nonce>"`. `static-server` mints
+ * the nonce per response and stamps it onto every inline `<script>` it emits,
+ * so the runtime never needs to know which specific scripts an app contains.
  */
-export function staticSecurityHeaders(): Record<string, string> {
+export function staticSecurityHeaders(
+  opts: { inlineScriptNonce?: string } = {},
+): Record<string, string> {
+  const scriptSrc = opts.inlineScriptNonce ? `'self' 'nonce-${opts.inlineScriptNonce}'` : "'self'";
   return {
     'X-Content-Type-Options': 'nosniff',
-    'Content-Security-Policy':
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'",
+    'Content-Security-Policy': `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'`,
     'Referrer-Policy': 'no-referrer',
   };
 }
