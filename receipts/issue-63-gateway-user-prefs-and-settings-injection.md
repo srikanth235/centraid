@@ -18,6 +18,7 @@ GitHub issue: [#63](https://github.com/srikanth235/centraid/issues/63)
 - [x] Standalone fallback preserved — templates keep working defaults via `:root` in their `app.css`
 - [x] Tests + typecheck + format/lint all clean
 - [x] PR review fixes: CSP nonce for inline bridge, accent key persists separately, live-update payload carries all known prefs
+- [x] Chat-history sessions scoped to the user identity — `chat_sessions.user_id` baked into the baseline schema, every read + write filters by current `UserStore.getUserId()`
 - [ ] **Out of scope (deferred):** mobile parity (Expo `WKURLSchemeHandler` / `injectedJavaScriptBeforeContentLoaded`)
 
 ## What changed
@@ -55,6 +56,8 @@ GitHub issue: [#63](https://github.com/srikanth235/centraid/issues/63)
 2. **Accent key persists separately.** `pickAppearance` previously rejected the gateway's `accent` field because `toRemoteShape` overwrote the semantic key (e.g. `"teal"`) with the hex swatch (`"#2EA098"`), leaving second-device launches stuck on the default accent. Renamed the wire fields: `accentKey` carries the semantic palette key (round-tripped for renderer state recovery), while `accent` / `accentLight` / `accentDeep` carry the resolved hex values that the runtime bakes into `<html style="…">`. `pickAppearance` reads `accentKey` first and falls back to `accent` for any prefs persisted before the fix.
 
 3. **Live-update payload carries all known prefs.** `broadcastThemeToFrames` only sent `{ theme, bgL }`, so density / cards / coolCast / accent changes wouldn't retune mounted iframes until reload. Replaced with `broadcastSettingsToFrames` (which sends a `centraid:settings` payload with full `dataAttrs` + `cssVars` derived from `toRemoteShape`, plus the legacy `centraid:theme` payload for any old bridges still in the wild). The inline bridge in each template (and the scaffolder's `INLINE_SETTINGS_BRIDGE`) now accepts both message shapes — `centraid:settings` applies the full set via `setAttribute('data-…')` + `setProperty('--…')`, and `centraid:theme` falls through to the original theme/bgL apply.
+
+**Chat-history sessions scoped to the user identity — `chat_sessions.user_id` baked into the baseline schema, every read + write filters by current `UserStore.getUserId()`.** The chat-history store and the user store were two unrelated SQLite files, so a chat session had no link back to the user identity. With the gateway now the source of truth for user prefs, the chat history needs the same scoping — otherwise two devices syncing to the same gateway can see each other's history (and a future multi-user model has no path forward without a column-add migration). Since centraid is pre-1.0, the column went into the baseline `MIGRATIONS[0]` directly rather than as a follow-up slot — no append-only migration ladder yet, no backfill machinery to carry. The `ChatHistoryStore` constructor now takes a required `userIdProvider: () => string` (wired to `UserStore.getUserId` by both hosts); every prepared statement filters by `user_id`, every insert stamps it. `startRuntimeHttpServer` refuses to mount the chat-history route without a `runtime.userStore` so misconfiguration fails loudly. Five new tests cover that two stores against the same SQLite file with different user UUIDs cannot see, write to, rename, or delete each other's sessions.
 
 ## Verification
 

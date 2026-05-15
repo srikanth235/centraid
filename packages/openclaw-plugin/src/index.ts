@@ -135,11 +135,16 @@ export default definePluginEntry({
     // fire in the gateway, so we defer opening the SQLite connection until
     // the first request lands. That keeps worker subprocesses from holding
     // stray DB handles to a file they never read.
+    //
+    // Per-user scoping: every chat_sessions row carries the gateway-side
+    // user UUID from `UserStore` so two devices sharing the same gateway
+    // can't see each other's history. The provider closure resolves the
+    // UUID lazily — UserStore caches it after the first read.
     const chatHistoryDb = path.join(path.dirname(appsDir), 'centraid-chat-history.sqlite');
     let chatHistoryStore: ChatHistoryStore | undefined;
     const getChatHistoryStore = (): ChatHistoryStore => {
       if (!chatHistoryStore) {
-        chatHistoryStore = new ChatHistoryStore(chatHistoryDb);
+        chatHistoryStore = new ChatHistoryStore(chatHistoryDb, () => userStore.getUserId());
       }
       return chatHistoryStore;
     };

@@ -5,20 +5,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { IncomingMessage, ServerResponse } from 'node:http';
-import {
-  ChatHistoryStore,
-  MIGRATIONS,
-  deriveTitle,
-  isUserMessage,
-  makeChatHistoryRouteHandler,
-} from './chat-history.js';
+import { ChatHistoryStore, MIGRATIONS, deriveTitle, isUserMessage } from './chat-history.js';
+import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
-function newStore(): ChatHistoryStore {
+// Tests that don't care about cross-user isolation share this stub UUID.
+const TEST_USER_ID = 'test-user-uuid-0000';
+const stubUserIdProvider = () => TEST_USER_ID;
+
+function newStore(provider: () => string = stubUserIdProvider): ChatHistoryStore {
   // Each test gets its own DB file so cases stay isolated. Using a real path
   // (not :memory:) exercises the same code path as production — WAL pragmas
   // and FK constraints behave differently on in-memory DBs.
   const dir = mkdtempSync(join(tmpdir(), 'centraid-chat-history-'));
-  return new ChatHistoryStore(join(dir, 'db.sqlite'));
+  return new ChatHistoryStore(join(dir, 'db.sqlite'), provider);
 }
 
 describe('deriveTitle', () => {
@@ -182,6 +181,72 @@ describe('ChatHistoryStore', () => {
   });
 });
 
+describe('ChatHistoryStore per-user scoping', () => {
+  // Two stores backed by the same SQLite file but with different user
+  // identities — simulates two devices syncing against the same gateway
+  // sqlite (or a future multi-user model). Operations must be invisible
+  // across users.
+  function pair(): { alice: ChatHistoryStore; bob: ChatHistoryStore } {
+    const dir = mkdtempSync(join(tmpdir(), 'centraid-chat-history-multi-'));
+    const path = join(dir, 'db.sqlite');
+    return {
+      alice: new ChatHistoryStore(path, () => 'alice'),
+      bob: new ChatHistoryStore(path, () => 'bob'),
+    };
+  }
+
+  it('createSession stamps the current user id on the row', () => {
+    const store = newStore(() => 'alice');
+    const s = store.createSession('todos');
+    assert.equal(s.userId, 'alice');
+    const loaded = store.getSession(s.id);
+    assert.equal(loaded?.userId, 'alice');
+  });
+
+  it("listSessions does not return another user's sessions", () => {
+    const { alice, bob } = pair();
+    alice.createSession('todos', 'alice-1');
+    alice.createSession('todos', 'alice-2');
+    bob.createSession('todos', 'bob-1');
+
+    const aliceList = alice.listSessions('todos');
+    assert.equal(aliceList.length, 2);
+    assert.ok(aliceList.every((s) => s.userId === 'alice'));
+
+    const bobList = bob.listSessions('todos');
+    assert.equal(bobList.length, 1);
+    assert.equal(bobList[0]!.title, 'bob-1');
+  });
+
+  it("getSession returns undefined for another user's session id", () => {
+    const { alice, bob } = pair();
+    const aliceSession = alice.createSession('todos');
+    // Bob asking for Alice's session id sees nothing — same id, different
+    // owner. The PK is `id` so the row exists; the user_id filter rejects.
+    assert.equal(bob.getSession(aliceSession.id), undefined);
+  });
+
+  it("appendMessages refuses to write into another user's session", () => {
+    const { alice, bob } = pair();
+    const aliceSession = alice.createSession('todos');
+    const result = bob.appendMessages(aliceSession.id, [{ kind: 'user', text: 'hi' }]);
+    assert.equal(result, undefined);
+    // And Alice's session still has zero messages.
+    const loaded = alice.getSession(aliceSession.id);
+    assert.equal(loaded?.messages.length, 0);
+  });
+
+  it("renameSession + deleteSession can't touch another user's session", () => {
+    const { alice, bob } = pair();
+    const aliceSession = alice.createSession('todos', 'mine');
+    assert.equal(bob.renameSession(aliceSession.id, 'stolen'), undefined);
+    assert.equal(bob.deleteSession(aliceSession.id), false);
+    // Alice's session is untouched.
+    const loaded = alice.getSession(aliceSession.id);
+    assert.equal(loaded?.title, 'mine');
+  });
+});
+
 describe('ChatHistoryStore migrations', () => {
   function freshDbPath(): string {
     const dir = mkdtempSync(join(tmpdir(), 'centraid-chat-history-mig-'));
@@ -200,20 +265,20 @@ describe('ChatHistoryStore migrations', () => {
 
   it('advances user_version to MIGRATIONS.length on a fresh DB', () => {
     const path = freshDbPath();
-    const store = new ChatHistoryStore(path);
+    const store = new ChatHistoryStore(path, stubUserIdProvider);
     assert.ok(store);
     assert.equal(readUserVersion(path), MIGRATIONS.length);
   });
 
   it('re-opening an already-migrated DB is a no-op and preserves data', () => {
     const path = freshDbPath();
-    const first = new ChatHistoryStore(path);
+    const first = new ChatHistoryStore(path, stubUserIdProvider);
     const s = first.createSession('todos', 'kept');
     first.appendMessages(s.id, [{ kind: 'user', text: 'hello' }]);
 
     // Open a second handle to the same file. The constructor must accept the
     // already-migrated DB without error and see the prior data.
-    const second = new ChatHistoryStore(path);
+    const second = new ChatHistoryStore(path, stubUserIdProvider);
     const loaded = second.getSession(s.id);
     assert.equal(loaded?.title, 'kept');
     assert.equal(loaded?.messages.length, 1);
@@ -224,13 +289,13 @@ describe('ChatHistoryStore migrations', () => {
     const path = freshDbPath();
     // Bootstrap the schema, then manually advance past the known ladder to
     // simulate an older build opening a DB written by a future centraid.
-    const bootstrap = new ChatHistoryStore(path);
+    const bootstrap = new ChatHistoryStore(path, stubUserIdProvider);
     assert.ok(bootstrap);
     const db = new DatabaseSync(path);
     db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);
     db.close();
 
-    assert.throws(() => new ChatHistoryStore(path), /newer|update centraid/i);
+    assert.throws(() => new ChatHistoryStore(path, stubUserIdProvider), /newer|update centraid/i);
   });
 });
 

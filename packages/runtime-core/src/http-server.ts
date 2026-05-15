@@ -2,7 +2,8 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import crypto from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { timingSafeEqual } from './security.js';
-import { ChatHistoryStore, makeChatHistoryRouteHandler } from './chat-history.js';
+import { ChatHistoryStore } from './chat-history.js';
+import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 import { makeUserStoreRouteHandler } from './user-store.js';
 import type { Runtime } from './runtime.js';
 
@@ -79,19 +80,6 @@ export async function startRuntimeHttpServer(
   const port = opts.port ?? 0;
   const token = opts.token ?? crypto.randomBytes(32).toString('hex');
 
-  // Lazy-init the chat-history store so callers that pass a path but never
-  // open the chat panel don't pay the SQLite-open cost. Mirrors the openclaw
-  // plugin's lazy pattern.
-  let chatHistoryStore: ChatHistoryStore | undefined;
-  const chatHistoryHandler = opts.chatHistoryDbPath
-    ? makeChatHistoryRouteHandler(() => {
-        if (!chatHistoryStore) {
-          chatHistoryStore = new ChatHistoryStore(opts.chatHistoryDbPath!);
-        }
-        return chatHistoryStore;
-      })
-    : undefined;
-
   // The user-store sqlite is owned by the caller (so app-index injection and
   // the HTTP route share the same file). We only mount the route if a store
   // is attached AND the host hasn't disabled it.
@@ -100,6 +88,32 @@ export async function startRuntimeHttpServer(
   const userStoreHandler = exposeUserStore
     ? makeUserStoreRouteHandler(() => userStore!)
     : undefined;
+
+  // Lazy-init the chat-history store so callers that pass a path but never
+  // open the chat panel don't pay the SQLite-open cost. Mirrors the openclaw
+  // plugin's lazy pattern.
+  //
+  // Chat history is per-user: every session row carries the gateway-side
+  // user UUID from `UserStore`. Without a userStore we have no way to scope
+  // sessions, so we refuse to mount the route — surfacing a config bug
+  // loudly is better than silently writing rows with `user_id = ''`.
+  if (opts.chatHistoryDbPath && !userStore) {
+    throw new Error(
+      'startRuntimeHttpServer: chatHistoryDbPath requires runtime.userStore — chat history is scoped to the user identity',
+    );
+  }
+  let chatHistoryStore: ChatHistoryStore | undefined;
+  const chatHistoryHandler =
+    opts.chatHistoryDbPath && userStore
+      ? makeChatHistoryRouteHandler(() => {
+          if (!chatHistoryStore) {
+            chatHistoryStore = new ChatHistoryStore(opts.chatHistoryDbPath!, () =>
+              userStore.getUserId(),
+            );
+          }
+          return chatHistoryStore;
+        })
+      : undefined;
 
   const server = http.createServer((req, res) => {
     void route(req, res);

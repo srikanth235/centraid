@@ -93,13 +93,14 @@ export { ChangeBus, type AppChange, type ChangeListener } from './change-bus.js'
 //     local runtime, so the desktop sees identical behavior in both modes
 export {
   ChatHistoryStore,
-  makeChatHistoryRouteHandler,
   deriveTitle,
   isUserMessage,
   type ChatSessionMeta,
   type ChatMessageRow,
   type AppendBatchResult,
+  type UserIdProvider,
 } from './chat-history.js';
+export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
 // User-prefs store + HTTP route dispatcher. Mirrors the chat-history wiring
 // — opened lazily by both hosts (openclaw plugin gateway, desktop embedded
