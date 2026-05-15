@@ -23,6 +23,7 @@ import type { ChatHistoryStore } from './chat-history.js';
 import { readAppSettings } from './app-settings.js';
 import { buildSettingsInject } from './settings-merge.js';
 import type { AppRef, RegistryEntry } from './types.js';
+import type { TelemetryWriter } from './telemetry.js';
 
 export interface RuntimeLogger {
   info(message: string): void;
@@ -64,6 +65,14 @@ export interface RuntimeOptions {
    * `startRuntimeHttpServer` mounts `/_centraid-chat/*` against it.
    */
   chatHistoryStore?: ChatHistoryStore;
+  /**
+   * Telemetry writer for spans + events. When omitted, handler invocations
+   * still run and the in-memory `logs` field on the outcome is populated,
+   * but nothing is persisted — the per-app `logs.jsonl` fallback only
+   * kicks in for hosts that haven't migrated yet (the desktop embed and
+   * the openclaw plugin both inject one).
+   */
+  telemetry?: TelemetryWriter;
 }
 
 const noopLogger: RuntimeLogger = {
@@ -103,6 +112,7 @@ export class Runtime {
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
   private scheduler: Scheduler;
+  private readonly telemetry: TelemetryWriter | undefined;
   private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
 
   constructor(opts: RuntimeOptions) {
@@ -110,6 +120,7 @@ export class Runtime {
     this.versionRetention = Math.max(2, opts.versionRetention ?? 5);
     this.logger = opts.logger ?? noopLogger;
     this.scheduler = opts.scheduler;
+    this.telemetry = opts.telemetry;
     this.registry = new Registry(opts.appsDir);
     this.versions = new VersionStore();
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
@@ -209,6 +220,7 @@ export class Runtime {
       withAppUploadLock: this.withAppUploadLock,
       resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
       emitForApp: (appId: string) => this.emitForApp(appId),
+      telemetry: this.telemetry,
     };
   }
 
@@ -279,6 +291,20 @@ export class Runtime {
             return;
           }
           await cleanupDeregisteredApp(this.appsDir, removed, this.logger);
+          // Drop telemetry rows for the removed app so the shared store
+          // doesn't accumulate orphans. Best-effort — a failure here
+          // doesn't undo the registry deregister.
+          if (this.telemetry) {
+            try {
+              await this.telemetry.deleteApp(route.appId);
+            } catch (err) {
+              this.logger.warn(
+                `[centraid] telemetry deleteApp("${route.appId}") failed: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+            }
+          }
           sendJson(res, 200, { id: route.appId });
           return;
         }
@@ -387,7 +413,7 @@ export class Runtime {
         }
 
         case 'app-logs': {
-          await handleLogsRoute(res, this.registry, route.appId, route.query);
+          await handleLogsRoute(res, this.registry, route.appId, route.query, this.telemetry);
           return;
         }
 
@@ -439,6 +465,7 @@ export class Runtime {
             handlerKind: 'query',
             args: { params: {}, query: route.query },
             timeoutMs: 10_000,
+            telemetry: this.telemetry,
           });
           if (!outcome.ok) {
             sendError(res, 500, 'handler_error', outcome.error ?? 'query failed');
@@ -475,6 +502,7 @@ export class Runtime {
             args: { params: {}, body: body.args },
             timeoutMs: 30_000,
             onWrite: this.emitForApp(route.appId),
+            telemetry: this.telemetry,
           });
           if (!outcome.ok) {
             sendError(res, 500, 'handler_error', outcome.error ?? 'action failed');

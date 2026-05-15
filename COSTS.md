@@ -156,3 +156,8 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-36c37800-00d-1778864901 | claude-code | 36c37800-00d0-49e0-83fa-df160fa904d6 | #67 | claude-opus-4-7 | 5 | 9545 | 14870 | 24 | 9574 | 0.0677 | chore(desktop): oxfmt formatting fix for styles.css (#67) |
 | claude-code-6a1faa59-b3c-1778864927 | claude-code | 6a1faa59-b3ce-4df5-bd63-370c71c237ee | #67 | claude-opus-4-7 | 22 | 7963 | 3133260 | 2884 | 10869 | 1.6886 | chore(desktop): oxfmt formatting fix for styles.css (#67) |
 | claude-code-b5c4ae67-385-1778898761 | claude-code | b5c4ae67-3850-4153-b575-e2d113cc3f8f | #67 | claude-opus-4-7 | 5 | 10385 | 14870 | 402 | 10792 | 0.0824 | fix(templates,harness): wire appColor end-to-end on curated + scaffolded apps (# |
+| claude-code-63391af8-890-1778863222 | claude-code | 63391af8-8906-4b61-b678-79043c7e4049 | #61 | claude-opus-4-7 | 564 | 2140351 | 88712752 | 236241 | 2377156 | 63.6424 |  |
+| claude-code-63391af8-890-1778863254 | claude-code | 63391af8-8906-4b61-b678-79043c7e4049 | #61 | claude-opus-4-7 | 6 | 4348 | 2060131 | 1637 | 5991 | 1.0982 |  |
+| claude-code-63391af8-890-1778863279 | claude-code | 63391af8-8906-4b61-b678-79043c7e4049 | #61 | claude-opus-4-7 | 4 | 3402 | 1383539 | 1213 | 4619 | 0.7434 |  |
+| claude-code-63391af8-890-1778863299 | claude-code | 63391af8-8906-4b61-b678-79043c7e4049 | #61 | claude-opus-4-7 | 3 | 2048 | 1043181 | 1274 | 3325 | 0.5663 |  |
+| claude-code-63391af8-890-1778863329 | claude-code | 63391af8-8906-4b61-b678-79043c7e4049 | #61 | claude-opus-4-7 | 4 | 2907 | 1397678 | 1326 | 4237 | 0.7502 |  |

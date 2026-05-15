@@ -65,6 +65,20 @@ export type {
 export type { AppTableRows } from './table-rows.js';
 export type { RunQueryResult } from './run-query.js';
 export type { LogEntry, LogLevel } from './log-store.js';
+export type {
+  TelemetryWriter,
+  TelemetrySpanRecord,
+  TelemetryEvent,
+  TelemetryReadEntry,
+  TelemetryReadOptions,
+  TelemetryLevel,
+  TelemetryKind,
+  TelemetryStatus,
+  TelemetryAppSettings,
+  TelemetryAppSettingsPatch,
+} from './telemetry.js';
+export { TelemetryStore, type TelemetryStoreOptions } from './telemetry-store.js';
+export { makeTelemetryRouteHandler } from './telemetry-routes.js';
 
 // Low-level helpers the openclaw plugin uses to expose SQL + schema as
 // agent tools without round-tripping through the HTTP surface.

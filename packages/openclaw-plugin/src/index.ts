@@ -27,6 +27,9 @@ import {
   UserStore,
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
+  TelemetryStore,
+  makeTelemetryRouteHandler,
+  type TelemetryWriter,
 } from '@centraid/runtime-core';
 import { OpenClawScheduler } from './lib/openclaw-cron.js';
 import { registerCentraidTools } from './lib/tools.js';
@@ -93,6 +96,26 @@ export default definePluginEntry({
     const gatewayDbProvider = makeGatewayDbProvider(gatewayDbPath);
     const userStore = new UserStore(gatewayDbProvider);
 
+    // Telemetry store — one shared SQLite holding spans + events for every
+    // app, sibling of appsDir. Lazy proxy so agent-worker contexts (which
+    // never invoke handlers) don't hold stray DB handles; see chat-history
+    // wiring below for the same pattern.
+    const telemetryDb = path.join(path.dirname(appsDir), 'centraid-telemetry.sqlite');
+    let telemetryStore: TelemetryStore | undefined;
+    const getTelemetryStore = (): TelemetryStore => {
+      if (!telemetryStore) {
+        telemetryStore = new TelemetryStore(telemetryDb);
+      }
+      return telemetryStore;
+    };
+    const telemetry: TelemetryWriter = {
+      recordHandler: (r) => getTelemetryStore().recordHandler(r),
+      readEvents: (appId, opts) => getTelemetryStore().readEvents(appId, opts),
+      deleteApp: (appId) => getTelemetryStore().deleteApp(appId),
+      getAppSettings: (appId) => getTelemetryStore().getAppSettings(appId),
+      setAppSettings: (appId, patch) => getTelemetryStore().setAppSettings(appId, patch),
+    };
+
     const runtime = new Runtime({
       appsDir,
       gatewayBaseUrl,
@@ -100,6 +123,7 @@ export default definePluginEntry({
       scheduler: new OpenClawScheduler(), // Path B by default; upgraded in gateway_start.
       userStore,
       logger: api.logger,
+      telemetry,
     });
 
     api.on('gateway_start', async (_event, ctx) => {
@@ -156,6 +180,16 @@ export default definePluginEntry({
       match: 'prefix',
       auth: 'gateway',
       handler: makeUserStoreRouteHandler(() => userStore),
+    });
+
+    // Read-only telemetry endpoint for the desktop's Cloud panel. Writes
+    // happen in-process via the `telemetry` writer plumbed into Runtime
+    // above; there's no public write surface.
+    api.registerHttpRoute({
+      path: '/_centraid-telemetry',
+      match: 'prefix',
+      auth: 'gateway',
+      handler: makeTelemetryRouteHandler(getTelemetryStore),
     });
   },
 });

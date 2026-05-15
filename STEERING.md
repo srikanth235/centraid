@@ -84,5 +84,7 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-9fc87005699-1778840715-1 | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | interrupt | structural |  | fix(runtime,plugin): scope chat sessions to UserStore identity (#63) |
 | steer-9fc87005699-1778840715-2 | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | correction | classifier | pushed to consolidate migrations into one global migration instead of separate | fix(runtime,plugin): scope chat sessions to UserStore identity (#63) |
 | steer-9fc87005699-1778842413-1 | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | correction | classifier | pushed back on separate DB files, wanted justification | refactor(runtime,plugin,desktop): single gateway sqlite + real FKs (#63) |
+| steer-63391af8890-1778863208-1 | 63391af8-8906-4b61-b678-79043c7e4049 |  | interrupt | structural |  |  |
+| steer-63391af8890-1778863208-2 | 63391af8-8906-4b61-b678-79043c7e4049 |  | correction | classifier | Flagged regressions: rebase must keep change-tracking; buffer cap drops marker |  |
 | steer-6a1faa59b3c-1778863483-1 | 6a1faa59-b3ce-4df5-bd63-370c71c237ee |  | interrupt | structural |  | feat(desktop,templates,runtime): per-app settings popover + Home redesign |
 | steer-6a1faa59b3c-1778863483-2 | 6a1faa59-b3ce-4df5-bd63-370c71c237ee |  | interrupt | structural |  | feat(desktop,templates,runtime): per-app settings popover + Home redesign |
