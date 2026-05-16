@@ -70,6 +70,7 @@ GitHub issue: [#67](https://github.com/srikanth235/centraid/issues/67)
 - `npm --workspace apps/desktop run typecheck` — clean
 - `npm --workspace apps/desktop run build` — clean
 - `npm --workspace packages/builder-harness run typecheck` — clean (after `DEFAULT_APP_CSS` extraction)
+- `npm --workspace packages/app-templates run build` — regenerates `manifest.json` with the appColor knob now declared in each curated template's `app-knobs.json` (hydrate default Blue, todos default Violet, journal default Ochre — matching each template's identity color)
 - `npm --workspace packages/runtime-core run test` — settings-merge test suite includes new `isAppKnobKey` / `appKnobTarget` routing cases
 - Manual: cloned Hydrate from the home Templates row, opened the gear popover, flipped each knob (font / width / radius / color) and confirmed live update via `postMessage('centraid:settings', …)`, persistence to `__centraid_settings` via `appQuery`, and re-bake on reload via `buildSettingsInject`
 - Manual: deleted all apps + drafts to confirm the home empty state renders the `cd-apps-empty` card and the sidebar shows the "No apps yet" placeholder

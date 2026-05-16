@@ -13,6 +13,12 @@
 //   - `:focus-visible` outlines preserved with `var(--accent)`.
 //   - `prefers-reduced-motion` respected.
 //   - Mobile-first with one breakpoint at 720px.
+//   - Honors the four standard per-app knobs declared in the matching
+//     `app-knobs.json`: `appFont` / `appWidth` / `appRadius` via
+//     `:root[data-app-*]` selectors, and `appColor` consumed wherever
+//     the accent paints (primary button, focus rings, links, pressed
+//     circle) via `var(--app-color, var(--accent))`. Falls back to
+//     `--accent` when no knob value is set.
 export const DEFAULT_APP_CSS = `* { box-sizing: border-box; }
 
 body {
@@ -76,7 +82,7 @@ input[type='text'], input[type='search'], textarea {
 }
 input:focus-visible, textarea:focus-visible {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--app-color, var(--accent));
 }
 
 /* --- Buttons --- */
@@ -86,14 +92,14 @@ button { font: inherit; cursor: pointer; }
   padding: 0 1.125rem;
   border-radius: var(--r-md);
   border: none;
-  background: var(--accent);
+  background: var(--app-color, var(--accent));
   color: var(--ink-inv, #fff);
   font-weight: 600;
   font-size: 0.9375rem;
   -webkit-tap-highlight-color: transparent;
 }
 .primary:disabled { opacity: 0.4; cursor: not-allowed; }
-.primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.primary:focus-visible { outline: 2px solid var(--app-color, var(--accent)); outline-offset: 2px; }
 
 .ghost {
   min-height: 2.75rem;
@@ -105,11 +111,11 @@ button { font: inherit; cursor: pointer; }
   font-weight: 500;
 }
 .ghost:hover { background: var(--bg-elev); }
-.ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ghost:focus-visible { outline: 2px solid var(--app-color, var(--accent)); outline-offset: 2px; }
 
 .link {
   background: none; border: none; padding: 0;
-  color: var(--accent); text-decoration: underline; font: inherit;
+  color: var(--app-color, var(--accent)); text-decoration: underline; font: inherit;
 }
 
 /* --- Bars (input + button paired) --- */
@@ -138,8 +144,8 @@ button { font: inherit; cursor: pointer; }
   color: var(--ink-inv, #fff);
   -webkit-tap-highlight-color: transparent;
 }
-.circle[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); }
-.circle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.circle[aria-pressed='true'] { background: var(--app-color, var(--accent)); border-color: var(--app-color, var(--accent)); }
+.circle:focus-visible { outline: 2px solid var(--app-color, var(--accent)); outline-offset: 2px; }
 
 /* --- Quiet icon button (e.g. row delete) --- */
 .del {
@@ -153,7 +159,7 @@ button { font: inherit; cursor: pointer; }
 }
 .del:hover { color: var(--ink-2); }
 .del:active { color: var(--danger); }
-.del:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.del:focus-visible { outline: 2px solid var(--app-color, var(--accent)); outline-offset: 2px; }
 
 /* --- State triad --- */
 .empty { color: var(--ink-3); font-size: 0.9rem; text-align: center; padding: 2rem 0; }
@@ -170,5 +176,44 @@ button { font: inherit; cursor: pointer; }
 /* --- Motion --- */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* ---------- App-level knobs ----------
+   Per-app aesthetic customizations declared in 'app-knobs.json' and
+   persisted in the '__centraid_settings' table. The runtime bakes
+   '<html data-app-* style="--app-color: ...">' before serving and
+   live-updates the same surface via postMessage. Defaults match the
+   base look above so an unset knob renders unchanged. */
+
+:root[data-app-font='sans'] {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+:root[data-app-font='serif'] {
+  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+}
+:root[data-app-font='mono'] {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+:root[data-app-width='narrow'] main { max-width: 36rem; }
+:root[data-app-width='wide'] main { max-width: 64rem; }
+@media (min-width: 720px) {
+  :root[data-app-width='narrow'] main { max-width: 42rem; }
+  :root[data-app-width='wide'] main { max-width: 72rem; }
+}
+
+:root[data-app-radius='sharp'] input[type='text'],
+:root[data-app-radius='sharp'] input[type='search'],
+:root[data-app-radius='sharp'] textarea,
+:root[data-app-radius='sharp'] .primary,
+:root[data-app-radius='sharp'] .ghost,
+:root[data-app-radius='sharp'] .circle {
+  border-radius: 0;
+}
+:root[data-app-radius='pill'] input[type='text'],
+:root[data-app-radius='pill'] input[type='search'],
+:root[data-app-radius='pill'] .primary,
+:root[data-app-radius='pill'] .ghost {
+  border-radius: 999px;
 }
 `;
