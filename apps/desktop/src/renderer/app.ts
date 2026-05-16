@@ -470,6 +470,7 @@
     currentCleanup = null;
     currentSetSidebarOpen = null;
     closeContextMenu();
+    closeAppSettings();
     root.innerHTML = '';
   }
 
@@ -575,24 +576,25 @@
 
     scroll.append(buildHomeHero());
 
-    // Your apps section
-    const totalApps = getApps().length;
+    // Your apps section — always rendered so the home page keeps a stable
+    // shape. When the workspace is empty an inline empty-state card stands
+    // in for the grid, pointing users at the Templates strip below as the
+    // fastest way to get their first app on screen.
+    const apps = getApps();
+    const totalApps = apps.length;
     const totalDrafts = drafts.length;
-    if (totalApps + totalDrafts > 0) {
+    {
       const section = el('section', { class: 'cd-section' });
-      const head = el('div', { class: 'cd-section-head' }, [
-        el('h2', {}, 'Your apps'),
-        el(
-          'span',
-          { class: 'cd-section-meta' },
-          `${totalApps} ${totalApps === 1 ? 'app' : 'apps'}${totalDrafts > 0 ? ` · ${totalDrafts} draft${totalDrafts === 1 ? '' : 's'}` : ''}`,
-        ),
-      ]);
-      const grid = el('div', { class: 'cd-apps-grid' });
-      for (const app of getApps()) grid.append(renderAppCard(app));
-      for (const d of drafts) grid.append(renderAppCard(d));
+      const head = el('div', { class: 'cd-section-head' }, [el('h2', {}, 'Your apps')]);
       section.append(head);
-      section.append(grid);
+      if (totalApps + totalDrafts > 0) {
+        const grid = el('div', { class: 'cd-apps-grid' });
+        for (const app of apps) grid.append(renderAppCard(app));
+        for (const d of drafts) grid.append(renderAppCard(d));
+        section.append(grid);
+      } else {
+        section.append(renderHomeAppsEmptyState());
+      }
       scroll.append(section);
     }
 
@@ -680,6 +682,44 @@
     return wrap;
   }
 
+  // Empty-state card shown under "Your apps" when the workspace is fresh.
+  // Carries the same visual weight as a populated grid row so the page
+  // silhouette stays steady when the first app lands. Points the user at
+  // the two ways forward — the hero prompt above, the templates below.
+  function renderHomeAppsEmptyState(): HTMLElement {
+    const card = el('div', { class: 'cd-apps-empty' });
+    card.append(el('div', { class: 'cd-apps-empty-halo' }));
+
+    const icon = el('div', {
+      class: 'cd-apps-empty-icon',
+      trustedHtml: Icon.Sparkle({ size: 22 }),
+    });
+    card.append(icon);
+
+    card.append(
+      el('div', { class: 'cd-apps-empty-text' }, [
+        el('div', { class: 'cd-apps-empty-title' }, 'Your workspace is a blank canvas'),
+        el(
+          'div',
+          { class: 'cd-apps-empty-hint' },
+          'Clone a template or describe what you want — we’ll build it.',
+        ),
+      ]),
+    );
+
+    const cues = el('div', { class: 'cd-apps-empty-cues' });
+    const cueUp = el('div', { class: 'cd-apps-empty-cue' });
+    cueUp.innerHTML = `${Icon.ArrowLeft({ size: 12 })}<span>Describe above</span>`;
+    cueUp.querySelector('svg')?.setAttribute('style', 'transform: rotate(90deg)');
+    const cueDown = el('div', { class: 'cd-apps-empty-cue' });
+    cueDown.innerHTML = `<span>Pick a template</span>${Icon.ArrowLeft({ size: 12 })}`;
+    cueDown.querySelector('svg')?.setAttribute('style', 'transform: rotate(-90deg)');
+    cues.append(cueUp, cueDown);
+    card.append(cues);
+
+    return card;
+  }
+
   function renderAppCard(app: AppMetaResolvedType): HTMLElement {
     const draft = isDraft(app);
     const status: 'new' | 'draft' | null = draft ? 'draft' : isUserApp(app.id) ? 'new' : null;
@@ -699,50 +739,40 @@
       },
     });
 
-    // Halo glow tinted by app color — bg.jsx uses `${color}33` (20% alpha)
-    // and no CSS opacity layer. Larger radius than the design (180×180 vs
-    // 140×140) compensates for the desktop renderer's darker default base
-    // background and pushes the glow under the icon a little further.
-    const halo = el('span', { class: 'cd-app-card-halo' });
-    halo.style.background = `radial-gradient(circle, ${app.color}66 0%, ${app.color}22 35%, transparent 70%)`;
-    card.append(halo);
-
-    // Head row: tile icon only — the status pill used to sit in the corner
-    // but moved to the meta row so the corner can host the `•••` action.
-    const head = el('div', { class: 'cd-app-card-head' });
+    // Top row mirrors the template card layout — small icon on the
+    // left, name + description stacked to its right. Keeps app +
+    // template tiles visually related so the home page reads as one
+    // consistent grid family.
+    const row = el('div', { class: 'cd-app-card-row' });
     const iconEl = el('div', {
       class: 'cd-app-card-icon',
-      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 24, strokeWidth: 1.85 }) : '',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 16, strokeWidth: 1.85 }) : '',
     });
     const finish = window.CentraidTokens.tileFinish(app.color, prefs.tileVariant);
     iconEl.style.background = finish.background;
     iconEl.style.color = finish.glyphColor;
     if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
-    head.append(iconEl);
-    card.append(head);
+    row.append(iconEl);
+    const text = el('div', { class: 'cd-app-card-text' });
+    text.append(el('div', { class: 'cd-app-card-name' }, app.name));
+    if (app.desc) text.append(el('div', { class: 'cd-app-card-desc' }, app.desc));
+    row.append(text);
+    card.append(row);
 
-    // Body
-    const body = el('div', {});
-    body.append(el('div', { class: 'cd-app-card-name' }, app.name));
-    body.append(el('div', { class: 'cd-app-card-desc' }, app.desc));
-    card.append(body);
-
-    // Meta line — "Edited X ago" for published apps (timestamp comes from
-    // userApps[*].updatedAt, backfilled by the v3 migration). Drafts have
-    // no published lineage yet, so they get a verb-cued "Continue editing"
-    // instead of a timestamp.
-    const meta = el('div', { class: 'cd-app-card-meta' });
+    // Foot — edited time on the left, status pill pushed to the right.
+    // What separates an app tile from a template tile: templates show
+    // a description; apps show their lifecycle (last touched + state).
     const ua = !draft ? findUserApp(app.id) : undefined;
-    const metaLabel = draft ? 'Continue editing' : `Edited ${relativeTime(ua?.updatedAt)}`;
-    meta.innerHTML = `${Icon.Pencil({ size: 11 })}<span>${metaLabel}</span>`;
+    const metaLabel = draft ? 'Continue editing' : relativeTime(ua?.updatedAt);
+    const foot = el('div', { class: 'cd-app-card-foot' });
+    foot.append(el('span', { class: 'cd-app-card-foot-time' }, metaLabel));
     if (status) {
       const pill = el('span', { class: 'cd-status', 'data-tone': status });
-      pill.style.marginLeft = 'auto';
       pill.append(el('span', { class: 'cd-status-dot' }));
       pill.append(document.createTextNode(status));
-      meta.append(pill);
+      foot.append(pill);
     }
-    card.append(meta);
+    card.append(foot);
 
     wrap.append(card);
     wrap.append(
@@ -1597,30 +1627,10 @@
     const ua = findUserApp(id);
     clear();
 
-    // Titlebar right cluster: brand chip with app icon + name, then the
-    // floating Edit pill that returns to the builder.
-    const brandChip = el('span', { class: 'cd-brand-chip' });
-    brandChip.append(
-      el('span', {
-        class: 'cd-app-strip-icon',
-        style: { background: app.color, width: '18px', height: '18px', borderRadius: '4px' },
-        trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 11, strokeWidth: 2 }) : '',
-      }),
-    );
-    brandChip.append(el('span', { class: 'cd-brand-chip-name' }, app.name));
-    const editPill = el('button', {
-      class: 'cd-edit-pill',
-      type: 'button',
-      onClick: () => enterBuilder({ appContext: app }),
-    });
-    editPill.innerHTML = `${Icon.Sparkle({ size: 11 })}<span>Edit</span>`;
-    const titlebarRight = el('span', {
-      style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
-    });
-    titlebarRight.append(brandChip);
-    titlebarRight.append(editPill);
-
     // Main area: the running app fills the canvas inside a scrollable column.
+    // Declared before the titlebar so the per-app settings popover (anchored
+    // to the gear button) can capture `view` cleanly via closure — the panel
+    // is inserted as a child of `view` when opened.
     const main = el('div', {});
     const view = el('div', {
       class: 'app-view',
@@ -1632,6 +1642,47 @@
     view.append(body);
     main.append(view);
     inner.style.setProperty('--accent-color', app.color);
+
+    // Titlebar right cluster: brand chip with app icon + name, gear button
+    // for per-app settings, then the floating Edit pill that returns to the
+    // builder.
+    const brandChip = el('span', { class: 'cd-brand-chip' });
+    brandChip.append(
+      el('span', {
+        class: 'cd-app-strip-icon',
+        style: { background: app.color, width: '18px', height: '18px', borderRadius: '4px' },
+        trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 11, strokeWidth: 2 }) : '',
+      }),
+    );
+    brandChip.append(el('span', { class: 'cd-brand-chip-name' }, app.name));
+
+    // Notion-style per-app customization popover, anchored to the gear.
+    // The button toggles the panel; the panel closes on Esc, click-outside,
+    // or another gear press.
+    const gearWrap = el('span', { class: 'cd-tb-btn-wrap' });
+    const gearBtn = el('button', {
+      class: 'cd-tb-btn',
+      type: 'button',
+      'aria-label': 'App settings',
+      'aria-haspopup': 'dialog',
+      trustedHtml: Icon.Settings ? Icon.Settings({ size: 15 }) : '',
+      onClick: () => toggleAppSettings(app, gearBtn, view, ua?.centraidProjectId),
+    });
+    gearWrap.append(gearBtn);
+    gearWrap.append(el('span', { class: 'cd-tooltip' }, 'App settings'));
+
+    const editPill = el('button', {
+      class: 'cd-edit-pill',
+      type: 'button',
+      onClick: () => enterBuilder({ appContext: app }),
+    });
+    editPill.innerHTML = `${Icon.Sparkle({ size: 11 })}<span>Edit</span>`;
+    const titlebarRight = el('span', {
+      style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
+    });
+    titlebarRight.append(brandChip);
+    titlebarRight.append(gearWrap);
+    titlebarRight.append(editPill);
 
     const sidebar = buildHomeSidebar(app.id);
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
@@ -1699,11 +1750,13 @@
       frameWrap.append(frame);
       container.append(frameWrap);
 
-      // Resolve the live URL and load it. We carry the initial theme in
+      // Resolve the live URL and load it. We carry the global theme in
       // BOTH the query string (so the runtime's settings injection bakes
       // `data-theme` / `--bg-l` into the served `index.html` server-side)
       // AND the hash (read by the inline live-settings bridge before paint,
       // covering the builder-preview path that bypasses the runtime).
+      // Theme is intentionally global — every mini app inherits the
+      // Centraid shell theme so the workspace stays visually coherent.
       void window.CentraidApi.appLiveUrl({ id: ua.centraidProjectId })
         .then((r) => {
           const qsep = r.url.includes('?') ? '&' : '?';
@@ -1758,6 +1811,413 @@
       ]),
     ]);
     container.append(stub);
+  }
+
+  // ---------- Per-app settings popover ----------
+  // Notion-style customization surface anchored to the gear button in the
+  // app-view titlebar.
+  //
+  // Theme / accent / density stay GLOBAL — baked into the iframe URL so
+  // every mini-app inherits the Centraid shell theme and the workspace
+  // reads as one product. True per-app *aesthetics* (font, page width,
+  // corner radius, etc.) live here. Each template declares its knobs in
+  // `<template>/app-knobs.json` (see `packages/app-templates`); the
+  // scaffolder copies that file into the cloned project; the runtime
+  // serves it as a static file. We fetch the cloned copy at panel-open
+  // so the controls match the app's CSS, not whatever the bundled
+  // template might have evolved to since the clone.
+  //
+  // Values persist in the per-app `__centraid_settings` SQLite table via
+  // `CentraidApi.appQuery` SQL writes. The runtime's settings-merge bakes
+  // them into `<html data-app-<key>="...">` on next load; the inline
+  // bridge in each template applies live `centraid:settings` postMessage
+  // updates from the shell so the change is visible immediately.
+
+  interface AppKnobOption {
+    value: string;
+    label: string;
+  }
+  interface AppKnob {
+    key: string;
+    label: string;
+    /** `segmented` for discrete values, `swatch` for colour choices. */
+    type: 'segmented' | 'swatch';
+    default: string;
+    options: AppKnobOption[];
+  }
+  interface AppKnobsManifest {
+    version: number;
+    knobs: AppKnob[];
+  }
+
+  let appSettingsCleanup: (() => void) | null = null;
+
+  function closeAppSettings(): void {
+    if (appSettingsCleanup) {
+      appSettingsCleanup();
+      appSettingsCleanup = null;
+    }
+  }
+
+  function toggleAppSettings(
+    app: AppMetaResolvedType,
+    anchor: HTMLElement,
+    view: HTMLElement,
+    appId: string | undefined,
+  ): void {
+    if (appSettingsCleanup) {
+      closeAppSettings();
+      return;
+    }
+    openAppSettings(app, anchor, view, appId);
+  }
+
+  // SQLite single-quote escape. Values come from a closed set
+  // (knob.value strings declared by the template) — we still escape
+  // defensively so a template author can introduce arbitrary value
+  // strings without rethinking the write path.
+  function sqlString(s: string): string {
+    return `'${s.replace(/'/g, "''")}'`;
+  }
+
+  async function ensureAppSettingsTable(appId: string): Promise<void> {
+    await window.CentraidApi.appQuery({
+      id: appId,
+      sql: 'CREATE TABLE IF NOT EXISTS __centraid_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+    });
+  }
+
+  async function fetchAppKnobValues(appId: string): Promise<Record<string, string>> {
+    try {
+      await ensureAppSettingsTable(appId);
+      const result = await window.CentraidApi.appQuery({
+        id: appId,
+        sql: 'SELECT key, value FROM __centraid_settings',
+      });
+      if (result.kind !== 'rows') return {};
+      const out: Record<string, string> = {};
+      for (const row of result.rows) {
+        const key = typeof row.key === 'string' ? row.key : String(row.key);
+        const raw = typeof row.value === 'string' ? row.value : String(row.value);
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          if (typeof parsed === 'string') out[key] = parsed;
+        } catch {
+          /* skip malformed row */
+        }
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  async function writeAppKnobValue(appId: string, key: string, value: string): Promise<void> {
+    const sql =
+      `INSERT INTO __centraid_settings (key, value) VALUES (${sqlString(key)}, ${sqlString(JSON.stringify(value))}) ` +
+      'ON CONFLICT(key) DO UPDATE SET value = excluded.value';
+    await window.CentraidApi.appQuery({ id: appId, sql });
+  }
+
+  // Settings key (camelCase, e.g. `appFont`) → kebab name shared by the
+  // data-attr and CSS-var paths. Mirrors `camelTailToKebab` in
+  // `runtime-core/src/settings-merge.ts` so the live update lands on the
+  // same target the runtime will bake on next reload.
+  function appKnobKebab(key: string): string {
+    // Strip the `app` prefix, lowercase first letter, kebab the rest.
+    const tail = key.startsWith('app') ? key.slice(3) : key;
+    return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+  }
+
+  function pushKnobToAppFrame(view: HTMLElement, key: string, value: string): void {
+    const frame = view.querySelector<HTMLIFrameElement>('iframe[data-centraid-app]');
+    if (!frame) return;
+    const name = appKnobKebab(key);
+    // Mirror the runtime's app-knob routing: keys ending in Color/Accent
+    // land as CSS vars (continuous colour values); everything else lands
+    // as data attributes (discrete states). Keeping the two paths in
+    // sync means a live edit and a hard reload produce identical DOM.
+    const isCss = /(?:Color|Accent)$/.test(key);
+    const dataAttrs = isCss ? {} : { [name]: value };
+    const cssVars = isCss ? { [name]: value } : {};
+    frame.contentWindow?.postMessage({ type: 'centraid:settings', dataAttrs, cssVars }, '*');
+  }
+
+  async function fetchAppKnobsManifest(appId: string): Promise<AppKnobsManifest | null> {
+    try {
+      const live = await window.CentraidApi.appLiveUrl({ id: appId });
+      // `appLiveUrl` returns `${gateway}/centraid/<id>/`. The manifest is a
+      // static sibling of `index.html` inside the same project.
+      const url = `${live.url.replace(/\/?$/, '/')}app-knobs.json`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const parsed = (await res.json()) as AppKnobsManifest;
+      if (!parsed || !Array.isArray(parsed.knobs)) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function openAppSettings(
+    app: AppMetaResolvedType,
+    anchor: HTMLElement,
+    view: HTMLElement,
+    appId: string | undefined,
+  ): void {
+    closeAppSettings();
+    anchor.dataset.open = 'true';
+
+    const backdrop = el('div', { class: 'cd-app-settings-backdrop' });
+    const panel = el('div', {
+      class: 'cd-app-settings-panel',
+      role: 'dialog',
+      'aria-label': 'App settings',
+    });
+
+    // Stop the panel's own clicks from bubbling to the backdrop, which would
+    // close it. Backdrop click closes; Esc closes globally.
+    panel.addEventListener('click', (e) => e.stopPropagation());
+    backdrop.addEventListener('click', closeAppSettings);
+
+    // Header
+    const header = el('div', { class: 'cd-app-settings-header' });
+    const iconTile = el('span', {
+      class: 'cd-app-settings-icon',
+      style: { background: app.color },
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 13, strokeWidth: 1.85 }) : '',
+    });
+    const headerText = el('div', { class: 'cd-app-settings-header-text' }, [
+      el('div', { class: 'cd-app-settings-name' }, app.name),
+      el('div', { class: 'cd-app-settings-eyebrow' }, 'App settings'),
+    ]);
+    const closeBtn = el('button', {
+      class: 'cd-app-settings-close',
+      type: 'button',
+      'aria-label': 'Close',
+      trustedHtml: Icon.X({ size: 12 }),
+      onClick: closeAppSettings,
+    });
+    header.append(iconTile, headerText, closeBtn);
+    panel.append(header);
+
+    // Preferences (knobs) — only meaningful for centraid-backed apps.
+    // We render an empty host section synchronously and fill it in when
+    // the manifest + current values resolve, so the panel pops in
+    // immediately without waiting for HTTP/SQL.
+    let prefsHost: HTMLElement | null = null;
+    if (appId) {
+      prefsHost = el('div', { class: 'cd-app-settings-section-host' });
+      panel.append(prefsHost);
+      void Promise.all([fetchAppKnobsManifest(appId), fetchAppKnobValues(appId)]).then(
+        ([manifest, stored]) => {
+          if (!prefsHost || !document.contains(panel)) return;
+          if (!manifest || manifest.knobs.length === 0) return;
+          prefsHost.replaceChildren(renderKnobsSection(manifest.knobs, stored, view, appId, panel));
+        },
+      );
+    }
+
+    // Manage
+    const manage = el('div', { class: 'cd-app-settings-manage' });
+    manage.append(
+      appSettingsMenuItem('Pencil', 'Rename', () => {
+        closeAppSettings();
+        void renameAppFromSettings(app);
+      }),
+      appSettingsMenuItem('Share', 'Share', () => {
+        closeAppSettings();
+        openShareDialog(app);
+      }),
+      appSettingsMenuItem('Folder', 'Reveal in Finder', () => {
+        closeAppSettings();
+        void revealApp(app);
+      }),
+      appSettingsMenuItem(
+        'Trash',
+        'Delete app',
+        () => {
+          closeAppSettings();
+          void deleteApp(app);
+        },
+        { destructive: true },
+      ),
+    );
+    panel.append(manage);
+
+    view.append(backdrop);
+    view.append(panel);
+
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeAppSettings();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+
+    appSettingsCleanup = (): void => {
+      window.removeEventListener('keydown', onKey);
+      backdrop.remove();
+      panel.remove();
+      prefsHost = null;
+      delete anchor.dataset.open;
+    };
+  }
+
+  function renderKnobsSection(
+    knobs: AppKnob[],
+    stored: Record<string, string>,
+    view: HTMLElement,
+    appId: string,
+    panel: HTMLElement,
+  ): HTMLElement {
+    const rows: HTMLElement[] = [];
+    for (const knob of knobs) {
+      const current = stored[knob.key] ?? knob.default;
+      const commit = (next: string): void => {
+        // Live push first so the user sees the change immediately; then
+        // persist. If the SQL write fails, toast + revert to the prior
+        // value so the popover doesn't lie about what's saved.
+        pushKnobToAppFrame(view, knob.key, next);
+        const prior = stored[knob.key] ?? knob.default;
+        stored[knob.key] = next;
+        void writeAppKnobValue(appId, knob.key, next).catch((err) => {
+          showToast(`Saving ${knob.label.toLowerCase()} failed: ${String(err)}`);
+          if (document.contains(panel)) {
+            stored[knob.key] = prior;
+            pushKnobToAppFrame(view, knob.key, prior);
+          }
+        });
+      };
+      const control =
+        knob.type === 'swatch'
+          ? makeKnobSwatches(knob.options, current, commit)
+          : makeSegmentedLabeled(
+              knob.options.map((o) => o.value),
+              Object.fromEntries(knob.options.map((o) => [o.value, o.label])),
+              current,
+              commit,
+            );
+      rows.push(
+        el('div', { class: 'cd-app-settings-row' }, [
+          el('span', { class: 'cd-app-settings-row-label' }, knob.label),
+          control,
+        ]),
+      );
+    }
+    return el('div', { class: 'cd-app-settings-section' }, [
+      el('div', { class: 'cd-app-settings-section-label' }, 'Preferences'),
+      ...rows,
+    ]);
+  }
+
+  // Render swatches for `type: 'swatch'` knobs (e.g. `appColor`). Each
+  // option's `value` is taken as a CSS-compatible colour; the `label` is
+  // surfaced via `title=` for hover-tooltips. Visually matches the global
+  // accent swatches in the Settings page.
+  function makeKnobSwatches(
+    options: readonly AppKnobOption[],
+    selected: string,
+    onSelect: (value: string) => void,
+  ): HTMLElement {
+    const wrap = el('div', { class: 'cd-swatches', role: 'radiogroup' });
+    for (const opt of options) {
+      const isActive = opt.value === selected;
+      const btn = el('button', {
+        'aria-checked': String(isActive),
+        'aria-label': opt.label,
+        class: 'cd-swatch',
+        'data-active': String(isActive),
+        role: 'radio',
+        style: { background: opt.value },
+        title: opt.label,
+        type: 'button',
+      });
+      btn.innerHTML = Icon.Check({ size: 14, strokeWidth: 2.5 });
+      btn.addEventListener('click', () => {
+        for (const child of wrap.children) {
+          (child as HTMLElement).dataset.active = 'false';
+          child.setAttribute('aria-checked', 'false');
+        }
+        btn.dataset.active = 'true';
+        btn.setAttribute('aria-checked', 'true');
+        onSelect(opt.value);
+      });
+      wrap.append(btn);
+    }
+    return wrap;
+  }
+
+  // makeSegmented variant that lets the caller supply a separate label per
+  // option (instead of reusing the value string). The template's
+  // app-knobs.json may want `{ value: "sans", label: "Sans" }` etc.
+  function makeSegmentedLabeled(
+    options: readonly string[],
+    labels: Record<string, string>,
+    selected: string,
+    onSelect: (value: string) => void,
+  ): HTMLElement {
+    const wrap = el('div', { class: 'seg', role: 'tablist' });
+    for (const opt of options) {
+      const btn = el(
+        'button',
+        {
+          'data-active': String(opt === selected),
+          onClick: () => {
+            for (const child of wrap.children) {
+              (child as HTMLElement).dataset.active = 'false';
+            }
+            btn.dataset.active = 'true';
+            onSelect(opt);
+          },
+          role: 'tab',
+        },
+        labels[opt] ?? opt,
+      );
+      wrap.append(btn);
+    }
+    return wrap;
+  }
+
+  function appSettingsMenuItem(
+    iconKey: IconNameType,
+    label: string,
+    onClick: () => void,
+    opts: { destructive?: boolean } = {},
+  ): HTMLElement {
+    const btn = el('button', {
+      class: 'cd-app-settings-menu-item',
+      type: 'button',
+      'data-danger': opts.destructive ? 'true' : undefined,
+      onClick,
+    });
+    btn.innerHTML = `${Icon[iconKey]({ size: 13 })}<span>${label}</span>`;
+    return btn;
+  }
+
+  // Inline rename from the settings panel — the home-grid inline editor
+  // relies on the card being in the DOM, which it isn't from the app view.
+  // A prompt is the lowest-friction substitute and matches the rest of the
+  // shell's "manage app" affordances.
+  async function renameAppFromSettings(app: AppMetaResolvedType): Promise<void> {
+    const input = window.prompt('Rename app', app.name);
+    if (input == null) return;
+    const next = input.trim().replace(/\s+/g, ' ');
+    if (!next || next === app.name) return;
+    try {
+      await window.CentraidApi.updateProjectMeta({ id: app.id, name: next });
+      const ua = findUserApp(app.id);
+      if (ua) {
+        ua.name = next;
+        ua.updatedAt = new Date().toISOString();
+        Store.set('home.userApps', userApps);
+      }
+      showToast(`Renamed to "${next}"`);
+      openApp(app.id);
+    } catch (err) {
+      showToast(`Rename failed: ${String(err)}`);
+    }
   }
 
   // ---------- Settings page ----------
@@ -1826,8 +2286,6 @@
     const themeSeg = makeSegmented<ThemeName>(['dark', 'light'], prefs.theme, (v) => {
       setPrefs({ theme: v });
     });
-    // Dark shade is locked at 5 — slider is presentational only.
-    const shadeRow = makeSliderRow(prefs.bgL, 0, 35, 1, () => {}, { disabled: true });
     const coolCastSwitch = makeSwitch(prefs.coolBlueCast, (v) => setPrefs({ coolBlueCast: v }));
     const accentSwatches = makeSwatches(prefs.accent, (v) => setPrefs({ accent: v }));
 
@@ -1858,7 +2316,6 @@
       drawerGroup('Theme', [
         el('div', { class: 'settings-note' }, 'Changes are saved automatically.'),
         drawerRow('Mode', themeSeg),
-        shadeRow.row,
         drawerRowInline('Cool blue cast', coolCastSwitch),
         drawerRow('Accent', accentSwatches),
       ]),
@@ -2268,40 +2725,6 @@
       control,
     ]);
   }
-  function makeSliderRow(
-    value: number,
-    min: number,
-    max: number,
-    step: number,
-    onChange: (next: number) => void,
-    opts: { disabled?: boolean } = {},
-  ): { row: HTMLElement; readout: HTMLElement } {
-    const readout = el('span', { class: 'cd-slider-readout' }, String(value));
-    const inputAttrs: ElAttrs = {
-      class: 'cd-slider',
-      max: String(max),
-      min: String(min),
-      step: String(step),
-      type: 'range',
-      value: String(value),
-      onInput: (e: Event) => {
-        const next = Number((e.target as HTMLInputElement).value);
-        readout.textContent = String(next);
-        onChange(next);
-      },
-    };
-    if (opts.disabled) inputAttrs.disabled = '';
-    const input = el('input', inputAttrs) as HTMLInputElement;
-    const row = el('div', { class: 'drawer-row' }, [
-      el('div', { class: 'cd-slider-head' }, [
-        el('span', { class: 'drawer-row-label' }, 'Dark shade'),
-        readout,
-      ]),
-      input,
-    ]);
-    if (opts.disabled) row.dataset.disabled = 'true';
-    return { readout, row };
-  }
   function makeSwitch(initial: boolean, onChange: (next: boolean) => void): HTMLElement {
     let on = initial;
     const btn = el('button', {
@@ -2334,7 +2757,7 @@
         style: { background: swatch.accent },
         type: 'button',
       });
-      btn.innerHTML = Icon.Check({ size: 14 });
+      btn.innerHTML = Icon.Check({ size: 14, strokeWidth: 2.5 });
       btn.addEventListener('click', () => {
         for (const child of wrap.children) {
           (child as HTMLElement).dataset.active = 'false';

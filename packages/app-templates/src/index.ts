@@ -25,7 +25,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ResolvedTemplate, TemplateManifest, TemplateMeta, TemplateSource } from './types.js';
 
-export type { ResolvedTemplate, TemplateManifest, TemplateMeta, TemplateSource } from './types.js';
+export type {
+  AppKnob,
+  AppKnobOption,
+  AppKnobsManifest,
+  ResolvedTemplate,
+  TemplateManifest,
+  TemplateMeta,
+  TemplateSource,
+} from './types.js';
 
 const DIST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(DIST_DIR, '..');

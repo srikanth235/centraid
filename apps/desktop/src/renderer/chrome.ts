@@ -341,7 +341,7 @@
       type: 'button',
       'aria-label': 'App actions',
       'aria-haspopup': 'menu',
-      trustedHtml: window.Icon.MoreHoriz({ size: 14 }),
+      trustedHtml: window.Icon.MoreVert({ size: 14 }),
       onClick: (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
@@ -382,13 +382,6 @@
     return item;
   }
 
-  function statusDotColor(status?: string | null): string {
-    if (status === 'new') return 'var(--accent-light)';
-    if (status === 'draft') return 'var(--icon-amber)';
-    if (status === 'live') return 'var(--success)';
-    return 'transparent';
-  }
-
   function buildSidebar(opts: SidebarOpts): HTMLElement {
     const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', height: '100%' } });
 
@@ -425,9 +418,12 @@
     );
     wrap.append(sbItem({ icon: Glyph.star(), label: 'Starred', disabled: true }));
 
-    // Apps section
+    // Apps section — always rendered so the workspace's information
+    // architecture stays stable; an empty-state row stands in for the
+    // list when the user hasn't cloned or built anything yet. Matches the
+    // Chats placeholder below.
+    wrap.append(el('div', { class: 'cd-sb-section' }, 'Apps'));
     if (opts.apps.length > 0) {
-      wrap.append(el('div', { class: 'cd-sb-section' }, 'Apps'));
       for (const a of opts.apps) {
         const iconNode = el('span', {
           class: 'cd-sb-app-icon',
@@ -442,10 +438,15 @@
           label: a.name,
           active: opts.activeId === a.id,
           onClick: () => opts.onAppClick(a.id),
-          dotColor: a.status ? statusDotColor(a.status) : undefined,
         });
         wrap.append(appRow(item, a.id, opts.onAppContext));
       }
+    } else {
+      // No apps yet — show a hint instead of an empty section header.
+      // The "+ New app" affordance lives at the top of the sidebar, so we
+      // don't duplicate it here; the placeholder just keeps the section
+      // anchored so users can see where their apps will land.
+      wrap.append(sbItem({ icon: Glyph.sparkle(), label: 'No apps yet', disabled: true }));
     }
 
     // Drafts
@@ -465,7 +466,6 @@
           label: d.name,
           active: opts.activeId === d.id,
           onClick: () => opts.onAppClick(d.id),
-          dotColor: 'var(--c-amber)',
         });
         wrap.append(appRow(item, d.id, opts.onAppContext));
       }
