@@ -19,7 +19,7 @@ export interface ProjectInfo {
   id: string;
   /** Absolute path on disk. */
   dir: string;
-  /** Whether build artifacts are present (any *.js files in queries/actions/crons). */
+  /** Whether build artifacts are present (any *.js files in queries/actions). */
   built: boolean;
   /** Last-modified timestamp of the project dir. */
   modifiedAt: string;

@@ -13,7 +13,7 @@ export interface RuntimeHttpServerOptions {
   /** Port. `0` (default) asks the OS for an ephemeral port. */
   port?: number;
   /**
-   * Pre-shared bearer token required on every non-loopback-ingest request.
+   * Pre-shared bearer token required on every request.
    * If omitted, a 32-byte random hex token is generated.
    */
   token?: string;
@@ -50,15 +50,8 @@ const USER_STORE_PREFIX = '/_centraid-user';
  *
  * Auth model:
  *   - Loopback bind by default (`127.0.0.1`).
- *   - All requests except `/centraid/<id>/_ingest/<cron>` (already gated on
- *     loopback + per-cron token by the runtime) require
- *     `Authorization: Bearer <token>`.
+ *   - All requests require `Authorization: Bearer <token>`.
  *   - The token is randomly minted on `start()` unless one is provided.
- *
- * The ingest endpoint is intentionally not gated by the server-level
- * bearer — it uses its own per-cron token enforced by `Runtime.handle`.
- * That lets a local scheduler POST results without knowing the server-level
- * bearer.
  *
  * When `chatHistoryDbPath` is provided, the server also serves the
  * `/_centraid-chat/*` HTTP surface (same shape the OpenClaw plugin exposes
@@ -93,14 +86,12 @@ export async function startRuntimeHttpServer(
   });
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (!isIngestRequest(req)) {
-      const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-      if (!raw || !timingSafeEqual(raw, token)) {
-        res.statusCode = 401;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
-        return;
-      }
+    const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    if (!raw || !timingSafeEqual(raw, token)) {
+      res.statusCode = 401;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
+      return;
     }
     if (chatHistoryHandler && (req.url ?? '').startsWith(CHAT_HISTORY_PREFIX)) {
       const handled = await chatHistoryHandler(req, res);
@@ -139,10 +130,4 @@ export async function startRuntimeHttpServer(
         });
       }),
   };
-}
-
-function isIngestRequest(req: IncomingMessage): boolean {
-  if (req.method !== 'POST') return false;
-  const url = req.url ?? '';
-  return /^\/centraid\/[^/]+\/_ingest\/[^/]+(\?|$)/.test(url);
 }

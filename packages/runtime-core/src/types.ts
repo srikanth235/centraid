@@ -25,33 +25,6 @@ export interface RegistryEntry {
   path: string;
   mode: AppMode;
   registeredAt: string;
-  /** Per-cron webhook tokens, keyed by cron id. */
-  cronTokens: Record<string, string>;
-  /** Mirrored cron status, keyed by cron id. */
-  cronStatus: Record<string, CronStatus>;
-}
-
-export interface CronStatus {
-  lastRunAtMs?: number;
-  lastRunStatus?: 'success' | 'failure' | 'running' | 'scheduled';
-  lastError?: string;
-  nextRunAtMs?: number;
-}
-
-/** Shape exported by `crons/<id>.js` per app. */
-export interface CronModule {
-  schedule:
-    | { cron: string; tz?: string; exact?: boolean }
-    | { every: string }
-    | { at: string; tz?: string };
-  execution?: 'main' | 'isolated' | 'current' | { session: string };
-  task: {
-    prompt: string;
-    toolAllow?: string[];
-    model?: string;
-  };
-  timeoutMs?: number;
-  default: HandlerFn<CronHandlerArgs>;
 }
 
 /** Shape exported by `queries/<id>.js`. Default export only. */
@@ -85,7 +58,6 @@ export type HandlerFn<Args, Ret = void> = (args: Args) => Promise<Ret>;
  */
 export type QueryHandler = HandlerFn<QueryHandlerArgs, unknown>;
 export type ActionHandler = HandlerFn<ActionHandlerArgs, ActionResult>;
-export type CronHandler = HandlerFn<CronHandlerArgs, void>;
 
 export interface ScopedDb {
   exec(sql: string): Promise<void>;
@@ -135,15 +107,4 @@ export interface ActionHandlerArgs extends CommonHandlerArgs {
 export interface ActionResult {
   status?: number;
   body?: unknown;
-}
-
-export interface CronHandlerArgs extends CommonHandlerArgs {
-  payload: {
-    text: string;
-    json?: unknown;
-    raw: string;
-    headers: Record<string, string>;
-    jobId: string;
-    runId?: string;
-  };
 }

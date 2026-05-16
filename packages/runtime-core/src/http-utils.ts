@@ -41,22 +41,3 @@ export function sendError(
 ): true {
   return sendJson(res, status, { error: code, message });
 }
-
-export function getHeader(req: IncomingMessage, name: string): string | undefined {
-  const value = req.headers[name.toLowerCase()];
-  if (Array.isArray(value)) return value[0];
-  return value;
-}
-
-/**
- * The cron webhook ingest endpoint must only accept connections from loopback.
- * The gateway's auth gate gives us authenticated callers, but ingest is a
- * different threat model — we want to be sure no remote client can ever hit
- * it, even if a misconfiguration exposes the gateway publicly.
- */
-export function isLoopback(req: IncomingMessage): boolean {
-  const xff = getHeader(req, 'x-forwarded-for');
-  if (xff) return false; // proxied — not a direct loopback caller
-  const host = getHeader(req, 'host') ?? '';
-  return host.startsWith('127.0.0.1') || host.startsWith('[::1]') || host.startsWith('localhost');
-}

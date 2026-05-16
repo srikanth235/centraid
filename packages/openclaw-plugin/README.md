@@ -1,6 +1,6 @@
 # @centraid/openclaw-plugin
 
-OpenClaw plugin that mounts a single `/centraid` prefix on the gateway and dispatches to **user-generated apps**. Each app is a folder of static assets + a sqlite database + JS handlers; periodic data ingest is driven by OpenClaw cron jobs that POST results back into the plugin.
+OpenClaw plugin that mounts a single `/centraid` prefix on the gateway and dispatches to **user-generated apps**. Each app is a folder of static assets + a sqlite database + JS handlers.
 
 ## URL surface
 
@@ -24,9 +24,6 @@ OpenClaw plugin that mounts a single `/centraid` prefix on the gateway and dispa
 | `GET` | `/centraid/<id>/<file>` | Static asset (extension allowlist) |
 | `GET` | `/centraid/<id>/_data/<query>` | Runs `queries/<query>.js` |
 | `POST` | `/centraid/<id>/_run` | Runs `actions/<body.action>.js` |
-| `GET` | `/centraid/<id>/_crons` | List crons + last-run status |
-| `POST` | `/centraid/<id>/_crons/<cron>/run` | Trigger a cron now |
-| `POST` | `/centraid/<id>/_ingest/<cron>` | Cron webhook target — **loopback only** |
 
 App ids starting with `_` are reserved (so `_apps` etc. can't collide).
 
@@ -74,7 +71,7 @@ curl -X POST -d '{"versionId":"v_2026-05-08T14-30-00-000Z_a1b2c3"}' \
      https://gw/centraid/_apps/my-app/activate
 ```
 
-`activate` is just a write to `current.json`; no extraction, no downtime, instant. Crons resync against the newly active version.
+`activate` is just a write to `current.json`; no extraction, no downtime, instant.
 
 ### What's accepted in the tarball
 
@@ -91,7 +88,6 @@ curl -X POST -d '{"versionId":"v_2026-05-08T14-30-00-000Z_a1b2c3"}' \
   data.sqlite              # never served as a static file
   queries/<name>.js        # GET /centraid/<id>/_data/<name>
   actions/<name>.js        # POST /centraid/<id>/_run  (body.action picks)
-  crons/<name>.js          # schedule + task + ingest handler in one module
   app.json                 # optional metadata
 ```
 
@@ -99,7 +95,7 @@ Static extension allowlist: `.html .htm .css .js .mjs .json .svg .png .jpg .jpeg
 
 ## Handler contract
 
-All three handler kinds use the **same** `{ db, log, app, ctx }` surface; only the kind-specific fields differ.
+Both handler kinds use the **same** `{ db, log, app, ctx }` surface; only the kind-specific fields differ.
 
 The plugin **loads `.js` files only** at runtime. You can author in TypeScript (recommended — see below) and ship the compiled `.js` next to it.
 
@@ -122,34 +118,6 @@ export default (async ({ body, db, log }) => {
   log.info(`rebuild requested with ${JSON.stringify(body)}`);
   return { status: 200, body: { ok: true } };
 }) satisfies ActionHandler;
-```
-
-```ts
-// crons/scan-github.ts
-import type { CronHandler } from "@centraid/openclaw-plugin";
-
-export const schedule  = { cron: "*/15 * * * *", tz: "UTC" };
-export const execution = "isolated";
-export const task      = {
-  prompt: "Run `gh issue list --json number,title,state,updatedAt --limit 200` and return the JSON array verbatim as your final message.",
-  toolAllow: ["bash"],
-};
-export const timeoutMs = 30000;
-
-export default (async ({ payload, db, log }) => {
-  const issues = (payload.json ?? JSON.parse(payload.text)) as Array<{
-    number: number; title: string; state: string; updatedAt: string;
-  }>;
-  // Schema lives in migrations/ — handlers presume the table already exists.
-  const upsert = db.prepare(
-    `INSERT INTO issues VALUES(@number,@title,@state,@updatedAt)
-     ON CONFLICT(number) DO UPDATE SET title=excluded.title, state=excluded.state, updatedAt=excluded.updatedAt`
-  );
-  await db.transaction(async () => {
-    for (const i of issues) await upsert.run(i);
-  })();
-  log.info(`upserted ${issues.length} issues`);
-}) satisfies CronHandler;
 ```
 
 ## Authoring apps in TypeScript
@@ -176,8 +144,7 @@ The handler-arg types are exported from `@centraid/openclaw-plugin`:
 | --- | --- |
 | `QueryHandler` | `satisfies QueryHandler` on a query default export |
 | `ActionHandler` | `satisfies ActionHandler` on an action default export |
-| `CronHandler` | `satisfies CronHandler` on a cron default export |
-| `QueryHandlerArgs`, `ActionHandlerArgs`, `CronHandlerArgs` | Args type if you prefer explicit destructuring annotations |
+| `QueryHandlerArgs`, `ActionHandlerArgs` | Args type if you prefer explicit destructuring annotations |
 | `ScopedDb`, `ScopedLog`, `AppRef` | Sub-surfaces of the args object |
 
 `db` is a proxy: each call round-trips to the plugin process which owns the `data.sqlite` connection — the worker never sees a path to another app's database. `ctx.fetch` is a timeout-bound `fetch`. There is no `fs`, `child_process`, or `process.env` provided.
@@ -187,14 +154,9 @@ The handler-arg types are exported from `@centraid/openclaw-plugin`:
 | Key | Default | Notes |
 | --- | --- | --- |
 | `appsDir` | `centraid` (resolved under `$OPENCLAW_STATE_DIR`, default `~/.openclaw`) | Where app folders live. Absolute paths are used as-is. |
-| `gatewayBaseUrl` | `http://127.0.0.1:18789` | Loopback URL cron webhooks point at |
 | `versionRetention` | `5` | Max versions kept per uploaded app (active always retained; min 2) |
 
-The registry persists at `<appsDir>/_registry.json` with mode `0600` — it stores per-cron random bearer tokens.
-
-## Cron registration
-
-The plugin syncs each app's `crons/*.js` into OpenClaw's cron registry. Default backend (**Path B**) shells out to the documented `openclaw cron` CLI; if `gateway_start` exposes a compatible `ctx.getCron()` handle, the adapter switches to it (**Path A**) at runtime. Either way the cron job id is namespaced as `centraid:<app_id>:<cron_id>` and uses webhook delivery back to `/centraid/<id>/_ingest/<cron>` with a per-job random token.
+The registry persists at `<appsDir>/_registry.json`.
 
 ## Trust & security model
 
@@ -203,11 +165,9 @@ The plugin syncs each app's `crons/*.js` into OpenClaw's cron registry. Default 
 Defense-in-depth that's already in place:
 
 - Path-traversal guard on every static lookup (`path.resolve` + prefix check).
-- Static-asset extension allowlist; reserved filenames (`data.sqlite`, `_registry.json`, `app.json`) and reserved directories (`queries`, `actions`, `crons`) are never served.
+- Static-asset extension allowlist; reserved filenames (`data.sqlite`, `_registry.json`, `app.json`) and reserved directories (`queries`, `actions`) are never served.
 - Per-response CSP `default-src 'self'`, `X-Content-Type-Options: nosniff`.
-- Per-cron random bearer tokens (`crypto.randomBytes(32)`), stored in a `0600` file.
-- Ingest endpoint requires loopback host header **and** matching bearer token (constant-time compare).
-- Worker `resourceLimits` cap memory; configurable `timeoutMs` per cron (default 60s ingest / 10s query / 30s action).
+- Worker `resourceLimits` cap memory; configurable `timeoutMs` per handler (default 10s query / 30s action).
 - 1 MiB body limit on every request that reads a body.
 
 ## Agent tools
@@ -253,8 +213,3 @@ bun run --filter @centraid/openclaw-plugin build
 ```
 
 SQLite is provided by Node's built-in `node:sqlite` (stable in Node ≥ 24; available behind `--experimental-sqlite` on 22.5 – 23.x). No native build step.
-
-## Open items
-
-- The public `PluginHookGatewayCronService` shape on `ctx.getCron()` is narrower than the `openclaw cron` CLI surface — it doesn't accept webhook delivery, tool allowlists, or model overrides. The adapter therefore always uses the CLI for `add` and only uses the handle for `list` / `remove` when present. If the SDK widens that surface in a later release, replace the CLI calls in `lib/openclaw-cron.ts` with handle calls.
-- The webhook payload shape from cron delivery is best-effort parsed in `index.ts#extractAgentFinalText`. Handlers should always defensively read `payload.text` and parse themselves.

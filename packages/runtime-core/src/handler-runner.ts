@@ -11,7 +11,7 @@ const WORKER_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'wor
 export interface RunHandlerOptions {
   app: AppRef;
   handlerFile: string;
-  handlerKind: 'query' | 'action' | 'cron';
+  handlerKind: 'query' | 'action';
   args: Record<string, unknown>;
   timeoutMs?: number;
   /**

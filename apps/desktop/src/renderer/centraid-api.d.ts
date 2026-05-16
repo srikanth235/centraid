@@ -218,7 +218,7 @@ export interface CentraidLogEntry {
   ts: number;
   level: CentraidLogLevel;
   msg: string;
-  source: 'query' | 'action' | 'cron';
+  source: 'query' | 'action';
   handler: string;
 }
 
@@ -542,7 +542,7 @@ declare global {
     ts: number;
     level: CentraidLogLevel;
     msg: string;
-    source: 'query' | 'action' | 'cron';
+    source: 'query' | 'action';
     handler: string;
   }
   interface CentraidChatModel {

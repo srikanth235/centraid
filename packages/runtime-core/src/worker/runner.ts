@@ -1,5 +1,5 @@
 /**
- * Worker entry that executes a user handler (queries / actions / crons).
+ * Worker entry that executes a user handler (queries / actions).
  *
  * Trust model: app code is **trusted local code** authored by the same user
  * running the gateway (see plugin README). The worker boundary here gives us
@@ -20,7 +20,7 @@ import { pathToFileURL } from 'node:url';
 
 interface WorkerRequest {
   handlerFile: string;
-  handlerKind: 'query' | 'action' | 'cron';
+  handlerKind: 'query' | 'action';
   args: unknown;
 }
 

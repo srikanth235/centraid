@@ -2,7 +2,7 @@
   "name": "@centraid/openclaw-plugin",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenClaw plugin that mounts a single /centraid prefix on the gateway and dispatches to user-generated apps (static assets + sqlite-backed queries + cron-fed ingest).",
+  "description": "OpenClaw plugin that mounts a single /centraid prefix on the gateway and dispatches to user-generated apps (static assets + sqlite-backed queries).",
   "files": [
     "dist",
     "openclaw.plugin.json",

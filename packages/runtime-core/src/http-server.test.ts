@@ -5,7 +5,6 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { Runtime } from './runtime.ts';
-import { NullScheduler } from './null-scheduler.ts';
 import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
 
 let workspace: string;
@@ -13,13 +12,8 @@ let server: RuntimeHttpServerHandle;
 
 beforeEach(async () => {
   workspace = await fs.mkdtemp(path.join(os.tmpdir(), `runtime-http-${crypto.randomUUID()}-`));
-  const runtime = new Runtime({
-    appsDir: workspace,
-    gatewayBaseUrl: 'http://127.0.0.1:0',
-    scheduler: new NullScheduler(),
-  });
+  const runtime = new Runtime({ appsDir: workspace });
   server = await startRuntimeHttpServer({ runtime });
-  runtime.setGatewayBaseUrl(server.url);
   await runtime.bootstrap();
 });
 

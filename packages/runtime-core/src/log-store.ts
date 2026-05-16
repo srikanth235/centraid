@@ -17,8 +17,8 @@ export interface LogEntry {
   ts: number;
   level: 'info' | 'warn' | 'error';
   msg: string;
-  source: 'query' | 'action' | 'cron';
-  /** Handler id (filename stem under queries/ actions/ crons/). */
+  source: 'query' | 'action';
+  /** Handler id (filename stem under queries/ actions/). */
   handler: string;
 }
 
@@ -115,7 +115,7 @@ function parseJsonl(text: string): LogEntry[] {
         typeof obj.ts === 'number' &&
         (obj.level === 'info' || obj.level === 'warn' || obj.level === 'error') &&
         typeof obj.msg === 'string' &&
-        (obj.source === 'query' || obj.source === 'action' || obj.source === 'cron') &&
+        (obj.source === 'query' || obj.source === 'action') &&
         typeof obj.handler === 'string'
       ) {
         out.push(obj as LogEntry);

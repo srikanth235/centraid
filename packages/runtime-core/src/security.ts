@@ -46,7 +46,7 @@ const CONTENT_TYPES: Record<string, string> = {
 const RESERVED_FILENAMES = new Set(['data.sqlite', '_registry.json', 'app.json']);
 
 /** Directories whose contents are never served as static. */
-const RESERVED_DIRS = new Set(['queries', 'actions', 'crons']);
+const RESERVED_DIRS = new Set(['queries', 'actions']);
 
 /** Apps whose ids start with `_` are reserved for plugin internals. */
 export function isReservedAppId(id: string): boolean {

@@ -25,7 +25,7 @@ export function validateAppId(id: string): void {
 /**
  * Scaffold a new project folder under `<projectsDir>/<id>/` with a minimal
  * centraid-format layout: index.html stub, package.json, tsconfig.json,
- * empty queries/actions/crons dirs, and an app.json.
+ * empty queries/actions dirs, and an app.json.
  */
 export async function scaffoldProject(
   projectsDir: string,
@@ -70,7 +70,6 @@ export async function scaffoldProject(
 
   await fs.mkdir(path.join(dir, 'queries'));
   await fs.mkdir(path.join(dir, 'actions'));
-  await fs.mkdir(path.join(dir, 'crons'));
   await fs.mkdir(path.join(dir, 'migrations'));
 
   // README so the human/agent has a clear starting brief in-folder.
@@ -197,7 +196,7 @@ export async function deleteProject(projectsDir: string, id: string): Promise<vo
 }
 
 async function hasAnyBuiltJs(projectDir: string): Promise<boolean> {
-  for (const sub of ['queries', 'actions', 'crons']) {
+  for (const sub of ['queries', 'actions']) {
     const dir = path.join(projectDir, sub);
     const entries = await fs.readdir(dir).catch(() => []);
     if (entries.some((n) => n.endsWith('.js') || n.endsWith('.mjs'))) return true;
@@ -364,7 +363,6 @@ bun install   # or: npm install
 - \`index.html\`, \`app.css\`, \`app.js\` — static, served from \`/centraid/${id}/\`
 - \`queries/<name>.js\` — GET \`/centraid/${id}/_data/<name>\`
 - \`actions/<name>.js\` — POST \`/centraid/${id}/_run\` (body picks \`action\`)
-- \`crons/<name>.js\` — schedule + agent task + ingest handler in one module
 - \`migrations/NNNN_<slug>.sql\` — schema migrations applied on publish
 - \`app.json\` — metadata (\`name\`, \`version\`)
 

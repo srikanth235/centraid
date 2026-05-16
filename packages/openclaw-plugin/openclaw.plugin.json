@@ -1,7 +1,7 @@
 {
   "id": "centraid",
   "name": "Centraid",
-  "description": "Mounts /centraid on the gateway. Each registered app is a folder with static assets, a sqlite database, and JS handlers for queries / actions / cron-fed ingest.",
+  "description": "Mounts /centraid on the gateway. Each registered app is a folder with static assets, a sqlite database, and JS handlers for queries / actions.",
   "contracts": {
     "tools": ["centraid_sql_describe", "centraid_sql_read", "centraid_sql_write"]
   },
@@ -16,11 +16,6 @@
         "type": "string",
         "description": "Where app folders live. Absolute paths are used as-is; relative paths resolve under OpenClaw's state dir ($OPENCLAW_STATE_DIR, default ~/.openclaw). Default: '~/.openclaw/centraid'.",
         "default": "centraid"
-      },
-      "gatewayBaseUrl": {
-        "type": "string",
-        "description": "Loopback URL used to point cron webhooks back at the gateway. Must resolve to 127.0.0.1.",
-        "default": "http://127.0.0.1:18789"
       },
       "versionRetention": {
         "type": "integer",

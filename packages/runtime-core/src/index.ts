@@ -4,8 +4,6 @@
  * Transport-agnostic engine for centraid apps:
  *   - registry, versioned uploads, sqlite-backed handler runner
  *   - the full `/centraid/...` URL surface as a `Runtime.handle(req, res)` fn
- *   - a `Scheduler` interface that pluggable backends (OpenClaw, Claude
- *     Agent SDK, ...) implement
  *
  * Hosts: `@centraid/openclaw-plugin` (OpenClaw gateway shim) and the
  * desktop in-process embed in `@centraid/desktop`.
@@ -19,24 +17,13 @@ export {
   type RuntimeHttpServerHandle,
 } from './http-server.js';
 
-export { NullScheduler } from './null-scheduler.js';
-
-export type {
-  Scheduler,
-  CronJobDefinition,
-  CronJobSnapshot,
-  CronChangedEvent,
-} from './scheduler.js';
-
 // Public handler types — apps written in TypeScript import these to type
 // their default exports.
 export type {
   QueryHandler,
   ActionHandler,
-  CronHandler,
   QueryHandlerArgs,
   ActionHandlerArgs,
-  CronHandlerArgs,
   ActionResult,
   ScopedDb,
   ScopedLog,
@@ -44,8 +31,6 @@ export type {
   AppId,
   AppMode,
   RegistryEntry,
-  CronStatus,
-  CronModule,
   QueryModule,
   ActionModule,
   HandlerFn,

@@ -9,7 +9,7 @@ Pi-coding-agent customization for **the centraid app builder** — an agent that
 | Function | Use |
 | --- | --- |
 | `createCentraidAgentSession({ projectDir, model? })` | Returns a pi `AgentSession` rooted at `projectDir` with the centraid system prompt appended. Subscribe / call `.prompt(text)` from your UI. |
-| `scaffoldProject(projectsDir, id, { name?, version? })` | Creates `<projectsDir>/<id>/` with the canonical layout (index.html, app.json, package.json, tsconfig.json, queries/, actions/, crons/). |
+| `scaffoldProject(projectsDir, id, { name?, version? })` | Creates `<projectsDir>/<id>/` with the canonical layout (index.html, app.json, package.json, tsconfig.json, queries/, actions/). |
 | `listProjects(projectsDir)` | Enumerate existing projects (most-recent first), with a `built` flag. |
 | `publishProject(projectDir, id, config, opts?)` | Run `bun run build` (or `tsc`), tarball the source, POST to `<gatewayUrl>/centraid/_apps/<id>/upload` with `Authorization: Bearer <gatewayToken>` (omitted when token empty). |
 | `defaultHarnessConfig()` / `resolveHarnessConfig(overrides)` | Defaults: `projectsDir = ~/centraid-projects`, `gatewayUrl = http://127.0.0.1:18789`, `gatewayToken = ""`. |

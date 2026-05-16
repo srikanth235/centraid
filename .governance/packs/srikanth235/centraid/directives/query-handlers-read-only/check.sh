@@ -4,8 +4,7 @@
 # handlerKind === 'query' (see packages/runtime-core/src/handler-runner.ts),
 # so writes from a query handler succeed but are invisible to the change-
 # notification SSE feed at /centraid/<id>/_changes. App UIs go stale with
-# no error anywhere. Mutations belong in actions/*.js (POST /_run) or
-# crons/*.js — both are session-tracked.
+# no error anywhere. Mutations belong in actions/*.js (POST /_run).
 #
 # Detection: any call to `stmt.run(` or `db.exec(` inside a tracked
 # `queries/*.js` file. In ScopedDb's API (packages/runtime-core/src/types.ts)
@@ -37,9 +36,9 @@ while IFS=: read -r file line_no match; do
     # Distinguish the two patterns in the message so a reader knows whether
     # it's a prepared-statement write or a raw exec.
     if [[ "$match" == *"db.exec("* ]]; then
-        violation "$file:$line_no — query handler calls db.exec() (writes are invisible to /_changes; move to actions/ or crons/)"
+        violation "$file:$line_no — query handler calls db.exec() (writes are invisible to /_changes; move to actions/)"
     else
-        violation "$file:$line_no — query handler calls stmt.run() (writes are invisible to /_changes; move to actions/ or crons/)"
+        violation "$file:$line_no — query handler calls stmt.run() (writes are invisible to /_changes; move to actions/)"
     fi
 done < <(git grep -nE "$PATTERN" -- '**/queries/*.js' 2>/dev/null || true)
 

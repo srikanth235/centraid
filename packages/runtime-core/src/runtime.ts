@@ -2,8 +2,6 @@
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Registry, RegistryError } from './registry.js';
-import { CronSync } from './cron-sync.js';
-import type { Scheduler, CronChangedEvent } from './scheduler.js';
 import { VersionStore, VersionStoreError } from './version-store.js';
 import { UploadError } from './upload.js';
 import { runHandler } from './handler-runner.js';
@@ -15,7 +13,7 @@ import { cleanupDeregisteredApp } from './deregister-cleanup.js';
 import { readAppSchema } from './schema.js';
 import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './cloud-routes.js';
 import { makeAppUploadLocks } from './upload-lock.js';
-import { handleAppIngest, handleAppUpload } from './route-handlers.js';
+import { handleAppUpload } from './route-handlers.js';
 import { ChangeBus } from './change-bus.js';
 import { handleAppChanges } from './changes-sse.js';
 import type { UserStore } from './user-store.js';
@@ -33,13 +31,8 @@ export interface RuntimeLogger {
 export interface RuntimeOptions {
   /** Absolute path of the directory holding app folders + `_registry.json`. */
   appsDir: string;
-  /** Base URL the cron webhook delivery targets — typically the loopback URL
-   *  of whichever HTTP front-end is mounted on top of this runtime. */
-  gatewayBaseUrl: string;
   /** Max retained versions per uploaded app (active always kept; min 2). */
   versionRetention?: number;
-  /** Scheduler backend (OpenClaw, Claude Agent SDK, etc.). */
-  scheduler: Scheduler;
   logger?: RuntimeLogger;
   /**
    * Optional change bus. When omitted the runtime constructs an internal
@@ -83,11 +76,10 @@ const noopLogger: RuntimeLogger = {
 export class Runtime {
   readonly registry: Registry;
   readonly versions: VersionStore;
-  readonly cronSync: CronSync;
   /**
    * Per-app change notification bus. Subscribed by the `/centraid/<id>/_changes`
    * SSE endpoint and emitted by `runQuery` (HTTP path + openclaw legacy tool)
-   * and `handler-runner` (app action/cron writes). Hosts can subscribe from
+   * and `handler-runner` (app action writes). Hosts can subscribe from
    * outside too — e.g. to add a write-driven log line.
    */
   readonly changeBus: ChangeBus;
@@ -102,25 +94,17 @@ export class Runtime {
   private readonly appsDir: string;
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
-  private scheduler: Scheduler;
   private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
 
   constructor(opts: RuntimeOptions) {
     this.appsDir = opts.appsDir;
     this.versionRetention = Math.max(2, opts.versionRetention ?? 5);
     this.logger = opts.logger ?? noopLogger;
-    this.scheduler = opts.scheduler;
     this.registry = new Registry(opts.appsDir);
     this.versions = new VersionStore();
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
     this.userStore = opts.userStore;
     this.chatHistoryStore = opts.chatHistoryStore;
-    this.cronSync = new CronSync({
-      registry: this.registry,
-      scheduler: this.scheduler,
-      versions: this.versions,
-      gatewayBaseUrl: opts.gatewayBaseUrl,
-    });
     this.withAppUploadLock = makeAppUploadLocks();
   }
 
@@ -137,26 +121,8 @@ export class Runtime {
   }
 
   /**
-   * Swap the scheduler backend at runtime. OpenClaw uses this when a richer
-   * SDK handle becomes available after `gateway_start`.
-   */
-  setScheduler(scheduler: Scheduler): void {
-    this.scheduler = scheduler;
-    this.cronSync.setScheduler(scheduler);
-  }
-
-  /**
-   * Update the base URL the runtime uses when constructing cron ingest
-   * webhook targets. The desktop's in-process embed calls this after its
-   * HTTP server has bound to an ephemeral loopback port.
-   */
-  setGatewayBaseUrl(url: string): void {
-    this.cronSync.setGatewayBaseUrl(url);
-  }
-
-  /**
-   * Load the registry, recover any torn `current.json` files, and reconcile
-   * cron jobs with the scheduler. Idempotent; call once on host startup.
+   * Load the registry and recover any torn `current.json` files. Idempotent;
+   * call once on host startup.
    */
   async bootstrap(): Promise<void> {
     await this.registry.load();
@@ -174,29 +140,6 @@ export class Runtime {
         );
       }
     }
-
-    try {
-      await this.cronSync.syncAll();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`[centraid] cron sync failed: ${msg}`);
-    }
-  }
-
-  /** Forward a scheduler-side cron status update onto the registry. */
-  async onCronChanged(event: CronChangedEvent): Promise<void> {
-    const parts = event.jobId.split(':');
-    if (parts.length !== 3 || parts[0] !== 'centraid') return;
-    const [, appId, cronId] = parts as [string, string, string];
-    await this.registry
-      .setCronStatus(appId, cronId, {
-        lastRunStatus:
-          event.status === 'ok' ? 'success' : event.status === 'error' ? 'failure' : undefined,
-        lastError: event.error,
-        nextRunAtMs: event.nextRunAtMs ?? event.job?.state?.nextRunAtMs,
-        lastRunAtMs: event.job?.state?.lastRunAtMs,
-      })
-      .catch(() => {});
   }
 
   private routeContext() {
@@ -205,7 +148,6 @@ export class Runtime {
       versionRetention: this.versionRetention,
       registry: this.registry,
       versions: this.versions,
-      cronSync: this.cronSync,
       withAppUploadLock: this.withAppUploadLock,
       resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
       emitForApp: (appId: string) => this.emitForApp(appId),
@@ -228,8 +170,7 @@ export class Runtime {
   /**
    * Handle a single inbound request. Implements the `/centraid/...` URL
    * surface. Assumes the host has already authenticated the caller —
-   * runtime-core does not enforce its own auth (the ingest endpoint is
-   * the one exception, gated on loopback + per-cron bearer).
+   * runtime-core does not enforce its own auth.
    */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const route = parseRoute(req.method ?? 'GET', req.url ?? '/');
@@ -245,8 +186,6 @@ export class Runtime {
               path: e.path,
               mode: e.mode,
               registeredAt: e.registeredAt,
-              crons: Object.keys(e.cronTokens),
-              cronStatus: e.cronStatus,
             })),
           );
           return;
@@ -266,13 +205,11 @@ export class Runtime {
             path: body.path,
             mode: 'path',
           });
-          await this.cronSync.syncApp(entry.id);
           sendJson(res, 201, { id: entry.id, path: entry.path, mode: entry.mode });
           return;
         }
 
         case 'registry-deregister': {
-          await this.cronSync.removeAppCrons(route.appId);
           const removed = await this.registry.deregister(route.appId);
           if (!removed) {
             sendError(res, 404, 'not_found', 'App not registered.');
@@ -324,7 +261,6 @@ export class Runtime {
             return;
           }
           await this.versions.activate(entry.path, body.versionId);
-          await this.cronSync.syncApp(entry.id);
           sendJson(res, 200, { activeVersion: body.versionId });
           return;
         }
@@ -482,41 +418,6 @@ export class Runtime {
           }
           const result = (outcome.value ?? {}) as { status?: number; body?: unknown };
           sendJson(res, result.status ?? 200, result.body ?? null);
-          return;
-        }
-
-        case 'app-crons-list': {
-          const entry = this.registry.get(route.appId);
-          if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          sendJson(
-            res,
-            200,
-            Object.keys(entry.cronTokens).map((cronId) => ({
-              id: cronId,
-              jobId: this.cronSync.jobIdFor(entry.id, cronId),
-              status: entry.cronStatus[cronId] ?? null,
-            })),
-          );
-          return;
-        }
-
-        case 'app-cron-runnow': {
-          const entry = this.registry.get(route.appId);
-          if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          const id = this.cronSync.jobIdFor(entry.id, route.cronId);
-          await this.scheduler.runJobNow(id);
-          sendJson(res, 202, { jobId: id });
-          return;
-        }
-
-        case 'app-ingest': {
-          await handleAppIngest(req, res, this.routeContext(), route.appId, route.cronId);
           return;
         }
 

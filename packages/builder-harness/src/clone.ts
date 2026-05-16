@@ -186,7 +186,7 @@ async function readAppMeta(projectDir: string): Promise<{ name?: string; descrip
 }
 
 async function hasAnyBuiltJs(projectDir: string): Promise<boolean> {
-  for (const sub of ['queries', 'actions', 'crons']) {
+  for (const sub of ['queries', 'actions']) {
     const dir = path.join(projectDir, sub);
     const entries = await fs.readdir(dir).catch(() => []);
     if (entries.some((n) => n.endsWith('.js') || n.endsWith('.mjs'))) return true;

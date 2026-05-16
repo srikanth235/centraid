@@ -26,7 +26,6 @@ You are working inside a centraid app project folder. Your job is to author or m
   package.json             # devDependency on @centraid/openclaw-plugin (for editor types)
   queries/<name>.js        # GET /centraid/<id>/_data/<name> handler
   actions/<name>.js        # POST /centraid/<id>/_run handler (body.action picks)
-  crons/<name>.js          # schedule + task + ingest handler in one module
   migrations/NNNN_<slug>.sql  # schema migrations (numbered, plain DDL)
 \`\`\`
 
@@ -45,7 +44,7 @@ Handlers are authored as **plain \`.js\` ES modules** — there is no \`tsconfig
 
 ### Handler contract
 
-All three handler kinds receive \`{ db, log, app, ctx }\` plus kind-specific fields. Type the default export by pointing JSDoc \`@type\` at the alias in \`@centraid/openclaw-plugin\`. Declare row shapes with \`@typedef\` and cast \`await db.prepare(...).get/all\` results with a JSDoc \`@type\` cast.
+Both handler kinds receive \`{ db, log, app, ctx }\` plus kind-specific fields. Type the default export by pointing JSDoc \`@type\` at the alias in \`@centraid/openclaw-plugin\`. Declare row shapes with \`@typedef\` and cast \`await db.prepare(...).get/all\` results with a JSDoc \`@type\` cast.
 
 **Every db call is async.** \`db.exec\`, and \`db.prepare(...).run / .get / .all\` all return \`Promise<...>\` — always \`await\` them. Forgetting \`await\` is the #1 bug in handler code; the linter cannot catch it because the cast hides the unawaited Promise.
 
@@ -78,29 +77,6 @@ export default async ({ body, db, log }) => {
   const input = /** @type {Input | undefined} */ (body);
   // do work
   return { status: 200, body: { ok: true } };
-};
-\`\`\`
-
-\`\`\`js
-// crons/<name>.js
-export const schedule  = { cron: '*/15 * * * *', tz: 'UTC' }; // or { every: '30m' } | { at: '...' }
-export const execution = 'isolated'; // | 'main' | 'current' | { session: '...' }
-export const task      = {
-  prompt: \`Run \\\`gh issue list --json number,title,state\\\` and return the JSON array verbatim as your final message.\`,
-  toolAllow: ['bash'],
-};
-export const timeoutMs = 30000;
-
-/**
- * @typedef {{ number: number, title: string, state: string }} Issue
- *
- * @type {import('@centraid/openclaw-plugin').CronHandler}
- */
-export default async ({ payload, db, log }) => {
-  const issues = /** @type {Issue[]} */ (payload.json ?? JSON.parse(payload.text));
-  // The \`issues\` table must already exist from a migration — see
-  // "Schema migrations" below. Handlers must never run DDL.
-  // Upsert via parameterized statement, wrapped in db.transaction(...).
 };
 \`\`\`
 
@@ -144,18 +120,10 @@ Rules:
 
 When a session begins on a project that has a live published version, the harness injects the live schema (a \`### Live schema\` block listing \`PRAGMA user_version\` and every \`CREATE TABLE\`/\`CREATE INDEX\`/\`CREATE VIEW\`) just below this section. Use it to decide what id the next migration must take and what the database currently looks like. If that block is absent, treat the database as empty and start at \`0001\`.
 
-### Cron handler design rules
-
-- The \`task.prompt\` runs in an OpenClaw agent session; its **final message** is delivered as a webhook to the plugin's ingest endpoint, which invokes your handler's \`default export\` with the parsed result in \`payload\`.
-- Write the prompt so the agent emits **strict JSON** as its final message. Tell it explicitly: "return the JSON array verbatim as your final message; no commentary".
-- The handler is a worker thread: no \`fs\`, no \`child_process\`, no \`process.env\`. \`ctx.fetch\` is available with the worker's abort signal.
-- For idempotent storage, prefer \`INSERT … ON CONFLICT DO UPDATE\` keyed by a stable id from the upstream system.
-
 ### Security model (do not weaken)
 
 - Static-serve same-origin only with strict CSP — don't request inline scripts; structure html so logic loads from \`.js\` files.
 - The plugin runs handlers in worker threads with crash + timeout isolation. Do not rely on shared globals across handler invocations.
-- Cron webhook ingest is loopback-only and bearer-authenticated by the plugin — your code does not need to handle auth.
 
 ### Build / publish expectations
 
@@ -163,7 +131,7 @@ There is **no build step**. The publish step uploads the project folder as-is; t
 
 ### When asked to scaffold a new app
 
-Default layout is already in place when you start. Add or modify files; do not move \`package.json\` unless the user explicitly asks. Place handlers under \`queries/\`, \`actions/\`, \`crons/\` as \`.js\` files following the patterns above.
+Default layout is already in place when you start. Add or modify files; do not move \`package.json\` unless the user explicitly asks. Place handlers under \`queries/\`, \`actions/\` as \`.js\` files following the patterns above.
 `;
 
 /** Build-time-friendly accessor (avoids accidental top-level evaluation costs). */

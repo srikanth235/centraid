@@ -2,19 +2,17 @@
  * @centraid/openclaw-plugin
  *
  * Thin OpenClaw shim over `@centraid/runtime-core`. Mounts the runtime's
- * `/centraid` URL surface on the gateway and wires OpenClaw's cron CLI as
- * the runtime's `Scheduler` backend. All app-handling logic — registry,
- * versioned uploads, sqlite-backed query/action/cron handlers, the full
+ * `/centraid` URL surface on the gateway. All app-handling logic — registry,
+ * versioned uploads, sqlite-backed query/action handlers, the full
  * `/centraid/...` switch — lives in runtime-core. This file only:
  *
  *   1. Resolves `pluginConfig` against the OpenClaw state dir
- *   2. Constructs a `Runtime` with `OpenClawScheduler` as the Scheduler
- *   3. Forwards `gateway_start` to `runtime.bootstrap()` and `cron_changed`
- *      to `runtime.onCronChanged()`
+ *   2. Constructs a `Runtime`
+ *   3. Forwards `gateway_start` to `runtime.bootstrap()`
  *   4. Mounts the runtime under `/centraid` via `api.registerHttpRoute`
  *
  * See `@centraid/runtime-core` for the engine and the public handler
- * surface (`QueryHandler`, `ActionHandler`, `CronHandler`).
+ * surface (`QueryHandler`, `ActionHandler`).
  */
 
 import path from 'node:path';
@@ -28,7 +26,6 @@ import {
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
 } from '@centraid/runtime-core';
-import { OpenClawScheduler } from './lib/openclaw-cron.js';
 import { registerCentraidTools } from './lib/tools.js';
 
 // Re-export the public handler & payload types from runtime-core so apps
@@ -38,10 +35,8 @@ import { registerCentraidTools } from './lib/tools.js';
 export type {
   QueryHandler,
   ActionHandler,
-  CronHandler,
   QueryHandlerArgs,
   ActionHandlerArgs,
-  CronHandlerArgs,
   ActionResult,
   ScopedDb,
   ScopedLog,
@@ -57,18 +52,15 @@ export type {
   LogLevel,
 } from '@centraid/runtime-core';
 
-export { OpenClawScheduler } from './lib/openclaw-cron.js';
-
 export default definePluginEntry({
   id: 'centraid',
   name: 'Centraid',
   description:
-    'Mounts /centraid on the gateway. Apps may be registered by path or uploaded as versioned tar.gz archives; each app has static assets, a persistent sqlite database, and JS handlers for queries / actions / cron-fed ingest.',
+    'Mounts /centraid on the gateway. Apps may be registered by path or uploaded as versioned tar.gz archives; each app has static assets, a persistent sqlite database, and JS handlers for queries / actions.',
 
   register(api: OpenClawPluginApi) {
     const pluginConfig = (api.pluginConfig ?? {}) as {
       appsDir?: string;
-      gatewayBaseUrl?: string;
       versionRetention?: number;
     };
     // Relative `appsDir` resolves under OpenClaw's state dir (~/.openclaw by
@@ -78,7 +70,6 @@ export default definePluginEntry({
     const appsDir = path.isAbsolute(appsDirRaw)
       ? appsDirRaw
       : path.join(resolveStateDir(process.env), appsDirRaw);
-    const gatewayBaseUrl = pluginConfig.gatewayBaseUrl ?? 'http://127.0.0.1:18789';
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
     // Single SQLite file for every per-user record the gateway owns —
@@ -95,26 +86,13 @@ export default definePluginEntry({
 
     const runtime = new Runtime({
       appsDir,
-      gatewayBaseUrl,
       versionRetention,
-      scheduler: new OpenClawScheduler(), // Path B by default; upgraded in gateway_start.
       userStore,
       logger: api.logger,
     });
 
-    api.on('gateway_start', async (_event, ctx) => {
-      // Path A becomes available if the gateway exposes a getCron() handle.
-      // We use it for list/remove only; add() always goes through the CLI
-      // because the public cron service shape doesn't support webhook delivery.
-      const handle = ctx.getCron?.();
-      if (handle) {
-        runtime.setScheduler(new OpenClawScheduler({ handle }));
-      }
+    api.on('gateway_start', async () => {
       await runtime.bootstrap();
-    });
-
-    api.on('cron_changed', async (event) => {
-      await runtime.onCronChanged(event);
     });
 
     api.registerHttpRoute({

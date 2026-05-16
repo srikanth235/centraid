@@ -1,12 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import type { AppId, AppMode, RegistryEntry, CronStatus } from './types.js';
+import type { AppId, AppMode, RegistryEntry } from './types.js';
 import { isReservedAppId } from './security.js';
 
 /**
  * Persistent registry of registered apps stored at <appsDir>/_registry.json.
- * File is created with mode 0600 so per-job webhook tokens aren't world-readable.
  */
 /* eslint-disable max-classes-per-file -- error class is colocated with its module */
 export class Registry {
@@ -78,8 +76,6 @@ export class Registry {
       path: absPath,
       mode: input.mode ?? 'path',
       registeredAt: new Date().toISOString(),
-      cronTokens: {},
-      cronStatus: {},
     };
     this.cache.set(input.id, entry);
     await this.persist();
@@ -112,8 +108,6 @@ export class Registry {
       path: dir,
       mode: 'uploaded',
       registeredAt: new Date().toISOString(),
-      cronTokens: {},
-      cronStatus: {},
     };
     this.cache.set(id, entry);
     await this.persist();
@@ -127,40 +121,11 @@ export class Registry {
     await this.persist();
     return entry;
   }
-
-  /** Mint a fresh per-cron webhook token, persist it, and return. */
-  async mintCronToken(appId: AppId, cronId: string): Promise<string> {
-    const entry = this.cache.get(appId);
-    if (!entry) throw new RegistryError('unknown_app', `Unknown app "${appId}".`);
-    const token = crypto.randomBytes(32).toString('hex');
-    entry.cronTokens[cronId] = token;
-    await this.persist();
-    return token;
-  }
-
-  cronToken(appId: AppId, cronId: string): string | undefined {
-    return this.cache.get(appId)?.cronTokens[cronId];
-  }
-
-  async forgetCron(appId: AppId, cronId: string): Promise<void> {
-    const entry = this.cache.get(appId);
-    if (!entry) return;
-    delete entry.cronTokens[cronId];
-    delete entry.cronStatus[cronId];
-    await this.persist();
-  }
-
-  async setCronStatus(appId: AppId, cronId: string, status: CronStatus): Promise<void> {
-    const entry = this.cache.get(appId);
-    if (!entry) return;
-    entry.cronStatus[cronId] = { ...entry.cronStatus[cronId], ...status };
-    await this.persist();
-  }
 }
 
 export class RegistryError extends Error {
   constructor(
-    public readonly code: 'invalid_id' | 'already_registered' | 'not_a_directory' | 'unknown_app',
+    public readonly code: 'invalid_id' | 'already_registered' | 'not_a_directory',
     message: string,
   ) {
     super(message);

@@ -27,9 +27,6 @@ export type Route =
   | { kind: 'app-static'; appId: string; rel: string }
   | { kind: 'app-data'; appId: string; queryName: string; query: Record<string, string> }
   | { kind: 'app-run'; appId: string }
-  | { kind: 'app-crons-list'; appId: string }
-  | { kind: 'app-cron-runnow'; appId: string; cronId: string }
-  | { kind: 'app-ingest'; appId: string; cronId: string }
   | { kind: 'app-changes'; appId: string }
   | { kind: 'not-found' };
 
@@ -123,21 +120,6 @@ export function parseRoute(method: string, rawUrl: string): Route {
   if (second === '_run') {
     if (m !== 'POST') return { kind: 'not-found' };
     return { kind: 'app-run', appId };
-  }
-
-  // /centraid/<id>/_crons[/<cron>/run]
-  if (second === '_crons') {
-    if (segments.length === 2 && m === 'GET') return { kind: 'app-crons-list', appId };
-    if (segments.length === 4 && segments[3] === 'run' && m === 'POST') {
-      return { kind: 'app-cron-runnow', appId, cronId: decodeURIComponent(segments[2] ?? '') };
-    }
-    return { kind: 'not-found' };
-  }
-
-  // /centraid/<id>/_ingest/<cron>
-  if (second === '_ingest') {
-    if (m !== 'POST' || segments.length !== 3) return { kind: 'not-found' };
-    return { kind: 'app-ingest', appId, cronId: decodeURIComponent(segments[2] ?? '') };
   }
 
   // /centraid/<id>/_changes — Server-Sent Events stream of mutations to the

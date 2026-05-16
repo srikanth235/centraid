@@ -48,9 +48,7 @@ if openclaw plugins list 2>/dev/null | grep -q "^│ $PLUGIN_ID\b\| $PLUGIN_ID "
   echo "→ $PLUGIN_ID already installed (link mode picks up rebuilds)"
 else
   echo "→ link-installing $PLUGIN_ID from $PLUGIN_DIR"
-  # --dangerously-force-unsafe-install: the plugin shells out to `openclaw cron`
-  # via child_process (see packages/openclaw-plugin/README.md → "Cron registration").
-  openclaw plugins install --link --dangerously-force-unsafe-install "$PLUGIN_DIR"
+  openclaw plugins install --link "$PLUGIN_DIR"
 fi
 
 UID_NUM="$(id -u)"

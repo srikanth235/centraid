@@ -33,8 +33,6 @@ function makeUploadedEntry(id: string): RegistryEntry {
     path: path.join(appsDir, id),
     mode: 'uploaded',
     registeredAt: new Date().toISOString(),
-    cronTokens: {},
-    cronStatus: {},
   };
 }
 
@@ -101,8 +99,6 @@ test('skips path-mode entries (user-owned dir, never delete)', async () => {
     path: externalDir,
     mode: 'path',
     registeredAt: new Date().toISOString(),
-    cronTokens: {},
-    cronStatus: {},
   };
 
   const result = await cleanupDeregisteredApp(appsDir, entry, logger);
@@ -127,8 +123,6 @@ test('refuses to remove a corrupt entry whose path is outside appsDir', async ()
     path: externalDir,
     mode: 'uploaded',
     registeredAt: new Date().toISOString(),
-    cronTokens: {},
-    cronStatus: {},
   };
 
   const result = await cleanupDeregisteredApp(appsDir, entry, logger);
@@ -146,8 +140,6 @@ test('refuses when path === appsDir (would wipe the entire state dir)', async ()
     path: appsDir,
     mode: 'uploaded',
     registeredAt: new Date().toISOString(),
-    cronTokens: {},
-    cronStatus: {},
   };
 
   const result = await cleanupDeregisteredApp(appsDir, entry, logger);
@@ -166,8 +158,6 @@ test('refuses on traversal attempts via "..", appsDir untouched', async () => {
     path: traversal,
     mode: 'uploaded',
     registeredAt: new Date().toISOString(),
-    cronTokens: {},
-    cronStatus: {},
   };
 
   const result = await cleanupDeregisteredApp(appsDir, entry, logger);

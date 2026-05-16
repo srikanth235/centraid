@@ -70,8 +70,6 @@ export default function AppDetailScreen({
       path: '',
       mode: 'uploaded',
       registeredAt: '',
-      crons: [],
-      cronStatus: {},
     };
     return resolveAppMeta(row);
   }, [appId]);

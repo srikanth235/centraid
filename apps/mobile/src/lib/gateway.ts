@@ -19,8 +19,6 @@ export interface AppRegistryRow {
   path: string;
   mode: 'uploaded' | 'path';
   registeredAt: string;
-  crons: string[];
-  cronStatus: Record<string, unknown>;
 }
 
 export class GatewayError extends Error {
@@ -122,7 +120,7 @@ export async function listApps(): Promise<AppRegistryRow[]> {
 
 // --- Display-metadata fallbacks ---
 //
-// The registry row only carries id + path + cron state — no name, color,
+// The registry row only carries id + path — no name, color,
 // or icon. Mobile derives display metadata from id:
 //   1. If the id matches a built-in template, reuse that AppMeta.
 //   2. Else: title-case the id, hash it into the palette, fall back to a

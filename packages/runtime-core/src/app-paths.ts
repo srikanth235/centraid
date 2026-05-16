@@ -15,7 +15,7 @@ export function appDataDir(entry: RegistryEntry): string {
 }
 
 /**
- * Resolve where the active *code* lives (handlers + static + app.json + crons).
+ * Resolve where the active *code* lives (handlers + static + app.json).
  *
  * For uploaded apps this is `<path>/versions/<activeVersion>/`.
  * For path-registered apps this is just `<path>` itself.

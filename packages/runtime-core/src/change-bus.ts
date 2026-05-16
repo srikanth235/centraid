@@ -8,7 +8,7 @@
  *   1. `runQuery()` — used by the HTTP `/centraid/_apps/{id}/query` route
  *      (chat-harness write tool in both desktop modes) AND by openclaw's
  *      legacy `centraid_sql_write` agent tool.
- *   2. `handler-runner.ts` — wraps every user-authored action / cron / query
+ *   2. `handler-runner.ts` — wraps every user-authored action / query
  *      handler with a session, so anything an app's own JS does to its
  *      database is observed.
  *   3. (room for more — e.g. future direct DB tools)

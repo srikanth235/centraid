@@ -1371,7 +1371,7 @@
         // template ships to the iframe) and Backend (reserved folders
         // that the gateway runs server-side: actions, queries, etc.).
         // Sub-items inside each group keep the existing recursive walk.
-        const BACKEND_DIRS = new Set(['actions', 'queries', 'migrations', 'crons']);
+        const BACKEND_DIRS = new Set(['actions', 'queries', 'migrations']);
         const backend = visible.filter((n) => n.kind === 'folder' && BACKEND_DIRS.has(n.name));
         const frontend = visible.filter((n) => !backend.includes(n));
 
@@ -1565,7 +1565,7 @@
               : active === 'sql'
                 ? 'Run SQL against your live app database. One statement at a time.'
                 : active === 'logs'
-                  ? 'Recent log lines from query, action, and cron handlers.'
+                  ? 'Recent log lines from query and action handlers.'
                   : 'View and manage the data stored in your app.';
 
         const head = el('div', { class: 'cloud-stage-head' });

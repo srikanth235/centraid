@@ -31,8 +31,6 @@ export interface AppRegistryRow {
   path: string;
   mode: 'uploaded' | 'path';
   registeredAt: string;
-  crons: string[];
-  cronStatus: Record<string, unknown>;
 }
 
 function url(config: HarnessConfig, pathname: string): string {
