@@ -96,15 +96,17 @@ export default definePluginEntry({
     const gatewayDbProvider = makeGatewayDbProvider(gatewayDbPath);
     const userStore = new UserStore(gatewayDbProvider);
 
-    // Telemetry store — one shared SQLite holding spans + events for every
-    // app, sibling of appsDir. Lazy proxy so agent-worker contexts (which
-    // never invoke handlers) don't hold stray DB handles; see chat-history
-    // wiring below for the same pattern.
-    const telemetryDb = path.join(path.dirname(appsDir), 'centraid-telemetry.sqlite');
+    // Telemetry store — one SQLite file PER APP at
+    // `<appsDir>/<appId>/telemetry.sqlite`. Constructor only stashes
+    // config + starts the sweep timer; per-app files open lazily on
+    // first `recordHandler` / `setAppSettings` call. We still wrap in a
+    // lazy proxy so the sweep `setInterval` isn't even created in
+    // agent-worker contexts (which `register()` runs in but which never
+    // invoke handlers) — mirrors the chat-history wiring below.
     let telemetryStore: TelemetryStore | undefined;
     const getTelemetryStore = (): TelemetryStore => {
       if (!telemetryStore) {
-        telemetryStore = new TelemetryStore(telemetryDb);
+        telemetryStore = new TelemetryStore(appsDir);
       }
       return telemetryStore;
     };

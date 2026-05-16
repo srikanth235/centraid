@@ -161,3 +161,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-63391af8-890-1778863279 | claude-code | 63391af8-8906-4b61-b678-79043c7e4049 | #61 | claude-opus-4-7 | 4 | 3402 | 1383539 | 1213 | 4619 | 0.7434 |  |
 | claude-code-63391af8-890-1778863299 | claude-code | 63391af8-8906-4b61-b678-79043c7e4049 | #61 | claude-opus-4-7 | 3 | 2048 | 1043181 | 1274 | 3325 | 0.5663 |  |
 | claude-code-63391af8-890-1778863329 | claude-code | 63391af8-8906-4b61-b678-79043c7e4049 | #61 | claude-opus-4-7 | 4 | 2907 | 1397678 | 1326 | 4237 | 0.7502 |  |
+| claude-code-6fd0fa48-ec2-1778899439 | claude-code | 6fd0fa48-ec2f-43f9-a6db-6fcf624b631e | #61 | claude-opus-4-7 | 5 | 13250 | 14870 | 198 | 13453 | 0.0952 | refactor(runtime,plugin,desktop): per-app telemetry SQLite files (#61) |

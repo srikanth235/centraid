@@ -88,3 +88,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-63391af8890-1778863208-2 | 63391af8-8906-4b61-b678-79043c7e4049 |  | correction | classifier | Flagged regressions: rebase must keep change-tracking; buffer cap drops marker |  |
 | steer-6a1faa59b3c-1778863483-1 | 6a1faa59-b3ce-4df5-bd63-370c71c237ee |  | interrupt | structural |  | feat(desktop,templates,runtime): per-app settings popover + Home redesign |
 | steer-6a1faa59b3c-1778863483-2 | 6a1faa59-b3ce-4df5-bd63-370c71c237ee |  | interrupt | structural |  | feat(desktop,templates,runtime): per-app settings popover + Home redesign |
+| steer-63391af8890-1778899439-1 | 63391af8-8906-4b61-b678-79043c7e4049 | #61 | correction | classifier | rejected shared telemetry DB; wants per-app telemetry sqlite files | refactor(runtime,plugin,desktop): per-app telemetry SQLite files (#61) |

@@ -2,19 +2,26 @@
  * Constants + pure helpers used by `TelemetryStore`.
  *
  * Pulled out to keep `telemetry-store.ts` focused on the class. Anything
- * that doesn't need access to the SQLite connection lives here: per-row
+ * that doesn't need access to a SQLite connection lives here: per-row
  * TTL math, message truncation, JSON-parse for the settings overrides
  * column, the level rank lookup, and the in-DB constants (caps, TTL
  * defaults, sweep cadence). See `telemetry-store.ts` for the rationale
  * behind each cap.
+ *
+ * Schema note: telemetry is now sharded one SQLite file per app at
+ * `<appsDir>/<appId>/telemetry.sqlite`. The file IS the per-app scope, so
+ * neither `spans` nor `events` carries an `app_id` column, and the
+ * settings table holds exactly one row (enforced by a CHECK constraint).
  */
 
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import type { TelemetryAppSettings, TelemetryLevel, TelemetryStatus } from './telemetry.js';
 
 /**
- * Initial schema executed once on `new TelemetryStore(...)`. Idempotent
- * (uses IF NOT EXISTS). `auto_vacuum = INCREMENTAL` MUST be applied
- * separately *before* this block on a fresh DB — see the constructor.
+ * Initial schema executed once on first open of an app's telemetry file.
+ * Idempotent (uses IF NOT EXISTS). `auto_vacuum = INCREMENTAL` MUST be
+ * applied separately *before* this block on a fresh DB — see the
+ * `getOrOpen` helper in telemetry-store.
  */
 export const TELEMETRY_SCHEMA = `
   PRAGMA journal_mode = WAL;
@@ -25,7 +32,6 @@ export const TELEMETRY_SCHEMA = `
     span_id     TEXT PRIMARY KEY,
     trace_id    TEXT NOT NULL,
     parent_id   TEXT,
-    app_id      TEXT NOT NULL,
     kind        TEXT NOT NULL,
     handler     TEXT NOT NULL,
     started_at  INTEGER NOT NULL,
@@ -34,13 +40,12 @@ export const TELEMETRY_SCHEMA = `
     error       TEXT,
     expires_at  INTEGER NOT NULL
   );
-  CREATE INDEX IF NOT EXISTS idx_spans_app_started ON spans(app_id, started_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_spans_started ON spans(started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_spans_expires ON spans(expires_at);
   CREATE INDEX IF NOT EXISTS idx_spans_trace ON spans(trace_id);
 
   CREATE TABLE IF NOT EXISTS events (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    app_id      TEXT NOT NULL,
     ts          INTEGER NOT NULL,
     trace_id    TEXT,
     span_id     TEXT,
@@ -50,13 +55,16 @@ export const TELEMETRY_SCHEMA = `
     msg         TEXT NOT NULL,
     expires_at  INTEGER NOT NULL
   );
-  CREATE INDEX IF NOT EXISTS idx_events_app_ts ON events(app_id, ts DESC);
-  CREATE INDEX IF NOT EXISTS idx_events_app_level_ts ON events(app_id, level, ts DESC);
+  CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
+  CREATE INDEX IF NOT EXISTS idx_events_level_ts ON events(level, ts DESC);
   CREATE INDEX IF NOT EXISTS idx_events_expires ON events(expires_at);
   CREATE INDEX IF NOT EXISTS idx_events_trace ON events(trace_id);
 
+  -- Single-row settings table. The CHECK enforces id=1 so a buggy upsert
+  -- can't accidentally insert a second row; readers always SELECT WHERE
+  -- id = 1.
   CREATE TABLE IF NOT EXISTS app_settings (
-    app_id         TEXT PRIMARY KEY,
+    id             INTEGER PRIMARY KEY CHECK (id = 1),
     enabled        INTEGER NOT NULL DEFAULT 1,
     min_level      TEXT NOT NULL DEFAULT 'info',
     overrides_json TEXT,
@@ -68,8 +76,18 @@ export const TELEMETRY_SCHEMA = `
 
 export const MAX_EVENTS_PER_RECORD = 500;
 export const MAX_EVENT_BYTES = 8 * 1024; // 8 KiB per msg
-export const MAX_RECORDS_PER_SEC = 200; // token bucket admission ceiling
+export const MAX_RECORDS_PER_SEC = 200; // token bucket admission ceiling, PER APP
 export const READ_HARD_CAP = 500;
+
+// --- connection cache ------------------------------------------------------
+
+/**
+ * LRU cap on open per-app telemetry connections. Each entry holds a
+ * `DatabaseSync` + prepared statements + per-app bucket state. At <10 active
+ * apps the cap never trips; the limit exists so a registry with dozens of
+ * historical apps can't pin one FD per app forever.
+ */
+export const MAX_OPEN_APP_CONNS = 16;
 
 // --- TTLs (ms) -------------------------------------------------------------
 
@@ -153,6 +171,74 @@ export function applyEventCaps(
     });
   }
   return out;
+}
+
+/**
+ * Prepared-statement bundle for one app's connection. Held on the
+ * `AppConn` so the hot path is a hash lookup, not a re-prepare.
+ */
+export interface AppStmts {
+  insertSpan: StatementSync;
+  insertEvent: StatementSync;
+  readEvents: StatementSync;
+  readEventsLevel: StatementSync;
+  sweepSpans: StatementSync;
+  sweepEvents: StatementSync;
+  getSettings: StatementSync;
+  upsertSettings: StatementSync;
+  deleteSettings: StatementSync;
+}
+
+export function prepareStmts(db: DatabaseSync): AppStmts {
+  return {
+    insertSpan: db.prepare(
+      `INSERT INTO spans
+         (span_id, trace_id, parent_id, kind, handler,
+          started_at, duration_ms, status, error, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(span_id) DO NOTHING`,
+    ),
+    insertEvent: db.prepare(
+      `INSERT INTO events
+         (ts, trace_id, span_id, level, source, handler, msg, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ),
+    readEvents: db.prepare(
+      `SELECT ts, level, source, handler, msg
+       FROM events
+       WHERE ts >= ?
+       ORDER BY ts DESC
+       LIMIT ?`,
+    ),
+    readEventsLevel: db.prepare(
+      `SELECT ts, level, source, handler, msg
+       FROM events
+       WHERE ts >= ? AND level = ?
+       ORDER BY ts DESC
+       LIMIT ?`,
+    ),
+    sweepSpans: db.prepare(
+      `DELETE FROM spans WHERE span_id IN
+         (SELECT span_id FROM spans WHERE expires_at < ? LIMIT ?)`,
+    ),
+    sweepEvents: db.prepare(
+      `DELETE FROM events WHERE id IN
+         (SELECT id FROM events WHERE expires_at < ? LIMIT ?)`,
+    ),
+    getSettings: db.prepare(
+      `SELECT enabled, min_level, overrides_json FROM app_settings WHERE id = 1`,
+    ),
+    upsertSettings: db.prepare(
+      `INSERT INTO app_settings (id, enabled, min_level, overrides_json, updated_at)
+       VALUES (1, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         enabled = excluded.enabled,
+         min_level = excluded.min_level,
+         overrides_json = excluded.overrides_json,
+         updated_at = excluded.updated_at`,
+    ),
+    deleteSettings: db.prepare(`DELETE FROM app_settings WHERE id = 1`),
+  };
 }
 
 export function safeParseOverrides(s: string): TelemetryAppSettings['retentionDaysOverrides'] {

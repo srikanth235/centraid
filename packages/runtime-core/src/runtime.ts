@@ -290,10 +290,13 @@ export class Runtime {
             sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          await cleanupDeregisteredApp(this.appsDir, removed, this.logger);
-          // Drop telemetry rows for the removed app so the shared store
-          // doesn't accumulate orphans. Best-effort — a failure here
-          // doesn't undo the registry deregister.
+          // Drop telemetry for the removed app BEFORE the filesystem
+          // cleanup. Telemetry lives at `<appsDir>/<id>/telemetry.sqlite`,
+          // and an open DB handle would block `rm -rf <appsDir>/<id>` on
+          // Windows. `deleteApp` closes the handle, unlinks the file,
+          // and best-effort rmdirs the empty per-app dir. Failures here
+          // are non-fatal — they just leave orphan rows / file behind
+          // for the sweeper or the next deregister to clean up.
           if (this.telemetry) {
             try {
               await this.telemetry.deleteApp(route.appId);
@@ -305,6 +308,7 @@ export class Runtime {
               );
             }
           }
+          await cleanupDeregisteredApp(this.appsDir, removed, this.logger);
           sendJson(res, 200, { id: route.appId });
           return;
         }
