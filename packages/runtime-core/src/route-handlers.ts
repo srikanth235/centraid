@@ -12,6 +12,7 @@ import { timingSafeEqual } from './security.js';
 import { appDataDir } from './app-paths.js';
 import { extractAgentFinalText, tryParseJson } from './payload.js';
 import type { AppRef, RegistryEntry } from './types.js';
+import type { TelemetryWriter } from './telemetry.js';
 
 export interface RouteContext {
   appsDir: string;
@@ -27,6 +28,8 @@ export interface RouteContext {
    * ignore it.
    */
   emitForApp(appId: string): (tables: string[]) => void;
+  /** Plugin-scope telemetry sink shared across handler kinds; optional. */
+  telemetry?: TelemetryWriter;
 }
 
 const refOf = (entry: RegistryEntry): AppRef => ({ id: entry.id, dir: appDataDir(entry) });
@@ -159,6 +162,7 @@ export async function handleAppIngest(
     },
     timeoutMs: 60_000,
     onWrite: ctx.emitForApp(entry.id),
+    telemetry: ctx.telemetry,
   });
 
   if (!outcome.ok) {

@@ -5,6 +5,7 @@ import { appDataDir } from './app-paths.js';
 import { readTableRows, TableRowsError } from './table-rows.js';
 import { runQuery, RunQueryError } from './run-query.js';
 import { readLogs, type LogLevel } from './log-store.js';
+import type { TelemetryWriter } from './telemetry.js';
 import { readBody, sendError, sendJson } from './http-utils.js';
 
 /**
@@ -88,6 +89,7 @@ export async function handleLogsRoute(
   registry: Registry,
   appId: string,
   query: Record<string, string>,
+  telemetry?: TelemetryWriter,
 ): Promise<true> {
   const entry = registry.get(appId);
   if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
@@ -96,7 +98,13 @@ export async function handleLogsRoute(
   const sinceTs = parseIntOpt(query.sinceTs);
   const level = isLogLevel(query.level) ? query.level : undefined;
 
-  const entries = await readLogs(appDataDir(entry), { limit, sinceTs, level });
+  // Prefer the shared plugin-scope telemetry store when wired up; fall back
+  // to the per-app `logs.jsonl` reader otherwise. The legacy fallback is
+  // retained so a host that hasn't migrated still serves the same payload
+  // shape — the response body is identical either way.
+  const entries = telemetry
+    ? await telemetry.readEvents(appId, { limit, sinceTs, level })
+    : await readLogs(appDataDir(entry), { limit, sinceTs, level });
   return sendJson(res, 200, { entries });
 }
 

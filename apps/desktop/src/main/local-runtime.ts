@@ -8,6 +8,7 @@ import {
   UserStore,
   makeGatewayDbProvider,
   startRuntimeHttpServer,
+  TelemetryStore,
   type RuntimeHttpServerHandle,
   type Scheduler,
 } from '@centraid/runtime-core';
@@ -77,6 +78,15 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     const userStore = new UserStore(gatewayDbProvider);
     const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
 
+    // Telemetry: one SQLite file PER APP at
+    // `<appsDir>/<appId>/telemetry.sqlite`. The store opens each app's
+    // file lazily on first write, caches connections in an LRU (cap 16),
+    // and applies a per-app token bucket so a runaway handler in one
+    // app can only starve itself. Keeps spans/events out of each app's
+    // user-facing `data.sqlite` and out of reach of the agent's
+    // `centraid_sql_*` tools, mirroring the openclaw-plugin layout.
+    const telemetry = new TelemetryStore(appsDir);
+
     // gatewayBaseUrl is filled in after the HTTP server binds and we learn
     // the ephemeral port; cron-sync uses it to construct webhook targets.
     const runtime = new Runtime({
@@ -90,6 +100,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
         warn: (m) => console.warn(`[local-runtime] ${m}`),
         error: (m) => console.error(`[local-runtime] ${m}`),
       },
+      telemetry,
     });
 
     const server = await startRuntimeHttpServer({ runtime });
