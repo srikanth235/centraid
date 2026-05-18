@@ -446,16 +446,9 @@ export class Runtime {
             const appSettings = readAppSettings(dataDbFile);
             const queryOverrides = route.query as Record<string, unknown>;
             const settingsInject = buildSettingsInject([globalPrefs, appSettings, queryOverrides]);
-            await serveStatic(res, codeDir, rel, {
-              settingsInject,
-              changeBridgeAppId: entry.id,
-            });
+            await serveStatic(res, codeDir, rel, { settingsInject });
           } else {
-            // Other static assets (`*.html`, CSS, JS, images). HTML pages
-            // benefit from the bridge too — the runtime only injects when
-            // Content-Type starts with text/html, so non-HTML assets fall
-            // through untouched.
-            await serveStatic(res, codeDir, rel, { changeBridgeAppId: entry.id });
+            await serveStatic(res, codeDir, rel);
           }
           return;
         }

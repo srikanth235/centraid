@@ -146,8 +146,18 @@ $('deleteBtn').addEventListener('click', async () => {
   renderList();
 });
 
-void (async () => {
+async function reloadFromServer() {
+  // Flush any pending local edit before pulling, so the user's in-flight
+  // keystrokes aren't clobbered by a stale-on-server snapshot.
+  await flushSave();
   await loadEntries();
   await loadActive();
   renderList();
-})();
+}
+
+void reloadFromServer();
+
+// Re-fetch on every server-observed mutation (chat-assistant writes,
+// cross-window edits, etc). The runtime injects `window.centraid.onChange`
+// into every served HTML.
+window.centraid?.onChange?.(() => void reloadFromServer());

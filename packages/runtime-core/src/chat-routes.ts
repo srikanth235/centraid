@@ -328,6 +328,7 @@ async function handlePostTurn(
 
   const input: ChatRunInput = {
     appId: entry.id,
+    dataDir: appDataDir(entry),
     windowId,
     sessionFile,
     mode,

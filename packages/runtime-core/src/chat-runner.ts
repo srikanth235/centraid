@@ -54,13 +54,22 @@ export type ChatStreamEvent =
 
 export interface ChatRunInput {
   appId: string;
+  /**
+   * Absolute path to the app's data directory — `entry.path` as resolved by
+   * `appDataDir(entry)`. For uploaded apps this is `<appsDir>/<id>`; for
+   * path-registered apps it's the externally-supplied folder. `data.sqlite`,
+   * the `_chat/` transcripts, and the live schema all live here. Adapters
+   * that spawn a subprocess agent (codex / claude-code) MUST use this as the
+   * spawn cwd so the workspace sandbox covers the file the agent reads/writes.
+   */
+  dataDir: string;
   /** Renderer-supplied window id; pinned to one transcript per (appId, windowId). */
   windowId: string;
   /**
    * Absolute path to the on-disk transcript file for this window —
-   * `<appsDir>/<appId>/_chat/w<windowId>.jsonl`. The runner is free to use
-   * this for its own session-resume mechanism (pi session file, codex
-   * thread id stored alongside, …).
+   * `<dataDir>/_chat/w<windowId>.jsonl`. The runner is free to use this for
+   * its own session-resume mechanism (pi session file, codex thread id
+   * stored alongside, …).
    */
   sessionFile: string;
   mode: ChatMode;

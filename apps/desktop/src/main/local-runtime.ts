@@ -72,9 +72,12 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     const prefsLoader = async (): Promise<RunnerPrefs | undefined> => {
       const allPrefs = userStore.getAllPrefs();
       const kindRaw = allPrefs['agent.runner.kind'];
-      const kind: RunnerPrefs['kind'] | undefined =
-        kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : undefined;
-      if (!kind) return undefined;
+      // Codex is the preferred default when the user hasn't explicitly
+      // picked a runner (the AI providers panel surfaces "Codex preferred
+      // when both are present"). Falling back here means a fresh install
+      // with imported codex creds Just Works without an extra settings hop.
+      const kind: RunnerPrefs['kind'] =
+        kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : 'codex';
       const binPath =
         typeof allPrefs['agent.runner.binPath'] === 'string'
           ? (allPrefs['agent.runner.binPath'] as string)
@@ -94,7 +97,6 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     // that the chat-adapter resolves at call time so the cycle is broken.
     let runtimeRef: Runtime | undefined;
     const chatRunner = makeChatRunner({
-      appsDir,
       prefsLoader,
       getChangeEmitter: (appId) => {
         const rt = runtimeRef;

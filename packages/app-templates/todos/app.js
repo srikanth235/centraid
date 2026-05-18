@@ -97,3 +97,8 @@ $('addForm').addEventListener('submit', async (e) => {
 });
 
 void refresh();
+
+// Re-fetch on every server-observed mutation (chat-assistant writes,
+// cross-window edits, future cron jobs). The runtime injects
+// `window.centraid.onChange` into every served HTML.
+window.centraid?.onChange?.(() => void refresh());

@@ -123,26 +123,29 @@ When a session begins on a project that has a live published version, the harnes
 
 ### Reactive data — keep the UI in sync with writes
 
-Every served HTML page in this app gets an inline change-bridge baked in by the runtime — you do not author or import it. The bridge opens an \`EventSource\` against \`/centraid/<appId>/_changes\` and surfaces every committed write two equivalent ways:
+The runtime auto-injects a change-bus bridge into every served HTML page. The frontend should subscribe so writes that happen behind its back — chat-assistant SQL writes, edits from a second window, future cron jobs — propagate to the UI without a manual reload. The bridge auto-reconnects on transient drops, so you don't need retry logic.
+
+Two equivalent APIs:
 
 \`\`\`js
-// 1) Imperative API
+// 1) Imperative API — what new templates should use. Returns an unsubscribe fn.
 const off = window.centraid.onChange((detail) => {
   // detail.tables : string[] of mutated tables (precise — never ["*"])
   // detail.source : "agent" | "handler" | "external"
   // detail.toolCallId? : string — only when source === "agent"
   // detail.agentTurnId? : string — only when source === "agent"
   // detail.ts     : number — ms since epoch
+  void refresh();
 });
-// call off() to unsubscribe
 
-// 2) DOM event (same detail shape)
-document.addEventListener('centraid:datachange', (e) => {
+// 2) DOM event — same detail shape.
+window.addEventListener('centraid:datachange', (e) => {
   // e.detail.tables, e.detail.source, ...
+  void refresh();
 });
 \`\`\`
 
-Use this to re-fetch the queries that touch the changed tables. Apps that don't care about precision can ignore the detail and just call their existing \`refresh()\` whenever an event arrives — fine, just wastes a fetch.
+Call this once at startup, after \`refresh()\` (or your initial-load function) is defined.
 
 What fires the bus:
 
@@ -152,7 +155,7 @@ What fires the bus:
 
 Practical patterns:
 
-- **Filter by \`tables\`.** Skip the refetch when none of \`detail.tables\` overlaps the queries on screen.
+- **Filter by \`tables\`.** Skip the refetch when none of \`detail.tables\` overlaps a table the page renders.
 - **Flash agent writes.** When \`source === "agent"\`, optionally pulse the affected rows to make the AI's edit visible. Other writes can stay silent.
 - **One sink, not many.** Apps usually subscribe once at startup; render loops read from the resulting derived state rather than each component opening its own \`EventSource\`.
 

@@ -76,9 +76,15 @@ describe('serveStatic — CSP + nonce', () => {
     const { res, data } = mockRes();
     await serveStatic(res, dir, 'index.html', { settingsInject: { dataAttrs: { theme: 'dark' } } });
     const html = data.body.toString('utf8');
-    // Original nonce wins; we don't append a second one.
-    assert.equal(html.match(/nonce=/g)?.length, 1);
+    // Original `nonce="abc"` is preserved (no double-stamping). A second
+    // nonce IS expected on the auto-injected change-bus bridge, which the
+    // runtime adds to every served HTML — see `injectChangeBridge`.
     assert.match(html, /<script nonce="abc">/);
+    assert.equal(
+      html.match(/<script nonce="abc">/g)?.length,
+      1,
+      'original nonced script should appear exactly once',
+    );
   });
 
   it('mints a fresh nonce per response', async () => {
@@ -101,6 +107,40 @@ describe('serveStatic — CSP + nonce', () => {
     assert.match(data.headers['Content-Security-Policy']!, /script-src 'self'/);
   });
 
+  it('auto-injects the change-bus bridge into every served HTML', async () => {
+    const dir = newAppDir({
+      'index.html': '<!doctype html><html><head><title>x</title></head><body></body></html>',
+    });
+    const { res, data } = mockRes();
+    await serveStatic(res, dir, 'index.html', { settingsInject: {} });
+    const html = data.body.toString('utf8');
+    // Bridge inlines the SSE wiring and the `centraid.onChange` sugar.
+    assert.match(html, /centraid\.onChange/);
+    assert.match(html, /EventSource\('_changes'\)/);
+    assert.match(html, /centraid:datachange/);
+    // It sits right after the opening <head>, before any user content.
+    assert.match(html, /<head>\s*<script\b[^>]*>\(function\(\)\{/);
+    // The CSP nonce stamper has tagged it so script-src 'self' lets it run.
+    assert.match(html, /<script nonce="[^"]+">\(function\(\)\{var w=window;w\.centraid/);
+  });
+
+  it('skips the bridge inject for HTML without a <head> tag', async () => {
+    const dir = newAppDir({ 'index.html': '<html><body>no head</body></html>' });
+    const { res, data } = mockRes();
+    await serveStatic(res, dir, 'index.html', { settingsInject: {} });
+    const html = data.body.toString('utf8');
+    assert.doesNotMatch(html, /centraid:datachange/);
+  });
+
+  it('does not inject the bridge into non-HTML responses', async () => {
+    const dir = newAppDir({ 'app.js': "console.log('hi')" });
+    const { res, data } = mockRes();
+    await serveStatic(res, dir, 'app.js');
+    const body = data.body.toString('utf8');
+    assert.doesNotMatch(body, /centraid:datachange/);
+    assert.doesNotMatch(body, /centraid\.onChange/);
+  });
+
   it('bakes data attrs onto <html> via settingsInject', async () => {
     const dir = newAppDir({ 'index.html': '<html><head></head><body></body></html>' });
     const { res, data } = mockRes();
@@ -109,62 +149,5 @@ describe('serveStatic — CSP + nonce', () => {
     });
     const html = data.body.toString('utf8');
     assert.match(html, /<html data-theme="dark" style="--bg-l:5%">/);
-  });
-});
-
-describe('serveStatic — change-bridge inject', () => {
-  it('injects the bridge with the appId baked in and dispatches the documented event', async () => {
-    const dir = newAppDir({
-      'index.html': '<!doctype html><html><head></head><body><h1>hi</h1></body></html>',
-    });
-    const { res, data } = mockRes();
-    await serveStatic(res, dir, 'index.html', { changeBridgeAppId: 'myapp' });
-    const html = data.body.toString('utf8');
-    // Bridge is present and lands right before </body> so the rest of the
-    // doc parses without waiting on the inline subscription.
-    assert.match(html, /<script\s+nonce="[^"]+">[\s\S]*var appId="myapp";/);
-    assert.match(html, /<script[\s\S]*<\/script><\/body>/);
-    // The documented event name + API are both referenced.
-    assert.match(html, /'centraid:datachange'/);
-    assert.match(html, /api\.onChange/);
-    // The CSP whitelists the bridge via the same per-response nonce.
-    const csp = data.headers['Content-Security-Policy']!;
-    const nonce = html.match(/<script\s+nonce="([^"]+)">[\s\S]*var appId/)?.[1];
-    assert.ok(nonce, 'expected to find the bridge nonce');
-    assert.match(csp, new RegExp(`script-src 'self' 'nonce-${nonce!.replace(/[/+=]/g, '\\$&')}'`));
-  });
-
-  it('falls back to before </html> when there is no <body>', async () => {
-    const dir = newAppDir({ 'index.html': '<!doctype html><html><head></head></html>' });
-    const { res, data } = mockRes();
-    await serveStatic(res, dir, 'index.html', { changeBridgeAppId: 'a' });
-    const html = data.body.toString('utf8');
-    assert.match(html, /<script[\s\S]*<\/script><\/html>/);
-  });
-
-  it('JSON-stringifies the appId so embedded quotes cannot escape the inline script', async () => {
-    const dir = newAppDir({ 'index.html': '<html><body></body></html>' });
-    const { res, data } = mockRes();
-    // The runtime's id validator forbids slashes, but we belt-and-suspender
-    // anyway — a stray quote in a future caller's appId must be inert.
-    await serveStatic(res, dir, 'index.html', { changeBridgeAppId: 'a"b' });
-    const html = data.body.toString('utf8');
-    assert.match(html, /var appId="a\\"b";/);
-  });
-
-  it('does not inject the bridge for non-HTML responses', async () => {
-    const dir = newAppDir({ 'app.js': 'console.log("hi")' });
-    const { res, data } = mockRes();
-    await serveStatic(res, dir, 'app.js', { changeBridgeAppId: 'myapp' });
-    const body = data.body.toString('utf8');
-    assert.equal(body, 'console.log("hi")');
-  });
-
-  it('does nothing when no changeBridgeAppId is supplied', async () => {
-    const dir = newAppDir({ 'index.html': '<html><body></body></html>' });
-    const { res, data } = mockRes();
-    await serveStatic(res, dir, 'index.html');
-    const html = data.body.toString('utf8');
-    assert.equal(/centraid:datachange/.test(html), false);
   });
 });

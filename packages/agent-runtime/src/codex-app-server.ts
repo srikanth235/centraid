@@ -21,9 +21,12 @@
  * Auth: codex reads `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`).
  * The user is expected to run `codex login` once before this runs.
  *
- * Sandbox: we pin `sandbox: 'workspaceWrite'` and `approvalPolicy: 'never'`
+ * Sandbox: we pin `sandbox: 'workspace-write'` and `approvalPolicy: 'never'`
  * so the agent can write files inside `cwd` without prompting. The
- * caller already scopes `cwd` to a per-app/per-project dir.
+ * caller already scopes `cwd` to a per-app/per-project dir. Enum strings
+ * are kebab-case per codex's `SandboxMode` serde definition — camelCase
+ * (e.g. `workspaceWrite`) is rejected at `thread/start` with
+ * `unknown variant`.
  *
  * Schema reference: `codex-rs/app-server-protocol/src/protocol/v2/{thread,turn,item,notification}.rs`.
  */
@@ -351,7 +354,7 @@ export async function runCodexAppServerTurn(
         ...(input.model ? { model: input.model } : {}),
         cwd: input.cwd,
         approvalPolicy: 'never',
-        sandbox: 'workspaceWrite',
+        sandbox: 'workspace-write',
         ...(input.extraSystemPrompt ? { developerInstructions: input.extraSystemPrompt } : {}),
         ...(input.toolContext ? { dynamicTools: centraidDynamicToolSpecs() } : {}),
       })) as { thread?: { id?: string } } | undefined;

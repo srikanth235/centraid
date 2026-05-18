@@ -3,10 +3,12 @@
  *
  * `runAgentTurn` is mode-agnostic. This file is the chat-side adapter
  * that wraps it into a `ChatRunner` the gateway's `/_chat` route can
- * inject: per-app cwd from `<appsDir>/<appId>`, the three first-class
- * `centraid_sql_*` tools declared inline against the per-app
- * `data.sqlite`, and the per-window `ChatStore` lookup for the previous
- * adapter session id (round-tripped to resume the conversation).
+ * inject: per-app cwd from `input.dataDir` (the resolved `appDataDir(entry)`
+ * — `<appsDir>/<id>` for uploaded apps, the external folder for
+ * path-registered ones), the three first-class `centraid_sql_*` tools
+ * declared inline against the per-app `data.sqlite`, and the per-window
+ * `ChatStore` lookup for the previous adapter session id (round-tripped
+ * to resume the conversation).
  *
  * Builder-mode consumers call `runAgentTurn` directly — they own their
  * own cwd / preamble / resume-id plumbing and don't need this adapter.
@@ -28,8 +30,6 @@ import { runAgentTurn, type ToolContext } from './runtime.js';
 import type { RunnerPrefs } from './types.js';
 
 export interface MakeChatRunnerOptions {
-  /** Embedded runtime's appsDir; pinned at construction. */
-  appsDir: string;
   /** Loader for the user's persisted runner prefs. Called per turn so
    *  the adapter picks up settings changes without a runtime restart. */
   prefsLoader: () => Promise<RunnerPrefs | undefined>;
@@ -82,7 +82,7 @@ export function makeChatRunner(opts: MakeChatRunnerOptions): ChatRunner {
         throw new Error('no coding agent configured');
       }
 
-      const cwd = path.join(opts.appsDir, input.appId);
+      const cwd = input.dataDir;
       const store = new ChatStore(cwd);
       const window = await store.getWindow(input.windowId).catch(() => undefined);
       const adapterKind = prefs.kind;
