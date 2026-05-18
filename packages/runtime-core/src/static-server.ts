@@ -27,6 +27,17 @@ export interface SettingsInject {
 export interface ServeStaticOptions {
   /** Settings to bake into the `<html>` element of `index.html`. */
   settingsInject?: SettingsInject;
+  /**
+   * App id to inject the change-bridge script for. When present, the served
+   * HTML gets a small inline `<script>` that opens an `EventSource` on
+   * `/centraid/<appId>/_changes`, exposes `window.centraid.onChange(cb)`,
+   * and dispatches a `centraid:datachange` `CustomEvent` on `document`
+   * whose `detail` is `{ tables, source, toolCallId?, agentTurnId?, ts }`.
+   *
+   * Apps that don't subscribe pay essentially nothing — the bridge keeps a
+   * single keep-alive SSE connection open and never paints anything itself.
+   */
+  changeBridgeAppId?: string;
 }
 
 export async function serveStatic(
@@ -58,6 +69,9 @@ export async function serveStatic(
     if (opts.settingsInject) {
       buf = Buffer.from(injectSettings(buf.toString('utf8'), opts.settingsInject), 'utf8');
     }
+    if (opts.changeBridgeAppId) {
+      buf = Buffer.from(injectChangeBridge(buf.toString('utf8'), opts.changeBridgeAppId), 'utf8');
+    }
     inlineScriptNonce = randomBytes(16).toString('base64');
     buf = Buffer.from(stampInlineScriptNonces(buf.toString('utf8'), inlineScriptNonce), 'utf8');
   }
@@ -85,6 +99,69 @@ function stampInlineScriptNonces(html: string, nonce: string): string {
     if (/\bnonce\s*=/i.test(attrs)) return match;
     return `<script${attrs} nonce="${nonce}">`;
   });
+}
+
+/**
+ * Inject the change-bridge: a small inline `<script>` that opens an
+ * `EventSource` on `/centraid/<appId>/_changes`, parses each `change` event
+ * payload, and surfaces it two ways:
+ *
+ *   1. `window.centraid.onChange(cb)` → `cb({ tables, source, toolCallId?,
+ *      agentTurnId?, ts })`. Returns an unsubscribe function.
+ *   2. A `centraid:datachange` `CustomEvent` dispatched on `document`. Same
+ *      `detail` shape. Useful for templated apps whose render loop already
+ *      listens on the document.
+ *
+ * The script is placed near the end of `<body>` (or before `</html>` as a
+ * fallback) so the rest of the page parses without waiting on the inline
+ * subscription. The nonce stamp pass runs afterwards, so the bridge is
+ * automatically allowed by the per-response CSP.
+ *
+ * Embedding strategy: `appId` is JSON-stringified at injection time so any
+ * stray quote chars in the value can't break out of the inline script.
+ * The runtime's appId validator forbids `/` and `..`, so this is purely
+ * a defense-in-depth measure.
+ */
+function injectChangeBridge(html: string, appId: string): string {
+  const safeId = JSON.stringify(appId);
+  const bridge = [
+    '<script>',
+    '(function(){',
+    `var appId=${safeId};`,
+    'var listeners=new Set();',
+    'var es;',
+    'function open(){',
+    'try{',
+    "es=new EventSource('/centraid/'+encodeURIComponent(appId)+'/_changes');",
+    "es.addEventListener('change',function(e){",
+    'var detail;',
+    'try{detail=JSON.parse(e.data);}catch(_){return;}',
+    'listeners.forEach(function(cb){try{cb(detail);}catch(_){}});',
+    "try{document.dispatchEvent(new CustomEvent('centraid:datachange',{detail:detail}));}catch(_){}",
+    '});',
+    'es.addEventListener("error",function(){});',
+    '}catch(_){}',
+    '}',
+    'open();',
+    'var api=window.centraid||(window.centraid={});',
+    'api.onChange=function(cb){',
+    'listeners.add(cb);',
+    'return function(){listeners.delete(cb);};',
+    '};',
+    '})();',
+    '</script>',
+  ].join('');
+  // Try to inject right before </body>; fall back to before </html>; else
+  // append. We don't try to be clever about case sensitivity — HTML tag
+  // names are spec-defined as ASCII case-insensitive but every authoring
+  // tool emits lowercase.
+  if (/<\/body\s*>/i.test(html)) {
+    return html.replace(/<\/body\s*>/i, `${bridge}$&`);
+  }
+  if (/<\/html\s*>/i.test(html)) {
+    return html.replace(/<\/html\s*>/i, `${bridge}$&`);
+  }
+  return html + bridge;
 }
 
 // `data-<name>` attribute names: lowercase letters, digits, dashes only.

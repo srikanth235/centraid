@@ -121,6 +121,43 @@ Rules:
 
 When a session begins on a project that has a live published version, the harness injects the live schema (a \`### Live schema\` block listing \`PRAGMA user_version\` and every \`CREATE TABLE\`/\`CREATE INDEX\`/\`CREATE VIEW\`) just below this section. Use it to decide what id the next migration must take and what the database currently looks like. If that block is absent, treat the database as empty and start at \`0001\`.
 
+### Reactive data — keep the UI in sync with writes
+
+Every served HTML page in this app gets an inline change-bridge baked in by the runtime — you do not author or import it. The bridge opens an \`EventSource\` against \`/centraid/<appId>/_changes\` and surfaces every committed write two equivalent ways:
+
+\`\`\`js
+// 1) Imperative API
+const off = window.centraid.onChange((detail) => {
+  // detail.tables : string[] of mutated tables (precise — never ["*"])
+  // detail.source : "agent" | "handler" | "external"
+  // detail.toolCallId? : string — only when source === "agent"
+  // detail.agentTurnId? : string — only when source === "agent"
+  // detail.ts     : number — ms since epoch
+});
+// call off() to unsubscribe
+
+// 2) DOM event (same detail shape)
+document.addEventListener('centraid:datachange', (e) => {
+  // e.detail.tables, e.detail.source, ...
+});
+\`\`\`
+
+Use this to re-fetch the queries that touch the changed tables. Apps that don't care about precision can ignore the detail and just call their existing \`refresh()\` whenever an event arrives — fine, just wastes a fetch.
+
+What fires the bus:
+
+- App handlers under \`actions/\` that INSERT/UPDATE/DELETE — \`source: "handler"\`.
+- The data-chat agent (\`centraid_sql_write\`) — \`source: "agent"\`. Carries a stable \`agentTurnId\` for the whole chat turn and a per-tool-call \`toolCallId\` matching the tool pill the user is looking at.
+- External SQL panels (cloud-style query editor) — \`source: "external"\`.
+
+Practical patterns:
+
+- **Filter by \`tables\`.** Skip the refetch when none of \`detail.tables\` overlaps the queries on screen.
+- **Flash agent writes.** When \`source === "agent"\`, optionally pulse the affected rows to make the AI's edit visible. Other writes can stay silent.
+- **One sink, not many.** Apps usually subscribe once at startup; render loops read from the resulting derived state rather than each component opening its own \`EventSource\`.
+
+The runtime guarantees: every successful write (handler / agent / external) emits a single event with a precise non-empty \`tables\` array. Empty-table emissions are suppressed by the bus, so subscribers never see no-op events.
+
 ### Security model (do not weaken)
 
 - Static-serve same-origin only with strict CSP — don't request inline scripts; structure html so logic loads from \`.js\` files.

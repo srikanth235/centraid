@@ -231,7 +231,7 @@ export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime):
           // the HTTP query route path does.
           onWrite: (tables) => {
             if (tables.length === 0) return;
-            changeBus.emit({ appId, tables, ts: Date.now() });
+            changeBus.emit({ appId, tables, ts: Date.now(), source: 'agent' });
           },
         });
         if (result.kind !== 'exec') {

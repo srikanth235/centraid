@@ -28,15 +28,22 @@ afterEach(async () => {
  * data payloads of `event: change` frames seen so far. Cancels the response
  * reader when done so the connection can close cleanly.
  */
+type ChangeEvt = {
+  tables: string[];
+  source?: string;
+  toolCallId?: string;
+  agentTurnId?: string;
+};
+
 async function readChangeEvents(
   res: Response,
-  predicate: (events: Array<{ tables: string[] }>) => boolean,
+  predicate: (events: ChangeEvt[]) => boolean,
   timeoutMs = 2000,
-): Promise<Array<{ tables: string[] }>> {
+): Promise<ChangeEvt[]> {
   if (!res.body) throw new Error('no body');
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  const out: Array<{ tables: string[] }> = [];
+  const out: ChangeEvt[] = [];
   let buf = '';
   const start = Date.now();
   try {
@@ -63,7 +70,7 @@ async function readChangeEvents(
           }
           if (isChange && data) {
             try {
-              out.push(JSON.parse(data) as { tables: string[] });
+              out.push(JSON.parse(data) as ChangeEvt);
             } catch {
               /* skip non-JSON */
             }
@@ -92,7 +99,12 @@ test('SSE: delivers a change event when the bus emits for the subscribed app', a
   // Emit after the connection is open. We use the bus directly because the
   // /_changes endpoint is the consumer side; producers are tested elsewhere.
   setTimeout(() => {
-    runtime.changeBus.emit({ appId: 'myapp', tables: ['todos'], ts: 1234 });
+    runtime.changeBus.emit({
+      appId: 'myapp',
+      tables: ['todos'],
+      ts: 1234,
+      source: 'handler',
+    });
   }, 50);
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
@@ -107,8 +119,8 @@ test('SSE: does not deliver events for OTHER apps to this subscriber', async () 
   assert.equal(res.status, 200);
 
   setTimeout(() => {
-    runtime.changeBus.emit({ appId: 'otherapp', tables: ['x'], ts: 1 });
-    runtime.changeBus.emit({ appId: 'myapp', tables: ['todos'], ts: 2 });
+    runtime.changeBus.emit({ appId: 'otherapp', tables: ['x'], ts: 1, source: 'handler' });
+    runtime.changeBus.emit({ appId: 'myapp', tables: ['todos'], ts: 2, source: 'handler' });
   }, 50);
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
@@ -138,4 +150,50 @@ test('SSE: client disconnect unsubscribes the listener from the bus', async () =
 test('SSE: requires the bearer token (gated by the surrounding http-server)', async () => {
   const res = await fetch(`${server.url}/centraid/myapp/_changes`);
   assert.equal(res.status, 401);
+});
+
+test('SSE: agent-sourced events carry source, toolCallId, and agentTurnId', async () => {
+  const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
+    headers: { Authorization: `Bearer ${server.token}` },
+  });
+  assert.equal(res.status, 200);
+
+  setTimeout(() => {
+    runtime.changeBus.emit({
+      appId: 'myapp',
+      tables: ['todos'],
+      ts: 5,
+      source: 'agent',
+      toolCallId: 'call-abc',
+      agentTurnId: 'turn-xyz',
+    });
+  }, 50);
+
+  const events = await readChangeEvents(res, (e) => e.length >= 1);
+  assert.equal(events.length, 1);
+  assert.equal(events[0]!.source, 'agent');
+  assert.equal(events[0]!.toolCallId, 'call-abc');
+  assert.equal(events[0]!.agentTurnId, 'turn-xyz');
+});
+
+test('SSE: handler-sourced events carry source but omit toolCallId/agentTurnId', async () => {
+  const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
+    headers: { Authorization: `Bearer ${server.token}` },
+  });
+  assert.equal(res.status, 200);
+
+  setTimeout(() => {
+    runtime.changeBus.emit({
+      appId: 'myapp',
+      tables: ['notes'],
+      ts: 6,
+      source: 'handler',
+    });
+  }, 50);
+
+  const events = await readChangeEvents(res, (e) => e.length >= 1);
+  assert.equal(events.length, 1);
+  assert.equal(events[0]!.source, 'handler');
+  assert.equal(events[0]!.toolCallId, undefined);
+  assert.equal(events[0]!.agentTurnId, undefined);
 });

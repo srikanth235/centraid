@@ -3,10 +3,10 @@
  *
  * `runAgentTurn` is mode-agnostic. This file is the chat-side adapter
  * that wraps it into a `ChatRunner` the gateway's `/_chat` route can
- * inject: per-app cwd from `<appsDir>/<appId>`, the `centraid` CLI
- * preamble spliced into the system prompt so the agent can read/write
- * `./data.sqlite`, and the per-window `ChatStore` lookup for the
- * previous adapter session id (round-tripped to resume the conversation).
+ * inject: per-app cwd from `<appsDir>/<appId>`, the three first-class
+ * `centraid_sql_*` tools declared inline against the per-app
+ * `data.sqlite`, and the per-window `ChatStore` lookup for the previous
+ * adapter session id (round-tripped to resume the conversation).
  *
  * Builder-mode consumers call `runAgentTurn` directly — they own their
  * own cwd / preamble / resume-id plumbing and don't need this adapter.
@@ -17,14 +17,14 @@
  */
 
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import {
   ChatStore,
   type ChatRunInput,
   type ChatRunResult,
   type ChatRunner,
 } from '@centraid/runtime-core';
-import { runAgentTurn } from './runtime.js';
+import { runAgentTurn, type ToolContext } from './runtime.js';
 import type { RunnerPrefs } from './types.js';
 
 export interface MakeChatRunnerOptions {
@@ -34,40 +34,42 @@ export interface MakeChatRunnerOptions {
    *  the adapter picks up settings changes without a runtime restart. */
   prefsLoader: () => Promise<RunnerPrefs | undefined>;
   /**
-   * Directory containing the built `centraid` CLI binary. Defaults to
-   * the `dist/` sibling of the agent-runtime package itself. Forwarded
-   * to `runAgentTurn` as `extraPath` so codex's shell tool / claude's
-   * Bash tool can invoke `centraid` by bare name without mutating the
-   * host's `process.env`.
+   * Resolve the host's change-emitter for an app. Required for the
+   * agent's `centraid_sql_write` tool to fire the runtime's change bus —
+   * without it, agent writes succeed but iframe re-renders won't trigger
+   * for the running app. The local-runtime sets this after `Runtime` is
+   * constructed (so it can close over `runtime.agentEmitForApp`).
    */
-  centraidCliDir?: string;
+  getChangeEmitter?: (
+    appId: string,
+  ) => (payload: { tables: string[]; toolCallId?: string; agentTurnId?: string }) => void;
 }
 
-export function defaultCentraidCliDir(): string {
-  return path.dirname(fileURLToPath(import.meta.url));
-}
+const CHAT_PROMPT_PREAMBLE = `## Centraid SQL tools
 
-const CHAT_PROMPT_PREAMBLE = `## centraid CLI
+You have three in-process tools for reading and writing this app's SQLite
+database. They are typed and scoped to this app — you do not pass an appId.
 
-You have a "centraid" CLI available for reading and writing this app's data:
+  centraid_sql_describe()                   — schema JSON: tables, columns, indexes, views
+  centraid_sql_read({ sql })                — rows JSON: { columns, rows, totalRows, truncated, durationMs }
+  centraid_sql_write({ sql })               — { rowsAffected, lastInsertRowid, durationMs }
 
-  centraid sql describe                      — JSON: tables, columns, indexes, views
-  centraid sql read  "SELECT ..."            — JSON: { columns, rows, totalRows, truncated }
-  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."  — JSON: { rowsAffected, lastInsertRowid }
+\`sql_read\` accepts a single SELECT or EXPLAIN. \`sql_write\` accepts one
+INSERT/UPDATE/DELETE/REPLACE. DDL (CREATE/ALTER/DROP), PRAGMA, ATTACH, and
+VACUUM are refused. Read responses are capped at 200 rows — pass LIMIT
+explicitly when you want fewer.
 
-The CLI operates on ./data.sqlite in the current working directory, which is
-already scoped to this app. You do NOT need to pass an appId. DDL
-(CREATE/ALTER/DROP) and PRAGMA are refused.
-
-Prefer one focused SELECT over many small ones (use LIMIT). Call
-\`centraid sql describe\` first if you don't know the schema yet.`;
+Prefer one focused query over many small ones. Call \`centraid_sql_describe\`
+first if you don't know the schema yet. After a \`centraid_sql_write\` the
+runtime fires a precise change event that the running app's UI subscribes
+to, so you do not need to ask the user to reload — the iframe will update
+on its own.`;
 
 function spliceExtraSystemPrompt(extra: string): string {
   return extra ? `${CHAT_PROMPT_PREAMBLE}\n\n${extra}` : CHAT_PROMPT_PREAMBLE;
 }
 
 export function makeChatRunner(opts: MakeChatRunnerOptions): ChatRunner {
-  const centraidCliDir = opts.centraidCliDir ?? defaultCentraidCliDir();
   return {
     async run(input: ChatRunInput): Promise<ChatRunResult> {
       const prefs = await opts.prefsLoader();
@@ -89,14 +91,29 @@ export function makeChatRunner(opts: MakeChatRunnerOptions): ChatRunner {
 
       const extraSystemPrompt = spliceExtraSystemPrompt(input.extraSystemPrompt);
 
+      const agentTurnId = randomUUID();
+      const emit = opts.getChangeEmitter?.(input.appId);
+      const toolContext: ToolContext | undefined = emit
+        ? {
+            dataFile: path.join(cwd, 'data.sqlite'),
+            agentTurnId,
+            emitChange: (payload) =>
+              emit({
+                tables: payload.tables,
+                agentTurnId,
+                ...(payload.toolCallId ? { toolCallId: payload.toolCallId } : {}),
+              }),
+          }
+        : undefined;
+
       const result = await runAgentTurn(
         {
           cwd,
           message: input.message,
           extraSystemPrompt,
-          extraPath: centraidCliDir,
           ...(input.model ? { model: input.model } : {}),
           ...(resumeId ? { prevSessionId: resumeId } : {}),
+          ...(toolContext ? { toolContext } : {}),
           abortSignal: input.abortSignal,
           onEvent: input.onEvent,
         },

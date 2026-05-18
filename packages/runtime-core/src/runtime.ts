@@ -175,14 +175,36 @@ export class Runtime {
   }
 
   /**
-   * Build a closure that emits a change for the given app. Passed to
-   * `runQuery` and `runHandler` so they can fire the bus without knowing
-   * the appId-to-bus wiring.
+   * Build a closure that emits a change for the given app. Each caller picks
+   * its provenance band — `'handler'` for app-authored action writes,
+   * `'external'` for cloud-panel SQL writes, etc. Agent writes flow through
+   * the chat runner's own emit closure (see `agentEmitForApp`).
    */
-  private emitForApp(appId: string): (tables: string[]) => void {
+  private emitForApp(appId: string, source: 'handler' | 'external'): (tables: string[]) => void {
     return (tables) => {
       if (tables.length === 0) return;
-      this.changeBus.emit({ appId, tables, ts: Date.now() });
+      this.changeBus.emit({ appId, tables, ts: Date.now(), source });
+    };
+  }
+
+  /**
+   * Build the change-emitter that the per-app chat runner uses for agent
+   * writes. The agent path needs to thread per-tool-call provenance through
+   * so the iframe can correlate refreshes with chat pills.
+   */
+  agentEmitForApp(
+    appId: string,
+  ): (payload: { tables: string[]; toolCallId?: string; agentTurnId?: string }) => void {
+    return (payload) => {
+      if (payload.tables.length === 0) return;
+      this.changeBus.emit({
+        appId,
+        tables: payload.tables,
+        ts: Date.now(),
+        source: 'agent',
+        ...(payload.toolCallId ? { toolCallId: payload.toolCallId } : {}),
+        ...(payload.agentTurnId ? { agentTurnId: payload.agentTurnId } : {}),
+      });
     };
   }
 
@@ -224,7 +246,7 @@ export class Runtime {
       versions: this.versions,
       withAppUploadLock: this.withAppUploadLock,
       resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
-      emitForApp: (appId: string) => this.emitForApp(appId),
+      emitForApp: (appId: string) => this.emitForApp(appId, 'handler'),
     };
   }
 
@@ -386,7 +408,7 @@ export class Runtime {
             res,
             this.registry,
             route.appId,
-            this.emitForApp(route.appId),
+            this.emitForApp(route.appId, 'external'),
           );
           return;
         }
@@ -424,9 +446,16 @@ export class Runtime {
             const appSettings = readAppSettings(dataDbFile);
             const queryOverrides = route.query as Record<string, unknown>;
             const settingsInject = buildSettingsInject([globalPrefs, appSettings, queryOverrides]);
-            await serveStatic(res, codeDir, rel, { settingsInject });
+            await serveStatic(res, codeDir, rel, {
+              settingsInject,
+              changeBridgeAppId: entry.id,
+            });
           } else {
-            await serveStatic(res, codeDir, rel);
+            // Other static assets (`*.html`, CSS, JS, images). HTML pages
+            // benefit from the bridge too — the runtime only injects when
+            // Content-Type starts with text/html, so non-HTML assets fall
+            // through untouched.
+            await serveStatic(res, codeDir, rel, { changeBridgeAppId: entry.id });
           }
           return;
         }
@@ -484,7 +513,7 @@ export class Runtime {
             handlerKind: 'action',
             args: { params: {}, body: body.args },
             timeoutMs: 30_000,
-            onWrite: this.emitForApp(route.appId),
+            onWrite: this.emitForApp(route.appId, 'handler'),
           });
           if (!outcome.ok) {
             sendError(res, 500, 'handler_error', outcome.error ?? 'action failed');

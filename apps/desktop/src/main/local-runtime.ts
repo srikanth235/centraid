@@ -89,7 +89,19 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
         ...(extraArgs ? { extraArgs } : {}),
       };
     };
-    const chatRunner = makeChatRunner({ appsDir, prefsLoader });
+    // We need the runtime to construct the change emitter, but the chat
+    // runner needs to be passed to the runtime constructor. Use a holder
+    // that the chat-adapter resolves at call time so the cycle is broken.
+    let runtimeRef: Runtime | undefined;
+    const chatRunner = makeChatRunner({
+      appsDir,
+      prefsLoader,
+      getChangeEmitter: (appId) => {
+        const rt = runtimeRef;
+        if (!rt) return () => undefined;
+        return rt.agentEmitForApp(appId);
+      },
+    });
 
     const runtime = new Runtime({
       appsDir,
@@ -115,6 +127,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       },
     });
 
+    runtimeRef = runtime;
     const server = await startRuntimeHttpServer({ runtime });
     await runtime.bootstrap();
 

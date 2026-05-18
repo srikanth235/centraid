@@ -30,11 +30,11 @@
  * per-app sqlite or checking the preview snapshot's freshness).
  */
 
-export {
-  makeChatRunner,
-  defaultCentraidCliDir,
-  type MakeChatRunnerOptions,
-} from './chat-adapter.js';
+export { makeChatRunner, type MakeChatRunnerOptions } from './chat-adapter.js';
+
+// Builder agent sessions still want the `centraid` CLI on PATH for the
+// `centraid preview snapshot` flow; expose the dist-dir resolver.
+export { defaultCentraidCliDir } from './centraid-cli-dir.js';
 
 export type { RunnerKind, RunnerPrefs } from './types.js';
 
@@ -43,6 +43,7 @@ export {
   type AgentTurnInput,
   type AgentTurnConfig,
   type AgentTurnResult,
+  type ToolContext,
 } from './runtime.js';
 
 export {
