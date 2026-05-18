@@ -1,93 +1,130 @@
 /*
  * Codex CLI adapter.
  *
- * Runs `codex exec` in JSON mode with our stdio MCP server attached, parses
- * the structured event stream, and translates lines into `ChatStreamEvent`s.
+ * Empirically verified against `codex-cli 0.128.0`. The event schema is
+ * pinned in `MIN_CODEX_VERSION` (see preflight.ts).
  *
- * Session continuity:
- *   - First turn in a window: no `--session`, codex assigns a thread id we
- *     persist via `ChatStore.noteTurn(..., adapterSessionId)` from the
- *     `local-chat-runner` dispatcher.
- *   - Subsequent turns: `--session <id>` to resume.
+ * Tooling: instead of an MCP server, we teach codex about a small local
+ * `centraid` CLI bin (shipped by this package) that codex invokes via
+ * its normal shell tool. The CLI operates on `./data.sqlite` (cwd =
+ * appId data dir), so we spawn codex with `-C <appsDir>/<id>` to pin
+ * the workspace. AppId is the cwd; the model can't escape the scope.
  *
- * Mode flags:
- *   - **full** (default): nothing added. The user's codex defaults apply.
- *   - **data**: `--ask-for-approval never --sandbox read-only` plus the
- *     MCP-only allowlist. Locks codex to centraid_sql_* tools.
+ * Mode handling: codex always runs `--sandbox workspace-write`. The
+ * "data mode" toggle is a no-op for codex — codex's sandbox model
+ * doesn't support a clean read-only-with-loopback-writes regime, so we
+ * don't pretend to enforce one. OpenClaw's data mode (which DOES
+ * intersect tool allowlists) remains the place to get strict lockdown.
  *
- * Event mapping (subject to verification — open item in the issue):
- *   { type: 'item.assistant_delta', delta }          → assistant.delta
- *   { type: 'item.reasoning_delta', delta }          → reasoning.delta
- *   { type: 'item.tool_call', id, name, arguments }  → tool.start
- *   { type: 'item.tool_result', id, name, output }   → tool.result
- *   { type: 'thread.assigned', threadId }            → captured for resume
- *   { type: 'turn.end' / 'item.final' }              → final
+ * Verified codex CLI shape (0.128.0):
+ *   - `codex exec --json [--sandbox …] [-C <cwd>] [-m <model>] <prompt>`
+ *   - `codex exec resume --json <SESSION_ID> [-m <model>] <prompt>`
+ *     (sandbox/approval/cwd are inherited from the initial session)
+ *   - `--skip-git-repo-check` lets us run inside non-git workspaces.
+ *   - No `--system-prompt` / `--allowed-tools` / `--session` flag —
+ *     extra system context is prepended to the user message.
  *
- * The harness tolerates unknown event shapes; if codex's stream evolves
- * we'll see `phase` events instead of typed ones until we add a mapping.
+ * Verified event schema:
+ *   {"type":"thread.started","thread_id":"<uuid>"}
+ *   {"type":"turn.started"}
+ *   {"type":"item.started","item":{"id":"item_N","type":"<kind>",…}}
+ *   {"type":"item.completed","item":{"type":"agent_message","text":"…"}}
+ *   {"type":"item.completed","item":{"type":"command_execution",
+ *      "command":"…","aggregated_output":"…","exit_code":N,"status":"completed"|"failed"}}
+ *   {"type":"turn.completed","usage":{…}}
+ *   {"type":"turn.failed","error":{…}}        (best-effort)
  */
 
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import type { ChatStreamEvent } from '@centraid/runtime-core';
 import { spawnCli } from './spawn-cli.js';
 import type { RunOneTurnArgs } from './types.js';
 
-const MCP_SERVER_LABEL = 'centraid';
-
 export interface CodexAdapterResult {
-  /** Codex thread id assigned this turn (or carried over). Undefined when
-   *  we never saw a thread-id event — caller skips persisting. */
   threadId?: string;
 }
+
+export interface CodexAdapterEnv {
+  /**
+   * Directory containing the per-app SQLite files
+   * (`<appsDir>/<appId>/data.sqlite`). Codex is launched with cwd pinned
+   * to `<appsDir>/<appId>` so the centraid CLI sees `./data.sqlite`.
+   */
+  appsDir: string;
+  /**
+   * Directory the `centraid` CLI is installed in. Prepended to PATH so
+   * codex can invoke it without an absolute path. Defaults to the
+   * sibling `dist/` of the calling module.
+   */
+  centraidCliDir: string;
+}
+
+const CENTRAID_PROMPT_PREAMBLE = `## centraid CLI
+
+You have a "centraid" CLI available for reading and writing this app's data:
+
+  centraid sql describe                      — JSON: tables, columns, indexes, views
+  centraid sql read  "SELECT ..."            — JSON: { columns, rows, totalRows, truncated }
+  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."  — JSON: { rowsAffected, lastInsertRowid }
+
+The CLI operates on ./data.sqlite in the current working directory, which is
+already scoped to this app. You do NOT need to pass an appId. DDL
+(CREATE/ALTER/DROP) and PRAGMA are refused.
+
+Prefer one focused SELECT over many small ones (use LIMIT). Call
+\`centraid sql describe\` first if you don't know the schema yet.`;
 
 export async function runCodexTurn(
   args: RunOneTurnArgs,
   prevThreadId: string | undefined,
+  env: CodexAdapterEnv,
 ): Promise<CodexAdapterResult> {
   const { ctx, input } = args;
   const bin = ctx.prefs.binPath ?? 'codex';
 
-  // Build the MCP-server spawn argument that we hand to codex via CLI flag.
-  // Codex executes this verbatim and pipes stdin/stdout to the spawned
-  // process. AppId is baked in — the model cannot redirect it through tool
-  // params because the MCP server doesn't accept an appId parameter.
-  const mcpCmd = [
-    ctx.nodeBin ?? process.execPath,
-    ctx.mcpServerScript,
-    '--apps-dir',
-    ctx.appsDir,
-    '--app-id',
-    input.appId,
-    '--mode',
-    input.mode,
-  ].join(' ');
+  const appWorkspace = path.join(env.appsDir, input.appId);
+  await fs.mkdir(appWorkspace, { recursive: true });
 
-  const cliArgs = ['exec', '--json'];
-  if (prevThreadId) cliArgs.push('--session', prevThreadId);
-  cliArgs.push('--mcp-server', `${MCP_SERVER_LABEL}=${mcpCmd}`);
-  if (input.model) cliArgs.push('--model', input.model);
-  if (input.mode === 'data') {
-    cliArgs.push('--ask-for-approval', 'never', '--sandbox', 'read-only');
-    cliArgs.push(
-      '--allowed-tools',
-      [
-        `mcp__${MCP_SERVER_LABEL}__centraid_sql_describe`,
-        `mcp__${MCP_SERVER_LABEL}__centraid_sql_read`,
-        `mcp__${MCP_SERVER_LABEL}__centraid_sql_write`,
-      ].join(','),
-    );
+  // Splice extraSystemPrompt (built by runtime-core) plus the CLI
+  // preamble into the user message — codex has no --system-prompt flag.
+  const prompt = [
+    CENTRAID_PROMPT_PREAMBLE,
+    '',
+    input.extraSystemPrompt || '',
+    '',
+    '---',
+    '',
+    input.message,
+  ].join('\n');
+
+  // Resume requires the subcommand form; sandbox/cwd/approval are
+  // inherited from the initial exec and cannot be re-set on resume.
+  let cliArgs: string[];
+  if (prevThreadId) {
+    cliArgs = ['exec', 'resume', '--json', '--skip-git-repo-check'];
+    if (input.model) cliArgs.push('--model', input.model);
+    if (ctx.prefs.extraArgs?.length) cliArgs.push(...ctx.prefs.extraArgs);
+    cliArgs.push(prevThreadId, prompt);
+  } else {
+    cliArgs = [
+      'exec',
+      '--json',
+      '--skip-git-repo-check',
+      '-C',
+      appWorkspace,
+      '--sandbox',
+      'workspace-write',
+    ];
+    if (input.model) cliArgs.push('--model', input.model);
+    if (ctx.prefs.extraArgs?.length) cliArgs.push(...ctx.prefs.extraArgs);
+    cliArgs.push(prompt);
   }
-  if (input.extraSystemPrompt) {
-    cliArgs.push('--system-prompt', input.extraSystemPrompt);
-  }
-  if (ctx.prefs.extraArgs && ctx.prefs.extraArgs.length > 0) {
-    cliArgs.push(...ctx.prefs.extraArgs);
-  }
-  // The prompt is the trailing positional argument.
-  cliArgs.push(input.message);
 
   let threadId: string | undefined;
   let sawFinal = false;
   let finalText = '';
+  const seenStarts = new Set<string>();
 
   const emit = (event: ChatStreamEvent): void => {
     if (input.abortSignal.aborted) return;
@@ -96,9 +133,20 @@ export async function runCodexTurn(
 
   emit({ type: 'assistant.start' });
 
+  // Prepend the centraid CLI dir to PATH so codex can shell out to
+  // `centraid` by bare name. We don't mutate the original env object.
+  const spawnEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: `${env.centraidCliDir}${path.delimiter}${process.env.PATH ?? ''}`,
+  };
+
   const result = await spawnCli({
     bin,
     args: cliArgs,
+    env: spawnEnv,
+    // Codex reads "additional input" from stdin even when the prompt is
+    // positional. Close stdin immediately so it doesn't block.
+    stdin: '',
     abortSignal: input.abortSignal,
     onStderrLine: (line) => emit({ type: 'phase', phase: 'stderr', detail: line }),
     onJsonLine: (line) => {
@@ -106,6 +154,7 @@ export async function runCodexTurn(
         translateCodexLine(
           line,
           emit,
+          seenStarts,
           (id) => {
             threadId = id;
           },
@@ -115,7 +164,7 @@ export async function runCodexTurn(
           },
         );
       } catch {
-        // ignore translation errors
+        // Translation errors are non-fatal.
       }
     },
   });
@@ -137,105 +186,148 @@ export async function runCodexTurn(
 }
 
 /**
- * Best-effort translation of one JSON line from `codex exec --json` into
- * a `ChatStreamEvent`. We accept several near-equivalent event names so
- * the adapter survives small schema drifts; unknown lines fall through as
- * `phase` events.
+ * Translate one JSON event line from `codex exec --json` into a
+ * `ChatStreamEvent`. Schema confirmed against codex-cli 0.128.0;
+ * unknown lines fall through as generic `phase` events so a small
+ * upgrade doesn't break the adapter.
  */
-function translateCodexLine(
+export function translateCodexLine(
   line: Record<string, unknown>,
   emit: (e: ChatStreamEvent) => void,
+  seenStarts: Set<string>,
   onThreadId: (id: string) => void,
   onFinal: (text: string) => void,
 ): void {
-  const type = String(line.type ?? line.event ?? '');
+  const type = String(line.type ?? '');
 
-  // Thread id capture — codex emits this on the first turn of a new session.
-  if (line.threadId && typeof line.threadId === 'string') onThreadId(line.threadId);
-  if (line.thread_id && typeof line.thread_id === 'string') onThreadId(line.thread_id);
-  if (type === 'thread.assigned' || type === 'session.created') {
-    const id =
-      typeof line.threadId === 'string'
-        ? line.threadId
-        : typeof line.sessionId === 'string'
-          ? line.sessionId
-          : undefined;
+  if (type === 'thread.started') {
+    const id = typeof line.thread_id === 'string' ? line.thread_id : undefined;
     if (id) onThreadId(id);
     return;
   }
 
-  // Assistant text deltas (multiple shapes).
-  if (type === 'item.assistant_delta' || type === 'assistant.delta' || type === 'text.delta') {
-    const delta = String(line.delta ?? line.text ?? '');
-    if (delta) emit({ type: 'assistant.delta', delta });
+  if (type === 'turn.started') {
+    emit({ type: 'phase', phase: 'turn.started' });
     return;
   }
-  if (type === 'item.reasoning_delta' || type === 'reasoning.delta') {
-    const delta = String(line.delta ?? line.text ?? '');
-    if (delta) emit({ type: 'reasoning.delta', delta });
-    return;
-  }
-  if (type === 'item.tool_call' || type === 'tool.start' || type === 'tool_call.start') {
-    const toolCallId = String(line.id ?? line.callId ?? '');
-    const toolName = String(line.name ?? line.toolName ?? 'tool');
-    const args = (line.arguments ?? line.args ?? line.params) as
-      | Record<string, unknown>
-      | undefined;
-    const sql =
-      args && typeof args === 'object' && typeof args.sql === 'string'
-        ? (args.sql as string)
-        : undefined;
+
+  if (type === 'item.started') {
+    const item = (line.item ?? {}) as Record<string, unknown>;
+    const id = String(item.id ?? '');
+    const itemType = String(item.type ?? '');
+    if (itemType === 'agent_message' || itemType === 'reasoning') {
+      // We surface text only on `item.completed`. Skip the start marker
+      // so the consumer doesn't see two events for the same item.
+      return;
+    }
+    if (!id || seenStarts.has(id)) return;
+    seenStarts.add(id);
+    const toolName = describeToolName(itemType, item);
+    const args = extractToolArgs(item);
+    const sql = typeof args?.sql === 'string' ? (args.sql as string) : undefined;
     emit({
       type: 'tool.start',
-      toolCallId,
+      toolCallId: id,
       toolName,
       args,
       ...(sql ? { sql } : {}),
     });
     return;
   }
-  if (type === 'item.tool_result' || type === 'tool.result' || type === 'tool_call.end') {
-    const toolCallId = String(line.id ?? line.callId ?? '');
-    const toolName = String(line.name ?? line.toolName ?? 'tool');
-    const ok = line.isError !== true && line.is_error !== true;
-    const output = line.output ?? line.result ?? line.content;
-    const errorText = ok
-      ? undefined
-      : typeof line.error === 'string'
-        ? (line.error as string)
-        : typeof line.errorText === 'string'
-          ? (line.errorText as string)
-          : undefined;
+
+  if (type === 'item.completed') {
+    const item = (line.item ?? {}) as Record<string, unknown>;
+    const id = String(item.id ?? '');
+    const itemType = String(item.type ?? '');
+
+    if (itemType === 'agent_message') {
+      const text = typeof item.text === 'string' ? (item.text as string) : '';
+      if (text) emit({ type: 'assistant.delta', delta: text });
+      onFinal(text);
+      emit({ type: 'final', text });
+      return;
+    }
+    if (itemType === 'reasoning') {
+      const text = typeof item.text === 'string' ? (item.text as string) : '';
+      if (text) emit({ type: 'reasoning.delta', delta: text });
+      return;
+    }
+    // Tool/command result item — emit synthetic start when we missed it,
+    // then emit tool.result.
+    if (!seenStarts.has(id)) {
+      seenStarts.add(id);
+      emit({
+        type: 'tool.start',
+        toolCallId: id || `codex-${seenStarts.size}`,
+        toolName: describeToolName(itemType, item),
+        args: extractToolArgs(item),
+      });
+    }
+    const ok = decideToolOk(item);
+    const errorText = ok ? undefined : extractToolErrorText(item);
     emit({
       type: 'tool.result',
-      toolCallId,
-      toolName,
+      toolCallId: id || `codex-${seenStarts.size}`,
+      toolName: describeToolName(itemType, item),
       ok,
-      result: output,
+      result: summarizeToolResult(item),
       ...(errorText ? { errorText } : {}),
     });
     return;
   }
-  if (type === 'item.final' || type === 'turn.end' || type === 'message.completed') {
-    const text =
-      typeof line.text === 'string'
-        ? line.text
-        : typeof line.content === 'string'
-          ? (line.content as string)
-          : '';
-    onFinal(text);
-    emit({ type: 'final', text });
+
+  if (type === 'turn.completed') {
+    emit({ type: 'phase', phase: 'turn.completed', detail: line.usage ?? null });
     return;
   }
-  if (type === 'error' || type === 'turn.error') {
+
+  if (type === 'turn.failed' || type === 'error') {
+    const err = line.error as { message?: unknown } | undefined;
     const message =
-      typeof line.message === 'string'
-        ? line.message
-        : typeof line.error === 'string'
-          ? line.error
-          : 'unknown codex error';
+      typeof err?.message === 'string'
+        ? err.message
+        : typeof line.message === 'string'
+          ? (line.message as string)
+          : 'codex turn failed';
     emit({ type: 'error', message });
     return;
   }
+
   emit({ type: 'phase', phase: type || 'unknown', detail: line });
+}
+
+function describeToolName(itemType: string, item: Record<string, unknown>): string {
+  if (itemType === 'command_execution') {
+    const cmd = typeof item.command === 'string' ? (item.command as string) : 'shell';
+    return `exec(${cmd.slice(0, 40)}${cmd.length > 40 ? '…' : ''})`;
+  }
+  return itemType || 'tool';
+}
+
+function extractToolArgs(item: Record<string, unknown>): Record<string, unknown> | undefined {
+  const args = item.args ?? item.arguments ?? item.params ?? item.input;
+  if (args && typeof args === 'object') return args as Record<string, unknown>;
+  return undefined;
+}
+
+function decideToolOk(item: Record<string, unknown>): boolean {
+  const status = typeof item.status === 'string' ? (item.status as string) : undefined;
+  if (status === 'failed') return false;
+  if (typeof item.exit_code === 'number' && (item.exit_code as number) !== 0) return false;
+  if (item.is_error === true) return false;
+  return true;
+}
+
+function extractToolErrorText(item: Record<string, unknown>): string | undefined {
+  if (typeof item.error === 'string') return item.error as string;
+  if (typeof item.aggregated_output === 'string') return item.aggregated_output as string;
+  return undefined;
+}
+
+function summarizeToolResult(item: Record<string, unknown>): unknown {
+  if (item.result !== undefined) return item.result;
+  if (item.aggregated_output !== undefined) {
+    return { aggregated_output: item.aggregated_output, exit_code: item.exit_code };
+  }
+  return null;
 }

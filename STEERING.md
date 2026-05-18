@@ -86,3 +86,9 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-9fc87005699-1778842413-1 | 9fc87005-6992-4f6f-ba26-5951fd092da4 | #63 | correction | classifier | pushed back on separate DB files, wanted justification | refactor(runtime,plugin,desktop): single gateway sqlite + real FKs (#63) |
 | steer-6a1faa59b3c-1778863483-1 | 6a1faa59-b3ce-4df5-bd63-370c71c237ee |  | interrupt | structural |  | feat(desktop,templates,runtime): per-app settings popover + Home redesign |
 | steer-6a1faa59b3c-1778863483-2 | 6a1faa59-b3ce-4df5-bd63-370c71c237ee |  | interrupt | structural |  | feat(desktop,templates,runtime): per-app settings popover + Home redesign |
+| steer-7a0284c3256-1779099410-1 | 7a0284c3-256e-4ea2-9f9d-ee59d85c0465 | #71 | interrupt | structural |  | feat(local-chat-runner): replace MCP plumbing with a small centraid CLI (#71) |
+| steer-7a0284c3256-1779099410-2 | 7a0284c3-256e-4ea2-9f9d-ee59d85c0465 | #71 | correction | classifier | scope narrowed to codex only; stop wiring claude | feat(local-chat-runner): replace MCP plumbing with a small centraid CLI (#71) |
+| steer-7a0284c3256-1779099410-3 | 7a0284c3-256e-4ea2-9f9d-ee59d85c0465 | #71 | interrupt | structural |  | feat(local-chat-runner): replace MCP plumbing with a small centraid CLI (#71) |
+| steer-7a0284c3256-1779099410-4 | 7a0284c3-256e-4ea2-9f9d-ee59d85c0465 | #71 | correction | classifier | reconsider MCP approach; suggested codex plugins instead | feat(local-chat-runner): replace MCP plumbing with a small centraid CLI (#71) |
+| steer-7a0284c3256-1779099410-5 | 7a0284c3-256e-4ea2-9f9d-ee59d85c0465 | #71 | interrupt | structural |  | feat(local-chat-runner): replace MCP plumbing with a small centraid CLI (#71) |
+| steer-7a0284c3256-1779099410-6 | 7a0284c3-256e-4ea2-9f9d-ee59d85c0465 | #71 | correction | classifier | reconsider approach; prefer CLI-in-prompt over MCP/plugins | feat(local-chat-runner): replace MCP plumbing with a small centraid CLI (#71) |

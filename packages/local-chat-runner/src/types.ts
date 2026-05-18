@@ -25,15 +25,11 @@ export interface RunnerPrefs {
 /**
  * Construction-time options every adapter receives. The `appsDir` is the
  * embedded local runtime's apps directory — same one the runtime constructs
- * its `Registry` against. The MCP server reuses it to compute the
- * `<appsDir>/<appId>/data.sqlite` path for each tool call.
+ * its `Registry` against. Adapters that spawn external CLIs derive the
+ * per-app data dir as `<appsDir>/<appId>/`.
  */
 export interface AdapterCtx {
   appsDir: string;
-  /** Absolute path to the built `centraid-mcp-server.js` entrypoint. */
-  mcpServerScript: string;
-  /** Node binary used to spawn the MCP server. Defaults to `process.execPath`. */
-  nodeBin?: string;
   /** Forwarded CLI-specific user prefs. */
   prefs: RunnerPrefs;
 }

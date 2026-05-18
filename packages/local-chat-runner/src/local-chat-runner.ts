@@ -2,12 +2,17 @@
  * Top-level `ChatRunner` for the desktop's embedded local runtime.
  *
  * Picks an adapter (Codex / Claude Code) based on the user's persisted
- * `chat.runner.kind` pref, then drives one turn. Adapter-assigned session
- * ids are persisted to the per-window `ChatStore` so subsequent turns
- * resume the same CLI session.
+ * `chat.runner.kind` pref, then drives one turn. Adapter-assigned
+ * session ids are persisted to the per-window `ChatStore` so subsequent
+ * turns resume the same CLI session.
  *
- * The local-runtime host wires this up in `Runtime({ chatRunner: ... })`.
- * The route handler in `runtime-core` calls `run()` per inbound POST.
+ * Codex talks to a small `centraid` CLI bin (shipped by this package)
+ * directly via shell — no MCP server, no network, no token plumbing.
+ * The CLI operates on `./data.sqlite` and codex is spawned with cwd
+ * pinned to `<appsDir>/<appId>`.
+ *
+ * Claude Code keeps its existing stdio-MCP wiring — this iteration's
+ * empirical verification + simplification work targets codex.
  */
 
 import path from 'node:path';
@@ -29,22 +34,27 @@ export interface MakeLocalChatRunnerOptions {
    *  the adapter picks up settings changes without a runtime restart. */
   prefsLoader: () => Promise<RunnerPrefs | undefined>;
   /**
-   * Optional override for the MCP-server script path. Defaults to the
-   * built `centraid-mcp-server.js` colocated with this module.
+   * Directory containing the built `centraid` CLI binary. Defaults to
+   * the `dist/` sibling of the local-chat-runner package itself.
+   * Codex's PATH is prepended with this dir per turn so it can invoke
+   * `centraid` by bare name.
    */
-  mcpServerScript?: string;
-  /** Optional override for the node binary used to spawn the MCP server. */
-  nodeBin?: string;
+  centraidCliDir?: string;
 }
 
-export function defaultMcpServerScript(): string {
+/**
+ * Default location of the built `centraid` CLI — sibling of this
+ * module, i.e. `<package>/dist/`. The published `bin.centraid` entry
+ * in package.json points at `./dist/centraid-cli.js`, and we expose
+ * just the directory so spawn-PATH stays simple.
+ */
+export function defaultCentraidCliDir(): string {
   // `import.meta.url` resolves to .../dist/local-chat-runner.js at runtime.
-  const here = fileURLToPath(import.meta.url);
-  return path.join(path.dirname(here), 'centraid-mcp-server.js');
+  return path.dirname(fileURLToPath(import.meta.url));
 }
 
 export function makeLocalChatRunner(opts: MakeLocalChatRunnerOptions): ChatRunner {
-  const script = opts.mcpServerScript ?? defaultMcpServerScript();
+  const centraidCliDir = opts.centraidCliDir ?? defaultCentraidCliDir();
   return {
     async run(input: ChatRunInput): Promise<ChatRunResult> {
       const prefs = await opts.prefsLoader();
@@ -58,14 +68,9 @@ export function makeLocalChatRunner(opts: MakeLocalChatRunnerOptions): ChatRunne
       }
       const ctx: AdapterCtx = {
         appsDir: opts.appsDir,
-        mcpServerScript: script,
-        ...(opts.nodeBin ? { nodeBin: opts.nodeBin } : {}),
         prefs,
       };
 
-      // Look up any prior adapter session id so we can pass `--resume` /
-      // `--session`. Mid-window kind switch drops the stale id — claude
-      // session ids aren't portable to codex and vice versa.
       const appDir = path.join(opts.appsDir, input.appId);
       const store = new ChatStore(appDir);
       const window = await store.getWindow(input.windowId).catch(() => undefined);
@@ -74,13 +79,19 @@ export function makeLocalChatRunner(opts: MakeLocalChatRunnerOptions): ChatRunne
         window && window.adapterKind === adapterKind ? window.adapterSessionId : undefined;
 
       if (prefs.kind === 'codex') {
-        const result = await runCodexTurn({ ctx, input }, resumeId);
+        const result = await runCodexTurn({ ctx, input }, resumeId, {
+          appsDir: opts.appsDir,
+          centraidCliDir,
+        });
         return {
           adapterKind,
           ...(result.threadId ? { adapterSessionId: result.threadId } : {}),
         };
       }
-      const result = await runClaudeTurn({ ctx, input }, resumeId);
+      const result = await runClaudeTurn({ ctx, input }, resumeId, {
+        appsDir: opts.appsDir,
+        centraidCliDir,
+      });
       return {
         adapterKind,
         ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),

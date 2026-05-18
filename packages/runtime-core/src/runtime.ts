@@ -98,7 +98,19 @@ export interface RunnerStatus {
   ok: boolean;
   /** Adapter version string when detectable (e.g. "codex 0.20.4"). */
   version?: string;
-  /** Reason for `ok: false`. e.g. "binary not on PATH". */
+  /**
+   * Minimum CLI version whose event/flag schema we've verified end-to-end.
+   * The chat panel shows this alongside the installed version.
+   */
+  minVersion?: string;
+  /**
+   * `true` when the installed version is >= `minVersion`. `false` when
+   * the user's CLI is older than what we've tested — the adapter may
+   * still work but we surface the mismatch so users know. `undefined`
+   * when we couldn't parse a semver from the CLI's `--version` output.
+   */
+  versionAtLeast?: boolean;
+  /** Reason for `ok: false` (or for a `versionAtLeast: false` warning). */
   reason?: string;
   /** Caller-facing hint (install link, settings path …). */
   hint?: string;

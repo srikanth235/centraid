@@ -1,87 +1,73 @@
 /*
  * Claude Code CLI adapter.
  *
- * Runs `claude` in non-interactive mode with stream-json output, an inline
- * `--mcp-config` pointing at our stdio MCP server, and per-mode permission
- * flags. Parses the SDK stream-json event format and translates entries
- * into `ChatStreamEvent`s.
+ * Runs `claude -p <prompt> --output-format stream-json --verbose` with
+ * the working directory pinned to `<appsDir>/<appId>` and the
+ * `centraid` CLI bin on PATH. Claude Code's default sandbox is
+ * permission-based (it asks the user before each new tool use) rather
+ * than network-blocking, so the direct-CLI pattern works without
+ * special flags — same as codex.
  *
- * Session continuity uses `--resume <sessionId>` on subsequent turns,
- * with the session id captured from the first turn's `session.init`-style
- * event.
+ * Empirically captured against Claude Code 2.1.126:
+ *   {"type":"system","subtype":"init","session_id":"<uuid>",...}
+ *   {"type":"assistant","message":{"content":[{"type":"text",...}, {"type":"tool_use",...}]}, "session_id":"...", "uuid":"..."}
+ *   {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"...","content":...,"is_error":...}]}}
+ *   {"type":"result","subtype":"success","result":"...","session_id":"..."}
  *
- * Mode flags:
- *   - **full**: nothing added; the user's claude defaults apply.
- *   - **data**: `--permission-mode plan` (planning-only, no edits), plus
- *     `--allowedTools` narrowed to the MCP-prefixed centraid tools.
- *
- * Event mapping (subject to verification — open item in the issue):
- *   { type: 'system', subtype: 'init', session_id }
- *   { type: 'assistant', message: { content: [...] } }    → assistant.delta / tool.start
- *   { type: 'user', message: { content: [{ tool_use_id, content }] } } → tool.result
- *   { type: 'result', ... }                              → final
+ * --output-format stream-json REQUIRES --verbose; otherwise claude
+ * errors out at startup.
  */
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { randomUUID } from 'node:crypto';
 import type { ChatStreamEvent } from '@centraid/runtime-core';
 import { spawnCli } from './spawn-cli.js';
 import type { RunOneTurnArgs } from './types.js';
 
-const MCP_SERVER_LABEL = 'centraid';
+const CENTRAID_PROMPT_PREAMBLE = `## centraid CLI
+
+You have a "centraid" CLI available for reading and writing this app's data:
+
+  centraid sql describe                      — JSON: tables, columns, indexes, views
+  centraid sql read  "SELECT ..."            — JSON: { columns, rows, totalRows, truncated }
+  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."  — JSON: { rowsAffected, lastInsertRowid }
+
+The CLI operates on ./data.sqlite in the current working directory, which is
+already scoped to this app. You do NOT need to pass an appId. DDL
+(CREATE/ALTER/DROP) and PRAGMA are refused.
+
+Prefer one focused SELECT over many small ones (use LIMIT). Call
+\`centraid sql describe\` first if you don't know the schema yet.`;
 
 export interface ClaudeAdapterResult {
   sessionId?: string;
 }
 
+export interface ClaudeAdapterEnv {
+  appsDir: string;
+  centraidCliDir: string;
+}
+
 export async function runClaudeTurn(
   args: RunOneTurnArgs,
   prevSessionId: string | undefined,
+  env: ClaudeAdapterEnv,
 ): Promise<ClaudeAdapterResult> {
   const { ctx, input } = args;
   const bin = ctx.prefs.binPath ?? 'claude';
 
-  // Claude Code wants an inline JSON file (or string) for --mcp-config.
-  // We materialize a tmp file per turn so the path is durable across the
-  // CLI's startup sequence; cleanup happens after exit.
-  const mcpConfig = {
-    mcpServers: {
-      [MCP_SERVER_LABEL]: {
-        command: ctx.nodeBin ?? process.execPath,
-        args: [
-          ctx.mcpServerScript,
-          '--apps-dir',
-          ctx.appsDir,
-          '--app-id',
-          input.appId,
-          '--mode',
-          input.mode,
-        ],
-      },
-    },
-  };
-  const mcpFile = path.join(tmpdir(), `centraid-mcp-${randomUUID()}.json`);
-  await fs.writeFile(mcpFile, JSON.stringify(mcpConfig), { mode: 0o600 });
+  const appWorkspace = path.join(env.appsDir, input.appId);
+  await fs.mkdir(appWorkspace, { recursive: true });
 
-  const cliArgs = ['-p', input.message, '--output-format', 'stream-json', '--mcp-config', mcpFile];
+  const cliArgs = ['-p', input.message, '--output-format', 'stream-json', '--verbose'];
   if (prevSessionId) cliArgs.push('--resume', prevSessionId);
   if (input.model) cliArgs.push('--model', input.model);
-  if (input.extraSystemPrompt) {
-    cliArgs.push('--append-system-prompt', input.extraSystemPrompt);
-  }
-  if (input.mode === 'data') {
-    cliArgs.push('--permission-mode', 'plan');
-    cliArgs.push(
-      '--allowedTools',
-      [
-        `mcp__${MCP_SERVER_LABEL}__centraid_sql_describe`,
-        `mcp__${MCP_SERVER_LABEL}__centraid_sql_read`,
-        `mcp__${MCP_SERVER_LABEL}__centraid_sql_write`,
-      ].join(','),
-    );
-  }
+
+  const systemPrompt = input.extraSystemPrompt
+    ? `${CENTRAID_PROMPT_PREAMBLE}\n\n${input.extraSystemPrompt}`
+    : CENTRAID_PROMPT_PREAMBLE;
+  cliArgs.push('--append-system-prompt', systemPrompt);
+
   if (ctx.prefs.extraArgs && ctx.prefs.extraArgs.length > 0) {
     cliArgs.push(...ctx.prefs.extraArgs);
   }
@@ -97,50 +83,59 @@ export async function runClaudeTurn(
 
   emit({ type: 'assistant.start' });
 
-  try {
-    const result = await spawnCli({
-      bin,
-      args: cliArgs,
-      abortSignal: input.abortSignal,
-      onStderrLine: (line) => emit({ type: 'phase', phase: 'stderr', detail: line }),
-      onJsonLine: (line) => {
-        try {
-          translateClaudeLine(
-            line,
-            emit,
-            (id) => {
-              sessionId = id;
-            },
-            (text) => {
-              sawFinal = true;
-              finalText = text;
-            },
-          );
-        } catch {
-          // ignore
-        }
-      },
+  const spawnEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: `${env.centraidCliDir}${path.delimiter}${process.env.PATH ?? ''}`,
+  };
+
+  const result = await spawnCli({
+    bin,
+    args: cliArgs,
+    cwd: appWorkspace,
+    env: spawnEnv,
+    abortSignal: input.abortSignal,
+    onStderrLine: (line) => emit({ type: 'phase', phase: 'stderr', detail: line }),
+    onJsonLine: (line) => {
+      try {
+        translateClaudeLine(
+          line,
+          emit,
+          (id) => {
+            sessionId = id;
+          },
+          (text) => {
+            sawFinal = true;
+            finalText = text;
+          },
+        );
+      } catch {
+        // ignore
+      }
+    },
+  });
+
+  if (input.abortSignal.aborted) {
+    emit({ type: 'aborted' });
+  } else if (result.exitCode !== 0 && !sawFinal) {
+    emit({
+      type: 'error',
+      message: `claude exited ${result.exitCode ?? 'null'}${
+        result.stderrTail ? `\n${result.stderrTail}` : ''
+      }`,
     });
-    if (input.abortSignal.aborted) {
-      emit({ type: 'aborted' });
-    } else if (result.exitCode !== 0 && !sawFinal) {
-      emit({
-        type: 'error',
-        message: `claude exited ${result.exitCode ?? 'null'}${
-          result.stderrTail ? `\n${result.stderrTail}` : ''
-        }`,
-      });
-    } else if (!sawFinal) {
-      emit({ type: 'final', text: finalText });
-    }
-  } finally {
-    await fs.unlink(mcpFile).catch(() => undefined);
+  } else if (!sawFinal) {
+    emit({ type: 'final', text: finalText });
   }
 
   return sessionId ? { sessionId } : {};
 }
 
-function translateClaudeLine(
+/**
+ * Translate one JSON event line from `claude -p --output-format
+ * stream-json --verbose` into a `ChatStreamEvent`. Confirmed schema
+ * for Claude Code 2.1.126; unknown shapes fall through as `phase`.
+ */
+export function translateClaudeLine(
   line: Record<string, unknown>,
   emit: (e: ChatStreamEvent) => void,
   onSessionId: (id: string) => void,

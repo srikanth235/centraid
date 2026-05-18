@@ -2,9 +2,9 @@
   "name": "@centraid/local-chat-runner",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-runtime ChatRunner for centraid's per-app chat. Spawns a user-configured coding CLI (Codex or Claude Code) as a subprocess and attaches a stdio MCP server that exposes centraid_sql_* tools scoped to the active app. Centraid bundles no inference loop — the user brings their own CLI.",
+  "description": "Local-runtime ChatRunner for centraid's per-app chat. Spawns a user-configured coding CLI (Codex or Claude Code) as a subprocess with cwd pinned to the active app's data dir and teaches it about a small `centraid` CLI bin that reads/writes data.sqlite directly. No MCP, no network, no token plumbing.",
   "bin": {
-    "centraid-mcp-server": "./dist/centraid-mcp-server.js"
+    "centraid": "./dist/centraid-cli.js"
   },
   "files": [
     "dist",
@@ -20,8 +20,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/runtime-core": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@centraid/runtime-core": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

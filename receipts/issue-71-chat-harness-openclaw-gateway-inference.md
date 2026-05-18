@@ -10,6 +10,7 @@ GitHub issue: [#71](https://github.com/srikanth235/centraid/issues/71)
 - [x] M5 — chat-harness rewrite
 - [x] M6 — data mode
 - [x] M7 — cleanup
+- [x] Open item — empirically pin codex schema + simplify to CLI
 - [x] typecheck
 - [x] test
 - [x] check
@@ -108,6 +109,24 @@ Deleted files: `system-prompt.ts` (moved to runtime-core's `buildExtraPrompt`), 
 
 `packages/builder-harness/` is deliberately unchanged — the app-authoring agent legitimately needs local fs/bash, so pi-coding-agent stays for the builder. A BYO-CLI migration for the builder is a separate issue.
 
+### Open item — empirically pin codex schema + simplify to CLI
+
+A follow-up pass on the local codex adapter, prompted by empirical runs of `codex-cli 0.128.0` and a re-read of codex's sandbox model. The original adapter shipped flags that don't exist in the CLI (`--allowed-tools`, `--system-prompt`, `--session`, `--ask-for-approval`) and assumed MCP-over-stdio was the only path to tool exposure. Two things changed:
+
+1. **Schema verified end-to-end.** Captured the actual `codex exec --json` event stream: `thread.started.thread_id`, `turn.started`, `item.started`, `item.completed[agent_message]` / `[command_execution]`, `turn.completed`, `turn.failed`. The `translateCodexLine` function is now pinned to that schema; unknown shapes fall through as `phase` events so a small upgrade doesn't break parsing. A unit test in [packages/local-chat-runner/src/codex-adapter.test.ts](../packages/local-chat-runner/src/codex-adapter.test.ts) carries the captured fixtures verbatim.
+
+2. **MCP entirely dropped in favour of a small `centraid` CLI.** Empirical probe showed codex's `--sandbox read-only` and `--sandbox workspace-write` both block outbound network (including loopback), which kills any "CLI talks to local HTTP" design. Codex DOES allow workspace-write filesystem access, so the simplest possible mechanism is a Node bin that opens `./data.sqlite` directly. The adapter spawns codex with `-C <appsDir>/<appId>` (cwd = the per-app data dir) and prepends the centraid-CLI bin dir to PATH. AppId is the cwd; the model never names it, so it can't escape the scope.
+
+The `centraid` CLI ([packages/local-chat-runner/src/centraid-cli.ts](../packages/local-chat-runner/src/centraid-cli.ts)) exposes three subcommands: `centraid sql describe` (JSON schema dump), `centraid sql read "SELECT ..."` (rows JSON), `centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."` (rowsAffected JSON). DDL and PRAGMA are refused with exit code 64; bad-usage with exit code 2. `CENTRAID_DATA_FILE` env override is supported for tests; production codex/claude adapters rely on cwd alone.
+
+The Claude Code adapter ([packages/local-chat-runner/src/claude-adapter.ts](../packages/local-chat-runner/src/claude-adapter.ts)) was simplified to the same shape (cwd + CLI on PATH, prompt preamble teaching the agent about the CLI) — Claude Code's permission-based sandbox accepts this without special flags.
+
+Mode handling for codex was dropped: codex's sandbox model has no clean read-only-with-writable-app-data regime, so the `mode: 'data'` toggle now only affects the runtime's prompt (`buildExtraPrompt` still picks the more-restrictive data-mode wording). OpenClaw's data-mode lockdown via `toolsAllow` + `disableMessageTool` is unchanged.
+
+Files deleted: `mcp-server-core.ts`, `centraid-mcp-server.ts`, `mcp-http-pool.ts` (the latter was speculative — never landed in the prior commit). Files added: `centraid-cli.ts`, `centraid-cli.test.ts`, `codex-adapter.test.ts`. The `@modelcontextprotocol/sdk` dependency is removed.
+
+`RunnerStatus` in runtime-core gains `minVersion?: string` and `versionAtLeast?: boolean`; `preflight.ts` parses semver from the CLI's `--version` output and compares against pinned minima (`codex` 0.128.0 / `claude-code` 2.1.126). When the user's CLI parses but is older, the preflight surfaces a warning hint while still reporting `ok: true` — older versions may work but we only know for sure on verified ones.
+
 ## Verification
 
 Automated checks all green at the worktree HEAD before commit:
@@ -117,7 +136,9 @@ Automated checks all green at the worktree HEAD before commit:
   - `packages/runtime-core/src/chat-store.test.ts` (7 tests): window-id validation, idempotent upsert, mid-window adapter swap, turnCount, list ordering, delete + transcript unlink, JSONL parser tolerance.
   - `packages/runtime-core/src/chat-routes.test.ts` (8 tests): 503 without runner, empty window list, end-to-end POST + SSE + window persistence, invalid windowId, DELETE, runner-status `none`, transcript replay via `/history`, error → SSE error frame.
   - `packages/chat-harness/src/chat-client.test.ts` (4 tests): SSE multi-event parse, bearer-token forwarding, non-2xx → `ChatHarnessError`, body fields (mode/model) forwarded.
-  - `packages/local-chat-runner/src/preflight.test.ts` (3 tests): binary-not-found reporting, cache reuse, cache busting on binPath change.
+  - `packages/local-chat-runner/src/preflight.test.ts` (7 tests): binary-not-found reporting, cache reuse, cache busting on binPath change, semver parsing, semver ordering, versionAtLeast surfacing.
+  - `packages/local-chat-runner/src/codex-adapter.test.ts` (4 tests): basic schema fixture, tool-call lifecycle fixture, turn.failed → error, unknown event → phase.
+  - `packages/local-chat-runner/src/centraid-cli.test.ts` (8 tests): describe/read/write JSON contracts, refusal exit codes, unknown subcommand handling, `CENTRAID_DATA_FILE` override.
   - Existing tests (179+) continue to pass.
 - `bun run check` — oxfmt + oxlint clean (0 warnings, 0 errors) across 244 files / 154 lint targets.
 - `bun run build` — 8/8 turbo build tasks succeed; the new `centraid-mcp-server.js` lands in `packages/local-chat-runner/dist/` and is wired as a `bin` entry so subprocess spawn paths can locate it.
