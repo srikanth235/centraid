@@ -1,15 +1,19 @@
 /*
- * Chat-specific `ChatRunner` for the desktop's embedded local runtime.
+ * Chat adapter — the per-app data chat layer on top of the engine.
  *
- * Thin wrapper over the unified `runAgentTurn` primitive: derives the
- * per-app workspace from `<appsDir>/<appId>`, splices the `centraid`
- * CLI preamble into the system prompt so the agent knows how to
- * read/write `./data.sqlite`, reads the previous adapter session id
- * from the per-window `ChatStore`, and hands back the new one for the
- * route handler to persist.
+ * `runAgentTurn` is mode-agnostic. This file is the chat-side adapter
+ * that wraps it into a `ChatRunner` the gateway's `/_chat` route can
+ * inject: per-app cwd from `<appsDir>/<appId>`, the `centraid` CLI
+ * preamble spliced into the system prompt so the agent can read/write
+ * `./data.sqlite`, and the per-window `ChatStore` lookup for the
+ * previous adapter session id (round-tripped to resume the conversation).
  *
- * Builder-mode consumers should call `runAgentTurn` directly with their
- * own workspace + preamble + resume-id handling.
+ * Builder-mode consumers call `runAgentTurn` directly — they own their
+ * own cwd / preamble / resume-id plumbing and don't need this adapter.
+ *
+ * Note: this is one of two `ChatRunner` implementations. The other lives
+ * in `@centraid/openclaw-plugin` and drives an in-process openclaw agent.
+ * The desktop's embedded runtime injects this one; openclaw injects its.
  */
 
 import path from 'node:path';
@@ -23,7 +27,7 @@ import {
 import { runAgentTurn } from './runtime.js';
 import type { RunnerPrefs } from './types.js';
 
-export interface MakeLocalChatRunnerOptions {
+export interface MakeChatRunnerOptions {
   /** Embedded runtime's appsDir; pinned at construction. */
   appsDir: string;
   /** Loader for the user's persisted runner prefs. Called per turn so
@@ -31,11 +35,10 @@ export interface MakeLocalChatRunnerOptions {
   prefsLoader: () => Promise<RunnerPrefs | undefined>;
   /**
    * Directory containing the built `centraid` CLI binary. Defaults to
-   * the `dist/` sibling of the local-chat-runner package itself.
-   * Codex's shell can shell out to this bin by bare name when we
-   * prepend it to PATH — but we only need PATH prepending for codex,
-   * and codex app-server inherits its env from the parent process.
-   * Kept for backwards-compat of the public option name.
+   * the `dist/` sibling of the agent-runtime package itself. Forwarded
+   * to `runAgentTurn` as `extraPath` so codex's shell tool / claude's
+   * Bash tool can invoke `centraid` by bare name without mutating the
+   * host's `process.env`.
    */
   centraidCliDir?: string;
 }
@@ -63,7 +66,7 @@ function spliceExtraSystemPrompt(extra: string): string {
   return extra ? `${CHAT_PROMPT_PREAMBLE}\n\n${extra}` : CHAT_PROMPT_PREAMBLE;
 }
 
-export function makeLocalChatRunner(opts: MakeLocalChatRunnerOptions): ChatRunner {
+export function makeChatRunner(opts: MakeChatRunnerOptions): ChatRunner {
   const centraidCliDir = opts.centraidCliDir ?? defaultCentraidCliDir();
   return {
     async run(input: ChatRunInput): Promise<ChatRunResult> {
@@ -72,9 +75,9 @@ export function makeLocalChatRunner(opts: MakeLocalChatRunnerOptions): ChatRunne
         input.onEvent({
           type: 'error',
           message:
-            'No local chat runner configured. Open Settings → AI providers and pick Codex or Claude Code.',
+            'No coding agent configured. Open Settings → AI providers and pick Codex or Claude Code.',
         });
-        throw new Error('no local chat runner configured');
+        throw new Error('no coding agent configured');
       }
 
       const cwd = path.join(opts.appsDir, input.appId);
@@ -86,36 +89,23 @@ export function makeLocalChatRunner(opts: MakeLocalChatRunnerOptions): ChatRunne
 
       const extraSystemPrompt = spliceExtraSystemPrompt(input.extraSystemPrompt);
 
-      // Codex spawns its shell tool with its own env; prepend the
-      // centraid CLI dir so the agent can invoke `centraid` by bare
-      // name regardless of where the user installed the package.
-      const originalPath = process.env.PATH ?? '';
-      const pathInjection = `${centraidCliDir}${path.delimiter}${originalPath}`;
-      const restorePath = (): void => {
-        process.env.PATH = originalPath;
+      const result = await runAgentTurn(
+        {
+          cwd,
+          message: input.message,
+          extraSystemPrompt,
+          extraPath: centraidCliDir,
+          ...(input.model ? { model: input.model } : {}),
+          ...(resumeId ? { prevSessionId: resumeId } : {}),
+          abortSignal: input.abortSignal,
+          onEvent: input.onEvent,
+        },
+        { prefs },
+      );
+      return {
+        adapterKind: result.adapterKind,
+        ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
       };
-      process.env.PATH = pathInjection;
-
-      try {
-        const result = await runAgentTurn(
-          {
-            cwd,
-            message: input.message,
-            extraSystemPrompt,
-            ...(input.model ? { model: input.model } : {}),
-            ...(resumeId ? { prevSessionId: resumeId } : {}),
-            abortSignal: input.abortSignal,
-            onEvent: input.onEvent,
-          },
-          { prefs },
-        );
-        return {
-          adapterKind: result.adapterKind,
-          ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
-        };
-      } finally {
-        restorePath();
-      }
     },
   };
 }

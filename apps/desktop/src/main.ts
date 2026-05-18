@@ -91,11 +91,11 @@ app.whenReady().then(() => {
   // fetcher is silent on every failure (offline, 404, parse error, etc.) so
   // the home grid keeps showing whatever's in cache + bundle regardless.
   void backgroundFetchTemplates();
-  // First-launch credential import. Reads Claude Code (macOS keychain) and
-  // Codex (`~/.codex/auth.json`); writes whichever exist into pi's auth.json
-  // so the coding agent can use the user's existing subscription. Codex is
-  // preferred when both are present. Subsequent launches no-op — the user
-  // can re-sync explicitly from Settings → AI providers.
+  // First-launch credential probe. Reads Claude Code (macOS keychain) and
+  // Codex (`~/.codex/auth.json`) to populate the Settings → AI providers
+  // status card so the user can see which CLIs are already installed.
+  // No credentials are copied — each backend reads its own auth in place
+  // (codex from `~/.codex/auth.json`, Claude SDK from `ANTHROPIC_API_KEY`).
   void firstLaunchAuthImport();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

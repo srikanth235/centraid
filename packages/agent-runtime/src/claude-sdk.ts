@@ -20,6 +20,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import type { ChatStreamEvent } from '@centraid/runtime-core';
 
 export interface ClaudeSdkInput {
@@ -30,6 +31,13 @@ export interface ClaudeSdkInput {
   model?: string;
   /** SDK session id from a prior turn; passed as `options.resume`. */
   prevSessionId?: string;
+  /**
+   * Path-delimited dirs prepended to PATH in the SDK-spawned claude
+   * process's env. Used so the agent's Bash tool can invoke the
+   * `centraid` CLI by bare name. The SDK accepts `env` on `query`'s
+   * options, so we never mutate the host's `process.env`.
+   */
+  extraPath?: string;
   abortSignal: AbortSignal;
   onEvent: (event: ChatStreamEvent) => void;
 }
@@ -93,6 +101,13 @@ export async function runClaudeSdkTurn(
     }
     if (input.model) options.model = input.model;
     if (input.prevSessionId) options.resume = input.prevSessionId;
+    if (input.extraPath) {
+      const current = process.env.PATH ?? '';
+      options.env = {
+        ...process.env,
+        PATH: current ? `${input.extraPath}${path.delimiter}${current}` : input.extraPath,
+      };
+    }
     if (config.pathToClaudeCodeExecutable) {
       options.pathToClaudeCodeExecutable = config.pathToClaudeCodeExecutable;
     }

@@ -103,17 +103,17 @@ async function withWindowLock<T>(
   const previous = windowLocks.get(key) ?? Promise.resolve();
   let release!: () => void;
   const next = new Promise<void>((resolve) => (release = resolve));
-  windowLocks.set(
-    key,
-    previous.then(() => next),
-  );
+  // The map holds the *chained* tail (previous → next) so newer callers
+  // await everything ahead of them. Keep a reference to that exact promise
+  // so the cleanup branch can identify "nobody else queued after me".
+  const chained = previous.then(() => next);
+  windowLocks.set(key, chained);
   await previous;
   try {
     return await fn();
   } finally {
     release();
-    // Clear the slot only if nothing else has chained on top of us.
-    if (windowLocks.get(key) === next) windowLocks.delete(key);
+    if (windowLocks.get(key) === chained) windowLocks.delete(key);
   }
 }
 

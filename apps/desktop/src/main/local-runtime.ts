@@ -10,11 +10,11 @@ import {
   type RuntimeHttpServerHandle,
 } from '@centraid/runtime-core';
 import {
-  makeLocalChatRunner,
+  makeChatRunner,
   runPreflight,
   invalidatePreflightCache,
   type RunnerPrefs,
-} from '@centraid/local-chat-runner';
+} from '@centraid/agent-runtime';
 
 /**
  * In-process runtime embedded inside the Electron main process. Spawned
@@ -65,21 +65,21 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     const userStore = new UserStore(gatewayDbProvider);
     const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
 
-    // Resolve user prefs for the local chat runner — the desktop persists
+    // Resolve user prefs for the agent runtime — the desktop persists
     // the user's CLI choice (codex / claude-code) + optional override path
     // in the gateway user_prefs row. Loader runs per turn so a settings
     // flip is picked up without an Electron restart.
     const prefsLoader = async (): Promise<RunnerPrefs | undefined> => {
       const allPrefs = userStore.getAllPrefs();
-      const kindRaw = allPrefs['chat.runner.kind'];
+      const kindRaw = allPrefs['agent.runner.kind'];
       const kind: RunnerPrefs['kind'] | undefined =
         kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : undefined;
       if (!kind) return undefined;
       const binPath =
-        typeof allPrefs['chat.runner.binPath'] === 'string'
-          ? (allPrefs['chat.runner.binPath'] as string)
+        typeof allPrefs['agent.runner.binPath'] === 'string'
+          ? (allPrefs['agent.runner.binPath'] as string)
           : undefined;
-      const extraArgsRaw = allPrefs['chat.runner.extraArgs'];
+      const extraArgsRaw = allPrefs['agent.runner.extraArgs'];
       const extraArgs = Array.isArray(extraArgsRaw)
         ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
         : undefined;
@@ -89,7 +89,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
         ...(extraArgs ? { extraArgs } : {}),
       };
     };
-    const chatRunner = makeLocalChatRunner({ appsDir, prefsLoader });
+    const chatRunner = makeChatRunner({ appsDir, prefsLoader });
 
     const runtime = new Runtime({
       appsDir,
@@ -102,7 +102,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
           return {
             kind: 'none' as const,
             ok: false,
-            reason: 'No local chat runner configured.',
+            reason: 'No coding agent configured.',
             hint: 'Open Settings → AI providers and pick Codex or Claude Code.',
           };
         }
@@ -134,9 +134,9 @@ export async function shutdownLocalRuntime(): Promise<void> {
 }
 
 /**
- * Called by the settings-save IPC handler when the user's `chat.runner.*`
+ * Called by the settings-save IPC handler when the user's `agent.runner.*`
  * prefs may have changed. The preflight result is cached in-memory by
- * `@centraid/local-chat-runner`; invalidating forces the next status
+ * `@centraid/agent-runtime`; invalidating forces the next status
  * read to re-probe `--version`.
  */
 export function noteRunnerPrefsChanged(): void {

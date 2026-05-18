@@ -246,9 +246,9 @@ export interface CentraidCloneTemplateResult {
 }
 
 /**
- * Subset of pi-ai's content-block types that the renderer hydrates into the
- * chat pane on session resume. Other block types (e.g. images) pass through
- * as opaque objects and are ignored.
+ * Content-block shapes the renderer hydrates into the chat pane on
+ * session resume. Other block types (e.g. images) pass through as
+ * opaque objects and are ignored.
  */
 export type CentraidContentBlock =
   | { type: 'text'; text: string }
@@ -257,9 +257,9 @@ export type CentraidContentBlock =
   | { type: string; [k: string]: unknown };
 
 /**
- * Subset of pi's `AgentMessage` union covering the roles the renderer
- * actually displays. Bash-execution / custom / summary message types are
- * passed through as `{ role: string }` and skipped during hydration.
+ * Persisted-message shape covering the roles the renderer actually
+ * displays. Bash-execution / custom / summary message types are passed
+ * through as `{ role: string }` and skipped during hydration.
  */
 export type CentraidAgentMessage =
   | { role: 'user'; content: string | CentraidContentBlock[]; timestamp?: number }
@@ -279,8 +279,9 @@ export type CentraidAgentMessage =
   | { role: string; [k: string]: unknown };
 
 /**
- * Pi `AgentEvent` shape (subset we care about). The full union is wider; we
- * type only the fields the renderer reads. See `@earendil-works/pi-agent-core`.
+ * `AgentEvent` shape the renderer consumes (subset we care about).
+ * Emitted by `@centraid/builder-harness`'s `createCentraidAgentSession`
+ * via the main-process IPC channel; matches `CentraidAgentEvent` there.
  */
 export type CentraidAgentEvent =
   | { type: 'agent_start' }
@@ -450,9 +451,9 @@ interface CentraidApi {
   /** Rename a chat session (overrides the auto-generated title). */
   chatHistoryRename(input: { sessionId: string; title: string }): Promise<CentraidChatSessionMeta>;
 
-  /** Snapshot of pi's auth.json + the on-machine source files. */
+  /** Snapshot of which coding-agent credentials are present on this machine. */
   authStatus(): Promise<CentraidAuthStatus>;
-  /** Re-import Codex / Claude Code creds, overwriting pi's existing entries. */
+  /** Re-probe the on-disk credential locations and return a fresh snapshot. */
   authResync(): Promise<CentraidAuthImportResult>;
 
   /**

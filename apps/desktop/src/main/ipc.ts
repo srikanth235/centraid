@@ -78,19 +78,19 @@ async function loadRunnerPrefs(): Promise<{
   extraArgs?: string[];
 }> {
   const prefs = await fetchUserPrefs();
-  const kindRaw = prefs['chat.runner.kind'];
+  const kindRaw = prefs['agent.runner.kind'];
   const kind: 'codex' | 'claude-code' | undefined =
     kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : undefined;
   if (!kind) {
     throw new Error(
-      'No coding-agent configured. Open Settings → AI providers and pick Codex or Claude Code.',
+      'No coding agent configured. Open Settings → AI providers and pick Codex or Claude Code.',
     );
   }
   const binPath =
-    typeof prefs['chat.runner.binPath'] === 'string'
-      ? (prefs['chat.runner.binPath'] as string)
+    typeof prefs['agent.runner.binPath'] === 'string'
+      ? (prefs['agent.runner.binPath'] as string)
       : undefined;
-  const extraArgsRaw = prefs['chat.runner.extraArgs'];
+  const extraArgsRaw = prefs['agent.runner.extraArgs'];
   const extraArgs = Array.isArray(extraArgsRaw)
     ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
     : undefined;
@@ -451,7 +451,7 @@ export function registerIpcHandlers(): void {
  * Capture the preview iframe inside `win` and write it as a PNG to
  * `<projectDir>/.preview/snapshot.png`. The agent picks it up via its
  * native `Read` tool (or `centraid preview snapshot` for freshness
- * metadata) — that replaces pi's `previewScreenshot` custom tool.
+ * metadata).
  *
  * The renderer tags the preview iframe with `data-centraid-app="1"`;
  * we use `executeJavaScript` to read its bounding rect, then clip
@@ -463,6 +463,13 @@ export function registerIpcHandlers(): void {
  */
 async function capturePreviewSnapshot(win: BrowserWindow, projectDir: string): Promise<void> {
   if (win.isDestroyed()) return;
+  const dir = path.join(projectDir, '.preview');
+  const file = path.join(dir, 'snapshot.png');
+  // Drop any prior snapshot up front so a failed capture (hidden preview tab,
+  // missing iframe, capturePage throw) can't leave a stale image the agent
+  // then treats as fresh. Re-created below iff capture succeeds this turn.
+  await fs.rm(file, { force: true }).catch(() => undefined);
+
   const rect = (await win.webContents.executeJavaScript(
     `(() => {
       const f = document.querySelector('iframe[data-centraid-app="1"]');
@@ -481,9 +488,8 @@ async function capturePreviewSnapshot(win: BrowserWindow, projectDir: string): P
     width: Math.max(1, Math.round(rect.width)),
     height: Math.max(1, Math.round(rect.height)),
   });
-  const dir = path.join(projectDir, '.preview');
   await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, 'snapshot.png'), image.toPNG());
+  await fs.writeFile(file, image.toPNG());
 }
 
 /** Stop and forget the session associated with a closing window. */

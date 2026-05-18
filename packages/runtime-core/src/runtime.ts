@@ -63,8 +63,8 @@ export interface RuntimeOptions {
    * Optional per-app chat runner. When provided, `POST /centraid/<id>/_chat`
    * drives a model turn via this runner. Two implementations exist:
    * `openclaw-plugin/lib/openclaw-chat-runner` (calls `runEmbeddedAgent`
-   * in-process) and `@centraid/local-chat-runner` (spawns codex / claude-code
-   * subprocesses with our stdio MCP server attached).
+   * in-process on the gateway side) and `@centraid/agent-runtime`'s
+   * `makeChatRunner` (drives codex app-server / Claude SDK locally).
    *
    * Without a runner the chat routes 503 with `no_chat_runner`. Hosts
    * decide whether to inject one — single-app standalone setups, tests,

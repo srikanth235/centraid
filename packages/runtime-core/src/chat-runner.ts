@@ -8,9 +8,9 @@
  *   - `openclaw-plugin/lib/openclaw-chat-runner.ts` — wraps
  *     `api.runtime.agent.runEmbeddedAgent`. OpenClaw owns the loop and
  *     dispatches plugin-registered tools server-side.
- *   - `@centraid/local-chat-runner` — spawns the user's configured CLI
- *     (codex / claude-code) as a subprocess, attaches a stdio MCP server
- *     exposing the centraid_sql_* tools.
+ *   - `@centraid/agent-runtime`'s `makeChatRunner` — drives codex
+ *     app-server / Claude SDK locally, with the agent shelling out to
+ *     the bundled `centraid` CLI for SQL access.
  *
  * Either way, the route handler in runtime-core never implements a model
  * loop itself; it just translates the runner's `ChatStreamEvent`s into SSE

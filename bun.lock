@@ -16,11 +16,11 @@
       "name": "@centraid/desktop",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-templates": "workspace:*",
         "@centraid/builder-harness": "workspace:*",
         "@centraid/chat-harness": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
-        "@centraid/local-chat-runner": "workspace:*",
         "@centraid/runtime-core": "workspace:*",
         "ws": "^8.18.0",
       },
@@ -66,6 +66,23 @@
         "typescript": "catalog:",
       },
     },
+    "packages/agent-runtime": {
+      "name": "@centraid/agent-runtime",
+      "version": "0.1.0",
+      "bin": {
+        "centraid": "./dist/centraid-cli.js",
+      },
+      "dependencies": {
+        "@anthropic-ai/claude-agent-sdk": "^0.3.143",
+        "@centraid/runtime-core": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
+      },
+    },
     "packages/app-templates": {
       "name": "@centraid/app-templates",
       "version": "0.1.0",
@@ -82,8 +99,8 @@
       "name": "@centraid/builder-harness",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/agent-runtime": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
-        "@centraid/local-chat-runner": "workspace:*",
         "@centraid/openclaw-plugin": "workspace:*",
         "@centraid/runtime-core": "workspace:*",
         "tar": "^7.4.3",
@@ -114,23 +131,6 @@
       "version": "0.1.0",
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/local-chat-runner": {
-      "name": "@centraid/local-chat-runner",
-      "version": "0.1.0",
-      "bin": {
-        "centraid": "./dist/centraid-cli.js",
-      },
-      "dependencies": {
-        "@anthropic-ai/claude-agent-sdk": "^0.3.143",
-        "@centraid/runtime-core": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "tsx": "^4.20.3",
         "typescript": "catalog:",
       },
     },
@@ -471,6 +471,8 @@
 
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
+    "@centraid/agent-runtime": ["@centraid/agent-runtime@workspace:packages/agent-runtime"],
+
     "@centraid/app-templates": ["@centraid/app-templates@workspace:packages/app-templates"],
 
     "@centraid/builder-harness": ["@centraid/builder-harness@workspace:packages/builder-harness"],
@@ -480,8 +482,6 @@
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
-
-    "@centraid/local-chat-runner": ["@centraid/local-chat-runner@workspace:packages/local-chat-runner"],
 
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
 

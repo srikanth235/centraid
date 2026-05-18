@@ -1,21 +1,19 @@
-// Status reporter for locally-installed coding-agent CLIs.
+// Status reporter for locally-installed coding-agent credentials.
 //
-// Originally this module imported Claude Code / Codex OAuth credentials
-// into pi-coding-agent's auth.json so pi could use the user's existing
-// subscription without a second OAuth dance. Now that pi is gone and the
-// builder + chat both drive turns through `@centraid/local-chat-runner`
-// (codex app-server / Claude SDK), no translation is needed:
+// Builder + chat both drive turns through `@centraid/agent-runtime`
+// (codex app-server / Claude SDK), and each backend handles its own
+// auth in place:
 //
-//   - codex app-server reads `~/.codex/auth.json` directly; the user runs
-//     `codex login` once and we never touch the file.
+//   - codex app-server reads `~/.codex/auth.json` directly; the user
+//     runs `codex login` once and we never touch the file.
 //   - Claude Agent SDK reads `ANTHROPIC_API_KEY` from the environment;
 //     there's no in-process flow that consumes the Claude Code keychain
-//     OAuth token, so the import step is intentionally a no-op.
+//     OAuth token.
 //
-// What survives: a status read the Settings UI uses to tell the user
-// which CLIs / keys are already on this machine. The `importAvailableCreds`
+// So this module no longer imports / writes anything — it just probes
+// the on-disk state and reports it back. The `importAvailableCreds`
 // entry point is kept for IPC compat so the renderer's "Resync" button
-// still wires up — it just returns the latest availability snapshot.
+// still wires up; it just returns the latest availability snapshot.
 
 import { exec } from 'node:child_process';
 import { promises as fs } from 'node:fs';

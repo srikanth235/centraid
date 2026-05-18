@@ -126,9 +126,8 @@ function flushBatch(chatSessionId: string | null, batch: unknown[]): void {
 }
 
 /**
- * Translate one `ChatStreamEvent` from the gateway's SSE stream into the
- * renderer's `centraid:chat:event` shape (kept identical to the previous
- * pi-coding-agent wiring so the renderer needed zero changes).
+ * Translate one `ChatStreamEvent` from the gateway's SSE stream into
+ * the renderer's `centraid:chat:event` shape.
  */
 function handleStreamEvent(
   win: BrowserWindow,

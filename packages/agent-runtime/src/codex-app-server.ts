@@ -30,6 +30,7 @@
 
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import type { ChatStreamEvent } from '@centraid/runtime-core';
 
@@ -45,6 +46,13 @@ export interface CodexAppServerInput {
   model?: string;
   /** Codex thread id from a prior turn; triggers `thread/resume` instead of `thread/start`. */
   prevThreadId?: string;
+  /**
+   * Path-delimited list of directories prepended to PATH in the spawned
+   * codex process's env. Used so the agent's shell tool can invoke the
+   * `centraid` CLI by bare name. Set per-spawn instead of mutating the
+   * host's `process.env` (which would race between concurrent turns).
+   */
+  extraPath?: string;
   abortSignal: AbortSignal;
   onEvent: (event: ChatStreamEvent) => void;
 }
@@ -82,9 +90,10 @@ export async function runCodexAppServerTurn(
   await fs.mkdir(input.cwd, { recursive: true });
 
   const args = ['app-server', ...(config.extraArgs ?? [])];
+  const childEnv = buildSpawnEnv(input.extraPath);
   const child = spawn(bin, args, {
     cwd: input.cwd,
-    env: process.env,
+    env: childEnv,
     stdio: ['pipe', 'pipe', 'pipe'],
   }) as ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -439,6 +448,15 @@ function extractErrorText(item: Record<string, unknown>): string | undefined {
   if (err && typeof err.message === 'string') return err.message;
   if (typeof item.aggregated_output === 'string') return item.aggregated_output;
   return undefined;
+}
+
+function buildSpawnEnv(extraPath: string | undefined): NodeJS.ProcessEnv {
+  if (!extraPath) return process.env;
+  const current = process.env.PATH ?? '';
+  return {
+    ...process.env,
+    PATH: current ? `${extraPath}${path.delimiter}${current}` : extraPath,
+  };
 }
 
 function summarizeToolResult(item: Record<string, unknown>): unknown {

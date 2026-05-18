@@ -8,13 +8,11 @@
  * (OpenClaw plugin + the desktop's embedded local runtime). The harness
  * client doesn't know which one it's pointed at — same URL contract.
  *
- * Replaces the earlier pi-coding-agent embed; the harness no longer
- * runs any inference loop itself. Tools live server-side (OpenClaw
- * registers them; the local runtime spawns a stdio MCP server exposing
- * the same surface).
- *
- * See @centraid/builder-harness for the app-authoring agent — that
- * client still uses pi-coding-agent locally, intentionally.
+ * The harness runs no inference loop itself; turns are driven server-side
+ * by whichever `ChatRunner` the host injected (OpenClaw's in-process
+ * runner, or `@centraid/agent-runtime`'s `makeChatRunner` on the local
+ * runtime). See @centraid/builder-harness for the separate app-authoring
+ * agent surface, which uses the same agent runtime via `runAgentTurn`.
  */
 
 export {

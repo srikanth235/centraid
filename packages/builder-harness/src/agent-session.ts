@@ -1,15 +1,13 @@
 /*
- * Builder agent session — pi-shaped facade over `runAgentTurn` (the
- * unified codex-app-server + Claude-SDK runtime in
- * `@centraid/local-chat-runner`).
+ * Builder agent session — facade over `runAgentTurn` (the unified
+ * codex-app-server + Claude-SDK runtime in `@centraid/agent-runtime`)
+ * that shapes events for the renderer's `handleAgentEvent`.
  *
- * Why a facade: the desktop IPC and renderer were originally built
- * around `@earendil-works/pi-coding-agent`'s `AgentSession`
- * (subscribe / prompt / messages / abort) and its `AgentEvent` union.
- * Replacing the runtime shouldn't force the renderer to relearn an
- * event schema in the same change, so this module keeps the outward
- * contract and translates the runtime's `ChatStreamEvent`s into the
- * pi-shaped events `handleAgentEvent` already consumes.
+ * The renderer consumes a coarser event union (`agent_start` /
+ * `turn_start` / `message_update` / `tool_execution_*` / etc.) than the
+ * fine-grained `ChatStreamEvent` the runtime emits, so this module owns
+ * the translation. Keeping it isolated lets the runtime evolve without
+ * the renderer relearning an event schema.
  *
  * Resume strategy: the runtime returns an opaque `sessionId` (codex
  * thread id / Claude session id). We persist it under
@@ -27,7 +25,7 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { runAgentTurn, type RunnerPrefs } from '@centraid/local-chat-runner';
+import { runAgentTurn, defaultCentraidCliDir, type RunnerPrefs } from '@centraid/agent-runtime';
 import type { ChatStreamEvent, AppSchema } from '@centraid/runtime-core';
 import { CENTRAID_APPEND_PROMPT } from './system-prompt.js';
 import { buildUiGroundingBlocks } from './ui-grounding.js';
@@ -59,9 +57,16 @@ export interface CreateCentraidAgentSessionOptions {
    */
   liveSchema?: { config: HarnessConfig; appId: string };
   model?: string;
+  /**
+   * Directory to prepend to PATH for any subprocess the agent spawns.
+   * Defaults to `defaultCentraidCliDir()` so the agent can invoke the
+   * `centraid` CLI (used by the `centraid preview snapshot` flow) by
+   * bare name. Pass an empty string to opt out.
+   */
+  centraidCliDir?: string;
 }
 
-/** Subset of pi's `AgentEvent` the renderer's `handleAgentEvent` consumes. */
+/** Event shape the renderer's `handleAgentEvent` consumes. */
 export type CentraidAgentEvent =
   | { type: 'agent_start' }
   | { type: 'agent_end'; messages: unknown[] }
@@ -111,6 +116,8 @@ export async function createCentraidAgentSession(
   await fs.mkdir(cwd, { recursive: true });
 
   const extraSystemPrompt = await buildExtraSystemPrompt(opts);
+  // Empty string = explicit opt-out; undefined = default (CLI dist dir).
+  const extraPath = opts.centraidCliDir ?? defaultCentraidCliDir();
 
   let resumeId: string | undefined;
   if (mode === 'continue') {
@@ -168,6 +175,7 @@ export async function createCentraidAgentSession(
             cwd,
             message: text,
             extraSystemPrompt,
+            ...(extraPath ? { extraPath } : {}),
             ...(opts.model ? { model: opts.model } : {}),
             ...(resumeId ? { prevSessionId: resumeId } : {}),
             abortSignal: abortController.signal,
@@ -196,7 +204,7 @@ export async function createCentraidAgentSession(
 }
 
 /**
- * Translate the runtime's `ChatStreamEvent` union into pi-shaped
+ * Translate the runtime's `ChatStreamEvent` union into the renderer's
  * `CentraidAgentEvent`s. `assistant.delta` / `reasoning.delta` →
  * `message_update`; `tool.start` / `tool.result` → `tool_execution_*`;
  * `phase` / `final` drop (the wrapping `message_end` / `turn_end`

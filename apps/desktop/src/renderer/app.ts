@@ -2445,12 +2445,11 @@
       ]),
     );
 
-    // ---- AI providers (Claude Code / Codex credential import) ----
-    // Centraid's coding agent (pi-mono) uses pi-ai's first-party OAuth
-    // providers. We ride on whichever subscription the user already has on
-    // disk: Codex creds in ~/.codex/auth.json, Claude Code creds in the
-    // macOS keychain. The importer copies them into ~/.pi/agent/auth.json
-    // — Codex is preferred when both exist so pi defaults to Codex models.
+    // ---- AI providers (Claude Code / Codex credential status) ----
+    // Centraid's coding agent runs the user's installed CLIs in place:
+    // codex app-server reads `~/.codex/auth.json` (set up by `codex login`)
+    // and the Claude Agent SDK reads `ANTHROPIC_API_KEY`. This panel just
+    // probes the on-machine state and shows which backends are ready.
     const authStatusHost = el('div', {
       style: { display: 'flex', flexDirection: 'column', gap: '8px' },
     });

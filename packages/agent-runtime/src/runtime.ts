@@ -2,7 +2,7 @@
  * Unified agent-turn primitive.
  *
  * Both chat and builder share this entry point. It dispatches to one of
- * two backends based on the user's persisted `chat.runner.kind` pref:
+ * two backends based on the user's persisted `agent.runner.kind` pref:
  *
  *   - `codex`       → spawn `codex app-server` (JSON-RPC stdio)
  *   - `claude-code` → call `@anthropic-ai/claude-agent-sdk`'s `query()` in-process
@@ -27,6 +27,14 @@ export interface AgentTurnInput {
   model?: string;
   /** Resume id from a prior turn (codex thread id / claude session id). */
   prevSessionId?: string;
+  /**
+   * Directories to prepend to PATH for any subprocess the agent spawns
+   * (codex's shell tool, claude's Bash tool). Path-delimited string —
+   * `path.delimiter` between entries. Used to expose the `centraid` CLI
+   * without mutating the host's `process.env` (which would race between
+   * concurrent turns). Empty / undefined = no PATH override.
+   */
+  extraPath?: string;
   abortSignal: AbortSignal;
   onEvent: (event: ChatStreamEvent) => void;
 }
@@ -56,6 +64,7 @@ export async function runAgentTurn(
         extraSystemPrompt: input.extraSystemPrompt,
         ...(input.model ? { model: input.model } : {}),
         ...(input.prevSessionId ? { prevThreadId: input.prevSessionId } : {}),
+        ...(input.extraPath ? { extraPath: input.extraPath } : {}),
         abortSignal: input.abortSignal,
         onEvent: input.onEvent,
       },
@@ -77,6 +86,7 @@ export async function runAgentTurn(
       extraSystemPrompt: input.extraSystemPrompt,
       ...(input.model ? { model: input.model } : {}),
       ...(input.prevSessionId ? { prevSessionId: input.prevSessionId } : {}),
+      ...(input.extraPath ? { extraPath: input.extraPath } : {}),
       abortSignal: input.abortSignal,
       onEvent: input.onEvent,
     },
