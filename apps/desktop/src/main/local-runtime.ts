@@ -9,6 +9,12 @@ import {
   startRuntimeHttpServer,
   type RuntimeHttpServerHandle,
 } from '@centraid/runtime-core';
+import {
+  makeChatRunner,
+  runPreflight,
+  invalidatePreflightCache,
+  type RunnerPrefs,
+} from '@centraid/agent-runtime';
 
 /**
  * In-process runtime embedded inside the Electron main process. Spawned
@@ -59,10 +65,49 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     const userStore = new UserStore(gatewayDbProvider);
     const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
 
+    // Resolve user prefs for the agent runtime — the desktop persists
+    // the user's CLI choice (codex / claude-code) + optional override path
+    // in the gateway user_prefs row. Loader runs per turn so a settings
+    // flip is picked up without an Electron restart.
+    const prefsLoader = async (): Promise<RunnerPrefs | undefined> => {
+      const allPrefs = userStore.getAllPrefs();
+      const kindRaw = allPrefs['agent.runner.kind'];
+      const kind: RunnerPrefs['kind'] | undefined =
+        kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : undefined;
+      if (!kind) return undefined;
+      const binPath =
+        typeof allPrefs['agent.runner.binPath'] === 'string'
+          ? (allPrefs['agent.runner.binPath'] as string)
+          : undefined;
+      const extraArgsRaw = allPrefs['agent.runner.extraArgs'];
+      const extraArgs = Array.isArray(extraArgsRaw)
+        ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
+        : undefined;
+      return {
+        kind,
+        ...(binPath ? { binPath } : {}),
+        ...(extraArgs ? { extraArgs } : {}),
+      };
+    };
+    const chatRunner = makeChatRunner({ appsDir, prefsLoader });
+
     const runtime = new Runtime({
       appsDir,
       userStore,
       chatHistoryStore,
+      chatRunner,
+      runnerStatus: async () => {
+        const prefs = await prefsLoader();
+        if (!prefs) {
+          return {
+            kind: 'none' as const,
+            ok: false,
+            reason: 'No coding agent configured.',
+            hint: 'Open Settings → AI providers and pick Codex or Claude Code.',
+          };
+        }
+        return runPreflight(prefs);
+      },
       logger: {
         info: (m) => console.info(`[local-runtime] ${m}`),
         warn: (m) => console.warn(`[local-runtime] ${m}`),
@@ -86,4 +131,14 @@ export async function shutdownLocalRuntime(): Promise<void> {
   const h = handle;
   handle = undefined;
   await h.close().catch(() => undefined);
+}
+
+/**
+ * Called by the settings-save IPC handler when the user's `agent.runner.*`
+ * prefs may have changed. The preflight result is cached in-memory by
+ * `@centraid/agent-runtime`; invalidating forces the next status
+ * read to re-probe `--version`.
+ */
+export function noteRunnerPrefsChanged(): void {
+  invalidatePreflightCache();
 }

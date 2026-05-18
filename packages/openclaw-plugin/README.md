@@ -24,8 +24,23 @@ OpenClaw plugin that mounts a single `/centraid` prefix on the gateway and dispa
 | `GET` | `/centraid/<id>/<file>` | Static asset (extension allowlist) |
 | `GET` | `/centraid/<id>/_data/<query>` | Runs `queries/<query>.js` |
 | `POST` | `/centraid/<id>/_run` | Runs `actions/<body.action>.js` |
+| `POST` | `/centraid/<id>/_chat` | Send a chat turn → SSE stream of normalized events |
+| `GET` | `/centraid/<id>/_chat/windows` | List per-window chat metadata |
+| `GET` | `/centraid/<id>/_chat/windows/<wid>/history` | Replay one window's transcript |
+| `DELETE` | `/centraid/<id>/_chat/windows/<wid>` | Clear one window |
 
-App ids starting with `_` are reserved (so `_apps` etc. can't collide).
+App ids starting with `_` are reserved (so `_apps`, `_chat` etc. can't collide).
+
+### Chat surface (host-agnostic)
+
+The `_chat` routes live in `@centraid/runtime-core` and are served identically on both gateway hosts. The plugin/host owns initiation but never the model loop:
+
+- **OpenClaw** injects an in-process `ChatRunner` that calls `api.runtime.agent.runEmbeddedAgent`. Plugin-registered tools (`centraid_sql_*`) dispatch server-side.
+- **Desktop embedded local runtime** uses `@centraid/agent-runtime`'s `makeChatRunner`, which drives codex app-server (subprocess) or the Claude Agent SDK (in-process). The agent shells out to the bundled `centraid` CLI for SQL access.
+
+Either way, the harness client at `@centraid/chat-harness` sees one HTTP/SSE contract.
+
+Per-window transcripts live at `<appsDir>/<id>/_chat/w<windowId>.jsonl`; a sibling `index.json` records mode + adapter session id so the next turn can resume.
 
 ## App modes
 
@@ -182,7 +197,7 @@ The plugin also registers three agent tools used by any OpenClaw-side agent that
 
 All three take `appId` as a parameter. A `before_tool_call` hook on the plugin enforces that `appId` matches the calling session's app — the chat client opens its session as `centraid-chat:<appId>:w<windowId>`, and the hook parses that key. Cross-app reads/writes (and any disallowed statement shape) are refused at the gateway before `execute` runs. Successful writes also emit through `runtime.changeBus`, so any subscriber on `/centraid/<appId>/_changes` learns about the mutation.
 
-The desktop app's in-app chat uses a parallel implementation in [@centraid/chat-harness](../chat-harness) (pi-coding-agent custom tools backed by the same HTTP endpoints) — these openclaw-registered tools exist for any agent running directly inside the OpenClaw gateway.
+The desktop app's in-app chat goes through the same `_chat` HTTP/SSE contract (see [@centraid/chat-harness](../chat-harness)). The openclaw-registered tools above are used by the in-gateway agent path; the desktop's local-runtime path drives codex / Claude via [@centraid/agent-runtime](../agent-runtime) and reaches the SQL surface through the bundled `centraid` CLI.
 
 ### Enabling the tools in `~/.openclaw/openclaw.json`
 

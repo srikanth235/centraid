@@ -1,31 +1,40 @@
 /*
  * @centraid/chat-harness
  *
- * Pi-coding-agent customization for the centraid in-app DATA CHAT — the
- * panel that talks to a single deployed app's SQLite. Pairs the
- * `createCentraidDataChatSession` factory with three closure-scoped tools
- * (centraid_sql_describe, centraid_sql_read, centraid_sql_write) that hit
- * the runtime's `/centraid/_apps/{appId}/...` HTTP surface — so this works
- * against both the embedded local runtime and remote OpenClaw without any
- * branching at the call site.
+ * Host-agnostic HTTP/SSE client for centraid's per-app chat surface.
  *
- * For the app-authoring agent (the builder), see @centraid/builder-harness.
+ * The per-app chat endpoint (`POST /centraid/<appId>/_chat`) lives in
+ * `@centraid/runtime-core` and is served identically by both gateway hosts
+ * (OpenClaw plugin + the desktop's embedded local runtime). The harness
+ * client doesn't know which one it's pointed at — same URL contract.
+ *
+ * The harness runs no inference loop itself; turns are driven server-side
+ * by whichever `ChatRunner` the host injected (OpenClaw's in-process
+ * runner, or `@centraid/agent-runtime`'s `makeChatRunner` on the local
+ * runtime). See @centraid/builder-harness for the separate app-authoring
+ * agent surface, which uses the same agent runtime via `runAgentTurn`.
  */
 
 export {
-  createCentraidDataChatSession,
-  type CreateDataChatSessionOptions,
-  type DataChatSessionMode,
-} from './data-chat-session.js';
-
+  openChatStream,
+  type OpenChatStreamOptions,
+  type ChatStreamHandle,
+} from './chat-client.js';
 export {
-  createCentraidSqlTools,
-  createCentraidSqlDescribeTool,
-  createCentraidSqlReadTool,
-  createCentraidSqlWriteTool,
-  isSelectOnly,
-  isWriteDml,
-  type CentraidSqlToolsOptions,
-} from './sql-tools.js';
+  fetchChatHistory,
+  listChatWindows,
+  clearChatWindow,
+  getRunnerStatus,
+  type ChatHistoryResult,
+  type ChatWindowListResult,
+} from './chat-history.js';
+export type { ChatHarnessConfig } from './types.js';
 
-export { buildDataChatPrompt, type BuildDataChatPromptOptions } from './system-prompt.js';
+// Re-export the runtime-core chat types so callers don't have to depend
+// on runtime-core directly to consume the streaming event union.
+export type {
+  ChatMode,
+  ChatStreamEvent,
+  ChatWindowMeta,
+  RunnerStatus,
+} from '@centraid/runtime-core';

@@ -16,18 +16,13 @@ import { icons, toCss } from '@centraid/design-tokens';
  * Returns the ordered list of prompt blocks to splice in below
  * `CENTRAID_APPEND_PROMPT`. Each block is a single string starting with
  * its `###` heading so it renders cleanly in the system prompt.
- *
- * Pass `withScreenshotTool: true` to include guidance for the
- * `previewScreenshot` custom tool (the desktop wires it up; CLI/test
- * callers that don't provide the tool should leave this false so the
- * agent isn't told to call something that isn't there).
  */
-export function buildUiGroundingBlocks(opts: { withScreenshotTool?: boolean } = {}): string[] {
+export function buildUiGroundingBlocks(): string[] {
   return [
     renderDesignTokensBlock(),
     renderIconSetBlock(),
     renderComponentPrimitivesBlock(),
-    renderUxRulesBlock(opts.withScreenshotTool === true),
+    renderUxRulesBlock(),
     renderExemplarsBlock(),
   ];
 }
@@ -193,10 +188,10 @@ function renderComponentPrimitivesBlock(): string {
 
 /**
  * `### UI/UX rules` — the non-negotiables: state triad, a11y floor,
- * viewport contract, and (optionally) when to call the visual-feedback
- * screenshot tool.
+ * viewport contract, plus the snapshot-file convention the desktop
+ * uses to feed the live preview back to the agent.
  */
-function renderUxRulesBlock(withScreenshotTool: boolean): string {
+function renderUxRulesBlock(): string {
   const lines = [
     '### UI/UX rules (non-negotiable)',
     '',
@@ -231,16 +226,17 @@ function renderUxRulesBlock(withScreenshotTool: boolean): string {
     '**CSS discipline.** No `!important`. No deep selectors (`> > >`). No inline styles unless dynamic. No `font-family` overrides — the system stack from the scaffold is the contract.',
   ];
 
-  if (withScreenshotTool) {
-    lines.push(
-      '',
-      '**Visual feedback.** After any meaningful CSS or layout change, call the',
-      '`previewScreenshot` tool to verify the result. The screenshot of the live',
-      'preview iframe will be returned as an image — read it like a code review',
-      "comment and fix what looks wrong before moving on. Don't spam the tool;",
-      'one screenshot per coherent visual change is the right cadence.',
-    );
-  }
+  lines.push(
+    '',
+    '**Visual feedback (preview snapshot).** The desktop shell keeps a fresh PNG',
+    'of the live preview iframe at `./.preview/snapshot.png` (cwd-relative — it',
+    'lives at the project root). After any meaningful CSS or layout change,',
+    'open the snapshot with your native file-reading tool and treat it like a code',
+    'review comment — fix what looks wrong before moving on. Use `centraid preview',
+    "snapshot` to check freshness (size + age in JSON) when you're unsure whether",
+    'the file has caught up to your last write. One look per coherent visual change',
+    "is the right cadence; don't spam it.",
+  );
 
   return lines.join('\n');
 }

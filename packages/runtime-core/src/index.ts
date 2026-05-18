@@ -9,7 +9,31 @@
  * desktop in-process embed in `@centraid/desktop`.
  */
 
-export { Runtime, type RuntimeOptions, type RuntimeLogger } from './runtime.js';
+export { Runtime, type RuntimeOptions, type RuntimeLogger, type RunnerStatus } from './runtime.js';
+
+// Per-app chat surface — `ChatRunner` is the host-injected seam, both
+// OpenClaw and the desktop local-runtime implement it. The HTTP routes
+// (`POST /centraid/<id>/_chat`, list / load / delete windows) are dispatched
+// by `Runtime.handle` when `RuntimeOptions.chatRunner` is set.
+export type {
+  ChatRunner,
+  ChatRunInput,
+  ChatRunResult,
+  ChatStreamEvent,
+  ChatMode,
+} from './chat-runner.js';
+export {
+  ChatStore,
+  isValidWindowId,
+  chatDir,
+  chatSessionFile,
+  chatIndexPath,
+  CHAT_DIR_NAME,
+  CHAT_INDEX_FILE,
+  type ChatWindowMeta,
+  type ChatIndex,
+} from './chat-store.js';
+export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prompt.js';
 
 export {
   startRuntimeHttpServer,

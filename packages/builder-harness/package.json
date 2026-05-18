@@ -2,7 +2,7 @@
   "name": "@centraid/builder-harness",
   "version": "0.1.0",
   "private": true,
-  "description": "Pi-coding-agent customization for the centraid app BUILDER: agent that knows how to author apps in the @centraid/openclaw-plugin format, plus scaffold + publish + gateway HTTP helpers. (For the in-app data chat see @centraid/chat-harness.)",
+  "description": "Drives the centraid app BUILDER: an agent session (codex app-server or Claude SDK via @centraid/agent-runtime) that authors apps in the @centraid/openclaw-plugin format, plus scaffold + publish + gateway HTTP helpers. (For the in-app data chat see @centraid/chat-harness.)",
   "files": [
     "dist",
     "templates",
@@ -18,10 +18,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@centraid/agent-runtime": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
     "@centraid/openclaw-plugin": "workspace:*",
     "@centraid/runtime-core": "workspace:*",
-    "@earendil-works/pi-coding-agent": "^0.74.0",
     "tar": "^7.4.3"
   },
   "devDependencies": {

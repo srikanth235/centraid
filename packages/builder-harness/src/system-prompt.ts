@@ -1,10 +1,11 @@
 /**
  * The centraid-format system prompt.
  *
- * Appended to pi's default coding-agent prompt — it teaches the model the
- * exact app folder layout, handler signatures, and the security model
- * defended by `@centraid/openclaw-plugin`. Keep this in sync with the
- * plugin's README.
+ * Appended to the backend's default coding-agent prompt (codex
+ * app-server's `developerInstructions` / Claude SDK's `systemPrompt`
+ * append) — teaches the model the exact app folder layout, handler
+ * signatures, and the security model defended by
+ * `@centraid/openclaw-plugin`. Keep in sync with the plugin's README.
  *
  * Authoring is JavaScript-only. Handler files are plain `.js` ES modules
  * with JSDoc type annotations that reference `@centraid/openclaw-plugin`'s

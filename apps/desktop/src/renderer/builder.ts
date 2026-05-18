@@ -295,8 +295,8 @@
     }
 
     // Build a one-line, human-readable summary of a tool call's args.
-    // Mirrors the fields pi's built-in tools actually emit (path / command /
-    // pattern). Falls back gracefully for custom or unknown tools.
+    // Mirrors the fields coding-agent tools commonly emit (path /
+    // command / pattern). Falls back gracefully for custom or unknown tools.
     function summarizeToolArgs(tool: string, args: unknown): string | undefined {
       if (!args || typeof args !== 'object') return undefined;
       const a = args as Record<string, unknown>;
@@ -2414,7 +2414,7 @@
       return { messages: result.messages };
     }
 
-    // Convert pi's persisted AgentMessage[] (returned by startAgent for
+    // Convert the persisted AgentMessage[] (returned by startAgent for
     // resumed sessions) into the renderer's ChatMsg[] so the chat pane
     // shows the prior conversation when the user reopens a project.
     //
@@ -2938,6 +2938,7 @@
           void window.Centraid.openSettings();
         }
       },
+      runtimeMode: window.Centraid?.getRuntimeMode?.(),
     });
 
     let builderSidebarOpen = Store.get<boolean>('appearance.sidebarOpen', true);

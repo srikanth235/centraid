@@ -27,7 +27,7 @@ GitHub issue: [#59](https://github.com/srikanth235/centraid/issues/59)
 
 ### Add priorTurns to chat-harness factory
 
-New optional `priorTurns: Array<{ user: string; assistant? }>` on `CreateDataChatSessionOptions` in [packages/chat-harness/src/data-chat-session.ts](../packages/chat-harness/src/data-chat-session.ts). When non-empty, the factory threads a `priorBlock` into the `appendSystemPromptOverride` callback right after the role-and-tools prompt block. A new internal `renderPriorTurnsBlock(turns)` helper formats the turns as numbered `### Turn N` sections with **User:** / **Assistant:** lines. Tool calls and results are deliberately omitted — the agent can re-run `centraid_sql_describe` if it needs schema; what matters for thread continuity is the user words + assistant answers.
+New optional `priorTurns: Array<{ user: string; assistant? }>` on `CreateDataChatSessionOptions` in `packages/chat-harness/src/data-chat-session.ts` (file removed in #71's chat-harness rewrite — historical reference only). When non-empty, the factory threads a `priorBlock` into the `appendSystemPromptOverride` callback right after the role-and-tools prompt block. A new internal `renderPriorTurnsBlock(turns)` helper formats the turns as numbered `### Turn N` sections with **User:** / **Assistant:** lines. Tool calls and results are deliberately omitted — the agent can re-run `centraid_sql_describe` if it needs schema; what matters for thread continuity is the user words + assistant answers.
 
 ### Render priorTurns into the system prompt
 

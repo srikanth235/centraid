@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit chrome-window-and-sidebar pending split into separate window-builder / sidebar-builder modules
 // Centraid Bold · Atmospheric chrome — Codex-style window shell.
 // Builds the `.cd-window` grid (sidebar column + main column) with
 // synthetic traffic lights, sidebar toggle, back/forward arrows, and an
@@ -325,6 +326,8 @@
     onAppClick: (id: string) => void;
     onSettings: () => void;
     onAppContext?: (id: string, anchor: MenuAnchor) => void;
+    /** Rendered as a Local/Remote badge next to the Settings row. */
+    runtimeMode?: 'local' | 'remote';
   }
 
   // Hover-revealed `•••` + right-click on a sidebar row, both routing
@@ -478,10 +481,16 @@
 
     // Spacer pushes Settings to the bottom
     wrap.append(el('span', { style: { flex: '1', minHeight: '12px' } }));
+    const modeBadge = opts.runtimeMode
+      ? opts.runtimeMode === 'local'
+        ? 'Local'
+        : 'Remote'
+      : undefined;
     wrap.append(
       sbItem({
         icon: Glyph.settings(),
         label: 'Settings',
+        meta: modeBadge,
         active: opts.activeId === 'settings',
         onClick: opts.onSettings,
       }),

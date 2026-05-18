@@ -1,6 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit per-app-chat-ipc pending split into chat-session / chat-stream / chat-history-ipc modules
-import { ipcMain, BrowserWindow, app } from 'electron';
-import path from 'node:path';
+import { ipcMain, BrowserWindow } from 'electron';
 import { loadSettings } from './settings.js';
 import {
   historyAppendBatch,
@@ -12,43 +11,31 @@ import {
   type ChatSessionMeta,
   type ChatSessionWithMessages,
 } from './chat-history-client.js';
+import type { ChatMode, ChatStreamEvent } from '@centraid/runtime-core';
 
 /**
- * Per-app agentic chat over @centraid/chat-harness.
+ * Per-app chat IPC. The desktop main process is now a thin proxy: every
+ * turn POSTs to `/centraid/<appId>/_chat` on whichever gateway the user
+ * has configured (OpenClaw or the embedded local runtime). The harness's
+ * SSE client streams `ChatStreamEvent`s back; we translate each event to
+ * the renderer's existing `centraid:chat:event` protocol so app-chat.ts
+ * doesn't need to change.
  *
- * Each window+app pair owns one pi-coding-agent session at a time. The
- * harness ships three closure-scoped SQL tools that hit the runtime's
- * `/centraid/_apps/{appId}/...` HTTP surface — that surface is identical
- * on the embedded local runtime and on the remote OpenClaw gateway, so
- * this chat path is gateway-agnostic.
- *
- * The renderer protocol (`centraid:chat:event` IPC) is preserved verbatim
- * from the previous OpenClaw-WS implementation so app-chat.ts didn't need
- * to change. Pi events are translated here:
- *   - assistant text deltas → 'assistant-delta'
- *   - tool_execution_start  → 'tool-call'   (sql extracted from args.sql)
- *   - tool_execution_end    → 'tool-result' / 'tool-error'
- *   - agent_end             → 'final'
- *
- * Chat history (sidebar) hits the same `/_centraid-chat` HTTP surface in
- * both modes: the OpenClaw plugin serves it on the remote gateway, and the
- * embedded local runtime's HTTP server serves an identical implementation
- * (both live in `@centraid/runtime-core`). No branching needed here.
+ * Chat-history (sidebar) still hits the gateway's `/_centraid-chat`
+ * surface — same as before — for compatibility with the renderer's
+ * persistent-conversations UI. Per-window transcript persistence in
+ * `<appsDir>/<appId>/_chat/index.json` is owned by the runtime now;
+ * the chat-history sqlite is a separate, renderer-facing log.
  */
 
-// Loaded lazily because @centraid/chat-harness pulls pi-coding-agent +
-// typebox + a non-trivial graph; we don't want that on the main-process
-// boot path for users who never open the chat panel.
+// chat-harness imports are lazy so we don't pay the cost on cold boot
+// for users who never open the chat panel.
 type ChatHarness = typeof import('@centraid/chat-harness');
 let chatHarnessPromise: Promise<ChatHarness> | undefined;
 function loadChatHarness(): Promise<ChatHarness> {
-  if (!chatHarnessPromise) {
-    chatHarnessPromise = import('@centraid/chat-harness');
-  }
+  if (!chatHarnessPromise) chatHarnessPromise = import('@centraid/chat-harness');
   return chatHarnessPromise;
 }
-
-type AgentSession = Awaited<ReturnType<ChatHarness['createCentraidDataChatSession']>>;
 
 export const ChatChannel = {
   START: 'centraid:chat:start',
@@ -65,47 +52,36 @@ export const ChatChannel = {
 interface ChatSession {
   appId: string;
   appName: string;
-  /**
-   * The chat-history row id (persistent across panel opens) for the
-   * conversation currently displayed in this window. `null` when the panel
-   * is freshly opened or a "new chat" was requested but the user hasn't
-   * sent anything yet — we lazy-create the row on first send so empty
-   * panels don't litter the sessions list.
-   */
+  /** Persisted chat-history row id (renderer-visible chat list). Lazy-
+   *  created on first send so empty panels don't litter the sidebar. */
   chatSessionId: string | null;
-  /** Pi-coding-agent session for the active conversation; null until the
-   * first send (we want the SQL tools to bind to a known chatSessionId, and
-   * creating the session lazily also avoids spinning pi up for empty panels). */
-  agent: AgentSession | null;
   /**
-   * Prior user/assistant turns loaded from the history table when START
-   * was called against an existing chatSessionId. Snapshotted here at
-   * START time — BEFORE any SEND appends the new user message — so the
-   * lazy agent-creation in `ensureAgent` doesn't see the in-flight message
-   * twice. Empty for freshly-opened or new-chat sessions.
+   * Window id sent to the runtime's `_chat` endpoint. Pinned per
+   * chat-history row so a refresh + load resumes the same CLI session
+   * (codex thread / claude-code session) on the gateway side. We mint
+   * one on START if the chatSessionId is null (no history row yet).
    */
-  priorTurns: Array<{ user: string; assistant?: string }>;
-  /** Unsubscribe handle for `agent.subscribe()`. */
-  detach: (() => void) | null;
+  windowId: string;
+  /**
+   * Chat mode for this window. `full` is the default — the user's agent
+   * reasons over the app with its full toolkit plus our SQL tools. `data`
+   * locks the run to centraid_sql_* only (plus per-adapter sandbox flags
+   * that runtime-core's runner applies). Once a window's first turn pins
+   * a mode, subsequent turns inherit it — the gateway-side `_chat/index.json`
+   * is the source of truth; we forward the desired mode but the runtime
+   * may override if the window already exists.
+   */
+  mode: ChatMode;
+  /** Abort handle for the currently streaming turn, or null when idle. */
+  currentAbort: (() => void) | null;
   /** Per-turn id assigned by the renderer; null while idle. */
   turnId: number | null;
-  /** True while pi is streaming a turn. */
-  streaming: boolean;
 }
 
 const sessions = new Map<string, ChatSession>();
 
 function sessionKey(windowId: number, appId: string): string {
   return `${windowId}:${appId}`;
-}
-
-/**
- * pi-coding-agent needs a real directory as cwd for its session metadata,
- * even though we disable all file tools. We give each app its own sandbox
- * under userData so concurrent app chats don't share pi session files.
- */
-function sandboxDirFor(appId: string): string {
-  return path.join(app.getPath('userData'), 'chat-sandbox', appId);
 }
 
 interface ChatEvent {
@@ -129,17 +105,19 @@ interface ChatEvent {
 }
 
 function emit(win: BrowserWindow, event: ChatEvent): void {
-  if (!win.isDestroyed()) {
-    win.webContents.send(ChatChannel.EVENT, event);
-  }
+  if (!win.isDestroyed()) win.webContents.send(ChatChannel.EVENT, event);
 }
 
-/**
- * Fire-and-forget batch flush — used for the streaming tail of a turn so
- * one HTTP POST carries every assistant/tool event the agent emitted. The
- * server assigns sequential idx values inside a single transaction, so this
- * is safe even if a second flush lands before this one.
- */
+interface TurnAccumulator {
+  aiText: string;
+  pending: Map<string, { tool: string; sql?: string; args?: unknown }>;
+  batch: unknown[];
+}
+
+function newAccumulator(): TurnAccumulator {
+  return { aiText: '', pending: new Map(), batch: [] };
+}
+
 function flushBatch(chatSessionId: string | null, batch: unknown[]): void {
   if (!chatSessionId || batch.length === 0) return;
   void historyAppendBatch(chatSessionId, batch).catch((err) => {
@@ -148,184 +126,83 @@ function flushBatch(chatSessionId: string | null, batch: unknown[]): void {
 }
 
 /**
- * Per-turn accumulator — collects the streamed assistant text plus an
- * ordered list of coarse persistence entries so the turn's tail flushes in
- * a single batched POST. The user message was already persisted in the SEND
- * handler before runTurn even starts.
+ * Translate one `ChatStreamEvent` from the gateway's SSE stream into
+ * the renderer's `centraid:chat:event` shape.
  */
-interface TurnAccumulator {
-  aiText: string;
-  aiAppended: boolean;
-  /** Tool-call id → call metadata captured at tool_execution_start, paired
-   *  with the matching tool_execution_end frame. */
-  pending: Map<string, { tool: string; sql?: string; args?: unknown }>;
-  batch: unknown[];
-}
-
-function newAccumulator(): TurnAccumulator {
-  return { aiText: '', aiAppended: false, pending: new Map(), batch: [] };
-}
-
-/**
- * Lazily create (or return) the pi-coding-agent session for this chat.
- * The agent is bound to a single (appId, chatSessionId) — when the user
- * opens a different chat row from the sidebar, START tears the previous
- * session down so we get a fresh agent here.
- */
-async function ensureAgent(session: ChatSession): Promise<AgentSession> {
-  if (session.agent) return session.agent;
-  const { createCentraidDataChatSession } = await loadChatHarness();
-  const settings = await loadSettings();
-  const agent = await createCentraidDataChatSession({
-    config: settings,
-    appId: session.appId,
-    appName: session.appName,
-    sandboxDir: sandboxDirFor(session.appId),
-    sessionMode: 'in-memory',
-    // priorTurns was snapshotted at START time so it doesn't include the
-    // in-flight user message that SEND appends right before invoking us.
-    priorTurns: session.priorTurns,
-  });
-  session.agent = agent;
-  return agent;
-}
-
-/**
- * Pull user/assistant text pairs out of the persisted history. Tool calls
- * and tool results are skipped — the model can re-discover schema via
- * `centraid_sql_describe` if it needs to; what we care about for thread
- * continuity is the user's words and the assistant's answers. Aborted or
- * error turns produce a user message with no assistant — those still go
- * into the block so the model sees the question was asked.
- */
-async function loadPriorTurns(
-  chatSessionId: string,
-): Promise<Array<{ user: string; assistant?: string }>> {
-  const loaded = await historyLoad(chatSessionId);
-  const turns: Array<{ user: string; assistant?: string }> = [];
-  let pendingUser: string | undefined;
-  for (const entry of loaded.messages) {
-    const payload = entry.payload as
-      | { kind?: string; text?: unknown; error?: unknown }
-      | null
-      | undefined;
-    if (!payload || typeof payload !== 'object') continue;
-    const text = typeof payload.text === 'string' ? payload.text : '';
-    if (payload.kind === 'user') {
-      // Flush the previous user-only turn (no assistant reply) before
-      // starting a new one.
-      if (pendingUser !== undefined) turns.push({ user: pendingUser });
-      pendingUser = text;
-    } else if (payload.kind === 'ai') {
-      // Pair with the most recent user message; if an AI message lands
-      // with no preceding user message (shouldn't happen, but defensive),
-      // drop it rather than fabricating a user turn.
-      if (pendingUser !== undefined) {
-        turns.push({ user: pendingUser, assistant: text });
-        pendingUser = undefined;
-      }
-    }
-    // tool entries are intentionally skipped.
-  }
-  if (pendingUser !== undefined) turns.push({ user: pendingUser });
-  return turns;
-}
-
-/**
- * Translate pi-coding-agent events into the renderer-facing ChatEvent
- * stream. Mirrors the shape produced by the previous OpenClaw-WS bridge so
- * `app-chat.ts` doesn't need to know anything changed.
- */
-function handlePiEvent(
+function handleStreamEvent(
   win: BrowserWindow,
   session: ChatSession,
   turnId: number,
   acc: TurnAccumulator,
-  // Typed as unknown because pi-coding-agent's event union is wider than
-  // what we care about and importing the full type here would force the
-  // harness import out of the lazy path.
-  evt: { type: string } & Record<string, unknown>,
+  event: ChatStreamEvent,
 ): void {
-  switch (evt.type) {
-    case 'agent_start':
-    case 'turn_start':
-    case 'message_start':
-      // Renderer already shows a "thinking" placeholder; nothing to do here
-      // beyond keeping it visible until the first delta lands.
+  switch (event.type) {
+    case 'assistant.start':
       return;
-    case 'message_update': {
-      const ame = evt.assistantMessageEvent as { type: string; delta?: unknown } | undefined;
-      if (!ame) return;
-      if (ame.type === 'text_delta' && typeof ame.delta === 'string') {
-        acc.aiText += ame.delta;
-        emit(win, {
-          appId: session.appId,
-          turnId,
-          kind: 'assistant-delta',
-          delta: ame.delta,
-        });
-      }
+    case 'assistant.delta':
+      acc.aiText += event.delta;
+      emit(win, {
+        appId: session.appId,
+        turnId,
+        kind: 'assistant-delta',
+        delta: event.delta,
+      });
       return;
-    }
-    case 'tool_execution_start': {
-      const toolName = String(evt.toolName ?? 'tool');
-      const toolCallId = String(evt.toolCallId ?? '');
-      const args = evt.args as Record<string, unknown> | undefined;
-      const sql =
-        (toolName === 'centraid_sql_read' || toolName === 'centraid_sql_write') &&
-        typeof args?.sql === 'string'
-          ? (args.sql as string)
-          : undefined;
-      acc.pending.set(toolCallId, { tool: toolName, sql, args });
+    case 'reasoning.delta':
+      // The renderer's existing protocol doesn't surface reasoning
+      // separately; treat as a thinking placeholder so the UI keeps a
+      // sense of progress.
+      emit(win, { appId: session.appId, turnId, kind: 'thinking' });
+      return;
+    case 'tool.start': {
+      acc.pending.set(event.toolCallId, {
+        tool: event.toolName,
+        sql: event.sql,
+        args: event.args,
+      });
       emit(win, {
         appId: session.appId,
         turnId,
         kind: 'tool-call',
-        toolName,
-        toolArgs: args,
-        sql,
+        toolName: event.toolName,
+        toolArgs: event.args,
+        sql: event.sql,
       });
       return;
     }
-    case 'tool_execution_end': {
-      const toolCallId = String(evt.toolCallId ?? '');
-      const toolName = String(evt.toolName ?? 'tool');
-      const pending = acc.pending.get(toolCallId);
-      acc.pending.delete(toolCallId);
-      const result = evt.result;
-      const isError = Boolean(evt.isError);
-      if (!isError) {
+    case 'tool.result': {
+      const pending = acc.pending.get(event.toolCallId);
+      acc.pending.delete(event.toolCallId);
+      if (event.ok) {
         emit(win, {
           appId: session.appId,
           turnId,
           kind: 'tool-result',
-          toolName,
-          toolResult: result,
+          toolName: event.toolName || pending?.tool || 'tool',
+          toolResult: event.result,
         });
         acc.batch.push({
           kind: 'tool',
-          id: toolCallId || `t${turnId}-${Date.now()}`,
-          tool: pending?.tool ?? toolName,
+          id: event.toolCallId || `t${turnId}-${Date.now()}`,
+          tool: pending?.tool ?? event.toolName,
           sql: pending?.sql,
           args: pending?.args,
           state: 'ok',
-          result,
+          result: event.result,
         });
       } else {
-        // pi's result payload for failures usually looks like
-        // { content: [{ type: 'text', text: '...' }] }
-        const text = extractToolErrorText(result) ?? 'Tool failed.';
+        const text = event.errorText ?? 'Tool failed.';
         emit(win, {
           appId: session.appId,
           turnId,
           kind: 'tool-error',
-          toolName,
+          toolName: event.toolName || pending?.tool || 'tool',
           text,
         });
         acc.batch.push({
           kind: 'tool',
-          id: toolCallId || `t${turnId}-${Date.now()}`,
-          tool: pending?.tool ?? toolName,
+          id: event.toolCallId || `t${turnId}-${Date.now()}`,
+          tool: pending?.tool ?? event.toolName,
           sql: pending?.sql,
           args: pending?.args,
           state: 'error',
@@ -334,37 +211,29 @@ function handlePiEvent(
       }
       return;
     }
-    case 'turn_end':
-    case 'agent_end': {
-      // The model has produced its final assistant message; stage it for the
-      // batched history flush. The actual flush happens in runTurn's finally
-      // so any straggler deltas after `agent_end` (rare) still merge in.
-      if (!acc.aiAppended && acc.aiText.trim().length > 0) {
-        acc.batch.push({ kind: 'ai', text: acc.aiText });
-        acc.aiAppended = true;
+    case 'final':
+      if (acc.aiText.trim().length > 0 || event.text.trim().length > 0) {
+        const text = acc.aiText || event.text;
+        acc.batch.push({ kind: 'ai', text });
       }
       emit(win, {
         appId: session.appId,
         turnId,
         kind: 'final',
-        text: acc.aiText,
+        text: acc.aiText || event.text,
       });
       return;
-    }
-    default:
-      break;
+    case 'aborted':
+      emit(win, { appId: session.appId, turnId, kind: 'aborted' });
+      return;
+    case 'error':
+      emit(win, { appId: session.appId, turnId, kind: 'error', text: event.message });
+      acc.batch.push({ kind: 'ai', text: event.message, error: true });
+      return;
+    case 'phase':
+      // diagnostic — surface as thinking so the UI keeps a heartbeat.
+      emit(win, { appId: session.appId, turnId, kind: 'thinking' });
   }
-}
-
-/** Pull a plain-text error message out of pi's tool-result content array. */
-function extractToolErrorText(result: unknown): string | undefined {
-  if (!result || typeof result !== 'object') return undefined;
-  const r = result as { content?: unknown };
-  if (!Array.isArray(r.content)) return undefined;
-  const first = r.content.find(
-    (c) => c && typeof c === 'object' && (c as { type?: unknown }).type === 'text',
-  ) as { text?: unknown } | undefined;
-  return typeof first?.text === 'string' ? first.text : undefined;
 }
 
 async function runTurn(
@@ -374,57 +243,51 @@ async function runTurn(
   turnId: number,
 ): Promise<void> {
   session.turnId = turnId;
-  session.streaming = true;
   emit(win, { appId: session.appId, turnId, kind: 'thinking' });
   const acc = newAccumulator();
+  const settings = await loadSettings();
+  const harness = await loadChatHarness();
 
-  let detach: (() => void) | null = null;
   try {
-    const agent = await ensureAgent(session);
-    detach = agent.subscribe((evt) => {
-      handlePiEvent(win, session, turnId, acc, evt as { type: string } & Record<string, unknown>);
+    const handle = await harness.openChatStream({
+      config: {
+        gatewayUrl: settings.gatewayUrl,
+        gatewayToken: settings.gatewayToken,
+      },
+      appId: session.appId,
+      windowId: session.windowId,
+      message: text,
+      mode: session.mode,
     });
-    session.detach = detach;
-    await agent.prompt(text);
+    session.currentAbort = () => handle.abort();
+    try {
+      for await (const event of handle.events) {
+        handleStreamEvent(win, session, turnId, acc, event);
+      }
+    } finally {
+      session.currentAbort = null;
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     emit(win, { appId: session.appId, turnId, kind: 'error', text: msg });
-    if (!acc.aiAppended) {
-      acc.batch.push({ kind: 'ai', text: msg, error: true });
-      acc.aiAppended = true;
-    }
+    acc.batch.push({ kind: 'ai', text: msg, error: true });
   } finally {
-    detach?.();
-    if (session.detach === detach) session.detach = null;
-    session.streaming = false;
     session.turnId = null;
     flushBatch(session.chatSessionId, acc.batch);
   }
 }
 
 /**
- * Tear down a chat session's agent. Called when the panel switches to a
- * different past chat or when the window closes. Aborting an in-flight
- * turn is best-effort — pi resolves the abort once the agent goes idle.
+ * Mint a fresh per-pane window id. Uses chat-history row ids when
+ * available so a refresh + reload reuses the same gateway window id and
+ * resumes the same CLI session.
  */
-async function disposeSession(session: ChatSession): Promise<void> {
-  session.detach?.();
-  session.detach = null;
-  if (session.agent) {
-    try {
-      if (session.streaming) await session.agent.abort();
-    } catch {
-      /* swallow */
-    }
-    try {
-      session.agent.dispose();
-    } catch {
-      /* swallow */
-    }
-    session.agent = null;
+function mintWindowId(chatSessionId: string | null): string {
+  if (chatSessionId) {
+    // Window ids are constrained to `[A-Za-z0-9_\-:]+`; UUIDs match.
+    return chatSessionId.replace(/[^A-Za-z0-9_\-:]/g, '');
   }
-  session.streaming = false;
-  session.turnId = null;
+  return `w${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function registerChatIpcHandlers(): void {
@@ -432,35 +295,29 @@ export function registerChatIpcHandlers(): void {
     ChatChannel.START,
     async (
       event,
-      input: { appId: string; appName: string; sessionId?: string | null },
+      input: {
+        appId: string;
+        appName: string;
+        sessionId?: string | null;
+        mode?: ChatMode;
+      },
     ): Promise<{ ok: true; sessionId: string | null }> => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win) throw new Error('no window for chat session');
       const key = sessionKey(win.id, input.appId);
       const prior = sessions.get(key);
-      if (prior) await disposeSession(prior);
-      // Reopening a saved chat: snapshot prior user/assistant turns NOW so
-      // the lazy ensureAgent() sees the conversation history without the
-      // in-flight user message SEND will append on the very next call.
-      // Failure to load history degrades to "model has no prior context"
-      // (the pre-fix behavior), never worse — the chat still works.
-      const priorTurns = input.sessionId
-        ? await loadPriorTurns(input.sessionId).catch((err) => {
-            console.warn('[centraid] failed to hydrate prior chat turns:', err);
-            return [] as Array<{ user: string; assistant?: string }>;
-          })
-        : [];
+      if (prior?.currentAbort) prior.currentAbort();
+      const chatSessionId = input.sessionId ?? null;
       sessions.set(key, {
         appId: input.appId,
         appName: input.appName,
-        chatSessionId: input.sessionId ?? null,
-        agent: null,
-        priorTurns,
-        detach: null,
+        chatSessionId,
+        windowId: mintWindowId(chatSessionId),
+        mode: input.mode === 'data' ? 'data' : 'full',
+        currentAbort: null,
         turnId: null,
-        streaming: false,
       });
-      return { ok: true, sessionId: input.sessionId ?? null };
+      return { ok: true, sessionId: chatSessionId };
     },
   );
 
@@ -475,17 +332,14 @@ export function registerChatIpcHandlers(): void {
       const session = sessions.get(sessionKey(win.id, input.appId));
       if (!session) throw new Error('chat session not started');
 
-      // Lazy-create the persisted chat-history row on first send so empty
-      // "+ New chat" presses don't litter the sessions list.
       if (!session.chatSessionId) {
         const created = await historyCreate(session.appId, '');
         session.chatSessionId = created.id;
+        // Rebind the window id to the freshly-created chat session so
+        // subsequent reloads of this row resume the same gateway window.
+        session.windowId = mintWindowId(session.chatSessionId);
       }
 
-      // Persist the user's message synchronously so we can return the
-      // canonical title (auto-derived server-side from the first user
-      // message) to the renderer. This also gives crash-safety: even if
-      // the turn never finishes, the user's prompt is durable.
       const appendRes = await historyAppendBatch(session.chatSessionId, [
         { kind: 'user', text: input.text },
       ]);
@@ -507,9 +361,9 @@ export function registerChatIpcHandlers(): void {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win) return { ok: true };
       const session = sessions.get(sessionKey(win.id, input.appId));
-      if (!session?.agent || !session.streaming) return { ok: true };
+      if (!session?.currentAbort) return { ok: true };
       try {
-        await session.agent.abort();
+        session.currentAbort();
         emit(win, {
           appId: input.appId,
           turnId: session.turnId ?? -1,
@@ -522,24 +376,15 @@ export function registerChatIpcHandlers(): void {
     },
   );
 
-  // Model picker — the renderer reads this for the chat header dropdown.
-  // The harness path defers model selection to pi's own settings/auth, so
-  // we return an empty list for now; the renderer falls back to "default".
+  // Model picker — model selection is owned by the gateway-side runner
+  // (OpenClaw config / codex / claude-code defaults). Return empty so the
+  // renderer falls back to "default".
   ipcMain.handle(
     ChatChannel.MODELS,
-    async () =>
-      [] as Array<{
-        id: string;
-        name: string;
-        provider: string;
-      }>,
+    async () => [] as Array<{ id: string; name: string; provider: string }>,
   );
 
-  // ---------- Chat history ----------
-  // The same `/_centraid-chat` HTTP surface backs both runtime modes — the
-  // openclaw plugin serves it on the remote gateway, and the embedded local
-  // runtime's HTTP server serves an identical implementation from
-  // @centraid/runtime-core.
+  // ---------- Chat history (renderer's persistent chat list) ----------
   ipcMain.handle(
     ChatChannel.HISTORY_LIST,
     async (_event, input: { appId: string }): Promise<{ sessions: ChatSessionMeta[] }> => {
@@ -568,7 +413,13 @@ export function registerChatIpcHandlers(): void {
 export function disposeWindowChatSessions(windowId: number): void {
   for (const [key, session] of sessions.entries()) {
     if (!key.startsWith(`${windowId}:`)) continue;
-    void disposeSession(session);
+    if (session.currentAbort) {
+      try {
+        session.currentAbort();
+      } catch {
+        /* swallow */
+      }
+    }
     sessions.delete(key);
   }
 }

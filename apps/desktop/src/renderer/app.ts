@@ -298,6 +298,22 @@
   // animated grid without rebuilding the page. Reset on every clear().
   let currentSetSidebarOpen: ((open: boolean) => void) | null = null;
 
+  // Cached runtime mode powering the sidebar's Local/Remote badge. Read
+  // from the main process on boot and refreshed whenever the user saves
+  // settings (modeSeg / saveBtn / testBtn). Undefined until the first
+  // settings fetch resolves, which suppresses the badge rather than
+  // flashing a stale value.
+  let currentRuntimeMode: 'local' | 'remote' | undefined;
+  function refreshRuntimeMode(): Promise<void> {
+    return window.CentraidApi.getSettings()
+      .then((s) => {
+        currentRuntimeMode = s.runtimeMode;
+      })
+      .catch(() => {
+        /* ignore — badge stays hidden until the next save */
+      });
+  }
+
   type ShellRoute =
     | { kind: 'home' }
     | { kind: 'settings' }
@@ -419,6 +435,7 @@
       onHome: renderHome,
       onNewApp: openNewAppSheet,
       onSettings: renderSettings,
+      runtimeMode: currentRuntimeMode,
     });
   }
 
@@ -2428,12 +2445,11 @@
       ]),
     );
 
-    // ---- AI providers (Claude Code / Codex credential import) ----
-    // Centraid's coding agent (pi-mono) uses pi-ai's first-party OAuth
-    // providers. We ride on whichever subscription the user already has on
-    // disk: Codex creds in ~/.codex/auth.json, Claude Code creds in the
-    // macOS keychain. The importer copies them into ~/.pi/agent/auth.json
-    // — Codex is preferred when both exist so pi defaults to Codex models.
+    // ---- AI providers (Claude Code / Codex credential status) ----
+    // Centraid's coding agent runs the user's installed CLIs in place:
+    // codex app-server reads `~/.codex/auth.json` (set up by `codex login`)
+    // and the Claude Agent SDK reads `ANTHROPIC_API_KEY`. This panel just
+    // probes the on-machine state and shows which backends are ready.
     const authStatusHost = el('div', {
       style: { display: 'flex', flexDirection: 'column', gap: '8px' },
     });
@@ -2637,12 +2653,14 @@
       class: 'btn btn-primary',
       onClick: async () => {
         try {
-          await window.CentraidApi.saveSettings({
+          const next = await window.CentraidApi.saveSettings({
             projectsDir: projectsDir.value.trim(),
             runtimeMode,
             remoteGatewayUrl: remoteUrl.value.trim(),
             remoteGatewayToken: remoteToken.value,
           });
+          currentRuntimeMode = next.runtimeMode;
+          renderSettings();
           showToast('Settings saved');
         } catch (err) {
           showToast(`Save failed: ${String(err)}`);
@@ -2661,6 +2679,7 @@
             remoteGatewayUrl: remoteUrl.value.trim(),
             remoteGatewayToken: remoteToken.value,
           });
+          currentRuntimeMode = next.runtimeMode;
           const base = (next.gatewayUrl ?? '').replace(/\/+$/, '');
           const health = await fetch(`${base}/health`).catch(() => null);
           showToast(health?.ok ? 'Runtime reachable' : 'Settings saved. Health check unavailable.');
@@ -2931,6 +2950,7 @@
     openShare: openShareDialog,
     openSettings: renderSettings,
     renderHome,
+    getRuntimeMode: () => currentRuntimeMode,
   };
 
   document.addEventListener('keydown', (e) => {
@@ -2949,5 +2969,15 @@
     }
   });
 
-  renderHome();
+  // Prime the sidebar's Local/Remote badge BEFORE the first renderHome
+  // so the badge is present on cold-boot Home. Racing renderHome()
+  // against a later applyRoute() rebuild produced two concurrent
+  // renderHomeAsync() calls — both cleared root, both appended, and the
+  // window ended up showing a stacked duplicate of the entire UI. The
+  // settings IPC is a local file read, so awaiting it doesn't make the
+  // first paint noticeably slower.
+  void (async (): Promise<void> => {
+    await refreshRuntimeMode();
+    renderHome();
+  })();
 })();
