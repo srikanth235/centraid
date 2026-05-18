@@ -65,11 +65,41 @@ export const Channel = {
 
 interface AgentSessionHandle {
   projectId: string;
+  projectDir: string;
   prompt(text: string): Promise<void>;
   stop(): Promise<void>;
 }
 
 const sessions = new Map<number, AgentSessionHandle>();
+
+async function loadRunnerPrefs(): Promise<{
+  kind: 'codex' | 'claude-code';
+  binPath?: string;
+  extraArgs?: string[];
+}> {
+  const prefs = await fetchUserPrefs();
+  const kindRaw = prefs['chat.runner.kind'];
+  const kind: 'codex' | 'claude-code' | undefined =
+    kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : undefined;
+  if (!kind) {
+    throw new Error(
+      'No coding-agent configured. Open Settings → AI providers and pick Codex or Claude Code.',
+    );
+  }
+  const binPath =
+    typeof prefs['chat.runner.binPath'] === 'string'
+      ? (prefs['chat.runner.binPath'] as string)
+      : undefined;
+  const extraArgsRaw = prefs['chat.runner.extraArgs'];
+  const extraArgs = Array.isArray(extraArgsRaw)
+    ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
+    : undefined;
+  return {
+    kind,
+    ...(binPath ? { binPath } : {}),
+    ...(extraArgs ? { extraArgs } : {}),
+  };
+}
 
 export function registerIpcHandlers(): void {
   // ----- Settings -----
@@ -191,20 +221,13 @@ export function registerIpcHandlers(): void {
       const { createCentraidAgentSession } = await import('@centraid/builder-harness');
       const projectDir = path.join(settings.projectsDir, input.projectId);
 
-      // Visual-feedback loop: give the agent a `previewScreenshot` tool
-      // that captures the preview iframe via the window's webContents.
-      // The harness detects the tool by name and turns on the matching
-      // system-prompt guidance.
-      const { createPreviewScreenshotTool } = await import('@centraid/builder-harness');
-      const previewScreenshot = createPreviewScreenshotTool({
-        capture: async () => capturePreviewIframe(win),
-      });
+      const runnerPrefs = await loadRunnerPrefs();
 
       const session = await createCentraidAgentSession({
         projectDir,
+        runnerPrefs,
         sessionMode: input.sessionMode,
         liveSchema: { config: settings, appId: input.projectId },
-        customTools: [previewScreenshot],
       });
 
       const unsubscribe = session.subscribe((evt) => {
@@ -217,20 +240,28 @@ export function registerIpcHandlers(): void {
 
       sessions.set(win.id, {
         projectId: input.projectId,
+        projectDir,
         prompt: async (text: string) => {
+          // Refresh the preview snapshot the agent reads via its native
+          // `Read` tool / `centraid preview snapshot`. Best-effort —
+          // capture errors (preview tab not visible, no index.html yet)
+          // shouldn't block the turn; the snapshot subcommand will just
+          // report `exists: false` and the agent can adapt.
+          await capturePreviewSnapshot(win, projectDir).catch(() => undefined);
           await session.prompt(text);
         },
         stop: async () => {
+          session.abort();
           unsubscribe();
           sessions.delete(win.id);
         },
       });
 
-      // For "continue" sessions, return the persisted message history so
-      // the renderer can hydrate the chat pane before any new turn streams
-      // in. Fresh sessions just return an empty array.
-      const messages = (session.messages ?? []) as unknown[];
-      return { ok: true, messages };
+      // The new runtime doesn't replay persisted message history — the
+      // backend (codex thread / Claude session) keeps the model-visible
+      // transcript across reloads via its own resume mechanism, while
+      // the renderer always starts with an empty chat pane.
+      return { ok: true, messages: [] };
     },
   );
 
@@ -417,21 +448,21 @@ export function registerIpcHandlers(): void {
 }
 
 /**
- * Capture the preview iframe inside `win` and return it as a base64 PNG.
+ * Capture the preview iframe inside `win` and write it as a PNG to
+ * `<projectDir>/.preview/snapshot.png`. The agent picks it up via its
+ * native `Read` tool (or `centraid preview snapshot` for freshness
+ * metadata) — that replaces pi's `previewScreenshot` custom tool.
  *
- * The renderer tags the preview iframe with `data-centraid-app="1"` (see
- * `makePreviewFrame` in renderer/builder.ts). We ask the renderer for its
- * bounding rect via `executeJavaScript`, then `capturePage(rect)` clips
- * to just that region — so the agent sees the app, not the chat pane
- * and chrome around it.
- *
- * Throws (surfaces as a tool error to the agent) when the preview tab
- * isn't visible — that's a useful signal: "open the preview, then ask
- * me to screenshot."
+ * The renderer tags the preview iframe with `data-centraid-app="1"`;
+ * we use `executeJavaScript` to read its bounding rect, then clip
+ * `capturePage` to that region so the agent sees the app, not the
+ * surrounding chrome. Failures (no preview tab open yet, no
+ * `index.html` scaffolded) are reported via the snapshot file's
+ * absence — the agent's `centraid preview snapshot` call returns
+ * `{ exists: false }` and the agent adapts.
  */
-async function capturePreviewIframe(
-  win: BrowserWindow,
-): Promise<{ mimeType: string; base64: string }> {
+async function capturePreviewSnapshot(win: BrowserWindow, projectDir: string): Promise<void> {
+  if (win.isDestroyed()) return;
   const rect = (await win.webContents.executeJavaScript(
     `(() => {
       const f = document.querySelector('iframe[data-centraid-app="1"]');
@@ -442,11 +473,7 @@ async function capturePreviewIframe(
     })()`,
   )) as { x: number; y: number; width: number; height: number } | null;
 
-  if (!rect) {
-    throw new Error(
-      'Preview iframe not visible. Switch the right pane to the Preview tab and try again.',
-    );
-  }
+  if (!rect) return;
 
   const image = await win.webContents.capturePage({
     x: Math.max(0, Math.round(rect.x)),
@@ -454,8 +481,9 @@ async function capturePreviewIframe(
     width: Math.max(1, Math.round(rect.width)),
     height: Math.max(1, Math.round(rect.height)),
   });
-  const base64 = image.toPNG().toString('base64');
-  return { mimeType: 'image/png', base64 };
+  const dir = path.join(projectDir, '.preview');
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, 'snapshot.png'), image.toPNG());
 }
 
 /** Stop and forget the session associated with a closing window. */

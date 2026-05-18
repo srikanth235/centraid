@@ -1,15 +1,18 @@
 /*
  * @centraid/builder-harness
  *
- * Customizes pi-coding-agent for the centraid app BUILDER use case: an agent
- * that authors centraid apps in the @centraid/openclaw-plugin format, plus
- * scaffold + publish + gateway HTTP helpers shared across desktop / mobile.
+ * Drives the centraid app BUILDER: a session that authors centraid apps
+ * in the @centraid/openclaw-plugin format, backed by the unified local
+ * agent runtime in @centraid/local-chat-runner (codex app-server or
+ * Claude SDK). Plus scaffold + publish + gateway HTTP helpers shared
+ * across desktop / mobile.
  *
- * The in-app *data chat* (talking to a deployed app's SQLite over the chat
- * panel) is a separate surface — see @centraid/chat-harness.
+ * The in-app *data chat* (talking to a deployed app's SQLite over the
+ * chat panel) is a separate surface — see @centraid/chat-harness — but
+ * both share the same agent runtime.
  *
  * Public surface:
- *   - createCentraidAgentSession({ projectDir, model? }) → AgentSession
+ *   - createCentraidAgentSession({ projectDir, runnerPrefs, ... }) → AgentSession
  *   - scaffoldProject(projectsDir, id, opts?) → ProjectInfo
  *   - listProjects(projectsDir) → ProjectInfo[]
  *   - publishProject(projectDir, id, config, opts?) → PublishResult
@@ -19,6 +22,9 @@
 export {
   createCentraidAgentSession,
   type CreateCentraidAgentSessionOptions,
+  type CentraidAgentEvent,
+  type CentraidSessionMode,
+  type AgentSession,
 } from './agent-session.js';
 
 export {
@@ -66,12 +72,6 @@ export { defaultHarnessConfig, resolveHarnessConfig } from './config.js';
 export { CENTRAID_APPEND_PROMPT, centraidAppendPrompt } from './system-prompt.js';
 
 export { buildUiGroundingBlocks } from './ui-grounding.js';
-
-export {
-  createPreviewScreenshotTool,
-  type CreatePreviewScreenshotToolOptions,
-  type PreviewScreenshotImage,
-} from './preview-screenshot-tool.js';
 
 export {
   type HarnessConfig,

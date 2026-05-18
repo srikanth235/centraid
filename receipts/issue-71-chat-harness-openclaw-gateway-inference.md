@@ -262,10 +262,19 @@ The previous "extract primitives" pass kept the `codex exec --json` and `claude 
 - `bun run lint`: 0/0 errors.
 - `bunx oxfmt --check`: clean.
 
-### Open items for the builder-harness swap (next commit)
+### Builder-harness swap (follow-up commit)
 
-- Replace `packages/builder-harness/src/agent-session.ts` (pi-based) with a duck-typed session backed by `runAgentTurn`. Translate `ChatStreamEvent` → the pi-shaped `CentraidAgentEvent` union the renderer's `handleAgentEvent` consumes, so the renderer doesn't change.
-- Per-project resume: persist the returned `sessionId` under `<projectDir>/.centraid-builder-state.json`. The CLI handles transcript continuity internally; the renderer hydrates an empty chat on reload (lossy by design, can revisit).
-- Desktop snapshot-capture loop: write `<projectDir>/.preview/snapshot.png` (debounced) so the builder agent can read it via its native `Read` tool / `centraid preview snapshot` for visual feedback. Replaces pi's `previewScreenshot` custom tool.
-- Drop `@earendil-works/pi-coding-agent` from `packages/builder-harness/package.json` and delete `preview-screenshot-tool.ts`. Update `ui-grounding.ts` to remove the `withScreenshotTool` opt-in and reference the snapshot file directly.
-- Drop the pi target from [auth-import.ts](../apps/desktop/src/main/auth-import.ts).
+- [packages/builder-harness/src/agent-session.ts](../packages/builder-harness/src/agent-session.ts): rewritten as a duck-typed facade backed by `runAgentTurn`. Same outward shape (`subscribe` / `prompt` / `messages` / `abort`) so the IPC handler and renderer code didn't have to change. A new `makeStreamTranslator` maps `ChatStreamEvent` → the pi-shaped `CentraidAgentEvent` union the renderer's `handleAgentEvent` consumes (`assistant.delta` → `message_update.text_delta`; `reasoning.delta` → `message_update.thinking_delta`; `tool.start` / `tool.result` → `tool_execution_*`; `error` synthesizes a tool failure; `phase` / `final` drop because the wrapping `message_end` / `turn_end` carry the same signal). Per-project resume id (codex thread id / Claude session id) persists at `<projectDir>/.centraid-builder-state.json`; a mismatched kind on reopen falls back to a fresh turn. `messages` always returns `[]` — the agent keeps the model-visible transcript via its own resume; the renderer just shows a fresh chat pane on reload.
+- [packages/builder-harness/src/ui-grounding.ts](../packages/builder-harness/src/ui-grounding.ts): dropped the `withScreenshotTool` opt-in; the **Visual feedback** block now points the agent at `./.preview/snapshot.png` and notes the `centraid preview snapshot` freshness probe.
+- `packages/builder-harness/src/preview-screenshot-tool.ts`: deleted. Replaced by the snapshot-file convention.
+- [packages/builder-harness/src/index.ts](../packages/builder-harness/src/index.ts): drop the `createPreviewScreenshotTool` / `PreviewScreenshotImage` exports; add the new `AgentSession` / `CentraidAgentEvent` / `CentraidSessionMode` types so consumers can type-check against the facade.
+- [packages/builder-harness/package.json](../packages/builder-harness/package.json): drop `@earendil-works/pi-coding-agent`; add `@centraid/local-chat-runner` workspace dep.
+- [apps/desktop/src/main/ipc.ts](../apps/desktop/src/main/ipc.ts):
+  - `AGENT_START`: stops loading the pi-specific `createPreviewScreenshotTool`. Loads runner prefs from gateway `user_prefs` (`chat.runner.kind`) via a new `loadRunnerPrefs` helper and threads them into `createCentraidAgentSession`. Returns an empty `messages` array — the renderer hydrates fresh.
+  - `AGENT_PROMPT` (via the session handle): captures `<projectDir>/.preview/snapshot.png` via `webContents.capturePage` (clipped to the iframe with `data-centraid-app="1"`) immediately before delegating to `session.prompt`. Failures (preview tab closed, no `index.html` yet) are swallowed — the agent's `centraid preview snapshot` call returns `exists: false` and it adapts.
+  - `AGENT_STOP`: also calls `session.abort()` so an in-flight `runAgentTurn` cleans up its codex subprocess / SDK call.
+
+### Open items deferred to a later commit
+
+- Drop the pi target from [auth-import.ts](../apps/desktop/src/main/auth-import.ts) — once pi is fully out of the codebase, the import flow's only remaining job is reporting which CLIs are installed locally.
+- Restore translator-level unit fixtures for the new backends. Easy to do once we've captured real wire output (`codex app-server` initialize/turn cycle; Claude SDK `partial_assistant_message` events) — should be a small follow-up.
