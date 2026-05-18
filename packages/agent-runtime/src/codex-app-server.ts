@@ -36,6 +36,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import type { ChatStreamEvent } from '@centraid/runtime-core';
+import type { ToolContext } from './runtime.js';
+import { centraidDynamicToolSpecs, handleCentraidToolCall } from './codex-centraid-tools.js';
 
 export interface CodexAppServerInput {
   cwd: string;
@@ -56,6 +58,14 @@ export interface CodexAppServerInput {
    * host's `process.env` (which would race between concurrent turns).
    */
   extraPath?: string;
+  /**
+   * When provided, codex receives `dynamicTools: [...]` on `thread/start`
+   * declaring three first-class tools — `centraid_sql_describe`,
+   * `centraid_sql_read`, `centraid_sql_write` — and we dispatch the
+   * resulting `item/tool/call` server requests in-process against the
+   * supplied `dataFile`. Writes fire `emitChange` precisely.
+   */
+  toolContext?: ToolContext;
   abortSignal: AbortSignal;
   onEvent: (event: ChatStreamEvent) => void;
 }
@@ -170,6 +180,12 @@ export async function runCodexAppServerTurn(
     // when grantRoot is needed). Auto-accept so the turn doesn't stall.
     if (method.endsWith('/requestApproval')) {
       send({ jsonrpc: '2.0', id, result: { decision: 'accept' } });
+      return;
+    }
+    if (method === 'item/tool/call' && input.toolContext) {
+      const outcome = handleCentraidToolCall(id, params, input.toolContext);
+      send(outcome.response);
+      for (const ev of outcome.events) emit(ev);
       return;
     }
     send({
@@ -340,6 +356,7 @@ export async function runCodexAppServerTurn(
         approvalPolicy: 'never',
         sandbox: 'workspace-write',
         ...(input.extraSystemPrompt ? { developerInstructions: input.extraSystemPrompt } : {}),
+        ...(input.toolContext ? { dynamicTools: centraidDynamicToolSpecs() } : {}),
       })) as { thread?: { id?: string } } | undefined;
       if (startResult?.thread?.id) threadId = startResult.thread.id;
     }

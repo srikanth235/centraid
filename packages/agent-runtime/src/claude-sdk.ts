@@ -21,7 +21,15 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { ChatStreamEvent } from '@centraid/runtime-core';
+import {
+  describeOp,
+  readOp,
+  writeOp,
+  SqlOpRefusal,
+  RunQueryError,
+  type ChatStreamEvent,
+} from '@centraid/runtime-core';
+import type { ToolContext } from './runtime.js';
 
 export interface ClaudeSdkInput {
   cwd: string;
@@ -38,6 +46,13 @@ export interface ClaudeSdkInput {
    * options, so we never mutate the host's `process.env`.
    */
   extraPath?: string;
+  /**
+   * When provided, the SDK is configured with an in-process MCP server
+   * exposing `centraid_sql_describe`, `centraid_sql_read`, and
+   * `centraid_sql_write`. Writes call `emitChange` after a precise table-
+   * tracked SQLite session commit.
+   */
+  toolContext?: ToolContext;
   abortSignal: AbortSignal;
   onEvent: (event: ChatStreamEvent) => void;
 }
@@ -110,6 +125,10 @@ export async function runClaudeSdkTurn(
     }
     if (config.pathToClaudeCodeExecutable) {
       options.pathToClaudeCodeExecutable = config.pathToClaudeCodeExecutable;
+    }
+    if (input.toolContext) {
+      const server = await buildCentraidMcpServer(mod, input.toolContext);
+      options.mcpServers = { centraid: server };
     }
 
     const generator = mod.query({
@@ -286,4 +305,87 @@ function makeSdkMessageTranslator(
     if (typeof msg.text === 'string') return msg.text;
     return '';
   }
+}
+
+/**
+ * Build the in-process MCP server that exposes the three centraid SQL
+ * tools. Zod 4 is the project's pinned schema lib; the SDK accepts both
+ * Zod 3 and Zod 4. Each handler returns a single `text` content block whose
+ * payload is the JSON-stringified result (matching the codex shape) so the
+ * model sees an identical surface across backends.
+ */
+async function buildCentraidMcpServer(
+  mod: typeof import('@anthropic-ai/claude-agent-sdk'),
+  ctx: ToolContext,
+): Promise<unknown> {
+  // Zod is a peer dep of the SDK; load lazily so non-Claude code paths
+  // never pay the resolution cost.
+  const { z } = await import('zod');
+
+  const okText = (payload: unknown) => ({
+    content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
+  });
+  const errText = (msg: string) => ({
+    content: [{ type: 'text' as const, text: msg }],
+    isError: true,
+  });
+  const toMsg = (err: unknown): string =>
+    err instanceof SqlOpRefusal
+      ? err.message
+      : err instanceof RunQueryError
+        ? `${err.code}: ${err.message}`
+        : err instanceof Error
+          ? err.message
+          : String(err);
+
+  const describe = mod.tool(
+    'centraid_sql_describe',
+    "Return the live SQLite schema for this app (tables, columns, indexes, views) as JSON. Call this first when you don't know the schema. No arguments.",
+    {},
+    async () => {
+      try {
+        return okText(describeOp({ dataFile: ctx.dataFile }));
+      } catch (err) {
+        return errText(toMsg(err));
+      }
+    },
+  );
+
+  const read = mod.tool(
+    'centraid_sql_read',
+    "Run one SELECT (or EXPLAIN) against this app's SQLite. Returns {columns, rows, totalRows, truncated, durationMs}. Rows are capped at 200 — use LIMIT to be explicit. DDL/PRAGMA/non-SELECT statements are refused.",
+    { sql: z.string().describe('A single SELECT or EXPLAIN statement.') },
+    async ({ sql }) => {
+      try {
+        return okText(readOp({ dataFile: ctx.dataFile, sql }));
+      } catch (err) {
+        return errText(toMsg(err));
+      }
+    },
+  );
+
+  const write = mod.tool(
+    'centraid_sql_write',
+    "Run one INSERT / UPDATE / DELETE / REPLACE against this app's SQLite. Returns {rowsAffected, lastInsertRowid, durationMs}. DDL (CREATE/ALTER/DROP), PRAGMA, ATTACH/DETACH, VACUUM are refused. The runtime fires its change bus after the write so the running app's UI re-renders automatically.",
+    { sql: z.string().describe('A single INSERT/UPDATE/DELETE/REPLACE statement.') },
+    async ({ sql }, extra) => {
+      try {
+        const toolUseId =
+          extra && typeof extra === 'object' && 'toolUseId' in extra
+            ? String((extra as { toolUseId?: unknown }).toolUseId ?? '')
+            : '';
+        const payload = writeOp({
+          dataFile: ctx.dataFile,
+          sql,
+          onWrite: (tables) =>
+            ctx.emitChange({ tables, ...(toolUseId ? { toolCallId: toolUseId } : {}) }),
+        });
+        return okText(payload);
+      } catch (err) {
+        return errText(toMsg(err));
+      }
+    },
+  );
+
+  return mod.createSdkMcpServer({ name: 'centraid', tools: [describe, read, write] });
 }

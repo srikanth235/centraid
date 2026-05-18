@@ -18,6 +18,29 @@ import { runCodexAppServerTurn } from './codex-app-server.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 import type { RunnerPrefs } from './types.js';
 
+/**
+ * Per-turn binding that lets adapters register the inline `centraid_sql_*`
+ * tools and emit precise, provenanced change-bus events. Optional — when
+ * absent (builder mode, tests), adapters fall back to no tool registration
+ * and the legacy `centraid` CLI is the only SQL surface available.
+ */
+export interface ToolContext {
+  /** Absolute path to the app's `data.sqlite` (the cwd's own data file). */
+  dataFile: string;
+  /**
+   * Stable id for this single `runAgentTurn` invocation. Stamped on every
+   * `centraid:datachange` event produced by tool calls inside this turn so
+   * the chat UI can correlate iframe refreshes back to the chat pill.
+   */
+  agentTurnId: string;
+  /**
+   * Forward a precise change to the host's `ChangeBus`. The adapter calls
+   * this after a successful `centraid_sql_write`. Emits no-op when `tables`
+   * is empty.
+   */
+  emitChange: (payload: { tables: string[]; toolCallId?: string }) => void;
+}
+
 export interface AgentTurnInput {
   /** Working directory the agent operates in (chat: app data dir; builder: project dir). */
   cwd: string;
@@ -35,6 +58,13 @@ export interface AgentTurnInput {
    * concurrent turns). Empty / undefined = no PATH override.
    */
   extraPath?: string;
+  /**
+   * Inline-tool wiring. When present, the codex / claude adapters declare
+   * the three `centraid_sql_*` tools and dispatch them in-process; without
+   * it, the agent falls back to its generic shell tool. Chat callers always
+   * supply one; builder callers (no per-app data file) omit it.
+   */
+  toolContext?: ToolContext;
   abortSignal: AbortSignal;
   onEvent: (event: ChatStreamEvent) => void;
 }
@@ -65,6 +95,7 @@ export async function runAgentTurn(
         ...(input.model ? { model: input.model } : {}),
         ...(input.prevSessionId ? { prevThreadId: input.prevSessionId } : {}),
         ...(input.extraPath ? { extraPath: input.extraPath } : {}),
+        ...(input.toolContext ? { toolContext: input.toolContext } : {}),
         abortSignal: input.abortSignal,
         onEvent: input.onEvent,
       },
@@ -87,6 +118,7 @@ export async function runAgentTurn(
       ...(input.model ? { model: input.model } : {}),
       ...(input.prevSessionId ? { prevSessionId: input.prevSessionId } : {}),
       ...(input.extraPath ? { extraPath: input.extraPath } : {}),
+      ...(input.toolContext ? { toolContext: input.toolContext } : {}),
       abortSignal: input.abortSignal,
       onEvent: input.onEvent,
     },

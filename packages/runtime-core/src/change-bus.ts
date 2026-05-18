@@ -30,6 +30,29 @@ export interface AppChange {
   tables: string[];
   /** Wall-clock time of the commit (ms since epoch). */
   ts: number;
+  /**
+   * Who initiated the write:
+   *  - `'agent'`     — an in-process agent tool call (centraid_sql_write).
+   *  - `'handler'`   — a user-authored action / query handler.
+   *  - `'external'`  — a cloud-panel SQL write or any other path that does
+   *    not have agent or handler context.
+   *
+   * Subscribers can use this to render differently (e.g. flash agent-driven
+   * rows) without needing to listen on a separate bus.
+   */
+  source: 'agent' | 'handler' | 'external';
+  /**
+   * When `source === 'agent'`, the tool-call id from the underlying CLI's
+   * dispatch (codex `callId` / Claude `tool_use_id`). Lets a renderer pin a
+   * later refresh to the same chat-pill the user is looking at.
+   */
+  toolCallId?: string;
+  /**
+   * Stable id for a single `ChatRunner.run` invocation. Used by the chat UI
+   * to group all writes from one turn — handy for "assistant updated 3
+   * rows" style summaries.
+   */
+  agentTurnId?: string;
 }
 
 export type ChangeListener = (change: AppChange) => void;

@@ -121,24 +121,45 @@ Rules:
 
 When a session begins on a project that has a live published version, the harness injects the live schema (a \`### Live schema\` block listing \`PRAGMA user_version\` and every \`CREATE TABLE\`/\`CREATE INDEX\`/\`CREATE VIEW\`) just below this section. Use it to decide what id the next migration must take and what the database currently looks like. If that block is absent, treat the database as empty and start at \`0001\`.
 
-### Reactive data (chat-assistant + cross-window writes)
+### Reactive data — keep the UI in sync with writes
 
-The runtime auto-injects a change-bus bridge into every served \`index.html\`. The frontend should subscribe so writes that happen behind its back — chat-assistant SQL writes, edits from a second window, future cron jobs — propagate to the UI without a manual reload.
+The runtime auto-injects a change-bus bridge into every served HTML page. The frontend should subscribe so writes that happen behind its back — chat-assistant SQL writes, edits from a second window, future cron jobs — propagate to the UI without a manual reload. The bridge auto-reconnects on transient drops, so you don't need retry logic.
 
-Two APIs, pick one:
+Two equivalent APIs:
 
 \`\`\`js
-// Sugar — what new templates should use.
-window.centraid?.onChange?.(() => void refresh());
+// 1) Imperative API — what new templates should use. Returns an unsubscribe fn.
+const off = window.centraid.onChange((detail) => {
+  // detail.tables : string[] of mutated tables (precise — never ["*"])
+  // detail.source : "agent" | "handler" | "external"
+  // detail.toolCallId? : string — only when source === "agent"
+  // detail.agentTurnId? : string — only when source === "agent"
+  // detail.ts     : number — ms since epoch
+  void refresh();
+});
 
-// Vanilla — equivalent, no optional chain on the global.
+// 2) DOM event — same detail shape.
 window.addEventListener('centraid:datachange', (e) => {
-  // e.detail = { tables: string[], ts: number }
+  // e.detail.tables, e.detail.source, ...
   void refresh();
 });
 \`\`\`
 
-Call this once at startup, after \`refresh()\` (or your initial-load function) is defined. The bridge auto-reconnects on transient drops, so you don't need retry logic. If the app cares which tables changed, read \`detail.tables\` and skip the refetch when none of them match a table the page actually renders.
+Call this once at startup, after \`refresh()\` (or your initial-load function) is defined.
+
+What fires the bus:
+
+- App handlers under \`actions/\` that INSERT/UPDATE/DELETE — \`source: "handler"\`.
+- The data-chat agent (\`centraid_sql_write\`) — \`source: "agent"\`. Carries a stable \`agentTurnId\` for the whole chat turn and a per-tool-call \`toolCallId\` matching the tool pill the user is looking at.
+- External SQL panels (cloud-style query editor) — \`source: "external"\`.
+
+Practical patterns:
+
+- **Filter by \`tables\`.** Skip the refetch when none of \`detail.tables\` overlaps a table the page renders.
+- **Flash agent writes.** When \`source === "agent"\`, optionally pulse the affected rows to make the AI's edit visible. Other writes can stay silent.
+- **One sink, not many.** Apps usually subscribe once at startup; render loops read from the resulting derived state rather than each component opening its own \`EventSource\`.
+
+The runtime guarantees: every successful write (handler / agent / external) emits a single event with a precise non-empty \`tables\` array. Empty-table emissions are suppressed by the bus, so subscribers never see no-op events.
 
 ### Security model (do not weaken)
 

@@ -1,19 +1,16 @@
 #!/usr/bin/env node
 /*
- * `centraid` CLI — exposed to codex (and other shell-capable agents) as
- * a small subprocess they invoke from their normal bash tool. Reads /
- * writes the active app's SQLite directly via `runQuery` /
- * `readAppSchema` from `@centraid/runtime-core` — no MCP server, no
- * network, no token plumbing.
+ * `centraid` CLI — still shipped as a human-facing binary so authors and
+ * scripts can poke at an app's `data.sqlite` from a shell. Agents now call
+ * the same operations via in-process tool registrations (`centraid_sql_*`)
+ * declared by the codex / claude adapters; both paths share the underlying
+ * implementation in `@centraid/runtime-core`'s `sql-ops.ts`.
  *
- * AppId / projectId scoping: the CLI opens files relative to its cwd.
- * The adapter spawns the agent with `-C <workspace>` so the working
- * directory IS the per-app/per-project dir. The model cannot escape
- * the scope because no subcommand takes a workspace argument.
+ * AppId scoping: the CLI opens files relative to its cwd. There is no
+ * `--workspace` flag — the caller must `cd` into the app's data dir.
  *
- * Output: JSON on stdout for tool results (so the agent can parse them
- * predictably) plus a short human-readable summary on stderr so the user
- * watching the chat log can follow along.
+ * Output: JSON on stdout for tool results plus a short human-readable
+ * summary on stderr.
  *
  * Subcommands:
  *   centraid sql describe
@@ -31,40 +28,9 @@
 
 import path from 'node:path';
 import { statSync } from 'node:fs';
-import { readAppSchema, runQuery, RunQueryError } from '@centraid/runtime-core';
-
-const SELECT_ROW_CAP = 200;
-
-function isSelectOnly(sql: string): boolean {
-  const stripped = sql
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/--[^\n]*/g, ' ')
-    .trim();
-  if (!stripped) return false;
-  const first = stripped.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase();
-  if (first !== 'SELECT' && first !== 'EXPLAIN') return false;
-  return !/\b(insert|update|delete|drop|alter|create|replace|attach|detach|vacuum|reindex|pragma)\b/i.test(
-    stripped,
-  );
-}
-
-function isWriteDml(sql: string): boolean {
-  const stripped = sql
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/--[^\n]*/g, ' ')
-    .trim();
-  if (!stripped) return false;
-  const first = stripped.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase();
-  if (first !== 'INSERT' && first !== 'UPDATE' && first !== 'DELETE' && first !== 'REPLACE') {
-    return false;
-  }
-  return !/\b(drop|alter|create|attach|detach|vacuum|reindex|pragma)\b/i.test(stripped);
-}
+import { describeOp, readOp, writeOp, SqlOpRefusal, RunQueryError } from '@centraid/runtime-core';
 
 function dataFile(): string {
-  // CENTRAID_DATA_FILE override is useful for tests; production codex
-  // adapter spawns with cwd=<appsDir>/<id>, so the default ./data.sqlite
-  // is correct without an override.
   if (process.env.CENTRAID_DATA_FILE) return process.env.CENTRAID_DATA_FILE;
   return path.resolve(process.cwd(), 'data.sqlite');
 }
@@ -92,9 +58,8 @@ function usage(): never {
       '  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."',
       '  centraid preview snapshot',
       '',
-      'The CLI operates relative to the current working directory',
-      "(the agent's workspace). DDL (CREATE/ALTER/DROP) and PRAGMA",
-      'are not allowed in `sql` subcommands.',
+      'The CLI operates relative to the current working directory.',
+      'DDL (CREATE/ALTER/DROP) and PRAGMA are not allowed in `sql` subcommands.',
       '',
     ].join('\n'),
   );
@@ -102,42 +67,21 @@ function usage(): never {
 }
 
 function commandDescribe(): void {
-  const schema = readAppSchema(dataFile());
-  const compact = {
-    schemaVersion: schema.schemaVersion,
-    tables: schema.tables.map((t) => ({
-      name: t.name,
-      columns: t.columns.map((c) => ({
-        name: c.name,
-        type: c.type,
-        notnull: c.notnull,
-        pk: c.pk,
-      })),
-    })),
-    views: schema.views.map((v) => v.name),
-    indexes: schema.indexes.map((i) => ({ name: i.name, table: i.tbl_name })),
-  };
-  printJson(compact);
+  try {
+    printJson(describeOp({ dataFile: dataFile() }));
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
 }
 
 function commandRead(sql: string): void {
-  if (!isSelectOnly(sql)) {
-    refuse('only SELECT (or EXPLAIN) statements are allowed in `sql read`.');
-  }
   try {
-    const result = runQuery(dataFile(), sql);
-    if (result.kind !== 'rows') {
-      fail('expected SELECT result; got an exec result.', 1);
-    }
-    const trimmed = result.rows.slice(0, SELECT_ROW_CAP);
-    printJson({
-      columns: result.columns,
-      rows: trimmed,
-      totalRows: result.rows.length,
-      truncated: result.rows.length > trimmed.length,
-      durationMs: result.durationMs,
-    });
+    printJson(readOp({ dataFile: dataFile(), sql }));
   } catch (err) {
+    if (err instanceof SqlOpRefusal) {
+      // CLI surface phrasing mirrors the historical error message format.
+      refuse('only SELECT (or EXPLAIN) statements are allowed in `sql read`.');
+    }
     if (err instanceof RunQueryError) fail(`${err.code}: ${err.message}`);
     fail(err instanceof Error ? err.message : String(err));
   }
@@ -166,25 +110,14 @@ function commandPreviewSnapshot(): void {
 }
 
 function commandWrite(sql: string): void {
-  if (!isWriteDml(sql)) {
-    refuse(
-      'only INSERT/UPDATE/DELETE/REPLACE are allowed in `sql write`; DDL and PRAGMA are refused.',
-    );
-  }
   try {
-    const result = runQuery(dataFile(), sql);
-    if (result.kind !== 'exec') {
-      fail('expected exec result; got rows.', 1);
-    }
-    printJson({
-      rowsAffected: result.rowsAffected,
-      lastInsertRowid:
-        typeof result.lastInsertRowid === 'bigint'
-          ? result.lastInsertRowid.toString()
-          : result.lastInsertRowid,
-      durationMs: result.durationMs,
-    });
+    printJson(writeOp({ dataFile: dataFile(), sql }));
   } catch (err) {
+    if (err instanceof SqlOpRefusal) {
+      refuse(
+        'only INSERT/UPDATE/DELETE/REPLACE are allowed in `sql write`; DDL and PRAGMA are refused.',
+      );
+    }
     if (err instanceof RunQueryError) fail(`${err.code}: ${err.message}`);
     fail(err instanceof Error ? err.message : String(err));
   }

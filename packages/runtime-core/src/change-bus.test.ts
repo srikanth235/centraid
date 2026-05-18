@@ -8,7 +8,7 @@ describe('ChangeBus', () => {
     const seen: string[] = [];
     bus.subscribe('app1', (c) => seen.push(`a:${c.tables.join(',')}`));
     bus.subscribe('app1', (c) => seen.push(`b:${c.tables.join(',')}`));
-    bus.emit({ appId: 'app1', tables: ['todos'], ts: 1 });
+    bus.emit({ appId: 'app1', tables: ['todos'], ts: 1, source: 'handler' });
     assert.deepEqual(seen, ['a:todos', 'b:todos']);
   });
 
@@ -18,9 +18,9 @@ describe('ChangeBus', () => {
     let app2Count = 0;
     bus.subscribe('app1', () => app1Count++);
     bus.subscribe('app2', () => app2Count++);
-    bus.emit({ appId: 'app1', tables: ['todos'], ts: 1 });
-    bus.emit({ appId: 'app1', tables: ['users'], ts: 2 });
-    bus.emit({ appId: 'app2', tables: ['notes'], ts: 3 });
+    bus.emit({ appId: 'app1', tables: ['todos'], ts: 1, source: 'handler' });
+    bus.emit({ appId: 'app1', tables: ['users'], ts: 2, source: 'handler' });
+    bus.emit({ appId: 'app2', tables: ['notes'], ts: 3, source: 'handler' });
     assert.equal(app1Count, 2);
     assert.equal(app2Count, 1);
   });
@@ -29,7 +29,7 @@ describe('ChangeBus', () => {
     const bus = new ChangeBus();
     let count = 0;
     bus.subscribe('app1', () => count++);
-    bus.emit({ appId: 'app1', tables: [], ts: 1 });
+    bus.emit({ appId: 'app1', tables: [], ts: 1, source: 'handler' });
     assert.equal(count, 0);
   });
 
@@ -37,10 +37,10 @@ describe('ChangeBus', () => {
     const bus = new ChangeBus();
     let count = 0;
     const unsub = bus.subscribe('app1', () => count++);
-    bus.emit({ appId: 'app1', tables: ['t'], ts: 1 });
+    bus.emit({ appId: 'app1', tables: ['t'], ts: 1, source: 'handler' });
     assert.equal(count, 1);
     unsub();
-    bus.emit({ appId: 'app1', tables: ['t'], ts: 2 });
+    bus.emit({ appId: 'app1', tables: ['t'], ts: 2, source: 'handler' });
     assert.equal(count, 1, 'unsubscribed listener should not fire again');
     assert.equal(bus.listenerCount('app1'), 0);
   });
@@ -62,7 +62,7 @@ describe('ChangeBus', () => {
       goodAfter = true;
     });
     // Emit must not propagate the throw.
-    assert.doesNotThrow(() => bus.emit({ appId: 'app1', tables: ['t'], ts: 1 }));
+    assert.doesNotThrow(() => bus.emit({ appId: 'app1', tables: ['t'], ts: 1, source: 'handler' }));
     assert.equal(goodAfter, true);
     assert.ok(warnings.some((w) => w.includes('boom')));
   });
@@ -76,8 +76,8 @@ describe('ChangeBus', () => {
       unsubA();
     });
     bus.subscribe('app1', () => order.push('b'));
-    bus.emit({ appId: 'app1', tables: ['t'], ts: 1 });
-    bus.emit({ appId: 'app1', tables: ['t'], ts: 2 });
+    bus.emit({ appId: 'app1', tables: ['t'], ts: 1, source: 'handler' });
+    bus.emit({ appId: 'app1', tables: ['t'], ts: 2, source: 'handler' });
     // First emit: a, b. Second emit: only b (a unsubscribed itself).
     assert.deepEqual(order, ['a', 'b', 'b']);
   });
@@ -98,8 +98,13 @@ describe('ChangeBus', () => {
     const bus = new ChangeBus();
     const captured: AppChange[] = [];
     bus.subscribe('app1', (c) => captured.push(c));
-    bus.emit({ appId: 'app1', tables: ['a', 'b'], ts: 12345 });
+    bus.emit({ appId: 'app1', tables: ['a', 'b'], ts: 12345, source: 'handler' });
     assert.equal(captured.length, 1);
-    assert.deepEqual(captured[0], { appId: 'app1', tables: ['a', 'b'], ts: 12345 });
+    assert.deepEqual(captured[0], {
+      appId: 'app1',
+      tables: ['a', 'b'],
+      ts: 12345,
+      source: 'handler',
+    });
   });
 });

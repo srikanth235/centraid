@@ -69,18 +69,32 @@ For `journal` the refresh path is split across `loadEntries` / `loadActive`, so 
 - `packages/runtime-core/src/chat-runner.ts`: `ChatRunInput` gains `dataDir`; updated the stale `sessionFile` docstring (it lives under `<dataDir>/_chat/`, not `<appsDir>/<appId>/_chat/`).
 - `packages/runtime-core/src/static-server.test.ts`: updated the double-stamp test to reflect the bridge inject, added two new tests for the bridge (HTML with `<head>` → injected; HTML without `<head>` → no inject; non-HTML response → no inject).
 
+## Follow-up — inline `centraid_sql_*` tools on codex + Claude
+
+The inline-tool refactor itself landed on top of this foundation. Each item the "Out of scope" list above flagged is now done:
+
+- Shared `sql-ops` core (`describeOp` / `readOp` / `writeOp`) lifted out of the `centraid` CLI into `packages/runtime-core/src/sql-ops.ts` with the SELECT-only / DML-only guards, `SELECT_ROW_CAP = 200`, and an `onWrite(tables)` hook. The CLI bin keeps working — it just calls the shared functions so any future tweak applies everywhere at once.
+- `centraid` CLI refactored to call shared ops, so the bin stays usable for humans / scripts and doesn't drift from the agent surface.
+- `AppChange` extended with provenance fields: required `source: 'agent' | 'handler' | 'external'` and optional `toolCallId` / `agentTurnId`. SSE wire payload carries provenance — every `_changes` event now ships them. `Runtime.emitForApp(appId, 'handler' | 'external')` stamps source for handler / cloud-panel writes; new `Runtime.agentEmitForApp(appId)` threads tool-call provenance through the bus for the chat path. The openclaw plugin's `centraid_sql_write` tool also stamps `source: 'agent'` so cross-host SSE shape stays consistent.
+- Codex `dynamicTools` + `item/tool/call`: `runCodexAppServerTurn` now sends `dynamicTools: [...]` on `thread/start` (only when the caller supplies a `ToolContext`) and adds an `item/tool/call` branch to its server-request dispatch. The tool-dispatch body lives in `codex-centraid-tools.ts` so the driver file stays under the 500-line repo-hygiene cap. Each call emits a `tool.start` followed by a `tool.result` event with the same `toolCallId` codex used, so the chat UI renders SQL pills natively. Write calls invoke `ctx.emitChange({ tables, toolCallId })` so the change bus fires precisely in the same process the runtime is hosting.
+- Claude `createSdkMcpServer`: `runClaudeSdkTurn` builds a per-turn `createSdkMcpServer({ name: 'centraid', tools: [...] })` via the SDK's `tool(...)` helper with Zod 4 input schemas. Each handler returns the JSON-stringified payload as a single `text` content block so the model sees the same response shape across backends. The write handler propagates the SDK's `toolUseId` through `ctx.emitChange`. Zod is added as a `dependencies` entry on `@centraid/agent-runtime` (peer dep of the Claude SDK); loaded via dynamic `import()` so the codex code path never pays the cost.
+- Chat-adapter swap to typed tools: the system-prompt preamble describes the three typed tools instead of the CLI subcommands, mints a stable `agentTurnId` per `ChatRunner.run`, threads it via `emitChange`, and drops the centraidCliDir / extraPath wiring. `defaultCentraidCliDir` moves to its own tiny module for builder use.
+- Local-runtime wires change emitter: `apps/desktop/src/main/local-runtime.ts` closes over `runtime.agentEmitForApp` via a deferred ref to break the construction cycle (`Runtime` needs the runner; the runner needs the runtime's emitter).
+- Tests pass: 203/203 runtime-core tests, 18/18 agent-runtime tests, full repo typecheck clean. New `sql-ops.test.ts` covers refusal cases, the row cap, and the `onWrite` callback firing. SSE tests now assert agent-sourced events carry `source: 'agent'` + `toolCallId` + `agentTurnId`, and handler-sourced events carry `source: 'handler'` with the optional fields absent.
+
+The auto-injected change-bridge (already shipped in the foundation commit) now carries the richer event detail by virtue of the SSE payload change — no template-side changes were needed.
+
+The builder system-prompt reactive-data section has been expanded to document the new `detail.source` / `toolCallId` / `agentTurnId` fields with practical patterns (filter by `tables`, flash agent writes, one sink not many).
+
 ## Out of scope
 
-These are the remaining items in #73, all to be landed in the inline-tool refactor that follows this PR:
+Carried forward to follow-up issues:
 
-- `runtime-core/src/sql-ops.ts` — pure `describeOp / readOp / writeOp` shared between codex, Claude, and the CLI.
-- codex adapter: `dynamicTools` declaration in `thread/start`, `item/tool/call` server-request dispatch, typed `ChatStreamEvent`s.
-- Claude adapter: `createSdkMcpServer` with the same three tools.
-- `AppChange` enrichment: `source: 'agent' | 'handler' | 'external'`, `toolCallId?`, `agentTurnId?`; SSE wire payload mirrors it; the bridge inject dispatches the richer event detail.
-- Chat preamble + builder preamble swap from CLI-doc to tool-doc.
-- fs.watch backstop for ad-hoc external writers (e.g., user running `sqlite3` in Terminal). Not blocking; revisit only if a real use case surfaces.
-
-All called out explicitly in [#73](https://github.com/srikanth235/centraid/issues/73)'s scope section.
+- Deprecating the `centraid` CLI binary itself — kept for human / scripted callers.
+- `fs.watch`-based cross-process reactivity backstop for ad-hoc external writers (e.g. user running `sqlite3` in Terminal).
+- Per-query subscriptions (a small reactive query layer keyed by table names).
+- Splitting `centraid_sql_write` into INSERT / UPDATE / DELETE tools or adding parameterized queries.
+- "Undo this assistant action" / `toolCallId`-keyed audit log — the data is now in the bus; the feature is its own issue.
 
 ## Verification
 

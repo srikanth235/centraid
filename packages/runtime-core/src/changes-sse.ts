@@ -50,7 +50,14 @@ export async function handleAppChanges(
   const unsubscribe = bus.subscribe(appId, (change) => {
     if (res.writableEnded) return;
     res.write(`event: change\n`);
-    res.write(`data: ${JSON.stringify({ tables: change.tables, ts: change.ts })}\n\n`);
+    const payload: Record<string, unknown> = {
+      tables: change.tables,
+      ts: change.ts,
+      source: change.source,
+    };
+    if (change.toolCallId) payload.toolCallId = change.toolCallId;
+    if (change.agentTurnId) payload.agentTurnId = change.agentTurnId;
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
   });
 
   const heartbeat = setInterval(() => {
