@@ -2938,6 +2938,7 @@
           void window.Centraid.openSettings();
         }
       },
+      runtimeMode: window.Centraid?.getRuntimeMode?.(),
     });
 
     let builderSidebarOpen = Store.get<boolean>('appearance.sidebarOpen', true);

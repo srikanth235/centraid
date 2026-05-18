@@ -298,6 +298,22 @@
   // animated grid without rebuilding the page. Reset on every clear().
   let currentSetSidebarOpen: ((open: boolean) => void) | null = null;
 
+  // Cached runtime mode powering the sidebar's Local/Remote badge. Read
+  // from the main process on boot and refreshed whenever the user saves
+  // settings (modeSeg / saveBtn / testBtn). Undefined until the first
+  // settings fetch resolves, which suppresses the badge rather than
+  // flashing a stale value.
+  let currentRuntimeMode: 'local' | 'remote' | undefined;
+  function refreshRuntimeMode(): Promise<void> {
+    return window.CentraidApi.getSettings()
+      .then((s) => {
+        currentRuntimeMode = s.runtimeMode;
+      })
+      .catch(() => {
+        /* ignore — badge stays hidden until the next save */
+      });
+  }
+
   type ShellRoute =
     | { kind: 'home' }
     | { kind: 'settings' }
@@ -419,6 +435,7 @@
       onHome: renderHome,
       onNewApp: openNewAppSheet,
       onSettings: renderSettings,
+      runtimeMode: currentRuntimeMode,
     });
   }
 
@@ -2637,12 +2654,14 @@
       class: 'btn btn-primary',
       onClick: async () => {
         try {
-          await window.CentraidApi.saveSettings({
+          const next = await window.CentraidApi.saveSettings({
             projectsDir: projectsDir.value.trim(),
             runtimeMode,
             remoteGatewayUrl: remoteUrl.value.trim(),
             remoteGatewayToken: remoteToken.value,
           });
+          currentRuntimeMode = next.runtimeMode;
+          renderSettings();
           showToast('Settings saved');
         } catch (err) {
           showToast(`Save failed: ${String(err)}`);
@@ -2661,6 +2680,7 @@
             remoteGatewayUrl: remoteUrl.value.trim(),
             remoteGatewayToken: remoteToken.value,
           });
+          currentRuntimeMode = next.runtimeMode;
           const base = (next.gatewayUrl ?? '').replace(/\/+$/, '');
           const health = await fetch(`${base}/health`).catch(() => null);
           showToast(health?.ok ? 'Runtime reachable' : 'Settings saved. Health check unavailable.');
@@ -2931,6 +2951,7 @@
     openShare: openShareDialog,
     openSettings: renderSettings,
     renderHome,
+    getRuntimeMode: () => currentRuntimeMode,
   };
 
   document.addEventListener('keydown', (e) => {
@@ -2950,4 +2971,11 @@
   });
 
   renderHome();
+  // Prime the sidebar's Local/Remote badge in the background; rebuild
+  // the current view once the answer arrives so the badge appears
+  // without waiting for the next navigation.
+  void refreshRuntimeMode().then(() => {
+    const top = navStack[navIndex];
+    if (top) applyRoute(top);
+  });
 })();

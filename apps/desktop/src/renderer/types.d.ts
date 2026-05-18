@@ -87,6 +87,12 @@ declare global {
      * on the home grid.
      */
     openAppContext: (id: string, anchor: MenuAnchor) => void;
+    /**
+     * Current runtime mode ('local' or 'remote'), or undefined before the
+     * first settings fetch resolves. Used by the builder shell to mirror
+     * the sidebar badge that the home shell shows next to Settings.
+     */
+    getRuntimeMode: () => 'local' | 'remote' | undefined;
   }
 
   interface BuilderOptions {
@@ -219,6 +225,12 @@ declare global {
      * affordance entirely (e.g. test harnesses).
      */
     onAppContext?: (id: string, anchor: MenuAnchor) => void;
+    /**
+     * Current runtime mode. Rendered as a Local/Remote badge next to the
+     * Settings row so users can tell at a glance which gateway is in
+     * play. Omit while the first settings fetch is in flight.
+     */
+    runtimeMode?: 'local' | 'remote';
   }
 
   interface ChromeApi {

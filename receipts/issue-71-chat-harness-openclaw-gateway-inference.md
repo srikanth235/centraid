@@ -164,3 +164,15 @@ Two classes of items from the issue's "Open verification items" remain:
 2. **MCP server lifecycle across resumes.** The current implementation spawns a fresh MCP server per turn (the codex `--mcp-server` flag and the claude `--mcp-config` tmpfile are both per-invocation). Per-session lifetime (the issue's stated preference) would reduce per-turn latency; the migration is a `local-chat-runner` internal — no public-API impact.
 
 Both are tracked as open items here rather than blocking the M1–M7 land.
+
+## Follow-up — desktop electron bump + runtime-mode badge
+
+Manual end-to-end verification surfaced two desktop-only gaps that the M1–M7 land could not have caught without running the embedded local runtime:
+
+1. **`node:sqlite` not available in electron@33.** The desktop pinned `electron@^33`, which ships Node 20.18 — too old for `node:sqlite` (added in Node 22.5). `import('./local-runtime.js')` therefore failed with `ERR_UNKNOWN_BUILTIN_MODULE` and the embedded HTTP server never bound. Bumped [apps/desktop/package.json](../apps/desktop/package.json) to `electron@^37` (Node 22.18). The only remaining diagnostic is the expected `ExperimentalWarning: SQLite` line on boot.
+
+2. **No indication of which gateway is active.** A failed chat send produced "Could not reach the gateway" with no hint about whether the user was in `local` or `remote` mode. Added a small `Local`/`Remote` meta badge next to the sidebar's Settings row, cached in [apps/desktop/src/renderer/app.ts](../apps/desktop/src/renderer/app.ts) (`currentRuntimeMode`) and refreshed on settings save. Threaded through [chrome.ts](../apps/desktop/src/renderer/chrome.ts) (`SidebarOpts.runtimeMode`) and reused by both home and builder sidebars; builder reads it via `window.Centraid.getRuntimeMode()`.
+
+Verified live: scaffolded a Todos app from the template grid in local mode, sent "Add a todo: buy milk" through the chat panel. Codex spawned with `cwd=<appsDir>/todos-2`, invoked `centraid sql write "INSERT INTO todos…"`, the CLI opened `./data.sqlite` (correctly scoped), the row landed (`1|buy milk|0|<ts>`), and the published Todos UI reflected it after iframe reload.
+
+One product gap surfaced but not addressed here (pending a separate decision): the desktop has no UI to set `chat.runner.kind`. The PR's `prefsLoader` reads the value from `user_prefs` but nothing writes it. The verification above set the pref by direct SQL. Options for the next pass: (a) add a Settings → AI providers picker, or (b) auto-default from the imported credentials (Codex preferred → `kind = 'codex'`).
