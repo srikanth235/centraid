@@ -121,6 +121,25 @@ Rules:
 
 When a session begins on a project that has a live published version, the harness injects the live schema (a \`### Live schema\` block listing \`PRAGMA user_version\` and every \`CREATE TABLE\`/\`CREATE INDEX\`/\`CREATE VIEW\`) just below this section. Use it to decide what id the next migration must take and what the database currently looks like. If that block is absent, treat the database as empty and start at \`0001\`.
 
+### Reactive data (chat-assistant + cross-window writes)
+
+The runtime auto-injects a change-bus bridge into every served \`index.html\`. The frontend should subscribe so writes that happen behind its back — chat-assistant SQL writes, edits from a second window, future cron jobs — propagate to the UI without a manual reload.
+
+Two APIs, pick one:
+
+\`\`\`js
+// Sugar — what new templates should use.
+window.centraid?.onChange?.(() => void refresh());
+
+// Vanilla — equivalent, no optional chain on the global.
+window.addEventListener('centraid:datachange', (e) => {
+  // e.detail = { tables: string[], ts: number }
+  void refresh();
+});
+\`\`\`
+
+Call this once at startup, after \`refresh()\` (or your initial-load function) is defined. The bridge auto-reconnects on transient drops, so you don't need retry logic. If the app cares which tables changed, read \`detail.tables\` and skip the refetch when none of them match a table the page actually renders.
+
 ### Security model (do not weaken)
 
 - Static-serve same-origin only with strict CSP — don't request inline scripts; structure html so logic loads from \`.js\` files.

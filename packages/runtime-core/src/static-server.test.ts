@@ -76,9 +76,15 @@ describe('serveStatic — CSP + nonce', () => {
     const { res, data } = mockRes();
     await serveStatic(res, dir, 'index.html', { settingsInject: { dataAttrs: { theme: 'dark' } } });
     const html = data.body.toString('utf8');
-    // Original nonce wins; we don't append a second one.
-    assert.equal(html.match(/nonce=/g)?.length, 1);
+    // Original `nonce="abc"` is preserved (no double-stamping). A second
+    // nonce IS expected on the auto-injected change-bus bridge, which the
+    // runtime adds to every served HTML — see `injectChangeBridge`.
     assert.match(html, /<script nonce="abc">/);
+    assert.equal(
+      html.match(/<script nonce="abc">/g)?.length,
+      1,
+      'original nonced script should appear exactly once',
+    );
   });
 
   it('mints a fresh nonce per response', async () => {
@@ -99,6 +105,40 @@ describe('serveStatic — CSP + nonce', () => {
     await serveStatic(res, dir, 'app.js');
     assert.equal(data.headers['Content-Security-Policy']?.includes('nonce-'), false);
     assert.match(data.headers['Content-Security-Policy']!, /script-src 'self'/);
+  });
+
+  it('auto-injects the change-bus bridge into every served HTML', async () => {
+    const dir = newAppDir({
+      'index.html': '<!doctype html><html><head><title>x</title></head><body></body></html>',
+    });
+    const { res, data } = mockRes();
+    await serveStatic(res, dir, 'index.html', { settingsInject: {} });
+    const html = data.body.toString('utf8');
+    // Bridge inlines the SSE wiring and the `centraid.onChange` sugar.
+    assert.match(html, /centraid\.onChange/);
+    assert.match(html, /EventSource\('_changes'\)/);
+    assert.match(html, /centraid:datachange/);
+    // It sits right after the opening <head>, before any user content.
+    assert.match(html, /<head>\s*<script\b[^>]*>\(function\(\)\{/);
+    // The CSP nonce stamper has tagged it so script-src 'self' lets it run.
+    assert.match(html, /<script nonce="[^"]+">\(function\(\)\{var w=window;w\.centraid/);
+  });
+
+  it('skips the bridge inject for HTML without a <head> tag', async () => {
+    const dir = newAppDir({ 'index.html': '<html><body>no head</body></html>' });
+    const { res, data } = mockRes();
+    await serveStatic(res, dir, 'index.html', { settingsInject: {} });
+    const html = data.body.toString('utf8');
+    assert.doesNotMatch(html, /centraid:datachange/);
+  });
+
+  it('does not inject the bridge into non-HTML responses', async () => {
+    const dir = newAppDir({ 'app.js': "console.log('hi')" });
+    const { res, data } = mockRes();
+    await serveStatic(res, dir, 'app.js');
+    const body = data.body.toString('utf8');
+    assert.doesNotMatch(body, /centraid:datachange/);
+    assert.doesNotMatch(body, /centraid\.onChange/);
   });
 
   it('bakes data attrs onto <html> via settingsInject', async () => {

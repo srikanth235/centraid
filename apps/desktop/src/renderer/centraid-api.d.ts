@@ -58,25 +58,16 @@ export interface CentraidSettings {
   authImportedAt?: string;
 }
 
-export type CentraidAuthSource = 'codex' | 'claude-code' | 'pi';
-
-export interface CentraidProviderStatus {
-  source: CentraidAuthSource;
-  expires?: number;
-  accountId?: string;
-  subscriptionType?: string;
-}
-
 export interface CentraidAuthStatus {
+  /** `~/.codex/auth.json` exists (i.e. `codex login` has run). */
   codexAvailable: boolean;
+  /** Claude Code OAuth entry present in macOS keychain. */
   claudeAvailable: boolean;
-  providers: Partial<Record<'openai-codex' | 'anthropic', CentraidProviderStatus>>;
 }
 
 export interface CentraidAuthImportResult {
   importedCodex: boolean;
   importedClaude: boolean;
-  preferred?: 'openai-codex' | 'anthropic';
   status: CentraidAuthStatus;
 }
 

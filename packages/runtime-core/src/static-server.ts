@@ -55,11 +55,20 @@ export async function serveStatic(
   // future injection.
   let inlineScriptNonce: string | undefined;
   if (contentType.startsWith('text/html')) {
+    let html = buf.toString('utf8');
     if (opts.settingsInject) {
-      buf = Buffer.from(injectSettings(buf.toString('utf8'), opts.settingsInject), 'utf8');
+      html = injectSettings(html, opts.settingsInject);
     }
+    // Bake the change-bus bridge into every served HTML — without this,
+    // an app's iframe never observes mutations that happen behind its
+    // back (chat-assistant writes, cross-window edits, future cron jobs).
+    // The injected script subscribes to `/centraid/<id>/_changes` SSE and
+    // re-broadcasts each event into the page as `centraid:datachange` +
+    // `window.centraid.onChange(cb)`. Templates opt in with one line.
+    html = injectChangeBridge(html);
     inlineScriptNonce = randomBytes(16).toString('base64');
-    buf = Buffer.from(stampInlineScriptNonces(buf.toString('utf8'), inlineScriptNonce), 'utf8');
+    html = stampInlineScriptNonces(html, inlineScriptNonce);
+    buf = Buffer.from(html, 'utf8');
   }
 
   res.statusCode = 200;
@@ -69,6 +78,35 @@ export async function serveStatic(
   }
   res.end(buf);
   return true;
+}
+
+/**
+ * Inline `<script>` that wires the runtime's `_changes` SSE stream into the
+ * page as both a `CustomEvent('centraid:datachange')` and a sugar API:
+ *
+ *     window.centraid.onChange(refresh)   // returns an unsubscribe fn
+ *     window.addEventListener('centraid:datachange', e => …)   // vanilla
+ *
+ * Auto-injected into every served HTML right after `<head>` so it runs
+ * before user `<script>`s parse. The CSP nonce stamper (which runs after
+ * this) tags the tag so `script-src 'self'` accepts it. The script also
+ * augments — never overwrites — `window.centraid`, so the mobile bridge's
+ * `centraid.haptic` / `centraid.notify` namespace coexists.
+ *
+ * Reconnect: EventSource auto-reconnects on transient drops; we additionally
+ * re-open after 5s if it lands in CLOSED (`readyState === 2`) so the iframe
+ * recovers from gateway restarts without a page reload.
+ */
+const CHANGE_BRIDGE_SCRIPT = `<script>(function(){var w=window;w.centraid=w.centraid||{};var listeners=new Set();w.centraid.onChange=function(cb){if(typeof cb!=='function')return function(){};listeners.add(cb);return function(){listeners.delete(cb);};};if(typeof EventSource!=='function')return;var es;function connect(){try{es=new EventSource('_changes');}catch(_){return;}es.addEventListener('change',function(ev){var d;try{d=JSON.parse(ev.data);}catch(_){d={tables:[],ts:Date.now()};}try{w.dispatchEvent(new CustomEvent('centraid:datachange',{detail:d}));}catch(_){}listeners.forEach(function(cb){try{cb(d);}catch(_){}});});es.addEventListener('error',function(){if(es&&es.readyState===2){setTimeout(function(){if(es&&es.readyState===2){try{es.close();}catch(_){}connect();}},5000);}});}connect();})();</script>`;
+
+function injectChangeBridge(html: string): string {
+  // Inject right after the opening <head>. If the document has no <head>
+  // (rare in practice but legal HTML) the script falls through unchanged
+  // — better to leave the doc intact than guess where to splice.
+  const m = /<head\b[^>]*>/i.exec(html);
+  if (!m) return html;
+  const insertAt = m.index + m[0].length;
+  return html.slice(0, insertAt) + CHANGE_BRIDGE_SCRIPT + html.slice(insertAt);
 }
 
 /**

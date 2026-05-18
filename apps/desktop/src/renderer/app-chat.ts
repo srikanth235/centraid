@@ -729,6 +729,13 @@
     }
 
     function renderChat(): void {
+      // Sticky-bottom: only pin to the bottom if the user was already at
+      // (or within a few px of) the bottom before this re-render. Otherwise
+      // restore their prior scrollTop so toggling a tool-call expander or
+      // any other in-place rerender doesn't yank them down while they're
+      // reading earlier content.
+      const prevScrollTop = scroll.scrollTop;
+      const wasAtBottom = prevScrollTop + scroll.clientHeight >= scroll.scrollHeight - 8;
       scroll.innerHTML = '';
       if (chat.length === 0) {
         scroll.append(empty);
@@ -747,7 +754,7 @@
           );
         }
       }
-      scroll.scrollTop = scroll.scrollHeight;
+      scroll.scrollTop = wasAtBottom ? scroll.scrollHeight : prevScrollTop;
     }
 
     // ---------- ChatMsg mutators ----------

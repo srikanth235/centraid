@@ -96,3 +96,8 @@ function render() {
 }
 
 void refresh();
+
+// Re-fetch on every server-observed mutation (chat-assistant writes,
+// cross-window edits, etc). The runtime injects `window.centraid.onChange`
+// into every served HTML.
+window.centraid?.onChange?.(() => void refresh());
