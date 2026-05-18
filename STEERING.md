@@ -127,3 +127,9 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-7a0284c3256-1779110609-19 | 7a0284c3-256e-4ea2-9f9d-ee59d85c0465 | #71 | interrupt | structural |  | refactor(runtime,desktop,agent-runtime,builder-harness): review fixes + naming cleanup (#71) |
 | steer-7a0284c3256-1779110609-20 | 7a0284c3-256e-4ea2-9f9d-ee59d85c0465 | #71 | correction | classifier | Wrong implementation path; user wants Claude SDK + codex app-server | refactor(runtime,desktop,agent-runtime,builder-harness): review fixes + naming cleanup (#71) |
 | steer-7a0284c3256-1779110609-21 | 7a0284c3-256e-4ea2-9f9d-ee59d85c0465 | #71 | correction | classifier | Reframes scope: unify chat+builder harnesses, remote gateway already done | refactor(runtime,desktop,agent-runtime,builder-harness): review fixes + naming cleanup (#71) |
+| steer-59e380359eb-1779119130-1 | 59e38035-9eb9-467d-8160-aaabcbf1a892 |  | interrupt | structural |  | fix(chat,reactivity): chat path correctness + auto-react to SQLite writes |
+| steer-59e380359eb-1779119130-2 | 59e38035-9eb9-467d-8160-aaabcbf1a892 |  | correction | lexical | wait, do all of them | fix(chat,reactivity): chat path correctness + auto-react to SQLite writes |
+| steer-59e380359eb-1779119130-3 | 59e38035-9eb9-467d-8160-aaabcbf1a892 |  | interrupt | structural |  | fix(chat,reactivity): chat path correctness + auto-react to SQLite writes |
+| steer-59e380359eb-1779119130-4 | 59e38035-9eb9-467d-8160-aaabcbf1a892 |  | interrupt | structural |  | fix(chat,reactivity): chat path correctness + auto-react to SQLite writes |
+| steer-59e380359eb-1779119130-5 | 59e38035-9eb9-467d-8160-aaabcbf1a892 |  | interrupt | structural |  | fix(chat,reactivity): chat path correctness + auto-react to SQLite writes |
+| steer-59e380359eb-1779119130-6 | 59e38035-9eb9-467d-8160-aaabcbf1a892 |  | interrupt | structural |  | fix(chat,reactivity): chat path correctness + auto-react to SQLite writes |

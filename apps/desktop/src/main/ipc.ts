@@ -79,13 +79,11 @@ async function loadRunnerPrefs(): Promise<{
 }> {
   const prefs = await fetchUserPrefs();
   const kindRaw = prefs['agent.runner.kind'];
-  const kind: 'codex' | 'claude-code' | undefined =
-    kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : undefined;
-  if (!kind) {
-    throw new Error(
-      'No coding agent configured. Open Settings → AI providers and pick Codex or Claude Code.',
-    );
-  }
+  // Codex is the preferred default — mirrors the chat-side loader in
+  // local-runtime.ts so the builder agent gets the same fallback when
+  // the user hasn't explicitly picked a runner.
+  const kind: 'codex' | 'claude-code' =
+    kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : 'codex';
   const binPath =
     typeof prefs['agent.runner.binPath'] === 'string'
       ? (prefs['agent.runner.binPath'] as string)

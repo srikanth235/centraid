@@ -2461,15 +2461,6 @@
         authStatusHost.append(el('div', { class: 'settings-note' }, 'Reading credential status…'));
         return;
       }
-      const formatExpires = (ms?: number): string => {
-        if (!ms) return '';
-        const left = ms - Date.now();
-        if (left <= 0) return 'expired';
-        const hours = Math.floor(left / 3_600_000);
-        if (hours < 1) return 'expires <1h';
-        if (hours < 48) return `expires in ${hours}h`;
-        return `expires in ${Math.floor(hours / 24)}d`;
-      };
       const providerRow = (params: {
         title: string;
         subtitle: string;
@@ -2524,47 +2515,30 @@
         );
       };
 
-      const codex = status.providers['openai-codex'];
-      const claude = status.providers['anthropic'];
-
       // Codex row first — preferred when both subscriptions are present.
-      const codexConnected = !!codex;
-      const codexExpiry = formatExpires(codex?.expires);
-      const codexSub: string[] = [];
-      if (codexConnected) codexSub.push('connected via pi auth.json');
-      else if (status.codexAvailable) codexSub.push('available locally — click Re-sync to import');
-      else codexSub.push('not found on this machine');
-      if (codexExpiry) codexSub.push(codexExpiry);
+      // The runtime reads `~/.codex/auth.json` in place, so "available" IS
+      // "connected" for our purposes; there's no separate import step.
       authStatusHost.append(
         providerRow({
           title: 'Codex (ChatGPT Plus/Pro) — preferred',
-          subtitle: codexSub.join(' · '),
-          connected: codexConnected,
+          subtitle: status.codexAvailable
+            ? 'connected via ~/.codex/auth.json'
+            : 'not found — run `codex login`',
+          connected: status.codexAvailable,
           accent: '#10b981',
         }),
       );
 
-      const claudeConnected = !!claude;
-      const claudeExpiry = formatExpires(claude?.expires);
-      const claudeSub: string[] = [];
-      if (claudeConnected) {
-        const sub = claude?.subscriptionType ? ` (${claude.subscriptionType})` : '';
-        claudeSub.push(`connected via pi auth.json${sub}`);
-      } else if (status.claudeAvailable) {
-        claudeSub.push(
-          status.codexAvailable
-            ? 'available — held back because Codex is preferred'
-            : 'available locally — click Re-sync to import',
-        );
-      } else {
-        claudeSub.push('not found in keychain');
-      }
-      if (claudeExpiry) claudeSub.push(claudeExpiry);
+      const claudeSubtitle = status.claudeAvailable
+        ? status.codexAvailable
+          ? 'connected — held back because Codex is preferred'
+          : 'connected via macOS keychain'
+        : 'not found in keychain';
       authStatusHost.append(
         providerRow({
           title: 'Claude Code (Pro/Max)',
-          subtitle: claudeSub.join(' · '),
-          connected: claudeConnected,
+          subtitle: claudeSubtitle,
+          connected: status.claudeAvailable,
           accent: '#a855f7',
         }),
       );
@@ -2611,7 +2585,6 @@
         renderAuthStatus({
           codexAvailable: false,
           claudeAvailable: false,
-          providers: {},
         }),
       );
 
