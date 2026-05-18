@@ -176,3 +176,9 @@ Manual end-to-end verification surfaced two desktop-only gaps that the M1–M7 l
 Verified live: scaffolded a Todos app from the template grid in local mode, sent "Add a todo: buy milk" through the chat panel. Codex spawned with `cwd=<appsDir>/todos-2`, invoked `centraid sql write "INSERT INTO todos…"`, the CLI opened `./data.sqlite` (correctly scoped), the row landed (`1|buy milk|0|<ts>`), and the published Todos UI reflected it after iframe reload.
 
 One product gap surfaced but not addressed here (pending a separate decision): the desktop has no UI to set `chat.runner.kind`. The PR's `prefsLoader` reads the value from `user_prefs` but nothing writes it. The verification above set the pref by direct SQL. Options for the next pass: (a) add a Settings → AI providers picker, or (b) auto-default from the imported credentials (Codex preferred → `kind = 'codex'`).
+
+### Fix-up — serialize runtime-mode prefetch with the initial renderHome
+
+The first version of the badge wiring called `renderHome()` synchronously at boot AND then `applyRoute(home)` again inside the `refreshRuntimeMode().then()` callback. Both invocations ran `renderHomeAsync()` concurrently — `clear()` and the async `await hydrateDrafts()` / `loadAvailableTemplates()` chain interleaved across the two renders, so `root` ended up with the whole shell appended twice (a stacked duplicate sidebar + main, visually indistinguishable from "two windows").
+
+Fix: serialize — `await refreshRuntimeMode()` first, then `renderHome()` once. The settings IPC is a local file read; first-paint isn't measurably slower.

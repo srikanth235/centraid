@@ -2970,12 +2970,15 @@
     }
   });
 
-  renderHome();
-  // Prime the sidebar's Local/Remote badge in the background; rebuild
-  // the current view once the answer arrives so the badge appears
-  // without waiting for the next navigation.
-  void refreshRuntimeMode().then(() => {
-    const top = navStack[navIndex];
-    if (top) applyRoute(top);
-  });
+  // Prime the sidebar's Local/Remote badge BEFORE the first renderHome
+  // so the badge is present on cold-boot Home. Racing renderHome()
+  // against a later applyRoute() rebuild produced two concurrent
+  // renderHomeAsync() calls — both cleared root, both appended, and the
+  // window ended up showing a stacked duplicate of the entire UI. The
+  // settings IPC is a local file read, so awaiting it doesn't make the
+  // first paint noticeably slower.
+  void (async (): Promise<void> => {
+    await refreshRuntimeMode();
+    renderHome();
+  })();
 })();
