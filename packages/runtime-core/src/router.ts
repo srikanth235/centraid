@@ -28,6 +28,13 @@ export type Route =
   | { kind: 'app-data'; appId: string; queryName: string; query: Record<string, string> }
   | { kind: 'app-run'; appId: string }
   | { kind: 'app-changes'; appId: string }
+  | {
+      kind: 'app-chat';
+      appId: string;
+      /** Segments under `/centraid/<appId>/`, starting with `_chat`. */
+      segments: string[];
+    }
+  | { kind: 'app-runner-status' }
   | { kind: 'not-found' };
 
 const PREFIX = '/centraid';
@@ -94,6 +101,16 @@ export function parseRoute(method: string, rawUrl: string): Route {
     return { kind: 'not-found' };
   }
 
+  // /centraid/_chat/runner-status — gateway-wide preflight for local CLI
+  // adapters. Not app-scoped; reserved id `_chat` is checked before the
+  // generic `app-*` dispatch below.
+  if (segments[0] === '_chat') {
+    if (segments[1] === 'runner-status' && segments.length === 2 && m === 'GET') {
+      return { kind: 'app-runner-status' };
+    }
+    return { kind: 'not-found' };
+  }
+
   const appId = decodeURIComponent(segments[0] ?? '');
   if (!appId || appId.startsWith('_')) return { kind: 'not-found' };
 
@@ -127,6 +144,13 @@ export function parseRoute(method: string, rawUrl: string): Route {
   if (second === '_changes') {
     if (m !== 'GET' || segments.length !== 2) return { kind: 'not-found' };
     return { kind: 'app-changes', appId };
+  }
+
+  // /centraid/<id>/_chat[/...] — per-app chat surface. The sub-route parser
+  // in chat-routes.ts owns the method/path matrix; here we just hand it the
+  // tail so the dispatch in runtime.ts can stay flat.
+  if (second === '_chat') {
+    return { kind: 'app-chat', appId, segments: segments.slice(1) };
   }
 
   // Anything else under /centraid/<id>/... is a static asset request.

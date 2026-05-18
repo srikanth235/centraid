@@ -20,6 +20,8 @@ import type { UserStore } from './user-store.js';
 import type { ChatHistoryStore } from './chat-history.js';
 import { readAppSettings } from './app-settings.js';
 import { buildSettingsInject } from './settings-merge.js';
+import { handleChatRoute, parseChatSubRoute } from './chat-routes.js';
+import type { ChatRunner } from './chat-runner.js';
 import type { AppRef, RegistryEntry } from './types.js';
 
 export interface RuntimeLogger {
@@ -57,6 +59,49 @@ export interface RuntimeOptions {
    * `startRuntimeHttpServer` mounts `/_centraid-chat/*` against it.
    */
   chatHistoryStore?: ChatHistoryStore;
+  /**
+   * Optional per-app chat runner. When provided, `POST /centraid/<id>/_chat`
+   * drives a model turn via this runner. Two implementations exist:
+   * `openclaw-plugin/lib/openclaw-chat-runner` (calls `runEmbeddedAgent`
+   * in-process) and `@centraid/local-chat-runner` (spawns codex / claude-code
+   * subprocesses with our stdio MCP server attached).
+   *
+   * Without a runner the chat routes 503 with `no_chat_runner`. Hosts
+   * decide whether to inject one — single-app standalone setups, tests,
+   * and worker subprocesses all run fine without it.
+   */
+  chatRunner?: ChatRunner;
+  /**
+   * Optional reader for per-app metadata (name, description). The chat
+   * route uses it to populate the `extraSystemPrompt` it hands to the
+   * runner. Both hosts wire `@centraid/builder-harness`'s app.json
+   * reader through. Defaults to "no metadata" — chat still works, just
+   * with the bare app-id as the display name.
+   */
+  appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
+  /**
+   * Optional preflight reporter for the gateway-wide
+   * `GET /centraid/_chat/runner-status` route. Returns the host's view of
+   * each adapter's readiness so the chat panel can show a Setup screen
+   * instead of failing per-turn when the CLI is missing or unauthenticated.
+   */
+  runnerStatus?: () => Promise<RunnerStatus>;
+}
+
+/**
+ * Shape returned by the runner-status preflight route. Both hosts share
+ * the schema; OpenClaw always reports `{ kind: 'openclaw', ok: true }`,
+ * the desktop local-runtime reports the configured CLI adapter.
+ */
+export interface RunnerStatus {
+  kind: 'openclaw' | 'codex' | 'claude-code' | 'none';
+  ok: boolean;
+  /** Adapter version string when detectable (e.g. "codex 0.20.4"). */
+  version?: string;
+  /** Reason for `ok: false`. e.g. "binary not on PATH". */
+  reason?: string;
+  /** Caller-facing hint (install link, settings path …). */
+  hint?: string;
 }
 
 const noopLogger: RuntimeLogger = {
@@ -91,6 +136,12 @@ export class Runtime {
   readonly userStore?: UserStore;
   /** Optional chat-history store. See `RuntimeOptions.chatHistoryStore`. */
   readonly chatHistoryStore?: ChatHistoryStore;
+  /** Optional per-app chat runner. See `RuntimeOptions.chatRunner`. */
+  readonly chatRunner?: ChatRunner;
+  /** Optional app-metadata reader for chat extra-system-prompt. */
+  readonly appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
+  /** Optional runner-status preflight. */
+  readonly runnerStatus?: () => Promise<RunnerStatus>;
   private readonly appsDir: string;
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
@@ -105,6 +156,9 @@ export class Runtime {
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
     this.userStore = opts.userStore;
     this.chatHistoryStore = opts.chatHistoryStore;
+    this.chatRunner = opts.chatRunner;
+    this.appMeta = opts.appMeta;
+    this.runnerStatus = opts.runnerStatus;
     this.withAppUploadLock = makeAppUploadLocks();
   }
 
@@ -140,6 +194,14 @@ export class Runtime {
         );
       }
     }
+  }
+
+  private chatRouteContext() {
+    return {
+      registry: this.registry,
+      runner: this.chatRunner,
+      appMeta: this.appMeta,
+    };
   }
 
   private routeContext() {
@@ -418,6 +480,26 @@ export class Runtime {
           }
           const result = (outcome.value ?? {}) as { status?: number; body?: unknown };
           sendJson(res, result.status ?? 200, result.body ?? null);
+          return;
+        }
+
+        case 'app-chat': {
+          const parsed = parseChatSubRoute(route.appId, route.segments, req.method ?? 'GET');
+          if (!parsed) {
+            sendError(res, 404, 'not_found', 'Unknown chat sub-route.');
+            return;
+          }
+          await handleChatRoute(req, res, this.chatRouteContext(), parsed);
+          return;
+        }
+
+        case 'app-runner-status': {
+          if (!this.runnerStatus) {
+            sendJson(res, 200, { kind: 'none', ok: false, reason: 'no runner configured' });
+            return;
+          }
+          const status = await this.runnerStatus();
+          sendJson(res, 200, status);
           return;
         }
 

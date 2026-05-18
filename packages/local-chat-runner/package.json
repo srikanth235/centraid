@@ -1,8 +1,11 @@
 {
-  "name": "@centraid/chat-harness",
-  "version": "0.2.0",
+  "name": "@centraid/local-chat-runner",
+  "version": "0.1.0",
   "private": true,
-  "description": "Host-agnostic HTTP/SSE client for centraid's per-app chat surface. Posts turns to POST /centraid/<appId>/_chat and streams normalized ChatStreamEvents back. Works against both gateway hosts (OpenClaw + embedded local runtime). No inference loop bundled — the harness drives the gateway, the gateway drives the model.",
+  "description": "Local-runtime ChatRunner for centraid's per-app chat. Spawns a user-configured coding CLI (Codex or Claude Code) as a subprocess and attaches a stdio MCP server that exposes centraid_sql_* tools scoped to the active app. Centraid bundles no inference loop — the user brings their own CLI.",
+  "bin": {
+    "centraid-mcp-server": "./dist/centraid-mcp-server.js"
+  },
   "files": [
     "dist",
     "README.md"
@@ -17,7 +20,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/runtime-core": "workspace:*"
+    "@centraid/runtime-core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

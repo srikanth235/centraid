@@ -27,6 +27,7 @@ import {
   makeGatewayDbProvider,
 } from '@centraid/runtime-core';
 import { registerCentraidTools } from './lib/tools.js';
+import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
 
 // Re-export the public handler & payload types from runtime-core so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -84,11 +85,15 @@ export default definePluginEntry({
     const gatewayDbProvider = makeGatewayDbProvider(gatewayDbPath);
     const userStore = new UserStore(gatewayDbProvider);
 
+    const chatRunner = makeOpenClawChatRunner(api);
+
     const runtime = new Runtime({
       appsDir,
       versionRetention,
       userStore,
       logger: api.logger,
+      chatRunner,
+      runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
     });
 
     api.on('gateway_start', async () => {

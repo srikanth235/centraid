@@ -8,6 +8,12 @@
  * the documented additive form — it does not replace the active profile,
  * so the user's existing tool baseline survives.
  *
+ * Load-bearing for the per-app chat endpoint's data-mode path: the OpenClaw
+ * ChatRunner passes a `toolsAllow` allowlist of just the centraid_sql_*
+ * tools, but that allowlist is intersected with the resolved agent's
+ * effective policy — so the tools must clear that gate first. Without this
+ * script's patch, data-mode runs would see an empty tool set.
+ *
  * No-op when all ids are already in the list. Atomic write via tmpfile +
  * rename.
  */
@@ -51,7 +57,10 @@ async function main() {
     }
   }
   if (added === 0) {
-    process.stdout.write('centraid tools already in tools.alsoAllow — nothing to do.\n');
+    process.stdout.write(
+      'centraid tools already in tools.alsoAllow — nothing to do.\n' +
+        "(centraid chat data-mode uses these via runEmbeddedAgent's toolsAllow allowlist.)\n",
+    );
     return;
   }
   tools.alsoAllow = merged;
@@ -61,6 +70,8 @@ async function main() {
   await fs.rename(tmp, configPath);
   process.stdout.write(
     `Added ${added} centraid tool id(s) to tools.alsoAllow in ${configPath}.\n` +
+      "(These are intersected with the resolved agent's effective policy at run time,\n" +
+      " so the chat endpoint's data-mode allowlist actually surfaces them.)\n" +
       'Restart the gateway: `openclaw gateway restart`\n',
   );
 }

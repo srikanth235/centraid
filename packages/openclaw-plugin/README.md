@@ -24,8 +24,23 @@ OpenClaw plugin that mounts a single `/centraid` prefix on the gateway and dispa
 | `GET` | `/centraid/<id>/<file>` | Static asset (extension allowlist) |
 | `GET` | `/centraid/<id>/_data/<query>` | Runs `queries/<query>.js` |
 | `POST` | `/centraid/<id>/_run` | Runs `actions/<body.action>.js` |
+| `POST` | `/centraid/<id>/_chat` | Send a chat turn → SSE stream of normalized events |
+| `GET` | `/centraid/<id>/_chat/windows` | List per-window chat metadata |
+| `GET` | `/centraid/<id>/_chat/windows/<wid>/history` | Replay one window's transcript |
+| `DELETE` | `/centraid/<id>/_chat/windows/<wid>` | Clear one window |
 
-App ids starting with `_` are reserved (so `_apps` etc. can't collide).
+App ids starting with `_` are reserved (so `_apps`, `_chat` etc. can't collide).
+
+### Chat surface (host-agnostic)
+
+The `_chat` routes live in `@centraid/runtime-core` and are served identically on both gateway hosts. The plugin/host owns initiation but never the model loop:
+
+- **OpenClaw** injects an in-process `ChatRunner` that calls `api.runtime.agent.runEmbeddedAgent`. Plugin-registered tools (`centraid_sql_*`) dispatch server-side.
+- **Desktop embedded local runtime** (in `@centraid/local-chat-runner`) spawns the user's configured CLI (Codex or Claude Code) as a subprocess and attaches a stdio MCP server exposing the same tool surface.
+
+Either way, the harness client at `@centraid/chat-harness` sees one HTTP/SSE contract.
+
+Per-window transcripts live at `<appsDir>/<id>/_chat/w<windowId>.jsonl`; a sibling `index.json` records mode + adapter session id so the next turn can resume.
 
 ## App modes
 
