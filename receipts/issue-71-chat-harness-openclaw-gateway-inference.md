@@ -274,7 +274,16 @@ The previous "extract primitives" pass kept the `codex exec --json` and `claude 
   - `AGENT_PROMPT` (via the session handle): captures `<projectDir>/.preview/snapshot.png` via `webContents.capturePage` (clipped to the iframe with `data-centraid-app="1"`) immediately before delegating to `session.prompt`. Failures (preview tab closed, no `index.html` yet) are swallowed — the agent's `centraid preview snapshot` call returns `exists: false` and it adapts.
   - `AGENT_STOP`: also calls `session.abort()` so an in-flight `runAgentTurn` cleans up its codex subprocess / SDK call.
 
-### Open items deferred to a later commit
+### Auth-import simplification (follow-up commit)
 
-- Drop the pi target from [auth-import.ts](../apps/desktop/src/main/auth-import.ts) — once pi is fully out of the codebase, the import flow's only remaining job is reporting which CLIs are installed locally.
-- Restore translator-level unit fixtures for the new backends. Easy to do once we've captured real wire output (`codex app-server` initialize/turn cycle; Claude SDK `partial_assistant_message` events) — should be a small follow-up.
+[apps/desktop/src/main/auth-import.ts](../apps/desktop/src/main/auth-import.ts) was rewritten as a status-only reporter. The old flow read Claude Code's keychain entry + `~/.codex/auth.json` and *wrote them into pi's auth.json* so pi-coding-agent could share the user's subscription. Now that pi is gone, no translation is needed:
+
+- Codex app-server reads `~/.codex/auth.json` directly. The user runs `codex login` once; nothing else touches the file.
+- The Claude Agent SDK reads `ANTHROPIC_API_KEY` from the process environment. The Claude Code OAuth token in the macOS keychain is not consumable by the SDK, so the import step is now an intentional no-op.
+
+`readAuthStatus` still reports the three booleans the Settings UI needs (`codexAvailable`, `claudeAvailable`, and a new `anthropicApiKeyAvailable`). `importAvailableCreds` is retained for IPC-compat — the renderer's "Resync" button still calls it; it just re-reads the status snapshot. Dropped exports: `getPiAuthPath`, `AuthSource`, `ProviderStatus`, and the per-provider `providers` map (nothing in the renderer was wired to them after pi went away).
+
+### Still deferred
+
+- Translator-level unit fixtures for the new backends. Easy to do once we've captured real wire output (`codex app-server` initialize/turn cycle; Claude SDK `partial_assistant_message` events) — should be a small follow-up.
+- Settings UI: the "AI providers" panel may want to render `anthropicApiKeyAvailable` differently from the keychain OAuth bit, and to coach the user on running `codex login` vs setting `ANTHROPIC_API_KEY`. UX polish, not blocking.

@@ -12,8 +12,8 @@
  *
  * The SDK reads `ANTHROPIC_API_KEY` from the environment — there is no
  * per-call auth field today. Callers in Electron should ensure the env
- * var is set (the auth-import flow seeds it from the user's
- * Claude-Code keychain entry).
+ * var is set before this runs; the desktop's auth-import status reports
+ * whether it is.
  *
  * Lazy-import: the SDK pulls a sizable subgraph + a vendored claude
  * binary; we avoid that cost when the user has selected codex.
