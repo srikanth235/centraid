@@ -182,3 +182,44 @@ One product gap surfaced but not addressed here (pending a separate decision): t
 The first version of the badge wiring called `renderHome()` synchronously at boot AND then `applyRoute(home)` again inside the `refreshRuntimeMode().then()` callback. Both invocations ran `renderHomeAsync()` concurrently — `clear()` and the async `await hydrateDrafts()` / `loadAvailableTemplates()` chain interleaved across the two renders, so `root` ended up with the whole shell appended twice (a stacked duplicate sidebar + main, visually indistinguishable from "two windows").
 
 Fix: serialize — `await refreshRuntimeMode()` first, then `renderHome()` once. The settings IPC is a local file read; first-paint isn't measurably slower.
+
+## Follow-up — extract mode-agnostic CLI primitives + `preview snapshot` subcommand
+
+Prep work for the next change: swapping the builder harness from `@earendil-works/pi-coding-agent` (in-process) to the same local CLI runner that chat already uses (codex `exec --json` / claude `-p --output-format stream-json`). This slice is scoped narrowly to "make `local-chat-runner` usable from a non-chat consumer without breaking chat."
+
+### What changed
+
+- [packages/local-chat-runner/src/codex-adapter.ts](../packages/local-chat-runner/src/codex-adapter.ts) and [claude-adapter.ts](../packages/local-chat-runner/src/claude-adapter.ts): refactored `runCodexTurn` / `runClaudeTurn` to take a neutral `{ cwd, message, extraSystemPrompt, model?, prevSessionId?, abortSignal, onEvent }` input plus a `{ hostBinDir?, binPath?, extraArgs? }` config. The hardcoded `CENTRAID_PROMPT_PREAMBLE` (which talks about `./data.sqlite` and the `centraid sql ...` commands — chat-specific) moved out of the adapters; the caller now owns any preamble.
+- [packages/local-chat-runner/src/local-chat-runner.ts](../packages/local-chat-runner/src/local-chat-runner.ts): `makeLocalChatRunner` becomes a thin wrapper that constructs `cwd = <appsDir>/<appId>`, splices the chat preamble into `extraSystemPrompt`, reads/writes the per-window `ChatStore` for resume, and delegates to the primitive. Public surface unchanged — chat path is byte-for-byte equivalent.
+- [packages/local-chat-runner/src/types.ts](../packages/local-chat-runner/src/types.ts): dropped `RunOneTurnArgs` / `AdapterCtx` (only used by the old chat-shaped adapter signatures); kept `RunnerKind` + `RunnerPrefs`.
+- [packages/local-chat-runner/src/index.ts](../packages/local-chat-runner/src/index.ts): now exports the primitives (`runCodexTurn`, `runClaudeTurn`) and their input/config/result types alongside the existing `makeLocalChatRunner`, so a future builder-harness session can import them directly without a circular dep.
+- [packages/local-chat-runner/src/centraid-cli.ts](../packages/local-chat-runner/src/centraid-cli.ts): added `centraid preview snapshot` subcommand returning `{ path, exists, sizeBytes?, mtimeMs?, ageMs? }` for `./.preview/snapshot.png`. The builder will keep this file fresh from the Electron main process; the agent reads the metadata to know whether a preview is ready, and uses its native `Read` tool for the image bytes.
+- [packages/local-chat-runner/src/centraid-cli.test.ts](../packages/local-chat-runner/src/centraid-cli.test.ts): added four tests for the new subcommand (missing file → `exists:false`, present file → size/mtime/age, no-subcommand usage error, extra-args rejection).
+
+### What did not change
+
+- Runtime-core types (`ChatRunner`, `ChatRunInput`, `ChatStreamEvent`, …) — `ChatRunner` is correctly chat-specific (it's the contract for the per-app `_chat` route handler), so no rename.
+- Package name (`@centraid/local-chat-runner`) — chat is still the primary consumer; builder will import primitives from the same package.
+- The chat flow end-to-end — `makeLocalChatRunner` still constructs the same `ChatRunner`, emits the same events, persists the same `adapterSessionId` back to `ChatStore` via the route handler. `codex-adapter.test.ts`'s 4 schema-fixture tests pass unchanged because `translateCodexLine` is untouched.
+
+### Why this lands now, not as a separate PR
+
+The user's stated next step is "swap pi out of the builder for the same CLI runner the chat already uses." That swap (next slice) needs primitives it can import. Landing the extraction here makes the next diff strictly about the builder side — none of the changes in this slice are user-visible.
+
+### Why a CLI subcommand for the snapshot instead of just a file convention
+
+Considered telling the agent the snapshot path in its system prompt and letting it use the native `Read` tool exclusively. The subcommand wins on one point: it's a cheap freshness check the agent can do without loading the image into context (size + age in JSON is a few bytes; reading a PNG drags the whole binary in). Codex's bash tool can shell out to `centraid preview snapshot` to decide whether to bother reading the file. Negligible cost to add; useful even if the builder slice ends up not using it.
+
+### Verification
+
+- `bun run build` — all turbo build tasks succeed.
+- `bun run typecheck` — 16/16 tasks succeed across the workspace (`@centraid/local-chat-runner`, `@centraid/desktop`, `@centraid/openclaw-plugin`, …).
+- `bun run test` — 22/22 tests pass in `@centraid/local-chat-runner` (4 codex translator + 7 preflight + 7 centraid-cli (existing) + 4 centraid-cli (new preview subcommand)). All 12 turbo test tasks succeed; no other package's tests touched these files.
+- `bun run lint` — `oxlint` clean (0 warnings, 0 errors across 156 files).
+
+### Open items for the builder-swap slice
+
+- New `BuilderSession` in `@centraid/builder-harness` calling `runCodexTurn` / `runClaudeTurn` with builder-specific cwd (`<projectsDir>/<projectId>`), preamble (the centraid format guide + UI grounding + preview-snapshot pointer that pi's `appendSystemPromptOverride` hook currently injects), and resume id (per-project, not per-window).
+- Desktop main-process loop that writes `<projectDir>/.preview/snapshot.png` whenever the builder preview `<webview>` paints (debounced).
+- Delete `@earendil-works/pi-coding-agent` from `packages/builder-harness/package.json` plus the now-unused `agent-session.ts` / `preview-screenshot-tool.ts`.
+- Drop the pi target from [auth-import.ts](../apps/desktop/src/main/auth-import.ts) (credentials now belong solely to the user's `codex` / `claude` installs).

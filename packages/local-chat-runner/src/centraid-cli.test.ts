@@ -109,6 +109,47 @@ test('unknown subcommand exits with usage error', () => {
   assert.match(r.stderr, /unknown subcommand/);
 });
 
+test('preview snapshot reports exists:false when the file is missing', () => {
+  const r = runCli('preview', 'snapshot');
+  assert.equal(r.code, 0, r.stderr);
+  const parsed = JSON.parse(r.stdout) as { path: string; exists: boolean };
+  assert.equal(parsed.exists, false);
+  assert.match(parsed.path, /\.preview\/snapshot\.png$/);
+});
+
+test('preview snapshot returns size + age when the file exists', async () => {
+  const dir = path.join(workspace, '.preview');
+  await fs.mkdir(dir, { recursive: true });
+  const png = path.join(dir, 'snapshot.png');
+  await fs.writeFile(png, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  const r = runCli('preview', 'snapshot');
+  assert.equal(r.code, 0, r.stderr);
+  const parsed = JSON.parse(r.stdout) as {
+    path: string;
+    exists: boolean;
+    sizeBytes: number;
+    mtimeMs: number;
+    ageMs: number;
+  };
+  assert.equal(parsed.exists, true);
+  assert.equal(parsed.sizeBytes, 4);
+  assert.ok(parsed.mtimeMs > 0);
+  assert.ok(parsed.ageMs >= 0);
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test('preview with no subcommand exits with usage error', () => {
+  const r = runCli('preview');
+  assert.equal(r.code, 2);
+  assert.match(r.stderr, /unknown preview subcommand/);
+});
+
+test('preview snapshot rejects extra args', () => {
+  const r = runCli('preview', 'snapshot', 'extra');
+  assert.equal(r.code, 2);
+  assert.match(r.stderr, /takes no arguments/);
+});
+
 test('CENTRAID_DATA_FILE overrides the default ./data.sqlite path', async () => {
   const alt = path.join(workspace, 'alt.sqlite');
   const db = new DatabaseSync(alt);

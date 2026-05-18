@@ -1,10 +1,9 @@
 /*
- * Shared types for the local chat-runner. Kept minimal — adapter
- * implementations import what they need, the dispatcher reads only
- * `RunnerPrefs`.
+ * Shared types for the local chat-runner wrapper. Only the wrapper
+ * (`makeLocalChatRunner`) reads these — the underlying CLI primitives
+ * (`runCodexTurn` / `runClaudeTurn`) take their own neutral input
+ * shapes and don't know about user prefs.
  */
-
-import type { ChatRunInput } from '@centraid/runtime-core';
 
 export type RunnerKind = 'codex' | 'claude-code';
 
@@ -20,21 +19,4 @@ export interface RunnerPrefs {
   binPath?: string;
   /** Extra args passed verbatim to the CLI invocation. */
   extraArgs?: string[];
-}
-
-/**
- * Construction-time options every adapter receives. The `appsDir` is the
- * embedded local runtime's apps directory — same one the runtime constructs
- * its `Registry` against. Adapters that spawn external CLIs derive the
- * per-app data dir as `<appsDir>/<appId>/`.
- */
-export interface AdapterCtx {
-  appsDir: string;
-  /** Forwarded CLI-specific user prefs. */
-  prefs: RunnerPrefs;
-}
-
-export interface RunOneTurnArgs {
-  ctx: AdapterCtx;
-  input: ChatRunInput;
 }

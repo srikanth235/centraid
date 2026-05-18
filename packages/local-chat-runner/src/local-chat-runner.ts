@@ -1,18 +1,16 @@
 /*
- * Top-level `ChatRunner` for the desktop's embedded local runtime.
+ * Chat-specific `ChatRunner` for the desktop's embedded local runtime.
  *
- * Picks an adapter (Codex / Claude Code) based on the user's persisted
- * `chat.runner.kind` pref, then drives one turn. Adapter-assigned
- * session ids are persisted to the per-window `ChatStore` so subsequent
- * turns resume the same CLI session.
+ * Thin wrapper over the mode-agnostic CLI primitives (`runCodexTurn` /
+ * `runClaudeTurn`): picks an adapter from the user's persisted
+ * `chat.runner.kind` pref, derives the per-app workspace from
+ * `<appsDir>/<appId>`, splices the `centraid` CLI preamble into the
+ * system prompt so the agent knows how to read/write `./data.sqlite`,
+ * reads the previous adapter session id from the per-window `ChatStore`,
+ * and returns the new one for the route handler to persist.
  *
- * Codex talks to a small `centraid` CLI bin (shipped by this package)
- * directly via shell — no MCP server, no network, no token plumbing.
- * The CLI operates on `./data.sqlite` and codex is spawned with cwd
- * pinned to `<appsDir>/<appId>`.
- *
- * Claude Code keeps its existing stdio-MCP wiring — this iteration's
- * empirical verification + simplification work targets codex.
+ * Builder-mode consumers should call `runCodexTurn` / `runClaudeTurn`
+ * directly with their own workspace + preamble + resume-id handling.
  */
 
 import path from 'node:path';
@@ -25,7 +23,7 @@ import {
 } from '@centraid/runtime-core';
 import { runCodexTurn } from './codex-adapter.js';
 import { runClaudeTurn } from './claude-adapter.js';
-import type { AdapterCtx, RunnerPrefs } from './types.js';
+import type { RunnerPrefs } from './types.js';
 
 export interface MakeLocalChatRunnerOptions {
   /** Embedded runtime's appsDir; pinned at construction. */
@@ -49,8 +47,26 @@ export interface MakeLocalChatRunnerOptions {
  * just the directory so spawn-PATH stays simple.
  */
 export function defaultCentraidCliDir(): string {
-  // `import.meta.url` resolves to .../dist/local-chat-runner.js at runtime.
   return path.dirname(fileURLToPath(import.meta.url));
+}
+
+const CHAT_PROMPT_PREAMBLE = `## centraid CLI
+
+You have a "centraid" CLI available for reading and writing this app's data:
+
+  centraid sql describe                      — JSON: tables, columns, indexes, views
+  centraid sql read  "SELECT ..."            — JSON: { columns, rows, totalRows, truncated }
+  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."  — JSON: { rowsAffected, lastInsertRowid }
+
+The CLI operates on ./data.sqlite in the current working directory, which is
+already scoped to this app. You do NOT need to pass an appId. DDL
+(CREATE/ALTER/DROP) and PRAGMA are refused.
+
+Prefer one focused SELECT over many small ones (use LIMIT). Call
+\`centraid sql describe\` first if you don't know the schema yet.`;
+
+function spliceExtraSystemPrompt(extra: string): string {
+  return extra ? `${CHAT_PROMPT_PREAMBLE}\n\n${extra}` : CHAT_PROMPT_PREAMBLE;
 }
 
 export function makeLocalChatRunner(opts: MakeLocalChatRunnerOptions): ChatRunner {
@@ -66,32 +82,55 @@ export function makeLocalChatRunner(opts: MakeLocalChatRunnerOptions): ChatRunne
         });
         throw new Error('no local chat runner configured');
       }
-      const ctx: AdapterCtx = {
-        appsDir: opts.appsDir,
-        prefs,
-      };
 
-      const appDir = path.join(opts.appsDir, input.appId);
-      const store = new ChatStore(appDir);
+      const cwd = path.join(opts.appsDir, input.appId);
+      const store = new ChatStore(cwd);
       const window = await store.getWindow(input.windowId).catch(() => undefined);
       const adapterKind = prefs.kind;
       const resumeId =
         window && window.adapterKind === adapterKind ? window.adapterSessionId : undefined;
 
+      const extraSystemPrompt = spliceExtraSystemPrompt(input.extraSystemPrompt);
+
       if (prefs.kind === 'codex') {
-        const result = await runCodexTurn({ ctx, input }, resumeId, {
-          appsDir: opts.appsDir,
-          centraidCliDir,
-        });
+        const result = await runCodexTurn(
+          {
+            cwd,
+            message: input.message,
+            extraSystemPrompt,
+            ...(input.model ? { model: input.model } : {}),
+            ...(resumeId ? { prevThreadId: resumeId } : {}),
+            abortSignal: input.abortSignal,
+            onEvent: input.onEvent,
+          },
+          {
+            hostBinDir: centraidCliDir,
+            ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
+            ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
+          },
+        );
         return {
           adapterKind,
           ...(result.threadId ? { adapterSessionId: result.threadId } : {}),
         };
       }
-      const result = await runClaudeTurn({ ctx, input }, resumeId, {
-        appsDir: opts.appsDir,
-        centraidCliDir,
-      });
+
+      const result = await runClaudeTurn(
+        {
+          cwd,
+          message: input.message,
+          extraSystemPrompt,
+          ...(input.model ? { model: input.model } : {}),
+          ...(resumeId ? { prevSessionId: resumeId } : {}),
+          abortSignal: input.abortSignal,
+          onEvent: input.onEvent,
+        },
+        {
+          hostBinDir: centraidCliDir,
+          ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
+          ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
+        },
+      );
       return {
         adapterKind,
         ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),

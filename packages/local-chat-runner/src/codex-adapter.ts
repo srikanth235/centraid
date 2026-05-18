@@ -1,28 +1,19 @@
 /*
- * Codex CLI adapter.
+ * Codex CLI adapter — mode-agnostic primitive.
  *
- * Empirically verified against `codex-cli 0.128.0`. The event schema is
- * pinned in `MIN_CODEX_VERSION` (see preflight.ts).
- *
- * Tooling: instead of an MCP server, we teach codex about a small local
- * `centraid` CLI bin (shipped by this package) that codex invokes via
- * its normal shell tool. The CLI operates on `./data.sqlite` (cwd =
- * appId data dir), so we spawn codex with `-C <appsDir>/<id>` to pin
- * the workspace. AppId is the cwd; the model can't escape the scope.
- *
- * Mode handling: codex always runs `--sandbox workspace-write`. The
- * "data mode" toggle is a no-op for codex — codex's sandbox model
- * doesn't support a clean read-only-with-loopback-writes regime, so we
- * don't pretend to enforce one. OpenClaw's data mode (which DOES
- * intersect tool allowlists) remains the place to get strict lockdown.
+ * Empirically verified against `codex-cli 0.128.0`; schema pinned in
+ * preflight.ts. Spawns `codex exec --json` (or `exec resume` when
+ * resuming a prior thread) with cwd pinned to the caller-supplied
+ * workspace and `extraSystemPrompt` prepended to the user message
+ * (codex has no `--system-prompt` flag). The caller owns scoping
+ * concerns: any preamble teaching codex about host-side CLIs belongs
+ * in `extraSystemPrompt`.
  *
  * Verified codex CLI shape (0.128.0):
  *   - `codex exec --json [--sandbox …] [-C <cwd>] [-m <model>] <prompt>`
  *   - `codex exec resume --json <SESSION_ID> [-m <model>] <prompt>`
  *     (sandbox/approval/cwd are inherited from the initial session)
  *   - `--skip-git-repo-check` lets us run inside non-git workspaces.
- *   - No `--system-prompt` / `--allowed-tools` / `--session` flag —
- *     extra system context is prepended to the user message.
  *
  * Verified event schema:
  *   {"type":"thread.started","thread_id":"<uuid>"}
@@ -39,85 +30,75 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { ChatStreamEvent } from '@centraid/runtime-core';
 import { spawnCli } from './spawn-cli.js';
-import type { RunOneTurnArgs } from './types.js';
 
-export interface CodexAdapterResult {
+export interface CodexTurnInput {
+  /**
+   * Working directory codex is launched into (`-C <cwd>`). Caller is
+   * responsible for scoping — codex's `workspace-write` sandbox confines
+   * the model to this tree.
+   */
+  cwd: string;
+  message: string;
+  /**
+   * Spliced verbatim ahead of `message` in the prompt. Codex has no
+   * `--system-prompt` flag, so this is the only way to inject system-
+   * level context per turn. Empty string is fine.
+   */
+  extraSystemPrompt: string;
+  model?: string;
+  /** Codex thread id from a prior turn; triggers `exec resume` form. */
+  prevThreadId?: string;
+  abortSignal: AbortSignal;
+  onEvent: (event: ChatStreamEvent) => void;
+}
+
+export interface CodexTurnConfig {
+  /**
+   * Directory containing host CLI bins to prepend to PATH (e.g. the
+   * `centraid` bin shipped by this package). Codex can then invoke
+   * those bins by bare name from its shell tool.
+   */
+  hostBinDir?: string;
+  /** Override the codex binary; defaults to PATH lookup of `codex`. */
+  binPath?: string;
+  /** Extra args passed verbatim before the prompt. */
+  extraArgs?: string[];
+}
+
+export interface CodexTurnResult {
   threadId?: string;
 }
 
-export interface CodexAdapterEnv {
-  /**
-   * Directory containing the per-app SQLite files
-   * (`<appsDir>/<appId>/data.sqlite`). Codex is launched with cwd pinned
-   * to `<appsDir>/<appId>` so the centraid CLI sees `./data.sqlite`.
-   */
-  appsDir: string;
-  /**
-   * Directory the `centraid` CLI is installed in. Prepended to PATH so
-   * codex can invoke it without an absolute path. Defaults to the
-   * sibling `dist/` of the calling module.
-   */
-  centraidCliDir: string;
-}
-
-const CENTRAID_PROMPT_PREAMBLE = `## centraid CLI
-
-You have a "centraid" CLI available for reading and writing this app's data:
-
-  centraid sql describe                      — JSON: tables, columns, indexes, views
-  centraid sql read  "SELECT ..."            — JSON: { columns, rows, totalRows, truncated }
-  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."  — JSON: { rowsAffected, lastInsertRowid }
-
-The CLI operates on ./data.sqlite in the current working directory, which is
-already scoped to this app. You do NOT need to pass an appId. DDL
-(CREATE/ALTER/DROP) and PRAGMA are refused.
-
-Prefer one focused SELECT over many small ones (use LIMIT). Call
-\`centraid sql describe\` first if you don't know the schema yet.`;
-
 export async function runCodexTurn(
-  args: RunOneTurnArgs,
-  prevThreadId: string | undefined,
-  env: CodexAdapterEnv,
-): Promise<CodexAdapterResult> {
-  const { ctx, input } = args;
-  const bin = ctx.prefs.binPath ?? 'codex';
+  input: CodexTurnInput,
+  config: CodexTurnConfig = {},
+): Promise<CodexTurnResult> {
+  const bin = config.binPath ?? 'codex';
 
-  const appWorkspace = path.join(env.appsDir, input.appId);
-  await fs.mkdir(appWorkspace, { recursive: true });
+  await fs.mkdir(input.cwd, { recursive: true });
 
-  // Splice extraSystemPrompt (built by runtime-core) plus the CLI
-  // preamble into the user message — codex has no --system-prompt flag.
-  const prompt = [
-    CENTRAID_PROMPT_PREAMBLE,
-    '',
-    input.extraSystemPrompt || '',
-    '',
-    '---',
-    '',
-    input.message,
-  ].join('\n');
+  const prompt = input.extraSystemPrompt
+    ? [input.extraSystemPrompt, '', '---', '', input.message].join('\n')
+    : input.message;
 
-  // Resume requires the subcommand form; sandbox/cwd/approval are
-  // inherited from the initial exec and cannot be re-set on resume.
   let cliArgs: string[];
-  if (prevThreadId) {
+  if (input.prevThreadId) {
     cliArgs = ['exec', 'resume', '--json', '--skip-git-repo-check'];
     if (input.model) cliArgs.push('--model', input.model);
-    if (ctx.prefs.extraArgs?.length) cliArgs.push(...ctx.prefs.extraArgs);
-    cliArgs.push(prevThreadId, prompt);
+    if (config.extraArgs?.length) cliArgs.push(...config.extraArgs);
+    cliArgs.push(input.prevThreadId, prompt);
   } else {
     cliArgs = [
       'exec',
       '--json',
       '--skip-git-repo-check',
       '-C',
-      appWorkspace,
+      input.cwd,
       '--sandbox',
       'workspace-write',
     ];
     if (input.model) cliArgs.push('--model', input.model);
-    if (ctx.prefs.extraArgs?.length) cliArgs.push(...ctx.prefs.extraArgs);
+    if (config.extraArgs?.length) cliArgs.push(...config.extraArgs);
     cliArgs.push(prompt);
   }
 
@@ -133,12 +114,12 @@ export async function runCodexTurn(
 
   emit({ type: 'assistant.start' });
 
-  // Prepend the centraid CLI dir to PATH so codex can shell out to
-  // `centraid` by bare name. We don't mutate the original env object.
-  const spawnEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    PATH: `${env.centraidCliDir}${path.delimiter}${process.env.PATH ?? ''}`,
-  };
+  const spawnEnv: NodeJS.ProcessEnv = config.hostBinDir
+    ? {
+        ...process.env,
+        PATH: `${config.hostBinDir}${path.delimiter}${process.env.PATH ?? ''}`,
+      }
+    : { ...process.env };
 
   const result = await spawnCli({
     bin,

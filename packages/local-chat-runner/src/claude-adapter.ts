@@ -1,12 +1,10 @@
 /*
- * Claude Code CLI adapter.
+ * Claude Code CLI adapter — mode-agnostic primitive.
  *
  * Runs `claude -p <prompt> --output-format stream-json --verbose` with
- * the working directory pinned to `<appsDir>/<appId>` and the
- * `centraid` CLI bin on PATH. Claude Code's default sandbox is
- * permission-based (it asks the user before each new tool use) rather
- * than network-blocking, so the direct-CLI pattern works without
- * special flags — same as codex.
+ * cwd pinned to the caller-supplied workspace and `extraSystemPrompt`
+ * passed via `--append-system-prompt`. Caller owns scoping concerns and
+ * any preamble teaching claude about host-side CLIs.
  *
  * Empirically captured against Claude Code 2.1.126:
  *   {"type":"system","subtype":"init","session_id":"<uuid>",...}
@@ -22,54 +20,49 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { ChatStreamEvent } from '@centraid/runtime-core';
 import { spawnCli } from './spawn-cli.js';
-import type { RunOneTurnArgs } from './types.js';
 
-const CENTRAID_PROMPT_PREAMBLE = `## centraid CLI
+export interface ClaudeTurnInput {
+  cwd: string;
+  message: string;
+  /** Passed via `--append-system-prompt`. Empty string omits the flag. */
+  extraSystemPrompt: string;
+  model?: string;
+  /** Claude session id from a prior turn; triggers `--resume`. */
+  prevSessionId?: string;
+  abortSignal: AbortSignal;
+  onEvent: (event: ChatStreamEvent) => void;
+}
 
-You have a "centraid" CLI available for reading and writing this app's data:
+export interface ClaudeTurnConfig {
+  /** Directory to prepend to PATH so claude can invoke host bins by bare name. */
+  hostBinDir?: string;
+  /** Override the claude binary; defaults to PATH lookup of `claude`. */
+  binPath?: string;
+  /** Extra args passed verbatim. */
+  extraArgs?: string[];
+}
 
-  centraid sql describe                      — JSON: tables, columns, indexes, views
-  centraid sql read  "SELECT ..."            — JSON: { columns, rows, totalRows, truncated }
-  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."  — JSON: { rowsAffected, lastInsertRowid }
-
-The CLI operates on ./data.sqlite in the current working directory, which is
-already scoped to this app. You do NOT need to pass an appId. DDL
-(CREATE/ALTER/DROP) and PRAGMA are refused.
-
-Prefer one focused SELECT over many small ones (use LIMIT). Call
-\`centraid sql describe\` first if you don't know the schema yet.`;
-
-export interface ClaudeAdapterResult {
+export interface ClaudeTurnResult {
   sessionId?: string;
 }
 
-export interface ClaudeAdapterEnv {
-  appsDir: string;
-  centraidCliDir: string;
-}
-
 export async function runClaudeTurn(
-  args: RunOneTurnArgs,
-  prevSessionId: string | undefined,
-  env: ClaudeAdapterEnv,
-): Promise<ClaudeAdapterResult> {
-  const { ctx, input } = args;
-  const bin = ctx.prefs.binPath ?? 'claude';
+  input: ClaudeTurnInput,
+  config: ClaudeTurnConfig = {},
+): Promise<ClaudeTurnResult> {
+  const bin = config.binPath ?? 'claude';
 
-  const appWorkspace = path.join(env.appsDir, input.appId);
-  await fs.mkdir(appWorkspace, { recursive: true });
+  await fs.mkdir(input.cwd, { recursive: true });
 
   const cliArgs = ['-p', input.message, '--output-format', 'stream-json', '--verbose'];
-  if (prevSessionId) cliArgs.push('--resume', prevSessionId);
+  if (input.prevSessionId) cliArgs.push('--resume', input.prevSessionId);
   if (input.model) cliArgs.push('--model', input.model);
+  if (input.extraSystemPrompt) {
+    cliArgs.push('--append-system-prompt', input.extraSystemPrompt);
+  }
 
-  const systemPrompt = input.extraSystemPrompt
-    ? `${CENTRAID_PROMPT_PREAMBLE}\n\n${input.extraSystemPrompt}`
-    : CENTRAID_PROMPT_PREAMBLE;
-  cliArgs.push('--append-system-prompt', systemPrompt);
-
-  if (ctx.prefs.extraArgs && ctx.prefs.extraArgs.length > 0) {
-    cliArgs.push(...ctx.prefs.extraArgs);
+  if (config.extraArgs && config.extraArgs.length > 0) {
+    cliArgs.push(...config.extraArgs);
   }
 
   let sessionId: string | undefined;
@@ -83,15 +76,17 @@ export async function runClaudeTurn(
 
   emit({ type: 'assistant.start' });
 
-  const spawnEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    PATH: `${env.centraidCliDir}${path.delimiter}${process.env.PATH ?? ''}`,
-  };
+  const spawnEnv: NodeJS.ProcessEnv = config.hostBinDir
+    ? {
+        ...process.env,
+        PATH: `${config.hostBinDir}${path.delimiter}${process.env.PATH ?? ''}`,
+      }
+    : { ...process.env };
 
   const result = await spawnCli({
     bin,
     args: cliArgs,
-    cwd: appWorkspace,
+    cwd: input.cwd,
     env: spawnEnv,
     abortSignal: input.abortSignal,
     onStderrLine: (line) => emit({ type: 'phase', phase: 'stderr', detail: line }),
