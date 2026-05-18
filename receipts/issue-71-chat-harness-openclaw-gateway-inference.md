@@ -113,13 +113,13 @@ Deleted files: `system-prompt.ts` (moved to runtime-core's `buildExtraPrompt`), 
 
 A follow-up pass on the local codex adapter, prompted by empirical runs of `codex-cli 0.128.0` and a re-read of codex's sandbox model. The original adapter shipped flags that don't exist in the CLI (`--allowed-tools`, `--system-prompt`, `--session`, `--ask-for-approval`) and assumed MCP-over-stdio was the only path to tool exposure. Two things changed:
 
-1. **Schema verified end-to-end.** Captured the actual `codex exec --json` event stream: `thread.started.thread_id`, `turn.started`, `item.started`, `item.completed[agent_message]` / `[command_execution]`, `turn.completed`, `turn.failed`. The `translateCodexLine` function is now pinned to that schema; unknown shapes fall through as `phase` events so a small upgrade doesn't break parsing. A unit test in [packages/local-chat-runner/src/codex-adapter.test.ts](../packages/local-chat-runner/src/codex-adapter.test.ts) carries the captured fixtures verbatim.
+1. **Schema verified end-to-end.** Captured the actual `codex exec --json` event stream: `thread.started.thread_id`, `turn.started`, `item.started`, `item.completed[agent_message]` / `[command_execution]`, `turn.completed`, `turn.failed`. The `translateCodexLine` function was pinned to that schema; unknown shapes fall through as `phase` events so a small upgrade doesn't break parsing. A unit test at `packages/local-chat-runner/src/codex-adapter.test.ts` carried the captured fixtures verbatim. (*Deleted in a later commit when the package swapped to `codex app-server` — see the v0 swap section below.*)
 
 2. **MCP entirely dropped in favour of a small `centraid` CLI.** Empirical probe showed codex's `--sandbox read-only` and `--sandbox workspace-write` both block outbound network (including loopback), which kills any "CLI talks to local HTTP" design. Codex DOES allow workspace-write filesystem access, so the simplest possible mechanism is a Node bin that opens `./data.sqlite` directly. The adapter spawns codex with `-C <appsDir>/<appId>` (cwd = the per-app data dir) and prepends the centraid-CLI bin dir to PATH. AppId is the cwd; the model never names it, so it can't escape the scope.
 
 The `centraid` CLI ([packages/local-chat-runner/src/centraid-cli.ts](../packages/local-chat-runner/src/centraid-cli.ts)) exposes three subcommands: `centraid sql describe` (JSON schema dump), `centraid sql read "SELECT ..."` (rows JSON), `centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."` (rowsAffected JSON). DDL and PRAGMA are refused with exit code 64; bad-usage with exit code 2. `CENTRAID_DATA_FILE` env override is supported for tests; production codex/claude adapters rely on cwd alone.
 
-The Claude Code adapter ([packages/local-chat-runner/src/claude-adapter.ts](../packages/local-chat-runner/src/claude-adapter.ts)) was simplified to the same shape (cwd + CLI on PATH, prompt preamble teaching the agent about the CLI) — Claude Code's permission-based sandbox accepts this without special flags.
+The Claude Code adapter (`packages/local-chat-runner/src/claude-adapter.ts`) was simplified to the same shape (cwd + CLI on PATH, prompt preamble teaching the agent about the CLI) — Claude Code's permission-based sandbox accepted this without special flags. (*Deleted in a later commit when the package swapped to the Claude Agent SDK — see the v0 swap section below.*)
 
 Mode handling for codex was dropped: codex's sandbox model has no clean read-only-with-writable-app-data regime, so the `mode: 'data'` toggle now only affects the runtime's prompt (`buildExtraPrompt` still picks the more-restrictive data-mode wording). OpenClaw's data-mode lockdown via `toolsAllow` + `disableMessageTool` is unchanged.
 
@@ -189,7 +189,7 @@ Prep work for the next change: swapping the builder harness from `@earendil-work
 
 ### What changed
 
-- [packages/local-chat-runner/src/codex-adapter.ts](../packages/local-chat-runner/src/codex-adapter.ts) and [claude-adapter.ts](../packages/local-chat-runner/src/claude-adapter.ts): refactored `runCodexTurn` / `runClaudeTurn` to take a neutral `{ cwd, message, extraSystemPrompt, model?, prevSessionId?, abortSignal, onEvent }` input plus a `{ hostBinDir?, binPath?, extraArgs? }` config. The hardcoded `CENTRAID_PROMPT_PREAMBLE` (which talks about `./data.sqlite` and the `centraid sql ...` commands — chat-specific) moved out of the adapters; the caller now owns any preamble.
+- `packages/local-chat-runner/src/codex-adapter.ts` and `claude-adapter.ts` (both later deleted): refactored `runCodexTurn` / `runClaudeTurn` to take a neutral `{ cwd, message, extraSystemPrompt, model?, prevSessionId?, abortSignal, onEvent }` input plus a `{ hostBinDir?, binPath?, extraArgs? }` config. The hardcoded `CENTRAID_PROMPT_PREAMBLE` (which talks about `./data.sqlite` and the `centraid sql ...` commands — chat-specific) moved out of the adapters; the caller now owns any preamble.
 - [packages/local-chat-runner/src/local-chat-runner.ts](../packages/local-chat-runner/src/local-chat-runner.ts): `makeLocalChatRunner` becomes a thin wrapper that constructs `cwd = <appsDir>/<appId>`, splices the chat preamble into `extraSystemPrompt`, reads/writes the per-window `ChatStore` for resume, and delegates to the primitive. Public surface unchanged — chat path is byte-for-byte equivalent.
 - [packages/local-chat-runner/src/types.ts](../packages/local-chat-runner/src/types.ts): dropped `RunOneTurnArgs` / `AdapterCtx` (only used by the old chat-shaped adapter signatures); kept `RunnerKind` + `RunnerPrefs`.
 - [packages/local-chat-runner/src/index.ts](../packages/local-chat-runner/src/index.ts): now exports the primitives (`runCodexTurn`, `runClaudeTurn`) and their input/config/result types alongside the existing `makeLocalChatRunner`, so a future builder-harness session can import them directly without a circular dep.
@@ -223,3 +223,49 @@ Considered telling the agent the snapshot path in its system prompt and letting 
 - Desktop main-process loop that writes `<projectDir>/.preview/snapshot.png` whenever the builder preview `<webview>` paints (debounced).
 - Delete `@earendil-works/pi-coding-agent` from `packages/builder-harness/package.json` plus the now-unused `agent-session.ts` / `preview-screenshot-tool.ts`.
 - Drop the pi target from [auth-import.ts](../apps/desktop/src/main/auth-import.ts) (credentials now belong solely to the user's `codex` / `claude` installs).
+
+## v0 swap — codex app-server + Claude Agent SDK
+
+The previous "extract primitives" pass kept the `codex exec --json` and `claude -p --output-format stream-json` adapters as the underlying CLI runners. A re-alignment with the original plan (and a fresh read of the codex repo + Claude Agent SDK docs) pivoted to a unified runtime that targets the *embedding* primitives both vendors actually recommend:
+
+- **Codex:** spawn `codex app-server` (long-lived process, JSON-RPC 2.0 over stdio, token deltas, structured tool-call lifecycle, `thread/resume` for cross-restart continuity). `codex exec` was designed for one-shot CI use; app-server is the contract VS Code's Codex extension uses.
+- **Claude:** import `@anthropic-ai/claude-agent-sdk` (in-process TypeScript, async-iterator events, `systemPrompt: { type: 'preset', preset: 'claude_code', append }` for prompt injection, `includePartialMessages: true` for streaming deltas, `resume` for session continuity). The `claude -p` CLI was useful as a stand-in but doesn't expose stable embedding semantics.
+
+### What changed
+
+- New [packages/local-chat-runner/src/codex-app-server.ts](../packages/local-chat-runner/src/codex-app-server.ts) — JSON-RPC client for `codex app-server`. Handshake is `initialize` (with `experimentalApi: true` capability) → `initialized` notification → `thread/start` (or `thread/resume`) → `turn/start`. cwd / `developerInstructions` / `sandbox` / `approvalPolicy: 'never'` are passed inside `thread/start` params (app-server does **not** honor `-c key=value` — that flag is parsed by the root `codex` CLI and only forwarded to opt-in subcommands). Auto-accepts any `*/requestApproval` server requests so the turn doesn't stall under `approvalPolicy: 'never'`. `turn/interrupt { threadId }` on abort.
+- New [packages/local-chat-runner/src/claude-sdk.ts](../packages/local-chat-runner/src/claude-sdk.ts) — wraps `mod.query({ prompt, options })`. Lazy-imports the SDK so codex-only paths don't pay the dependency cost (the SDK pulls a bundled `claude` binary into `node_modules`). Translates `SDKMessage` events — `partial_assistant_message` content-block deltas → `assistant.delta` / `reasoning.delta`; assistant `tool_use` blocks → `tool.start`; user `tool_result` blocks → `tool.result`; `result` → `final`.
+- New [packages/local-chat-runner/src/runtime.ts](../packages/local-chat-runner/src/runtime.ts) — exports `runAgentTurn(input, config)`, the unified primitive both chat and builder consume. Dispatches by `prefs.kind` ∈ `'codex' | 'claude-code'`. Returns `{ adapterKind, sessionId? }` for resume.
+- [packages/local-chat-runner/src/local-chat-runner.ts](../packages/local-chat-runner/src/local-chat-runner.ts) — `makeLocalChatRunner` is now a thin chat wrapper over `runAgentTurn`: derives `cwd = <appsDir>/<appId>`, splices the centraid-CLI preamble into `extraSystemPrompt`, reads/writes the per-window `ChatStore` for resume, prepends the centraid bin dir to `PATH` so codex's shell tool can invoke `centraid` by bare name.
+- [packages/local-chat-runner/src/index.ts](../packages/local-chat-runner/src/index.ts) — exports the new primitives + the backend-specific input/result types for direct consumers (builder-harness).
+- [packages/local-chat-runner/package.json](../packages/local-chat-runner/package.json) — adds `@anthropic-ai/claude-agent-sdk@^0.3.143`.
+
+### Deleted
+
+- `packages/local-chat-runner/src/codex-adapter.ts` — replaced by `codex-app-server.ts`.
+- `packages/local-chat-runner/src/claude-adapter.ts` — replaced by `claude-sdk.ts`.
+- `packages/local-chat-runner/src/spawn-cli.ts` — generic CLI subprocess helper, no longer needed (`codex-app-server.ts` owns its own process; `claude-sdk.ts` is in-process).
+- `packages/local-chat-runner/src/codex-adapter.test.ts` — fixtures pinned to the old `codex exec --json` schema. New backend-specific tests are deferred until we've captured wire output from real app-server / SDK runs.
+
+### What did not change
+
+- `ChatRunner` interface in `@centraid/runtime-core` — the chat-routes contract is unchanged.
+- `ChatStreamEvent` shape — both new backends emit the same normalized union the renderer consumes.
+- The `centraid` CLI bin (`sql describe / read / write`, `preview snapshot`) — agents still shell out to it for host capabilities.
+- Public surface of `@centraid/local-chat-runner` for chat consumers (`makeLocalChatRunner`, `defaultCentraidCliDir`, preflight helpers).
+
+### Verification (this commit)
+
+- `bun run build`: all turbo build tasks succeed.
+- `bun run typecheck`: 16/16 succeed.
+- `bun run test`: 18/18 pass (4 codex translator fixtures dropped with `codex-adapter.test.ts`; 7 preflight + 11 centraid-CLI tests pass unchanged).
+- `bun run lint`: 0/0 errors.
+- `bunx oxfmt --check`: clean.
+
+### Open items for the builder-harness swap (next commit)
+
+- Replace `packages/builder-harness/src/agent-session.ts` (pi-based) with a duck-typed session backed by `runAgentTurn`. Translate `ChatStreamEvent` → the pi-shaped `CentraidAgentEvent` union the renderer's `handleAgentEvent` consumes, so the renderer doesn't change.
+- Per-project resume: persist the returned `sessionId` under `<projectDir>/.centraid-builder-state.json`. The CLI handles transcript continuity internally; the renderer hydrates an empty chat on reload (lossy by design, can revisit).
+- Desktop snapshot-capture loop: write `<projectDir>/.preview/snapshot.png` (debounced) so the builder agent can read it via its native `Read` tool / `centraid preview snapshot` for visual feedback. Replaces pi's `previewScreenshot` custom tool.
+- Drop `@earendil-works/pi-coding-agent` from `packages/builder-harness/package.json` and delete `preview-screenshot-tool.ts`. Update `ui-grounding.ts` to remove the `withScreenshotTool` opt-in and reference the snapshot file directly.
+- Drop the pi target from [auth-import.ts](../apps/desktop/src/main/auth-import.ts).

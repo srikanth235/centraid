@@ -2,7 +2,7 @@
   "name": "@centraid/local-chat-runner",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-runtime ChatRunner for centraid's per-app chat. Spawns a user-configured coding CLI (Codex or Claude Code) as a subprocess with cwd pinned to the active app's data dir and teaches it about a small `centraid` CLI bin that reads/writes data.sqlite directly. No MCP, no network, no token plumbing.",
+  "description": "Unified local agent runtime for centraid: drives one turn through either codex app-server (JSON-RPC subprocess) or @anthropic-ai/claude-agent-sdk (in-process). Used by both chat and builder. Ships a tiny `centraid` CLI bin agents shell out to.",
   "bin": {
     "centraid": "./dist/centraid-cli.js"
   },
@@ -20,6 +20,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.143",
     "@centraid/runtime-core": "workspace:*"
   },
   "devDependencies": {

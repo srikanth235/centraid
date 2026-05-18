@@ -1,16 +1,15 @@
 /*
  * Chat-specific `ChatRunner` for the desktop's embedded local runtime.
  *
- * Thin wrapper over the mode-agnostic CLI primitives (`runCodexTurn` /
- * `runClaudeTurn`): picks an adapter from the user's persisted
- * `chat.runner.kind` pref, derives the per-app workspace from
- * `<appsDir>/<appId>`, splices the `centraid` CLI preamble into the
- * system prompt so the agent knows how to read/write `./data.sqlite`,
- * reads the previous adapter session id from the per-window `ChatStore`,
- * and returns the new one for the route handler to persist.
+ * Thin wrapper over the unified `runAgentTurn` primitive: derives the
+ * per-app workspace from `<appsDir>/<appId>`, splices the `centraid`
+ * CLI preamble into the system prompt so the agent knows how to
+ * read/write `./data.sqlite`, reads the previous adapter session id
+ * from the per-window `ChatStore`, and hands back the new one for the
+ * route handler to persist.
  *
- * Builder-mode consumers should call `runCodexTurn` / `runClaudeTurn`
- * directly with their own workspace + preamble + resume-id handling.
+ * Builder-mode consumers should call `runAgentTurn` directly with their
+ * own workspace + preamble + resume-id handling.
  */
 
 import path from 'node:path';
@@ -21,8 +20,7 @@ import {
   type ChatRunResult,
   type ChatRunner,
 } from '@centraid/runtime-core';
-import { runCodexTurn } from './codex-adapter.js';
-import { runClaudeTurn } from './claude-adapter.js';
+import { runAgentTurn } from './runtime.js';
 import type { RunnerPrefs } from './types.js';
 
 export interface MakeLocalChatRunnerOptions {
@@ -34,18 +32,14 @@ export interface MakeLocalChatRunnerOptions {
   /**
    * Directory containing the built `centraid` CLI binary. Defaults to
    * the `dist/` sibling of the local-chat-runner package itself.
-   * Codex's PATH is prepended with this dir per turn so it can invoke
-   * `centraid` by bare name.
+   * Codex's shell can shell out to this bin by bare name when we
+   * prepend it to PATH — but we only need PATH prepending for codex,
+   * and codex app-server inherits its env from the parent process.
+   * Kept for backwards-compat of the public option name.
    */
   centraidCliDir?: string;
 }
 
-/**
- * Default location of the built `centraid` CLI — sibling of this
- * module, i.e. `<package>/dist/`. The published `bin.centraid` entry
- * in package.json points at `./dist/centraid-cli.js`, and we expose
- * just the directory so spawn-PATH stays simple.
- */
 export function defaultCentraidCliDir(): string {
   return path.dirname(fileURLToPath(import.meta.url));
 }
@@ -92,49 +86,36 @@ export function makeLocalChatRunner(opts: MakeLocalChatRunnerOptions): ChatRunne
 
       const extraSystemPrompt = spliceExtraSystemPrompt(input.extraSystemPrompt);
 
-      if (prefs.kind === 'codex') {
-        const result = await runCodexTurn(
+      // Codex spawns its shell tool with its own env; prepend the
+      // centraid CLI dir so the agent can invoke `centraid` by bare
+      // name regardless of where the user installed the package.
+      const originalPath = process.env.PATH ?? '';
+      const pathInjection = `${centraidCliDir}${path.delimiter}${originalPath}`;
+      const restorePath = (): void => {
+        process.env.PATH = originalPath;
+      };
+      process.env.PATH = pathInjection;
+
+      try {
+        const result = await runAgentTurn(
           {
             cwd,
             message: input.message,
             extraSystemPrompt,
             ...(input.model ? { model: input.model } : {}),
-            ...(resumeId ? { prevThreadId: resumeId } : {}),
+            ...(resumeId ? { prevSessionId: resumeId } : {}),
             abortSignal: input.abortSignal,
             onEvent: input.onEvent,
           },
-          {
-            hostBinDir: centraidCliDir,
-            ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
-            ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
-          },
+          { prefs },
         );
         return {
-          adapterKind,
-          ...(result.threadId ? { adapterSessionId: result.threadId } : {}),
+          adapterKind: result.adapterKind,
+          ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
         };
+      } finally {
+        restorePath();
       }
-
-      const result = await runClaudeTurn(
-        {
-          cwd,
-          message: input.message,
-          extraSystemPrompt,
-          ...(input.model ? { model: input.model } : {}),
-          ...(resumeId ? { prevSessionId: resumeId } : {}),
-          abortSignal: input.abortSignal,
-          onEvent: input.onEvent,
-        },
-        {
-          hostBinDir: centraidCliDir,
-          ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
-          ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
-        },
-      );
-      return {
-        adapterKind,
-        ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
-      };
     },
   };
 }
