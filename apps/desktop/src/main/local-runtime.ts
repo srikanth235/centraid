@@ -172,11 +172,15 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       automationStore,
       // On every publish that lands new/changed/removed automation
       // manifests, reconcile the OS scheduler so its installed
-      // entries match the just-synced mirror state. Per-app
-      // reconcile is enough — sync only touches one app at a time.
+      // entries match the just-synced mirror state. Scoped to this
+      // app — without `scope.appId`, the host would diff against
+      // every centraid-owned entry it knows and sweep every OTHER
+      // app's jobs as "absent from desired."
       onAutomationsSynced: async (appId) => {
         try {
-          await automationHost.reconcile(automationStore.listByApp(appId));
+          await automationHost.reconcile(automationStore.listByApp(appId), {
+            scope: { appId },
+          });
         } catch (err) {
           console.warn(
             `[local-runtime] OS scheduler reconcile failed for "${appId}": ` +

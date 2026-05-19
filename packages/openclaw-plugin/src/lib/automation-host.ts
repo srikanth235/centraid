@@ -20,6 +20,7 @@
 
 import type {
   AutomationHost,
+  AutomationReconcileOptions,
   AutomationReconcileResult,
   AutomationRow,
 } from '@centraid/runtime-core';
@@ -31,6 +32,15 @@ import {
   upsertCronJob,
   payloadFor,
 } from './automations-cron.js';
+
+/**
+ * Centraid-owned cron job names follow `centraid:<appId>:<name>` (see
+ * `cronNameFor`). The per-app reconcile filter uses this prefix to
+ * pick out one app's entries from the host's flat list.
+ */
+function appCronPrefix(appId: string): string {
+  return `centraid:${appId}:`;
+}
 
 export class OpenclawAutomationHost implements AutomationHost {
   async register(row: AutomationRow): Promise<void> {
@@ -49,11 +59,28 @@ export class OpenclawAutomationHost implements AutomationHost {
     return listCentraidCronJobs();
   }
 
-  async reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult> {
+  async reconcile(
+    desired: ReadonlyArray<AutomationRow>,
+    opts: AutomationReconcileOptions = {},
+  ): Promise<AutomationReconcileResult> {
+    const scope = opts.scope;
     const desiredByCronName = new Map<string, AutomationRow>();
-    for (const row of desired) desiredByCronName.set(cronNameFor(row.appId, row.name), row);
+    for (const row of desired) {
+      // Defensive cross-app drop: a scoped reconcile must not register
+      // entries for an app it wasn't asked to touch.
+      if (scope && row.appId !== scope.appId) continue;
+      desiredByCronName.set(cronNameFor(row.appId, row.name), row);
+    }
 
-    const actualNames = new Set(await listCentraidCronJobs());
+    // When scoped, the removal pass only considers the named app's
+    // entries; without this filter, every other app's cron jobs would
+    // appear "absent from desired" and get swept.
+    const allActualNames = await listCentraidCronJobs();
+    const actualNames = new Set(
+      scope
+        ? allActualNames.filter((n) => n.startsWith(appCronPrefix(scope.appId)))
+        : allActualNames,
+    );
 
     const added: string[] = [];
     const updated: string[] = [];

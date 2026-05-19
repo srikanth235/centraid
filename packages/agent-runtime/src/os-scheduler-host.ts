@@ -16,6 +16,7 @@
 
 import type {
   AutomationHost,
+  AutomationReconcileOptions,
   AutomationReconcileResult,
   AutomationRow,
 } from '@centraid/runtime-core';
@@ -71,12 +72,15 @@ export class OsSchedulerHost implements AutomationHost {
     return installed.map((e) => jobLabel(e.appId, e.automationName));
   }
 
-  async reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult> {
+  async reconcile(
+    desired: ReadonlyArray<AutomationRow>,
+    opts: AutomationReconcileOptions = {},
+  ): Promise<AutomationReconcileResult> {
     const items: OsSchedulerReconcileDesired[] = desired.map((row) => ({
       spec: this.specFor(row),
       enabled: row.enabled,
     }));
-    const out = await reconcileOsJobs(items, this.opts.os);
+    const out = await reconcileOsJobs(items, this.opts.os, opts.scope);
     return {
       added: out.added,
       updated: out.updated,

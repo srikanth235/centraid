@@ -530,6 +530,12 @@ export interface OsSchedulerReconcileResult {
  * re-registered to catch schedule or runner changes that landed
  * while the desktop was offline.
  *
+ * Pass `scope.appId` for the per-app case (publish or deregister of
+ * one app). Without scope, the removal pass considers every installed
+ * centraid-owned entry — appropriate at startup against the full
+ * mirror, catastrophic against `listByApp(...)` because every other
+ * app's entries would look "absent from desired" and get swept.
+ *
  * Called at local-runtime startup to absorb changes that happened
  * outside our hot path (publishes from another machine, manual edits
  * to the mirror, etc.). Best-effort per-entry: a failure on one
@@ -539,14 +545,22 @@ export interface OsSchedulerReconcileResult {
 export async function reconcile(
   desired: ReadonlyArray<OsSchedulerReconcileDesired>,
   opts: OsSchedulerOptions = {},
+  scope?: { appId: string },
 ): Promise<OsSchedulerReconcileResult> {
-  const installed = await list(opts);
+  const installedAll = await list(opts);
+  // When scoped, the removal pass only considers entries for that app —
+  // other apps' entries are invisible to this reconcile pass.
+  const installed = scope ? installedAll.filter((e) => e.appId === scope.appId) : installedAll;
   const installedLabels = new Set(installed.map((e) => jobLabel(e.appId, e.automationName)));
 
   // Desired-and-enabled keyed by label so we can diff against installed.
+  // When scoped, defensively drop any cross-app rows the caller passed
+  // in by mistake — without this, a scoped reconcile could register
+  // entries for an app it wasn't supposed to touch.
   const desiredEnabled = new Map<string, OsSchedulerJobSpec>();
   for (const d of desired) {
     if (!d.enabled) continue;
+    if (scope && d.spec.appId !== scope.appId) continue;
     desiredEnabled.set(jobLabel(d.spec.appId, d.spec.automationName), d.spec);
   }
 

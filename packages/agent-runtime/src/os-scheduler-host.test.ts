@@ -128,4 +128,56 @@ describe('OsSchedulerHost', () => {
     const finalList = await ctx.host.list();
     assert.equal(finalList.length, 0);
   });
+
+  it('reconcile with scope.appId only touches that app — other apps survive', async () => {
+    // Two apps, one automation each, both installed.
+    const ctx = setup();
+    await ctx.host.register(row({ appId: 'todos', name: 'daily-digest' }));
+    await ctx.host.register(
+      row({ appId: 'journal', name: 'weekly-recap', cronExpr: '0 20 * * 0' }),
+    );
+    const before = await ctx.host.list();
+    assert.deepEqual([...before].sort(), [
+      'com.centraid.journal.weekly-recap',
+      'com.centraid.todos.daily-digest',
+    ]);
+
+    // Scoped reconcile against todos' rows. The desired set only
+    // contains the existing todos entry, so journal's row appears
+    // "absent" — but because we scope, journal's entry must survive.
+    const result = await ctx.host.reconcile([row({ appId: 'todos', name: 'daily-digest' })], {
+      scope: { appId: 'todos' },
+    });
+    assert.deepEqual(result.added, []);
+    assert.deepEqual([...result.updated].sort(), ['com.centraid.todos.daily-digest']);
+    assert.deepEqual(result.removed, []);
+    const afterUpdate = await ctx.host.list();
+    assert.deepEqual([...afterUpdate].sort(), [
+      'com.centraid.journal.weekly-recap',
+      'com.centraid.todos.daily-digest',
+    ]);
+
+    // Scoped reconcile against an empty todos desired set (the
+    // deregister path). Without scoping this would wipe both apps'
+    // entries; with scope it must only remove todos.
+    const wipeTodos = await ctx.host.reconcile([], { scope: { appId: 'todos' } });
+    assert.deepEqual(wipeTodos.removed, ['com.centraid.todos.daily-digest']);
+    const afterWipe = await ctx.host.list();
+    assert.deepEqual([...afterWipe], ['com.centraid.journal.weekly-recap']);
+  });
+
+  it('reconcile with scope ignores desired rows for other apps', async () => {
+    // Defense in depth: even if a caller hands us a cross-app row by
+    // mistake, a scoped reconcile must not register it.
+    const ctx = setup();
+    await ctx.host.reconcile(
+      [
+        row({ appId: 'todos', name: 'daily-digest' }),
+        row({ appId: 'journal', name: 'leak', cronExpr: '0 9 * * *' }),
+      ],
+      { scope: { appId: 'todos' } },
+    );
+    const installed = await ctx.host.list();
+    assert.deepEqual([...installed], ['com.centraid.todos.daily-digest']);
+  });
 });

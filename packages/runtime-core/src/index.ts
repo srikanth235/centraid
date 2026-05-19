@@ -194,7 +194,11 @@ export {
 // runtime state; this is centraid's own registration surface for the
 // list/UI and the reconciliation pass.
 export { AutomationStore, type AutomationRow } from './automation-store.js';
-export type { AutomationHost, AutomationReconcileResult } from './automation-host.js';
+export type {
+  AutomationHost,
+  AutomationReconcileOptions,
+  AutomationReconcileResult,
+} from './automation-host.js';
 
 // Deploy boundary for automations: scan an app's `automations/*.json`
 // and bring the mirror into agreement. Called by `handleAppUpload`

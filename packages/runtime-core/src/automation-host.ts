@@ -31,9 +31,15 @@
  *   - `unregister` is also idempotent. Tolerates "not found" — happens
  *     when the user removed the host entry by hand between centraid
  *     registration and teardown.
- *   - `reconcile(desired)` brings the host into agreement with the
- *     supplied desired set. Used at gateway/runtime startup to absorb
- *     changes that landed while the host was offline.
+ *   - `reconcile(desired, opts?)` brings the host into agreement with
+ *     the supplied desired set. Used at gateway/runtime startup to
+ *     absorb changes that landed while the host was offline, and on
+ *     every per-app publish/deregister to settle that app's entries.
+ *     Pass `opts.scope.appId` for the per-app case — without it the
+ *     diff runs against every centraid-owned entry the host knows,
+ *     and `desired` listing rows for only one app would sweep every
+ *     other app's entries. The interface enforces the scoping so
+ *     callers can't get this wrong silently.
  */
 
 import type { AutomationRow } from './automation-store.js';
@@ -62,10 +68,37 @@ export interface AutomationHost {
 
   /**
    * Bring the host into agreement with `desired`. Implementations
-   * compare against `list()`, then issue the smallest set of register
-   * / unregister calls needed.
+   * compare against `list()` (filtered to `opts.scope.appId` when
+   * provided), then issue the smallest set of register/unregister
+   * calls needed.
+   *
+   * `opts.scope.appId` MUST be set whenever `desired` is a per-app
+   * subset of the mirror (i.e. came from `AutomationStore.listByApp`).
+   * Omit it only when `desired` is the full mirror via
+   * `AutomationStore.listAll` — typically at host startup.
+   *
+   * When `scope.appId` is set, `desired` rows that belong to other
+   * apps are ignored (host implementations defensively filter), and
+   * the removal pass only considers installed entries for that app.
    */
-  reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult>;
+  reconcile(
+    desired: ReadonlyArray<AutomationRow>,
+    opts?: AutomationReconcileOptions,
+  ): Promise<AutomationReconcileResult>;
+}
+
+/**
+ * Options for {@link AutomationHost.reconcile}. Currently just the
+ * scope; kept open as an object so we can grow it (timeouts, dry-run,
+ * etc.) without breaking the call sites.
+ */
+export interface AutomationReconcileOptions {
+  /**
+   * When set, reconcile only the named app's entries. The host filters
+   * its `list()` to entries for this app before computing removals so
+   * a per-app desired set can't sweep other apps' jobs.
+   */
+  scope?: { appId: string };
 }
 
 export interface AutomationReconcileResult {

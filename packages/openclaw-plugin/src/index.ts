@@ -117,14 +117,17 @@ export default definePluginEntry({
       // Once the mirror is updated, reconcile the host against the
       // mirror so openclaw's cron store catches up immediately —
       // without this the user would have to restart the gateway to
-      // see schedule changes take effect. Per-app reconcile only:
-      // sync touches one app at a time, no reason to scan everything.
+      // see schedule changes take effect. Scoped to this app — a
+      // bare per-app `desired` against an unscoped reconcile would
+      // sweep every other app's cron entries.
       onAutomationsSynced: async (appId, result) => {
         api.logger.info(
           `[centraid] automations synced for "${appId}": +${result.added.length} ~${result.updated.length} -${result.removed.length}`,
         );
         try {
-          await automationHost.reconcile(automationStore.listByApp(appId));
+          await automationHost.reconcile(automationStore.listByApp(appId), {
+            scope: { appId },
+          });
         } catch (err) {
           api.logger.warn(
             `[centraid] cron reconcile after sync failed: ${err instanceof Error ? err.message : String(err)}`,
