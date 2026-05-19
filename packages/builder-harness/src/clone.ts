@@ -57,12 +57,12 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
   await fs.mkdir(opts.projectsDir, { recursive: true });
   await copyDir(opts.templateDir, destDir);
 
-  // Ensure the canonical centraid subdirs exist even if the template
-  // didn't ship them. `scaffoldProject` produces all four; cloning a
-  // template that pre-dates one of them shouldn't leave the agent
-  // without a canonical place to write — most relevant for
-  // `automations/`, which older templates won't have but the agent
-  // needs as the drop target for cron-scheduled manifests (issue #70).
+  // Ensure the canonical centraid subdirs exist. `scaffoldProject`
+  // produces all four; this call backstops templates that pre-date
+  // one. Bundled templates routinely ship `automations/*.json`
+  // manifests (e.g. `journal/automations/weekly-recap.json`); those
+  // carry through unchanged via `copyDir` above — this step only
+  // adds missing directories, never overwrites contents (issue #70).
   await ensureCanonicalSubdirs(destDir);
 
   await rewriteAppJson(destDir, opts.newName, opts.newDesc);
@@ -205,10 +205,12 @@ async function ensureCanonicalSubdirs(projectDir: string): Promise<void> {
   await Promise.all(
     CANONICAL_SUBDIRS.map((sub) => fs.mkdir(path.join(projectDir, sub), { recursive: true })),
   );
-  // Drop the automations brief if the template didn't ship one. Writing
-  // unconditionally would clobber a template that bundles real
-  // automation manifests + its own readme, so we only seed when no
-  // README exists yet.
+  // Seed a brief only when the template didn't ship one of its own.
+  // The brief is a placeholder for an empty `automations/` folder —
+  // its presence means "no manifests here yet," not "this is all the
+  // template provides." Templates that bundle real manifests usually
+  // ship their own README alongside them; either way, we never
+  // clobber existing content.
   const readmePath = path.join(projectDir, 'automations', 'README.md');
   try {
     await fs.access(readmePath);
@@ -219,11 +221,17 @@ async function ensureCanonicalSubdirs(projectDir: string): Promise<void> {
 
 const AUTOMATIONS_README = `# automations/
 
-Cron-scheduled deterministic actions for this app. Drop one \`.json\`
-manifest per automation here; the matching handler ships at
-\`actions/<name>.js\`. See the project root \`README.md\` for the full
-manifest shape, or ask the builder agent to "set up an automation
-that runs every N..." — it will scaffold both files.
+This folder holds cron-scheduled deterministic actions for the app.
+Each automation is a \`.json\` manifest here plus a matching handler
+at \`actions/<name>.js\`. Existing automations appear in the
+desktop's App settings → Automations panel; this README is only
+seeded when the folder is empty, so seeing it means no manifests
+ship with this app yet.
+
+To add one, ask the builder agent ("set up an automation that
+runs every Monday at 9am…") — it scaffolds both files and the
+desktop picks them up on the next sync. See the project root
+\`README.md\` for the full manifest shape.
 `;
 
 async function hasAnyBuiltJs(projectDir: string): Promise<boolean> {

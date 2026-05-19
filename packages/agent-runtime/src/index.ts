@@ -104,6 +104,7 @@ export {
   register as registerOsJob,
   unregister as unregisterOsJob,
   list as listOsJobs,
+  reconcile as reconcileOsJobs,
   jobLabel,
   currentPlatform,
   buildLaunchdPlist,
@@ -117,6 +118,14 @@ export {
   type OsPlatform,
   type OsSchedulerJobSpec,
   type OsSchedulerJobInstalled,
+  type OsSchedulerListEntry,
   type OsSchedulerOptions,
+  type OsSchedulerReconcileDesired,
+  type OsSchedulerReconcileResult,
   type ExecShell,
 } from './os-scheduler.js';
+
+// AutomationHost adapter wrapping os-scheduler. The desktop wires
+// this into local-runtime so toggle/delete IPC calls reach the OS
+// scheduler through the same interface openclaw uses on the cloud.
+export { OsSchedulerHost, type OsSchedulerHostOptions } from './os-scheduler-host.js';

@@ -97,13 +97,25 @@ export async function handleAppUpload(
     // shouldn't fail the upload (the publish still succeeded), so we
     // surface in the response and log. The host scheduler reconciles
     // separately via `onAutomationsSynced`.
+    //
+    // `versions.commit` above renamed the staging dir into
+    // `<entry.path>/versions/<versionId>/`, so `result.extractedDir`
+    // no longer exists on disk — point sync at the post-commit path
+    // or it reads ENOENT and wipes the mirror rows the clone-time
+    // sync just wrote.
+    const committedDir = path.join(entry.path, 'versions', result.versionId);
     let automationSync: SyncAutomationsResult | undefined;
     if (ctx.automationStore) {
       try {
         automationSync = await syncAutomationsFromDisk({
           appId,
-          appCodeDir: result.extractedDir,
+          appCodeDir: committedDir,
           store: ctx.automationStore,
+          // The persistent app root holds `data.sqlite`; its
+          // `__centraid_settings` table carries user-set automation
+          // toggles. Sync reads these so a user-disabled automation
+          // stays disabled across republish.
+          dataDbFile: path.join(entry.path, 'data.sqlite'),
         });
         const changed =
           automationSync.added.length +

@@ -109,7 +109,7 @@ export {
 } from './sql-ops.js';
 export { readAppSchema } from './schema.js';
 export { Registry } from './registry.js';
-export { appDataDir } from './app-paths.js';
+export { appDataDir, readActiveCodeDir } from './app-paths.js';
 
 // Error classes — hosts that want to translate them to their own response
 // shapes can import these directly. (The Runtime.handle() default handler
@@ -158,7 +158,15 @@ export { UserStore, makeUserStoreRouteHandler } from './user-store.js';
 // Per-app `__centraid_settings` reader and the settings-merge pipeline that
 // turns layered prefs/settings into the `SettingsInject` payload baked into
 // each app's index.html.
-export { readAppSettings, APP_SETTINGS_TABLE } from './app-settings.js';
+export {
+  readAppSettings,
+  readAppSetting,
+  writeAppSetting,
+  deleteAppSetting,
+  automationEnabledKey,
+  APP_SETTINGS_TABLE,
+  RUNTIME_KEY_PREFIX,
+} from './app-settings.js';
 export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
 export type { SettingsInject } from './static-server.js';
 
@@ -186,6 +194,11 @@ export {
 // runtime state; this is centraid's own registration surface for the
 // list/UI and the reconciliation pass.
 export { AutomationStore, type AutomationRow } from './automation-store.js';
+export type {
+  AutomationHost,
+  AutomationReconcileOptions,
+  AutomationReconcileResult,
+} from './automation-host.js';
 
 // Deploy boundary for automations: scan an app's `automations/*.json`
 // and bring the mirror into agreement. Called by `handleAppUpload`

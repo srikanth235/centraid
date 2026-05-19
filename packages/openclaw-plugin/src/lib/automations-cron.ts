@@ -22,7 +22,7 @@
  */
 
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
-import type { AutomationStore, AutomationRow } from '@centraid/runtime-core';
+import type { AutomationRow } from '@centraid/runtime-core';
 import { CENTRAID_MOCK_MODEL_ID, CENTRAID_MOCK_PROVIDER_ID } from './automations-provider.js';
 
 /** Prefix every centraid-owned cron job's name so reconciliation can identify them. */
@@ -53,7 +53,7 @@ interface CronAddPayload {
   };
 }
 
-function payloadFor(row: AutomationRow): CronAddPayload {
+export function payloadFor(row: AutomationRow): CronAddPayload {
   return {
     name: cronNameFor(row.appId, row.name),
     enabled: row.enabled,
@@ -115,49 +115,10 @@ export async function listCentraidCronJobs(): Promise<string[]> {
   return jobs.map((j) => j.name).filter((n) => n.startsWith(`${CRON_PREFIX}:`));
 }
 
-export interface ReconciliationOutcome {
-  added: string[];
-  updated: string[];
-  removed: string[];
-}
-
-/**
- * Diff openclaw cron list vs the centraid `automations` mirror; bring
- * openclaw into agreement with the mirror. Called on `gateway_start`.
- *
- * Strategy: simple set diff by cron name. For names present in both,
- * we always re-issue `cron.update` because the SQLite mirror might
- * have absorbed an enabled-flag toggle or schedule change while the
- * plugin was offline.
- */
-export async function reconcileAutomationCron(
-  store: AutomationStore,
-): Promise<ReconciliationOutcome> {
-  const rows = store.listAll();
-  const desiredByCronName = new Map<string, AutomationRow>();
-  for (const row of rows) desiredByCronName.set(cronNameFor(row.appId, row.name), row);
-
-  const actualNames = new Set(await listCentraidCronJobs());
-
-  const added: string[] = [];
-  const updated: string[] = [];
-  const removed: string[] = [];
-
-  for (const [cronName, row] of desiredByCronName) {
-    if (actualNames.has(cronName)) {
-      await callGatewayTool('cron.update', {}, payloadFor(row));
-      updated.push(cronName);
-    } else {
-      await callGatewayTool('cron.add', {}, payloadFor(row));
-      added.push(cronName);
-    }
-  }
-  for (const cronName of actualNames) {
-    if (!desiredByCronName.has(cronName)) {
-      await callGatewayTool('cron.remove', {}, { name: cronName });
-      removed.push(cronName);
-    }
-  }
-
-  return { added, updated, removed };
-}
+// `reconcileAutomationCron(store)` lived here in the original
+// issue-#70 implementation. The replacement is
+// `OpenclawAutomationHost.reconcile(rows)` — same diff algorithm,
+// but the rows are passed in by the caller (matching the
+// `AutomationHost` contract shared with the local OS scheduler).
+// Callers that want "everything" pass `store.listAll()`; per-app
+// sync hooks pass `store.listByApp(appId)`.

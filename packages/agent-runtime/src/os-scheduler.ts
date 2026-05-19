@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit os-scheduler keeps launchd/systemd/Task-Scheduler artifact builders + register/unregister/list/reconcile co-located so the cron→platform translation stays in one auditable file; splitting per-platform would scatter cohesive code with no real reuse benefit
 /**
  * OS-level scheduler glue for local-side automations.
  *
@@ -51,7 +52,17 @@ export interface OsSchedulerJobSpec {
   automationName: string;
   /** 5-field cron expression from the manifest. */
   cronExpr: string;
-  /** Working directory the centraid CLI should cd into before running — the app dir. */
+  /**
+   * Working directory the centraid CLI should cd into before running.
+   * Must be the **persistent app root** (the dir containing
+   * `data.sqlite` + `current.json`) — NOT a version subdir. The OS
+   * scheduler bakes this path into the launchd plist / systemd unit
+   * file at register-time, and subsequent publishes create new
+   * `versions/<vid>/` subdirs while the persistent root is stable.
+   * The CLI's `run-automation` resolves the active version itself via
+   * `readActiveCodeDir(cwd)` so the manifest + handler are loaded
+   * from the currently-deployed version each fire.
+   */
   cwd: string;
   /** Which runner the CLI should drive. */
   runner: 'codex' | 'claude-code';
@@ -369,15 +380,23 @@ export async function register(
   if (platform === 'darwin') {
     const artifactPath = path.join(root, `${label}.plist`);
     await fs.writeFile(artifactPath, buildLaunchdPlist(spec), 'utf8');
-    const res = await exec('launchctl', [
-      'bootstrap',
-      `gui/${process.getuid?.() ?? ''}`,
-      artifactPath,
-    ]);
-    // `launchctl bootstrap` returns non-zero if already loaded — try
-    // an unload+load sequence in that case rather than failing.
-    if (res.exitCode !== 0 && !/already loaded/i.test(res.stderr)) {
-      throw new Error(`launchctl bootstrap failed: ${res.stderr || res.stdout}`);
+    const uid = process.getuid?.() ?? '';
+    const domain = `gui/${uid}`;
+    const res = await exec('launchctl', ['bootstrap', domain, artifactPath]);
+    if (res.exitCode !== 0) {
+      // Recent macOS (Ventura+) returns "5: Input/output error" when
+      // the service is already bootstrapped under this domain rather
+      // than the older "already loaded" string. Both mean the same
+      // thing — force-replace by tearing down + re-bootstrapping.
+      // bootout's exit code is intentionally ignored (it errors when
+      // the service isn't loaded, which is fine for our purposes).
+      await exec('launchctl', ['bootout', `${domain}/${label}`]);
+      const retry = await exec('launchctl', ['bootstrap', domain, artifactPath]);
+      if (retry.exitCode !== 0) {
+        throw new Error(
+          `launchctl bootstrap failed: ${retry.stderr || retry.stdout || res.stderr || res.stdout}`,
+        );
+      }
     }
     return { ...spec, artifactPath, jobLabel: label };
   }
@@ -446,6 +465,12 @@ export async function unregister(
   throw new UnsupportedOsSchedulerError(platform);
 }
 
+export interface OsSchedulerListEntry {
+  appId: string;
+  automationName: string;
+  artifactPath: string;
+}
+
 /**
  * Enumerate centraid-owned OS scheduler jobs by scanning the
  * artifact root for files matching our naming convention. Returns
@@ -453,9 +478,7 @@ export async function unregister(
  * so the desktop UI can show what the OS actually has registered
  * (independent of what the gateway DB thinks).
  */
-export async function list(
-  opts: OsSchedulerOptions = {},
-): Promise<Array<{ appId: string; automationName: string; artifactPath: string }>> {
+export async function list(opts: OsSchedulerOptions = {}): Promise<Array<OsSchedulerListEntry>> {
   const platform = opts.platform ?? currentPlatform();
   const root = resolveArtifactRoot(platform, opts.artifactRoot);
   const entries = await fs.readdir(root).catch(() => []);
@@ -476,4 +499,92 @@ export async function list(
     out.push({ appId, automationName, artifactPath: path.join(root, entry) });
   }
   return out;
+}
+
+export interface OsSchedulerReconcileDesired {
+  /** The job spec the desired state wants installed. */
+  spec: OsSchedulerJobSpec;
+  /**
+   * Whether the user wants this automation firing. False → the
+   * reconcile pass removes the OS scheduler entry (there's no clean
+   * "registered but suppressed" state in launchd/systemd/Task
+   * Scheduler, so disable == unregister).
+   */
+  enabled: boolean;
+}
+
+export interface OsSchedulerReconcileResult {
+  /** Job labels newly installed. */
+  added: string[];
+  /** Job labels whose spec was re-installed (cron/runner/cwd changed). */
+  updated: string[];
+  /** Job labels removed (no longer desired, or disabled). */
+  removed: string[];
+}
+
+/**
+ * Bring the OS scheduler into agreement with `desired`. Every entry
+ * the host currently has that ISN'T in `desired` (with enabled=true)
+ * is unregistered; every desired entry that isn't installed is
+ * registered. Desired entries that are already installed are
+ * re-registered to catch schedule or runner changes that landed
+ * while the desktop was offline.
+ *
+ * Pass `scope.appId` for the per-app case (publish or deregister of
+ * one app). Without scope, the removal pass considers every installed
+ * centraid-owned entry — appropriate at startup against the full
+ * mirror, catastrophic against `listByApp(...)` because every other
+ * app's entries would look "absent from desired" and get swept.
+ *
+ * Called at local-runtime startup to absorb changes that happened
+ * outside our hot path (publishes from another machine, manual edits
+ * to the mirror, etc.). Best-effort per-entry: a failure on one
+ * entry is logged and surfaced in the returned result; the others
+ * still run.
+ */
+export async function reconcile(
+  desired: ReadonlyArray<OsSchedulerReconcileDesired>,
+  opts: OsSchedulerOptions = {},
+  scope?: { appId: string },
+): Promise<OsSchedulerReconcileResult> {
+  const installedAll = await list(opts);
+  // When scoped, the removal pass only considers entries for that app —
+  // other apps' entries are invisible to this reconcile pass.
+  const installed = scope ? installedAll.filter((e) => e.appId === scope.appId) : installedAll;
+  const installedLabels = new Set(installed.map((e) => jobLabel(e.appId, e.automationName)));
+
+  // Desired-and-enabled keyed by label so we can diff against installed.
+  // When scoped, defensively drop any cross-app rows the caller passed
+  // in by mistake — without this, a scoped reconcile could register
+  // entries for an app it wasn't supposed to touch.
+  const desiredEnabled = new Map<string, OsSchedulerJobSpec>();
+  for (const d of desired) {
+    if (!d.enabled) continue;
+    if (scope && d.spec.appId !== scope.appId) continue;
+    desiredEnabled.set(jobLabel(d.spec.appId, d.spec.automationName), d.spec);
+  }
+
+  const result: OsSchedulerReconcileResult = { added: [], updated: [], removed: [] };
+
+  for (const [label, spec] of desiredEnabled) {
+    // Always re-register — register() is idempotent and a re-register
+    // is how we pick up cron/cwd/runner drift. This is the same
+    // strategy openclaw uses (always issue cron.update when both
+    // sides have the entry).
+    await register(spec, opts);
+    if (installedLabels.has(label)) result.updated.push(label);
+    else result.added.push(label);
+  }
+
+  for (const entry of installed) {
+    const label = jobLabel(entry.appId, entry.automationName);
+    if (desiredEnabled.has(label)) continue;
+    // Either no longer desired, or desired-but-disabled — both
+    // collapse to "remove from the host" since OS schedulers have no
+    // suppressed-but-registered state.
+    await unregister(entry.appId, entry.automationName, opts);
+    result.removed.push(label);
+  }
+
+  return result;
 }

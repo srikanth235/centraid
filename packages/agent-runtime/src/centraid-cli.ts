@@ -28,7 +28,14 @@
 
 import path from 'node:path';
 import { statSync } from 'node:fs';
-import { describeOp, readOp, writeOp, SqlOpRefusal, RunQueryError } from '@centraid/runtime-core';
+import {
+  describeOp,
+  readActiveCodeDir,
+  readOp,
+  writeOp,
+  SqlOpRefusal,
+  RunQueryError,
+} from '@centraid/runtime-core';
 import { runAutomationLocal, type LocalRunnerKind } from './run-automation-local.js';
 
 function dataFile(): string {
@@ -177,10 +184,18 @@ function parseRunAutomationArgs(args: string[]): ParsedRunAutomation {
 
 async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never> {
   const appDir = process.cwd();
+  // The OS scheduler freezes `cwd` into its plist/service file at
+  // register-time, so the cron'd path is the persistent app root and
+  // must survive every subsequent publish. Resolve the active version
+  // here at fire-time so we load the manifest + handler from the
+  // currently-deployed version, not from a stale baked-in path.
+  // Falls back to `appDir` for path-registered apps (no current.json).
+  const codeDir = await readActiveCodeDir(appDir);
   try {
     const { outcome, record } = await runAutomationLocal({
       appId: parsed.appId,
       appDir,
+      codeDir,
       automationName: parsed.name,
       runner: parsed.runner,
       ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),

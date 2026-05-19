@@ -20,6 +20,7 @@ GitHub issue: [#70](https://github.com/srikanth235/centraid/issues/70)
 - [x] Deploy story: sync `automations/*.json` on publish + reconcile cron
 - [x] Cloud → Automations rail item: enable/disable + Run-now + Delete
 - [x] Unit tests across packages, typecheck clean
+- [x] Bug-fix: scope per-app reconcile so it can't sweep other apps' jobs
 
 ## What changed
 
@@ -56,6 +57,8 @@ GitHub issue: [#70](https://github.com/srikanth235/centraid/issues/70)
 **Cloud → Automations rail item: enable/disable + Run-now + Delete.** Added a new `'automations'` section to the Cloud-tab rail in `apps/desktop/src/renderer/builder.ts`, sitting between Database and SQL editor. Each automation renders as a card: name + cron expression in the header, the user's NL prompt verbatim in the body, a metadata strip (`actions/<file>`, model id, generated-by), and an actions row with an On/Off toggle, Run-now button, Delete button, and per-row result chip after a manual run. Toggle flips persist via `setAutomationEnabled` and the openclaw cron reconciler picks them up on the next sync. Run-now drives `runAutomationLocal` through IPC and shows duration / batch / agent-call counts inline. Empty state walks the user through "ask the builder…" + the manifest-drop path. Refresh button on the panel header re-fetches the mirror without leaving the tab. Styling added to `styles.css` (`.cloud-automation-*` family) mirrors the existing logs/database treatments.
 
 **Unit tests across packages, typecheck clean.** Final test run: 229 in runtime-core, 64 in agent-runtime, 21 in openclaw-plugin, 4 in chat-harness, 1 in builder-harness — 319 total, zero failures. Typecheck clean across 16 turbo packages. New test files added in this issue: `automation-manifest.test.ts`, `automation-store.test.ts`, `sync-automations.test.ts`, `mock-llm-server.test.ts`, `os-scheduler.test.ts`. Worker-thread integration testing of the automation handler runner is deferred to e2e flows — the worker boundary is hard to drive without compiled output and the dispatcher contracts are well-typed.
+
+**Bug-fix: scope per-app reconcile so it can't sweep other apps' jobs.** `AutomationHost.reconcile(desired)` was documented as a global operation but both per-app callers (`onAutomationsSynced` in `apps/desktop/src/main/local-runtime.ts` and the openclaw plugin's equivalent at `packages/openclaw-plugin/src/index.ts`) passed `automationStore.listByApp(appId)`. Both host implementations diffed `desired` against a global `list()`, so per-app desired sets made every other app's entries look "absent from desired" and got unregistered. The deregister path was worst: `runtime.ts:376-378` cleared one app's mirror rows and then fired the same callback with an empty per-app set, which under the old contract told the host "remove every centraid-owned job." The interface now takes an `opts.scope.appId`. When set, host implementations filter `list()` to the scoped app before computing removals and defensively drop cross-app rows from `desired`. Both per-app callers pass the scope; the unscoped form remains for the startup full-mirror reconcile in `openclaw-plugin/src/index.ts`. Regression coverage in `packages/agent-runtime/src/os-scheduler-host.test.ts` runs two apps with one automation each and asserts: (a) a scoped reconcile with a non-empty per-app desired set leaves the other app's entry intact, (b) a scoped reconcile with an empty desired set (the deregister case) only removes the scoped app's entry, and (c) a scoped reconcile defensively ignores `desired` rows pointed at a different app. Touches the `AutomationReconcileOptions` type, both host adapters, and the low-level `reconcile()` in `os-scheduler.ts`. agent-runtime 72/72, runtime-core 243/243, openclaw-plugin 21/21, builder-harness 1/1.
 
 ## Out of scope (per issue)
 
@@ -97,3 +100,47 @@ verify (called out per issue spike list):
 The DOM widget layer for the desktop automations panel landed in this
 PR as the new Cloud → Automations rail item — see the deploy-story /
 rail-item follow-ups above.
+
+## Follow-up — AutomationHost interface + per-app toggle SoT
+
+Refactor + bug-fix pass after the original landing. Motivation: the
+`enabled` flag had two homes (the gateway mirror's `enabled` column
+and the user's in-memory toggle state), and the local desktop had no
+register/unregister mechanism — the `centraid cron register` CLI verb
+the original receipt promised was never wired up.
+
+**What changed**
+
+- **New `AutomationHost` interface** in `packages/runtime-core/src/automation-host.ts`. Two backends now implement it: `OsSchedulerHost` (in `@centraid/agent-runtime`, wraps the existing `os-scheduler.ts` register/unregister/list/reconcile) and `OpenclawAutomationHost` (in `@centraid/openclaw-plugin`, wraps `upsertCronJob` / `removeCronJob` / `listCentraidCronJobs`). The desktop IPC and the openclaw plugin's gateway-start + sync hooks now call this interface instead of either backend's helpers directly.
+- **Toggle source-of-truth moved to per-app `data.sqlite::__centraid_settings`** under the reserved key `__automation.<name>.enabled`. The gateway mirror's `enabled` column is now a derived projection — sync re-reads from settings on every pass; `setEnabled` IPC writes to settings + mirror + host in order. This is what makes the toggle survive both publish and desktop restart (it didn't before; the mirror was being clobbered on every republish).
+- **Delete now propagates across all four surfaces**: `host.unregister`, source-project `automations/<name>.json` removal, settings key clear, mirror row drop. The action handler at `actions/<name>.js` is intentionally left alone — it may be useful as a standalone script or referenced by a different automation.
+- **`readActiveCodeDir(appDir)`** helper added to `app-paths.ts` and exported from runtime-core. Reads `current.json`, returns the versioned subdir, falls back to `appDir` for path-registered apps. Two callers: desktop's Run-now IPC and the CLI's `run-automation` subcommand (which is fired by the OS scheduler with `cwd = persistent app root`, frozen at register-time, and re-resolves the active version on each fire). This unblocks the "publish changes the version dir path; OS scheduler cron must not break" requirement.
+- **`os-scheduler.ts` gained `reconcile()`** — the docstring originally promised it but it was never shipped. Diffs desired (enabled-and-present) against installed by `jobLabel`; force-replaces present entries (via bootout+bootstrap on macOS) so re-reconciles don't trip on macOS Ventura+'s `5: Input/output error` quirk when bootstrapping an already-loaded service.
+- **Startup reconcile** added to local-runtime's bootstrap: `automationHost.reconcile(automationStore.listAll())` fire-and-forget so a slow shell-out doesn't block runtime start. Same hook in openclaw-plugin's `gateway_start` was already there but now goes through the host.
+- **`onAutomationsSynced` per-app reconcile**: after each publish, both backends now reconcile only the just-published app's rows (`store.listByApp(appId)`), not the global set. Strictly more efficient; same correctness.
+- **Bugs surfaced + fixed along the way**:
+  - Cloned templates' automations weren't synced to the mirror until first publish — the clone path called `cloneTemplate()` but never `syncAutomationsFromDisk()`. Settings → Automations appeared empty for new clones.
+  - `handleAppUpload` was syncing from `result.extractedDir`, which `versions.commit` had already renamed into `<entry.path>/versions/<versionId>/`. The stale path returned ENOENT → empty file list → sync removed the row clone had just written. Fixed by computing `committedDir` from `entry.path + versionId`.
+  - Run-now resolved manifest from `<appDir>/automations/<name>.json` — flat layout. After publish, manifests live in the versioned subdir. Added `codeDir` parameter to `runAutomationLocal` (defaults to `appDir` for the CLI-from-project-dir path), desktop resolves via `readActiveCodeDir`.
+  - `AUTOMATIONS_README` content and `clone.ts` comment block framed `automations/` as "a drop target the agent will fill later," obscuring that bundled templates routinely ship real manifests. Rewrote both.
+
+**Test coverage**
+
+- 9 new app-settings tests (round-trip / create-on-demand / overwrite / delete / automation key shape).
+- 4 new `readActiveCodeDir` tests.
+- 1 new sync test for "default enabled when dataDbFile omitted (clone-time, no DB yet)" and one updated for "preserve via __centraid_settings."
+- 6 new `OsSchedulerHost` tests (register/unregister/list/reconcile + disabled-row collapse to unregister).
+
+Totals after follow-up: runtime-core 243, agent-runtime 70, openclaw-plugin 21, builder-harness 1. Typecheck 16/16.
+
+**Verified end-to-end in the desktop**
+
+- Toggle off in App settings → Standing Orders → mirror=0, `__centraid_settings.__automation.daily-digest.enabled=false`, launchd plist removed.
+- Restart desktop → toggle persists off. Restart again, toggle back on → all three layers flip back, plist re-created.
+- Delete (verified programmatically — UI Edit button intermittent on this build): source manifest removed, mirror row gone, settings key cleared, launchd plist removed.
+
+**Not done in this slice (intentional)**
+
+- No `centraid cron list/sync` CLI verbs yet. The OS scheduler is wired through the desktop IPC; CLI exposure is a separate question.
+- `OsSchedulerJobSpec.centraidBin` points at `defaultCentraidCliDir()/centraid-cli.js`, which is the dist `.js` file (not the `+x` symlinked bin). For packaged Electron installs the launchd plist may need the executable bit set on the target file; this works in dev. A follow-up should validate the packaged-binary path.
+
