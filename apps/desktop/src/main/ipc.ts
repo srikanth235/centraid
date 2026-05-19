@@ -20,6 +20,7 @@ import {
 } from './auth-import.js';
 import {
   localRuntimeAppsDir,
+  localRuntimeAutomationHost,
   localRuntimeCodexHomeBaseDir,
   localRuntimeGatewayDb,
   noteRunnerPrefsChanged,
@@ -33,7 +34,12 @@ import {
 } from '@centraid/agent-runtime';
 import {
   AutomationStore,
+  automationEnabledKey,
+  deleteAppSetting,
   makeGatewayDbProvider,
+  readActiveCodeDir,
+  syncAutomationsFromDisk,
+  writeAppSetting,
   type AutomationRow,
   type RunnerStatus,
 } from '@centraid/runtime-core';
@@ -510,6 +516,25 @@ export function registerIpcHandlers(): void {
         newDesc: tmpl.desc,
       });
 
+      // Templates can ship automation manifests (`automations/*.json`).
+      // The publish path syncs them into the per-gateway mirror via
+      // `handleAppUpload`, but a fresh clone is a draft that hasn't been
+      // uploaded yet — so without this call the cloned app's
+      // Settings → Automations panel would appear empty until first
+      // publish. Sync is idempotent and a no-op for templates that
+      // ship no manifests.
+      //
+      // `dataDbFile` points at the eventual `data.sqlite` location
+      // even though it doesn't exist yet at clone time — sync's read
+      // returns undefined and every automation defaults to enabled,
+      // which is the right initial state for freshly-cloned templates.
+      await syncAutomationsFromDisk({
+        appId: newAppId,
+        appCodeDir: project.dir,
+        store: getAutomationStore(),
+        dataDbFile: path.join(localRuntimeAppsDir(), newAppId, 'data.sqlite'),
+      });
+
       // Cloning only lays the project down on disk as a draft. The user
       // edits/previews in the builder and explicitly clicks Publish to
       // upload to the gateway (Channel.PUBLISH).
@@ -562,10 +587,16 @@ export function registerIpcHandlers(): void {
       agentCalls: number;
     }> => {
       const appDir = path.join(localRuntimeAppsDir(), input.appId);
+      // Code (manifest + handler) lives in the active version's subdir
+      // after publish; data.sqlite + scratch live at the persistent app
+      // root. The CLI's `run-automation` path does the same resolution
+      // when fired by the OS scheduler.
+      const codeDir = await readActiveCodeDir(appDir);
       const prefs = await loadRunnerPrefs();
       const { outcome, record } = await runAutomationLocal({
         appId: input.appId,
         appDir,
+        codeDir,
         automationName: input.name,
         runner: prefs.kind,
       });
@@ -582,12 +613,76 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_SET_ENABLED,
     async (_e, input: { appId: string; name: string; enabled: boolean }) => {
-      getAutomationStore().setEnabled(input.appId, input.name, input.enabled);
+      // Source of truth: the app's data.sqlite __centraid_settings.
+      // Mirror is a derived projection; we update it eagerly so the
+      // UI list reflects the toggle without waiting for a sync. Host
+      // gets register(row) — OsSchedulerHost collapses
+      // enabled=false to unregister so launchd/systemd/Task
+      // Scheduler don't keep a suppressed-but-installed entry.
+      const dataDbFile = path.join(localRuntimeAppsDir(), input.appId, 'data.sqlite');
+      writeAppSetting(dataDbFile, automationEnabledKey(input.name), input.enabled);
+      const store = getAutomationStore();
+      store.setEnabled(input.appId, input.name, input.enabled);
+      const row = store.get(input.appId, input.name);
+      if (row) {
+        try {
+          await localRuntimeAutomationHost().register(row);
+        } catch (err) {
+          console.warn(
+            `[automations] host register failed for ${input.appId}/${input.name}: ` +
+              (err instanceof Error ? err.message : String(err)),
+          );
+        }
+      }
       return { ok: true };
     },
   );
 
   ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { appId: string; name: string }) => {
+    // Delete is best-effort across four surfaces; we proceed past
+    // individual failures because a stale entry on any one of them
+    // is recoverable but a half-deleted state with no UI affordance
+    // is worse.
+    //
+    //   1. OS scheduler: tear down the launchd/systemd/Task entry.
+    //   2. Source project: remove the manifest from
+    //      `<projectsDir>/<appId>/automations/<name>.json` so the
+    //      next publish doesn't reintroduce it. The action handler
+    //      at `actions/<name>.js` is intentionally left alone — it
+    //      may be useful as a standalone script or referenced by a
+    //      different automation; the builder agent can prune it
+    //      explicitly if the user asks.
+    //   3. Per-app settings: clear the toggle key so a future
+    //      republish doesn't inherit a stale value if the user
+    //      re-creates an automation under the same name.
+    //   4. Mirror: drop the row so the UI hides it immediately.
+    try {
+      await localRuntimeAutomationHost().unregister(input.appId, input.name);
+    } catch (err) {
+      console.warn(
+        `[automations] host unregister failed for ${input.appId}/${input.name}: ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
+    }
+    try {
+      const settings = await loadSettings();
+      const manifestPath = path.join(
+        settings.projectsDir,
+        input.appId,
+        'automations',
+        `${input.name}.json`,
+      );
+      await fs.rm(manifestPath, { force: true });
+    } catch (err) {
+      console.warn(
+        `[automations] manifest rm failed for ${input.appId}/${input.name}: ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
+    }
+    deleteAppSetting(
+      path.join(localRuntimeAppsDir(), input.appId, 'data.sqlite'),
+      automationEnabledKey(input.name),
+    );
     getAutomationStore().remove(input.appId, input.name);
     return { ok: true };
   });

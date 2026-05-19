@@ -175,9 +175,21 @@ export type SpawnCli = typeof defaultSpawnCli;
 export interface RunAutomationLocalOptions {
   /** App id (folder name under the projects dir). */
   appId: string;
-  /** Absolute path to the app directory (data.sqlite + actions/ + automations/ live here). */
+  /**
+   * Absolute path to the app's *data* directory — where `data.sqlite`,
+   * the scratch folder, and CLI cwd live. For uploaded apps this is the
+   * persistent root that survives version swaps; for path-registered apps
+   * (centraid CLI run from a project root) it's just the project dir.
+   */
   appDir: string;
-  /** Automation name. The manifest is loaded from `<appDir>/automations/<name>.json`. */
+  /**
+   * Absolute path to the app's *code* directory — where `automations/`
+   * and `actions/` live. For uploaded apps this is the active version's
+   * subdir (`<appDir>/versions/<activeVersion>/`); for path-registered
+   * apps it's the same as `appDir`. Defaults to `appDir` when omitted.
+   */
+  codeDir?: string;
+  /** Automation name. The manifest is loaded from `<codeDir>/automations/<name>.json`. */
   automationName: string;
   /** Which CLI to drive. Defaults to codex. */
   runner?: LocalRunnerKind;
@@ -244,7 +256,8 @@ export async function runAutomationLocal(
   const runId = `${opts.appId}:${opts.automationName}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
 
-  const manifestPath = path.join(opts.appDir, 'automations', `${opts.automationName}.json`);
+  const codeDir = opts.codeDir ?? opts.appDir;
+  const manifestPath = path.join(codeDir, 'automations', `${opts.automationName}.json`);
   let manifest: AutomationManifest;
   try {
     const raw = await fs.readFile(manifestPath, 'utf8');
@@ -256,7 +269,7 @@ export async function runAutomationLocal(
     );
   }
 
-  const handlerFile = path.join(opts.appDir, 'actions', manifest.action);
+  const handlerFile = path.join(codeDir, 'actions', manifest.action);
   await fs.access(handlerFile).catch(() => {
     throw new Error(
       `automation ${opts.appId}/${opts.automationName}: handler ${handlerFile} not found — re-run the builder to regenerate it`,

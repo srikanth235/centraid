@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import type { RegistryEntry } from './types.js';
 
 /**
@@ -34,6 +35,36 @@ export function appCodeDir(entry: RegistryEntry, activeVersion?: string): string
     return path.join(entry.path, 'versions', activeVersion);
   }
   return entry.path;
+}
+
+/**
+ * Resolve an uploaded app's active code dir from disk, given only the
+ * persistent app root. Reads `<appDir>/current.json`, finds the
+ * `activeVersion`, and returns `<appDir>/versions/<activeVersion>/`.
+ *
+ * Falls back to `appDir` itself when `current.json` is missing or has
+ * no active version — that covers path-registered apps (flat layout)
+ * and dev-project layouts the centraid CLI is run inside.
+ *
+ * Used by callers that have the persistent root in hand but need the
+ * code root (handlers + automation manifests live there). Two
+ * concrete callers today:
+ *   - the desktop's Run-now IPC (renderer triggers immediate fire)
+ *   - the centraid CLI's `run-automation` subcommand (fires under the
+ *     OS scheduler, whose `cwd` is frozen to the persistent root at
+ *     register time and must not change across publishes)
+ */
+export async function readActiveCodeDir(appDir: string): Promise<string> {
+  try {
+    const raw = await fs.readFile(path.join(appDir, 'current.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { activeVersion?: unknown };
+    if (typeof parsed.activeVersion === 'string' && parsed.activeVersion.length > 0) {
+      return path.join(appDir, 'versions', parsed.activeVersion);
+    }
+  } catch {
+    // Missing/unreadable current.json — flat layout (path-registered or dev).
+  }
+  return appDir;
 }
 
 export class AppPathError extends Error {

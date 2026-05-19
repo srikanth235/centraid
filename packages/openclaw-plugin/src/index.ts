@@ -30,7 +30,7 @@ import {
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
 import { registerAutomationsProvider, setOpenClawConfig } from './lib/automations-provider.js';
-import { reconcileAutomationCron } from './lib/automations-cron.js';
+import { OpenclawAutomationHost } from './lib/automation-host.js';
 
 // Re-export the public handler & payload types from runtime-core so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -98,6 +98,12 @@ export default definePluginEntry({
 
     const chatRunner = makeOpenClawChatRunner(api);
 
+    // Openclaw cron host. Same `AutomationHost` shape the desktop's
+    // OS scheduler implements; centralizes register / unregister /
+    // reconcile so callers don't speak `cron.add` / `cron.update`
+    // directly.
+    const automationHost = new OpenclawAutomationHost();
+
     const runtime = new Runtime({
       appsDir,
       versionRetention,
@@ -108,16 +114,17 @@ export default definePluginEntry({
       automationStore,
       // After every successful publish, sync runs against the new
       // version's `automations/` (handled inside `handleAppUpload`).
-      // Once the mirror is updated, fire the cron reconciler so
-      // openclaw's cron store catches up immediately — without this
-      // the user would have to restart the gateway to see schedule
-      // changes take effect.
+      // Once the mirror is updated, reconcile the host against the
+      // mirror so openclaw's cron store catches up immediately —
+      // without this the user would have to restart the gateway to
+      // see schedule changes take effect. Per-app reconcile only:
+      // sync touches one app at a time, no reason to scan everything.
       onAutomationsSynced: async (appId, result) => {
         api.logger.info(
           `[centraid] automations synced for "${appId}": +${result.added.length} ~${result.updated.length} -${result.removed.length}`,
         );
         try {
-          await reconcileAutomationCron(automationStore);
+          await automationHost.reconcile(automationStore.listByApp(appId));
         } catch (err) {
           api.logger.warn(
             `[centraid] cron reconcile after sync failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -154,7 +161,7 @@ export default definePluginEntry({
       // network / SDK errors so a transient cron-store hiccup doesn't
       // prevent the plugin from booting.
       try {
-        const outcome = await reconcileAutomationCron(automationStore);
+        const outcome = await automationHost.reconcile(automationStore.listAll());
         if (outcome.added.length + outcome.updated.length + outcome.removed.length > 0) {
           api.logger.info(
             `[centraid] automations reconciled: +${outcome.added.length} ~${outcome.updated.length} -${outcome.removed.length}`,

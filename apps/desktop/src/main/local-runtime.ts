@@ -8,12 +8,15 @@ import {
   UserStore,
   makeGatewayDbProvider,
   startRuntimeHttpServer,
+  type AutomationHost,
   type RuntimeHttpServerHandle,
 } from '@centraid/runtime-core';
 import {
+  defaultCentraidCliDir,
   makeChatRunner,
   runPreflight,
   invalidatePreflightCache,
+  OsSchedulerHost,
   type RunnerPrefs,
   type OpenAICompatProvider,
 } from '@centraid/agent-runtime';
@@ -60,6 +63,34 @@ export function localRuntimeCodexHomeBaseDir(): string {
  */
 export function localRuntimeGatewayDb(): string {
   return path.join(app.getPath('userData'), 'local-runtime', 'centraid-gateway.sqlite');
+}
+
+/**
+ * Singleton OS-scheduler-backed AutomationHost for the local runtime.
+ *
+ * Lazy: built on first read so we don't shell out to the OS scheduler
+ * before anyone actually toggled an automation. The host writes
+ * launchd plists / systemd timers / Task Scheduler tasks with
+ * `cwd = localRuntimeAppsDir()/<appId>` (the persistent app root that
+ * survives publishes — the CLI's `run-automation` re-resolves the
+ * active version inside it on each fire).
+ *
+ * `centraidBin` points at the bundled CLI script. The script ships
+ * with the agent-runtime dist; we resolve via `defaultCentraidCliDir`
+ * to stay agnostic to electron-builder unpacking layout. Caller is
+ * expected to ensure the file is executable (see CLI install hooks).
+ */
+let _automationHost: AutomationHost | undefined;
+export function localRuntimeAutomationHost(): AutomationHost {
+  if (_automationHost) return _automationHost;
+  _automationHost = new OsSchedulerHost({
+    resolveAppDir: (appId) => path.join(localRuntimeAppsDir(), appId),
+    centraidBin: path.join(defaultCentraidCliDir(), 'centraid-cli.js'),
+    // Match the chat-runner default; toggling per-automation runner
+    // isn't surfaced in the UI today.
+    runner: 'codex',
+  });
+  return _automationHost;
 }
 
 export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
@@ -127,18 +158,32 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       codexHomeBaseDir: localRuntimeCodexHomeBaseDir(),
     });
 
+    // OS-scheduler host (launchd / systemd / Task Scheduler). Same
+    // shape as openclaw's cron host in remote mode — see
+    // `OsSchedulerHost` and `AutomationHost`. Built once, shared with
+    // the IPC handlers via the `localRuntimeAutomationHost()` accessor.
+    const automationHost = localRuntimeAutomationHost();
+
     const runtime = new Runtime({
       appsDir,
       userStore,
       chatHistoryStore,
       chatRunner,
       automationStore,
-      // The local-runtime has no openclaw cron; the OS scheduler
-      // (launchd / systemd / Task Scheduler) is the host. We don't
-      // re-register here on every sync — the user wires the OS
-      // scheduler explicitly via the centraid CLI's `cron register`
-      // path. The sync still keeps the mirror current so the desktop
-      // UI lists the deployed automations and `Run now` finds them.
+      // On every publish that lands new/changed/removed automation
+      // manifests, reconcile the OS scheduler so its installed
+      // entries match the just-synced mirror state. Per-app
+      // reconcile is enough — sync only touches one app at a time.
+      onAutomationsSynced: async (appId) => {
+        try {
+          await automationHost.reconcile(automationStore.listByApp(appId));
+        } catch (err) {
+          console.warn(
+            `[local-runtime] OS scheduler reconcile failed for "${appId}": ` +
+              (err instanceof Error ? err.message : String(err)),
+          );
+        }
+      },
       runnerStatus: async () => {
         const prefs = await prefsLoader();
         if (!prefs) {
@@ -161,6 +206,27 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     runtimeRef = runtime;
     const server = await startRuntimeHttpServer({ runtime });
     await runtime.bootstrap();
+
+    // Startup reconcile: catch up the OS scheduler on anything that
+    // changed while the desktop was closed (publishes from elsewhere,
+    // a stale plist orphaned by an uninstall, etc.). Fire-and-forget
+    // so a slow scheduler shell-out doesn't block runtime start.
+    void automationHost
+      .reconcile(automationStore.listAll())
+      .then((diff) => {
+        if (diff.added.length || diff.updated.length || diff.removed.length) {
+          console.info(
+            `[local-runtime] OS scheduler startup reconcile — ` +
+              `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
+          );
+        }
+      })
+      .catch((err) =>
+        console.warn(
+          `[local-runtime] OS scheduler startup reconcile failed: ` +
+            (err instanceof Error ? err.message : String(err)),
+        ),
+      );
 
     handle = server;
     return handle;

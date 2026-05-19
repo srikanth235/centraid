@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { mkdtempSync, promises as fs } from 'node:fs';
 import path from 'node:path';
+import { writeAppSetting, automationEnabledKey } from './app-settings.js';
 import { makeGatewayDbProvider } from './gateway-db.js';
 import { AutomationStore } from './automation-store.js';
 import { syncAutomationsFromDisk } from './sync-automations.js';
@@ -10,15 +11,18 @@ import type { AutomationManifest } from './automation-manifest.js';
 
 function setup(): {
   appDir: string;
+  dataDbFile: string;
   store: AutomationStore;
   writeManifest: (name: string, manifest: AutomationManifest) => Promise<void>;
   writeRaw: (name: string, text: string) => Promise<void>;
 } {
   const root = mkdtempSync(path.join(tmpdir(), 'centraid-sync-auto-'));
   const appDir = path.join(root, 'app');
+  const dataDbFile = path.join(root, 'data.sqlite');
   const store = new AutomationStore(makeGatewayDbProvider(path.join(root, 'gateway.sqlite')));
   return {
     appDir,
+    dataDbFile,
     store,
     writeManifest: async (name, manifest) => {
       await fs.mkdir(path.join(appDir, 'automations'), { recursive: true });
@@ -65,15 +69,17 @@ describe('syncAutomationsFromDisk', () => {
     assert.equal(row?.manifest.action, 'weekly-recap.js');
   });
 
-  it('preserves the enabled flag across re-sync', async () => {
+  it('preserves the enabled flag across re-sync (reads from __centraid_settings)', async () => {
     const ctx = setup();
     await ctx.writeManifest('weekly-recap', baseManifest);
     await syncAutomationsFromDisk({
       appId: 'journal',
       appCodeDir: ctx.appDir,
       store: ctx.store,
+      dataDbFile: ctx.dataDbFile,
     });
-    ctx.store.setEnabled('journal', 'weekly-recap', false);
+    // User toggles off via the new source of truth (per-app settings).
+    writeAppSetting(ctx.dataDbFile, automationEnabledKey('weekly-recap'), false);
 
     // Change the schedule on disk to force an update.
     await ctx.writeManifest('weekly-recap', { ...baseManifest, schedule: '0 21 * * 0' });
@@ -81,11 +87,24 @@ describe('syncAutomationsFromDisk', () => {
       appId: 'journal',
       appCodeDir: ctx.appDir,
       store: ctx.store,
+      dataDbFile: ctx.dataDbFile,
     });
     assert.deepEqual(r.updated, ['weekly-recap']);
     const row = ctx.store.get('journal', 'weekly-recap');
     assert.equal(row?.enabled, false, 'enabled toggle must survive resync');
     assert.equal(row?.cronExpr, '0 21 * * 0');
+  });
+
+  it('defaults enabled=true when dataDbFile is omitted (clone-time, no DB yet)', async () => {
+    const ctx = setup();
+    await ctx.writeManifest('weekly-recap', baseManifest);
+    await syncAutomationsFromDisk({
+      appId: 'journal',
+      appCodeDir: ctx.appDir,
+      store: ctx.store,
+      // no dataDbFile — fresh clone before publish
+    });
+    assert.equal(ctx.store.get('journal', 'weekly-recap')?.enabled, true);
   });
 
   it('removes rows whose on-disk manifest disappeared', async () => {

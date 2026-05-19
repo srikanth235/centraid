@@ -28,6 +28,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { automationEnabledKey, readAppSetting } from './app-settings.js';
 import {
   AutomationManifestError,
   parseManifest,
@@ -42,6 +43,15 @@ export interface SyncAutomationsOptions {
   appCodeDir: string;
   /** Mirror store to write into. */
   store: AutomationStore;
+  /**
+   * Path to the app's `data.sqlite` — used to read user-set toggle
+   * state from `__centraid_settings` (the source of truth for
+   * `enabled`). Optional: when omitted (or the file doesn't exist
+   * yet — common at clone time before first publish), every
+   * automation defaults to enabled. The mirror's `enabled` column is
+   * a derived projection of this; never read it back as authoritative.
+   */
+  dataDbFile?: string;
 }
 
 export interface SyncAutomationError {
@@ -77,7 +87,7 @@ export interface SyncAutomationsResult {
 export async function syncAutomationsFromDisk(
   opts: SyncAutomationsOptions,
 ): Promise<SyncAutomationsResult> {
-  const { appId, appCodeDir, store } = opts;
+  const { appId, appCodeDir, store, dataDbFile } = opts;
   const automationsDir = path.join(appCodeDir, 'automations');
 
   const result: SyncAutomationsResult = {
@@ -107,10 +117,11 @@ export async function syncAutomationsFromDisk(
     }
 
     const prev = existingByName.get(name);
-    // Preserve the user's enable/disable toggle across republish. New
-    // manifests default to enabled so an automation the agent just
-    // scaffolded runs without an extra confirm step.
-    const enabled = prev ? prev.enabled : true;
+    // Source of truth for the toggle is the app's `data.sqlite`
+    // `__centraid_settings.__automation.<name>.enabled` row. Missing
+    // (no DB yet, or user hasn't flipped the toggle) means enabled —
+    // the agent scaffolded it, the user hasn't opted out, so it runs.
+    const enabled = readEnabledFlag(dataDbFile, name);
 
     if (prev && manifestEquals(prev.manifest, manifest) && prev.enabled === enabled) {
       result.unchanged.push(name);
@@ -161,6 +172,20 @@ function toSyncError(file: string, err: unknown): SyncAutomationError {
  */
 function manifestEquals(a: AutomationManifest, b: AutomationManifest): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Read the user-set enable flag for one automation from the app's
+ * `__centraid_settings` row. `undefined` → defaults to enabled (the
+ * agent just scaffolded it; user hasn't opted out). Non-boolean
+ * values (corrupt setting) → also default enabled, since refusing to
+ * run on a malformed row is worse than running by default.
+ */
+function readEnabledFlag(dataDbFile: string | undefined, name: string): boolean {
+  if (!dataDbFile) return true;
+  const raw = readAppSetting(dataDbFile, automationEnabledKey(name));
+  if (typeof raw === 'boolean') return raw;
+  return true;
 }
 
 /** Re-export so a host receiving a sync result has the row type to hand. */
