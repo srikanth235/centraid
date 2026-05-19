@@ -105,6 +105,25 @@ export default definePluginEntry({
       logger: api.logger,
       chatRunner,
       runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
+      automationStore,
+      // After every successful publish, sync runs against the new
+      // version's `automations/` (handled inside `handleAppUpload`).
+      // Once the mirror is updated, fire the cron reconciler so
+      // openclaw's cron store catches up immediately — without this
+      // the user would have to restart the gateway to see schedule
+      // changes take effect.
+      onAutomationsSynced: async (appId, result) => {
+        api.logger.info(
+          `[centraid] automations synced for "${appId}": +${result.added.length} ~${result.updated.length} -${result.removed.length}`,
+        );
+        try {
+          await reconcileAutomationCron(automationStore);
+        } catch (err) {
+          api.logger.warn(
+            `[centraid] cron reconcile after sync failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      },
     });
 
     // Register the centraid-mock provider plugin. The provider's

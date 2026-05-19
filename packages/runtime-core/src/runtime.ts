@@ -23,6 +23,8 @@ import { buildSettingsInject } from './settings-merge.js';
 import { handleChatRoute, parseChatSubRoute } from './chat-routes.js';
 import type { ChatRunner } from './chat-runner.js';
 import type { AppRef, RegistryEntry } from './types.js';
+import type { AutomationStore } from './automation-store.js';
+import type { SyncAutomationsResult } from './sync-automations.js';
 
 export interface RuntimeLogger {
   info(message: string): void;
@@ -86,6 +88,23 @@ export interface RuntimeOptions {
    * instead of failing per-turn when the CLI is missing or unauthenticated.
    */
   runnerStatus?: () => Promise<RunnerStatus>;
+  /**
+   * Optional mirror table for centraid automations (issue #70). When
+   * provided, `handleAppUpload` syncs the just-extracted version's
+   * `automations/*.json` into the mirror so the desktop UI + the host
+   * scheduler reconciler see the latest deployed set. Without it, the
+   * runtime skips the sync step — useful for tests and standalone
+   * single-app setups that don't run automations.
+   */
+  automationStore?: AutomationStore;
+  /**
+   * Optional callback fired after every successful automation sync.
+   * Hosts wire their scheduler reconciler here: the openclaw plugin
+   * calls `reconcileAutomationCron`, the desktop's local runtime
+   * re-registers OS scheduler jobs. Fires only when the sync produced
+   * changes (added / updated / removed non-empty).
+   */
+  onAutomationsSynced?: (appId: string, result: SyncAutomationsResult) => void | Promise<void>;
 }
 
 /**
@@ -185,6 +204,11 @@ export class Runtime {
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
   private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
+  private readonly automationStore?: AutomationStore;
+  private readonly onAutomationsSynced?: (
+    appId: string,
+    result: SyncAutomationsResult,
+  ) => void | Promise<void>;
 
   constructor(opts: RuntimeOptions) {
     this.appsDir = opts.appsDir;
@@ -199,6 +223,8 @@ export class Runtime {
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
     this.withAppUploadLock = makeAppUploadLocks();
+    if (opts.automationStore) this.automationStore = opts.automationStore;
+    if (opts.onAutomationsSynced) this.onAutomationsSynced = opts.onAutomationsSynced;
   }
 
   /**
@@ -274,6 +300,9 @@ export class Runtime {
       withAppUploadLock: this.withAppUploadLock,
       resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
       emitForApp: (appId: string) => this.emitForApp(appId, 'handler'),
+      ...(this.automationStore ? { automationStore: this.automationStore } : {}),
+      ...(this.onAutomationsSynced ? { onAutomationsSynced: this.onAutomationsSynced } : {}),
+      logger: this.logger,
     };
   }
 
@@ -339,6 +368,27 @@ export class Runtime {
             return;
           }
           await cleanupDeregisteredApp(this.appsDir, removed, this.logger);
+          // Drop any mirror rows so the host scheduler reconciler can
+          // sweep the now-orphan cron entries. Fire-and-log on failure —
+          // we don't want a store glitch to fail the deregister.
+          if (this.automationStore) {
+            try {
+              this.automationStore.removeByApp(route.appId);
+              if (this.onAutomationsSynced) {
+                await this.onAutomationsSynced(route.appId, {
+                  added: [],
+                  updated: [],
+                  removed: [],
+                  unchanged: [],
+                  errors: [],
+                });
+              }
+            } catch (err) {
+              this.logger.warn(
+                `[centraid] failed to clean automations for "${route.appId}": ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }
           sendJson(res, 200, { id: route.appId });
           return;
         }

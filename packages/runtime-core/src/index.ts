@@ -187,6 +187,17 @@ export {
 // list/UI and the reconciliation pass.
 export { AutomationStore, type AutomationRow } from './automation-store.js';
 
+// Deploy boundary for automations: scan an app's `automations/*.json`
+// and bring the mirror into agreement. Called by `handleAppUpload`
+// after a publish lands; hosts can also call directly for out-of-band
+// syncs (tests, manual refresh).
+export {
+  syncAutomationsFromDisk,
+  type SyncAutomationsOptions,
+  type SyncAutomationsResult,
+  type SyncAutomationError,
+} from './sync-automations.js';
+
 // Worker-isolated automation handler runner. Hosts provide
 // `toolDispatcher` + `agentDispatcher` to wire the worker boundary into
 // either the local-side mock-LLM + CLI subprocess flow (@centraid/agent-runtime)

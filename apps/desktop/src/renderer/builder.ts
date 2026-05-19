@@ -80,6 +80,8 @@
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 9 12 5 16"/><line x1="13" y1="16" x2="19" y2="16"/></svg>`;
   const LogsIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>`;
+  const AutomationsIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>`;
   // Tool-group icons. Bolt = activity glyph on the consolidated pill;
   // ChevronDownIcon = expand/collapse affordance (rotates 180° when open).
   const BoltIcon = (size = 13): string =>
@@ -1369,9 +1371,10 @@
 
         // Split root-level entries into Frontend (everything the app
         // template ships to the iframe) and Backend (reserved folders
-        // that the gateway runs server-side: actions, queries, etc.).
-        // Sub-items inside each group keep the existing recursive walk.
-        const BACKEND_DIRS = new Set(['actions', 'queries', 'migrations']);
+        // that the gateway runs server-side: actions, queries,
+        // migrations, automations). Sub-items inside each group keep
+        // the existing recursive walk.
+        const BACKEND_DIRS = new Set(['actions', 'queries', 'migrations', 'automations']);
         const backend = visible.filter((n) => n.kind === 'folder' && BACKEND_DIRS.has(n.name));
         const frontend = visible.filter((n) => !backend.includes(n));
 
@@ -1411,6 +1414,7 @@
       type CloudSection =
         | 'overview'
         | 'database'
+        | 'automations'
         | 'users'
         | 'storage'
         | 'secrets'
@@ -1420,6 +1424,7 @@
       const sections: [CloudSection, string, (n?: number) => string, boolean][] = [
         ['overview', 'Overview', CloudOverviewIcon, true],
         ['database', 'Database', DatabaseIcon, true],
+        ['automations', 'Automations', AutomationsIcon, true],
         ['sql', 'SQL editor', SqlIcon, true],
         ['logs', 'Logs', LogsIcon, true],
         ['users', 'Users', UsersIcon, false],
@@ -1471,6 +1476,21 @@
       let logsError: string | undefined;
       let logsLevelFilter: CentraidLogLevel | 'all' = 'all';
       let logsSearch = '';
+
+      // Automations state (issue #70). Read from the per-gateway mirror
+      // table; rebuilds entirely on each refresh + after every UI mutation
+      // (toggle, delete, run-now) so the panel always reflects what the
+      // host scheduler is about to fire.
+      let automationsCache: CentraidAutomationRow[] | undefined | 'pending' | 'error';
+      let automationsError: string | undefined;
+      // Per-row run state so the spinner + last-result chip survive a
+      // re-render. Keyed by automation name.
+      const automationRunState = new Map<
+        string,
+        | { kind: 'idle' }
+        | { kind: 'running' }
+        | { kind: 'done'; result: CentraidAutomationRunResult; finishedAt: number }
+      >();
       // Uses the hoisted `cloudLogsPoll` + `stopCloudLogsPoll` so renderRight
       // (which tears down the right pane on tab switch) can clear it.
       const stopLogsPolling = stopCloudLogsPoll;
@@ -1566,7 +1586,9 @@
                 ? 'Run SQL against your live app database. One statement at a time.'
                 : active === 'logs'
                   ? 'Recent log lines from query and action handlers.'
-                  : 'View and manage the data stored in your app.';
+                  : active === 'automations'
+                    ? 'Cron-scheduled actions registered for this app. Toggle, run now, or remove them.'
+                    : 'View and manage the data stored in your app.';
 
         const head = el('div', { class: 'cloud-stage-head' });
         const headLeft = el('div', {});
@@ -1591,6 +1613,15 @@
           });
           refreshBtn.innerHTML = `${RefreshIcon(13)}<span>Refresh</span>`;
           head.append(refreshBtn);
+        } else if (active === 'automations') {
+          const refreshBtn = el('button', {
+            'aria-label': 'Refresh automations',
+            class: 'btn btn-ghost cloud-refresh-btn',
+            title: 'Refresh automations',
+            onClick: () => void refreshAutomations(),
+          });
+          refreshBtn.innerHTML = `${RefreshIcon(13)}<span>Refresh</span>`;
+          head.append(refreshBtn);
         }
         stage.append(head);
 
@@ -1602,6 +1633,8 @@
           drawSqlEditor();
         } else if (active === 'logs') {
           drawLogs();
+        } else if (active === 'automations') {
+          drawAutomations();
         } else {
           const empty = el('div', { class: 'cloud-empty' });
           empty.textContent =
@@ -2305,6 +2338,219 @@
 
       function pad2(n: number): string {
         return n < 10 ? `0${n}` : String(n);
+      }
+
+      function drawAutomations(): void {
+        if (!projectId) {
+          stage.append(el('div', { class: 'cloud-empty' }, 'No project yet.'));
+          return;
+        }
+
+        const wrap = el('div', { class: 'cloud-automations' });
+
+        if (automationsCache === undefined || automationsCache === 'pending') {
+          wrap.append(
+            el('div', { class: 'cloud-empty cloud-empty-quiet' }, 'Loading automations…'),
+          );
+          stage.append(wrap);
+          if (automationsCache === undefined) void refreshAutomations();
+          return;
+        }
+
+        if (automationsCache === 'error') {
+          const e = el('div', { class: 'cloud-empty' });
+          e.innerHTML = `Could not load automations.<br><span class="cloud-stat-sub">${escapeHtml(automationsError ?? 'unknown error')}</span>`;
+          wrap.append(e);
+          stage.append(wrap);
+          return;
+        }
+
+        if (automationsCache.length === 0) {
+          const e = el('div', { class: 'cloud-empty' });
+          e.innerHTML = `No automations yet.<br><span class="cloud-stat-sub">Ask the builder to "set up an automation that runs every…" or drop a manifest into the project's <code>automations/</code> folder, then republish to deploy.</span>`;
+          wrap.append(e);
+          stage.append(wrap);
+          return;
+        }
+
+        for (const row of automationsCache) {
+          wrap.append(renderAutomationRow(row));
+        }
+
+        stage.append(wrap);
+      }
+
+      function renderAutomationRow(row: CentraidAutomationRow): HTMLElement {
+        const runState = automationRunState.get(row.name) ?? { kind: 'idle' };
+        const card = el('div', {
+          class: 'cloud-automation-row',
+          'data-enabled': String(row.enabled),
+        });
+
+        // Header line: name + cron expression + enabled toggle.
+        const head = el('div', { class: 'cloud-automation-head' });
+        const titleWrap = el('div', { class: 'cloud-automation-title' });
+        titleWrap.append(el('span', { class: 'cloud-automation-name' }, row.name));
+        titleWrap.append(
+          el(
+            'span',
+            { class: 'cloud-automation-cron', title: 'Cron expression (UTC)' },
+            row.cronExpr,
+          ),
+        );
+        head.append(titleWrap);
+
+        const toggleLabel = el('label', { class: 'cloud-automation-toggle' });
+        const toggle = el('input', { type: 'checkbox' }) as HTMLInputElement;
+        toggle.checked = row.enabled;
+        toggle.addEventListener('change', () => {
+          void onToggleAutomation(row, toggle);
+        });
+        toggleLabel.append(toggle);
+        toggleLabel.append(
+          el('span', { class: 'cloud-automation-toggle-text' }, row.enabled ? 'On' : 'Off'),
+        );
+        head.append(toggleLabel);
+        card.append(head);
+
+        // Prompt body (the user's NL prompt verbatim).
+        const promptEl = el('div', { class: 'cloud-automation-prompt' });
+        promptEl.textContent = row.prompt;
+        card.append(promptEl);
+
+        // Metadata strip: handler file · generated-by · model.
+        const meta = el('div', { class: 'cloud-automation-meta' });
+        meta.append(
+          el(
+            'span',
+            { class: 'cloud-automation-meta-item', title: 'Handler file under actions/' },
+            `actions/${row.manifest.action}`,
+          ),
+        );
+        if (row.manifest.requires.model) {
+          meta.append(
+            el(
+              'span',
+              { class: 'cloud-automation-meta-item', title: 'Model used by ctx.agent calls' },
+              row.manifest.requires.model,
+            ),
+          );
+        }
+        meta.append(
+          el(
+            'span',
+            { class: 'cloud-automation-meta-item cloud-automation-meta-faint' },
+            `by ${row.manifest.generated.by}`,
+          ),
+        );
+        card.append(meta);
+
+        // Action row: Run now · Delete · per-row run-result chip.
+        const actions = el('div', { class: 'cloud-automation-actions' });
+        const runBtn = el('button', {
+          class: 'btn btn-ghost cloud-automation-run',
+          disabled: runState.kind === 'running',
+          onClick: () => void onRunAutomation(row),
+        }) as HTMLButtonElement;
+        runBtn.textContent = runState.kind === 'running' ? 'Running…' : 'Run now';
+        actions.append(runBtn);
+
+        const delBtn = el('button', {
+          class: 'btn btn-ghost cloud-automation-delete',
+          onClick: () => void onDeleteAutomation(row),
+        });
+        delBtn.textContent = 'Delete';
+        actions.append(delBtn);
+
+        if (runState.kind === 'done') {
+          const chip = el('span', {
+            class: 'cloud-automation-result',
+            'data-ok': String(runState.result.ok),
+          });
+          const ms = runState.result.durationMs;
+          const summary = runState.result.ok
+            ? `OK in ${ms}ms — ${runState.result.toolBatches} tool batch${runState.result.toolBatches === 1 ? '' : 'es'}, ${runState.result.agentCalls} agent call${runState.result.agentCalls === 1 ? '' : 's'}`
+            : `FAILED in ${ms}ms — ${runState.result.error ?? 'unknown error'}`;
+          chip.textContent = summary;
+          actions.append(chip);
+        }
+        card.append(actions);
+
+        return card;
+      }
+
+      async function refreshAutomations(): Promise<void> {
+        if (!projectId) return;
+        if (automationsCache === 'pending') return;
+        const prior = automationsCache;
+        automationsCache = 'pending';
+        if (prior === undefined && active === 'automations') drawStage();
+        try {
+          automationsCache = await Api().listAutomations({ appId: projectId });
+          automationsError = undefined;
+        } catch (err) {
+          automationsCache = 'error';
+          automationsError = err instanceof Error ? err.message : String(err);
+        }
+        if (active === 'automations') drawStage();
+      }
+
+      async function onToggleAutomation(
+        row: CentraidAutomationRow,
+        checkbox: HTMLInputElement,
+      ): Promise<void> {
+        if (!projectId) return;
+        const next = checkbox.checked;
+        try {
+          await Api().setAutomationEnabled({ appId: projectId, name: row.name, enabled: next });
+          await refreshAutomations();
+        } catch (err) {
+          // Revert the toggle so the UI doesn't misrepresent persisted state.
+          checkbox.checked = row.enabled;
+          automationsError = err instanceof Error ? err.message : String(err);
+          automationsCache = 'error';
+          if (active === 'automations') drawStage();
+        }
+      }
+
+      async function onRunAutomation(row: CentraidAutomationRow): Promise<void> {
+        if (!projectId) return;
+        automationRunState.set(row.name, { kind: 'running' });
+        if (active === 'automations') drawStage();
+        try {
+          const result = await Api().runAutomationNow({ appId: projectId, name: row.name });
+          automationRunState.set(row.name, { kind: 'done', result, finishedAt: Date.now() });
+        } catch (err) {
+          automationRunState.set(row.name, {
+            kind: 'done',
+            result: {
+              ok: false,
+              durationMs: 0,
+              error: err instanceof Error ? err.message : String(err),
+              toolBatches: 0,
+              agentCalls: 0,
+            },
+            finishedAt: Date.now(),
+          });
+        }
+        if (active === 'automations') drawStage();
+      }
+
+      async function onDeleteAutomation(row: CentraidAutomationRow): Promise<void> {
+        if (!projectId) return;
+        const ok = confirm(
+          `Delete automation "${row.name}"?\n\nThis removes the mirror row only. The on-disk manifest and handler stay — republish (or re-sync) to reinstate.`,
+        );
+        if (!ok) return;
+        try {
+          await Api().deleteAutomation({ appId: projectId, name: row.name });
+          automationRunState.delete(row.name);
+          await refreshAutomations();
+        } catch (err) {
+          automationsError = err instanceof Error ? err.message : String(err);
+          automationsCache = 'error';
+          if (active === 'automations') drawStage();
+        }
       }
 
       drawRail();

@@ -659,4 +659,30 @@ declare global {
   interface CentraidChatSessionWithMessages extends CentraidChatSessionMeta {
     messages: Array<{ idx: number; payload: CentraidChatHistoryMessage; createdAt: number }>;
   }
+  // Mirror of the module-level CentraidAutomationRow/Result so the Cloud
+  // → Automations panel can reference them by bare name without imports.
+  interface CentraidAutomationRow {
+    appId: string;
+    name: string;
+    prompt: string;
+    cronExpr: string;
+    enabled: boolean;
+    manifest: {
+      prompt: string;
+      schedule: string;
+      action: string;
+      requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
+      costEstimate?: { model: string; tokensPerFire: number };
+      generated: { by: string; at: string };
+    };
+    createdAt: number;
+    updatedAt: number;
+  }
+  interface CentraidAutomationRunResult {
+    ok: boolean;
+    durationMs: number;
+    error?: string;
+    toolBatches: number;
+    agentCalls: number;
+  }
 }

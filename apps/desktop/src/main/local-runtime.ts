@@ -2,6 +2,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { app } from 'electron';
 import {
+  AutomationStore,
   ChatHistoryStore,
   Runtime,
   UserStore,
@@ -77,6 +78,11 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     const gatewayDbProvider = makeGatewayDbProvider(localRuntimeGatewayDb());
     const userStore = new UserStore(gatewayDbProvider);
     const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
+    // Shared mirror for centraid automations (issue #70). The same
+    // store backs the IPC handlers in `ipc.ts` and the upload-time
+    // sync wired through `handleAppUpload` — every publish lands new
+    // manifests here and the UI reads from this surface.
+    const automationStore = new AutomationStore(gatewayDbProvider);
 
     // Resolve user prefs for the agent runtime — the desktop persists
     // the user's CLI choice (codex / claude-code) + optional override path
@@ -126,6 +132,13 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       userStore,
       chatHistoryStore,
       chatRunner,
+      automationStore,
+      // The local-runtime has no openclaw cron; the OS scheduler
+      // (launchd / systemd / Task Scheduler) is the host. We don't
+      // re-register here on every sync — the user wires the OS
+      // scheduler explicitly via the centraid CLI's `cron register`
+      // path. The sync still keeps the mirror current so the desktop
+      // UI lists the deployed automations and `Run now` finds them.
       runnerStatus: async () => {
         const prefs = await prefsLoader();
         if (!prefs) {

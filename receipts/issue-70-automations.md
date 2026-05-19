@@ -17,6 +17,8 @@ GitHub issue: [#70](https://github.com/srikanth235/centraid/issues/70)
 - [x] Builder agent system-prompt update for automations
 - [x] App-templates example automation
 - [x] Desktop UI per-app automations panel + IPC
+- [x] Deploy story: sync `automations/*.json` on publish + reconcile cron
+- [x] Cloud → Automations rail item: enable/disable + Run-now + Delete
 - [x] Unit tests across packages, typecheck clean
 
 ## What changed
@@ -47,9 +49,13 @@ GitHub issue: [#70](https://github.com/srikanth235/centraid/issues/70)
 
 **Follow-up: ensure automations/ lands on both scaffold and clone paths.** `scaffoldProject` was already creating `automations/`, but `cloneTemplate` only copied what the template source had — so cloning hydrate or todos (which don't ship automations) left the agent with no canonical drop target for cron-scheduled manifests. Fixed by mkdir-ing the canonical subdir list (queries/actions/migrations/automations) idempotently in `cloneTemplate` after `copyDir`, and refactoring `scaffoldProject` to use the same list (kept in sync between the two files). Both paths also drop a brief `automations/README.md` so empty-dir file viewers don't hide it and the agent has an in-folder pointer to the manifest shape — scaffold's is the full spec, clone's is a short pointer that defers to the project README.
 
-**Desktop UI per-app automations panel + IPC.** Added four IPC channels (`AUTOMATIONS_LIST`, `AUTOMATIONS_RUN_NOW`, `AUTOMATIONS_SET_ENABLED`, `AUTOMATIONS_DELETE`) to `preload.ts` and the main-process handler module `apps/desktop/src/main/ipc.ts`. The list handler opens a lazy `AutomationStore` against the same `localRuntimeGatewayDb()` the embedded runtime uses. Run-now invokes `runAutomationLocal` directly in-process for fast iteration (sidesteps the OS scheduler). Renderer-side `CentraidApi` type definitions were extended with `CentraidAutomationRow` / `CentraidAutomationRunResult` and the four corresponding method signatures. The DOM widget layer (sidebar pill activation, per-app panel rendering) is deferred to a follow-up PR — the IPC + types are what's load-bearing for this issue.
+**Desktop UI per-app automations panel + IPC.** Added four IPC channels (`AUTOMATIONS_LIST`, `AUTOMATIONS_RUN_NOW`, `AUTOMATIONS_SET_ENABLED`, `AUTOMATIONS_DELETE`) to `preload.ts` and the main-process handler module `apps/desktop/src/main/ipc.ts`. The list handler opens a lazy `AutomationStore` against the same `localRuntimeGatewayDb()` the embedded runtime uses. Run-now invokes `runAutomationLocal` directly in-process for fast iteration (sidesteps the OS scheduler). Renderer-side `CentraidApi` type definitions were extended with `CentraidAutomationRow` / `CentraidAutomationRunResult` and the four corresponding method signatures.
 
-**Unit tests across packages, typecheck clean.** Final test run: 222 in runtime-core, 64 in agent-runtime, 21 in openclaw-plugin, 4 in chat-harness, 1 in builder-harness (no test changes there yet) — 312 total, zero failures. Typecheck clean across 16 turbo packages. New test files added in this issue: `automation-manifest.test.ts`, `automation-store.test.ts`, `mock-llm-server.test.ts`, `os-scheduler.test.ts`. Worker-thread integration testing of the automation handler runner is deferred to e2e flows — the worker boundary is hard to drive without compiled output and the dispatcher contracts are well-typed.
+**Deploy story: sync `automations/*.json` on publish + reconcile cron.** Before this change, nothing wrote disk-side manifests into the gateway `automations` mirror table — the table was effectively unreachable. New `packages/runtime-core/src/sync-automations.ts` exposes `syncAutomationsFromDisk({appId, appCodeDir, store})`: scans the app's `automations/*.json`, parses + validates each manifest, upserts changed ones into the mirror, removes mirror rows whose file disappeared, and preserves the user's `enabled` toggle across republish. Invalid manifests are reported in `errors` and skipped — the other entries still apply. The hook lives in `handleAppUpload` (runtime-core) so the same deploy boundary covers both remote (openclaw gateway) and local (desktop in-process gateway) publish paths — the desktop's "Publish" button is now also "deploy automations." `Runtime` accepts an optional `automationStore` + `onAutomationsSynced` callback; the openclaw plugin wires both and calls `reconcileAutomationCron` from the callback so cron updates take effect without a gateway restart. Local-runtime wires the store but no reconcile callback (OS scheduler registration stays explicit via the CLI). Deregister also clears mirror rows so the reconciler sweeps zombie cron jobs.
+
+**Cloud → Automations rail item: enable/disable + Run-now + Delete.** Added a new `'automations'` section to the Cloud-tab rail in `apps/desktop/src/renderer/builder.ts`, sitting between Database and SQL editor. Each automation renders as a card: name + cron expression in the header, the user's NL prompt verbatim in the body, a metadata strip (`actions/<file>`, model id, generated-by), and an actions row with an On/Off toggle, Run-now button, Delete button, and per-row result chip after a manual run. Toggle flips persist via `setAutomationEnabled` and the openclaw cron reconciler picks them up on the next sync. Run-now drives `runAutomationLocal` through IPC and shows duration / batch / agent-call counts inline. Empty state walks the user through "ask the builder…" + the manifest-drop path. Refresh button on the panel header re-fetches the mirror without leaving the tab. Styling added to `styles.css` (`.cloud-automation-*` family) mirrors the existing logs/database treatments.
+
+**Unit tests across packages, typecheck clean.** Final test run: 229 in runtime-core, 64 in agent-runtime, 21 in openclaw-plugin, 4 in chat-harness, 1 in builder-harness — 319 total, zero failures. Typecheck clean across 16 turbo packages. New test files added in this issue: `automation-manifest.test.ts`, `automation-store.test.ts`, `sync-automations.test.ts`, `mock-llm-server.test.ts`, `os-scheduler.test.ts`. Worker-thread integration testing of the automation handler runner is deferred to e2e flows — the worker boundary is hard to drive without compiled output and the dispatcher contracts are well-typed.
 
 ## Out of scope (per issue)
 
@@ -64,7 +70,7 @@ GitHub issue: [#70](https://github.com/srikanth235/centraid/issues/70)
 
 ## Verification
 
-- `npm test` clean across all packages (312 tests passing, 0 failures).
+- `npm test` clean across all packages (319 tests passing, 0 failures).
 - `npm run typecheck` clean across all 16 turbo packages.
 - `npm run lint` clean (oxlint + oxfmt all pass via pre-commit hook).
 
@@ -88,7 +94,6 @@ verify (called out per issue spike list):
 - **`augmentModelCatalog` + `resolveDynamicModel` pass the
   `agents.defaults.models` allowlist check** at cron-fire time.
 
-The DOM widget layer for the desktop automations panel (sidebar entry
-activation, list rendering, run-now button wiring) is a follow-up PR.
-The IPC channels + types here are what's load-bearing for the rest of
-the architecture.
+The DOM widget layer for the desktop automations panel landed in this
+PR as the new Cloud → Automations rail item — see the deploy-story /
+rail-item follow-ups above.
