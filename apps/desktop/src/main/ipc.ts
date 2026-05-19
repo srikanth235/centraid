@@ -33,14 +33,18 @@ import {
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
 import {
+  AutomationRunsStore,
   AutomationStore,
   automationEnabledKey,
+  automationsDbPath,
   deleteAppSetting,
   makeGatewayDbProvider,
   readActiveCodeDir,
   syncAutomationsFromDisk,
   writeAppSetting,
   type AutomationRow,
+  type AutomationRunNodeRow,
+  type AutomationRunRow,
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
@@ -107,6 +111,10 @@ export const Channel = {
   AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
   AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
   AUTOMATIONS_DELETE: 'centraid:automations:delete',
+  // Run audit + node timeline (issue #80). Read-only views over the
+  // per-app `automations.sqlite` runs / run_nodes tables.
+  AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
+  AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
 } as const;
 
 interface AgentSessionHandle {
@@ -686,6 +694,48 @@ export function registerIpcHandlers(): void {
     getAutomationStore().remove(input.appId, input.name);
     return { ok: true };
   });
+
+  // Run audit reads (issue #80). The per-app `automations.sqlite` file
+  // is runtime-owned and opened lazily; if no automation has fired yet
+  // the file doesn't exist and we return an empty list.
+  ipcMain.handle(
+    Channel.AUTOMATIONS_LIST_RUNS,
+    async (
+      _e,
+      input: { appId: string; name: string; limit?: number },
+    ): Promise<AutomationRunRow[]> => {
+      const appDir = path.join(localRuntimeAppsDir(), input.appId);
+      try {
+        await fs.access(automationsDbPath(appDir));
+      } catch {
+        return [];
+      }
+      const store = new AutomationRunsStore(automationsDbPath(appDir));
+      try {
+        return store.listRuns({ name: input.name, limit: input.limit ?? 25 });
+      } finally {
+        store.close();
+      }
+    },
+  );
+
+  ipcMain.handle(
+    Channel.AUTOMATIONS_LIST_RUN_NODES,
+    async (_e, input: { appId: string; runId: string }): Promise<AutomationRunNodeRow[]> => {
+      const appDir = path.join(localRuntimeAppsDir(), input.appId);
+      try {
+        await fs.access(automationsDbPath(appDir));
+      } catch {
+        return [];
+      }
+      const store = new AutomationRunsStore(automationsDbPath(appDir));
+      try {
+        return store.listNodes(input.runId);
+      } finally {
+        store.close();
+      }
+    },
+  );
 }
 
 /**

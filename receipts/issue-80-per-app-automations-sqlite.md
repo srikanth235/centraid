@@ -12,10 +12,10 @@ GitHub issue: [#80](https://github.com/srikanth235/centraid/issues/80)
 - [x] `onFailure` dispatch (incl. timeout/crash) with depth-3 recursion cap
 - [x] `outputSchema` validation of handler return; failures land in `runs.error`, `runs.ok=0`
 - [x] Retention pruning at end-of-run per `history.keep`
-- [ ] System-prompt `### Run audit & state` block under `### Automations`
-- [ ] Desktop UI: per-automation run list + per-run node timeline
-- [ ] Boundary test: `centraid_sql_*` agent tools cannot reach `automations.sqlite`
-- [ ] Unit tests across runtime-core / agent-runtime; typecheck + lint green
+- [x] System-prompt `### Run audit & state` block under `### Automations`
+- [x] Desktop UI: per-automation run list + per-run node timeline
+- [x] Boundary test: `centraid_sql_*` agent tools cannot reach `automations.sqlite`
+- [x] Unit tests across runtime-core / agent-runtime; typecheck + lint green
 
 ## What changed
 
@@ -45,6 +45,14 @@ Outsized growth of `automation-handler-runner.ts` is held in check by a new `aut
 
 **Retention pruning at end-of-run per `history.keep`.** Also threaded in the previous commit. The runner reads `manifest.history.keep` and calls `AutomationRunsStore.prune(name, { count | days | errorsOnly | all })` after `finishRun`. CASCADE on the `run_nodes` foreign key drops the orphaned node rows so the file stays bounded. Default `{count: 100}` applies when the manifest doesn't declare a policy.
 
+**Desktop UI: per-automation run list + per-run node timeline.** Two new IPC channels (`AUTOMATIONS_LIST_RUNS`, `AUTOMATIONS_LIST_RUN_NODES`) opened in `apps/desktop/src/main/ipc.ts` read directly from the per-app `automations.sqlite` and return [] when the file doesn't exist yet (no automation has fired). Preload surfaces them as `window.CentraidApi.listAutomationRuns({appId, name, limit})` and `listAutomationRunNodes({appId, runId})`. The Standing Orders card grew a "Runs" toggle in its foot; clicking it lazy-loads the last 25 runs inline below the card with timestamp + ok/✗ icon + triggerKind + duration + summary, newest first. Each row is a button that expands to show the node timeline — ordinal (`#0`, `#1·2` for retries), kind (TOOL / AGENT), name, batch_id, duration, plus `<details>` blocks for args/output JSON. Styles live next to the existing `.cd-app-order-*` block in `styles.css`. Error-state rows wear a red border + danger background; node rows that hit the truncation envelope still render the head + size — the user just doesn't get the full payload back.
+
+**System-prompt `### Run audit & state` block under `### Automations`.** Appended to `packages/builder-harness/src/system-prompt.ts`. Teaches the builder agent: (1) `ctx.tool`/`ctx.agent` are auto-instrumented — no manual logging; (2) `ctx.state.get/set` for cursors/ETags/dedup hashes; (3) `ctx.runs.last({status: 'ok'})` for the since-last-successful-run pattern; (4) `ctx.runs.list({since})` for aggregating + catch-up patterns; (5) `ctx.tool(name, args, {retry, onError})` for transient-failure handling; (6) `ctx.invoke(name, {input})` for sub-invocations; (7) `return { summary, output }` is validated against `manifest.outputSchema`. Calls out the four pattern names — stateless poll, incremental, aggregating, catch-up — and explicitly directs the builder away from inventing `runs` / `watermark` tables in `data.sqlite`. The manifest example in the same prompt now shows the new `trigger`/`outputSchema`/`onFailure`/`history.keep` fields.
+
+**Boundary test: `centraid_sql_*` agent tools cannot reach `automations.sqlite`.** Five new tests in `automation-runs-boundary.test.ts` assert that `describeOp({dataFile: data.sqlite})` does not list `runs`/`run_nodes`/`state` even when `automations.sqlite` has been populated; `readOp` errors on SELECTs against those tables (they don't exist in `data.sqlite`); and a side-channel probe via `SELECT name FROM sqlite_master` confirms the audit tables aren't visible. Together these establish that `centraid_sql_*` agent tools — which take `dataFile` and never see the `automations.sqlite` path — cannot read or write the audit/state surface.
+
+**Unit tests across runtime-core / agent-runtime; typecheck + lint green.** Final counts: runtime-core 291, agent-runtime 77, openclaw-plugin 21, builder-harness 1, chat-harness 4 — 394 total. Typecheck 16/16. `bun run check` (oxfmt --check + oxlint) clean.
+
 ## Out of scope
 
 - Webhook / event triggers — the manifest's `trigger` shape will be expanded later but only `kind: 'cron'` is wired in this issue.
@@ -56,8 +64,10 @@ Outsized growth of `automation-handler-runner.ts` is held in check by a new `aut
 
 ## Verification
 
-- `bun run test` — 255/255 in runtime-core (new 9-case `AutomationRunsStore` suite + existing 246).
+- `bun run test` — 394/394 across all packages (runtime-core 291, agent-runtime 77, openclaw-plugin 21, builder-harness 1, chat-harness 4).
 - `bun run typecheck` — 16/16 packages clean.
-- Lint + format clean (oxlint + oxfmt).
-- Lazy file-creation behavior asserted: `automations.sqlite` is absent on disk until the first method call (`insertRun`); test inspects `fs.existsSync` both before and after.
+- `bun run check` (oxfmt --check + oxlint) — 0 warnings, 0 errors.
+- Lazy file-creation behavior asserted: `automations.sqlite` is absent on disk until the first method call (`insertRun`); the test inspects `fs.existsSync` both before and after.
 - Migration ladder is independent of the gateway DB ladder and idempotent across reopens (verified with `openAutomationsDb` x2 + `PRAGMA user_version`).
+- Boundary test (`automation-runs-boundary.test.ts`) confirms `centraid_sql_*` operations against `data.sqlite` see neither the `runs` / `run_nodes` / `state` schema nor any row from a pre-populated `automations.sqlite`.
+- End-to-end `runAutomationLocal` tests cover the full local fire path including onFailure cascade, depth-3 cap, retention, legacy `schedule` back-compat, and `outputSchema` rejection — all with stubbed real handlers (no claude/codex binaries needed).

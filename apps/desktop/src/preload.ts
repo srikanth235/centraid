@@ -70,6 +70,8 @@ const Channel = {
   AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
   AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
   AUTOMATIONS_DELETE: 'centraid:automations:delete',
+  AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
+  AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -206,4 +208,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.AUTOMATIONS_SET_ENABLED, input),
   deleteAutomation: (input: { appId: string; name: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_DELETE, input),
+  // Run audit reads (issue #80). Returns the rows newest-first.
+  listAutomationRuns: (input: { appId: string; name: string; limit?: number }) =>
+    ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUNS, input),
+  listAutomationRunNodes: (input: { appId: string; runId: string }) =>
+    ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUN_NODES, input),
 });

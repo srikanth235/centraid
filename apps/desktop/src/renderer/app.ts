@@ -2243,7 +2243,32 @@
       }
       foot.append(chip);
     }
+
+    // Run audit affordance (issue #80). The "Runs" link expands a
+    // per-automation history panel below the card with the last 25
+    // runs (timestamp, ok/error, duration, summary). Clicking a run
+    // expands its node timeline (ordinal, kind, name, duration, +
+    // expandable args/output JSON).
+    const runsToggle = el('button', {
+      class: 'cd-app-order-runs-toggle',
+      type: 'button',
+      'aria-expanded': 'false',
+    }) as HTMLButtonElement;
+    runsToggle.textContent = 'Runs';
+    const runsHost = el('div', { class: 'cd-app-order-runs', hidden: 'true' });
+    runsToggle.addEventListener('click', () => {
+      const open = runsToggle.getAttribute('aria-expanded') === 'true';
+      const next = !open;
+      runsToggle.setAttribute('aria-expanded', String(next));
+      runsHost.hidden = !next;
+      if (next && !runsHost.dataset.loaded) {
+        void loadRunsInto(appId, row.name, runsHost);
+      }
+    });
+    foot.append(runsToggle);
+
     body.append(foot);
+    body.append(runsHost);
     card.append(body);
 
     // Toggle column — pill switch. The label wraps the input so the
@@ -2326,6 +2351,138 @@
       });
     }
     rerenderOrderCard(row, appId, panel);
+  }
+
+  // Issue #80 — render the per-automation runs panel inline below the
+  // standing-order card. The host element is created hidden in
+  // renderStandingOrder; this function lazy-loads on first open and
+  // caches via the `data-loaded` flag so re-toggling doesn't refetch.
+  async function loadRunsInto(appId: string, name: string, host: HTMLElement): Promise<void> {
+    host.dataset.loaded = 'true';
+    host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'Loading…'));
+    let runs: CentraidAutomationRunRecord[];
+    try {
+      runs = await window.CentraidApi.listAutomationRuns({ appId, name });
+    } catch (err) {
+      host.replaceChildren(
+        el(
+          'div',
+          { class: 'cd-app-runs-empty' },
+          `Failed to load runs: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+    if (runs.length === 0) {
+      host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'No runs recorded yet.'));
+      return;
+    }
+    const list = el('div', { class: 'cd-app-runs-list' });
+    for (const run of runs) list.append(renderRunRow(appId, run));
+    host.replaceChildren(list);
+  }
+
+  function renderRunRow(appId: string, run: CentraidAutomationRunRecord): HTMLElement {
+    const card = el('div', { class: 'cd-app-run', 'data-ok': String(run.ok) });
+    const head = el('button', {
+      type: 'button',
+      class: 'cd-app-run-head',
+      'aria-expanded': 'false',
+    }) as HTMLButtonElement;
+    const when = new Date(run.startedAt).toLocaleString();
+    const duration = run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : '…';
+    head.append(
+      el('span', { class: 'cd-app-run-status' }, run.ok ? '✓' : '✗'),
+      el('span', { class: 'cd-app-run-when' }, when),
+      el('span', { class: 'cd-app-run-trigger' }, run.triggerKind),
+      el('span', { class: 'cd-app-run-duration' }, duration),
+      el(
+        'span',
+        { class: 'cd-app-run-summary' },
+        run.ok ? (run.summary ?? '—') : (run.error ?? 'failed'),
+      ),
+    );
+    const nodesHost = el('div', { class: 'cd-app-run-nodes', hidden: 'true' });
+    head.addEventListener('click', () => {
+      const open = head.getAttribute('aria-expanded') === 'true';
+      const next = !open;
+      head.setAttribute('aria-expanded', String(next));
+      nodesHost.hidden = !next;
+      if (next && !nodesHost.dataset.loaded) {
+        void loadNodesInto(appId, run.runId, nodesHost);
+      }
+    });
+    card.append(head, nodesHost);
+    return card;
+  }
+
+  async function loadNodesInto(appId: string, runId: string, host: HTMLElement): Promise<void> {
+    host.dataset.loaded = 'true';
+    host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'Loading nodes…'));
+    let nodes: CentraidAutomationRunNode[];
+    try {
+      nodes = await window.CentraidApi.listAutomationRunNodes({ appId, runId });
+    } catch (err) {
+      host.replaceChildren(
+        el(
+          'div',
+          { class: 'cd-app-runs-empty' },
+          `Failed to load nodes: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+    if (nodes.length === 0) {
+      host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'No nodes recorded.'));
+      return;
+    }
+    const list = el('div', { class: 'cd-app-run-node-list' });
+    for (const node of nodes) list.append(renderNodeRow(node));
+    host.replaceChildren(list);
+  }
+
+  function renderNodeRow(node: CentraidAutomationRunNode): HTMLElement {
+    const wrap = el('div', { class: 'cd-app-run-node', 'data-ok': String(node.ok) });
+    const head = el('div', { class: 'cd-app-run-node-head' }, [
+      el(
+        'span',
+        { class: 'cd-app-run-node-pos' },
+        `#${node.ordinal}${node.attempt > 1 ? `·${node.attempt}` : ''}`,
+      ),
+      el('span', { class: 'cd-app-run-node-kind' }, node.kind),
+      el('span', { class: 'cd-app-run-node-name' }, node.name),
+      ...(node.batchId !== undefined
+        ? [el('span', { class: 'cd-app-run-node-batch' }, `batch ${node.batchId}`)]
+        : []),
+      el(
+        'span',
+        { class: 'cd-app-run-node-duration' },
+        node.durationMs !== undefined ? formatDuration(node.durationMs) : '—',
+      ),
+    ]);
+    wrap.append(head);
+    if (node.error) {
+      wrap.append(el('div', { class: 'cd-app-run-node-error' }, node.error));
+    }
+    if (node.argsJson) {
+      const det = el('details', { class: 'cd-app-run-node-payload' });
+      det.append(el('summary', {}, 'args'), el('pre', {}, prettyJson(node.argsJson)));
+      wrap.append(det);
+    }
+    if (node.outputJson) {
+      const det = el('details', { class: 'cd-app-run-node-payload' });
+      det.append(el('summary', {}, 'output'), el('pre', {}, prettyJson(node.outputJson)));
+      wrap.append(det);
+    }
+    return wrap;
+  }
+
+  function prettyJson(raw: string): string {
+    try {
+      return JSON.stringify(JSON.parse(raw), null, 2);
+    } catch {
+      return raw;
+    }
   }
 
   function rerenderOrderCard(row: CentraidAutomationRow, appId: string, panel: HTMLElement): void {

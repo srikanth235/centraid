@@ -497,6 +497,53 @@ interface CentraidApi {
     enabled: boolean;
   }): Promise<{ ok: true }>;
   deleteAutomation(input: { appId: string; name: string }): Promise<{ ok: true }>;
+  // Run audit (issue #80). Reads the per-app `automations.sqlite`
+  // file's runs / run_nodes tables. Returns [] if no automation has
+  // fired yet (file not created).
+  listAutomationRuns(input: {
+    appId: string;
+    name: string;
+    limit?: number;
+  }): Promise<CentraidAutomationRunRecord[]>;
+  listAutomationRunNodes(input: {
+    appId: string;
+    runId: string;
+  }): Promise<CentraidAutomationRunNode[]>;
+}
+
+/** A single run record from `automations.sqlite#runs`. */
+export interface CentraidAutomationRunRecord {
+  runId: string;
+  automationName: string;
+  triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure';
+  parentRunId?: string;
+  inputJson?: string;
+  startedAt: number;
+  endedAt?: number;
+  ok: boolean;
+  error?: string;
+  summary?: string;
+  outputJson?: string;
+}
+
+/** A single node (ctx.tool / ctx.agent call) inside a run. */
+export interface CentraidAutomationRunNode {
+  nodeId: string;
+  runId: string;
+  ordinal: number;
+  batchId?: number;
+  attempt: number;
+  kind: 'tool' | 'agent';
+  name: string;
+  argsJson?: string;
+  outputJson?: string;
+  ok: boolean;
+  error?: string;
+  startedAt: number;
+  endedAt?: number;
+  durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 /** Row shape returned by `listAutomations`. Mirrors `AutomationRow` from runtime-core. */
@@ -684,5 +731,36 @@ declare global {
     error?: string;
     toolBatches: number;
     agentCalls: number;
+  }
+  interface CentraidAutomationRunRecord {
+    runId: string;
+    automationName: string;
+    triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure';
+    parentRunId?: string;
+    inputJson?: string;
+    startedAt: number;
+    endedAt?: number;
+    ok: boolean;
+    error?: string;
+    summary?: string;
+    outputJson?: string;
+  }
+  interface CentraidAutomationRunNode {
+    nodeId: string;
+    runId: string;
+    ordinal: number;
+    batchId?: number;
+    attempt: number;
+    kind: 'tool' | 'agent';
+    name: string;
+    argsJson?: string;
+    outputJson?: string;
+    ok: boolean;
+    error?: string;
+    startedAt: number;
+    endedAt?: number;
+    durationMs?: number;
+    inputTokens?: number;
+    outputTokens?: number;
   }
 }
