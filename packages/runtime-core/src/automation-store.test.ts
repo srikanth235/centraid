@@ -14,9 +14,10 @@ function newStore(): AutomationStore {
 
 const sampleManifest: AutomationManifest = {
   prompt: 'every 30 min, summarize PRs',
-  schedule: '*/30 * * * *',
+  trigger: { kind: 'cron', expr: '*/30 * * * *' },
   action: 'summarize-prs.js',
   requires: { mcps: ['github'], model: 'anthropic/claude-3-5-sonnet' },
+  history: { keep: { count: 100 } },
   generated: { by: 'builder', at: '2026-05-19T00:00:00Z' },
 };
 
@@ -31,7 +32,7 @@ describe('AutomationStore', () => {
     assert.equal(row.manifest.prompt, sampleManifest.prompt);
 
     const fetched = store.get('todos', 'daily-digest');
-    assert.equal(fetched?.manifest.schedule, '*/30 * * * *');
+    assert.equal(fetched?.manifest.trigger.expr, '*/30 * * * *');
   });
 
   it('returns undefined for missing rows', () => {
@@ -41,7 +42,11 @@ describe('AutomationStore', () => {
   it('upsert updates rather than duplicates', () => {
     const store = newStore();
     store.upsert('todos', 'a', sampleManifest);
-    const v2: AutomationManifest = { ...sampleManifest, schedule: '0 * * * *', prompt: 'changed' };
+    const v2: AutomationManifest = {
+      ...sampleManifest,
+      trigger: { kind: 'cron', expr: '0 * * * *' },
+      prompt: 'changed',
+    };
     const updated = store.upsert('todos', 'a', v2);
     assert.equal(updated.cronExpr, '0 * * * *');
     assert.equal(updated.prompt, 'changed');

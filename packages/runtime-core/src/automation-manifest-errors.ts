@@ -8,7 +8,6 @@ export type AutomationManifestValidationCode =
   | 'invalid_json'
   | 'missing_field'
   | 'invalid_field'
-  | 'invalid_schedule'
   | 'invalid_action_path'
   | 'invalid_trigger'
   | 'invalid_output_schema'

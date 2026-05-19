@@ -58,7 +58,7 @@ describe('isValidAutomationName', () => {
 
 const goodManifest = {
   prompt: 'every 30 min, summarize open PRs in foo/bar',
-  schedule: '*/30 * * * *',
+  trigger: { kind: 'cron', expr: '*/30 * * * *' },
   action: 'summarize-prs.js',
   requires: {
     mcps: ['github'],
@@ -73,7 +73,8 @@ describe('parseManifest / validateManifest', () => {
   it('round-trips a well-formed manifest', () => {
     const m = parseManifest(JSON.stringify(goodManifest));
     assert.equal(m.prompt, goodManifest.prompt);
-    assert.equal(m.schedule, goodManifest.schedule);
+    assert.equal(m.trigger.kind, 'cron');
+    assert.equal(m.trigger.expr, '*/30 * * * *');
     assert.equal(m.action, goodManifest.action);
     assert.deepEqual([...(m.requires.mcps ?? [])], ['github']);
     assert.deepEqual([...(m.requires.tools ?? [])], ['github.list_pull_requests']);
@@ -96,9 +97,9 @@ describe('parseManifest / validateManifest', () => {
     delete noPrompt.prompt;
     assert.throws(() => validateManifest(noPrompt), /prompt/);
 
-    const noSched = { ...goodManifest } as Record<string, unknown>;
-    delete noSched.schedule;
-    assert.throws(() => validateManifest(noSched), /schedule/);
+    const noTrigger = { ...goodManifest } as Record<string, unknown>;
+    delete noTrigger.trigger;
+    assert.throws(() => validateManifest(noTrigger), /trigger/);
 
     const noGenerated = { ...goodManifest } as Record<string, unknown>;
     delete noGenerated.generated;
@@ -106,7 +107,10 @@ describe('parseManifest / validateManifest', () => {
   });
 
   it('rejects bad cron expressions', () => {
-    assert.throws(() => validateManifest({ ...goodManifest, schedule: '@hourly' }), /schedule/);
+    assert.throws(
+      () => validateManifest({ ...goodManifest, trigger: { kind: 'cron', expr: '@hourly' } }),
+      /trigger/,
+    );
   });
 
   it('rejects action path traversal', () => {
@@ -136,7 +140,7 @@ describe('parseManifest / validateManifest', () => {
   it('allows omitting optional fields', () => {
     const minimal = {
       prompt: 'hello',
-      schedule: '0 * * * *',
+      trigger: { kind: 'cron', expr: '0 * * * *' },
       action: 'h.js',
       requires: {},
       generated: { by: 'test', at: '2026-01-01T00:00:00Z' },
@@ -147,7 +151,7 @@ describe('parseManifest / validateManifest', () => {
   });
 });
 
-describe('manifest trigger / back-compat (issue #80)', () => {
+describe('manifest trigger', () => {
   const base = {
     prompt: 'hi',
     action: 'h.js',
@@ -155,23 +159,13 @@ describe('manifest trigger / back-compat (issue #80)', () => {
     generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
   };
 
-  it('normalizes legacy `schedule` into trigger.cron with the same expr', () => {
-    const m = validateManifest({ ...base, schedule: '0 9 * * MON-FRI' });
-    assert.equal(m.schedule, '0 9 * * MON-FRI');
-    assert.equal(m.trigger.kind, 'cron');
-    assert.equal(m.trigger.expr, '0 9 * * MON-FRI');
-  });
-
-  it('accepts new canonical trigger:{kind:cron,expr} form', () => {
+  it('accepts trigger:{kind:cron,expr}', () => {
     const m = validateManifest({
       ...base,
       trigger: { kind: 'cron', expr: '*/15 * * * *' },
     });
     assert.equal(m.trigger.kind, 'cron');
     assert.equal(m.trigger.expr, '*/15 * * * *');
-    // `schedule` mirrors trigger.expr so existing consumers (mirror table,
-    // cron registration) keep working with no change.
-    assert.equal(m.schedule, '*/15 * * * *');
   });
 
   it('rejects unknown trigger.kind', () => {
@@ -184,29 +178,23 @@ describe('manifest trigger / back-compat (issue #80)', () => {
   it('rejects invalid trigger.expr cron', () => {
     assert.throws(
       () => validateManifest({ ...base, trigger: { kind: 'cron', expr: '@hourly' } }),
-      (err) => err instanceof AutomationManifestError && err.code === 'invalid_schedule',
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_trigger',
     );
   });
 
-  it('rejects manifest with neither schedule nor trigger', () => {
-    assert.throws(() => validateManifest({ ...base }), /schedule/);
+  it('rejects manifest with no trigger', () => {
+    assert.throws(() => validateManifest({ ...base }), /trigger/);
   });
 
-  it('prefers trigger when both fields are present', () => {
-    const m = validateManifest({
-      ...base,
-      schedule: '0 0 * * *',
-      trigger: { kind: 'cron', expr: '*/5 * * * *' },
-    });
-    assert.equal(m.schedule, '*/5 * * * *');
-    assert.equal(m.trigger.expr, '*/5 * * * *');
+  it('rejects bare `schedule` field (no longer accepted in v0)', () => {
+    assert.throws(() => validateManifest({ ...base, schedule: '0 0 * * *' }), /trigger/);
   });
 });
 
 describe('manifest outputSchema (issue #80)', () => {
   const base = {
     prompt: 'hi',
-    schedule: '0 * * * *',
+    trigger: { kind: 'cron', expr: '0 * * * *' },
     action: 'h.js',
     requires: {},
     generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
@@ -275,7 +263,7 @@ describe('manifest outputSchema (issue #80)', () => {
 describe('manifest onFailure (issue #80)', () => {
   const base = {
     prompt: 'hi',
-    schedule: '0 * * * *',
+    trigger: { kind: 'cron', expr: '0 * * * *' },
     action: 'h.js',
     requires: {},
     generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
@@ -304,7 +292,7 @@ describe('manifest onFailure (issue #80)', () => {
 describe('manifest history.keep (issue #80)', () => {
   const base = {
     prompt: 'hi',
-    schedule: '0 * * * *',
+    trigger: { kind: 'cron', expr: '0 * * * *' },
     action: 'h.js',
     requires: {},
     generated: { by: 'test', at: '2026-05-19T00:00:00Z' },

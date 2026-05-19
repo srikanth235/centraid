@@ -1,6 +1,6 @@
 {
   "prompt": "Every Sunday at 8pm, look at the past week's hydration log and write one short, kind line of encouragement based on how it went.",
-  "schedule": "0 20 * * 0",
+  "trigger": { "kind": "cron", "expr": "0 20 * * 0" },
   "action": "weekly-encouragement.js",
   "requires": {
     "model": "anthropic/claude-3-5-sonnet"

@@ -108,13 +108,8 @@ export interface RunAutomationHandlerOptions {
   toolDispatcher: AutomationToolDispatcher;
   agentDispatcher: AutomationAgentDispatcher;
   invokeDispatcher?: AutomationInvokeDispatcher;
-  /**
-   * Per-app `automations.sqlite` store for audit + ctx.state + ctx.runs.
-   * Omitting it is the legacy code path — no audit row is written and
-   * `ctx.state` / `ctx.runs` reject. Hosts wired for issue #80 always
-   * pass it.
-   */
-  runsStore?: AutomationRunsStore;
+  /** Per-app `automations.sqlite` store for audit + ctx.state + ctx.runs. */
+  runsStore: AutomationRunsStore;
   triggerKind?: AutomationTriggerKind;
   input?: unknown;
   parentRunId?: string;
@@ -231,23 +226,14 @@ export async function runAutomationHandler(
     nextBatchId: 1,
   };
 
-  if (audit.store) {
-    try {
-      audit.store.insertRun({
-        runId: audit.runId,
-        automationName: audit.automationName,
-        triggerKind: opts.triggerKind ?? 'scheduled',
-        ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-        ...(opts.input !== undefined ? { inputJson: truncateForAudit(opts.input) ?? '' } : {}),
-        startedAt: Date.now(),
-      });
-    } catch (err) {
-      logs.push({
-        level: 'warn',
-        msg: `automation audit insertRun failed: ${err instanceof Error ? err.message : String(err)}`,
-      });
-    }
-  }
+  audit.store.insertRun({
+    runId: audit.runId,
+    automationName: audit.automationName,
+    triggerKind: opts.triggerKind ?? 'scheduled',
+    ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
+    ...(opts.input !== undefined ? { inputJson: truncateForAudit(opts.input) ?? '' } : {}),
+    startedAt: Date.now(),
+  });
 
   const worker = new Worker(WORKER_FILE, {
     workerData: {
@@ -296,23 +282,17 @@ export async function runAutomationHandler(
       } catch {
         /* ignore */
       }
-      if (audit.store) {
-        try {
-          audit.store.finishRun({
-            runId: audit.runId,
-            endedAt: Date.now(),
-            ok: outcome.ok,
-            ...(outcome.error ? { error: outcome.error } : {}),
-            ...(outcome.summary ? { summary: outcome.summary } : {}),
-            ...(outcome.output !== undefined
-              ? { outputJson: truncateForAudit(outcome.output) ?? '' }
-              : {}),
-          });
-        } catch {
-          /* swallow */
-        }
-        applyRetention(audit.store, audit.automationName, opts.history);
-      }
+      audit.store.finishRun({
+        runId: audit.runId,
+        endedAt: Date.now(),
+        ok: outcome.ok,
+        ...(outcome.error ? { error: outcome.error } : {}),
+        ...(outcome.summary ? { summary: outcome.summary } : {}),
+        ...(outcome.output !== undefined
+          ? { outputJson: truncateForAudit(outcome.output) ?? '' }
+          : {}),
+      });
+      applyRetention(audit.store, audit.automationName, opts.history);
       abortController.abort();
       worker.removeAllListeners();
       worker.terminate().catch(() => {});
@@ -355,34 +335,30 @@ export async function runAutomationHandler(
         void opts
           .agentDispatcher({ prompt: msg.prompt, json: msg.json }, dispatchCtx)
           .then((result) => {
-            if (audit.store) {
-              recordAgentNode({
-                store: audit.store,
-                runId: audit.runId,
-                ordinal,
-                prompt: msg.prompt,
-                ok: true,
-                result,
-                started,
-                ended: Date.now(),
-              });
-            }
+            recordAgentNode({
+              store: audit.store,
+              runId: audit.runId,
+              ordinal,
+              prompt: msg.prompt,
+              ok: true,
+              result,
+              started,
+              ended: Date.now(),
+            });
             send({ type: 'agent-reply', id: msg.id, ok: true, result });
           })
           .catch((err: unknown) => {
             const errorMsg = err instanceof Error ? err.message : String(err);
-            if (audit.store) {
-              recordAgentNode({
-                store: audit.store,
-                runId: audit.runId,
-                ordinal,
-                prompt: msg.prompt,
-                ok: false,
-                error: errorMsg,
-                started,
-                ended: Date.now(),
-              });
-            }
+            recordAgentNode({
+              store: audit.store,
+              runId: audit.runId,
+              ordinal,
+              prompt: msg.prompt,
+              ok: false,
+              error: errorMsg,
+              started,
+              ended: Date.now(),
+            });
             send({ type: 'agent-reply', id: msg.id, ok: false, error: errorMsg });
           });
         return;

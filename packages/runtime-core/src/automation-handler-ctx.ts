@@ -24,7 +24,7 @@ export interface ToolCallWire {
 }
 
 export interface AuditState {
-  store: AutomationRunsStore | undefined;
+  store: AutomationRunsStore;
   runId: string;
   automationName: string;
   ordinal: number;
@@ -61,22 +61,20 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
   for (let i = 0; i < calls.length; i++) {
     const call = calls[i]!;
     const result = results[i] ?? { ok: false, error: 'no result returned by dispatcher' };
-    if (audit.store) {
-      recordToolNode({
-        store: audit.store,
-        runId: audit.runId,
-        ordinal: ordinals[i]!,
-        attempt: 1,
-        ...(batchId !== undefined ? { batchId } : {}),
-        name: call.name,
-        args: call.args,
-        ok: result.ok,
-        ...(result.result !== undefined ? { result: result.result } : {}),
-        ...(result.error !== undefined ? { error: result.error } : {}),
-        started,
-        ended,
-      });
-    }
+    recordToolNode({
+      store: audit.store,
+      runId: audit.runId,
+      ordinal: ordinals[i]!,
+      attempt: 1,
+      ...(batchId !== undefined ? { batchId } : {}),
+      name: call.name,
+      args: call.args,
+      ok: result.ok,
+      ...(result.result !== undefined ? { result: result.result } : {}),
+      ...(result.error !== undefined ? { error: result.error } : {}),
+      started,
+      ended,
+    });
     finalResults.push(result);
   }
   for (let i = 0; i < calls.length; i++) {
@@ -99,21 +97,19 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
         ok: false,
         error: 'no result returned by dispatcher',
       };
-      if (audit.store) {
-        recordToolNode({
-          store: audit.store,
-          runId: audit.runId,
-          ordinal: ordinals[i]!,
-          attempt,
-          name: call.name,
-          args: call.args,
-          ok: retryResult.ok,
-          ...(retryResult.result !== undefined ? { result: retryResult.result } : {}),
-          ...(retryResult.error !== undefined ? { error: retryResult.error } : {}),
-          started: retryStarted,
-          ended: retryEnded,
-        });
-      }
+      recordToolNode({
+        store: audit.store,
+        runId: audit.runId,
+        ordinal: ordinals[i]!,
+        attempt,
+        name: call.name,
+        args: call.args,
+        ok: retryResult.ok,
+        ...(retryResult.result !== undefined ? { result: retryResult.result } : {}),
+        ...(retryResult.error !== undefined ? { error: retryResult.error } : {}),
+        started: retryStarted,
+        ended: retryEnded,
+      });
       result = retryResult;
     }
     if (!result.ok && call.onError === 'continue') result = { ok: true, result: undefined };
@@ -134,12 +130,6 @@ export function handleStateMessage(
   key: string,
   value: unknown,
 ): CtxReply {
-  if (!audit.store) {
-    return {
-      ok: false,
-      error: 'ctx.state requires a runs store (host must wire AutomationRunsStore)',
-    };
-  }
   try {
     if (method === 'get') {
       const entry = audit.store.stateGet(audit.automationName, key);
@@ -170,12 +160,6 @@ export function handleRunsMessage(
   method: 'last' | 'list',
   filter: { name?: string; status?: 'ok' | 'error'; since?: number; limit?: number },
 ): CtxReply {
-  if (!audit.store) {
-    return {
-      ok: false,
-      error: 'ctx.runs requires a runs store (host must wire AutomationRunsStore)',
-    };
-  }
   try {
     const name = filter.name ?? audit.automationName;
     const limit = filter.limit ?? 50;

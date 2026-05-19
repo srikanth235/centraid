@@ -555,7 +555,7 @@ export interface CentraidAutomationRow {
   enabled: boolean;
   manifest: {
     prompt: string;
-    schedule: string;
+    trigger: { kind: 'cron'; expr: string };
     action: string;
     requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
     costEstimate?: { model: string; tokensPerFire: number };
@@ -716,7 +716,7 @@ declare global {
     enabled: boolean;
     manifest: {
       prompt: string;
-      schedule: string;
+      trigger: { kind: 'cron'; expr: string };
       action: string;
       requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
       costEstimate?: { model: string; tokensPerFire: number };

@@ -137,7 +137,7 @@ export class AutomationStore {
       appId,
       name,
       manifest.prompt,
-      manifest.schedule,
+      manifest.trigger.expr,
       enabled ? 1 : 0,
       JSON.stringify(manifest),
       now,

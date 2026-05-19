@@ -1,18 +1,15 @@
 /**
  * Automation manifest schema + validator.
  *
- * Each automation in an app lives as three artifacts (see issue #70):
+ * Each automation in an app lives as three artifacts:
  *
  *   1. `automations/<name>.json` — manifest (this module's shape)
  *   2. `actions/<name>.js`       — generated JS handler
  *   3. cron expression           — embedded in the manifest's `trigger.expr`
  *
- * Issue #80 reshaped the manifest's trigger field to `trigger: { kind, expr }`
- * so we can later add webhook/event triggers without a second migration.
- * Legacy manifests using bare `schedule: "<cron>"` still parse — they are
- * normalized to `trigger: { kind: 'cron', expr: "<cron>" }` in memory, and
- * the canonical `schedule` shortcut continues to mirror `trigger.expr` so
- * existing consumers (mirror table, cron registration) don't need to change.
+ * Trigger shape is `trigger: { kind: 'cron', expr }` — the shape leaves
+ * room for webhook/event kinds without a second migration. Only `cron`
+ * is wired today.
  *
  * Output-schema validation + `validateOutputAgainstSchema` live in
  * `automation-manifest-output.ts` to keep this file focused. Error class
@@ -80,13 +77,6 @@ export interface AutomationHistoryConfig {
 
 export interface AutomationManifest {
   readonly prompt: string;
-  /**
-   * Cron expression — five whitespace-separated fields, UTC. Always
-   * present in the parsed manifest (mirrors `trigger.expr`). Existing
-   * consumers (mirror table, cron registration, UI display) read this
-   * field; new code paths can read `trigger` instead.
-   */
-  readonly schedule: string;
   readonly trigger: AutomationTrigger;
   readonly action: string;
   readonly requires: AutomationManifestRequires;
@@ -153,47 +143,39 @@ function optionalStringArray(value: unknown, field: string): readonly string[] |
   });
 }
 
-function resolveTriggerAndSchedule(r: Record<string, unknown>): {
-  trigger: AutomationTrigger;
-  schedule: string;
-} {
+function resolveTrigger(r: Record<string, unknown>): AutomationTrigger {
   const triggerRaw = r.trigger;
-  if (triggerRaw !== undefined) {
-    if (triggerRaw === null || typeof triggerRaw !== 'object' || Array.isArray(triggerRaw)) {
-      throw new AutomationManifestError(
-        'invalid_trigger',
-        'manifest.trigger must be an object with { kind, expr }',
-        'trigger',
-      );
-    }
-    const t = triggerRaw as Record<string, unknown>;
-    if (t.kind !== 'cron') {
-      throw new AutomationManifestError(
-        'invalid_trigger',
-        `manifest.trigger.kind "${String(t.kind)}" is not supported — only "cron" is wired today`,
-        'trigger.kind',
-      );
-    }
-    const expr = requireString(t.expr, 'trigger.expr');
-    if (!isValidCronExpression(expr)) {
-      throw new AutomationManifestError(
-        'invalid_schedule',
-        `manifest.trigger.expr "${expr}" is not a valid 5-field cron expression`,
-        'trigger.expr',
-      );
-    }
-    return { trigger: { kind: 'cron', expr }, schedule: expr };
-  }
-  // Legacy form — bare `schedule` field. Normalize to trigger.
-  const sched = requireString(r.schedule, 'schedule');
-  if (!isValidCronExpression(sched)) {
+  if (triggerRaw === undefined) {
     throw new AutomationManifestError(
-      'invalid_schedule',
-      `manifest.schedule "${sched}" is not a valid 5-field cron expression`,
-      'schedule',
+      'missing_field',
+      'manifest.trigger must be { kind: "cron", expr: "<cron>" }',
+      'trigger',
     );
   }
-  return { trigger: { kind: 'cron', expr: sched }, schedule: sched };
+  if (triggerRaw === null || typeof triggerRaw !== 'object' || Array.isArray(triggerRaw)) {
+    throw new AutomationManifestError(
+      'invalid_trigger',
+      'manifest.trigger must be an object with { kind, expr }',
+      'trigger',
+    );
+  }
+  const t = triggerRaw as Record<string, unknown>;
+  if (t.kind !== 'cron') {
+    throw new AutomationManifestError(
+      'invalid_trigger',
+      `manifest.trigger.kind "${String(t.kind)}" is not supported — only "cron" is wired today`,
+      'trigger.kind',
+    );
+  }
+  const expr = requireString(t.expr, 'trigger.expr');
+  if (!isValidCronExpression(expr)) {
+    throw new AutomationManifestError(
+      'invalid_trigger',
+      `manifest.trigger.expr "${expr}" is not a valid 5-field cron expression`,
+      'trigger.expr',
+    );
+  }
+  return { kind: 'cron', expr };
 }
 
 const DEFAULT_HISTORY_KEEP_COUNT = 100;
@@ -332,7 +314,7 @@ export function validateManifest(raw: unknown): AutomationManifest {
   const r = raw as Record<string, unknown>;
 
   const prompt = requireString(r.prompt, 'prompt');
-  const { trigger, schedule } = resolveTriggerAndSchedule(r);
+  const trigger = resolveTrigger(r);
   const action = requireString(r.action, 'action');
   if (!isValidActionFilename(action)) {
     throw new AutomationManifestError(
@@ -363,7 +345,6 @@ export function validateManifest(raw: unknown): AutomationManifest {
 
   return {
     prompt,
-    schedule,
     trigger,
     action,
     requires,

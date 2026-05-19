@@ -352,32 +352,6 @@ describe('runAutomationHandler audit (issue #80)', () => {
     h.store.close();
   });
 
-  it('legacy code path (no runsStore) still works — ctx.state rejects', async () => {
-    const h = makeHarness();
-    const handler = h.writeHandler(
-      'legacy.js',
-      `export default async ({ ctx }) => {
-        try {
-          await ctx.state.get('x');
-          return { summary: 'ok' };
-        } catch (e) {
-          return { summary: 'rejected: ' + e.message };
-        }
-      };`,
-    );
-    const outcome = await runAutomationHandler({
-      app: { id: 'todos', dir: h.appDir },
-      handlerFile: handler,
-      automationName: 'legacy',
-      runId: makeRunId('legacy'),
-      toolDispatcher: okDispatcher,
-      agentDispatcher: okAgentDispatcher,
-      // no runsStore
-    });
-    assert.equal(outcome.ok, true);
-    assert.match(outcome.summary ?? '', /requires a runs store/);
-  });
-
   it('truncates oversize args_json with a {_truncated, bytes, head} envelope', async () => {
     const h = makeHarness();
     const handler = h.writeHandler(

@@ -108,9 +108,10 @@ export interface HandlerReturnEnvelope {
 }
 
 /**
- * Pull `{ summary, output }` out of a handler's return value. A bare
- * string is treated as a summary (back-compat with the pre-issue-#80
- * "return a one-liner for the run log" pattern).
+ * Pull `{ summary, output }` out of a handler's return value. Handlers
+ * may return undefined (no-op) or `{ summary?, output? }`. Anything
+ * else (bare string, number, array) is ignored — `summary` is only
+ * picked up from a returned object.
  */
 export function extractReturnEnvelope(value: unknown): HandlerReturnEnvelope {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -120,7 +121,6 @@ export function extractReturnEnvelope(value: unknown): HandlerReturnEnvelope {
     if ('output' in v) env.output = v.output;
     return env;
   }
-  if (typeof value === 'string') return { value, summary: value };
   return { value };
 }
 

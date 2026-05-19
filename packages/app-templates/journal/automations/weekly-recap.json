@@ -1,6 +1,6 @@
 {
   "prompt": "Every Sunday at 8pm, summarize the last 7 days of journal entries into a short reflection.",
-  "schedule": "0 20 * * 0",
+  "trigger": { "kind": "cron", "expr": "0 20 * * 0" },
   "action": "weekly-recap.js",
   "requires": {
     "model": "anthropic/claude-3-5-sonnet"

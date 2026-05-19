@@ -197,7 +197,7 @@ Recognize automation prompts. If the user says "do X every N minutes/hours/days/
 }
 \`\`\`
 
-- \`trigger\` is the canonical trigger shape. Today only \`{ kind: "cron", expr }\` is supported; the cron expression is a standard 5-field UTC string. Common patterns: \`*/30 * * * *\` (every 30 min), \`0 * * * *\` (top of every hour), \`0 9 * * MON-FRI\` (9 AM weekdays). Legacy manifests using a bare \`schedule: "<cron>"\` field still parse.
+- \`trigger\` is the trigger shape. Today only \`{ kind: "cron", expr }\` is supported; the cron expression is a standard 5-field UTC string. Common patterns: \`*/30 * * * *\` (every 30 min), \`0 * * * *\` (top of every hour), \`0 9 * * MON-FRI\` (9 AM weekdays).
 - \`requires.mcps\` lists the MCP servers the handler depends on. The host runtime checks these are installed before activating the schedule.
 - \`requires.tools\` lists the fully-qualified tool names the handler calls via \`ctx.tool(...)\`. The host scoping policy enforces this allowlist.
 - \`requires.model\` is the model \`ctx.agent\` should route through. **Never set this to \`centraid-mock/...\`** — that would recurse into the runner.

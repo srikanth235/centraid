@@ -201,9 +201,10 @@ function seedAutomations(dbFile) {
   for (const r of rows) {
     const manifest = {
       prompt: r.prompt,
-      schedule: r.cronExpr,
+      trigger: { kind: 'cron', expr: r.cronExpr },
       action: r.action,
       requires: { model: 'anthropic/claude-3-5-sonnet' },
+      history: { keep: { count: 100 } },
       generated: { by: 'template', at: '2026-05-19T00:00:00Z' },
     };
     stmt.run(

@@ -27,7 +27,7 @@ function writeManifest(appDir: string, name: string, manifest: Partial<Automatio
   mkdirSync(path.join(appDir, 'actions'), { recursive: true });
   const full = {
     ...baseManifest,
-    schedule: '0 * * * *',
+    trigger: { kind: 'cron', expr: '0 * * * *' },
     action: `${name}.js`,
     ...manifest,
   };
@@ -53,12 +53,11 @@ describe('runAutomationLocal onFailure cascade (issue #80)', () => {
   it('fires the named onFailure automation with the failed run as input', async () => {
     const h = makeAppHarness();
     writeManifest(h.appDir, 'flaky', {
-      schedule: '0 * * * *',
       onFailure: 'alerter',
       history: { keep: { count: 100 } },
     });
     writeHandler(h.appDir, 'flaky', `export default async () => { throw new Error('boom'); };`);
-    writeManifest(h.appDir, 'alerter', { schedule: '0 * * * *' });
+    writeManifest(h.appDir, 'alerter', {});
     writeHandler(
       h.appDir,
       'alerter',
@@ -130,22 +129,6 @@ describe('runAutomationLocal onFailure cascade (issue #80)', () => {
       });
     }
     assert.equal(h.store.countRuns('kept'), 2);
-    h.store.close();
-  });
-
-  it('legacy `schedule` manifests still fire end-to-end (back-compat)', async () => {
-    const h = makeAppHarness();
-    // No trigger field; bare schedule.
-    writeManifest(h.appDir, 'legacy', { schedule: '0 * * * *' });
-    writeHandler(h.appDir, 'legacy', `export default async () => ({ summary: 'legacy ok' });`);
-    const { outcome } = await runAutomationLocal({
-      appId: 'app1',
-      appDir: h.appDir,
-      automationName: 'legacy',
-      runsStore: h.store,
-    });
-    assert.equal(outcome.ok, true);
-    assert.equal(outcome.summary, 'legacy ok');
     h.store.close();
   });
 
