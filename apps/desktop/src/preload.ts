@@ -60,6 +60,16 @@ const Channel = {
   PROVIDER_API_KEY_CLEAR: 'centraid:agent:provider:clearApiKey',
 
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
+
+  // Automations (issue #70). The desktop reads the per-gateway
+  // `automations` mirror table and triggers manual runs via the
+  // headless `centraid run-automation` path. Reads route through the
+  // openclaw plugin's HTTP surface; the run-now action invokes the
+  // local CLI in-process for fast iteration.
+  AUTOMATIONS_LIST: 'centraid:automations:list',
+  AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
+  AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
+  AUTOMATIONS_DELETE: 'centraid:automations:delete',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -186,4 +196,14 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // custom OpenAI-compatible endpoint. Renderer calls this when the
   // settings panel opens or the user clicks "Test connection".
   getRunnerStatus: () => ipcRenderer.invoke(Channel.RUNNER_STATUS_GET),
+
+  // Automations (issue #70).
+  listAutomations: (input: { appId: string }) =>
+    ipcRenderer.invoke(Channel.AUTOMATIONS_LIST, input),
+  runAutomationNow: (input: { appId: string; name: string }) =>
+    ipcRenderer.invoke(Channel.AUTOMATIONS_RUN_NOW, input),
+  setAutomationEnabled: (input: { appId: string; name: string; enabled: boolean }) =>
+    ipcRenderer.invoke(Channel.AUTOMATIONS_SET_ENABLED, input),
+  deleteAutomation: (input: { appId: string; name: string }) =>
+    ipcRenderer.invoke(Channel.AUTOMATIONS_DELETE, input),
 });

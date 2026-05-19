@@ -19,12 +19,24 @@ import {
   type AuthStatus,
 } from './auth-import.js';
 import {
+  localRuntimeAppsDir,
   localRuntimeCodexHomeBaseDir,
+  localRuntimeGatewayDb,
   noteRunnerPrefsChanged,
   resolveProviderPrefs,
 } from './local-runtime.js';
-import { runPreflight, type OpenAICompatProvider, type RunnerPrefs } from '@centraid/agent-runtime';
-import type { RunnerStatus } from '@centraid/runtime-core';
+import {
+  runPreflight,
+  runAutomationLocal,
+  type OpenAICompatProvider,
+  type RunnerPrefs,
+} from '@centraid/agent-runtime';
+import {
+  AutomationStore,
+  makeGatewayDbProvider,
+  type AutomationRow,
+  type RunnerStatus,
+} from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
 
 /**
@@ -81,6 +93,14 @@ export const Channel = {
   // Force-refresh + return the current preflight status for the configured
   // runner (binary version + optional provider endpoint probe).
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
+
+  // Automations (issue #70) — desktop UI surface. Reads the
+  // per-gateway automations mirror table; manual run-now fires the
+  // local `centraid run-automation` headless path in-process.
+  AUTOMATIONS_LIST: 'centraid:automations:list',
+  AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
+  AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
+  AUTOMATIONS_DELETE: 'centraid:automations:delete',
 } as const;
 
 interface AgentSessionHandle {
@@ -506,6 +526,71 @@ export function registerIpcHandlers(): void {
       };
     },
   );
+
+  // ----- Automations (issue #70) -----
+  // The desktop reads the per-gateway automations mirror table directly.
+  // The store is opened lazily; the local runtime owns the actual DB
+  // handle so we wrap the same `localRuntimeGatewayDb()` path here.
+  const getAutomationStore = (() => {
+    let store: AutomationStore | undefined;
+    return (): AutomationStore => {
+      if (!store) {
+        const provider = makeGatewayDbProvider(localRuntimeGatewayDb());
+        store = new AutomationStore(provider);
+      }
+      return store;
+    };
+  })();
+
+  ipcMain.handle(
+    Channel.AUTOMATIONS_LIST,
+    async (_e, input: { appId: string }): Promise<AutomationRow[]> => {
+      return getAutomationStore().listByApp(input.appId);
+    },
+  );
+
+  ipcMain.handle(
+    Channel.AUTOMATIONS_RUN_NOW,
+    async (
+      _e,
+      input: { appId: string; name: string },
+    ): Promise<{
+      ok: boolean;
+      durationMs: number;
+      error?: string;
+      toolBatches: number;
+      agentCalls: number;
+    }> => {
+      const appDir = path.join(localRuntimeAppsDir(), input.appId);
+      const prefs = await loadRunnerPrefs();
+      const { outcome, record } = await runAutomationLocal({
+        appId: input.appId,
+        appDir,
+        automationName: input.name,
+        runner: prefs.kind,
+      });
+      return {
+        ok: outcome.ok,
+        durationMs: record.durationMs,
+        ...(outcome.error ? { error: outcome.error } : {}),
+        toolBatches: record.toolBatches,
+        agentCalls: record.agentCalls,
+      };
+    },
+  );
+
+  ipcMain.handle(
+    Channel.AUTOMATIONS_SET_ENABLED,
+    async (_e, input: { appId: string; name: string; enabled: boolean }) => {
+      getAutomationStore().setEnabled(input.appId, input.name, input.enabled);
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { appId: string; name: string }) => {
+    getAutomationStore().remove(input.appId, input.name);
+    return { ok: true };
+  });
 }
 
 /**
