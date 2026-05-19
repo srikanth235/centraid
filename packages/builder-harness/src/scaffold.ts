@@ -68,15 +68,18 @@ export async function scaffoldProject(
   // rules in `app.css`.
   await fs.writeFile(path.join(dir, 'app-knobs.json'), DEFAULT_APP_KNOBS);
 
-  await fs.mkdir(path.join(dir, 'queries'));
-  await fs.mkdir(path.join(dir, 'actions'));
-  await fs.mkdir(path.join(dir, 'migrations'));
-  // automations/ holds one .json manifest per cron-scheduled automation
-  // (see runtime-core's `automation-manifest.ts`). The runtime artifact
-  // — the generated `.js` handler the scheduler fires — lives next to
-  // user-authored actions under `actions/` so author-side tooling treats
-  // them uniformly.
-  await fs.mkdir(path.join(dir, 'automations'));
+  // Canonical centraid subdirs. `automations/` holds one .json manifest
+  // per cron-scheduled automation (see runtime-core's
+  // `automation-manifest.ts`); the runtime artifact — the generated .js
+  // handler — lives next to user-authored actions under `actions/` so
+  // author-side tooling treats them uniformly. Kept in sync with
+  // `clone.ts#CANONICAL_SUBDIRS` so cloned projects match fresh ones.
+  for (const sub of ['queries', 'actions', 'migrations', 'automations']) {
+    await fs.mkdir(path.join(dir, sub));
+  }
+  // Seed automations/ with a brief so empty-dir file viewers don't hide
+  // it and the agent has an in-folder pointer to the manifest shape.
+  await fs.writeFile(path.join(dir, 'automations', 'README.md'), AUTOMATIONS_README);
 
   // README so the human/agent has a clear starting brief in-folder.
   await fs.writeFile(path.join(dir, 'README.md'), README_TEMPLATE(id));
@@ -380,6 +383,50 @@ bun install   # or: npm install
 - \`app.json\` — metadata (\`name\`, \`version\`)
 
 See \`@centraid/openclaw-plugin\` for the full handler-arg types.
+`;
+
+const AUTOMATIONS_README = `# automations/
+
+Cron-scheduled deterministic actions for this app. Drop one \`.json\`
+manifest per automation here; the matching handler ships at
+\`actions/<name>.js\`. The host scheduler (launchd / Task Scheduler /
+systemd timer locally, openclaw cron remotely) fires
+\`centraid run-automation\` against each manifest on schedule.
+
+## Manifest shape
+
+\`\`\`json
+{
+  "prompt": "every 30 min, summarize new PRs in foo/bar",
+  "schedule": "*/30 * * * *",
+  "action": "summarize-prs.js",
+  "requires": {
+    "mcps": ["github"],
+    "tools": ["github.list_pull_requests"],
+    "model": "anthropic/claude-3-5-sonnet"
+  },
+  "costEstimate": { "model": "anthropic/claude-3-5-sonnet", "tokensPerFire": 5000 },
+  "generated": { "by": "builder", "at": "<ISO-8601>" }
+}
+\`\`\`
+
+- \`schedule\` is a 5-field cron expression (UTC).
+- \`requires.mcps\` / \`requires.tools\` declare which host tools the
+  handler will call via \`ctx.tool(name, args)\`. Install-time check
+  verifies the host has them before activating the schedule.
+- \`requires.model\` is the model \`ctx.agent({prompt, json?})\` should
+  route through. **Never set this to \`centraid-mock/*\`** — that would
+  recurse into the runner.
+- \`generated.at\` is an ISO-8601 timestamp.
+
+## Authoring
+
+The prompt is canonical. Re-prompting the builder regenerates the JS
+under \`actions/\`. Do not hand-edit the generated handler — your edits
+will be overwritten on the next regeneration.
+
+See \`@centraid/openclaw-plugin\`'s \`AutomationHandler\` type for the
+full handler-arg shape.
 `;
 
 function escapeHtml(s: string): string {

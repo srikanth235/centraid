@@ -133,3 +133,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-59e380359eb-1779119130-4 | 59e38035-9eb9-467d-8160-aaabcbf1a892 |  | interrupt | structural |  | fix(chat,reactivity): chat path correctness + auto-react to SQLite writes |
 | steer-59e380359eb-1779119130-5 | 59e38035-9eb9-467d-8160-aaabcbf1a892 |  | interrupt | structural |  | fix(chat,reactivity): chat path correctness + auto-react to SQLite writes |
 | steer-59e380359eb-1779119130-6 | 59e38035-9eb9-467d-8160-aaabcbf1a892 |  | interrupt | structural |  | fix(chat,reactivity): chat path correctness + auto-react to SQLite writes |
+| steer-14a8bef42c3-1779184388-1 | 14a8bef4-2c30-4aad-83f3-80f59429ed53 | #70 | correction | classifier | harness scaffold missing automations folder; should create it | fix(builder-harness): ensure automations/ folder lands on both scaffold and clo… |

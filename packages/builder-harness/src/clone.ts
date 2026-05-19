@@ -57,6 +57,14 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
   await fs.mkdir(opts.projectsDir, { recursive: true });
   await copyDir(opts.templateDir, destDir);
 
+  // Ensure the canonical centraid subdirs exist even if the template
+  // didn't ship them. `scaffoldProject` produces all four; cloning a
+  // template that pre-dates one of them shouldn't leave the agent
+  // without a canonical place to write — most relevant for
+  // `automations/`, which older templates won't have but the agent
+  // needs as the drop target for cron-scheduled manifests (issue #70).
+  await ensureCanonicalSubdirs(destDir);
+
   await rewriteAppJson(destDir, opts.newName, opts.newDesc);
   await rewritePackageJson(destDir, opts.newAppId);
 
@@ -184,6 +192,39 @@ async function readAppMeta(projectDir: string): Promise<{ name?: string; descrip
     return {};
   }
 }
+
+/**
+ * Canonical centraid subdirs every project carries. Kept in sync with
+ * `scaffoldProject` so cloned projects look identical to fresh ones.
+ * Idempotent — `mkdir { recursive: true }` is a no-op on existing dirs,
+ * so re-cloning or cloning an already-canonical template is fine.
+ */
+const CANONICAL_SUBDIRS = ['queries', 'actions', 'migrations', 'automations'] as const;
+
+async function ensureCanonicalSubdirs(projectDir: string): Promise<void> {
+  await Promise.all(
+    CANONICAL_SUBDIRS.map((sub) => fs.mkdir(path.join(projectDir, sub), { recursive: true })),
+  );
+  // Drop the automations brief if the template didn't ship one. Writing
+  // unconditionally would clobber a template that bundles real
+  // automation manifests + its own readme, so we only seed when no
+  // README exists yet.
+  const readmePath = path.join(projectDir, 'automations', 'README.md');
+  try {
+    await fs.access(readmePath);
+  } catch {
+    await fs.writeFile(readmePath, AUTOMATIONS_README);
+  }
+}
+
+const AUTOMATIONS_README = `# automations/
+
+Cron-scheduled deterministic actions for this app. Drop one \`.json\`
+manifest per automation here; the matching handler ships at
+\`actions/<name>.js\`. See the project root \`README.md\` for the full
+manifest shape, or ask the builder agent to "set up an automation
+that runs every N..." — it will scaffold both files.
+`;
 
 async function hasAnyBuiltJs(projectDir: string): Promise<boolean> {
   for (const sub of ['queries', 'actions']) {
