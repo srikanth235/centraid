@@ -189,6 +189,29 @@ export {
   type AutomationManifestValidationCode,
 } from './automation-manifest.js';
 
+// Per-app automation run audit + ctx.state backing store. Lives in its
+// own SQLite file (`automations.sqlite`) sibling to `data.sqlite`,
+// runtime-owned, never reachable from handler `db` or the
+// `centraid_sql_*` agent tools. See issue #80.
+export {
+  AutomationRunsStore,
+  type InsertRunInput,
+  type FinishRunInput,
+  type InsertNodeInput,
+  type ListRunsOptions,
+} from './automation-runs-store.js';
+export {
+  AUTOMATIONS_DB_FILE,
+  AUTOMATIONS_MIGRATIONS,
+  automationsDbPath,
+  openAutomationsDb,
+  type AutomationRunRow,
+  type AutomationRunNodeRow,
+  type AutomationStateEntry,
+  type AutomationTriggerKind,
+  type AutomationRunNodeKind,
+} from './automation-runs-schema.js';
+
 // Per-gateway automations mirror table (`gateway-db.ts` MIGRATIONS[1]).
 // The host scheduler (openclaw cron remote, OS scheduler local) owns
 // runtime state; this is centraid's own registration surface for the
