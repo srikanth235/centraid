@@ -5,14 +5,31 @@
  *
  *   1. `automations/<name>.json` — manifest (this module's shape)
  *   2. `actions/<name>.js`       — generated JS handler
- *   3. cron expression           — embedded in the manifest's `schedule`
+ *   3. cron expression           — embedded in the manifest's `trigger.expr`
  *
- * The manifest is the canonical source of truth — re-prompting overwrites
- * the .js, and the prompt is preserved verbatim in `prompt`. Validation
- * here is shared between the producer (builder-harness) and consumers
- * (runtime-core automation runner, openclaw plugin reconciliation pass,
- * desktop UI display).
+ * Issue #80 reshaped the manifest's trigger field to `trigger: { kind, expr }`
+ * so we can later add webhook/event triggers without a second migration.
+ * Legacy manifests using bare `schedule: "<cron>"` still parse — they are
+ * normalized to `trigger: { kind: 'cron', expr: "<cron>" }` in memory, and
+ * the canonical `schedule` shortcut continues to mirror `trigger.expr` so
+ * existing consumers (mirror table, cron registration) don't need to change.
+ *
+ * Output-schema validation + `validateOutputAgainstSchema` live in
+ * `automation-manifest-output.ts` to keep this file focused. Error class
+ * + validation-code union live in `automation-manifest-errors.ts`.
  */
+
+import { AutomationManifestError } from './automation-manifest-errors.js';
+import { validateOutputSchema, type AutomationOutputSchema } from './automation-manifest-output.js';
+
+export {
+  AutomationManifestError,
+  type AutomationManifestValidationCode,
+} from './automation-manifest-errors.js';
+export {
+  validateOutputAgainstSchema,
+  type AutomationOutputSchema,
+} from './automation-manifest-output.js';
 
 export interface AutomationManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
@@ -29,65 +46,57 @@ export interface AutomationManifestRequires {
 }
 
 export interface AutomationCostEstimate {
-  /** Model identifier the estimate is for. */
   readonly model: string;
-  /** Estimated tokens consumed by a single fire. */
   readonly tokensPerFire: number;
 }
 
 export interface AutomationGeneratedMeta {
-  /** What produced this manifest (`"builder"`, `"hand"`, `"test"` …). */
   readonly by: string;
-  /** ISO-8601 timestamp of generation. */
   readonly at: string;
 }
 
+/**
+ * Trigger surface. Only `cron` is wired today; webhook / event kinds are
+ * future work (issue #80 § Out). The shape leaves room without forcing
+ * a second migration.
+ */
+export type AutomationTrigger = { readonly kind: 'cron'; readonly expr: string };
+
+/**
+ * Retention policy applied at end-of-run to `runs` (and via CASCADE,
+ * `run_nodes`). One of: `{count: N}` keep newest N, `{days: N}` drop
+ * older than N days, `"all"` keep everything (no-op), `"errors"` keep
+ * only failed runs. Default at validation time is `{count: 100}`.
+ */
+export type AutomationHistoryKeep =
+  | { readonly count: number }
+  | { readonly days: number }
+  | 'all'
+  | 'errors';
+
+export interface AutomationHistoryConfig {
+  readonly keep: AutomationHistoryKeep;
+}
+
 export interface AutomationManifest {
-  /** The user's natural-language prompt — never paraphrased, never lost. */
   readonly prompt: string;
-  /** Five-field cron expression (UTC) — e.g. every-30-min: `[asterisk]/30 * * * *`. */
+  /**
+   * Cron expression — five whitespace-separated fields, UTC. Always
+   * present in the parsed manifest (mirrors `trigger.expr`). Existing
+   * consumers (mirror table, cron registration, UI display) read this
+   * field; new code paths can read `trigger` instead.
+   */
   readonly schedule: string;
-  /** Filename of the generated JS handler under `actions/`. */
+  readonly trigger: AutomationTrigger;
   readonly action: string;
-  /** Capability dependencies surfaced at install-time host-runtime check. */
   readonly requires: AutomationManifestRequires;
-  /** Optional cost telemetry surfaced in UI. */
   readonly costEstimate?: AutomationCostEstimate;
-  /** Provenance — when, by what, against what model. */
+  readonly outputSchema?: AutomationOutputSchema;
+  readonly onFailure?: string;
+  readonly history: AutomationHistoryConfig;
   readonly generated: AutomationGeneratedMeta;
 }
 
-export type AutomationManifestValidationCode =
-  | 'invalid_json'
-  | 'missing_field'
-  | 'invalid_field'
-  | 'invalid_schedule'
-  | 'invalid_action_path'
-  | 'mock_model_disallowed';
-
-export class AutomationManifestError extends Error {
-  readonly code: AutomationManifestValidationCode;
-  readonly field?: string;
-  constructor(code: AutomationManifestValidationCode, message: string, field?: string) {
-    super(message);
-    this.name = 'AutomationManifestError';
-    this.code = code;
-    if (field !== undefined) this.field = field;
-  }
-}
-
-/**
- * Minimal cron validator: five whitespace-separated fields with the
- * legal character classes for each field's value range. We deliberately
- * do not parse semantics (next-fire calculation lives in the host
- * scheduler — launchd, openclaw cron); this just rejects obvious
- * garbage at install time before the host scheduler rejects it less
- * helpfully.
- *
- * Allowed per field: digits, `*`, `,`, `-`, `/`, and (for day-of-week)
- * the three-letter weekday names. Day-of-month also allows `?` as some
- * cron flavors require it.
- */
 export function isValidCronExpression(expr: string): boolean {
   if (typeof expr !== 'string') return false;
   const trimmed = expr.trim();
@@ -98,15 +107,18 @@ export function isValidCronExpression(expr: string): boolean {
   return fields.every((f) => fieldPattern.test(f));
 }
 
-/** Action filename must be a bare basename ending in `.js` — no slashes, no `..`. */
 export function isValidActionFilename(name: string): boolean {
   if (typeof name !== 'string') return false;
   if (!name.endsWith('.js')) return false;
   if (name.includes('/') || name.includes('\\') || name.includes('..')) return false;
-  // Basename without extension must be a sensible identifier.
   const base = name.slice(0, -3);
   if (!base) return false;
   return /^[A-Za-z0-9_-]+$/.test(base);
+}
+
+export function isValidAutomationName(name: string): boolean {
+  if (typeof name !== 'string' || name.length === 0) return false;
+  return /^[A-Za-z0-9_-]+$/.test(name);
 }
 
 function requireString(value: unknown, field: string): string {
@@ -141,12 +153,165 @@ function optionalStringArray(value: unknown, field: string): readonly string[] |
   });
 }
 
-/**
- * Parse + validate a manifest from its on-disk JSON form. Returns the
- * frozen manifest on success, throws `AutomationManifestError` on failure.
- * Callers that have the parsed object already can call `validateManifest`
- * directly.
- */
+function resolveTriggerAndSchedule(r: Record<string, unknown>): {
+  trigger: AutomationTrigger;
+  schedule: string;
+} {
+  const triggerRaw = r.trigger;
+  if (triggerRaw !== undefined) {
+    if (triggerRaw === null || typeof triggerRaw !== 'object' || Array.isArray(triggerRaw)) {
+      throw new AutomationManifestError(
+        'invalid_trigger',
+        'manifest.trigger must be an object with { kind, expr }',
+        'trigger',
+      );
+    }
+    const t = triggerRaw as Record<string, unknown>;
+    if (t.kind !== 'cron') {
+      throw new AutomationManifestError(
+        'invalid_trigger',
+        `manifest.trigger.kind "${String(t.kind)}" is not supported — only "cron" is wired today`,
+        'trigger.kind',
+      );
+    }
+    const expr = requireString(t.expr, 'trigger.expr');
+    if (!isValidCronExpression(expr)) {
+      throw new AutomationManifestError(
+        'invalid_schedule',
+        `manifest.trigger.expr "${expr}" is not a valid 5-field cron expression`,
+        'trigger.expr',
+      );
+    }
+    return { trigger: { kind: 'cron', expr }, schedule: expr };
+  }
+  // Legacy form — bare `schedule` field. Normalize to trigger.
+  const sched = requireString(r.schedule, 'schedule');
+  if (!isValidCronExpression(sched)) {
+    throw new AutomationManifestError(
+      'invalid_schedule',
+      `manifest.schedule "${sched}" is not a valid 5-field cron expression`,
+      'schedule',
+    );
+  }
+  return { trigger: { kind: 'cron', expr: sched }, schedule: sched };
+}
+
+const DEFAULT_HISTORY_KEEP_COUNT = 100;
+
+function validateHistory(raw: unknown): AutomationHistoryConfig {
+  if (raw === undefined) return { keep: { count: DEFAULT_HISTORY_KEEP_COUNT } };
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new AutomationManifestError(
+      'invalid_history',
+      'manifest.history must be an object',
+      'history',
+    );
+  }
+  const h = raw as Record<string, unknown>;
+  if (h.keep === undefined) return { keep: { count: DEFAULT_HISTORY_KEEP_COUNT } };
+  const keep = h.keep;
+  if (keep === 'all' || keep === 'errors') return { keep };
+  if (keep === null || typeof keep !== 'object' || Array.isArray(keep)) {
+    throw new AutomationManifestError(
+      'invalid_history',
+      'manifest.history.keep must be {count:N} | {days:N} | "all" | "errors"',
+      'history.keep',
+    );
+  }
+  const k = keep as Record<string, unknown>;
+  if (typeof k.count === 'number' && Number.isInteger(k.count) && k.count >= 0) {
+    return { keep: { count: k.count } };
+  }
+  if (typeof k.days === 'number' && Number.isInteger(k.days) && k.days >= 0) {
+    return { keep: { days: k.days } };
+  }
+  throw new AutomationManifestError(
+    'invalid_history',
+    'manifest.history.keep must be {count:N} | {days:N} | "all" | "errors"',
+    'history.keep',
+  );
+}
+
+function validateRequires(raw: unknown): AutomationManifestRequires {
+  if (raw !== undefined && (raw === null || typeof raw !== 'object')) {
+    throw new AutomationManifestError(
+      'invalid_field',
+      'manifest.requires must be an object',
+      'requires',
+    );
+  }
+  const req = (raw ?? {}) as Record<string, unknown>;
+  const mcps = optionalStringArray(req.mcps, 'requires.mcps');
+  const tools = optionalStringArray(req.tools, 'requires.tools');
+  let model: string | undefined;
+  if (req.model !== undefined) {
+    if (typeof req.model !== 'string' || req.model.length === 0) {
+      throw new AutomationManifestError(
+        'invalid_field',
+        'manifest.requires.model must be a non-empty string',
+        'requires.model',
+      );
+    }
+    if (req.model.startsWith('centraid-mock/') || req.model === 'centraid-mock') {
+      throw new AutomationManifestError(
+        'mock_model_disallowed',
+        `manifest.requires.model "${req.model}" points at the centraid-mock provider — that would recurse into the automation runtime itself`,
+        'requires.model',
+      );
+    }
+    model = req.model;
+  }
+  const requires: AutomationManifestRequires = {};
+  if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
+  if (tools) (requires as { tools: readonly string[] }).tools = tools;
+  if (model !== undefined) (requires as { model: string }).model = model;
+  return requires;
+}
+
+function validateCostEstimate(raw: unknown): AutomationCostEstimate | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== 'object') {
+    throw new AutomationManifestError(
+      'invalid_field',
+      'manifest.costEstimate must be an object',
+      'costEstimate',
+    );
+  }
+  const ce = raw as Record<string, unknown>;
+  const model = requireString(ce.model, 'costEstimate.model');
+  if (
+    typeof ce.tokensPerFire !== 'number' ||
+    !Number.isFinite(ce.tokensPerFire) ||
+    ce.tokensPerFire < 0
+  ) {
+    throw new AutomationManifestError(
+      'invalid_field',
+      'manifest.costEstimate.tokensPerFire must be a non-negative finite number',
+      'costEstimate.tokensPerFire',
+    );
+  }
+  return { model, tokensPerFire: ce.tokensPerFire };
+}
+
+function validateOnFailure(raw: unknown): string | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string' || raw.length === 0) {
+    throw new AutomationManifestError(
+      'invalid_on_failure',
+      'manifest.onFailure must be a non-empty string naming another automation',
+      'onFailure',
+    );
+  }
+  if (!isValidAutomationName(raw)) {
+    throw new AutomationManifestError(
+      'invalid_on_failure',
+      `manifest.onFailure "${raw}" is not a valid automation name`,
+      'onFailure',
+    );
+  }
+  return raw;
+}
+
 export function parseManifest(json: string): AutomationManifest {
   let raw: unknown;
   try {
@@ -167,14 +332,7 @@ export function validateManifest(raw: unknown): AutomationManifest {
   const r = raw as Record<string, unknown>;
 
   const prompt = requireString(r.prompt, 'prompt');
-  const schedule = requireString(r.schedule, 'schedule');
-  if (!isValidCronExpression(schedule)) {
-    throw new AutomationManifestError(
-      'invalid_schedule',
-      `manifest.schedule "${schedule}" is not a valid 5-field cron expression`,
-      'schedule',
-    );
-  }
+  const { trigger, schedule } = resolveTriggerAndSchedule(r);
   const action = requireString(r.action, 'action');
   if (!isValidActionFilename(action)) {
     throw new AutomationManifestError(
@@ -183,69 +341,11 @@ export function validateManifest(raw: unknown): AutomationManifest {
       'action',
     );
   }
-
-  const requiresRaw = r.requires;
-  if (requiresRaw !== undefined && (requiresRaw === null || typeof requiresRaw !== 'object')) {
-    throw new AutomationManifestError(
-      'invalid_field',
-      'manifest.requires must be an object',
-      'requires',
-    );
-  }
-  const req = (requiresRaw ?? {}) as Record<string, unknown>;
-  const mcps = optionalStringArray(req.mcps, 'requires.mcps');
-  const tools = optionalStringArray(req.tools, 'requires.tools');
-  let model: string | undefined;
-  if (req.model !== undefined) {
-    if (typeof req.model !== 'string' || req.model.length === 0) {
-      throw new AutomationManifestError(
-        'invalid_field',
-        'manifest.requires.model must be a non-empty string',
-        'requires.model',
-      );
-    }
-    if (req.model.startsWith('centraid-mock/') || req.model === 'centraid-mock') {
-      // Hard rule: routing ctx.agent through our own mock provider would
-      // recurse into the StreamFn that is currently executing the handler.
-      // See "Manifest validation — recursion guard" in issue #70.
-      throw new AutomationManifestError(
-        'mock_model_disallowed',
-        `manifest.requires.model "${req.model}" points at the centraid-mock provider — that would recurse into the automation runtime itself`,
-        'requires.model',
-      );
-    }
-    model = req.model;
-  }
-  const requires: AutomationManifestRequires = {};
-  if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
-  if (tools) (requires as { tools: readonly string[] }).tools = tools;
-  if (model !== undefined) (requires as { model: string }).model = model;
-
-  let costEstimate: AutomationCostEstimate | undefined;
-  const ceRaw = r.costEstimate;
-  if (ceRaw !== undefined) {
-    if (ceRaw === null || typeof ceRaw !== 'object') {
-      throw new AutomationManifestError(
-        'invalid_field',
-        'manifest.costEstimate must be an object',
-        'costEstimate',
-      );
-    }
-    const ce = ceRaw as Record<string, unknown>;
-    const ceModel = requireString(ce.model, 'costEstimate.model');
-    if (
-      typeof ce.tokensPerFire !== 'number' ||
-      !Number.isFinite(ce.tokensPerFire) ||
-      ce.tokensPerFire < 0
-    ) {
-      throw new AutomationManifestError(
-        'invalid_field',
-        'manifest.costEstimate.tokensPerFire must be a non-negative finite number',
-        'costEstimate.tokensPerFire',
-      );
-    }
-    costEstimate = { model: ceModel, tokensPerFire: ce.tokensPerFire };
-  }
+  const requires = validateRequires(r.requires);
+  const costEstimate = validateCostEstimate(r.costEstimate);
+  const outputSchema = validateOutputSchema(r.outputSchema);
+  const onFailure = validateOnFailure(r.onFailure);
+  const history = validateHistory(r.history);
 
   const genRaw = r.generated;
   if (!genRaw || typeof genRaw !== 'object' || Array.isArray(genRaw)) {
@@ -261,25 +361,16 @@ export function validateManifest(raw: unknown): AutomationManifest {
     at: requireString(gen.at, 'generated.at'),
   };
 
-  const manifest: AutomationManifest = {
+  return {
     prompt,
     schedule,
+    trigger,
     action,
     requires,
     ...(costEstimate ? { costEstimate } : {}),
+    ...(outputSchema ? { outputSchema } : {}),
+    ...(onFailure ? { onFailure } : {}),
+    history,
     generated,
   };
-  return manifest;
-}
-
-/**
- * Automation name = manifest filename without extension. Mirrors the
- * convention queries and actions follow (`<name>.js`); we expose this so
- * scaffolding + UI use one source of truth.
- *
- * Allowed: same identifier subset as `isValidActionFilename`.
- */
-export function isValidAutomationName(name: string): boolean {
-  if (typeof name !== 'string' || name.length === 0) return false;
-  return /^[A-Za-z0-9_-]+$/.test(name);
 }

@@ -182,11 +182,16 @@ export {
   isValidCronExpression,
   parseManifest,
   validateManifest,
+  validateOutputAgainstSchema,
   type AutomationManifest,
   type AutomationManifestRequires,
   type AutomationCostEstimate,
   type AutomationGeneratedMeta,
   type AutomationManifestValidationCode,
+  type AutomationTrigger,
+  type AutomationOutputSchema,
+  type AutomationHistoryConfig,
+  type AutomationHistoryKeep,
 } from './automation-manifest.js';
 
 // Per-app automation run audit + ctx.state backing store. Lives in its
