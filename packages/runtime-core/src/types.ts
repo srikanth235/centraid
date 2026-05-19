@@ -108,3 +108,67 @@ export interface ActionResult {
   status?: number;
   body?: unknown;
 }
+
+/**
+ * JSON-schema-ish shape passed to `ctx.agent({ json: ... })`. We don't
+ * narrow further here — the runner forwards it to the host's structured
+ * output enforcement and rejects on parse failure.
+ */
+export type AutomationJsonSchema = Record<string, unknown>;
+
+export interface AutomationAgentArgs {
+  /** The user-or-handler-supplied prompt to the model. */
+  prompt: string;
+  /**
+   * Optional JSON schema enforced on the response. When provided, the
+   * runner re-prompts (or fails) until the model returns a value that
+   * parses + validates; the resolved Promise carries the parsed object.
+   *
+   * Without `json`, the resolved value is the raw assistant text.
+   *
+   * Setting `json` is the recommended runtime failure detector — if the
+   * host can't reach the required MCP / model, the schema check throws
+   * loudly instead of writing garbage to the DB.
+   */
+  json?: AutomationJsonSchema;
+}
+
+export interface AutomationCtx {
+  /**
+   * Invoke one host tool (MCP or builtin) deterministically. Result type
+   * is intentionally `unknown` — the handler narrows with a JSDoc cast.
+   * Concurrent calls (via Promise.all) are batched into one host agent
+   * turn for cold-start amortization.
+   */
+  tool(name: string, args: unknown): Promise<unknown>;
+  /**
+   * Constrained one-shot inference against the user's real provider.
+   * Returns the parsed JSON object when `json:` schema is set, otherwise
+   * the raw assistant text.
+   */
+  agent(args: AutomationAgentArgs): Promise<unknown>;
+  /**
+   * AbortSignal that fires when the run is being torn down (timeout,
+   * SIGTERM from the OS scheduler, manual cancel).
+   */
+  abortSignal: AbortSignal;
+}
+
+export interface AutomationHandlerArgs {
+  db: ScopedDb;
+  log: ScopedLog;
+  app: AppRef;
+  ctx: AutomationCtx;
+}
+
+/**
+ * Shape of an automation `.js` handler's default export. Automations
+ * receive a different `ctx` from queries/actions (no `fetch`; adds
+ * `tool` + `agent`) because their execution model is different: a cron
+ * fire has no human session, no HTTP request, no inbound body.
+ */
+export type AutomationHandler = HandlerFn<AutomationHandlerArgs, unknown>;
+
+export interface AutomationModule {
+  default: AutomationHandler;
+}

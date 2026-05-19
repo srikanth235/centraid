@@ -66,6 +66,12 @@ export type {
   HandlerFn,
   ScopedFetch,
   CommonHandlerArgs,
+  AutomationHandler,
+  AutomationHandlerArgs,
+  AutomationModule,
+  AutomationCtx,
+  AutomationAgentArgs,
+  AutomationJsonSchema,
 } from './types.js';
 
 // Live-schema and cloud-panel payload shapes — consumed by builder-harness
@@ -155,3 +161,55 @@ export { UserStore, makeUserStoreRouteHandler } from './user-store.js';
 export { readAppSettings, APP_SETTINGS_TABLE } from './app-settings.js';
 export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
 export type { SettingsInject } from './static-server.js';
+
+// Automation manifest schema + validator. Shared between producers
+// (`@centraid/builder-harness` writes manifests during scaffolding /
+// re-prompt) and consumers (the local automation runner in
+// `@centraid/agent-runtime`, the openclaw plugin's reconciliation pass,
+// and the desktop UI). See issue #70.
+export {
+  AutomationManifestError,
+  isValidActionFilename,
+  isValidAutomationName,
+  isValidCronExpression,
+  parseManifest,
+  validateManifest,
+  type AutomationManifest,
+  type AutomationManifestRequires,
+  type AutomationCostEstimate,
+  type AutomationGeneratedMeta,
+  type AutomationManifestValidationCode,
+} from './automation-manifest.js';
+
+// Per-gateway automations mirror table (`gateway-db.ts` MIGRATIONS[1]).
+// The host scheduler (openclaw cron remote, OS scheduler local) owns
+// runtime state; this is centraid's own registration surface for the
+// list/UI and the reconciliation pass.
+export { AutomationStore, type AutomationRow } from './automation-store.js';
+
+// Deploy boundary for automations: scan an app's `automations/*.json`
+// and bring the mirror into agreement. Called by `handleAppUpload`
+// after a publish lands; hosts can also call directly for out-of-band
+// syncs (tests, manual refresh).
+export {
+  syncAutomationsFromDisk,
+  type SyncAutomationsOptions,
+  type SyncAutomationsResult,
+  type SyncAutomationError,
+} from './sync-automations.js';
+
+// Worker-isolated automation handler runner. Hosts provide
+// `toolDispatcher` + `agentDispatcher` to wire the worker boundary into
+// either the local-side mock-LLM + CLI subprocess flow (@centraid/agent-runtime)
+// or the openclaw in-process StreamFn flow (@centraid/openclaw-plugin).
+export {
+  runAutomationHandler,
+  type RunAutomationHandlerOptions,
+  type AutomationHandlerOutcome,
+  type AutomationToolCall,
+  type AutomationToolResult,
+  type AutomationToolDispatcher,
+  type AutomationAgentCall,
+  type AutomationAgentDispatcher,
+  type AutomationDispatchContext,
+} from './automation-handler-runner.js';

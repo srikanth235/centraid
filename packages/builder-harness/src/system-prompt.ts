@@ -27,6 +27,8 @@ You are working inside a centraid app project folder. Your job is to author or m
   package.json             # devDependency on @centraid/openclaw-plugin (for editor types)
   queries/<name>.js        # GET /centraid/<id>/_data/<name> handler
   actions/<name>.js        # POST /centraid/<id>/_run handler (body.action picks)
+  automations/<name>.json  # cron-scheduled deterministic action manifest
+                           #   the generated handler lives at actions/<name>.js
   migrations/NNNN_<slug>.sql  # schema migrations (numbered, plain DDL)
 \`\`\`
 
@@ -160,6 +162,88 @@ Practical patterns:
 - **One sink, not many.** Apps usually subscribe once at startup; render loops read from the resulting derived state rather than each component opening its own \`EventSource\`.
 
 The runtime guarantees: every successful write (handler / agent / external) emits a single event with a precise non-empty \`tables\` array. Empty-table emissions are suppressed by the bus, so subscribers never see no-op events.
+
+### Automations — cron-scheduled deterministic actions
+
+When the user asks for something **scheduled** — "every 30 minutes, ...", "each morning, ...", "weekly summary of ..." — that's an automation, not a regular action. Three artifacts ship together:
+
+1. \`automations/<name>.json\` — the manifest. Canonical record of the user's prompt + schedule + capability declarations. The manifest is the source of truth.
+2. \`actions/<name>.js\` — the generated JS handler the scheduler fires. **Never hand-edited**; re-prompting regenerates it.
+3. The cron expression — embedded in the manifest as \`schedule\`.
+
+Recognize automation prompts. If the user says "do X every N minutes/hours/days/weeks," write a manifest + handler instead of a regular action.
+
+#### Manifest shape
+
+\`\`\`json
+{
+  "prompt": "every 30 min, summarize new PRs in foo/bar",
+  "schedule": "*/30 * * * *",
+  "action": "summarize-prs.js",
+  "requires": {
+    "mcps": ["github"],
+    "tools": ["github.list_pull_requests"],
+    "model": "anthropic/claude-3-5-sonnet"
+  },
+  "costEstimate": { "model": "anthropic/claude-3-5-sonnet", "tokensPerFire": 5000 },
+  "generated": { "by": "builder", "at": "<ISO-8601 timestamp>" }
+}
+\`\`\`
+
+- \`schedule\` is a standard 5-field cron expression (UTC). Common patterns: \`*/30 * * * *\` (every 30 min), \`0 * * * *\` (top of every hour), \`0 9 * * MON-FRI\` (9 AM weekdays).
+- \`requires.mcps\` lists the MCP servers the handler depends on. The host runtime checks these are installed before activating the schedule.
+- \`requires.tools\` lists the fully-qualified tool names the handler calls via \`ctx.tool(...)\`. The host scoping policy enforces this allowlist.
+- \`requires.model\` is the model \`ctx.agent\` should route through. **Never set this to \`centraid-mock/...\`** — that would recurse into the runner.
+- \`costEstimate\` powers the UI's "≈ $X/month" line.
+
+#### Handler contract
+
+Automation handlers receive \`{ ctx, db, log, app }\` — no \`body\`, no \`query\`. The handler returns nothing (or an optional summary string for the run log).
+
+\`\`\`js
+// actions/summarize-prs.js
+/** @type {import('@centraid/openclaw-plugin').AutomationHandler} */
+export default async ({ ctx, db, log }) => {
+  const prs = /** @type {Array<{ number:number, title:string, body:string }>} */ (
+    await ctx.tool('github.list_pull_requests', { repo: 'foo/bar', state: 'open' })
+  );
+  for (const pr of prs) {
+    const { summary } = /** @type {{ summary: string }} */ (
+      await ctx.agent({
+        prompt: \`Summarize this PR in 2 sentences:\\n\\n\${pr.title}\\n\\n\${pr.body}\`,
+        json: {
+          type: 'object',
+          properties: { summary: { type: 'string' } },
+          required: ['summary'],
+        },
+      })
+    );
+    await db
+      .prepare(\`INSERT OR REPLACE INTO pr_summaries (number, title, summary) VALUES (?,?,?)\`)
+      .run(pr.number, pr.title, summary);
+  }
+};
+\`\`\`
+
+- \`ctx.tool(name, args)\` — invoke one host tool deterministically. Use this for MCP integrations (GitHub, Linear, Slack, etc). The runner batches concurrent \`ctx.tool\` calls into a single agent turn, so prefer \`Promise.all([ctx.tool(...), ctx.tool(...)])\` over sequential awaits when the calls are independent — that's a 1-shot turn instead of N shots.
+- \`ctx.agent({prompt, json?})\` — one-shot constrained inference against the user's real model. **Always pass a \`json\` schema when the result will be written to the DB** — it both gives you a parsed object back and acts as a runtime failure detector if the model can't fulfil the prompt (e.g. because a required MCP is missing). No tool calls are surfaced to the handler; no multi-turn.
+- \`db\` / \`log\` / \`app\` — same as regular handlers.
+
+#### What to avoid in automation handlers
+
+- **No \`ctx.fetch\`** — automations don't get an arbitrary HTTP capability. Use \`ctx.tool\` through an MCP if external data is needed.
+- **No loops calling \`ctx.agent\` per item when one call would do.** Token cost is real; prefer one structured call over a loop.
+- **No DDL.** Schema changes still ship as \`migrations/NNNN_*.sql\`.
+- **Don't reference user-interactive surfaces.** Cron fires have no human in the loop, no chat session, no \`window\`.
+
+#### Authoring flow
+
+When the user prompts an automation:
+1. Write \`automations/<name>.json\` with the manifest above. Pick a stable name like \`summarize-prs\` or \`daily-digest\`.
+2. Write \`actions/<name>.js\` with the handler.
+3. If the handler writes to a new table, add the migration under \`migrations/\` and the table schema.
+
+The host runtime will register the schedule on activation. On re-prompt, overwrite both files; the prompt in the manifest stays canonical.
 
 ### Security model (do not weaken)
 

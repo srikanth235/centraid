@@ -1991,6 +1991,11 @@
       role: 'dialog',
       'aria-label': 'App settings',
     });
+    // Carry the app's hue into the popover so the standing-order rail
+    // and toggle pick up the same accent the iframe + brand chip use.
+    // CSS vars cascade downward only; `inner` (where openApp sets this)
+    // is a sibling, not a parent, of the panel.
+    panel.style.setProperty('--accent-color', app.color);
 
     // Stop the panel's own clicks from bubbling to the backdrop, which would
     // close it. Backdrop click closes; Esc closes globally.
@@ -2033,6 +2038,23 @@
           prefsHost.replaceChildren(renderKnobsSection(manifest.knobs, stored, view, appId, panel));
         },
       );
+    }
+
+    // Automations (issue #70) — end-user surface for cron-scheduled
+    // actions the builder agent scaffolded. Same lazy pattern as
+    // Preferences: empty host first, replace once the mirror responds.
+    // End-user controls only — on/off toggle, Run now, and a
+    // human-readable schedule. Operator concerns (delete, schedule
+    // editing) live in the builder's Cloud → Automations rail item.
+    let automationsHost: HTMLElement | null = null;
+    if (appId) {
+      automationsHost = el('div', { class: 'cd-app-settings-section-host' });
+      panel.append(automationsHost);
+      void window.CentraidApi.listAutomations({ appId }).then((rows) => {
+        if (!automationsHost || !document.contains(panel)) return;
+        if (rows.length === 0) return;
+        automationsHost.replaceChildren(renderAutomationsSection(rows, appId, panel));
+      });
     }
 
     // Manage
@@ -2080,6 +2102,249 @@
       prefsHost = null;
       delete anchor.dataset.open;
     };
+  }
+
+  // Per-automation run state, keyed by `${appId}:${name}`. Survives
+  // multiple opens/closes of the popover so a user who closes during a
+  // run sees the result chip on next open.
+  const automationRunState = new Map<
+    string,
+    | { kind: 'running' }
+    | { kind: 'done'; ok: boolean; durationMs: number; error?: string; finishedAt: number }
+  >();
+  const automationKey = (appId: string, name: string): string => `${appId}:${name}`;
+
+  /**
+   * Translate a 5-field cron expression into a small-caps display
+   * string. Covers the patterns the builder agent actually emits
+   * (`0 20 * * 0`, `0 17 * * 1-5`, `*[asterisk-slash]N * * * *`, …);
+   * unrecognized expressions fall back to the raw text so the
+   * end-user at least sees something stable.
+   *
+   * Time zone is the user's local — the cron expression runs in UTC
+   * server-side, but for the in-app surface we show what they'll
+   * actually feel.
+   */
+  function cronToHuman(expr: string): string {
+    const fields = expr.trim().split(/\s+/);
+    if (fields.length !== 5) return expr;
+    const [min, hour, dom, month, dow] = fields as [string, string, string, string, string];
+
+    const fmtTime = (h: number, m: number): string => {
+      const date = new Date();
+      date.setHours(h, m, 0, 0);
+      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    };
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    // Every N minutes
+    const stepMin = min.match(/^\*\/(\d+)$/);
+    if (stepMin && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+      const n = Number(stepMin[1]);
+      return n === 1 ? 'Every minute' : `Every ${n} minutes`;
+    }
+
+    // Hourly on the dot
+    if (min === '0' && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+      return 'Hourly';
+    }
+
+    const minNum = Number(min);
+    const hourNum = Number(hour);
+    const isExactTime = !Number.isNaN(minNum) && !Number.isNaN(hourNum);
+
+    if (isExactTime && dom === '*' && month === '*') {
+      const time = fmtTime(hourNum, minNum);
+      if (dow === '*') return `Daily at ${time}`;
+      if (dow === '1-5') return `Weekdays at ${time}`;
+      if (dow === '0,6' || dow === '6,0') return `Weekends at ${time}`;
+      const single = Number(dow);
+      if (!Number.isNaN(single) && single >= 0 && single <= 6) {
+        return `${dayNames[single]}s at ${time}`;
+      }
+    }
+
+    return expr;
+  }
+
+  function renderAutomationsSection(
+    rows: CentraidAutomationRow[],
+    appId: string,
+    panel: HTMLElement,
+  ): HTMLElement {
+    const section = el('div', { class: 'cd-app-settings-section cd-app-orders' });
+    section.append(
+      el('div', { class: 'cd-app-settings-section-label cd-app-orders-label' }, 'Standing orders'),
+    );
+
+    const list = el('div', { class: 'cd-app-orders-list' });
+    for (const row of rows) {
+      list.append(renderStandingOrder(row, appId, panel));
+    }
+    section.append(list);
+    return section;
+  }
+
+  function renderStandingOrder(
+    row: CentraidAutomationRow,
+    appId: string,
+    panel: HTMLElement,
+  ): HTMLElement {
+    const card = el('article', {
+      class: 'cd-app-order',
+      'data-enabled': String(row.enabled),
+    });
+
+    // Left rail — thin colored bar. Accent when on, neutral when off.
+    // Decorative only; the toggle is the keyboard target.
+    card.append(el('span', { class: 'cd-app-order-rail', 'aria-hidden': 'true' }));
+
+    const body = el('div', { class: 'cd-app-order-body' });
+
+    // Header line: schedule (display) · run-now affordance.
+    const head = el('div', { class: 'cd-app-order-head' });
+    const schedule = el('span', { class: 'cd-app-order-schedule' }, cronToHuman(row.cronExpr));
+    head.append(schedule);
+
+    const stateKey = automationKey(appId, row.name);
+    const runBtn = el('button', {
+      class: 'cd-app-order-run',
+      type: 'button',
+      onClick: () => void onRunStandingOrder(row, appId, panel),
+    }) as HTMLButtonElement;
+    const runState = automationRunState.get(stateKey);
+    runBtn.disabled = runState?.kind === 'running';
+    runBtn.textContent = runState?.kind === 'running' ? 'Running…' : 'Run now';
+    head.append(runBtn);
+    body.append(head);
+
+    // The user's NL prompt, treated as a quoted instruction. No quote
+    // marks — the left rule + italic carry the gesture.
+    const promptEl = el('blockquote', { class: 'cd-app-order-prompt' });
+    promptEl.textContent = row.prompt;
+    body.append(promptEl);
+
+    // Foot: handler reference + result chip when present.
+    const foot = el('div', { class: 'cd-app-order-foot' });
+    foot.append(el('span', { class: 'cd-app-order-handler' }, row.manifest.action));
+
+    if (runState?.kind === 'done') {
+      const chip = el('span', {
+        class: 'cd-app-order-result',
+        'data-ok': String(runState.ok),
+      });
+      if (runState.ok) {
+        chip.textContent = `Ran in ${formatDuration(runState.durationMs)}`;
+      } else {
+        chip.textContent = runState.error
+          ? `Failed: ${runState.error}`
+          : `Failed in ${formatDuration(runState.durationMs)}`;
+      }
+      foot.append(chip);
+    }
+    body.append(foot);
+    card.append(body);
+
+    // Toggle column — pill switch. The label wraps the input so the
+    // visual hit-area and the keyboard control align.
+    const toggle = el('label', {
+      class: 'cd-app-order-toggle',
+      'aria-label': `${row.enabled ? 'Disable' : 'Enable'} ${row.name}`,
+    });
+    const input = el('input', { type: 'checkbox' }) as HTMLInputElement;
+    input.checked = row.enabled;
+    input.addEventListener('change', () => {
+      void onToggleStandingOrder(row, appId, input, card, panel);
+    });
+    toggle.append(input);
+    toggle.append(el('span', { class: 'cd-app-order-toggle-track', 'aria-hidden': 'true' }));
+    card.append(toggle);
+
+    return card;
+  }
+
+  function formatDuration(ms: number): string {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    const mins = Math.floor(ms / 60_000);
+    const secs = Math.round((ms % 60_000) / 1000);
+    return secs ? `${mins}m ${secs}s` : `${mins}m`;
+  }
+
+  async function onToggleStandingOrder(
+    row: CentraidAutomationRow,
+    appId: string,
+    input: HTMLInputElement,
+    card: HTMLElement,
+    panel: HTMLElement,
+  ): Promise<void> {
+    const next = input.checked;
+    card.dataset.enabled = String(next);
+    try {
+      await window.CentraidApi.setAutomationEnabled({ appId, name: row.name, enabled: next });
+      // The in-memory row stored by closure is now stale; reflect the
+      // new state so a subsequent toggle reads the right "current."
+      (row as { enabled: boolean }).enabled = next;
+    } catch (err) {
+      // Revert UI so it doesn't lie about persisted state.
+      input.checked = row.enabled;
+      card.dataset.enabled = String(row.enabled);
+      if (document.contains(panel)) {
+        showToast(
+          `Could not ${next ? 'enable' : 'disable'} ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
+  async function onRunStandingOrder(
+    row: CentraidAutomationRow,
+    appId: string,
+    panel: HTMLElement,
+  ): Promise<void> {
+    const stateKey = automationKey(appId, row.name);
+    automationRunState.set(stateKey, { kind: 'running' });
+    // Repaint just this card so the rest of the panel doesn't blink.
+    rerenderOrderCard(row, appId, panel);
+    try {
+      const result = await window.CentraidApi.runAutomationNow({ appId, name: row.name });
+      automationRunState.set(stateKey, {
+        kind: 'done',
+        ok: result.ok,
+        durationMs: result.durationMs,
+        ...(result.error ? { error: result.error } : {}),
+        finishedAt: Date.now(),
+      });
+    } catch (err) {
+      automationRunState.set(stateKey, {
+        kind: 'done',
+        ok: false,
+        durationMs: 0,
+        error: err instanceof Error ? err.message : String(err),
+        finishedAt: Date.now(),
+      });
+    }
+    rerenderOrderCard(row, appId, panel);
+  }
+
+  function rerenderOrderCard(row: CentraidAutomationRow, appId: string, panel: HTMLElement): void {
+    if (!document.contains(panel)) return;
+    const list = panel.querySelector('.cd-app-orders-list');
+    if (!list) return;
+    const cards = list.querySelectorAll<HTMLElement>('.cd-app-order');
+    // The order matches the listAutomations response — find by name
+    // via the run-now button's disabled-state proxy and the handler
+    // span. Simpler: replace whichever card carries this name in its
+    // aria-label-bearing toggle.
+    for (const card of cards) {
+      const toggle = card.querySelector<HTMLElement>('.cd-app-order-toggle');
+      if (toggle?.getAttribute('aria-label')?.endsWith(row.name)) {
+        const next = renderStandingOrder(row, appId, panel);
+        card.replaceWith(next);
+        return;
+      }
+    }
   }
 
   function renderKnobsSection(

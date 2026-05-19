@@ -485,6 +485,46 @@ interface CentraidApi {
    * an explicit user action.
    */
   getRunnerStatus(): Promise<CentraidRunnerStatus>;
+
+  // Automations (issue #70). The desktop UI reads the per-gateway
+  // automations mirror table directly and triggers manual runs via
+  // the local headless run path.
+  listAutomations(input: { appId: string }): Promise<CentraidAutomationRow[]>;
+  runAutomationNow(input: { appId: string; name: string }): Promise<CentraidAutomationRunResult>;
+  setAutomationEnabled(input: {
+    appId: string;
+    name: string;
+    enabled: boolean;
+  }): Promise<{ ok: true }>;
+  deleteAutomation(input: { appId: string; name: string }): Promise<{ ok: true }>;
+}
+
+/** Row shape returned by `listAutomations`. Mirrors `AutomationRow` from runtime-core. */
+export interface CentraidAutomationRow {
+  appId: string;
+  name: string;
+  prompt: string;
+  cronExpr: string;
+  enabled: boolean;
+  manifest: {
+    prompt: string;
+    schedule: string;
+    action: string;
+    requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
+    costEstimate?: { model: string; tokensPerFire: number };
+    generated: { by: string; at: string };
+  };
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Result of `runAutomationNow`. */
+export interface CentraidAutomationRunResult {
+  ok: boolean;
+  durationMs: number;
+  error?: string;
+  toolBatches: number;
+  agentCalls: number;
 }
 
 /** Sub-status for a custom OpenAI-compatible provider on a codex runner. */
@@ -618,5 +658,31 @@ declare global {
       };
   interface CentraidChatSessionWithMessages extends CentraidChatSessionMeta {
     messages: Array<{ idx: number; payload: CentraidChatHistoryMessage; createdAt: number }>;
+  }
+  // Mirror of the module-level CentraidAutomationRow/Result so the Cloud
+  // → Automations panel can reference them by bare name without imports.
+  interface CentraidAutomationRow {
+    appId: string;
+    name: string;
+    prompt: string;
+    cronExpr: string;
+    enabled: boolean;
+    manifest: {
+      prompt: string;
+      schedule: string;
+      action: string;
+      requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
+      costEstimate?: { model: string; tokensPerFire: number };
+      generated: { by: string; at: string };
+    };
+    createdAt: number;
+    updatedAt: number;
+  }
+  interface CentraidAutomationRunResult {
+    ok: boolean;
+    durationMs: number;
+    error?: string;
+    toolBatches: number;
+    agentCalls: number;
   }
 }

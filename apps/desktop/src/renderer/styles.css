@@ -2486,6 +2486,109 @@ textarea {
   word-break: break-word;
 }
 
+/* Cloud → Automations — per-app cron-scheduled actions (issue #70).
+ * Each card pairs the user's NL prompt with the cron expression, the
+ * enable/disable toggle, and Run-now / Delete affordances. The result
+ * chip after a manual run sticks until the next refresh so the user
+ * can read the timing without watching the panel. */
+.cloud-automations {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cloud-automation-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cloud-automation-row[data-enabled='false'] {
+  opacity: 0.72;
+}
+.cloud-automation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cloud-automation-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.cloud-automation-name {
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 13px;
+}
+.cloud-automation-cron {
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+}
+.cloud-automation-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.cloud-automation-toggle-text {
+  min-width: 22px;
+}
+.cloud-automation-prompt {
+  font-size: 12.5px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cloud-automation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cloud-automation-meta-item {
+  font-size: 11px;
+  color: var(--ink-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+}
+.cloud-automation-meta-faint {
+  color: var(--ink-3);
+  background: transparent;
+  font-family: inherit;
+}
+.cloud-automation-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cloud-automation-result {
+  font-size: 11.5px;
+  margin-left: auto;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+}
+.cloud-automation-result[data-ok='true'] {
+  color: var(--success, #2f9d3f);
+  background: color-mix(in srgb, var(--success, #2f9d3f) 10%, transparent);
+}
+.cloud-automation-result[data-ok='false'] {
+  color: var(--danger, #e25555);
+  background: color-mix(in srgb, var(--danger, #e25555) 10%, transparent);
+}
+
 /* Code — file tree (left) + viewer (right) */
 .code-pane {
   flex: 1;
@@ -5547,6 +5650,201 @@ textarea {
   flex-direction: column;
   gap: 10px;
 }
+
+/* "Standing orders" — per-automation cards inside the app-view gear
+ * popover. Different visual register from the Preferences section
+ * above: the schedule is the dominant element (small-caps + mono
+ * numerals), the user's NL prompt reads as a quoted instruction with
+ * a left rule, and a custom pill switch carries the enable state.
+ * Decorative rail on the left edge shifts from accent → ink-4 when
+ * the order is paused, so an off automation feels stilled rather
+ * than absent. Issue #70. */
+.cd-app-orders {
+  padding-top: 12px;
+  padding-bottom: 14px;
+}
+.cd-app-orders-label {
+  margin-bottom: 2px;
+}
+.cd-app-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-app-order {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3px 1fr auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 10px 10px 0;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--ink) 2.5%, transparent);
+  transition: background 0.15s ease;
+}
+.cd-app-order:hover {
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+.cd-app-order-rail {
+  align-self: stretch;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-color, color-mix(in oklab, var(--ink) 35%, transparent));
+  transition:
+    background 0.18s ease,
+    opacity 0.18s ease;
+}
+.cd-app-order[data-enabled='false'] .cd-app-order-rail {
+  background: color-mix(in oklab, var(--ink) 16%, transparent);
+}
+.cd-app-order[data-enabled='false'] .cd-app-order-schedule {
+  color: var(--ink-3);
+}
+.cd-app-order[data-enabled='false'] .cd-app-order-prompt {
+  opacity: 0.6;
+}
+.cd-app-order-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cd-app-order-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cd-app-order-schedule {
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.cd-app-order-run {
+  flex: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--ink) 18%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    text-decoration-color 0.15s ease;
+}
+.cd-app-order-run:hover:not(:disabled) {
+  color: var(--ink);
+  text-decoration-color: var(--ink-2);
+}
+.cd-app-order-run:disabled {
+  color: var(--ink-4);
+  cursor: progress;
+  text-decoration-color: transparent;
+}
+.cd-app-order-prompt {
+  margin: 0;
+  padding: 0 0 0 10px;
+  border-left: 2px solid color-mix(in oklab, var(--ink) 12%, transparent);
+  font-size: 12.5px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cd-app-order-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cd-app-order-handler {
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  letter-spacing: 0.01em;
+}
+.cd-app-order-result {
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: auto;
+}
+.cd-app-order-result[data-ok='true'] {
+  color: var(--success, #2f9d3f);
+  background: color-mix(in srgb, var(--success, #2f9d3f) 10%, transparent);
+}
+.cd-app-order-result[data-ok='false'] {
+  color: var(--danger, #e25555);
+  background: color-mix(in srgb, var(--danger, #e25555) 10%, transparent);
+}
+
+/* Pill toggle — custom, not a native checkbox. Matches the dignity
+ * of the surrounding typography; iOS-style affordance reads as
+ * deliberate without being overwrought. */
+.cd-app-order-toggle {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 18px;
+  flex: none;
+  margin-top: 2px;
+  cursor: pointer;
+}
+.cd-app-order-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.cd-app-order-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--ink) 14%, transparent);
+  border-radius: 999px;
+  transition:
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.cd-app-order-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: transform 0.18s cubic-bezier(0.34, 1.32, 0.7, 1);
+}
+.cd-app-order-toggle input:checked + .cd-app-order-toggle-track {
+  background: var(--accent-color, color-mix(in oklab, var(--ink) 70%, transparent));
+}
+.cd-app-order-toggle input:checked + .cd-app-order-toggle-track::after {
+  transform: translateX(12px);
+}
+.cd-app-order-toggle input:focus-visible + .cd-app-order-toggle-track {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px color-mix(in oklab, var(--ink) 35%, transparent);
+}
+
 .cd-app-settings-section-label {
   font-family: var(--font-mono);
   font-size: 9.5px;

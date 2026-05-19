@@ -29,6 +29,7 @@
 import path from 'node:path';
 import { statSync } from 'node:fs';
 import { describeOp, readOp, writeOp, SqlOpRefusal, RunQueryError } from '@centraid/runtime-core';
+import { runAutomationLocal, type LocalRunnerKind } from './run-automation-local.js';
 
 function dataFile(): string {
   if (process.env.CENTRAID_DATA_FILE) return process.env.CENTRAID_DATA_FILE;
@@ -57,9 +58,16 @@ function usage(): never {
       '  centraid sql read "SELECT ..."',
       '  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."',
       '  centraid preview snapshot',
+      '  centraid run-automation <appId> <name> [--runner codex|claude-code] [--timeout-ms <n>]',
       '',
       'The CLI operates relative to the current working directory.',
       'DDL (CREATE/ALTER/DROP) and PRAGMA are not allowed in `sql` subcommands.',
+      '',
+      '`run-automation` is the headless entry point invoked by host schedulers',
+      '(launchd / Task Scheduler / systemd timer). It loads the manifest at',
+      '`<cwd>/automations/<name>.json`, spawns the appropriate CLI per ctx.tool',
+      'batch, and writes a run record to stdout as JSON. Exits 0 on success,',
+      'non-zero on failure.',
       '',
     ].join('\n'),
   );
@@ -123,9 +131,84 @@ function commandWrite(sql: string): void {
   }
 }
 
+interface ParsedRunAutomation {
+  appId: string;
+  name: string;
+  runner: LocalRunnerKind;
+  timeoutMs?: number;
+}
+
+function parseRunAutomationArgs(args: string[]): ParsedRunAutomation {
+  if (args.length < 2) {
+    process.stderr.write('centraid: `run-automation` requires <appId> <name>\n');
+    process.exit(2);
+  }
+  const appId = args[0]!;
+  const name = args[1]!;
+  let runner: LocalRunnerKind = 'codex';
+  let timeoutMs: number | undefined;
+  for (let i = 2; i < args.length; i++) {
+    const flag = args[i];
+    if (flag === '--runner') {
+      const value = args[++i];
+      if (value !== 'codex' && value !== 'claude-code') {
+        process.stderr.write(
+          `centraid: --runner must be "codex" or "claude-code", got "${value}"\n`,
+        );
+        process.exit(2);
+      }
+      runner = value;
+    } else if (flag === '--timeout-ms') {
+      const value = Number(args[++i]);
+      if (!Number.isFinite(value) || value <= 0) {
+        process.stderr.write(
+          `centraid: --timeout-ms must be a positive number, got "${args[i]}"\n`,
+        );
+        process.exit(2);
+      }
+      timeoutMs = value;
+    } else {
+      process.stderr.write(`centraid: unknown flag "${flag}"\n`);
+      process.exit(2);
+    }
+  }
+  return { appId, name, runner, ...(timeoutMs !== undefined ? { timeoutMs } : {}) };
+}
+
+async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never> {
+  const appDir = process.cwd();
+  try {
+    const { outcome, record } = await runAutomationLocal({
+      appId: parsed.appId,
+      appDir,
+      automationName: parsed.name,
+      runner: parsed.runner,
+      ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
+      onLog: (level, msg) => {
+        process.stderr.write(`[mock-llm:${level}] ${msg}\n`);
+      },
+    });
+    // Run record is the structured stdout. Human-friendly summary on
+    // stderr so the OS scheduler's log shows the gist at a glance.
+    printJson(record);
+    process.stderr.write(
+      `centraid: automation ${record.appId}/${record.automationName} ${record.ok ? 'ok' : 'FAILED'} ` +
+        `in ${record.durationMs}ms (${record.toolBatches} tool batches, ${record.agentCalls} agent calls)\n`,
+    );
+    process.exit(outcome.ok ? 0 : 1);
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
 function main(argv: string[]): void {
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') usage();
   const top = argv[0];
+  if (top === 'run-automation') {
+    const parsed = parseRunAutomationArgs(argv.slice(1));
+    void commandRunAutomation(parsed);
+    return;
+  }
   if (top === 'preview') {
     const sub = argv[1];
     if (sub !== 'snapshot') {

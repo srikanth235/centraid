@@ -68,3 +68,55 @@ export {
   parseSemver,
   compareSemver,
 } from './preflight.js';
+
+// Ephemeral HTTP mock-LLM server used by the local automation runtime
+// (see issue #70). Per-spawn lifecycle, bearer-token-as-dispatch-id
+// correlation, speaks both Anthropic Messages and OpenAI Chat
+// Completions.
+export {
+  startMockLlmServer,
+  type MockLlmServerHandle,
+  type MockLlmServerOptions,
+  type StagedTurn,
+  type CapturedToolResult,
+} from './mock-llm-server.js';
+
+// Local-side per-fire orchestrator for automations. Loads the manifest,
+// stands up the mock-LLM, drives the worker, spawns claude / codex
+// subprocesses per ctx.tool batch, routes ctx.agent through the user's
+// real provider. See issue #70.
+export {
+  runAutomationLocal,
+  defaultSpawnCli,
+  type RunAutomationLocalOptions,
+  type AutomationRunRecord,
+  type LocalRunnerKind,
+  type SpawnCli,
+  type SpawnCliInput,
+  type SpawnCliResult,
+} from './run-automation-local.js';
+
+// OS-level scheduler glue (launchd / systemd / Task Scheduler) for
+// the local path. Pure-function artifact generators (testable
+// without touching the real scheduler) plus register/unregister/list
+// that shell out via an injectable execShell.
+export {
+  register as registerOsJob,
+  unregister as unregisterOsJob,
+  list as listOsJobs,
+  jobLabel,
+  currentPlatform,
+  buildLaunchdPlist,
+  cronToLaunchdIntervals,
+  buildSystemdService,
+  buildSystemdTimer,
+  cronToSystemdOnCalendar,
+  cronToSchtasksArgs,
+  defaultExecShell,
+  UnsupportedOsSchedulerError,
+  type OsPlatform,
+  type OsSchedulerJobSpec,
+  type OsSchedulerJobInstalled,
+  type OsSchedulerOptions,
+  type ExecShell,
+} from './os-scheduler.js';
