@@ -25,9 +25,12 @@ import {
   UserStore,
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
+  AutomationStore,
 } from '@centraid/runtime-core';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
+import { registerAutomationsProvider, setOpenClawConfig } from './lib/automations-provider.js';
+import { reconcileAutomationCron } from './lib/automations-cron.js';
 
 // Re-export the public handler & payload types from runtime-core so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -91,6 +94,7 @@ export default definePluginEntry({
     const gatewayDbPath = path.join(path.dirname(appsDir), 'centraid-gateway.sqlite');
     const gatewayDbProvider = makeGatewayDbProvider(gatewayDbPath);
     const userStore = new UserStore(gatewayDbProvider);
+    const automationStore = new AutomationStore(gatewayDbProvider);
 
     const chatRunner = makeOpenClawChatRunner(api);
 
@@ -103,8 +107,45 @@ export default definePluginEntry({
       runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
     });
 
+    // Register the centraid-mock provider plugin. The provider's
+    // StreamFn parses the dispatch sentinel from the cron-fire prompt,
+    // loads the automation handler off disk, and runs it with a ctx
+    // that routes ctx.tool through callGatewayTool and ctx.agent
+    // through the user's REAL provider via the simple-completion
+    // runtime. See `lib/automations-provider.ts`.
+    registerAutomationsProvider(api, {
+      resolveAppDir: (appId) => {
+        const entry = runtime.registry.get(appId);
+        return entry?.path;
+      },
+      logger: api.logger,
+    });
+
     api.on('gateway_start', async () => {
       await runtime.bootstrap();
+      // Bind the openclaw config so the provider plugin's ctx.agent
+      // path can route through `prepareSimpleCompletionModelForAgent`.
+      // `api.config` is available at gateway_start time; before this
+      // any cron fire would throw, but cron jobs don't fire until
+      // after gateway_start anyway.
+      setOpenClawConfig((api as unknown as { config: unknown }).config);
+      // Reconcile centraid's automations mirror with openclaw's cron
+      // store. Adds jobs we expect but openclaw doesn't know about,
+      // updates mismatched ones, removes zombies. Soft-fails on
+      // network / SDK errors so a transient cron-store hiccup doesn't
+      // prevent the plugin from booting.
+      try {
+        const outcome = await reconcileAutomationCron(automationStore);
+        if (outcome.added.length + outcome.updated.length + outcome.removed.length > 0) {
+          api.logger.info(
+            `[centraid] automations reconciled: +${outcome.added.length} ~${outcome.updated.length} -${outcome.removed.length}`,
+          );
+        }
+      } catch (err) {
+        api.logger.warn(
+          `[centraid] automations reconciliation failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     });
 
     api.registerHttpRoute({

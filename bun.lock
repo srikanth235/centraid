@@ -140,6 +140,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/runtime-core": "workspace:*",
+        "@mariozechner/pi-ai": "^0.73.0",
         "@sinclair/typebox": "^0.27.0",
       },
       "devDependencies": {

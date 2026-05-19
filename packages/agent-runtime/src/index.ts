@@ -95,3 +95,28 @@ export {
   type SpawnCliInput,
   type SpawnCliResult,
 } from './run-automation-local.js';
+
+// OS-level scheduler glue (launchd / systemd / Task Scheduler) for
+// the local path. Pure-function artifact generators (testable
+// without touching the real scheduler) plus register/unregister/list
+// that shell out via an injectable execShell.
+export {
+  register as registerOsJob,
+  unregister as unregisterOsJob,
+  list as listOsJobs,
+  jobLabel,
+  currentPlatform,
+  buildLaunchdPlist,
+  cronToLaunchdIntervals,
+  buildSystemdService,
+  buildSystemdTimer,
+  cronToSystemdOnCalendar,
+  cronToSchtasksArgs,
+  defaultExecShell,
+  UnsupportedOsSchedulerError,
+  type OsPlatform,
+  type OsSchedulerJobSpec,
+  type OsSchedulerJobInstalled,
+  type OsSchedulerOptions,
+  type ExecShell,
+} from './os-scheduler.js';
