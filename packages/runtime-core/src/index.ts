@@ -155,3 +155,28 @@ export { UserStore, makeUserStoreRouteHandler } from './user-store.js';
 export { readAppSettings, APP_SETTINGS_TABLE } from './app-settings.js';
 export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
 export type { SettingsInject } from './static-server.js';
+
+// Automation manifest schema + validator. Shared between producers
+// (`@centraid/builder-harness` writes manifests during scaffolding /
+// re-prompt) and consumers (the local automation runner in
+// `@centraid/agent-runtime`, the openclaw plugin's reconciliation pass,
+// and the desktop UI). See issue #70.
+export {
+  AutomationManifestError,
+  isValidActionFilename,
+  isValidAutomationName,
+  isValidCronExpression,
+  parseManifest,
+  validateManifest,
+  type AutomationManifest,
+  type AutomationManifestRequires,
+  type AutomationCostEstimate,
+  type AutomationGeneratedMeta,
+  type AutomationManifestValidationCode,
+} from './automation-manifest.js';
+
+// Per-gateway automations mirror table (`gateway-db.ts` MIGRATIONS[1]).
+// The host scheduler (openclaw cron remote, OS scheduler local) owns
+// runtime state; this is centraid's own registration surface for the
+// list/UI and the reconciliation pass.
+export { AutomationStore, type AutomationRow } from './automation-store.js';

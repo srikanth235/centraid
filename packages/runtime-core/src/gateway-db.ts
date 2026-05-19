@@ -93,6 +93,33 @@ export const MIGRATIONS: readonly string[] = [
     CREATE INDEX IF NOT EXISTS idx_chat_messages_session
       ON chat_messages(session_id);
   `,
+  // 1 → 2: automations mirror table.
+  //
+  // The cron schedule itself + last/next-run telemetry live in the host
+  // scheduler (openclaw cron on remote, OS scheduler on local — see
+  // issue #70). This table is centraid's own *mirror* so the desktop UI
+  // can list automations per app, the reconciliation pass at
+  // `gateway_start` can diff DB-vs-host to clean up zombies, and editors
+  // have one place to read the canonical prompt + manifest.
+  //
+  // We don't FK to the apps registry (`_registry.json`) — it's a file,
+  // not a SQLite table — but the reconciliation pass treats a missing
+  // app_id as "stale, remove."
+  `
+    CREATE TABLE IF NOT EXISTS automations (
+      app_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      cron_expr TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      manifest_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (app_id, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_automations_app
+      ON automations(app_id);
+  `,
 ];
 
 function migrate(db: DatabaseSync): void {

@@ -29,7 +29,7 @@ describe('openGatewayDb', () => {
     assert.equal(userVersion(path), MIGRATIONS.length);
   });
 
-  it('creates the four expected tables with FK constraints', () => {
+  it('creates the expected tables with FK constraints', () => {
     const path = freshDbPath();
     openGatewayDb(path).close();
     const db = new DatabaseSync(path);
@@ -38,7 +38,13 @@ describe('openGatewayDb', () => {
         .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
         .all() as Array<{ name: string }>;
       const names = tables.map((t) => t.name).filter((n) => !n.startsWith('sqlite_'));
-      assert.deepEqual(names.sort(), ['chat_messages', 'chat_sessions', 'user_prefs', 'users']);
+      assert.deepEqual(names.sort(), [
+        'automations',
+        'chat_messages',
+        'chat_sessions',
+        'user_prefs',
+        'users',
+      ]);
 
       // Verify the FK from chat_sessions → users with ON DELETE CASCADE.
       const fks = db.prepare(`PRAGMA foreign_key_list('chat_sessions')`).all() as Array<{

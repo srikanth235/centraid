@@ -71,6 +71,12 @@ export async function scaffoldProject(
   await fs.mkdir(path.join(dir, 'queries'));
   await fs.mkdir(path.join(dir, 'actions'));
   await fs.mkdir(path.join(dir, 'migrations'));
+  // automations/ holds one .json manifest per cron-scheduled automation
+  // (see runtime-core's `automation-manifest.ts`). The runtime artifact
+  // — the generated `.js` handler the scheduler fires — lives next to
+  // user-authored actions under `actions/` so author-side tooling treats
+  // them uniformly.
+  await fs.mkdir(path.join(dir, 'automations'));
 
   // README so the human/agent has a clear starting brief in-folder.
   await fs.writeFile(path.join(dir, 'README.md'), README_TEMPLATE(id));
@@ -196,6 +202,9 @@ export async function deleteProject(projectsDir: string, id: string): Promise<vo
 }
 
 async function hasAnyBuiltJs(projectDir: string): Promise<boolean> {
+  // Note: the automation handler is generated under `actions/`, so it's
+  // already covered by the actions scan below. The `automations/` folder
+  // itself only holds manifests, not executable code — no need to scan it.
   for (const sub of ['queries', 'actions']) {
     const dir = path.join(projectDir, sub);
     const entries = await fs.readdir(dir).catch(() => []);
@@ -363,6 +372,10 @@ bun install   # or: npm install
 - \`index.html\`, \`app.css\`, \`app.js\` — static, served from \`/centraid/${id}/\`
 - \`queries/<name>.js\` — GET \`/centraid/${id}/_data/<name>\`
 - \`actions/<name>.js\` — POST \`/centraid/${id}/_run\` (body picks \`action\`)
+- \`automations/<name>.json\` — cron-scheduled deterministic action manifest;
+  the generated handler lives under \`actions/<name>.js\` and is fired by the
+  host scheduler. The manifest is the source of truth; the handler is
+  regenerated from the user's prompt and is **not** hand-edited.
 - \`migrations/NNNN_<slug>.sql\` — schema migrations applied on publish
 - \`app.json\` — metadata (\`name\`, \`version\`)
 
