@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit codex-jsonrpc-adapter pending split codex-event-translator helpers (describeStartedTool, extractArgs, readAgentMessageText, extractErrorText, summarizeToolResult) into a sibling module
 /*
  * Codex app-server backend.
  *
@@ -21,6 +22,14 @@
  * Auth: codex reads `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`).
  * The user is expected to run `codex login` once before this runs.
  *
+ * Custom OpenAI-compatible providers: when `config.provider` is set, the
+ * adapter materializes a scoped `CODEX_HOME` under
+ * `config.codexHomeBaseDir/codex-homes/<id>/` containing a generated
+ * `config.toml` that declares the endpoint, and points the spawned
+ * codex process at it via the `CODEX_HOME` env var. The user's real
+ * `~/.codex` (and `auth.json`) is untouched. The API key is injected
+ * into the child's env under `provider.envKey` — never written to disk.
+ *
  * Sandbox: we pin `sandbox: 'workspace-write'` and `approvalPolicy: 'never'`
  * so the agent can write files inside `cwd` without prompting. The
  * caller already scopes `cwd` to a per-app/per-project dir. Enum strings
@@ -33,10 +42,13 @@
 
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import type { ChatStreamEvent } from '@centraid/runtime-core';
 import type { ToolContext } from './runtime.js';
+import type { OpenAICompatProvider } from './types.js';
+import { materializeCodexHome } from './codex-provider-config.js';
 import { centraidDynamicToolSpecs, handleCentraidToolCall } from './codex-centraid-tools.js';
 
 export interface CodexAppServerInput {
@@ -75,6 +87,21 @@ export interface CodexAppServerConfig {
   binPath?: string;
   /** Extra args passed to `codex app-server` (rare). */
   extraArgs?: string[];
+  /**
+   * When set, the spawned codex process gets a scoped `CODEX_HOME`
+   * containing a generated `config.toml` that routes all model calls
+   * through this OpenAI-compatible endpoint. The user's `~/.codex` is
+   * never read or modified.
+   */
+  provider?: OpenAICompatProvider;
+  /**
+   * Parent directory under which provider-scoped CODEX_HOMEs are
+   * materialized (one subdir per `provider.id`). Only used when
+   * `provider` is set. Defaults to `os.tmpdir()` — hosts that want
+   * codex thread state to persist across launches should point this
+   * at a stable location under their userData dir.
+   */
+  codexHomeBaseDir?: string;
 }
 
 export interface CodexAppServerResult {
@@ -102,8 +129,18 @@ export async function runCodexAppServerTurn(
   const bin = config.binPath ?? 'codex';
   await fs.mkdir(input.cwd, { recursive: true });
 
+  const codexHome = config.provider
+    ? await materializeCodexHome(config.provider, config.codexHomeBaseDir ?? os.tmpdir())
+    : undefined;
+
   const args = ['app-server', ...(config.extraArgs ?? [])];
-  const childEnv = buildSpawnEnv(input.extraPath);
+  const childEnv = buildSpawnEnv({
+    ...(input.extraPath ? { extraPath: input.extraPath } : {}),
+    ...(codexHome ? { codexHome } : {}),
+    ...(config.provider?.envKey && config.provider.apiKey
+      ? { apiKeyVar: config.provider.envKey, apiKeyVal: config.provider.apiKey }
+      : {}),
+  });
   const child = spawn(bin, args, {
     cwd: input.cwd,
     env: childEnv,
@@ -470,13 +507,26 @@ function extractErrorText(item: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-function buildSpawnEnv(extraPath: string | undefined): NodeJS.ProcessEnv {
-  if (!extraPath) return process.env;
-  const current = process.env.PATH ?? '';
-  return {
-    ...process.env,
-    PATH: current ? `${extraPath}${path.delimiter}${current}` : extraPath,
-  };
+interface SpawnEnvOptions {
+  extraPath?: string;
+  codexHome?: string;
+  apiKeyVar?: string;
+  apiKeyVal?: string;
+}
+
+function buildSpawnEnv(opts: SpawnEnvOptions): NodeJS.ProcessEnv {
+  const { extraPath, codexHome, apiKeyVar, apiKeyVal } = opts;
+  if (!extraPath && !codexHome && !apiKeyVar) return process.env;
+  // Clone so we never mutate `process.env` — concurrent turns must not race
+  // on PATH/CODEX_HOME/API-key vars.
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (extraPath) {
+    const current = process.env.PATH ?? '';
+    env.PATH = current ? `${extraPath}${path.delimiter}${current}` : extraPath;
+  }
+  if (codexHome) env.CODEX_HOME = codexHome;
+  if (apiKeyVar && apiKeyVal) env[apiKeyVar] = apiKeyVal;
+  return env;
 }
 
 function summarizeToolResult(item: Record<string, unknown>): unknown {

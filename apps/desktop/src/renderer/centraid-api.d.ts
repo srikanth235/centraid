@@ -463,6 +463,49 @@ interface CentraidApi {
    * delete the corresponding key. Returns the full prefs map after the write.
    */
   saveUserPrefs(patch: Record<string, unknown>): Promise<Record<string, unknown>>;
+
+  /**
+   * Persist the API key for the custom OpenAI-compatible provider via
+   * Electron `safeStorage`. The plaintext key crosses the IPC bridge once
+   * (renderer → main) and is encrypted before being written to disk.
+   * It never enters `user_prefs` or any renderer-readable surface.
+   * Pass an empty string to delete; equivalent to `clearProviderApiKey`.
+   */
+  setProviderApiKey(input: { apiKey: string }): Promise<{ ok: true }>;
+  /** Whether an encrypted API key blob is on disk. The plaintext is never returned. */
+  hasProviderApiKey(): Promise<{ present: boolean }>;
+  /** Delete the encrypted API key blob from disk. */
+  clearProviderApiKey(): Promise<{ ok: true }>;
+
+  /**
+   * Fresh preflight of the configured runner: binary version + (if a
+   * custom OpenAI-compatible endpoint is set) reachability probe of
+   * `<baseUrl>/models` with the persisted API key. Always re-probes —
+   * the renderer should call this only on settings-panel open or after
+   * an explicit user action.
+   */
+  getRunnerStatus(): Promise<CentraidRunnerStatus>;
+}
+
+/** Sub-status for a custom OpenAI-compatible provider on a codex runner. */
+export interface CentraidProviderStatus {
+  id: string;
+  baseUrl: string;
+  ok: boolean;
+  modelCount?: number;
+  reason?: string;
+}
+
+/** Preflight snapshot returned by `getRunnerStatus`. */
+export interface CentraidRunnerStatus {
+  kind: 'openclaw' | 'codex' | 'claude-code' | 'none';
+  ok: boolean;
+  version?: string;
+  minVersion?: string;
+  versionAtLeast?: boolean;
+  reason?: string;
+  hint?: string;
+  provider?: CentraidProviderStatus;
 }
 
 declare global {

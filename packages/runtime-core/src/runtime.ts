@@ -89,6 +89,26 @@ export interface RuntimeOptions {
 }
 
 /**
+ * Sub-status for a custom OpenAI-compatible provider configured on the
+ * codex runner. Surfaced in `RunnerStatus.provider` when set, so the
+ * settings UI can show whether the endpoint is reachable and what
+ * models it exposes — independent of whether the codex binary itself
+ * is healthy.
+ */
+export interface ProviderStatus {
+  /** Provider id from `RunnerPrefs.provider.id`. */
+  id: string;
+  /** Base URL probed. */
+  baseUrl: string;
+  /** `true` when the endpoint responded successfully. */
+  ok: boolean;
+  /** Number of models returned by `GET <baseUrl>/models` when probe succeeded. */
+  modelCount?: number;
+  /** Plain-text reason for `ok: false` (timeout, 401, connection refused, …). */
+  reason?: string;
+}
+
+/**
  * Shape returned by the runner-status preflight route. Both hosts share
  * the schema; OpenClaw always reports `{ kind: 'openclaw', ok: true }`,
  * the desktop local-runtime reports the configured CLI adapter.
@@ -114,6 +134,13 @@ export interface RunnerStatus {
   reason?: string;
   /** Caller-facing hint (install link, settings path …). */
   hint?: string;
+  /**
+   * Probe of the configured custom OpenAI-compatible endpoint, if any.
+   * Independent from the binary preflight — a healthy codex CLI can
+   * still fail at runtime if the configured endpoint is unreachable
+   * or the API key is wrong, so the UI surfaces both.
+   */
+  provider?: ProviderStatus;
 }
 
 const noopLogger: RuntimeLogger = {

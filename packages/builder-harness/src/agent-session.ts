@@ -64,6 +64,12 @@ export interface CreateCentraidAgentSessionOptions {
    * bare name. Pass an empty string to opt out.
    */
   centraidCliDir?: string;
+  /**
+   * Parent dir under which scoped `CODEX_HOME`s are materialized when
+   * `runnerPrefs.provider` is set. Forwarded to `runAgentTurn`. Ignored
+   * when no provider is configured or the runner is `claude-code`.
+   */
+  codexHomeBaseDir?: string;
 }
 
 /** Event shape the renderer's `handleAgentEvent` consumes. */
@@ -181,7 +187,10 @@ export async function createCentraidAgentSession(
             abortSignal: abortController.signal,
             onEvent,
           },
-          { prefs: opts.runnerPrefs },
+          {
+            prefs: opts.runnerPrefs,
+            ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
+          },
         );
         if (result.sessionId) {
           resumeId = result.sessionId;

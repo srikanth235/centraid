@@ -11,6 +11,11 @@
  * need to know which one ran a given turn. The returned `adapterSessionId`
  * (codex thread id / claude session id) is opaque — round-trip it on the
  * next turn via `prevSessionId` to resume the conversation.
+ *
+ * When `prefs.provider` is set on a codex runner, the codex CLI is
+ * pointed at an OpenAI-compatible endpoint (Ollama, Groq, vLLM, …) via
+ * a scoped `CODEX_HOME`. The dispatcher just plumbs the prefs through;
+ * see `codex-app-server.ts` for the toml materialization.
  */
 
 import type { ChatStreamEvent } from '@centraid/runtime-core';
@@ -71,6 +76,14 @@ export interface AgentTurnInput {
 
 export interface AgentTurnConfig {
   prefs: RunnerPrefs;
+  /**
+   * Parent directory under which scoped `CODEX_HOME`s are materialized
+   * when `prefs.provider` is set on a codex runner. The host should
+   * point this at a persistent location under its userData dir so codex
+   * thread state survives across launches. Ignored for `claude-code`
+   * runners. Defaults to `os.tmpdir()` inside the codex adapter.
+   */
+  codexHomeBaseDir?: string;
 }
 
 export interface AgentTurnResult {
@@ -102,6 +115,8 @@ export async function runAgentTurn(
       {
         ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
         ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
+        ...(prefs.provider ? { provider: prefs.provider } : {}),
+        ...(config.codexHomeBaseDir ? { codexHomeBaseDir: config.codexHomeBaseDir } : {}),
       },
     );
     return {
