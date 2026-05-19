@@ -54,6 +54,12 @@ const Channel = {
   USER_ID_GET: 'centraid:user:id',
   USER_PREFS_GET: 'centraid:user:prefs:get',
   USER_PREFS_SAVE: 'centraid:user:prefs:save',
+
+  PROVIDER_API_KEY_SET: 'centraid:agent:provider:setApiKey',
+  PROVIDER_API_KEY_HAS: 'centraid:agent:provider:hasApiKey',
+  PROVIDER_API_KEY_CLEAR: 'centraid:agent:provider:clearApiKey',
+
+  RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -167,4 +173,17 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   getUserPrefs: () => ipcRenderer.invoke(Channel.USER_PREFS_GET),
   saveUserPrefs: (patch: Record<string, unknown>) =>
     ipcRenderer.invoke(Channel.USER_PREFS_SAVE, patch),
+
+  // Custom OpenAI-compatible provider — API key persisted via Electron
+  // safeStorage in the main process. Renderer can write, check presence,
+  // or clear; it can never read the plaintext back.
+  setProviderApiKey: (input: { apiKey: string }) =>
+    ipcRenderer.invoke(Channel.PROVIDER_API_KEY_SET, input),
+  hasProviderApiKey: () => ipcRenderer.invoke(Channel.PROVIDER_API_KEY_HAS),
+  clearProviderApiKey: () => ipcRenderer.invoke(Channel.PROVIDER_API_KEY_CLEAR),
+
+  // Fresh preflight — re-probes the binary and (if configured) the
+  // custom OpenAI-compatible endpoint. Renderer calls this when the
+  // settings panel opens or the user clicks "Test connection".
+  getRunnerStatus: () => ipcRenderer.invoke(Channel.RUNNER_STATUS_GET),
 });

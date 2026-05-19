@@ -43,6 +43,14 @@ export interface MakeChatRunnerOptions {
   getChangeEmitter?: (
     appId: string,
   ) => (payload: { tables: string[]; toolCallId?: string; agentTurnId?: string }) => void;
+  /**
+   * Parent dir under which scoped `CODEX_HOME`s are materialized when the
+   * user has configured a custom OpenAI-compatible provider on a codex
+   * runner. Hosts should point this at a stable userData-relative path
+   * so codex thread state persists across launches. Ignored when no
+   * provider is configured.
+   */
+  codexHomeBaseDir?: string;
 }
 
 const CHAT_PROMPT_PREAMBLE = `## Centraid SQL tools
@@ -117,7 +125,10 @@ export function makeChatRunner(opts: MakeChatRunnerOptions): ChatRunner {
           abortSignal: input.abortSignal,
           onEvent: input.onEvent,
         },
-        { prefs },
+        {
+          prefs,
+          ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
+        },
       );
       return {
         adapterKind: result.adapterKind,

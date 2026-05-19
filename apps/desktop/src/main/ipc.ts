@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (agent, chat, projects, provider) once the surface stabilizes
 import { ipcMain, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
@@ -17,6 +18,14 @@ import {
   type AuthImportResult,
   type AuthStatus,
 } from './auth-import.js';
+import {
+  localRuntimeCodexHomeBaseDir,
+  noteRunnerPrefsChanged,
+  resolveProviderPrefs,
+} from './local-runtime.js';
+import { runPreflight, type OpenAICompatProvider, type RunnerPrefs } from '@centraid/agent-runtime';
+import type { RunnerStatus } from '@centraid/runtime-core';
+import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
 
 /**
  * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
@@ -61,6 +70,17 @@ export const Channel = {
   USER_ID_GET: 'centraid:user:id',
   USER_PREFS_GET: 'centraid:user:prefs:get',
   USER_PREFS_SAVE: 'centraid:user:prefs:save',
+
+  // Provider secret (custom OpenAI-compatible endpoint API key, stored
+  // via Electron `safeStorage` outside the gateway DB). The plaintext
+  // never leaves the main process — the renderer only sees "has it / does not".
+  PROVIDER_API_KEY_SET: 'centraid:agent:provider:setApiKey',
+  PROVIDER_API_KEY_HAS: 'centraid:agent:provider:hasApiKey',
+  PROVIDER_API_KEY_CLEAR: 'centraid:agent:provider:clearApiKey',
+
+  // Force-refresh + return the current preflight status for the configured
+  // runner (binary version + optional provider endpoint probe).
+  RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 } as const;
 
 interface AgentSessionHandle {
@@ -76,6 +96,7 @@ async function loadRunnerPrefs(): Promise<{
   kind: 'codex' | 'claude-code';
   binPath?: string;
   extraArgs?: string[];
+  provider?: OpenAICompatProvider;
 }> {
   const prefs = await fetchUserPrefs();
   const kindRaw = prefs['agent.runner.kind'];
@@ -92,10 +113,12 @@ async function loadRunnerPrefs(): Promise<{
   const extraArgs = Array.isArray(extraArgsRaw)
     ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
     : undefined;
+  const provider = await resolveProviderPrefs(prefs);
   return {
     kind,
     ...(binPath ? { binPath } : {}),
     ...(extraArgs ? { extraArgs } : {}),
+    ...(provider ? { provider } : {}),
   };
 }
 
@@ -115,9 +138,48 @@ export function registerIpcHandlers(): void {
   // ----- User identity + prefs (gateway-backed) -----
   ipcMain.handle(Channel.USER_ID_GET, async () => fetchUserId());
   ipcMain.handle(Channel.USER_PREFS_GET, async () => fetchUserPrefs());
-  ipcMain.handle(Channel.USER_PREFS_SAVE, async (_e, patch: Record<string, unknown>) =>
-    saveUserPrefs(patch),
+  ipcMain.handle(Channel.USER_PREFS_SAVE, async (_e, patch: Record<string, unknown>) => {
+    const next = await saveUserPrefs(patch);
+    // A change to any `agent.runner.*` key (kind, provider config) makes
+    // the cached preflight stale. Invalidating unconditionally is cheap —
+    // the next status read just re-probes once.
+    if (Object.keys(patch).some((k) => k.startsWith('agent.runner.'))) {
+      noteRunnerPrefsChanged();
+    }
+    return next;
+  });
+
+  // ----- Provider secret (custom OpenAI-compatible endpoint API key) -----
+  // The plaintext lives only in the main process — renderer can set, query
+  // presence, or clear, but never read the key back.
+  ipcMain.handle(
+    Channel.PROVIDER_API_KEY_SET,
+    async (_e, input: { apiKey: string }): Promise<{ ok: true }> => {
+      await setProviderApiKey(input.apiKey);
+      noteRunnerPrefsChanged();
+      return { ok: true };
+    },
   );
+  ipcMain.handle(
+    Channel.PROVIDER_API_KEY_HAS,
+    async (): Promise<{ present: boolean }> => ({ present: await hasProviderApiKey() }),
+  );
+  ipcMain.handle(Channel.PROVIDER_API_KEY_CLEAR, async (): Promise<{ ok: true }> => {
+    await clearProviderApiKey();
+    noteRunnerPrefsChanged();
+    return { ok: true };
+  });
+
+  // ----- Runner / endpoint preflight -----
+  // The settings UI calls this to show whether the codex binary is
+  // installed AND whether the configured custom endpoint is reachable.
+  // Always re-probes — the renderer only asks when the user opens the panel
+  // or clicks "Test connection".
+  ipcMain.handle(Channel.RUNNER_STATUS_GET, async (): Promise<RunnerStatus> => {
+    noteRunnerPrefsChanged();
+    const prefs = (await loadRunnerPrefs()) as RunnerPrefs;
+    return runPreflight(prefs);
+  });
 
   // ----- Credential import (Claude Code / Codex → pi auth.json) -----
   // Status read is silent; the resync handler runs the importer with
@@ -226,6 +288,7 @@ export function registerIpcHandlers(): void {
         runnerPrefs,
         sessionMode: input.sessionMode,
         liveSchema: { config: settings, appId: input.projectId },
+        codexHomeBaseDir: localRuntimeCodexHomeBaseDir(),
       });
 
       const unsubscribe = session.subscribe((evt) => {
