@@ -264,7 +264,13 @@ export async function runCodexAppServerTurn(
       const item = (p.item ?? {}) as Record<string, unknown>;
       const type = String(item.type ?? '');
       const id = String(item.id ?? '');
-      if (type === 'agentMessage' || type === 'reasoning') return;
+      if (
+        type === 'agentMessage' ||
+        type === 'reasoning' ||
+        type === 'userMessage' ||
+        type === 'dynamicToolCall'
+      )
+        return;
       const toolName = describeStartedTool(type, item);
       emit({
         type: 'tool.start',
@@ -289,7 +295,7 @@ export async function runCodexAppServerTurn(
         }
         return;
       }
-      if (type === 'reasoning') return;
+      if (type === 'reasoning' || type === 'userMessage' || type === 'dynamicToolCall') return;
 
       const status = typeof item.status === 'string' ? (item.status as string) : 'completed';
       const ok = status === 'completed';
