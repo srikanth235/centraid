@@ -51,6 +51,13 @@ export type {
   RunQueryResult,
   LogEntry,
   LogLevel,
+  AutomationHandler,
+  AutomationHandlerArgs,
+  AutomationCtx,
+  AutomationAgentArgs,
+  AutomationJsonSchema,
+  AutomationManifest,
+  AutomationManifestRequires,
 } from '@centraid/runtime-core';
 
 export default definePluginEntry({

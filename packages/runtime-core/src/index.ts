@@ -66,6 +66,12 @@ export type {
   HandlerFn,
   ScopedFetch,
   CommonHandlerArgs,
+  AutomationHandler,
+  AutomationHandlerArgs,
+  AutomationModule,
+  AutomationCtx,
+  AutomationAgentArgs,
+  AutomationJsonSchema,
 } from './types.js';
 
 // Live-schema and cloud-panel payload shapes — consumed by builder-harness
@@ -180,3 +186,19 @@ export {
 // runtime state; this is centraid's own registration surface for the
 // list/UI and the reconciliation pass.
 export { AutomationStore, type AutomationRow } from './automation-store.js';
+
+// Worker-isolated automation handler runner. Hosts provide
+// `toolDispatcher` + `agentDispatcher` to wire the worker boundary into
+// either the local-side mock-LLM + CLI subprocess flow (@centraid/agent-runtime)
+// or the openclaw in-process StreamFn flow (@centraid/openclaw-plugin).
+export {
+  runAutomationHandler,
+  type RunAutomationHandlerOptions,
+  type AutomationHandlerOutcome,
+  type AutomationToolCall,
+  type AutomationToolResult,
+  type AutomationToolDispatcher,
+  type AutomationAgentCall,
+  type AutomationAgentDispatcher,
+  type AutomationDispatchContext,
+} from './automation-handler-runner.js';

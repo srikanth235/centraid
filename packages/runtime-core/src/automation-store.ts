@@ -156,13 +156,13 @@ export class AutomationStore {
 
   listByApp(appId: string): AutomationRow[] {
     const { stmts } = this.ensureReady();
-    const rows = stmts.listByApp.all(appId) as RawRow[];
+    const rows = stmts.listByApp.all(appId) as unknown as RawRow[];
     return rows.map(rowFromRaw);
   }
 
   listAll(): AutomationRow[] {
     const { stmts } = this.ensureReady();
-    const rows = stmts.listAll.all() as RawRow[];
+    const rows = stmts.listAll.all() as unknown as RawRow[];
     return rows.map(rowFromRaw);
   }
 
