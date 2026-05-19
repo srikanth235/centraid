@@ -44,133 +44,39 @@
  *     also bypass MCP-level prompts, not just CLI-level.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
+  AutomationRunsStore,
+  automationsDbPath,
   parseManifest,
   runAutomationHandler,
   type AutomationDispatchContext,
   type AutomationHandlerOutcome,
+  type AutomationInvokeDispatcher,
   type AutomationManifest,
   type AutomationToolCall,
   type AutomationToolResult,
+  type AutomationTriggerKind,
 } from '@centraid/runtime-core';
 import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
-import { materializeCodexHome } from './codex-provider-config.js';
+import {
+  defaultSpawnCli,
+  type LocalRunnerKind,
+  type SpawnCli,
+  type SpawnCliInput,
+  type SpawnCliResult,
+} from './run-automation-cli-spawn.js';
 
-export type LocalRunnerKind = 'codex' | 'claude-code';
-
-export interface SpawnCliInput {
-  /** Which CLI to invoke. */
-  readonly kind: LocalRunnerKind;
-  /** Mock-LLM base URL (`http://127.0.0.1:<port>/v1`). */
-  readonly mockBaseUrl: string;
-  /** Per-spawn bearer token (`centraid-mock-<dispatchId>`). */
-  readonly mockBearerToken: string;
-  /** The natural-language prompt to feed the CLI. Contains the dispatch sentinel. */
-  readonly prompt: string;
-  /** Tool allowlist from the manifest — passed to the CLI's MCP tool restriction flag. */
-  readonly toolsAllow: readonly string[];
-  /** Workspace dir (app code dir) the CLI should treat as cwd. */
-  readonly cwd: string;
-  /** Scratch dir for transient files (CODEX_HOME, etc). Auto-cleaned on close. */
-  readonly scratchDir: string;
-  /** AbortSignal — fires on timeout or external cancel. */
-  readonly abortSignal: AbortSignal;
-}
-
-export interface SpawnCliResult {
-  /** Process exit code, or null when killed by signal. */
-  readonly exitCode: number | null;
-  /** True on graceful exit (code === 0). */
-  readonly ok: boolean;
-  /** Buffered stderr — surfaced in the run record on failure. */
-  readonly stderr: string;
-}
-
-/**
- * Default CLI spawn — production behavior. Tests inject their own
- * spawn implementation (typically one that drives the mock server's
- * staged turns without launching a real subprocess).
- */
-export const defaultSpawnCli = async (input: SpawnCliInput): Promise<SpawnCliResult> => {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  let proc: ChildProcess;
-  if (input.kind === 'claude-code') {
-    env.ANTHROPIC_BASE_URL = input.mockBaseUrl;
-    env.ANTHROPIC_API_KEY = input.mockBearerToken;
-    const args = [
-      '-p',
-      input.prompt,
-      '--output-format',
-      'stream-json',
-      '--permission-mode',
-      'bypassPermissions',
-    ];
-    for (const tool of input.toolsAllow) {
-      args.push('--allowed-tools', tool);
-    }
-    proc = spawn('claude', args, { cwd: input.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  } else {
-    // Codex: per-invocation provider override via -c flags. If the
-    // override doesn't take effect in the installed codex version,
-    // swap in a materialized CODEX_HOME (see comment at top of file).
-    const codexHome = await materializeCodexHome(
-      {
-        id: 'centraid-mock',
-        name: 'Centraid Automation Mock',
-        baseUrl: input.mockBaseUrl,
-        wireApi: 'chat',
-        envKey: 'CENTRAID_MOCK_KEY',
-      },
-      input.scratchDir,
-    );
-    env.CODEX_HOME = codexHome;
-    env.CENTRAID_MOCK_KEY = input.mockBearerToken;
-    const args = ['exec', '--json', '--ask-for-approval', 'never'];
-    for (const tool of input.toolsAllow) {
-      args.push('--allowed-tools', tool);
-    }
-    args.push(input.prompt);
-    proc = spawn('codex', args, { cwd: input.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  }
-
-  const stderrChunks: Buffer[] = [];
-  proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
-  // We don't need to parse stdout — tool results come back through
-  // the mock server, not the CLI's stdout. Drain it so the buffer
-  // doesn't fill up and the process can exit.
-  proc.stdout?.on('data', () => undefined);
-
-  const abortListener = (): void => {
-    if (!proc.killed) proc.kill('SIGTERM');
-  };
-  input.abortSignal.addEventListener('abort', abortListener, { once: true });
-
-  return await new Promise<SpawnCliResult>((resolve) => {
-    proc.on('exit', (code) => {
-      input.abortSignal.removeEventListener('abort', abortListener);
-      resolve({
-        exitCode: code,
-        ok: code === 0,
-        stderr: Buffer.concat(stderrChunks).toString('utf8'),
-      });
-    });
-    proc.on('error', (err) => {
-      input.abortSignal.removeEventListener('abort', abortListener);
-      resolve({
-        exitCode: null,
-        ok: false,
-        stderr: `spawn error: ${err.message}\n${Buffer.concat(stderrChunks).toString('utf8')}`,
-      });
-    });
-  });
+export {
+  defaultSpawnCli,
+  type LocalRunnerKind,
+  type SpawnCli,
+  type SpawnCliInput,
+  type SpawnCliResult,
 };
-
-/** Override seam for tests. Defaults to invoking the real CLIs. */
-export type SpawnCli = typeof defaultSpawnCli;
 
 export interface RunAutomationLocalOptions {
   /** App id (folder name under the projects dir). */
@@ -201,6 +107,28 @@ export interface RunAutomationLocalOptions {
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
   /** Optional write notifier — called after the handler exits with the set of touched tables. */
   onWrite?: (tables: string[]) => void;
+  /**
+   * Trigger that caused this fire. Defaults to `'scheduled'`. Recursive
+   * calls via `ctx.invoke` use `'manual'`; the onFailure dispatch loop
+   * uses `'on_failure'`.
+   */
+  triggerKind?: AutomationTriggerKind;
+  /** Optional input payload (e.g. for sub-invocations / on_failure). */
+  input?: unknown;
+  /** Optional parent run id for sub-invocations. */
+  parentRunId?: string;
+  /**
+   * Recursion guard for `onFailure` cascades. Defaults to 0. The runtime
+   * refuses to fire a follow-up automation when this would push the
+   * chain past depth 3 (issue #80 § Open question resolution).
+   */
+  failureDepth?: number;
+  /**
+   * Shared `AutomationRunsStore` for the per-app `automations.sqlite`.
+   * When omitted, the host constructs one from `appDir`. Tests inject
+   * a synthetic store to keep the file out of `appDir`.
+   */
+  runsStore?: AutomationRunsStore;
 }
 
 export interface AutomationRunRecord {
@@ -442,6 +370,38 @@ export async function runAutomationLocal(
     }
   };
 
+  // Per-app `automations.sqlite` — see issue #80. Constructed lazily;
+  // the file isn't created until the first row lands.
+  const runsStore = opts.runsStore ?? new AutomationRunsStore(automationsDbPath(opts.appDir));
+  const failureDepth = opts.failureDepth ?? 0;
+  const triggerKind: AutomationTriggerKind = opts.triggerKind ?? 'scheduled';
+
+  // ctx.invoke: synchronously fire a sibling automation and return its
+  // `output`. Intra-app only (issue #80 § Out — cross-app invoke is
+  // future work).
+  const invokeDispatcher: AutomationInvokeDispatcher = async (name, args) => {
+    const child = await runAutomationLocal({
+      appId: opts.appId,
+      appDir: opts.appDir,
+      ...(opts.codeDir ? { codeDir: opts.codeDir } : {}),
+      automationName: name,
+      ...(opts.runner ? { runner: opts.runner } : {}),
+      ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+      ...(opts.spawnCli ? { spawnCli: opts.spawnCli } : {}),
+      ...(opts.onLog ? { onLog: opts.onLog } : {}),
+      ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
+      triggerKind: 'manual',
+      input: args.input,
+      parentRunId: args.parentRunId,
+      failureDepth,
+      runsStore,
+    });
+    if (!child.outcome.ok) {
+      throw new Error(`ctx.invoke("${name}") failed: ${child.outcome.error ?? 'unknown error'}`);
+    }
+    return child.outcome.output;
+  };
+
   const outcome = await runAutomationHandler({
     app: { id: opts.appId, dir: opts.appDir },
     handlerFile,
@@ -449,12 +409,69 @@ export async function runAutomationLocal(
     runId,
     toolDispatcher,
     agentDispatcher,
+    invokeDispatcher,
+    runsStore,
+    triggerKind,
+    ...(opts.input !== undefined ? { input: opts.input } : {}),
+    ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
+    ...(manifest.outputSchema ? { outputSchema: manifest.outputSchema } : {}),
+    history: manifest.history,
     timeoutMs: opts.timeoutMs ?? 5 * 60 * 1000,
     ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
   });
 
   await mock.close().catch(() => undefined);
   await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
+
+  // onFailure cascade: when the handler fails (incl. timeout / output
+  // schema rejection) and the manifest names a follow-up automation,
+  // fire it with the failed run as input. Capped at depth 3 so a
+  // misconfigured pair can't loop forever.
+  if (!outcome.ok && manifest.onFailure) {
+    if (failureDepth >= 3) {
+      onLog(
+        'warn',
+        `onFailure cascade for ${opts.appId}/${opts.automationName} aborted at depth ${failureDepth} (cap=3)`,
+      );
+    } else {
+      const failureInput = {
+        runId,
+        automationName: opts.automationName,
+        error: outcome.error ?? 'unknown error',
+        nodes: runsStore.listNodes(runId).map((n) => ({
+          ordinal: n.ordinal,
+          attempt: n.attempt,
+          kind: n.kind,
+          name: n.name,
+          ok: n.ok,
+          ...(n.error !== undefined ? { error: n.error } : {}),
+        })),
+      };
+      try {
+        await runAutomationLocal({
+          appId: opts.appId,
+          appDir: opts.appDir,
+          ...(opts.codeDir ? { codeDir: opts.codeDir } : {}),
+          automationName: manifest.onFailure,
+          ...(opts.runner ? { runner: opts.runner } : {}),
+          ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+          ...(opts.spawnCli ? { spawnCli: opts.spawnCli } : {}),
+          ...(opts.onLog ? { onLog: opts.onLog } : {}),
+          ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
+          triggerKind: 'on_failure',
+          input: failureInput,
+          parentRunId: runId,
+          failureDepth: failureDepth + 1,
+          runsStore,
+        });
+      } catch (err) {
+        onLog(
+          'error',
+          `onFailure dispatch ${manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
 
   const endedAt = Date.now();
   const record: AutomationRunRecord = {

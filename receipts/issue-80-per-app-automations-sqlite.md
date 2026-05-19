@@ -9,9 +9,9 @@ GitHub issue: [#80](https://github.com/srikanth235/centraid/issues/80)
 - [x] Instrument `runAutomationHandler` to commit `runs` + `run_nodes` rows around handler execution (incl. batch_id, attempt)
 - [x] `ctx.state.{get,set}`, `ctx.runs.{last,list}`, `ctx.invoke(name, {input})` against the per-app file
 - [x] `opts.retry: { max, backoff }` and `opts.onError: 'fail'|'continue'` on `ctx.tool`
-- [ ] `onFailure` dispatch (incl. timeout/crash) with depth-3 recursion cap
-- [ ] `outputSchema` validation of handler return; failures land in `runs.error`, `runs.ok=0`
-- [ ] Retention pruning at end-of-run per `history.keep`
+- [x] `onFailure` dispatch (incl. timeout/crash) with depth-3 recursion cap
+- [x] `outputSchema` validation of handler return; failures land in `runs.error`, `runs.ok=0`
+- [x] Retention pruning at end-of-run per `history.keep`
 - [ ] System-prompt `### Run audit & state` block under `### Automations`
 - [ ] Desktop UI: per-automation run list + per-run node timeline
 - [ ] Boundary test: `centraid_sql_*` agent tools cannot reach `automations.sqlite`
@@ -38,6 +38,12 @@ The store exposes `insertRun` / `finishRun` (parent state-machine for one fire),
 **`opts.retry: { max, backoff }` and `opts.onError: 'fail'|'continue'` on `ctx.tool`.** The optional third argument to `ctx.tool` rides along in the worker's batch message. The parent's retry loop is sequential per failing call (the worker batches by microtask, retries don't naturally fit) and writes one `run_nodes` row per attempt sharing the call's ordinal with ascending `attempt`. Default backoff is exponential with a 5s cap on the inter-attempt delay; `backoff: 'fixed'` is also accepted. `onError: 'continue'` swallows the final failure and resolves the handler's Promise with `undefined`; the audit row still records `ok=0` so the run timeline shows what happened.
 
 Outsized growth of `automation-handler-runner.ts` is held in check by a new `automation-handler-audit.ts` (truncation, retention, envelope extraction, node-row writers) and `automation-handler-ctx.ts` (the `ctx.state` / `ctx.runs` / `ctx.invoke` message handlers + retrying tool-batch dispatcher). The runner itself just owns Worker lifecycle, the timeout/abort plumbing, and the message router.
+
+**`onFailure` dispatch (incl. timeout/crash) with depth-3 recursion cap.** Both hosts now own the failure cascade. `packages/agent-runtime/src/run-automation-local.ts` (local OS-scheduler path) and `packages/openclaw-plugin/src/lib/automations-provider.ts` (remote openclaw cron path) each opt-in to the new ctx surface by constructing an `AutomationRunsStore` keyed off the app's data dir, wiring an `invokeDispatcher` that recursively re-enters the host (intra-app only, per issue #80 § Out), and inspecting the handler outcome at end-of-fire. When `outcome.ok === false` and `manifest.onFailure` names a sibling automation, the host fires it with `triggerKind: 'on_failure'`, `parentRunId` linked to the failed run, and an input payload carrying the failed runId, automation name, error message, and node summary (ordinal/attempt/kind/name/ok/error). A `failureDepth` counter threaded through the recursive call refuses to dispatch beyond depth 3, logging an `aborted at depth N (cap=3)` warning instead — that's the issue's "Open question — onFailure recursion" resolution. Timeout-triggered failures and worker crashes go through the same path because `runAutomationHandler` always returns an outcome with `ok=false`/`error` set, regardless of the failure mode.
+
+**`outputSchema` validation of handler return; failures land in `runs.error`, `runs.ok=0`.** Wired in the previous commit's `runAutomationHandler` change. After the handler returns successfully, the runner extracts the `{summary, output}` envelope and validates `output` against `manifest.outputSchema` via `validateOutputAgainstSchema`. A validation failure flips the outcome to `ok=false` with a `outputSchema validation failed: <reason>` error message; the audit row sees `ok=0` and the error. Five new agent-runtime tests cover the local path end-to-end including this rejection.
+
+**Retention pruning at end-of-run per `history.keep`.** Also threaded in the previous commit. The runner reads `manifest.history.keep` and calls `AutomationRunsStore.prune(name, { count | days | errorsOnly | all })` after `finishRun`. CASCADE on the `run_nodes` foreign key drops the orphaned node rows so the file stays bounded. Default `{count: 100}` applies when the manifest doesn't declare a policy.
 
 ## Out of scope
 

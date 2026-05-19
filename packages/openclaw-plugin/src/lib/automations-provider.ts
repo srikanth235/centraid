@@ -36,12 +36,17 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
+  AutomationRunsStore,
+  automationsDbPath,
   parseManifest,
   runAutomationHandler,
   type AutomationDispatchContext,
+  type AutomationHandlerOutcome,
+  type AutomationInvokeDispatcher,
   type AutomationManifest,
   type AutomationToolCall,
   type AutomationToolResult,
+  type AutomationTriggerKind,
 } from '@centraid/runtime-core';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
@@ -224,27 +229,63 @@ async function executeAutomation(
       `centraid-mock: app "${dispatch.appId}" is not registered with the runtime`,
     );
   }
-  const manifestPath = path.join(appDir, 'automations', `${dispatch.automationName}.json`);
+  const runsStore = new AutomationRunsStore(automationsDbPath(appDir));
+  const outcome = await runOpenclawFire(
+    {
+      appId: dispatch.appId,
+      appDir,
+      automationName: dispatch.automationName,
+      triggerKind: 'scheduled',
+      failureDepth: 0,
+      runsStore,
+    },
+    log,
+  );
+  if (!outcome.ok) {
+    log.error(`automation ${dispatch.appId}/${dispatch.automationName} failed: ${outcome.error}`);
+    return errorMessage(`automation failed: ${outcome.error ?? 'unknown error'}`);
+  }
+  const summary =
+    outcome.summary ?? (typeof outcome.value === 'string' ? outcome.value : undefined) ?? 'ok';
+  return successMessage(summary);
+}
+
+interface OpenclawFireOptions {
+  appId: string;
+  appDir: string;
+  automationName: string;
+  triggerKind: AutomationTriggerKind;
+  failureDepth: number;
+  runsStore: AutomationRunsStore;
+  parentRunId?: string;
+  input?: unknown;
+}
+
+async function runOpenclawFire(
+  opts: OpenclawFireOptions,
+  log: { info(m: string): void; warn(m: string): void; error(m: string): void },
+): Promise<AutomationHandlerOutcome> {
+  const manifestPath = path.join(opts.appDir, 'automations', `${opts.automationName}.json`);
   let manifest: AutomationManifest;
   try {
     manifest = parseManifest(await fs.readFile(manifestPath, 'utf8'));
   } catch (err) {
-    return errorMessage(
-      `centraid-mock: failed to load manifest ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return {
+      ok: false,
+      error: `failed to load manifest ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`,
+      logs: [],
+      toolBatches: 0,
+      agentCalls: 0,
+    };
   }
-  const handlerFile = path.join(appDir, 'actions', manifest.action);
-
-  const runId = `${dispatch.appId}:${dispatch.automationName}:${Date.now()}:${randomUUID().slice(0, 8)}`;
+  const handlerFile = path.join(opts.appDir, 'actions', manifest.action);
+  const runId = `${opts.appId}:${opts.automationName}:${Date.now()}:${randomUUID().slice(0, 8)}`;
 
   const toolDispatcher = async (
     calls: readonly AutomationToolCall[],
     _ctx: AutomationDispatchContext,
-  ): Promise<AutomationToolResult[]> => {
-    // Each ctx.tool call → one callGatewayTool round-trip. callGatewayTool
-    // routes through openclaw's harness MCP + audit + before-tool hooks,
-    // so we get the user's real integrations + policy enforcement for free.
-    const results = await Promise.all(
+  ): Promise<AutomationToolResult[]> =>
+    Promise.all(
       calls.map(async (call) => {
         try {
           const out = await callGatewayTool(call.name, {}, call.args);
@@ -257,8 +298,6 @@ async function executeAutomation(
         }
       }),
     );
-    return results;
-  };
 
   const agentDispatcher = async (
     call: { prompt: string; json?: unknown },
@@ -270,23 +309,17 @@ async function executeAutomation(
         'ctx.agent called but manifest.requires.model is unset — declare a model in the automation manifest',
       );
     }
-    // openclaw's config + agentId for the simple-completion runtime.
-    // `agentId` is a stable identifier so token usage rolls up under
-    // a centraid bucket; we use `centraid-automation:<appId>:<name>`.
     const prepared = await prepareSimpleCompletionModelForAgent({
       cfg: getOpenClawConfig(),
       agentId: `centraid-automation:${_ctx.appId}:${_ctx.automationName}`,
       modelRef,
     });
-    if ('error' in prepared) {
-      throw new Error(`ctx.agent prepare failed: ${prepared.error}`);
-    }
+    if ('error' in prepared) throw new Error(`ctx.agent prepare failed: ${prepared.error}`);
     const out = await completeWithPreparedSimpleCompletionModel({
       model: prepared.model,
       auth: prepared.auth,
       context: { messages: [{ role: 'user', content: call.prompt, timestamp: Date.now() }] },
     });
-    // out is an AssistantMessage; pull the text content out.
     const text = (out.content ?? [])
       .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
       .map((c) => c.text)
@@ -302,23 +335,83 @@ async function executeAutomation(
     }
   };
 
+  const invokeDispatcher: AutomationInvokeDispatcher = async (name, args) => {
+    const child = await runOpenclawFire(
+      {
+        appId: opts.appId,
+        appDir: opts.appDir,
+        automationName: name,
+        triggerKind: 'manual',
+        failureDepth: opts.failureDepth,
+        runsStore: opts.runsStore,
+        parentRunId: args.parentRunId,
+        ...(args.input !== undefined ? { input: args.input } : {}),
+      },
+      log,
+    );
+    if (!child.ok) throw new Error(`ctx.invoke("${name}") failed: ${child.error}`);
+    return child.output;
+  };
+
   const outcome = await runAutomationHandler({
-    app: { id: dispatch.appId, dir: appDir },
+    app: { id: opts.appId, dir: opts.appDir },
     handlerFile,
-    automationName: dispatch.automationName,
+    automationName: opts.automationName,
     runId,
     toolDispatcher,
     agentDispatcher,
+    invokeDispatcher,
+    runsStore: opts.runsStore,
+    triggerKind: opts.triggerKind,
+    ...(opts.input !== undefined ? { input: opts.input } : {}),
+    ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
+    ...(manifest.outputSchema ? { outputSchema: manifest.outputSchema } : {}),
+    history: manifest.history,
     timeoutMs: 5 * 60 * 1000,
   });
 
-  if (!outcome.ok) {
-    log.error(`automation ${dispatch.appId}/${dispatch.automationName} failed: ${outcome.error}`);
-    return errorMessage(`automation failed: ${outcome.error ?? 'unknown error'}`);
+  if (!outcome.ok && manifest.onFailure) {
+    if (opts.failureDepth >= 3) {
+      log.warn(
+        `onFailure cascade for ${opts.appId}/${opts.automationName} aborted at depth ${opts.failureDepth} (cap=3)`,
+      );
+    } else {
+      const failureInput = {
+        runId,
+        automationName: opts.automationName,
+        error: outcome.error ?? 'unknown error',
+        nodes: opts.runsStore.listNodes(runId).map((n) => ({
+          ordinal: n.ordinal,
+          attempt: n.attempt,
+          kind: n.kind,
+          name: n.name,
+          ok: n.ok,
+          ...(n.error !== undefined ? { error: n.error } : {}),
+        })),
+      };
+      try {
+        await runOpenclawFire(
+          {
+            appId: opts.appId,
+            appDir: opts.appDir,
+            automationName: manifest.onFailure,
+            triggerKind: 'on_failure',
+            failureDepth: opts.failureDepth + 1,
+            runsStore: opts.runsStore,
+            parentRunId: runId,
+            input: failureInput,
+          },
+          log,
+        );
+      } catch (err) {
+        log.error(
+          `onFailure dispatch ${manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
   }
-  return successMessage(
-    typeof outcome.value === 'string' && outcome.value.length > 0 ? outcome.value : 'ok',
-  );
+
+  return outcome;
 }
 
 /**
