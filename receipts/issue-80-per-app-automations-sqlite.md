@@ -6,9 +6,9 @@ GitHub issue: [#80](https://github.com/srikanth235/centraid/issues/80)
 
 - [x] Per-app `automations.sqlite` store (runs, run_nodes, state) with lazy file creation + own migration ladder
 - [x] Manifest reshape: `trigger:{kind,expr}` canonical with legacy `schedule` back-compat, `outputSchema`, `onFailure`, `history.keep`
-- [ ] Instrument `runAutomationHandler` to commit `runs` + `run_nodes` rows around handler execution (incl. batch_id, attempt)
-- [ ] `ctx.state.{get,set}`, `ctx.runs.{last,list}`, `ctx.invoke(name, {input})` against the per-app file
-- [ ] `opts.retry: { max, backoff }` and `opts.onError: 'fail'|'continue'` on `ctx.tool`
+- [x] Instrument `runAutomationHandler` to commit `runs` + `run_nodes` rows around handler execution (incl. batch_id, attempt)
+- [x] `ctx.state.{get,set}`, `ctx.runs.{last,list}`, `ctx.invoke(name, {input})` against the per-app file
+- [x] `opts.retry: { max, backoff }` and `opts.onError: 'fail'|'continue'` on `ctx.tool`
 - [ ] `onFailure` dispatch (incl. timeout/crash) with depth-3 recursion cap
 - [ ] `outputSchema` validation of handler return; failures land in `runs.error`, `runs.ok=0`
 - [ ] Retention pruning at end-of-run per `history.keep`
@@ -30,6 +30,14 @@ The store exposes `insertRun` / `finishRun` (parent state-machine for one fire),
 `onFailure` names a sibling automation to dispatch on handler failure. The validator enforces `isValidAutomationName` shape; cross-reference validation (the named automation actually exists) happens at sync-time in `sync-automations.ts` rather than at manifest-parse time, since the parser sees one manifest at a time.
 
 `history.keep` is one of `{count: N}` | `{days: N}` | `"all"` | `"errors"`, defaulting to `{count: 100}` when omitted. The retention shape is parsed here so the runtime can hand it straight to `AutomationRunsStore.prune` at end-of-run; the prune predicate itself was already wired in the previous commit.
+
+**Instrument `runAutomationHandler` to commit `runs` + `run_nodes` rows around handler execution (incl. batch_id, attempt).** The runner now takes an optional `runsStore: AutomationRunsStore` plus `triggerKind`, `input`, `parentRunId`, `outputSchema`, and `history`. On run start it writes the `runs` row with `trigger_kind` defaulting to `'scheduled'`. Every `ctx.tool` batch from the worker mints one batch_id when N > 1 (solo calls get `batchId: null` so the timeline UI can tell them apart) and one `ordinal` per call; the dispatcher result lands as a `run_nodes` row with `attempt: 1`. Every `ctx.agent` call is its own ordinal as a separate `kind: 'agent'` row. At end-of-run the `runs` row is updated with `ok`, `error`, `summary`, `output_json`, and retention runs against the manifest's `history.keep`. Args + output JSON above 64 KB are replaced with a `{_truncated: true, bytes, head}` envelope so a tool that returns 50 KB of PRs serialized per fire doesn't balloon the file.
+
+**`ctx.state.{get,set}`, `ctx.runs.{last,list}`, `ctx.invoke(name, {input})` against the per-app file.** Worker side: each method flushes any pending tool batch first (these are different turn shapes so they don't ride along), then round-trips through new `state`/`runs`/`invoke` worker→parent message types. Parent side: `state.get` returns the JSON-parsed value (falling back to the raw string if it isn't valid JSON), `state.set` accepts any JSON-serializable value (undefined → null), `state.delete` is a single-row drop. `runs.last({name?, status?})` and `runs.list({name?, status?, since?, limit?})` query the per-app store; the in-progress self-run is filtered out so the handler doesn't see its own incomplete row. `ctx.invoke` routes through a new host-supplied `invokeDispatcher` callback the handler-runner takes as a constructor parameter — runtime-core can't load and execute a sibling automation by name, but it can hand the child run's parent_run_id back via the callback so the host's recursive `runAutomationHandler` call links the audit chain.
+
+**`opts.retry: { max, backoff }` and `opts.onError: 'fail'|'continue'` on `ctx.tool`.** The optional third argument to `ctx.tool` rides along in the worker's batch message. The parent's retry loop is sequential per failing call (the worker batches by microtask, retries don't naturally fit) and writes one `run_nodes` row per attempt sharing the call's ordinal with ascending `attempt`. Default backoff is exponential with a 5s cap on the inter-attempt delay; `backoff: 'fixed'` is also accepted. `onError: 'continue'` swallows the final failure and resolves the handler's Promise with `undefined`; the audit row still records `ok=0` so the run timeline shows what happened.
+
+Outsized growth of `automation-handler-runner.ts` is held in check by a new `automation-handler-audit.ts` (truncation, retention, envelope extraction, node-row writers) and `automation-handler-ctx.ts` (the `ctx.state` / `ctx.runs` / `ctx.invoke` message handlers + retrying tool-batch dispatcher). The runner itself just owns Worker lifecycle, the timeout/abort plumbing, and the message router.
 
 ## Out of scope
 

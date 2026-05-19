@@ -1,0 +1,219 @@
+/**
+ * Parent-side handlers for the worker's `ctx.*` messages (issue #80).
+ *
+ * Split out of `automation-handler-runner.ts` so the runner stays focused
+ * on worker lifecycle + message routing. Each function here takes the
+ * audit `AutomationRunsStore` (when present) and returns a reply that
+ * matches the worker's expected wire shape.
+ */
+
+import type {
+  AutomationDispatchContext,
+  AutomationInvokeDispatcher,
+  AutomationToolDispatcher,
+  AutomationToolResult,
+} from './automation-handler-runner.js';
+import type { AutomationRunsStore } from './automation-runs-store.js';
+import { backoffDelayMs, recordToolNode, rowToRunRef } from './automation-handler-audit.js';
+
+export interface ToolCallWire {
+  name: string;
+  args: unknown;
+  retry?: { max: number; backoff?: 'fixed' | 'exponential'; intervalMs?: number };
+  onError?: 'fail' | 'continue';
+}
+
+export interface AuditState {
+  store: AutomationRunsStore | undefined;
+  runId: string;
+  automationName: string;
+  ordinal: number;
+  nextBatchId: number;
+}
+
+export function nextOrdinal(audit: AuditState): number {
+  return audit.ordinal++;
+}
+
+export function nextBatchIdFor(audit: AuditState, n: number): number | undefined {
+  if (n <= 1) return undefined;
+  return audit.nextBatchId++;
+}
+
+export interface DispatchBatchArgs {
+  audit: AuditState;
+  toolDispatcher: AutomationToolDispatcher;
+  dispatchCtx: AutomationDispatchContext;
+  calls: ToolCallWire[];
+}
+
+export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<AutomationToolResult[]> {
+  const { audit, calls, toolDispatcher, dispatchCtx } = args;
+  const ordinals = calls.map(() => nextOrdinal(audit));
+  const batchId = nextBatchIdFor(audit, calls.length);
+  const started = Date.now();
+  const results = await toolDispatcher(
+    calls.map((c) => ({ name: c.name, args: c.args })),
+    dispatchCtx,
+  );
+  const ended = Date.now();
+  const finalResults: AutomationToolResult[] = [];
+  for (let i = 0; i < calls.length; i++) {
+    const call = calls[i]!;
+    const result = results[i] ?? { ok: false, error: 'no result returned by dispatcher' };
+    if (audit.store) {
+      recordToolNode({
+        store: audit.store,
+        runId: audit.runId,
+        ordinal: ordinals[i]!,
+        attempt: 1,
+        ...(batchId !== undefined ? { batchId } : {}),
+        name: call.name,
+        args: call.args,
+        ok: result.ok,
+        ...(result.result !== undefined ? { result: result.result } : {}),
+        ...(result.error !== undefined ? { error: result.error } : {}),
+        started,
+        ended,
+      });
+    }
+    finalResults.push(result);
+  }
+  for (let i = 0; i < calls.length; i++) {
+    const call = calls[i]!;
+    let result = finalResults[i]!;
+    if (result.ok) continue;
+    const max = call.retry?.max ?? 1;
+    let attempt = 1;
+    while (!result.ok && attempt < max) {
+      attempt++;
+      const delay = backoffDelayMs(attempt, call.retry ?? {});
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      const retryStarted = Date.now();
+      const retryResults = await toolDispatcher(
+        [{ name: call.name, args: call.args }],
+        dispatchCtx,
+      );
+      const retryEnded = Date.now();
+      const retryResult = retryResults[0] ?? {
+        ok: false,
+        error: 'no result returned by dispatcher',
+      };
+      if (audit.store) {
+        recordToolNode({
+          store: audit.store,
+          runId: audit.runId,
+          ordinal: ordinals[i]!,
+          attempt,
+          name: call.name,
+          args: call.args,
+          ok: retryResult.ok,
+          ...(retryResult.result !== undefined ? { result: retryResult.result } : {}),
+          ...(retryResult.error !== undefined ? { error: retryResult.error } : {}),
+          started: retryStarted,
+          ended: retryEnded,
+        });
+      }
+      result = retryResult;
+    }
+    if (!result.ok && call.onError === 'continue') result = { ok: true, result: undefined };
+    finalResults[i] = result;
+  }
+  return finalResults;
+}
+
+export interface CtxReply {
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+export function handleStateMessage(
+  audit: AuditState,
+  method: 'get' | 'set' | 'delete',
+  key: string,
+  value: unknown,
+): CtxReply {
+  if (!audit.store) {
+    return {
+      ok: false,
+      error: 'ctx.state requires a runs store (host must wire AutomationRunsStore)',
+    };
+  }
+  try {
+    if (method === 'get') {
+      const entry = audit.store.stateGet(audit.automationName, key);
+      if (!entry) return { ok: true, result: undefined };
+      try {
+        return { ok: true, result: JSON.parse(entry.valueJson) as unknown };
+      } catch {
+        return { ok: true, result: entry.valueJson };
+      }
+    }
+    if (method === 'set') {
+      const json = JSON.stringify(value === undefined ? null : value);
+      audit.store.stateSet(audit.automationName, key, json, Date.now());
+      return { ok: true };
+    }
+    if (method === 'delete') {
+      audit.store.stateDelete(audit.automationName, key);
+      return { ok: true };
+    }
+    return { ok: false, error: `unknown state method: ${String(method)}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export function handleRunsMessage(
+  audit: AuditState,
+  method: 'last' | 'list',
+  filter: { name?: string; status?: 'ok' | 'error'; since?: number; limit?: number },
+): CtxReply {
+  if (!audit.store) {
+    return {
+      ok: false,
+      error: 'ctx.runs requires a runs store (host must wire AutomationRunsStore)',
+    };
+  }
+  try {
+    const name = filter.name ?? audit.automationName;
+    const limit = filter.limit ?? 50;
+    // Fetch one extra row so we can drop the in-progress self-run without
+    // short-changing the caller's limit.
+    const rows = audit.store
+      .listRuns({
+        name,
+        ...(filter.status ? { status: filter.status } : {}),
+        ...(filter.since !== undefined ? { since: filter.since } : {}),
+        limit: limit + 1,
+      })
+      .filter((r) => r.runId !== audit.runId)
+      .slice(0, limit);
+    if (method === 'last') {
+      const first = rows[0];
+      return { ok: true, result: first ? rowToRunRef(first) : undefined };
+    }
+    return { ok: true, result: rows.map(rowToRunRef) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function handleInvokeMessage(
+  audit: AuditState,
+  dispatchCtx: AutomationDispatchContext,
+  invokeDispatcher: AutomationInvokeDispatcher | undefined,
+  name: string,
+  input: unknown,
+): Promise<CtxReply> {
+  if (!invokeDispatcher) {
+    return { ok: false, error: 'ctx.invoke is not wired by the host runtime' };
+  }
+  try {
+    const out = await invokeDispatcher(name, { input, parentRunId: audit.runId }, dispatchCtx);
+    return { ok: true, result: out };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

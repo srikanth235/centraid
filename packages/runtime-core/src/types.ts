@@ -133,20 +133,120 @@ export interface AutomationAgentArgs {
   json?: AutomationJsonSchema;
 }
 
+/**
+ * Per-call options accepted by `ctx.tool` (issue #80). When omitted,
+ * a failed tool call rejects the returned Promise (the legacy behavior).
+ */
+export interface AutomationToolOptions {
+  /**
+   * Retry configuration. `max` is the maximum number of attempts —
+   * `{max: 3}` allows up to two retries after the initial call. Each
+   * attempt produces its own `run_nodes` row sharing the same ordinal
+   * with ascending `attempt`. Default backoff is exponential, capped at
+   * 5s; fixed-interval backoff is also available.
+   */
+  retry?: { max: number; backoff?: 'fixed' | 'exponential'; intervalMs?: number };
+  /**
+   * On final failure (after retries are exhausted, or with no retry
+   * config), `'fail'` rejects the Promise — the handler's try/catch can
+   * react — and `'continue'` resolves with `undefined` so the handler
+   * can ignore the failure without wrapping every call in try/catch.
+   * Default `'fail'`.
+   */
+  onError?: 'fail' | 'continue';
+}
+
+/**
+ * Cross-process state surface for handlers (issue #80). Backed by the
+ * per-app `automations.sqlite` `state` table. Scope is per-automation:
+ * `state.PK = (automation_name, key)`. Cross-automation state should go
+ * through the app's own `data.sqlite` instead.
+ */
+export interface AutomationStateCtx {
+  /** Resolve a previously-set value for this automation. Returns undefined when unset. */
+  get<T = unknown>(key: string): Promise<T | undefined>;
+  /** Persist a JSON-serializable value for this automation. */
+  set(key: string, value: unknown): Promise<void>;
+  /** Drop the entry. */
+  delete(key: string): Promise<void>;
+}
+
+/**
+ * Lightweight handle on a past run. Mirrors `AutomationRunRow` but
+ * pre-parses `inputJson`/`outputJson` for handler convenience.
+ */
+export interface AutomationRunRef {
+  runId: string;
+  automationName: string;
+  triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure';
+  startedAt: number;
+  endedAt?: number;
+  ok: boolean;
+  error?: string;
+  summary?: string;
+  input?: unknown;
+  output?: unknown;
+}
+
+export interface AutomationRunsListFilter {
+  /** Defaults to the currently-executing automation. */
+  name?: string;
+  /** Only return runs whose `ok` flag matches. */
+  status?: 'ok' | 'error';
+  /** `started_at` lower bound (inclusive, ms epoch). */
+  since?: number;
+  /** Max rows. Defaults to 50. */
+  limit?: number;
+}
+
+export interface AutomationRunsCtx {
+  /**
+   * Most-recent run record. With no filter, returns the most recent
+   * for the currently-executing automation; pass `{status: 'ok'}` for
+   * the "since last successful run" cursor pattern.
+   */
+  last(filter?: { name?: string; status?: 'ok' | 'error' }): Promise<AutomationRunRef | undefined>;
+  /** List run records newest-first. */
+  list(filter?: AutomationRunsListFilter): Promise<AutomationRunRef[]>;
+}
+
+export interface AutomationInvokeArgs {
+  /** Optional payload passed to the child run; lands in `runs.input_json`. */
+  input?: unknown;
+}
+
 export interface AutomationCtx {
   /**
    * Invoke one host tool (MCP or builtin) deterministically. Result type
    * is intentionally `unknown` — the handler narrows with a JSDoc cast.
    * Concurrent calls (via Promise.all) are batched into one host agent
-   * turn for cold-start amortization.
+   * turn for cold-start amortization. Issue #80 added an optional third
+   * argument carrying retry + onError configuration.
    */
-  tool(name: string, args: unknown): Promise<unknown>;
+  tool(name: string, args: unknown, opts?: AutomationToolOptions): Promise<unknown>;
   /**
    * Constrained one-shot inference against the user's real provider.
    * Returns the parsed JSON object when `json:` schema is set, otherwise
    * the raw assistant text.
    */
   agent(args: AutomationAgentArgs): Promise<unknown>;
+  /**
+   * Cross-fire state surface (issue #80). Backed by the per-app
+   * `automations.sqlite`. Persists across desktop restarts.
+   */
+  state: AutomationStateCtx;
+  /**
+   * Run audit query surface (issue #80). Read-only view of the per-app
+   * `runs` table. Used by handlers for the "since last successful run"
+   * cursor pattern and aggregating / catch-up automations.
+   */
+  runs: AutomationRunsCtx;
+  /**
+   * Synchronously invoke another automation in the same app and return
+   * its `output` (issue #80). Links the child run to this one via
+   * `parent_run_id`. Intra-app only.
+   */
+  invoke(name: string, args?: AutomationInvokeArgs): Promise<unknown>;
   /**
    * AbortSignal that fires when the run is being torn down (timeout,
    * SIGTERM from the OS scheduler, manual cancel).
