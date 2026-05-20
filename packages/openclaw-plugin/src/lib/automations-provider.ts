@@ -382,7 +382,6 @@ async function runOpenclawFire(
         error: outcome.error ?? 'unknown error',
         nodes: opts.runsStore.listNodes(runId).map((n) => ({
           ordinal: n.ordinal,
-          attempt: n.attempt,
           kind: n.kind,
           name: n.name,
           ok: n.ok,

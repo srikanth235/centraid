@@ -134,29 +134,6 @@ export interface AutomationAgentArgs {
 }
 
 /**
- * Per-call options accepted by `ctx.tool` (issue #80). When omitted,
- * a failed tool call rejects the returned Promise (the legacy behavior).
- */
-export interface AutomationToolOptions {
-  /**
-   * Retry configuration. `max` is the maximum number of attempts —
-   * `{max: 3}` allows up to two retries after the initial call. Each
-   * attempt produces its own `run_nodes` row sharing the same ordinal
-   * with ascending `attempt`. Default backoff is exponential, capped at
-   * 5s; fixed-interval backoff is also available.
-   */
-  retry?: { max: number; backoff?: 'fixed' | 'exponential'; intervalMs?: number };
-  /**
-   * On final failure (after retries are exhausted, or with no retry
-   * config), `'fail'` rejects the Promise — the handler's try/catch can
-   * react — and `'continue'` resolves with `undefined` so the handler
-   * can ignore the failure without wrapping every call in try/catch.
-   * Default `'fail'`.
-   */
-  onError?: 'fail' | 'continue';
-}
-
-/**
  * Cross-process state surface for handlers (issue #80). Backed by the
  * per-app `automations.sqlite` `state` table. Scope is per-automation:
  * `state.PK = (automation_name, key)`. Cross-automation state should go
@@ -220,10 +197,11 @@ export interface AutomationCtx {
    * Invoke one host tool (MCP or builtin) deterministically. Result type
    * is intentionally `unknown` — the handler narrows with a JSDoc cast.
    * Concurrent calls (via Promise.all) are batched into one host agent
-   * turn for cold-start amortization. Issue #80 added an optional third
-   * argument carrying retry + onError configuration.
+   * turn for cold-start amortization. A failed tool call rejects the
+   * returned Promise — retry / backoff / error-classification is the
+   * handler's job (it's plain JS; use `try/catch`).
    */
-  tool(name: string, args: unknown, opts?: AutomationToolOptions): Promise<unknown>;
+  tool(name: string, args: unknown): Promise<unknown>;
   /**
    * Constrained one-shot inference against the user's real provider.
    * Returns the parsed JSON object when `json:` schema is set, otherwise

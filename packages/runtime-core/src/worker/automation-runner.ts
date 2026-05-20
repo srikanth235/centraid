@@ -18,9 +18,11 @@
  * Mitigation: when the handler does `Promise.all([ctx.tool(a),
  * ctx.tool(b), ctx.tool(c)])`, we collect all three queued tool calls
  * inside the same microtask checkpoint and dispatch them as ONE batch
- * to the parent. Each call may carry its own `opts.retry`/`opts.onError`
- * — those ride along in the batch message; the parent owns the retry
- * loop so the audit table sees one row per attempt.
+ * to the parent.
+ *
+ * There is no runtime retry: a failed `ctx.tool` rejects the handler's
+ * Promise, and the handler (plain JS) owns retry / backoff / error
+ * classification via `try/catch`.
  *
  * `ctx.agent`, `ctx.state.*`, `ctx.runs.*`, and `ctx.invoke` are
  * fundamentally different turn shapes (constrained inference / KV
@@ -43,8 +45,6 @@ interface WorkerRequest {
 interface ToolCallWire {
   name: string;
   args: unknown;
-  retry?: { max: number; backoff?: 'fixed' | 'exponential'; intervalMs?: number };
-  onError?: 'fail' | 'continue';
 }
 
 type ParentMessage =
@@ -103,8 +103,6 @@ const pendingInvoke = new Map<
 interface PendingToolCall {
   name: string;
   args: unknown;
-  retry?: { max: number; backoff?: 'fixed' | 'exponential'; intervalMs?: number };
-  onError?: 'fail' | 'continue';
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
 }
@@ -120,12 +118,7 @@ function flushBatch(): void {
   const calls = pendingToolBatch;
   pendingToolBatch = [];
   pendingToolBatchById.set(id, { calls });
-  const wire: ToolCallWire[] = calls.map((c) => ({
-    name: c.name,
-    args: c.args,
-    ...(c.retry ? { retry: c.retry } : {}),
-    ...(c.onError ? { onError: c.onError } : {}),
-  }));
+  const wire: ToolCallWire[] = calls.map((c) => ({ name: c.name, args: c.args }));
   port.postMessage({ type: 'tool-batch', id, calls: wire } satisfies WorkerMessage);
 }
 
@@ -326,24 +319,9 @@ const runs = {
 };
 
 const ctx = {
-  tool(
-    name: string,
-    args: unknown,
-    opts?: {
-      retry?: { max: number; backoff?: 'fixed' | 'exponential'; intervalMs?: number };
-      onError?: 'fail' | 'continue';
-    },
-  ): Promise<unknown> {
+  tool(name: string, args: unknown): Promise<unknown> {
     return new Promise<unknown>((resolve, reject) => {
-      const call: PendingToolCall = {
-        name,
-        args,
-        resolve,
-        reject,
-        ...(opts?.retry ? { retry: opts.retry } : {}),
-        ...(opts?.onError ? { onError: opts.onError } : {}),
-      };
-      pendingToolBatch.push(call);
+      pendingToolBatch.push({ name, args, resolve, reject });
       scheduleBatchFlush();
     });
   },

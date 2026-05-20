@@ -32,15 +32,6 @@ export function truncateForAudit(value: unknown): string | undefined {
   return JSON.stringify({ _truncated: true, bytes: json.length, head: json.slice(0, 256) });
 }
 
-export function backoffDelayMs(
-  attempt: number,
-  cfg: { backoff?: 'fixed' | 'exponential'; intervalMs?: number },
-): number {
-  const interval = cfg.intervalMs ?? 250;
-  if (cfg.backoff === 'fixed') return interval;
-  return Math.min(interval * 2 ** (attempt - 1), 5000);
-}
-
 export interface RunRef {
   runId: string;
   automationName: string;
@@ -124,15 +115,14 @@ export function extractReturnEnvelope(value: unknown): HandlerReturnEnvelope {
   return { value };
 }
 
-export function makeNodeId(runId: string, ordinal: number, attempt: number): string {
-  return `${runId}:${ordinal}:${attempt}:${randomUUID().slice(0, 6)}`;
+export function makeNodeId(runId: string, ordinal: number): string {
+  return `${runId}:${ordinal}:${randomUUID().slice(0, 6)}`;
 }
 
 export interface RecordToolNodeArgs {
   store: AutomationRunsStore;
   runId: string;
   ordinal: number;
-  attempt: number;
   batchId?: number;
   name: string;
   args?: unknown;
@@ -145,11 +135,10 @@ export interface RecordToolNodeArgs {
 
 export function recordToolNode(args: RecordToolNodeArgs): void {
   const input: InsertNodeInput = {
-    nodeId: makeNodeId(args.runId, args.ordinal, args.attempt),
+    nodeId: makeNodeId(args.runId, args.ordinal),
     runId: args.runId,
     ordinal: args.ordinal,
     ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
-    attempt: args.attempt,
     kind: 'tool',
     name: args.name,
     ...(args.args !== undefined ? { argsJson: truncateForAudit(args.args) ?? '' } : {}),
@@ -183,10 +172,9 @@ export interface RecordAgentNodeArgs {
 
 export function recordAgentNode(args: RecordAgentNodeArgs): void {
   const input: InsertNodeInput = {
-    nodeId: makeNodeId(args.runId, args.ordinal, 1),
+    nodeId: makeNodeId(args.runId, args.ordinal),
     runId: args.runId,
     ordinal: args.ordinal,
-    attempt: 1,
     kind: 'agent',
     name: 'agent',
     argsJson: truncateForAudit({ prompt: args.prompt }) ?? '',

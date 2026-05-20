@@ -262,8 +262,24 @@ Every automation fire is recorded in a per-app \`automations.sqlite\` file the r
 - **\`ctx.state.get(key)\` / \`ctx.state.set(key, value)\`** — cross-fire KV scoped to the current automation. Use for watermarks, cursors, ETags, dedup hashes — anything that needs to survive between runs. JSON-serializable values only. Survives desktop restart.
 - **\`ctx.runs.last({ status: 'ok' })\`** — the most-recent successful run record. Use for the "since last successful run" pattern. The in-progress self-run is filtered out, so you never see your own incomplete row.
 - **\`ctx.runs.list({ since, limit })\`** — newest-first history of runs. Use for aggregating windows ("summarize last week's runs") and catch-up patterns ("on first fire after a gap, replay missed windows").
-- **\`ctx.tool(name, args, { retry: { max: 3 }, onError: 'continue' })\`** — optional retry + onError on a single tool call. Each attempt produces a distinct audit row sharing the call's ordinal. \`onError: 'continue'\` resolves the Promise with \`undefined\` instead of throwing on final failure.
 - **\`ctx.invoke(name, { input })\`** — synchronously fire a sibling automation in the same app and receive its \`output\`. Use to compose deterministic workflows out of named building blocks. The child run links to the parent via \`parent_run_id\`.
+
+There is **no retry knob** on \`ctx.tool\`. A failed tool call rejects the Promise; the handler is plain JavaScript, so retry / backoff / error-classification is yours to write with \`try/catch\`. This is deliberate — retry policy depends on *which* failure it is (a 429 wants backoff, a 404 wants no retry, a "not ready yet" wants a short poll), and only the handler knows the tool's error semantics. Each \`ctx.tool\` call is its own audit node, so a handler-driven retry loop shows up as distinct nodes in the run timeline.
+
+\`\`\`js
+// Retry only on transient failures — the handler classifies the error.
+async function withRetry(fn, { max = 3 } = {}) {
+  for (let i = 0; i < max; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i === max - 1 || !/\\b(429|503|timeout)\\b/i.test(String(e.message))) throw e;
+      await new Promise((r) => setTimeout(r, 250 * 2 ** i));
+    }
+  }
+}
+const prs = await withRetry(() => ctx.tool('github.list_pull_requests', { repo }));
+\`\`\`
 
 Your handler can optionally \`return { summary, output }\`. \`summary\` is a one-line description shown in the UI run list. \`output\` is the structured value persisted to \`runs.output_json\`; if your manifest declares \`outputSchema\`, the runtime validates \`output\` against it and flips the run to failed if the shape drifts.
 

@@ -2444,11 +2444,7 @@
   function renderNodeRow(node: CentraidAutomationRunNode): HTMLElement {
     const wrap = el('div', { class: 'cd-app-run-node', 'data-ok': String(node.ok) });
     const head = el('div', { class: 'cd-app-run-node-head' }, [
-      el(
-        'span',
-        { class: 'cd-app-run-node-pos' },
-        `#${node.ordinal}${node.attempt > 1 ? `·${node.attempt}` : ''}`,
-      ),
+      el('span', { class: 'cd-app-run-node-pos' }, `#${node.ordinal}`),
       el('span', { class: 'cd-app-run-node-kind' }, node.kind),
       el('span', { class: 'cd-app-run-node-name' }, node.name),
       ...(node.batchId !== undefined

@@ -35,7 +35,6 @@ export interface AutomationRunNodeRow {
   readonly runId: string;
   readonly ordinal: number;
   readonly batchId?: number;
-  readonly attempt: number;
   readonly kind: AutomationRunNodeKind;
   readonly name: string;
   readonly argsJson?: string;
@@ -80,7 +79,6 @@ export const AUTOMATIONS_MIGRATIONS: readonly string[] = [
       run_id        TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
       ordinal       INTEGER NOT NULL,
       batch_id      INTEGER,
-      attempt       INTEGER NOT NULL DEFAULT 1,
       kind          TEXT NOT NULL,
       name          TEXT NOT NULL,
       args_json     TEXT,

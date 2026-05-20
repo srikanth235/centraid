@@ -89,7 +89,7 @@ describe('AutomationRunsStore', () => {
     store.close();
   });
 
-  it('inserts nodes with batch_id and attempt; lists in (ordinal, attempt) order', () => {
+  it('inserts nodes with batch_id; lists in (ordinal, started_at) order', () => {
     const { store } = newStore();
     store.insertRun({ runId: 'r', automationName: 'foo', triggerKind: 'scheduled', startedAt: 0 });
     store.insertNode({
@@ -97,7 +97,6 @@ describe('AutomationRunsStore', () => {
       runId: 'r',
       ordinal: 0,
       batchId: 1,
-      attempt: 1,
       kind: 'tool',
       name: 'github.list_prs',
       ok: true,
@@ -110,7 +109,6 @@ describe('AutomationRunsStore', () => {
       runId: 'r',
       ordinal: 1,
       batchId: 1,
-      attempt: 1,
       kind: 'tool',
       name: 'github.list_issues',
       ok: true,
@@ -118,43 +116,25 @@ describe('AutomationRunsStore', () => {
       endedAt: 21,
       durationMs: 10,
     });
-    // Retry: same ordinal as n2 logical position but attempt 2 — but
-    // attempt-rows usually share *one* call slot, so simulate retry of
-    // ordinal 2 with attempts 1 and 2.
     store.insertNode({
-      nodeId: 'n3a',
+      nodeId: 'n3',
       runId: 'r',
       ordinal: 2,
-      attempt: 1,
-      kind: 'tool',
-      name: 'flaky.tool',
-      ok: false,
-      error: 'transient',
-      startedAt: 30,
-      endedAt: 35,
-      durationMs: 5,
-    });
-    store.insertNode({
-      nodeId: 'n3b',
-      runId: 'r',
-      ordinal: 2,
-      attempt: 2,
-      kind: 'tool',
-      name: 'flaky.tool',
+      kind: 'agent',
+      name: 'agent',
       ok: true,
-      startedAt: 36,
+      startedAt: 30,
       endedAt: 40,
-      durationMs: 4,
+      durationMs: 10,
     });
     const nodes = store.listNodes('r');
-    assert.equal(nodes.length, 4);
+    assert.equal(nodes.length, 3);
     assert.deepEqual(
-      nodes.map((n) => [n.nodeId, n.ordinal, n.attempt]),
+      nodes.map((n) => [n.nodeId, n.ordinal]),
       [
-        ['n1', 0, 1],
-        ['n2', 1, 1],
-        ['n3a', 2, 1],
-        ['n3b', 2, 2],
+        ['n1', 0],
+        ['n2', 1],
+        ['n3', 2],
       ],
     );
     assert.equal(nodes[0]?.batchId, 1);
@@ -237,7 +217,6 @@ describe('AutomationRunsStore', () => {
         nodeId: `n-${i}`,
         runId: id,
         ordinal: 0,
-        attempt: 1,
         kind: 'tool',
         name: 'a.b',
         ok: true,

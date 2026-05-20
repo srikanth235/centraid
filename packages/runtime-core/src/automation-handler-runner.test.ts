@@ -73,7 +73,6 @@ describe('runAutomationHandler audit (issue #80)', () => {
     assert.equal(nodes.length, 2);
     assert.equal(nodes[0]?.kind, 'tool');
     assert.equal(nodes[0]?.name, 'mcp.foo');
-    assert.equal(nodes[0]?.attempt, 1);
     assert.equal(nodes[0]?.batchId, undefined); // solo call
     assert.equal(nodes[1]?.kind, 'agent');
     assert.equal(nodes[1]?.ok, true);
@@ -111,12 +110,23 @@ describe('runAutomationHandler audit (issue #80)', () => {
     h.store.close();
   });
 
-  it('retries via opts.retry produce one row per attempt sharing the ordinal', async () => {
+  it('a failed ctx.tool rejects the handler Promise; handler-side try/catch owns retry', async () => {
     const h = makeHarness();
+    // The handler retries itself via try/catch — the runtime does no
+    // retrying. Each attempt is a distinct ctx.tool call → distinct node.
     const handlerFile = h.writeHandler(
       'retry.js',
       `export default async ({ ctx }) => {
-        await ctx.tool('flaky.tool', { n: 1 }, { retry: { max: 3, backoff: 'fixed', intervalMs: 1 } });
+        let lastErr;
+        for (let i = 0; i < 3; i++) {
+          try {
+            const r = await ctx.tool('flaky.tool', { attempt: i });
+            return { summary: 'ok after ' + i };
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        throw lastErr;
       };`,
     );
     let calls = 0;
@@ -136,42 +146,43 @@ describe('runAutomationHandler audit (issue #80)', () => {
       runsStore: h.store,
     });
     assert.equal(outcome.ok, true);
+    // Three distinct ctx.tool calls → three nodes with ascending ordinal.
     const nodes = h.store.listNodes(runId);
     assert.equal(nodes.length, 3);
     assert.deepEqual(
-      nodes.map((n) => [n.ordinal, n.attempt, n.ok]),
+      nodes.map((n) => [n.ordinal, n.ok]),
       [
-        [0, 1, false],
-        [0, 2, false],
-        [0, 3, true],
+        [0, false],
+        [1, false],
+        [2, true],
       ],
     );
     h.store.close();
   });
 
-  it('opts.onError=continue swallows final failure, audit still records ok=0', async () => {
+  it('a failed ctx.tool the handler does not catch fails the run', async () => {
     const h = makeHarness();
     const handlerFile = h.writeHandler(
-      'continue.js',
+      'uncaught.js',
       `export default async ({ ctx }) => {
-        const r = await ctx.tool('always.fails', {}, { onError: 'continue' });
-        return { summary: 'after fail: ' + String(r) };
+        await ctx.tool('always.fails', {});
+        return { summary: 'unreachable' };
       };`,
     );
     const failing: AutomationToolDispatcher = async (cs) =>
       cs.map(() => ({ ok: false, error: 'nope' }));
-    const runId = makeRunId('continue');
+    const runId = makeRunId('uncaught');
     const outcome = await runAutomationHandler({
       app: { id: 'todos', dir: h.appDir },
       handlerFile,
-      automationName: 'continue',
+      automationName: 'uncaught',
       runId,
       toolDispatcher: failing,
       agentDispatcher: okAgentDispatcher,
       runsStore: h.store,
     });
-    assert.equal(outcome.ok, true);
-    assert.match(outcome.summary ?? '', /undefined/);
+    assert.equal(outcome.ok, false);
+    assert.match(outcome.error ?? '', /nope/);
     const nodes = h.store.listNodes(runId);
     assert.equal(nodes.length, 1);
     assert.equal(nodes[0]?.ok, false);

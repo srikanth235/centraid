@@ -10,7 +10,6 @@
  *                on_failure). Carries parent_run_id for sub-invocations,
  *                handler-return summary, validated output_json.
  *   run_nodes  — one row per ctx.tool / ctx.agent call inside a run.
- *                Retries share an ordinal with ascending `attempt`.
  *                Promise.all-batched calls share a `batch_id`.
  *   state      — per-(automation_name, key) KV used by ctx.state.
  *
@@ -48,7 +47,6 @@ interface RawNode {
   run_id: string;
   ordinal: number;
   batch_id: number | null;
-  attempt: number;
   kind: string;
   name: string;
   args_json: string | null;
@@ -92,7 +90,6 @@ export interface InsertNodeInput {
   readonly runId: string;
   readonly ordinal: number;
   readonly batchId?: number;
-  readonly attempt: number;
   readonly kind: AutomationRunNodeKind;
   readonly name: string;
   readonly argsJson?: string;
@@ -153,7 +150,6 @@ function nodeFromRaw(raw: RawNode): AutomationRunNodeRow {
     runId: raw.run_id,
     ordinal: raw.ordinal,
     ...(raw.batch_id !== null ? { batchId: raw.batch_id } : {}),
-    attempt: raw.attempt,
     kind: raw.kind as AutomationRunNodeKind,
     name: raw.name,
     ...(raw.args_json !== null ? { argsJson: raw.args_json } : {}),
@@ -204,13 +200,13 @@ function prepare(db: DatabaseSync): PreparedStatements {
     `),
     insertNode: db.prepare(`
       INSERT INTO run_nodes (
-        node_id, run_id, ordinal, batch_id, attempt, kind, name,
+        node_id, run_id, ordinal, batch_id, kind, name,
         args_json, output_json, ok, error,
         started_at, ended_at, duration_ms, input_tokens, output_tokens
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     listNodesByRun: db.prepare(`
-      SELECT * FROM run_nodes WHERE run_id = ? ORDER BY ordinal ASC, attempt ASC
+      SELECT * FROM run_nodes WHERE run_id = ? ORDER BY ordinal ASC, started_at ASC
     `),
     upsertState: db.prepare(`
       INSERT INTO state (automation_name, key, value_json, updated_at)
@@ -318,7 +314,6 @@ export class AutomationRunsStore {
       input.runId,
       input.ordinal,
       input.batchId ?? null,
-      input.attempt,
       input.kind,
       input.name,
       input.argsJson ?? null,

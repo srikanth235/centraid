@@ -14,13 +14,11 @@ import type {
   AutomationToolResult,
 } from './automation-handler-runner.js';
 import type { AutomationRunsStore } from './automation-runs-store.js';
-import { backoffDelayMs, recordToolNode, rowToRunRef } from './automation-handler-audit.js';
+import { recordToolNode, rowToRunRef } from './automation-handler-audit.js';
 
 export interface ToolCallWire {
   name: string;
   args: unknown;
-  retry?: { max: number; backoff?: 'fixed' | 'exponential'; intervalMs?: number };
-  onError?: 'fail' | 'continue';
 }
 
 export interface AuditState {
@@ -47,6 +45,13 @@ export interface DispatchBatchArgs {
   calls: ToolCallWire[];
 }
 
+/**
+ * Dispatch one batch of `ctx.tool` calls and record each as a
+ * `run_nodes` row. There is no runtime retry — a failed `ctx.tool`
+ * rejects the handler's Promise, and the handler (which is plain JS)
+ * owns retry/backoff/error-classification via `try/catch`. See the
+ * "Run audit & state" block of the builder system prompt.
+ */
 export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<AutomationToolResult[]> {
   const { audit, calls, toolDispatcher, dispatchCtx } = args;
   const ordinals = calls.map(() => nextOrdinal(audit));
@@ -57,15 +62,12 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
     dispatchCtx,
   );
   const ended = Date.now();
-  const finalResults: AutomationToolResult[] = [];
-  for (let i = 0; i < calls.length; i++) {
-    const call = calls[i]!;
+  return calls.map((call, i) => {
     const result = results[i] ?? { ok: false, error: 'no result returned by dispatcher' };
     recordToolNode({
       store: audit.store,
       runId: audit.runId,
       ordinal: ordinals[i]!,
-      attempt: 1,
       ...(batchId !== undefined ? { batchId } : {}),
       name: call.name,
       args: call.args,
@@ -75,47 +77,8 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
       started,
       ended,
     });
-    finalResults.push(result);
-  }
-  for (let i = 0; i < calls.length; i++) {
-    const call = calls[i]!;
-    let result = finalResults[i]!;
-    if (result.ok) continue;
-    const max = call.retry?.max ?? 1;
-    let attempt = 1;
-    while (!result.ok && attempt < max) {
-      attempt++;
-      const delay = backoffDelayMs(attempt, call.retry ?? {});
-      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
-      const retryStarted = Date.now();
-      const retryResults = await toolDispatcher(
-        [{ name: call.name, args: call.args }],
-        dispatchCtx,
-      );
-      const retryEnded = Date.now();
-      const retryResult = retryResults[0] ?? {
-        ok: false,
-        error: 'no result returned by dispatcher',
-      };
-      recordToolNode({
-        store: audit.store,
-        runId: audit.runId,
-        ordinal: ordinals[i]!,
-        attempt,
-        name: call.name,
-        args: call.args,
-        ok: retryResult.ok,
-        ...(retryResult.result !== undefined ? { result: retryResult.result } : {}),
-        ...(retryResult.error !== undefined ? { error: retryResult.error } : {}),
-        started: retryStarted,
-        ended: retryEnded,
-      });
-      result = retryResult;
-    }
-    if (!result.ok && call.onError === 'continue') result = { ok: true, result: undefined };
-    finalResults[i] = result;
-  }
-  return finalResults;
+    return result;
+  });
 }
 
 export interface CtxReply {

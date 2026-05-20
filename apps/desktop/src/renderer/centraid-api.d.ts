@@ -532,7 +532,6 @@ export interface CentraidAutomationRunNode {
   runId: string;
   ordinal: number;
   batchId?: number;
-  attempt: number;
   kind: 'tool' | 'agent';
   name: string;
   argsJson?: string;
@@ -750,7 +749,6 @@ declare global {
     runId: string;
     ordinal: number;
     batchId?: number;
-    attempt: number;
     kind: 'tool' | 'agent';
     name: string;
     argsJson?: string;

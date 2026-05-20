@@ -440,7 +440,6 @@ export async function runAutomationLocal(
         error: outcome.error ?? 'unknown error',
         nodes: runsStore.listNodes(runId).map((n) => ({
           ordinal: n.ordinal,
-          attempt: n.attempt,
           kind: n.kind,
           name: n.name,
           ok: n.ok,
