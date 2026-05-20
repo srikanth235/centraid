@@ -2336,6 +2336,9 @@
       el('div', { class: 'cd-app-settings-name' }, app.name),
       el('div', { class: 'cd-app-settings-eyebrow' }, 'App settings'),
     ]);
+    // §E2 — the popover is implicitly live (knobs save on change), so
+    // there's no Save button — an "Auto-saved" marker states that.
+    const autoSaved = el('span', { class: 'cd-app-settings-autosaved' }, 'Auto-saved');
     const closeBtn = el('button', {
       class: 'cd-app-settings-close',
       type: 'button',
@@ -2343,17 +2346,48 @@
       trustedHtml: Icon.X({ size: 12 }),
       onClick: closeAppSettings,
     });
-    header.append(iconTile, headerText, closeBtn);
+    header.append(iconTile, headerText, autoSaved, closeBtn);
     panel.append(header);
 
-    // Preferences (knobs) — only meaningful for centraid-backed apps.
-    // We render an empty host section synchronously and fill it in when
-    // the manifest + current values resolve, so the panel pops in
-    // immediately without waiting for HTTP/SQL.
-    let prefsHost: HTMLElement | null = null;
+    // §E1 — tabbed popover: Appearance · Automations · Manage. Each tab
+    // does one job instead of one flat stack.
+    type AppSettingsTab = 'appearance' | 'automations' | 'manage';
+    const panes: Record<AppSettingsTab, HTMLElement> = {
+      appearance: el('div', { class: 'cd-app-settings-pane' }),
+      automations: el('div', { class: 'cd-app-settings-pane' }),
+      manage: el('div', { class: 'cd-app-settings-pane' }),
+    };
+    const tabBar = el('div', { class: 'cd-app-settings-tabs' });
+    const tabButtons = new Map<AppSettingsTab, HTMLElement>();
+    const showAppSettingsTab = (id: AppSettingsTab): void => {
+      for (const [tid, btn] of tabButtons) btn.dataset.active = String(tid === id);
+      for (const [pid, pane] of Object.entries(panes)) pane.hidden = pid !== id;
+    };
+    for (const [id, label] of [
+      ['appearance', 'Appearance'],
+      ['automations', 'Automations'],
+      ['manage', 'Manage'],
+    ] as const) {
+      const btn = el(
+        'button',
+        { class: 'cd-app-settings-tab', type: 'button', onClick: () => showAppSettingsTab(id) },
+        label,
+      );
+      tabButtons.set(id, btn);
+      tabBar.append(btn);
+    }
+    panel.append(tabBar);
+    panel.append(panes.appearance, panes.automations, panes.manage);
+
+    // Appearance — per-app knobs (font / width / corners / App color).
+    // Only meaningful for centraid-backed apps; an empty host fills in
+    // when the manifest + current values resolve.
+    let prefsHost: HTMLElement | null = el('div', { class: 'cd-app-settings-section-host' });
+    prefsHost.append(
+      el('div', { class: 'cd-app-settings-note' }, 'No appearance options for this app.'),
+    );
+    panes.appearance.append(prefsHost);
     if (appId) {
-      prefsHost = el('div', { class: 'cd-app-settings-section-host' });
-      panel.append(prefsHost);
       void Promise.all([fetchAppKnobsManifest(appId), fetchAppKnobValues(appId)]).then(
         ([manifest, stored]) => {
           if (!prefsHost || !document.contains(panel)) return;
@@ -2364,23 +2398,37 @@
     }
 
     // Automations (issue #70) — end-user surface for cron-scheduled
-    // actions the builder agent scaffolded. Same lazy pattern as
-    // Preferences: empty host first, replace once the mirror responds.
-    // End-user controls only — on/off toggle, Run now, and a
-    // human-readable schedule. Operator concerns (delete, schedule
-    // editing) live in the builder's Cloud → Automations rail item.
-    let automationsHost: HTMLElement | null = null;
+    // actions the builder agent scaffolded. Same lazy pattern.
+    const automationsHost = el('div', { class: 'cd-app-settings-section-host' });
+    automationsHost.append(
+      el('div', { class: 'cd-app-settings-note' }, 'No automations for this app yet.'),
+    );
+    panes.automations.append(automationsHost);
     if (appId) {
-      automationsHost = el('div', { class: 'cd-app-settings-section-host' });
-      panel.append(automationsHost);
       void window.CentraidApi.listAutomations({ appId }).then((rows) => {
-        if (!automationsHost || !document.contains(panel)) return;
+        if (!document.contains(panel)) return;
         if (rows.length === 0) return;
         automationsHost.replaceChildren(renderAutomationsSection(rows, appId, panel));
       });
     }
+    // §E3 — graduates to the top-level Automations destination.
+    panes.automations.append(
+      el(
+        'button',
+        {
+          class: 'cd-app-settings-pane-link',
+          type: 'button',
+          onClick: () => {
+            closeAppSettings();
+            renderAutomations();
+          },
+        },
+        'Open Automations →',
+      ),
+    );
 
-    // Manage
+    // Manage — Rename / Share / Reveal, then a Danger zone whose Delete
+    // arms a confirmation step before it fires (§E1).
     const manage = el('div', { class: 'cd-app-settings-manage' });
     manage.append(
       appSettingsMenuItem('Pencil', 'Rename', () => {
@@ -2395,17 +2443,31 @@
         closeAppSettings();
         void revealApp(app);
       }),
-      appSettingsMenuItem(
-        'Trash',
-        'Delete app',
-        () => {
-          closeAppSettings();
-          void deleteApp(app);
-        },
-        { destructive: true },
-      ),
     );
-    panel.append(manage);
+    panes.manage.append(manage);
+
+    const dangerZone = el('div', { class: 'cd-app-settings-danger' });
+    dangerZone.append(el('div', { class: 'cd-app-settings-danger-label' }, 'Danger zone'));
+    let deleteArmed = false;
+    const deleteBtn = el(
+      'button',
+      { class: 'cd-app-settings-danger-btn', type: 'button' },
+      'Delete app',
+    );
+    deleteBtn.addEventListener('click', () => {
+      if (!deleteArmed) {
+        deleteArmed = true;
+        deleteBtn.dataset.armed = 'true';
+        deleteBtn.textContent = 'Click again to delete';
+        return;
+      }
+      closeAppSettings();
+      void deleteApp(app);
+    });
+    dangerZone.append(deleteBtn);
+    panes.manage.append(dangerZone);
+
+    showAppSettingsTab('appearance');
 
     view.append(backdrop);
     view.append(panel);

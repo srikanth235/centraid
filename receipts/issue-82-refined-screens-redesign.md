@@ -17,7 +17,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] Step 4 — Builder B1–B6
 - [x] Step 5 — Settings monolith split (C)
 - [x] Step 6 — App view copilot (D)
-- [ ] Step 7 — Per-app settings tabbed popover (E)
+- [x] Step 7 — Per-app settings tabbed popover (E)
 - [ ] Step 8 — ⌘K command palette (F)
 
 ## What changed
@@ -130,6 +130,19 @@ on teardown). §D3 (collapse the copilot's three header icons into a ⋯
 overflow) and §D1 (coordinated "Try these starters" empty state across
 the running app + copilot) are deferred — the copilot already collapses
 to a FAB so the 340px-always-on problem the handover flags is solved.
+
+**Step 7 — Per-app settings tabbed popover (E).** `openAppSettings`
+previously stacked Preferences, Automations and Manage (Delete
+included) in one flat list. §E1: the popover now has three tabs —
+Appearance (per-app knobs), Automations, Manage — each showing one
+pane at a time. §E2: an `Auto-saved` mono-caps marker sits in the
+header next to the close button (the popover saves on change, so
+there's no Save button). The Automations pane gains an
+`Open Automations →` link that graduates to the top-level Automations
+destination (§E3, wired in Step 2). §E1 Manage: Rename / Share /
+Reveal stay as a menu, and Delete moved into a bordered `Danger zone`
+whose button arms a confirmation step ("Click again to delete") before
+it fires.
 
 ## Out of scope
 

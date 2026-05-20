@@ -6054,6 +6054,112 @@ textarea {
   background: color-mix(in oklab, var(--ink) 6%, transparent);
   color: var(--ink);
 }
+
+/* §E2 — Auto-saved marker; the popover has no Save button. */
+.cd-app-settings-autosaved {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  flex: none;
+}
+
+/* §E1 — tabbed popover. */
+.cd-app-settings-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 10px;
+  border-bottom: 0.5px solid var(--line);
+}
+.cd-app-settings-tab {
+  flex: 1;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 110ms,
+    color 110ms;
+}
+.cd-app-settings-tab:hover {
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.cd-app-settings-tab[data-active='true'] {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+}
+.cd-app-settings-pane[hidden] {
+  display: none;
+}
+.cd-app-settings-note {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.cd-app-settings-pane-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-top: 0.5px solid var(--line);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.cd-app-settings-pane-link:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* §E1 — Manage tab Danger zone. */
+.cd-app-settings-danger {
+  margin: 10px 12px 12px;
+  padding: 10px 12px 12px;
+  border: 0.5px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+.cd-app-settings-danger-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--danger);
+  margin-bottom: 8px;
+}
+.cd-app-settings-danger-btn {
+  width: 100%;
+  padding: 7px 10px;
+  border: 0.5px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.cd-app-settings-danger-btn:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.cd-app-settings-danger-btn[data-armed='true'] {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
 .cd-app-settings-section {
   padding: 10px 12px 12px;
   border-bottom: 0.5px solid var(--line);
