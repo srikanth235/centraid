@@ -115,6 +115,8 @@ export const Channel = {
   // per-app `automations.sqlite` runs / run_nodes tables.
   AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
   AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
+  // Pin / unpin a run as a replay fixture (issue #80 follow-up).
+  AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
 } as const;
 
 interface AgentSessionHandle {
@@ -586,7 +588,7 @@ export function registerIpcHandlers(): void {
     Channel.AUTOMATIONS_RUN_NOW,
     async (
       _e,
-      input: { appId: string; name: string },
+      input: { appId: string; name: string; replay?: boolean },
     ): Promise<{
       ok: boolean;
       durationMs: number;
@@ -601,20 +603,53 @@ export function registerIpcHandlers(): void {
       // when fired by the OS scheduler.
       const codeDir = await readActiveCodeDir(appDir);
       const prefs = await loadRunnerPrefs();
-      const { outcome, record } = await runAutomationLocal({
-        appId: input.appId,
-        appDir,
-        codeDir,
-        automationName: input.name,
-        runner: prefs.kind,
-      });
-      return {
-        ok: outcome.ok,
-        durationMs: record.durationMs,
-        ...(outcome.error ? { error: outcome.error } : {}),
-        toolBatches: record.toolBatches,
-        agentCalls: record.agentCalls,
-      };
+      const runsStore = new AutomationRunsStore(automationsDbPath(appDir));
+      try {
+        // Replay mode (issue #80 follow-up) — serve the run from the
+        // automation's pinned fixture instead of live tools.
+        let replayFromRunId: string | undefined;
+        if (input.replay) {
+          const pinned = runsStore.pinnedRun(input.name);
+          if (!pinned) {
+            throw new Error(
+              `No pinned run for "${input.name}" — pin a successful run first, then replay it.`,
+            );
+          }
+          replayFromRunId = pinned.runId;
+        }
+        // Cross-app ctx.invoke resolver — any registered app under the
+        // local apps dir is reachable via `ctx.invoke('appId/name')`.
+        const resolveApp = async (
+          otherId: string,
+        ): Promise<{ appDir: string; codeDir: string } | undefined> => {
+          const otherDir = path.join(localRuntimeAppsDir(), otherId);
+          try {
+            await fs.access(otherDir);
+          } catch {
+            return undefined;
+          }
+          return { appDir: otherDir, codeDir: await readActiveCodeDir(otherDir) };
+        };
+        const { outcome, record } = await runAutomationLocal({
+          appId: input.appId,
+          appDir,
+          codeDir,
+          automationName: input.name,
+          runner: prefs.kind,
+          runsStore,
+          resolveApp,
+          ...(replayFromRunId ? { replayFromRunId } : {}),
+        });
+        return {
+          ok: outcome.ok,
+          durationMs: record.durationMs,
+          ...(outcome.error ? { error: outcome.error } : {}),
+          toolBatches: record.toolBatches,
+          agentCalls: record.agentCalls,
+        };
+      } finally {
+        runsStore.close();
+      }
     },
   );
 
@@ -734,6 +769,23 @@ export function registerIpcHandlers(): void {
       } finally {
         store.close();
       }
+    },
+  );
+
+  // Pin / unpin a run as a replay fixture (issue #80 follow-up). The
+  // file always exists here — the user can only reach this from a run
+  // row, which means at least one run has been recorded.
+  ipcMain.handle(
+    Channel.AUTOMATIONS_PIN_RUN,
+    async (_e, input: { appId: string; runId: string; pinned: boolean }): Promise<{ ok: true }> => {
+      const appDir = path.join(localRuntimeAppsDir(), input.appId);
+      const store = new AutomationRunsStore(automationsDbPath(appDir));
+      try {
+        store.setPinned(input.runId, input.pinned);
+      } finally {
+        store.close();
+      }
+      return { ok: true };
     },
   );
 }

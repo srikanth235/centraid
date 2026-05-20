@@ -10,10 +10,9 @@
  *      (issue #80) an optional `invokeDispatcher`. The runtime-core
  *      layer doesn't know how to load + execute a sibling automation
  *      by name — that's host-specific.
- *   3. Tool calls arrive in batches; per-call `opts.retry`/`opts.onError`
- *      ride along. The retry loop lives parent-side (see
- *      `automation-handler-ctx.ts`) so each attempt becomes a distinct
- *      audit row sharing the call's ordinal.
+ *   3. Tool calls arrive in batches; each call becomes one `run_nodes`
+ *      audit row. There is no runtime retry — a failed `ctx.tool`
+ *      rejects the handler Promise (see `automation-handler-ctx.ts`).
  *   4. (Issue #80) Every ctx surface call lands in the per-app
  *      `automations.sqlite`. `ctx.state` / `ctx.runs` read+write the
  *      same file. Retention runs at end-of-run per
@@ -87,11 +86,21 @@ export type AutomationAgentDispatcher = (
   ctx: AutomationDispatchContext,
 ) => Promise<unknown>;
 
+/**
+ * Result of an `invokeDispatcher` call. `output` is the child handler's
+ * return value (surfaced to `ctx.invoke`'s caller); `childRunId` links
+ * the parent's `invoke` audit node to the child run for the DAG view.
+ */
+export interface AutomationInvokeResult {
+  output: unknown;
+  childRunId?: string;
+}
+
 export type AutomationInvokeDispatcher = (
   name: string,
   args: { input?: unknown; parentRunId: string },
   ctx: AutomationDispatchContext,
-) => Promise<unknown>;
+) => Promise<AutomationInvokeResult>;
 
 export interface AutomationDispatchContext {
   readonly runId: string;
@@ -239,6 +248,7 @@ export async function runAutomationHandler(
     workerData: {
       handlerFile: opts.handlerFile,
       args: { app: { id: opts.app.id, dir: opts.app.dir } },
+      input: opts.input,
     },
     resourceLimits: { maxOldGenerationSizeMb: 256, maxYoungGenerationSizeMb: 32 },
   });

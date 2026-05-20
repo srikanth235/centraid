@@ -169,7 +169,7 @@ When the user asks for something **scheduled** — "every 30 minutes, ...", "eac
 
 1. \`automations/<name>.json\` — the manifest. Canonical record of the user's prompt + schedule + capability declarations. The manifest is the source of truth.
 2. \`actions/<name>.js\` — the generated JS handler the scheduler fires. **Never hand-edited**; re-prompting regenerates it.
-3. The cron expression — embedded in the manifest as \`schedule\`.
+3. The cron expression — embedded in the manifest as \`trigger.expr\`.
 
 Recognize automation prompts. If the user says "do X every N minutes/hours/days/weeks," write a manifest + handler instead of a regular action.
 
@@ -262,7 +262,8 @@ Every automation fire is recorded in a per-app \`automations.sqlite\` file the r
 - **\`ctx.state.get(key)\` / \`ctx.state.set(key, value)\`** — cross-fire KV scoped to the current automation. Use for watermarks, cursors, ETags, dedup hashes — anything that needs to survive between runs. JSON-serializable values only. Survives desktop restart.
 - **\`ctx.runs.last({ status: 'ok' })\`** — the most-recent successful run record. Use for the "since last successful run" pattern. The in-progress self-run is filtered out, so you never see your own incomplete row.
 - **\`ctx.runs.list({ since, limit })\`** — newest-first history of runs. Use for aggregating windows ("summarize last week's runs") and catch-up patterns ("on first fire after a gap, replay missed windows").
-- **\`ctx.invoke(name, { input })\`** — synchronously fire a sibling automation in the same app and receive its \`output\`. Use to compose deterministic workflows out of named building blocks. The child run links to the parent via \`parent_run_id\`.
+- **\`ctx.invoke(name, { input })\`** — synchronously fire another automation and receive its \`output\`. \`name\` is \`"automation"\` for a sibling in this app, or \`"appId/automation"\` to invoke an automation in another installed app. Use to compose deterministic workflows out of named building blocks. The invoked run reads its payload as \`ctx.input\`.
+- **\`ctx.input\`** — the payload this run was invoked with: the \`input\` from a \`ctx.invoke\`, the failed-run summary on an \`onFailure\` dispatch, or \`undefined\` for a plain scheduled fire. Narrow it with a JSDoc cast.
 
 There is **no retry knob** on \`ctx.tool\`. A failed tool call rejects the Promise; the handler is plain JavaScript, so retry / backoff / error-classification is yours to write with \`try/catch\`. This is deliberate — retry policy depends on *which* failure it is (a 429 wants backoff, a 404 wants no retry, a "not ready yet" wants a short poll), and only the handler knows the tool's error semantics. Each \`ctx.tool\` call is its own audit node, so a handler-driven retry loop shows up as distinct nodes in the run timeline.
 

@@ -40,6 +40,7 @@ interface RawRun {
   error: string | null;
   summary: string | null;
   output_json: string | null;
+  pinned: number;
 }
 
 interface RawNode {
@@ -58,6 +59,7 @@ interface RawNode {
   duration_ms: number | null;
   input_tokens: number | null;
   output_tokens: number | null;
+  child_run_id: string | null;
 }
 
 interface RawState {
@@ -101,6 +103,7 @@ export interface InsertNodeInput {
   readonly durationMs: number;
   readonly inputTokens?: number;
   readonly outputTokens?: number;
+  readonly childRunId?: string;
 }
 
 export interface ListRunsOptions {
@@ -117,6 +120,9 @@ interface PreparedStatements {
   listRunsByName: StatementSync;
   listRunsAll: StatementSync;
   lastRunByName: StatementSync;
+  setPinned: StatementSync;
+  pinnedRunByName: StatementSync;
+  listChildRunsByParent: StatementSync;
   insertNode: StatementSync;
   listNodesByRun: StatementSync;
   upsertState: StatementSync;
@@ -141,6 +147,7 @@ function runFromRaw(raw: RawRun): AutomationRunRow {
     ...(raw.error !== null ? { error: raw.error } : {}),
     ...(raw.summary !== null ? { summary: raw.summary } : {}),
     ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
+    pinned: raw.pinned !== 0,
   };
 }
 
@@ -161,6 +168,7 @@ function nodeFromRaw(raw: RawNode): AutomationRunNodeRow {
     ...(raw.duration_ms !== null ? { durationMs: raw.duration_ms } : {}),
     ...(raw.input_tokens !== null ? { inputTokens: raw.input_tokens } : {}),
     ...(raw.output_tokens !== null ? { outputTokens: raw.output_tokens } : {}),
+    ...(raw.child_run_id !== null ? { childRunId: raw.child_run_id } : {}),
   };
 }
 
@@ -198,12 +206,21 @@ function prepare(db: DatabaseSync): PreparedStatements {
       WHERE automation_name = ? AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT 1
     `),
+    setPinned: db.prepare(`UPDATE runs SET pinned = ? WHERE run_id = ?`),
+    pinnedRunByName: db.prepare(`
+      SELECT * FROM runs
+      WHERE automation_name = ? AND pinned = 1
+      ORDER BY started_at DESC LIMIT 1
+    `),
+    listChildRunsByParent: db.prepare(`
+      SELECT * FROM runs WHERE parent_run_id = ? ORDER BY started_at ASC
+    `),
     insertNode: db.prepare(`
       INSERT INTO run_nodes (
         node_id, run_id, ordinal, batch_id, kind, name,
         args_json, output_json, ok, error,
-        started_at, ended_at, duration_ms, input_tokens, output_tokens
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        started_at, ended_at, duration_ms, input_tokens, output_tokens, child_run_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     listNodesByRun: db.prepare(`
       SELECT * FROM run_nodes WHERE run_id = ? ORDER BY ordinal ASC, started_at ASC
@@ -220,12 +237,17 @@ function prepare(db: DatabaseSync): PreparedStatements {
     pruneByCount: db.prepare(`
       DELETE FROM runs
       WHERE automation_name = ?
+        AND pinned = 0
         AND run_id NOT IN (
           SELECT run_id FROM runs WHERE automation_name = ? ORDER BY started_at DESC LIMIT ?
         )
     `),
-    pruneByDays: db.prepare(`DELETE FROM runs WHERE automation_name = ? AND started_at < ?`),
-    pruneErrorsOnly: db.prepare(`DELETE FROM runs WHERE automation_name = ? AND ok = 1`),
+    pruneByDays: db.prepare(
+      `DELETE FROM runs WHERE automation_name = ? AND pinned = 0 AND started_at < ?`,
+    ),
+    pruneErrorsOnly: db.prepare(
+      `DELETE FROM runs WHERE automation_name = ? AND pinned = 0 AND ok = 1`,
+    ),
     countRunsByName: db.prepare(`SELECT COUNT(*) AS c FROM runs WHERE automation_name = ?`),
   };
 }
@@ -307,6 +329,30 @@ export class AutomationRunsStore {
     return raw ? runFromRaw(raw) : undefined;
   }
 
+  /**
+   * Pin / unpin a run. A pinned run becomes a replay fixture: a
+   * `triggerKind: 'replay'` fire serves its recorded `run_nodes` outputs,
+   * and retention pruning never drops it.
+   */
+  setPinned(runId: string, pinned: boolean): void {
+    const { stmts } = this.ensureReady();
+    stmts.setPinned.run(pinned ? 1 : 0, runId);
+  }
+
+  /** Most recent pinned run for an automation, or undefined when none is pinned. */
+  pinnedRun(name: string): AutomationRunRow | undefined {
+    const { stmts } = this.ensureReady();
+    const raw = stmts.pinnedRunByName.get(name) as RawRun | undefined;
+    return raw ? runFromRaw(raw) : undefined;
+  }
+
+  /** Child runs spawned by `ctx.invoke` from the given parent, oldest first. */
+  listChildRuns(parentRunId: string): AutomationRunRow[] {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listChildRunsByParent.all(parentRunId) as unknown as RawRun[];
+    return rows.map(runFromRaw);
+  }
+
   insertNode(input: InsertNodeInput): void {
     const { stmts } = this.ensureReady();
     stmts.insertNode.run(
@@ -325,6 +371,7 @@ export class AutomationRunsStore {
       input.durationMs,
       input.inputTokens ?? null,
       input.outputTokens ?? null,
+      input.childRunId ?? null,
     );
   }
 

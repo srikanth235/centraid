@@ -40,6 +40,8 @@ import { pathToFileURL } from 'node:url';
 interface WorkerRequest {
   handlerFile: string;
   args: unknown;
+  /** The payload this run was invoked with — surfaced as `ctx.input`. */
+  input?: unknown;
 }
 
 interface ToolCallWire {
@@ -341,6 +343,7 @@ const ctx = {
   },
   state,
   runs,
+  input: req.input,
   invoke(name: string, args: { input?: unknown } = {}): Promise<unknown> {
     flushPendingToolBatchIfAny();
     return new Promise((resolve, reject) => {

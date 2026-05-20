@@ -253,5 +253,6 @@ export {
   type AutomationAgentCall,
   type AutomationAgentDispatcher,
   type AutomationInvokeDispatcher,
+  type AutomationInvokeResult,
   type AutomationDispatchContext,
 } from './automation-handler-runner.js';

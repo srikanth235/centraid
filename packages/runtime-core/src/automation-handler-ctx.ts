@@ -14,7 +14,7 @@ import type {
   AutomationToolResult,
 } from './automation-handler-runner.js';
 import type { AutomationRunsStore } from './automation-runs-store.js';
-import { recordToolNode, rowToRunRef } from './automation-handler-audit.js';
+import { recordInvokeNode, recordToolNode, rowToRunRef } from './automation-handler-audit.js';
 
 export interface ToolCallWire {
   name: string;
@@ -157,10 +157,39 @@ export async function handleInvokeMessage(
   if (!invokeDispatcher) {
     return { ok: false, error: 'ctx.invoke is not wired by the host runtime' };
   }
+  const ordinal = nextOrdinal(audit);
+  const started = Date.now();
   try {
-    const out = await invokeDispatcher(name, { input, parentRunId: audit.runId }, dispatchCtx);
-    return { ok: true, result: out };
+    const res = await invokeDispatcher(name, { input, parentRunId: audit.runId }, dispatchCtx);
+    recordInvokeNode({
+      store: audit.store,
+      runId: audit.runId,
+      ordinal,
+      target: name,
+      input,
+      ok: true,
+      result: res.output,
+      ...(res.childRunId ? { childRunId: res.childRunId } : {}),
+      started,
+      ended: Date.now(),
+    });
+    return { ok: true, result: res.output };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const error = err instanceof Error ? err.message : String(err);
+    const tagged = err as { childRunId?: unknown };
+    const childRunId = typeof tagged.childRunId === 'string' ? tagged.childRunId : undefined;
+    recordInvokeNode({
+      store: audit.store,
+      runId: audit.runId,
+      ordinal,
+      target: name,
+      input,
+      ok: false,
+      error,
+      ...(childRunId ? { childRunId } : {}),
+      started,
+      ended: Date.now(),
+    });
+    return { ok: false, error };
   }
 }

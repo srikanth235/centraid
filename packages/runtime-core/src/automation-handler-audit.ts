@@ -193,3 +193,49 @@ export function recordAgentNode(args: RecordAgentNodeArgs): void {
     /* swallow */
   }
 }
+
+export interface RecordInvokeNodeArgs {
+  store: AutomationRunsStore;
+  runId: string;
+  ordinal: number;
+  /** The `ctx.invoke` target — `"name"` intra-app or `"appId/name"` cross-app. */
+  target: string;
+  input?: unknown;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+  /** Child run id, when the child run was created (some failures abort before that). */
+  childRunId?: string;
+  started: number;
+  ended: number;
+}
+
+/**
+ * Record a `ctx.invoke` call as a `kind: 'invoke'` audit node. The
+ * `childRunId` links it to the spawned run so the DAG view can nest the
+ * child timeline.
+ */
+export function recordInvokeNode(args: RecordInvokeNodeArgs): void {
+  const node: InsertNodeInput = {
+    nodeId: makeNodeId(args.runId, args.ordinal),
+    runId: args.runId,
+    ordinal: args.ordinal,
+    kind: 'invoke',
+    name: args.target,
+    ...(args.input !== undefined ? { argsJson: truncateForAudit(args.input) ?? '' } : {}),
+    ...(args.ok && args.result !== undefined
+      ? { outputJson: truncateForAudit(args.result) ?? '' }
+      : {}),
+    ok: args.ok,
+    ...(args.error ? { error: args.error } : {}),
+    ...(args.childRunId ? { childRunId: args.childRunId } : {}),
+    startedAt: args.started,
+    endedAt: args.ended,
+    durationMs: args.ended - args.started,
+  };
+  try {
+    args.store.insertNode(node);
+  } catch {
+    /* swallow */
+  }
+}

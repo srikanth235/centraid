@@ -490,7 +490,16 @@ interface CentraidApi {
   // automations mirror table directly and triggers manual runs via
   // the local headless run path.
   listAutomations(input: { appId: string }): Promise<CentraidAutomationRow[]>;
-  runAutomationNow(input: { appId: string; name: string }): Promise<CentraidAutomationRunResult>;
+  /**
+   * Fire an automation now. With `replay: true` the run is served from
+   * the automation's pinned run (recorded tool/agent outputs) instead of
+   * live tools — fast, deterministic builder iteration (issue #80).
+   */
+  runAutomationNow(input: {
+    appId: string;
+    name: string;
+    replay?: boolean;
+  }): Promise<CentraidAutomationRunResult>;
   setAutomationEnabled(input: {
     appId: string;
     name: string;
@@ -509,6 +518,8 @@ interface CentraidApi {
     appId: string;
     runId: string;
   }): Promise<CentraidAutomationRunNode[]>;
+  /** Pin / unpin a run as a replay fixture (issue #80 follow-up). */
+  pinAutomationRun(input: { appId: string; runId: string; pinned: boolean }): Promise<{ ok: true }>;
 }
 
 /** A single run record from `automations.sqlite#runs`. */
@@ -524,15 +535,17 @@ export interface CentraidAutomationRunRecord {
   error?: string;
   summary?: string;
   outputJson?: string;
+  /** True when the run is pinned as a replay fixture. */
+  pinned: boolean;
 }
 
-/** A single node (ctx.tool / ctx.agent call) inside a run. */
+/** A single node (ctx.tool / ctx.agent / ctx.invoke call) inside a run. */
 export interface CentraidAutomationRunNode {
   nodeId: string;
   runId: string;
   ordinal: number;
   batchId?: number;
-  kind: 'tool' | 'agent';
+  kind: 'tool' | 'agent' | 'invoke';
   name: string;
   argsJson?: string;
   outputJson?: string;
@@ -543,6 +556,8 @@ export interface CentraidAutomationRunNode {
   durationMs?: number;
   inputTokens?: number;
   outputTokens?: number;
+  /** For `kind: 'invoke'` — the run id of the child run it spawned. */
+  childRunId?: string;
 }
 
 /** Row shape returned by `listAutomations`. Mirrors `AutomationRow` from runtime-core. */
@@ -743,13 +758,14 @@ declare global {
     error?: string;
     summary?: string;
     outputJson?: string;
+    pinned: boolean;
   }
   interface CentraidAutomationRunNode {
     nodeId: string;
     runId: string;
     ordinal: number;
     batchId?: number;
-    kind: 'tool' | 'agent';
+    kind: 'tool' | 'agent' | 'invoke';
     name: string;
     argsJson?: string;
     outputJson?: string;
@@ -760,5 +776,6 @@ declare global {
     durationMs?: number;
     inputTokens?: number;
     outputTokens?: number;
+    childRunId?: string;
   }
 }

@@ -159,3 +159,150 @@ describe('runAutomationLocal onFailure cascade (issue #80)', () => {
     h.store.close();
   });
 });
+
+describe('runAutomationLocal pinned-data replay + cross-app invoke (issue #80)', () => {
+  it('replay mode serves ctx.tool from a pinned run without spawning a CLI', async () => {
+    const h = makeAppHarness();
+    writeManifest(h.appDir, 'fetcher', {});
+    writeHandler(
+      h.appDir,
+      'fetcher',
+      `export default async ({ ctx }) => {
+         const data = await ctx.tool('github.list_prs', { repo: 'foo/bar' });
+         return { summary: 'replayed', output: data };
+       };`,
+    );
+    // Seed a pinned run with one recorded tool node.
+    h.store.insertRun({
+      runId: 'pinned-1',
+      automationName: 'fetcher',
+      triggerKind: 'scheduled',
+      startedAt: 1,
+    });
+    h.store.finishRun({ runId: 'pinned-1', endedAt: 2, ok: true });
+    h.store.insertNode({
+      nodeId: 'pn1',
+      runId: 'pinned-1',
+      ordinal: 0,
+      kind: 'tool',
+      name: 'github.list_prs',
+      argsJson: JSON.stringify({ repo: 'foo/bar' }),
+      outputJson: JSON.stringify([{ number: 7 }]),
+      ok: true,
+      startedAt: 1,
+      endedAt: 2,
+      durationMs: 1,
+    });
+    h.store.setPinned('pinned-1', true);
+
+    const { outcome } = await runAutomationLocal({
+      appId: 'app1',
+      appDir: h.appDir,
+      automationName: 'fetcher',
+      runsStore: h.store,
+      replayFromRunId: 'pinned-1',
+      // A throwing spawnCli proves replay never reaches a CLI subprocess.
+      spawnCli: () => {
+        throw new Error('replay must not spawn a CLI');
+      },
+    });
+    assert.equal(outcome.ok, true);
+    assert.deepEqual(outcome.output, [{ number: 7 }]);
+    const replayRun = h.store.listRuns({ name: 'fetcher' }).find((r) => r.runId !== 'pinned-1');
+    assert.equal(replayRun?.triggerKind, 'replay');
+    h.store.close();
+  });
+
+  it('replay fails loudly when the pin has no matching node', async () => {
+    const h = makeAppHarness();
+    writeManifest(h.appDir, 'fetcher', {});
+    writeHandler(
+      h.appDir,
+      'fetcher',
+      `export default async ({ ctx }) => { await ctx.tool('x.y', {}); };`,
+    );
+    h.store.insertRun({
+      runId: 'empty-pin',
+      automationName: 'fetcher',
+      triggerKind: 'scheduled',
+      startedAt: 1,
+    });
+    h.store.finishRun({ runId: 'empty-pin', endedAt: 2, ok: true });
+    const { outcome } = await runAutomationLocal({
+      appId: 'app1',
+      appDir: h.appDir,
+      automationName: 'fetcher',
+      runsStore: h.store,
+      replayFromRunId: 'empty-pin',
+    });
+    assert.equal(outcome.ok, false);
+    assert.match(outcome.error ?? '', /no pinned result/);
+    h.store.close();
+  });
+
+  it('cross-app ctx.invoke runs a sibling app resolved via resolveApp', async () => {
+    const appA = makeAppHarness();
+    const appBDir = mkdtempSync(path.join(tmpdir(), 'centraid-local-fire-b-'));
+    writeManifest(appA.appDir, 'caller', {});
+    writeHandler(
+      appA.appDir,
+      'caller',
+      `export default async ({ ctx }) => {
+         const r = await ctx.invoke('appB/worker', { input: { n: 3 } });
+         return { output: r };
+       };`,
+    );
+    writeManifest(appBDir, 'worker', {});
+    writeHandler(
+      appBDir,
+      'worker',
+      `export default async ({ ctx }) => {
+         const inp = ctx.input;
+         return { output: { doubled: inp.n * 2 } };
+       };`,
+    );
+
+    const { outcome } = await runAutomationLocal({
+      appId: 'appA',
+      appDir: appA.appDir,
+      automationName: 'caller',
+      runsStore: appA.store,
+      resolveApp: (id) => (id === 'appB' ? { appDir: appBDir } : undefined),
+    });
+    assert.equal(outcome.ok, true);
+    assert.deepEqual(outcome.output, { doubled: 6 });
+
+    // The child ran in appB's own automations.sqlite.
+    const appBStore = new AutomationRunsStore(automationsDbPath(appBDir));
+    const workerRuns = appBStore.listRuns({ name: 'worker' });
+    assert.equal(workerRuns.length, 1);
+    assert.equal(workerRuns[0]?.triggerKind, 'manual');
+    appBStore.close();
+
+    // The caller recorded the cross-app invoke as a `kind: 'invoke'` node.
+    const callerRun = appA.store.listRuns({ name: 'caller' })[0]!;
+    const node = appA.store.listNodes(callerRun.runId).find((n) => n.kind === 'invoke');
+    assert.ok(node, 'expected an invoke node on the caller run');
+    assert.equal(node?.name, 'appB/worker');
+    appA.store.close();
+  });
+
+  it('cross-app ctx.invoke fails clearly when resolveApp is not wired', async () => {
+    const h = makeAppHarness();
+    writeManifest(h.appDir, 'caller', {});
+    writeHandler(
+      h.appDir,
+      'caller',
+      `export default async ({ ctx }) => { await ctx.invoke('other/thing', {}); };`,
+    );
+    const { outcome } = await runAutomationLocal({
+      appId: 'app1',
+      appDir: h.appDir,
+      automationName: 'caller',
+      runsStore: h.store,
+    });
+    assert.equal(outcome.ok, false);
+    assert.match(outcome.error ?? '', /cross-app invoke requires/);
+    h.store.close();
+  });
+});

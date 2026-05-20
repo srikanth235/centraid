@@ -220,11 +220,19 @@ export interface AutomationCtx {
    */
   runs: AutomationRunsCtx;
   /**
-   * Synchronously invoke another automation in the same app and return
-   * its `output` (issue #80). Links the child run to this one via
-   * `parent_run_id`. Intra-app only.
+   * Synchronously invoke another automation and return its `output`
+   * (issue #80). `name` is `"automation"` for a sibling in the same app,
+   * or `"appId/automation"` to invoke an automation in another registered
+   * app. Intra-app children link to this run via `parent_run_id`.
    */
   invoke(name: string, args?: AutomationInvokeArgs): Promise<unknown>;
+  /**
+   * The payload this run was invoked with — the `input` from
+   * `ctx.invoke(name, { input })`, the failed-run summary for an
+   * `onFailure` dispatch, or `undefined` for a plain scheduled fire.
+   * Narrow it with a JSDoc cast.
+   */
+  input: unknown;
   /**
    * AbortSignal that fires when the run is being torn down (timeout,
    * SIGTERM from the OS scheduler, manual cancel).

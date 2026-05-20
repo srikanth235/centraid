@@ -2377,13 +2377,75 @@
       host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'No runs recorded yet.'));
       return;
     }
+    const wrap = el('div', { class: 'cd-app-runs' });
+    // When a run is pinned, surface a one-click "replay it" affordance —
+    // the replayed fire serves recorded tool/agent output, no live calls.
+    if (runs.some((r) => r.pinned)) {
+      const bar = el('div', { class: 'cd-app-runs-bar' });
+      const replayBtn = el('button', {
+        type: 'button',
+        class: 'cd-app-runs-replay',
+      }) as HTMLButtonElement;
+      replayBtn.textContent = 'Replay pinned run';
+      replayBtn.title = `Re-run "${name}" against the pinned run's recorded outputs (no live tool calls)`;
+      replayBtn.addEventListener('click', () => void onReplayPinned(appId, name, host, replayBtn));
+      bar.append(
+        el('span', { class: 'cd-app-runs-bar-note' }, 'A run is pinned as a replay fixture.'),
+        replayBtn,
+      );
+      wrap.append(bar);
+    }
     const list = el('div', { class: 'cd-app-runs-list' });
-    for (const run of runs) list.append(renderRunRow(appId, run));
-    host.replaceChildren(list);
+    for (const run of runs) list.append(renderRunRow(appId, name, run, host));
+    wrap.append(list);
+    host.replaceChildren(wrap);
   }
 
-  function renderRunRow(appId: string, run: CentraidAutomationRunRecord): HTMLElement {
-    const card = el('div', { class: 'cd-app-run', 'data-ok': String(run.ok) });
+  async function onReplayPinned(
+    appId: string,
+    name: string,
+    host: HTMLElement,
+    btn: HTMLButtonElement,
+  ): Promise<void> {
+    btn.disabled = true;
+    btn.textContent = 'Replaying…';
+    try {
+      const result = await window.CentraidApi.runAutomationNow({ appId, name, replay: true });
+      if (!result.ok) showToast(`Replay finished with an error: ${result.error ?? 'unknown'}`);
+    } catch (err) {
+      showToast(`Replay failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    delete host.dataset.loaded;
+    void loadRunsInto(appId, name, host);
+  }
+
+  async function onTogglePin(
+    appId: string,
+    name: string,
+    run: CentraidAutomationRunRecord,
+    host: HTMLElement,
+  ): Promise<void> {
+    try {
+      await window.CentraidApi.pinAutomationRun({ appId, runId: run.runId, pinned: !run.pinned });
+    } catch (err) {
+      showToast(`Could not update pin: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    delete host.dataset.loaded;
+    void loadRunsInto(appId, name, host);
+  }
+
+  function renderRunRow(
+    appId: string,
+    name: string,
+    run: CentraidAutomationRunRecord,
+    host: HTMLElement,
+  ): HTMLElement {
+    const card = el('div', {
+      class: 'cd-app-run',
+      'data-ok': String(run.ok),
+      'data-pinned': String(run.pinned),
+    });
     const head = el('button', {
       type: 'button',
       class: 'cd-app-run-head',
@@ -2402,6 +2464,11 @@
         run.ok ? (run.summary ?? '—') : (run.error ?? 'failed'),
       ),
     );
+    if (run.pinned) {
+      head.append(
+        el('span', { class: 'cd-app-run-pin-flag', title: 'Pinned replay fixture' }, '📌'),
+      );
+    }
     const nodesHost = el('div', { class: 'cd-app-run-nodes', hidden: 'true' });
     head.addEventListener('click', () => {
       const open = head.getAttribute('aria-expanded') === 'true';
@@ -2412,7 +2479,18 @@
         void loadNodesInto(appId, run.runId, nodesHost);
       }
     });
-    card.append(head, nodesHost);
+    const actions = el('div', { class: 'cd-app-run-actions' });
+    const pinBtn = el('button', {
+      type: 'button',
+      class: 'cd-app-run-pin',
+    }) as HTMLButtonElement;
+    pinBtn.textContent = run.pinned ? 'Unpin' : 'Pin';
+    pinBtn.title = run.pinned
+      ? 'Stop using this run as a replay fixture'
+      : 'Pin this run as a replay fixture for builder iteration';
+    pinBtn.addEventListener('click', () => void onTogglePin(appId, name, run, host));
+    actions.append(pinBtn);
+    card.append(head, actions, nodesHost);
     return card;
   }
 
@@ -2436,20 +2514,61 @@
       host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'No nodes recorded.'));
       return;
     }
-    const list = el('div', { class: 'cd-app-run-node-list' });
-    for (const node of nodes) list.append(renderNodeRow(node));
-    host.replaceChildren(list);
+    host.replaceChildren(renderNodeTimeline(appId, nodes, 0));
   }
 
-  function renderNodeRow(node: CentraidAutomationRunNode): HTMLElement {
-    const wrap = el('div', { class: 'cd-app-run-node', 'data-ok': String(node.ok) });
+  // Issue #80 follow-up — render the run as a DAG rather than a flat
+  // list: nodes that share a `batchId` (a `Promise.all` frontier) sit in
+  // one parallel lane; `ctx.invoke` nodes expand to their child run's
+  // own nested timeline.
+  function renderNodeTimeline(
+    appId: string,
+    nodes: CentraidAutomationRunNode[],
+    depth: number,
+  ): HTMLElement {
+    const wrap = el('div', { class: 'cd-app-run-timeline' });
+    let i = 0;
+    while (i < nodes.length) {
+      const node = nodes[i]!;
+      const bid = node.batchId;
+      if (bid !== undefined) {
+        const group: CentraidAutomationRunNode[] = [];
+        while (i < nodes.length && nodes[i]!.batchId === bid) {
+          group.push(nodes[i]!);
+          i++;
+        }
+        if (group.length > 1) {
+          const lane = el('div', { class: 'cd-app-run-lane' });
+          lane.append(el('div', { class: 'cd-app-run-lane-label' }, `parallel ×${group.length}`));
+          const laneNodes = el('div', { class: 'cd-app-run-lane-nodes' });
+          for (const g of group) laneNodes.append(renderNodeCard(appId, g, depth));
+          lane.append(laneNodes);
+          wrap.append(lane);
+          continue;
+        }
+        wrap.append(renderNodeCard(appId, group[0]!, depth));
+        continue;
+      }
+      wrap.append(renderNodeCard(appId, node, depth));
+      i++;
+    }
+    return wrap;
+  }
+
+  function renderNodeCard(
+    appId: string,
+    node: CentraidAutomationRunNode,
+    depth: number,
+  ): HTMLElement {
+    const wrap = el('div', {
+      class: 'cd-app-run-node',
+      'data-ok': String(node.ok),
+      'data-kind': node.kind,
+    });
     const head = el('div', { class: 'cd-app-run-node-head' }, [
       el('span', { class: 'cd-app-run-node-pos' }, `#${node.ordinal}`),
       el('span', { class: 'cd-app-run-node-kind' }, node.kind),
       el('span', { class: 'cd-app-run-node-name' }, node.name),
-      ...(node.batchId !== undefined
-        ? [el('span', { class: 'cd-app-run-node-batch' }, `batch ${node.batchId}`)]
-        : []),
       el(
         'span',
         { class: 'cd-app-run-node-duration' },
@@ -2470,7 +2589,71 @@
       det.append(el('summary', {}, 'output'), el('pre', {}, prettyJson(node.outputJson)));
       wrap.append(det);
     }
+    // ctx.invoke node — nest the child run's own timeline. Cross-app
+    // children (`appId/name`) live in another app's audit file, so we
+    // can't reach them from here; show a note instead of a dead toggle.
+    const childRunId = node.childRunId;
+    if (node.kind === 'invoke' && childRunId) {
+      if (node.name.includes('/')) {
+        wrap.append(
+          el(
+            'div',
+            { class: 'cd-app-run-node-note' },
+            'cross-app invoke — child run recorded in the target app',
+          ),
+        );
+      } else if (depth < 4) {
+        const childHost = el('div', { class: 'cd-app-run-node-children', hidden: 'true' });
+        const toggle = el('button', {
+          type: 'button',
+          class: 'cd-app-run-node-expand',
+          'aria-expanded': 'false',
+        }) as HTMLButtonElement;
+        toggle.textContent = 'child run ▸';
+        toggle.addEventListener('click', () => {
+          const open = toggle.getAttribute('aria-expanded') === 'true';
+          const next = !open;
+          toggle.setAttribute('aria-expanded', String(next));
+          toggle.textContent = next ? 'child run ▾' : 'child run ▸';
+          childHost.hidden = !next;
+          if (next && !childHost.dataset.loaded) {
+            void loadChildNodes(appId, childRunId, childHost, depth);
+          }
+        });
+        wrap.append(toggle, childHost);
+      }
+    }
     return wrap;
+  }
+
+  async function loadChildNodes(
+    appId: string,
+    runId: string,
+    host: HTMLElement,
+    depth: number,
+  ): Promise<void> {
+    host.dataset.loaded = 'true';
+    host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'Loading child run…'));
+    let nodes: CentraidAutomationRunNode[];
+    try {
+      nodes = await window.CentraidApi.listAutomationRunNodes({ appId, runId });
+    } catch (err) {
+      host.replaceChildren(
+        el(
+          'div',
+          { class: 'cd-app-runs-empty' },
+          `Failed to load child run: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+    if (nodes.length === 0) {
+      host.replaceChildren(
+        el('div', { class: 'cd-app-runs-empty' }, 'Child run recorded no nodes.'),
+      );
+      return;
+    }
+    host.replaceChildren(renderNodeTimeline(appId, nodes, depth + 1));
   }
 
   function prettyJson(raw: string): string {

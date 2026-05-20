@@ -27,9 +27,8 @@
  *          see issue #70 § What happens when cron fires) and
  *          stopReason "stop".
  *
- * The registration glue itself (registerProvider) is the responsibility
- * of the plugin entry — this module just exports the ProviderPlugin
- * descriptor as a factory.
+ * The registration glue (registerProvider) is the plugin entry's job —
+ * this module just exports the ProviderPlugin descriptor as a factory.
  */
 
 import { promises as fs } from 'node:fs';
@@ -264,8 +263,9 @@ interface OpenclawFireOptions {
 async function runOpenclawFire(
   opts: OpenclawFireOptions,
   log: { info(m: string): void; warn(m: string): void; error(m: string): void },
-): Promise<AutomationHandlerOutcome> {
+): Promise<AutomationHandlerOutcome & { runId: string }> {
   const manifestPath = path.join(opts.appDir, 'automations', `${opts.automationName}.json`);
+  const runId = `${opts.appId}:${opts.automationName}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   let manifest: AutomationManifest;
   try {
     manifest = parseManifest(await fs.readFile(manifestPath, 'utf8'));
@@ -276,10 +276,10 @@ async function runOpenclawFire(
       logs: [],
       toolBatches: 0,
       agentCalls: 0,
+      runId,
     };
   }
   const handlerFile = path.join(opts.appDir, 'actions', manifest.action);
-  const runId = `${opts.appId}:${opts.automationName}:${Date.now()}:${randomUUID().slice(0, 8)}`;
 
   const toolDispatcher = async (
     calls: readonly AutomationToolCall[],
@@ -349,8 +349,12 @@ async function runOpenclawFire(
       },
       log,
     );
-    if (!child.ok) throw new Error(`ctx.invoke("${name}") failed: ${child.error}`);
-    return child.output;
+    if (!child.ok) {
+      throw Object.assign(new Error(`ctx.invoke("${name}") failed: ${child.error}`), {
+        childRunId: child.runId,
+      });
+    }
+    return { output: child.output, childRunId: child.runId };
   };
 
   const outcome = await runAutomationHandler({
@@ -410,7 +414,7 @@ async function runOpenclawFire(
     }
   }
 
-  return outcome;
+  return { ...outcome, runId };
 }
 
 /**

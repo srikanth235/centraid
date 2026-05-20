@@ -276,7 +276,69 @@ describe('AutomationRunsStore', () => {
     const version = (
       db2.prepare('PRAGMA user_version').get() as { user_version: number } | undefined
     )?.user_version;
-    assert.equal(version, 1);
+    assert.equal(version, 2);
     db2.close();
+  });
+
+  it('setPinned / pinnedRun round-trip; pinned runs survive count pruning', () => {
+    const { store } = newStore();
+    for (let i = 0; i < 6; i++) {
+      const id = `r${i}`;
+      store.insertRun({
+        runId: id,
+        automationName: 'foo',
+        triggerKind: 'scheduled',
+        startedAt: 100 + i,
+      });
+      store.finishRun({ runId: id, endedAt: 200 + i, ok: true });
+    }
+    assert.equal(store.getRun('r0')?.pinned, false);
+    store.setPinned('r0', true);
+    assert.equal(store.getRun('r0')?.pinned, true);
+    assert.equal(store.pinnedRun('foo')?.runId, 'r0');
+    // Keep newest 2 — r0 is oldest but pinned, so it must survive.
+    store.prune('foo', { count: 2 });
+    const remaining = store.listRuns({ name: 'foo' }).map((r) => r.runId);
+    assert.ok(remaining.includes('r0'), 'pinned run must survive count pruning');
+    assert.equal(remaining.length, 3); // r0 (pinned) + r5 + r4
+    store.setPinned('r0', false);
+    assert.equal(store.pinnedRun('foo'), undefined);
+    store.close();
+  });
+
+  it('insertNode records child_run_id; listChildRuns links parent to children', () => {
+    const { store } = newStore();
+    store.insertRun({
+      runId: 'p',
+      automationName: 'parent',
+      triggerKind: 'scheduled',
+      startedAt: 0,
+    });
+    store.insertRun({
+      runId: 'c1',
+      automationName: 'child',
+      triggerKind: 'manual',
+      parentRunId: 'p',
+      startedAt: 5,
+    });
+    store.insertNode({
+      nodeId: 'n1',
+      runId: 'p',
+      ordinal: 0,
+      kind: 'invoke',
+      name: 'child',
+      childRunId: 'c1',
+      ok: true,
+      startedAt: 5,
+      endedAt: 9,
+      durationMs: 4,
+    });
+    assert.equal(store.listNodes('p')[0]?.childRunId, 'c1');
+    assert.equal(store.listNodes('p')[0]?.kind, 'invoke');
+    const children = store.listChildRuns('p');
+    assert.equal(children.length, 1);
+    assert.equal(children[0]?.runId, 'c1');
+    assert.equal(store.listChildRuns('missing').length, 0);
+    store.close();
   });
 });

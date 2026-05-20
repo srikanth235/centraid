@@ -25,10 +25,16 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { runAgentTurn, defaultCentraidCliDir, type RunnerPrefs } from '@centraid/agent-runtime';
+import {
+  runAgentTurn,
+  defaultCentraidCliDir,
+  enumerateMcpServers,
+  type RunnerPrefs,
+} from '@centraid/agent-runtime';
 import type { ChatStreamEvent, AppSchema } from '@centraid/runtime-core';
 import { CENTRAID_APPEND_PROMPT } from './system-prompt.js';
 import { buildUiGroundingBlocks } from './ui-grounding.js';
+import { buildToolsGroundingBlock } from './tools-grounding.js';
 import { fetchAppSchema } from './gateway-client.js';
 import type { HarnessConfig } from './types.js';
 
@@ -316,6 +322,17 @@ function makeStreamTranslator(emit: (event: CentraidAgentEvent) => void): {
 
 async function buildExtraSystemPrompt(opts: CreateCentraidAgentSessionOptions): Promise<string> {
   const blocks: string[] = [CENTRAID_APPEND_PROMPT, ...buildUiGroundingBlocks()];
+
+  // Available-tools grounding (issue #80 follow-up): ask the host CLI
+  // which MCP servers it has wired up so the agent declares `requires`
+  // against reality. Best-effort — a missing/old CLI yields no block.
+  try {
+    const servers = await enumerateMcpServers(opts.runnerPrefs.kind, opts.runnerPrefs.binPath);
+    const toolsBlock = buildToolsGroundingBlock(servers);
+    if (toolsBlock) blocks.push(toolsBlock);
+  } catch {
+    // enumeration is best-effort — proceed without the block
+  }
 
   if (opts.liveSchema) {
     try {

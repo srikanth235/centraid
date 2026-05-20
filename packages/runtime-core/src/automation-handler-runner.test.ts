@@ -341,7 +341,7 @@ describe('runAutomationHandler audit (issue #80)', () => {
         parentRunId: args.parentRunId,
         input: args.input,
       });
-      return childOutcome.output;
+      return { output: childOutcome.output, childRunId };
     };
     const parentRunId = makeRunId('parent');
     const out = await runAutomationHandler({
@@ -360,6 +360,16 @@ describe('runAutomationHandler audit (issue #80)', () => {
     const childRows = h.store.listRuns({ name: 'child' });
     assert.equal(childRows.length, 1);
     assert.equal(childRows[0]?.parentRunId, parentRunId);
+    // The parent run records the ctx.invoke as a `kind: 'invoke'` audit
+    // node carrying the child run id (so the DAG view can nest it).
+    const invokeNode = h.store.listNodes(parentRunId).find((n) => n.kind === 'invoke');
+    assert.ok(invokeNode, 'expected an invoke node on the parent run');
+    assert.equal(invokeNode?.name, 'child');
+    assert.equal(invokeNode?.childRunId, childRows[0]?.runId);
+    // listChildRuns surfaces the same linkage from the parent side.
+    const children = h.store.listChildRuns(parentRunId);
+    assert.equal(children.length, 1);
+    assert.equal(children[0]?.runId, childRows[0]?.runId);
     h.store.close();
   });
 

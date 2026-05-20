@@ -16,6 +16,11 @@ GitHub issue: [#80](https://github.com/srikanth235/centraid/issues/80)
 - [x] Desktop UI: per-automation run list + per-run node timeline
 - [x] Boundary test: `centraid_sql_*` agent tools cannot reach `automations.sqlite`
 - [x] Unit tests across runtime-core / agent-runtime; typecheck + lint green
+- [x] Pinned-data replay — `runs.pinned` + `triggerKind: 'replay'` serve recorded `run_nodes` for builder iteration
+- [x] Cross-app `ctx.invoke` — `ctx.invoke('appId/name')` resolves any registered app
+- [x] `ctx.invoke` recorded as a `kind: 'invoke'` audit node; `ctx.input` exposed to handlers
+- [x] Available-tools grounding block — host MCP servers spliced into the builder system prompt
+- [x] Desktop per-run DAG view — batched lanes + nested child-run timelines + pin/replay controls
 
 ## What changed
 
@@ -51,22 +56,34 @@ Outsized growth of `automation-handler-runner.ts` is held in check by a new `aut
 
 **Boundary test: `centraid_sql_*` agent tools cannot reach `automations.sqlite`.** Five new tests in `automation-runs-boundary.test.ts` assert that `describeOp({dataFile: data.sqlite})` does not list `runs`/`run_nodes`/`state` even when `automations.sqlite` has been populated; `readOp` errors on SELECTs against those tables (they don't exist in `data.sqlite`); and a side-channel probe via `SELECT name FROM sqlite_master` confirms the audit tables aren't visible. Together these establish that `centraid_sql_*` agent tools — which take `dataFile` and never see the `automations.sqlite` path — cannot read or write the audit/state surface.
 
-**Unit tests across runtime-core / agent-runtime; typecheck + lint green.** Final counts: runtime-core 289, agent-runtime 76, openclaw-plugin 21, builder-harness 1, chat-harness 4 — 391 total. Typecheck 16/16. `bun run check` (oxfmt --check + oxlint) clean.
+**Unit tests across runtime-core / agent-runtime; typecheck + lint green.** Counts after the follow-up: runtime-core 291, agent-runtime 84, openclaw-plugin 21, builder-harness 3, chat-harness 4 — 403 total. Typecheck 16/16. `bun run check` (oxfmt --check + oxlint) clean.
+
+**Pinned-data replay — `runs.pinned` + `triggerKind: 'replay'` serve recorded `run_nodes` for builder iteration.** Re-running an automation while iterating on its handler hits live MCP tools (GitHub, Linear, …) on every fire — slow and non-deterministic. Migration `1 → 2` adds `runs.pinned` (a run flagged as a replay fixture); `AutomationRunsStore` grows `setPinned` / `pinnedRun`, and all three `prune` predicates gain `AND pinned = 0` so a pinned fixture is never dropped by retention. `runAutomationLocal` takes a `replayFromRunId` option: when set it forces `triggerKind: 'replay'`, skips the mock-LLM server + CLI spawn entirely, and routes `ctx.tool` / `ctx.agent` / `ctx.invoke` through `buildReplayDispatchers` (new `run-automation-replay.ts`), which serves the pinned run's recorded `run_nodes` matched by call name + serialized args (falling back to name-only order so a handler edit still replays). A call with no matching recorded node fails loudly — the pin is stale. The live `ctx.tool` / `ctx.agent` dispatch + mock-server lifecycle moved to `run-automation-live-dispatch.ts` so `run-automation-local.ts` stays under the 500-line cap and the replay vs. live branch is legible.
+
+**Cross-app `ctx.invoke` — `ctx.invoke('appId/name')` resolves any registered app.** `ctx.invoke` now accepts an `appId/automation` target. `runAutomationLocal` parses the prefix; an `appId` other than the current app is resolved through a host-supplied `resolveApp` callback (the desktop wires it to the local apps dir, so any registered app is reachable). The cross-app child runs against the *target* app's own `automations.sqlite` and is **not** linked via `parent_run_id` — the self-FK can't cross SQLite files. Intra-app children keep the `parent_run_id` link. The desktop's `runAutomationNow` IPC wires `resolveApp`; the openclaw remote path stays intra-app (cross-app on the gateway needs its app registry — noted below).
+
+**`ctx.invoke` recorded as a `kind: 'invoke'` audit node; `ctx.input` exposed to handlers.** `handleInvokeMessage` now records every `ctx.invoke` as a `run_nodes` row of new kind `'invoke'`, carrying the invoked target name and (migration `1 → 2`'s new `run_nodes.child_run_id`) the spawned child run id — the DAG view nests the child from this link, and `AutomationRunsStore.listChildRuns` surfaces the same linkage by `parent_run_id`. `AutomationInvokeDispatcher` returns `{ output, childRunId }` so the node can be linked. Separately, the payload passed to `ctx.invoke(name, { input })` (and the `onFailure` failure summary) is now delivered to the handler as `ctx.input` — the worker threads `workerData.input` onto the `ctx` object — so an invoked automation can actually read what it was called with.
+
+**Available-tools grounding block — host MCP servers spliced into the builder system prompt.** New `enumerateMcpServers` (agent-runtime) shells out to the host CLI's `mcp list` subcommand (`claude mcp list` / `codex mcp list`), and `parseMcpList` tolerantly extracts the configured MCP server ids (Claude `name: cmd - status` lines and Codex whitespace columns both put the id first). The builder harness's `buildToolsGroundingBlock` renders an `### Available host tools` section listing those servers + the rules for `ctx.tool` naming and `requires.mcps` / `requires.tools` declaration; `agent-session.ts` splices it into the system prompt at session start, below the UI grounding blocks. Enumeration is best-effort — a missing/old CLI or no servers yields no block (the same degrade-silently pattern as the live-schema block).
+
+**Desktop per-run DAG view — batched lanes + nested child-run timelines + pin/replay controls.** The flat node list in the Standing Orders runs panel became a DAG: `renderNodeTimeline` groups nodes sharing a `batchId` (a `Promise.all` frontier) into a parallel lane shown as a labelled `parallel ×N` cluster, and `kind: 'invoke'` nodes get an expand toggle that lazy-loads the child run's own timeline (recursively, depth-capped) via the existing `listAutomationRunNodes` IPC. Cross-app invoke nodes render a note instead of a dead toggle (the child lives in another file). Each run row grew a Pin / Unpin button (new `AUTOMATIONS_PIN_RUN` IPC → `setPinned`); when any run is pinned, the panel shows a "Replay pinned run" bar that calls `runAutomationNow` with `replay: true`. Styles live next to the existing `.cd-app-run-*` block.
 
 ## Out of scope
 
 - Webhook / event triggers — the manifest's `trigger` shape will be expanded later but only `kind: 'cron'` is wired in this issue.
-- Pinned data during builder iteration. Filed separately.
-- Available-tools grounding block in the system prompt. Filed separately.
-- Cross-app `ctx.invoke`. Intra-app only here.
-- Per-run-node DAG visualisation beyond a flat timeline list (Promise.all batching surfaces via `batch_id` grouping, not a rendered graph).
+- Cross-app `ctx.invoke` on the openclaw remote path — the local desktop path resolves any registered app; the gateway path stays intra-app until it grows an equivalent app-registry resolver.
+- Per-MCP-server *tool name* enumeration — the grounding block lists the configured servers; individual tool ids within a server are still discovered by the CLI at run time.
 - Token cost rollups across runs / UI cost dashboards.
 
 ## Verification
 
-- `bun run test` — 391/391 across all packages (runtime-core 289, agent-runtime 76, openclaw-plugin 21, builder-harness 1, chat-harness 4). The handler-runner suite covers single-node run, parallel batch_id, handler-side classified retry (distinct ordinals, no runtime retry), uncaught tool failure failing the run, cross-run state, runs.last cursor, outputSchema rejection, history.keep pruning, ctx.invoke parent linkage, and the 64 KB truncation envelope.
+- `bun run test` — 403/403 across all packages (runtime-core 291, agent-runtime 84, openclaw-plugin 21, builder-harness 3, chat-harness 4). The handler-runner suite covers single-node run, parallel batch_id, handler-side classified retry (distinct ordinals, no runtime retry), uncaught tool failure failing the run, cross-run state, runs.last cursor, outputSchema rejection, history.keep pruning, ctx.invoke parent linkage, and the 64 KB truncation envelope.
 - `bun run typecheck` — 16/16 packages clean.
 - `bun run check` (oxfmt --check + oxlint) — 0 warnings, 0 errors.
+- **Pinned-data replay** is covered by `automation-runs-store.test.ts` (`setPinned` / `pinnedRun` round-trip; pinned runs survive count pruning) and `run-automation-local.test.ts` (replay serves `ctx.tool` from a pinned run with a throwing `spawnCli` proving no CLI is spawned; a stale pin fails loudly with "no pinned result").
+- **Cross-app `ctx.invoke`** is covered by `run-automation-local.test.ts` — an `appId/name` target runs in the other app's own `automations.sqlite`, the caller records a `kind: 'invoke'` node naming the cross-app target, and a missing `resolveApp` fails with a clear error.
+- **`ctx.invoke` recorded as a `kind: 'invoke'` audit node** is asserted in `automation-handler-runner.test.ts` (the parent run carries an `invoke` node whose `childRunId` matches the child run; `listChildRuns` returns the child) and `automation-runs-store.test.ts` (`insertNode` round-trips `child_run_id`, `migrate` lands at `user_version` 2).
+- **Available-tools grounding block** — `mcp-tools.test.ts` covers `parseMcpList` against Claude-style and Codex-style output plus the empty-state; `tools-grounding.test.ts` covers `buildToolsGroundingBlock` (omitted when empty, lists each server + the `requires` rules).
 - Lazy file-creation behavior asserted: `automations.sqlite` is absent on disk until the first method call (`insertRun`); the test inspects `fs.existsSync` both before and after.
 - Migration ladder is independent of the gateway DB ladder and idempotent across reopens (verified with `openAutomationsDb` x2 + `PRAGMA user_version`).
 - Boundary test (`automation-runs-boundary.test.ts`) confirms `centraid_sql_*` operations against `data.sqlite` see neither the `runs` / `run_nodes` / `state` schema nor any row from a pre-populated `automations.sqlite`.

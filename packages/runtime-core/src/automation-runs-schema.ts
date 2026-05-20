@@ -14,7 +14,7 @@ import path from 'node:path';
 export const AUTOMATIONS_DB_FILE = 'automations.sqlite';
 
 export type AutomationTriggerKind = 'scheduled' | 'manual' | 'replay' | 'on_failure';
-export type AutomationRunNodeKind = 'tool' | 'agent';
+export type AutomationRunNodeKind = 'tool' | 'agent' | 'invoke';
 
 export interface AutomationRunRow {
   readonly runId: string;
@@ -28,6 +28,12 @@ export interface AutomationRunRow {
   readonly error?: string;
   readonly summary?: string;
   readonly outputJson?: string;
+  /**
+   * When true the run is a kept fixture: its recorded `run_nodes` can be
+   * replayed by a `triggerKind: 'replay'` fire, and retention pruning
+   * skips it (issue #80 follow-up — pinned data during builder iteration).
+   */
+  readonly pinned: boolean;
 }
 
 export interface AutomationRunNodeRow {
@@ -46,6 +52,12 @@ export interface AutomationRunNodeRow {
   readonly durationMs?: number;
   readonly inputTokens?: number;
   readonly outputTokens?: number;
+  /**
+   * For `kind: 'invoke'` nodes — the `run_id` of the child run spawned by
+   * `ctx.invoke`. Intra-app children live in this same file (the DAG view
+   * nests them); cross-app children live in the target app's file.
+   */
+  readonly childRunId?: string;
 }
 
 export interface AutomationStateEntry {
@@ -103,6 +115,15 @@ export const AUTOMATIONS_MIGRATIONS: readonly string[] = [
       updated_at      INTEGER NOT NULL,
       PRIMARY KEY (automation_name, key)
     );
+  `,
+  // 1 → 2: pinned-run fixtures + ctx.invoke child linkage (issue #80
+  // follow-ups). `runs.pinned` marks a run as a replay fixture and exempts
+  // it from retention. `run_nodes.child_run_id` links an `invoke` node to
+  // the run it spawned so the DAG view can nest the child timeline.
+  `
+    ALTER TABLE runs ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE run_nodes ADD COLUMN child_run_id TEXT;
+    CREATE INDEX IF NOT EXISTS runs_by_parent ON runs(parent_run_id);
   `,
 ];
 

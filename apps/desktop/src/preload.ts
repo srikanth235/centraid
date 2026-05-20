@@ -72,6 +72,7 @@ const Channel = {
   AUTOMATIONS_DELETE: 'centraid:automations:delete',
   AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
   AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
+  AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -202,7 +203,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // Automations (issue #70).
   listAutomations: (input: { appId: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_LIST, input),
-  runAutomationNow: (input: { appId: string; name: string }) =>
+  runAutomationNow: (input: { appId: string; name: string; replay?: boolean }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_RUN_NOW, input),
   setAutomationEnabled: (input: { appId: string; name: string; enabled: boolean }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_SET_ENABLED, input),
@@ -213,4 +214,6 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUNS, input),
   listAutomationRunNodes: (input: { appId: string; runId: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUN_NODES, input),
+  pinAutomationRun: (input: { appId: string; runId: string; pinned: boolean }) =>
+    ipcRenderer.invoke(Channel.AUTOMATIONS_PIN_RUN, input),
 });
