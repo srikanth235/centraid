@@ -13,7 +13,7 @@ applies the screen-level redesign, landed as one commit per step.
 
 - [x] design-tokens — refined-screen icons + Send glyph fix
 - [x] Step 2 — Sidebar restructure (G2/G3)
-- [ ] Step 3 — Home redesign (A1/A2/A3)
+- [x] Step 3 — Home redesign (A1/A2/A3)
 - [ ] Step 4 — Builder B1–B6
 - [ ] Step 5 — Settings monolith split (C)
 - [ ] Step 6 — App view copilot (D)
@@ -55,13 +55,36 @@ surface }` descriptor; `window.Centraid` exposes `openDiscover` /
 `openStarred` / `openAutomations` so the builder's sidebar routes
 through the shell.
 
+**Step 3 — Home redesign (A1/A2/A3).** `renderHomeAsync` now branches
+into two layouts by app count. The Day-1 home (§A1, 0–2 apps) keeps the
+centred composer hero — its placeholder rotates through five example
+prompts every 6s and pauses once the user types — and adds a tabbed
+discovery shelf (`buildTabbedShelf`): Templates (the live gallery),
+Examples (six seed prompts that drop into the builder), and Recently
+viewed (`home.recent`, tracked in `openApp`). The loaded home (§A2, 3+
+apps) demotes the composer to an ambient pinned `BuildPill` — a slim
+360px bar that expands into a full composer card on click — then leads
+with a `Starred` section and an `All apps` grid of slightly smaller
+tiles, closing on a quiet "Discover templates" footer. The old
+`renderHomeAppsEmptyState` card and its `.cd-apps-empty*` CSS were
+removed (the shelf does that job now). App tiles became the
+`RefinedAppTile` (§A3): a vertical card with a 40px icon, a
+hover-revealed star that toggles `home.starred`, the static blurb, and
+a state-aware bottom strip — `DRAFT`, `NEW` only for the first 24h
+(`isRecentlyCreated`), otherwise `opened <relative time>`. `wireComposer`
+factors the shared textarea/submit wiring; `registerCleanup` chains the
+rotating-placeholder timer onto the page teardown.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).
 - Mobile-side adoption of the new screens (desktop renderer only).
-- The per-app star toggle (lands with §A3) and the Automations
-  scheduler (lands with §E3) — their pages currently show list/empty
-  states only.
+- The Automations scheduler (lands with §E3) — the page currently
+  shows an empty state only.
+- A dedicated `createdAt` field. The §A3 "NEW" badge keys off
+  `updatedAt` as a recency proxy, so a republish inside 24h re-shows
+  NEW. A precise `createdAt` would need plumbing through the publish
+  flow — deferred.
 
 ## Verification
 

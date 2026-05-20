@@ -486,15 +486,6 @@
   function findUserApp(id: string): UserAppMeta | undefined {
     return userApps.find((a) => a.id === id);
   }
-  /**
-   * Legacy `usr_` ids stay treated as user apps for backwards-compat with
-   * stored localStorage entries. New centraid-backed apps use plain
-   * `<slug>-<rand>` ids and are detected by membership in `userApps`.
-   */
-  function isUserApp(id: string): boolean {
-    if (id.startsWith('usr_')) return true;
-    return !!findUserApp(id);
-  }
 
   function isDraft(app: AppMetaResolvedType): app is DraftAppMeta {
     return (app as DraftAppMeta).__draft === true;
@@ -598,6 +589,48 @@
     }
   }
 
+  // ── Starred + recently-viewed (Refined Screens §A2/§A3) ─────────────
+  let starred = Store.get<Record<string, boolean>>('home.starred', {});
+  function isStarred(id: string): boolean {
+    return starred[id] === true;
+  }
+  function toggleStar(id: string): void {
+    const next = { ...starred };
+    if (next[id]) delete next[id];
+    else next[id] = true;
+    starred = next;
+    Store.set('home.starred', starred);
+  }
+
+  // Recently-viewed app ids, most-recent first, capped at 8.
+  function recordRecent(id: string): void {
+    const list = Store.get<string[]>('home.recent', []).filter((x) => x !== id);
+    list.unshift(id);
+    Store.set('home.recent', list.slice(0, 8));
+  }
+  function recentApps(): AppMetaResolvedType[] {
+    return Store.get<string[]>('home.recent', [])
+      .map((id) => findApp(id))
+      .filter((a): a is AppMetaResolvedType => !!a);
+  }
+
+  // "NEW" applies only for the first 24h after an app lands (§A3).
+  function isRecentlyCreated(iso?: string): boolean {
+    if (!iso) return false;
+    const t = new Date(iso).getTime();
+    return !Number.isNaN(t) && Date.now() - t < 24 * 60 * 60 * 1000;
+  }
+
+  // Chains a teardown callback onto `currentCleanup` so page-scoped
+  // timers (rotating placeholders, etc.) stop when the page is replaced.
+  function registerCleanup(fn: () => void): void {
+    const prev = currentCleanup;
+    currentCleanup = (): void => {
+      if (prev) prev();
+      fn();
+    };
+  }
+
   function renderHome(): void {
     void renderHomeAsync();
   }
@@ -608,48 +641,19 @@
     await hydrateDrafts();
     const availableTemplates = await loadAvailableTemplates();
 
-    // ─ Main column: glass hero + "Your apps" grid + Templates strip ─
-    // `has-wall` paints the device-wall crosshatch behind everything —
-    // matches the Bold home screenshot. (UPDATES.md §5 said don't promote
-    // device-wall to a system token; the rendered design HTML uses it on
-    // Home anyway, so it lives here as a product choice, not a DS token.)
+    // `has-wall` paints the device-wall crosshatch behind everything.
     const main = el('div', { class: 'has-wall' });
     const scroll = el('div', { class: 'cd-main-scroll' });
     main.append(scroll);
 
-    scroll.append(buildHomeHero());
-
-    // Your apps section — always rendered so the home page keeps a stable
-    // shape. When the workspace is empty an inline empty-state card stands
-    // in for the grid, pointing users at the Templates strip below as the
-    // fastest way to get their first app on screen.
+    // Refined Screens §A1/§A2 — two distinct home layouts. At day one
+    // (0–2 apps) the composer leads and a discovery shelf fills the page;
+    // once the workspace fills out (3+) apps lead and the composer
+    // demotes to an ambient pinned pill.
     const apps = getApps();
-    const totalApps = apps.length;
-    const totalDrafts = drafts.length;
-    {
-      const section = el('section', { class: 'cd-section' });
-      const head = el('div', { class: 'cd-section-head' }, [el('h2', {}, 'Your apps')]);
-      section.append(head);
-      if (totalApps + totalDrafts > 0) {
-        const grid = el('div', { class: 'cd-apps-grid' });
-        for (const app of apps) grid.append(renderAppCard(app));
-        for (const d of drafts) grid.append(renderAppCard(d));
-        section.append(grid);
-      } else {
-        section.append(renderHomeAppsEmptyState());
-      }
-      scroll.append(section);
-    }
-
-    // Templates strip
-    if (availableTemplates.length > 0) {
-      const section = el('section', { class: 'cd-section' });
-      section.append(el('div', { class: 'cd-eyebrow' }, 'Templates · curated'));
-      const grid = el('div', { class: 'cd-tmpl-grid' });
-      for (const tmpl of availableTemplates) grid.append(renderTemplateCard(tmpl));
-      section.append(grid);
-      scroll.append(section);
-    }
+    const total = apps.length + drafts.length;
+    if (total < 3) renderDay1Home(scroll, availableTemplates);
+    else renderLoadedHome(scroll, apps);
 
     const sidebar = buildHomeSidebar({ page: 'home' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
@@ -665,22 +669,123 @@
     root.append(shell);
   }
 
-  function buildHomeHero(): HTMLElement {
-    const wrap = el('div', { class: 'cd-hero' });
-    wrap.append(el('h1', {}, 'What should we build?'));
+  // §A1 — Day-1 home: centered composer hero + tabbed discovery shelf.
+  function renderDay1Home(scroll: HTMLElement, templates: TemplateEntry[]): void {
+    scroll.append(buildHomeHero());
+    const apps = getApps();
+    if (apps.length + drafts.length > 0) {
+      const section = el('section', { class: 'cd-section' });
+      section.append(buildSectionBar('Your apps', apps.length + drafts.length));
+      const grid = el('div', { class: 'cd-apps-grid' });
+      for (const app of apps) grid.append(renderAppCard(app));
+      for (const d of drafts) grid.append(renderAppCard(d));
+      section.append(grid);
+      scroll.append(section);
+    }
+    scroll.append(buildTabbedShelf(templates));
+  }
 
-    const prompt = el('div', { class: 'cd-hero-prompt' });
-    const ta = el('textarea', {
-      placeholder: 'A habit tracker, a journal, a tiny calculator…',
-      rows: '2',
-    }) as HTMLTextAreaElement;
-    const buildBtn = el('button', { class: 'cd-hero-build-btn', disabled: '' });
-    buildBtn.innerHTML = `<span>Build</span>${Icon.Send({ size: 13 })}`;
+  // §A2 — Loaded home: ambient build pill + Starred + All apps.
+  function renderLoadedHome(scroll: HTMLElement, apps: AppMetaResolvedType[]): void {
+    scroll.append(buildBuildPill());
 
+    const all: AppMetaResolvedType[] = [...apps, ...drafts];
+    const starredApps = all.filter((a) => isStarred(a.id));
+    if (starredApps.length > 0) {
+      const section = el('section', { class: 'cd-section' });
+      section.append(buildSectionBar('Starred', starredApps.length));
+      const grid = el('div', { class: 'cd-apps-grid' });
+      for (const a of starredApps) grid.append(renderAppCard(a));
+      section.append(grid);
+      scroll.append(section);
+    }
+
+    const section = el('section', { class: 'cd-section' });
+    section.append(buildSectionBar('All apps', all.length));
+    const grid = el('div', { class: 'cd-apps-grid cd-apps-grid--small' });
+    for (const a of all) grid.append(renderAppCard(a, true));
+    section.append(grid);
+    scroll.append(section);
+
+    scroll.append(
+      el('div', { class: 'cd-home-footer' }, [
+        el('span', {}, 'Looking for inspiration?'),
+        el(
+          'button',
+          { class: 'cd-home-footer-btn', type: 'button', onClick: renderDiscover },
+          'Discover templates',
+        ),
+      ]),
+    );
+  }
+
+  function buildSectionBar(label: string, count: number): HTMLElement {
+    return el('div', { class: 'cd-section-head' }, [
+      el('h2', {}, label),
+      el('span', { class: 'cd-section-meta' }, String(count)),
+    ]);
+  }
+
+  // Rotating example prompts for the Day-1 composer (§A1).
+  const HERO_PROMPTS: readonly string[] = [
+    'a habit tracker with daily check-ins…',
+    'a journal with one page per day…',
+    'a reading list with covers and ratings…',
+    'a workout planner with weekly splits…',
+    'a budget tracker with monthly rollups…',
+  ];
+
+  // Example apps for the Day-1 shelf — clicking one seeds the builder.
+  const HOME_EXAMPLES: ReadonlyArray<{
+    name: string;
+    prompt: string;
+    iconKey: IconNameType;
+    colorKey: string;
+  }> = [
+    {
+      name: 'Habit tracker',
+      prompt: 'a habit tracker with daily check-ins and streaks',
+      iconKey: 'Habit',
+      colorKey: 'rose',
+    },
+    {
+      name: 'Daily journal',
+      prompt: 'a journal with one entry per day and a calendar view',
+      iconKey: 'Journal',
+      colorKey: 'amber',
+    },
+    {
+      name: 'Pomodoro timer',
+      prompt: 'a pomodoro timer with 25-minute work blocks and breaks',
+      iconKey: 'Pomodoro',
+      colorKey: 'teal',
+    },
+    {
+      name: 'Hydration log',
+      prompt: 'a water tracker that counts 8 cups a day',
+      iconKey: 'Water',
+      colorKey: 'indigo',
+    },
+    {
+      name: 'Mood check-in',
+      prompt: 'a 5-second daily mood check-in with a monthly chart',
+      iconKey: 'Mood',
+      colorKey: 'forest',
+    },
+    {
+      name: 'Gift ideas',
+      prompt: 'a place to jot half-formed gift ideas for friends',
+      iconKey: 'Gift',
+      colorKey: 'ochre',
+    },
+  ];
+
+  // Shared composer behaviour — wires submit/keydown onto a textarea +
+  // build button pair. Used by the Day-1 hero and the loaded-home pill.
+  function wireComposer(ta: HTMLTextAreaElement, buildBtn: HTMLElement): void {
     const submit = (): void => {
       const v = ta.value.trim();
-      if (!v) return;
-      enterBuilder({ initialPrompt: v });
+      if (v) enterBuilder({ initialPrompt: v });
     };
     ta.addEventListener('input', () => {
       if (ta.value.trim()) buildBtn.removeAttribute('disabled');
@@ -694,6 +799,29 @@
       }
     });
     buildBtn.addEventListener('click', submit);
+  }
+
+  function buildHomeHero(): HTMLElement {
+    const wrap = el('div', { class: 'cd-hero' });
+    wrap.append(el('h1', {}, 'What should we build?'));
+
+    const prompt = el('div', { class: 'cd-hero-prompt' });
+    const ta = el('textarea', {
+      placeholder: HERO_PROMPTS[0],
+      rows: '2',
+    }) as HTMLTextAreaElement;
+    // Rotating example placeholder — pauses once the user starts typing.
+    let idx = 0;
+    const rot = window.setInterval(() => {
+      if (ta.value.trim()) return;
+      idx = (idx + 1) % HERO_PROMPTS.length;
+      ta.placeholder = HERO_PROMPTS[idx] ?? '';
+    }, 6000);
+    registerCleanup(() => window.clearInterval(rot));
+
+    const buildBtn = el('button', { class: 'cd-hero-build-btn', disabled: '' });
+    buildBtn.innerHTML = `<span>Build</span>${Icon.Send({ size: 13 })}`;
+    wireComposer(ta, buildBtn);
 
     const row = el('div', { class: 'cd-hero-prompt-row' });
     row.append(el('span', { style: { flex: '1' } }));
@@ -701,66 +829,127 @@
     prompt.append(ta);
     prompt.append(row);
     wrap.append(prompt);
-
-    const suggestions = [
-      { icon: 'Habit', label: 'Habit tracker' } as const,
-      { icon: 'Journal', label: 'Daily journal' } as const,
-      { icon: 'Pomodoro', label: 'Pomodoro timer' } as const,
-      { icon: 'Water', label: 'Hydration' } as const,
-    ];
-    const sugRow = el('div', { class: 'cd-hero-suggestions' });
-    for (const s of suggestions) {
-      const chip = el('button', {
-        class: 'cd-chip',
-        onClick: () => {
-          ta.value = s.label;
-          ta.dispatchEvent(new Event('input'));
-          ta.focus();
-        },
-      });
-      chip.innerHTML = `${Icon[s.icon]({ size: 12 })}<span>${s.label}</span>`;
-      sugRow.append(chip);
-    }
-    wrap.append(sugRow);
     return wrap;
   }
 
-  // Empty-state card shown under "Your apps" when the workspace is fresh.
-  // Carries the same visual weight as a populated grid row so the page
-  // silhouette stays steady when the first app lands. Points the user at
-  // the two ways forward — the hero prompt above, the templates below.
-  function renderHomeAppsEmptyState(): HTMLElement {
-    const card = el('div', { class: 'cd-apps-empty' });
-    card.append(el('div', { class: 'cd-apps-empty-halo' }));
+  // §A2 — the ambient pinned build pill. Collapsed it's a slim ~360px
+  // bar; clicking expands it into a full composer card.
+  function buildBuildPill(): HTMLElement {
+    const pill = el('div', { class: 'cd-build-pill', 'data-expanded': 'false' });
 
-    const icon = el('div', {
-      class: 'cd-apps-empty-icon',
-      trustedHtml: Icon.Sparkle({ size: 22 }),
+    const collapsed = el('button', { class: 'cd-build-pill-collapsed', type: 'button' }, [
+      el('span', { class: 'cd-build-pill-icon', trustedHtml: Icon.Sparkle({ size: 14 }) }),
+      el('span', { class: 'cd-build-pill-label' }, 'Build something new…'),
+      el('span', { class: 'cd-kbd' }, '⌘N'),
+    ]);
+
+    const ta = el('textarea', { placeholder: HERO_PROMPTS[0], rows: '3' }) as HTMLTextAreaElement;
+    const buildBtn = el('button', { class: 'cd-hero-build-btn', disabled: '' });
+    buildBtn.innerHTML = `<span>Build</span>${Icon.Send({ size: 13 })}`;
+    wireComposer(ta, buildBtn);
+
+    const expanded = el('div', { class: 'cd-build-pill-expanded' }, [
+      ta,
+      el('div', { class: 'cd-hero-prompt-row' }, [el('span', { style: { flex: '1' } }), buildBtn]),
+    ]);
+
+    collapsed.addEventListener('click', () => {
+      pill.dataset.expanded = 'true';
+      ta.focus();
     });
-    card.append(icon);
+    ta.addEventListener('blur', () => {
+      if (!ta.value.trim()) pill.dataset.expanded = 'false';
+    });
 
-    card.append(
-      el('div', { class: 'cd-apps-empty-text' }, [
-        el('div', { class: 'cd-apps-empty-title' }, 'Your workspace is a blank canvas'),
-        el(
-          'div',
-          { class: 'cd-apps-empty-hint' },
-          'Clone a template or describe what you want — we’ll build it.',
-        ),
-      ]),
-    );
+    pill.append(collapsed, expanded);
+    return pill;
+  }
 
-    const cues = el('div', { class: 'cd-apps-empty-cues' });
-    const cueUp = el('div', { class: 'cd-apps-empty-cue' });
-    cueUp.innerHTML = `${Icon.ArrowLeft({ size: 12 })}<span>Describe above</span>`;
-    cueUp.querySelector('svg')?.setAttribute('style', 'transform: rotate(90deg)');
-    const cueDown = el('div', { class: 'cd-apps-empty-cue' });
-    cueDown.innerHTML = `<span>Pick a template</span>${Icon.ArrowLeft({ size: 12 })}`;
-    cueDown.querySelector('svg')?.setAttribute('style', 'transform: rotate(-90deg)');
-    cues.append(cueUp, cueDown);
-    card.append(cues);
+  // §A1 — tabbed discovery shelf: Templates · Examples · Recently viewed.
+  function buildTabbedShelf(templates: TemplateEntry[]): HTMLElement {
+    const section = el('section', { class: 'cd-section' });
+    const tabBar = el('div', { class: 'cd-shelf-tabs' });
+    const row = el('div', { class: 'cd-shelf-row' });
 
-    return card;
+    const shelfEmpty = (msg: string): HTMLElement => el('div', { class: 'cd-shelf-empty' }, msg);
+    const shelfCard = (
+      name: string,
+      desc: string,
+      iconKey: string,
+      color: string,
+      onClick: () => void,
+    ): HTMLElement => {
+      const card = el('button', { class: 'cd-shelf-card', type: 'button', onClick });
+      const icon = el('div', {
+        class: 'cd-shelf-card-icon',
+        style: { background: color },
+        trustedHtml: Icon[iconKey as IconNameType]
+          ? Icon[iconKey as IconNameType]({ size: 16, strokeWidth: 1.85 })
+          : Icon.Sparkle({ size: 16 }),
+      });
+      card.append(icon);
+      card.append(el('div', { class: 'cd-shelf-card-name' }, name));
+      card.append(el('div', { class: 'cd-shelf-card-desc' }, desc));
+      return card;
+    };
+
+    const palette = window.ICON_PALETTE as Record<string, string>;
+    const renderTab = (tab: string): void => {
+      row.innerHTML = '';
+      if (tab === 'Templates') {
+        if (templates.length === 0) {
+          row.append(shelfEmpty('No templates available yet.'));
+          return;
+        }
+        for (const t of templates) {
+          row.append(
+            shelfCard(t.name, t.desc, t.iconKey, palette[t.colorKey] ?? '#7C5BD9', () =>
+              openTemplatePreview(t),
+            ),
+          );
+        }
+      } else if (tab === 'Examples') {
+        for (const ex of HOME_EXAMPLES) {
+          row.append(
+            shelfCard(ex.name, ex.prompt, ex.iconKey, palette[ex.colorKey] ?? '#7C5BD9', () =>
+              enterBuilder({ initialPrompt: ex.prompt }),
+            ),
+          );
+        }
+      } else {
+        const recent = recentApps();
+        if (recent.length === 0) {
+          row.append(shelfEmpty('Apps you open show up here.'));
+          return;
+        }
+        for (const a of recent) {
+          row.append(shelfCard(a.name, a.desc || '', a.iconKey, a.color, () => openApp(a.id)));
+        }
+      }
+    };
+
+    for (const tab of ['Templates', 'Examples', 'Recently viewed'] as const) {
+      const btn = el(
+        'button',
+        {
+          class: 'cd-shelf-tab',
+          type: 'button',
+          'data-active': tab === 'Templates' ? 'true' : undefined,
+          onClick: () => {
+            for (const b of tabBar.querySelectorAll<HTMLElement>('.cd-shelf-tab')) {
+              delete b.dataset.active;
+            }
+            btn.dataset.active = 'true';
+            renderTab(tab);
+          },
+        },
+        tab,
+      );
+      tabBar.append(btn);
+    }
+    renderTab('Templates');
+    section.append(tabBar, row);
+    return section;
   }
 
   // ---------- Sidebar destination pages ----------
@@ -844,16 +1033,23 @@
     mountShellPage('automations', main);
   }
 
-  function renderAppCard(app: AppMetaResolvedType): HTMLElement {
-    const draft = isDraft(app);
-    const status: 'new' | 'draft' | null = draft ? 'draft' : isUserApp(app.id) ? 'new' : null;
+  function statusPillEl(tone: 'new' | 'draft' | 'live', label: string): HTMLElement {
+    return el('span', { class: 'cd-status', 'data-tone': tone }, [
+      el('span', { class: 'cd-status-dot' }),
+      label,
+    ]);
+  }
 
-    // Wrap is the grid item; card is the clickable surface. The wrap also
-    // hosts the hover-revealed `•••` action button as a sibling so we don't
-    // nest a button inside a button.
+  // §A3 — RefinedAppTile: 40px icon, hover-revealed star, static blurb,
+  // and a state-aware bottom strip (NEW for <24h, DRAFT, else last-opened).
+  function renderAppCard(app: AppMetaResolvedType, small = false): HTMLElement {
+    const draft = isDraft(app);
+
+    // Wrap is the grid item; the card is the clickable surface. The star
+    // and `•••` action ride as wrap siblings so we don't nest buttons.
     const wrap = el('div', { class: 'cd-app-card-wrap', 'data-app-id': app.id });
     const card = el('button', {
-      class: 'cd-app-card',
+      class: small ? 'cd-app-card cd-app-card--small' : 'cd-app-card',
       type: 'button',
       onClick: () => (draft ? enterBuilder({ appContext: app }) : openApp(app.id)),
       onContextmenu: (e: Event) => {
@@ -863,42 +1059,49 @@
       },
     });
 
-    // Top row mirrors the template card layout — small icon on the
-    // left, name + description stacked to its right. Keeps app +
-    // template tiles visually related so the home page reads as one
-    // consistent grid family.
-    const row = el('div', { class: 'cd-app-card-row' });
     const iconEl = el('div', {
       class: 'cd-app-card-icon',
-      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 16, strokeWidth: 1.85 }) : '',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 18, strokeWidth: 1.85 }) : '',
     });
     const finish = window.CentraidTokens.tileFinish(app.color, prefs.tileVariant);
     iconEl.style.background = finish.background;
     iconEl.style.color = finish.glyphColor;
     if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
-    row.append(iconEl);
-    const text = el('div', { class: 'cd-app-card-text' });
-    text.append(el('div', { class: 'cd-app-card-name' }, app.name));
-    if (app.desc) text.append(el('div', { class: 'cd-app-card-desc' }, app.desc));
-    row.append(text);
-    card.append(row);
+    card.append(iconEl);
 
-    // Foot — edited time on the left, status pill pushed to the right.
-    // What separates an app tile from a template tile: templates show
-    // a description; apps show their lifecycle (last touched + state).
+    card.append(el('div', { class: 'cd-app-card-name' }, app.name));
+    card.append(el('div', { class: 'cd-app-card-desc' }, app.desc || 'No description yet.'));
+
+    // State-aware bottom strip.
     const ua = !draft ? findUserApp(app.id) : undefined;
-    const metaLabel = draft ? 'Continue editing' : relativeTime(ua?.updatedAt);
     const foot = el('div', { class: 'cd-app-card-foot' });
-    foot.append(el('span', { class: 'cd-app-card-foot-time' }, metaLabel));
-    if (status) {
-      const pill = el('span', { class: 'cd-status', 'data-tone': status });
-      pill.append(el('span', { class: 'cd-status-dot' }));
-      pill.append(document.createTextNode(status));
-      foot.append(pill);
+    if (draft) {
+      foot.append(statusPillEl('draft', 'draft'));
+    } else if (isRecentlyCreated(ua?.updatedAt)) {
+      foot.append(statusPillEl('new', 'new · just now'));
+    } else {
+      foot.append(
+        el('span', { class: 'cd-app-card-foot-time' }, `opened ${relativeTime(ua?.updatedAt)}`),
+      );
     }
     card.append(foot);
-
     wrap.append(card);
+
+    // Hover-revealed star — toggles starred state without opening the app.
+    const star = el('button', {
+      class: 'cd-app-card-star',
+      type: 'button',
+      'aria-label': isStarred(app.id) ? 'Unstar app' : 'Star app',
+      'data-on': isStarred(app.id) ? 'true' : undefined,
+      trustedHtml: Icon.Star ? Icon.Star({ size: 15 }) : '',
+      onClick: (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleStar(app.id);
+        renderHome();
+      },
+    });
+    wrap.append(star);
     wrap.append(
       buildMoreButton('App actions', (rect) => openContextMenu(app, { kind: 'rect', rect })),
     );
@@ -1737,6 +1940,7 @@
     if (!app) {
       return;
     }
+    recordRecent(id);
     // Drafts can't be "opened" — they don't have a runnable build yet.
     // Route to the builder so the click is meaningful even when openApp
     // is called by surfaces (like the builder's own sidebar) that don't

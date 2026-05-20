@@ -4467,138 +4467,210 @@ textarea {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
 }
+/* §A2 — the "All apps" grid uses slightly smaller tiles. */
+.cd-apps-grid--small {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 9px;
+}
 
-/* Empty state shown under "Your apps" on a fresh workspace. Designed
-   to carry the visual weight of a populated grid row — same outline
-   family as the app cards, but generously padded and centered so it
-   reads as a deliberate moment rather than a notice. The dashed border
-   communicates "placeholder slot" without feeling cheap. */
-.cd-apps-empty {
-  position: relative;
+/* §A2 — ambient build pill. Collapsed it's a slim centered bar; the
+   expanded state swaps in a full composer card. */
+.cd-build-pill {
+  max-width: 1080px;
+  margin: 0 auto 28px;
+  display: flex;
+  justify-content: center;
+}
+.cd-build-pill[data-expanded='true'] {
+  display: block;
+}
+.cd-build-pill-collapsed {
+  width: 360px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink-3);
+  cursor: pointer;
+  font: inherit;
+  transition:
+    background 140ms,
+    border-color 140ms;
+}
+.cd-build-pill-collapsed:hover {
+  border-color: var(--line-strong);
+  color: var(--ink-2);
+}
+.cd-build-pill[data-expanded='true'] .cd-build-pill-collapsed {
+  display: none;
+}
+.cd-build-pill-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+.cd-build-pill-label {
+  flex: 1;
+  font-size: 13px;
+  text-align: left;
+}
+.cd-build-pill-expanded {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 12px 10px;
+  border-radius: 14px;
+  border: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 86%, transparent);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+}
+.cd-build-pill[data-expanded='true'] .cd-build-pill-expanded {
+  display: flex;
+}
+.cd-build-pill-expanded textarea {
+  width: 100%;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 4px 4px 8px;
+}
+.cd-build-pill-expanded textarea::placeholder {
+  color: var(--ink-4);
+}
+
+/* §A1 — tabbed discovery shelf. */
+.cd-shelf-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.cd-shelf-tab {
+  padding: 5px 11px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.cd-shelf-tab:hover {
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.cd-shelf-tab[data-active='true'] {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+}
+.cd-shelf-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+.cd-shelf-card {
+  flex: 0 0 200px;
   display: flex;
   flex-direction: column;
+  gap: 5px;
+  padding: 13px;
+  border-radius: 12px;
+  border: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition:
+    background 140ms,
+    transform 140ms;
+}
+.cd-shelf-card:hover {
+  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  transform: translateY(-1px);
+}
+.cd-shelf-card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  margin-bottom: 3px;
+}
+.cd-shelf-card-icon svg {
+  display: block;
+}
+.cd-shelf-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cd-shelf-card-desc {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cd-shelf-empty {
+  padding: 28px 12px;
+  font-size: 13px;
+  color: var(--ink-4);
+}
+
+/* §A2 — quiet inspiration footer. */
+.cd-home-footer {
+  max-width: 1080px;
+  margin: 36px auto 0;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 24px;
-  /* Explicit height (not min-height) — some ancestor in the home layout
-     was stretching the card to fill leftover scroll space, leaving the
-     content visually pushed below center. Locking the height keeps the
-     card compact and lets `justify-content: center` actually center. */
-  height: 240px;
-  flex: 0 0 auto;
-  border-radius: 16px;
-  background:
-    radial-gradient(
-        circle at 1px 1px,
-        color-mix(in srgb, var(--ink) 8%, transparent) 1px,
-        transparent 0
-      )
-      0 0 / 18px 18px,
-    var(--bg-elev);
-  border: 1px dashed color-mix(in srgb, var(--line-strong) 80%, transparent);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  text-align: center;
-}
-:root[data-theme='dark'] .cd-apps-empty {
-  background:
-    radial-gradient(
-        circle at 1px 1px,
-        color-mix(in srgb, var(--ink) 6%, transparent) 1px,
-        transparent 0
-      )
-      0 0 / 18px 18px,
-    color-mix(in srgb, var(--bg-elev) 60%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 1px dashed color-mix(in srgb, var(--line-strong) 90%, transparent);
-  box-shadow: none;
-}
-/* Soft accent halo sits directly behind the icon as a centered glow.
-   No bleed from the corners — the card is short enough that a centered
-   halo reads as "this is the focal point" rather than corner decoration. */
-.cd-apps-empty-halo {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 220px;
-  height: 140px;
-  background: radial-gradient(
-    ellipse at center,
-    color-mix(in oklab, var(--accent) 22%, transparent),
-    transparent 70%
-  );
-  filter: blur(10px);
-  pointer-events: none;
-  z-index: 0;
-}
-.cd-apps-empty > * {
-  position: relative;
-  z-index: 1;
-}
-.cd-apps-empty-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(
-    135deg,
-    color-mix(in oklab, var(--accent) 90%, white 0%),
-    color-mix(in oklab, var(--accent) 60%, black 8%)
-  );
-  color: #fff;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 8px 22px color-mix(in oklab, var(--accent) 35%, transparent);
-}
-.cd-apps-empty-text {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  max-width: 420px;
-}
-.cd-apps-empty-title {
-  font-size: 14.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.cd-apps-empty-hint {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--ink-3);
-  line-height: 1.5;
 }
-/* Pair of pointer chips that aim the user at the two paths forward —
-   ↑ at the hero prompt above, ↓ at the Templates grid below. */
-.cd-apps-empty-cues {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-}
-.cd-apps-empty-cue {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px 5px 8px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--ink-2);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+.cd-home-footer-btn {
   border: 0.5px solid var(--line);
   border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition:
+    background 140ms,
+    color 140ms;
 }
-.cd-apps-empty-cue:last-child {
-  padding: 5px 8px 5px 10px;
+.cd-home-footer-btn:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
 }
-.cd-apps-empty-cue svg {
-  display: block;
-  color: var(--accent);
-}
+
 /* Wrap is the grid item; it hosts the card and a sibling `•••` action
    button so we don't nest a button inside a button. The wrap itself is
    the positioning context for the hover-revealed affordance. */
@@ -4606,27 +4678,20 @@ textarea {
   position: relative;
   display: block;
 }
-/* App card mirrors the template card's top row (icon left, name
-   right), then adds a foot strip below carrying the lifecycle info
-   (last edited + status). This is the key visual rhyme that lets
-   "Your apps" and "Templates · curated" feel like one grid family
-   on the home page, while still letting an app tile be self-evident
-   about its state at a glance. */
+/* RefinedAppTile (§A3) — a vertical card: 40px icon, name, one-line
+   blurb, and a state-aware bottom strip. The hover-revealed star and
+   `•••` action ride as wrap siblings. */
 .cd-app-card {
   position: relative;
   width: 100%;
-  padding: 12px;
-  /* Reserve room on the right for the `•••` action so the name never
-     gets clipped by the button on hover. 32px matches the template
-     card's reservation. */
-  padding-right: 32px;
+  padding: 14px;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
   cursor: pointer;
   overflow: hidden;
   text-align: left;
@@ -4637,6 +4702,11 @@ textarea {
     border-color 160ms,
     box-shadow 160ms,
     transform 160ms;
+}
+.cd-app-card--small {
+  padding: 12px;
+  gap: 6px;
+  border-radius: 12px;
 }
 :root[data-theme='dark'] .cd-app-card {
   background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
@@ -4657,65 +4727,51 @@ textarea {
 .cd-app-card:active {
   transform: scale(0.99);
 }
-/* Top row — same shape as .cd-tmpl-card: 32px icon, name + desc
-   stacked to its right. Vertical alignment is `flex-start` so a
-   two-line description doesn't push the icon down off the name. */
-.cd-app-card-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-}
 .cd-app-card-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  /* Nudge down a hair so the icon's optical center aligns with the
-     name's cap-height rather than its baseline. */
-  margin-top: 1px;
+  margin-bottom: 3px;
+}
+.cd-app-card--small .cd-app-card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
 }
 .cd-app-card-icon svg {
   display: block;
-  width: 16px;
-  height: 16px;
-}
-.cd-app-card-text {
-  flex: 1;
-  min-width: 0;
+  width: 18px;
+  height: 18px;
 }
 .cd-app-card-name {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.003em;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cd-app-card-desc {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--ink-3);
-  margin-top: 2px;
   line-height: 1.4;
-  /* Clamp to a single line so the foot strip sits at a stable y
-     across the grid row. Long descriptions ellipsize. */
+  /* Clamp to a single line so the foot strip sits at a stable y. */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Foot strip — sits below the row, separated by a subtle hairline
-   that reads as a structural divider between identity (icon+name)
-   and state (time+status). Status pill is pushed right via
-   space-between so it always anchors the trailing edge. */
+/* State-aware bottom strip — NEW pill, DRAFT pill, or last-opened. */
 .cd-app-card-foot {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 3px;
   padding-top: 8px;
   border-top: 0.5px solid color-mix(in srgb, var(--line) 70%, transparent);
 }
@@ -4728,14 +4784,46 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Pin the status pill to the trailing edge of the foot strip via
-   `margin-inline-start: auto`. More robust than `justify-content:
-   space-between` because it doesn't depend on the foot having
-   exactly two children — when there's no status, the time hugs the
-   left as expected; when there is, the pill snaps to the right edge
-   regardless of the time's width. */
-.cd-app-card-foot .cd-status {
-  margin-inline-start: auto;
+
+/* Hover-revealed star, top-right of the tile (§A3). Filled amber when
+   the app is starred; otherwise a quiet outline that fades in on hover. */
+.cd-app-card-star {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity 120ms,
+    background 120ms,
+    color 120ms;
+}
+.cd-app-card-star svg {
+  display: block;
+}
+.cd-app-card-wrap:hover .cd-app-card-star,
+.cd-app-card-wrap:focus-within .cd-app-card-star,
+.cd-app-card-star[data-on='true'] {
+  opacity: 1;
+}
+.cd-app-card-star:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.cd-app-card-star[data-on='true'] {
+  color: var(--icon-amber);
+}
+.cd-app-card-star[data-on='true'] svg path {
+  fill: currentColor;
 }
 
 /* Templates row at the bottom of Home */
