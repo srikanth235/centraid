@@ -57,19 +57,24 @@ export interface ChatRunInput {
   /**
    * Absolute path to the app's data directory — `entry.path` as resolved by
    * `appDataDir(entry)`. For uploaded apps this is `<appsDir>/<id>`; for
-   * path-registered apps it's the externally-supplied folder. `data.sqlite`,
-   * the `_chat/` transcripts, and the live schema all live here. Adapters
-   * that spawn a subprocess agent (codex / claude-code) MUST use this as the
-   * spawn cwd so the workspace sandbox covers the file the agent reads/writes.
+   * path-registered apps it's the externally-supplied folder. `data.sqlite`
+   * and the live schema live here. Adapters that spawn a subprocess agent
+   * (codex / claude-code) MUST use this as the spawn cwd so the workspace
+   * sandbox covers the file the agent reads/writes.
    */
   dataDir: string;
-  /** Renderer-supplied window id; pinned to one transcript per (appId, windowId). */
+  /**
+   * The chat session id. A chat session IS the chat window, so this is the
+   * window id — it's also the `chat_sessions` row id in the central gateway
+   * SQLite the transcript persists to.
+   */
   windowId: string;
   /**
-   * Absolute path to the on-disk transcript file for this window —
-   * `<dataDir>/_chat/w<windowId>.jsonl`. The runner is free to use this for
-   * its own session-resume mechanism (pi session file, codex thread id
-   * stored alongside, …).
+   * Absolute path to a runner-owned scratch session file (under the central
+   * `chatRunnerSessionDir`, named `<windowId>.jsonl`). The runner is free to
+   * use this for its own session-resume mechanism (e.g. the OpenClaw runner
+   * writes a pi session file here). It is NOT the chat transcript — the
+   * transcript lives in the gateway DB.
    */
   sessionFile: string;
   mode: ChatMode;
@@ -90,6 +95,13 @@ export interface ChatRunInput {
    * per-window queue is the primary correctness guarantee).
    */
   idempotencyKey?: string;
+  /**
+   * The runner's previous resume handle, read from the `chat_sessions` row
+   * by the route. The adapter resumes only when `prevAdapterKind` matches
+   * the kind it's about to use — a mid-session runner switch starts fresh.
+   */
+  prevAdapterSessionId?: string;
+  prevAdapterKind?: string;
   onEvent: (event: ChatStreamEvent) => void;
 }
 
@@ -97,8 +109,8 @@ export interface ChatRunResult {
   /**
    * Resumable session id assigned by the adapter (codex thread id,
    * claude-code session id). Omitted by adapters whose resume happens via
-   * the on-disk `sessionFile` (OpenClaw runner). The route handler
-   * persists this to `_chat/index.json` so the next turn can resume.
+   * the on-disk `sessionFile` (OpenClaw runner). The route handler persists
+   * this to the session's `chat_sessions` row so the next turn can resume.
    */
   adapterSessionId?: string;
   /** Adapter kind that wrote `adapterSessionId`. */

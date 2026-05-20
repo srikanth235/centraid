@@ -169,6 +169,11 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       userStore,
       chatHistoryStore,
       chatRunner,
+      chatRunnerSessionDir: path.join(
+        app.getPath('userData'),
+        'local-runtime',
+        'chat-runner-sessions',
+      ),
       automationStore,
       // On every publish that lands new/changed/removed automation
       // manifests, reconcile the OS scheduler so its installed

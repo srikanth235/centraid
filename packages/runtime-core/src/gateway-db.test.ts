@@ -93,13 +93,13 @@ describe('openGatewayDb', () => {
         JSON.stringify('dark'),
       );
       db.prepare(
-        `INSERT INTO chat_sessions (id, user_id, app_id, title, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).run('s1', 'u1', 'todos', 'hi', Date.now(), Date.now());
+        `INSERT INTO chat_sessions (id, user_id, origin_app_id, title, mode, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run('s1', 'u1', 'todos', 'hi', 'full', Date.now(), Date.now());
       db.prepare(
-        `INSERT INTO chat_messages (session_id, idx, payload_json, created_at)
-         VALUES (?, ?, ?, ?)`,
-      ).run('s1', 0, '{"kind":"user","text":"x"}', Date.now());
+        `INSERT INTO chat_messages (session_id, idx, app_id, payload_json, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run('s1', 0, 'todos', '{"kind":"user","text":"x"}', Date.now());
 
       db.prepare(`DELETE FROM users WHERE id = ?`).run('u1');
 

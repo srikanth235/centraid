@@ -89,13 +89,22 @@ export type CentraidChatEvent =
   | (ChatEventBase & { kind: 'aborted' });
 
 /**
- * One row from the persisted chat-history index for an app. Sessions list
- * RPCs return these sorted by `updatedAt` desc.
+ * One persisted chat session — the session id is also the chat window id.
+ * Sessions list RPCs return these sorted by `updatedAt` desc.
  */
 export interface CentraidChatSessionMeta {
   id: string;
-  appId: string;
+  /** App the chat was opened from; `null` for chats started from the shell. */
+  originAppId: string | null;
   title: string;
+  /** Sticky chat mode. */
+  mode: 'full' | 'data';
+  /** Runner kind that owns `adapterSessionId`. */
+  adapterKind: string | null;
+  /** Opaque per-runner resume handle. */
+  adapterSessionId: string | null;
+  /** Number of completed turns. */
+  turnCount: number;
   createdAt: number;
   updatedAt: number;
   messageCount: number;
@@ -698,8 +707,12 @@ declare global {
     | (_ChatEventBaseG & { kind: 'aborted' });
   interface CentraidChatSessionMeta {
     id: string;
-    appId: string;
+    originAppId: string | null;
     title: string;
+    mode: 'full' | 'data';
+    adapterKind: string | null;
+    adapterSessionId: string | null;
+    turnCount: number;
     createdAt: number;
     updatedAt: number;
     messageCount: number;

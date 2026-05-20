@@ -48,18 +48,16 @@ test('POST /_chat returns 503 when no runner is configured', async () => {
   assert.equal(body.error, 'no_chat_runner');
 });
 
-test('GET /_chat/windows returns an empty list initially', async () => {
+test('GET /_chat/windows is no longer a route (404)', async () => {
   await bootstrap();
   await registerApp('demo');
   const res = await fetch(`${server.url}/centraid/demo/_chat/windows`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 200);
-  const body = (await res.json()) as { windows: unknown[] };
-  assert.deepEqual(body.windows, []);
+  assert.equal(res.status, 404);
 });
 
-test('POST /_chat drives the runner, streams events, and persists window meta', async () => {
+test('POST /_chat drives the runner and streams events', async () => {
   const runner: ChatRunner = {
     async run(input) {
       input.onEvent({ type: 'assistant.start' });
@@ -88,14 +86,25 @@ test('POST /_chat drives the runner, streams events, and persists window meta', 
   assert.match(text, /"delta":"Hi "/);
   assert.match(text, /event: final/);
   assert.match(text, /event: end/);
+});
 
-  // Window was persisted.
-  const list = await fetch(`${server.url}/centraid/demo/_chat/windows`, {
-    headers: { Authorization: `Bearer ${server.token}` },
-  }).then((r) => r.json() as Promise<{ windows: Array<{ id: string; turnCount: number }> }>);
-  assert.equal(list.windows.length, 1);
-  assert.equal(list.windows[0]?.id, 'w1');
-  assert.equal(list.windows[0]?.turnCount, 1);
+test('POST /_chat passes the runner-owned session file under the scratch dir', async () => {
+  let seenSessionFile = '';
+  const runner: ChatRunner = {
+    async run(input) {
+      seenSessionFile = input.sessionFile;
+      input.onEvent({ type: 'final', text: 'ok' });
+    },
+  };
+  await bootstrap({ runner });
+  await registerApp('demo');
+  await fetch(`${server.url}/centraid/demo/_chat`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ windowId: 'w1', message: 'hello' }),
+  }).then((r) => r.text());
+  assert.equal(path.basename(seenSessionFile), 'w1.jsonl');
+  assert.equal(path.dirname(seenSessionFile), runtime.chatRunnerSessionDir);
 });
 
 test('POST /_chat with invalid windowId returns 400', async () => {
@@ -113,32 +122,6 @@ test('POST /_chat with invalid windowId returns 400', async () => {
   assert.equal(res.status, 400);
 });
 
-test('DELETE /_chat/windows/<id> tears down a window', async () => {
-  const runner: ChatRunner = {
-    async run(input) {
-      input.onEvent({ type: 'final', text: 'ok' });
-    },
-  };
-  await bootstrap({ runner });
-  await registerApp('demo');
-  // Create window first.
-  await fetch(`${server.url}/centraid/demo/_chat`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ windowId: 'w1', message: 'hello' }),
-  }).then((r) => r.text());
-
-  const del = await fetch(`${server.url}/centraid/demo/_chat/windows/w1`, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${server.token}` },
-  });
-  assert.equal(del.status, 200);
-  const list = (await fetch(`${server.url}/centraid/demo/_chat/windows`, {
-    headers: { Authorization: `Bearer ${server.token}` },
-  }).then((r) => r.json())) as { windows: unknown[] };
-  assert.equal(list.windows.length, 0);
-});
-
 test('GET /centraid/_chat/runner-status returns "none" when no runner configured', async () => {
   await bootstrap();
   const res = await fetch(`${server.url}/centraid/_chat/runner-status`, {
@@ -148,50 +131,6 @@ test('GET /centraid/_chat/runner-status returns "none" when no runner configured
   const body = (await res.json()) as { kind: string; ok: boolean };
   assert.equal(body.kind, 'none');
   assert.equal(body.ok, false);
-});
-
-test('transcript is persisted as JSONL and replayable via /history', async () => {
-  const runner: ChatRunner = {
-    async run(input) {
-      input.onEvent({ type: 'assistant.delta', delta: 'Hello' });
-      input.onEvent({
-        type: 'tool.start',
-        toolCallId: 't1',
-        toolName: 'centraid_sql_read',
-        args: { sql: 'SELECT 1' },
-        sql: 'SELECT 1',
-      });
-      input.onEvent({
-        type: 'tool.result',
-        toolCallId: 't1',
-        toolName: 'centraid_sql_read',
-        ok: true,
-        result: { rows: [[1]] },
-      });
-      input.onEvent({ type: 'final', text: 'Hello' });
-      return { adapterKind: 'test', adapterSessionId: 'session-xyz' };
-    },
-  };
-  await bootstrap({ runner });
-  await registerApp('demo');
-
-  await fetch(`${server.url}/centraid/demo/_chat`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ windowId: 'w1', message: 'hi' }),
-  }).then((r) => r.text());
-
-  const history = (await fetch(`${server.url}/centraid/demo/_chat/windows/w1/history`, {
-    headers: { Authorization: `Bearer ${server.token}` },
-  }).then((r) => r.json())) as {
-    window: { adapterSessionId?: string };
-    entries: Array<{ role: string; text?: string; toolName?: string }>;
-  };
-  const roles = history.entries.map((e) => e.role);
-  assert.deepEqual(roles, ['user', 'tool', 'tool', 'assistant']);
-  assert.equal(history.entries[0]?.text, 'hi');
-  assert.equal(history.entries[3]?.text, 'Hello');
-  assert.equal(history.window.adapterSessionId, 'session-xyz');
 });
 
 test('runner error becomes an SSE error frame', async () => {

@@ -7,11 +7,18 @@
  *                    multi-tenant doesn't need a column-add migration.
  *   user_prefs     — global prefs keyed by (user_id, key); JSON-encoded
  *                    values. FK-cascaded from `users`.
- *   chat_sessions  — chat-pane sessions, scoped by user_id (FK-cascaded
- *                    from `users`) and app_id. Real FK so deleting a user
+ *   chat_sessions  — chat sessions, scoped by user_id (FK-cascaded from
+ *                    `users`). A session is the single chat concept — its
+ *                    id IS the chat window id. Carries a nullable
+ *                    `origin_app_id` (the app the chat was opened from;
+ *                    NULL = started from the centraid shell), a sticky
+ *                    `mode` ('full' | 'data'), per-turn `turn_count`, and
+ *                    the runner-resume handle (`adapter_kind` +
+ *                    `adapter_session_id`). Real FK so deleting a user
  *                    cleans up their sessions atomically.
  *   chat_messages  — append-only message log, FK-cascaded from
- *                    `chat_sessions`.
+ *                    `chat_sessions`. Each row carries a nullable `app_id`
+ *                    naming the app a tool call in that message touched.
  *
  * One file, one connection, one migration ladder, real foreign keys
  * (`PRAGMA foreign_keys=ON`). UserStore + ChatHistoryStore both wrap
@@ -73,18 +80,23 @@ export const MIGRATIONS: readonly string[] = [
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
-      app_id TEXT NOT NULL,
+      origin_app_id TEXT,
       title TEXT NOT NULL DEFAULT '',
+      mode TEXT NOT NULL DEFAULT 'full',
+      adapter_kind TEXT,
+      adapter_session_id TEXT,
+      turn_count INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_app_updated
-      ON chat_sessions(user_id, app_id, updated_at DESC);
+      ON chat_sessions(user_id, origin_app_id, updated_at DESC);
 
     CREATE TABLE IF NOT EXISTS chat_messages (
       session_id TEXT NOT NULL,
       idx INTEGER NOT NULL,
+      app_id TEXT,
       payload_json TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       PRIMARY KEY (session_id, idx),

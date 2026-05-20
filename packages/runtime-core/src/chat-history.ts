@@ -1,10 +1,13 @@
 /*
- * Centraid chat-history store.
+ * Centraid chat store — the single store for every chat.
  *
  * Wraps the shared gateway SQLite (see `gateway-db.ts`) to read/write the
- * `chat_sessions` and `chat_messages` tables. Sessions are scoped by the
- * gateway-side user UUID (`UserStore.getUserId`) and `app_id`; messages
- * are append-only with monotonic per-session `idx`.
+ * `chat_sessions` and `chat_messages` tables. A chat session IS the chat
+ * window: the session id is the window id. Sessions are scoped by the
+ * gateway-side user UUID (`UserStore.getUserId`) and carry a nullable
+ * `origin_app_id` (the app the chat was opened from; NULL = started from
+ * the centraid shell). Chats are cross-app — a chat can reference multiple
+ * apps — so the session itself is not app-scoped, only its origin is.
  *
  * Exposed over HTTP at the `/_centraid-chat` prefix (dispatcher lives in
  * `chat-history-routes.ts`). Two host surfaces mount the route identically:
@@ -16,8 +19,11 @@
  * bearer token the surrounding HTTP server already enforces.
  *
  * Persistence model:
- *   chat_sessions(id, user_id FK→users, app_id, title, created_at, updated_at)
- *   chat_messages(session_id FK→chat_sessions, idx, payload_json, created_at)
+ *   chat_sessions(id, user_id FK→users, origin_app_id, title, mode,
+ *                 adapter_kind, adapter_session_id, turn_count,
+ *                 created_at, updated_at)
+ *   chat_messages(session_id FK→chat_sessions, idx, app_id, payload_json,
+ *                 created_at)
  *
  * `payload_json` is whatever the renderer's `AppChatMsg` shape is. The
  * runtime doesn't interpret it (beyond peeking inside the first user
@@ -28,6 +34,9 @@
  * tail of a turn, and the server assigns idx values atomically. This is
  * the only way to preserve ordering across N parallel fire-and-forget
  * posts.
+ *
+ * The `_chat` POST route (`chat-routes.ts`) records turn completion +
+ * runner-resume metadata against the same row via `noteTurn`.
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
@@ -38,8 +47,17 @@ export interface ChatSessionMeta {
   id: string;
   /** Owner of the session — the gateway-side user UUID from `UserStore`. */
   userId: string;
-  appId: string;
+  /** App the chat was opened from; `null` when started from the shell. */
+  originAppId: string | null;
   title: string;
+  /** Sticky chat mode: `full` (agent + SQL tools) or `data` (SQL only). */
+  mode: 'full' | 'data';
+  /** Runner kind that owns `adapterSessionId` (codex | claude-code | openclaw). */
+  adapterKind: string | null;
+  /** Opaque per-runner resume handle; `null` until the first turn lands. */
+  adapterSessionId: string | null;
+  /** Number of completed turns on this session. */
+  turnCount: number;
   createdAt: number;
   updatedAt: number;
   messageCount: number;
@@ -79,7 +97,45 @@ interface PreparedStatements {
   setTitle: StatementSync;
   touch: StatementSync;
   metaOnly: StatementSync;
+  noteTurnWithAdapter: StatementSync;
+  noteTurnKindOnly: StatementSync;
+  noteTurnNoAdapter: StatementSync;
 }
+
+interface SessionRow {
+  id: string;
+  user_id: string;
+  origin_app_id: string | null;
+  title: string;
+  mode: string;
+  adapter_kind: string | null;
+  adapter_session_id: string | null;
+  turn_count: number;
+  created_at: number;
+  updated_at: number;
+  msg_count: number;
+}
+
+function mapSessionRow(r: SessionRow): ChatSessionMeta {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    originAppId: r.origin_app_id ?? null,
+    title: r.title,
+    mode: r.mode === 'data' ? 'data' : 'full',
+    adapterKind: r.adapter_kind ?? null,
+    adapterSessionId: r.adapter_session_id ?? null,
+    turnCount: Number(r.turn_count),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    messageCount: Number(r.msg_count),
+  };
+}
+
+const SESSION_COLS = `s.id, s.user_id, s.origin_app_id, s.title, s.mode,
+        s.adapter_kind, s.adapter_session_id, s.turn_count,
+        s.created_at, s.updated_at,
+        (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id) AS msg_count`;
 
 export class ChatHistoryStore {
   private readonly dbProvider: DatabaseProvider;
@@ -100,19 +156,20 @@ export class ChatHistoryStore {
     const db = this.dbProvider();
     const stmts: PreparedStatements = {
       list: db.prepare(
-        `SELECT s.id, s.user_id, s.app_id, s.title, s.created_at, s.updated_at,
-                (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id) AS msg_count
+        `SELECT ${SESSION_COLS}
          FROM chat_sessions s
-         WHERE s.user_id = ? AND s.app_id = ?
+         WHERE s.user_id = ? AND s.origin_app_id = ?
          ORDER BY s.updated_at DESC`,
       ),
       insertSession: db.prepare(
-        `INSERT INTO chat_sessions (id, user_id, app_id, title, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO chat_sessions
+           (id, user_id, origin_app_id, title, mode,
+            adapter_kind, adapter_session_id, turn_count, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?)`,
       ),
       getSession: db.prepare(
-        `SELECT id, user_id, app_id, title, created_at, updated_at
-         FROM chat_sessions WHERE id = ? AND user_id = ?`,
+        `SELECT ${SESSION_COLS}
+         FROM chat_sessions s WHERE s.id = ? AND s.user_id = ?`,
       ),
       getMessages: db.prepare(
         `SELECT idx, payload_json, created_at FROM chat_messages
@@ -127,17 +184,32 @@ export class ChatHistoryStore {
         `SELECT COALESCE(MAX(idx) + 1, 0) AS next FROM chat_messages WHERE session_id = ?`,
       ),
       insertMessage: db.prepare(
-        `INSERT INTO chat_messages (session_id, idx, payload_json, created_at)
-         VALUES (?, ?, ?, ?)`,
+        `INSERT INTO chat_messages (session_id, idx, app_id, payload_json, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
       ),
       setTitle: db.prepare(
         `UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
       ),
       touch: db.prepare(`UPDATE chat_sessions SET updated_at = ? WHERE id = ? AND user_id = ?`),
       metaOnly: db.prepare(
-        `SELECT s.id, s.user_id, s.app_id, s.title, s.created_at, s.updated_at,
-                (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id) AS msg_count
+        `SELECT ${SESSION_COLS}
          FROM chat_sessions s WHERE s.id = ? AND s.user_id = ?`,
+      ),
+      noteTurnWithAdapter: db.prepare(
+        `UPDATE chat_sessions
+         SET turn_count = turn_count + 1, updated_at = ?,
+             adapter_kind = ?, adapter_session_id = ?
+         WHERE id = ? AND user_id = ?`,
+      ),
+      noteTurnKindOnly: db.prepare(
+        `UPDATE chat_sessions
+         SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?
+         WHERE id = ? AND user_id = ?`,
+      ),
+      noteTurnNoAdapter: db.prepare(
+        `UPDATE chat_sessions
+         SET turn_count = turn_count + 1, updated_at = ?
+         WHERE id = ? AND user_id = ?`,
       ),
     };
     this.db = db;
@@ -150,51 +222,49 @@ export class ChatHistoryStore {
     return this.userIdProvider();
   }
 
-  listSessions(appId: string): ChatSessionMeta[] {
+  /** List sessions whose origin app is `originAppId` (the per-app sidebar). */
+  listSessions(originAppId: string): ChatSessionMeta[] {
     const { stmts } = this.ensureReady();
     const userId = this.currentUserId();
-    const rows = stmts.list.all(userId, appId) as Array<{
-      id: string;
-      user_id: string;
-      app_id: string;
-      title: string;
-      created_at: number;
-      updated_at: number;
-      msg_count: number;
-    }>;
-    return rows.map((r) => ({
-      id: r.id,
-      userId: r.user_id,
-      appId: r.app_id,
-      title: r.title,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-      messageCount: Number(r.msg_count),
-    }));
+    const rows = stmts.list.all(userId, originAppId) as unknown as SessionRow[];
+    return rows.map(mapSessionRow);
   }
 
-  createSession(appId: string, title: string = ''): ChatSessionMeta {
+  /**
+   * Create a fresh chat session. `originAppId` is the app the chat was
+   * opened from (`null` for chats started from the centraid shell);
+   * `mode` is the sticky chat mode. The new row starts with turn_count 0
+   * and NULL adapter columns.
+   */
+  createSession(
+    originAppId: string | null,
+    mode: 'full' | 'data',
+    title: string = '',
+  ): ChatSessionMeta {
     const { stmts } = this.ensureReady();
     const userId = this.currentUserId();
     const now = Date.now();
     const id = randomUUID();
-    stmts.insertSession.run(id, userId, appId, title, now, now);
-    return { id, userId, appId, title, createdAt: now, updatedAt: now, messageCount: 0 };
+    stmts.insertSession.run(id, userId, originAppId, title, mode, now, now);
+    return {
+      id,
+      userId,
+      originAppId,
+      title,
+      mode,
+      adapterKind: null,
+      adapterSessionId: null,
+      turnCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      messageCount: 0,
+    };
   }
 
   getSession(id: string): (ChatSessionMeta & { messages: ChatMessageRow[] }) | undefined {
     const { stmts } = this.ensureReady();
     const userId = this.currentUserId();
-    const row = stmts.getSession.get(id, userId) as
-      | {
-          id: string;
-          user_id: string;
-          app_id: string;
-          title: string;
-          created_at: number;
-          updated_at: number;
-        }
-      | undefined;
+    const row = stmts.getSession.get(id, userId) as unknown as SessionRow | undefined;
     if (!row) return undefined;
     const msgs = stmts.getMessages.all(id) as Array<{
       idx: number;
@@ -206,16 +276,15 @@ export class ChatHistoryStore {
       payload: JSON.parse(m.payload_json) as unknown,
       createdAt: m.created_at,
     }));
-    return {
-      id: row.id,
-      userId: row.user_id,
-      appId: row.app_id,
-      title: row.title,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      messageCount: messages.length,
-      messages,
-    };
+    const meta = mapSessionRow(row);
+    return { ...meta, messageCount: messages.length, messages };
+  }
+
+  /** Session meta only (no message rows). Cheap — the `_chat` POST route
+   *  uses this to read sticky mode + runner-resume handles per turn. */
+  getSessionMeta(id: string): ChatSessionMeta | undefined {
+    const userId = this.currentUserId();
+    return this.metaOnly(id, userId);
   }
 
   renameSession(id: string, title: string): ChatSessionMeta | undefined {
@@ -242,12 +311,20 @@ export class ChatHistoryStore {
    * — or, importantly, if it exists but is owned by a different user, so
    * cross-user writes are silently impossible.
    *
+   * `appId` (optional) is written into the `app_id` column for every row in
+   * the batch — it names the app whose data a tool call in this turn
+   * touched. `null`/`undefined` leaves the column NULL.
+   *
    * Batching is the contract that gives us ordering: callers send one POST
    * with the ordered tail of a turn, and the server is the only thing that
    * assigns idx values — so two POSTs racing produce stable, separable
    * batches rather than interleaved chaos.
    */
-  appendMessages(sessionId: string, payloads: unknown[]): AppendBatchResult | undefined {
+  appendMessages(
+    sessionId: string,
+    payloads: unknown[],
+    appId?: string | null,
+  ): AppendBatchResult | undefined {
     const { db, stmts } = this.ensureReady();
     const userId = this.currentUserId();
     const existing = stmts.sessionExists.get(sessionId, userId) as { title: string } | undefined;
@@ -255,6 +332,7 @@ export class ChatHistoryStore {
     if (payloads.length === 0) {
       return { firstIdx: 0, count: 0, title: existing.title };
     }
+    const appIdCol = appId ?? null;
 
     // node:sqlite has no `transaction()` helper, so we wrap explicitly.
     // BEGIN IMMEDIATE acquires the write lock up-front instead of upgrading
@@ -270,7 +348,7 @@ export class ChatHistoryStore {
       for (let i = 0; i < payloads.length; i++) {
         const idx = firstIdx + i;
         const payload = payloads[i];
-        stmts.insertMessage.run(sessionId, idx, JSON.stringify(payload), now);
+        stmts.insertMessage.run(sessionId, idx, appIdCol, JSON.stringify(payload), now);
         if (idx === 0 && !title && isUserMessage(payload)) {
           title = deriveTitle(payload.text);
         }
@@ -290,29 +368,39 @@ export class ChatHistoryStore {
     }
   }
 
+  /**
+   * Record turn completion: bump `turn_count` + `updated_at`, and persist
+   * the runner-resume handle. When `adapter` is provided, `adapter_kind` is
+   * always set; `adapter_session_id` is only overwritten when
+   * `adapter.sessionId` is defined (an undefined session id keeps the
+   * existing handle). When `adapter` is omitted, only the counters move.
+   * Returns the updated meta, or `undefined` if the session is missing /
+   * owned by another user.
+   */
+  noteTurn(
+    sessionId: string,
+    adapter?: { kind: string; sessionId?: string },
+  ): ChatSessionMeta | undefined {
+    const { stmts } = this.ensureReady();
+    const userId = this.currentUserId();
+    const now = Date.now();
+    let res;
+    if (adapter && adapter.sessionId !== undefined) {
+      res = stmts.noteTurnWithAdapter.run(now, adapter.kind, adapter.sessionId, sessionId, userId);
+    } else if (adapter) {
+      res = stmts.noteTurnKindOnly.run(now, adapter.kind, sessionId, userId);
+    } else {
+      res = stmts.noteTurnNoAdapter.run(now, sessionId, userId);
+    }
+    if (Number(res.changes) === 0) return undefined;
+    return this.metaOnly(sessionId, userId);
+  }
+
   private metaOnly(id: string, userId: string): ChatSessionMeta | undefined {
     const { stmts } = this.ensureReady();
-    const row = stmts.metaOnly.get(id, userId) as
-      | {
-          id: string;
-          user_id: string;
-          app_id: string;
-          title: string;
-          created_at: number;
-          updated_at: number;
-          msg_count: number;
-        }
-      | undefined;
+    const row = stmts.metaOnly.get(id, userId) as unknown as SessionRow | undefined;
     if (!row) return undefined;
-    return {
-      id: row.id,
-      userId: row.user_id,
-      appId: row.app_id,
-      title: row.title,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      messageCount: Number(row.msg_count),
-    };
+    return mapSessionRow(row);
   }
 }
 

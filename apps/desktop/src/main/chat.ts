@@ -21,11 +21,10 @@ import type { ChatMode, ChatStreamEvent } from '@centraid/runtime-core';
  * the renderer's existing `centraid:chat:event` protocol so app-chat.ts
  * doesn't need to change.
  *
- * Chat-history (sidebar) still hits the gateway's `/_centraid-chat`
- * surface — same as before — for compatibility with the renderer's
- * persistent-conversations UI. Per-window transcript persistence in
- * `<appsDir>/<appId>/_chat/index.json` is owned by the runtime now;
- * the chat-history sqlite is a separate, renderer-facing log.
+ * Chat-history (sidebar) hits the gateway's `/_centraid-chat` surface for
+ * the renderer's persistent-conversations UI. A chat session IS the chat
+ * window — the session id is the windowId sent to the `_chat` POST route,
+ * and the gateway persists the runner-resume handle on that same row.
  */
 
 // chat-harness imports are lazy so we don't pay the cost on cold boot
@@ -66,10 +65,9 @@ interface ChatSession {
    * Chat mode for this window. `full` is the default — the user's agent
    * reasons over the app with its full toolkit plus our SQL tools. `data`
    * locks the run to centraid_sql_* only (plus per-adapter sandbox flags
-   * that runtime-core's runner applies). Once a window's first turn pins
-   * a mode, subsequent turns inherit it — the gateway-side `_chat/index.json`
-   * is the source of truth; we forward the desired mode but the runtime
-   * may override if the window already exists.
+   * that runtime-core's runner applies). The mode is pinned on the
+   * `chat_sessions` row at create time and is sticky for the session's
+   * lifetime — the gateway reads it off the row, not the per-turn body.
    */
   mode: ChatMode;
   /** Abort handle for the currently streaming turn, or null when idle. */
@@ -333,7 +331,7 @@ export function registerChatIpcHandlers(): void {
       if (!session) throw new Error('chat session not started');
 
       if (!session.chatSessionId) {
-        const created = await historyCreate(session.appId, '');
+        const created = await historyCreate(session.appId, session.mode, '');
         session.chatSessionId = created.id;
         // Rebind the window id to the freshly-created chat session so
         // subsequent reloads of this row resume the same gateway window.

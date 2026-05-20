@@ -20,21 +20,9 @@ export {
   type OpenChatStreamOptions,
   type ChatStreamHandle,
 } from './chat-client.js';
-export {
-  fetchChatHistory,
-  listChatWindows,
-  clearChatWindow,
-  getRunnerStatus,
-  type ChatHistoryResult,
-  type ChatWindowListResult,
-} from './chat-history.js';
+export { getRunnerStatus } from './chat-history.js';
 export type { ChatHarnessConfig } from './types.js';
 
 // Re-export the runtime-core chat types so callers don't have to depend
 // on runtime-core directly to consume the streaming event union.
-export type {
-  ChatMode,
-  ChatStreamEvent,
-  ChatWindowMeta,
-  RunnerStatus,
-} from '@centraid/runtime-core';
+export type { ChatMode, ChatStreamEvent, RunnerStatus } from '@centraid/runtime-core';

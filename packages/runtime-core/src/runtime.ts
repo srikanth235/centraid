@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit pending split into changes-feed / app-routes modules
 import path from 'node:path';
+import os from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Registry, RegistryError } from './registry.js';
 import { VersionStore, VersionStoreError } from './version-store.js';
@@ -73,6 +74,12 @@ export interface RuntimeOptions {
    * and worker subprocesses all run fine without it.
    */
   chatRunner?: ChatRunner;
+  /**
+   * Central scratch base dir for runner-owned chat session files. The
+   * `POST /centraid/<id>/_chat` route passes `<dir>/<windowId>.jsonl` as
+   * `ChatRunInput.sessionFile`. Defaults to an OS-tmpdir path when omitted.
+   */
+  chatRunnerSessionDir?: string;
   /**
    * Optional reader for per-app metadata (name, description). The chat
    * route uses it to populate the `extraSystemPrompt` it hands to the
@@ -196,6 +203,8 @@ export class Runtime {
   readonly chatHistoryStore?: ChatHistoryStore;
   /** Optional per-app chat runner. See `RuntimeOptions.chatRunner`. */
   readonly chatRunner?: ChatRunner;
+  /** Central scratch base dir for runner-owned chat session files. */
+  readonly chatRunnerSessionDir: string;
   /** Optional app-metadata reader for chat extra-system-prompt. */
   readonly appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /** Optional runner-status preflight. */
@@ -220,6 +229,8 @@ export class Runtime {
     this.userStore = opts.userStore;
     this.chatHistoryStore = opts.chatHistoryStore;
     this.chatRunner = opts.chatRunner;
+    this.chatRunnerSessionDir =
+      opts.chatRunnerSessionDir ?? path.join(os.tmpdir(), 'centraid-chat-runner-sessions');
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
     this.withAppUploadLock = makeAppUploadLocks();
@@ -287,6 +298,8 @@ export class Runtime {
     return {
       registry: this.registry,
       runner: this.chatRunner,
+      chatStore: this.chatHistoryStore,
+      chatRunnerSessionDir: this.chatRunnerSessionDir,
       appMeta: this.appMeta,
     };
   }
