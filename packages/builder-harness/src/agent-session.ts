@@ -28,7 +28,7 @@ import { promises as fs } from 'node:fs';
 import {
   runAgentTurn,
   defaultCentraidCliDir,
-  enumerateMcpServers,
+  enumerateHostTools,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
 import type { ChatStreamEvent, AppSchema } from '@centraid/runtime-core';
@@ -323,12 +323,15 @@ function makeStreamTranslator(emit: (event: CentraidAgentEvent) => void): {
 async function buildExtraSystemPrompt(opts: CreateCentraidAgentSessionOptions): Promise<string> {
   const blocks: string[] = [CENTRAID_APPEND_PROMPT, ...buildUiGroundingBlocks()];
 
-  // Available-tools grounding (issue #80 follow-up): ask the host CLI
-  // which MCP servers it has wired up so the agent declares `requires`
+  // Available-tools grounding (issue #80 follow-up): ask the host runtime
+  // which tools it exposes so the agent declares `ctx.tool` + `requires`
   // against reality. Best-effort — a missing/old CLI yields no block.
   try {
-    const servers = await enumerateMcpServers(opts.runnerPrefs.kind, opts.runnerPrefs.binPath);
-    const toolsBlock = buildToolsGroundingBlock(servers);
+    const tools = await enumerateHostTools(opts.runnerPrefs.kind, {
+      cwd: opts.projectDir,
+      ...(opts.runnerPrefs.binPath ? { binPath: opts.runnerPrefs.binPath } : {}),
+    });
+    const toolsBlock = buildToolsGroundingBlock(tools);
     if (toolsBlock) blocks.push(toolsBlock);
   } catch {
     // enumeration is best-effort — proceed without the block

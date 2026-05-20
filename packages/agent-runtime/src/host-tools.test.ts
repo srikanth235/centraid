@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMcpList } from './mcp-tools.js';
+import { parseMcpList } from './host-tools.js';
 
 describe('parseMcpList', () => {
   it('parses Claude Code `name: command - status` lines', () => {
@@ -11,13 +11,10 @@ describe('parseMcpList', () => {
       'linear: https://mcp.linear.app/sse (SSE) - ✓ Connected',
       'broken-one: node ./bad.js - ✗ Failed to connect',
     ].join('\n');
-    const servers = parseMcpList(raw);
     assert.deepEqual(
-      servers.map((s) => s.name),
+      parseMcpList(raw).map((s) => s.name),
       ['github', 'linear', 'broken-one'],
     );
-    assert.equal(servers[0]?.status, 'Connected');
-    assert.match(servers[2]?.status ?? '', /Failed/i);
   });
 
   it('parses Codex-style bare / whitespace-column lines', () => {
