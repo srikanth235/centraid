@@ -1028,6 +1028,13 @@
       // Always stop any in-flight cloud polling before re-rendering; the
       // cloud branch below will restart it if logs is the active section.
       stopCloudLogsPoll();
+      // Code + Cloud are full-focus surfaces — the refined Builder
+      // artboards show no chat pane on these tabs, so the file tree /
+      // cloud rail + content span the whole body. Preview restores the
+      // user's saved chat-pane preference.
+      const chatVisible = tab === 'preview' ? builderChatOpen : false;
+      main.dataset.chat = chatVisible ? 'open' : 'closed';
+      setShellChatPaneOpen(chatVisible);
       if (tab === 'preview') void renderPreview();
       else if (tab === 'cloud') renderCloud();
       else void renderCode();
@@ -1396,7 +1403,7 @@
         treeWrap.innerHTML = '';
 
         const searchInput = el('input', {
-          class: 'code-search',
+          class: 'code-search-input',
           placeholder: 'Search code',
           value: search,
         }) as HTMLInputElement;
@@ -1404,13 +1411,22 @@
           search = searchInput.value.trim().toLowerCase();
           drawTree();
           // Keep the input focused after re-render.
-          const next = treeWrap.querySelector('.code-search') as HTMLInputElement | null;
+          const next = treeWrap.querySelector('.code-search-input') as HTMLInputElement | null;
           if (next) {
             next.focus();
             next.setSelectionRange(search.length, search.length);
           }
         });
-        treeWrap.append(searchInput);
+        treeWrap.append(
+          el('div', { class: 'code-search' }, [
+            el('span', {
+              class: 'code-search-icon',
+              trustedHtml: Icon.Search({ size: 13 }),
+            }),
+            searchInput,
+            el('span', { class: 'code-search-kbd' }, '⌘P'),
+          ]),
+        );
 
         const list = el('div', { class: 'code-tree-list' });
         const visible = filterTree(tree, search);
@@ -1520,12 +1536,16 @@
         treeWrap.append(list);
       };
 
-      // ---- Editable editor (tabs + head + surface + status) ----
-      const tabsBar = el('div', { class: 'code-tabs' });
-      const headBar = el('div', { class: 'code-head' });
+      // ---- Editable editor. One tab strip carries the open-file tabs
+      // plus a trailing Diff / Save / ⋯ action cluster — the refined
+      // artboard has no separate file-info head — then the editor
+      // surface and the status strip. ----
+      const tabStrip = el('div', { class: 'code-tab-strip' });
+      const tabActions = el('div', { class: 'code-tab-actions' });
+      const tabsBar = el('div', { class: 'code-tabs' }, [tabStrip, tabActions]);
       const editorHost = el('div', { class: 'code-editor-host' });
       const statusBar = el('div', { class: 'code-status' });
-      workspace.append(tabsBar, headBar, editorHost, statusBar);
+      workspace.append(tabsBar, editorHost, statusBar);
 
       // Bottom status strip — "N lines · KB · autosaving · line L col C ·
       // LANG" (matches RefinedBuilderCode). `caret` is refreshed live by
@@ -1609,7 +1629,7 @@
       };
 
       function drawTabs(): void {
-        tabsBar.innerHTML = '';
+        tabStrip.innerHTML = '';
         for (const p of codeOpenTabs) {
           const buf = codeBuffers.get(p);
           const dirty = !!buf && buf.current !== buf.original;
@@ -1646,35 +1666,20 @@
               onClick: () => closeTab(p),
             }),
           );
-          tabsBar.append(tab);
+          tabStrip.append(tab);
         }
       }
 
+      // Trailing action cluster in the tab strip — a Diff toggle, a
+      // per-file Save, and a ⋯ overflow (Save all / Revert / Open
+      // folder). Redrawn whenever the active file or dirty state changes.
       function drawHead(): void {
-        headBar.innerHTML = '';
+        tabActions.innerHTML = '';
         const p = codeActivePath;
         const buf = p ? codeBuffers.get(p) : undefined;
         if (!p || !buf) return;
-        const lang = languageHint(p);
-        const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
-        const lineCount = buf.current.split('\n').length;
-        const bytes = new TextEncoder().encode(buf.current).byteLength;
         const dirty = buf.current !== buf.original;
         const nDirty = dirtyPaths().length;
-
-        const titleRow = el('div', { class: 'code-head-title-row' }, [
-          ...(dir ? [el('span', { class: 'code-viewer-dir' }, dir)] : []),
-          el('span', { class: 'code-viewer-name' }, basename(p)),
-          el('span', { class: 'code-lang-pill', 'data-lang': lang }, LANG_DISPLAY[lang] ?? 'TXT'),
-          ...(dirty ? [el('span', { class: 'code-dirty-badge' }, 'Unsaved')] : []),
-        ]);
-        const meta = el(
-          'span',
-          { class: 'code-viewer-meta' },
-          `${lineCount} ${lineCount === 1 ? 'line' : 'lines'} · ${formatBytes(bytes)}` +
-            (nDirty > 0 ? ` · ${nDirty} unsaved file${nDirty === 1 ? '' : 's'}` : ''),
-        );
-        const titleStack = el('div', { class: 'code-viewer-title' }, [titleRow, meta]);
 
         const diffBtn = el(
           'button',
@@ -1742,10 +1747,7 @@
         });
         const overflowWrap = el('div', { class: 'code-overflow-wrap' }, [overflow, menu]);
 
-        headBar.append(
-          titleStack,
-          el('div', { class: 'code-viewer-actions' }, [diffBtn, saveBtn, overflowWrap]),
-        );
+        tabActions.append(diffBtn, saveBtn, overflowWrap);
       }
 
       function drawEditorHost(): void {
@@ -2049,6 +2051,9 @@
                     ? 'Cron-scheduled actions registered for this app. Toggle, run now, or remove them.'
                     : 'View and manage the data stored in your app.';
 
+        // The Overview surface opens straight into its hero strip — the
+        // refined artboard has no "Overview" page heading — so the stage
+        // head is rendered for every section except Overview.
         const head = el('div', { class: 'cloud-stage-head' });
         const headLeft = el('div', {});
         headLeft.innerHTML = `<h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p>`;
@@ -2082,7 +2087,7 @@
           refreshBtn.innerHTML = `${RefreshIcon(13)}<span>Refresh</span>`;
           head.append(refreshBtn);
         }
-        stage.append(head);
+        if (active !== 'overview') stage.append(head);
 
         if (active === 'overview') {
           drawOverview();
@@ -2119,39 +2124,74 @@
         // cards. Matches the journal-in-shell treatment.
         stage.classList.add('cloud-stage-atmospheric');
 
-        // §B6 — hero URL strip. The live deployment URL is the headline
-        // fact of the Cloud surface, so it gets a full-width strip above
-        // the stat tiles rather than competing as one card among many.
+        // Active version — drives both the hero eyebrow ("LIVE · V1 ·
+        // PUBLISHED 3H AGO") and the Versions stat tile's date sub-line.
+        const versionList =
+          versionsCache && versionsCache !== 'pending' && versionsCache !== 'error'
+            ? versionsCache.versions
+            : [];
+        const activeVersionId =
+          versionsCache && versionsCache !== 'pending' && versionsCache !== 'error'
+            ? versionsCache.activeVersion
+            : undefined;
+        const activeVersion =
+          versionList.find((v) => v.current || v.versionId === activeVersionId) ?? versionList[0];
+
+        // ---- Hero strip — the live deployment URL is the headline fact
+        // of the Cloud surface. An icon tile + status eyebrow + mono URL
+        // on the left; Open / Copy / Share actions on the trailing edge.
         const hero = el('div', { class: 'cloud-hero', 'data-live': String(!!liveUrl) });
+        const heroTile = el('div', {
+          class: 'cloud-hero-tile',
+          'data-status': liveUrl ? 'live' : 'off',
+          trustedHtml: Icon.Eye({ size: 21 }),
+        });
         if (liveUrl) {
           const url = liveUrl;
+          const verLabel = activeVersion?.declaredVersion
+            ? ` · V${activeVersion.declaredVersion}`
+            : '';
+          const whenLabel = activeVersion
+            ? ` · PUBLISHED ${relativeWhen(activeVersion.uploadedAt).toUpperCase()}`
+            : '';
+          const copyUrl = (msg: string): void => {
+            void navigator.clipboard
+              .writeText(url)
+              .then(() => showToast(msg))
+              .catch(() => showToast('Copy failed'));
+          };
+          const heroBtn = (glyph: string, label: string, onClick: () => void): HTMLElement =>
+            el('button', {
+              class: 'cloud-hero-btn',
+              type: 'button',
+              trustedHtml: `${glyph}<span>${label}</span>`,
+              onClick,
+            });
           hero.append(
-            el('span', { class: 'cloud-hero-dot', 'data-status': 'live' }),
+            heroTile,
             el('div', { class: 'cloud-hero-meta' }, [
-              el('span', { class: 'cloud-hero-eyebrow' }, 'Live deployment'),
+              el('div', { class: 'cloud-hero-eyebrow' }, [
+                el('span', { class: 'cloud-hero-dot', 'data-status': 'live' }),
+                el('span', {}, `LIVE${verLabel}${whenLabel}`),
+              ]),
               el('span', { class: 'cloud-hero-url' }, formatPreviewUrl(url)),
             ]),
-            el(
-              'button',
-              {
-                class: 'cloud-stat-copy cloud-hero-copy',
-                type: 'button',
-                trustedHtml: `${Icon.Copy({ size: 12 })}<span>Copy URL</span>`,
-                onClick: () => {
-                  void navigator.clipboard
-                    .writeText(url)
-                    .then(() => showToast('Copied URL'))
-                    .catch(() => showToast('Copy failed'));
-                },
-              },
-              undefined,
-            ),
+            el('div', { class: 'cloud-hero-actions' }, [
+              heroBtn(Icon.Eye({ size: 13 }), 'Open', () => {
+                window.open(url, '_blank');
+              }),
+              heroBtn(Icon.Copy({ size: 13 }), 'Copy', () => copyUrl('Copied URL')),
+              heroBtn(Icon.Share({ size: 13 }), 'Share', () => copyUrl('Share link copied')),
+            ]),
           );
         } else {
           hero.append(
-            el('span', { class: 'cloud-hero-dot', 'data-status': 'off' }),
+            heroTile,
             el('div', { class: 'cloud-hero-meta' }, [
-              el('span', { class: 'cloud-hero-eyebrow' }, 'Not deployed'),
+              el('div', { class: 'cloud-hero-eyebrow' }, [
+                el('span', { class: 'cloud-hero-dot', 'data-status': 'off' }),
+                el('span', {}, 'NOT DEPLOYED'),
+              ]),
               el(
                 'span',
                 { class: 'cloud-hero-url cloud-hero-url--muted' },
@@ -2162,48 +2202,55 @@
         }
         stage.append(hero);
 
+        // ---- Status — four stat tiles (Schema · Tables · Versions ·
+        // Gateway) under a caps section label. ----
+        stage.append(el('div', { class: 'cloud-section-label' }, 'Status'));
         const grid = el('div', { class: 'cloud-stat-grid' });
+        const statCard = (label: string, body: string): HTMLElement => {
+          const card = el('div', { class: 'cloud-stat-card' });
+          card.innerHTML = `<div class="cloud-stat-eyebrow"><span>${escapeHtml(label)}</span></div>${body}`;
+          return card;
+        };
 
-        const versionCard = el('div', { class: 'cloud-stat-card' });
-        if (versionsCache === 'pending' || versionsCache === undefined) {
-          versionCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Versions</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
-        } else if (versionsCache === 'error') {
-          versionCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Versions</span></div><div class="cloud-stat-value cloud-stat-muted">—</div>';
-        } else {
-          const v = versionsCache;
-          versionCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Versions</span></div><div class="cloud-stat-value">${v.versions.length}</div><div class="cloud-stat-sub">${v.activeVersion ? `Active: ${escapeHtml(v.activeVersion.slice(0, 18))}…` : 'No active version'}</div>`;
-        }
-        grid.append(versionCard);
-
-        const tableCard = el('div', { class: 'cloud-stat-card' });
+        // Schema version.
+        let schemaBody: string;
         if (schemaCache === 'pending' || schemaCache === undefined) {
-          tableCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Tables</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+          schemaBody = '<div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+        } else if (schemaCache === 'error') {
+          schemaBody = `<div class="cloud-stat-value cloud-stat-muted">Unavailable</div><div class="cloud-stat-sub">${escapeHtml(schemaError ?? 'gateway error')}</div>`;
+        } else if (!schemaCache) {
+          schemaBody =
+            '<div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">Publish to create the database</div>';
+        } else {
+          schemaBody = `<div class="cloud-stat-value">v${schemaCache.schemaVersion}</div><div class="cloud-stat-sub">${schemaCache.schemaVersion === 1 ? 'Never migrated' : 'Up to date'}</div>`;
+        }
+        grid.append(statCard('Schema', schemaBody));
+
+        // Tables.
+        let tableBody: string;
+        if (schemaCache === 'pending' || schemaCache === undefined) {
+          tableBody = '<div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
         } else if (!schemaCache || schemaCache === 'error') {
-          tableCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Tables</span></div><div class="cloud-stat-value cloud-stat-muted">—</div>';
+          tableBody = '<div class="cloud-stat-value cloud-stat-muted">—</div>';
         } else {
           const s = schemaCache;
-          tableCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Tables</span></div><div class="cloud-stat-value">${s.tables.length}</div><div class="cloud-stat-sub">${s.indexes.length} indexes · ${s.views.length} views</div>`;
+          tableBody = `<div class="cloud-stat-value">${s.tables.length}</div><div class="cloud-stat-sub">${s.indexes.length} index${s.indexes.length === 1 ? '' : 'es'} · ${s.views.length} view${s.views.length === 1 ? '' : 's'}</div>`;
         }
-        grid.append(tableCard);
+        grid.append(statCard('Tables', tableBody));
 
-        // ---- Row 2: Schema · Last activity · Gateway (span 2) ----
-        const schemaCard = el('div', { class: 'cloud-stat-card' });
-        if (schemaCache === 'pending' || schemaCache === undefined) {
-          schemaCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
-        } else if (schemaCache === 'error') {
-          schemaCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value cloud-stat-muted">Unavailable</div><div class="cloud-stat-sub">${escapeHtml(schemaError ?? 'gateway error')}</div>`;
-        } else if (!schemaCache) {
-          schemaCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">Publish to create the database</div>';
+        // Versions.
+        let versionBody: string;
+        if (versionsCache === 'pending' || versionsCache === undefined) {
+          versionBody = '<div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+        } else if (versionsCache === 'error') {
+          versionBody = '<div class="cloud-stat-value cloud-stat-muted">—</div>';
         } else {
-          schemaCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value">v${schemaCache.schemaVersion}</div><div class="cloud-stat-sub">${schemaCache.schemaVersion === 1 ? 'Never migrated' : 'Up to date'}</div>`;
+          const sub = activeVersion
+            ? `active · ${activeVersion.uploadedAt.slice(0, 10)}`
+            : 'No active version';
+          versionBody = `<div class="cloud-stat-value">${versionsCache.versions.length}</div><div class="cloud-stat-sub">${escapeHtml(sub)}</div>`;
         }
-        grid.append(schemaCard);
+        grid.append(statCard('Versions', versionBody));
 
         // Gateway reachability — derived from whether either cache resolved
         // successfully. Avoids a separate ping while still giving the user
@@ -2236,10 +2283,11 @@
 
         stage.append(grid);
 
-        // §B6 — activity feed. The version history reads as a chronological
-        // deploy log: newest publish first, the active version flagged.
+        // ---- Recent activity — the version history reads as a
+        // chronological deploy log: newest publish first, each row an
+        // icon tile + title (+ Active flag) + a mono "Builder · when". ----
+        stage.append(el('div', { class: 'cloud-section-label' }, 'Recent activity'));
         const feed = el('div', { class: 'cloud-feed' });
-        feed.append(el('div', { class: 'cloud-feed-head' }, 'Activity'));
         if (versionsCache === 'pending' || versionsCache === undefined) {
           feed.append(el('div', { class: 'cloud-feed-empty' }, 'Loading activity…'));
         } else if (versionsCache === 'error' || versionsCache.versions.length === 0) {
@@ -2257,26 +2305,19 @@
           for (const v of ordered) {
             const isActive = v.current || v.versionId === versionsCache.activeVersion;
             const row = el('div', { class: 'cloud-feed-row' }, [
-              el('span', {
-                class: 'cloud-feed-dot',
-                'data-active': String(isActive),
+              el('div', {
+                class: 'cloud-feed-tile',
+                trustedHtml: Icon.Save({ size: 14 }),
               }),
-              el('div', { class: 'cloud-feed-meta' }, [
-                el('div', { class: 'cloud-feed-title-row' }, [
-                  el(
-                    'span',
-                    { class: 'cloud-feed-title' },
-                    v.declaredVersion ? `Published v${v.declaredVersion}` : 'Published',
-                  ),
-                  ...(isActive ? [el('span', { class: 'cloud-feed-live' }, 'Active')] : []),
-                ]),
+              el('div', { class: 'cloud-feed-title-row' }, [
                 el(
                   'span',
-                  { class: 'cloud-feed-sub' },
-                  `${v.files} file${v.files === 1 ? '' : 's'} · ${formatBytes(v.bytes)} · ${v.versionId.slice(0, 22)}`,
+                  { class: 'cloud-feed-title' },
+                  v.declaredVersion ? `Published v${v.declaredVersion}` : 'Published',
                 ),
+                ...(isActive ? [el('span', { class: 'cloud-feed-live' }, 'Active')] : []),
               ]),
-              el('span', { class: 'cloud-feed-when' }, relativeWhen(v.uploadedAt)),
+              el('span', { class: 'cloud-feed-when' }, `Builder · ${relativeWhen(v.uploadedAt)}`),
             ]);
             feed.append(row);
           }
@@ -3720,6 +3761,10 @@
       /* assigned below */
     };
     const toggleChatPane = (): void => {
+      // The chat pane only exists on the Preview surface — Code + Cloud
+      // are full-focus surfaces with no chat — so the toggle is inert
+      // there (renderRight forces the pane hidden on those tabs).
+      if (tab !== 'preview') return;
       builderChatOpen = !builderChatOpen;
       Store.set('builder.chatPaneOpen', builderChatOpen);
       main.dataset.chat = builderChatOpen ? 'open' : 'closed';

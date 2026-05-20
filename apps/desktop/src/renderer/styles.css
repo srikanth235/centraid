@@ -2757,22 +2757,48 @@ textarea {
 }
 .code-search {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 12px;
-  padding: 8px 12px;
-  border-radius: 999px;
+  padding: 7px 9px;
+  border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--bg-sunken);
+  transition: border-color 0.15s;
+}
+.code-search:focus-within {
+  border-color: var(--ink-4, var(--ink-3));
+  background: var(--bg-elev);
+}
+.code-search-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-3);
+}
+.code-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
   color: var(--ink);
   font-size: 12px;
   outline: none;
-  transition: border-color 0.15s;
 }
-.code-search::placeholder {
+.code-search-input::placeholder {
   color: var(--ink-3);
 }
-.code-search:focus {
-  border-color: var(--ink-4, var(--ink-3));
+.code-search-kbd {
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
   background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 5px;
 }
 .code-tree-list {
   flex: 1;
@@ -2853,11 +2879,27 @@ textarea {
   flex: none;
   display: flex;
   align-items: stretch;
-  gap: 0;
-  padding: 0 8px 0 14px;
+  gap: 10px;
+  padding: 0 10px 0 14px;
   background: var(--bg);
   border-bottom: 0.5px solid var(--line);
+}
+.code-tab-strip {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
+}
+.code-tab-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.code-tab-actions .tiny-btn[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
 }
 .code-tab {
   display: inline-flex;
@@ -2925,36 +2967,6 @@ textarea {
   height: 7px;
   border-radius: 50%;
   margin: 0 4px;
-}
-.code-head {
-  flex: none;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-elev);
-}
-.code-dirty-badge {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-}
-.code-viewer-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-}
-.code-viewer-actions .tiny-btn[data-active='true'] {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
 }
 .code-overflow-wrap {
   position: relative;
@@ -3223,24 +3235,35 @@ textarea {
   z-index: -1;
 }
 .cloud-stat-grid {
-  /* Fixed 4-col grid so a span-2 live URL card and a span-2 gateway card
-     line up across rows. Cards drop to single-column under ~640px. */
+  /* Fixed 4-col grid — Schema · Tables · Versions · Gateway. The grid
+     sits directly under its "Status" section label so it carries no
+     top margin of its own. Cards drop to single-column under ~720px. */
   grid-template-columns: repeat(4, 1fr);
+  margin-top: 0;
 }
 @media (max-width: 720px) {
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
-/* §B6 — hero URL strip. Full-width band above the stat tiles carrying
-   the live deployment URL — the headline fact of the Cloud surface. */
+/* Caps section label — "Status" / "Recent activity" headings that sit
+   above the stat grid and the activity feed on the Cloud Overview. */
+.cloud-section-label {
+  margin: 26px 0 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+/* Hero strip — full-width deployment band: an icon tile, the status
+   eyebrow + mono URL, and Open / Copy / Share actions trailing. */
 .cloud-hero {
-  margin-top: 20px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 12px;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--bg-elev);
 }
@@ -3248,16 +3271,33 @@ textarea {
   border-color: hsla(101 28% 42% / 0.28);
   background: linear-gradient(180deg, hsla(101 28% 42% / 0.06), transparent 70%), var(--bg-elev);
 }
+.cloud-hero-tile {
+  flex: none;
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink-3);
+}
+.cloud-hero-tile[data-status='live'] {
+  background: hsla(101 28% 42% / 0.16);
+  color: var(--c-forest, #5c8a4e);
+}
+.cloud-hero-tile svg {
+  display: block;
+}
 .cloud-hero-dot {
   flex: none;
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--ink-4);
 }
 .cloud-hero-dot[data-status='live'] {
   background: var(--c-forest, #5c8a4e);
-  box-shadow: 0 0 0 4px hsla(101 28% 42% / 0.18);
+  box-shadow: 0 0 0 3px hsla(101 28% 42% / 0.18);
 }
 .cloud-hero-dot[data-status='off'] {
   background: var(--ink-4);
@@ -3265,20 +3305,28 @@ textarea {
 .cloud-hero-meta {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
   min-width: 0;
   flex: 1;
 }
 .cloud-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  font-weight: 700;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
+  color: var(--c-forest, #5c8a4e);
+}
+.cloud-hero[data-live='false'] .cloud-hero-eyebrow {
   color: var(--ink-3);
 }
 .cloud-hero-url {
   font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3286,33 +3334,50 @@ textarea {
 }
 .cloud-hero-url--muted {
   color: var(--ink-3);
+  font-weight: 400;
 }
-.cloud-hero-copy {
-  margin-top: 0;
+.cloud-hero-actions {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cloud-hero-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-/* §B6 — activity feed. Chronological deploy log under the stat tiles. */
-.cloud-feed {
-  margin-top: 24px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--bg-sunken);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+.cloud-hero-btn:hover {
+  background: var(--bg-elev);
+  color: var(--ink);
+}
+.cloud-hero-btn svg {
+  display: block;
+}
+/* Activity feed — chronological deploy log under the "Recent activity"
+   label: each row an icon tile, a title (+ Active flag), and a mono
+   "Builder · <when>" on the trailing edge. */
+.cloud-feed {
+  border: 1px solid var(--line);
+  border-radius: 14px;
   background: var(--bg-elev);
   overflow: hidden;
 }
-.cloud-feed-head {
-  padding: 12px 16px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  border-bottom: 1px solid var(--line);
-}
 .cloud-feed-empty {
-  padding: 20px 16px;
+  padding: 18px 16px;
   font-size: 12.5px;
   color: var(--ink-3);
 }
@@ -3320,34 +3385,31 @@ textarea {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--line);
 }
 .cloud-feed-row:last-child {
   border-bottom: 0;
 }
-.cloud-feed-dot {
+.cloud-feed-tile {
   flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ink-4);
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: hsla(101 28% 42% / 0.14);
+  color: var(--c-forest, #5c8a4e);
 }
-.cloud-feed-dot[data-active='true'] {
-  background: var(--c-forest, #5c8a4e);
-  box-shadow: 0 0 0 3px hsla(101 28% 42% / 0.18);
-}
-.cloud-feed-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
+.cloud-feed-tile svg {
+  display: block;
 }
 .cloud-feed-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 .cloud-feed-title {
   font-size: 13px;
@@ -3364,16 +3426,9 @@ textarea {
   background: hsla(101 28% 42% / 0.16);
   color: var(--c-forest, #5c8a4e);
 }
-.cloud-feed-sub {
-  font-size: 11px;
-  color: var(--ink-3);
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .cloud-feed-when {
   flex: none;
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
   font-size: 11.5px;
   color: var(--ink-3);
 }
@@ -3434,68 +3489,8 @@ textarea {
   color: var(--ink);
 }
 
-/* ---------- Code view: language pill, stacked metadata, lang dots,
-              tree groups, active-row accent stripe ---------- */
-.code-viewer-title {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-.code-head-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.code-viewer-dir {
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.code-viewer-name {
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.code-lang-pill {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 2px 7px;
-  border-radius: 5px;
-  text-transform: uppercase;
-  background: hsla(213 70% 60% / 0.14);
-  color: var(--c-blue, #4f8fe0);
-}
-.code-lang-pill[data-lang='css'] {
-  background: hsla(28 70% 55% / 0.14);
-  color: var(--c-orange, #e08c45);
-}
-.code-lang-pill[data-lang='js'],
-.code-lang-pill[data-lang='ts'] {
-  background: hsla(48 60% 55% / 0.16);
-  color: var(--c-yellow, #d4b445);
-}
-.code-lang-pill[data-lang='json'] {
-  background: var(--bg-sunken);
-  color: var(--ink-3);
-}
-.code-lang-pill[data-lang='md'] {
-  background: hsla(258 50% 60% / 0.16);
-  color: var(--c-violet, #7c5bd9);
-}
-.code-lang-pill[data-lang='other'] {
-  background: var(--bg-sunken);
-  color: var(--ink-3);
-}
-.code-viewer-meta {
-  font-size: 11.5px;
-  color: var(--ink-3);
-  letter-spacing: 0.01em;
-}
-
+/* ---------- Code view: lang dots, tree groups, active-row accent stripe
+              ---------- */
 /* Tree — group headers + colored dot replaces the per-file glyph + a 2px
    accent stripe on the active row instead of a heavy background fill. */
 .code-tree-group-head {

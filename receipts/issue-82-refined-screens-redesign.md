@@ -27,6 +27,33 @@ applies the screen-level redesign, landed as one commit per step.
 
 ## What changed
 
+**2026-05-20 — Builder Cloud + Code surfaces pixel pass.** The Cloud
+Overview and the Code workspace were taken to a pixel match of the
+refined artboards. Cloud Overview (`drawOverview`): the surface no
+longer renders a "Overview" stage head — it opens straight into the
+hero strip. The hero gained a leading icon tile and a trailing
+Open / Copy / Share action cluster (`cloud-hero-tile`,
+`cloud-hero-actions`, `cloud-hero-btn`); its eyebrow now reads the
+live status as `LIVE · V<n> · PUBLISHED <when>` (derived from the
+active version record) instead of a static "Live deployment". A caps
+`cloud-section-label` ("Status" / "Recent activity") sits above the
+stat grid and the activity feed. The four stat tiles were reordered to
+Schema · Tables · Versions · Gateway, and the Versions tile's sub-line
+became `active · <date>`. The activity feed dropped its in-card header
+(the label moved out), and each row is now an icon tile + title
+(+ Active flag) + a mono `Builder · <when>` — the `cloud-feed-dot` /
+`-head` / `-sub` / `-meta` elements were retired. Code workspace
+(`renderCode`): the search field became a bordered row with a leading
+glyph and a `⌘P` kbd chip (`code-search-icon` / `-input` / `-kbd`).
+The standalone `code-head` info bar (file name + lang pill + Unsaved
+badge + line/byte meta — all already shown by the active tab and the
+status strip) was removed; its Diff / Save / ⋯ actions moved into a
+trailing `code-tab-actions` cluster inside the tab strip, so the
+workspace is now tab-strip → editor → status strip. The orphaned
+`.code-head`, `.code-head-title-row`, `.code-viewer-*`, `.code-lang-pill*`
+and `.code-dirty-badge` CSS was removed. Verified via Electron
+screenshots of both surfaces.
+
 **2026-05-20 — Discover page adopts the shared card grid.** The
 Discover template gallery now renders the same `.cd-app-card`
 RefinedAppTile and 6-column uniform-height grid as the Home shelf.
