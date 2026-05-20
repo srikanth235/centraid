@@ -193,12 +193,15 @@ function prepare(db: DatabaseSync): PreparedStatements {
     getRun: db.prepare(`SELECT * FROM runs WHERE run_id = ?`),
     listRunsByName: db.prepare(`
       SELECT * FROM runs
-      WHERE automation_name = ? AND (? IS NULL OR started_at >= ?)
+      WHERE automation_name = ?
+        AND (? IS NULL OR started_at >= ?)
+        AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT ?
     `),
     listRunsAll: db.prepare(`
       SELECT * FROM runs
       WHERE (? IS NULL OR started_at >= ?)
+        AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT ?
     `),
     lastRunByName: db.prepare(`
@@ -312,14 +315,22 @@ export class AutomationRunsStore {
     const { stmts } = this.ensureReady();
     const limit = opts.limit ?? 50;
     const since = opts.since ?? null;
-    const rows = (
+    // `status` is pushed into the SQL predicate (not filtered after LIMIT)
+    // so `{ status: 'ok', limit: N }` returns N successful runs even when
+    // recent failures would otherwise crowd them out of the window.
+    const okFilter = opts.status === undefined ? null : opts.status === 'ok' ? 1 : 0;
+    const rows =
       opts.name !== undefined
-        ? (stmts.listRunsByName.all(opts.name, since, since, limit) as unknown as RawRun[])
-        : (stmts.listRunsAll.all(since, since, limit) as unknown as RawRun[])
-    ).map(runFromRaw);
-    if (opts.status === undefined) return rows;
-    const wantOk = opts.status === 'ok';
-    return rows.filter((r) => r.ok === wantOk);
+        ? (stmts.listRunsByName.all(
+            opts.name,
+            since,
+            since,
+            okFilter,
+            okFilter,
+            limit,
+          ) as unknown as RawRun[])
+        : (stmts.listRunsAll.all(since, since, okFilter, okFilter, limit) as unknown as RawRun[]);
+    return rows.map(runFromRaw);
   }
 
   lastRun(name: string, status?: 'ok' | 'error'): AutomationRunRow | undefined {

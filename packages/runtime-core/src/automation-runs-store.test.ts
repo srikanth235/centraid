@@ -202,6 +202,30 @@ describe('AutomationRunsStore', () => {
     store.close();
   });
 
+  it('listRuns pushes status into SQL so the limit window does not hide older oks', () => {
+    const { store } = newStore();
+    // r0,r1 succeed (oldest); r2,r3,r4 fail (newest).
+    for (let i = 0; i < 5; i++) {
+      const id = `r${i}`;
+      store.insertRun({
+        runId: id,
+        automationName: 'win',
+        triggerKind: 'scheduled',
+        startedAt: 100 + i,
+      });
+      store.finishRun({ runId: id, endedAt: 200 + i, ok: i < 2 });
+    }
+    // The two newest runs are both failures — an after-LIMIT filter would
+    // return 0; the SQL predicate must still surface the 2 older oks.
+    const oks = store.listRuns({ name: 'win', status: 'ok', limit: 2 });
+    assert.equal(oks.length, 2);
+    assert.deepEqual(
+      oks.map((r) => r.runId),
+      ['r1', 'r0'],
+    );
+    store.close();
+  });
+
   it('prune by count keeps newest N runs and cascades nodes', () => {
     const { store } = newStore();
     for (let i = 0; i < 10; i++) {

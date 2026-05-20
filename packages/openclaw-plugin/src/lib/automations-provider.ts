@@ -213,19 +213,26 @@ async function executeAutomation(
       `centraid-mock: app "${dispatch.appId}" is not registered with the runtime`,
     );
   }
+  // The openclaw gateway is long-lived — close the per-fire SQLite
+  // handle once the fire (incl. the onFailure cascade) is done.
   const runsStore = new AutomationRunsStore(automationsDbPath(appDir));
-  const outcome = await runOpenclawFire(
-    {
-      appId: dispatch.appId,
-      appDir,
-      automationName: dispatch.automationName,
-      triggerKind: 'scheduled',
-      failureDepth: 0,
-      runsStore,
-      resolveAppDir: opts.resolveAppDir,
-    },
-    log,
-  );
+  let outcome;
+  try {
+    outcome = await runOpenclawFire(
+      {
+        appId: dispatch.appId,
+        appDir,
+        automationName: dispatch.automationName,
+        triggerKind: 'scheduled',
+        failureDepth: 0,
+        runsStore,
+        resolveAppDir: opts.resolveAppDir,
+      },
+      log,
+    );
+  } finally {
+    runsStore.close();
+  }
   if (!outcome.ok) {
     log.error(`automation ${dispatch.appId}/${dispatch.automationName} failed: ${outcome.error}`);
     return errorMessage(`automation failed: ${outcome.error ?? 'unknown error'}`);
