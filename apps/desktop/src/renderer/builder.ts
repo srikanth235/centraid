@@ -59,11 +59,9 @@
   // pills when the agent wrote files. Page outline + a small pen overlay.
   const FileEditIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="14 3 14 9 20 9"/><path d="M18 13l3 3-5 5h-3v-3z"/></svg>`;
-  // Cloud-tab icons. The Cloud tab is a Lovable-style data-browser panel
-  // that lives next to Preview/Code; these glyphs label the tab itself and
-  // the left-rail sub-sections (Database, Users, Storage, etc.).
-  const CloudIcon = (size = 13): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`;
+  // Cloud-surface icons. The Cloud surface is a Lovable-style data-browser
+  // panel reached from the sidebar; these glyphs label its left-rail
+  // sub-sections (Database, Users, Storage, etc.).
   const CloudOverviewIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`;
   const DatabaseIcon = (size = 14): string =>
@@ -425,10 +423,11 @@
     // Mode tabs render as icon-only pills by default; the active tab expands
     // to icon+label (Lovable pattern). Each entry's third field is a render
     // fn so we can mix design-token icons (Eye, Code) with inline SVGs (Cloud).
+    // §B3 — the pane toggle is Preview/Code only. Cloud is a sidebar
+    // destination (§G2), reached via the expanded app's Cloud child.
     const tabDefs: [Tab, string, () => string][] = [
       ['preview', 'Preview', () => Icon.Eye({ size: 13 })],
       ['code', 'Code', () => Icon.Code({ size: 13 })],
-      ['cloud', 'Cloud', () => CloudIcon(13)],
     ];
 
     // History toggle — swaps the chat pane between live chat and version
@@ -453,9 +452,8 @@
 
     // Device segmented control — toggles the preview iframe between
     // mobile / tablet / desktop framing. Lives in the right-pane toolbar
-    // and is hidden when the active tab isn't Preview (via .urlbar-slot
-    // data-visible). The old URL address bar that used to sit beside it
-    // has been removed — the preview iframe is the source of truth.
+    // (`rb-toolbar`) and is hidden when the active tab isn't Preview
+    // (gated by `.rb-toolbar[data-tab]`).
     const deviceMobileBtn = el('button', {
       'aria-label': 'Mobile',
       class: 'urlbar-device-btn',
@@ -502,7 +500,26 @@
       deviceTabletBtn,
       deviceDesktopBtn,
     ]);
-    const urlbarSlot = el('div', { class: 'urlbar-slot' }, [devicePill]);
+
+    // §B3 — preview URL pill. A sync-state dot, the trimmed preview URL in
+    // mono, and a reload button. The full URL rides on the pill's `title`
+    // attribute; renderPreview() keeps the text + dot state in sync.
+    const previewUrlDot = el('span', { class: 'rb-url-dot', 'data-state': 'idle' });
+    const previewUrlText = el('span', { class: 'rb-url-text' }, 'No preview');
+    const previewRefreshBtn = el('button', {
+      'aria-label': 'Reload preview',
+      class: 'rb-url-refresh',
+      title: 'Reload preview',
+      trustedHtml: RefreshIcon(13),
+      onClick: () => {
+        if (tab === 'preview') renderRight();
+      },
+    });
+    const previewUrlPill = el('div', { class: 'rb-url' }, [
+      previewUrlDot,
+      previewUrlText,
+      previewRefreshBtn,
+    ]);
 
     // Inline-editable title + description. Edits persist to
     // `app.json#{name,description}` via the updateProjectMeta IPC and also
@@ -630,7 +647,7 @@
       deviceMobileBtn.dataset.active = String(previewDevice === 'mobile');
       deviceTabletBtn.dataset.active = String(previewDevice === 'tablet');
       deviceDesktopBtn.dataset.active = String(previewDevice === 'desktop');
-      urlbarSlot.dataset.visible = String(tab === 'preview');
+      rbToolbar.dataset.tab = tab;
     }
 
     // Trim noisy URL prefixes for display while preserving the full URL on
@@ -691,24 +708,27 @@
     // data-sidebar drives the .builder-body grid columns (open vs collapsed).
     const body = el('div', { class: 'builder-body', 'data-sidebar': 'open' });
     const chatPane = el('div', { class: 'chat-pane' });
-    // The right pane is now a flat container for the canvas — the mode
-    // tabs + device pill (formerly in `.right-pane-toolbar`) ride in the
-    // window chrome row (cd-tl-main) as `titlebarCenter`. Backdrop classes
-    // (`preview-pane`, `has-phone`) stay on `rightPane` so the dotted wall
-    // fills the column. Render functions write into `rightPaneContent`.
+    // The right pane carries its own toolbar (`rb-toolbar`) above the
+    // canvas. Backdrop classes (`preview-pane`, `has-phone`) stay on
+    // `rightPane` so the dotted wall fills the column. Render functions
+    // write into `rightPaneContent`.
     const rightPane = el('div', { class: 'right-pane' });
+    // §B3 — right-pane toolbar. Owns the Preview/Code toggle, the preview
+    // URL pill, and the viewport device pill. The handover puts these in a
+    // toolbar above the canvas — sitting with the surface they control —
+    // rather than in the window chrome row. `data-tab` gates the
+    // preview-only controls (URL pill + device pill) via CSS.
+    const rbToolbar = el('div', { class: 'rb-toolbar', 'data-tab': tab }, [
+      tabsPill,
+      el('div', { class: 'rb-toolbar-spacer' }),
+      previewUrlPill,
+      devicePill,
+    ]);
     const rightPaneContent = el('div', { class: 'right-pane-content' });
+    rightPane.append(rbToolbar);
     rightPane.append(rightPaneContent);
     body.append(chatPane);
     body.append(rightPane);
-
-    // Center chrome cluster — tabs (Preview / Code / Cloud) followed by the
-    // device pill (Phone / Tablet / Desktop). The device pill hides when
-    // the active tab isn't Preview (driven by .urlbar-slot[data-visible]).
-    const builderTitlebarCenter = el('span', { class: 'builder-tl-center' }, [
-      tabsPill,
-      urlbarSlot,
-    ]);
 
     // chat-scroll + chat-input-wrap are recreated by renderChatPane() each
     // time chatView changes, so the same pane can host either view without
@@ -1113,6 +1133,17 @@
       }
 
       const resolved = projectId ? await resolvePreviewSrc() : undefined;
+
+      // §B3 — keep the toolbar URL pill in sync with the resolved source.
+      if (!resolved) {
+        previewUrlText.textContent = 'Building…';
+        previewUrlDot.dataset.state = 'building';
+        previewUrlPill.removeAttribute('title');
+      } else {
+        previewUrlText.textContent = formatPreviewUrl(resolved.src);
+        previewUrlDot.dataset.state = resolved.kind === 'live' ? 'live' : 'local';
+        previewUrlPill.setAttribute('title', resolved.src);
+      }
 
       if (!resolved) {
         // §B4 — render the skeleton phone + an ambient building pill
@@ -3182,6 +3213,9 @@
     }));
     const sidebar = window.Chrome.buildSidebar({
       activeId: opts.projectId,
+      // The builder IS the app's Cloud/Build surface — highlight that child
+      // under the expanded active app (§G2).
+      activeSurface: 'cloud',
       apps: sidebarApps,
       // Drafts come from the shell's hydrated cache (passed via
       // BuilderOptions). Older callers may omit them — default to empty.
@@ -3223,10 +3257,16 @@
         }
       },
       // §G2 — the expanded active app's App child returns to the running
-      // app view. "Cloud" is the builder itself, so it stays put.
+      // app view; the Cloud child switches the right pane to the Cloud
+      // surface (now a sidebar destination rather than a pane tab).
       onAppSurface: (id: string, surface: 'app' | 'cloud') => {
         if (surface === 'app' && typeof window.Centraid?.openApp === 'function') {
           window.Centraid.openApp(id);
+        } else if (surface === 'cloud') {
+          tab = 'cloud';
+          renderRight();
+          refreshTabs();
+          refreshTopbarToggles();
         }
       },
     });
@@ -3269,12 +3309,10 @@
       showNewChat: true,
       sidebar,
       sidebarOpen: builderSidebarOpen,
-      // Tabs (Preview / Code / Cloud) + device pill (Phone / Tablet /
-      // Desktop) ride in the window chrome row as the center cluster —
-      // killing the old right-pane-toolbar row. Project identity stays
-      // in the chat pane's own header (builder-pane-header), so no
-      // titlebarRight on the chrome row.
-      titlebarCenter: builderTitlebarCenter,
+      // §B3 — the tabs + URL pill + device pill live in the right pane's
+      // own toolbar (`rb-toolbar`), not the window chrome. The chrome row
+      // carries just back/forward/sidebar; project identity stays in the
+      // chat pane's own header (builder-pane-header).
     });
     setShellChatPaneOpen = chromeSetChatPaneOpen;
     root.append(shell);

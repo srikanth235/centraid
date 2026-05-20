@@ -19,6 +19,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] Step 6 — App view copilot (D)
 - [x] Step 7 — Per-app settings tabbed popover (E)
 - [x] Step 8 — ⌘K command palette (F)
+- [x] Follow-up B2/B3 — Builder pane toolbar
 
 ## What changed
 
@@ -156,6 +157,25 @@ Escape or a backdrop click closes. It opens from a global `⌘K`
 is now wired — `buildHomeSidebar` passes `onSearch`, and the builder's
 sidebar routes through the new `window.Centraid.openSearch`.
 
+**Follow-up B2/B3 — Builder pane toolbar.** §B3 (previously a flagged
+conflict) is now implemented: the Preview/Code toggle, the preview URL
+pill, and the viewport device pill move out of the window chrome row
+into a dedicated right-pane toolbar (`rb-toolbar`) that sits directly
+above the canvas — the layout the handover specifies. The new URL pill
+(`rb-url`) shows a sync-state dot (live / local / building), the
+trimmed preview URL in monospace, and a reload button; `renderPreview`
+keeps the text + dot in sync and stamps the full URL on the pill's
+`title`. `rb-toolbar[data-tab]` gates the preview-only controls so the
+URL + device pills hide on the Code surface. The mode toggle is now
+Preview/Code only — Cloud graduates to a sidebar destination (§G2):
+the expanded active app's `Cloud` child switches the right pane to the
+Cloud surface via `onAppSurface`, and the builder passes
+`activeSurface: 'cloud'`. The window chrome's `titlebarCenter` slot is
+dropped, and the now-dead `builder-tl-center` / `urlbar-slot` CSS is
+removed. §B2 (single agent stream) needed no change — the live Builder
+already consolidates progress into in-place tool-group pills + thinking
+blocks rather than stacking a chip per step.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).
@@ -167,8 +187,7 @@ sidebar routes through the new `window.Centraid.openSearch`.
   NEW. A precise `createdAt` would need plumbing through the publish
   flow — deferred.
 - Builder §B5 (editable code workspace) and §B6 (Cloud rebuild) —
-  larger standalone features deferred from this pass; §B3 (pane
-  toolbar) is a flagged conflict with a recent live-repo refactor.
+  larger standalone features deferred from this pass.
 
 ## Verification
 

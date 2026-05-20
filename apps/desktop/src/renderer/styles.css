@@ -1014,17 +1014,6 @@ textarea {
 /* URL bar slot — flexes to absorb middle slack; hidden when not in Preview.
    Hosts the device segmented control alongside the URL pill, with a small
    gap so they read as separate controls. */
-.urlbar-slot {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 0;
-}
-.urlbar-slot[data-visible='false'] {
-  visibility: hidden;
-}
 /* Segmented control. Container is clearly recessed (bg-sunken) so the
    active button — lifted to bg-elev with an inset hairline outline plus a
    real drop shadow — reads as a confidently floating pill above the track.
@@ -1292,30 +1281,6 @@ textarea {
   letter-spacing: -0.01em;
   color: var(--ink);
   outline: none;
-}
-
-/* Center cluster inside cd-tl-main — mode tabs (Preview/Code/Cloud) +
-   device pill (Phone/Tablet/Desktop). Lives in the right grid cell
-   (.cd-tl-context), which spans the right-pane width. Space-between
-   pins tabs flush-left (against the chat/right boundary) and the device
-   pill flush-right (extreme right of the chrome row). */
-.builder-tl-center {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-/* Inside the chrome row, the urlbar-slot hugs its content (the device
-   pill) rather than flexing to fill, and fully collapses when hidden so
-   the layout stays tight on non-Preview tabs. */
-.cd-tl-main .urlbar-slot {
-  flex: 0 1 auto;
-  justify-content: flex-end;
-}
-.cd-tl-main .urlbar-slot[data-visible='false'] {
-  display: none;
 }
 
 /* Header shown when chat pane is in History view */
@@ -1837,7 +1802,10 @@ textarea {
   position: relative;
   overflow: hidden;
 }
-.right-pane-toolbar {
+/* §B3 — right-pane toolbar. Mode tabs at the leading edge; the preview
+   URL pill + device pill ride the trailing edge, pushed there by the
+   flex spacer. Non-preview tabs hide the preview-only controls. */
+.rb-toolbar {
   flex: none;
   display: flex;
   align-items: center;
@@ -1850,19 +1818,82 @@ textarea {
   position: relative;
   z-index: 1;
 }
-.right-pane-toolbar-spacer {
+.rb-toolbar-spacer {
   flex: 1;
 }
-/* In the toolbar context the URL slot hugs its content instead of
-   stretching across the toolbar — the spacer above pushes it to the
-   right. When non-preview tabs hide it, collapse fully so the layout
-   stays tidy. */
-.right-pane-toolbar .urlbar-slot {
-  flex: 0 1 auto;
-  justify-content: flex-end;
-}
-.right-pane-toolbar .urlbar-slot[data-visible='false'] {
+.rb-toolbar:not([data-tab='preview']) .rb-url,
+.rb-toolbar:not([data-tab='preview']) .urlbar-device {
   display: none;
+}
+/* Preview URL pill — recessed track, sync-state dot, mono URL, reload. */
+.rb-url {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  max-width: 320px;
+  min-width: 0;
+}
+.rb-url-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.rb-url-dot[data-state='live'] {
+  background: var(--ok, #3fb950);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #3fb950) 22%, transparent);
+}
+.rb-url-dot[data-state='local'] {
+  background: var(--accent);
+}
+.rb-url-dot[data-state='building'] {
+  background: var(--warn, #d29922);
+  animation: rb-url-pulse 1.3s ease-in-out infinite;
+}
+@keyframes rb-url-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.rb-url-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.rb-url-refresh {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.rb-url-refresh:hover {
+  background: var(--bg-elev);
+  color: var(--ink);
 }
 .right-pane-content {
   flex: 1;
@@ -4121,7 +4152,6 @@ textarea {
 .cd-tl-side button,
 .cd-tl-main .cd-tb-btn-wrap,
 .cd-tl-side .cd-tb-btn-wrap,
-.cd-tl-main .cd-tabs-pill,
 .cd-tl-main .cd-btn,
 /* Project-name contenteditable inside the builder chrome must accept
    clicks (otherwise the surrounding tl-main drag region eats them). */
@@ -5392,10 +5422,10 @@ textarea {
   }
 }
 
-/* Pill-tab cluster (Preview / Code / Cloud) — matches .urlbar-device so
-   the two segmented controls in the right-pane toolbar read as one
-   visual system: recessed track + lifted active pill with hairline +
-   drop shadow. */
+/* Pill-tab cluster (Preview / Code) — matches .urlbar-device so the two
+   segmented controls in the right-pane toolbar read as one visual
+   system: recessed track + lifted active pill with hairline + drop
+   shadow. */
 .cd-tabs-pill {
   display: inline-flex;
   padding: 2px;
