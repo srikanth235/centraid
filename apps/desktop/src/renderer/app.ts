@@ -159,7 +159,14 @@
     // (packages/app-templates/*/index.html) listens for this and flips its
     // own <html> data-attrs / CSS vars to match.
     broadcastSettingsToFrames();
+    // §C2 — let an open Appearance settings page refresh its live-preview
+    // tile (tile/card/density variants aren't pure CSS-var swaps).
+    if (onAppearanceApplied) onAppearanceApplied();
   }
+
+  // §C2 — set by the Appearance settings page so its preview tile can
+  // re-render on every pref change; cleared on page teardown.
+  let onAppearanceApplied: (() => void) | null = null;
 
   // Project the renderer's typed prefs into the same `dataAttrs` / `cssVars`
   // shape the runtime uses for server-side injection. The bridge inside each
@@ -3184,12 +3191,50 @@
       },
     );
 
+    // §C2 — live-preview tile. A miniature composition (mini app tiles +
+    // an accent button + skeleton text) that re-renders on every
+    // appearance change so the user sees theme / accent / tile-variant
+    // land on a representative surface, not just the chrome.
+    const previewHost = el('div', { class: 'ap-preview-host' });
+    const renderAppearancePreview = (): void => {
+      const seeds = ['#5b8def', '#e0734a', '#48a07a'];
+      const tiles = seeds.map((c) => {
+        const finish = window.CentraidTokens.tileFinish(c, prefs.tileVariant);
+        const t = el('div', { class: 'ap-preview-tile' });
+        t.style.background = finish.background;
+        if (finish.boxShadow) t.style.boxShadow = finish.boxShadow;
+        return t;
+      });
+      previewHost.replaceChildren(
+        el('div', { class: 'ap-preview' }, [
+          el('div', { class: 'ap-preview-bar' }, [
+            el('span', { class: 'ap-preview-traffic' }),
+            el('span', { class: 'ap-preview-traffic' }),
+            el('span', { class: 'ap-preview-traffic' }),
+            el('span', { class: 'ap-preview-chip' }),
+          ]),
+          el('div', { class: 'ap-preview-body' }, [
+            el('div', { class: 'ap-preview-tiles' }, tiles),
+            el('div', { class: 'ap-preview-line' }),
+            el('div', { class: 'ap-preview-line ap-preview-line--short' }),
+            el('button', { class: 'ap-preview-btn', type: 'button', disabled: '' }, 'Primary'),
+          ]),
+        ]),
+      );
+    };
+    renderAppearancePreview();
+    onAppearanceApplied = renderAppearancePreview;
+    registerCleanup(() => {
+      onAppearanceApplied = null;
+    });
+
     pageHosts.appearance.append(
       drawerGroup('Theme', [
         drawerRow('Mode', themeSeg),
         drawerRowInline('Cool blue cast', coolCastSwitch),
         drawerRow('Accent', accentSwatches),
       ]),
+      drawerGroup('Preview', [previewHost]),
     );
     pageHosts.layout.append(
       drawerGroup('Layout', [
@@ -3317,11 +3362,15 @@
         authStatusHost.append(el('div', { class: 'settings-note' }, 'Reading credential status…'));
         return;
       }
+      // §C3 — each provider row carries a state badge (Connected /
+      // Standby / Not found) so the at-a-glance status doesn't rely on
+      // reading the subtitle prose.
       const providerRow = (params: {
         title: string;
         subtitle: string;
         connected: boolean;
         accent: string;
+        badge: { label: string; tone: 'on' | 'standby' | 'off' };
       }): HTMLElement => {
         const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
         return el(
@@ -3367,6 +3416,11 @@
                 ),
               ],
             ),
+            el(
+              'span',
+              { class: 'provider-badge', 'data-tone': params.badge.tone },
+              params.badge.label,
+            ),
           ],
         );
       };
@@ -3382,6 +3436,9 @@
             : 'not found — run `codex login`',
           connected: status.codexAvailable,
           accent: '#10b981',
+          badge: status.codexAvailable
+            ? { label: 'Preferred', tone: 'on' }
+            : { label: 'Not found', tone: 'off' },
         }),
       );
 
@@ -3396,6 +3453,11 @@
           subtitle: claudeSubtitle,
           connected: status.claudeAvailable,
           accent: '#a855f7',
+          badge: !status.claudeAvailable
+            ? { label: 'Not found', tone: 'off' }
+            : status.codexAvailable
+              ? { label: 'Standby', tone: 'standby' }
+              : { label: 'Connected', tone: 'on' },
         }),
       );
     };
@@ -3848,16 +3910,29 @@
     const contentArea = el('div', { class: 'cd-settings-content' });
     innerNav.append(el('div', { class: 'cd-settings-nav-eyebrow' }, 'Settings · Personal'));
 
+    // §C4 — pages whose controls persist on change carry an "Auto-saved"
+    // marker; the credential pages (inference, runtime) keep their
+    // explicit Save/Test buttons and so get no marker.
+    const autoSavePages = new Set<SettingsPageId>(['appearance', 'layout', 'workspace']);
+
     const navButtons = new Map<SettingsPageId, HTMLElement>();
     const showSettingsPage = (id: SettingsPageId): void => {
       const def = settingsPages.find((p) => p.id === id);
       for (const [pid, btn] of navButtons) {
         btn.dataset.active = String(pid === id);
       }
-      contentArea.replaceChildren(
+      const head = el('div', { class: 'cd-settings-page-head' }, [
         el('h2', { class: 'cd-settings-page-title' }, def ? def.label : 'Settings'),
-        pageHosts[id],
-      );
+        ...(autoSavePages.has(id)
+          ? [
+              el('span', {
+                class: 'cd-settings-autosaved',
+                trustedHtml: `${Icon.Check({ size: 11, strokeWidth: 2.5 })}<span>Auto-saved</span>`,
+              }),
+            ]
+          : []),
+      ]);
+      contentArea.replaceChildren(head, pageHosts[id]);
     };
     let lastSection = '';
     for (const p of settingsPages) {

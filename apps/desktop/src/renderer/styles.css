@@ -4105,16 +4105,122 @@ textarea {
 .cd-settings-content {
   min-width: 0;
 }
-.cd-settings-page-title {
+.cd-settings-page-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   margin: 0 0 18px;
+}
+.cd-settings-page-title {
+  margin: 0;
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 22px;
   letter-spacing: -0.02em;
   color: var(--ink);
 }
+/* §C4 — auto-save marker for pages whose controls persist on change. */
+.cd-settings-autosaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--c-forest, #5c8a4e);
+}
 .cd-settings-page {
   display: block;
+}
+
+/* §C3 — AI provider state badge. */
+.provider-badge {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+}
+.provider-badge[data-tone='on'] {
+  background: hsla(101 28% 42% / 0.16);
+  color: var(--c-forest, #5c8a4e);
+}
+.provider-badge[data-tone='standby'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.provider-badge[data-tone='off'] {
+  background: var(--bg-sunken);
+  color: var(--ink-4);
+}
+
+/* §C2 — Appearance live-preview tile. A miniature window mockup whose
+   surfaces ride the live theme/accent/tile-variant choices. */
+.ap-preview {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg);
+  max-width: 340px;
+}
+.ap-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--line);
+}
+.ap-preview-traffic {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-4);
+}
+.ap-preview-chip {
+  margin-left: auto;
+  width: 36px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.ap-preview-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ap-preview-tiles {
+  display: flex;
+  gap: 8px;
+}
+.ap-preview-tile {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+.ap-preview-line {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+}
+.ap-preview-line--short {
+  width: 60%;
+}
+.ap-preview-btn {
+  align-self: flex-start;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 14px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .drawer-group {

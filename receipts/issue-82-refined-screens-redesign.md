@@ -22,6 +22,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] Follow-up B2/B3 — Builder pane toolbar
 - [x] Follow-up B5 — Builder editable code workspace
 - [x] Follow-up B6 — Cloud Overview hero + activity feed
+- [x] Follow-up C2/C3/C4 — Settings preview, badges, save markers
 
 ## What changed
 
@@ -206,6 +207,20 @@ tiles (Versions, Tables, Schema version, Gateway). Below it a new
 **activity feed** (`cloud-feed`) renders the version history as a
 chronological deploy log: newest publish first, the active version
 flagged, each row showing file count, byte size, and relative time.
+
+**Follow-up C2/C3/C4 — Settings preview, badges, save markers.** §C2:
+the Appearance page gains a live-preview tile (`ap-preview`) — a
+miniature window mockup with mini app-tiles, an accent button, and
+skeleton text — that re-renders on every appearance change via a new
+`onAppearanceApplied` hook fired from `applyPrefs`, so tile-variant and
+accent choices land on a representative surface. §C3: each AI-provider
+row now carries a state badge (`provider-badge`) — `Preferred` /
+`Connected` / `Standby` / `Not found` — so status doesn't depend on
+reading the subtitle prose. §C4: the settings inner-shell renders a
+per-page header; pages whose controls persist on change (Appearance,
+Layout, Workspace) carry an `Auto-saved` marker, while the credential
+pages (Inference endpoint, Where apps run) keep their explicit
+Save/Test buttons and get no marker.
 
 ## Out of scope
 
