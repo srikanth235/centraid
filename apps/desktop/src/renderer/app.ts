@@ -317,6 +317,9 @@
   type ShellRoute =
     | { kind: 'home' }
     | { kind: 'settings' }
+    | { kind: 'discover' }
+    | { kind: 'starred' }
+    | { kind: 'automations' }
     | { id: string; kind: 'app' }
     | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' };
 
@@ -327,6 +330,9 @@
   function routeKey(route: ShellRoute): string {
     if (route.kind === 'home') return 'home';
     if (route.kind === 'settings') return 'settings';
+    if (route.kind === 'discover') return 'discover';
+    if (route.kind === 'starred') return 'starred';
+    if (route.kind === 'automations') return 'automations';
     if (route.kind === 'app') return `app:${route.id}`;
     if (route.appContext) return `builder:${route.appContext.id}`;
     return `builder:new:${route.initialPrompt ?? ''}`;
@@ -367,6 +373,12 @@
         renderHome();
       } else if (route.kind === 'settings') {
         renderSettings();
+      } else if (route.kind === 'discover') {
+        renderDiscover();
+      } else if (route.kind === 'starred') {
+        renderStarred();
+      } else if (route.kind === 'automations') {
+        renderAutomations();
       } else if (route.kind === 'app') {
         openApp(route.id);
       } else {
@@ -397,8 +409,9 @@
 
   // Build the sidebar contents for the current home/app-view context. The
   // builder builds its own (it knows which project is active).
-  function buildHomeSidebar(activeId?: string): HTMLElement {
-    const all = getAppsWithDrafts();
+  function buildHomeSidebar(
+    active: { page?: SidebarPage; appId?: string; surface?: 'app' | 'cloud' } = {},
+  ): HTMLElement {
     const apps: ChromeSidebarApp[] = userApps.map((a) => ({
       color: a.color,
       iconKey: a.iconKey,
@@ -413,15 +426,26 @@
       name: d.name,
       status: 'draft',
     }));
-    void all;
     return window.Chrome.buildSidebar({
-      activeId,
+      activeId: active.appId,
+      activePage: active.page,
+      activeSurface: active.surface,
       apps,
       drafts: draftEntries,
       onAppClick: (id) => {
         const app = findApp(id);
         if (!app) return;
         if (isDraft(app)) enterBuilder({ appContext: app });
+        else openApp(id);
+      },
+      // §G2 — the expanded active app's App/Cloud children. "App" returns
+      // to the running app view; "Cloud" opens that app in the builder
+      // (which owns the Cloud surface — see §B6).
+      onAppSurface: (id, surface) => {
+        const app = findApp(id);
+        if (!app) return;
+        if (surface === 'cloud') enterBuilder({ appContext: app });
+        else if (isDraft(app)) enterBuilder({ appContext: app });
         else openApp(id);
       },
       // Both right-click on the row and the hover-revealed `•••` route
@@ -434,8 +458,10 @@
       },
       onHome: renderHome,
       onNewApp: openNewAppSheet,
+      onDiscover: renderDiscover,
+      onStarred: renderStarred,
+      onAutomations: renderAutomations,
       onSettings: renderSettings,
-      runtimeMode: currentRuntimeMode,
     });
   }
 
@@ -625,7 +651,7 @@
       scroll.append(section);
     }
 
-    const sidebar = buildHomeSidebar('home');
+    const sidebar = buildHomeSidebar({ page: 'home' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
       ...chromeNav(),
       main,
@@ -735,6 +761,87 @@
     card.append(cues);
 
     return card;
+  }
+
+  // ---------- Sidebar destination pages ----------
+  // Discover / Starred / Automations are top-level sidebar destinations
+  // added by Refined Screens §G3. Discover surfaces the template gallery
+  // (which §A3 removes from Home); Starred and Automations are wired here
+  // with their list/empty states — the per-app star toggle (§A3) and the
+  // scheduler backing Automations (§E3) land in later steps.
+
+  function renderSimpleEmpty(message: string): HTMLElement {
+    return el('div', { class: 'cd-page-empty' }, [
+      el('div', { class: 'cd-page-empty-icon', trustedHtml: Icon.Sparkle({ size: 22 }) }),
+      el('div', { class: 'cd-page-empty-text' }, message),
+    ]);
+  }
+
+  function mountShellPage(page: SidebarPage, main: HTMLElement): void {
+    const sidebar = buildHomeSidebar({ page });
+    const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
+      ...chromeNav(),
+      main,
+      onNewChat: openNewAppSheet,
+      onToggleSidebar: toggleSidebar,
+      showNewChat: true,
+      sidebar,
+      sidebarOpen: prefs.sidebarOpen,
+    });
+    currentSetSidebarOpen = setSidebarOpen;
+    root.append(shell);
+  }
+
+  function pageScroll(title: string, subtitle: string): { main: HTMLElement; scroll: HTMLElement } {
+    const main = el('div', { class: 'has-wall' });
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
+    scroll.append(
+      el('div', { class: 'cd-page-head' }, [el('h1', {}, title), el('p', {}, subtitle)]),
+    );
+    return { main, scroll };
+  }
+
+  function renderDiscover(): void {
+    void renderDiscoverAsync();
+  }
+  async function renderDiscoverAsync(): Promise<void> {
+    recordRoute({ kind: 'discover' });
+    clear();
+    const availableTemplates = await loadAvailableTemplates();
+    const { main, scroll } = pageScroll(
+      'Discover',
+      'Start from a template — clone it and make it yours.',
+    );
+    if (availableTemplates.length > 0) {
+      const grid = el('div', { class: 'cd-tmpl-grid' });
+      for (const tmpl of availableTemplates) grid.append(renderTemplateCard(tmpl));
+      scroll.append(grid);
+    } else {
+      scroll.append(renderSimpleEmpty('No templates available yet.'));
+    }
+    mountShellPage('discover', main);
+  }
+
+  function renderStarred(): void {
+    recordRoute({ kind: 'starred' });
+    clear();
+    const { main, scroll } = pageScroll('Starred', 'Apps you star show up here for quick access.');
+    scroll.append(renderSimpleEmpty('Nothing starred yet. Hover an app tile and tap the star.'));
+    mountShellPage('starred', main);
+  }
+
+  function renderAutomations(): void {
+    recordRoute({ kind: 'automations' });
+    clear();
+    const { main, scroll } = pageScroll(
+      'Automations',
+      'Scheduled triggers that run scripts across your apps.',
+    );
+    scroll.append(
+      renderSimpleEmpty('No automations yet. Add one from an app’s settings → Automations.'),
+    );
+    mountShellPage('automations', main);
   }
 
   function renderAppCard(app: AppMetaResolvedType): HTMLElement {
@@ -1701,7 +1808,7 @@
     titlebarRight.append(gearWrap);
     titlebarRight.append(editPill);
 
-    const sidebar = buildHomeSidebar(app.id);
+    const sidebar = buildHomeSidebar({ appId: app.id, surface: 'app' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
       ...chromeNav(),
       main,
@@ -3235,7 +3342,7 @@
 
     scroll.append(page);
 
-    const sidebar = buildHomeSidebar('settings');
+    const sidebar = buildHomeSidebar({ page: 'settings' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
       ...chromeNav(),
       main,
@@ -3474,6 +3581,9 @@
     openBuilder: openNewAppSheet,
     openShare: openShareDialog,
     openSettings: renderSettings,
+    openDiscover: renderDiscover,
+    openStarred: renderStarred,
+    openAutomations: renderAutomations,
     renderHome,
     getRuntimeMode: () => currentRuntimeMode,
   };

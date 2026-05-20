@@ -12,7 +12,7 @@ applies the screen-level redesign, landed as one commit per step.
 ## Checklist
 
 - [x] design-tokens — refined-screen icons + Send glyph fix
-- [ ] Step 2 — Sidebar restructure (G2/G3)
+- [x] Step 2 — Sidebar restructure (G2/G3)
 - [ ] Step 3 — Home redesign (A1/A2/A3)
 - [ ] Step 4 — Builder B1–B6
 - [ ] Step 5 — Settings monolith split (C)
@@ -32,11 +32,43 @@ desktop + mobile). The `Send` icon — previously a plain right-arrow
 visually identical to the forward-nav glyph, flagged in §B2 of the
 handover — was replaced with a proper paper-plane.
 
+**Step 2 — Sidebar restructure (G2/G3).** `chrome.ts buildSidebar` was
+rebuilt around the refined information architecture: an accent-tinted
+`Build new` entry plus `Search` at the top; a `Pages` section with
+`Home` / `Discover` / `Starred` / `Automations`; the live `Apps` list;
+and `Settings` pinned to the bottom carrying a `live` status pill
+(`.cd-status[data-tone="live"]`) in place of the old Local/Remote tag.
+The standalone disabled `Plugins` row was dropped and `Automations`
+graduated from a disabled stub into a Pages destination (§E3). The app
+matching `activeId` now expands into `App`/`Cloud` children bound by an
+indented hairline rule (§G2) — `expandedApp()` plus the new
+`.cd-sb-folder-children` styling. `sbItem` gained `accent` and
+`trailing` slots. The `ChromeBuildSidebarOpts` contract added
+`activePage` / `activeSurface` / `onDiscover` / `onStarred` /
+`onAutomations` / `onAppSurface` and dropped the now-unused
+`runtimeMode`. `app.ts` added `discover` / `starred` / `automations`
+`ShellRoute` kinds with back/forward support and three destination
+pages — Discover renders the template gallery (which §A3 removes from
+Home), Starred and Automations ship list/empty states pending later
+steps. `buildHomeSidebar` was generalised to take an `{ page, appId,
+surface }` descriptor; `window.Centraid` exposes `openDiscover` /
+`openStarred` / `openAutomations` so the builder's sidebar routes
+through the shell.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).
 - Mobile-side adoption of the new screens (desktop renderer only).
+- The per-app star toggle (lands with §A3) and the Automations
+  scheduler (lands with §E3) — their pages currently show list/empty
+  states only.
 
 ## Verification
 
 - `bun --filter @centraid/design-tokens run typecheck` — clean
+- `turbo run typecheck --filter=@centraid/desktop` — clean
+- `turbo run build --filter=@centraid/desktop` — clean
+- `oxlint` on the changed renderer files — clean
+- Visual verification in a running Electron window is pending — the
+  desktop app needs a gateway/runtime backend; recommend a manual
+  `bun run dev:desktop` smoke test.

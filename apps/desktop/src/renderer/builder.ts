@@ -3179,12 +3179,21 @@
       onNewApp: () => {
         /* already in builder; ignore */
       },
+      onDiscover: () => window.Centraid?.openDiscover?.(),
+      onStarred: () => window.Centraid?.openStarred?.(),
+      onAutomations: () => window.Centraid?.openAutomations?.(),
       onSettings: () => {
         if (typeof window.Centraid?.openSettings === 'function') {
           void window.Centraid.openSettings();
         }
       },
-      runtimeMode: window.Centraid?.getRuntimeMode?.(),
+      // §G2 — the expanded active app's App child returns to the running
+      // app view. "Cloud" is the builder itself, so it stays put.
+      onAppSurface: (id: string, surface: 'app' | 'cloud') => {
+        if (surface === 'app' && typeof window.Centraid?.openApp === 'function') {
+          window.Centraid.openApp(id);
+        }
+      },
     });
 
     let builderSidebarOpen = Store.get<boolean>('appearance.sidebarOpen', true);

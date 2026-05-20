@@ -87,10 +87,15 @@ declare global {
      * on the home grid.
      */
     openAppContext: (id: string, anchor: MenuAnchor) => void;
+    /** Navigate to the Discover (templates) page. */
+    openDiscover: () => void;
+    /** Navigate to the Starred apps page. */
+    openStarred: () => void;
+    /** Navigate to the Automations page. */
+    openAutomations: () => void;
     /**
      * Current runtime mode ('local' or 'remote'), or undefined before the
-     * first settings fetch resolves. Used by the builder shell to mirror
-     * the sidebar badge that the home shell shows next to Settings.
+     * first settings fetch resolves.
      */
     getRuntimeMode: () => 'local' | 'remote' | undefined;
   }
@@ -209,14 +214,26 @@ declare global {
     onToggleChat?: () => void;
   }
 
+  type SidebarPage = 'home' | 'discover' | 'starred' | 'automations' | 'settings';
+
   interface ChromeBuildSidebarOpts {
+    /** App id of the app/builder currently in focus — expands its row. */
     activeId?: string;
+    /** Which top-level page is current — drives the active highlight. */
+    activePage?: SidebarPage;
+    /** Which child of the expanded active app is current (§G2). */
+    activeSurface?: 'app' | 'cloud';
     apps: ChromeSidebarApp[];
     drafts: ChromeSidebarApp[];
     onHome: () => void;
     onNewApp: () => void;
     onSearch?: () => void;
+    onDiscover?: () => void;
+    onStarred?: () => void;
+    onAutomations?: () => void;
     onAppClick: (id: string) => void;
+    /** Click on an expanded app's App/Cloud child destination. */
+    onAppSurface?: (id: string, surface: 'app' | 'cloud') => void;
     onSettings: () => void;
     /**
      * Opens the per-app actions menu (Rename · Reveal in Finder · Delete
@@ -225,12 +242,6 @@ declare global {
      * affordance entirely (e.g. test harnesses).
      */
     onAppContext?: (id: string, anchor: MenuAnchor) => void;
-    /**
-     * Current runtime mode. Rendered as a Local/Remote badge next to the
-     * Settings row so users can tell at a glance which gateway is in
-     * play. Omit while the first settings fetch is in flight.
-     */
-    runtimeMode?: 'local' | 'remote';
   }
 
   interface ChromeApi {
