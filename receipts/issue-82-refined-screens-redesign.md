@@ -27,6 +27,15 @@ applies the screen-level redesign, landed as one commit per step.
 
 ## What changed
 
+**2026-05-20 — Top-anchored Day-1 Home hero.** Dropped `flex: 1` and
+`justify-content: center` from `.cd-hero` so the heading + composer no
+longer vertically center in the column — they now sit ~44px from the
+top (`padding: 44px 56px 0`, `28px` heading→composer gap), mirroring
+the `faithful.jsx` artboard rhythm. The apps shelf opens `44px` below
+the composer (`.cd-shelf` padding `44px 56px 56px`) and the column
+keeps its remaining height as open space rather than stretching the
+hero to fill it.
+
 **2026-05-20 — Home hero declutter.** Removed the `Cloud · live
 deploys are here` announcement pill from the Day-1 hero (the
 `cd-hero-announce` anchor and its `-badge` / `-arrow` CSS rules). Took

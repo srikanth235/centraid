@@ -5111,18 +5111,18 @@ textarea {
   padding: 0;
 }
 
-/* Hero — "What should we build?" + composer. */
+/* Hero — "What should we build?" + composer. Top-anchored: the heading
+   sits ~44px from the top and the composer rides just under it, leaving
+   the apps shelf the rest of the column rather than vertically centering. */
 .cd-hero {
-  flex: 1;
   max-width: 760px;
   width: 100%;
   margin: 0 auto;
-  padding: 48px 56px 40px;
+  padding: 44px 56px 0;
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  gap: 28px;
   align-items: center;
-  justify-content: center;
   text-align: center;
 }
 
@@ -5462,7 +5462,7 @@ textarea {
 /* §A1 — HomeShelf: tabbed shelf at the bottom of the Day-1 home. Same
    surface as the rest of Home; same RefinedAppTile the All apps page uses. */
 .cd-shelf {
-  padding: 8px 56px 36px;
+  padding: 44px 56px 56px;
 }
 .cd-shelf-inner {
   max-width: 1180px;
