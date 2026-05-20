@@ -6246,46 +6246,76 @@ textarea {
     0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
-/* Floating brand chip used in App view titlebar */
+/* §D — App-view titlebar identity lockup: gradient app-icon tile + name
+   + a LIVE status chip, in a soft ink-washed pill. */
 .cd-brand-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
   padding: 4px 10px 4px 6px;
-  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
   border: 0.5px solid var(--line);
-  border-radius: 999px;
+  border-radius: 8px;
+}
+.cd-brand-chip-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: #fff;
 }
 .cd-brand-chip-name {
-  font-size: 12px;
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cd-brand-chip-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
   font-weight: 500;
-  color: var(--ink-2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cd-brand-chip-live-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
 }
 /* §D4/§G4 — Use / Build segmented switch in the App-view titlebar. */
 .cd-mode-switch {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  height: 28px;
   padding: 2px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
   border: 0.5px solid var(--line);
 }
 .cd-mode-seg {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 0 9px;
-  height: 22px;
-  border-radius: 6px;
+  padding: 0 12px;
+  height: 24px;
+  border-radius: 999px;
   border: none;
   background: transparent;
   color: var(--ink-3);
   cursor: pointer;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   transition:
     background 120ms,
@@ -6297,7 +6327,7 @@ textarea {
 .cd-mode-seg[data-active='true'] {
   background: var(--bg-elev);
   color: var(--ink);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 0 0 0.5px var(--line);
 }
 .cd-mode-seg-icon {
   display: inline-flex;
@@ -6336,27 +6366,28 @@ textarea {
   pointer-events: none;
 }
 
-/* ---------- App-scoped agentic chat (FAB + slide-out panel) ---------- */
+/* ---------- App-scoped copilot (ambient FAB + docked panel) ---------- */
+/* §D — collapsed copilot: a quiet glass pill at the bottom-right of the
+   canvas. Sparkle in a tinted disc, app label, ⌘J keycap. */
 .app-chat-fab {
   position: absolute;
-  right: 18px;
-  bottom: 18px;
-  height: 40px;
-  padding: 0 14px 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--accent, var(--ink));
-  color: white;
+  right: 22px;
+  bottom: 22px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 10px 14px 10px 12px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  color: var(--ink);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
-  font-weight: 500;
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.18),
-    0 2px 4px rgba(0, 0, 0, 0.12);
+    0 12px 28px -10px rgba(0, 0, 0, 0.45),
+    0 4px 10px -2px rgba(0, 0, 0, 0.25);
   z-index: 50;
   transition:
     transform 140ms ease-out,
@@ -6371,66 +6402,126 @@ textarea {
   transform: translateY(6px);
 }
 .app-chat-fab-icon {
-  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--accent);
 }
 .app-chat-fab-icon svg {
-  width: 16px;
-  height: 16px;
+  width: 11px;
+  height: 11px;
+}
+.app-chat-fab-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
 }
 .app-chat-fab-kbd {
   font-family: var(--font-mono);
   font-size: 10px;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--ink-4);
 }
 
+/* §D — expanded copilot: a floating inset glass card hanging on the
+   right edge of the canvas. No hard outline — depth comes from a soft
+   top-edge highlight, a faint inner ring, and an outer halo. */
 .app-chat-panel {
   position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: min(420px, 80%);
-  background: var(--bg-elev);
-  border-left: 1px solid var(--line);
+  right: 14px;
+  top: 14px;
+  bottom: 14px;
+  width: min(372px, 80%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-elev) 92%, transparent) 0%,
+    color-mix(in srgb, var(--bg-elev) 80%, transparent) 100%
+  );
+  backdrop-filter: blur(36px) saturate(180%);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
-  transform: translateX(100%);
-  transition: transform 200ms ease-out;
+  transform: translateX(calc(100% + 18px));
+  opacity: 0;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    opacity 160ms ease-out;
   z-index: 51;
-  box-shadow: -16px 0 32px -16px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 0.5px color-mix(in srgb, var(--ink) 4%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 16px 40px -12px rgba(0, 0, 0, 0.45),
+    0 4px 12px -2px rgba(0, 0, 0, 0.18);
 }
 .app-chat-panel.open {
   transform: translateX(0);
+  opacity: 1;
 }
 .app-chat-head {
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
+  gap: 10px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--ink) 10%, transparent) 20%,
+      color-mix(in srgb, var(--ink) 10%, transparent) 80%,
+      transparent 100%
+    )
+    1;
+}
+.app-chat-avatar {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--accent);
 }
 .app-chat-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+.app-chat-title-text {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);
+  line-height: 1.1;
 }
-.app-chat-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  display: inline-block;
+.app-chat-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .app-chat-icon-btn {
   border: 0;
   background: transparent;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -6447,12 +6538,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-}
-.app-chat-title-text {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: none;
 }
 
 /* ---------- Chat history view ---------- */
@@ -6579,7 +6665,7 @@ textarea {
    .msg-ai, .tool-group, etc.) inside `.chat-scroll`. The override below
    tightens padding for the narrower 420px panel. */
 .app-chat-panel .chat-scroll {
-  padding: 14px 14px 6px;
+  padding: 18px 16px 6px;
 }
 .app-chat-panel .msg-ai,
 .app-chat-panel .msg-user {
@@ -6606,55 +6692,114 @@ textarea {
 .msg-ai-error .msg-ai-text p {
   color: #b3261e;
 }
+/* §D1 — copilot empty state: an intro card + a recent-chats list. */
 .app-chat-empty {
-  margin: auto 0;
-  text-align: center;
   color: var(--ink-3);
-  padding: 24px 8px;
+}
+.app-chat-intro-card {
+  padding: 14px;
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
 }
 .app-chat-empty-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 500;
   color: var(--ink);
-  margin-bottom: 6px;
+  line-height: 1.45;
+}
+.app-chat-empty-accent {
+  color: var(--accent);
 }
 .app-chat-empty-hint {
+  margin: 6px 0 0;
   font-size: 12.5px;
   line-height: 1.5;
-}
-/* §D1 — "Try these starters" prompt chips in the copilot empty state. */
-.app-chat-starters-label {
-  margin-top: 18px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 .app-chat-starters {
-  margin-top: 10px;
+  margin-top: 12px;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .app-chat-starter {
   border: 0.5px solid var(--line);
-  background: var(--bg-elev);
-  border-radius: 8px;
-  padding: 8px 12px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border-radius: 999px;
+  padding: 5px 10px;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 11.5px;
   color: var(--ink-2);
   text-align: left;
   cursor: pointer;
   transition:
     background 0.12s,
-    border-color 0.12s;
+    border-color 0.12s,
+    color 0.12s;
 }
 .app-chat-starter:hover {
-  background: var(--bg-sunken);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
   border-color: var(--accent);
   color: var(--ink);
+}
+/* §D1 — recent-chats list in the empty state. */
+.app-chat-recent[hidden] {
+  display: none;
+}
+.app-chat-recent-label {
+  margin: 22px 4px 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.app-chat-recent-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+}
+.app-chat-recent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  border-bottom: 0.5px solid var(--line);
+}
+.app-chat-recent-row:last-child {
+  border-bottom: none;
+}
+.app-chat-recent-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--ink-4);
+  flex: none;
+}
+.app-chat-recent-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-chat-recent-row:hover .app-chat-recent-title {
+  color: var(--ink);
+}
+.app-chat-recent-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  flex: none;
 }
 /* §D3 — copilot header ⋯ overflow menu. */
 .app-chat-overflow-wrap {
@@ -6778,39 +6923,72 @@ textarea {
   margin-top: 4px;
 }
 
+/* §D — composer card: the textarea sits above a toolbar row carrying
+   a paperclip affordance, a ⌘↵ keycap, and the accent send button. */
 .app-chat-input-wrap {
   flex: none;
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 10px 12px 12px;
-  border-top: 1px solid var(--line);
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 14px 18px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
   background: var(--bg-elev);
 }
 .app-chat-textarea {
-  flex: 1;
   resize: none;
-  background: var(--bg);
+  background: transparent;
   color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px;
+  border: 0;
+  padding: 0;
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.5;
-  min-height: 36px;
+  min-height: 22px;
   max-height: 140px;
   outline: none;
 }
-.app-chat-textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+.app-chat-textarea::placeholder {
+  color: var(--ink-4);
+}
+.app-chat-input-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.app-chat-input-spacer {
+  flex: 1;
+}
+.app-chat-attach {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 0;
+  background: transparent;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--ink-3);
+}
+.app-chat-attach:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.app-chat-input-kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
 }
 .app-chat-send {
   flex: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
   border: 0;
   background: var(--accent);
   color: white;
@@ -6857,20 +7035,27 @@ textarea {
 }
 .cd-app-settings-panel {
   position: absolute;
-  top: 8px;
-  right: 12px;
-  width: 308px;
-  max-height: calc(100% - 24px);
-  overflow-y: auto;
-  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  border: 0.5px solid var(--line);
-  border-radius: 14px;
+  top: 6px;
+  right: 18px;
+  width: 340px;
+  max-height: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-elev) 92%, transparent) 0%,
+    color-mix(in srgb, var(--bg-elev) 80%, transparent) 100%
+  );
+  backdrop-filter: blur(36px) saturate(180%);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  border-radius: 16px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 30px 80px -20px rgba(0, 0, 0, 0.55),
-    0 12px 30px -8px rgba(0, 0, 0, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 0.5px color-mix(in srgb, var(--ink) 4%, transparent),
+    0 2px 4px rgba(0, 0, 0, 0.25),
+    0 32px 80px -20px rgba(0, 0, 0, 0.55),
+    0 12px 28px -6px rgba(0, 0, 0, 0.3);
   z-index: 13;
   animation: cd-app-settings-pop 140ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }
@@ -6888,32 +7073,30 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 12px 10px;
-  border-bottom: 0.5px solid var(--line);
+  padding: 14px 14px 12px;
 }
 .cd-app-settings-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
-  color: white;
+  color: #fff;
   flex: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 .cd-app-settings-icon svg {
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
 }
 .cd-app-settings-header-text {
   min-width: 0;
   flex: 1;
 }
 .cd-app-settings-name {
-  font-family: var(--font-display);
+  font-family: var(--font-display, var(--font-sans));
   font-weight: 600;
-  font-size: 14px;
-  line-height: 1.15;
+  font-size: 15px;
+  line-height: 1.05;
   color: var(--ink);
 }
 .cd-app-settings-eyebrow {
@@ -6921,13 +7104,13 @@ textarea {
   font-size: 10px;
   color: var(--ink-4);
   margin-top: 2px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .cd-app-settings-close {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: 7px;
   border: 0;
   background: transparent;
   color: var(--ink-3);
@@ -6941,110 +7124,138 @@ textarea {
   color: var(--ink);
 }
 
-/* §E2 — Auto-saved marker; the popover has no Save button. */
-.cd-app-settings-autosaved {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  flex: none;
+/* §E1 — tabbed popover: a segmented pill of Appearance / Automations /
+   Manage, inset 14px from the popover edges. */
+.cd-app-settings-tabs-wrap {
+  padding: 0 14px;
 }
-
-/* §E1 — tabbed popover. */
 .cd-app-settings-tabs {
   display: flex;
-  gap: 2px;
-  padding: 6px 10px;
-  border-bottom: 0.5px solid var(--line);
+  gap: 0;
+  padding: 3px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
 .cd-app-settings-tab {
   flex: 1;
-  padding: 5px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--ink-3);
   font: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   cursor: pointer;
   transition:
     background 110ms,
     color 110ms;
 }
+.cd-app-settings-tab-glyph {
+  display: inline-flex;
+}
 .cd-app-settings-tab:hover {
   color: var(--ink-2);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 .cd-app-settings-tab[data-active='true'] {
   color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.cd-app-settings-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+}
+.cd-app-settings-tab-badge[hidden] {
+  display: none;
+}
+.cd-app-settings-tab[data-active='true'] .cd-app-settings-tab-badge {
+  background: var(--accent);
+  color: #fff;
+}
+.cd-app-settings-pane {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 14px 8px;
+  overflow-y: auto;
 }
 .cd-app-settings-pane[hidden] {
   display: none;
 }
 .cd-app-settings-note {
-  padding: 14px 12px;
-  font-size: 12px;
+  padding: 4px 0;
+  font-size: 12.5px;
   color: var(--ink-4);
+  line-height: 1.5;
 }
 .cd-app-settings-pane-link {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 10px 12px;
+  margin-top: 14px;
+  padding: 12px 4px 0;
   border: none;
   border-top: 0.5px solid var(--line);
   background: transparent;
   color: var(--accent);
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11.5px;
+  font-weight: 600;
   cursor: pointer;
 }
 .cd-app-settings-pane-link:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: color-mix(in oklab, var(--accent) 80%, var(--ink) 20%);
 }
 
 /* §E1 — Manage tab Danger zone. */
 .cd-app-settings-danger {
-  margin: 10px 12px 12px;
-  padding: 10px 12px 12px;
-  border: 0.5px solid color-mix(in srgb, var(--danger) 40%, transparent);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--danger) 6%, transparent);
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--line);
 }
 .cd-app-settings-danger-label {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 9.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--danger);
   margin-bottom: 8px;
 }
-.cd-app-settings-danger-btn {
-  width: 100%;
-  padding: 7px 10px;
-  border: 0.5px solid color-mix(in srgb, var(--danger) 45%, transparent);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--danger);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 120ms,
-    color 120ms;
-}
-.cd-app-settings-danger-btn:hover {
+.cd-app-settings-danger-item .cd-app-settings-menu-icon {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
 }
-.cd-app-settings-danger-btn[data-armed='true'] {
-  background: var(--danger);
-  color: #fff;
-  border-color: var(--danger);
+.cd-app-settings-confirm-pill {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--danger);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.cd-app-settings-confirm-pill[hidden] {
+  display: none;
 }
 .cd-app-settings-section {
   padding: 10px 12px 12px;
@@ -7052,6 +7263,65 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* §E1 — Appearance pane: the proposal's `TabAppearance` drops the
+   "Preferences" heading and renders Font / Width / Corners as compact
+   label-left, segmented-right grid rows. The App-color row is hairline-
+   separated and stacks its swatches under a label + scope note. */
+.cd-app-settings-pane .cd-app-settings-section {
+  padding: 0;
+  border-bottom: none;
+  gap: 12px;
+}
+.cd-app-settings-pane .cd-app-settings-section-label {
+  display: none;
+}
+.cd-app-settings-pane .cd-app-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 80px) 1fr;
+  gap: 10px;
+  align-items: center;
+  min-height: 0;
+}
+.cd-app-settings-pane .cd-app-settings-row-label {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+/* The color knob renders last; lift it onto its own hairline-topped
+   block and let the swatches sit on the right. */
+.cd-app-settings-pane .cd-app-settings-row:has(.cd-swatches) {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 0.5px solid var(--line);
+}
+.cd-app-settings-pane .seg {
+  display: inline-flex;
+  justify-self: end;
+  padding: 2px;
+  gap: 2px;
+  border: 0.5px solid var(--line);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+.cd-app-settings-pane .seg button {
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.cd-app-settings-pane .seg button[data-active='true'] {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.cd-app-settings-pane .cd-swatches {
+  justify-self: end;
+  display: inline-flex;
+  gap: 6px;
+}
+.cd-app-settings-pane .cd-swatch {
+  width: 22px;
+  height: 30px;
+  border-radius: 999px;
 }
 
 /* "Standing orders" — per-automation cards inside the app-view gear
@@ -7267,41 +7537,65 @@ textarea {
   color: var(--ink-2);
 }
 .cd-app-settings-manage {
-  padding: 6px 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 .cd-app-settings-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 7px 8px;
+  padding: 9px 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
-  font-size: 12.5px;
-  font-weight: 500;
+  font: inherit;
+  transition: background 100ms;
 }
-.cd-app-settings-menu-item svg {
-  color: var(--ink-3);
+.cd-app-settings-menu-icon {
+  width: 28px;
+  height: 28px;
   flex: none;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border: 0.5px solid var(--line);
+  color: var(--ink-3);
+}
+.cd-app-settings-menu-text {
+  flex: 1;
+  min-width: 0;
+}
+.cd-app-settings-menu-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.cd-app-settings-menu-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--ink-3);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cd-app-settings-menu-item:hover {
   background: color-mix(in oklab, var(--ink) 5%, transparent);
 }
-.cd-app-settings-menu-item[data-danger='true'] {
-  color: var(--c-rose);
-}
-.cd-app-settings-menu-item[data-danger='true'] svg {
-  color: var(--c-rose);
+.cd-app-settings-menu-item[data-danger='true'] .cd-app-settings-menu-label {
+  color: var(--danger);
 }
 .cd-app-settings-menu-item[data-danger='true']:hover {
-  background: color-mix(in oklab, var(--c-rose) 12%, transparent);
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 /* Gear in titlebar — `data-open` is set while the panel is mounted so it
    stays visually "pressed" without needing a stateful class. */

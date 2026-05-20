@@ -2423,18 +2423,26 @@
     main.append(view);
     inner.style.setProperty('--accent-color', app.color);
 
-    // Titlebar right cluster: brand chip with app icon + name, gear button
-    // for per-app settings, then the floating Edit pill that returns to the
-    // builder.
+    // Titlebar identity lockup: a gradient app-icon tile + name + a LIVE
+    // status chip, then the Use / Build switch, the gear, and a ⋯ button —
+    // the same shape the refined Builder titlebar uses.
     const brandChip = el('span', { class: 'cd-brand-chip' });
-    brandChip.append(
-      el('span', {
-        class: 'cd-app-strip-icon',
-        style: { background: app.color, width: '18px', height: '18px', borderRadius: '4px' },
-        trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 11, strokeWidth: 2 }) : '',
-      }),
-    );
+    const brandFinish = window.CentraidTokens.tileFinish(app.color, 'gradient');
+    const brandIcon = el('span', {
+      class: 'cd-brand-chip-icon',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 11, strokeWidth: 1.9 }) : '',
+    });
+    brandIcon.style.background = brandFinish.background;
+    brandIcon.style.color = brandFinish.glyphColor;
+    if (brandFinish.boxShadow) brandIcon.style.boxShadow = brandFinish.boxShadow;
+    brandChip.append(brandIcon);
     brandChip.append(el('span', { class: 'cd-brand-chip-name' }, app.name));
+    brandChip.append(
+      el('span', { class: 'cd-brand-chip-live' }, [
+        el('span', { class: 'cd-brand-chip-live-dot' }),
+        'live',
+      ]),
+    );
 
     // Notion-style per-app customization popover, anchored to the gear.
     // The button toggles the panel; the panel closes on Esc, click-outside,
@@ -2469,12 +2477,23 @@
       [el('span', { class: 'cd-mode-seg-icon', trustedHtml: Icon.Sparkle({ size: 12 }) }), 'Build'],
     );
     const modeSwitch = el('div', { class: 'cd-mode-switch' }, [useSeg, buildSeg]);
+    const moreBtn = el('button', {
+      class: 'cd-tb-btn',
+      type: 'button',
+      'aria-label': 'More',
+      title: 'More',
+      trustedHtml: Icon.MoreHoriz ? Icon.MoreHoriz({ size: 14 }) : '',
+    });
+    // The identity lockup leads the trailing cluster; the Use/Build
+    // switch, the gear, and the ⋯ button follow — the refined-proposal
+    // titlebar shape.
     const titlebarRight = el('span', {
       style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
     });
     titlebarRight.append(brandChip);
-    titlebarRight.append(gearWrap);
     titlebarRight.append(modeSwitch);
+    titlebarRight.append(gearWrap);
+    titlebarRight.append(moreBtn);
 
     const sidebar = buildHomeSidebar({ appId: app.id, surface: 'app' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
@@ -2777,20 +2796,21 @@
     panel.addEventListener('click', (e) => e.stopPropagation());
     backdrop.addEventListener('click', closeAppSettings);
 
-    // Header
+    // Header — gradient app-icon tile + name + an "APP SETTINGS" mono
+    // eyebrow, then a close button.
     const header = el('div', { class: 'cd-app-settings-header' });
+    const settingsFinish = window.CentraidTokens.tileFinish(app.color, 'gradient');
     const iconTile = el('span', {
       class: 'cd-app-settings-icon',
-      style: { background: app.color },
-      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 13, strokeWidth: 1.85 }) : '',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 15, strokeWidth: 1.85 }) : '',
     });
+    iconTile.style.background = settingsFinish.background;
+    iconTile.style.color = settingsFinish.glyphColor;
+    if (settingsFinish.boxShadow) iconTile.style.boxShadow = settingsFinish.boxShadow;
     const headerText = el('div', { class: 'cd-app-settings-header-text' }, [
       el('div', { class: 'cd-app-settings-name' }, app.name),
       el('div', { class: 'cd-app-settings-eyebrow' }, 'App settings'),
     ]);
-    // §E2 — the popover is implicitly live (knobs save on change), so
-    // there's no Save button — an "Auto-saved" marker states that.
-    const autoSaved = el('span', { class: 'cd-app-settings-autosaved' }, 'Auto-saved');
     const closeBtn = el('button', {
       class: 'cd-app-settings-close',
       type: 'button',
@@ -2798,7 +2818,7 @@
       trustedHtml: Icon.X({ size: 12 }),
       onClick: closeAppSettings,
     });
-    header.append(iconTile, headerText, autoSaved, closeBtn);
+    header.append(iconTile, headerText, closeBtn);
     panel.append(header);
 
     // §E1 — tabbed popover: Appearance · Automations · Manage. Each tab
@@ -2809,26 +2829,45 @@
       automations: el('div', { class: 'cd-app-settings-pane' }),
       manage: el('div', { class: 'cd-app-settings-pane' }),
     };
+    const tabBarWrap = el('div', { class: 'cd-app-settings-tabs-wrap' });
     const tabBar = el('div', { class: 'cd-app-settings-tabs' });
+    tabBarWrap.append(tabBar);
     const tabButtons = new Map<AppSettingsTab, HTMLElement>();
     const showAppSettingsTab = (id: AppSettingsTab): void => {
       for (const [tid, btn] of tabButtons) btn.dataset.active = String(tid === id);
       for (const [pid, pane] of Object.entries(panes)) pane.hidden = pid !== id;
+    };
+    // Tab glyphs — the shared icon set lacks palette/wrench, so the
+    // popover carries small inline SVGs that match the proposal.
+    const tabGlyph: Record<AppSettingsTab, string> = {
+      appearance:
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20 2.5 2.5 0 0 0 2-4 2.5 2.5 0 0 1 2-4h2a4 4 0 0 0 4-4 10 10 0 0 0-10-8z"/></svg>',
+      automations:
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
+      manage:
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4l-5.6 5.6a2 2 0 1 0 2.8 2.8l5.6-5.6a4 4 0 0 1 5.4-5.4l-3 3-2.2-2.2 3-3z"/></svg>',
     };
     for (const [id, label] of [
       ['appearance', 'Appearance'],
       ['automations', 'Automations'],
       ['manage', 'Manage'],
     ] as const) {
-      const btn = el(
-        'button',
-        { class: 'cd-app-settings-tab', type: 'button', onClick: () => showAppSettingsTab(id) },
-        label,
+      const btn = el('button', {
+        class: 'cd-app-settings-tab',
+        type: 'button',
+        onClick: () => showAppSettingsTab(id),
+      });
+      btn.append(
+        el('span', { class: 'cd-app-settings-tab-glyph', trustedHtml: tabGlyph[id] }),
+        el('span', { class: 'cd-app-settings-tab-label' }, label),
       );
+      if (id === 'automations') {
+        btn.append(el('span', { class: 'cd-app-settings-tab-badge', hidden: '' }, '0'));
+      }
       tabButtons.set(id, btn);
       tabBar.append(btn);
     }
-    panel.append(tabBar);
+    panel.append(tabBarWrap);
     panel.append(panes.appearance, panes.automations, panes.manage);
 
     // Appearance — per-app knobs (font / width / corners / App color).
@@ -2860,6 +2899,11 @@
       void window.CentraidApi.listAutomations({ appId }).then((rows) => {
         if (!document.contains(panel)) return;
         if (rows.length === 0) return;
+        const badge = tabButtons.get('automations')?.querySelector('.cd-app-settings-tab-badge');
+        if (badge instanceof HTMLElement) {
+          badge.textContent = String(rows.length);
+          badge.hidden = false;
+        }
         automationsHost.replaceChildren(renderAutomationsSection(rows, appId, panel));
       });
     }
@@ -2879,19 +2923,19 @@
       ),
     );
 
-    // Manage — Rename / Share / Reveal, then a Danger zone whose Delete
-    // arms a confirmation step before it fires (§E1).
+    // Manage — Rename / Share / Reveal as icon-tiled rows, then a Danger
+    // zone whose Delete arms a confirmation step before it fires (§E1).
     const manage = el('div', { class: 'cd-app-settings-manage' });
     manage.append(
-      appSettingsMenuItem('Pencil', 'Rename', () => {
+      appSettingsMenuItem('Pencil', 'Rename', `Currently · ${app.name}`, () => {
         closeAppSettings();
         void renameAppFromSettings(app);
       }),
-      appSettingsMenuItem('Share', 'Share', () => {
+      appSettingsMenuItem('Share', 'Share…', 'Link or read-only invite', () => {
         closeAppSettings();
         openShareDialog(app);
       }),
-      appSettingsMenuItem('Folder', 'Reveal in Finder', () => {
+      appSettingsMenuItem('Folder', 'Reveal in Finder', 'Open the project folder', () => {
         closeAppSettings();
         void revealApp(app);
       }),
@@ -2901,16 +2945,34 @@
     const dangerZone = el('div', { class: 'cd-app-settings-danger' });
     dangerZone.append(el('div', { class: 'cd-app-settings-danger-label' }, 'Danger zone'));
     let deleteArmed = false;
-    const deleteBtn = el(
-      'button',
-      { class: 'cd-app-settings-danger-btn', type: 'button' },
-      'Delete app',
+    const deleteBtn = el('button', {
+      class: 'cd-app-settings-menu-item cd-app-settings-danger-item',
+      type: 'button',
+      'data-danger': 'true',
+    });
+    const deleteIconTile = el('span', {
+      class: 'cd-app-settings-menu-icon',
+      trustedHtml: Icon.Trash ? Icon.Trash({ size: 13 }) : '',
+    });
+    const deleteText = el('span', { class: 'cd-app-settings-menu-text' }, [
+      el('span', { class: 'cd-app-settings-menu-label' }, 'Delete app'),
+      el(
+        'span',
+        { class: 'cd-app-settings-menu-sub' },
+        'Removes the project, its data, and its scheduled automations.',
+      ),
+    ]);
+    const deleteConfirm = el(
+      'span',
+      { class: 'cd-app-settings-confirm-pill', hidden: '' },
+      'click to confirm',
     );
+    deleteBtn.append(deleteIconTile, deleteText, deleteConfirm);
     deleteBtn.addEventListener('click', () => {
       if (!deleteArmed) {
         deleteArmed = true;
         deleteBtn.dataset.armed = 'true';
-        deleteBtn.textContent = 'Click again to delete';
+        deleteConfirm.hidden = false;
         return;
       }
       closeAppSettings();
@@ -3302,6 +3364,7 @@
   function appSettingsMenuItem(
     iconKey: IconNameType,
     label: string,
+    sub: string,
     onClick: () => void,
     opts: { destructive?: boolean } = {},
   ): HTMLElement {
@@ -3311,7 +3374,16 @@
       'data-danger': opts.destructive ? 'true' : undefined,
       onClick,
     });
-    btn.innerHTML = `${Icon[iconKey]({ size: 13 })}<span>${label}</span>`;
+    btn.append(
+      el('span', {
+        class: 'cd-app-settings-menu-icon',
+        trustedHtml: Icon[iconKey] ? Icon[iconKey]({ size: 13 }) : '',
+      }),
+      el('span', { class: 'cd-app-settings-menu-text' }, [
+        el('span', { class: 'cd-app-settings-menu-label' }, label),
+        el('span', { class: 'cd-app-settings-menu-sub' }, sub),
+      ]),
+    );
     return btn;
   }
 

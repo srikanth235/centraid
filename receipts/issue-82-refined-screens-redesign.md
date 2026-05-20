@@ -324,6 +324,42 @@ settings persistence, theme application, provider config, and palette
 search/keyboard handling were preserved. Verified by Electron
 screenshots against the proposal artboards.
 
+**Pixel-match App view + per-app settings popover (2026-05-20).** A
+fidelity pass taking the App view (running app + copilot, expanded and
+collapsed) and the per-app settings popover to a pixel match of the
+refined proposal artboards (`RefinedAppView` / `CopilotExpanded` /
+`CopilotCollapsed` / `RefinedAppSettingsPopover`). Copilot
+(`app-chat.ts`): the collapsed FAB is retuned to the proposal's quiet
+glass pill — a sparkle in a 22px accent-tinted disc, the `Ask <app>`
+label, and a `⌘J` keycap. The expanded panel becomes a floating inset
+glass card (14px-inset, 16px radius, soft-card halo, no hard outline)
+that slides in from the canvas edge; its header reads `Copilot` beside
+a 24px sparkle avatar with a mono `scoped · <app>.app` sub-context line
+(which now also carries the active chat title in place of the old
+title-text swap), and the close affordance becomes a chevron Minimize.
+The empty state leads with an intro card — a `Chat with your <app>
+data.` headline, an explainer, and pill-shaped starter chips — followed
+by a lazily-hydrated `Recent chats` list (real gateway sessions, click
+to resume). The composer is a single card: the textarea over a toolbar
+row with a paperclip, a `⌘↵` keycap, and a 26px accent send button.
+Titlebar (`openApp`): the brand chip becomes the proposal identity
+lockup — a gradient app-icon tile + name + a `live` success chip — and
+a `⋯` More button joins the gear after the Use/Build switch; the switch
+itself is retuned to the 28px pill shape. Popover (`openAppSettings`):
+the card matches `RefinedAppSettingsPopover` — 340px wide, soft-card
+radius 16, a header with a 32px gradient icon tile + name + `APP
+SETTINGS` eyebrow + close (the `Auto-saved` marker was dropped), and a
+segmented tab pill carrying glyphs plus a live count badge on
+Automations. The Appearance pane drops the `Preferences` heading and
+renders Font/Width/Corners as compact label-left segmented-right grid
+rows with the App-color swatches hairline-separated below; the Manage
+tab's rows gain 28px icon tiles + a sub-line, and the Danger zone's
+Delete is a destructive icon-tiled row that reveals a `click to
+confirm` pill when armed. All copilot agent wiring, message rendering,
+starters, history, knob persistence, automations, and rename/delete
+behavior were preserved. Verified by Electron screenshots against the
+three proposal artboards.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).
