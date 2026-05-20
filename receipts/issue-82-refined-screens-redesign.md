@@ -27,6 +27,17 @@ applies the screen-level redesign, landed as one commit per step.
 
 ## What changed
 
+**2026-05-20 — Discover page adopts the shared card grid.** The
+Discover template gallery now renders the same `.cd-app-card`
+RefinedAppTile and 6-column uniform-height grid as the Home shelf.
+`renderTemplateCard` was rewritten to delegate to `buildShelfTile`
+(the single card builder) instead of the bespoke horizontal
+`.cd-tmpl-card`; `buildShelfTile` gained optional `onContextMenu` and
+`more` (hover `•••`) hooks so the template card keeps its right-click
+menu and action button. `.cd-tmpl-grid` now mirrors `.cd-shelf-grid`
+(`repeat(6, 1fr)`, `gap: 14px`), and the orphaned `.cd-tmpl-card*` CSS
+(plus its `.cd-card-more` and `[data-cards]` selectors) was removed.
+
 **2026-05-20 — Uniform app/template card grid.** `.cd-app-card` now
 takes `height: 100%` (and `.cd-app-card-wrap` too) so every tile fills
 its grid cell — a row of cards shares one height regardless of how

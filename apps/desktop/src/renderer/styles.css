@@ -5749,85 +5749,13 @@ textarea {
   fill: currentColor;
 }
 
-/* Templates row at the bottom of Home */
+/* Discover-page template grid — same 6-column uniform-height layout as
+   the Home shelf (`.cd-shelf-grid`); the cards themselves are the shared
+   `.cd-app-card` RefinedAppTile built by `buildShelfTile`. */
 .cd-tmpl-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-}
-.cd-tmpl-card-wrap {
-  position: relative;
-  display: block;
-}
-.cd-tmpl-card {
-  width: 100%;
-  padding: 12px;
-  /* Reserve room on the right for the `•••` action so the description
-     never gets clipped by the button on hover. 32px is the button's hit
-     area (26px) plus the inline-edge padding. */
-  padding-right: 32px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
-  font: inherit;
-  transition:
-    background 160ms,
-    border-color 160ms,
-    box-shadow 160ms,
-    transform 160ms;
-}
-/* Light mode: solid elevated surface (like the app cards) so the card
-   reads cleanly against the cream `--bg-wall`. Dark mode keeps the
-   translucent glass treatment that lets the gradient canvas show
-   through — same split the `.cd-app-card` rules use. */
-:root[data-theme='dark'] .cd-tmpl-card {
-  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 0.5px solid var(--line);
-  box-shadow: none;
-}
-.cd-tmpl-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-:root[data-theme='dark'] .cd-tmpl-card:hover {
-  background: color-mix(in srgb, var(--bg-elev) 75%, transparent);
-  box-shadow: none;
-  transform: translateY(-1px);
-}
-.cd-tmpl-card-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  flex: 0 0 auto;
-}
-.cd-tmpl-card-icon svg {
-  width: 16px;
-  height: 16px;
-}
-.cd-tmpl-card-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.cd-tmpl-card-desc {
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
 }
 
 /* Hover-revealed `•••` action trigger. Lives as a sibling of the card so
@@ -5868,8 +5796,6 @@ textarea {
 }
 .cd-app-card-wrap:hover .cd-card-more,
 .cd-app-card-wrap:focus-within .cd-card-more,
-.cd-tmpl-card-wrap:hover .cd-card-more,
-.cd-tmpl-card-wrap:focus-within .cd-card-more,
 .cd-sb-app-row:hover .cd-card-more,
 .cd-sb-app-row:focus-within .cd-card-more,
 .cd-card-more:focus-visible,
@@ -5883,15 +5809,6 @@ textarea {
 .cd-card-more:active {
   background: color-mix(in oklab, var(--ink) 18%, transparent);
 }
-/* Template cards inherit the base top-right placement. Slightly smaller
-   hit area than the home app cards since the template card itself is
-   denser, but anchored to the same corner so the affordance lives in a
-   consistent spot across the page. */
-.cd-tmpl-card-wrap .cd-card-more {
-  width: 24px;
-  height: 24px;
-}
-
 /* RefinedAppTile (§A3) keeps the hover-revealed star in the card's top
    row, so the `•••` action moves to the bottom-right corner to stay
    clear of it. */
@@ -6000,16 +5917,14 @@ textarea {
 /* Tweaks · Card variant — outlined is the design default (see .cd-app-card
    above). Flat strips the border + frosted blur down to a plain elev tile;
    Elevated drops the border and adds the design's shadow-md for depth. */
-[data-cards='flat'] .cd-app-card,
-[data-cards='flat'] .cd-tmpl-card {
+[data-cards='flat'] .cd-app-card {
   background: var(--bg-elev);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   border-color: transparent;
   box-shadow: none;
 }
-[data-cards='elevated'] .cd-app-card,
-[data-cards='elevated'] .cd-tmpl-card {
+[data-cards='elevated'] .cd-app-card {
   border-color: transparent;
   box-shadow: var(--shadow-md);
 }

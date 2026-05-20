@@ -791,12 +791,22 @@
     timestamp?: string;
     starred?: boolean;
     onClick: () => void;
+    /** Optional right-click handler — wires the card's context menu. */
+    onContextMenu?: (e: MouseEvent) => void;
+    /** Optional hover-revealed `•••` action in the tile's bottom-right. */
+    more?: { label: string; onOpen: (rect: DOMRect) => void };
   }): HTMLElement {
     const card = el('button', {
       class: 'cd-app-card cd-app-card--small',
       type: 'button',
       onClick: spec.onClick,
     });
+    if (spec.onContextMenu) {
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        spec.onContextMenu?.(e as MouseEvent);
+      });
+    }
 
     const iconEl = el('div', {
       class: 'cd-app-card-icon',
@@ -833,6 +843,9 @@
     card.append(foot);
 
     const wrap = el('div', { class: 'cd-app-card-wrap' }, [card]);
+    if (spec.more) {
+      wrap.append(buildMoreButton(spec.more.label, spec.more.onOpen));
+    }
     return wrap;
   }
 
@@ -1416,45 +1429,28 @@
     return wrap;
   }
 
+  // Discover-page template card. Shares the exact RefinedAppTile vocabulary
+  // and uniform-height grid as the Home shelf — `buildShelfTile` is the one
+  // card builder, so Discover and the shelf's Templates tab stay in lockstep.
+  // Click opens a preview rather than cloning straight away — keeps a
+  // single-tap from becoming a surprise side effect on disk; the "Use this
+  // template" button in the preview commits the clone.
   function renderTemplateCard(tmpl: TemplateEntry): HTMLElement {
     const color = (window.ICON_PALETTE as Record<string, string>)[tmpl.colorKey] || '#7C5BD9';
-    const wrap = el('div', { class: 'cd-tmpl-card-wrap' });
-    const card = el(
-      'button',
-      {
-        class: 'cd-tmpl-card',
-        type: 'button',
-        // Click opens a preview rather than cloning straight away — keeps a
-        // single-tap from becoming a surprise side effect on disk. The
-        // "Use this template" button in the preview commits the clone.
-        onClick: () => openTemplatePreview(tmpl),
-        onContextmenu: (e: Event) => {
-          e.preventDefault();
-          const me = e as MouseEvent;
-          openTemplateContextMenu(tmpl, { kind: 'point', x: me.clientX, y: me.clientY });
-        },
+    return buildShelfTile({
+      name: tmpl.name,
+      desc: tmpl.desc,
+      iconKey: tmpl.iconKey,
+      color,
+      status: 'template',
+      onClick: () => openTemplatePreview(tmpl),
+      onContextMenu: (me) =>
+        openTemplateContextMenu(tmpl, { kind: 'point', x: me.clientX, y: me.clientY }),
+      more: {
+        label: 'Template actions',
+        onOpen: (rect) => openTemplateContextMenu(tmpl, { kind: 'rect', rect }),
       },
-      [],
-    );
-    const iconEl = el('div', {
-      class: 'cd-tmpl-card-icon',
-      style: { background: color },
-      trustedHtml: Icon[tmpl.iconKey as IconNameType]
-        ? Icon[tmpl.iconKey as IconNameType]({ size: 16, strokeWidth: 1.85 })
-        : '',
     });
-    card.append(iconEl);
-    const text = el('div', { style: { minWidth: '0', flex: '1' } });
-    text.append(el('div', { class: 'cd-tmpl-card-name' }, tmpl.name));
-    text.append(el('div', { class: 'cd-tmpl-card-desc' }, tmpl.desc));
-    card.append(text);
-    wrap.append(card);
-    wrap.append(
-      buildMoreButton('Template actions', (rect) =>
-        openTemplateContextMenu(tmpl, { kind: 'rect', rect }),
-      ),
-    );
-    return wrap;
   }
 
   // Hover-revealed `•••` action trigger. Sits as a sibling to the card so we
