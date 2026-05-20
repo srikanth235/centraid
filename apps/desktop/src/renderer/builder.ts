@@ -48,11 +48,10 @@
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
   const MonitorIcon = (size = 13): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
-  // Sparkle glyph for the "Try" follow-up label and other contextual hints.
-  // Smaller stroke than the design-token Sparkle so it sits comfortably as a
-  // 11px label adornment.
-  const SparkleIcon = (size = 11): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.6 1.6L21 17l-1.4.4L19 19l-.6-1.6L17 17l1.4-.4z"/></svg>`;
+  // Paperclip glyph for the chat composer's attach control — the shared
+  // icon set has no paperclip, so it lives inline here.
+  const PaperclipIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
   const FolderOpenIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 9h18l-2 9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
   // File-with-edit glyph for the change card that surfaces below tool-group
@@ -713,16 +712,23 @@
     // `rightPane` so the dotted wall fills the column. Render functions
     // write into `rightPaneContent`.
     const rightPane = el('div', { class: 'right-pane' });
-    // §B3 — right-pane toolbar. Owns the Preview/Code toggle, the preview
-    // URL pill, and the viewport device pill. The handover puts these in a
-    // toolbar above the canvas — sitting with the surface they control —
-    // rather than in the window chrome row. `data-tab` gates the
-    // preview-only controls (URL pill + device pill) via CSS.
+    // §B3 — right-pane toolbar. Layout mirrors RBPaneToolbar: URL pill at
+    // the leading edge, then a flex spacer, then the viewport device pill,
+    // an open-in-new-tab button, and the Preview/Code toggle on the
+    // trailing edge — controls sitting with the surface they control.
+    // `data-tab` gates the preview-only controls (URL pill + device pill).
+    const rbShareBtn = el('button', {
+      'aria-label': 'Open in new tab',
+      class: 'rb-toolbar-share',
+      title: 'Open in new tab',
+      trustedHtml: Icon.Share({ size: 12 }),
+    });
     const rbToolbar = el('div', { class: 'rb-toolbar', 'data-tab': tab }, [
-      tabsPill,
-      el('div', { class: 'rb-toolbar-spacer' }),
       previewUrlPill,
+      el('div', { class: 'rb-toolbar-spacer' }),
       devicePill,
+      rbShareBtn,
+      tabsPill,
     ]);
     const rightPaneContent = el('div', { class: 'right-pane-content' });
     rightPane.append(rbToolbar);
@@ -843,17 +849,17 @@
       if (m.kind === 'user') {
         return el('div', { class: 'msg-user' }, [el('div', { class: 'msg-user-bubble' }, m.text)]);
       }
-      // AI message — preserve paragraphs from the streaming text. Lead
-      // with a small `builder` author chip (gradient dot + monospace
-      // label) that grounds the assistant turn in the conversation
-      // rather than letting it read as floating prose.
-      const author = el('div', { class: 'msg-ai-author' });
-      author.innerHTML =
-        '<span class="msg-ai-author-dot"></span><span class="msg-ai-author-name">builder</span>';
+      // AI message — flat prose with a small sparkle avatar at the lead
+      // (matches RBChat's agent message). The avatar grounds the turn in
+      // the conversation; the body reads as plain prose, no bubble.
+      const avatar = el('span', {
+        class: 'msg-ai-avatar',
+        trustedHtml: Icon.Sparkle({ size: 11 }),
+      });
       const para = el('div', { class: 'msg-ai-text' });
       const text = m.text || (m.streaming ? '…' : '');
       text.split('\n\n').forEach((p) => para.append(el('p', {}, p)));
-      return el('div', { class: 'msg-ai' }, [author, para]);
+      return el('div', { class: 'msg-ai' }, [avatar, para]);
     }
 
     function renderChat(): void {
@@ -920,7 +926,7 @@
           'aria-label': 'Attach',
           class: 'input-pill input-pill-icon',
           title: 'Attach',
-          trustedHtml: Icon.Plus({ size: 14 }),
+          trustedHtml: PaperclipIcon(14),
         }),
         el('button', {
           'aria-label': 'Open project folder',
@@ -932,28 +938,23 @@
           },
         }),
         el('div', { class: 'spacer' }),
+        el('span', { class: 'chat-input-kbd' }, '⌘↵'),
         sendBtn,
       ]);
 
       const wrap = el('div', { class: 'chat-input' }, [ta, controls]);
-      // Contextual follow-ups — anchored just above the input, prefixed with
-      // a `Try` label so they read as suggestions rather than empty-state
-      // filler. Same hardcoded set today; future work can swap in
-      // turn-aware suggestions from the agent.
-      const followups = el('div', { class: 'prompt-starters' });
-      followups.append(
-        el('span', {
-          class: 'prompt-starters-label',
-          trustedHtml: `${SparkleIcon(11)}<span>Try</span>`,
-        }),
-      );
+      // Contextual follow-ups — anchored just above the input under a
+      // "Suggested next moves" eyebrow so they read as a labelled group
+      // (matches RBChat). Same hardcoded set today; future work can swap
+      // in turn-aware suggestions from the agent.
+      const followupChips = el('div', { class: 'prompt-starters' });
       for (const suggestion of [
         'Improve the layout',
         'Add saved data',
         'Polish the visual style',
         'Prepare to publish',
       ]) {
-        followups.append(
+        followupChips.append(
           el(
             'button',
             {
@@ -967,7 +968,12 @@
           ),
         );
       }
-      inputWrap.append(followups);
+      inputWrap.append(
+        el('div', { class: 'prompt-starters-group' }, [
+          el('div', { class: 'prompt-starters-label' }, 'Suggested next moves'),
+          followupChips,
+        ]),
+      );
       inputWrap.append(wrap);
     }
 
@@ -1488,14 +1494,22 @@
         // section headers only appear when both groups are populated.
         const showHeaders = !search && frontend.length > 0 && backend.length > 0;
 
+        // Group header with a trailing mono count (matches the cd-eyebrow
+        // + count in RefinedBuilderCode's file tree).
+        const groupHead = (label: string, count: number): HTMLElement =>
+          el('div', { class: 'code-tree-group-head' }, [
+            el('span', {}, label),
+            el('span', { class: 'code-tree-group-count' }, String(count)),
+          ]);
+
         if (showHeaders) {
-          list.append(el('div', { class: 'code-tree-group-head' }, 'Frontend'));
+          list.append(groupHead('Frontend', frontend.length));
         }
         walk(frontend, 0);
 
         if (backend.length > 0) {
           if (showHeaders) {
-            list.append(el('div', { class: 'code-tree-group-head' }, 'Backend'));
+            list.append(groupHead('Backend', backend.length));
           }
           walk(backend, 0);
         }
@@ -1507,11 +1521,47 @@
         treeWrap.append(list);
       };
 
-      // ---- Editable editor (tabs + head + surface) ----
+      // ---- Editable editor (tabs + head + surface + status) ----
       const tabsBar = el('div', { class: 'code-tabs' });
       const headBar = el('div', { class: 'code-head' });
       const editorHost = el('div', { class: 'code-editor-host' });
-      workspace.append(tabsBar, headBar, editorHost);
+      const statusBar = el('div', { class: 'code-status' });
+      workspace.append(tabsBar, headBar, editorHost, statusBar);
+
+      // Bottom status strip — "N lines · KB · autosaving · line L col C ·
+      // LANG" (matches RefinedBuilderCode). `caret` is refreshed live by
+      // the editor's selection listener; the rest by file/dirty changes.
+      let caretLine = 1;
+      let caretCol = 1;
+      function drawStatus(): void {
+        statusBar.innerHTML = '';
+        const p = codeActivePath;
+        const buf = p ? codeBuffers.get(p) : undefined;
+        if (!p || !buf) return;
+        const lineCount = buf.current.split('\n').length;
+        const bytes = new TextEncoder().encode(buf.current).byteLength;
+        const nDirty = dirtyPaths().length;
+        const lang = languageHint(p);
+        const sep = (): HTMLElement => el('span', { class: 'code-status-sep' }, '·');
+        statusBar.append(
+          el(
+            'span',
+            {},
+            `${lineCount} ${lineCount === 1 ? 'line' : 'lines'} · ${formatBytes(bytes)}`,
+          ),
+          sep(),
+          el('span', { class: 'code-status-save' }, [
+            el('span', { class: 'code-status-dot' }),
+            nDirty > 0
+              ? `autosaving · ${nDirty} unsaved file${nDirty === 1 ? '' : 's'}`
+              : 'all saved',
+          ]),
+          el('span', { class: 'code-status-spacer' }),
+          el('span', {}, `line ${caretLine} · col ${caretCol}`),
+          sep(),
+          el('span', {}, LANG_DISPLAY[lang] ?? 'TXT'),
+        );
+      }
 
       const basename = (p: string): string =>
         p.includes('/') ? p.slice(p.lastIndexOf('/') + 1) : p;
@@ -1529,6 +1579,7 @@
         drawTree();
         drawTabs();
         drawHead();
+        drawStatus();
       };
       const saveAll = async (): Promise<void> => {
         for (const p of dirtyPaths()) await saveFile(p);
@@ -1704,13 +1755,16 @@
         const buf = p ? codeBuffers.get(p) : undefined;
         if (!p || !buf) {
           editorHost.append(el('div', { class: 'empty' }, 'No file open.'));
+          drawStatus();
           return;
         }
         if (codeDiffMode) {
           editorHost.append(buildDiffView(buf));
+          drawStatus();
           return;
         }
         editorHost.append(buildEditor(p, buf));
+        drawStatus();
       }
 
       const buildDiffView = (buf: CodeBuffer): HTMLElement => {
@@ -1759,15 +1813,28 @@
         paintGutter();
         paintHighlight();
 
+        // Caret position drives the bottom status strip's "line L col C".
+        const refreshCaret = (): void => {
+          const upto = ta.value.slice(0, ta.selectionStart);
+          const nl = upto.lastIndexOf('\n');
+          caretLine = upto.split('\n').length;
+          caretCol = ta.selectionStart - (nl + 1) + 1;
+          drawStatus();
+        };
+        ta.addEventListener('keyup', refreshCaret);
+        ta.addEventListener('click', refreshCaret);
+        ta.addEventListener('focus', refreshCaret);
+
         ta.addEventListener('input', () => {
           buf.current = ta.value;
           paintHighlight();
           paintGutter();
-          // Dirty state changed — refresh the tab dots, tree, and head
-          // without rebuilding the editor (keeps the caret/focus).
+          // Dirty state changed — refresh the tab dots, tree, head, and
+          // status without rebuilding the editor (keeps the caret/focus).
           drawTabs();
           drawHead();
           drawTree();
+          refreshCaret();
         });
         ta.addEventListener('scroll', () => {
           pre.style.transform = `translate(${-ta.scrollLeft}px, ${-ta.scrollTop}px)`;

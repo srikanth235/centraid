@@ -1335,7 +1335,10 @@ textarea {
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 24px 8px;
+  padding: 26px 24px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 .chat-divider {
   display: flex;
@@ -1387,52 +1390,46 @@ textarea {
 .msg-user {
   display: flex;
   justify-content: flex-end;
-  margin: 8px 0;
+  margin: 0;
 }
 .msg-user-bubble {
   max-width: 84%;
-  background: var(--accent);
-  color: white;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--ink);
   padding: 10px 14px;
-  border-radius: 16px 16px 4px 16px;
-  font-size: 13px;
+  border-radius: 14px 14px 4px 14px;
+  font-size: 14px;
   line-height: 1.45;
 }
+/* Agent message — flat prose with a small sparkle avatar at the lead.
+   No bubble: the assistant turn reads as plain prose (matches RBChat). */
 .msg-ai {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 14px 0 8px;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
 }
-/* Author chip — small accent square + monospace `builder` label that
-   precedes every assistant turn. Grounds the message in the
-   conversation rather than letting it read as floating prose. */
-.msg-ai-author {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  letter-spacing: 0;
-  margin-bottom: 2px;
-}
-.msg-ai-author-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-deep, var(--accent)));
-  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;
+.msg-ai-avatar {
   flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  margin-top: 2px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
 }
-.msg-ai-author-name {
-  letter-spacing: 0.01em;
+.msg-ai-text {
+  flex: 1;
+  min-width: 0;
 }
 .msg-ai-text p {
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.55;
-  color: var(--ink);
+  color: var(--ink-2);
 }
 .msg-ai-text p:last-child {
   margin-bottom: 0;
@@ -1668,37 +1665,34 @@ textarea {
   padding: 8px 16px 16px;
   background: var(--bg);
 }
-/* Contextual follow-ups, anchored just above the input. The leading
-   `.prompt-starters-label` ("✨ Try") frames the chips as suggestions
-   tied to the conversation rather than empty-state filler that floats
-   in dead space. */
+/* Contextual follow-ups, anchored just above the input under a
+   "Suggested next moves" eyebrow so they read as a labelled group
+   tied to the conversation rather than empty-state filler. */
+.prompt-starters-group {
+  margin-bottom: 10px;
+}
 .prompt-starters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 8px;
 }
 .prompt-starters-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.01em;
-  color: var(--ink-4, var(--ink-3));
-  margin-right: 2px;
-}
-.prompt-starters-label svg {
-  opacity: 0.85;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 8px;
 }
 .prompt-starter {
   border: 0.5px solid var(--line);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--ink-2);
   border-radius: 999px;
-  padding: 5px 10px;
-  font-size: 11.5px;
+  padding: 6px 12px;
+  font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -1734,15 +1728,24 @@ textarea {
 
 .chat-input {
   background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 10px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
+}
+/* ⌘↵ keycap in the composer toolbar — matches RBChat's mono hint. */
+.chat-input-kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
 }
 .chat-input:focus-within {
   border-color: var(--accent);
@@ -1791,21 +1794,21 @@ textarea {
    attach + open-folder buttons cluster tightly without competing with the
    primary send button on the right. */
 .input-pill-icon {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   justify-content: center;
 }
 .send-btn {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   border: 0;
   background: var(--accent);
   color: white;
   display: grid;
   place-items: center;
-  margin-left: auto;
+  margin-left: 0;
 }
 .send-btn:hover {
   background: color-mix(in oklab, var(--accent) 88%, black);
@@ -1847,6 +1850,26 @@ textarea {
 .rb-toolbar-spacer {
   flex: 1;
 }
+.rb-toolbar-share {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.rb-toolbar-share:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
 .rb-toolbar:not([data-tab='preview']) .rb-url,
 .rb-toolbar:not([data-tab='preview']) .urlbar-device {
   display: none;
@@ -1855,19 +1878,19 @@ textarea {
 .rb-url {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 28px;
+  gap: 8px;
+  height: 24px;
   padding: 0 4px 0 10px;
-  background: var(--bg-sunken);
+  background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  border-radius: 999px;
+  border-radius: 6px;
   max-width: 320px;
   min-width: 0;
 }
 .rb-url-dot {
   flex: none;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--ink-3);
 }
@@ -1898,7 +1921,7 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--ink-2);
 }
 .rb-url-refresh {
@@ -1906,10 +1929,10 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border: 0;
-  border-radius: 50%;
+  border-radius: 5px;
   background: transparent;
   color: var(--ink-3);
   cursor: pointer;
@@ -2272,10 +2295,10 @@ textarea {
   gap: 12px;
 }
 .cloud-stat-card {
-  border: 1px solid var(--line);
+  border: 0.5px solid var(--line);
   border-radius: 12px;
-  padding: 16px;
-  background: var(--bg-elev);
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
 .cloud-stat-label {
   font-size: 11px;
@@ -2284,9 +2307,11 @@ textarea {
   color: var(--ink-3);
 }
 .cloud-stat-value {
-  margin-top: 6px;
-  font-size: 18px;
-  font-weight: 600;
+  margin-top: 4px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
   color: var(--ink);
   word-break: break-all;
 }
@@ -2299,6 +2324,8 @@ textarea {
   color: var(--ink-3);
   font-weight: 500;
   font-size: 14px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 .cloud-stat-sub {
   margin-top: 4px;
@@ -2885,23 +2912,22 @@ textarea {
   flex: none;
   display: flex;
   align-items: stretch;
-  gap: 1px;
-  padding: 0 8px;
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--line);
+  gap: 0;
+  padding: 0 8px 0 14px;
+  background: var(--bg);
+  border-bottom: 0.5px solid var(--line);
   overflow-x: auto;
 }
 .code-tab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 6px 0 10px;
-  border-top: 2px solid transparent;
+  gap: 7px;
+  padding: 10px 12px 9px;
+  border-bottom: 2px solid transparent;
   max-width: 200px;
 }
 .code-tab[data-active='true'] {
-  background: var(--bg);
-  border-top-color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 .code-tab-dot {
   width: 6px;
@@ -2925,14 +2951,14 @@ textarea {
   background: transparent;
   color: var(--ink-3);
   cursor: pointer;
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  font-size: 12px;
-  padding: 9px 0;
+  font-size: 12.5px;
+  padding: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .code-tab[data-active='true'] .code-tab-label {
+  font-weight: 600;
   color: var(--ink);
 }
 .code-tab-close {
@@ -3151,6 +3177,38 @@ textarea {
   flex: none;
   margin-left: auto;
   background: var(--accent);
+}
+
+/* Bottom status strip — N lines · KB · autosaving · line/col · LANG.
+   Matches RefinedBuilderCode's footer. */
+.code-status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 18px;
+  border-top: 0.5px solid var(--line);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+.code-status-sep {
+  color: var(--ink-4);
+}
+.code-status-spacer {
+  flex: 1;
+}
+.code-status-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.code-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent-light, var(--accent));
 }
 .tok-tag {
   color: var(--c-rose);
@@ -3404,8 +3462,10 @@ textarea {
   box-shadow: 0 0 0 3px hsla(0 50% 53% / 0.18);
 }
 .cloud-stat-value.cloud-stat-mid {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 .cloud-stat-value.cloud-stat-inline {
   display: inline-flex;
@@ -3498,15 +3558,25 @@ textarea {
 /* Tree — group headers + colored dot replaces the per-file glyph + a 2px
    accent stripe on the active row instead of a heavy background fill. */
 .code-tree-group-head {
-  padding: 14px 10px 4px;
-  font-size: 10.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 10px 4px;
+  font-size: 9.5px;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 .code-tree-group-head:first-child {
-  padding-top: 6px;
+  padding-top: 4px;
+}
+.code-tree-group-count {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  letter-spacing: 0;
+  color: var(--ink-4);
 }
 .code-tree-lang-dot {
   width: 6px;

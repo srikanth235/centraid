@@ -262,6 +262,33 @@ row, 2-line clamped blurb, and a state-aware mono foot strip
 section headers `Apps · N` / `Chats · N` with a hover-revealed `+`.
 Verified by Electron screenshots against the proposal artboards.
 
+**Pixel-match Builder screens (2026-05-20).** A fidelity pass taking the
+Builder Preview, Code, and Cloud surfaces to a pixel match of the
+refined proposal artboards (`RefinedBuilder` / `RefinedBuilderCode` /
+`RefinedBuilderCloud`). Chat pane (`RBChat`): the assistant turn drops
+its monospace `builder` author chip for flat prose led by a 22px
+sparkle avatar (`msg-ai-avatar`); user messages become tinted accent
+pills (`16%` fill, `28%` border) instead of solid-accent bubbles; the
+scroll body is now a flex column with an 18px message gap. The composer
+follow-ups move under a "Suggested next moves" mono-caps eyebrow
+(`prompt-starters-group`) rather than an inline `✦ Try` label, and the
+composer toolbar gains a `⌘↵` keycap (`chat-input-kbd`) beside a 30px
+send button; the attach control uses a proper paperclip glyph. The
+right-pane toolbar (`rb-toolbar`) is reordered to mirror `RBPaneToolbar`
+— URL pill at the leading edge, then a spacer, the viewport device
+pill, an open-in-new-tab button (`rb-toolbar-share`), and the
+Preview/Code toggle trailing; the URL pill is retuned to a 24px
+6px-radius bg-elev pill. Code workspace: file tabs switch from a
+top-border to a bottom-border accent underline with bolded active
+labels; tree group headers (`code-tree-group-head`) gain a trailing
+mono file count; and a new bottom status strip (`code-status`) renders
+`N lines · KB · autosaving · line L col C · LANG` with a live
+caret-position readout wired off the editor textarea's selection.
+Cloud: stat-tile values jump to a 24px display weight on a faint
+`ink 3%` tile fill, and the gateway/loading values are pinned
+`nowrap` so "Reachable" / "Loading…" no longer wrap. Verified by
+Electron screenshots against the three proposal artboards.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).
