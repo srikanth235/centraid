@@ -27,6 +27,16 @@ applies the screen-level redesign, landed as one commit per step.
 
 ## What changed
 
+**2026-05-20 — Home layout is always the composer-led Day-1 view.**
+`renderHomeAsync` no longer branches on app count: the centered
+composer hero + tabbed discovery shelf (`renderDay1Home`) is now the
+sole Home layout regardless of how many apps or drafts exist. The
+count-gated `renderLoadedHome` path (greeting header + Starred / All
+apps grids + inspiration footer) and its now-orphaned helpers
+(`buildBuildPill`, `buildSectionBar`, `eyebrowDate`, `HERO_PROMPTS`,
+`LIST_SVG`) were removed. The shelf's `Browse all →` continues to
+route to the Discover templates page — the only path off Home.
+
 **2026-05-20 — Builder pixel-fidelity pass.** Relocated the Builder
 project identity into the window titlebar to match the refined
 `RefinedBuilder` artboard. The in-pane `builder-pane-header` row was

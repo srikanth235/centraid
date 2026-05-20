@@ -663,14 +663,11 @@
     const scroll = el('div', { class: 'cd-main-scroll' });
     main.append(scroll);
 
-    // Refined Screens §A1/§A2 — two distinct home layouts. At day one
-    // (0–2 apps) the composer leads and a discovery shelf fills the page;
-    // once the workspace fills out (3+) apps lead and the composer
-    // demotes to an ambient pinned pill.
-    const apps = getApps();
-    const total = apps.length + drafts.length;
-    if (total < 3) renderDay1Home(scroll, availableTemplates);
-    else renderLoadedHome(scroll, apps);
+    // Home is always the composer-led layout — centered composer hero +
+    // tabbed discovery shelf — regardless of how many apps exist. The
+    // shelf's "Browse all →" is the only path to the alternate (Discover)
+    // page; the workspace never auto-switches based on app count.
+    renderDay1Home(scroll, availableTemplates);
 
     const sidebar = buildHomeSidebar({ page: 'home' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
@@ -695,96 +692,8 @@
     scroll.append(buildTabbedShelf(templates));
   }
 
-  // Eyebrow date — "Tuesday · 19 May" format, computed from the clock.
-  function eyebrowDate(): string {
-    const d = new Date();
-    const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
-    const day = d.getDate();
-    const month = d.toLocaleDateString('en-US', { month: 'short' });
-    return `${weekday} · ${day} ${month}`;
-  }
-
-  // §A2 — Loaded home: greeting header (eyebrow + "Your apps." + ambient
-  // build pill on the right) + Starred + All apps + inspiration footer.
-  function renderLoadedHome(scroll: HTMLElement, apps: AppMetaResolvedType[]): void {
-    const header = el('header', { class: 'cd-home-header' }, [
-      el('div', { class: 'cd-home-header-text' }, [
-        el('div', { class: 'cd-eyebrow' }, eyebrowDate()),
-        el('h1', {}, 'Your apps.'),
-      ]),
-      buildBuildPill(),
-    ]);
-    scroll.append(header);
-
-    const all: AppMetaResolvedType[] = [...apps, ...drafts];
-    const starredApps = all.filter((a) => isStarred(a.id));
-    if (starredApps.length > 0) {
-      const section = el('section', { class: 'cd-section' });
-      section.append(buildSectionBar('Starred', starredApps.length));
-      const grid = el('div', { class: 'cd-apps-grid' });
-      for (const a of starredApps) grid.append(renderAppCard(a));
-      section.append(grid);
-      scroll.append(section);
-    }
-
-    const section = el('section', { class: 'cd-section' });
-    section.append(buildSectionBar('All apps', all.length, true));
-    const grid = el('div', { class: 'cd-apps-grid cd-apps-grid--small' });
-    for (const a of all) grid.append(renderAppCard(a, true));
-    section.append(grid);
-    scroll.append(section);
-
-    scroll.append(
-      el('div', { class: 'cd-home-footer' }, [
-        el('div', { class: 'cd-home-footer-text' }, [
-          el('div', { class: 'cd-home-footer-title' }, 'Looking for inspiration?'),
-          el(
-            'div',
-            { class: 'cd-home-footer-sub' },
-            'Browse templates — habit trackers, journals, counters, lists.',
-          ),
-        ]),
-        el(
-          'button',
-          { class: 'cd-chip cd-home-footer-btn', type: 'button', onClick: renderDiscover },
-          [
-            el('span', { trustedHtml: Icon.Compass({ size: 12 }) }),
-            el('span', {}, 'Discover templates'),
-          ],
-        ),
-      ]),
-    );
-  }
-
-  // SectionBar — heading + zero-padded mono count + optional sort chip.
-  function buildSectionBar(label: string, count: number, sortable = false): HTMLElement {
-    const head = el('div', { class: 'cd-section-head' }, [
-      el('h2', {}, label),
-      el('span', { class: 'cd-section-meta' }, String(count).padStart(2, '0')),
-    ]);
-    if (sortable) {
-      head.append(el('span', { class: 'cd-section-spacer' }));
-      head.append(
-        el('button', { class: 'cd-chip cd-section-sort', type: 'button' }, [
-          el('span', { trustedHtml: LIST_SVG }),
-          el('span', {}, 'Sort · recent'),
-        ]),
-      );
-    }
-    return head;
-  }
-
-  // Rotating example prompts for the Day-1 composer (§A1).
-  const HERO_PROMPTS: readonly string[] = [
-    'a habit tracker with daily check-ins…',
-    'a journal with one page per day…',
-    'a reading list with covers and ratings…',
-    'a workout planner with weekly splits…',
-    'a budget tracker with monthly rollups…',
-  ];
-
   // Shared composer behaviour — wires submit/keydown onto a textarea +
-  // build button pair. Used by the Day-1 hero and the loaded-home pill.
+  // build button pair. Used by the Day-1 hero.
   function wireComposer(ta: HTMLTextAreaElement, buildBtn: HTMLElement): void {
     const submit = (): void => {
       const v = ta.value.trim();
@@ -822,11 +731,6 @@
     'stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">' +
     '<rect x="9" y="2" width="6" height="11" rx="3"/>' +
     '<path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>';
-  // List glyph — not in the shared icon set; inlined for the Sort chip.
-  const LIST_SVG =
-    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-    '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
 
   function buildHomeHero(): HTMLElement {
     const wrap = el('div', { class: 'cd-hero' });
@@ -882,43 +786,6 @@
     composer.append(ta, toolbar);
     wrap.append(composer);
     return wrap;
-  }
-
-  // §A2 — the ambient pinned build pill. Collapsed it's a slim ~360px
-  // bar; clicking expands it into a full composer card.
-  function buildBuildPill(): HTMLElement {
-    const pill = el('div', { class: 'cd-build-pill', 'data-expanded': 'false' });
-
-    const collapsed = el('button', { class: 'cd-build-pill-collapsed', type: 'button' }, [
-      el('span', { class: 'cd-build-pill-icon', trustedHtml: Icon.Sparkle({ size: 12 }) }),
-      el(
-        'span',
-        { class: 'cd-build-pill-label' },
-        'Build a tiny app · habit tracker, journal, calculator…',
-      ),
-      el('span', { class: 'cd-kbd' }, '⌘N'),
-    ]);
-
-    const ta = el('textarea', { placeholder: HERO_PROMPTS[0], rows: '3' }) as HTMLTextAreaElement;
-    const buildBtn = el('button', { class: 'cd-hero-build-btn', disabled: '' });
-    buildBtn.innerHTML = `<span>Build</span>${Icon.Send({ size: 13 })}`;
-    wireComposer(ta, buildBtn);
-
-    const expanded = el('div', { class: 'cd-build-pill-expanded' }, [
-      ta,
-      el('div', { class: 'cd-hero-prompt-row' }, [el('span', { style: { flex: '1' } }), buildBtn]),
-    ]);
-
-    collapsed.addEventListener('click', () => {
-      pill.dataset.expanded = 'true';
-      ta.focus();
-    });
-    ta.addEventListener('blur', () => {
-      if (!ta.value.trim()) pill.dataset.expanded = 'false';
-    });
-
-    pill.append(collapsed, expanded);
-    return pill;
   }
 
   // A shelf tile — the same RefinedAppTile shape as renderAppCard but
