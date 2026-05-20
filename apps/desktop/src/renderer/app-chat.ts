@@ -143,17 +143,17 @@
       'aria-hidden': 'true',
     });
 
-    // Header controls. The leading button doubles as "open history list" when
-    // in chat view and "back to chat" when in history view. The "+" mints a
-    // new chat (clearing the in-memory turns; persists on first send). Close
-    // hides the whole panel.
+    // Header controls. Back button — shown only in history view (returns
+    // to chat). In chat view its job (opening history) moves into the ⋯
+    // overflow (§D3). Close hides the whole panel.
     const headHistoryBtn = el('button', {
       class: 'app-chat-icon-btn',
       type: 'button',
-      'aria-label': 'Show chat history',
-      title: 'Chat history',
+      hidden: '',
+      'aria-label': 'Back to chat',
+      title: 'Back to chat',
       trustedHtml:
-        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>',
+        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 4l-4 4 4 4"/></svg>',
       onClick: () => {
         if (viewMode === 'history') setView('chat');
         else void openHistory();
@@ -166,17 +166,6 @@
       }),
       el('span', { class: 'app-chat-title-text' }, `Ask ${app.name}`),
     ]);
-    const headNewBtn = el('button', {
-      class: 'app-chat-icon-btn',
-      type: 'button',
-      'aria-label': 'New chat',
-      title: 'New chat',
-      trustedHtml:
-        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
-      onClick: () => {
-        void startNewChat();
-      },
-    });
     const headCloseBtn = el('button', {
       class: 'app-chat-icon-btn app-chat-close',
       type: 'button',
@@ -186,14 +175,83 @@
         '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
       onClick: () => toggle(false),
     });
+
+    // §D3 — secondary header actions (New chat, Chat history) collapse
+    // into a ⋯ overflow so the copilot header reads calmly: title · ⋯ · ×.
+    const overflowMenu = el('div', { class: 'app-chat-overflow-menu', hidden: '' });
+    const overflowItem = (label: string, onClick: () => void): HTMLElement =>
+      el(
+        'button',
+        {
+          class: 'app-chat-overflow-item',
+          type: 'button',
+          onClick: () => {
+            overflowMenu.setAttribute('hidden', '');
+            onClick();
+          },
+        },
+        label,
+      );
+    overflowMenu.append(
+      overflowItem('New chat', () => void startNewChat()),
+      overflowItem('Chat history', () => void openHistory()),
+    );
+    const overflowBtn = el('button', {
+      class: 'app-chat-icon-btn',
+      type: 'button',
+      'aria-label': 'More actions',
+      title: 'More',
+      trustedHtml:
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>',
+    });
+    overflowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (overflowMenu.hasAttribute('hidden')) overflowMenu.removeAttribute('hidden');
+      else overflowMenu.setAttribute('hidden', '');
+    });
+    document.addEventListener('click', () => overflowMenu.setAttribute('hidden', ''), {
+      capture: true,
+    });
+    const overflowWrap = el('div', { class: 'app-chat-overflow-wrap' }, [
+      overflowBtn,
+      overflowMenu,
+    ]);
+
     const head = el('div', { class: 'app-chat-head' }, [
       headHistoryBtn,
       headTitle,
-      el('div', { class: 'app-chat-head-actions' }, [headNewBtn, headCloseBtn]),
+      el('div', { class: 'app-chat-head-actions' }, [overflowWrap, headCloseBtn]),
     ]);
     // chat-scroll mirrors the builder; the panel-specific padding override
     // lives in styles.css under `.app-chat-panel .chat-scroll`.
     const scroll = el('div', { class: 'chat-scroll app-chat-scroll' });
+    // §D1 — the empty state leads with "Try these starters": tappable
+    // prompt chips that drop into the composer, so a fresh copilot pane
+    // is never a blank box.
+    const starterPrompts = [
+      'What can this app do?',
+      'Show me all the records',
+      'Add a new entry',
+      'Summarize the data',
+    ];
+    const starterRow = el('div', { class: 'app-chat-starters' });
+    for (const prompt of starterPrompts) {
+      starterRow.append(
+        el(
+          'button',
+          {
+            class: 'app-chat-starter',
+            type: 'button',
+            onClick: () => {
+              input.value = prompt;
+              input.dispatchEvent(new Event('input'));
+              input.focus();
+            },
+          },
+          prompt,
+        ),
+      );
+    }
     const empty = el('div', { class: 'app-chat-empty' }, [
       el('div', { class: 'app-chat-empty-title' }, `Chat with ${app.name}`),
       el(
@@ -201,6 +259,8 @@
         { class: 'app-chat-empty-hint' },
         'Ask questions about this app’s data, or have the assistant add, update, or delete records on your behalf.',
       ),
+      el('div', { class: 'app-chat-starters-label' }, 'Try these starters'),
+      starterRow,
     ]);
 
     // History view chrome — list of past sessions with a search input and
@@ -307,15 +367,10 @@
       historyWrap.hidden = !onHistory;
       scroll.hidden = onHistory;
       inputWrap.hidden = onHistory;
-      // Hamburger icon morphs into a back arrow when in history view.
-      headHistoryBtn.setAttribute('aria-label', onHistory ? 'Back to chat' : 'Show chat history');
-      headHistoryBtn.title = onHistory ? 'Back to chat' : 'Chat history';
-      headHistoryBtn.innerHTML = onHistory
-        ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 4l-4 4 4 4"/></svg>'
-        : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>';
-      // Hide the "+" while inside history — you don't start a new chat from
-      // a list view; tap a row or back out to chat first.
-      headNewBtn.hidden = onHistory;
+      // The back button shows only in history view; the ⋯ overflow shows
+      // only in chat view (§D3).
+      headHistoryBtn.hidden = !onHistory;
+      overflowWrap.hidden = onHistory;
       if (onHistory) historySearchInput.focus();
     }
 

@@ -6279,6 +6279,79 @@ textarea {
   font-size: 12.5px;
   line-height: 1.5;
 }
+/* §D1 — "Try these starters" prompt chips in the copilot empty state. */
+.app-chat-starters-label {
+  margin-top: 18px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.app-chat-starters {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.app-chat-starter {
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+.app-chat-starter:hover {
+  background: var(--bg-sunken);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+/* §D3 — copilot header ⋯ overflow menu. */
+.app-chat-overflow-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.app-chat-overflow-wrap[hidden] {
+  display: none;
+}
+.app-chat-overflow-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.app-chat-overflow-menu[hidden] {
+  display: none;
+}
+.app-chat-overflow-item {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.app-chat-overflow-item:hover {
+  background: var(--bg-sunken);
+}
 
 /* Each tool row inside the in-app chat's tool-group is clickable and drills
    in to show SQL + the result table. Builder's `.tg-row` is a static div;

@@ -137,6 +137,12 @@
         a.updatedAt = nowIso;
         touched = true;
       }
+      // Backfill createdAt from updatedAt for apps that predate the field
+      // (§A3 NEW badge keys off it). New apps get a real stamp at creation.
+      if (!a.createdAt) {
+        a.createdAt = a.updatedAt;
+        touched = true;
+      }
     }
     if (touched) Store.set('home.userApps', userApps);
   }
@@ -623,7 +629,9 @@
       .filter((a): a is AppMetaResolvedType => !!a);
   }
 
-  // "NEW" applies only for the first 24h after an app lands (§A3).
+  // "NEW" applies only for the first 24h after an app is created (§A3).
+  // Keyed off the immutable `createdAt` stamp, not `updatedAt`, so a
+  // republish doesn't re-show NEW.
   function isRecentlyCreated(iso?: string): boolean {
     if (!iso) return false;
     const t = new Date(iso).getTime();
@@ -1301,7 +1309,7 @@
     const foot = el('div', { class: 'cd-app-card-foot' });
     if (draft) {
       foot.append(statusPillEl('draft', 'draft'));
-    } else if (isRecentlyCreated(ua?.updatedAt)) {
+    } else if (isRecentlyCreated(ua?.createdAt)) {
       foot.append(statusPillEl('new', 'new · just now'));
     } else {
       foot.append(
@@ -2141,14 +2149,16 @@
       return existing;
     }
 
+    const stampIso = new Date().toISOString();
     const newApp: UserAppMeta = {
       color: input.color || meta.color,
       colorKey: 'violet',
+      createdAt: stampIso,
       desc: input.prompt && input.prompt.length <= 60 ? input.prompt : 'Built with Centraid.',
       iconKey: input.iconKey || meta.iconKey,
       id,
       name: input.name || meta.name,
-      updatedAt: new Date().toISOString(),
+      updatedAt: stampIso,
       ...(input.projectId ? { centraidProjectId: input.projectId } : {}),
     };
     userApps.push(newApp);

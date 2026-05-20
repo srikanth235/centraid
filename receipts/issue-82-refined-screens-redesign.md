@@ -23,6 +23,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] Follow-up B5 — Builder editable code workspace
 - [x] Follow-up B6 — Cloud Overview hero + activity feed
 - [x] Follow-up C2/C3/C4 — Settings preview, badges, save markers
+- [x] Follow-up D1/D3 — copilot starters, overflow, createdAt
 
 ## What changed
 
@@ -221,6 +222,19 @@ per-page header; pages whose controls persist on change (Appearance,
 Layout, Workspace) carry an `Auto-saved` marker, while the credential
 pages (Inference endpoint, Where apps run) keep their explicit
 Save/Test buttons and get no marker.
+
+**Follow-up D1/D3 — copilot starters, overflow, createdAt.** §D1: the
+app-view copilot's empty state leads with a "Try these starters" block
+— four tappable prompt chips (`app-chat-starter`) that drop into the
+composer, so a fresh copilot pane is never a blank box. §D3: the
+copilot header's New-chat and Chat-history icons collapse into a `⋯`
+overflow menu (`app-chat-overflow-menu`), leaving a calm header of
+title · ⋯ · ×; the back affordance still appears on its own in history
+view. Separately, `UserAppMeta` gains a real immutable `createdAt`
+stamp — set once when an app first lands on home, backfilled from
+`updatedAt` for older apps — and the §A3 "NEW" badge now keys off it
+(`isRecentlyCreated(createdAt)`) so a republish inside 24h no longer
+re-shows NEW.
 
 ## Out of scope
 

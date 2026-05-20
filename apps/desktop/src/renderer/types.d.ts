@@ -162,6 +162,13 @@ declare global {
      * Renders as "Edited X ago" in the home tile.
      */
     updatedAt?: string;
+    /**
+     * Creation timestamp (ISO 8601). Stamped once when the app first lands
+     * on home and never rewritten — so the §A3 "NEW" badge reflects true
+     * app age rather than last-edit recency. Backfilled from `updatedAt`
+     * for apps that predate this field.
+     */
+    createdAt?: string;
   }
 
   /**
