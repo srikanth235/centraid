@@ -1045,24 +1045,27 @@ textarea {
    real drop shadow — reads as a confidently floating pill above the track.
    --shadow-sm alone is just a 1px bottom hairline and gets lost in dark
    mode; we layer our own shadow here. */
+/* Device switcher — a rounded-rect segmented cluster with icon-only
+   pill items (refined proposal RBPaneToolbar). */
 .urlbar-device {
   display: inline-flex;
   padding: 2px;
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
-  border-radius: 999px;
+  border-radius: 7px;
   gap: 1px;
   flex: none;
 }
 .urlbar-device-btn {
   border: 0;
   background: transparent;
-  height: 24px;
-  padding: 0 11px;
-  border-radius: 999px;
+  width: 26px;
+  height: 20px;
+  padding: 0;
+  border-radius: 5px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
   color: var(--ink-3);
   cursor: pointer;
   font-family: inherit;
@@ -1072,9 +1075,6 @@ textarea {
     background 120ms,
     color 120ms,
     box-shadow 120ms;
-}
-.urlbar-device-label {
-  letter-spacing: -0.005em;
 }
 .urlbar-device-btn:hover {
   color: var(--ink);
@@ -1244,70 +1244,9 @@ textarea {
   flex-direction: column;
 }
 
-/* In-pane builder header — sits at the top of the chat pane and owns
-   the project icon, name + status row, more menu, and Publish button.
-   View-context controls (mode tabs, device pill) live in the window
-   chrome row instead — this header is project-identity only. */
-.builder-pane-header {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  border-bottom: 0.5px solid var(--line);
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--bg-elev) 28%, transparent),
-    transparent
-  );
-}
-.builder-pane-meta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.builder-pane-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.builder-pane-more {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  color: var(--ink-3);
-  background: transparent;
-  border: none;
-  border-radius: 7px;
-  cursor: pointer;
-  transition: background 120ms;
-}
-.builder-pane-more:hover {
-  background: color-mix(in oklab, var(--ink) 5%, transparent);
-  color: var(--ink);
-}
-/* The header's icon picks up the project's accent — bigger than the old
-   strip's 22px chip, matching the v2 mockup's 32px tile. */
-.builder-pane-header .app-topbar-icon {
-  width: 32px !important;
-  height: 32px !important;
-  border-radius: 8px !important;
-}
-.builder-pane-header .app-topbar-icon svg {
-  width: 16px;
-  height: 16px;
-}
-/* Editable project title sits inside the meta column. */
-.builder-pane-meta b {
-  font-weight: 600;
-  font-size: 14.5px;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  outline: none;
-}
+/* Builder titlebar identity lockup — the project icon + name + status
+   badge now ride in the window titlebar (cd-tl-nav), hugging the
+   back/forward arrows. The chat pane carries no header of its own. */
 
 /* Header shown when chat pane is in History view */
 .chatpane-head {
@@ -1976,22 +1915,25 @@ textarea {
 .preview-stage:has(.skel-phone) {
   align-items: center;
 }
+/* Light skeleton phone (refined proposal RBPreview) — a light device
+   wall with light-grey shimmering placeholder blocks. */
 .skel-phone {
   flex: 0 0 auto;
-  width: 300px;
+  width: 320px;
   height: 600px;
-  border-radius: 38px;
-  background: var(--bezel);
-  padding: 9px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, #fafbfc 0%, #eceef2 100%);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 50px 100px -30px rgba(0, 0, 0, 0.6);
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 50px 100px -30px rgba(0, 0, 0, 0.55),
+    0 12px 32px -8px rgba(0, 0, 0, 0.25);
 }
 .skel-phone-screen {
   width: 100%;
   height: 100%;
-  border-radius: 30px;
-  background: var(--bg-app);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -2000,30 +1942,29 @@ textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 13px 22px 4px;
+  padding: 0 0 10px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
-  color: var(--ink-3);
+  color: #0c0f15;
 }
 .skel-battery {
-  width: 22px;
-  height: 11px;
-  border: 1.4px solid var(--ink-4);
-  border-radius: 3px;
+  width: 14px;
+  height: 8px;
+  border: 1.2px solid #0c0f15;
+  border-radius: 2px;
   position: relative;
 }
 .skel-battery::after {
   content: '';
   position: absolute;
-  inset: 2px;
-  width: 55%;
-  background: var(--ink-4);
+  inset: 1.2px;
+  background: #0c0f15;
   border-radius: 1px;
 }
 .skel-body {
   flex: 1;
-  padding: 18px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 11px;
@@ -2032,9 +1973,9 @@ textarea {
 .skel-cell {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--ink) 6%, transparent) 25%,
-    color-mix(in srgb, var(--ink) 13%, transparent) 37%,
-    color-mix(in srgb, var(--ink) 6%, transparent) 63%
+    rgba(0, 0, 0, 0.06) 0%,
+    rgba(0, 0, 0, 0.12) 50%,
+    rgba(0, 0, 0, 0.06) 100%
   );
   background-size: 200% 100%;
   animation: skel-shimmer 1.6s linear infinite;
@@ -4821,6 +4762,12 @@ textarea {
   cursor: default;
   pointer-events: none;
 }
+/* Active toggle state — e.g. the builder titlebar's History button when
+   the chat pane is showing version history. */
+.cd-tb-btn[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
 .cd-tooltip {
   position: absolute;
   top: calc(100% + 6px);
@@ -6155,54 +6102,115 @@ textarea {
   margin-top: 1px;
 }
 
-/* In-meta status row — replaces the old editable description subtitle
-   AND the standalone sync chip with a single read-only line that fuses
-   sync state + version + edit time:  ● Live · v3 · edited 14h ago
-   The dot's colour and pulse are driven by the parent's [data-state],
-   set by refreshSyncStatus(). */
-.cd-app-strip-status {
+/* Builder titlebar identity lockup — a soft ink-washed pill carrying the
+   gradient app-icon, editable project name, and a compact status badge.
+   Lives in cd-tl-nav, hugging the back/forward arrows (refined proposal
+   RefinedBuilder). */
+.cd-tl-identity {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
+  margin-left: 6px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 0.5px solid var(--line);
+  min-width: 0;
+}
+.cd-tl-app-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.cd-tl-identity b {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  outline: none;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-tl-identity b[contenteditable] {
+  cursor: text;
+  border-radius: 3px;
+  padding: 0 3px;
+  margin: 0 -3px;
+  transition: background 0.12s;
+}
+.cd-tl-identity b[contenteditable]:hover,
+.cd-tl-identity b[contenteditable]:focus {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+/* Status badge — uppercase-mono pill with a pulsing dot. The dynamic
+   text (Draft / Editing… / Publishing… / Live · v…) is composed by
+   paintStatus(); colour is driven by the parent's [data-state]. */
+.cd-tl-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent-light) 18%, transparent);
+  color: var(--accent-light);
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-4);
-  margin-top: 2px;
-  letter-spacing: 0;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-.cd-app-strip-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink-4);
+.cd-tl-status-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
   flex-shrink: 0;
+  animation: cd-pulse 1400ms ease-in-out infinite;
 }
-.cd-app-strip-status[data-state='idle-live'] .cd-app-strip-status-dot {
-  background: var(--success, #2ea043);
-  box-shadow: 0 0 6px color-mix(in oklab, var(--success, #2ea043) 60%, transparent);
+.cd-tl-status[data-state='idle-live'] {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: var(--success);
 }
-.cd-app-strip-status[data-state='idle-live'] {
-  color: var(--ink-3);
+.cd-tl-status[data-state='idle-live'] .cd-tl-status-dot {
+  animation: none;
 }
-.cd-app-strip-status[data-state='editing'] .cd-app-strip-status-dot,
-.cd-app-strip-status[data-state='publishing'] .cd-app-strip-status-dot {
-  background: var(--accent);
-  animation: cd-app-strip-status-pulse 1.4s ease-in-out infinite;
-}
-.cd-app-strip-status[data-state='editing'],
-.cd-app-strip-status[data-state='publishing'] {
-  color: color-mix(in oklab, var(--accent) 70%, var(--ink-2));
-}
-@keyframes cd-app-strip-status-pulse {
+@keyframes cd-pulse {
   0%,
   100% {
     opacity: 1;
     transform: scale(1);
   }
   50% {
-    opacity: 0.55;
-    transform: scale(0.85);
+    opacity: 0.45;
+    transform: scale(0.8);
   }
+}
+
+/* Trailing builder titlebar cluster — history, more, Publish. */
+.cd-tl-builder-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cd-tl-publish {
+  height: 28px;
+  padding: 0 12px;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.cd-tl-publish svg {
+  display: block;
 }
 
 /* Pill-tab cluster (Preview / Code) — matches .urlbar-device so the two
@@ -6214,17 +6222,17 @@ textarea {
   padding: 2px;
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
-  border-radius: 999px;
+  border-radius: 7px;
   gap: 1px;
 }
 .cd-tabs-pill button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 11px;
-  height: 24px;
+  justify-content: center;
+  width: 28px;
+  height: 20px;
   border: none;
-  border-radius: 999px;
+  border-radius: 5px;
   cursor: pointer;
   background: transparent;
   color: var(--ink-3);

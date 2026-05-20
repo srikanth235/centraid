@@ -52,8 +52,6 @@
   // icon set has no paperclip, so it lives inline here.
   const PaperclipIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
-  const FolderOpenIcon = (size = 14): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 9h18l-2 9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
   // File-with-edit glyph for the change card that surfaces below tool-group
   // pills when the agent wrote files. Page outline + a small pen overlay.
   const FileEditIcon = (size = 14): string =>
@@ -342,44 +340,42 @@
     // so existing callers that update its textContent on rename still work.
     const crumbProjName = el('span', {}, isUpdateMode ? `Editing ${projName}` : 'Builder');
 
-    const primaryBtn = el('button', { class: 'btn btn-primary' });
-    primaryBtn.innerHTML = Icon.Plus({ size: 13 }) + '<span>Add to home</span>';
+    // Primary action — always "Publish" with the Share/upload glyph in
+    // both new-build and update modes (refined proposal RefinedBuilder).
+    // Update mode reuses the same publish flow; the gateway semantics
+    // (uploading a new version) are identical, so the label unifies.
+    const primaryBtn = el('button', { class: 'btn btn-primary cd-tl-publish' });
+    primaryBtn.innerHTML = Icon.Share({ size: 11 }) + '<span>Publish</span>';
     primaryBtn.addEventListener('click', () => {
       void handlePublish();
     });
-    if (isUpdateMode) {
-      // Update mode reuses the publish flow; the label reflects the gateway
-      // semantics (this uploads a new version) rather than implying a
-      // local-only save.
-      primaryBtn.innerHTML = (Icon.Save ? Icon.Save({ size: 13 }) : '') + '<span>Publish</span>';
-    }
 
+    // Titlebar app-icon tile — a gradient finish from the project color,
+    // matching how app icons are tiled on Home (renderAppCard) and in the
+    // App-view brand chip. ~20px to sit inside the identity pill.
     const projIconEl = el('div', {
-      class: 'app-topbar-icon',
-      trustedHtml: (Icon[projIcon] || Icon.Sparkle)({ size: 14, strokeWidth: 2 }),
-      style: {
-        background: projColor as string,
-        borderRadius: '4px',
-        height: '28px',
-        width: '28px',
-      },
+      class: 'cd-tl-app-icon',
+      trustedHtml: (Icon[projIcon] || Icon.Sparkle)({ size: 11, strokeWidth: 1.9 }),
     });
+    function paintProjIcon(): void {
+      const finish = window.CentraidTokens.tileFinish(projColor as string, 'gradient');
+      projIconEl.style.background = finish.background;
+      projIconEl.style.color = finish.glyphColor;
+      if (finish.boxShadow) projIconEl.style.boxShadow = finish.boxShadow;
+    }
+    paintProjIcon();
 
-    // Read-only status row that replaces the old editable description
-    // subtitle (which was 'Built with Centraid.' / 'Add a description…').
-    // Mirrors the v2 mockup's `● Live · v3 · edited 14h ago` pattern: a
-    // colored dot reflects the sync state (driven by `[data-state]` set
-    // by paintStatus), followed by version number + relative edit time
-    // when known. For a draft project the row just reads 'Draft'. The
-    // description data is preserved in app.json — editing moves to a
-    // future settings affordance.
-    const projStatusDot = el('span', { class: 'cd-app-strip-status-dot' });
-    const projStatusText = el('span', { class: 'cd-app-strip-status-text' }, 'Draft');
-    const projSubtitleEl = el(
-      'span',
-      { 'data-state': 'idle-draft', class: 'cd-app-strip-status' },
-      [projStatusDot, projStatusText],
-    );
+    // Read-only status badge — a compact uppercase-mono pill with a
+    // pulsing dot, sitting inside the titlebar identity lockup (refined
+    // proposal RefinedBuilder). The dynamic text (Draft / Editing… /
+    // Publishing… / Live · v…) is composed by paintStatus(); only the
+    // sync-state colour is driven by the parent's [data-state].
+    const projStatusDot = el('span', { class: 'cd-tl-status-dot' });
+    const projStatusText = el('span', { class: 'cd-tl-status-text' }, 'Draft');
+    const projSubtitleEl = el('span', { 'data-state': 'idle-draft', class: 'cd-tl-status' }, [
+      projStatusDot,
+      projStatusText,
+    ]);
     let appVersionCount = 0;
     let appLastEditedAt: number | undefined;
     function relTime(ts: number): string {
@@ -434,9 +430,9 @@
     // user can still see the rendered app while browsing past versions).
     const historyBtn = el('button', {
       'aria-label': 'View history',
-      class: 'topbar-icon-btn',
+      class: 'cd-tb-btn',
       'data-active': String(chatView === 'history'),
-      trustedHtml: Icon.History({ size: 16 }),
+      trustedHtml: Icon.History({ size: 14 }),
       title: 'View history',
       onClick: () => {
         chatView = chatView === 'history' ? 'chat' : 'history';
@@ -458,9 +454,9 @@
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'mobile'),
       title: 'Mobile preview',
-      // Icon + visible label (Phone / Tablet / Desktop) — matches the
-      // v2 mockup's segmented device pill instead of icon-only.
-      trustedHtml: `${SmartphoneIcon(13)}<span class="urlbar-device-label">Phone</span>`,
+      // Icon-only segmented device control (refined proposal RBPaneToolbar);
+      // the `title` attr carries the tooltip.
+      trustedHtml: SmartphoneIcon(13),
       onClick: () => {
         if (previewDevice === 'mobile') return;
         previewDevice = 'mobile';
@@ -473,7 +469,7 @@
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'tablet'),
       title: 'Tablet preview',
-      trustedHtml: `${TabletIcon(13)}<span class="urlbar-device-label">Tablet</span>`,
+      trustedHtml: TabletIcon(13),
       onClick: () => {
         if (previewDevice === 'tablet') return;
         previewDevice = 'tablet';
@@ -486,7 +482,7 @@
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'desktop'),
       title: 'Desktop preview',
-      trustedHtml: `${MonitorIcon(13)}<span class="urlbar-device-label">Desktop</span>`,
+      trustedHtml: MonitorIcon(13),
       onClick: () => {
         if (previewDevice === 'desktop') return;
         previewDevice = 'desktop';
@@ -593,7 +589,9 @@
             refreshTopbarToggles();
           },
         });
-        btn.innerHTML = `${renderIcon()}<span>${label}</span>`;
+        // Icon-only toggle (refined proposal RBPaneToggle); the `title` +
+        // `aria-label` carry the Preview / Code semantics.
+        btn.innerHTML = renderIcon();
         return btn;
       }),
     );
@@ -619,17 +617,28 @@
     // (mode tabs, device pill).
     const moreBtn = el('button', {
       'aria-label': 'More project actions',
-      class: 'builder-pane-more',
+      class: 'cd-tb-btn',
       title: 'More',
       // Wired in a future commit (Share, Rename, Edit description, etc.);
       // for now it's a visual placeholder so the header reads complete.
-      trustedHtml:
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
+      trustedHtml: Icon.MoreHoriz({ size: 14 }),
     });
-    const builderHeader = el('div', { class: 'builder-pane-header' }, [
+
+    // Titlebar identity lockup — a soft ink-washed pill carrying the
+    // gradient app-icon, the editable project name, and the status
+    // badge. Lands in `.cd-tl-nav` (via `titlebarLead`) so it hugs the
+    // back/forward arrows, matching the refined proposal RefinedBuilder.
+    // The chat pane no longer carries a header row of its own.
+    const builderIdentity = el('span', { class: 'cd-tl-identity' }, [
       projIconEl,
-      el('span', { class: 'builder-pane-meta' }, [projNameEl, projSubtitleEl]),
-      el('span', { class: 'builder-pane-actions' }, [historyBtn, moreBtn, primaryBtn]),
+      projNameEl,
+      projSubtitleEl,
+    ]);
+    // Trailing titlebar actions — history, more, and the Publish button.
+    const builderActions = el('span', { class: 'cd-tl-builder-actions' }, [
+      historyBtn,
+      moreBtn,
+      primaryBtn,
     ]);
 
     function refreshTabs(): void {
@@ -896,7 +905,7 @@
     function renderInput(): void {
       inputWrap.innerHTML = '';
       const ta = el('textarea', {
-        placeholder: isUpdateMode ? 'Describe the change…' : 'Ask, or describe what to change…',
+        placeholder: 'Describe a change…',
         rows: 1,
       }) as HTMLTextAreaElement;
 
@@ -922,20 +931,12 @@
       });
 
       const controls = el('div', { class: 'chat-input-controls' }, [
+        // Composer carries the attach control only (refined proposal RBChat).
         el('button', {
           'aria-label': 'Attach',
           class: 'input-pill input-pill-icon',
           title: 'Attach',
           trustedHtml: PaperclipIcon(14),
-        }),
-        el('button', {
-          'aria-label': 'Open project folder',
-          class: 'input-pill input-pill-icon',
-          title: 'Open project folder',
-          trustedHtml: FolderOpenIcon(14),
-          onClick: () => {
-            if (projectId) void Api().openProjectFolder({ id: projectId });
-          },
         }),
         el('div', { class: 'spacer' }),
         el('span', { class: 'chat-input-kbd' }, '⌘↵'),
@@ -977,13 +978,11 @@
       inputWrap.append(wrap);
     }
 
-    // The chat pane is composed of a persistent header (project icon +
-    // name + status + Publish) and a body that swaps between live chat
-    // and version history. The header is mounted ONCE during builder
-    // setup; renderChatPane only touches the body so the header doesn't
-    // flash on every chatView flip.
+    // The chat pane has no header row of its own — project identity
+    // (icon + name + status) and the project actions live in the window
+    // titlebar (refined proposal RefinedBuilder). The chat pane is just a
+    // body that swaps between live chat and version history.
     const chatBody = el('div', { class: 'chat-body' });
-    chatPane.append(builderHeader);
     chatPane.append(chatBody);
 
     // ---------- Chat pane swap (chat ↔ history) ----------
@@ -3490,7 +3489,14 @@
 
       // Fresh build: scaffold + start agent + send first prompt.
       const id = generateProjectId(initialPrompt);
-      pushMessage({ kind: 'divider', text: 'Today' });
+      // Date divider carries the conversation start time (refined proposal
+      // RBChat — "Today · 14:22").
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(
+        2,
+        '0',
+      )}`;
+      pushMessage({ kind: 'divider', text: `Today · ${hhmm}` });
       pushMessage({ kind: 'status', text: 'Setting up project…', spinning: true });
       try {
         await Api().createProject({ id, name: projName, version: '0.1.0' });
@@ -3676,6 +3682,9 @@
       onNewApp: () => {
         /* already in builder; ignore */
       },
+      // Chats has no dedicated creation surface yet — the section `+`
+      // routes back to Home where a new conversation can be started.
+      onNewChat: handleExit,
       onSearch: () => window.Centraid?.openSearch?.(),
       onDiscover: () => window.Centraid?.openDiscover?.(),
       onStarred: () => window.Centraid?.openStarred?.(),
@@ -3738,10 +3747,13 @@
       showNewChat: true,
       sidebar,
       sidebarOpen: builderSidebarOpen,
+      // The app-identity lockup hugs the back/forward arrows (titlebarLead);
+      // the project actions — history, more, Publish — ride the trailing
+      // edge (titlebarRight). The chat pane no longer carries a header.
       // §B3 — the tabs + URL pill + device pill live in the right pane's
-      // own toolbar (`rb-toolbar`), not the window chrome. The chrome row
-      // carries just back/forward/sidebar; project identity stays in the
-      // chat pane's own header (builder-pane-header).
+      // own toolbar (`rb-toolbar`), not the window chrome.
+      titlebarLead: builderIdentity,
+      titlebarRight: builderActions,
     });
     setShellChatPaneOpen = chromeSetChatPaneOpen;
     root.append(shell);

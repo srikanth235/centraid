@@ -27,6 +27,29 @@ applies the screen-level redesign, landed as one commit per step.
 
 ## What changed
 
+**2026-05-20 — Builder pixel-fidelity pass.** Relocated the Builder
+project identity into the window titlebar to match the refined
+`RefinedBuilder` artboard. The in-pane `builder-pane-header` row was
+removed; `chrome.ts` gained a `titlebarLead` slot that lands the
+app-identity lockup in `.cd-tl-nav` hugging the back/forward arrows,
+while history / more / Publish ride the trailing edge via
+`titlebarRight`. The lockup is a soft ink-washed pill with a gradient
+app-icon tile (`tileFinish`), the editable project name, and a compact
+uppercase-mono status badge with a pulsing dot (`cd-pulse`); the chat
+pane now has no header. The primary action is `Publish` with the
+Share/upload glyph in both new-build and update modes. The chat-pane
+`⌘\` toggle was retained. Right-pane toolbar: the device switcher and
+the Preview/Code toggle became icon-only, and both segmented clusters
+moved from full pills to 7px rounded-rect tracks with 5px inner items.
+Sidebar `Chats` section header gained a `+` action (wired to the
+new-chat fallback). Composer: placeholder unified to `Describe a
+change…`, the open-project-folder button removed (attach only), and the
+`Today` date divider now carries the start time (`Today · HH:MM`). The
+preview skeleton phone was repainted to the proposal's light device —
+light-gradient screen, dark status-bar text, light-grey shimmer blocks,
+28px radius, deeper layered shadow. Verified via Electron screenshots
+against `03-builder` / `04-builder-code`.
+
 **design-tokens — refined-screen icons + Send glyph fix.** The redesign
 introduces a command palette, a Discover destination, the Builder pane
 toolbar, and a rebuilt Cloud surface — all needing glyphs absent from

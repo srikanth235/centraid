@@ -147,6 +147,10 @@
      *  Sits between the back/forward nav and the trailing flex spacer, so it
      *  reads as "what's the main canvas showing" rather than identity. */
     titlebarCenter?: HTMLElement | null;
+    /** Lead chrome element — placed in `.cd-tl-nav` immediately after the
+     *  forward button, so it hugs the back/forward arrows. Used by the
+     *  Builder titlebar for the app-identity lockup. */
+    titlebarLead?: HTMLElement | null;
     showNewChat?: boolean;
     onNewChat?: () => void;
     canGoBack?: boolean;
@@ -238,6 +242,11 @@
             onClick: opts.onNewChat,
           }),
         );
+      }
+      // Lead element — app-identity lockup, hugging the back/forward
+      // arrows (Builder titlebar). Sits before the chat-pane toggle.
+      if (opts.titlebarLead) {
+        navChildren.push(opts.titlebarLead);
       }
       // Chat-pane toggle pinned to the trailing edge of cd-tl-nav (via
       // `.chat-toggle-wrap { margin-left: auto }` — see styles.css). Sits at
@@ -336,6 +345,9 @@
     drafts: SidebarApp[];
     onHome: () => void;
     onNewApp: () => void;
+    /** New-chat action wired to the Chats section `+`. Falls back to
+     *  `onNewApp` when there is no dedicated chat-creation entry point. */
+    onNewChat?: () => void;
     onSearch?: () => void;
     onDiscover?: () => void;
     onStarred?: () => void;
@@ -560,8 +572,10 @@
     }
 
     // Placeholder: Chats — visible to preserve the design's information
-    // architecture for future wiring, but disabled today.
-    wrap.append(sbSection('Chats · 0'));
+    // architecture for future wiring, but disabled today. The header's
+    // `+` reuses the new-app flow (the chat surface has no dedicated
+    // creation entry point yet — RefinedSidebar §G3).
+    wrap.append(sbSection('Chats · 0', opts.onNewChat ?? opts.onNewApp));
     wrap.append(sbItem({ icon: Glyph.sparkle(), label: 'No saved chats yet', disabled: true }));
 
     // Spacer pushes Settings to the bottom. Refined Screens §G3 swaps the

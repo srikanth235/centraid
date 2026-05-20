@@ -210,6 +210,9 @@ declare global {
     /** Center chrome cluster — mode tabs, device pill, etc. Sits between
      *  the back/forward nav and the trailing flex spacer. */
     titlebarCenter?: HTMLElement | null;
+    /** Lead chrome element — placed in `.cd-tl-nav` right after the
+     *  forward button, hugging the back/forward arrows. Builder identity. */
+    titlebarLead?: HTMLElement | null;
     showNewChat?: boolean;
     onNewChat?: () => void;
     canGoBack?: boolean;
@@ -236,6 +239,9 @@ declare global {
     drafts: ChromeSidebarApp[];
     onHome: () => void;
     onNewApp: () => void;
+    /** New-chat action wired to the Chats section `+`. Falls back to
+     *  `onNewApp` when there is no dedicated chat-creation entry point. */
+    onNewChat?: () => void;
     onSearch?: () => void;
     onDiscover?: () => void;
     onStarred?: () => void;
