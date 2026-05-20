@@ -121,13 +121,22 @@
 
     const Icon = window.Icon;
 
-    const fab = el('button', {
-      class: 'app-chat-fab',
-      type: 'button',
-      title: 'Ask about this app',
-      'aria-label': 'Open chat',
-      trustedHtml: Icon.Sparkle({ size: 18 }),
-    });
+    // §D2 — ambient copilot FAB. Collapsed by default; carries a label
+    // and a ⌘J hint so the entry point is legible, not just a glyph.
+    const fab = el(
+      'button',
+      {
+        class: 'app-chat-fab',
+        type: 'button',
+        title: 'Ask about this app',
+        'aria-label': `Ask ${app.name}`,
+      },
+      [
+        el('span', { class: 'app-chat-fab-icon', trustedHtml: Icon.Sparkle({ size: 16 }) }),
+        el('span', { class: 'app-chat-fab-label' }, `Ask ${app.name}`),
+        el('span', { class: 'app-chat-fab-kbd' }, '⌘J'),
+      ],
+    );
 
     const panel = el('aside', {
       class: 'app-chat-panel',
@@ -262,6 +271,15 @@
     }
 
     fab.addEventListener('click', () => toggle(true));
+
+    // §D2 — ⌘J toggles the copilot from anywhere in the app view.
+    const onGlobalKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault();
+        toggle();
+      }
+    };
+    document.addEventListener('keydown', onGlobalKey);
 
     async function ensureStarted(): Promise<void> {
       if (started) return;
@@ -981,6 +999,7 @@
       } catch {
         /* swallow */
       }
+      document.removeEventListener('keydown', onGlobalKey);
       fab.remove();
       panel.remove();
     };

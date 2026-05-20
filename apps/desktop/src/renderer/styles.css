@@ -5450,22 +5450,44 @@ textarea {
   font-weight: 500;
   color: var(--ink-2);
 }
-.cd-edit-pill {
+/* §D4/§G4 — Use / Build segmented switch in the App-view titlebar. */
+.cd-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border: 0.5px solid var(--line);
+}
+.cd-mode-seg {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 0 10px;
-  height: 24px;
-  border-radius: 999px;
+  padding: 0 9px;
+  height: 22px;
+  border-radius: 6px;
   border: none;
-  background: var(--accent);
-  color: #fff;
+  background: transparent;
+  color: var(--ink-3);
   cursor: pointer;
+  font: inherit;
   font-size: 11.5px;
   font-weight: 500;
+  transition:
+    background 120ms,
+    color 120ms;
 }
-.cd-edit-pill:hover {
-  background: color-mix(in oklab, var(--accent) 88%, white 12%);
+.cd-mode-seg:hover {
+  color: var(--ink);
+}
+.cd-mode-seg[data-active='true'] {
+  background: var(--bg-elev);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.cd-mode-seg-icon {
+  display: inline-flex;
 }
 
 /* Small ghost / primary buttons used in the titlebar */
@@ -5506,15 +5528,19 @@ textarea {
   position: absolute;
   right: 18px;
   bottom: 18px;
-  width: 44px;
-  height: 44px;
+  height: 40px;
+  padding: 0 14px 0 12px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--accent, var(--ink));
   color: white;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.18),
     0 2px 4px rgba(0, 0, 0, 0.12);
@@ -5531,9 +5557,19 @@ textarea {
   pointer-events: none;
   transform: translateY(6px);
 }
-.app-chat-fab svg {
-  width: 18px;
-  height: 18px;
+.app-chat-fab-icon {
+  display: inline-flex;
+}
+.app-chat-fab-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.app-chat-fab-kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .app-chat-panel {

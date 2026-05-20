@@ -1999,18 +1999,30 @@
     gearWrap.append(gearBtn);
     gearWrap.append(el('span', { class: 'cd-tooltip' }, 'App settings'));
 
-    const editPill = el('button', {
-      class: 'cd-edit-pill',
-      type: 'button',
-      onClick: () => enterBuilder({ appContext: app }),
-    });
-    editPill.innerHTML = `${Icon.Sparkle({ size: 11 })}<span>Edit</span>`;
+    // §D4/§G4 — Use / Build segmented switch replaces the floating Edit
+    // sparkle. "Use" is the running app (current); "Build" returns to the
+    // builder. The rename matters: "Edit" read like editing a list row,
+    // not switching into the build experience.
+    const useSeg = el('button', { class: 'cd-mode-seg', type: 'button', 'data-active': 'true' }, [
+      el('span', { class: 'cd-mode-seg-icon', trustedHtml: Icon.Eye({ size: 12 }) }),
+      'Use',
+    ]);
+    const buildSeg = el(
+      'button',
+      {
+        class: 'cd-mode-seg',
+        type: 'button',
+        onClick: () => enterBuilder({ appContext: app }),
+      },
+      [el('span', { class: 'cd-mode-seg-icon', trustedHtml: Icon.Sparkle({ size: 12 }) }), 'Build'],
+    );
+    const modeSwitch = el('div', { class: 'cd-mode-switch' }, [useSeg, buildSeg]);
     const titlebarRight = el('span', {
       style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
     });
     titlebarRight.append(brandChip);
     titlebarRight.append(gearWrap);
-    titlebarRight.append(editPill);
+    titlebarRight.append(modeSwitch);
 
     const sidebar = buildHomeSidebar({ appId: app.id, surface: 'app' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({

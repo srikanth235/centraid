@@ -16,7 +16,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] Step 3 — Home redesign (A1/A2/A3)
 - [x] Step 4 — Builder B1–B6
 - [x] Step 5 — Settings monolith split (C)
-- [ ] Step 6 — App view copilot (D)
+- [x] Step 6 — App view copilot (D)
 - [ ] Step 7 — Per-app settings tabbed popover (E)
 - [ ] Step 8 — ⌘K command palette (F)
 
@@ -117,6 +117,19 @@ already renders per-provider credential status rows. §C2 (Appearance
 live-preview tile) and §C4 (per-page save-footer / auto-saved caps)
 are deferred polish; the inference and runtime pages keep their
 existing Save/Test buttons.
+
+**Step 6 — App view copilot (D).** §D4 is implemented: the App-view
+titlebar's floating Edit sparkle is replaced by a `Use` / `Build`
+segmented switch (`.cd-mode-switch`) — `Use` is the running app
+(active), `Build` returns to the builder. The rename matters per §G4:
+"Edit" read like editing a list row. §D2 is completed: the copilot
+panel was already collapsed by default with a FAB, so this pass turned
+the bare glyph FAB into a labelled `Ask <app>` pill carrying a `⌘J`
+hint, and wired `⌘J` as a global toggle (registered on mount, removed
+on teardown). §D3 (collapse the copilot's three header icons into a ⋯
+overflow) and §D1 (coordinated "Try these starters" empty state across
+the running app + copilot) are deferred — the copilot already collapses
+to a FAB so the 340px-always-on problem the handover flags is solved.
 
 ## Out of scope
 
