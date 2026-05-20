@@ -10,6 +10,32 @@
   --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: 'Space Grotesk', 'Geist', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Type scale — canonical, mirrors packages/design-tokens tokens.css.
+     Two weights only: 400 regular, 500/600 medium. No bold. */
+  --t-display: 600 28px/34px var(--font-display);
+  --t-title: 600 20px/26px var(--font-display);
+  --t-body: 400 15px/22px var(--font-sans);
+  --t-body-strong: 600 15px/22px var(--font-sans);
+  --t-small: 400 13px/18px var(--font-sans);
+  --t-tiny: 500 11px/14px var(--font-sans);
+  --t-mono: 500 12px/16px var(--font-mono);
+
+  /* AI prose variant — body weight, looser leading for chat. */
+  --t-body-prose: 400 15px/24px var(--font-sans);
+
+  /* Legacy / marketing aliases — hero sections outside the chrome. */
+  --t-display-1: 700 40px/1.1 var(--font-display);
+  --t-display-2: 700 32px/1.15 var(--font-display);
+  --t-h1: 600 26px/1.2 var(--font-display);
+  --t-h2: 600 22px/1.25 var(--font-display);
+  --t-h3: 600 16px/1.3 var(--font-sans);
+  --t-micro: 500 10.5px/1.3 var(--font-sans);
+
+  --tracking-display: -0.025em;
+  --tracking-h: -0.015em;
+  --tracking-body: 0.01em;
+  --tracking-eyebrow: 0.08em;
 }
 
 *,
@@ -4980,30 +5006,89 @@ textarea {
   text-align: center;
 }
 
-/* Hero — "What should we build?" */
+/* Day-1 home — centered hero with the composer as the centre of gravity.
+   The scroll column centers its content vertically when the page is the
+   Day-1 layout (a single hero block above the shelf). */
+.cd-day1-scroll {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+/* Hero — announcement pill + "What should we build?" + composer. */
 .cd-hero {
-  max-width: 720px;
-  margin: 0 auto 40px;
-}
-.cd-hero h1 {
-  margin: 0 0 22px;
+  flex: 1;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 56px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 30px;
-  letter-spacing: -0.025em;
-  color: var(--ink);
 }
-.cd-hero-prompt {
-  background: color-mix(in srgb, var(--bg-elev) 86%, transparent);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+
+/* Announcement pill — accent NEW badge + headline + right arrow. */
+.cd-hero-announce {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px;
+  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
   border: 0.5px solid var(--line);
-  border-radius: 14px;
-  padding: 12px 12px 10px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+  border-radius: 999px;
+  font: var(--t-small);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  text-decoration: none;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
 }
-.cd-hero-prompt textarea {
+.cd-hero-announce-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font: var(--t-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cd-hero-announce-arrow {
+  display: inline-flex;
+  margin-right: 10px;
+  opacity: 0.6;
+}
+
+.cd-hero h1 {
+  margin: 0;
+  font: var(--t-display-1);
+  font-size: 44px;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+/* Day1Composer — bg-elev card with descriptive placeholder + toolbar. */
+.cd-composer {
+  width: 100%;
+  max-width: 680px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 18px;
+  padding: 18px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow:
+    0 24px 48px -24px rgba(0, 0, 0, 0.45),
+    0 0 0 6px color-mix(in srgb, var(--accent) 5%, transparent);
+  text-align: left;
+}
+.cd-composer-input {
   width: 100%;
   min-height: 56px;
   resize: none;
@@ -5011,22 +5096,76 @@ textarea {
   outline: 0;
   background: transparent;
   color: var(--ink);
-  font: inherit;
-  font-size: 14px;
-  line-height: 1.5;
-  padding: 6px 4px 12px;
+  font: var(--t-body);
+  font-size: 15px;
+  line-height: 1.45;
 }
-.cd-hero-prompt textarea::placeholder {
-  color: var(--ink-4);
+.cd-composer-input::placeholder {
+  color: var(--ink-3);
 }
-.cd-hero-prompt-row {
+.cd-composer-toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--line);
 }
-.cd-hero-prompt-row .spacer {
+.cd-composer-spacer {
   flex: 1;
 }
+.cd-composer-attach,
+.cd-composer-mic {
+  width: 28px;
+  height: 28px;
+}
+.cd-composer-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line);
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+.cd-composer-mode svg {
+  display: block;
+}
+.cd-composer-kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  letter-spacing: 0;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.cd-composer-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: var(--ink);
+  color: var(--bg);
+  cursor: pointer;
+  padding: 0;
+}
+.cd-composer-send svg {
+  display: block;
+}
+.cd-composer-send[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+.cd-composer-send:hover:not([disabled]) {
+  background: color-mix(in srgb, var(--ink) 86%, var(--bg));
+}
+
 .cd-hero-build-btn {
   height: 30px;
   padding: 0 14px;
@@ -5090,33 +5229,60 @@ textarea {
   color: var(--ink);
 }
 
-/* "Your apps" + "Templates" sections */
-.cd-section {
+/* Loaded-home greeting header — eyebrow + "Your apps." + build pill. */
+.cd-home-header {
   max-width: 1080px;
   margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
-.cd-section + .cd-section {
-  margin-top: 32px;
+.cd-home-header-text {
+  min-width: 0;
+  flex: 1;
+}
+.cd-home-header h1 {
+  margin: 6px 0 0;
+  font: var(--t-display-1);
+  font-size: 34px;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+/* "Starred" + "All apps" sections */
+.cd-section {
+  max-width: 1080px;
+  margin: 36px auto 0;
 }
 .cd-section-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 14px;
 }
 .cd-section-head h2 {
   margin: 0;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 18px;
-  letter-spacing: -0.01em;
+  font: var(--t-h2);
+  font-size: 16px;
+  letter-spacing: -0.015em;
   color: var(--ink);
 }
 .cd-section-head .cd-section-meta {
   font-family: var(--font-mono);
-  color: var(--ink-3);
+  color: var(--ink-4);
   font-size: 11px;
+  letter-spacing: 0;
   white-space: nowrap;
+}
+.cd-section-spacer {
+  flex: 1;
+}
+.cd-section-sort {
+  font-size: 11.5px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 0.5px solid var(--line);
 }
 .cd-eyebrow {
   font-family: var(--font-mono);
@@ -5124,50 +5290,40 @@ textarea {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--ink-3);
-  margin-bottom: 12px;
 }
 
 .cd-apps-grid {
   display: grid;
-  /* Match the template grid exactly — same min, same 1fr upper bound,
-     same gap — so app and template tiles line up width-for-width when
-     viewed on the same page. `auto-fill` (not `auto-fit`) keeps any
-     empty trailing tracks reserved so a single app tile sits in track
-     1 at its natural width instead of stretching across the row. */
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
 }
-/* §A2 — the "All apps" grid uses slightly smaller tiles. */
 .cd-apps-grid--small {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 9px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
 }
 
-/* §A2 — ambient build pill. Collapsed it's a slim centered bar; the
-   expanded state swaps in a full composer card. */
+/* §A2 — ambient build pill. Collapsed it's a slim ~360px bar floated to
+   the right of the greeting; expanded it swaps in a composer card. */
 .cd-build-pill {
-  max-width: 1080px;
-  margin: 0 auto 28px;
-  display: flex;
-  justify-content: center;
+  width: 360px;
+  max-width: 540px;
 }
 .cd-build-pill[data-expanded='true'] {
-  display: block;
+  width: 100%;
 }
 .cd-build-pill-collapsed {
-  width: 360px;
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 9px 12px;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
   border-radius: 999px;
   border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: var(--shadow-sm);
   color: var(--ink-3);
-  cursor: pointer;
+  cursor: text;
   font: inherit;
   transition:
     background 140ms,
@@ -5175,19 +5331,39 @@ textarea {
 }
 .cd-build-pill-collapsed:hover {
   border-color: var(--line-strong);
-  color: var(--ink-2);
 }
 .cd-build-pill[data-expanded='true'] .cd-build-pill-collapsed {
   display: none;
 }
 .cd-build-pill-icon {
-  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
 }
 .cd-build-pill-label {
   flex: 1;
+  min-width: 0;
+  font: var(--t-body);
   font-size: 13px;
+  color: var(--ink-3);
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-build-pill-label + .cd-kbd,
+.cd-build-pill .cd-kbd {
+  font-size: 10.5px;
+  letter-spacing: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-4);
 }
 .cd-build-pill-expanded {
   display: none;
@@ -5220,93 +5396,93 @@ textarea {
   color: var(--ink-4);
 }
 
-/* §A1 — tabbed discovery shelf. */
-.cd-shelf-tabs {
+/* §A1 — HomeShelf: tabbed shelf at the bottom of the Day-1 home. Same
+   surface as the rest of Home; same RefinedAppTile the All apps page uses. */
+.cd-shelf {
+  border-top: 0.5px solid var(--line);
+  padding: 20px 56px 26px;
+}
+.cd-shelf-inner {
+  max-width: 1180px;
+  margin: 0 auto;
   display: flex;
-  gap: 4px;
-  margin-bottom: 14px;
+  flex-direction: column;
+  gap: 14px;
+}
+.cd-shelf-tabrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cd-shelf-tabs {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
 }
 .cd-shelf-tab {
-  padding: 5px 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
   color: var(--ink-3);
-  font: inherit;
-  font-size: 13px;
+  font: var(--t-body);
+  font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
   transition:
     background 120ms,
     color 120ms;
 }
-.cd-shelf-tab:hover {
-  color: var(--ink-2);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
 .cd-shelf-tab[data-active='true'] {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--line);
   color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  font-weight: 600;
 }
-.cd-shelf-row {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-  scrollbar-width: thin;
+.cd-shelf-tab-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--ink-4);
 }
-.cd-shelf-card {
-  flex: 0 0 200px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 13px;
-  border-radius: 12px;
-  border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  transition:
-    background 140ms,
-    transform 140ms;
+.cd-shelf-tab[data-active='true'] .cd-shelf-tab-count {
+  color: var(--ink-3);
 }
-.cd-shelf-card:hover {
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  transform: translateY(-1px);
+.cd-shelf-spacer {
+  flex: 1;
 }
-.cd-shelf-card-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+.cd-shelf-browse {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  color: #fff;
-  margin-bottom: 3px;
+  gap: 6px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font: var(--t-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
 }
-.cd-shelf-card-icon svg {
+.cd-shelf-browse:hover {
+  color: var(--ink);
+}
+.cd-shelf-browse svg {
   display: block;
 }
-.cd-shelf-card-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-shelf-card-desc {
-  font-size: 11.5px;
-  color: var(--ink-3);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.cd-shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
 }
 .cd-shelf-empty {
+  grid-column: 1 / -1;
   padding: 28px 12px;
   font-size: 13px;
   color: var(--ink-4);
@@ -5315,30 +5491,31 @@ textarea {
 /* §A2 — quiet inspiration footer. */
 .cd-home-footer {
   max-width: 1080px;
-  margin: 36px auto 0;
+  margin: 40px auto 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-size: 13px;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 0.5px solid var(--line);
+}
+.cd-home-footer-text {
+  min-width: 0;
+  flex: 1;
+}
+.cd-home-footer-title {
+  font: var(--t-body);
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.cd-home-footer-sub {
+  margin-top: 2px;
+  font: var(--t-small);
+  font-size: 12px;
   color: var(--ink-3);
 }
 .cd-home-footer-btn {
-  border: 0.5px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 13px;
-  padding: 5px 12px;
-  cursor: pointer;
-  transition:
-    background 140ms,
-    color 140ms;
-}
-.cd-home-footer-btn:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink);
+  font-size: 12.5px;
+  padding: 6px 12px;
 }
 
 /* Wrap is the grid item; it hosts the card and a sibling `•••` action
@@ -5348,56 +5525,43 @@ textarea {
   position: relative;
   display: block;
 }
-/* RefinedAppTile (§A3) — a vertical card: 40px icon, name, one-line
-   blurb, and a state-aware bottom strip. The hover-revealed star and
-   `•••` action ride as wrap siblings. */
+/* RefinedAppTile (§A3) — a vertical card: gradient icon tile w/ status
+   dot, hover-revealed star, name, 2-line blurb, state-aware foot strip. */
 .cd-app-card {
   position: relative;
   width: 100%;
-  padding: 14px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: var(--shadow-sm);
+  min-height: 92px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 10px;
   cursor: pointer;
-  overflow: hidden;
   text-align: left;
   color: inherit;
   font: inherit;
   transition:
-    background 160ms,
-    border-color 160ms,
-    box-shadow 160ms,
-    transform 160ms;
+    background 140ms,
+    transform 120ms;
 }
 .cd-app-card--small {
-  padding: 12px;
-  gap: 6px;
-  border-radius: 12px;
-}
-:root[data-theme='dark'] .cd-app-card {
-  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 0.5px solid var(--line);
-  box-shadow: none;
+  min-height: 80px;
 }
 .cd-app-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-:root[data-theme='dark'] .cd-app-card:hover {
-  background: color-mix(in srgb, var(--bg-elev) 75%, transparent);
-  box-shadow: none;
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 .cd-app-card:active {
   transform: scale(0.99);
 }
+.cd-app-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .cd-app-card-icon {
+  position: relative;
   width: 40px;
   height: 40px;
   border-radius: 11px;
@@ -5406,75 +5570,96 @@ textarea {
   align-items: center;
   justify-content: center;
   color: #fff;
-  margin-bottom: 3px;
 }
 .cd-app-card--small .cd-app-card-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
 }
 .cd-app-card-icon svg {
   display: block;
   width: 18px;
   height: 18px;
 }
+.cd-app-card--small .cd-app-card-icon svg {
+  width: 16px;
+  height: 16px;
+}
+/* Status dot riding the icon's top-right corner. */
+.cd-app-card-icon-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2.5px var(--bg);
+}
+.cd-app-card-icon-dot[data-tone='new'] {
+  background: var(--accent-light);
+}
+.cd-app-card-icon-dot[data-tone='draft'] {
+  background: var(--icon-amber);
+}
+.cd-app-card-icon-dot[data-tone='template'] {
+  background: var(--success);
+}
 .cd-app-card-name {
-  font-size: 13.5px;
+  font: var(--t-title);
   font-weight: 600;
-  letter-spacing: -0.005em;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cd-app-card-desc {
+  margin-top: -7px;
+  font: var(--t-small);
   font-size: 11.5px;
   color: var(--ink-3);
-  line-height: 1.4;
-  /* Clamp to a single line so the foot strip sits at a stable y. */
-  white-space: nowrap;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
-/* State-aware bottom strip — NEW pill, DRAFT pill, or last-opened. */
+/* State-aware bottom strip — status label · timestamp, all mono 9.5px. */
 .cd-app-card-foot {
+  margin-top: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 3px;
-  padding-top: 8px;
-  border-top: 0.5px solid color-mix(in srgb, var(--line) 70%, transparent);
-}
-.cd-app-card-foot-time {
+  gap: 6px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 9.5px;
+  letter-spacing: 0;
+}
+.cd-app-card-foot .cd-status {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+}
+.cd-app-card-foot-sep,
+.cd-app-card-foot-time {
   color: var(--ink-4);
-  letter-spacing: 0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Hover-revealed star, top-right of the tile (§A3). Filled amber when
-   the app is starred; otherwise a quiet outline that fades in on hover. */
+/* Hover-revealed star, top-right of the tile's top row (§A3). Filled
+   amber when starred; otherwise a quiet outline that fades in on hover. */
 .cd-app-card-star {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 26px;
-  height: 26px;
   border: none;
-  border-radius: 7px;
   background: transparent;
-  color: var(--ink-3);
+  padding: 4px;
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  color: var(--ink-4);
   opacity: 0;
+  display: grid;
+  place-items: center;
   transition:
     opacity 120ms,
-    background 120ms,
     color 120ms;
 }
 .cd-app-card-star svg {
@@ -5486,8 +5671,7 @@ textarea {
   opacity: 1;
 }
 .cd-app-card-star:hover {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink);
+  color: var(--ink-2);
 }
 .cd-app-card-star[data-on='true'] {
   color: var(--icon-amber);
@@ -5637,6 +5821,16 @@ textarea {
 .cd-tmpl-card-wrap .cd-card-more {
   width: 24px;
   height: 24px;
+}
+
+/* RefinedAppTile (§A3) keeps the hover-revealed star in the card's top
+   row, so the `•••` action moves to the bottom-right corner to stay
+   clear of it. */
+.cd-app-card-wrap .cd-card-more {
+  top: auto;
+  bottom: 8px;
+  width: 22px;
+  height: 22px;
 }
 
 /* Sidebar row variant — the row itself is a slim button, so the wrap is

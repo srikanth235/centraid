@@ -687,24 +687,34 @@
   }
 
   // §A1 — Day-1 home: centered composer hero + tabbed discovery shelf.
+  // Apps live only inside the shelf's "My apps" tab — there is no
+  // separate "Your apps" section above the shelf.
   function renderDay1Home(scroll: HTMLElement, templates: TemplateEntry[]): void {
+    scroll.classList.add('cd-day1-scroll');
     scroll.append(buildHomeHero());
-    const apps = getApps();
-    if (apps.length + drafts.length > 0) {
-      const section = el('section', { class: 'cd-section' });
-      section.append(buildSectionBar('Your apps', apps.length + drafts.length));
-      const grid = el('div', { class: 'cd-apps-grid' });
-      for (const app of apps) grid.append(renderAppCard(app));
-      for (const d of drafts) grid.append(renderAppCard(d));
-      section.append(grid);
-      scroll.append(section);
-    }
     scroll.append(buildTabbedShelf(templates));
   }
 
-  // §A2 — Loaded home: ambient build pill + Starred + All apps.
+  // Eyebrow date — "Tuesday · 19 May" format, computed from the clock.
+  function eyebrowDate(): string {
+    const d = new Date();
+    const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
+    const day = d.getDate();
+    const month = d.toLocaleDateString('en-US', { month: 'short' });
+    return `${weekday} · ${day} ${month}`;
+  }
+
+  // §A2 — Loaded home: greeting header (eyebrow + "Your apps." + ambient
+  // build pill on the right) + Starred + All apps + inspiration footer.
   function renderLoadedHome(scroll: HTMLElement, apps: AppMetaResolvedType[]): void {
-    scroll.append(buildBuildPill());
+    const header = el('header', { class: 'cd-home-header' }, [
+      el('div', { class: 'cd-home-header-text' }, [
+        el('div', { class: 'cd-eyebrow' }, eyebrowDate()),
+        el('h1', {}, 'Your apps.'),
+      ]),
+      buildBuildPill(),
+    ]);
+    scroll.append(header);
 
     const all: AppMetaResolvedType[] = [...apps, ...drafts];
     const starredApps = all.filter((a) => isStarred(a.id));
@@ -718,7 +728,7 @@
     }
 
     const section = el('section', { class: 'cd-section' });
-    section.append(buildSectionBar('All apps', all.length));
+    section.append(buildSectionBar('All apps', all.length, true));
     const grid = el('div', { class: 'cd-apps-grid cd-apps-grid--small' });
     for (const a of all) grid.append(renderAppCard(a, true));
     section.append(grid);
@@ -726,21 +736,42 @@
 
     scroll.append(
       el('div', { class: 'cd-home-footer' }, [
-        el('span', {}, 'Looking for inspiration?'),
+        el('div', { class: 'cd-home-footer-text' }, [
+          el('div', { class: 'cd-home-footer-title' }, 'Looking for inspiration?'),
+          el(
+            'div',
+            { class: 'cd-home-footer-sub' },
+            'Browse templates — habit trackers, journals, counters, lists.',
+          ),
+        ]),
         el(
           'button',
-          { class: 'cd-home-footer-btn', type: 'button', onClick: renderDiscover },
-          'Discover templates',
+          { class: 'cd-chip cd-home-footer-btn', type: 'button', onClick: renderDiscover },
+          [
+            el('span', { trustedHtml: Icon.Compass({ size: 12 }) }),
+            el('span', {}, 'Discover templates'),
+          ],
         ),
       ]),
     );
   }
 
-  function buildSectionBar(label: string, count: number): HTMLElement {
-    return el('div', { class: 'cd-section-head' }, [
+  // SectionBar — heading + zero-padded mono count + optional sort chip.
+  function buildSectionBar(label: string, count: number, sortable = false): HTMLElement {
+    const head = el('div', { class: 'cd-section-head' }, [
       el('h2', {}, label),
-      el('span', { class: 'cd-section-meta' }, String(count)),
+      el('span', { class: 'cd-section-meta' }, String(count).padStart(2, '0')),
     ]);
+    if (sortable) {
+      head.append(el('span', { class: 'cd-section-spacer' }));
+      head.append(
+        el('button', { class: 'cd-chip cd-section-sort', type: 'button' }, [
+          el('span', { trustedHtml: LIST_SVG }),
+          el('span', {}, 'Sort · recent'),
+        ]),
+      );
+    }
+    return head;
   }
 
   // Rotating example prompts for the Day-1 composer (§A1).
@@ -750,51 +781,6 @@
     'a reading list with covers and ratings…',
     'a workout planner with weekly splits…',
     'a budget tracker with monthly rollups…',
-  ];
-
-  // Example apps for the Day-1 shelf — clicking one seeds the builder.
-  const HOME_EXAMPLES: ReadonlyArray<{
-    name: string;
-    prompt: string;
-    iconKey: IconNameType;
-    colorKey: string;
-  }> = [
-    {
-      name: 'Habit tracker',
-      prompt: 'a habit tracker with daily check-ins and streaks',
-      iconKey: 'Habit',
-      colorKey: 'rose',
-    },
-    {
-      name: 'Daily journal',
-      prompt: 'a journal with one entry per day and a calendar view',
-      iconKey: 'Journal',
-      colorKey: 'amber',
-    },
-    {
-      name: 'Pomodoro timer',
-      prompt: 'a pomodoro timer with 25-minute work blocks and breaks',
-      iconKey: 'Pomodoro',
-      colorKey: 'teal',
-    },
-    {
-      name: 'Hydration log',
-      prompt: 'a water tracker that counts 8 cups a day',
-      iconKey: 'Water',
-      colorKey: 'indigo',
-    },
-    {
-      name: 'Mood check-in',
-      prompt: 'a 5-second daily mood check-in with a monthly chart',
-      iconKey: 'Mood',
-      colorKey: 'forest',
-    },
-    {
-      name: 'Gift ideas',
-      prompt: 'a place to jot half-formed gift ideas for friends',
-      iconKey: 'Gift',
-      colorKey: 'ochre',
-    },
   ];
 
   // Shared composer behaviour — wires submit/keydown onto a textarea +
@@ -818,34 +804,83 @@
     buildBtn.addEventListener('click', submit);
   }
 
+  // Right-pointing arrow — the shared icon set ships only ArrowLeft, so
+  // the design's right-arrows are ArrowLeft rotated 180°.
+  function arrowRight(size: number): string {
+    return `<span style="display:inline-flex;transform:rotate(180deg)">${Icon.ArrowLeft({ size })}</span>`;
+  }
+  // Small chevron-down — ArrowLeft rotated -90°, matching Day1Composer.
+  function chevronDown(size: number): string {
+    return `<span style="display:inline-flex;transform:rotate(-90deg);opacity:0.6">${Icon.ArrowLeft(
+      { size },
+    )}</span>`;
+  }
+  // Microphone glyph — not in the shared icon set; inlined to match the
+  // design's voice affordance.
+  const MIC_SVG =
+    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">' +
+    '<rect x="9" y="2" width="6" height="11" rx="3"/>' +
+    '<path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>';
+  // List glyph — not in the shared icon set; inlined for the Sort chip.
+  const LIST_SVG =
+    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
+
   function buildHomeHero(): HTMLElement {
     const wrap = el('div', { class: 'cd-hero' });
+
+    // Announcement pill — accent NEW badge + headline + right arrow.
+    wrap.append(
+      el('a', { class: 'cd-hero-announce', href: '#', onClick: (e: Event) => e.preventDefault() }, [
+        el('span', { class: 'cd-hero-announce-badge' }, 'New'),
+        el('span', {}, 'Cloud · live deploys are here'),
+        el('span', { class: 'cd-hero-announce-arrow', trustedHtml: arrowRight(12) }),
+      ]),
+    );
+
+    // Personalized heading — no user-profile source exists in the
+    // renderer, so we fall back to the un-named form rather than fake one.
     wrap.append(el('h1', {}, 'What should we build?'));
 
-    const prompt = el('div', { class: 'cd-hero-prompt' });
+    // Day1Composer — bg-elev card with descriptive placeholder + toolbar.
+    const composer = el('div', { class: 'cd-composer' });
     const ta = el('textarea', {
-      placeholder: HERO_PROMPTS[0],
+      class: 'cd-composer-input',
+      placeholder: 'Describe an app you want — a habit tracker, a journal, a tiny tool…',
       rows: '2',
     }) as HTMLTextAreaElement;
-    // Rotating example placeholder — pauses once the user starts typing.
-    let idx = 0;
-    const rot = window.setInterval(() => {
-      if (ta.value.trim()) return;
-      idx = (idx + 1) % HERO_PROMPTS.length;
-      ta.placeholder = HERO_PROMPTS[idx] ?? '';
-    }, 6000);
-    registerCleanup(() => window.clearInterval(rot));
 
-    const buildBtn = el('button', { class: 'cd-hero-build-btn', disabled: '' });
-    buildBtn.innerHTML = `<span>Build</span>${Icon.Send({ size: 13 })}`;
+    const buildBtn = el('button', { class: 'cd-composer-send', type: 'button', disabled: '' });
+    buildBtn.innerHTML = Icon.Send({ size: 14 });
     wireComposer(ta, buildBtn);
 
-    const row = el('div', { class: 'cd-hero-prompt-row' });
-    row.append(el('span', { style: { flex: '1' } }));
-    row.append(buildBtn);
-    prompt.append(ta);
-    prompt.append(row);
-    wrap.append(prompt);
+    const toolbar = el('div', { class: 'cd-composer-toolbar' }, [
+      el('button', {
+        class: 'cd-icon-btn cd-composer-attach',
+        type: 'button',
+        title: 'Attach',
+        trustedHtml: Icon.Plus({ size: 14 }),
+      }),
+      el('span', { class: 'cd-composer-spacer' }),
+      el('span', { class: 'cd-composer-mode' }, [
+        el('span', { trustedHtml: Icon.Sparkle({ size: 11 }) }),
+        el('span', {}, 'Build'),
+        el('span', { trustedHtml: chevronDown(9) }),
+      ]),
+      el('button', {
+        class: 'cd-icon-btn cd-composer-mic',
+        type: 'button',
+        title: 'Voice',
+        trustedHtml: MIC_SVG,
+      }),
+      el('span', { class: 'cd-kbd cd-composer-kbd' }, '⌘↵'),
+      buildBtn,
+    ]);
+
+    composer.append(ta, toolbar);
+    wrap.append(composer);
     return wrap;
   }
 
@@ -855,8 +890,12 @@
     const pill = el('div', { class: 'cd-build-pill', 'data-expanded': 'false' });
 
     const collapsed = el('button', { class: 'cd-build-pill-collapsed', type: 'button' }, [
-      el('span', { class: 'cd-build-pill-icon', trustedHtml: Icon.Sparkle({ size: 14 }) }),
-      el('span', { class: 'cd-build-pill-label' }, 'Build something new…'),
+      el('span', { class: 'cd-build-pill-icon', trustedHtml: Icon.Sparkle({ size: 12 }) }),
+      el(
+        'span',
+        { class: 'cd-build-pill-label' },
+        'Build a tiny app · habit tracker, journal, calculator…',
+      ),
       el('span', { class: 'cd-kbd' }, '⌘N'),
     ]);
 
@@ -882,90 +921,161 @@
     return pill;
   }
 
-  // §A1 — tabbed discovery shelf: Templates · Examples · Recently viewed.
+  // A shelf tile — the same RefinedAppTile shape as renderAppCard but
+  // driven by a plain spec, so templates (which aren't AppMetaResolved)
+  // can share the exact card vocabulary.
+  function buildShelfTile(spec: {
+    name: string;
+    desc: string;
+    iconKey: string;
+    color: string;
+    status?: 'new' | 'draft' | 'template' | null;
+    timestamp?: string;
+    starred?: boolean;
+    onClick: () => void;
+  }): HTMLElement {
+    const card = el('button', {
+      class: 'cd-app-card cd-app-card--small',
+      type: 'button',
+      onClick: spec.onClick,
+    });
+
+    const iconEl = el('div', {
+      class: 'cd-app-card-icon',
+      trustedHtml: Icon[spec.iconKey as IconNameType]
+        ? Icon[spec.iconKey as IconNameType]({ size: 18, strokeWidth: 1.85 })
+        : '',
+    });
+    const finish = window.CentraidTokens.tileFinish(spec.color as ColorHexType, prefs.tileVariant);
+    iconEl.style.background = finish.background;
+    iconEl.style.color = finish.glyphColor;
+    if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
+
+    const top = el('div', { class: 'cd-app-card-top' }, [iconEl]);
+    if (spec.status) {
+      const dot = el('span', { class: 'cd-app-card-icon-dot', 'data-tone': spec.status });
+      iconEl.style.position = 'relative';
+      iconEl.append(dot);
+    }
+    card.append(top);
+
+    card.append(el('div', { class: 'cd-app-card-name' }, spec.name));
+    card.append(el('div', { class: 'cd-app-card-desc' }, spec.desc));
+
+    const foot = el('div', { class: 'cd-app-card-foot' });
+    if (spec.status === 'new') foot.append(statusPillEl('new', 'new'));
+    else if (spec.status === 'draft') foot.append(statusPillEl('draft', 'draft'));
+    else if (spec.status === 'template') foot.append(statusPillEl('live', 'template'));
+    if (spec.status && spec.timestamp) {
+      foot.append(el('span', { class: 'cd-app-card-foot-sep' }, '·'));
+    }
+    if (spec.timestamp) {
+      foot.append(el('span', { class: 'cd-app-card-foot-time' }, spec.timestamp));
+    }
+    card.append(foot);
+
+    const wrap = el('div', { class: 'cd-app-card-wrap' }, [card]);
+    return wrap;
+  }
+
+  // §A1 — HomeShelf: pill-tabbed shelf — My apps · Starred · Templates —
+  // each tab a count badge, "Browse all →" pushed right, a 6-col grid.
   function buildTabbedShelf(templates: TemplateEntry[]): HTMLElement {
-    const section = el('section', { class: 'cd-section' });
-    const tabBar = el('div', { class: 'cd-shelf-tabs' });
-    const row = el('div', { class: 'cd-shelf-row' });
+    const section = el('section', { class: 'cd-shelf' });
 
-    const shelfEmpty = (msg: string): HTMLElement => el('div', { class: 'cd-shelf-empty' }, msg);
-    const shelfCard = (
-      name: string,
-      desc: string,
-      iconKey: string,
-      color: string,
-      onClick: () => void,
-    ): HTMLElement => {
-      const card = el('button', { class: 'cd-shelf-card', type: 'button', onClick });
-      const icon = el('div', {
-        class: 'cd-shelf-card-icon',
-        style: { background: color },
-        trustedHtml: Icon[iconKey as IconNameType]
-          ? Icon[iconKey as IconNameType]({ size: 16, strokeWidth: 1.85 })
-          : Icon.Sparkle({ size: 16 }),
-      });
-      card.append(icon);
-      card.append(el('div', { class: 'cd-shelf-card-name' }, name));
-      card.append(el('div', { class: 'cd-shelf-card-desc' }, desc));
-      return card;
-    };
-
+    const all: AppMetaResolvedType[] = [...getApps(), ...drafts];
+    const starredApps = all.filter((a) => isStarred(a.id));
     const palette = window.ICON_PALETTE as Record<string, string>;
-    const renderTab = (tab: string): void => {
-      row.innerHTML = '';
-      if (tab === 'Templates') {
-        if (templates.length === 0) {
-          row.append(shelfEmpty('No templates available yet.'));
-          return;
-        }
-        for (const t of templates) {
-          row.append(
-            shelfCard(t.name, t.desc, t.iconKey, palette[t.colorKey] ?? '#7C5BD9', () =>
-              openTemplatePreview(t),
-            ),
-          );
-        }
-      } else if (tab === 'Examples') {
-        for (const ex of HOME_EXAMPLES) {
-          row.append(
-            shelfCard(ex.name, ex.prompt, ex.iconKey, palette[ex.colorKey] ?? '#7C5BD9', () =>
-              enterBuilder({ initialPrompt: ex.prompt }),
-            ),
-          );
-        }
+
+    const appTiles = (list: AppMetaResolvedType[]): HTMLElement[] =>
+      list.map((a) => renderAppCard(a, true));
+
+    const tabs: ReadonlyArray<{
+      id: string;
+      label: string;
+      count: number;
+      render: () => HTMLElement[];
+    }> = [
+      {
+        id: 'apps',
+        label: 'My apps',
+        count: all.length,
+        render: () => appTiles(all),
+      },
+      {
+        id: 'starred',
+        label: 'Starred',
+        count: starredApps.length,
+        render: () => appTiles(starredApps),
+      },
+      {
+        id: 'templates',
+        label: 'Templates',
+        count: templates.length,
+        render: () =>
+          templates.map((t) =>
+            buildShelfTile({
+              name: t.name,
+              desc: t.desc,
+              iconKey: t.iconKey,
+              color: palette[t.colorKey] ?? '#7C5BD9',
+              status: 'template',
+              onClick: () => openTemplatePreview(t),
+            }),
+          ),
+      },
+    ];
+
+    const inner = el('div', { class: 'cd-shelf-inner' });
+    const tabRow = el('div', { class: 'cd-shelf-tabrow' });
+    const tabList = el('div', { class: 'cd-shelf-tabs', role: 'tablist' });
+    const grid = el('div', { class: 'cd-shelf-grid' });
+
+    const renderTab = (tabId: string): void => {
+      const t = tabs.find((x) => x.id === tabId) ?? tabs[0]!;
+      grid.innerHTML = '';
+      const tiles = t.render();
+      if (tiles.length === 0) {
+        grid.append(el('div', { class: 'cd-shelf-empty' }, 'Nothing here yet.'));
       } else {
-        const recent = recentApps();
-        if (recent.length === 0) {
-          row.append(shelfEmpty('Apps you open show up here.'));
-          return;
-        }
-        for (const a of recent) {
-          row.append(shelfCard(a.name, a.desc || '', a.iconKey, a.color, () => openApp(a.id)));
-        }
+        for (const tile of tiles) grid.append(tile);
       }
     };
 
-    for (const tab of ['Templates', 'Examples', 'Recently viewed'] as const) {
+    for (const t of tabs) {
       const btn = el(
         'button',
         {
           class: 'cd-shelf-tab',
           type: 'button',
-          'data-active': tab === 'Templates' ? 'true' : undefined,
+          role: 'tab',
+          'data-active': t.id === 'apps' ? 'true' : undefined,
           onClick: () => {
-            for (const b of tabBar.querySelectorAll<HTMLElement>('.cd-shelf-tab')) {
+            for (const b of tabList.querySelectorAll<HTMLElement>('.cd-shelf-tab')) {
               delete b.dataset.active;
             }
             btn.dataset.active = 'true';
-            renderTab(tab);
+            renderTab(t.id);
           },
         },
-        tab,
+        [
+          el('span', {}, t.label),
+          el('span', { class: 'cd-shelf-tab-count' }, String(t.count).padStart(2, '0')),
+        ],
       );
-      tabBar.append(btn);
+      tabList.append(btn);
     }
-    renderTab('Templates');
-    section.append(tabBar, row);
+
+    const browseAll = el(
+      'button',
+      { class: 'cd-shelf-browse', type: 'button', onClick: renderDiscover },
+      [el('span', {}, 'Browse all'), el('span', { trustedHtml: arrowRight(13) })],
+    );
+
+    tabRow.append(tabList, el('span', { class: 'cd-shelf-spacer' }), browseAll);
+    inner.append(tabRow, grid);
+    section.append(inner);
+    renderTab('apps');
     return section;
   }
 
@@ -1272,13 +1382,14 @@
     ]);
   }
 
-  // §A3 — RefinedAppTile: 40px icon, hover-revealed star, static blurb,
-  // and a state-aware bottom strip (NEW for <24h, DRAFT, else last-opened).
+  // §A3 — RefinedAppTile: gradient icon tile with a status dot, a
+  // hover-revealed star, a 2-line blurb, and a state-aware bottom strip
+  // (NEW for <24h, DRAFT, else last-opened).
   function renderAppCard(app: AppMetaResolvedType, small = false): HTMLElement {
     const draft = isDraft(app);
 
-    // Wrap is the grid item; the card is the clickable surface. The star
-    // and `•••` action ride as wrap siblings so we don't nest buttons.
+    // Wrap is the grid item; the card is the clickable surface. The `•••`
+    // action rides as a wrap sibling so we don't nest a button in a button.
     const wrap = el('div', { class: 'cd-app-card-wrap', 'data-app-id': app.id });
     const card = el('button', {
       class: small ? 'cd-app-card cd-app-card--small' : 'cd-app-card',
@@ -1291,6 +1402,10 @@
       },
     });
 
+    const ua = !draft ? findUserApp(app.id) : undefined;
+    const isNew = !draft && isRecentlyCreated(ua?.createdAt);
+    const tone: 'new' | 'draft' | null = draft ? 'draft' : isNew ? 'new' : null;
+
     const iconEl = el('div', {
       class: 'cd-app-card-icon',
       trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 18, strokeWidth: 1.85 }) : '',
@@ -1299,25 +1414,9 @@
     iconEl.style.background = finish.background;
     iconEl.style.color = finish.glyphColor;
     if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
-    card.append(iconEl);
-
-    card.append(el('div', { class: 'cd-app-card-name' }, app.name));
-    card.append(el('div', { class: 'cd-app-card-desc' }, app.desc || 'No description yet.'));
-
-    // State-aware bottom strip.
-    const ua = !draft ? findUserApp(app.id) : undefined;
-    const foot = el('div', { class: 'cd-app-card-foot' });
-    if (draft) {
-      foot.append(statusPillEl('draft', 'draft'));
-    } else if (isRecentlyCreated(ua?.createdAt)) {
-      foot.append(statusPillEl('new', 'new · just now'));
-    } else {
-      foot.append(
-        el('span', { class: 'cd-app-card-foot-time' }, `opened ${relativeTime(ua?.updatedAt)}`),
-      );
+    if (tone) {
+      iconEl.append(el('span', { class: 'cd-app-card-icon-dot', 'data-tone': tone }));
     }
-    card.append(foot);
-    wrap.append(card);
 
     // Hover-revealed star — toggles starred state without opening the app.
     const star = el('button', {
@@ -1325,7 +1424,7 @@
       type: 'button',
       'aria-label': isStarred(app.id) ? 'Unstar app' : 'Star app',
       'data-on': isStarred(app.id) ? 'true' : undefined,
-      trustedHtml: Icon.Star ? Icon.Star({ size: 15 }) : '',
+      trustedHtml: Icon.Star ? Icon.Star({ size: 14 }) : '',
       onClick: (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1333,7 +1432,20 @@
         renderHome();
       },
     });
-    wrap.append(star);
+
+    card.append(el('div', { class: 'cd-app-card-top' }, [iconEl, star]));
+    card.append(el('div', { class: 'cd-app-card-name' }, app.name));
+    card.append(el('div', { class: 'cd-app-card-desc' }, app.desc || 'No description yet.'));
+
+    // State-aware bottom strip — status label + "·" + timestamp.
+    const foot = el('div', { class: 'cd-app-card-foot' });
+    if (tone) foot.append(statusPillEl(tone, tone));
+    const stamp = draft ? 'saved' : relativeTime(ua?.updatedAt);
+    if (tone) foot.append(el('span', { class: 'cd-app-card-foot-sep' }, '·'));
+    foot.append(el('span', { class: 'cd-app-card-foot-time' }, stamp));
+    card.append(foot);
+    wrap.append(card);
+
     wrap.append(
       buildMoreButton('App actions', (rect) => openContextMenu(app, { kind: 'rect', rect })),
     );

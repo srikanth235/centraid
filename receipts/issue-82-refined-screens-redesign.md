@@ -236,6 +236,32 @@ stamp — set once when an app first lands on home, backfilled from
 (`isRecentlyCreated(createdAt)`) so a republish inside 24h no longer
 re-shows NEW.
 
+**Pixel-match Home screens + type-token sync (2026-05-20).** A
+fidelity pass that takes the structurally-faithful Home screens to a
+pixel match of the refined proposal artboards. `styles.css :root` gains
+the full `--t-*` type scale and `--tracking-*` tokens copied from the
+design-system `tokens.css`, so the screen CSS references `var(--t-*)`
+exactly as the design source does. Day-1 home (`renderDay1Home` /
+`buildHomeHero`) now opens with an accent-`NEW` announcement pill, a
+44px `--t-display-1` heading, and the `Day1Composer` card — an
+18px-radius bg-elev surface with an accent-glow shadow, the descriptive
+placeholder, and the full toolbar row (`+` attach, `✦ Build ⌄` mode
+pill, mic, `⌘↵` keycap, circular dark send). `buildTabbedShelf` was
+rebuilt as `HomeShelf`: pill-style segmented tabs (My apps / Starred /
+Templates) each with a zero-padded count badge, a `Browse all →` button
+pushed right, and a 6-column `RefinedAppTile` grid; the separate "Your
+apps" section above the shelf was removed so apps live only in the
+shelf. Loaded home (`renderLoadedHome`) gains an eyebrow date +
+`Your apps.` heading with the `BuildPill` floated right; `SectionBar`
+renders a zero-padded mono count and a `Sort · recent` chip on "All
+apps". `renderAppCard` matches `RefinedAppTile` — 12px-padded tile,
+gradient icon with a corner status dot, hover-revealed star in the top
+row, 2-line clamped blurb, and a state-aware mono foot strip
+(NEW/DRAFT label · timestamp). `chrome.ts buildSidebar` drops the
+`Automations` Pages item, folds drafts into the `Apps` list, and labels
+section headers `Apps · N` / `Chats · N` with a hover-revealed `+`.
+Verified by Electron screenshots against the proposal artboards.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).

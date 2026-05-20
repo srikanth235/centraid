@@ -463,6 +463,26 @@
     return group;
   }
 
+  // Section header — uppercase mono-caps label, format "Apps · N" with an
+  // optional hover-revealed `+` action button (§G3 / RefinedSidebar).
+  function sbSection(label: string, onAction?: () => void): HTMLElement {
+    const section = el('div', { class: 'cd-sb-section' }, [el('span', {}, label)]);
+    if (onAction) {
+      section.append(
+        el('span', { class: 'cd-sb-section-actions' }, [
+          el('button', {
+            class: 'cd-sb-section-btn',
+            type: 'button',
+            'aria-label': 'Add',
+            trustedHtml: Glyph.plus(),
+            onClick: onAction,
+          }),
+        ]),
+      );
+    }
+    return section;
+  }
+
   function buildSidebar(opts: SidebarOpts): HTMLElement {
     const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', height: '100%' } });
 
@@ -486,8 +506,8 @@
       }),
     );
 
-    // Pages — Home / Discover / Starred / Automations.
-    wrap.append(el('div', { class: 'cd-sb-section' }, 'Pages'));
+    // Pages — Home / Discover / Starred (RefinedSidebar §G3).
+    wrap.append(sbSection('Pages'));
     wrap.append(
       sbItem({
         icon: Glyph.home(),
@@ -514,23 +534,15 @@
         onClick: opts.onStarred,
       }),
     );
-    wrap.append(
-      sbItem({
-        icon: Glyph.history(),
-        label: 'Automations',
-        active: opts.activePage === 'automations',
-        disabled: !opts.onAutomations,
-        onClick: opts.onAutomations,
-      }),
-    );
 
-    // Apps section — always rendered so the workspace's information
-    // architecture stays stable; an empty-state row stands in for the
-    // list when the user hasn't cloned or built anything yet. The app
+    // Apps section — the design folds drafts into the Apps list rather
+    // than carrying a separate Drafts header. Count appended to the
+    // header label; a hover-revealed `+` opens the new-app flow. The app
     // matching `activeId` expands into App/Cloud children (§G2).
-    wrap.append(el('div', { class: 'cd-sb-section' }, 'Apps'));
-    if (opts.apps.length > 0) {
-      for (const a of opts.apps) {
+    const appList = [...opts.apps, ...opts.drafts];
+    wrap.append(sbSection(`Apps · ${appList.length}`, opts.onNewApp));
+    if (appList.length > 0) {
+      for (const a of appList) {
         if (a.id === opts.activeId) {
           wrap.append(expandedApp(a, opts));
           continue;
@@ -547,27 +559,9 @@
       wrap.append(sbItem({ icon: Glyph.sparkle(), label: 'No apps yet', disabled: true }));
     }
 
-    // Drafts
-    if (opts.drafts.length > 0) {
-      wrap.append(el('div', { class: 'cd-sb-section' }, 'Drafts'));
-      for (const d of opts.drafts) {
-        if (d.id === opts.activeId) {
-          wrap.append(expandedApp(d, opts));
-          continue;
-        }
-        const item = sbItem({
-          iconNode: appIconNode(d),
-          icon: '',
-          label: d.name,
-          onClick: () => opts.onAppClick(d.id),
-        });
-        wrap.append(appRow(item, d.id, opts.onAppContext));
-      }
-    }
-
     // Placeholder: Chats — visible to preserve the design's information
     // architecture for future wiring, but disabled today.
-    wrap.append(el('div', { class: 'cd-sb-section' }, 'Chats'));
+    wrap.append(sbSection('Chats · 0'));
     wrap.append(sbItem({ icon: Glyph.sparkle(), label: 'No saved chats yet', disabled: true }));
 
     // Spacer pushes Settings to the bottom. Refined Screens §G3 swaps the

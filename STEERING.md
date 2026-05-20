@@ -147,3 +147,6 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-906f928532b-1779274149-1 | 906f9285-32b8-465e-b3a8-7145639b16cf |  | interrupt | structural |  | feat(design-tokens): add refined-screen icons, fix Send glyph |
 | steer-906f928532b-1779277637-1 | 906f9285-32b8-465e-b3a8-7145639b16cf | #82 | correction | classifier | rejected deferring work; demanded all items be completed | feat(desktop): Builder pane toolbar - URL pill + device + tabs (#82) |
 | steer-906f928532b-1779277637-2 | 906f9285-32b8-465e-b3a8-7145639b16cf | #82 | interrupt | structural |  | feat(desktop): Builder pane toolbar - URL pill + device + tabs (#82) |
+| steer-906f928532b-1779286484-1 | 906f9285-32b8-465e-b3a8-7145639b16cf | #82 | correction | classifier | pushed back on accepting structural-only deviations; demanded closer match | feat(desktop): pixel-match Home screens to refined proposal (#82) |
+| steer-906f928532b-1779286484-2 | 906f9285-32b8-465e-b3a8-7145639b16cf | #82 | interrupt | structural |  | feat(desktop): pixel-match Home screens to refined proposal (#82) |
+| steer-906f928532b-1779286484-3 | 906f9285-32b8-465e-b3a8-7145639b16cf | #82 | correction | classifier | rejected structural-only audit; demanded pixel-by-pixel match | feat(desktop): pixel-match Home screens to refined proposal (#82) |
