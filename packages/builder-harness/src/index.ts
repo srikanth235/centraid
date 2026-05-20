@@ -65,7 +65,12 @@ export type {
   LogLevel,
 } from '@centraid/runtime-core';
 
-export { readProjectFiles, type ProjectFile, type ProjectFileLanguage } from './project-files.js';
+export {
+  readProjectFiles,
+  writeProjectFile,
+  type ProjectFile,
+  type ProjectFileLanguage,
+} from './project-files.js';
 
 export { defaultHarnessConfig, resolveHarnessConfig } from './config.js';
 

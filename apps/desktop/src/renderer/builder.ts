@@ -48,22 +48,17 @@
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
   const MonitorIcon = (size = 13): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
-  // Sparkle glyph for the "Try" follow-up label and other contextual hints.
-  // Smaller stroke than the design-token Sparkle so it sits comfortably as a
-  // 11px label adornment.
-  const SparkleIcon = (size = 11): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.6 1.6L21 17l-1.4.4L19 19l-.6-1.6L17 17l1.4-.4z"/></svg>`;
-  const FolderOpenIcon = (size = 14): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 9h18l-2 9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+  // Paperclip glyph for the chat composer's attach control — the shared
+  // icon set has no paperclip, so it lives inline here.
+  const PaperclipIcon = (size = 14): string =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
   // File-with-edit glyph for the change card that surfaces below tool-group
   // pills when the agent wrote files. Page outline + a small pen overlay.
   const FileEditIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="14 3 14 9 20 9"/><path d="M18 13l3 3-5 5h-3v-3z"/></svg>`;
-  // Cloud-tab icons. The Cloud tab is a Lovable-style data-browser panel
-  // that lives next to Preview/Code; these glyphs label the tab itself and
-  // the left-rail sub-sections (Database, Users, Storage, etc.).
-  const CloudIcon = (size = 13): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`;
+  // Cloud-surface icons. The Cloud surface is a Lovable-style data-browser
+  // panel reached from the sidebar; these glyphs label its left-rail
+  // sub-sections (Database, Users, Storage, etc.).
   const CloudOverviewIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`;
   const DatabaseIcon = (size = 14): string =>
@@ -345,44 +340,42 @@
     // so existing callers that update its textContent on rename still work.
     const crumbProjName = el('span', {}, isUpdateMode ? `Editing ${projName}` : 'Builder');
 
-    const primaryBtn = el('button', { class: 'btn btn-primary' });
-    primaryBtn.innerHTML = Icon.Plus({ size: 13 }) + '<span>Add to home</span>';
+    // Primary action — always "Publish" with the Share/upload glyph in
+    // both new-build and update modes (refined proposal RefinedBuilder).
+    // Update mode reuses the same publish flow; the gateway semantics
+    // (uploading a new version) are identical, so the label unifies.
+    const primaryBtn = el('button', { class: 'btn btn-primary cd-tl-publish' });
+    primaryBtn.innerHTML = Icon.Share({ size: 11 }) + '<span>Publish</span>';
     primaryBtn.addEventListener('click', () => {
       void handlePublish();
     });
-    if (isUpdateMode) {
-      // Update mode reuses the publish flow; the label reflects the gateway
-      // semantics (this uploads a new version) rather than implying a
-      // local-only save.
-      primaryBtn.innerHTML = (Icon.Save ? Icon.Save({ size: 13 }) : '') + '<span>Publish</span>';
-    }
 
+    // Titlebar app-icon tile — a gradient finish from the project color,
+    // matching how app icons are tiled on Home (renderAppCard) and in the
+    // App-view brand chip. ~20px to sit inside the identity pill.
     const projIconEl = el('div', {
-      class: 'app-topbar-icon',
-      trustedHtml: (Icon[projIcon] || Icon.Sparkle)({ size: 14, strokeWidth: 2 }),
-      style: {
-        background: projColor as string,
-        borderRadius: '4px',
-        height: '28px',
-        width: '28px',
-      },
+      class: 'cd-tl-app-icon',
+      trustedHtml: (Icon[projIcon] || Icon.Sparkle)({ size: 11, strokeWidth: 1.9 }),
     });
+    function paintProjIcon(): void {
+      const finish = window.CentraidTokens.tileFinish(projColor as string, 'gradient');
+      projIconEl.style.background = finish.background;
+      projIconEl.style.color = finish.glyphColor;
+      if (finish.boxShadow) projIconEl.style.boxShadow = finish.boxShadow;
+    }
+    paintProjIcon();
 
-    // Read-only status row that replaces the old editable description
-    // subtitle (which was 'Built with Centraid.' / 'Add a description…').
-    // Mirrors the v2 mockup's `● Live · v3 · edited 14h ago` pattern: a
-    // colored dot reflects the sync state (driven by `[data-state]` set
-    // by paintStatus), followed by version number + relative edit time
-    // when known. For a draft project the row just reads 'Draft'. The
-    // description data is preserved in app.json — editing moves to a
-    // future settings affordance.
-    const projStatusDot = el('span', { class: 'cd-app-strip-status-dot' });
-    const projStatusText = el('span', { class: 'cd-app-strip-status-text' }, 'Draft');
-    const projSubtitleEl = el(
-      'span',
-      { 'data-state': 'idle-draft', class: 'cd-app-strip-status' },
-      [projStatusDot, projStatusText],
-    );
+    // Read-only status badge — a compact uppercase-mono pill with a
+    // pulsing dot, sitting inside the titlebar identity lockup (refined
+    // proposal RefinedBuilder). The dynamic text (Draft / Editing… /
+    // Publishing… / Live · v…) is composed by paintStatus(); only the
+    // sync-state colour is driven by the parent's [data-state].
+    const projStatusDot = el('span', { class: 'cd-tl-status-dot' });
+    const projStatusText = el('span', { class: 'cd-tl-status-text' }, 'Draft');
+    const projSubtitleEl = el('span', { 'data-state': 'idle-draft', class: 'cd-tl-status' }, [
+      projStatusDot,
+      projStatusText,
+    ]);
     let appVersionCount = 0;
     let appLastEditedAt: number | undefined;
     function relTime(ts: number): string {
@@ -425,10 +418,11 @@
     // Mode tabs render as icon-only pills by default; the active tab expands
     // to icon+label (Lovable pattern). Each entry's third field is a render
     // fn so we can mix design-token icons (Eye, Code) with inline SVGs (Cloud).
+    // §B3 — the pane toggle is Preview/Code only. Cloud is a sidebar
+    // destination (§G2), reached via the expanded app's Cloud child.
     const tabDefs: [Tab, string, () => string][] = [
       ['preview', 'Preview', () => Icon.Eye({ size: 13 })],
       ['code', 'Code', () => Icon.Code({ size: 13 })],
-      ['cloud', 'Cloud', () => CloudIcon(13)],
     ];
 
     // History toggle — swaps the chat pane between live chat and version
@@ -436,9 +430,9 @@
     // user can still see the rendered app while browsing past versions).
     const historyBtn = el('button', {
       'aria-label': 'View history',
-      class: 'topbar-icon-btn',
+      class: 'cd-tb-btn',
       'data-active': String(chatView === 'history'),
-      trustedHtml: Icon.History({ size: 16 }),
+      trustedHtml: Icon.History({ size: 14 }),
       title: 'View history',
       onClick: () => {
         chatView = chatView === 'history' ? 'chat' : 'history';
@@ -453,17 +447,16 @@
 
     // Device segmented control — toggles the preview iframe between
     // mobile / tablet / desktop framing. Lives in the right-pane toolbar
-    // and is hidden when the active tab isn't Preview (via .urlbar-slot
-    // data-visible). The old URL address bar that used to sit beside it
-    // has been removed — the preview iframe is the source of truth.
+    // (`rb-toolbar`) and is hidden when the active tab isn't Preview
+    // (gated by `.rb-toolbar[data-tab]`).
     const deviceMobileBtn = el('button', {
       'aria-label': 'Mobile',
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'mobile'),
       title: 'Mobile preview',
-      // Icon + visible label (Phone / Tablet / Desktop) — matches the
-      // v2 mockup's segmented device pill instead of icon-only.
-      trustedHtml: `${SmartphoneIcon(13)}<span class="urlbar-device-label">Phone</span>`,
+      // Icon-only segmented device control (refined proposal RBPaneToolbar);
+      // the `title` attr carries the tooltip.
+      trustedHtml: SmartphoneIcon(13),
       onClick: () => {
         if (previewDevice === 'mobile') return;
         previewDevice = 'mobile';
@@ -476,7 +469,7 @@
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'tablet'),
       title: 'Tablet preview',
-      trustedHtml: `${TabletIcon(13)}<span class="urlbar-device-label">Tablet</span>`,
+      trustedHtml: TabletIcon(13),
       onClick: () => {
         if (previewDevice === 'tablet') return;
         previewDevice = 'tablet';
@@ -489,7 +482,7 @@
       class: 'urlbar-device-btn',
       'data-active': String(previewDevice === 'desktop'),
       title: 'Desktop preview',
-      trustedHtml: `${MonitorIcon(13)}<span class="urlbar-device-label">Desktop</span>`,
+      trustedHtml: MonitorIcon(13),
       onClick: () => {
         if (previewDevice === 'desktop') return;
         previewDevice = 'desktop';
@@ -502,7 +495,26 @@
       deviceTabletBtn,
       deviceDesktopBtn,
     ]);
-    const urlbarSlot = el('div', { class: 'urlbar-slot' }, [devicePill]);
+
+    // §B3 — preview URL pill. A sync-state dot, the trimmed preview URL in
+    // mono, and a reload button. The full URL rides on the pill's `title`
+    // attribute; renderPreview() keeps the text + dot state in sync.
+    const previewUrlDot = el('span', { class: 'rb-url-dot', 'data-state': 'idle' });
+    const previewUrlText = el('span', { class: 'rb-url-text' }, 'No preview');
+    const previewRefreshBtn = el('button', {
+      'aria-label': 'Reload preview',
+      class: 'rb-url-refresh',
+      title: 'Reload preview',
+      trustedHtml: RefreshIcon(13),
+      onClick: () => {
+        if (tab === 'preview') renderRight();
+      },
+    });
+    const previewUrlPill = el('div', { class: 'rb-url' }, [
+      previewUrlDot,
+      previewUrlText,
+      previewRefreshBtn,
+    ]);
 
     // Inline-editable title + description. Edits persist to
     // `app.json#{name,description}` via the updateProjectMeta IPC and also
@@ -577,7 +589,9 @@
             refreshTopbarToggles();
           },
         });
-        btn.innerHTML = `${renderIcon()}<span>${label}</span>`;
+        // Icon-only toggle (refined proposal RBPaneToggle); the `title` +
+        // `aria-label` carry the Preview / Code semantics.
+        btn.innerHTML = renderIcon();
         return btn;
       }),
     );
@@ -603,17 +617,28 @@
     // (mode tabs, device pill).
     const moreBtn = el('button', {
       'aria-label': 'More project actions',
-      class: 'builder-pane-more',
+      class: 'cd-tb-btn',
       title: 'More',
       // Wired in a future commit (Share, Rename, Edit description, etc.);
       // for now it's a visual placeholder so the header reads complete.
-      trustedHtml:
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
+      trustedHtml: Icon.MoreHoriz({ size: 14 }),
     });
-    const builderHeader = el('div', { class: 'builder-pane-header' }, [
+
+    // Titlebar identity lockup — a soft ink-washed pill carrying the
+    // gradient app-icon, the editable project name, and the status
+    // badge. Lands in `.cd-tl-nav` (via `titlebarLead`) so it hugs the
+    // back/forward arrows, matching the refined proposal RefinedBuilder.
+    // The chat pane no longer carries a header row of its own.
+    const builderIdentity = el('span', { class: 'cd-tl-identity' }, [
       projIconEl,
-      el('span', { class: 'builder-pane-meta' }, [projNameEl, projSubtitleEl]),
-      el('span', { class: 'builder-pane-actions' }, [historyBtn, moreBtn, primaryBtn]),
+      projNameEl,
+      projSubtitleEl,
+    ]);
+    // Trailing titlebar actions — history, more, and the Publish button.
+    const builderActions = el('span', { class: 'cd-tl-builder-actions' }, [
+      historyBtn,
+      moreBtn,
+      primaryBtn,
     ]);
 
     function refreshTabs(): void {
@@ -630,7 +655,7 @@
       deviceMobileBtn.dataset.active = String(previewDevice === 'mobile');
       deviceTabletBtn.dataset.active = String(previewDevice === 'tablet');
       deviceDesktopBtn.dataset.active = String(previewDevice === 'desktop');
-      urlbarSlot.dataset.visible = String(tab === 'preview');
+      rbToolbar.dataset.tab = tab;
     }
 
     // Trim noisy URL prefixes for display while preserving the full URL on
@@ -691,24 +716,34 @@
     // data-sidebar drives the .builder-body grid columns (open vs collapsed).
     const body = el('div', { class: 'builder-body', 'data-sidebar': 'open' });
     const chatPane = el('div', { class: 'chat-pane' });
-    // The right pane is now a flat container for the canvas — the mode
-    // tabs + device pill (formerly in `.right-pane-toolbar`) ride in the
-    // window chrome row (cd-tl-main) as `titlebarCenter`. Backdrop classes
-    // (`preview-pane`, `has-phone`) stay on `rightPane` so the dotted wall
-    // fills the column. Render functions write into `rightPaneContent`.
+    // The right pane carries its own toolbar (`rb-toolbar`) above the
+    // canvas. Backdrop classes (`preview-pane`, `has-phone`) stay on
+    // `rightPane` so the dotted wall fills the column. Render functions
+    // write into `rightPaneContent`.
     const rightPane = el('div', { class: 'right-pane' });
+    // §B3 — right-pane toolbar. Layout mirrors RBPaneToolbar: URL pill at
+    // the leading edge, then a flex spacer, then the viewport device pill,
+    // an open-in-new-tab button, and the Preview/Code toggle on the
+    // trailing edge — controls sitting with the surface they control.
+    // `data-tab` gates the preview-only controls (URL pill + device pill).
+    const rbShareBtn = el('button', {
+      'aria-label': 'Open in new tab',
+      class: 'rb-toolbar-share',
+      title: 'Open in new tab',
+      trustedHtml: Icon.Share({ size: 12 }),
+    });
+    const rbToolbar = el('div', { class: 'rb-toolbar', 'data-tab': tab }, [
+      previewUrlPill,
+      el('div', { class: 'rb-toolbar-spacer' }),
+      devicePill,
+      rbShareBtn,
+      tabsPill,
+    ]);
     const rightPaneContent = el('div', { class: 'right-pane-content' });
+    rightPane.append(rbToolbar);
     rightPane.append(rightPaneContent);
     body.append(chatPane);
     body.append(rightPane);
-
-    // Center chrome cluster — tabs (Preview / Code / Cloud) followed by the
-    // device pill (Phone / Tablet / Desktop). The device pill hides when
-    // the active tab isn't Preview (driven by .urlbar-slot[data-visible]).
-    const builderTitlebarCenter = el('span', { class: 'builder-tl-center' }, [
-      tabsPill,
-      urlbarSlot,
-    ]);
 
     // chat-scroll + chat-input-wrap are recreated by renderChatPane() each
     // time chatView changes, so the same pane can host either view without
@@ -823,17 +858,17 @@
       if (m.kind === 'user') {
         return el('div', { class: 'msg-user' }, [el('div', { class: 'msg-user-bubble' }, m.text)]);
       }
-      // AI message — preserve paragraphs from the streaming text. Lead
-      // with a small `builder` author chip (gradient dot + monospace
-      // label) that grounds the assistant turn in the conversation
-      // rather than letting it read as floating prose.
-      const author = el('div', { class: 'msg-ai-author' });
-      author.innerHTML =
-        '<span class="msg-ai-author-dot"></span><span class="msg-ai-author-name">builder</span>';
+      // AI message — flat prose with a small sparkle avatar at the lead
+      // (matches RBChat's agent message). The avatar grounds the turn in
+      // the conversation; the body reads as plain prose, no bubble.
+      const avatar = el('span', {
+        class: 'msg-ai-avatar',
+        trustedHtml: Icon.Sparkle({ size: 11 }),
+      });
       const para = el('div', { class: 'msg-ai-text' });
       const text = m.text || (m.streaming ? '…' : '');
       text.split('\n\n').forEach((p) => para.append(el('p', {}, p)));
-      return el('div', { class: 'msg-ai' }, [author, para]);
+      return el('div', { class: 'msg-ai' }, [avatar, para]);
     }
 
     function renderChat(): void {
@@ -870,7 +905,7 @@
     function renderInput(): void {
       inputWrap.innerHTML = '';
       const ta = el('textarea', {
-        placeholder: isUpdateMode ? 'Describe the change…' : 'Ask, or describe what to change…',
+        placeholder: 'Describe a change…',
         rows: 1,
       }) as HTMLTextAreaElement;
 
@@ -896,44 +931,31 @@
       });
 
       const controls = el('div', { class: 'chat-input-controls' }, [
+        // Composer carries the attach control only (refined proposal RBChat).
         el('button', {
           'aria-label': 'Attach',
           class: 'input-pill input-pill-icon',
           title: 'Attach',
-          trustedHtml: Icon.Plus({ size: 14 }),
-        }),
-        el('button', {
-          'aria-label': 'Open project folder',
-          class: 'input-pill input-pill-icon',
-          title: 'Open project folder',
-          trustedHtml: FolderOpenIcon(14),
-          onClick: () => {
-            if (projectId) void Api().openProjectFolder({ id: projectId });
-          },
+          trustedHtml: PaperclipIcon(14),
         }),
         el('div', { class: 'spacer' }),
+        el('span', { class: 'chat-input-kbd' }, '⌘↵'),
         sendBtn,
       ]);
 
       const wrap = el('div', { class: 'chat-input' }, [ta, controls]);
-      // Contextual follow-ups — anchored just above the input, prefixed with
-      // a `Try` label so they read as suggestions rather than empty-state
-      // filler. Same hardcoded set today; future work can swap in
-      // turn-aware suggestions from the agent.
-      const followups = el('div', { class: 'prompt-starters' });
-      followups.append(
-        el('span', {
-          class: 'prompt-starters-label',
-          trustedHtml: `${SparkleIcon(11)}<span>Try</span>`,
-        }),
-      );
+      // Contextual follow-ups — anchored just above the input under a
+      // "Suggested next moves" eyebrow so they read as a labelled group
+      // (matches RBChat). Same hardcoded set today; future work can swap
+      // in turn-aware suggestions from the agent.
+      const followupChips = el('div', { class: 'prompt-starters' });
       for (const suggestion of [
         'Improve the layout',
         'Add saved data',
         'Polish the visual style',
         'Prepare to publish',
       ]) {
-        followups.append(
+        followupChips.append(
           el(
             'button',
             {
@@ -947,17 +969,20 @@
           ),
         );
       }
-      inputWrap.append(followups);
+      inputWrap.append(
+        el('div', { class: 'prompt-starters-group' }, [
+          el('div', { class: 'prompt-starters-label' }, 'Suggested next moves'),
+          followupChips,
+        ]),
+      );
       inputWrap.append(wrap);
     }
 
-    // The chat pane is composed of a persistent header (project icon +
-    // name + status + Publish) and a body that swaps between live chat
-    // and version history. The header is mounted ONCE during builder
-    // setup; renderChatPane only touches the body so the header doesn't
-    // flash on every chatView flip.
+    // The chat pane has no header row of its own — project identity
+    // (icon + name + status) and the project actions live in the window
+    // titlebar (refined proposal RefinedBuilder). The chat pane is just a
+    // body that swaps between live chat and version history.
     const chatBody = el('div', { class: 'chat-body' });
-    chatPane.append(builderHeader);
     chatPane.append(chatBody);
 
     // ---------- Chat pane swap (chat ↔ history) ----------
@@ -1003,6 +1028,13 @@
       // Always stop any in-flight cloud polling before re-rendering; the
       // cloud branch below will restart it if logs is the active section.
       stopCloudLogsPoll();
+      // Code + Cloud are full-focus surfaces — the refined Builder
+      // artboards show no chat pane on these tabs, so the file tree /
+      // cloud rail + content span the whole body. Preview restores the
+      // user's saved chat-pane preference.
+      const chatVisible = tab === 'preview' ? builderChatOpen : false;
+      main.dataset.chat = chatVisible ? 'open' : 'closed';
+      setShellChatPaneOpen(chatVisible);
       if (tab === 'preview') void renderPreview();
       else if (tab === 'cloud') renderCloud();
       else void renderCode();
@@ -1071,6 +1103,38 @@
       return undefined;
     }
 
+    // §B4 — skeleton phone shown while the agent is still building (before
+    // an index.html exists). Replaces the old "Nothing to preview yet"
+    // paragraph so the canvas reads as "a screen taking shape", not empty.
+    function buildPreviewSkeleton(): HTMLElement {
+      const stage = el('div', { class: 'preview-stage' });
+      const phone = el('div', { class: 'skel-phone' });
+      const screen = el('div', { class: 'skel-phone-screen' });
+
+      screen.append(
+        el('div', { class: 'skel-statusbar' }, [
+          el('span', {}, '9:41'),
+          el('span', { class: 'skel-battery' }),
+        ]),
+      );
+
+      const skelBody = el('div', { class: 'skel-body' });
+      skelBody.append(el('div', { class: 'skel-block skel-block-title' }));
+      skelBody.append(el('div', { class: 'skel-block skel-block-sub' }));
+      skelBody.append(el('div', { class: 'skel-block skel-block-card' }));
+      const grid = el('div', { class: 'skel-grid' });
+      for (const _ of Array.from({ length: 28 })) grid.append(el('div', { class: 'skel-cell' }));
+      skelBody.append(grid);
+      for (const _ of Array.from({ length: 3 })) {
+        skelBody.append(el('div', { class: 'skel-block skel-block-row' }));
+      }
+      screen.append(skelBody);
+
+      phone.append(screen);
+      stage.append(phone);
+      return stage;
+    }
+
     async function renderPreview(): Promise<void> {
       // `has-phone` styles the pane as the dotted-grid backdrop that mobile
       // and tablet device frames sit on. Desktop wants a plain flex-stretched
@@ -1082,15 +1146,28 @@
 
       const resolved = projectId ? await resolvePreviewSrc() : undefined;
 
+      // §B3 — keep the toolbar URL pill in sync with the resolved source.
       if (!resolved) {
-        const empty = el('div', { class: 'empty' });
-        empty.innerHTML = `
-          <p><b>Nothing to preview yet.</b></p>
-          <p style="margin-top: 6px; opacity: .7">
-            The preview shows your app's local files as soon as the agent
-            writes an <code>index.html</code>. Click <b>${isNewBuild ? 'Add to home' : 'Save'}</b> to publish to the gateway once you're happy.
-          </p>`;
-        rightPaneContent.append(empty);
+        previewUrlText.textContent = 'Building…';
+        previewUrlDot.dataset.state = 'building';
+        previewUrlPill.removeAttribute('title');
+      } else {
+        previewUrlText.textContent = formatPreviewUrl(resolved.src);
+        previewUrlDot.dataset.state = resolved.kind === 'live' ? 'live' : 'local';
+        previewUrlPill.setAttribute('title', resolved.src);
+      }
+
+      if (!resolved) {
+        // §B4 — render the skeleton phone + an ambient building pill
+        // instead of an explanatory paragraph.
+        rightPane.classList.add('has-phone');
+        rightPaneContent.append(buildPreviewSkeleton());
+        rightPaneContent.append(
+          el('div', { class: 'preview-building-pill' }, [
+            el('span', { class: 'preview-building-dot' }),
+            'Building · preview refreshes on save',
+          ]),
+        );
         return;
       }
 
@@ -1117,34 +1194,131 @@
       }
     }
 
-    // Code view — file-tree on the left + viewer on the right (Lovable-style).
-    // Tree state (expanded folders, search query, active file) is per-render
-    // so re-mounts return to a sensible default instead of stale state.
+    // §B5 — editable code workspace. Buffers, open tabs, the active file,
+    // and the diff toggle are hoisted out of renderCode() so unsaved edits
+    // survive renderRight() re-renders (e.g. the user peeking at Preview
+    // and coming back). A buffer's `current` diverging from `original`
+    // marks it dirty.
+    type CodeLang = 'html' | 'js' | 'ts' | 'css' | 'json' | 'md' | 'other';
+    interface CodeBuffer {
+      original: string;
+      current: string;
+      language: CodeLang;
+    }
+    const codeBuffers = new Map<string, CodeBuffer>();
+    const codeOpenTabs: string[] = [];
+    let codeActivePath: string | undefined;
+    let codeDiffMode = false;
+
+    // Unified line diff (LCS) — drives the Code view's Diff toggle. O(mn)
+    // is fine here: project files are capped at 256 KB by readProjectFiles.
+    type DiffRow = { type: 'same' | 'add' | 'del'; text: string; aNum?: number; bNum?: number };
+    function lineDiff(aStr: string, bStr: string): DiffRow[] {
+      const a = aStr.split('\n');
+      const b = bStr.split('\n');
+      const m = a.length;
+      const n = b.length;
+      const dp: number[][] = Array.from({ length: m + 1 }, () =>
+        Array.from<number>({ length: n + 1 }).fill(0),
+      );
+      for (let i = m - 1; i >= 0; i--) {
+        for (let j = n - 1; j >= 0; j--) {
+          dp[i]![j] =
+            a[i] === b[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+        }
+      }
+      const rows: DiffRow[] = [];
+      let i = 0;
+      let j = 0;
+      let an = 1;
+      let bn = 1;
+      while (i < m && j < n) {
+        if (a[i] === b[j]) {
+          rows.push({ type: 'same', text: a[i]!, aNum: an++, bNum: bn++ });
+          i++;
+          j++;
+        } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+          rows.push({ type: 'del', text: a[i]!, aNum: an++ });
+          i++;
+        } else {
+          rows.push({ type: 'add', text: b[j]!, bNum: bn++ });
+          j++;
+        }
+      }
+      while (i < m) rows.push({ type: 'del', text: a[i++]!, aNum: an++ });
+      while (j < n) rows.push({ type: 'add', text: b[j++]!, bNum: bn++ });
+      return rows;
+    }
+
+    // Code view — file tree on the left, an editable tabbed editor on the
+    // right (§B5). The editor is a transparent <textarea> over a tokenized
+    // <pre>, so typing stays live while keeping syntax colour.
     async function renderCode(): Promise<void> {
       const codePane = el('div', { class: 'code-pane' });
       const treeWrap = el('div', { class: 'code-tree' });
-      const viewer = el('div', { class: 'code-viewer' });
+      const workspace = el('div', { class: 'code-workspace' });
       codePane.append(treeWrap);
-      codePane.append(viewer);
+      codePane.append(workspace);
       rightPaneContent.append(codePane);
 
       if (!projectId) {
-        viewer.innerHTML = '<div class="empty">No project yet.</div>';
+        workspace.innerHTML = '<div class="empty">No project yet.</div>';
         return;
       }
+      const pid = projectId;
 
       let files: Awaited<ReturnType<Window['CentraidApi']['readProjectFiles']>> = [];
       try {
-        files = await Api().readProjectFiles({ id: projectId });
+        files = await Api().readProjectFiles({ id: pid });
       } catch (err) {
-        viewer.innerHTML = `<div class="empty">Could not read files: ${escapeHtml(String(err))}</div>`;
+        workspace.innerHTML = `<div class="empty">Could not read files: ${escapeHtml(String(err))}</div>`;
         return;
       }
 
       if (files.length === 0) {
-        viewer.innerHTML = '<div class="empty">Empty project.</div>';
+        workspace.innerHTML = '<div class="empty">Empty project.</div>';
         return;
       }
+
+      // Sync clean buffers to the freshest on-disk bytes (the agent may
+      // have rewritten files since the last Code visit); leave dirty
+      // buffers untouched so unsaved edits are never clobbered.
+      for (const f of files) {
+        const buf = codeBuffers.get(f.path);
+        if (buf && buf.current === buf.original) {
+          buf.original = f.content;
+          buf.current = f.content;
+        }
+      }
+      // Drop tabs/buffers whose file no longer exists on disk.
+      for (const p of codeOpenTabs.slice()) {
+        if (!files.some((f) => f.path === p)) {
+          codeOpenTabs.splice(codeOpenTabs.indexOf(p), 1);
+          codeBuffers.delete(p);
+        }
+      }
+
+      const openFile = (p: string): void => {
+        if (!codeBuffers.has(p)) {
+          const f = files.find((x) => x.path === p);
+          if (!f) return;
+          codeBuffers.set(p, {
+            original: f.content,
+            current: f.content,
+            language: languageHint(p),
+          });
+        }
+        if (!codeOpenTabs.includes(p)) codeOpenTabs.push(p);
+        codeActivePath = p;
+      };
+
+      if (!codeActivePath || !files.some((f) => f.path === codeActivePath)) {
+        codeActivePath = files.find((f) => f.path === 'index.html')?.path ?? files[0]!.path;
+      }
+      openFile(codeActivePath);
+
+      const dirtyPaths = (): string[] =>
+        [...codeBuffers.entries()].filter(([, b]) => b.current !== b.original).map(([p]) => p);
 
       type TreeNode = {
         name: string;
@@ -1191,14 +1365,11 @@
 
       const tree = buildTree();
 
-      // Sensible default selection: index.html if present, else first file.
-      let active = files.find((f) => f.path === 'index.html')?.path ?? files[0]!.path;
-
       // Folders containing the active file start expanded so the user can
       // see where it lives. Search auto-expands matching paths too.
       const expanded = new Set<string>();
       {
-        const parts = active.split('/');
+        const parts = (codeActivePath ?? '').split('/');
         let acc = '';
         for (let i = 0; i < parts.length - 1; i++) {
           acc = acc ? `${acc}/${parts[i]}` : parts[i]!;
@@ -1228,70 +1399,11 @@
         return out;
       }
 
-      const drawViewer = (): void => {
-        viewer.innerHTML = '';
-        const file = files.find((f) => f.path === active);
-        if (!file) {
-          viewer.innerHTML = '<div class="empty">File not found.</div>';
-          return;
-        }
-        const lang = languageHint(file.path);
-        const langLabel = LANG_DISPLAY[lang] ?? 'TEXT';
-        const lineCount = file.content.split('\n').length;
-        const bytes = new TextEncoder().encode(file.content).byteLength;
-        const pathDir = file.path.includes('/')
-          ? file.path.slice(0, file.path.lastIndexOf('/'))
-          : '';
-        const pathName = file.path.includes('/')
-          ? file.path.slice(file.path.lastIndexOf('/') + 1)
-          : file.path;
-
-        // Filename row: name + colored language pill + Read-only chip.
-        const titleRow = el('div', { class: 'code-viewer-title-row' }, [
-          ...(pathDir ? [el('span', { class: 'code-viewer-dir' }, pathDir + '/')] : []),
-          el('span', { class: 'code-viewer-name' }, pathName),
-          el('span', { class: 'code-lang-pill', 'data-lang': lang }, langLabel),
-          el('span', { class: 'code-readonly-badge' }, 'Read-only'),
-        ]);
-        const metaRow = el(
-          'span',
-          { class: 'code-viewer-meta' },
-          `${lineCount} ${lineCount === 1 ? 'line' : 'lines'} · ${formatBytes(bytes)} · synced from gateway`,
-        );
-        const titleStack = el('div', { class: 'code-viewer-title' }, [titleRow, metaRow]);
-
-        const openBtn = el(
-          'button',
-          {
-            class: 'btn btn-ghost tiny-btn code-open-btn',
-            onClick: () => {
-              if (projectId) void Api().openProjectFolder({ id: projectId });
-            },
-          },
-          'Open folder',
-        );
-        const head = el('div', { class: 'code-viewer-head' }, [
-          titleStack,
-          el('div', { class: 'code-viewer-actions' }, [openBtn]),
-        ]);
-
-        const body = el('div', { class: 'code-body' });
-        const lines = file.content.split('\n');
-        const gutter = el('div', { class: 'code-gutter' });
-        lines.forEach((_, i) => gutter.append(el('div', {}, String(i + 1))));
-        const text = el('pre', { class: 'code-text' });
-        text.innerHTML = tokenize(file.content, lang);
-        body.append(gutter);
-        body.append(text);
-        viewer.append(head);
-        viewer.append(body);
-      };
-
       const drawTree = (): void => {
         treeWrap.innerHTML = '';
 
         const searchInput = el('input', {
-          class: 'code-search',
+          class: 'code-search-input',
           placeholder: 'Search code',
           value: search,
         }) as HTMLInputElement;
@@ -1299,13 +1411,22 @@
           search = searchInput.value.trim().toLowerCase();
           drawTree();
           // Keep the input focused after re-render.
-          const next = treeWrap.querySelector('.code-search') as HTMLInputElement | null;
+          const next = treeWrap.querySelector('.code-search-input') as HTMLInputElement | null;
           if (next) {
             next.focus();
             next.setSelectionRange(search.length, search.length);
           }
         });
-        treeWrap.append(searchInput);
+        treeWrap.append(
+          el('div', { class: 'code-search' }, [
+            el('span', {
+              class: 'code-search-icon',
+              trustedHtml: Icon.Search({ size: 13 }),
+            }),
+            searchInput,
+            el('span', { class: 'code-search-kbd' }, '⌘P'),
+          ]),
+        );
 
         const list = el('div', { class: 'code-tree-list' });
         const visible = filterTree(tree, search);
@@ -1338,22 +1459,28 @@
             return row;
           }
           const lang = languageHint(node.path);
+          const buf = codeBuffers.get(node.path);
+          const isDirty = !!buf && buf.current !== buf.original;
           const row = el(
             'button',
             {
               class: 'code-tree-row code-tree-file',
-              'data-active': String(active === node.path),
+              'data-active': String(codeActivePath === node.path),
+              'data-dirty': String(isDirty),
               'data-depth': String(depth),
               onClick: () => {
-                active = node.path;
+                openFile(node.path);
                 drawTree();
-                drawViewer();
+                drawTabs();
+                drawHead();
+                drawEditorHost();
               },
             },
             [
               el('span', { class: 'code-tree-chevron-spacer' }),
               el('span', { class: 'code-tree-lang-dot', 'data-lang': lang }),
               el('span', { class: 'code-tree-name' }, node.name),
+              ...(isDirty ? [el('span', { class: 'code-tree-dirty' })] : []),
             ],
           );
           row.style.setProperty('--depth', String(depth));
@@ -1382,14 +1509,22 @@
         // section headers only appear when both groups are populated.
         const showHeaders = !search && frontend.length > 0 && backend.length > 0;
 
+        // Group header with a trailing mono count (matches the cd-eyebrow
+        // + count in RefinedBuilderCode's file tree).
+        const groupHead = (label: string, count: number): HTMLElement =>
+          el('div', { class: 'code-tree-group-head' }, [
+            el('span', {}, label),
+            el('span', { class: 'code-tree-group-count' }, String(count)),
+          ]);
+
         if (showHeaders) {
-          list.append(el('div', { class: 'code-tree-group-head' }, 'Frontend'));
+          list.append(groupHead('Frontend', frontend.length));
         }
         walk(frontend, 0);
 
         if (backend.length > 0) {
           if (showHeaders) {
-            list.append(el('div', { class: 'code-tree-group-head' }, 'Backend'));
+            list.append(groupHead('Backend', backend.length));
           }
           walk(backend, 0);
         }
@@ -1401,8 +1536,334 @@
         treeWrap.append(list);
       };
 
+      // ---- Editable editor. One tab strip carries the open-file tabs
+      // plus a trailing Diff / Save / ⋯ action cluster — the refined
+      // artboard has no separate file-info head — then the editor
+      // surface and the status strip. ----
+      const tabStrip = el('div', { class: 'code-tab-strip' });
+      const tabActions = el('div', { class: 'code-tab-actions' });
+      const tabsBar = el('div', { class: 'code-tabs' }, [tabStrip, tabActions]);
+      const editorHost = el('div', { class: 'code-editor-host' });
+      const statusBar = el('div', { class: 'code-status' });
+      workspace.append(tabsBar, editorHost, statusBar);
+
+      // Bottom status strip — "N lines · KB · autosaving · line L col C ·
+      // LANG" (matches RefinedBuilderCode). `caret` is refreshed live by
+      // the editor's selection listener; the rest by file/dirty changes.
+      let caretLine = 1;
+      let caretCol = 1;
+      function drawStatus(): void {
+        statusBar.innerHTML = '';
+        const p = codeActivePath;
+        const buf = p ? codeBuffers.get(p) : undefined;
+        if (!p || !buf) return;
+        const lineCount = buf.current.split('\n').length;
+        const bytes = new TextEncoder().encode(buf.current).byteLength;
+        const nDirty = dirtyPaths().length;
+        const lang = languageHint(p);
+        const sep = (): HTMLElement => el('span', { class: 'code-status-sep' }, '·');
+        statusBar.append(
+          el(
+            'span',
+            {},
+            `${lineCount} ${lineCount === 1 ? 'line' : 'lines'} · ${formatBytes(bytes)}`,
+          ),
+          sep(),
+          el('span', { class: 'code-status-save' }, [
+            el('span', { class: 'code-status-dot' }),
+            nDirty > 0
+              ? `autosaving · ${nDirty} unsaved file${nDirty === 1 ? '' : 's'}`
+              : 'all saved',
+          ]),
+          el('span', { class: 'code-status-spacer' }),
+          el('span', {}, `line ${caretLine} · col ${caretCol}`),
+          sep(),
+          el('span', {}, LANG_DISPLAY[lang] ?? 'TXT'),
+        );
+      }
+
+      const basename = (p: string): string =>
+        p.includes('/') ? p.slice(p.lastIndexOf('/') + 1) : p;
+
+      const saveFile = async (p: string): Promise<void> => {
+        const buf = codeBuffers.get(p);
+        if (!buf || buf.current === buf.original) return;
+        try {
+          await Api().writeProjectFile({ id: pid, path: p, content: buf.current });
+          buf.original = buf.current;
+          showToast(`Saved ${basename(p)}`);
+        } catch (err) {
+          showToast(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        drawTree();
+        drawTabs();
+        drawHead();
+        drawStatus();
+      };
+      const saveAll = async (): Promise<void> => {
+        for (const p of dirtyPaths()) await saveFile(p);
+        // Saved files mean the preview is now stale — nudge it on next view.
+      };
+      const revertActive = (): void => {
+        const buf = codeActivePath ? codeBuffers.get(codeActivePath) : undefined;
+        if (!buf) return;
+        buf.current = buf.original;
+        drawTree();
+        drawTabs();
+        drawHead();
+        drawEditorHost();
+      };
+      const closeTab = (p: string): void => {
+        const idx = codeOpenTabs.indexOf(p);
+        if (idx < 0) return;
+        codeOpenTabs.splice(idx, 1);
+        codeBuffers.delete(p);
+        if (codeActivePath === p) {
+          codeActivePath = codeOpenTabs[Math.max(0, idx - 1)];
+          if (codeActivePath) openFile(codeActivePath);
+        }
+        drawTree();
+        drawTabs();
+        drawHead();
+        drawEditorHost();
+      };
+
+      function drawTabs(): void {
+        tabStrip.innerHTML = '';
+        for (const p of codeOpenTabs) {
+          const buf = codeBuffers.get(p);
+          const dirty = !!buf && buf.current !== buf.original;
+          const tab = el('div', {
+            class: 'code-tab',
+            'data-active': String(codeActivePath === p),
+            'data-dirty': String(dirty),
+          });
+          tab.append(
+            el('span', {
+              class: 'code-tab-dot',
+              'data-lang': languageHint(p),
+            }),
+            el(
+              'button',
+              {
+                class: 'code-tab-label',
+                title: p,
+                onClick: () => {
+                  openFile(p);
+                  drawTree();
+                  drawTabs();
+                  drawHead();
+                  drawEditorHost();
+                },
+              },
+              basename(p),
+            ),
+            el('button', {
+              'aria-label': `Close ${basename(p)}`,
+              class: 'code-tab-close',
+              trustedHtml: dirty ? '' : Icon.X({ size: 11, strokeWidth: 2.5 }),
+              title: dirty ? 'Unsaved changes' : 'Close',
+              onClick: () => closeTab(p),
+            }),
+          );
+          tabStrip.append(tab);
+        }
+      }
+
+      // Trailing action cluster in the tab strip — a Diff toggle, a
+      // per-file Save, and a ⋯ overflow (Save all / Revert / Open
+      // folder). Redrawn whenever the active file or dirty state changes.
+      function drawHead(): void {
+        tabActions.innerHTML = '';
+        const p = codeActivePath;
+        const buf = p ? codeBuffers.get(p) : undefined;
+        if (!p || !buf) return;
+        const dirty = buf.current !== buf.original;
+        const nDirty = dirtyPaths().length;
+
+        const diffBtn = el(
+          'button',
+          {
+            class: 'btn btn-ghost tiny-btn',
+            'data-active': String(codeDiffMode),
+            disabled: dirty ? undefined : '',
+            title: dirty ? 'Toggle diff against last save' : 'No changes to diff',
+            onClick: () => {
+              codeDiffMode = !codeDiffMode;
+              drawHead();
+              drawEditorHost();
+            },
+          },
+          'Diff',
+        );
+        const saveBtn = el(
+          'button',
+          {
+            class: 'btn btn-primary tiny-btn',
+            disabled: dirty ? undefined : '',
+            onClick: () => void saveFile(p),
+          },
+          'Save',
+        );
+
+        // Overflow — Save all / Revert / Open folder.
+        const overflow = el('button', {
+          'aria-label': 'More code actions',
+          class: 'btn btn-ghost tiny-btn code-overflow-btn',
+          trustedHtml:
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
+        });
+        const menu = el('div', { class: 'code-overflow-menu', hidden: '' });
+        const menuItem = (label: string, onClick: () => void, disabled = false): HTMLElement =>
+          el(
+            'button',
+            {
+              class: 'code-overflow-item',
+              disabled: disabled ? '' : undefined,
+              onClick: () => {
+                menu.setAttribute('hidden', '');
+                onClick();
+              },
+            },
+            label,
+          );
+        menu.append(
+          menuItem(
+            nDirty > 0 ? `Save all (${nDirty})` : 'Save all',
+            () => void saveAll(),
+            nDirty === 0,
+          ),
+          menuItem('Revert this file', revertActive, !dirty),
+          menuItem('Open project folder', () => void Api().openProjectFolder({ id: pid })),
+        );
+        overflow.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const wasHidden = menu.hasAttribute('hidden');
+          if (wasHidden) menu.removeAttribute('hidden');
+          else menu.setAttribute('hidden', '');
+        });
+        document.addEventListener('click', () => menu.setAttribute('hidden', ''), {
+          capture: true,
+        });
+        const overflowWrap = el('div', { class: 'code-overflow-wrap' }, [overflow, menu]);
+
+        tabActions.append(diffBtn, saveBtn, overflowWrap);
+      }
+
+      function drawEditorHost(): void {
+        editorHost.innerHTML = '';
+        const p = codeActivePath;
+        const buf = p ? codeBuffers.get(p) : undefined;
+        if (!p || !buf) {
+          editorHost.append(el('div', { class: 'empty' }, 'No file open.'));
+          drawStatus();
+          return;
+        }
+        if (codeDiffMode) {
+          editorHost.append(buildDiffView(buf));
+          drawStatus();
+          return;
+        }
+        editorHost.append(buildEditor(p, buf));
+        drawStatus();
+      }
+
+      const buildDiffView = (buf: CodeBuffer): HTMLElement => {
+        const rows = lineDiff(buf.original, buf.current);
+        const wrap = el('div', { class: 'code-diff' });
+        for (const r of rows) {
+          const sign = r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' ';
+          wrap.append(
+            el('div', { class: 'code-diff-row', 'data-type': r.type }, [
+              el('span', { class: 'code-diff-num' }, r.aNum ? String(r.aNum) : ''),
+              el('span', { class: 'code-diff-num' }, r.bNum ? String(r.bNum) : ''),
+              el('span', { class: 'code-diff-sign' }, sign),
+              el('span', { class: 'code-diff-text' }, r.text || ' '),
+            ]),
+          );
+        }
+        return wrap;
+      };
+
+      const buildEditor = (p: string, buf: CodeBuffer): HTMLElement => {
+        const lang = languageHint(p);
+        const editor = el('div', { class: 'code-editor' });
+        const gutterInner = el('div', { class: 'code-edit-gutter-inner' });
+        const gutter = el('div', { class: 'code-edit-gutter' }, [gutterInner]);
+        const pre = el('pre', { class: 'code-edit-pre' });
+        const preClip = el('div', { class: 'code-edit-pre-clip' }, [pre]);
+        const ta = el('textarea', {
+          class: 'code-edit-ta',
+          spellcheck: 'false',
+          wrap: 'off',
+        }) as HTMLTextAreaElement;
+        ta.value = buf.current;
+        const surface = el('div', { class: 'code-edit-surface' }, [preClip, ta]);
+        editor.append(gutter, surface);
+
+        const paintGutter = (): void => {
+          const n = buf.current.split('\n').length;
+          const have = gutterInner.childElementCount;
+          if (n === have) return;
+          gutterInner.innerHTML = '';
+          for (let i = 1; i <= n; i++) gutterInner.append(el('div', {}, String(i)));
+        };
+        const paintHighlight = (): void => {
+          pre.innerHTML = tokenize(buf.current, lang) + '\n';
+        };
+        paintGutter();
+        paintHighlight();
+
+        // Caret position drives the bottom status strip's "line L col C".
+        const refreshCaret = (): void => {
+          const upto = ta.value.slice(0, ta.selectionStart);
+          const nl = upto.lastIndexOf('\n');
+          caretLine = upto.split('\n').length;
+          caretCol = ta.selectionStart - (nl + 1) + 1;
+          drawStatus();
+        };
+        ta.addEventListener('keyup', refreshCaret);
+        ta.addEventListener('click', refreshCaret);
+        ta.addEventListener('focus', refreshCaret);
+
+        ta.addEventListener('input', () => {
+          buf.current = ta.value;
+          paintHighlight();
+          paintGutter();
+          // Dirty state changed — refresh the tab dots, tree, head, and
+          // status without rebuilding the editor (keeps the caret/focus).
+          drawTabs();
+          drawHead();
+          drawTree();
+          refreshCaret();
+        });
+        ta.addEventListener('scroll', () => {
+          pre.style.transform = `translate(${-ta.scrollLeft}px, ${-ta.scrollTop}px)`;
+          gutterInner.style.transform = `translateY(${-ta.scrollTop}px)`;
+        });
+        // Tab inserts two spaces rather than moving focus out of the editor.
+        ta.addEventListener('keydown', (e) => {
+          const ke = e as KeyboardEvent;
+          if (ke.key === 'Tab') {
+            ke.preventDefault();
+            const s = ta.selectionStart;
+            const eEnd = ta.selectionEnd;
+            ta.value = ta.value.slice(0, s) + '  ' + ta.value.slice(eEnd);
+            ta.selectionStart = s + 2;
+            ta.selectionEnd = s + 2;
+            ta.dispatchEvent(new Event('input'));
+          } else if ((ke.metaKey || ke.ctrlKey) && ke.key.toLowerCase() === 's') {
+            ke.preventDefault();
+            void saveFile(p);
+          }
+        });
+        return editor;
+      };
+
       drawTree();
-      drawViewer();
+      drawTabs();
+      drawHead();
+      drawEditorHost();
     }
 
     // Cloud view — Lovable-style data-browser. The Overview and Database
@@ -1590,6 +2051,9 @@
                     ? 'Cron-scheduled actions registered for this app. Toggle, run now, or remove them.'
                     : 'View and manage the data stored in your app.';
 
+        // The Overview surface opens straight into its hero strip — the
+        // refined artboard has no "Overview" page heading — so the stage
+        // head is rendered for every section except Overview.
         const head = el('div', { class: 'cloud-stage-head' });
         const headLeft = el('div', {});
         headLeft.innerHTML = `<h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p>`;
@@ -1623,7 +2087,7 @@
           refreshBtn.innerHTML = `${RefreshIcon(13)}<span>Refresh</span>`;
           head.append(refreshBtn);
         }
-        stage.append(head);
+        if (active !== 'overview') stage.append(head);
 
         if (active === 'overview') {
           drawOverview();
@@ -1660,104 +2124,133 @@
         // cards. Matches the journal-in-shell treatment.
         stage.classList.add('cloud-stage-atmospheric');
 
-        const grid = el('div', { class: 'cloud-stat-grid' });
+        // Active version — drives both the hero eyebrow ("LIVE · V1 ·
+        // PUBLISHED 3H AGO") and the Versions stat tile's date sub-line.
+        const versionList =
+          versionsCache && versionsCache !== 'pending' && versionsCache !== 'error'
+            ? versionsCache.versions
+            : [];
+        const activeVersionId =
+          versionsCache && versionsCache !== 'pending' && versionsCache !== 'error'
+            ? versionsCache.activeVersion
+            : undefined;
+        const activeVersion =
+          versionList.find((v) => v.current || v.versionId === activeVersionId) ?? versionList[0];
 
-        // ---- Row 1: LIVE URL (span 2) · Versions · Tables ----
-        const liveCard = el('div', { class: 'cloud-stat-card cloud-stat-card--live' });
+        // ---- Hero strip — the live deployment URL is the headline fact
+        // of the Cloud surface. An icon tile + status eyebrow + mono URL
+        // on the left; Open / Copy / Share actions on the trailing edge.
+        const hero = el('div', { class: 'cloud-hero', 'data-live': String(!!liveUrl) });
+        const heroTile = el('div', {
+          class: 'cloud-hero-tile',
+          'data-status': liveUrl ? 'live' : 'off',
+          trustedHtml: Icon.Eye({ size: 21 }),
+        });
         if (liveUrl) {
-          // Capture into a const so TS keeps the narrowed `string` type
-          // inside the click handler closure (the outer `liveUrl` is
-          // mutable from the project's perspective).
           const url = liveUrl;
-          const eyebrow = el('div', { class: 'cloud-stat-eyebrow' }, [
-            el('span', { class: 'cloud-status-dot', 'data-status': 'live' }),
-            el('span', {}, 'Live URL'),
-          ]);
-          const value = el(
-            'div',
-            { class: 'cloud-stat-value cloud-stat-mono cloud-stat-url' },
-            formatPreviewUrl(url),
-          );
-          const copyBtn = el(
-            'button',
-            {
-              class: 'cloud-stat-copy',
+          const verLabel = activeVersion?.declaredVersion
+            ? ` · V${activeVersion.declaredVersion}`
+            : '';
+          const whenLabel = activeVersion
+            ? ` · PUBLISHED ${relativeWhen(activeVersion.uploadedAt).toUpperCase()}`
+            : '';
+          const copyUrl = (msg: string): void => {
+            void navigator.clipboard
+              .writeText(url)
+              .then(() => showToast(msg))
+              .catch(() => showToast('Copy failed'));
+          };
+          const heroBtn = (glyph: string, label: string, onClick: () => void): HTMLElement =>
+            el('button', {
+              class: 'cloud-hero-btn',
               type: 'button',
-              onClick: () => {
-                void navigator.clipboard
-                  .writeText(url)
-                  .then(() => showToast('Copied URL'))
-                  .catch(() => showToast('Copy failed'));
-              },
-            },
-            'Copy',
+              trustedHtml: `${glyph}<span>${label}</span>`,
+              onClick,
+            });
+          hero.append(
+            heroTile,
+            el('div', { class: 'cloud-hero-meta' }, [
+              el('div', { class: 'cloud-hero-eyebrow' }, [
+                el('span', { class: 'cloud-hero-dot', 'data-status': 'live' }),
+                el('span', {}, `LIVE${verLabel}${whenLabel}`),
+              ]),
+              el('span', { class: 'cloud-hero-url' }, formatPreviewUrl(url)),
+            ]),
+            el('div', { class: 'cloud-hero-actions' }, [
+              heroBtn(Icon.Eye({ size: 13 }), 'Open', () => {
+                window.open(url, '_blank');
+              }),
+              heroBtn(Icon.Copy({ size: 13 }), 'Copy', () => copyUrl('Copied URL')),
+              heroBtn(Icon.Share({ size: 13 }), 'Share', () => copyUrl('Share link copied')),
+            ]),
           );
-          liveCard.append(eyebrow);
-          liveCard.append(value);
-          liveCard.append(copyBtn);
         } else {
-          liveCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span class="cloud-status-dot" data-status="off"></span><span>Live URL</span></div><div class="cloud-stat-value cloud-stat-muted">Not published</div>';
+          hero.append(
+            heroTile,
+            el('div', { class: 'cloud-hero-meta' }, [
+              el('div', { class: 'cloud-hero-eyebrow' }, [
+                el('span', { class: 'cloud-hero-dot', 'data-status': 'off' }),
+                el('span', {}, 'NOT DEPLOYED'),
+              ]),
+              el(
+                'span',
+                { class: 'cloud-hero-url cloud-hero-url--muted' },
+                'Publish to get a live URL',
+              ),
+            ]),
+          );
         }
-        grid.append(liveCard);
+        stage.append(hero);
 
-        const versionCard = el('div', { class: 'cloud-stat-card' });
-        if (versionsCache === 'pending' || versionsCache === undefined) {
-          versionCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Versions</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
-        } else if (versionsCache === 'error') {
-          versionCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Versions</span></div><div class="cloud-stat-value cloud-stat-muted">—</div>';
-        } else {
-          const v = versionsCache;
-          versionCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Versions</span></div><div class="cloud-stat-value">${v.versions.length}</div><div class="cloud-stat-sub">${v.activeVersion ? `Active: ${escapeHtml(v.activeVersion.slice(0, 18))}…` : 'No active version'}</div>`;
-        }
-        grid.append(versionCard);
+        // ---- Status — four stat tiles (Schema · Tables · Versions ·
+        // Gateway) under a caps section label. ----
+        stage.append(el('div', { class: 'cloud-section-label' }, 'Status'));
+        const grid = el('div', { class: 'cloud-stat-grid' });
+        const statCard = (label: string, body: string): HTMLElement => {
+          const card = el('div', { class: 'cloud-stat-card' });
+          card.innerHTML = `<div class="cloud-stat-eyebrow"><span>${escapeHtml(label)}</span></div>${body}`;
+          return card;
+        };
 
-        const tableCard = el('div', { class: 'cloud-stat-card' });
+        // Schema version.
+        let schemaBody: string;
         if (schemaCache === 'pending' || schemaCache === undefined) {
-          tableCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Tables</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+          schemaBody = '<div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+        } else if (schemaCache === 'error') {
+          schemaBody = `<div class="cloud-stat-value cloud-stat-muted">Unavailable</div><div class="cloud-stat-sub">${escapeHtml(schemaError ?? 'gateway error')}</div>`;
+        } else if (!schemaCache) {
+          schemaBody =
+            '<div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">Publish to create the database</div>';
+        } else {
+          schemaBody = `<div class="cloud-stat-value">v${schemaCache.schemaVersion}</div><div class="cloud-stat-sub">${schemaCache.schemaVersion === 1 ? 'Never migrated' : 'Up to date'}</div>`;
+        }
+        grid.append(statCard('Schema', schemaBody));
+
+        // Tables.
+        let tableBody: string;
+        if (schemaCache === 'pending' || schemaCache === undefined) {
+          tableBody = '<div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
         } else if (!schemaCache || schemaCache === 'error') {
-          tableCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Tables</span></div><div class="cloud-stat-value cloud-stat-muted">—</div>';
+          tableBody = '<div class="cloud-stat-value cloud-stat-muted">—</div>';
         } else {
           const s = schemaCache;
-          tableCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Tables</span></div><div class="cloud-stat-value">${s.tables.length}</div><div class="cloud-stat-sub">${s.indexes.length} indexes · ${s.views.length} views</div>`;
+          tableBody = `<div class="cloud-stat-value">${s.tables.length}</div><div class="cloud-stat-sub">${s.indexes.length} index${s.indexes.length === 1 ? '' : 'es'} · ${s.views.length} view${s.views.length === 1 ? '' : 's'}</div>`;
         }
-        grid.append(tableCard);
+        grid.append(statCard('Tables', tableBody));
 
-        // ---- Row 2: Schema · Last activity · Gateway (span 2) ----
-        const schemaCard = el('div', { class: 'cloud-stat-card' });
-        if (schemaCache === 'pending' || schemaCache === undefined) {
-          schemaCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
-        } else if (schemaCache === 'error') {
-          schemaCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value cloud-stat-muted">Unavailable</div><div class="cloud-stat-sub">${escapeHtml(schemaError ?? 'gateway error')}</div>`;
-        } else if (!schemaCache) {
-          schemaCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">Publish to create the database</div>';
-        } else {
-          schemaCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Schema version</span></div><div class="cloud-stat-value">v${schemaCache.schemaVersion}</div><div class="cloud-stat-sub">${schemaCache.schemaVersion === 1 ? 'Never migrated' : 'Up to date'}</div>`;
-        }
-        grid.append(schemaCard);
-
-        // Last activity — newest version's uploadedAt. Cheap; reuses the
-        // same cache we already populated for the Versions card.
-        const activityCard = el('div', { class: 'cloud-stat-card' });
+        // Versions.
+        let versionBody: string;
         if (versionsCache === 'pending' || versionsCache === undefined) {
-          activityCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Last activity</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
-        } else if (versionsCache === 'error' || versionsCache.versions.length === 0) {
-          activityCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Last activity</span></div><div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">No publishes yet</div>';
+          versionBody = '<div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
+        } else if (versionsCache === 'error') {
+          versionBody = '<div class="cloud-stat-value cloud-stat-muted">—</div>';
         } else {
-          const newest = [...versionsCache.versions].sort((a, b) =>
-            b.uploadedAt.localeCompare(a.uploadedAt),
-          )[0]!;
-          activityCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Last activity</span></div><div class="cloud-stat-value cloud-stat-mid">${escapeHtml(relativeWhen(newest.uploadedAt))}</div><div class="cloud-stat-sub">Published from the builder</div>`;
+          const sub = activeVersion
+            ? `active · ${activeVersion.uploadedAt.slice(0, 10)}`
+            : 'No active version';
+          versionBody = `<div class="cloud-stat-value">${versionsCache.versions.length}</div><div class="cloud-stat-sub">${escapeHtml(sub)}</div>`;
         }
-        grid.append(activityCard);
+        grid.append(statCard('Versions', versionBody));
 
         // Gateway reachability — derived from whether either cache resolved
         // successfully. Avoids a separate ping while still giving the user
@@ -1775,7 +2268,7 @@
           versionsCache === undefined ||
           schemaCache === 'pending' ||
           schemaCache === undefined;
-        const gatewayCard = el('div', { class: 'cloud-stat-card cloud-stat-card--gateway' });
+        const gatewayCard = el('div', { class: 'cloud-stat-card' });
         if (stillLoading && !anyOk) {
           gatewayCard.innerHTML =
             '<div class="cloud-stat-eyebrow"><span>Gateway</span></div><div class="cloud-stat-value cloud-stat-muted">Checking…</div>';
@@ -1789,6 +2282,47 @@
         grid.append(gatewayCard);
 
         stage.append(grid);
+
+        // ---- Recent activity — the version history reads as a
+        // chronological deploy log: newest publish first, each row an
+        // icon tile + title (+ Active flag) + a mono "Builder · when". ----
+        stage.append(el('div', { class: 'cloud-section-label' }, 'Recent activity'));
+        const feed = el('div', { class: 'cloud-feed' });
+        if (versionsCache === 'pending' || versionsCache === undefined) {
+          feed.append(el('div', { class: 'cloud-feed-empty' }, 'Loading activity…'));
+        } else if (versionsCache === 'error' || versionsCache.versions.length === 0) {
+          feed.append(
+            el(
+              'div',
+              { class: 'cloud-feed-empty' },
+              'No activity yet — publish your app to deploy it.',
+            ),
+          );
+        } else {
+          const ordered = [...versionsCache.versions].sort((a, b) =>
+            b.uploadedAt.localeCompare(a.uploadedAt),
+          );
+          for (const v of ordered) {
+            const isActive = v.current || v.versionId === versionsCache.activeVersion;
+            const row = el('div', { class: 'cloud-feed-row' }, [
+              el('div', {
+                class: 'cloud-feed-tile',
+                trustedHtml: Icon.Save({ size: 14 }),
+              }),
+              el('div', { class: 'cloud-feed-title-row' }, [
+                el(
+                  'span',
+                  { class: 'cloud-feed-title' },
+                  v.declaredVersion ? `Published v${v.declaredVersion}` : 'Published',
+                ),
+                ...(isActive ? [el('span', { class: 'cloud-feed-live' }, 'Active')] : []),
+              ]),
+              el('span', { class: 'cloud-feed-when' }, `Builder · ${relativeWhen(v.uploadedAt)}`),
+            ]);
+            feed.append(row);
+          }
+        }
+        stage.append(feed);
       }
 
       function drawDatabase(): void {
@@ -2996,7 +3530,14 @@
 
       // Fresh build: scaffold + start agent + send first prompt.
       const id = generateProjectId(initialPrompt);
-      pushMessage({ kind: 'divider', text: 'Today' });
+      // Date divider carries the conversation start time (refined proposal
+      // RBChat — "Today · 14:22").
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(
+        2,
+        '0',
+      )}`;
+      pushMessage({ kind: 'divider', text: `Today · ${hhmm}` });
       pushMessage({ kind: 'status', text: 'Setting up project…', spinning: true });
       try {
         await Api().createProject({ id, name: projName, version: '0.1.0' });
@@ -3148,6 +3689,9 @@
     }));
     const sidebar = window.Chrome.buildSidebar({
       activeId: opts.projectId,
+      // The builder IS the app's Cloud/Build surface — highlight that child
+      // under the expanded active app (§G2).
+      activeSurface: 'cloud',
       apps: sidebarApps,
       // Drafts come from the shell's hydrated cache (passed via
       // BuilderOptions). Older callers may omit them — default to empty.
@@ -3179,12 +3723,31 @@
       onNewApp: () => {
         /* already in builder; ignore */
       },
+      // Chats has no dedicated creation surface yet — the section `+`
+      // routes back to Home where a new conversation can be started.
+      onNewChat: handleExit,
+      onSearch: () => window.Centraid?.openSearch?.(),
+      onDiscover: () => window.Centraid?.openDiscover?.(),
+      onStarred: () => window.Centraid?.openStarred?.(),
+      onAutomations: () => window.Centraid?.openAutomations?.(),
       onSettings: () => {
         if (typeof window.Centraid?.openSettings === 'function') {
           void window.Centraid.openSettings();
         }
       },
-      runtimeMode: window.Centraid?.getRuntimeMode?.(),
+      // §G2 — the expanded active app's App child returns to the running
+      // app view; the Cloud child switches the right pane to the Cloud
+      // surface (now a sidebar destination rather than a pane tab).
+      onAppSurface: (id: string, surface: 'app' | 'cloud') => {
+        if (surface === 'app' && typeof window.Centraid?.openApp === 'function') {
+          window.Centraid.openApp(id);
+        } else if (surface === 'cloud') {
+          tab = 'cloud';
+          renderRight();
+          refreshTabs();
+          refreshTopbarToggles();
+        }
+      },
     });
 
     let builderSidebarOpen = Store.get<boolean>('appearance.sidebarOpen', true);
@@ -3198,6 +3761,10 @@
       /* assigned below */
     };
     const toggleChatPane = (): void => {
+      // The chat pane only exists on the Preview surface — Code + Cloud
+      // are full-focus surfaces with no chat — so the toggle is inert
+      // there (renderRight forces the pane hidden on those tabs).
+      if (tab !== 'preview') return;
       builderChatOpen = !builderChatOpen;
       Store.set('builder.chatPaneOpen', builderChatOpen);
       main.dataset.chat = builderChatOpen ? 'open' : 'closed';
@@ -3225,12 +3792,13 @@
       showNewChat: true,
       sidebar,
       sidebarOpen: builderSidebarOpen,
-      // Tabs (Preview / Code / Cloud) + device pill (Phone / Tablet /
-      // Desktop) ride in the window chrome row as the center cluster —
-      // killing the old right-pane-toolbar row. Project identity stays
-      // in the chat pane's own header (builder-pane-header), so no
-      // titlebarRight on the chrome row.
-      titlebarCenter: builderTitlebarCenter,
+      // The app-identity lockup hugs the back/forward arrows (titlebarLead);
+      // the project actions — history, more, Publish — ride the trailing
+      // edge (titlebarRight). The chat pane no longer carries a header.
+      // §B3 — the tabs + URL pill + device pill live in the right pane's
+      // own toolbar (`rb-toolbar`), not the window chrome.
+      titlebarLead: builderIdentity,
+      titlebarRight: builderActions,
     });
     setShellChatPaneOpen = chromeSetChatPaneOpen;
     root.append(shell);

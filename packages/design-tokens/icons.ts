@@ -27,7 +27,40 @@ const ICON_DATA = {
   Pause: [{ d: 'M6 5h4v14H6zM14 5h4v14h-4z', fill: 'currentColor' }],
   Skip: [{ d: 'M6 4l10 8-10 8zM18 5v14' }],
   Reset: [{ d: 'M3 12a9 9 0 1 0 3-6.7L3 8' }, { d: 'M3 3v5h5' }],
-  Send: [{ d: 'M5 12h14M14 7l5 5-5 5' }],
+  // Paper-plane send glyph. The previous artwork was a plain right-arrow
+  // visually identical to the forward-nav icon — see Refined Screens §B2.
+  Send: [{ d: 'M22 2L11 13' }, { d: 'M22 2l-7 20-4-9-9-4z' }],
+  Refresh: [{ d: 'M21 12a9 9 0 1 1-3-6.7M21 3v5h-5' }],
+  Copy: [
+    { d: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z' },
+    { d: 'M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1' },
+  ],
+  Star: [{ d: 'M12 3l2.7 5.5 6 .9-4.35 4.25 1.05 6L12 17.8 6.6 20.65l1.05-6L3.3 9.4l6-.9z' }],
+  Compass: [
+    { d: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' },
+    { d: 'M16 8l-2.4 5.6L8 16l2.4-5.6z', fill: 'currentColor' },
+  ],
+  Bolt: [{ d: 'M13 2L4 13h7l-2 9 11-13h-8z' }],
+  Globe: [
+    { d: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' },
+    {
+      d: 'M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.7-3.8-9S9.5 5.5 12 3z',
+    },
+  ],
+  Phone: [
+    { d: 'M7 2h10a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z' },
+    { d: 'M11 18.5h2' },
+  ],
+  Tablet: [
+    { d: 'M5 3h14a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z' },
+    { d: 'M11 18h2' },
+  ],
+  Monitor: [{ d: 'M3 4h18v12H3z' }, { d: 'M9 20h6M12 16v4' }],
+  Command: [
+    {
+      d: 'M9 7.5A2.5 2.5 0 1 0 6.5 10H10v4H6.5A2.5 2.5 0 1 0 9 16.5V13h6v3.5A2.5 2.5 0 1 0 17.5 14H14v-4h3.5A2.5 2.5 0 1 0 15 7.5V11H9z',
+    },
+  ],
   Share: [{ d: 'M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7' }, { d: 'M16 6l-4-4-4 4M12 2v14' }],
   Eye: [
     { d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z' },

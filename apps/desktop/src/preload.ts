@@ -15,6 +15,7 @@ const Channel = {
   PROJECTS_LIST: 'centraid:projects:list',
   PROJECTS_CREATE: 'centraid:projects:create',
   PROJECTS_FILES: 'centraid:projects:files',
+  PROJECTS_WRITE_FILE: 'centraid:projects:write-file',
   PROJECTS_OPEN: 'centraid:projects:open',
   PROJECTS_DELETE: 'centraid:projects:delete',
   PROJECTS_UPDATE_META: 'centraid:projects:update-meta',
@@ -111,6 +112,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   createProject: (input: { id: string; name?: string; version?: string }) =>
     ipcRenderer.invoke(Channel.PROJECTS_CREATE, input),
   readProjectFiles: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_FILES, input),
+  writeProjectFile: (input: { id: string; path: string; content: string }) =>
+    ipcRenderer.invoke(Channel.PROJECTS_WRITE_FILE, input),
   openProjectFolder: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_OPEN, input),
   deleteProject: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_DELETE, input),
   updateProjectMeta: (input: { id: string; name?: string; description?: string }) =>
