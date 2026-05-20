@@ -7,27 +7,21 @@ describe('buildToolsGroundingBlock', () => {
     assert.equal(buildToolsGroundingBlock([]), undefined);
   });
 
-  it('lists native + MCP tools and MCP servers, source-agnostic', () => {
+  it('lists native + MCP tools source-agnostically with descriptions', () => {
     const block = buildToolsGroundingBlock([
-      { name: 'Read', source: 'native', granularity: 'tool' },
-      { name: 'github.list_pull_requests', source: 'mcp', granularity: 'tool', server: 'github' },
-      { name: 'linear', source: 'mcp', granularity: 'server', server: 'linear' },
+      { name: 'Read', source: 'native' },
+      {
+        name: 'github.list_pull_requests',
+        source: 'mcp',
+        server: 'github',
+        description: 'List PRs.',
+      },
     ]);
     assert.ok(block);
     assert.match(block, /### Available host tools/);
     assert.match(block, /`Read` _\(native\)_/);
-    assert.match(block, /`github\.list_pull_requests` _\(mcp\)_/);
-    assert.match(block, /MCP servers/);
-    assert.match(block, /`linear`/);
+    assert.match(block, /`github\.list_pull_requests` _\(mcp\)_ — List PRs\./);
     assert.match(block, /requires\.tools/);
-  });
-
-  it('omits the callable-tools section when only servers are known', () => {
-    const block = buildToolsGroundingBlock([
-      { name: 'github', source: 'mcp', granularity: 'server', server: 'github' },
-    ]);
-    assert.ok(block);
-    assert.doesNotMatch(block, /\*\*Callable tools\*\*/);
-    assert.match(block, /\*\*MCP servers\*\*/);
+    assert.match(block, /requires\.mcps/);
   });
 });

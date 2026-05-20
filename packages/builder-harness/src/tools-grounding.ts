@@ -7,7 +7,7 @@
  * against reality — not against training-prior guesses.
  *
  * A tool is a tool: this block does not distinguish native CLI builtins
- * from MCP-backed tools beyond a parenthetical note, because the harness
+ * from MCP-backed tools beyond a parenthetical tag, because the harness
  * doesn't care about the source. Built dynamically (see agent-session.ts)
  * from `enumerateHostTools()`; omitted entirely when enumeration is empty.
  */
@@ -21,47 +21,35 @@ import type { HostTool } from '@centraid/agent-runtime';
 export function buildToolsGroundingBlock(tools: readonly HostTool[]): string | undefined {
   if (tools.length === 0) return undefined;
 
-  const specific = tools.filter((t) => t.granularity === 'tool');
-  const servers = tools.filter((t) => t.granularity === 'server');
-
   const lines: string[] = [
     '### Available host tools (ground `ctx.tool` and `requires` against this list)',
     '',
-    'These are the tools the host runtime exposes to automation handlers.',
-    'This is the **complete** set — there are no others. A handler that',
-    'calls `ctx.tool` with a name not derivable from this list fails at run',
-    'time.',
+    'These are the tools the host runtime exposes to automation handlers —',
+    'native builtins and MCP-backed tools alike. This is the **complete**',
+    'set; a handler that calls `ctx.tool` with a name not on this list',
+    'fails at run time.',
+    '',
+    'Call a tool by passing its name verbatim to `ctx.tool(name, args)`:',
     '',
   ];
 
-  if (specific.length > 0) {
-    lines.push('**Callable tools** — pass the name verbatim to `ctx.tool(name, args)`:', '');
-    for (const t of specific) {
-      const tag = t.source === 'mcp' ? ' _(mcp)_' : ' _(native)_';
-      lines.push(`- \`${t.name}\`${tag}`);
-    }
-    lines.push('');
-  }
-
-  if (servers.length > 0) {
-    lines.push(
-      '**MCP servers** — the runtime reports the server but not its tool ids;',
-      'call a specific tool as `ctx.tool("<server>.<tool>", args)`:',
-      '',
-    );
-    for (const s of servers) lines.push(`- \`${s.name}\``);
-    lines.push('');
+  for (const t of tools) {
+    const tag = t.source === 'mcp' ? ' _(mcp)_' : ' _(native)_';
+    const desc = t.description ? ` — ${t.description}` : '';
+    lines.push(`- \`${t.name}\`${tag}${desc}`);
   }
 
   lines.push(
+    '',
     '**Rules when authoring an automation manifest + handler:**',
     '',
     '- `requires.tools` — list the fully-qualified tool names the handler',
     '  calls. The host scoping policy enforces this allowlist.',
-    '- `requires.mcps` — list the MCP servers behind the tools you use.',
-    "- If the user asks for an integration whose tool/server isn't listed",
-    '  above, say so plainly and ask them to install/configure it first —',
-    'do **not** author a handler that depends on a tool that does not exist.',
+    '- `requires.mcps` — list the MCP servers behind the `_(mcp)_` tools',
+    '  you use (the segment before the `.` in the tool name).',
+    "- If the user asks for an integration whose tool isn't listed above,",
+    '  say so plainly and ask them to install/configure it first — do',
+    '  **not** author a handler that depends on a tool that does not exist.',
   );
 
   return lines.join('\n');

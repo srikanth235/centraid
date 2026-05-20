@@ -14,10 +14,9 @@
  *     reports the full resolved tool set (native builtins + MCP tools)
  *     in `tools: string[]`. We start a `query()`, read that message, and
  *     abort before any model turn — cheap, no tokens spent.
- *   - `codex` — codex has no tool-registry CLI; its verifiable surface is
- *     the configured MCP servers (`codex mcp list`). Each becomes a tool
- *     entry; the grounding block tells the agent the per-server tool ids
- *     are `<server>.<tool>`.
+ *   - `codex` — the codex app-server's `mcpServerStatus/list` JSON-RPC
+ *     returns each MCP server's full `tools` map (real tool names +
+ *     descriptions). We drive a short app-server handshake and read it.
  *
  * Enumeration is best-effort: any failure (missing/old CLI, no API key,
  * parse miss) resolves to `[]` and the grounding block is simply omitted.
@@ -26,21 +25,20 @@
 import { spawn } from 'node:child_process';
 import type { RunnerKind } from './types.js';
 
-const MCP_LIST_TIMEOUT_MS = 6_000;
+const CODEX_ENUM_TIMEOUT_MS = 15_000;
 
 export interface HostTool {
   /**
-   * The callable name as the agent sees it — a specific tool (`Read`,
-   * `github.list_pull_requests`) or, when the runtime only exposes
-   * servers, an MCP server id (`github`). See `granularity`.
+   * The callable name as the agent sees it — a native builtin (`Read`)
+   * or an MCP tool (`github.list_pull_requests`).
    */
   name: string;
   /** Where the tool comes from — informational; the harness treats both alike. */
   source: 'native' | 'mcp';
-  /** `'tool'` for a specific callable; `'server'` when only the MCP server is known. */
-  granularity: 'tool' | 'server';
   /** MCP server id, when `source === 'mcp'`. */
   server?: string;
+  /** One-line description, when the runtime reports one. */
+  description?: string;
 }
 
 /**
@@ -81,7 +79,7 @@ async function enumerateClaudeTools(cwd: string): Promise<HostTool[]> {
   try {
     for await (const msg of q) {
       if (msg.type === 'system' && msg.subtype === 'init') {
-        return (msg.tools ?? []).map(toHostTool);
+        return (msg.tools ?? []).map(claudeToolToHostTool);
       }
     }
   } finally {
@@ -91,82 +89,141 @@ async function enumerateClaudeTools(cwd: string): Promise<HostTool[]> {
 }
 
 /** Map a Claude SDK tool name to a `HostTool`. MCP tools are `mcp__<server>__<tool>`. */
-function toHostTool(name: string): HostTool {
+export function claudeToolToHostTool(name: string): HostTool {
   if (name.startsWith('mcp__')) {
     const rest = name.slice('mcp__'.length);
     const sep = rest.indexOf('__');
     if (sep > 0) {
       const server = rest.slice(0, sep);
       const tool = rest.slice(sep + 2);
-      return { name: `${server}.${tool}`, source: 'mcp', granularity: 'tool', server };
+      return { name: `${server}.${tool}`, source: 'mcp', server };
     }
   }
-  return { name, source: 'native', granularity: 'tool' };
+  return { name, source: 'native' };
 }
 
-/** Codex: enumerate configured MCP servers (`codex mcp list`). */
-async function enumerateCodexTools(binPath?: string): Promise<HostTool[]> {
-  const bin = binPath && binPath.length > 0 ? binPath : 'codex';
-  const servers = parseMcpList(await runMcpList(bin));
-  return servers.map((s) => ({
-    name: s.name,
-    source: 'mcp' as const,
-    granularity: 'server' as const,
-    server: s.name,
-  }));
+/** One MCP server entry from the codex `mcpServerStatus/list` response. */
+export interface CodexMcpServerStatus {
+  name: string;
+  tools?: Record<string, { name?: string; description?: string | null }>;
 }
 
 /**
- * Parse `<cli> mcp list` output into server ids. Tolerant by design —
- * both Claude Code (`name: command - status`) and Codex (whitespace
- * columns) put the server id first on each line. Exported for tests.
+ * Flatten codex `mcpServerStatus/list` data into `HostTool[]` — each
+ * server's `tools` map becomes `<server>.<tool>` entries. Exported for
+ * tests.
  */
-export function parseMcpList(raw: string): { name: string }[] {
-  const out: { name: string }[] = [];
-  const seen = new Set<string>();
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    if (/^no mcp servers/i.test(trimmed)) return [];
-    if (/^(checking|health|name\b|listing|configured mcp)/i.test(trimmed)) continue;
-    const m = trimmed.match(/^([A-Za-z0-9_.-]+)\s*(?::|\s{2,}|$)/);
-    if (!m) continue;
-    const name = m[1]!;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    out.push({ name });
+export function flattenCodexMcpServers(statuses: readonly CodexMcpServerStatus[]): HostTool[] {
+  const out: HostTool[] = [];
+  for (const s of statuses) {
+    for (const [key, def] of Object.entries(s.tools ?? {})) {
+      const toolName = def?.name ?? key;
+      const tool: HostTool = { name: `${s.name}.${toolName}`, source: 'mcp', server: s.name };
+      if (def?.description) tool.description = def.description;
+      out.push(tool);
+    }
   }
   return out;
 }
 
-function runMcpList(bin: string): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const child = spawn(bin, ['mcp', 'list'], { stdio: ['ignore', 'pipe', 'pipe'] });
-    const chunks: Buffer[] = [];
+/** Codex: enumerate MCP tools via the app-server `mcpServerStatus/list` RPC. */
+async function enumerateCodexTools(binPath?: string): Promise<HostTool[]> {
+  const bin = binPath && binPath.length > 0 ? binPath : 'codex';
+  return flattenCodexMcpServers(await codexMcpServerStatuses(bin));
+}
+
+/**
+ * Drive a minimal codex app-server handshake (`initialize` → `initialized`
+ * → `mcpServerStatus/list`, paging on `nextCursor`) and return the server
+ * statuses. The process is killed as soon as the list is complete.
+ */
+function codexMcpServerStatuses(bin: string): Promise<CodexMcpServerStatus[]> {
+  return new Promise<CodexMcpServerStatus[]>((resolve, reject) => {
+    const child = spawn(bin, ['app-server'], { stdio: ['pipe', 'pipe', 'ignore'] });
+    const collected: CodexMcpServerStatus[] = [];
+    let buf = '';
+    let listId = 1;
     let settled = false;
-    const settle = (fn: () => void): void => {
+    const finish = (fn: () => void): void => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* already gone */
+      }
       fn();
     };
-    const timer = setTimeout(() => {
-      settle(() => {
-        child.kill('SIGKILL');
-        reject(new Error('`mcp list` timed out'));
-      });
-    }, MCP_LIST_TIMEOUT_MS);
+    const timer = setTimeout(
+      () => finish(() => reject(new Error('codex app-server tool enumeration timed out'))),
+      CODEX_ENUM_TIMEOUT_MS,
+    );
     timer.unref?.();
-    child.stdout.on('data', (c: Buffer) => chunks.push(c));
-    child.stderr.on('data', (c: Buffer) => chunks.push(c));
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      settle(() => reject(err));
+
+    const send = (msg: object): void => {
+      if (child.stdin.writable) child.stdin.write(JSON.stringify(msg) + '\n');
+    };
+    const requestList = (cursor?: string): void => {
+      listId += 1;
+      send({
+        jsonrpc: '2.0',
+        id: listId,
+        method: 'mcpServerStatus/list',
+        params: { detail: 'toolsAndAuthOnly', ...(cursor ? { cursor } : {}) },
+      });
+    };
+
+    child.on('error', (err) => finish(() => reject(err)));
+    child.on('exit', () => finish(() => resolve(collected)));
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      buf += chunk.toString('utf8');
+      let nl: number;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        if (!line.trim()) continue;
+        let msg: {
+          id?: unknown;
+          method?: unknown;
+          result?: { data?: CodexMcpServerStatus[]; nextCursor?: string | null };
+          error?: { message?: string };
+        };
+        try {
+          msg = JSON.parse(line) as typeof msg;
+        } catch {
+          continue;
+        }
+        // Skip notifications and server-to-client requests.
+        if (msg.method !== undefined) continue;
+        if (msg.id === 1) {
+          send({ jsonrpc: '2.0', method: 'initialized', params: {} });
+          requestList();
+          continue;
+        }
+        if (typeof msg.id === 'number') {
+          if (msg.error) {
+            finish(() => reject(new Error(msg.error?.message ?? 'mcpServerStatus/list failed')));
+            return;
+          }
+          const data = msg.result?.data;
+          if (Array.isArray(data)) collected.push(...data);
+          const next = msg.result?.nextCursor;
+          if (typeof next === 'string' && next) requestList(next);
+          else finish(() => resolve(collected));
+        }
+      }
     });
-    child.on('exit', (code) => {
-      clearTimeout(timer);
-      const text = Buffer.concat(chunks).toString('utf8');
-      if (code === 0) settle(() => resolve(text));
-      else settle(() => reject(new Error(`\`mcp list\` exited ${code ?? 'null'}`)));
+
+    send({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        clientInfo: { name: 'centraid-tool-probe', title: 'Centraid', version: '0.1.0' },
+        capabilities: { experimentalApi: true },
+      },
     });
   });
 }

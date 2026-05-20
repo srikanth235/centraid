@@ -1,39 +1,39 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMcpList } from './host-tools.js';
+import { claudeToolToHostTool, flattenCodexMcpServers } from './host-tools.js';
 
-describe('parseMcpList', () => {
-  it('parses Claude Code `name: command - status` lines', () => {
-    const raw = [
-      'Checking MCP server health...',
-      '',
-      'github: npx -y @modelcontextprotocol/server-github - ✓ Connected',
-      'linear: https://mcp.linear.app/sse (SSE) - ✓ Connected',
-      'broken-one: node ./bad.js - ✗ Failed to connect',
-    ].join('\n');
-    assert.deepEqual(
-      parseMcpList(raw).map((s) => s.name),
-      ['github', 'linear', 'broken-one'],
-    );
+describe('claudeToolToHostTool', () => {
+  it('maps an MCP tool name `mcp__server__tool` to `server.tool`', () => {
+    assert.deepEqual(claudeToolToHostTool('mcp__github__list_pull_requests'), {
+      name: 'github.list_pull_requests',
+      source: 'mcp',
+      server: 'github',
+    });
   });
 
-  it('parses Codex-style bare / whitespace-column lines', () => {
-    const raw = ['github', 'slack    npx -y server-slack', 'notion'].join('\n');
-    assert.deepEqual(
-      parseMcpList(raw).map((s) => s.name),
-      ['github', 'slack', 'notion'],
-    );
+  it('treats a bare tool name as native', () => {
+    assert.deepEqual(claudeToolToHostTool('Bash'), { name: 'Bash', source: 'native' });
   });
+});
 
-  it('returns [] for the explicit empty-state message', () => {
-    assert.deepEqual(parseMcpList('No MCP servers configured.'), []);
-  });
-
-  it('dedupes repeated server ids and skips header chrome', () => {
-    const raw = ['Configured MCP servers:', 'github: a', 'github: a', 'name'].join('\n');
+describe('flattenCodexMcpServers', () => {
+  it('flattens each server tools map into `<server>.<tool>` entries', () => {
+    const tools = flattenCodexMcpServers([
+      {
+        name: 'chrome-devtools',
+        tools: {
+          upload_file: { name: 'upload_file', description: 'Upload a file.' },
+          list_network_requests: { name: 'list_network_requests' },
+        },
+      },
+      { name: 'empty-server' },
+    ]);
     assert.deepEqual(
-      parseMcpList(raw).map((s) => s.name),
-      ['github'],
+      tools.map((t) => t.name),
+      ['chrome-devtools.upload_file', 'chrome-devtools.list_network_requests'],
     );
+    assert.equal(tools[0]?.source, 'mcp');
+    assert.equal(tools[0]?.server, 'chrome-devtools');
+    assert.equal(tools[0]?.description, 'Upload a file.');
   });
 });
