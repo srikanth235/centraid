@@ -3,29 +3,40 @@
  * block (issue #80 follow-up).
  *
  * The builder agent authors `ctx.tool(...)` calls and `requires` manifest
- * fields. Without grounding it guesses tool names from training priors.
- * So at session start we ask the host runtime which tools it actually
- * exposes — and we treat "tools" uniformly: a tool is a tool whether it's
- * a native CLI builtin or MCP-backed. The harness only cares about the
- * callable surface, not the source.
+ * fields. Without grounding it guesses tool names — and argument shapes —
+ * from training priors. So at session start we ask the host runtime which
+ * tools it exposes, *with their exact JSON input schemas*.
  *
- * Per-runtime mechanisms (each runtime exposes its own registry):
- *   - `claude-code` — the Claude Agent SDK's session `init` message
- *     reports the full resolved tool set (native builtins + MCP tools)
- *     in `tools: string[]`. We start a `query()`, read that message, and
- *     abort before any model turn — cheap, no tokens spent.
- *   - `codex` — the codex app-server's `mcpServerStatus/list` JSON-RPC
- *     returns each MCP server's full `tools` map (real tool names +
- *     descriptions). We drive a short app-server handshake and read it.
+ * Mechanism — capture from the mock-LLM server:
+ *   Every coding agent must tell its LLM, on the very first request, the
+ *   full set of callable tools (builtins + MCP) with complete JSON
+ *   schemas — that is the agent↔model contract. So we point the CLI at
+ *   the same per-run mock-LLM server the automation runtime uses, stage
+ *   an immediate end-turn, and snapshot the `tools` array off that first
+ *   request. The CLI gets an "ok" and exits; zero model tokens are spent.
+ *
+ * This is deliberately *the same path* the automation runtime drives, so
+ * the enumerated surface is exactly what a deployed handler's `ctx.tool`
+ * can reach — not a second-hand registry that might over- or
+ * under-promise.
+ *
+ * "A tool is a tool": native builtins and MCP-backed tools are treated
+ * uniformly; `source` is an informational tag only.
  *
  * Enumeration is best-effort: any failure (missing/old CLI, no API key,
- * parse miss) resolves to `[]` and the grounding block is simply omitted.
+ * parse miss, timeout) resolves to `[]` and the grounding block is simply
+ * omitted.
  */
 
-import { spawn } from 'node:child_process';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { RunnerKind } from './types.js';
+import { startMockLlmServer } from './mock-llm-server.js';
+import { defaultSpawnCli, type SpawnCliInput } from './run-automation-cli-spawn.js';
 
-const CODEX_ENUM_TIMEOUT_MS = 15_000;
+/** Hard cap on the probe — a hung/missing CLI must not stall the builder. */
+const PROBE_TIMEOUT_MS = 30_000;
 
 export interface HostTool {
   /**
@@ -39,56 +50,137 @@ export interface HostTool {
   server?: string;
   /** One-line description, when the runtime reports one. */
   description?: string;
+  /**
+   * The tool's JSON Schema for arguments, verbatim from the agent↔model
+   * contract. Present for every function-style tool; absent for native
+   * provider tools (e.g. `web_search`) that take no caller-supplied args.
+   */
+  inputSchema?: unknown;
 }
 
 /**
- * Enumerate the tools the host runtime exposes. Best-effort — resolves to
- * `[]` on any failure.
+ * Enumerate the tools the host runtime exposes, with input schemas.
+ * Best-effort — resolves to `[]` on any failure.
  */
 export async function enumerateHostTools(
   kind: RunnerKind,
   opts: { cwd: string; binPath?: string },
 ): Promise<HostTool[]> {
   try {
-    return kind === 'claude-code'
-      ? await enumerateClaudeTools(opts.cwd)
-      : await enumerateCodexTools(opts.binPath);
+    const tools = await probeRuntimeTools(kind, opts);
+    return tools;
   } catch {
     return [];
   }
 }
 
 /**
- * Claude Code: read the Agent SDK's `init` system message, which carries
- * the fully-resolved tool set. We abort the query the moment it arrives —
- * `init` is emitted during session setup, before any model call.
+ * Drive one throwaway CLI turn against a mock-LLM server and snapshot the
+ * `tools` array off the first request.
  */
-async function enumerateClaudeTools(cwd: string): Promise<HostTool[]> {
-  const sdk = (await import('@anthropic-ai/claude-agent-sdk')) as {
-    query: (params: { prompt: string; options?: Record<string, unknown> }) => AsyncIterable<{
-      type?: string;
-      subtype?: string;
-      tools?: string[];
-    }>;
-  };
-  const abortController = new AbortController();
-  const q = sdk.query({
-    prompt: 'centraid: tool enumeration probe',
-    options: { cwd, abortController, maxTurns: 1 },
-  });
-  try {
-    for await (const msg of q) {
-      if (msg.type === 'system' && msg.subtype === 'init') {
-        return (msg.tools ?? []).map(claudeToolToHostTool);
+async function probeRuntimeTools(
+  kind: RunnerKind,
+  opts: { cwd: string; binPath?: string },
+): Promise<HostTool[]> {
+  let captured: unknown[] | undefined;
+  const abort = new AbortController();
+  const server = await startMockLlmServer({
+    onRequest: (_dispatchId, body) => {
+      if (captured === undefined && Array.isArray(body.tools)) {
+        captured = body.tools;
+        // The first request carries the full tool set — stop the CLI
+        // now rather than waiting for it to finish its turn (codex
+        // exits promptly; `claude -p` otherwise lingers).
+        abort.abort();
       }
-    }
+    },
+  });
+  const scratchDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-tool-probe-'));
+  const timer = setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
+  timer.unref?.();
+  try {
+    const { dispatchId, bearerToken } = server.mintDispatchToken();
+    // An immediate end-turn: the CLI sends its tools, gets "ok", exits.
+    server.stageTurn(dispatchId, { text: 'ok', stopReason: 'end_turn' });
+    const input: SpawnCliInput = {
+      kind,
+      mockBaseUrl: server.baseUrl,
+      mockBearerToken: bearerToken,
+      prompt: 'centraid tool-enumeration probe — reply with: ok',
+      toolsAllow: [],
+      cwd: opts.cwd,
+      scratchDir,
+      abortSignal: abort.signal,
+      ...(opts.binPath ? { binPath: opts.binPath } : {}),
+    };
+    await defaultSpawnCli(input);
   } finally {
-    abortController.abort();
+    clearTimeout(timer);
+    await server.close();
+    await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
   }
-  return [];
+
+  if (!captured) return [];
+  return kind === 'codex' ? normalizeCodexTools(captured) : normalizeClaudeTools(captured);
 }
 
-/** Map a Claude SDK tool name to a `HostTool`. MCP tools are `mcp__<server>__<tool>`. */
+/**
+ * Normalize the `tools` array codex ships in an OpenAI Responses request:
+ *   - `{type:'function', name, description?, parameters}` — function tool;
+ *     `parameters` is the JSON args schema.
+ *   - `{type:'custom', name, description?, format}` — freeform/custom
+ *     tool (e.g. `apply_patch`); named, but no JSON args schema.
+ *   - `{type:'web_search', ...}` — native provider tool; the `type` *is*
+ *     the tool name and it takes no caller-authored arguments.
+ *
+ * codex tool names are flat (`exec_command`, `update_plan`); MCP tools —
+ * when configured — also surface as function tools. Exported for tests.
+ */
+export function normalizeCodexTools(raw: readonly unknown[]): HostTool[] {
+  const out: HostTool[] = [];
+  for (const entry of raw) {
+    if (!isObject(entry)) continue;
+    // Prefer an explicit `name`; fall back to `type` for the nameless
+    // native tools whose `type` is the identity (`web_search`).
+    const name =
+      typeof entry.name === 'string' && entry.name
+        ? entry.name
+        : typeof entry.type === 'string' && entry.type
+          ? entry.type
+          : undefined;
+    if (!name) continue;
+    const tool: HostTool = { name, source: 'native' };
+    if (typeof entry.description === 'string' && entry.description) {
+      tool.description = entry.description;
+    }
+    if (entry.parameters !== undefined) tool.inputSchema = entry.parameters;
+    out.push(tool);
+  }
+  return out;
+}
+
+/**
+ * Normalize the `tools` array claude ships in an Anthropic Messages
+ * request. Entries are `{name, description?, input_schema}`; MCP tools
+ * carry the `mcp__<server>__<tool>` name shape. Exported for tests.
+ */
+export function normalizeClaudeTools(raw: readonly unknown[]): HostTool[] {
+  const out: HostTool[] = [];
+  for (const entry of raw) {
+    if (!isObject(entry)) continue;
+    const name = typeof entry.name === 'string' ? entry.name : undefined;
+    if (!name) continue;
+    const tool: HostTool = claudeToolToHostTool(name);
+    if (typeof entry.description === 'string' && entry.description) {
+      tool.description = entry.description;
+    }
+    if (entry.input_schema !== undefined) tool.inputSchema = entry.input_schema;
+    out.push(tool);
+  }
+  return out;
+}
+
+/** Map a Claude tool name to a `HostTool`. MCP tools are `mcp__<server>__<tool>`. */
 export function claudeToolToHostTool(name: string): HostTool {
   if (name.startsWith('mcp__')) {
     const rest = name.slice('mcp__'.length);
@@ -102,128 +194,6 @@ export function claudeToolToHostTool(name: string): HostTool {
   return { name, source: 'native' };
 }
 
-/** One MCP server entry from the codex `mcpServerStatus/list` response. */
-export interface CodexMcpServerStatus {
-  name: string;
-  tools?: Record<string, { name?: string; description?: string | null }>;
-}
-
-/**
- * Flatten codex `mcpServerStatus/list` data into `HostTool[]` — each
- * server's `tools` map becomes `<server>.<tool>` entries. Exported for
- * tests.
- */
-export function flattenCodexMcpServers(statuses: readonly CodexMcpServerStatus[]): HostTool[] {
-  const out: HostTool[] = [];
-  for (const s of statuses) {
-    for (const [key, def] of Object.entries(s.tools ?? {})) {
-      const toolName = def?.name ?? key;
-      const tool: HostTool = { name: `${s.name}.${toolName}`, source: 'mcp', server: s.name };
-      if (def?.description) tool.description = def.description;
-      out.push(tool);
-    }
-  }
-  return out;
-}
-
-/** Codex: enumerate MCP tools via the app-server `mcpServerStatus/list` RPC. */
-async function enumerateCodexTools(binPath?: string): Promise<HostTool[]> {
-  const bin = binPath && binPath.length > 0 ? binPath : 'codex';
-  return flattenCodexMcpServers(await codexMcpServerStatuses(bin));
-}
-
-/**
- * Drive a minimal codex app-server handshake (`initialize` → `initialized`
- * → `mcpServerStatus/list`, paging on `nextCursor`) and return the server
- * statuses. The process is killed as soon as the list is complete.
- */
-function codexMcpServerStatuses(bin: string): Promise<CodexMcpServerStatus[]> {
-  return new Promise<CodexMcpServerStatus[]>((resolve, reject) => {
-    const child = spawn(bin, ['app-server'], { stdio: ['pipe', 'pipe', 'ignore'] });
-    const collected: CodexMcpServerStatus[] = [];
-    let buf = '';
-    let listId = 1;
-    let settled = false;
-    const finish = (fn: () => void): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try {
-        child.kill('SIGTERM');
-      } catch {
-        /* already gone */
-      }
-      fn();
-    };
-    const timer = setTimeout(
-      () => finish(() => reject(new Error('codex app-server tool enumeration timed out'))),
-      CODEX_ENUM_TIMEOUT_MS,
-    );
-    timer.unref?.();
-
-    const send = (msg: object): void => {
-      if (child.stdin.writable) child.stdin.write(JSON.stringify(msg) + '\n');
-    };
-    const requestList = (cursor?: string): void => {
-      listId += 1;
-      send({
-        jsonrpc: '2.0',
-        id: listId,
-        method: 'mcpServerStatus/list',
-        params: { detail: 'toolsAndAuthOnly', ...(cursor ? { cursor } : {}) },
-      });
-    };
-
-    child.on('error', (err) => finish(() => reject(err)));
-    child.on('exit', () => finish(() => resolve(collected)));
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      buf += chunk.toString('utf8');
-      let nl: number;
-      while ((nl = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, nl);
-        buf = buf.slice(nl + 1);
-        if (!line.trim()) continue;
-        let msg: {
-          id?: unknown;
-          method?: unknown;
-          result?: { data?: CodexMcpServerStatus[]; nextCursor?: string | null };
-          error?: { message?: string };
-        };
-        try {
-          msg = JSON.parse(line) as typeof msg;
-        } catch {
-          continue;
-        }
-        // Skip notifications and server-to-client requests.
-        if (msg.method !== undefined) continue;
-        if (msg.id === 1) {
-          send({ jsonrpc: '2.0', method: 'initialized', params: {} });
-          requestList();
-          continue;
-        }
-        if (typeof msg.id === 'number') {
-          if (msg.error) {
-            finish(() => reject(new Error(msg.error?.message ?? 'mcpServerStatus/list failed')));
-            return;
-          }
-          const data = msg.result?.data;
-          if (Array.isArray(data)) collected.push(...data);
-          const next = msg.result?.nextCursor;
-          if (typeof next === 'string' && next) requestList(next);
-          else finish(() => resolve(collected));
-        }
-      }
-    });
-
-    send({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'initialize',
-      params: {
-        clientInfo: { name: 'centraid-tool-probe', title: 'Centraid', version: '0.1.0' },
-        capabilities: { experimentalApi: true },
-      },
-    });
-  });
+function isObject(x: unknown): x is Record<string, unknown> {
+  return x !== null && typeof x === 'object' && !Array.isArray(x);
 }

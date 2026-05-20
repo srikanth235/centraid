@@ -184,3 +184,85 @@ export function writeOpenAiChatCompletions(
   res.write('data: [DONE]\n\n');
   res.end();
 }
+
+/**
+ * OpenAI Responses response (POST /v1/responses). codex 0.128+ dropped
+ * `wire_api = "chat"` and now speaks only the Responses API, so the
+ * codex provider config sets `wire_api = "responses"` and codex POSTs
+ * here. Tool calls surface as `function_call` output items; the final
+ * ack is a single `message` item.
+ *
+ * The streamed event sequence is the minimal one codex's Responses SSE
+ * parser consumes: `response.created`, then `response.output_item.added`
+ * + `.done` per output item, then `response.completed` carrying the
+ * fully-assembled response object.
+ */
+export function writeOpenAiResponses(
+  req: IncomingMessage,
+  res: ServerResponse,
+  turn: StagedTurn,
+): void {
+  const responseId = `resp_${randomBytes(8).toString('hex')}`;
+  const output: unknown[] = [];
+  if (turn.text) {
+    output.push({
+      type: 'message',
+      id: `msg_${randomBytes(8).toString('hex')}`,
+      role: 'assistant',
+      status: 'completed',
+      content: [{ type: 'output_text', text: turn.text, annotations: [] }],
+    });
+  }
+  for (const tu of turn.toolUses ?? []) {
+    output.push({
+      type: 'function_call',
+      id: `fc_${randomBytes(8).toString('hex')}`,
+      call_id: tu.id,
+      name: tu.name,
+      arguments: JSON.stringify(tu.input ?? {}),
+      status: 'completed',
+    });
+  }
+  const responseBody = {
+    id: responseId,
+    object: 'response',
+    status: 'completed',
+    model: MODEL_ID,
+    output,
+    usage: { input_tokens: 0, output_tokens: 1, total_tokens: 1 },
+  };
+
+  if (!isStreamingRequested(req)) {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(responseBody));
+    return;
+  }
+
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache',
+    connection: 'keep-alive',
+  });
+  const writeEvent = (event: string, data: unknown): void => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+  writeEvent('response.created', {
+    type: 'response.created',
+    response: { id: responseId, object: 'response', status: 'in_progress', model: MODEL_ID },
+  });
+  output.forEach((item, index) => {
+    writeEvent('response.output_item.added', {
+      type: 'response.output_item.added',
+      output_index: index,
+      item,
+    });
+    writeEvent('response.output_item.done', {
+      type: 'response.output_item.done',
+      output_index: index,
+      item,
+    });
+  });
+  writeEvent('response.completed', { type: 'response.completed', response: responseBody });
+  res.end();
+}

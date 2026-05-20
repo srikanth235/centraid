@@ -17,7 +17,8 @@ export type RunnerKind = 'codex' | 'claude-code';
  * actual `~/.codex` is never touched.
  *
  * Covers Ollama, vLLM, Groq, Together, LM Studio, and anything else that
- * speaks `/v1/chat/completions` (or `/v1/responses` when `wireApi` is set).
+ * speaks `/v1/responses` (or `/v1/chat/completions` when `wireApi` is
+ * explicitly set to `chat`).
  *
  * `claude-code` runners ignore this field — the Claude Agent SDK is
  * Anthropic-wire-format only.
@@ -30,9 +31,10 @@ export interface OpenAICompatProvider {
   /** Base URL the endpoint exposes; must include `/v1` (or whatever path precedes `/chat/completions`). */
   baseUrl: string;
   /**
-   * OpenAI wire format codex should use. `chat` = `/chat/completions`
-   * (default, broadest support). `responses` = `/responses` (newer; some
-   * providers proxy it).
+   * OpenAI wire format codex should use. `responses` = `/responses`
+   * (default; the only format codex 0.128+ accepts). `chat` =
+   * `/chat/completions` (legacy; rejected at config load by current
+   * codex — set only for an older codex or a chat-only proxy).
    */
   wireApi?: 'chat' | 'responses';
   /**

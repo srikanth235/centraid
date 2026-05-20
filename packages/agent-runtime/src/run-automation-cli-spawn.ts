@@ -21,13 +21,19 @@ export type LocalRunnerKind = 'codex' | 'claude-code';
 export interface SpawnCliInput {
   /** Which CLI to invoke. */
   readonly kind: LocalRunnerKind;
+  /** Override the CLI binary location; defaults to a PATH lookup of `codex`/`claude`. */
+  readonly binPath?: string;
   /** Mock-LLM base URL (`http://127.0.0.1:<port>/v1`). */
   readonly mockBaseUrl: string;
   /** Per-spawn bearer token (`centraid-mock-<dispatchId>`). */
   readonly mockBearerToken: string;
   /** The natural-language prompt to feed the CLI. Contains the dispatch sentinel. */
   readonly prompt: string;
-  /** Tool allowlist from the manifest — passed to the CLI's MCP tool restriction flag. */
+  /**
+   * Tool allowlist from the manifest. Passed to `claude --allowed-tools`;
+   * ignored for `codex` (which has no `exec` allowlist flag — the mock
+   * server enforces the allowlist by only staging permitted calls).
+   */
   readonly toolsAllow: readonly string[];
   /** Workspace dir (app code dir) the CLI should treat as cwd. */
   readonly cwd: string;
@@ -54,33 +60,54 @@ export const defaultSpawnCli: SpawnCli = async (input) => {
   if (input.kind === 'claude-code') {
     env.ANTHROPIC_BASE_URL = input.mockBaseUrl;
     env.ANTHROPIC_API_KEY = input.mockBearerToken;
+    // `claude --print --output-format=stream-json` requires `--verbose`
+    // on current claude (2.1.x); without it the CLI exits non-zero
+    // before making a single model request.
     const args = [
       '-p',
       input.prompt,
       '--output-format',
       'stream-json',
+      '--verbose',
       '--permission-mode',
       'bypassPermissions',
     ];
     for (const tool of input.toolsAllow) args.push('--allowed-tools', tool);
-    proc = spawn('claude', args, { cwd: input.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    proc = spawn(input.binPath ?? 'claude', args, {
+      cwd: input.cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
   } else {
     const codexHome = await materializeCodexHome(
       {
         id: 'centraid-mock',
         name: 'Centraid Automation Mock',
         baseUrl: input.mockBaseUrl,
-        wireApi: 'chat',
+        // wireApi defaults to 'responses' — the only format codex 0.128+ accepts.
         envKey: 'CENTRAID_MOCK_KEY',
       },
       input.scratchDir,
     );
     env.CODEX_HOME = codexHome;
     env.CENTRAID_MOCK_KEY = input.mockBearerToken;
-    const args = ['exec', '--json', '--ask-for-approval', 'never'];
-    for (const tool of input.toolsAllow) args.push('--allowed-tools', tool);
-    args.push(input.prompt);
-    proc = spawn('codex', args, { cwd: input.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    // `codex exec` has no tool-allowlist flag; the mock-LLM server only
+    // ever stages tool calls the manifest permits, so the allowlist is
+    // already enforced upstream. `--dangerously-bypass-approvals-and-sandbox`
+    // lets the staged calls run without an interactive prompt;
+    // `--skip-git-repo-check` allows app dirs that aren't git repos.
+    const args = [
+      'exec',
+      '--json',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '--skip-git-repo-check',
+      input.prompt,
+    ];
+    proc = spawn(input.binPath ?? 'codex', args, {
+      cwd: input.cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
   }
 
   const stderrChunks: Buffer[] = [];

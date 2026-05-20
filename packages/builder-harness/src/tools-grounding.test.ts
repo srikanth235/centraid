@@ -24,4 +24,25 @@ describe('buildToolsGroundingBlock', () => {
     assert.match(block, /requires\.tools/);
     assert.match(block, /requires\.mcps/);
   });
+
+  it('renders each tool’s JSON args schema verbatim', () => {
+    const block = buildToolsGroundingBlock([
+      {
+        name: 'exec_command',
+        source: 'native',
+        description: 'Runs a command.',
+        inputSchema: {
+          type: 'object',
+          properties: { cmd: { type: 'string' } },
+          required: ['cmd'],
+        },
+      },
+    ]);
+    assert.ok(block);
+    assert.match(block, /args schema:/);
+    assert.match(
+      block,
+      /`\{"type":"object","properties":\{"cmd":\{"type":"string"\}\},"required":\["cmd"\]\}`/,
+    );
+  });
 });

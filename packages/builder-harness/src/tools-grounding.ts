@@ -3,8 +3,9 @@
  *
  * Spliced into the builder system prompt at session start, below the
  * UI grounding blocks. It lists the tools the host runtime actually
- * exposes so the agent writes `ctx.tool(...)` calls and `requires.tools`
- * against reality — not against training-prior guesses.
+ * exposes — each with its exact JSON input schema — so the agent writes
+ * `ctx.tool(...)` calls (correct name *and* args), and `requires.tools`,
+ * against reality rather than training-prior guesses.
  *
  * A tool is a tool: this block does not distinguish native CLI builtins
  * from MCP-backed tools beyond a parenthetical tag, because the harness
@@ -29,7 +30,9 @@ export function buildToolsGroundingBlock(tools: readonly HostTool[]): string | u
     'set; a handler that calls `ctx.tool` with a name not on this list',
     'fails at run time.',
     '',
-    'Call a tool by passing its name verbatim to `ctx.tool(name, args)`:',
+    'Each entry carries the tool name and, where applicable, its exact',
+    'JSON Schema for arguments. Call a tool by passing its name verbatim',
+    'to `ctx.tool(name, args)` with `args` shaped to that schema:',
     '',
   ];
 
@@ -37,6 +40,9 @@ export function buildToolsGroundingBlock(tools: readonly HostTool[]): string | u
     const tag = t.source === 'mcp' ? ' _(mcp)_' : ' _(native)_';
     const desc = t.description ? ` — ${t.description}` : '';
     lines.push(`- \`${t.name}\`${tag}${desc}`);
+    if (t.inputSchema !== undefined) {
+      lines.push(`  - args schema: \`${JSON.stringify(t.inputSchema)}\``);
+    }
   }
 
   lines.push(
@@ -47,6 +53,8 @@ export function buildToolsGroundingBlock(tools: readonly HostTool[]): string | u
     '  calls. The host scoping policy enforces this allowlist.',
     '- `requires.mcps` — list the MCP servers behind the `_(mcp)_` tools',
     '  you use (the segment before the `.` in the tool name).',
+    '- Shape every `ctx.tool` argument object to the tool’s args schema',
+    '  above — required fields, types, and enums are enforced at run time.',
     "- If the user asks for an integration whose tool isn't listed above,",
     '  say so plainly and ask them to install/configure it first — do',
     '  **not** author a handler that depends on a tool that does not exist.',

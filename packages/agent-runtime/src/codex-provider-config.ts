@@ -55,7 +55,10 @@ export function buildProviderToml(p: OpenAICompatProvider): string {
     `[model_providers.${idKey}]`,
     `name = ${tomlString(p.name)}`,
     `base_url = ${tomlString(p.baseUrl)}`,
-    `wire_api = ${tomlString(p.wireApi ?? 'chat')}`,
+    // codex 0.128+ rejects `wire_api = "chat"` at config load; the
+    // Responses API is the only supported wire format, so it is the
+    // default here. Callers can still pass `wireApi` explicitly.
+    `wire_api = ${tomlString(p.wireApi ?? 'responses')}`,
   ];
   if (p.envKey) lines.push(`env_key = ${tomlString(p.envKey)}`);
   lines.push('');

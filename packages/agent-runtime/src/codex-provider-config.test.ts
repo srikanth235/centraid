@@ -16,8 +16,19 @@ test('buildProviderToml emits a model_provider line and a [model_providers.<id>]
   assert.match(toml, /\[model_providers\.groq\]/);
   assert.match(toml, /name = "Groq"/);
   assert.match(toml, /base_url = "https:\/\/api\.groq\.com\/openai\/v1"/);
-  assert.match(toml, /wire_api = "chat"/);
+  // codex 0.128+ rejects `wire_api = "chat"`; `responses` is the default.
+  assert.match(toml, /wire_api = "responses"/);
   assert.match(toml, /env_key = "GROQ_API_KEY"/);
+});
+
+test('buildProviderToml respects an explicit wireApi=chat override', () => {
+  const toml = buildProviderToml({
+    id: 'legacy',
+    name: 'Legacy',
+    baseUrl: 'https://legacy.example.com/v1',
+    wireApi: 'chat',
+  });
+  assert.match(toml, /wire_api = "chat"/);
 });
 
 test('buildProviderToml omits env_key for keyless providers', () => {

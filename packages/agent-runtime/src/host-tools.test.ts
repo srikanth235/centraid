@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { claudeToolToHostTool, flattenCodexMcpServers } from './host-tools.js';
+import { claudeToolToHostTool, normalizeCodexTools, normalizeClaudeTools } from './host-tools.js';
 
 describe('claudeToolToHostTool', () => {
   it('maps an MCP tool name `mcp__server__tool` to `server.tool`', () => {
@@ -16,24 +16,55 @@ describe('claudeToolToHostTool', () => {
   });
 });
 
-describe('flattenCodexMcpServers', () => {
-  it('flattens each server tools map into `<server>.<tool>` entries', () => {
-    const tools = flattenCodexMcpServers([
+describe('normalizeCodexTools', () => {
+  it('keeps function tools with their JSON input schema', () => {
+    const tools = normalizeCodexTools([
       {
-        name: 'chrome-devtools',
-        tools: {
-          upload_file: { name: 'upload_file', description: 'Upload a file.' },
-          list_network_requests: { name: 'list_network_requests' },
-        },
+        type: 'function',
+        name: 'exec_command',
+        description: 'Runs a command.',
+        parameters: { type: 'object', properties: { cmd: { type: 'string' } }, required: ['cmd'] },
       },
-      { name: 'empty-server' },
     ]);
-    assert.deepEqual(
-      tools.map((t) => t.name),
-      ['chrome-devtools.upload_file', 'chrome-devtools.list_network_requests'],
-    );
-    assert.equal(tools[0]?.source, 'mcp');
-    assert.equal(tools[0]?.server, 'chrome-devtools');
-    assert.equal(tools[0]?.description, 'Upload a file.');
+    assert.equal(tools.length, 1);
+    assert.equal(tools[0]?.name, 'exec_command');
+    assert.equal(tools[0]?.source, 'native');
+    assert.equal(tools[0]?.description, 'Runs a command.');
+    assert.deepEqual(tools[0]?.inputSchema, {
+      type: 'object',
+      properties: { cmd: { type: 'string' } },
+      required: ['cmd'],
+    });
+  });
+
+  it('maps a native provider tool (no name/schema) by its `type`', () => {
+    const tools = normalizeCodexTools([{ type: 'web_search', external_web_access: true }]);
+    assert.deepEqual(tools, [{ name: 'web_search', source: 'native' }]);
+  });
+});
+
+describe('normalizeClaudeTools', () => {
+  it('keeps native + MCP tools with descriptions and input schemas', () => {
+    const tools = normalizeClaudeTools([
+      { name: 'Read', description: 'Read a file.', input_schema: { type: 'object' } },
+      {
+        name: 'mcp__github__list_pull_requests',
+        description: 'List PRs.',
+        input_schema: { type: 'object', properties: { repo: { type: 'string' } } },
+      },
+    ]);
+    assert.deepEqual(tools[0], {
+      name: 'Read',
+      source: 'native',
+      description: 'Read a file.',
+      inputSchema: { type: 'object' },
+    });
+    assert.equal(tools[1]?.name, 'github.list_pull_requests');
+    assert.equal(tools[1]?.source, 'mcp');
+    assert.equal(tools[1]?.server, 'github');
+    assert.deepEqual(tools[1]?.inputSchema, {
+      type: 'object',
+      properties: { repo: { type: 'string' } },
+    });
   });
 });
