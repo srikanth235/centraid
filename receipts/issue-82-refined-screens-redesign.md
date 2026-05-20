@@ -27,6 +27,15 @@ applies the screen-level redesign, landed as one commit per step.
 
 ## What changed
 
+**2026-05-20 — Home hero declutter.** Removed the `Cloud · live
+deploys are here` announcement pill from the Day-1 hero (the
+`cd-hero-announce` anchor and its `-badge` / `-arrow` CSS rules). Took
+out the `0.5px` hairline `border-top` that separated the composer hero
+from the apps shelf, so Home reads as one continuous surface. Adjusted
+the vertical rhythm: the hero now has `48px 56px 40px` padding with a
+`26px` heading→composer gap, and the shelf opens with `8px` top
+padding instead of carrying the rule.
+
 **2026-05-20 — Home layout is always the composer-led Day-1 view.**
 `renderHomeAsync` no longer branches on app count: the centered
 composer hero + tabbed discovery shelf (`renderDay1Home`) is now the

@@ -735,15 +735,6 @@
   function buildHomeHero(): HTMLElement {
     const wrap = el('div', { class: 'cd-hero' });
 
-    // Announcement pill — accent NEW badge + headline + right arrow.
-    wrap.append(
-      el('a', { class: 'cd-hero-announce', href: '#', onClick: (e: Event) => e.preventDefault() }, [
-        el('span', { class: 'cd-hero-announce-badge' }, 'New'),
-        el('span', {}, 'Cloud · live deploys are here'),
-        el('span', { class: 'cd-hero-announce-arrow', trustedHtml: arrowRight(12) }),
-      ]),
-    );
-
     // Personalized heading — no user-profile source exists in the
     // renderer, so we fall back to the un-named form rather than fake one.
     wrap.append(el('h1', {}, 'What should we build?'));

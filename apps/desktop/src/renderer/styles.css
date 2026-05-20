@@ -5111,52 +5111,19 @@ textarea {
   padding: 0;
 }
 
-/* Hero — announcement pill + "What should we build?" + composer. */
+/* Hero — "What should we build?" + composer. */
 .cd-hero {
   flex: 1;
   max-width: 760px;
   width: 100%;
   margin: 0 auto;
-  padding: 40px 56px 24px;
+  padding: 48px 56px 40px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 26px;
   align-items: center;
   justify-content: center;
   text-align: center;
-}
-
-/* Announcement pill — accent NEW badge + headline + right arrow. */
-.cd-hero-announce {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px;
-  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
-  border: 0.5px solid var(--line);
-  border-radius: 999px;
-  font: var(--t-small);
-  font-size: 12.5px;
-  color: var(--ink-2);
-  text-decoration: none;
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-}
-.cd-hero-announce-badge {
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font: var(--t-mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.cd-hero-announce-arrow {
-  display: inline-flex;
-  margin-right: 10px;
-  opacity: 0.6;
 }
 
 .cd-hero h1 {
@@ -5495,8 +5462,7 @@ textarea {
 /* §A1 — HomeShelf: tabbed shelf at the bottom of the Day-1 home. Same
    surface as the rest of Home; same RefinedAppTile the All apps page uses. */
 .cd-shelf {
-  border-top: 0.5px solid var(--line);
-  padding: 20px 56px 26px;
+  padding: 8px 56px 36px;
 }
 .cd-shelf-inner {
   max-width: 1180px;
