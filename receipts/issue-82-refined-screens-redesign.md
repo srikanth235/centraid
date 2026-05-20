@@ -246,10 +246,13 @@ re-shows NEW.
 
 ## Verification
 
-- `bun --filter @centraid/design-tokens run typecheck` — clean
-- `turbo run typecheck --filter=@centraid/desktop` — clean
-- `turbo run build --filter=@centraid/desktop` — clean
-- `oxlint` on the changed renderer files — clean
+- `turbo run typecheck build --filter=@centraid/desktop
+  --filter=@centraid/builder-harness --filter=@centraid/design-tokens`
+  — clean
+- `oxlint` on the changed renderer / main / harness files — clean
+- `oxfmt` applied to all changed `.ts` / `.css` files
 - Visual verification in a running Electron window is pending — the
   desktop app needs a gateway/runtime backend; recommend a manual
-  `bun run dev:desktop` smoke test.
+  `bun run dev:desktop` smoke test, exercising the Builder pane
+  toolbar, the editable Code workspace (edit → Save → Diff), the Cloud
+  Overview, Settings pages, and the app-view copilot.
