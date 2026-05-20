@@ -1175,12 +1175,22 @@
     sub?: string;
     icon: string;
     tint?: string;
+    /** Variant changes the leading visual: action chip, app tile, chat dot. */
+    variant?: 'action' | 'app' | 'chat';
+    /** App reference — drives the gradient icon tile for `variant: 'app'`. */
+    app?: AppMetaResolvedType;
+    /** Right-aligned meta — relative time or a kbd hint. */
+    meta?: string;
+    /** Right-aligned mono kbd chip (e.g. ↵). */
+    kbd?: string;
+    /** Accent treatment for the leading chip (the primary "Build" action). */
+    accent?: boolean;
     run: () => void;
   }
 
   // §F — a 640px command card over a dimmed, blurred copy of the current
-  // screen. Results group into Build / Apps / Templates / Settings with
-  // up/down + Enter keyboard navigation.
+  // screen. Results group into Build / Apps / Chats / Settings with
+  // up/down + Enter keyboard navigation and a footer hint bar.
   function openCommandPalette(): void {
     if (paletteCleanup) return;
     const backdrop = el('div', { class: 'cd-palette-backdrop' });
@@ -1189,14 +1199,35 @@
       role: 'dialog',
       'aria-label': 'Command palette',
     });
+
+    // Input row — leading search glyph, the field, a trailing `esc` chip.
     const input = el('input', {
       class: 'cd-palette-input',
       type: 'text',
       autocomplete: 'off',
-      placeholder: 'Search apps, templates, settings — or describe something to build…',
+      placeholder: 'Search apps, chats, templates — or describe a new one…',
     }) as HTMLInputElement;
+    const inputRow = el('div', { class: 'cd-palette-inputrow' }, [
+      el('span', { class: 'cd-palette-search-icon', trustedHtml: Icon.Search({ size: 16 }) }),
+      input,
+      el('span', { class: 'cd-palette-esc' }, 'esc'),
+    ]);
     const resultsEl = el('div', { class: 'cd-palette-results' });
-    card.append(input, resultsEl);
+
+    // Footer hint bar — navigate / open / open-in-new-window / esc close.
+    const kbd = (k: string): HTMLElement => el('span', { class: 'cd-palette-kbd' }, k);
+    const footer = el('div', { class: 'cd-palette-footer' }, [
+      kbd('↑↓'),
+      el('span', {}, 'navigate'),
+      kbd('↵'),
+      el('span', {}, 'open'),
+      kbd('⌘↵'),
+      el('span', {}, 'open in new window'),
+      el('span', { class: 'cd-palette-footer-sp' }),
+      kbd('esc'),
+      el('span', {}, 'close'),
+    ]);
+    card.append(inputRow, resultsEl, footer);
     backdrop.append(card);
     document.body.append(backdrop);
 
@@ -1219,26 +1250,57 @@
     let rows: PaletteRow[] = [];
     let active = 0;
 
+    const settingsSubs: Record<string, string> = {
+      Appearance: 'Theme, accent, app tiles',
+      Layout: 'Density, cards, sidebar',
+      Workspace: 'Sidebar, chat model',
+      'AI providers': 'Codex · Claude Code · custom endpoint',
+      'Inference endpoint': 'Route Codex through any OpenAI endpoint',
+      'Where apps run': 'Local or remote runtime',
+      'Sync & backups': 'Cross-device sync and snapshots',
+    };
+
     const collectGroups = (q: string): Array<{ group: string; items: PaletteRow[] }> => {
       const lc = q.toLowerCase();
       const groups: Array<{ group: string; items: PaletteRow[] }> = [];
 
+      // ── Build — describe-a-new-app primary action + template browse.
       groups.push({
         group: 'Build',
         items: [
           {
-            label: q ? `Build “${q}”` : 'Build a new app',
-            icon: Icon.Sparkle({ size: 15 }),
-            tint: 'var(--accent)',
+            label: q ? `Build ${q}` : 'Build a new app',
+            sub: q
+              ? 'Start a new app with this prompt'
+              : 'Describe an app and let the agent build it',
+            icon: Icon.Sparkle({ size: 14 }),
+            variant: 'action',
+            accent: true,
+            kbd: '↵',
             run: () => {
               closeCommandPalette();
               if (q) enterBuilder({ initialPrompt: q });
               else openNewAppSheet();
             },
           },
+          {
+            label: q
+              ? `Browse templates · matching “${q}”`
+              : 'Browse templates · habit, journal, counter',
+            sub: templates.length
+              ? `${templates.length} curated templates`
+              : 'Curated starting points',
+            icon: Icon.Compass({ size: 14 }),
+            variant: 'action',
+            run: () => {
+              closeCommandPalette();
+              renderDiscover();
+            },
+          },
         ],
       });
 
+      // ── Apps — gradient app tiles. Matching apps, or recents pre-query.
       const allApps = [...getApps(), ...drafts];
       const recents = recentApps();
       const appMatches = (
@@ -1251,50 +1313,58 @@
       if (appMatches.length > 0) {
         groups.push({
           group: `Apps · ${appMatches.length}`,
-          items: appMatches.map((a) => ({
-            label: a.name,
-            sub: a.desc,
-            icon: Icon[a.iconKey] ? Icon[a.iconKey]({ size: 15 }) : Icon.Sparkle({ size: 15 }),
-            tint: a.color,
-            run: () => {
-              closeCommandPalette();
-              if (isDraft(a)) enterBuilder({ appContext: a });
-              else openApp(a.id);
-            },
-          })),
+          items: appMatches.map((a) => {
+            const ua = !isDraft(a) ? findUserApp(a.id) : undefined;
+            return {
+              label: a.name,
+              sub: a.desc || 'No description yet.',
+              icon: '',
+              variant: 'app' as const,
+              app: a,
+              meta: isDraft(a) ? 'draft' : relativeTime(ua?.updatedAt),
+              run: () => {
+                closeCommandPalette();
+                if (isDraft(a)) enterBuilder({ appContext: a });
+                else openApp(a.id);
+              },
+            };
+          }),
         });
       }
 
-      const tplMatches = (
-        q ? templates.filter((t) => t.name.toLowerCase().includes(lc)) : templates
-      ).slice(0, 6);
-      if (tplMatches.length > 0) {
-        const palette = window.ICON_PALETTE as Record<string, string>;
+      // ── Chats — recent builder conversations, one per app. The shell has
+      // no separate chat store, so each app's build conversation is the
+      // chat; opening a row drops you back into that app's builder.
+      const chatApps = (q ? appMatches : recents.length ? recents : allApps).slice(0, 3);
+      if (chatApps.length > 0) {
         groups.push({
-          group: `Templates · ${tplMatches.length}`,
-          items: tplMatches.map((t) => ({
-            label: t.name,
-            sub: t.desc,
-            icon: Icon[t.iconKey as IconNameType]
-              ? Icon[t.iconKey as IconNameType]({ size: 15 })
-              : Icon.Sparkle({ size: 15 }),
-            tint: palette[t.colorKey],
-            run: () => {
-              closeCommandPalette();
-              openTemplatePreview(t);
-            },
-          })),
+          group: `Chats · ${chatApps.length}`,
+          items: chatApps.map((a) => {
+            const ua = !isDraft(a) ? findUserApp(a.id) : undefined;
+            return {
+              label: `Continue building ${a.name}`,
+              sub: `${a.name} · ${isDraft(a) ? 'draft' : relativeTime(ua?.updatedAt)}`,
+              icon: Icon.Sparkle({ size: 13 }),
+              variant: 'chat' as const,
+              run: () => {
+                closeCommandPalette();
+                enterBuilder({ appContext: a });
+              },
+            };
+          }),
         });
       }
 
+      // ── Settings — the seven inner pages, each with a one-line blurb.
       const setMatches = settingsLabels.filter((s) => !q || s.toLowerCase().includes(lc));
       if (setMatches.length > 0) {
         groups.push({
           group: 'Settings',
           items: setMatches.map((s) => ({
             label: s,
-            sub: 'Settings',
-            icon: Icon.Settings({ size: 15 }),
+            sub: settingsSubs[s] ?? 'Settings',
+            icon: Icon.Settings({ size: 14 }),
+            variant: 'action' as const,
             run: () => {
               closeCommandPalette();
               renderSettings();
@@ -1323,17 +1393,51 @@
         resultsEl.append(el('div', { class: 'cd-palette-group' }, g.group));
         for (const item of g.items) {
           rows.push(item);
-          const ic = el('span', { class: 'cd-palette-row-icon', trustedHtml: item.icon });
-          if (item.tint) ic.style.color = item.tint;
+
+          // Leading visual — gradient app tile, accent action chip, or a
+          // plain bordered glyph chip (chat / non-accent action).
+          let lead: HTMLElement;
+          if (item.variant === 'app' && item.app) {
+            lead = el('div', { class: 'cd-palette-row-tile' });
+            const finish = window.CentraidTokens.tileFinish(item.app.color, 'gradient');
+            lead.style.background = finish.background;
+            lead.style.color = finish.glyphColor;
+            if (finish.boxShadow) lead.style.boxShadow = finish.boxShadow;
+            lead.innerHTML = Icon[item.app.iconKey]
+              ? Icon[item.app.iconKey]({ size: 14, strokeWidth: 1.85 })
+              : Icon.Sparkle({ size: 14 });
+          } else {
+            lead = el('span', {
+              class: 'cd-palette-row-icon',
+              'data-accent': item.accent ? 'true' : undefined,
+              trustedHtml: item.icon,
+            });
+            if (item.tint && !item.accent) lead.style.color = item.tint;
+          }
+
           const txt = el('div', { class: 'cd-palette-row-text' }, [
             el('div', { class: 'cd-palette-row-label' }, item.label),
           ]);
           if (item.sub) txt.append(el('div', { class: 'cd-palette-row-sub' }, item.sub));
+
+          const rowChildren: HTMLElement[] = [lead, txt];
+          if (item.kbd) {
+            rowChildren.push(el('span', { class: 'cd-palette-row-kbd' }, item.kbd));
+          } else if (item.meta) {
+            rowChildren.push(el('span', { class: 'cd-palette-row-meta' }, item.meta));
+          }
+
           resultsEl.append(
-            el('button', { class: 'cd-palette-row', type: 'button', onClick: () => item.run() }, [
-              ic,
-              txt,
-            ]),
+            el(
+              'button',
+              {
+                class: 'cd-palette-row',
+                'data-variant': item.variant ?? 'action',
+                type: 'button',
+                onClick: () => item.run(),
+              },
+              rowChildren,
+            ),
           );
         }
       }
@@ -1359,6 +1463,8 @@
         active = Math.max(0, active - 1);
         highlight();
       } else if (k.key === 'Enter') {
+        // ⌘↵ is the "open in new window" affordance from the footer hint
+        // bar; the shell is single-window today, so it runs the active row.
         k.preventDefault();
         rows[active]?.run();
       }
@@ -3257,9 +3363,7 @@
       chatModel: undefined as string | undefined,
     }));
 
-    const main = el('div');
-    const scroll = el('div', { class: 'cd-main-scroll' });
-    main.append(scroll);
+    const main = el('div', { class: 'cd-settings-main' });
 
     // §C1 — break the Settings monolith into discrete inner-sidebar
     // pages. Each `drawerGroup` appends into its page host instead of
@@ -3283,14 +3387,29 @@
       sync: el('div', { class: 'cd-settings-page' }),
     };
 
-    // ---- Tweaks — Theme group ----
-    const themeSeg = makeSegmented<ThemeName>(['dark', 'light'], prefs.theme, (v) => {
-      setPrefs({ theme: v });
-    });
+    // ---- Theme group ----
+    // The proposal's Mode control offers Auto / Light / Dark. The shell
+    // only persists a concrete light|dark theme, so "Auto" is a one-shot
+    // that resolves the OS `prefers-color-scheme` and applies it — no new
+    // persisted state, persistence semantics stay intact.
+    const themeSeg = makeSegmentedLabeled(
+      ['auto', 'light', 'dark'],
+      { auto: 'Auto', light: 'Light', dark: 'Dark' },
+      prefs.theme,
+      (v) => {
+        const resolved: ThemeName =
+          v === 'auto'
+            ? window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark'
+            : (v as ThemeName);
+        setPrefs({ theme: resolved });
+      },
+    );
     const coolCastSwitch = makeSwitch(prefs.coolBlueCast, (v) => setPrefs({ coolBlueCast: v }));
     const accentSwatches = makeSwatches(prefs.accent, (v) => setPrefs({ accent: v }));
 
-    // ---- Tweaks — Layout group ----
+    // ---- Layout group ----
     const densitySeg = makeSegmented<Density>(['compact', 'regular', 'comfy'], prefs.density, (v) =>
       setPrefs({ density: v }),
     );
@@ -3313,36 +3432,34 @@
       },
     );
 
-    // §C2 — live-preview tile. A miniature composition (mini app tiles +
-    // an accent button + skeleton text) that re-renders on every
-    // appearance change so the user sees theme / accent / tile-variant
-    // land on a representative surface, not just the chrome.
+    // §C2 — live-preview tile. A 4-up grid of representative app tiles
+    // (icon + name) that re-renders on every appearance change so the
+    // user sees the theme / accent / tile-variant land on real tiles.
     const previewHost = el('div', { class: 'ap-preview-host' });
     const renderAppearancePreview = (): void => {
-      const seeds = ['#5b8def', '#e0734a', '#48a07a'];
-      const tiles = seeds.map((c) => {
-        const finish = window.CentraidTokens.tileFinish(c, prefs.tileVariant);
-        const t = el('div', { class: 'ap-preview-tile' });
-        t.style.background = finish.background;
-        if (finish.boxShadow) t.style.boxShadow = finish.boxShadow;
-        return t;
+      const seeds: ReadonlyArray<{ color: string; icon: IconNameType; name: string }> = [
+        { color: '#4E68DD', icon: 'Todo', name: 'Tasks' },
+        { color: '#7C5BD9', icon: 'Journal', name: 'Journal' },
+        { color: '#E55772', icon: 'Pencil', name: 'Notes' },
+        { color: '#2EA098', icon: 'Habit', name: 'Weekly' },
+      ];
+      const tiles = seeds.map((s) => {
+        const finish = window.CentraidTokens.tileFinish(s.color, prefs.tileVariant);
+        const icon = el('div', {
+          class: 'ap-preview-tile-icon',
+          trustedHtml: Icon[s.icon]
+            ? Icon[s.icon]({ size: 18, strokeWidth: 1.85 })
+            : Icon.Folder({ size: 18 }),
+        });
+        icon.style.background = finish.background;
+        icon.style.color = finish.glyphColor;
+        if (finish.boxShadow) icon.style.boxShadow = finish.boxShadow;
+        return el('div', { class: 'ap-preview-tile' }, [
+          icon,
+          el('span', { class: 'ap-preview-tile-name' }, s.name),
+        ]);
       });
-      previewHost.replaceChildren(
-        el('div', { class: 'ap-preview' }, [
-          el('div', { class: 'ap-preview-bar' }, [
-            el('span', { class: 'ap-preview-traffic' }),
-            el('span', { class: 'ap-preview-traffic' }),
-            el('span', { class: 'ap-preview-traffic' }),
-            el('span', { class: 'ap-preview-chip' }),
-          ]),
-          el('div', { class: 'ap-preview-body' }, [
-            el('div', { class: 'ap-preview-tiles' }, tiles),
-            el('div', { class: 'ap-preview-line' }),
-            el('div', { class: 'ap-preview-line ap-preview-line--short' }),
-            el('button', { class: 'ap-preview-btn', type: 'button', disabled: '' }, 'Primary'),
-          ]),
-        ]),
-      );
+      previewHost.replaceChildren(el('div', { class: 'ap-preview' }, tiles));
     };
     renderAppearancePreview();
     onAppearanceApplied = renderAppearancePreview;
@@ -3352,19 +3469,48 @@
 
     pageHosts.appearance.append(
       drawerGroup('Theme', [
-        drawerRow('Mode', themeSeg),
-        drawerRowInline('Cool blue cast', coolCastSwitch),
-        drawerRow('Accent', accentSwatches),
+        drawerRowH('Mode', 'Light theme follows the system at night when set to Auto.', themeSeg),
+        drawerRowH(
+          'Cool blue cast',
+          'Tint dark surfaces toward blue. Off = neutral graphite.',
+          coolCastSwitch,
+        ),
       ]),
-      drawerGroup('Preview', [previewHost]),
+      drawerGroup('Accent', [
+        drawerRowH(
+          'Color',
+          'Used for the build button, sparkle, focus rings, and version badges.',
+          accentSwatches,
+        ),
+      ]),
+      drawerGroup('App tiles', [
+        drawerRowH('Treatment', 'How icon tiles on the home grid look.', tileSeg),
+        drawerRowH(
+          'Preview',
+          'How the home grid looks with your current choices.',
+          previewHost,
+          true,
+        ),
+      ]),
     );
     pageHosts.layout.append(
-      drawerGroup('Layout', [
-        drawerRow('Density', densitySeg),
-        drawerRow('Cards', cardsSeg),
-        drawerRowInline('Sidebar visible', sidebarSwitch),
+      drawerGroup('Density', [
+        drawerRowH(
+          'Spacing',
+          'Affects row height, type sizes, and spacing across all apps.',
+          densitySeg,
+        ),
       ]),
-      drawerGroup('App tiles', [drawerRow('Treatment', tileSeg)]),
+      drawerGroup('Cards', [
+        drawerRowH(
+          'Surface',
+          'Affects every card-shaped surface — app tiles, message rows, settings groups.',
+          cardsSeg,
+        ),
+      ]),
+      drawerGroup('Sidebar', [
+        drawerRowH('Show sidebar', 'Toggle the apps + chats panel.', sidebarSwitch),
+      ]),
     );
 
     // ---- Runtime group ----
@@ -3606,15 +3752,8 @@
     });
 
     pageHosts.providers.append(
-      drawerGroup('AI providers', [
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Centraid auto-imports your Claude Code and Codex credentials on first launch so the coding agent rides on your existing subscription. Codex is preferred when both are present.',
-        ),
-        authStatusHost,
-        el('div', { class: 'sheet-actions' }, [resyncBtn]),
-      ]),
+      drawerGroup('Connected', [authStatusHost]),
+      el('div', { class: 'sheet-actions' }, [resyncBtn]),
     );
 
     // Initial status load — populates the rows after the page mounts.
@@ -3870,19 +4009,16 @@
     clearProviderBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Disable</span>';
 
     pageHosts.inference.append(
-      drawerGroup('Custom inference endpoint', [
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Route Codex through any OpenAI-compatible endpoint (Ollama, vLLM, Groq, Together, LM Studio). Your ~/.codex/auth.json and config.toml are not touched — Centraid materializes a scoped CODEX_HOME for the spawned process.',
-        ),
-        labeled('Preset', 'Fill the fields below from a known provider.', presetSelect),
+      drawerGroup('Provider', [
+        labeled('Preset', 'Quick-fills the fields below from a known provider.', presetSelect),
         labeled(
           'Provider id',
           'Used as the [model_providers.<id>] key in codex config.',
           providerIdInput,
         ),
         labeled('Display name', 'Shown in codex logs.', providerNameInput),
+      ]),
+      drawerGroup('Connection', [
         labeled(
           'Base URL',
           'Must include /v1 (or whatever path precedes /chat/completions).',
@@ -3898,18 +4034,22 @@
           'Default is Chat completions; only flip if your provider supports /responses.',
           wireApiSelect,
         ),
+      ]),
+      drawerGroup('Credentials', [
         labeled(
           'API key',
           'Stored encrypted via OS keychain. Never written to disk in plaintext.',
           apiKeyInput,
         ),
-        el('div', { class: 'drawer-row' }, [
-          el('span', { class: 'drawer-row-label' }, 'Key status'),
-          apiKeyStatusEl,
+        el('div', { class: 'drawer-row drawer-row-grid' }, [
+          el('div', { class: 'drawer-row-head' }, [
+            el('span', { class: 'drawer-row-label' }, 'Key status'),
+          ]),
+          el('div', { class: 'drawer-row-control' }, [apiKeyStatusEl]),
         ]),
         providerStatusEl,
-        el('div', { class: 'sheet-actions' }, [saveProviderBtn, testProviderBtn, clearProviderBtn]),
       ]),
+      el('div', { class: 'sheet-actions' }, [saveProviderBtn, testProviderBtn, clearProviderBtn]),
     );
 
     void refreshKeyStatus();
@@ -3991,46 +4131,100 @@
     testBtn.innerHTML = Icon.Eye({ size: 13 }) + '<span>Test connection</span>';
 
     pageHosts.runtime.append(
-      drawerGroup('Runtime', [
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Where centraid runs your apps. Changes apply when you save.',
-        ),
-        drawerRow('Mode', modeSeg),
+      drawerGroup('Mode', [
+        drawerRowH('Runtime', 'Changes apply when you save.', modeSeg),
         remoteRowsHost,
         labeled(
           'Projects directory',
           'Where each app project is scaffolded. Tilde is expanded to your home directory.',
           projectsDir,
         ),
-        el('div', { class: 'sheet-actions' }, [testBtn, saveBtn]),
       ]),
+      el('div', { class: 'sheet-actions' }, [testBtn, saveBtn]),
     );
     pageHosts.sync.append(
-      drawerGroup('Sync & backups', [
+      drawerGroup('Sync', [
         el('div', { class: 'settings-note' }, 'Project sync and backup settings will live here.'),
       ]),
     );
 
-    // §C1 — inner-sidebar shell. Each entry shows exactly one page so no
-    // single view mixes cosmetic and credential controls.
-    const settingsPages: ReadonlyArray<{
+    // §C1 — inner-sidebar shell modelled on RefinedSettingsV2. A grouped
+    // category nav (Workspace / Models / Runtime) — each entry an icon +
+    // label + optional mono hint — sits beside a scrolling content pane
+    // that shows exactly one page (a PageHead + its controls) at a time.
+    interface SettingsPageDef {
       id: SettingsPageId;
       label: string;
       section: string;
-    }> = [
-      { id: 'appearance', label: 'Appearance', section: 'Workspace' },
-      { id: 'layout', label: 'Layout', section: 'Workspace' },
-      { id: 'workspace', label: 'Workspace', section: 'Workspace' },
-      { id: 'providers', label: 'AI providers', section: 'Models' },
-      { id: 'inference', label: 'Inference endpoint', section: 'Models' },
-      { id: 'runtime', label: 'Where apps run', section: 'Runtime' },
-      { id: 'sync', label: 'Sync & backups', section: 'Runtime' },
+      icon: IconNameType;
+      hint?: string;
+      subtitle: string;
+    }
+    const settingsPages: ReadonlyArray<SettingsPageDef> = [
+      {
+        id: 'appearance',
+        label: 'Appearance',
+        section: 'Workspace',
+        icon: 'Mood',
+        subtitle: 'Visual treatment for Centraid chrome and the app tiles on your home screen.',
+      },
+      {
+        id: 'layout',
+        label: 'Layout',
+        section: 'Workspace',
+        icon: 'Code',
+        subtitle: 'Density and surface treatment across every Centraid screen.',
+      },
+      {
+        id: 'workspace',
+        label: 'Workspace',
+        section: 'Workspace',
+        icon: 'Folder',
+        subtitle: 'Sidebar, navigation, and the in-app chat model.',
+      },
+      {
+        id: 'providers',
+        label: 'AI providers',
+        section: 'Models',
+        icon: 'Sparkle',
+        subtitle:
+          'Centraid auto-imports your Claude Code and Codex credentials on first launch so the coding agent rides on your existing subscription.',
+      },
+      {
+        id: 'inference',
+        label: 'Inference endpoint',
+        section: 'Models',
+        icon: 'Bolt',
+        hint: 'Custom',
+        subtitle:
+          'Route Codex through any OpenAI-compatible endpoint (Ollama, vLLM, Groq, Together, LM Studio). Your ~/.codex/auth.json and config.toml are not touched.',
+      },
+      {
+        id: 'runtime',
+        label: 'Where apps run',
+        section: 'Runtime',
+        icon: 'Monitor',
+        subtitle:
+          'Local mode runs apps inside this Electron process. Remote mode delegates to the Centraid gateway so they’re reachable from any device.',
+      },
+      {
+        id: 'sync',
+        label: 'Sync & backups',
+        section: 'Runtime',
+        icon: 'History',
+        subtitle:
+          'Keep apps, drafts, and chats in sync across your devices and back up automatically.',
+      },
     ];
-    const innerNav = el('div', { class: 'cd-settings-nav' });
-    const contentArea = el('div', { class: 'cd-settings-content' });
-    innerNav.append(el('div', { class: 'cd-settings-nav-eyebrow' }, 'Settings · Personal'));
+
+    const innerNav = el('aside', { class: 'cd-settings-nav' });
+    const contentArea = el('section', { class: 'cd-settings-content' });
+    innerNav.append(
+      el('div', { class: 'cd-settings-nav-head' }, [
+        el('div', { class: 'cd-settings-nav-eyebrow' }, 'Settings'),
+        el('div', { class: 'cd-settings-nav-title' }, 'Personal'),
+      ]),
+    );
 
     // §C4 — pages whose controls persist on change carry an "Auto-saved"
     // marker; the credential pages (inference, runtime) keep their
@@ -4043,18 +4237,23 @@
       for (const [pid, btn] of navButtons) {
         btn.dataset.active = String(pid === id);
       }
-      const head = el('div', { class: 'cd-settings-page-head' }, [
-        el('h2', { class: 'cd-settings-page-title' }, def ? def.label : 'Settings'),
+      const titleRow = el('div', { class: 'cd-settings-page-titlerow' }, [
+        el('h1', { class: 'cd-settings-page-title' }, def ? def.label : 'Settings'),
         ...(autoSavePages.has(id)
           ? [
               el('span', {
                 class: 'cd-settings-autosaved',
-                trustedHtml: `${Icon.Check({ size: 11, strokeWidth: 2.5 })}<span>Auto-saved</span>`,
+                trustedHtml: `${Icon.Check({ size: 10, strokeWidth: 2.5 })}<span>Auto-saved</span>`,
               }),
             ]
           : []),
       ]);
+      const head = el('header', { class: 'cd-settings-page-head' }, [
+        titleRow,
+        ...(def ? [el('p', { class: 'cd-settings-page-sub' }, def.subtitle)] : []),
+      ]);
       contentArea.replaceChildren(head, pageHosts[id]);
+      contentArea.scrollTop = 0;
     };
     let lastSection = '';
     for (const p of settingsPages) {
@@ -4062,17 +4261,30 @@
         innerNav.append(el('div', { class: 'cd-settings-nav-section' }, p.section));
         lastSection = p.section;
       }
+      const btnChildren: HTMLElement[] = [
+        el('span', {
+          class: 'cd-settings-nav-icon',
+          trustedHtml: Icon[p.icon] ? Icon[p.icon]({ size: 14 }) : Icon.Folder({ size: 14 }),
+        }),
+        el('span', { class: 'cd-settings-nav-label' }, p.label),
+      ];
+      if (p.hint) btnChildren.push(el('span', { class: 'cd-settings-nav-hint' }, p.hint));
       const btn = el(
         'button',
         { class: 'cd-settings-nav-item', type: 'button', onClick: () => showSettingsPage(p.id) },
-        p.label,
+        btnChildren,
       );
       navButtons.set(p.id, btn);
       innerNav.append(btn);
     }
+    innerNav.append(
+      el('div', { class: 'cd-settings-nav-foot' }, [
+        el('span', { class: 'cd-settings-nav-ver' }, 'v0.5.2'),
+      ]),
+    );
 
     const settingsShell = el('div', { class: 'cd-settings-shell' }, [innerNav, contentArea]);
-    scroll.append(settingsShell);
+    main.append(settingsShell);
     showSettingsPage('appearance');
 
     const sidebar = buildHomeSidebar({ page: 'settings' });
@@ -4089,25 +4301,34 @@
     root.append(shell);
   }
 
+  // §C — RefinedSettingsV2 `Sec`: a titled section — a plain bold heading
+  // above a body of rows that sits under a hairline rule.
   function drawerGroup(label: string, rows: HTMLElement[]): HTMLElement {
     return el('div', { class: 'drawer-group' }, [
       el('div', { class: 'drawer-group-label' }, label),
-      ...rows,
+      el('div', { class: 'drawer-group-body' }, rows),
     ]);
   }
-  function drawerRow(label: string, control: HTMLElement): HTMLElement {
-    return el('div', { class: 'drawer-row' }, [
-      el('span', { class: 'drawer-row-label' }, label),
-      control,
-    ]);
-  }
-  // Inline variant — label on the left, control on the right (used by the
-  // Tweaks switches "Cool blue cast" and "Sidebar visible").
-  function drawerRowInline(label: string, control: HTMLElement): HTMLElement {
-    return el('div', { class: 'drawer-row drawer-row-inline' }, [
-      el('span', { class: 'drawer-row-label' }, label),
-      control,
-    ]);
+  // §C — RefinedSettingsV2 `Row`: a two-column grid — a label + hint
+  // stack on the left, the control on the right. `full` stacks the
+  // control below the label across the whole row width.
+  function drawerRowH(
+    label: string,
+    hint: string,
+    control: HTMLElement,
+    full = false,
+  ): HTMLElement {
+    return el(
+      'div',
+      { class: full ? 'drawer-row drawer-row-full' : 'drawer-row drawer-row-grid' },
+      [
+        el('div', { class: 'drawer-row-head' }, [
+          el('span', { class: 'drawer-row-label' }, label),
+          el('span', { class: 'drawer-row-hint' }, hint),
+        ]),
+        el('div', { class: 'drawer-row-control' }, [control]),
+      ],
+    );
   }
   function makeSwitch(initial: boolean, onChange: (next: boolean) => void): HTMLElement {
     let on = initial;
@@ -4127,21 +4348,35 @@
     });
     return btn;
   }
+  // §C — RefinedSettingsV2 accent picker: a labelled swatch card per
+  // accent (a color bar + a name caption); the active card wears an ink
+  // border. Names match the proposal copy (Electric / Violet / …).
   function makeSwatches(selected: AccentKey, onSelect: (value: AccentKey) => void): HTMLElement {
-    const order: AccentKey[] = ['blue', 'violet', 'teal', 'ochre', 'rose'];
+    const order: ReadonlyArray<{ key: AccentKey; name: string }> = [
+      { key: 'blue', name: 'Electric' },
+      { key: 'violet', name: 'Violet' },
+      { key: 'teal', name: 'Teal' },
+      { key: 'ochre', name: 'Ochre' },
+      { key: 'rose', name: 'Rose' },
+    ];
     const wrap = el('div', { class: 'cd-swatches', role: 'radiogroup', 'aria-label': 'Accent' });
-    for (const key of order) {
+    for (const { key, name } of order) {
       const swatch = ACCENT_PALETTE[key];
-      const btn = el('button', {
-        'aria-checked': String(key === selected),
-        'aria-label': key,
-        class: 'cd-swatch',
-        'data-active': String(key === selected),
-        role: 'radio',
-        style: { background: swatch.accent },
-        type: 'button',
-      });
-      btn.innerHTML = Icon.Check({ size: 14, strokeWidth: 2.5 });
+      const btn = el(
+        'button',
+        {
+          'aria-checked': String(key === selected),
+          'aria-label': name,
+          class: 'cd-swatch',
+          'data-active': String(key === selected),
+          role: 'radio',
+          type: 'button',
+        },
+        [
+          el('span', { class: 'cd-swatch-chip', style: { background: swatch.accent } }),
+          el('span', { class: 'cd-swatch-name' }, name),
+        ],
+      );
       btn.addEventListener('click', () => {
         for (const child of wrap.children) {
           (child as HTMLElement).dataset.active = 'false';

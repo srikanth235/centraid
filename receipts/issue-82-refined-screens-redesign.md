@@ -289,6 +289,41 @@ Cloud: stat-tile values jump to a 24px display weight on a faint
 `nowrap` so "Reachable" / "Loading…" no longer wrap. Verified by
 Electron screenshots against the three proposal artboards.
 
+**Pixel-match Settings + command palette (2026-05-20).** A fidelity pass
+taking the Settings screen and the ⌘K command palette to a pixel match
+of the refined proposal artboards (`RefinedSettingsV2` /
+`RefinedSearch`). Command palette (`openCommandPalette`): the input
+becomes a row with a leading search glyph and a trailing `esc` chip; a
+footer hint bar (`cd-palette-footer`) was added — navigate ↑↓ / open ↵ /
+open in new window ⌘↵ / esc close. Result groups are now Build / Apps /
+Chats / Settings: Build leads with an accent-chip primary action ("Build
+<query>" or "Build a new app") plus a "Browse templates" row, each
+carrying a per-row `↵` kbd hint; Apps rows render the gradient app-icon
+tile (`cd-palette-row-tile`) with a right-aligned mono timestamp; a new
+Chats group surfaces recent builder conversations; Settings rows carry a
+one-line blurb. The card was retuned to a 16px radius over a 78%-`--bg`
+6px-blur backdrop. Settings (`renderSettingsAsync`): the inner shell is
+rebuilt as a two-column `main` grid — a 232px category nav beside an
+independently scrolling content pane. The nav (`cd-settings-nav`) rides
+a faint ink wash with a `Settings / Personal` header, grouped sections
+(Workspace / Models / Runtime) where each item is an icon + label +
+optional mono hint, and a `v0.5.2` footer. Each page opens with a
+`PageHead` — a 26px display title (auto-saved marker inline where
+applicable) above a 13.5px subtitle line. `drawerGroup` became the
+proposal `Sec` (a plain bold heading above a hairline-topped body);
+`drawerRowH` is the `Row` two-column grid (label + hint left, control
+right, with a `full` stacked variant). Within Settings the segmented
+control renders as the inline bordered `Seg`, `cd-switch` as the 34×20
+accent `Tog`, and `makeSwatches` as labelled accent-swatch cards
+(Electric / Violet / Teal / Ochre / Rose). The Appearance Mode control
+gains an Auto option (resolves the OS `prefers-color-scheme` one-shot —
+no new persisted state); the App-tiles treatment + a 4-up live preview
+grid (`ap-preview`) moved onto the Appearance page; the inference page
+was split into Provider / Connection / Credentials sections. All
+settings persistence, theme application, provider config, and palette
+search/keyboard handling were preserved. Verified by Electron
+screenshots against the proposal artboards.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).
