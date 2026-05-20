@@ -125,6 +125,7 @@ export default definePluginEntry({
       chatRunner,
       runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
       automationStore,
+      gatewayDb: gatewayDbProvider,
       // After every successful publish, sync runs against the new
       // version's `automations/` (handled inside `handleAppUpload`).
       // Once the mirror is updated, reconcile the host against the
@@ -160,6 +161,7 @@ export default definePluginEntry({
         const entry = runtime.registry.get(appId);
         return entry?.path;
       },
+      gatewayDbProvider,
       logger: api.logger,
     });
 

@@ -1,73 +1,60 @@
 /*
- * AutomationRunsStore — per-app run audit + ctx.state backing file.
+ * AutomationRunsStore — automation run audit + ctx.state surface.
  *
- * Lives in a separate SQLite file, `automations.sqlite`, next to the
- * app's `data.sqlite` and `logs.jsonl`. Owned exclusively by the
- * runtime; never reachable from the handler's `db` proxy or the
- * `centraid_sql_*` agent tools (see issue #80). Three tables:
+ * The three tables — `automation_runs`, `automation_run_nodes`,
+ * `automation_state` — live in the central gateway DB
+ * (`centraid-gateway.sqlite`), alongside `users`, `chat_sessions`, and
+ * the `automations` mirror. The DDL is in `gateway-db.ts`
+ * MIGRATIONS[2]. Folding the audit into the gateway DB (it was a
+ * per-app `automations.sqlite` file) lets a cross-app `ctx.invoke`
+ * child run link its `parent_run_id` self-FK into one joinable DAG —
+ * a self-FK can't cross SQLite files.
  *
- *   runs       — one row per automation fire (scheduled/manual/replay/
- *                on_failure). Carries parent_run_id for sub-invocations,
- *                handler-return summary, validated output_json.
- *   run_nodes  — one row per ctx.tool / ctx.agent call inside a run.
- *                Promise.all-batched calls share a `batch_id`.
- *   state      — per-(automation_name, key) KV used by ctx.state.
+ *   automation_runs       — one row per automation fire (scheduled/
+ *                           manual/replay/on_failure). Carries
+ *                           parent_run_id for sub-invocations,
+ *                           handler-return summary, validated
+ *                           output_json, an `origin_app_id`.
+ *   automation_run_nodes  — one row per ctx.tool / ctx.agent /
+ *                           ctx.invoke call inside a run.
+ *                           Promise.all-batched calls share a
+ *                           `batch_id`.
+ *   automation_state      — per-(origin_app_id, automation_name, key)
+ *                           KV used by ctx.state.
  *
- * Schema, migrations, and row types live in `automation-runs-schema.ts`
- * so callers (e.g. desktop UI) can import the row shapes without
- * pulling in the SQLite-backed implementation.
+ * The store is runtime-owned: it is never reachable from the handler's
+ * `db` proxy or the `centraid_sql_*` agent tools (those only ever see
+ * an app's `data.sqlite`).
+ *
+ * Each store instance is bound to one `originAppId`; name-scoped reads
+ * and writes are filtered to that app. `forApp(otherId)` returns a
+ * sibling store sharing the same `DatabaseProvider` (same cached
+ * connection) bound to a different app — used by cross-app `ctx.invoke`
+ * so a child run is recorded under the target app.
+ *
+ * Row types live in `automation-runs-schema.ts`; the prepared-statement
+ * block + raw-row mappers live in `automation-runs-store-sql.ts`.
  */
 
-import { type DatabaseSync, type StatementSync } from 'node:sqlite';
-import {
-  openAutomationsDb,
-  type AutomationRunRow,
-  type AutomationRunNodeRow,
-  type AutomationStateEntry,
-  type AutomationTriggerKind,
-  type AutomationRunNodeKind,
+import { type DatabaseSync } from 'node:sqlite';
+import type { DatabaseProvider } from './gateway-db.js';
+import type {
+  AutomationRunRow,
+  AutomationRunNodeRow,
+  AutomationStateEntry,
+  AutomationTriggerKind,
+  AutomationRunNodeKind,
 } from './automation-runs-schema.js';
-
-interface RawRun {
-  run_id: string;
-  automation_name: string;
-  trigger_kind: string;
-  parent_run_id: string | null;
-  input_json: string | null;
-  started_at: number;
-  ended_at: number | null;
-  ok: number;
-  error: string | null;
-  summary: string | null;
-  output_json: string | null;
-  pinned: number;
-}
-
-interface RawNode {
-  node_id: string;
-  run_id: string;
-  ordinal: number;
-  batch_id: number | null;
-  kind: string;
-  name: string;
-  args_json: string | null;
-  output_json: string | null;
-  ok: number;
-  error: string | null;
-  started_at: number;
-  ended_at: number | null;
-  duration_ms: number | null;
-  input_tokens: number | null;
-  output_tokens: number | null;
-  child_run_id: string | null;
-}
-
-interface RawState {
-  automation_name: string;
-  key: string;
-  value_json: string;
-  updated_at: number;
-}
+import {
+  prepare,
+  runFromRaw,
+  nodeFromRaw,
+  stateFromRaw,
+  type PreparedStatements,
+  type RawRun,
+  type RawNode,
+  type RawState,
+} from './automation-runs-store-sql.js';
 
 export interface InsertRunInput {
   readonly runId: string;
@@ -113,168 +100,38 @@ export interface ListRunsOptions {
   readonly limit?: number;
 }
 
-interface PreparedStatements {
-  insertRun: StatementSync;
-  finishRun: StatementSync;
-  getRun: StatementSync;
-  listRunsByName: StatementSync;
-  listRunsAll: StatementSync;
-  lastRunByName: StatementSync;
-  setPinned: StatementSync;
-  pinnedRunByName: StatementSync;
-  listChildRunsByParent: StatementSync;
-  insertNode: StatementSync;
-  listNodesByRun: StatementSync;
-  upsertState: StatementSync;
-  getState: StatementSync;
-  deleteState: StatementSync;
-  pruneByCount: StatementSync;
-  pruneByDays: StatementSync;
-  pruneErrorsOnly: StatementSync;
-  countRunsByName: StatementSync;
-}
-
-function runFromRaw(raw: RawRun): AutomationRunRow {
-  return {
-    runId: raw.run_id,
-    automationName: raw.automation_name,
-    triggerKind: raw.trigger_kind as AutomationTriggerKind,
-    ...(raw.parent_run_id !== null ? { parentRunId: raw.parent_run_id } : {}),
-    ...(raw.input_json !== null ? { inputJson: raw.input_json } : {}),
-    startedAt: raw.started_at,
-    ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
-    ok: raw.ok !== 0,
-    ...(raw.error !== null ? { error: raw.error } : {}),
-    ...(raw.summary !== null ? { summary: raw.summary } : {}),
-    ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
-    pinned: raw.pinned !== 0,
-  };
-}
-
-function nodeFromRaw(raw: RawNode): AutomationRunNodeRow {
-  return {
-    nodeId: raw.node_id,
-    runId: raw.run_id,
-    ordinal: raw.ordinal,
-    ...(raw.batch_id !== null ? { batchId: raw.batch_id } : {}),
-    kind: raw.kind as AutomationRunNodeKind,
-    name: raw.name,
-    ...(raw.args_json !== null ? { argsJson: raw.args_json } : {}),
-    ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
-    ok: raw.ok !== 0,
-    ...(raw.error !== null ? { error: raw.error } : {}),
-    startedAt: raw.started_at,
-    ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
-    ...(raw.duration_ms !== null ? { durationMs: raw.duration_ms } : {}),
-    ...(raw.input_tokens !== null ? { inputTokens: raw.input_tokens } : {}),
-    ...(raw.output_tokens !== null ? { outputTokens: raw.output_tokens } : {}),
-    ...(raw.child_run_id !== null ? { childRunId: raw.child_run_id } : {}),
-  };
-}
-
-function stateFromRaw(raw: RawState): AutomationStateEntry {
-  return {
-    automationName: raw.automation_name,
-    key: raw.key,
-    valueJson: raw.value_json,
-    updatedAt: raw.updated_at,
-  };
-}
-
-function prepare(db: DatabaseSync): PreparedStatements {
-  return {
-    insertRun: db.prepare(`
-      INSERT INTO runs (run_id, automation_name, trigger_kind, parent_run_id, input_json, started_at, ok)
-      VALUES (?, ?, ?, ?, ?, ?, 0)
-    `),
-    finishRun: db.prepare(`
-      UPDATE runs SET ended_at = ?, ok = ?, error = ?, summary = ?, output_json = ? WHERE run_id = ?
-    `),
-    getRun: db.prepare(`SELECT * FROM runs WHERE run_id = ?`),
-    listRunsByName: db.prepare(`
-      SELECT * FROM runs
-      WHERE automation_name = ?
-        AND (? IS NULL OR started_at >= ?)
-        AND (? IS NULL OR ok = ?)
-      ORDER BY started_at DESC LIMIT ?
-    `),
-    listRunsAll: db.prepare(`
-      SELECT * FROM runs
-      WHERE (? IS NULL OR started_at >= ?)
-        AND (? IS NULL OR ok = ?)
-      ORDER BY started_at DESC LIMIT ?
-    `),
-    lastRunByName: db.prepare(`
-      SELECT * FROM runs
-      WHERE automation_name = ? AND (? IS NULL OR ok = ?)
-      ORDER BY started_at DESC LIMIT 1
-    `),
-    setPinned: db.prepare(`UPDATE runs SET pinned = ? WHERE run_id = ?`),
-    pinnedRunByName: db.prepare(`
-      SELECT * FROM runs
-      WHERE automation_name = ? AND pinned = 1
-      ORDER BY started_at DESC LIMIT 1
-    `),
-    listChildRunsByParent: db.prepare(`
-      SELECT * FROM runs WHERE parent_run_id = ? ORDER BY started_at ASC
-    `),
-    insertNode: db.prepare(`
-      INSERT INTO run_nodes (
-        node_id, run_id, ordinal, batch_id, kind, name,
-        args_json, output_json, ok, error,
-        started_at, ended_at, duration_ms, input_tokens, output_tokens, child_run_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `),
-    listNodesByRun: db.prepare(`
-      SELECT * FROM run_nodes WHERE run_id = ? ORDER BY ordinal ASC, started_at ASC
-    `),
-    upsertState: db.prepare(`
-      INSERT INTO state (automation_name, key, value_json, updated_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(automation_name, key) DO UPDATE SET
-        value_json = excluded.value_json,
-        updated_at = excluded.updated_at
-    `),
-    getState: db.prepare(`SELECT * FROM state WHERE automation_name = ? AND key = ?`),
-    deleteState: db.prepare(`DELETE FROM state WHERE automation_name = ? AND key = ?`),
-    pruneByCount: db.prepare(`
-      DELETE FROM runs
-      WHERE automation_name = ?
-        AND pinned = 0
-        AND run_id NOT IN (
-          SELECT run_id FROM runs WHERE automation_name = ? ORDER BY started_at DESC LIMIT ?
-        )
-    `),
-    pruneByDays: db.prepare(
-      `DELETE FROM runs WHERE automation_name = ? AND pinned = 0 AND started_at < ?`,
-    ),
-    pruneErrorsOnly: db.prepare(
-      `DELETE FROM runs WHERE automation_name = ? AND pinned = 0 AND ok = 1`,
-    ),
-    countRunsByName: db.prepare(`SELECT COUNT(*) AS c FROM runs WHERE automation_name = ?`),
-  };
-}
-
 /**
- * Lazy wrapper around the per-app `automations.sqlite` connection.
+ * Store over the gateway DB's automation run-audit tables.
  *
- * Construct once per app at the call site that owns the run lifecycle
- * (automation-handler-runner). The file is opened on first method call
- * — opening it eagerly would create the file before any automation has
- * fired, which the issue explicitly forbids.
+ * Construct with a shared `DatabaseProvider` (the same one `UserStore`
+ * / `ChatHistoryStore` / `AutomationStore` use) and the `originAppId`
+ * the store's name-scoped reads/writes belong to. The connection is
+ * opened lazily by the provider on first method call.
  */
 export class AutomationRunsStore {
-  private readonly dbPath: string;
+  private readonly provider: DatabaseProvider;
+  private readonly originAppId: string | null;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
 
-  constructor(dbPath: string) {
-    this.dbPath = dbPath;
+  constructor(provider: DatabaseProvider, originAppId: string | null) {
+    this.provider = provider;
+    this.originAppId = originAppId;
+  }
+
+  /**
+   * Return a sibling store bound to a different app, sharing this
+   * store's provider (so they share one cached connection). Used by
+   * cross-app `ctx.invoke` so the child run is recorded under the
+   * target app.
+   */
+  forApp(originAppId: string): AutomationRunsStore {
+    return new AutomationRunsStore(this.provider, originAppId);
   }
 
   private ensureReady(): { db: DatabaseSync; stmts: PreparedStatements } {
     if (this.db && this.stmts) return { db: this.db, stmts: this.stmts };
-    const db = openAutomationsDb(this.dbPath);
+    const db = this.provider();
     const stmts = prepare(db);
     this.db = db;
     this.stmts = stmts;
@@ -285,6 +142,7 @@ export class AutomationRunsStore {
     const { stmts } = this.ensureReady();
     stmts.insertRun.run(
       input.runId,
+      this.originAppId,
       input.automationName,
       input.triggerKind,
       input.parentRunId ?? null,
@@ -323,20 +181,30 @@ export class AutomationRunsStore {
       opts.name !== undefined
         ? (stmts.listRunsByName.all(
             opts.name,
+            this.originAppId,
             since,
             since,
             okFilter,
             okFilter,
             limit,
           ) as unknown as RawRun[])
-        : (stmts.listRunsAll.all(since, since, okFilter, okFilter, limit) as unknown as RawRun[]);
+        : (stmts.listRunsAll.all(
+            this.originAppId,
+            since,
+            since,
+            okFilter,
+            okFilter,
+            limit,
+          ) as unknown as RawRun[]);
     return rows.map(runFromRaw);
   }
 
   lastRun(name: string, status?: 'ok' | 'error'): AutomationRunRow | undefined {
     const { stmts } = this.ensureReady();
     const okFilter = status === undefined ? null : status === 'ok' ? 1 : 0;
-    const raw = stmts.lastRunByName.get(name, okFilter, okFilter) as RawRun | undefined;
+    const raw = stmts.lastRunByName.get(name, this.originAppId, okFilter, okFilter) as
+      | RawRun
+      | undefined;
     return raw ? runFromRaw(raw) : undefined;
   }
 
@@ -353,7 +221,7 @@ export class AutomationRunsStore {
   /** Most recent pinned run for an automation, or undefined when none is pinned. */
   pinnedRun(name: string): AutomationRunRow | undefined {
     const { stmts } = this.ensureReady();
-    const raw = stmts.pinnedRunByName.get(name) as RawRun | undefined;
+    const raw = stmts.pinnedRunByName.get(name, this.originAppId) as RawRun | undefined;
     return raw ? runFromRaw(raw) : undefined;
   }
 
@@ -394,30 +262,30 @@ export class AutomationRunsStore {
 
   stateGet(name: string, key: string): AutomationStateEntry | undefined {
     const { stmts } = this.ensureReady();
-    const raw = stmts.getState.get(name, key) as RawState | undefined;
+    const raw = stmts.getState.get(this.originAppId, name, key) as RawState | undefined;
     return raw ? stateFromRaw(raw) : undefined;
   }
 
   stateSet(name: string, key: string, valueJson: string, updatedAt: number): void {
     const { stmts } = this.ensureReady();
-    stmts.upsertState.run(name, key, valueJson, updatedAt);
+    stmts.upsertState.run(this.originAppId, name, key, valueJson, updatedAt);
   }
 
   stateDelete(name: string, key: string): void {
     const { stmts } = this.ensureReady();
-    stmts.deleteState.run(name, key);
+    stmts.deleteState.run(this.originAppId, name, key);
   }
 
   countRuns(name: string): number {
     const { stmts } = this.ensureReady();
-    const raw = stmts.countRunsByName.get(name) as { c: number } | undefined;
+    const raw = stmts.countRunsByName.get(name, this.originAppId) as { c: number } | undefined;
     return raw?.c ?? 0;
   }
 
   /**
    * Apply a `history.keep` retention policy for an automation. Cascading
-   * FKs drop the orphaned `run_nodes`. Runs at end-of-run (resolved per
-   * the issue's "retention timing" open question).
+   * FKs drop the orphaned `automation_run_nodes`. Runs at end-of-run
+   * (resolved per the issue's "retention timing" open question).
    */
   prune(
     name: string,
@@ -426,26 +294,38 @@ export class AutomationRunsStore {
     const { stmts } = this.ensureReady();
     if (keep.all) return;
     if (keep.errorsOnly) {
-      stmts.pruneErrorsOnly.run(name);
+      stmts.pruneErrorsOnly.run(name, this.originAppId);
       return;
     }
     if (keep.count !== undefined && keep.count >= 0) {
-      stmts.pruneByCount.run(name, name, keep.count);
+      stmts.pruneByCount.run(name, this.originAppId, name, this.originAppId, keep.count);
       return;
     }
     if (keep.days !== undefined && keep.days >= 0) {
       const cutoff = Date.now() - keep.days * 24 * 60 * 60 * 1000;
-      stmts.pruneByDays.run(name, cutoff);
+      stmts.pruneByDays.run(name, this.originAppId, cutoff);
     }
   }
 
+  /**
+   * Drop every run + state row for this store's bound `originAppId`.
+   * `automation_run_nodes` cascade off `automation_runs`. Called when
+   * the owning app is deregistered.
+   */
+  deleteAppData(): void {
+    const { stmts } = this.ensureReady();
+    stmts.deleteRunsByApp.run(this.originAppId);
+    stmts.deleteStateByApp.run(this.originAppId);
+  }
+
+  /**
+   * No-op. The gateway DB connection is owned by the host's
+   * `DatabaseProvider` and shared with `UserStore` / `ChatHistoryStore`
+   * / `AutomationStore` — closing it mid-fire would break them. Kept
+   * for call-site compatibility; only the cached prepared statements
+   * are cleared.
+   */
   close(): void {
-    if (!this.db) return;
-    try {
-      this.db.close();
-    } catch {
-      /* ignore */
-    }
     this.db = undefined;
     this.stmts = undefined;
   }

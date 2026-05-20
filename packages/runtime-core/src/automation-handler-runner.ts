@@ -13,9 +13,9 @@
  *   3. Tool calls arrive in batches; each call becomes one `run_nodes`
  *      audit row. There is no runtime retry — a failed `ctx.tool`
  *      rejects the handler Promise (see `automation-handler-ctx.ts`).
- *   4. (Issue #80) Every ctx surface call lands in the per-app
- *      `automations.sqlite`. `ctx.state` / `ctx.runs` read+write the
- *      same file. Retention runs at end-of-run per
+ *   4. (Issue #80) Every ctx surface call lands in the gateway DB's
+ *      automation run-audit tables. `ctx.state` / `ctx.runs` read+write
+ *      the same store. Retention runs at end-of-run per
  *      `manifest.history.keep`.
  */
 
@@ -117,7 +117,7 @@ export interface RunAutomationHandlerOptions {
   toolDispatcher: AutomationToolDispatcher;
   agentDispatcher: AutomationAgentDispatcher;
   invokeDispatcher?: AutomationInvokeDispatcher;
-  /** Per-app `automations.sqlite` store for audit + ctx.state + ctx.runs. */
+  /** Gateway-DB-backed run-audit store for audit + ctx.state + ctx.runs. */
   runsStore: AutomationRunsStore;
   triggerKind?: AutomationTriggerKind;
   input?: unknown;

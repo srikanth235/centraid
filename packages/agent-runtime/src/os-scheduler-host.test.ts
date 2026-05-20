@@ -27,6 +27,7 @@ function setup(): {
   const host = new OsSchedulerHost({
     resolveAppDir: (appId) => `/persistent/apps/${appId}`,
     centraidBin: '/usr/local/bin/centraid',
+    gatewayDbPath: '/persistent/centraid-gateway.sqlite',
     runner: 'codex',
     os: { execShell, platform: 'darwin', artifactRoot },
   });
@@ -35,14 +36,14 @@ function setup(): {
 
 function row(overrides: Partial<AutomationRow> = {}): AutomationRow {
   return {
-    appId: 'todos',
+    originAppId: 'todos',
     name: 'daily-digest',
     prompt: 'do the thing',
     cronExpr: '0 17 * * 1-5',
     enabled: true,
     manifest: {
       prompt: 'do the thing',
-      schedule: '0 17 * * 1-5',
+      trigger: { kind: 'cron', expr: '0 17 * * 1-5' },
       action: 'daily-digest.js',
       requires: { model: 'anthropic/claude-3-5-sonnet' },
       generated: { by: 'template', at: '2026-05-19T00:00:00Z' },
@@ -132,9 +133,9 @@ describe('OsSchedulerHost', () => {
   it('reconcile with scope.appId only touches that app — other apps survive', async () => {
     // Two apps, one automation each, both installed.
     const ctx = setup();
-    await ctx.host.register(row({ appId: 'todos', name: 'daily-digest' }));
+    await ctx.host.register(row({ originAppId: 'todos', name: 'daily-digest' }));
     await ctx.host.register(
-      row({ appId: 'journal', name: 'weekly-recap', cronExpr: '0 20 * * 0' }),
+      row({ originAppId: 'journal', name: 'weekly-recap', cronExpr: '0 20 * * 0' }),
     );
     const before = await ctx.host.list();
     assert.deepEqual([...before].sort(), [
@@ -145,7 +146,7 @@ describe('OsSchedulerHost', () => {
     // Scoped reconcile against todos' rows. The desired set only
     // contains the existing todos entry, so journal's row appears
     // "absent" — but because we scope, journal's entry must survive.
-    const result = await ctx.host.reconcile([row({ appId: 'todos', name: 'daily-digest' })], {
+    const result = await ctx.host.reconcile([row({ originAppId: 'todos', name: 'daily-digest' })], {
       scope: { appId: 'todos' },
     });
     assert.deepEqual(result.added, []);
@@ -172,8 +173,8 @@ describe('OsSchedulerHost', () => {
     const ctx = setup();
     await ctx.host.reconcile(
       [
-        row({ appId: 'todos', name: 'daily-digest' }),
-        row({ appId: 'journal', name: 'leak', cronExpr: '0 9 * * *' }),
+        row({ originAppId: 'todos', name: 'daily-digest' }),
+        row({ originAppId: 'journal', name: 'leak', cronExpr: '0 9 * * *' }),
       ],
       { scope: { appId: 'todos' } },
     );

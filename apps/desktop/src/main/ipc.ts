@@ -36,7 +36,6 @@ import {
   AutomationRunsStore,
   AutomationStore,
   automationEnabledKey,
-  automationsDbPath,
   deleteAppSetting,
   makeGatewayDbProvider,
   readActiveCodeDir,
@@ -45,6 +44,7 @@ import {
   type AutomationRow,
   type AutomationRunNodeRow,
   type AutomationRunRow,
+  type DatabaseProvider,
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
@@ -562,17 +562,22 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  // ----- Automations (issue #70) -----
-  // The desktop reads the per-gateway automations mirror table directly.
-  // The store is opened lazily; the local runtime owns the actual DB
-  // handle so we wrap the same `localRuntimeGatewayDb()` path here.
+  // ----- Automations (issue #70 / #80) -----
+  // The desktop reads the gateway DB directly — the automations mirror
+  // and (issue #80) the automation run-audit tables. One lazily-opened
+  // provider over `localRuntimeGatewayDb()` is shared by every store
+  // built here so they ride a single connection.
+  const getGatewayDbProvider = (() => {
+    let provider: DatabaseProvider | undefined;
+    return (): DatabaseProvider => {
+      if (!provider) provider = makeGatewayDbProvider(localRuntimeGatewayDb());
+      return provider;
+    };
+  })();
   const getAutomationStore = (() => {
     let store: AutomationStore | undefined;
     return (): AutomationStore => {
-      if (!store) {
-        const provider = makeGatewayDbProvider(localRuntimeGatewayDb());
-        store = new AutomationStore(provider);
-      }
+      if (!store) store = new AutomationStore(getGatewayDbProvider());
       return store;
     };
   })();
@@ -603,53 +608,51 @@ export function registerIpcHandlers(): void {
       // when fired by the OS scheduler.
       const codeDir = await readActiveCodeDir(appDir);
       const prefs = await loadRunnerPrefs();
-      const runsStore = new AutomationRunsStore(automationsDbPath(appDir));
-      try {
-        // Replay mode (issue #80 follow-up) — serve the run from the
-        // automation's pinned fixture instead of live tools.
-        let replayFromRunId: string | undefined;
-        if (input.replay) {
-          const pinned = runsStore.pinnedRun(input.name);
-          if (!pinned) {
-            throw new Error(
-              `No pinned run for "${input.name}" — pin a successful run first, then replay it.`,
-            );
-          }
-          replayFromRunId = pinned.runId;
+      const gatewayDb = getGatewayDbProvider();
+      const runsStore = new AutomationRunsStore(gatewayDb, input.appId);
+      // Replay mode (issue #80 follow-up) — serve the run from the
+      // automation's pinned fixture instead of live tools.
+      let replayFromRunId: string | undefined;
+      if (input.replay) {
+        const pinned = runsStore.pinnedRun(input.name);
+        if (!pinned) {
+          throw new Error(
+            `No pinned run for "${input.name}" — pin a successful run first, then replay it.`,
+          );
         }
-        // Cross-app ctx.invoke resolver — any registered app under the
-        // local apps dir is reachable via `ctx.invoke('appId/name')`.
-        const resolveApp = async (
-          otherId: string,
-        ): Promise<{ appDir: string; codeDir: string } | undefined> => {
-          const otherDir = path.join(localRuntimeAppsDir(), otherId);
-          try {
-            await fs.access(otherDir);
-          } catch {
-            return undefined;
-          }
-          return { appDir: otherDir, codeDir: await readActiveCodeDir(otherDir) };
-        };
-        const { outcome, record } = await runAutomationLocal({
-          appId: input.appId,
-          appDir,
-          codeDir,
-          automationName: input.name,
-          runner: prefs.kind,
-          runsStore,
-          resolveApp,
-          ...(replayFromRunId ? { replayFromRunId } : {}),
-        });
-        return {
-          ok: outcome.ok,
-          durationMs: record.durationMs,
-          ...(outcome.error ? { error: outcome.error } : {}),
-          toolBatches: record.toolBatches,
-          agentCalls: record.agentCalls,
-        };
-      } finally {
-        runsStore.close();
+        replayFromRunId = pinned.runId;
       }
+      // Cross-app ctx.invoke resolver — any registered app under the
+      // local apps dir is reachable via `ctx.invoke('appId/name')`.
+      const resolveApp = async (
+        otherId: string,
+      ): Promise<{ appDir: string; codeDir: string } | undefined> => {
+        const otherDir = path.join(localRuntimeAppsDir(), otherId);
+        try {
+          await fs.access(otherDir);
+        } catch {
+          return undefined;
+        }
+        return { appDir: otherDir, codeDir: await readActiveCodeDir(otherDir) };
+      };
+      const { outcome, record } = await runAutomationLocal({
+        appId: input.appId,
+        appDir,
+        codeDir,
+        automationName: input.name,
+        runner: prefs.kind,
+        runsStore,
+        gatewayDb,
+        resolveApp,
+        ...(replayFromRunId ? { replayFromRunId } : {}),
+      });
+      return {
+        ok: outcome.ok,
+        durationMs: record.durationMs,
+        ...(outcome.error ? { error: outcome.error } : {}),
+        toolBatches: record.toolBatches,
+        agentCalls: record.agentCalls,
+      };
     },
   );
 
@@ -730,61 +733,34 @@ export function registerIpcHandlers(): void {
     return { ok: true };
   });
 
-  // Run audit reads (issue #80). The per-app `automations.sqlite` file
-  // is runtime-owned and opened lazily; if no automation has fired yet
-  // the file doesn't exist and we return an empty list.
+  // Run audit reads (issue #80). The run audit lives in the central
+  // gateway DB; an app with no fired automation simply has no rows, so
+  // these return an empty list naturally.
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUNS,
     async (
       _e,
       input: { appId: string; name: string; limit?: number },
     ): Promise<AutomationRunRow[]> => {
-      const appDir = path.join(localRuntimeAppsDir(), input.appId);
-      try {
-        await fs.access(automationsDbPath(appDir));
-      } catch {
-        return [];
-      }
-      const store = new AutomationRunsStore(automationsDbPath(appDir));
-      try {
-        return store.listRuns({ name: input.name, limit: input.limit ?? 25 });
-      } finally {
-        store.close();
-      }
+      const store = new AutomationRunsStore(getGatewayDbProvider(), input.appId);
+      return store.listRuns({ name: input.name, limit: input.limit ?? 25 });
     },
   );
 
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUN_NODES,
     async (_e, input: { appId: string; runId: string }): Promise<AutomationRunNodeRow[]> => {
-      const appDir = path.join(localRuntimeAppsDir(), input.appId);
-      try {
-        await fs.access(automationsDbPath(appDir));
-      } catch {
-        return [];
-      }
-      const store = new AutomationRunsStore(automationsDbPath(appDir));
-      try {
-        return store.listNodes(input.runId);
-      } finally {
-        store.close();
-      }
+      const store = new AutomationRunsStore(getGatewayDbProvider(), input.appId);
+      return store.listNodes(input.runId);
     },
   );
 
-  // Pin / unpin a run as a replay fixture (issue #80 follow-up). The
-  // file always exists here — the user can only reach this from a run
-  // row, which means at least one run has been recorded.
+  // Pin / unpin a run as a replay fixture (issue #80 follow-up).
   ipcMain.handle(
     Channel.AUTOMATIONS_PIN_RUN,
     async (_e, input: { appId: string; runId: string; pinned: boolean }): Promise<{ ok: true }> => {
-      const appDir = path.join(localRuntimeAppsDir(), input.appId);
-      const store = new AutomationRunsStore(automationsDbPath(appDir));
-      try {
-        store.setPinned(input.runId, input.pinned);
-      } finally {
-        store.close();
-      }
+      const store = new AutomationRunsStore(getGatewayDbProvider(), input.appId);
+      store.setPinned(input.runId, input.pinned);
       return { ok: true };
     },
   );

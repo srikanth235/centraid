@@ -4,7 +4,7 @@
  * High-level flow (see issue #70 § Headless run path):
  *
  *   1. Load the manifest + resolve the handler file.
- *   2. Open the per-app `automations.sqlite` audit store.
+ *   2. Build the gateway-DB-backed run-audit store.
  *   3. Build dispatchers:
  *        - Live mode: stand up the ephemeral mock-LLM server; each
  *          `ctx.tool` batch spawns one CLI subprocess, `ctx.agent`
@@ -18,11 +18,12 @@
  *   5. On failure, fire the manifest's `onFailure` automation (depth-3
  *      capped). On success/failure, return the run record + outcome.
  *
- * `ctx.invoke` re-enters this function. Intra-app invokes link via
- * `parent_run_id`; cross-app invokes (`ctx.invoke('appId/name')`) resolve
- * the target app via the host-supplied `resolveApp` callback and run
- * against that app's own `automations.sqlite` (the `parent_run_id`
- * self-FK can't cross SQLite files, so cross-app children are unlinked).
+ * `ctx.invoke` re-enters this function. The run audit for every app
+ * lives in one central gateway DB, so a cross-app invoke
+ * (`ctx.invoke('appId/name')`) — resolved via the host-supplied
+ * `resolveApp` callback — links its child run's `parent_run_id` into
+ * the same joinable DAG as an intra-app invoke. The child run is
+ * recorded under the target app via `runsStore.forApp(targetAppId)`.
  */
 
 import { promises as fs } from 'node:fs';
@@ -30,13 +31,13 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
   AutomationRunsStore,
-  automationsDbPath,
   parseManifest,
   runAutomationHandler,
   type AutomationHandlerOutcome,
   type AutomationInvokeDispatcher,
   type AutomationManifest,
   type AutomationTriggerKind,
+  type DatabaseProvider,
 } from '@centraid/runtime-core';
 import {
   startLiveDispatch,
@@ -105,9 +106,15 @@ export interface RunAutomationLocalOptions {
    */
   failureDepth?: number;
   /**
-   * Shared `AutomationRunsStore` for the per-app `automations.sqlite`.
-   * When omitted, the host constructs one from `appDir`. Tests inject
-   * a synthetic store to keep the file out of `appDir`.
+   * Gateway DB provider for the central run-audit store. When
+   * `runsStore` is omitted, one is built from this provider bound to
+   * `appId`. Either `runsStore` or `gatewayDb` MUST be supplied.
+   */
+  gatewayDb?: DatabaseProvider;
+  /**
+   * Pre-built `AutomationRunsStore`. Mainly a test-injection seam; the
+   * recursive `ctx.invoke` / `onFailure` paths pass the parent's store
+   * through. When omitted, one is built from `gatewayDb` + `appId`.
    */
   runsStore?: AutomationRunsStore;
   /**
@@ -179,190 +186,188 @@ export async function runAutomationLocal(
     );
   });
 
-  // Per-app `automations.sqlite` — see issue #80. Constructed lazily;
-  // the file isn't created until the first row lands.
-  const runsStore = opts.runsStore ?? new AutomationRunsStore(automationsDbPath(opts.appDir));
-  // Close the SQLite handle iff we own it — a caller-injected store (or
-  // one shared with a child invoke) is the caller's to close. Without
-  // this, a long-lived host leaks one handle per fire.
-  const ownsStore = opts.runsStore === undefined;
+  // Central gateway-DB run-audit store — see issue #80. The gateway
+  // connection is host-owned (shared via the provider), so the store
+  // is never `close()`d here.
+  let runsStore: AutomationRunsStore;
+  if (opts.runsStore) {
+    runsStore = opts.runsStore;
+  } else if (opts.gatewayDb) {
+    runsStore = new AutomationRunsStore(opts.gatewayDb, opts.appId);
+  } else {
+    throw new Error(
+      `automation ${opts.appId}/${opts.automationName}: runAutomationLocal requires either runsStore or gatewayDb`,
+    );
+  }
   const failureDepth = opts.failureDepth ?? 0;
-  try {
-    const replay = opts.replayFromRunId !== undefined;
-    const triggerKind: AutomationTriggerKind = replay
-      ? 'replay'
-      : (opts.triggerKind ?? 'scheduled');
+  const replay = opts.replayFromRunId !== undefined;
+  const triggerKind: AutomationTriggerKind = replay ? 'replay' : (opts.triggerKind ?? 'scheduled');
 
-    // Replay mode shares one node cursor across all three ctx surfaces.
-    const replayDispatchers = replay
-      ? buildReplayDispatchers(runsStore, opts.replayFromRunId as string)
-      : undefined;
+  // Replay mode shares one node cursor across all three ctx surfaces.
+  const replayDispatchers = replay
+    ? buildReplayDispatchers(runsStore, opts.replayFromRunId as string)
+    : undefined;
 
-    // Live mode stands up the mock-LLM server + scratch dir.
-    let live: LiveDispatch | undefined;
-    if (!replay) {
-      live = await startLiveDispatch({
-        appDir: opts.appDir,
-        runId,
-        runner,
-        spawnCli,
-        toolsAllow: manifest.requires.tools ?? [],
-        onLog,
-      });
+  // Live mode stands up the mock-LLM server + scratch dir.
+  let live: LiveDispatch | undefined;
+  if (!replay) {
+    live = await startLiveDispatch({
+      appDir: opts.appDir,
+      runId,
+      runner,
+      spawnCli,
+      toolsAllow: manifest.requires.tools ?? [],
+      onLog,
+    });
+  }
+
+  // ctx.invoke: fire a sibling automation and return its `output`.
+  // Both intra-app and `appId/name` cross-app children link via
+  // parent_run_id (one gateway DB); `appId/name` targets a different
+  // registered app, resolved via the host `resolveApp` hook.
+  const liveInvoke: AutomationInvokeDispatcher = async (name, args) => {
+    const slash = name.indexOf('/');
+    const targetAppId = slash >= 0 ? name.slice(0, slash) : opts.appId;
+    const targetName = slash >= 0 ? name.slice(slash + 1) : name;
+    if (!targetName || targetName.includes('/')) {
+      throw new Error(`ctx.invoke("${name}"): target must be "name" or "appId/name"`);
+    }
+    const crossApp = targetAppId !== opts.appId;
+
+    let targetAppDir = opts.appDir;
+    let targetCodeDir = opts.codeDir;
+    let targetStore = runsStore;
+    if (crossApp) {
+      if (!opts.resolveApp) {
+        throw new Error(
+          `ctx.invoke("${name}"): cross-app invoke requires a host that wires resolveApp`,
+        );
+      }
+      const resolved = await opts.resolveApp(targetAppId);
+      if (!resolved) {
+        throw new Error(`ctx.invoke("${name}"): app "${targetAppId}" is not registered`);
+      }
+      targetAppDir = resolved.appDir;
+      targetCodeDir = resolved.codeDir;
+      // Same gateway DB, target app's origin id — the child run lands
+      // under the target app and its parent_run_id links into one DAG.
+      targetStore = runsStore.forApp(targetAppId);
     }
 
-    // ctx.invoke: fire a sibling automation and return its `output`.
-    // Intra-app links the child via parent_run_id; `appId/name` targets a
-    // different registered app (resolved via the host `resolveApp` hook).
-    const liveInvoke: AutomationInvokeDispatcher = async (name, args) => {
-      const slash = name.indexOf('/');
-      const targetAppId = slash >= 0 ? name.slice(0, slash) : opts.appId;
-      const targetName = slash >= 0 ? name.slice(slash + 1) : name;
-      if (!targetName || targetName.includes('/')) {
-        throw new Error(`ctx.invoke("${name}"): target must be "name" or "appId/name"`);
-      }
-      const crossApp = targetAppId !== opts.appId;
+    const child = await runAutomationLocal({
+      appId: targetAppId,
+      appDir: targetAppDir,
+      ...(targetCodeDir ? { codeDir: targetCodeDir } : {}),
+      automationName: targetName,
+      runner,
+      ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+      spawnCli,
+      onLog,
+      ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
+      ...(opts.resolveApp ? { resolveApp: opts.resolveApp } : {}),
+      ...(opts.gatewayDb ? { gatewayDb: opts.gatewayDb } : {}),
+      triggerKind: 'manual',
+      input: args.input,
+      // All run audit lives in one gateway DB, so the parent_run_id
+      // self-FK links a cross-app child too.
+      parentRunId: args.parentRunId,
+      failureDepth,
+      runsStore: targetStore,
+    });
+    if (!child.outcome.ok) {
+      const e = new Error(
+        `ctx.invoke("${name}") failed: ${child.outcome.error ?? 'unknown error'}`,
+      ) as Error & { childRunId?: string };
+      e.childRunId = child.record.runId;
+      throw e;
+    }
+    return { output: child.outcome.output, childRunId: child.record.runId };
+  };
 
-      let targetAppDir = opts.appDir;
-      let targetCodeDir = opts.codeDir;
-      let targetStore = runsStore;
-      if (crossApp) {
-        if (!opts.resolveApp) {
-          throw new Error(
-            `ctx.invoke("${name}"): cross-app invoke requires a host that wires resolveApp`,
-          );
-        }
-        const resolved = await opts.resolveApp(targetAppId);
-        if (!resolved) {
-          throw new Error(`ctx.invoke("${name}"): app "${targetAppId}" is not registered`);
-        }
-        targetAppDir = resolved.appDir;
-        targetCodeDir = resolved.codeDir;
-        targetStore = new AutomationRunsStore(automationsDbPath(resolved.appDir));
-      }
+  const outcome = await runAutomationHandler({
+    app: { id: opts.appId, dir: opts.appDir },
+    handlerFile,
+    automationName: opts.automationName,
+    runId,
+    toolDispatcher: replayDispatchers ? replayDispatchers.toolDispatcher : live!.toolDispatcher,
+    agentDispatcher: replayDispatchers ? replayDispatchers.agentDispatcher : live!.agentDispatcher,
+    invokeDispatcher: replayDispatchers ? replayDispatchers.invokeDispatcher : liveInvoke,
+    runsStore,
+    triggerKind,
+    ...(opts.input !== undefined ? { input: opts.input } : {}),
+    ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
+    ...(manifest.outputSchema ? { outputSchema: manifest.outputSchema } : {}),
+    history: manifest.history,
+    timeoutMs: opts.timeoutMs ?? 5 * 60 * 1000,
+    ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
+  });
 
-      let child: { outcome: AutomationHandlerOutcome; record: AutomationRunRecord };
+  await live?.close();
+
+  // onFailure cascade: when the handler fails (incl. timeout / output
+  // schema rejection) and the manifest names a follow-up automation,
+  // fire it with the failed run as input. Capped at depth 3 so a
+  // misconfigured pair can't loop forever. Skipped under replay — a
+  // replayed fire must not trigger a fresh live automation.
+  if (!replay && !outcome.ok && manifest.onFailure) {
+    if (failureDepth >= 3) {
+      onLog(
+        'warn',
+        `onFailure cascade for ${opts.appId}/${opts.automationName} aborted at depth ${failureDepth} (cap=3)`,
+      );
+    } else {
+      const failureInput = {
+        runId,
+        automationName: opts.automationName,
+        error: outcome.error ?? 'unknown error',
+        nodes: runsStore.listNodes(runId).map((n) => ({
+          ordinal: n.ordinal,
+          kind: n.kind,
+          name: n.name,
+          ok: n.ok,
+          ...(n.error !== undefined ? { error: n.error } : {}),
+        })),
+      };
       try {
-        child = await runAutomationLocal({
-          appId: targetAppId,
-          appDir: targetAppDir,
-          ...(targetCodeDir ? { codeDir: targetCodeDir } : {}),
-          automationName: targetName,
+        await runAutomationLocal({
+          appId: opts.appId,
+          appDir: opts.appDir,
+          ...(opts.codeDir ? { codeDir: opts.codeDir } : {}),
+          automationName: manifest.onFailure,
           runner,
           ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
           spawnCli,
           onLog,
           ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
           ...(opts.resolveApp ? { resolveApp: opts.resolveApp } : {}),
-          triggerKind: 'manual',
-          input: args.input,
-          // The parent_run_id self-FK can't cross SQLite files — only link
-          // intra-app children.
-          ...(crossApp ? {} : { parentRunId: args.parentRunId }),
-          failureDepth,
-          runsStore: targetStore,
+          ...(opts.gatewayDb ? { gatewayDb: opts.gatewayDb } : {}),
+          triggerKind: 'on_failure',
+          input: failureInput,
+          parentRunId: runId,
+          failureDepth: failureDepth + 1,
+          runsStore,
         });
-      } finally {
-        if (crossApp) targetStore.close();
-      }
-      if (!child.outcome.ok) {
-        const e = new Error(
-          `ctx.invoke("${name}") failed: ${child.outcome.error ?? 'unknown error'}`,
-        ) as Error & { childRunId?: string };
-        e.childRunId = child.record.runId;
-        throw e;
-      }
-      return { output: child.outcome.output, childRunId: child.record.runId };
-    };
-
-    const outcome = await runAutomationHandler({
-      app: { id: opts.appId, dir: opts.appDir },
-      handlerFile,
-      automationName: opts.automationName,
-      runId,
-      toolDispatcher: replayDispatchers ? replayDispatchers.toolDispatcher : live!.toolDispatcher,
-      agentDispatcher: replayDispatchers
-        ? replayDispatchers.agentDispatcher
-        : live!.agentDispatcher,
-      invokeDispatcher: replayDispatchers ? replayDispatchers.invokeDispatcher : liveInvoke,
-      runsStore,
-      triggerKind,
-      ...(opts.input !== undefined ? { input: opts.input } : {}),
-      ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-      ...(manifest.outputSchema ? { outputSchema: manifest.outputSchema } : {}),
-      history: manifest.history,
-      timeoutMs: opts.timeoutMs ?? 5 * 60 * 1000,
-      ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
-    });
-
-    await live?.close();
-
-    // onFailure cascade: when the handler fails (incl. timeout / output
-    // schema rejection) and the manifest names a follow-up automation,
-    // fire it with the failed run as input. Capped at depth 3 so a
-    // misconfigured pair can't loop forever. Skipped under replay — a
-    // replayed fire must not trigger a fresh live automation.
-    if (!replay && !outcome.ok && manifest.onFailure) {
-      if (failureDepth >= 3) {
+      } catch (err) {
         onLog(
-          'warn',
-          `onFailure cascade for ${opts.appId}/${opts.automationName} aborted at depth ${failureDepth} (cap=3)`,
+          'error',
+          `onFailure dispatch ${manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
         );
-      } else {
-        const failureInput = {
-          runId,
-          automationName: opts.automationName,
-          error: outcome.error ?? 'unknown error',
-          nodes: runsStore.listNodes(runId).map((n) => ({
-            ordinal: n.ordinal,
-            kind: n.kind,
-            name: n.name,
-            ok: n.ok,
-            ...(n.error !== undefined ? { error: n.error } : {}),
-          })),
-        };
-        try {
-          await runAutomationLocal({
-            appId: opts.appId,
-            appDir: opts.appDir,
-            ...(opts.codeDir ? { codeDir: opts.codeDir } : {}),
-            automationName: manifest.onFailure,
-            runner,
-            ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
-            spawnCli,
-            onLog,
-            ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
-            ...(opts.resolveApp ? { resolveApp: opts.resolveApp } : {}),
-            triggerKind: 'on_failure',
-            input: failureInput,
-            parentRunId: runId,
-            failureDepth: failureDepth + 1,
-            runsStore,
-          });
-        } catch (err) {
-          onLog(
-            'error',
-            `onFailure dispatch ${manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
       }
     }
-
-    const endedAt = Date.now();
-    const record: AutomationRunRecord = {
-      appId: opts.appId,
-      automationName: opts.automationName,
-      runId,
-      startedAt,
-      endedAt,
-      durationMs: endedAt - startedAt,
-      ok: outcome.ok,
-      ...(outcome.error ? { error: outcome.error } : {}),
-      toolBatches: outcome.toolBatches,
-      agentCalls: outcome.agentCalls,
-    };
-    return { outcome, record };
-  } finally {
-    if (ownsStore) runsStore.close();
   }
+
+  const endedAt = Date.now();
+  const record: AutomationRunRecord = {
+    appId: opts.appId,
+    automationName: opts.automationName,
+    runId,
+    startedAt,
+    endedAt,
+    durationMs: endedAt - startedAt,
+    ok: outcome.ok,
+    ...(outcome.error ? { error: outcome.error } : {}),
+    toolBatches: outcome.toolBatches,
+    agentCalls: outcome.agentCalls,
+  };
+  return { outcome, record };
 }

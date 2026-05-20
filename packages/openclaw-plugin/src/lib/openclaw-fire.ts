@@ -13,9 +13,10 @@
  *   - `invokeDispatcher` re-enters this function. `ctx.invoke('name')`
  *     stays intra-app; `ctx.invoke('appId/name')` resolves the target
  *     app's dir through `resolveAppDir` (the same registry the desktop
- *     and mobile use to list apps) and runs against that app's own
- *     `automations.sqlite`. The `parent_run_id` self-FK can't cross
- *     SQLite files, so cross-app children are left unlinked.
+ *     and mobile use to list apps). Run audit for every app lives in
+ *     one central gateway DB, so a cross-app child run links its
+ *     `parent_run_id` into the same DAG as an intra-app one — the
+ *     child is recorded under the target app via `runsStore.forApp`.
  *   - `onFailure` cascade fires the named sibling, depth-3 capped.
  */
 
@@ -23,14 +24,13 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
-  AutomationRunsStore,
-  automationsDbPath,
   parseManifest,
   runAutomationHandler,
   type AutomationDispatchContext,
   type AutomationHandlerOutcome,
   type AutomationInvokeDispatcher,
   type AutomationManifest,
+  type AutomationRunsStore,
   type AutomationToolCall,
   type AutomationToolResult,
   type AutomationTriggerKind,
@@ -146,28 +146,26 @@ export async function runOpenclawFire(
       const dir = opts.resolveAppDir(targetAppId);
       if (!dir) throw new Error(`ctx.invoke("${name}"): app "${targetAppId}" is not registered`);
       targetAppDir = dir;
-      targetStore = new AutomationRunsStore(automationsDbPath(dir));
+      // Same gateway DB, target app's origin id — the child run lands
+      // under the target app and links its parent_run_id into one DAG.
+      targetStore = opts.runsStore.forApp(targetAppId);
     }
-    let child: AutomationHandlerOutcome & { runId: string };
-    try {
-      child = await runOpenclawFire(
-        {
-          appId: targetAppId,
-          appDir: targetAppDir,
-          automationName: targetName,
-          triggerKind: 'manual',
-          failureDepth: opts.failureDepth,
-          runsStore: targetStore,
-          resolveAppDir: opts.resolveAppDir,
-          // The parent_run_id self-FK can't cross SQLite files.
-          ...(crossApp ? {} : { parentRunId: args.parentRunId }),
-          ...(args.input !== undefined ? { input: args.input } : {}),
-        },
-        log,
-      );
-    } finally {
-      if (crossApp) targetStore.close();
-    }
+    const child = await runOpenclawFire(
+      {
+        appId: targetAppId,
+        appDir: targetAppDir,
+        automationName: targetName,
+        triggerKind: 'manual',
+        failureDepth: opts.failureDepth,
+        runsStore: targetStore,
+        resolveAppDir: opts.resolveAppDir,
+        // All run audit lives in one gateway DB, so the parent_run_id
+        // self-FK links a cross-app child too.
+        parentRunId: args.parentRunId,
+        ...(args.input !== undefined ? { input: args.input } : {}),
+      },
+      log,
+    );
     if (!child.ok) {
       throw Object.assign(new Error(`ctx.invoke("${name}") failed: ${child.error}`), {
         childRunId: child.runId,

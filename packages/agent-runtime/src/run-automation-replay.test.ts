@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
-import { AutomationRunsStore, automationsDbPath } from '@centraid/runtime-core';
+import { AutomationRunsStore, makeGatewayDbProvider } from '@centraid/runtime-core';
 import { buildReplayDispatchers } from './run-automation-replay.js';
 
 function newStore(): AutomationRunsStore {
   const dir = mkdtempSync(path.join(tmpdir(), 'centraid-replay-'));
-  return new AutomationRunsStore(automationsDbPath(dir));
+  const provider = makeGatewayDbProvider(path.join(dir, 'centraid-gateway.sqlite'));
+  return new AutomationRunsStore(provider, 'app');
 }
 
 const ctx = {

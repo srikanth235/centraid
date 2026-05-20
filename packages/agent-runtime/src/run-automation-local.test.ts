@@ -5,13 +5,16 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   AutomationRunsStore,
-  automationsDbPath,
+  makeGatewayDbProvider,
+  type DatabaseProvider,
   type AutomationManifest,
 } from '@centraid/runtime-core';
 import { runAutomationLocal } from './run-automation-local.js';
 
 interface AppHarness {
   appDir: string;
+  appId: string;
+  gatewayDb: DatabaseProvider;
   store: AutomationRunsStore;
 }
 
@@ -43,10 +46,13 @@ function writeHandler(appDir: string, name: string, source: string): void {
   writeFileSync(path.join(appDir, 'actions', `${name}.js`), source, 'utf8');
 }
 
-function makeAppHarness(): AppHarness {
+function makeAppHarness(appId = 'app1'): AppHarness {
   const appDir = mkdtempSync(path.join(tmpdir(), 'centraid-local-fire-'));
-  const store = new AutomationRunsStore(automationsDbPath(appDir));
-  return { appDir, store };
+  // One gateway DB per harness; the run audit for every app fired
+  // through it lives in this single file.
+  const gatewayDb = makeGatewayDbProvider(path.join(appDir, 'centraid-gateway.sqlite'));
+  const store = new AutomationRunsStore(gatewayDb, appId);
+  return { appDir, appId, gatewayDb, store };
 }
 
 describe('runAutomationLocal onFailure cascade (issue #80)', () => {
@@ -240,8 +246,8 @@ describe('runAutomationLocal pinned-data replay + cross-app invoke (issue #80)',
     h.store.close();
   });
 
-  it('cross-app ctx.invoke runs a sibling app resolved via resolveApp', async () => {
-    const appA = makeAppHarness();
+  it('cross-app ctx.invoke runs a sibling app and links the run DAG', async () => {
+    const appA = makeAppHarness('appA');
     const appBDir = mkdtempSync(path.join(tmpdir(), 'centraid-local-fire-b-'));
     writeManifest(appA.appDir, 'caller', {});
     writeHandler(
@@ -267,24 +273,30 @@ describe('runAutomationLocal pinned-data replay + cross-app invoke (issue #80)',
       appDir: appA.appDir,
       automationName: 'caller',
       runsStore: appA.store,
+      gatewayDb: appA.gatewayDb,
       resolveApp: (id) => (id === 'appB' ? { appDir: appBDir } : undefined),
     });
     assert.equal(outcome.ok, true);
     assert.deepEqual(outcome.output, { doubled: 6 });
 
-    // The child ran in appB's own automations.sqlite.
-    const appBStore = new AutomationRunsStore(automationsDbPath(appBDir));
+    // The child ran under appB's origin scope in the SAME gateway DB.
+    const appBStore = appA.store.forApp('appB');
     const workerRuns = appBStore.listRuns({ name: 'worker' });
     assert.equal(workerRuns.length, 1);
     assert.equal(workerRuns[0]?.triggerKind, 'manual');
-    appBStore.close();
 
     // The caller recorded the cross-app invoke as a `kind: 'invoke'` node.
     const callerRun = appA.store.listRuns({ name: 'caller' })[0]!;
     const node = appA.store.listNodes(callerRun.runId).find((n) => n.kind === 'invoke');
     assert.ok(node, 'expected an invoke node on the caller run');
     assert.equal(node?.name, 'appB/worker');
-    appA.store.close();
+
+    // The DAG fix: the cross-app child links its parent_run_id to the
+    // caller run — listChildRuns joins them across the app boundary.
+    const children = appA.store.listChildRuns(callerRun.runId);
+    assert.equal(children.length, 1);
+    assert.equal(children[0]?.runId, workerRuns[0]?.runId);
+    assert.equal(node?.childRunId, workerRuns[0]?.runId);
   });
 
   it('cross-app ctx.invoke fails clearly when resolveApp is not wired', async () => {

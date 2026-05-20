@@ -39,6 +39,9 @@ describe('openGatewayDb', () => {
         .all() as Array<{ name: string }>;
       const names = tables.map((t) => t.name).filter((n) => !n.startsWith('sqlite_'));
       assert.deepEqual(names.sort(), [
+        'automation_run_nodes',
+        'automation_runs',
+        'automation_state',
         'automations',
         'chat_messages',
         'chat_sessions',
@@ -58,6 +61,48 @@ describe('openGatewayDb', () => {
       assert.equal(userFk.from, 'user_id');
       assert.equal(userFk.to, 'id');
       assert.equal(userFk.on_delete, 'CASCADE');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('advances to 3 migrations and creates the automation run-audit tables', () => {
+    const path = freshDbPath();
+    openGatewayDb(path).close();
+    assert.equal(MIGRATIONS.length, 3);
+    assert.equal(userVersion(path), 3);
+    const db = new DatabaseSync(path);
+    try {
+      const has = (name: string): boolean =>
+        (
+          db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`).get(name) as
+            | { name: string }
+            | undefined
+        )?.name === name;
+      assert.ok(has('automation_runs'), 'automation_runs table exists');
+      assert.ok(has('automation_run_nodes'), 'automation_run_nodes table exists');
+      assert.ok(has('automation_state'), 'automation_state table exists');
+
+      // automation_run_nodes cascades off automation_runs.
+      const nodeFk = (
+        db.prepare(`PRAGMA foreign_key_list('automation_run_nodes')`).all() as Array<{
+          table: string;
+          on_delete: string;
+        }>
+      ).find((f) => f.table === 'automation_runs');
+      assert.ok(nodeFk, 'expected FK on automation_run_nodes.run_id → automation_runs.run_id');
+      assert.equal(nodeFk.on_delete, 'CASCADE');
+
+      // parent_run_id self-FK uses ON DELETE SET NULL so deleting one
+      // app's runs can't FK-fail against another app's cross-app child.
+      const parentFk = (
+        db.prepare(`PRAGMA foreign_key_list('automation_runs')`).all() as Array<{
+          table: string;
+          on_delete: string;
+        }>
+      ).find((f) => f.table === 'automation_runs');
+      assert.ok(parentFk, 'expected self-FK on automation_runs.parent_run_id');
+      assert.equal(parentFk.on_delete, 'SET NULL');
     } finally {
       db.close();
     }

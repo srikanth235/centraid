@@ -571,7 +571,7 @@ export interface CentraidAutomationRunNode {
 
 /** Row shape returned by `listAutomations`. Mirrors `AutomationRow` from runtime-core. */
 export interface CentraidAutomationRow {
-  appId: string;
+  originAppId: string;
   name: string;
   prompt: string;
   cronExpr: string;
@@ -736,7 +736,7 @@ declare global {
   // Mirror of the module-level CentraidAutomationRow/Result so the Cloud
   // → Automations panel can reference them by bare name without imports.
   interface CentraidAutomationRow {
-    appId: string;
+    originAppId: string;
     name: string;
     prompt: string;
     cronExpr: string;

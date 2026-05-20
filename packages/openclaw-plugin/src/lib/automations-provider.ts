@@ -13,7 +13,9 @@
  *       1. Recovers `(appId, automationName)` from the prompt sentinel
  *          `<<<centraid:appId:name>>>`.
  *       2. Loads `<appId>/automations/<name>.json` + `<appId>/actions/<name>.js`.
- *       3. Runs the handler via `runAutomationHandler` from runtime-core.
+ *       3. Runs the handler via `runAutomationHandler` from runtime-core,
+ *          wiring an `AutomationRunsStore` over the shared gateway DB
+ *          for the run audit + `ctx.state`.
  *          - toolDispatcher routes through `callGatewayTool` (full
  *            harness MCP routing + audit + before-tool hooks for free).
  *          - agentDispatcher routes through
@@ -31,7 +33,7 @@
  * this module just exports the ProviderPlugin descriptor as a factory.
  */
 
-import { AutomationRunsStore, automationsDbPath } from '@centraid/runtime-core';
+import { AutomationRunsStore, type DatabaseProvider } from '@centraid/runtime-core';
 import { runOpenclawFire } from './openclaw-fire.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 // pi-ai types — open-import (matches openclaw's own pattern) so this
@@ -66,6 +68,12 @@ export interface AutomationsProviderOptions {
    * wires this through to `runtime.registry.get(...)`.
    */
   resolveAppDir(appId: string): string | undefined;
+  /**
+   * Shared gateway DB provider. The automation run-audit store
+   * (`AutomationRunsStore`) is built from this — the same connection
+   * `UserStore` / `ChatHistoryStore` / `AutomationStore` use.
+   */
+  gatewayDbProvider: DatabaseProvider;
   /** Optional logger. */
   logger?: { info(m: string): void; warn(m: string): void; error(m: string): void };
 }
@@ -213,26 +221,22 @@ async function executeAutomation(
       `centraid-mock: app "${dispatch.appId}" is not registered with the runtime`,
     );
   }
-  // The openclaw gateway is long-lived — close the per-fire SQLite
-  // handle once the fire (incl. the onFailure cascade) is done.
-  const runsStore = new AutomationRunsStore(automationsDbPath(appDir));
-  let outcome;
-  try {
-    outcome = await runOpenclawFire(
-      {
-        appId: dispatch.appId,
-        appDir,
-        automationName: dispatch.automationName,
-        triggerKind: 'scheduled',
-        failureDepth: 0,
-        runsStore,
-        resolveAppDir: opts.resolveAppDir,
-      },
-      log,
-    );
-  } finally {
-    runsStore.close();
-  }
+  // Run audit lives in the central gateway DB; the store wraps the
+  // shared, host-owned provider connection (no per-fire handle to
+  // close).
+  const runsStore = new AutomationRunsStore(opts.gatewayDbProvider, dispatch.appId);
+  const outcome = await runOpenclawFire(
+    {
+      appId: dispatch.appId,
+      appDir,
+      automationName: dispatch.automationName,
+      triggerKind: 'scheduled',
+      failureDepth: 0,
+      runsStore,
+      resolveAppDir: opts.resolveAppDir,
+    },
+    log,
+  );
   if (!outcome.ok) {
     log.error(`automation ${dispatch.appId}/${dispatch.automationName} failed: ${outcome.error}`);
     return errorMessage(`automation failed: ${outcome.error ?? 'unknown error'}`);

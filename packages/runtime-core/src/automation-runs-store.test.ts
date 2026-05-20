@@ -1,43 +1,22 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
+import { makeGatewayDbProvider } from './gateway-db.js';
 import { AutomationRunsStore } from './automation-runs-store.js';
-import {
-  automationsDbPath,
-  openAutomationsDb,
-  AUTOMATIONS_DB_FILE,
-} from './automation-runs-schema.js';
 
-function newStore(): { store: AutomationRunsStore; dir: string; file: string } {
+function newStore(appId = 'some-app'): AutomationRunsStore {
+  // A temp gateway DB — the provider runs the gateway migrations on
+  // first use, creating the automation_* tables.
   const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-  const file = automationsDbPath(dir);
-  return { store: new AutomationRunsStore(file), dir, file };
+  const provider = makeGatewayDbProvider(path.join(dir, 'centraid-gateway.sqlite'));
+  return new AutomationRunsStore(provider, appId);
 }
 
 describe('AutomationRunsStore', () => {
-  it('does not create the file until first method call', () => {
-    const { dir, file } = newStore();
-    assert.equal(existsSync(file), false);
-    assert.equal(path.basename(file), AUTOMATIONS_DB_FILE);
-    assert.equal(path.dirname(file), dir);
-  });
-
-  it('creates the file lazily on first insertRun', () => {
-    const { store, file } = newStore();
-    store.insertRun({
-      runId: 'r1',
-      automationName: 'foo',
-      triggerKind: 'scheduled',
-      startedAt: 1000,
-    });
-    assert.equal(existsSync(file), true);
-    store.close();
-  });
-
   it('round-trips a run row including parentRunId, inputJson, summary, outputJson', () => {
-    const { store } = newStore();
+    const store = newStore();
     store.insertRun({
       runId: 'parent-1',
       automationName: 'parent',
@@ -75,7 +54,7 @@ describe('AutomationRunsStore', () => {
   });
 
   it('finishRun with ok=false records the error', () => {
-    const { store } = newStore();
+    const store = newStore();
     store.insertRun({
       runId: 'r1',
       automationName: 'foo',
@@ -90,7 +69,7 @@ describe('AutomationRunsStore', () => {
   });
 
   it('inserts nodes with batch_id; lists in (ordinal, started_at) order', () => {
-    const { store } = newStore();
+    const store = newStore();
     store.insertRun({ runId: 'r', automationName: 'foo', triggerKind: 'scheduled', startedAt: 0 });
     store.insertNode({
       nodeId: 'n1',
@@ -143,13 +122,13 @@ describe('AutomationRunsStore', () => {
     store.close();
   });
 
-  it('ctx.state get/set round-trip across reopens', () => {
+  it('ctx.state get/set round-trip across store reopens', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const file = automationsDbPath(dir);
-    const s1 = new AutomationRunsStore(file);
+    const provider = makeGatewayDbProvider(path.join(dir, 'centraid-gateway.sqlite'));
+    const s1 = new AutomationRunsStore(provider, 'some-app');
     s1.stateSet('foo', 'cursor', JSON.stringify({ since: 42 }), 1000);
     s1.close();
-    const s2 = new AutomationRunsStore(file);
+    const s2 = new AutomationRunsStore(provider, 'some-app');
     const entry = s2.stateGet('foo', 'cursor');
     assert.equal(entry?.valueJson, JSON.stringify({ since: 42 }));
     assert.equal(entry?.updatedAt, 1000);
@@ -162,8 +141,36 @@ describe('AutomationRunsStore', () => {
     s2.close();
   });
 
+  it('state is scoped per origin app', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
+    const provider = makeGatewayDbProvider(path.join(dir, 'centraid-gateway.sqlite'));
+    const appA = new AutomationRunsStore(provider, 'app-a');
+    const appB = new AutomationRunsStore(provider, 'app-b');
+    appA.stateSet('shared-name', 'k', JSON.stringify('A'), 1);
+    appB.stateSet('shared-name', 'k', JSON.stringify('B'), 1);
+    assert.equal(appA.stateGet('shared-name', 'k')?.valueJson, JSON.stringify('A'));
+    assert.equal(appB.stateGet('shared-name', 'k')?.valueJson, JSON.stringify('B'));
+  });
+
+  it('listRuns is scoped to the store origin app', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
+    const provider = makeGatewayDbProvider(path.join(dir, 'centraid-gateway.sqlite'));
+    const appA = new AutomationRunsStore(provider, 'app-a');
+    const appB = new AutomationRunsStore(provider, 'app-b');
+    appA.insertRun({ runId: 'a1', automationName: 'job', triggerKind: 'scheduled', startedAt: 1 });
+    appB.insertRun({ runId: 'b1', automationName: 'job', triggerKind: 'scheduled', startedAt: 2 });
+    assert.deepEqual(
+      appA.listRuns({ name: 'job' }).map((r) => r.runId),
+      ['a1'],
+    );
+    assert.deepEqual(
+      appB.listRuns({}).map((r) => r.runId),
+      ['b1'],
+    );
+  });
+
   it('lastRun returns most recent run, optionally filtered by status', () => {
-    const { store } = newStore();
+    const store = newStore();
     store.insertRun({ runId: 'r1', automationName: 'foo', triggerKind: 'scheduled', startedAt: 1 });
     store.finishRun({ runId: 'r1', endedAt: 2, ok: false, error: 'bad' });
     store.insertRun({ runId: 'r2', automationName: 'foo', triggerKind: 'scheduled', startedAt: 3 });
@@ -178,7 +185,7 @@ describe('AutomationRunsStore', () => {
   });
 
   it('listRuns supports name/status/since/limit filters', () => {
-    const { store } = newStore();
+    const store = newStore();
     for (let i = 0; i < 5; i++) {
       const id = `r${i}`;
       store.insertRun({
@@ -203,7 +210,7 @@ describe('AutomationRunsStore', () => {
   });
 
   it('listRuns pushes status into SQL so the limit window does not hide older oks', () => {
-    const { store } = newStore();
+    const store = newStore();
     // r0,r1 succeed (oldest); r2,r3,r4 fail (newest).
     for (let i = 0; i < 5; i++) {
       const id = `r${i}`;
@@ -227,7 +234,7 @@ describe('AutomationRunsStore', () => {
   });
 
   it('prune by count keeps newest N runs and cascades nodes', () => {
-    const { store } = newStore();
+    const store = newStore();
     for (let i = 0; i < 10; i++) {
       const id = `r${i}`;
       store.insertRun({
@@ -265,7 +272,7 @@ describe('AutomationRunsStore', () => {
   });
 
   it('prune errorsOnly drops successful runs', () => {
-    const { store } = newStore();
+    const store = newStore();
     for (let i = 0; i < 4; i++) {
       const id = `r${i}`;
       store.insertRun({
@@ -284,7 +291,7 @@ describe('AutomationRunsStore', () => {
   });
 
   it('prune all=true is a no-op', () => {
-    const { store } = newStore();
+    const store = newStore();
     store.insertRun({ runId: 'r1', automationName: 'foo', triggerKind: 'scheduled', startedAt: 1 });
     store.finishRun({ runId: 'r1', endedAt: 2, ok: true });
     store.prune('foo', { all: true });
@@ -292,20 +299,8 @@ describe('AutomationRunsStore', () => {
     store.close();
   });
 
-  it('migrate is idempotent — opening an already-current DB does nothing', () => {
-    const { file } = newStore();
-    const db1 = openAutomationsDb(file);
-    db1.close();
-    const db2 = openAutomationsDb(file);
-    const version = (
-      db2.prepare('PRAGMA user_version').get() as { user_version: number } | undefined
-    )?.user_version;
-    assert.equal(version, 2);
-    db2.close();
-  });
-
   it('setPinned / pinnedRun round-trip; pinned runs survive count pruning', () => {
-    const { store } = newStore();
+    const store = newStore();
     for (let i = 0; i < 6; i++) {
       const id = `r${i}`;
       store.insertRun({
@@ -331,7 +326,7 @@ describe('AutomationRunsStore', () => {
   });
 
   it('insertNode records child_run_id; listChildRuns links parent to children', () => {
-    const { store } = newStore();
+    const store = newStore();
     store.insertRun({
       runId: 'p',
       automationName: 'parent',
@@ -364,5 +359,78 @@ describe('AutomationRunsStore', () => {
     assert.equal(children[0]?.runId, 'c1');
     assert.equal(store.listChildRuns('missing').length, 0);
     store.close();
+  });
+
+  it('cross-app ctx.invoke linkage — a child run under app B links to a parent under app A', () => {
+    // The whole point of folding the run audit into the gateway DB:
+    // a cross-app `ctx.invoke` child run can carry a `parentRunId`
+    // pointing at a run in a different app, and `listChildRuns` joins
+    // them — a per-file split could not.
+    const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
+    const provider = makeGatewayDbProvider(path.join(dir, 'centraid-gateway.sqlite'));
+    const appA = new AutomationRunsStore(provider, 'app-a');
+    // forApp shares the same provider/connection — used by cross-app invoke.
+    const appB = appA.forApp('app-b');
+
+    appA.insertRun({
+      runId: 'A-parent',
+      automationName: 'orchestrate',
+      triggerKind: 'scheduled',
+      startedAt: 1,
+    });
+    appB.insertRun({
+      runId: 'B-child',
+      automationName: 'do-work',
+      triggerKind: 'manual',
+      parentRunId: 'A-parent',
+      startedAt: 2,
+    });
+    appB.finishRun({ runId: 'B-child', endedAt: 3, ok: true });
+
+    // The child lives under app B's origin scope...
+    assert.deepEqual(
+      appB.listRuns({ name: 'do-work' }).map((r) => r.runId),
+      ['B-child'],
+    );
+    // ...but it does NOT show up under app A's name-scoped list.
+    assert.deepEqual(appA.listRuns({ name: 'do-work' }), []);
+    // The cross-file-impossible bit: listChildRuns(parent) finds the
+    // child even though parent and child belong to different apps.
+    const children = appA.listChildRuns('A-parent');
+    assert.equal(children.length, 1);
+    assert.equal(children[0]?.runId, 'B-child');
+  });
+
+  it('deleteAppData drops only the bound app run audit + state', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
+    const provider = makeGatewayDbProvider(path.join(dir, 'centraid-gateway.sqlite'));
+    const appA = new AutomationRunsStore(provider, 'app-a');
+    const appB = new AutomationRunsStore(provider, 'app-b');
+    for (const [store, id] of [
+      [appA, 'a1'],
+      [appB, 'b1'],
+    ] as const) {
+      store.insertRun({ runId: id, automationName: 'job', triggerKind: 'scheduled', startedAt: 1 });
+      store.insertNode({
+        nodeId: `${id}-n`,
+        runId: id,
+        ordinal: 0,
+        kind: 'tool',
+        name: 't',
+        ok: true,
+        startedAt: 1,
+        endedAt: 2,
+        durationMs: 1,
+      });
+      store.stateSet('job', 'k', JSON.stringify('v'), 1);
+    }
+    appA.deleteAppData();
+    assert.equal(appA.listRuns({}).length, 0);
+    assert.equal(appA.listNodes('a1').length, 0); // cascaded
+    assert.equal(appA.stateGet('job', 'k'), undefined);
+    // app B is untouched.
+    assert.equal(appB.listRuns({}).length, 1);
+    assert.equal(appB.listNodes('b1').length, 1);
+    assert.ok(appB.stateGet('job', 'k'));
   });
 });

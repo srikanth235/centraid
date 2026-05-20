@@ -25,7 +25,7 @@ describe('AutomationStore', () => {
   it('upserts and reads back a manifest', () => {
     const store = newStore();
     const row = store.upsert('todos', 'daily-digest', sampleManifest);
-    assert.equal(row.appId, 'todos');
+    assert.equal(row.originAppId, 'todos');
     assert.equal(row.name, 'daily-digest');
     assert.equal(row.cronExpr, '*/30 * * * *');
     assert.equal(row.enabled, true);

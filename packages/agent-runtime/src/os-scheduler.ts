@@ -68,6 +68,13 @@ export interface OsSchedulerJobSpec {
   runner: 'codex' | 'claude-code';
   /** Absolute path to the `centraid` binary. */
   centraidBin: string;
+  /**
+   * Environment variables to bake into the generated artifact (launchd
+   * `EnvironmentVariables`, systemd `Environment=`, schtasks process
+   * env). Used to pass `CENTRAID_GATEWAY_DB` so the scheduled fire
+   * writes its run audit to the desktop's gateway DB.
+   */
+  env?: Record<string, string>;
 }
 
 export interface OsSchedulerJobInstalled extends OsSchedulerJobSpec {
@@ -178,6 +185,15 @@ export function buildLaunchdPlist(spec: OsSchedulerJobSpec): string {
       ? `    <key>StartCalendarInterval</key>\n    ${dictToXml(intervals[0]!, 4)}`
       : `    <key>StartCalendarInterval</key>\n    <array>\n${intervals.map((i) => '      ' + dictToXml(i, 6)).join('\n')}\n    </array>`;
   const label = jobLabel(spec.appId, spec.automationName);
+  const envEntries = Object.entries(spec.env ?? {});
+  const envXml =
+    envEntries.length > 0
+      ? `    <key>EnvironmentVariables</key>\n    <dict>\n${envEntries
+          .map(
+            ([k, v]) => `      <key>${xmlEscape(k)}</key>\n      <string>${xmlEscape(v)}</string>`,
+          )
+          .join('\n')}\n    </dict>\n`
+      : '';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -197,7 +213,7 @@ export function buildLaunchdPlist(spec: OsSchedulerJobSpec): string {
     <string>${xmlEscape(spec.cwd)}</string>
     <key>RunAtLoad</key>
     <false/>
-${intervalsXml}
+${envXml}${intervalsXml}
     <key>StandardOutPath</key>
     <string>${xmlEscape(path.join(spec.cwd, '.automation-logs', spec.automationName + '.out.log'))}</string>
     <key>StandardErrorPath</key>
@@ -252,13 +268,16 @@ export function cronToSystemdOnCalendar(cron: string): string {
 }
 
 export function buildSystemdService(spec: OsSchedulerJobSpec): string {
+  const envLines = Object.entries(spec.env ?? {})
+    .map(([k, v]) => `Environment="${k}=${v}"\n`)
+    .join('');
   return `[Unit]
 Description=Centraid automation ${spec.appId}/${spec.automationName}
 
 [Service]
 Type=oneshot
 WorkingDirectory=${spec.cwd}
-ExecStart=${spec.centraidBin} run-automation ${spec.appId} ${spec.automationName} --runner ${spec.runner}
+${envLines}ExecStart=${spec.centraidBin} run-automation ${spec.appId} ${spec.automationName} --runner ${spec.runner}
 `;
 }
 
@@ -414,15 +433,15 @@ export async function register(
   }
   if (platform === 'win32') {
     const args = cronToSchtasksArgs(spec.cronExpr);
-    const cmd = [
-      '/Create',
-      '/TN',
-      label,
-      ...args,
-      '/TR',
-      `"${spec.centraidBin}" run-automation ${spec.appId} ${spec.automationName} --runner ${spec.runner}`,
-      '/F',
-    ];
+    // Task Scheduler has no per-task env-var field; bake the env into
+    // the command line via `cmd /c "set VAR=val && ..."` so the
+    // scheduled `centraid run-automation` process inherits it.
+    const envPrefix = Object.entries(spec.env ?? {})
+      .map(([k, v]) => `set "${k}=${v}" && `)
+      .join('');
+    const runCmd = `"${spec.centraidBin}" run-automation ${spec.appId} ${spec.automationName} --runner ${spec.runner}`;
+    const trArg = envPrefix ? `cmd /c "${envPrefix}${runCmd}"` : runCmd;
+    const cmd = ['/Create', '/TN', label, ...args, '/TR', trArg, '/F'];
     const res = await exec('schtasks', cmd);
     if (res.exitCode !== 0) {
       throw new Error(`schtasks /Create failed: ${res.stderr || res.stdout}`);
