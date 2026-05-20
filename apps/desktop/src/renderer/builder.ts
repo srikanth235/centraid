@@ -3213,6 +3213,7 @@
       onNewApp: () => {
         /* already in builder; ignore */
       },
+      onSearch: () => window.Centraid?.openSearch?.(),
       onDiscover: () => window.Centraid?.openDiscover?.(),
       onStarred: () => window.Centraid?.openStarred?.(),
       onAutomations: () => window.Centraid?.openAutomations?.(),

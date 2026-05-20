@@ -93,6 +93,8 @@ declare global {
     openStarred: () => void;
     /** Navigate to the Automations page. */
     openAutomations: () => void;
+    /** Open the ⌘K command palette. */
+    openSearch: () => void;
     /**
      * Current runtime mode ('local' or 'remote'), or undefined before the
      * first settings fetch resolves.

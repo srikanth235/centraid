@@ -458,6 +458,7 @@
       },
       onHome: renderHome,
       onNewApp: openNewAppSheet,
+      onSearch: openCommandPalette,
       onDiscover: renderDiscover,
       onStarred: renderStarred,
       onAutomations: renderAutomations,
@@ -505,6 +506,7 @@
     currentSetSidebarOpen = null;
     closeContextMenu();
     closeAppSettings();
+    closeCommandPalette();
     root.innerHTML = '';
   }
 
@@ -1031,6 +1033,221 @@
       renderSimpleEmpty('No automations yet. Add one from an app’s settings → Automations.'),
     );
     mountShellPage('automations', main);
+  }
+
+  // ---------- ⌘K command palette (Refined Screens §F) ----------
+  let paletteCleanup: (() => void) | null = null;
+
+  function closeCommandPalette(): void {
+    if (paletteCleanup) {
+      paletteCleanup();
+      paletteCleanup = null;
+    }
+  }
+
+  interface PaletteRow {
+    label: string;
+    sub?: string;
+    icon: string;
+    tint?: string;
+    run: () => void;
+  }
+
+  // §F — a 640px command card over a dimmed, blurred copy of the current
+  // screen. Results group into Build / Apps / Templates / Settings with
+  // up/down + Enter keyboard navigation.
+  function openCommandPalette(): void {
+    if (paletteCleanup) return;
+    const backdrop = el('div', { class: 'cd-palette-backdrop' });
+    const card = el('div', {
+      class: 'cd-palette',
+      role: 'dialog',
+      'aria-label': 'Command palette',
+    });
+    const input = el('input', {
+      class: 'cd-palette-input',
+      type: 'text',
+      autocomplete: 'off',
+      placeholder: 'Search apps, templates, settings — or describe something to build…',
+    }) as HTMLInputElement;
+    const resultsEl = el('div', { class: 'cd-palette-results' });
+    card.append(input, resultsEl);
+    backdrop.append(card);
+    document.body.append(backdrop);
+
+    let templates: TemplateEntry[] = [];
+    void loadAvailableTemplates().then((t) => {
+      templates = t;
+      render();
+    });
+
+    const settingsLabels = [
+      'Appearance',
+      'Layout',
+      'Workspace',
+      'AI providers',
+      'Inference endpoint',
+      'Where apps run',
+      'Sync & backups',
+    ];
+
+    let rows: PaletteRow[] = [];
+    let active = 0;
+
+    const collectGroups = (q: string): Array<{ group: string; items: PaletteRow[] }> => {
+      const lc = q.toLowerCase();
+      const groups: Array<{ group: string; items: PaletteRow[] }> = [];
+
+      groups.push({
+        group: 'Build',
+        items: [
+          {
+            label: q ? `Build “${q}”` : 'Build a new app',
+            icon: Icon.Sparkle({ size: 15 }),
+            tint: 'var(--accent)',
+            run: () => {
+              closeCommandPalette();
+              if (q) enterBuilder({ initialPrompt: q });
+              else openNewAppSheet();
+            },
+          },
+        ],
+      });
+
+      const allApps = [...getApps(), ...drafts];
+      const recents = recentApps();
+      const appMatches = (
+        q
+          ? allApps.filter((a) => a.name.toLowerCase().includes(lc))
+          : recents.length
+            ? recents
+            : allApps
+      ).slice(0, 6);
+      if (appMatches.length > 0) {
+        groups.push({
+          group: `Apps · ${appMatches.length}`,
+          items: appMatches.map((a) => ({
+            label: a.name,
+            sub: a.desc,
+            icon: Icon[a.iconKey] ? Icon[a.iconKey]({ size: 15 }) : Icon.Sparkle({ size: 15 }),
+            tint: a.color,
+            run: () => {
+              closeCommandPalette();
+              if (isDraft(a)) enterBuilder({ appContext: a });
+              else openApp(a.id);
+            },
+          })),
+        });
+      }
+
+      const tplMatches = (
+        q ? templates.filter((t) => t.name.toLowerCase().includes(lc)) : templates
+      ).slice(0, 6);
+      if (tplMatches.length > 0) {
+        const palette = window.ICON_PALETTE as Record<string, string>;
+        groups.push({
+          group: `Templates · ${tplMatches.length}`,
+          items: tplMatches.map((t) => ({
+            label: t.name,
+            sub: t.desc,
+            icon: Icon[t.iconKey as IconNameType]
+              ? Icon[t.iconKey as IconNameType]({ size: 15 })
+              : Icon.Sparkle({ size: 15 }),
+            tint: palette[t.colorKey],
+            run: () => {
+              closeCommandPalette();
+              openTemplatePreview(t);
+            },
+          })),
+        });
+      }
+
+      const setMatches = settingsLabels.filter((s) => !q || s.toLowerCase().includes(lc));
+      if (setMatches.length > 0) {
+        groups.push({
+          group: 'Settings',
+          items: setMatches.map((s) => ({
+            label: s,
+            sub: 'Settings',
+            icon: Icon.Settings({ size: 15 }),
+            run: () => {
+              closeCommandPalette();
+              renderSettings();
+            },
+          })),
+        });
+      }
+      return groups;
+    };
+
+    const highlight = (): void => {
+      const rowEls = resultsEl.querySelectorAll<HTMLElement>('.cd-palette-row');
+      let i = 0;
+      for (const r of rowEls) {
+        r.dataset.active = String(i === active);
+        if (i === active) r.scrollIntoView({ block: 'nearest' });
+        i += 1;
+      }
+    };
+
+    const render = (): void => {
+      const q = input.value.trim();
+      rows = [];
+      resultsEl.replaceChildren();
+      for (const g of collectGroups(q)) {
+        resultsEl.append(el('div', { class: 'cd-palette-group' }, g.group));
+        for (const item of g.items) {
+          rows.push(item);
+          const ic = el('span', { class: 'cd-palette-row-icon', trustedHtml: item.icon });
+          if (item.tint) ic.style.color = item.tint;
+          const txt = el('div', { class: 'cd-palette-row-text' }, [
+            el('div', { class: 'cd-palette-row-label' }, item.label),
+          ]);
+          if (item.sub) txt.append(el('div', { class: 'cd-palette-row-sub' }, item.sub));
+          resultsEl.append(
+            el('button', { class: 'cd-palette-row', type: 'button', onClick: () => item.run() }, [
+              ic,
+              txt,
+            ]),
+          );
+        }
+      }
+      if (active >= rows.length) active = Math.max(0, rows.length - 1);
+      highlight();
+    };
+
+    input.addEventListener('input', () => {
+      active = 0;
+      render();
+    });
+    input.addEventListener('keydown', (e) => {
+      const k = e as KeyboardEvent;
+      if (k.key === 'Escape') {
+        k.preventDefault();
+        closeCommandPalette();
+      } else if (k.key === 'ArrowDown') {
+        k.preventDefault();
+        active = Math.min(rows.length - 1, active + 1);
+        highlight();
+      } else if (k.key === 'ArrowUp') {
+        k.preventDefault();
+        active = Math.max(0, active - 1);
+        highlight();
+      } else if (k.key === 'Enter') {
+        k.preventDefault();
+        rows[active]?.run();
+      }
+    });
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) closeCommandPalette();
+    });
+
+    paletteCleanup = (): void => {
+      backdrop.remove();
+    };
+
+    render();
+    input.focus();
   }
 
   function statusPillEl(tone: 'new' | 'draft' | 'live', label: string): HTMLElement {
@@ -3903,6 +4120,7 @@
     openDiscover: renderDiscover,
     openStarred: renderStarred,
     openAutomations: renderAutomations,
+    openSearch: openCommandPalette,
     renderHome,
     getRuntimeMode: () => currentRuntimeMode,
   };
@@ -3910,6 +4128,12 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && ctxMenu) {
       closeContextMenu();
+      return;
+    }
+    // §F — ⌘K opens the command palette from anywhere.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      openCommandPalette();
       return;
     }
     if ((e.metaKey || e.ctrlKey) && e.key === '[') {

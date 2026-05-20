@@ -18,7 +18,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] Step 5 — Settings monolith split (C)
 - [x] Step 6 — App view copilot (D)
 - [x] Step 7 — Per-app settings tabbed popover (E)
-- [ ] Step 8 — ⌘K command palette (F)
+- [x] Step 8 — ⌘K command palette (F)
 
 ## What changed
 
@@ -143,6 +143,18 @@ destination (§E3, wired in Step 2). §E1 Manage: Rename / Share /
 Reveal stay as a menu, and Delete moved into a bordered `Danger zone`
 whose button arms a confirmation step ("Click again to delete") before
 it fires.
+
+**Step 8 — ⌘K command palette (F).** A new `openCommandPalette` surface
+in `app.ts`: a 640px card over a dimmed, 6px-blurred backdrop, with an
+auto-focused input. Results group into Build (always — "Build "<query>""
+seeds the builder, or opens the new-app sheet when empty), Apps · N
+(matching user apps + drafts, or recents pre-query), Templates · N
+(matching the live gallery) and Settings (the seven page labels).
+Up/Down move an accent-railed highlight, Enter runs the active row,
+Escape or a backdrop click closes. It opens from a global `⌘K`
+(registered on the document) and from the sidebar `Search` row, which
+is now wired — `buildHomeSidebar` passes `onSearch`, and the builder's
+sidebar routes through the new `window.Centraid.openSearch`.
 
 ## Out of scope
 
