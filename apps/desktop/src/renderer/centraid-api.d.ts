@@ -89,13 +89,22 @@ export type CentraidChatEvent =
   | (ChatEventBase & { kind: 'aborted' });
 
 /**
- * One row from the persisted chat-history index for an app. Sessions list
- * RPCs return these sorted by `updatedAt` desc.
+ * One persisted chat session — the session id is also the chat window id.
+ * Sessions list RPCs return these sorted by `updatedAt` desc.
  */
 export interface CentraidChatSessionMeta {
   id: string;
-  appId: string;
+  /** App the chat was opened from; `null` for chats started from the shell. */
+  originAppId: string | null;
   title: string;
+  /** Sticky chat mode. */
+  mode: 'full' | 'data';
+  /** Runner kind that owns `adapterSessionId`. */
+  adapterKind: string | null;
+  /** Opaque per-runner resume handle. */
+  adapterSessionId: string | null;
+  /** Number of completed turns. */
+  turnCount: number;
   createdAt: number;
   updatedAt: number;
   messageCount: number;
@@ -500,25 +509,86 @@ interface CentraidApi {
   // automations mirror table directly and triggers manual runs via
   // the local headless run path.
   listAutomations(input: { appId: string }): Promise<CentraidAutomationRow[]>;
-  runAutomationNow(input: { appId: string; name: string }): Promise<CentraidAutomationRunResult>;
+  /**
+   * Fire an automation now. With `replay: true` the run is served from
+   * the automation's pinned run (recorded tool/agent outputs) instead of
+   * live tools — fast, deterministic builder iteration (issue #80).
+   */
+  runAutomationNow(input: {
+    appId: string;
+    name: string;
+    replay?: boolean;
+  }): Promise<CentraidAutomationRunResult>;
   setAutomationEnabled(input: {
     appId: string;
     name: string;
     enabled: boolean;
   }): Promise<{ ok: true }>;
   deleteAutomation(input: { appId: string; name: string }): Promise<{ ok: true }>;
+  // Run audit (issue #80). Reads the per-app `automations.sqlite`
+  // file's runs / run_nodes tables. Returns [] if no automation has
+  // fired yet (file not created).
+  listAutomationRuns(input: {
+    appId: string;
+    name: string;
+    limit?: number;
+  }): Promise<CentraidAutomationRunRecord[]>;
+  listAutomationRunNodes(input: {
+    appId: string;
+    runId: string;
+  }): Promise<CentraidAutomationRunNode[]>;
+  /** Pin / unpin a run as a replay fixture (issue #80 follow-up). */
+  pinAutomationRun(input: { appId: string; runId: string; pinned: boolean }): Promise<{ ok: true }>;
+}
+
+/** A single run record from `automations.sqlite#runs`. */
+export interface CentraidAutomationRunRecord {
+  runId: string;
+  automationName: string;
+  triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure';
+  parentRunId?: string;
+  inputJson?: string;
+  startedAt: number;
+  endedAt?: number;
+  ok: boolean;
+  error?: string;
+  summary?: string;
+  outputJson?: string;
+  /** True when the run is pinned as a replay fixture. */
+  pinned: boolean;
+}
+
+/** A single node (ctx.tool / ctx.agent / ctx.invoke call) inside a run. */
+export interface CentraidAutomationRunNode {
+  nodeId: string;
+  runId: string;
+  ordinal: number;
+  batchId?: number;
+  kind: 'tool' | 'agent' | 'invoke';
+  name: string;
+  argsJson?: string;
+  outputJson?: string;
+  ok: boolean;
+  error?: string;
+  startedAt: number;
+  endedAt?: number;
+  durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  /** For `kind: 'invoke'` — the run id of the child run it spawned. */
+  childRunId?: string;
 }
 
 /** Row shape returned by `listAutomations`. Mirrors `AutomationRow` from runtime-core. */
 export interface CentraidAutomationRow {
-  appId: string;
+  originAppId: string;
   name: string;
   prompt: string;
   cronExpr: string;
   enabled: boolean;
   manifest: {
     prompt: string;
-    schedule: string;
+    trigger: { kind: 'cron'; expr: string };
     action: string;
     requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
     costEstimate?: { model: string; tokensPerFire: number };
@@ -647,8 +717,12 @@ declare global {
     | (_ChatEventBaseG & { kind: 'aborted' });
   interface CentraidChatSessionMeta {
     id: string;
-    appId: string;
+    originAppId: string | null;
     title: string;
+    mode: 'full' | 'data';
+    adapterKind: string | null;
+    adapterSessionId: string | null;
+    turnCount: number;
     createdAt: number;
     updatedAt: number;
     messageCount: number;
@@ -672,14 +746,14 @@ declare global {
   // Mirror of the module-level CentraidAutomationRow/Result so the Cloud
   // → Automations panel can reference them by bare name without imports.
   interface CentraidAutomationRow {
-    appId: string;
+    originAppId: string;
     name: string;
     prompt: string;
     cronExpr: string;
     enabled: boolean;
     manifest: {
       prompt: string;
-      schedule: string;
+      trigger: { kind: 'cron'; expr: string };
       action: string;
       requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
       costEstimate?: { model: string; tokensPerFire: number };
@@ -694,5 +768,37 @@ declare global {
     error?: string;
     toolBatches: number;
     agentCalls: number;
+  }
+  interface CentraidAutomationRunRecord {
+    runId: string;
+    automationName: string;
+    triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure';
+    parentRunId?: string;
+    inputJson?: string;
+    startedAt: number;
+    endedAt?: number;
+    ok: boolean;
+    error?: string;
+    summary?: string;
+    outputJson?: string;
+    pinned: boolean;
+  }
+  interface CentraidAutomationRunNode {
+    nodeId: string;
+    runId: string;
+    ordinal: number;
+    batchId?: number;
+    kind: 'tool' | 'agent' | 'invoke';
+    name: string;
+    argsJson?: string;
+    outputJson?: string;
+    ok: boolean;
+    error?: string;
+    startedAt: number;
+    endedAt?: number;
+    durationMs?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    childRunId?: string;
   }
 }

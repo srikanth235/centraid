@@ -7356,6 +7356,266 @@ textarea {
   background: color-mix(in srgb, var(--danger, #e25555) 10%, transparent);
 }
 
+/* Run audit (issue #80). The "Runs" link in the foot expands a
+ * per-automation history panel below the card. Newest run first;
+ * clicking a run expands its node timeline. */
+.cd-app-order-runs-toggle {
+  margin-left: auto;
+  font-size: 11px;
+  background: none;
+  border: none;
+  color: color-mix(in oklab, var(--ink) 55%, transparent);
+  cursor: pointer;
+  padding: 0;
+}
+.cd-app-order-runs-toggle:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.cd-app-order-runs {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+.cd-app-runs-empty {
+  color: color-mix(in oklab, var(--ink) 45%, transparent);
+  font-style: italic;
+  padding: 6px 0;
+}
+.cd-app-runs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cd-app-run {
+  border: 1px solid color-mix(in oklab, var(--ink) 8%, transparent);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.cd-app-run[data-ok='false'] {
+  border-color: color-mix(in srgb, var(--danger, #e25555) 30%, transparent);
+}
+.cd-app-run-head {
+  display: grid;
+  grid-template-columns: 16px auto auto auto 1fr;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: inherit;
+}
+.cd-app-run-head:hover {
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+.cd-app-run-status {
+  font-weight: 600;
+}
+.cd-app-run[data-ok='true'] .cd-app-run-status {
+  color: var(--success, #2a8c2a);
+}
+.cd-app-run[data-ok='false'] .cd-app-run-status {
+  color: var(--danger, #e25555);
+}
+.cd-app-run-when {
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklab, var(--ink) 70%, transparent);
+}
+.cd-app-run-trigger,
+.cd-app-run-duration {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in oklab, var(--ink) 50%, transparent);
+}
+.cd-app-run-summary {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: color-mix(in oklab, var(--ink) 65%, transparent);
+}
+.cd-app-run-nodes {
+  padding: 4px 10px 8px;
+  border-top: 1px solid color-mix(in oklab, var(--ink) 6%, transparent);
+}
+.cd-app-run-node-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cd-app-run-node {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+}
+.cd-app-run-node[data-ok='false'] {
+  background: color-mix(in srgb, var(--danger, #e25555) 6%, transparent);
+}
+.cd-app-run-node-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.cd-app-run-node-pos {
+  font-weight: 600;
+  color: color-mix(in oklab, var(--ink) 70%, transparent);
+}
+.cd-app-run-node-kind {
+  text-transform: uppercase;
+  font-size: 9px;
+  color: color-mix(in oklab, var(--ink) 50%, transparent);
+}
+.cd-app-run-node-batch {
+  font-size: 9px;
+  color: color-mix(in oklab, var(--accent, #0a84ff) 70%, transparent);
+}
+.cd-app-run-node-duration {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklab, var(--ink) 50%, transparent);
+}
+.cd-app-run-node-error {
+  margin-top: 4px;
+  color: var(--danger, #e25555);
+  white-space: pre-wrap;
+}
+.cd-app-run-node-payload {
+  margin-top: 4px;
+}
+.cd-app-run-node-payload summary {
+  cursor: pointer;
+  color: color-mix(in oklab, var(--ink) 55%, transparent);
+}
+.cd-app-run-node-payload pre {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  border-radius: 4px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Pinned-run replay + DAG timeline (issue #80 follow-up). */
+.cd-app-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cd-app-runs-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--accent, #0a84ff) 8%, transparent);
+}
+.cd-app-runs-bar-note {
+  color: color-mix(in oklab, var(--ink) 60%, transparent);
+}
+.cd-app-runs-replay {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in oklab, var(--accent, #0a84ff) 45%, transparent);
+  background: none;
+  color: var(--accent, #0a84ff);
+  cursor: pointer;
+}
+.cd-app-runs-replay:hover {
+  background: color-mix(in oklab, var(--accent, #0a84ff) 12%, transparent);
+}
+.cd-app-runs-replay:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.cd-app-run[data-pinned='true'] {
+  border-color: color-mix(in oklab, var(--accent, #0a84ff) 40%, transparent);
+}
+.cd-app-run-pin-flag {
+  margin-left: 2px;
+}
+.cd-app-run-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 10px 6px;
+}
+.cd-app-run-pin {
+  font-size: 10px;
+  padding: 2px 9px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in oklab, var(--ink) 18%, transparent);
+  background: none;
+  color: color-mix(in oklab, var(--ink) 65%, transparent);
+  cursor: pointer;
+}
+.cd-app-run-pin:hover {
+  color: var(--ink);
+  border-color: color-mix(in oklab, var(--ink) 35%, transparent);
+}
+.cd-app-run[data-pinned='true'] .cd-app-run-pin {
+  color: var(--accent, #0a84ff);
+  border-color: color-mix(in oklab, var(--accent, #0a84ff) 45%, transparent);
+}
+.cd-app-run-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cd-app-run-lane {
+  border-left: 2px solid color-mix(in oklab, var(--accent, #0a84ff) 35%, transparent);
+  padding-left: 6px;
+}
+.cd-app-run-lane-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in oklab, var(--accent, #0a84ff) 70%, transparent);
+  margin-bottom: 3px;
+}
+.cd-app-run-lane-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cd-app-run-lane-nodes > .cd-app-run-node {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.cd-app-run-node[data-kind='invoke'] {
+  background: color-mix(in oklab, var(--accent, #0a84ff) 7%, transparent);
+}
+.cd-app-run-node-expand {
+  margin-top: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--accent, #0a84ff);
+}
+.cd-app-run-node-children {
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in oklab, var(--ink) 12%, transparent);
+}
+.cd-app-run-node-note {
+  margin-top: 4px;
+  font-size: 9px;
+  font-style: italic;
+  color: color-mix(in oklab, var(--ink) 50%, transparent);
+}
+
 /* Pill toggle — custom, not a native checkbox. Matches the dignity
  * of the surrounding typography; iOS-style affordance reads as
  * deliberate without being overwrought. */

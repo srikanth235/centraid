@@ -10,11 +10,16 @@
  * outer turn — only by `ctx.agent` calls that route through a
  * different (real) provider.
  *
- * This module ships **both wire protocols** so the same server serves
- * either CLI:
+ * This module ships **all three wire protocols** so the same server
+ * serves either CLI:
  *
- *   - Anthropic Messages   — `POST /v1/messages`             (claude -p)
- *   - OpenAI Chat Completions — `POST /v1/chat/completions`  (codex exec)
+ *   - Anthropic Messages      — `POST /v1/messages`           (claude -p)
+ *   - OpenAI Responses        — `POST /v1/responses`          (codex exec)
+ *   - OpenAI Chat Completions — `POST /v1/chat/completions`   (legacy)
+ *
+ * codex 0.128+ dropped `wire_api = "chat"`; the codex provider config
+ * now sets `wire_api = "responses"`, so codex hits `/v1/responses`. The
+ * Chat Completions adapter is kept for any provider still on that wire.
  *
  * The server is per-run: a fresh server starts before each
  * `centraid run-automation` invocation, binds to 127.0.0.1 on a
@@ -39,7 +44,11 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { AddressInfo } from 'node:net';
-import { writeAnthropicMessages, writeOpenAiChatCompletions } from './mock-llm-writers.js';
+import {
+  writeAnthropicMessages,
+  writeOpenAiChatCompletions,
+  writeOpenAiResponses,
+} from './mock-llm-writers.js';
 
 /**
  * One pre-staged "agent turn" the mock will emit on the next CLI
@@ -94,6 +103,13 @@ export interface MockLlmServerOptions {
    * `ctx.tool` Promises without polling the server.
    */
   onToolResults?: (dispatchId: string, results: CapturedToolResult[]) => void;
+  /**
+   * Optional callback fired with the parsed body of every authenticated
+   * POST, before the staged-turn lookup. The host-tool enumeration probe
+   * uses this to snapshot the `tools` array the CLI ships to the model —
+   * the canonical source of truth for tool names + JSON schemas.
+   */
+  onRequest?: (dispatchId: string, body: Record<string, unknown>) => void;
   /** Optional logger for diagnostics. */
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
 }
@@ -190,7 +206,11 @@ export async function startMockLlmServer(
       return;
     }
 
-    // Sniff for tool_result blocks in either protocol so we can route
+    // Surface the raw request to any observer (tool-enumeration probe)
+    // before we touch the staged-turn machinery.
+    opts.onRequest?.(dispatchId, parsed);
+
+    // Sniff for tool_result blocks in any protocol so we can route
     // them to the orchestrator before assembling the next response.
     const results = extractToolResults(parsed);
     if (results.length > 0 && opts.onToolResults) {
@@ -209,6 +229,10 @@ export async function startMockLlmServer(
 
     if (url.startsWith('/v1/messages')) {
       writeAnthropicMessages(req, res, turn);
+      return;
+    }
+    if (url.startsWith('/v1/responses')) {
+      writeOpenAiResponses(req, res, turn);
       return;
     }
     if (url.startsWith('/v1/chat/completions')) {
@@ -278,11 +302,24 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 /**
- * Search the Anthropic-style and OpenAI-style request bodies for
- * `tool_result` content blocks. Returns one entry per result block.
+ * Search the Anthropic-style, OpenAI Chat, and OpenAI Responses request
+ * bodies for tool results. Returns one entry per result block.
  */
 function extractToolResults(body: Record<string, unknown>): CapturedToolResult[] {
   const out: CapturedToolResult[] = [];
+  // OpenAI Responses: { input: [{ type: "function_call_output", call_id,
+  // output }, ...] }. The CLI re-sends prior turns in `input`; only the
+  // function_call_output items are tool results.
+  const input = body.input;
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      if (!isObject(item)) continue;
+      if (item.type === 'function_call_output') {
+        const id = typeof item.call_id === 'string' ? item.call_id : '';
+        out.push({ id, content: stringifyContent(item.output), isError: false });
+      }
+    }
+  }
   // Anthropic Messages: { messages: [{ role: "user", content: [{ type:
   // "tool_result", tool_use_id, content, is_error? }, ...] }] }
   const messages = (body.messages as unknown[] | undefined) ?? [];

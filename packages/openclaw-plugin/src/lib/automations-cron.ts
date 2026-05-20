@@ -55,14 +55,14 @@ interface CronAddPayload {
 
 export function payloadFor(row: AutomationRow): CronAddPayload {
   return {
-    name: cronNameFor(row.appId, row.name),
+    name: cronNameFor(row.originAppId, row.name),
     enabled: row.enabled,
     schedule: { kind: 'cron', expr: row.cronExpr },
     sessionTarget: 'isolated',
     wakeMode: 'now',
     payload: {
       kind: 'agentTurn',
-      message: `<<<centraid:${row.appId}:${row.name}>>>`,
+      message: `<<<centraid:${row.originAppId}:${row.name}>>>`,
       model: `${CENTRAID_MOCK_PROVIDER_ID}/${CENTRAID_MOCK_MODEL_ID}`,
       ...(row.manifest.requires.tools ? { toolsAllow: row.manifest.requires.tools } : {}),
       timeoutSeconds: 300,

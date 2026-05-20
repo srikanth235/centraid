@@ -115,6 +115,32 @@ describe('mock-llm-server: stage + serve', () => {
     });
   });
 
+  it('serves an OpenAI Responses streaming response for a tool_use turn', async () => {
+    await withServer(async (server) => {
+      const { dispatchId, bearerToken } = server.mintDispatchToken();
+      server.stageTurn(dispatchId, {
+        toolUses: [{ id: 'call_resp', name: 'exec_command', input: { cmd: 'ls' } }],
+        stopReason: 'tool_use',
+      });
+      const res = await fetch(`${server.baseUrl}/responses`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${bearerToken}`, accept: 'text/event-stream' },
+        body: JSON.stringify({
+          model: 'centraid-mock-run-automation',
+          input: [{ type: 'message', role: 'user', content: 'go' }],
+          stream: true,
+        }),
+      });
+      assert.equal(res.status, 200);
+      const text = await res.text();
+      assert.match(text, /event: response\.created/);
+      assert.match(text, /"type":"function_call"/);
+      assert.match(text, /"name":"exec_command"/);
+      assert.match(text, /"call_id":"call_resp"/);
+      assert.match(text, /event: response\.completed/);
+    });
+  });
+
   it('serves an end_turn ack with assistant text', async () => {
     await withServer(async (server) => {
       const { dispatchId, bearerToken } = server.mintDispatchToken();
@@ -180,6 +206,61 @@ describe('mock-llm-server: tool_result capture', () => {
       {
         onToolResults: (dispatchId, results) => {
           for (const r of results) captured.push({ dispatchId, ...r });
+        },
+      },
+    );
+  });
+
+  it('routes OpenAI Responses function_call_output items to onToolResults', async () => {
+    const captured: Array<{ id: string; content: string }> = [];
+    await withServer(
+      async (server) => {
+        const { dispatchId, bearerToken } = server.mintDispatchToken();
+        server.stageTurn(dispatchId, { text: 'ok', stopReason: 'end_turn' });
+        await fetch(`${server.baseUrl}/responses`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${bearerToken}` },
+          body: JSON.stringify({
+            input: [
+              { type: 'message', role: 'user', content: 'go' },
+              { type: 'function_call', call_id: 'call_resp', name: 'exec_command' },
+              { type: 'function_call_output', call_id: 'call_resp', output: 'resp output' },
+            ],
+          }),
+        });
+        assert.equal(captured.length, 1);
+        assert.equal(captured[0]!.id, 'call_resp');
+        assert.equal(captured[0]!.content, 'resp output');
+      },
+      {
+        onToolResults: (_dispatchId, results) => {
+          for (const r of results) captured.push(r);
+        },
+      },
+    );
+  });
+
+  it('surfaces the raw request body via onRequest (tool-enumeration probe)', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    await withServer(
+      async (server) => {
+        const { dispatchId, bearerToken } = server.mintDispatchToken();
+        server.stageTurn(dispatchId, { text: 'ok', stopReason: 'end_turn' });
+        await fetch(`${server.baseUrl}/responses`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${bearerToken}` },
+          body: JSON.stringify({
+            input: [{ type: 'message', role: 'user', content: 'go' }],
+            tools: [{ type: 'function', name: 'exec_command', parameters: { type: 'object' } }],
+          }),
+        });
+        assert.equal(bodies.length, 1);
+        const tools = bodies[0]!.tools as Array<{ name: string }>;
+        assert.equal(tools[0]!.name, 'exec_command');
+      },
+      {
+        onRequest: (_dispatchId, body) => {
+          bodies.push(body);
         },
       },
     );

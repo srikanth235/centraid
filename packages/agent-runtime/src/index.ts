@@ -69,6 +69,11 @@ export {
   compareSemver,
 } from './preflight.js';
 
+// Host tool enumeration — feeds the builder's available-tools grounding
+// block so the agent declares `ctx.tool` calls + `requires` against the
+// tools the host runtime actually exposes (issue #80 follow-up).
+export { enumerateHostTools, type HostTool } from './host-tools.js';
+
 // Ephemeral HTTP mock-LLM server used by the local automation runtime
 // (see issue #70). Per-spawn lifecycle, bearer-token-as-dispatch-id
 // correlation, speaks both Anthropic Messages and OpenAI Chat

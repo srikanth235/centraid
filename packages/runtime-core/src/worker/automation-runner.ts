@@ -4,9 +4,10 @@
  * Parallel to `runner.ts` (which executes queries / actions). The shape
  * of the handler arg differs: queries/actions get `{ db, log, app, ctx:
  * { fetch, abortSignal } }`, automations get `{ db, log, app, ctx: {
- * tool, agent, abortSignal } }`. The runner forwards `tool` and `agent`
- * calls back to the parent via message-passing — the same idiom as the
- * db proxy, but with a notable extension: per-microtask **batching**.
+ * tool, agent, state, runs, invoke, abortSignal } }`. The runner
+ * forwards `tool` and `agent` calls back to the parent via
+ * message-passing — the same idiom as the db proxy, but with a notable
+ * extension: per-microtask **batching** for `ctx.tool`.
  *
  * Why batching: each batch dispatches to one host agent turn (one
  * `codex exec` / `claude -p` spawn on local, one `createStreamFn`
@@ -17,14 +18,17 @@
  * Mitigation: when the handler does `Promise.all([ctx.tool(a),
  * ctx.tool(b), ctx.tool(c)])`, we collect all three queued tool calls
  * inside the same microtask checkpoint and dispatch them as ONE batch
- * to the parent. The parent stages them as one mock-LLM turn returning
- * three `tool_use` blocks, the host CLI executes all three through its
- * MCP pipeline in one shot, and the three Promises resolve together.
+ * to the parent.
  *
- * `ctx.agent` is fundamentally a different turn shape (constrained
- * inference, not tool dispatch) so it never batches with `ctx.tool` —
- * it flushes pending tool batches first, then runs as its own one-shot
- * agent turn.
+ * There is no runtime retry: a failed `ctx.tool` rejects the handler's
+ * Promise, and the handler (plain JS) owns retry / backoff / error
+ * classification via `try/catch`.
+ *
+ * `ctx.agent`, `ctx.state.*`, `ctx.runs.*`, and `ctx.invoke` are
+ * fundamentally different turn shapes (constrained inference / KV
+ * read / KV write / sub-invocation) so they never batch with
+ * `ctx.tool` — each flushes any pending tool batch first, then runs as
+ * its own one-shot turn.
  *
  * Trust model: same as `runner.ts`. App code is trusted; the worker is
  * for crash + timeout isolation, not security sandboxing.
@@ -36,6 +40,13 @@ import { pathToFileURL } from 'node:url';
 interface WorkerRequest {
   handlerFile: string;
   args: unknown;
+  /** The payload this run was invoked with — surfaced as `ctx.input`. */
+  input?: unknown;
+}
+
+interface ToolCallWire {
+  name: string;
+  args: unknown;
 }
 
 type ParentMessage =
@@ -46,12 +57,23 @@ type ParentMessage =
       results: Array<{ ok: boolean; result?: unknown; error?: string }>;
     }
   | { type: 'agent-reply'; id: number; ok: boolean; result?: unknown; error?: string }
+  | { type: 'state-reply'; id: number; ok: boolean; result?: unknown; error?: string }
+  | { type: 'runs-reply'; id: number; ok: boolean; result?: unknown; error?: string }
+  | { type: 'invoke-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'abort'; reason?: string };
 
 type WorkerMessage =
   | { type: 'db'; id: number; method: string; payload: unknown }
-  | { type: 'tool-batch'; id: number; calls: Array<{ name: string; args: unknown }> }
+  | { type: 'tool-batch'; id: number; calls: ToolCallWire[] }
   | { type: 'agent'; id: number; prompt: string; json?: unknown }
+  | { type: 'state'; id: number; method: 'get' | 'set' | 'delete'; key: string; value?: unknown }
+  | {
+      type: 'runs';
+      id: number;
+      method: 'last' | 'list';
+      filter: { name?: string; status?: 'ok' | 'error'; since?: number; limit?: number };
+    }
+  | { type: 'invoke'; id: number; name: string; input?: unknown }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
   | { type: 'result'; ok: boolean; value?: unknown; error?: string };
 
@@ -61,11 +83,21 @@ if (!parentPort) {
 const port = parentPort;
 const req = workerData as WorkerRequest;
 
-// --- shared bookkeeping ---------------------------------------------------
-
 let nextCallId = 1;
 const pendingDb = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 const pendingAgent = new Map<
+  number,
+  { resolve: (v: unknown) => void; reject: (e: Error) => void }
+>();
+const pendingState = new Map<
+  number,
+  { resolve: (v: unknown) => void; reject: (e: Error) => void }
+>();
+const pendingRuns = new Map<
+  number,
+  { resolve: (v: unknown) => void; reject: (e: Error) => void }
+>();
+const pendingInvoke = new Map<
   number,
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
 >();
@@ -77,17 +109,8 @@ interface PendingToolCall {
   reject: (e: Error) => void;
 }
 
-// A "batch" is the set of `ctx.tool` calls that were queued before the
-// next microtask boundary drained. The flush is scheduled with
-// `queueMicrotask` so that synchronous `ctx.tool(...).ctx.tool(...)`
-// chains (and `Promise.all([...])` siblings) end up in the same batch.
 let pendingToolBatch: PendingToolCall[] = [];
-const pendingToolBatchById = new Map<
-  number,
-  {
-    calls: PendingToolCall[];
-  }
->();
+const pendingToolBatchById = new Map<number, { calls: PendingToolCall[] }>();
 let batchScheduled = false;
 
 function flushBatch(): void {
@@ -97,12 +120,8 @@ function flushBatch(): void {
   const calls = pendingToolBatch;
   pendingToolBatch = [];
   pendingToolBatchById.set(id, { calls });
-  const msg: WorkerMessage = {
-    type: 'tool-batch',
-    id,
-    calls: calls.map((c) => ({ name: c.name, args: c.args })),
-  };
-  port.postMessage(msg);
+  const wire: ToolCallWire[] = calls.map((c) => ({ name: c.name, args: c.args }));
+  port.postMessage({ type: 'tool-batch', id, calls: wire } satisfies WorkerMessage);
 }
 
 function scheduleBatchFlush(): void {
@@ -111,24 +130,27 @@ function scheduleBatchFlush(): void {
   queueMicrotask(flushBatch);
 }
 
-// --- abort plumbing -------------------------------------------------------
-
 const abortController = new AbortController();
 
 function rejectAllPending(reason: string): void {
-  for (const [, p] of pendingDb) p.reject(new Error(reason));
+  const err = new Error(reason);
+  for (const [, p] of pendingDb) p.reject(err);
   pendingDb.clear();
-  for (const [, p] of pendingAgent) p.reject(new Error(reason));
+  for (const [, p] of pendingAgent) p.reject(err);
   pendingAgent.clear();
-  for (const call of pendingToolBatch) call.reject(new Error(reason));
+  for (const [, p] of pendingState) p.reject(err);
+  pendingState.clear();
+  for (const [, p] of pendingRuns) p.reject(err);
+  pendingRuns.clear();
+  for (const [, p] of pendingInvoke) p.reject(err);
+  pendingInvoke.clear();
+  for (const call of pendingToolBatch) call.reject(err);
   pendingToolBatch = [];
   for (const [, batch] of pendingToolBatchById) {
-    for (const c of batch.calls) c.reject(new Error(reason));
+    for (const c of batch.calls) c.reject(err);
   }
   pendingToolBatchById.clear();
 }
-
-// --- parent message router ------------------------------------------------
 
 port.on('message', (msg: ParentMessage) => {
   if (msg.type === 'db-reply') {
@@ -144,10 +166,7 @@ port.on('message', (msg: ParentMessage) => {
     if (!batch) return;
     pendingToolBatchById.delete(msg.id);
     if (batch.calls.length !== msg.results.length) {
-      // Shouldn't happen — parent always returns one result per call.
-      for (const c of batch.calls) {
-        c.reject(new Error('tool-reply length mismatch'));
-      }
+      for (const c of batch.calls) c.reject(new Error('tool-reply length mismatch'));
       return;
     }
     for (let i = 0; i < batch.calls.length; i++) {
@@ -166,13 +185,35 @@ port.on('message', (msg: ParentMessage) => {
     else p.reject(new Error(msg.error ?? 'agent call failed'));
     return;
   }
+  if (msg.type === 'state-reply') {
+    const p = pendingState.get(msg.id);
+    if (!p) return;
+    pendingState.delete(msg.id);
+    if (msg.ok) p.resolve(msg.result);
+    else p.reject(new Error(msg.error ?? 'state call failed'));
+    return;
+  }
+  if (msg.type === 'runs-reply') {
+    const p = pendingRuns.get(msg.id);
+    if (!p) return;
+    pendingRuns.delete(msg.id);
+    if (msg.ok) p.resolve(msg.result);
+    else p.reject(new Error(msg.error ?? 'runs query failed'));
+    return;
+  }
+  if (msg.type === 'invoke-reply') {
+    const p = pendingInvoke.get(msg.id);
+    if (!p) return;
+    pendingInvoke.delete(msg.id);
+    if (msg.ok) p.resolve(msg.result);
+    else p.reject(new Error(msg.error ?? 'invoke failed'));
+    return;
+  }
   if (msg.type === 'abort') {
     abortController.abort(msg.reason ?? 'aborted');
     rejectAllPending(msg.reason ?? 'aborted');
   }
 });
-
-// --- ctx surface ----------------------------------------------------------
 
 function dbCall(method: string, payload: unknown): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -227,6 +268,58 @@ const log = {
     port.postMessage({ type: 'log', level: 'error', msg } satisfies WorkerMessage),
 };
 
+function flushPendingToolBatchIfAny(): void {
+  if (pendingToolBatch.length > 0) flushBatch();
+}
+
+const state = {
+  get<T = unknown>(key: string): Promise<T | undefined> {
+    flushPendingToolBatchIfAny();
+    return new Promise<unknown>((resolve, reject) => {
+      const id = nextCallId++;
+      pendingState.set(id, { resolve, reject });
+      port.postMessage({ type: 'state', id, method: 'get', key } satisfies WorkerMessage);
+    }) as Promise<T | undefined>;
+  },
+  set(key: string, value: unknown): Promise<void> {
+    flushPendingToolBatchIfAny();
+    return new Promise((resolve, reject) => {
+      const id = nextCallId++;
+      pendingState.set(id, { resolve: () => resolve(), reject });
+      port.postMessage({ type: 'state', id, method: 'set', key, value } satisfies WorkerMessage);
+    });
+  },
+  delete(key: string): Promise<void> {
+    flushPendingToolBatchIfAny();
+    return new Promise((resolve, reject) => {
+      const id = nextCallId++;
+      pendingState.set(id, { resolve: () => resolve(), reject });
+      port.postMessage({ type: 'state', id, method: 'delete', key } satisfies WorkerMessage);
+    });
+  },
+};
+
+const runs = {
+  last(filter: { name?: string; status?: 'ok' | 'error' } = {}): Promise<unknown> {
+    flushPendingToolBatchIfAny();
+    return new Promise((resolve, reject) => {
+      const id = nextCallId++;
+      pendingRuns.set(id, { resolve, reject });
+      port.postMessage({ type: 'runs', id, method: 'last', filter } satisfies WorkerMessage);
+    });
+  },
+  list(
+    filter: { name?: string; status?: 'ok' | 'error'; since?: number; limit?: number } = {},
+  ): Promise<unknown> {
+    flushPendingToolBatchIfAny();
+    return new Promise((resolve, reject) => {
+      const id = nextCallId++;
+      pendingRuns.set(id, { resolve, reject });
+      port.postMessage({ type: 'runs', id, method: 'list', filter } satisfies WorkerMessage);
+    });
+  },
+};
+
 const ctx = {
   tool(name: string, args: unknown): Promise<unknown> {
     return new Promise<unknown>((resolve, reject) => {
@@ -235,9 +328,7 @@ const ctx = {
     });
   },
   agent(args: { prompt: string; json?: unknown }): Promise<unknown> {
-    // Flush any pending tool batch first — keeps inference well-defined
-    // relative to side-effecting tool dispatches that preceded it.
-    if (pendingToolBatch.length > 0) flushBatch();
+    flushPendingToolBatchIfAny();
     return new Promise((resolve, reject) => {
       const id = nextCallId++;
       pendingAgent.set(id, { resolve, reject });
@@ -250,10 +341,25 @@ const ctx = {
       port.postMessage(msg);
     });
   },
+  state,
+  runs,
+  input: req.input,
+  invoke(name: string, args: { input?: unknown } = {}): Promise<unknown> {
+    flushPendingToolBatchIfAny();
+    return new Promise((resolve, reject) => {
+      const id = nextCallId++;
+      pendingInvoke.set(id, { resolve, reject });
+      const msg: WorkerMessage = {
+        type: 'invoke',
+        id,
+        name,
+        ...(args.input !== undefined ? { input: args.input } : {}),
+      };
+      port.postMessage(msg);
+    });
+  },
   abortSignal: abortController.signal,
 };
-
-// --- handler invocation ---------------------------------------------------
 
 (async () => {
   try {

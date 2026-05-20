@@ -30,6 +30,7 @@ import path from 'node:path';
 import { statSync } from 'node:fs';
 import {
   describeOp,
+  makeGatewayDbProvider,
   readActiveCodeDir,
   readOp,
   writeOp,
@@ -191,6 +192,14 @@ async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never>
   // currently-deployed version, not from a stale baked-in path.
   // Falls back to `appDir` for path-registered apps (no current.json).
   const codeDir = await readActiveCodeDir(appDir);
+  // This is the OS-scheduler-spawned path — no in-process gateway
+  // handle. The run audit must land in the SAME gateway DB the desktop
+  // reads, so the OS scheduler bakes `CENTRAID_GATEWAY_DB` into the
+  // launchd plist / systemd unit / Task Scheduler artifact. Fall back
+  // to `<appDir>/centraid-gateway.sqlite` for a bare CLI invocation.
+  const gatewayDbPath =
+    process.env.CENTRAID_GATEWAY_DB ?? path.join(appDir, 'centraid-gateway.sqlite');
+  const gatewayDb = makeGatewayDbProvider(gatewayDbPath);
   try {
     const { outcome, record } = await runAutomationLocal({
       appId: parsed.appId,
@@ -198,6 +207,7 @@ async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never>
       codeDir,
       automationName: parsed.name,
       runner: parsed.runner,
+      gatewayDb,
       ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
       onLog: (level, msg) => {
         process.stderr.write(`[mock-llm:${level}] ${msg}\n`);

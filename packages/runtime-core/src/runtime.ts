@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit pending split into changes-feed / app-routes modules
 import path from 'node:path';
+import os from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Registry, RegistryError } from './registry.js';
 import { VersionStore, VersionStoreError } from './version-store.js';
@@ -24,6 +25,8 @@ import { handleChatRoute, parseChatSubRoute } from './chat-routes.js';
 import type { ChatRunner } from './chat-runner.js';
 import type { AppRef, RegistryEntry } from './types.js';
 import type { AutomationStore } from './automation-store.js';
+import { AutomationRunsStore } from './automation-runs-store.js';
+import type { DatabaseProvider } from './gateway-db.js';
 import type { SyncAutomationsResult } from './sync-automations.js';
 
 export interface RuntimeLogger {
@@ -74,6 +77,12 @@ export interface RuntimeOptions {
    */
   chatRunner?: ChatRunner;
   /**
+   * Central scratch base dir for runner-owned chat session files. The
+   * `POST /centraid/<id>/_chat` route passes `<dir>/<windowId>.jsonl` as
+   * `ChatRunInput.sessionFile`. Defaults to an OS-tmpdir path when omitted.
+   */
+  chatRunnerSessionDir?: string;
+  /**
    * Optional reader for per-app metadata (name, description). The chat
    * route uses it to populate the `extraSystemPrompt` it hands to the
    * runner. Both hosts wire `@centraid/builder-harness`'s app.json
@@ -97,6 +106,14 @@ export interface RuntimeOptions {
    * single-app setups that don't run automations.
    */
   automationStore?: AutomationStore;
+  /**
+   * Optional shared gateway DB provider (issue #80). When set, the
+   * deregister handler builds an `AutomationRunsStore` from it to drop
+   * the removed app's run audit + `ctx.state` rows. Hosts that pass an
+   * `automationStore` built from a provider should pass the same
+   * provider here.
+   */
+  gatewayDb?: DatabaseProvider;
   /**
    * Optional callback fired after every successful automation sync.
    * Hosts wire their scheduler reconciler here: the openclaw plugin
@@ -196,6 +213,8 @@ export class Runtime {
   readonly chatHistoryStore?: ChatHistoryStore;
   /** Optional per-app chat runner. See `RuntimeOptions.chatRunner`. */
   readonly chatRunner?: ChatRunner;
+  /** Central scratch base dir for runner-owned chat session files. */
+  readonly chatRunnerSessionDir: string;
   /** Optional app-metadata reader for chat extra-system-prompt. */
   readonly appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /** Optional runner-status preflight. */
@@ -205,6 +224,7 @@ export class Runtime {
   private readonly logger: RuntimeLogger;
   private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
   private readonly automationStore?: AutomationStore;
+  private readonly gatewayDb?: DatabaseProvider;
   private readonly onAutomationsSynced?: (
     appId: string,
     result: SyncAutomationsResult,
@@ -220,10 +240,13 @@ export class Runtime {
     this.userStore = opts.userStore;
     this.chatHistoryStore = opts.chatHistoryStore;
     this.chatRunner = opts.chatRunner;
+    this.chatRunnerSessionDir =
+      opts.chatRunnerSessionDir ?? path.join(os.tmpdir(), 'centraid-chat-runner-sessions');
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
     this.withAppUploadLock = makeAppUploadLocks();
     if (opts.automationStore) this.automationStore = opts.automationStore;
+    if (opts.gatewayDb) this.gatewayDb = opts.gatewayDb;
     if (opts.onAutomationsSynced) this.onAutomationsSynced = opts.onAutomationsSynced;
   }
 
@@ -287,6 +310,8 @@ export class Runtime {
     return {
       registry: this.registry,
       runner: this.chatRunner,
+      chatStore: this.chatHistoryStore,
+      chatRunnerSessionDir: this.chatRunnerSessionDir,
       appMeta: this.appMeta,
     };
   }
@@ -386,6 +411,17 @@ export class Runtime {
             } catch (err) {
               this.logger.warn(
                 `[centraid] failed to clean automations for "${route.appId}": ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }
+          // Drop the app's automation run audit + ctx.state from the
+          // gateway DB (issue #80). Best-effort like the mirror cleanup.
+          if (this.gatewayDb) {
+            try {
+              new AutomationRunsStore(this.gatewayDb, route.appId).deleteAppData();
+            } catch (err) {
+              this.logger.warn(
+                `[centraid] failed to clean automation run audit for "${route.appId}": ${err instanceof Error ? err.message : String(err)}`,
               );
             }
           }

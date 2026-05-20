@@ -68,8 +68,8 @@ export class OpenclawAutomationHost implements AutomationHost {
     for (const row of desired) {
       // Defensive cross-app drop: a scoped reconcile must not register
       // entries for an app it wasn't asked to touch.
-      if (scope && row.appId !== scope.appId) continue;
-      desiredByCronName.set(cronNameFor(row.appId, row.name), row);
+      if (scope && row.originAppId !== scope.appId) continue;
+      desiredByCronName.set(cronNameFor(row.originAppId, row.name), row);
     }
 
     // When scoped, the removal pass only considers the named app's

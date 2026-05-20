@@ -1,6 +1,6 @@
 {
   "prompt": "Every weekday at 5pm, look at what's still open and what got done today, and write a short two-line digest naming the most-stale open item.",
-  "schedule": "0 17 * * 1-5",
+  "trigger": { "kind": "cron", "expr": "0 17 * * 1-5" },
   "action": "daily-digest.js",
   "requires": {
     "model": "anthropic/claude-3-5-sonnet"

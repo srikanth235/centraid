@@ -10,7 +10,8 @@
  * one place.
  *
  * See `automation-manifest.ts` for the manifest schema and `gateway-db.ts`
- * MIGRATIONS[1] for the table DDL.
+ * MIGRATIONS[1] for the table DDL. The mirror row is keyed by
+ * (origin_app_id, name).
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
@@ -24,7 +25,7 @@ import {
 
 /** Row shape as it sits in the gateway DB. */
 export interface AutomationRow {
-  readonly appId: string;
+  readonly originAppId: string;
   readonly name: string;
   readonly prompt: string;
   readonly cronExpr: string;
@@ -35,7 +36,7 @@ export interface AutomationRow {
 }
 
 interface RawRow {
-  app_id: string;
+  origin_app_id: string;
   name: string;
   prompt: string;
   cron_expr: string;
@@ -67,13 +68,13 @@ function rowFromRaw(raw: RawRow): AutomationRow {
     if (err instanceof AutomationManifestError) {
       throw new AutomationManifestError(
         err.code,
-        `automations(${raw.app_id}/${raw.name}): ${err.message}`,
+        `automations(${raw.origin_app_id}/${raw.name}): ${err.message}`,
       );
     }
     throw err;
   }
   return {
-    appId: raw.app_id,
+    originAppId: raw.origin_app_id,
     name: raw.name,
     prompt: raw.prompt,
     cronExpr: raw.cron_expr,
@@ -98,23 +99,23 @@ export class AutomationStore {
     const db = this.dbProvider();
     const stmts: PreparedStatements = {
       upsert: db.prepare(`
-        INSERT INTO automations (app_id, name, prompt, cron_expr, enabled, manifest_json, created_at, updated_at)
+        INSERT INTO automations (origin_app_id, name, prompt, cron_expr, enabled, manifest_json, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(app_id, name) DO UPDATE SET
+        ON CONFLICT(origin_app_id, name) DO UPDATE SET
           prompt = excluded.prompt,
           cron_expr = excluded.cron_expr,
           enabled = excluded.enabled,
           manifest_json = excluded.manifest_json,
           updated_at = excluded.updated_at
       `),
-      getOne: db.prepare(`SELECT * FROM automations WHERE app_id = ? AND name = ?`),
-      listByApp: db.prepare(`SELECT * FROM automations WHERE app_id = ? ORDER BY name`),
-      listAll: db.prepare(`SELECT * FROM automations ORDER BY app_id, name`),
+      getOne: db.prepare(`SELECT * FROM automations WHERE origin_app_id = ? AND name = ?`),
+      listByApp: db.prepare(`SELECT * FROM automations WHERE origin_app_id = ? ORDER BY name`),
+      listAll: db.prepare(`SELECT * FROM automations ORDER BY origin_app_id, name`),
       setEnabled: db.prepare(
-        `UPDATE automations SET enabled = ?, updated_at = ? WHERE app_id = ? AND name = ?`,
+        `UPDATE automations SET enabled = ?, updated_at = ? WHERE origin_app_id = ? AND name = ?`,
       ),
-      remove: db.prepare(`DELETE FROM automations WHERE app_id = ? AND name = ?`),
-      removeByApp: db.prepare(`DELETE FROM automations WHERE app_id = ?`),
+      remove: db.prepare(`DELETE FROM automations WHERE origin_app_id = ? AND name = ?`),
+      removeByApp: db.prepare(`DELETE FROM automations WHERE origin_app_id = ?`),
     };
     this.db = db;
     this.stmts = stmts;
@@ -137,7 +138,7 @@ export class AutomationStore {
       appId,
       name,
       manifest.prompt,
-      manifest.schedule,
+      manifest.trigger.expr,
       enabled ? 1 : 0,
       JSON.stringify(manifest),
       now,

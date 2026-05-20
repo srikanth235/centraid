@@ -7,11 +7,29 @@
  *                    multi-tenant doesn't need a column-add migration.
  *   user_prefs     — global prefs keyed by (user_id, key); JSON-encoded
  *                    values. FK-cascaded from `users`.
- *   chat_sessions  — chat-pane sessions, scoped by user_id (FK-cascaded
- *                    from `users`) and app_id. Real FK so deleting a user
+ *   chat_sessions  — chat sessions, scoped by user_id (FK-cascaded from
+ *                    `users`). A session is the single chat concept — its
+ *                    id IS the chat window id. Carries a nullable
+ *                    `origin_app_id` (the app the chat was opened from;
+ *                    NULL = started from the centraid shell), a sticky
+ *                    `mode` ('full' | 'data'), per-turn `turn_count`, and
+ *                    the runner-resume handle (`adapter_kind` +
+ *                    `adapter_session_id`). Real FK so deleting a user
  *                    cleans up their sessions atomically.
  *   chat_messages  — append-only message log, FK-cascaded from
- *                    `chat_sessions`.
+ *                    `chat_sessions`. Each row carries a nullable `app_id`
+ *                    naming the app a tool call in that message touched.
+ *   automations    — centraid's mirror of registered automations, keyed
+ *                    by (origin_app_id, name).
+ *   automation_runs / automation_run_nodes / automation_state
+ *                  — the automation run-audit + ctx.state surface
+ *                    (issue #80). One run row per automation fire, one
+ *                    node row per ctx.tool/ctx.agent/ctx.invoke call,
+ *                    one state row per (automation, key). Runtime-owned;
+ *                    never reachable from handler `db` or the
+ *                    `centraid_sql_*` agent tools. Living here (not in a
+ *                    per-app file) lets a cross-app `ctx.invoke` child
+ *                    link its `parent_run_id` into one joinable DAG.
  *
  * One file, one connection, one migration ladder, real foreign keys
  * (`PRAGMA foreign_keys=ON`). UserStore + ChatHistoryStore both wrap
@@ -73,18 +91,23 @@ export const MIGRATIONS: readonly string[] = [
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
-      app_id TEXT NOT NULL,
+      origin_app_id TEXT,
       title TEXT NOT NULL DEFAULT '',
+      mode TEXT NOT NULL DEFAULT 'full',
+      adapter_kind TEXT,
+      adapter_session_id TEXT,
+      turn_count INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_app_updated
-      ON chat_sessions(user_id, app_id, updated_at DESC);
+      ON chat_sessions(user_id, origin_app_id, updated_at DESC);
 
     CREATE TABLE IF NOT EXISTS chat_messages (
       session_id TEXT NOT NULL,
       idx INTEGER NOT NULL,
+      app_id TEXT,
       payload_json TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       PRIMARY KEY (session_id, idx),
@@ -104,10 +127,12 @@ export const MIGRATIONS: readonly string[] = [
   //
   // We don't FK to the apps registry (`_registry.json`) — it's a file,
   // not a SQLite table — but the reconciliation pass treats a missing
-  // app_id as "stale, remove."
+  // origin_app_id as "stale, remove." `origin_app_id` is nullable for
+  // forward-compat with app-less automations (not built in v0); today
+  // it is always set.
   `
     CREATE TABLE IF NOT EXISTS automations (
-      app_id TEXT NOT NULL,
+      origin_app_id TEXT,
       name TEXT NOT NULL,
       prompt TEXT NOT NULL,
       cron_expr TEXT NOT NULL,
@@ -115,10 +140,76 @@ export const MIGRATIONS: readonly string[] = [
       manifest_json TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
-      PRIMARY KEY (app_id, name)
+      PRIMARY KEY (origin_app_id, name)
     );
     CREATE INDEX IF NOT EXISTS idx_automations_app
-      ON automations(app_id);
+      ON automations(origin_app_id);
+  `,
+  // 2 → 3: automation run-audit + ctx.state tables (issue #80).
+  //
+  // These were a per-app `automations.sqlite` file; folded into the
+  // gateway DB so a cross-app `ctx.invoke` child run can link its
+  // `parent_run_id` self-FK into one joinable DAG (a self-FK can't
+  // cross SQLite files). Runtime-owned; never reachable from handler
+  // `db` or the `centraid_sql_*` agent tools.
+  //
+  // `origin_app_id` is nullable on `automation_runs` / `automation_state`
+  // for forward-compat with app-less automations (not built in v0);
+  // today it is always set. `automation_runs.parent_run_id` uses
+  // `ON DELETE SET NULL` so deleting one app's runs doesn't FK-fail
+  // when another app has a cross-app child pointing at them.
+  `
+    CREATE TABLE IF NOT EXISTS automation_runs (
+      run_id          TEXT PRIMARY KEY,
+      origin_app_id   TEXT,
+      automation_name TEXT NOT NULL,
+      trigger_kind    TEXT NOT NULL,
+      parent_run_id   TEXT REFERENCES automation_runs(run_id) ON DELETE SET NULL,
+      input_json      TEXT,
+      started_at      INTEGER NOT NULL,
+      ended_at        INTEGER,
+      ok              INTEGER NOT NULL DEFAULT 0,
+      error           TEXT,
+      summary         TEXT,
+      output_json     TEXT,
+      pinned          INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_automation_runs_app_name_started
+      ON automation_runs(origin_app_id, automation_name, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_automation_runs_parent
+      ON automation_runs(parent_run_id);
+
+    CREATE TABLE IF NOT EXISTS automation_run_nodes (
+      node_id       TEXT PRIMARY KEY,
+      run_id        TEXT NOT NULL REFERENCES automation_runs(run_id) ON DELETE CASCADE,
+      ordinal       INTEGER NOT NULL,
+      batch_id      INTEGER,
+      kind          TEXT NOT NULL,
+      name          TEXT NOT NULL,
+      args_json     TEXT,
+      output_json   TEXT,
+      ok            INTEGER NOT NULL,
+      error         TEXT,
+      started_at    INTEGER NOT NULL,
+      ended_at      INTEGER,
+      duration_ms   INTEGER,
+      input_tokens  INTEGER,
+      output_tokens INTEGER,
+      child_run_id  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_automation_run_nodes_by_run
+      ON automation_run_nodes(run_id, ordinal);
+    CREATE INDEX IF NOT EXISTS idx_automation_run_nodes_by_tool
+      ON automation_run_nodes(name, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS automation_state (
+      origin_app_id   TEXT,
+      automation_name TEXT NOT NULL,
+      key             TEXT NOT NULL,
+      value_json      TEXT,
+      updated_at      INTEGER NOT NULL,
+      PRIMARY KEY (origin_app_id, automation_name, key)
+    );
   `,
 ];
 

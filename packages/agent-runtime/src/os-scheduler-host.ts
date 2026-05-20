@@ -43,6 +43,15 @@ export interface OsSchedulerHostOptions {
   resolveAppDir(appId: string): string;
   /** Absolute path to the `centraid` binary the scheduler should invoke. */
   centraidBin: string;
+  /**
+   * Absolute path to the gateway DB (`centraid-gateway.sqlite`). Baked
+   * into the OS scheduler artifact as `CENTRAID_GATEWAY_DB` so the
+   * scheduled `centraid run-automation` process writes its run audit
+   * to the SAME gateway DB the desktop reads — without this the fire
+   * would fall back to `<appDir>/centraid-gateway.sqlite` and the run
+   * would be invisible in the desktop UI.
+   */
+  gatewayDbPath: string;
   /** Which CLI runner to drive (codex / claude-code). */
   runner: LocalRunnerKind;
   /** Options forwarded to os-scheduler (mostly used in tests for execShell + artifactRoot overrides). */
@@ -57,7 +66,7 @@ export class OsSchedulerHost implements AutomationHost {
     // collapse disabled to unregister so reconcile and toggle stay
     // consistent.
     if (!row.enabled) {
-      await this.unregister(row.appId, row.name);
+      await this.unregister(row.originAppId, row.name);
       return;
     }
     await registerOsJob(this.specFor(row), this.opts.os);
@@ -90,12 +99,13 @@ export class OsSchedulerHost implements AutomationHost {
 
   private specFor(row: AutomationRow): OsSchedulerJobSpec {
     return {
-      appId: row.appId,
+      appId: row.originAppId,
       automationName: row.name,
       cronExpr: row.cronExpr,
-      cwd: this.opts.resolveAppDir(row.appId),
+      cwd: this.opts.resolveAppDir(row.originAppId),
       runner: this.opts.runner,
       centraidBin: this.opts.centraidBin,
+      env: { CENTRAID_GATEWAY_DB: this.opts.gatewayDbPath },
     };
   }
 }

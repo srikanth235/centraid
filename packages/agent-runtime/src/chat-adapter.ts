@@ -6,9 +6,9 @@
  * inject: per-app cwd from `input.dataDir` (the resolved `appDataDir(entry)`
  * — `<appsDir>/<id>` for uploaded apps, the external folder for
  * path-registered ones), the three first-class `centraid_sql_*` tools
- * declared inline against the per-app `data.sqlite`, and the per-window
- * `ChatStore` lookup for the previous adapter session id (round-tripped
- * to resume the conversation).
+ * declared inline against the per-app `data.sqlite`, and the previous
+ * adapter session id threaded through `input.prevAdapter*` (round-tripped
+ * from the central `chat_sessions` row to resume the conversation).
  *
  * Builder-mode consumers call `runAgentTurn` directly — they own their
  * own cwd / preamble / resume-id plumbing and don't need this adapter.
@@ -20,12 +20,7 @@
 
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import {
-  ChatStore,
-  type ChatRunInput,
-  type ChatRunResult,
-  type ChatRunner,
-} from '@centraid/runtime-core';
+import type { ChatRunInput, ChatRunResult, ChatRunner } from '@centraid/runtime-core';
 import { runAgentTurn, type ToolContext } from './runtime.js';
 import type { RunnerPrefs } from './types.js';
 
@@ -91,11 +86,10 @@ export function makeChatRunner(opts: MakeChatRunnerOptions): ChatRunner {
       }
 
       const cwd = input.dataDir;
-      const store = new ChatStore(cwd);
-      const window = await store.getWindow(input.windowId).catch(() => undefined);
-      const adapterKind = prefs.kind;
+      // Resume only when the previous turn used the same runner kind — a
+      // mid-session runner switch starts a fresh conversation.
       const resumeId =
-        window && window.adapterKind === adapterKind ? window.adapterSessionId : undefined;
+        input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
 
       const extraSystemPrompt = spliceExtraSystemPrompt(input.extraSystemPrompt);
 

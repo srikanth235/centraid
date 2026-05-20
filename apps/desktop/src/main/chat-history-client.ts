@@ -1,8 +1,8 @@
 /*
- * HTTP client for the centraid chat-history routes exposed by the openclaw
- * plugin under `/_centraid-chat`. The plugin owns a single shared SQLite
- * (`<stateDir>/centraid-chat-history.sqlite`) holding every app's sessions
- * and messages — see packages/openclaw-plugin/src/lib/chat-history.ts.
+ * HTTP client for the centraid chat routes exposed under `/_centraid-chat`.
+ * The gateway owns a single shared SQLite holding every chat session and
+ * message — see packages/runtime-core/src/chat-history.ts. A chat session
+ * IS the chat window: the session id is the window id.
  *
  * The client is thin on purpose: it shapes URLs, attaches the bearer token,
  * and JSON-decodes. Auth resolution is cached for the process lifetime
@@ -15,8 +15,17 @@ import { loadSettings } from './settings.js';
 
 export interface ChatSessionMeta {
   id: string;
-  appId: string;
+  /** App the chat was opened from; `null` for chats started from the shell. */
+  originAppId: string | null;
   title: string;
+  /** Sticky chat mode. */
+  mode: 'full' | 'data';
+  /** Runner kind that owns `adapterSessionId`. */
+  adapterKind: string | null;
+  /** Opaque per-runner resume handle. */
+  adapterSessionId: string | null;
+  /** Number of completed turns. */
+  turnCount: number;
   createdAt: number;
   updatedAt: number;
   messageCount: number;
@@ -98,8 +107,12 @@ export async function historyList(appId: string): Promise<ChatSessionMeta[]> {
   return out.sessions ?? [];
 }
 
-export async function historyCreate(appId: string, title = ''): Promise<ChatSessionMeta> {
-  return call<ChatSessionMeta>('POST', '/sessions', { appId, title });
+export async function historyCreate(
+  originAppId: string | null,
+  mode: 'full' | 'data',
+  title = '',
+): Promise<ChatSessionMeta> {
+  return call<ChatSessionMeta>('POST', '/sessions', { appId: originAppId, mode, title });
 }
 
 export async function historyLoad(id: string): Promise<ChatSessionWithMessages> {

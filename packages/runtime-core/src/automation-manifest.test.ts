@@ -7,6 +7,7 @@ import {
   isValidActionFilename,
   parseManifest,
   validateManifest,
+  validateOutputAgainstSchema,
 } from './automation-manifest.js';
 
 describe('isValidCronExpression', () => {
@@ -57,7 +58,7 @@ describe('isValidAutomationName', () => {
 
 const goodManifest = {
   prompt: 'every 30 min, summarize open PRs in foo/bar',
-  schedule: '*/30 * * * *',
+  trigger: { kind: 'cron', expr: '*/30 * * * *' },
   action: 'summarize-prs.js',
   requires: {
     mcps: ['github'],
@@ -72,7 +73,8 @@ describe('parseManifest / validateManifest', () => {
   it('round-trips a well-formed manifest', () => {
     const m = parseManifest(JSON.stringify(goodManifest));
     assert.equal(m.prompt, goodManifest.prompt);
-    assert.equal(m.schedule, goodManifest.schedule);
+    assert.equal(m.trigger.kind, 'cron');
+    assert.equal(m.trigger.expr, '*/30 * * * *');
     assert.equal(m.action, goodManifest.action);
     assert.deepEqual([...(m.requires.mcps ?? [])], ['github']);
     assert.deepEqual([...(m.requires.tools ?? [])], ['github.list_pull_requests']);
@@ -95,9 +97,9 @@ describe('parseManifest / validateManifest', () => {
     delete noPrompt.prompt;
     assert.throws(() => validateManifest(noPrompt), /prompt/);
 
-    const noSched = { ...goodManifest } as Record<string, unknown>;
-    delete noSched.schedule;
-    assert.throws(() => validateManifest(noSched), /schedule/);
+    const noTrigger = { ...goodManifest } as Record<string, unknown>;
+    delete noTrigger.trigger;
+    assert.throws(() => validateManifest(noTrigger), /trigger/);
 
     const noGenerated = { ...goodManifest } as Record<string, unknown>;
     delete noGenerated.generated;
@@ -105,7 +107,10 @@ describe('parseManifest / validateManifest', () => {
   });
 
   it('rejects bad cron expressions', () => {
-    assert.throws(() => validateManifest({ ...goodManifest, schedule: '@hourly' }), /schedule/);
+    assert.throws(
+      () => validateManifest({ ...goodManifest, trigger: { kind: 'cron', expr: '@hourly' } }),
+      /trigger/,
+    );
   });
 
   it('rejects action path traversal', () => {
@@ -135,7 +140,7 @@ describe('parseManifest / validateManifest', () => {
   it('allows omitting optional fields', () => {
     const minimal = {
       prompt: 'hello',
-      schedule: '0 * * * *',
+      trigger: { kind: 'cron', expr: '0 * * * *' },
       action: 'h.js',
       requires: {},
       generated: { by: 'test', at: '2026-01-01T00:00:00Z' },
@@ -143,5 +148,188 @@ describe('parseManifest / validateManifest', () => {
     const m = validateManifest(minimal);
     assert.equal(m.requires.mcps, undefined);
     assert.equal(m.costEstimate, undefined);
+  });
+});
+
+describe('manifest trigger', () => {
+  const base = {
+    prompt: 'hi',
+    action: 'h.js',
+    requires: {},
+    generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
+  };
+
+  it('accepts trigger:{kind:cron,expr}', () => {
+    const m = validateManifest({
+      ...base,
+      trigger: { kind: 'cron', expr: '*/15 * * * *' },
+    });
+    assert.equal(m.trigger.kind, 'cron');
+    assert.equal(m.trigger.expr, '*/15 * * * *');
+  });
+
+  it('rejects unknown trigger.kind', () => {
+    assert.throws(
+      () => validateManifest({ ...base, trigger: { kind: 'webhook', expr: 'POST /x' } }),
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_trigger',
+    );
+  });
+
+  it('rejects invalid trigger.expr cron', () => {
+    assert.throws(
+      () => validateManifest({ ...base, trigger: { kind: 'cron', expr: '@hourly' } }),
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_trigger',
+    );
+  });
+
+  it('rejects manifest with no trigger', () => {
+    assert.throws(() => validateManifest({ ...base }), /trigger/);
+  });
+
+  it('rejects bare `schedule` field (no longer accepted in v0)', () => {
+    assert.throws(() => validateManifest({ ...base, schedule: '0 0 * * *' }), /trigger/);
+  });
+});
+
+describe('manifest outputSchema (issue #80)', () => {
+  const base = {
+    prompt: 'hi',
+    trigger: { kind: 'cron', expr: '0 * * * *' },
+    action: 'h.js',
+    requires: {},
+    generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
+  };
+
+  it('accepts a well-formed outputSchema', () => {
+    const m = validateManifest({
+      ...base,
+      outputSchema: {
+        type: 'object',
+        properties: { summary: { type: 'string' }, count: { type: 'number' } },
+        required: ['summary'],
+      },
+    });
+    assert.equal(m.outputSchema?.type, 'object');
+    assert.equal(m.outputSchema?.properties?.summary?.type, 'string');
+    assert.deepEqual([...(m.outputSchema?.required ?? [])], ['summary']);
+  });
+
+  it('rejects non-object schema type', () => {
+    assert.throws(
+      () => validateManifest({ ...base, outputSchema: { type: 'string' } }),
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_output_schema',
+    );
+  });
+
+  it('rejects properties with unknown types', () => {
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          outputSchema: { type: 'object', properties: { x: { type: 'datetime' } } },
+        }),
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_output_schema',
+    );
+  });
+
+  it('validateOutputAgainstSchema rejects missing required keys', () => {
+    const schema = {
+      type: 'object',
+      properties: { summary: { type: 'string' } },
+      required: ['summary'],
+    } as const;
+    assert.equal(validateOutputAgainstSchema(schema, { summary: 'ok' }), null);
+    const err = validateOutputAgainstSchema(schema, { other: 'x' });
+    assert.match(err ?? '', /missing required output property "summary"/);
+  });
+
+  it('validateOutputAgainstSchema rejects wrong property type', () => {
+    const schema = {
+      type: 'object',
+      properties: { count: { type: 'number' } },
+    } as const;
+    const err = validateOutputAgainstSchema(schema, { count: 'not a number' });
+    assert.match(err ?? '', /expected type number, got string/);
+  });
+
+  it('validateOutputAgainstSchema rejects non-object outputs', () => {
+    const schema = { type: 'object' } as const;
+    assert.match(validateOutputAgainstSchema(schema, 'hello') ?? '', /not an object/);
+    assert.match(validateOutputAgainstSchema(schema, null) ?? '', /not an object/);
+    assert.match(validateOutputAgainstSchema(schema, [1, 2]) ?? '', /not an object/);
+  });
+});
+
+describe('manifest onFailure (issue #80)', () => {
+  const base = {
+    prompt: 'hi',
+    trigger: { kind: 'cron', expr: '0 * * * *' },
+    action: 'h.js',
+    requires: {},
+    generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
+  };
+
+  it('accepts a valid follow-up name', () => {
+    const m = validateManifest({ ...base, onFailure: 'digest-alert' });
+    assert.equal(m.onFailure, 'digest-alert');
+  });
+
+  it('rejects an invalid follow-up name', () => {
+    assert.throws(
+      () => validateManifest({ ...base, onFailure: 'a/b' }),
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_on_failure',
+    );
+  });
+
+  it('rejects an empty follow-up string', () => {
+    assert.throws(
+      () => validateManifest({ ...base, onFailure: '' }),
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_on_failure',
+    );
+  });
+});
+
+describe('manifest history.keep (issue #80)', () => {
+  const base = {
+    prompt: 'hi',
+    trigger: { kind: 'cron', expr: '0 * * * *' },
+    action: 'h.js',
+    requires: {},
+    generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
+  };
+
+  it('defaults to count: 100 when history is omitted', () => {
+    const m = validateManifest(base);
+    assert.deepEqual(m.history, { keep: { count: 100 } });
+  });
+
+  it('accepts {count: N}', () => {
+    const m = validateManifest({ ...base, history: { keep: { count: 50 } } });
+    assert.deepEqual(m.history.keep, { count: 50 });
+  });
+
+  it('accepts {days: N}', () => {
+    const m = validateManifest({ ...base, history: { keep: { days: 7 } } });
+    assert.deepEqual(m.history.keep, { days: 7 });
+  });
+
+  it('accepts "all" and "errors"', () => {
+    assert.equal(validateManifest({ ...base, history: { keep: 'all' } }).history.keep, 'all');
+    assert.equal(validateManifest({ ...base, history: { keep: 'errors' } }).history.keep, 'errors');
+  });
+
+  it('rejects malformed keep shapes', () => {
+    assert.throws(
+      () => validateManifest({ ...base, history: { keep: { count: -1 } } }),
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_history',
+    );
+    assert.throws(
+      () => validateManifest({ ...base, history: { keep: { weeks: 4 } } }),
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_history',
+    );
+    assert.throws(
+      () => validateManifest({ ...base, history: { keep: 'forever' } }),
+      (err) => err instanceof AutomationManifestError && err.code === 'invalid_history',
+    );
   });
 });

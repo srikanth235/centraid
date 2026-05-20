@@ -96,6 +96,13 @@ export default definePluginEntry({
     const userStore = new UserStore(gatewayDbProvider);
     const automationStore = new AutomationStore(gatewayDbProvider);
 
+    // Chat-history store — wraps the same shared gateway DB. It is THE chat
+    // store: the `/centraid/<id>/_chat` POST route reads sticky mode +
+    // runner-resume handles from it and records turn completion back.
+    // Constructed before the runtime so it can be handed to the Runtime
+    // and also mounted on the `/_centraid-chat` HTTP surface.
+    const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
+
     const chatRunner = makeOpenClawChatRunner(api);
 
     // Openclaw cron host. Same `AutomationHost` shape the desktop's
@@ -108,10 +115,17 @@ export default definePluginEntry({
       appsDir,
       versionRetention,
       userStore,
+      chatHistoryStore,
+      chatRunnerSessionDir: path.join(
+        resolveStateDir(process.env),
+        'centraid',
+        'chat-runner-sessions',
+      ),
       logger: api.logger,
       chatRunner,
       runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
       automationStore,
+      gatewayDb: gatewayDbProvider,
       // After every successful publish, sync runs against the new
       // version's `automations/` (handled inside `handleAppUpload`).
       // Once the mirror is updated, reconcile the host against the
@@ -147,6 +161,7 @@ export default definePluginEntry({
         const entry = runtime.registry.get(appId);
         return entry?.path;
       },
+      gatewayDbProvider,
       logger: api.logger,
     });
 
@@ -189,16 +204,11 @@ export default definePluginEntry({
     // registerCentraidTools (uses sessionKey = "centraid-chat:<appId>").
     registerCentraidTools(api, runtime);
 
-    // Chat-history store — wraps the shared gateway DB above. The store
-    // itself is constructed eagerly because it's cheap (no DB work in the
-    // constructor, just stashing the providers); the underlying file open
-    // still defers to first method call via the shared `gatewayDbProvider`.
-    //
+    // Mount the chat-history store (constructed above) on its HTTP surface.
     // Per-user scoping: every chat_sessions row carries the gateway-side
     // user UUID from `UserStore` (real FK to `users`, ON DELETE CASCADE).
     // The provider closure resolves the UUID lazily — UserStore caches it
     // after the first read.
-    const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
     api.registerHttpRoute({
       path: '/_centraid-chat',
       match: 'prefix',

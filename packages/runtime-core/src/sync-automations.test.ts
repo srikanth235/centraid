@@ -40,9 +40,10 @@ function setup(): {
 
 const baseManifest: AutomationManifest = {
   prompt: 'weekly recap',
-  schedule: '0 20 * * 0',
+  trigger: { kind: 'cron', expr: '0 20 * * 0' },
   action: 'weekly-recap.js',
   requires: { model: 'anthropic/claude-3-5-sonnet' },
+  history: { keep: { count: 100 } },
   generated: { by: 'builder', at: '2026-05-19T00:00:00Z' },
 };
 
@@ -82,7 +83,10 @@ describe('syncAutomationsFromDisk', () => {
     writeAppSetting(ctx.dataDbFile, automationEnabledKey('weekly-recap'), false);
 
     // Change the schedule on disk to force an update.
-    await ctx.writeManifest('weekly-recap', { ...baseManifest, schedule: '0 21 * * 0' });
+    await ctx.writeManifest('weekly-recap', {
+      ...baseManifest,
+      trigger: { kind: 'cron', expr: '0 21 * * 0' },
+    });
     const r = await syncAutomationsFromDisk({
       appId: 'journal',
       appCodeDir: ctx.appDir,

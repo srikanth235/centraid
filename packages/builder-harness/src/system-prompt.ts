@@ -169,7 +169,7 @@ When the user asks for something **scheduled** — "every 30 minutes, ...", "eac
 
 1. \`automations/<name>.json\` — the manifest. Canonical record of the user's prompt + schedule + capability declarations. The manifest is the source of truth.
 2. \`actions/<name>.js\` — the generated JS handler the scheduler fires. **Never hand-edited**; re-prompting regenerates it.
-3. The cron expression — embedded in the manifest as \`schedule\`.
+3. The cron expression — embedded in the manifest as \`trigger.expr\`.
 
 Recognize automation prompts. If the user says "do X every N minutes/hours/days/weeks," write a manifest + handler instead of a regular action.
 
@@ -178,22 +178,32 @@ Recognize automation prompts. If the user says "do X every N minutes/hours/days/
 \`\`\`json
 {
   "prompt": "every 30 min, summarize new PRs in foo/bar",
-  "schedule": "*/30 * * * *",
+  "trigger": { "kind": "cron", "expr": "*/30 * * * *" },
   "action": "summarize-prs.js",
   "requires": {
     "mcps": ["github"],
     "tools": ["github.list_pull_requests"],
     "model": "anthropic/claude-3-5-sonnet"
   },
+  "outputSchema": {
+    "type": "object",
+    "properties": { "summary": { "type": "string" } },
+    "required": ["summary"]
+  },
+  "onFailure": "digest-alert",
+  "history": { "keep": { "count": 50 } },
   "costEstimate": { "model": "anthropic/claude-3-5-sonnet", "tokensPerFire": 5000 },
   "generated": { "by": "builder", "at": "<ISO-8601 timestamp>" }
 }
 \`\`\`
 
-- \`schedule\` is a standard 5-field cron expression (UTC). Common patterns: \`*/30 * * * *\` (every 30 min), \`0 * * * *\` (top of every hour), \`0 9 * * MON-FRI\` (9 AM weekdays).
+- \`trigger\` is the trigger shape. Today only \`{ kind: "cron", expr }\` is supported; the cron expression is a standard 5-field UTC string. Common patterns: \`*/30 * * * *\` (every 30 min), \`0 * * * *\` (top of every hour), \`0 9 * * MON-FRI\` (9 AM weekdays).
 - \`requires.mcps\` lists the MCP servers the handler depends on. The host runtime checks these are installed before activating the schedule.
 - \`requires.tools\` lists the fully-qualified tool names the handler calls via \`ctx.tool(...)\`. The host scoping policy enforces this allowlist.
 - \`requires.model\` is the model \`ctx.agent\` should route through. **Never set this to \`centraid-mock/...\`** — that would recurse into the runner.
+- \`outputSchema\` declares the shape of the handler's optional \`return { output }\`. The runtime validates and surfaces a failed run when the shape drifts. See "Run audit & state" below.
+- \`onFailure\` names a sibling automation to fire when the handler fails. See "Run audit & state".
+- \`history.keep\` controls audit retention. Defaults to \`{ count: 100 }\`.
 - \`costEstimate\` powers the UI's "≈ $X/month" line.
 
 #### Handler contract
@@ -244,6 +254,50 @@ When the user prompts an automation:
 3. If the handler writes to a new table, add the migration under \`migrations/\` and the table schema.
 
 The host runtime will register the schedule on activation. On re-prompt, overwrite both files; the prompt in the manifest stays canonical.
+
+### Run audit & state
+
+Every automation fire is recorded in a per-app \`automations.sqlite\` file the runtime owns (sibling to \`data.sqlite\`). You do not write to this file directly — the runtime instruments \`ctx.tool\` / \`ctx.agent\` calls automatically and exposes a narrow read+write surface through \`ctx\`:
+
+- **\`ctx.state.get(key)\` / \`ctx.state.set(key, value)\`** — cross-fire KV scoped to the current automation. Use for watermarks, cursors, ETags, dedup hashes — anything that needs to survive between runs. JSON-serializable values only. Survives desktop restart.
+- **\`ctx.runs.last({ status: 'ok' })\`** — the most-recent successful run record. Use for the "since last successful run" pattern. The in-progress self-run is filtered out, so you never see your own incomplete row.
+- **\`ctx.runs.list({ since, limit })\`** — newest-first history of runs. Use for aggregating windows ("summarize last week's runs") and catch-up patterns ("on first fire after a gap, replay missed windows").
+- **\`ctx.invoke(name, { input })\`** — synchronously fire another automation and receive its \`output\`. \`name\` is \`"automation"\` for a sibling in this app, or \`"appId/automation"\` to invoke an automation in another installed app. Use to compose deterministic workflows out of named building blocks. The invoked run reads its payload as \`ctx.input\`.
+- **\`ctx.input\`** — the payload this run was invoked with: the \`input\` from a \`ctx.invoke\`, the failed-run summary on an \`onFailure\` dispatch, or \`undefined\` for a plain scheduled fire. Narrow it with a JSDoc cast.
+
+There is **no retry knob** on \`ctx.tool\`. A failed tool call rejects the Promise; the handler is plain JavaScript, so retry / backoff / error-classification is yours to write with \`try/catch\`. This is deliberate — retry policy depends on *which* failure it is (a 429 wants backoff, a 404 wants no retry, a "not ready yet" wants a short poll), and only the handler knows the tool's error semantics. Each \`ctx.tool\` call is its own audit node, so a handler-driven retry loop shows up as distinct nodes in the run timeline.
+
+\`\`\`js
+// Retry only on transient failures — the handler classifies the error.
+async function withRetry(fn, { max = 3 } = {}) {
+  for (let i = 0; i < max; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i === max - 1 || !/\\b(429|503|timeout)\\b/i.test(String(e.message))) throw e;
+      await new Promise((r) => setTimeout(r, 250 * 2 ** i));
+    }
+  }
+}
+const prs = await withRetry(() => ctx.tool('github.list_pull_requests', { repo }));
+\`\`\`
+
+Your handler can optionally \`return { summary, output }\`. \`summary\` is a one-line description shown in the UI run list. \`output\` is the structured value persisted to \`runs.output_json\`; if your manifest declares \`outputSchema\`, the runtime validates \`output\` against it and flips the run to failed if the shape drifts.
+
+#### Patterns to recognize in user prompts
+
+When the user describes an automation, identify which of these shapes it matches and lean on \`ctx\` instead of inventing a new \`data.sqlite\` table for state:
+
+- **Stateless poll** — "every N minutes, check X and notify if Y". No \`ctx.state\` / \`ctx.runs\` needed; just \`ctx.tool\` + DB write.
+- **Incremental** — "every N minutes, ingest new items since the last run". Use \`ctx.state.get('cursor')\` / \`ctx.state.set('cursor', ...)\`, OR \`ctx.runs.last({ status: 'ok' })?.startedAt\`. **Do not invent a \`runs\` or \`watermark\` table in \`data.sqlite\`** — the runtime already has one.
+- **Aggregating** — "every Monday, summarize last week". Use \`ctx.runs.list({ since: Date.now() - 7*24*3600*1000 })\` to enumerate the prior fires.
+- **Catch-up** — "on first fire after a gap, replay missed windows". Combine \`ctx.runs.last({ status: 'ok' })?.startedAt\` with the cron interval to detect the gap, then loop over windows.
+
+#### \`onFailure\` and \`history.keep\`
+
+The manifest's optional \`onFailure: "alerter-name"\` dispatches the named sibling automation when the handler fails (including \`outputSchema\` rejection and timeout). The failed run record lands in the alerter's \`ctx.runs.last()\`. Recursion is capped at depth 3 by the runtime, so a misconfigured pair can't loop.
+
+\`history.keep\` controls audit retention per-automation: \`{ count: 100 }\` (default) keeps the newest 100, \`{ days: 30 }\` drops anything older, \`"all"\` keeps everything, \`"errors"\` keeps only failed runs.
 
 ### Security model (do not weaken)
 

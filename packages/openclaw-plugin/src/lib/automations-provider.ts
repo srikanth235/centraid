@@ -13,7 +13,9 @@
  *       1. Recovers `(appId, automationName)` from the prompt sentinel
  *          `<<<centraid:appId:name>>>`.
  *       2. Loads `<appId>/automations/<name>.json` + `<appId>/actions/<name>.js`.
- *       3. Runs the handler via `runAutomationHandler` from runtime-core.
+ *       3. Runs the handler via `runAutomationHandler` from runtime-core,
+ *          wiring an `AutomationRunsStore` over the shared gateway DB
+ *          for the run audit + `ctx.state`.
  *          - toolDispatcher routes through `callGatewayTool` (full
  *            harness MCP routing + audit + before-tool hooks for free).
  *          - agentDispatcher routes through
@@ -27,33 +29,22 @@
  *          see issue #70 § What happens when cron fires) and
  *          stopReason "stop".
  *
- * The registration glue itself (registerProvider) is the responsibility
- * of the plugin entry — this module just exports the ProviderPlugin
- * descriptor as a factory.
+ * The registration glue (registerProvider) is the plugin entry's job —
+ * this module just exports the ProviderPlugin descriptor as a factory.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
-import {
-  parseManifest,
-  runAutomationHandler,
-  type AutomationDispatchContext,
-  type AutomationManifest,
-  type AutomationToolCall,
-  type AutomationToolResult,
-} from '@centraid/runtime-core';
-import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
-import {
-  prepareSimpleCompletionModelForAgent,
-  completeWithPreparedSimpleCompletionModel,
-} from 'openclaw/plugin-sdk/simple-completion-runtime';
+import { AutomationRunsStore, type DatabaseProvider } from '@centraid/runtime-core';
+import { runOpenclawFire } from './openclaw-fire.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 // pi-ai types — open-import (matches openclaw's own pattern) so this
 // module's exported descriptor lines up with the StreamFn shape the
 // openclaw runtime expects.
 import type { AssistantMessage, AssistantMessageEventStream } from '@mariozechner/pi-ai';
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai';
+
+// Re-exported so the plugin entry's `import { setOpenClawConfig }` stays
+// pointed at this module after the per-fire logic moved to openclaw-fire.
+export { setOpenClawConfig } from './openclaw-fire.js';
 
 /**
  * Local structural type for the ProviderPlugin descriptor we register.
@@ -77,6 +68,12 @@ export interface AutomationsProviderOptions {
    * wires this through to `runtime.registry.get(...)`.
    */
   resolveAppDir(appId: string): string | undefined;
+  /**
+   * Shared gateway DB provider. The automation run-audit store
+   * (`AutomationRunsStore`) is built from this — the same connection
+   * `UserStore` / `ChatHistoryStore` / `AutomationStore` use.
+   */
+  gatewayDbProvider: DatabaseProvider;
   /** Optional logger. */
   logger?: { info(m: string): void; warn(m: string): void; error(m: string): void };
 }
@@ -224,138 +221,29 @@ async function executeAutomation(
       `centraid-mock: app "${dispatch.appId}" is not registered with the runtime`,
     );
   }
-  const manifestPath = path.join(appDir, 'automations', `${dispatch.automationName}.json`);
-  let manifest: AutomationManifest;
-  try {
-    manifest = parseManifest(await fs.readFile(manifestPath, 'utf8'));
-  } catch (err) {
-    return errorMessage(
-      `centraid-mock: failed to load manifest ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-  const handlerFile = path.join(appDir, 'actions', manifest.action);
-
-  const runId = `${dispatch.appId}:${dispatch.automationName}:${Date.now()}:${randomUUID().slice(0, 8)}`;
-
-  const toolDispatcher = async (
-    calls: readonly AutomationToolCall[],
-    _ctx: AutomationDispatchContext,
-  ): Promise<AutomationToolResult[]> => {
-    // Each ctx.tool call → one callGatewayTool round-trip. callGatewayTool
-    // routes through openclaw's harness MCP + audit + before-tool hooks,
-    // so we get the user's real integrations + policy enforcement for free.
-    const results = await Promise.all(
-      calls.map(async (call) => {
-        try {
-          const out = await callGatewayTool(call.name, {}, call.args);
-          return { ok: true, result: out } satisfies AutomationToolResult;
-        } catch (err) {
-          return {
-            ok: false,
-            error: err instanceof Error ? err.message : String(err),
-          } satisfies AutomationToolResult;
-        }
-      }),
-    );
-    return results;
-  };
-
-  const agentDispatcher = async (
-    call: { prompt: string; json?: unknown },
-    _ctx: AutomationDispatchContext,
-  ): Promise<unknown> => {
-    const modelRef = manifest.requires.model;
-    if (!modelRef) {
-      throw new Error(
-        'ctx.agent called but manifest.requires.model is unset — declare a model in the automation manifest',
-      );
-    }
-    // openclaw's config + agentId for the simple-completion runtime.
-    // `agentId` is a stable identifier so token usage rolls up under
-    // a centraid bucket; we use `centraid-automation:<appId>:<name>`.
-    const prepared = await prepareSimpleCompletionModelForAgent({
-      cfg: getOpenClawConfig(),
-      agentId: `centraid-automation:${_ctx.appId}:${_ctx.automationName}`,
-      modelRef,
-    });
-    if ('error' in prepared) {
-      throw new Error(`ctx.agent prepare failed: ${prepared.error}`);
-    }
-    const out = await completeWithPreparedSimpleCompletionModel({
-      model: prepared.model,
-      auth: prepared.auth,
-      context: { messages: [{ role: 'user', content: call.prompt, timestamp: Date.now() }] },
-    });
-    // out is an AssistantMessage; pull the text content out.
-    const text = (out.content ?? [])
-      .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-      .map((c) => c.text)
-      .join('');
-    if (!call.json) return text;
-    try {
-      return JSON.parse(text) as unknown;
-    } catch (err) {
-      throw new Error(
-        `ctx.agent expected JSON but got: ${text.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
-        { cause: err },
-      );
-    }
-  };
-
-  const outcome = await runAutomationHandler({
-    app: { id: dispatch.appId, dir: appDir },
-    handlerFile,
-    automationName: dispatch.automationName,
-    runId,
-    toolDispatcher,
-    agentDispatcher,
-    timeoutMs: 5 * 60 * 1000,
-  });
-
+  // Run audit lives in the central gateway DB; the store wraps the
+  // shared, host-owned provider connection (no per-fire handle to
+  // close).
+  const runsStore = new AutomationRunsStore(opts.gatewayDbProvider, dispatch.appId);
+  const outcome = await runOpenclawFire(
+    {
+      appId: dispatch.appId,
+      appDir,
+      automationName: dispatch.automationName,
+      triggerKind: 'scheduled',
+      failureDepth: 0,
+      runsStore,
+      resolveAppDir: opts.resolveAppDir,
+    },
+    log,
+  );
   if (!outcome.ok) {
     log.error(`automation ${dispatch.appId}/${dispatch.automationName} failed: ${outcome.error}`);
     return errorMessage(`automation failed: ${outcome.error ?? 'unknown error'}`);
   }
-  return successMessage(
-    typeof outcome.value === 'string' && outcome.value.length > 0 ? outcome.value : 'ok',
-  );
-}
-
-/**
- * Synthetic helper to mint an OpenClawConfig handle. openclaw expects
- * a config object resolved from its runtime context; in the cron-fire
- * path the runtime makes one available via a thread-local. Since
- * `prepareSimpleCompletionModelForAgent` accepts `cfg` explicitly, we
- * lazily import the runtime-config-snapshot module the first time
- * it's needed.
- *
- * Wrapped in a helper so the import is deferred until ctx.agent
- * actually fires — keeps cold-start fast for automations that only
- * use ctx.tool.
- */
-function getOpenClawConfig(): never {
-  // Resolved by the plugin entry at registration time and exposed via
-  // a module-scoped setter. The plugin entry calls
-  // `setOpenClawConfig(api.config)` before any cron fire reaches the
-  // StreamFn.
-  const cfg = openclawConfigRef.current;
-  if (!cfg) {
-    throw new Error(
-      'centraid-mock provider used before openclaw config was bound — plugin entry must call setOpenClawConfig() at registration',
-    );
-  }
-  return cfg as never;
-}
-
-const openclawConfigRef: { current: unknown } = { current: undefined };
-
-/**
- * Called by the plugin entry once `api.config` is in hand, before any
- * cron fire reaches our StreamFn. Stores the handle module-scoped so
- * `ctx.agent` can route through the user's real provider auth.
- */
-export function setOpenClawConfig(cfg: unknown): void {
-  openclawConfigRef.current = cfg;
+  const summary =
+    outcome.summary ?? (typeof outcome.value === 'string' ? outcome.value : undefined) ?? 'ok';
+  return successMessage(summary);
 }
 
 function successMessage(text: string): AssistantMessage {

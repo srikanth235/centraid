@@ -81,7 +81,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('createSession + listSessions round-trips', () => {
-    const s = store.createSession('todos', '');
+    const s = store.createSession('todos', 'full', '');
     const list = store.listSessions('todos');
     assert.equal(list.length, 1);
     assert.equal(list[0]!.id, s.id);
@@ -90,7 +90,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('listSessions is app-scoped', () => {
-    store.createSession('todos', '');
+    store.createSession('todos', 'full', '');
     store.createSession('habits', '');
     const todos = store.listSessions('todos');
     const habits = store.listSessions('habits');
@@ -100,7 +100,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('appendMessages assigns sequential idx from a single batch', () => {
-    const s = store.createSession('todos');
+    const s = store.createSession('todos', 'full');
     const r = store.appendMessages(s.id, [
       { kind: 'user', text: 'first' },
       { kind: 'ai', text: 'reply' },
@@ -117,7 +117,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('appendMessages preserves order across two sequential batches', () => {
-    const s = store.createSession('todos');
+    const s = store.createSession('todos', 'full');
     store.appendMessages(s.id, [
       { kind: 'user', text: 'q1' },
       { kind: 'ai', text: 'a1' },
@@ -132,7 +132,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('appendMessages derives title from the first user message if title is empty', () => {
-    const s = store.createSession('todos', '');
+    const s = store.createSession('todos', 'full', '');
     const r = store.appendMessages(s.id, [{ kind: 'user', text: 'Add a daily standup' }]);
     assert.equal(r?.title, 'Add a daily standup');
     const meta = store.listSessions('todos')[0]!;
@@ -140,13 +140,13 @@ describe('ChatHistoryStore', () => {
   });
 
   it('appendMessages does not overwrite a non-empty title', () => {
-    const s = store.createSession('todos', 'Pinned name');
+    const s = store.createSession('todos', 'full', 'Pinned name');
     const r = store.appendMessages(s.id, [{ kind: 'user', text: 'something' }]);
     assert.equal(r?.title, 'Pinned name');
   });
 
   it('appendMessages skips title derivation when first batch starts with non-user', () => {
-    const s = store.createSession('todos', '');
+    const s = store.createSession('todos', 'full', '');
     const r = store.appendMessages(s.id, [{ kind: 'ai', text: 'I went first' }]);
     assert.equal(r?.title, '');
   });
@@ -157,7 +157,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('appendMessages with empty array touches nothing', () => {
-    const s = store.createSession('todos');
+    const s = store.createSession('todos', 'full');
     const r = store.appendMessages(s.id, []);
     assert.equal(r?.count, 0);
     const loaded = store.getSession(s.id);
@@ -165,7 +165,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('renameSession updates title and bumps updatedAt', () => {
-    const s = store.createSession('todos', 'old');
+    const s = store.createSession('todos', 'full', 'old');
     const updated = store.renameSession(s.id, 'new');
     assert.equal(updated?.title, 'new');
     assert.ok((updated?.updatedAt ?? 0) >= s.updatedAt);
@@ -176,21 +176,68 @@ describe('ChatHistoryStore', () => {
   });
 
   it('deleteSession cascades to messages', () => {
-    const s = store.createSession('todos');
+    const s = store.createSession('todos', 'full');
     store.appendMessages(s.id, [{ kind: 'user', text: 'doomed' }]);
     assert.equal(store.deleteSession(s.id), true);
     assert.equal(store.getSession(s.id), undefined);
   });
 
   it('listSessions orders by updatedAt desc', async () => {
-    const a = store.createSession('todos', 'A');
+    const a = store.createSession('todos', 'full', 'A');
     // Force a clock gap so the second session's createdAt > first's
     // updatedAt without us mutating the data.
     await new Promise((resolve) => setTimeout(resolve, 4));
-    const b = store.createSession('todos', 'B');
+    const b = store.createSession('todos', 'full', 'B');
     const list = store.listSessions('todos');
     assert.equal(list[0]!.id, b.id);
     assert.equal(list[1]!.id, a.id);
+  });
+
+  it('createSession with a null originAppId persists NULL and round-trips', () => {
+    const s = store.createSession(null, 'data', 'shell chat');
+    assert.equal(s.originAppId, null);
+    assert.equal(s.mode, 'data');
+    const loaded = store.getSession(s.id);
+    assert.equal(loaded?.originAppId, null);
+    assert.equal(loaded?.mode, 'data');
+    // A null-origin session is not returned by any app-scoped listing.
+    assert.equal(store.listSessions('todos').length, 0);
+  });
+
+  it('noteTurn bumps turn_count and persists the adapter columns', () => {
+    const s = store.createSession('todos', 'full');
+    assert.equal(s.turnCount, 0);
+    assert.equal(s.adapterKind, null);
+
+    const after1 = store.noteTurn(s.id, { kind: 'codex', sessionId: 'cx-1' });
+    assert.equal(after1?.turnCount, 1);
+    assert.equal(after1?.adapterKind, 'codex');
+    assert.equal(after1?.adapterSessionId, 'cx-1');
+
+    // Adapter omitted — counters move, adapter columns stay.
+    const after2 = store.noteTurn(s.id);
+    assert.equal(after2?.turnCount, 2);
+    assert.equal(after2?.adapterKind, 'codex');
+    assert.equal(after2?.adapterSessionId, 'cx-1');
+
+    // Adapter present but no sessionId — kind updates, session id is kept.
+    const after3 = store.noteTurn(s.id, { kind: 'claude-code' });
+    assert.equal(after3?.turnCount, 3);
+    assert.equal(after3?.adapterKind, 'claude-code');
+    assert.equal(after3?.adapterSessionId, 'cx-1');
+  });
+
+  it('noteTurn returns undefined for an unknown session', () => {
+    assert.equal(store.noteTurn('not-a-real-id'), undefined);
+  });
+
+  it('getSessionMeta returns meta without messages', () => {
+    const s = store.createSession('todos', 'full');
+    store.appendMessages(s.id, [{ kind: 'user', text: 'hi' }]);
+    const meta = store.getSessionMeta(s.id);
+    assert.equal(meta?.id, s.id);
+    assert.equal(meta?.messageCount, 1);
+    assert.equal((meta as unknown as { messages?: unknown }).messages, undefined);
   });
 });
 
@@ -214,7 +261,7 @@ describe('ChatHistoryStore per-user scoping', () => {
 
   it('createSession stamps the current user id on the row', () => {
     const store = newStore(() => 'alice');
-    const s = store.createSession('todos');
+    const s = store.createSession('todos', 'full');
     assert.equal(s.userId, 'alice');
     const loaded = store.getSession(s.id);
     assert.equal(loaded?.userId, 'alice');
@@ -222,9 +269,9 @@ describe('ChatHistoryStore per-user scoping', () => {
 
   it("listSessions does not return another user's sessions", () => {
     const { alice, bob } = pair();
-    alice.createSession('todos', 'alice-1');
-    alice.createSession('todos', 'alice-2');
-    bob.createSession('todos', 'bob-1');
+    alice.createSession('todos', 'full', 'alice-1');
+    alice.createSession('todos', 'full', 'alice-2');
+    bob.createSession('todos', 'full', 'bob-1');
 
     const aliceList = alice.listSessions('todos');
     assert.equal(aliceList.length, 2);
@@ -237,7 +284,7 @@ describe('ChatHistoryStore per-user scoping', () => {
 
   it("getSession returns undefined for another user's session id", () => {
     const { alice, bob } = pair();
-    const aliceSession = alice.createSession('todos');
+    const aliceSession = alice.createSession('todos', 'full');
     // Bob asking for Alice's session id sees nothing — same id, different
     // owner. The PK is `id` so the row exists; the user_id filter rejects.
     assert.equal(bob.getSession(aliceSession.id), undefined);
@@ -245,7 +292,7 @@ describe('ChatHistoryStore per-user scoping', () => {
 
   it("appendMessages refuses to write into another user's session", () => {
     const { alice, bob } = pair();
-    const aliceSession = alice.createSession('todos');
+    const aliceSession = alice.createSession('todos', 'full');
     const result = bob.appendMessages(aliceSession.id, [{ kind: 'user', text: 'hi' }]);
     assert.equal(result, undefined);
     // And Alice's session still has zero messages.
@@ -255,7 +302,7 @@ describe('ChatHistoryStore per-user scoping', () => {
 
   it("renameSession + deleteSession can't touch another user's session", () => {
     const { alice, bob } = pair();
-    const aliceSession = alice.createSession('todos', 'mine');
+    const aliceSession = alice.createSession('todos', 'full', 'mine');
     assert.equal(bob.renameSession(aliceSession.id, 'stolen'), undefined);
     assert.equal(bob.deleteSession(aliceSession.id), false);
     // Alice's session is untouched.
@@ -273,7 +320,7 @@ describe('ChatHistoryStore data persistence', () => {
     const dbProvider = makeGatewayDbProvider(join(dir, 'db.sqlite'));
     seedUsers(dbProvider, [TEST_USER_ID]);
     const first = new ChatHistoryStore(dbProvider, stubUserIdProvider);
-    const s = first.createSession('todos', 'kept');
+    const s = first.createSession('todos', 'full', 'kept');
     first.appendMessages(s.id, [{ kind: 'user', text: 'hello' }]);
 
     const second = new ChatHistoryStore(dbProvider, stubUserIdProvider);
@@ -354,9 +401,21 @@ describe('makeChatHistoryRouteHandler', () => {
     handler = makeChatHistoryRouteHandler(() => store);
   });
 
-  it('400s on POST /sessions without appId', async () => {
+  it('POST /sessions without appId creates a shell-origin session', async () => {
     const res = await call(handler, 'POST', '/_centraid-chat/sessions', {});
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 200);
+    assert.equal((res.body as { originAppId: string | null }).originAppId, null);
+    assert.equal((res.body as { mode: string }).mode, 'full');
+  });
+
+  it('POST /sessions honors the data mode', async () => {
+    const res = await call(handler, 'POST', '/_centraid-chat/sessions', {
+      appId: 'todos',
+      mode: 'data',
+    });
+    assert.equal(res.status, 200);
+    assert.equal((res.body as { mode: string }).mode, 'data');
+    assert.equal((res.body as { originAppId: string | null }).originAppId, 'todos');
   });
 
   it('round-trips create → list → append → load → delete', async () => {

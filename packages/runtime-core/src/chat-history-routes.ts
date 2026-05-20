@@ -51,12 +51,13 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  * via the `userIdProvider` it was constructed with.
  *
  * Dispatch map:
- *   GET    /_centraid-chat/sessions?appId=...           list
- *   POST   /_centraid-chat/sessions                     create  body: {appId, title?}
+ *   GET    /_centraid-chat/sessions?appId=...           list (appId = origin app)
+ *   POST   /_centraid-chat/sessions                     create  body: {appId?, mode?, title?}
  *   GET    /_centraid-chat/sessions/<id>                load (with messages)
  *   PATCH  /_centraid-chat/sessions/<id>                rename  body: {title}
  *   DELETE /_centraid-chat/sessions/<id>                delete
- *   POST   /_centraid-chat/sessions/<id>/messages       batch append  body: {payloads: [...]}
+ *   POST   /_centraid-chat/sessions/<id>/messages       batch append
+ *                                                       body: {payloads: [...], appId?}
  */
 export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
@@ -79,12 +80,11 @@ export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
           return true;
         }
         if (method === 'POST') {
-          const body = (await readJsonBody(req)) as { appId?: string; title?: string } | undefined;
-          if (!body?.appId) {
-            sendError(res, 400, 'appId is required');
-            return true;
-          }
-          sendJson(res, 200, store.createSession(body.appId, body.title ?? ''));
+          const body = (await readJsonBody(req)) as
+            | { appId?: string; mode?: string; title?: string }
+            | undefined;
+          const mode = body?.mode === 'data' ? 'data' : 'full';
+          sendJson(res, 200, store.createSession(body?.appId ?? null, mode, body?.title ?? ''));
           return true;
         }
         sendError(res, 405, 'method not allowed');
@@ -101,12 +101,14 @@ export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
             sendError(res, 405, 'method not allowed');
             return true;
           }
-          const body = (await readJsonBody(req)) as { payloads?: unknown } | undefined;
+          const body = (await readJsonBody(req)) as
+            | { payloads?: unknown; appId?: string }
+            | undefined;
           if (!Array.isArray(body?.payloads)) {
             sendError(res, 400, 'payloads must be an array');
             return true;
           }
-          const result = store.appendMessages(id, body.payloads);
+          const result = store.appendMessages(id, body.payloads, body.appId ?? null);
           if (!result) {
             sendError(res, 404, 'session not found');
             return true;
