@@ -15,7 +15,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] Step 2 — Sidebar restructure (G2/G3)
 - [x] Step 3 — Home redesign (A1/A2/A3)
 - [x] Step 4 — Builder B1–B6
-- [ ] Step 5 — Settings monolith split (C)
+- [x] Step 5 — Settings monolith split (C)
 - [ ] Step 6 — App view copilot (D)
 - [ ] Step 7 — Per-app settings tabbed popover (E)
 - [ ] Step 8 — ⌘K command palette (F)
@@ -100,6 +100,23 @@ sub-items; this commit lands §B4 and records the state of the rest:
 - §B5 (editable code workspace) and §B6 (Cloud rebuild) — *deferred.*
   Each is a substantial standalone feature (an in-pane editor with
   tabs/diff; a Cloud hero + activity feed). Tracked for follow-up.
+
+**Step 5 — Settings monolith split (C).** §C1 is implemented:
+`renderSettingsAsync` no longer appends every `drawerGroup` into one
+continuous scroll. Seven page hosts now exist (`appearance`, `layout`,
+`workspace`, `providers`, `inference`, `runtime`, `sync`) and each
+group-builder appends into its own host — Theme → Appearance, Layout +
+App tiles → Layout, Chat → Workspace, AI providers → AI providers,
+Custom inference endpoint → Inference endpoint, Runtime → Where apps
+run, plus a placeholder Sync & backups page. An inner-sidebar shell
+(`.cd-settings-shell`) renders a sectioned page nav (Workspace /
+Models / Runtime) beside a content pane that shows exactly one page at
+a time, so no single view mixes cosmetic and credential controls.
+§C3 (provider state badges) is partly in place — the AI providers page
+already renders per-provider credential status rows. §C2 (Appearance
+live-preview tile) and §C4 (per-page save-footer / auto-saved caps)
+are deferred polish; the inference and runtime pages keep their
+existing Save/Test buttons.
 
 ## Out of scope
 

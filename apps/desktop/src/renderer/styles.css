@@ -3679,6 +3679,79 @@ textarea {
   font-size: 11px;
   color: var(--ink-4);
 }
+/* §C1 — Settings inner-sidebar shell: a left page nav + a content
+   pane that shows exactly one discrete page at a time. */
+.cd-settings-shell {
+  display: grid;
+  grid-template-columns: 208px 1fr;
+  gap: 28px;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 32px 56px;
+  width: 100%;
+}
+.cd-settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  position: sticky;
+  top: 24px;
+  align-self: start;
+}
+.cd-settings-nav-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 0 10px 8px;
+}
+.cd-settings-nav-section {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 14px 10px 4px;
+}
+.cd-settings-nav-item {
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background 100ms,
+    color 100ms;
+}
+.cd-settings-nav-item:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.cd-settings-nav-item[data-active='true'] {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+}
+.cd-settings-content {
+  min-width: 0;
+}
+.cd-settings-page-title {
+  margin: 0 0 18px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.cd-settings-page {
+  display: block;
+}
+
 .drawer-group {
   margin-bottom: 22px;
 }

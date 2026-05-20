@@ -2841,39 +2841,27 @@
     const scroll = el('div', { class: 'cd-main-scroll' });
     main.append(scroll);
 
-    // Constrain the form to a readable width inside the wider main panel;
-    // the drawer-* classes were authored for a ~360px column so giving them
-    // a similar max-width here preserves their visual rhythm.
-    const page = el('div', {
-      style: {
-        margin: '0 auto',
-        maxWidth: '720px',
-        padding: '28px 32px 48px',
-        width: '100%',
-      },
-    });
-
-    page.append(
-      el(
-        'div',
-        {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '4px',
-            marginBottom: '20px',
-          },
-        },
-        [
-          el('h1', { style: { fontSize: '24px', fontWeight: '600', margin: '0' } }, 'Settings'),
-          el(
-            'div',
-            { class: 'settings-hint', style: { margin: '0' } },
-            'Appearance and gateway preferences for Centraid.',
-          ),
-        ],
-      ),
-    );
+    // §C1 — break the Settings monolith into discrete inner-sidebar
+    // pages. Each `drawerGroup` appends into its page host instead of
+    // one continuous scroll; an inner sidebar (built at the end) swaps
+    // which host is visible.
+    type SettingsPageId =
+      | 'appearance'
+      | 'layout'
+      | 'workspace'
+      | 'providers'
+      | 'inference'
+      | 'runtime'
+      | 'sync';
+    const pageHosts: Record<SettingsPageId, HTMLElement> = {
+      appearance: el('div', { class: 'cd-settings-page' }),
+      layout: el('div', { class: 'cd-settings-page' }),
+      workspace: el('div', { class: 'cd-settings-page' }),
+      providers: el('div', { class: 'cd-settings-page' }),
+      inference: el('div', { class: 'cd-settings-page' }),
+      runtime: el('div', { class: 'cd-settings-page' }),
+      sync: el('div', { class: 'cd-settings-page' }),
+    };
 
     // ---- Tweaks — Theme group ----
     const themeSeg = makeSegmented<ThemeName>(['dark', 'light'], prefs.theme, (v) => {
@@ -2905,13 +2893,14 @@
       },
     );
 
-    page.append(
+    pageHosts.appearance.append(
       drawerGroup('Theme', [
-        el('div', { class: 'settings-note' }, 'Changes are saved automatically.'),
         drawerRow('Mode', themeSeg),
         drawerRowInline('Cool blue cast', coolCastSwitch),
         drawerRow('Accent', accentSwatches),
       ]),
+    );
+    pageHosts.layout.append(
       drawerGroup('Layout', [
         drawerRow('Density', densitySeg),
         drawerRow('Cards', cardsSeg),
@@ -3006,7 +2995,7 @@
       refreshModelsBtn,
     ]);
 
-    page.append(
+    pageHosts.workspace.append(
       drawerGroup('Chat', [
         el(
           'div',
@@ -3141,7 +3130,7 @@
       }
     });
 
-    page.append(
+    pageHosts.providers.append(
       drawerGroup('AI providers', [
         el(
           'div',
@@ -3405,7 +3394,7 @@
     }) as HTMLButtonElement;
     clearProviderBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Disable</span>';
 
-    page.append(
+    pageHosts.inference.append(
       drawerGroup('Custom inference endpoint', [
         el(
           'div',
@@ -3526,7 +3515,7 @@
     });
     testBtn.innerHTML = Icon.Eye({ size: 13 }) + '<span>Test connection</span>';
 
-    page.append(
+    pageHosts.runtime.append(
       drawerGroup('Runtime', [
         el(
           'div',
@@ -3543,8 +3532,60 @@
         el('div', { class: 'sheet-actions' }, [testBtn, saveBtn]),
       ]),
     );
+    pageHosts.sync.append(
+      drawerGroup('Sync & backups', [
+        el('div', { class: 'settings-note' }, 'Project sync and backup settings will live here.'),
+      ]),
+    );
 
-    scroll.append(page);
+    // §C1 — inner-sidebar shell. Each entry shows exactly one page so no
+    // single view mixes cosmetic and credential controls.
+    const settingsPages: ReadonlyArray<{
+      id: SettingsPageId;
+      label: string;
+      section: string;
+    }> = [
+      { id: 'appearance', label: 'Appearance', section: 'Workspace' },
+      { id: 'layout', label: 'Layout', section: 'Workspace' },
+      { id: 'workspace', label: 'Workspace', section: 'Workspace' },
+      { id: 'providers', label: 'AI providers', section: 'Models' },
+      { id: 'inference', label: 'Inference endpoint', section: 'Models' },
+      { id: 'runtime', label: 'Where apps run', section: 'Runtime' },
+      { id: 'sync', label: 'Sync & backups', section: 'Runtime' },
+    ];
+    const innerNav = el('div', { class: 'cd-settings-nav' });
+    const contentArea = el('div', { class: 'cd-settings-content' });
+    innerNav.append(el('div', { class: 'cd-settings-nav-eyebrow' }, 'Settings · Personal'));
+
+    const navButtons = new Map<SettingsPageId, HTMLElement>();
+    const showSettingsPage = (id: SettingsPageId): void => {
+      const def = settingsPages.find((p) => p.id === id);
+      for (const [pid, btn] of navButtons) {
+        btn.dataset.active = String(pid === id);
+      }
+      contentArea.replaceChildren(
+        el('h2', { class: 'cd-settings-page-title' }, def ? def.label : 'Settings'),
+        pageHosts[id],
+      );
+    };
+    let lastSection = '';
+    for (const p of settingsPages) {
+      if (p.section !== lastSection) {
+        innerNav.append(el('div', { class: 'cd-settings-nav-section' }, p.section));
+        lastSection = p.section;
+      }
+      const btn = el(
+        'button',
+        { class: 'cd-settings-nav-item', type: 'button', onClick: () => showSettingsPage(p.id) },
+        p.label,
+      );
+      navButtons.set(p.id, btn);
+      innerNav.append(btn);
+    }
+
+    const settingsShell = el('div', { class: 'cd-settings-shell' }, [innerNav, contentArea]);
+    scroll.append(settingsShell);
+    showSettingsPage('appearance');
 
     const sidebar = buildHomeSidebar({ page: 'settings' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
