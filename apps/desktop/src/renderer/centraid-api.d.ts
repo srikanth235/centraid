@@ -323,6 +323,16 @@ interface CentraidApi {
     version?: string;
   }): Promise<CentraidProjectInfo>;
   readProjectFiles(input: { id: string }): Promise<CentraidProjectFile[]>;
+  /**
+   * Overwrite a single text file inside the project folder (§B5 editable
+   * code workspace). The main process guards against path traversal and
+   * rejects non-text extensions. Returns the written path + byte size.
+   */
+  writeProjectFile(input: {
+    id: string;
+    path: string;
+    content: string;
+  }): Promise<{ path: string; size: number }>;
   openProjectFolder(input: { id: string }): Promise<{ ok: true }>;
   deleteProject(input: { id: string }): Promise<{ ok: true }>;
   /**

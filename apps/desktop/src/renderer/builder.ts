@@ -1182,34 +1182,131 @@
       }
     }
 
-    // Code view — file-tree on the left + viewer on the right (Lovable-style).
-    // Tree state (expanded folders, search query, active file) is per-render
-    // so re-mounts return to a sensible default instead of stale state.
+    // §B5 — editable code workspace. Buffers, open tabs, the active file,
+    // and the diff toggle are hoisted out of renderCode() so unsaved edits
+    // survive renderRight() re-renders (e.g. the user peeking at Preview
+    // and coming back). A buffer's `current` diverging from `original`
+    // marks it dirty.
+    type CodeLang = 'html' | 'js' | 'ts' | 'css' | 'json' | 'md' | 'other';
+    interface CodeBuffer {
+      original: string;
+      current: string;
+      language: CodeLang;
+    }
+    const codeBuffers = new Map<string, CodeBuffer>();
+    const codeOpenTabs: string[] = [];
+    let codeActivePath: string | undefined;
+    let codeDiffMode = false;
+
+    // Unified line diff (LCS) — drives the Code view's Diff toggle. O(mn)
+    // is fine here: project files are capped at 256 KB by readProjectFiles.
+    type DiffRow = { type: 'same' | 'add' | 'del'; text: string; aNum?: number; bNum?: number };
+    function lineDiff(aStr: string, bStr: string): DiffRow[] {
+      const a = aStr.split('\n');
+      const b = bStr.split('\n');
+      const m = a.length;
+      const n = b.length;
+      const dp: number[][] = Array.from({ length: m + 1 }, () =>
+        Array.from<number>({ length: n + 1 }).fill(0),
+      );
+      for (let i = m - 1; i >= 0; i--) {
+        for (let j = n - 1; j >= 0; j--) {
+          dp[i]![j] =
+            a[i] === b[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+        }
+      }
+      const rows: DiffRow[] = [];
+      let i = 0;
+      let j = 0;
+      let an = 1;
+      let bn = 1;
+      while (i < m && j < n) {
+        if (a[i] === b[j]) {
+          rows.push({ type: 'same', text: a[i]!, aNum: an++, bNum: bn++ });
+          i++;
+          j++;
+        } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+          rows.push({ type: 'del', text: a[i]!, aNum: an++ });
+          i++;
+        } else {
+          rows.push({ type: 'add', text: b[j]!, bNum: bn++ });
+          j++;
+        }
+      }
+      while (i < m) rows.push({ type: 'del', text: a[i++]!, aNum: an++ });
+      while (j < n) rows.push({ type: 'add', text: b[j++]!, bNum: bn++ });
+      return rows;
+    }
+
+    // Code view — file tree on the left, an editable tabbed editor on the
+    // right (§B5). The editor is a transparent <textarea> over a tokenized
+    // <pre>, so typing stays live while keeping syntax colour.
     async function renderCode(): Promise<void> {
       const codePane = el('div', { class: 'code-pane' });
       const treeWrap = el('div', { class: 'code-tree' });
-      const viewer = el('div', { class: 'code-viewer' });
+      const workspace = el('div', { class: 'code-workspace' });
       codePane.append(treeWrap);
-      codePane.append(viewer);
+      codePane.append(workspace);
       rightPaneContent.append(codePane);
 
       if (!projectId) {
-        viewer.innerHTML = '<div class="empty">No project yet.</div>';
+        workspace.innerHTML = '<div class="empty">No project yet.</div>';
         return;
       }
+      const pid = projectId;
 
       let files: Awaited<ReturnType<Window['CentraidApi']['readProjectFiles']>> = [];
       try {
-        files = await Api().readProjectFiles({ id: projectId });
+        files = await Api().readProjectFiles({ id: pid });
       } catch (err) {
-        viewer.innerHTML = `<div class="empty">Could not read files: ${escapeHtml(String(err))}</div>`;
+        workspace.innerHTML = `<div class="empty">Could not read files: ${escapeHtml(String(err))}</div>`;
         return;
       }
 
       if (files.length === 0) {
-        viewer.innerHTML = '<div class="empty">Empty project.</div>';
+        workspace.innerHTML = '<div class="empty">Empty project.</div>';
         return;
       }
+
+      // Sync clean buffers to the freshest on-disk bytes (the agent may
+      // have rewritten files since the last Code visit); leave dirty
+      // buffers untouched so unsaved edits are never clobbered.
+      for (const f of files) {
+        const buf = codeBuffers.get(f.path);
+        if (buf && buf.current === buf.original) {
+          buf.original = f.content;
+          buf.current = f.content;
+        }
+      }
+      // Drop tabs/buffers whose file no longer exists on disk.
+      for (const p of codeOpenTabs.slice()) {
+        if (!files.some((f) => f.path === p)) {
+          codeOpenTabs.splice(codeOpenTabs.indexOf(p), 1);
+          codeBuffers.delete(p);
+        }
+      }
+
+      const openFile = (p: string): void => {
+        if (!codeBuffers.has(p)) {
+          const f = files.find((x) => x.path === p);
+          if (!f) return;
+          codeBuffers.set(p, {
+            original: f.content,
+            current: f.content,
+            language: languageHint(p),
+          });
+        }
+        if (!codeOpenTabs.includes(p)) codeOpenTabs.push(p);
+        codeActivePath = p;
+      };
+
+      if (!codeActivePath || !files.some((f) => f.path === codeActivePath)) {
+        codeActivePath = files.find((f) => f.path === 'index.html')?.path ?? files[0]!.path;
+      }
+      openFile(codeActivePath);
+
+      const dirtyPaths = (): string[] =>
+        [...codeBuffers.entries()].filter(([, b]) => b.current !== b.original).map(([p]) => p);
 
       type TreeNode = {
         name: string;
@@ -1256,14 +1353,11 @@
 
       const tree = buildTree();
 
-      // Sensible default selection: index.html if present, else first file.
-      let active = files.find((f) => f.path === 'index.html')?.path ?? files[0]!.path;
-
       // Folders containing the active file start expanded so the user can
       // see where it lives. Search auto-expands matching paths too.
       const expanded = new Set<string>();
       {
-        const parts = active.split('/');
+        const parts = (codeActivePath ?? '').split('/');
         let acc = '';
         for (let i = 0; i < parts.length - 1; i++) {
           acc = acc ? `${acc}/${parts[i]}` : parts[i]!;
@@ -1292,65 +1386,6 @@
         }
         return out;
       }
-
-      const drawViewer = (): void => {
-        viewer.innerHTML = '';
-        const file = files.find((f) => f.path === active);
-        if (!file) {
-          viewer.innerHTML = '<div class="empty">File not found.</div>';
-          return;
-        }
-        const lang = languageHint(file.path);
-        const langLabel = LANG_DISPLAY[lang] ?? 'TEXT';
-        const lineCount = file.content.split('\n').length;
-        const bytes = new TextEncoder().encode(file.content).byteLength;
-        const pathDir = file.path.includes('/')
-          ? file.path.slice(0, file.path.lastIndexOf('/'))
-          : '';
-        const pathName = file.path.includes('/')
-          ? file.path.slice(file.path.lastIndexOf('/') + 1)
-          : file.path;
-
-        // Filename row: name + colored language pill + Read-only chip.
-        const titleRow = el('div', { class: 'code-viewer-title-row' }, [
-          ...(pathDir ? [el('span', { class: 'code-viewer-dir' }, pathDir + '/')] : []),
-          el('span', { class: 'code-viewer-name' }, pathName),
-          el('span', { class: 'code-lang-pill', 'data-lang': lang }, langLabel),
-          el('span', { class: 'code-readonly-badge' }, 'Read-only'),
-        ]);
-        const metaRow = el(
-          'span',
-          { class: 'code-viewer-meta' },
-          `${lineCount} ${lineCount === 1 ? 'line' : 'lines'} · ${formatBytes(bytes)} · synced from gateway`,
-        );
-        const titleStack = el('div', { class: 'code-viewer-title' }, [titleRow, metaRow]);
-
-        const openBtn = el(
-          'button',
-          {
-            class: 'btn btn-ghost tiny-btn code-open-btn',
-            onClick: () => {
-              if (projectId) void Api().openProjectFolder({ id: projectId });
-            },
-          },
-          'Open folder',
-        );
-        const head = el('div', { class: 'code-viewer-head' }, [
-          titleStack,
-          el('div', { class: 'code-viewer-actions' }, [openBtn]),
-        ]);
-
-        const body = el('div', { class: 'code-body' });
-        const lines = file.content.split('\n');
-        const gutter = el('div', { class: 'code-gutter' });
-        lines.forEach((_, i) => gutter.append(el('div', {}, String(i + 1))));
-        const text = el('pre', { class: 'code-text' });
-        text.innerHTML = tokenize(file.content, lang);
-        body.append(gutter);
-        body.append(text);
-        viewer.append(head);
-        viewer.append(body);
-      };
 
       const drawTree = (): void => {
         treeWrap.innerHTML = '';
@@ -1403,22 +1438,28 @@
             return row;
           }
           const lang = languageHint(node.path);
+          const buf = codeBuffers.get(node.path);
+          const isDirty = !!buf && buf.current !== buf.original;
           const row = el(
             'button',
             {
               class: 'code-tree-row code-tree-file',
-              'data-active': String(active === node.path),
+              'data-active': String(codeActivePath === node.path),
+              'data-dirty': String(isDirty),
               'data-depth': String(depth),
               onClick: () => {
-                active = node.path;
+                openFile(node.path);
                 drawTree();
-                drawViewer();
+                drawTabs();
+                drawHead();
+                drawEditorHost();
               },
             },
             [
               el('span', { class: 'code-tree-chevron-spacer' }),
               el('span', { class: 'code-tree-lang-dot', 'data-lang': lang }),
               el('span', { class: 'code-tree-name' }, node.name),
+              ...(isDirty ? [el('span', { class: 'code-tree-dirty' })] : []),
             ],
           );
           row.style.setProperty('--depth', String(depth));
@@ -1466,8 +1507,295 @@
         treeWrap.append(list);
       };
 
+      // ---- Editable editor (tabs + head + surface) ----
+      const tabsBar = el('div', { class: 'code-tabs' });
+      const headBar = el('div', { class: 'code-head' });
+      const editorHost = el('div', { class: 'code-editor-host' });
+      workspace.append(tabsBar, headBar, editorHost);
+
+      const basename = (p: string): string =>
+        p.includes('/') ? p.slice(p.lastIndexOf('/') + 1) : p;
+
+      const saveFile = async (p: string): Promise<void> => {
+        const buf = codeBuffers.get(p);
+        if (!buf || buf.current === buf.original) return;
+        try {
+          await Api().writeProjectFile({ id: pid, path: p, content: buf.current });
+          buf.original = buf.current;
+          showToast(`Saved ${basename(p)}`);
+        } catch (err) {
+          showToast(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        drawTree();
+        drawTabs();
+        drawHead();
+      };
+      const saveAll = async (): Promise<void> => {
+        for (const p of dirtyPaths()) await saveFile(p);
+        // Saved files mean the preview is now stale — nudge it on next view.
+      };
+      const revertActive = (): void => {
+        const buf = codeActivePath ? codeBuffers.get(codeActivePath) : undefined;
+        if (!buf) return;
+        buf.current = buf.original;
+        drawTree();
+        drawTabs();
+        drawHead();
+        drawEditorHost();
+      };
+      const closeTab = (p: string): void => {
+        const idx = codeOpenTabs.indexOf(p);
+        if (idx < 0) return;
+        codeOpenTabs.splice(idx, 1);
+        codeBuffers.delete(p);
+        if (codeActivePath === p) {
+          codeActivePath = codeOpenTabs[Math.max(0, idx - 1)];
+          if (codeActivePath) openFile(codeActivePath);
+        }
+        drawTree();
+        drawTabs();
+        drawHead();
+        drawEditorHost();
+      };
+
+      function drawTabs(): void {
+        tabsBar.innerHTML = '';
+        for (const p of codeOpenTabs) {
+          const buf = codeBuffers.get(p);
+          const dirty = !!buf && buf.current !== buf.original;
+          const tab = el('div', {
+            class: 'code-tab',
+            'data-active': String(codeActivePath === p),
+            'data-dirty': String(dirty),
+          });
+          tab.append(
+            el('span', {
+              class: 'code-tab-dot',
+              'data-lang': languageHint(p),
+            }),
+            el(
+              'button',
+              {
+                class: 'code-tab-label',
+                title: p,
+                onClick: () => {
+                  openFile(p);
+                  drawTree();
+                  drawTabs();
+                  drawHead();
+                  drawEditorHost();
+                },
+              },
+              basename(p),
+            ),
+            el('button', {
+              'aria-label': `Close ${basename(p)}`,
+              class: 'code-tab-close',
+              trustedHtml: dirty ? '' : Icon.X({ size: 11, strokeWidth: 2.5 }),
+              title: dirty ? 'Unsaved changes' : 'Close',
+              onClick: () => closeTab(p),
+            }),
+          );
+          tabsBar.append(tab);
+        }
+      }
+
+      function drawHead(): void {
+        headBar.innerHTML = '';
+        const p = codeActivePath;
+        const buf = p ? codeBuffers.get(p) : undefined;
+        if (!p || !buf) return;
+        const lang = languageHint(p);
+        const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
+        const lineCount = buf.current.split('\n').length;
+        const bytes = new TextEncoder().encode(buf.current).byteLength;
+        const dirty = buf.current !== buf.original;
+        const nDirty = dirtyPaths().length;
+
+        const titleRow = el('div', { class: 'code-head-title-row' }, [
+          ...(dir ? [el('span', { class: 'code-viewer-dir' }, dir)] : []),
+          el('span', { class: 'code-viewer-name' }, basename(p)),
+          el('span', { class: 'code-lang-pill', 'data-lang': lang }, LANG_DISPLAY[lang] ?? 'TXT'),
+          ...(dirty ? [el('span', { class: 'code-dirty-badge' }, 'Unsaved')] : []),
+        ]);
+        const meta = el(
+          'span',
+          { class: 'code-viewer-meta' },
+          `${lineCount} ${lineCount === 1 ? 'line' : 'lines'} · ${formatBytes(bytes)}` +
+            (nDirty > 0 ? ` · ${nDirty} unsaved file${nDirty === 1 ? '' : 's'}` : ''),
+        );
+        const titleStack = el('div', { class: 'code-viewer-title' }, [titleRow, meta]);
+
+        const diffBtn = el(
+          'button',
+          {
+            class: 'btn btn-ghost tiny-btn',
+            'data-active': String(codeDiffMode),
+            disabled: dirty ? undefined : '',
+            title: dirty ? 'Toggle diff against last save' : 'No changes to diff',
+            onClick: () => {
+              codeDiffMode = !codeDiffMode;
+              drawHead();
+              drawEditorHost();
+            },
+          },
+          'Diff',
+        );
+        const saveBtn = el(
+          'button',
+          {
+            class: 'btn btn-primary tiny-btn',
+            disabled: dirty ? undefined : '',
+            onClick: () => void saveFile(p),
+          },
+          'Save',
+        );
+
+        // Overflow — Save all / Revert / Open folder.
+        const overflow = el('button', {
+          'aria-label': 'More code actions',
+          class: 'btn btn-ghost tiny-btn code-overflow-btn',
+          trustedHtml:
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
+        });
+        const menu = el('div', { class: 'code-overflow-menu', hidden: '' });
+        const menuItem = (label: string, onClick: () => void, disabled = false): HTMLElement =>
+          el(
+            'button',
+            {
+              class: 'code-overflow-item',
+              disabled: disabled ? '' : undefined,
+              onClick: () => {
+                menu.setAttribute('hidden', '');
+                onClick();
+              },
+            },
+            label,
+          );
+        menu.append(
+          menuItem(
+            nDirty > 0 ? `Save all (${nDirty})` : 'Save all',
+            () => void saveAll(),
+            nDirty === 0,
+          ),
+          menuItem('Revert this file', revertActive, !dirty),
+          menuItem('Open project folder', () => void Api().openProjectFolder({ id: pid })),
+        );
+        overflow.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const wasHidden = menu.hasAttribute('hidden');
+          if (wasHidden) menu.removeAttribute('hidden');
+          else menu.setAttribute('hidden', '');
+        });
+        document.addEventListener('click', () => menu.setAttribute('hidden', ''), {
+          capture: true,
+        });
+        const overflowWrap = el('div', { class: 'code-overflow-wrap' }, [overflow, menu]);
+
+        headBar.append(
+          titleStack,
+          el('div', { class: 'code-viewer-actions' }, [diffBtn, saveBtn, overflowWrap]),
+        );
+      }
+
+      function drawEditorHost(): void {
+        editorHost.innerHTML = '';
+        const p = codeActivePath;
+        const buf = p ? codeBuffers.get(p) : undefined;
+        if (!p || !buf) {
+          editorHost.append(el('div', { class: 'empty' }, 'No file open.'));
+          return;
+        }
+        if (codeDiffMode) {
+          editorHost.append(buildDiffView(buf));
+          return;
+        }
+        editorHost.append(buildEditor(p, buf));
+      }
+
+      const buildDiffView = (buf: CodeBuffer): HTMLElement => {
+        const rows = lineDiff(buf.original, buf.current);
+        const wrap = el('div', { class: 'code-diff' });
+        for (const r of rows) {
+          const sign = r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' ';
+          wrap.append(
+            el('div', { class: 'code-diff-row', 'data-type': r.type }, [
+              el('span', { class: 'code-diff-num' }, r.aNum ? String(r.aNum) : ''),
+              el('span', { class: 'code-diff-num' }, r.bNum ? String(r.bNum) : ''),
+              el('span', { class: 'code-diff-sign' }, sign),
+              el('span', { class: 'code-diff-text' }, r.text || ' '),
+            ]),
+          );
+        }
+        return wrap;
+      };
+
+      const buildEditor = (p: string, buf: CodeBuffer): HTMLElement => {
+        const lang = languageHint(p);
+        const editor = el('div', { class: 'code-editor' });
+        const gutterInner = el('div', { class: 'code-edit-gutter-inner' });
+        const gutter = el('div', { class: 'code-edit-gutter' }, [gutterInner]);
+        const pre = el('pre', { class: 'code-edit-pre' });
+        const preClip = el('div', { class: 'code-edit-pre-clip' }, [pre]);
+        const ta = el('textarea', {
+          class: 'code-edit-ta',
+          spellcheck: 'false',
+          wrap: 'off',
+        }) as HTMLTextAreaElement;
+        ta.value = buf.current;
+        const surface = el('div', { class: 'code-edit-surface' }, [preClip, ta]);
+        editor.append(gutter, surface);
+
+        const paintGutter = (): void => {
+          const n = buf.current.split('\n').length;
+          const have = gutterInner.childElementCount;
+          if (n === have) return;
+          gutterInner.innerHTML = '';
+          for (let i = 1; i <= n; i++) gutterInner.append(el('div', {}, String(i)));
+        };
+        const paintHighlight = (): void => {
+          pre.innerHTML = tokenize(buf.current, lang) + '\n';
+        };
+        paintGutter();
+        paintHighlight();
+
+        ta.addEventListener('input', () => {
+          buf.current = ta.value;
+          paintHighlight();
+          paintGutter();
+          // Dirty state changed — refresh the tab dots, tree, and head
+          // without rebuilding the editor (keeps the caret/focus).
+          drawTabs();
+          drawHead();
+          drawTree();
+        });
+        ta.addEventListener('scroll', () => {
+          pre.style.transform = `translate(${-ta.scrollLeft}px, ${-ta.scrollTop}px)`;
+          gutterInner.style.transform = `translateY(${-ta.scrollTop}px)`;
+        });
+        // Tab inserts two spaces rather than moving focus out of the editor.
+        ta.addEventListener('keydown', (e) => {
+          const ke = e as KeyboardEvent;
+          if (ke.key === 'Tab') {
+            ke.preventDefault();
+            const s = ta.selectionStart;
+            const eEnd = ta.selectionEnd;
+            ta.value = ta.value.slice(0, s) + '  ' + ta.value.slice(eEnd);
+            ta.selectionStart = s + 2;
+            ta.selectionEnd = s + 2;
+            ta.dispatchEvent(new Event('input'));
+          } else if ((ke.metaKey || ke.ctrlKey) && ke.key.toLowerCase() === 's') {
+            ke.preventDefault();
+            void saveFile(p);
+          }
+        });
+        return editor;
+      };
+
       drawTree();
-      drawViewer();
+      drawTabs();
+      drawHead();
+      drawEditorHost();
     }
 
     // Cloud view — Lovable-style data-browser. The Overview and Database

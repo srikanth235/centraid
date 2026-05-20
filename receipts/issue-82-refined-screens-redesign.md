@@ -20,6 +20,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] Step 7 — Per-app settings tabbed popover (E)
 - [x] Step 8 — ⌘K command palette (F)
 - [x] Follow-up B2/B3 — Builder pane toolbar
+- [x] Follow-up B5 — Builder editable code workspace
 
 ## What changed
 
@@ -176,6 +177,23 @@ removed. §B2 (single agent stream) needed no change — the live Builder
 already consolidates progress into in-place tool-group pills + thinking
 blocks rather than stacking a chip per step.
 
+**Follow-up B5 — Builder editable code workspace.** The Code surface is
+no longer read-only. `renderCode` is rebuilt around an editable editor:
+a transparent `<textarea>` stacked over a tokenized `<pre>` (`code-edit-*`)
+so typing stays live while keeping syntax colour, with a synced
+line-number gutter and Tab→two-spaces / ⌘S handling. Open files become
+tabs (`code-tabs`) carrying a dirty dot; the file tree gains a matching
+dirty marker. The file head shows an `Unsaved` badge, a per-file
+**Save** (⌘S), a **Diff** toggle, and a `⋯` overflow menu carrying
+`Save all (N)`, `Revert this file`, and `Open project folder`. The Diff
+view renders a unified LCS line diff of the buffer against its last
+saved state. Edit buffers, open tabs, and the active file are hoisted
+out of `renderCode` so unsaved edits survive `renderRight()` re-renders
+(peeking at Preview and back); clean buffers re-sync to disk so agent
+rewrites are picked up. Persistence rides a new `writeProjectFile`
+helper in `@centraid/builder-harness` (path-traversal guarded, text
+extensions only) exposed over a `PROJECTS_WRITE_FILE` IPC channel.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).
@@ -186,8 +204,7 @@ blocks rather than stacking a chip per step.
   `updatedAt` as a recency proxy, so a republish inside 24h re-shows
   NEW. A precise `createdAt` would need plumbing through the publish
   flow — deferred.
-- Builder §B5 (editable code workspace) and §B6 (Cloud rebuild) —
-  larger standalone features deferred from this pass.
+- Builder §B6 (Cloud rebuild) — tracked as a separate follow-up.
 
 ## Verification
 

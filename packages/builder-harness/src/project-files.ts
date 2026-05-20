@@ -90,6 +90,32 @@ async function walk(root: string, rel: string, out: ProjectFile[]): Promise<void
   }
 }
 
+/**
+ * Write a single text file inside a project folder, for the desktop's
+ * editable code workspace (§B5). Guards against path traversal — the
+ * resolved target must stay inside `projectDir` — and rejects extensions
+ * outside the editable text set so binaries/build artifacts can't be
+ * clobbered. Parent directories are created as needed.
+ */
+export async function writeProjectFile(
+  projectDir: string,
+  relPath: string,
+  content: string,
+): Promise<{ path: string; size: number }> {
+  const root = path.resolve(projectDir);
+  const abs = path.resolve(root, relPath);
+  if (abs !== root && !abs.startsWith(root + path.sep)) {
+    throw new Error(`Refusing to write outside the project: ${relPath}`);
+  }
+  const ext = path.extname(abs).toLowerCase();
+  if (!TEXT_EXT.has(ext)) {
+    throw new Error(`Not an editable text file: ${relPath}`);
+  }
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+  await fs.writeFile(abs, content, 'utf8');
+  return { path: relPath, size: Buffer.byteLength(content, 'utf8') };
+}
+
 function languageOf(ext: string): ProjectFileLanguage {
   switch (ext) {
     case '.ts':

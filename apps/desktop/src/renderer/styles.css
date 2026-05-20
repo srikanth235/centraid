@@ -2844,36 +2844,114 @@ textarea {
   color: var(--ink-3);
 }
 
-.code-viewer {
+/* §B5 — editable code workspace. Column of tab strip + file head +
+   editor surface. The editor is a transparent <textarea> stacked over a
+   tokenized <pre>; both share identical font metrics so the caret and
+   the syntax colours line up exactly. */
+.code-workspace {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   background: var(--bg);
 }
-.code-viewer-head {
+.code-tabs {
   flex: none;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
+  align-items: stretch;
+  gap: 1px;
+  padding: 0 8px;
   background: var(--bg-elev);
-  font-size: 11px;
-  color: var(--ink-3);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
 }
-.code-viewer-path {
+.code-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 10px;
+  border-top: 2px solid transparent;
+  max-width: 200px;
+}
+.code-tab[data-active='true'] {
+  background: var(--bg);
+  border-top-color: var(--accent);
+}
+.code-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--c-blue, #4f8fe0);
+}
+.code-tab-dot[data-lang='css'] {
+  background: var(--c-orange, #e08c45);
+}
+.code-tab-dot[data-lang='js'],
+.code-tab-dot[data-lang='ts'] {
+  background: var(--c-yellow, #d4b445);
+}
+.code-tab-dot[data-lang='md'] {
+  background: var(--c-violet, #7c5bd9);
+}
+.code-tab-label {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
   font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  color: var(--ink);
   font-size: 12px;
-  font-weight: 500;
+  padding: 9px 0;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.code-viewer-meta {
-  letter-spacing: 0.04em;
+.code-tab[data-active='true'] .code-tab-label {
+  color: var(--ink);
+}
+.code-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.code-tab-close:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.code-tab[data-dirty='true'] .code-tab-close {
+  background: var(--accent);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin: 0 4px;
+}
+.code-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.code-dirty-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
 }
 .code-viewer-actions {
   display: inline-flex;
@@ -2881,39 +2959,172 @@ textarea {
   gap: 8px;
   flex: none;
 }
-.code-readonly-badge {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 7px;
-  color: var(--ink-2);
+.code-viewer-actions .tiny-btn[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+.code-overflow-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.code-overflow-btn {
+  padding: 4px 6px;
+}
+.code-overflow-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.code-overflow-menu[hidden] {
+  display: none;
+}
+.code-overflow-item {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.code-overflow-item:hover:not(:disabled) {
   background: var(--bg-sunken);
-  font-size: 11px;
-  font-weight: 600;
 }
-.code-open-btn {
-  padding: 5px 8px;
+.code-overflow-item:disabled {
+  color: var(--ink-4);
+  cursor: default;
 }
-.code-body {
+.code-editor-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.code-editor {
   flex: 1;
   display: flex;
-  overflow: auto;
-  padding: 16px;
+  min-width: 0;
+  min-height: 0;
+}
+.code-edit-gutter {
+  flex: none;
+  overflow: hidden;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+  user-select: none;
+}
+.code-edit-gutter-inner {
+  padding: 12px 10px 12px 14px;
+  text-align: right;
   font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
   font-size: 12px;
   line-height: 1.65;
+  color: var(--ink-4);
+  will-change: transform;
+}
+.code-edit-surface {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.code-edit-pre-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.code-edit-pre,
+.code-edit-ta {
+  margin: 0;
+  padding: 12px 16px;
+  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre;
+  tab-size: 2;
+  letter-spacing: 0;
+}
+.code-edit-pre {
+  will-change: transform;
+  pointer-events: none;
   color: var(--ink);
 }
-.code-gutter {
+.code-edit-ta {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow: auto;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ink);
+}
+.code-edit-ta::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* Unified diff against the last save. */
+.code-diff {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 0;
+  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.code-diff-row {
+  display: flex;
+  white-space: pre;
+}
+.code-diff-row[data-type='add'] {
+  background: color-mix(in srgb, var(--c-forest, #3fb950) 14%, transparent);
+}
+.code-diff-row[data-type='del'] {
+  background: color-mix(in srgb, var(--c-rose, #f0506e) 14%, transparent);
+}
+.code-diff-num {
   flex: none;
-  padding-right: 14px;
+  width: 42px;
+  padding-right: 8px;
   text-align: right;
   color: var(--ink-4);
   user-select: none;
 }
-.code-text {
-  margin: 0;
-  white-space: pre;
+.code-diff-sign {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  color: var(--ink-3);
+}
+.code-diff-row[data-type='add'] .code-diff-sign {
+  color: var(--c-forest, #3fb950);
+}
+.code-diff-row[data-type='del'] .code-diff-sign {
+  color: var(--c-rose, #f0506e);
+}
+.code-diff-text {
   flex: 1;
+  color: var(--ink);
+}
+.code-tree-dirty {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  margin-left: auto;
+  background: var(--accent);
 }
 .tok-tag {
   color: var(--c-rose);
@@ -3071,17 +3282,13 @@ textarea {
 
 /* ---------- Code view: language pill, stacked metadata, lang dots,
               tree groups, active-row accent stripe ---------- */
-.code-viewer-head {
-  align-items: flex-start;
-  padding: 12px 18px;
-}
 .code-viewer-title {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
 }
-.code-viewer-title-row {
+.code-head-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
