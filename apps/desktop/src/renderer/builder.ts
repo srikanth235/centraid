@@ -1071,6 +1071,38 @@
       return undefined;
     }
 
+    // §B4 — skeleton phone shown while the agent is still building (before
+    // an index.html exists). Replaces the old "Nothing to preview yet"
+    // paragraph so the canvas reads as "a screen taking shape", not empty.
+    function buildPreviewSkeleton(): HTMLElement {
+      const stage = el('div', { class: 'preview-stage' });
+      const phone = el('div', { class: 'skel-phone' });
+      const screen = el('div', { class: 'skel-phone-screen' });
+
+      screen.append(
+        el('div', { class: 'skel-statusbar' }, [
+          el('span', {}, '9:41'),
+          el('span', { class: 'skel-battery' }),
+        ]),
+      );
+
+      const skelBody = el('div', { class: 'skel-body' });
+      skelBody.append(el('div', { class: 'skel-block skel-block-title' }));
+      skelBody.append(el('div', { class: 'skel-block skel-block-sub' }));
+      skelBody.append(el('div', { class: 'skel-block skel-block-card' }));
+      const grid = el('div', { class: 'skel-grid' });
+      for (const _ of Array.from({ length: 28 })) grid.append(el('div', { class: 'skel-cell' }));
+      skelBody.append(grid);
+      for (const _ of Array.from({ length: 3 })) {
+        skelBody.append(el('div', { class: 'skel-block skel-block-row' }));
+      }
+      screen.append(skelBody);
+
+      phone.append(screen);
+      stage.append(phone);
+      return stage;
+    }
+
     async function renderPreview(): Promise<void> {
       // `has-phone` styles the pane as the dotted-grid backdrop that mobile
       // and tablet device frames sit on. Desktop wants a plain flex-stretched
@@ -1083,14 +1115,16 @@
       const resolved = projectId ? await resolvePreviewSrc() : undefined;
 
       if (!resolved) {
-        const empty = el('div', { class: 'empty' });
-        empty.innerHTML = `
-          <p><b>Nothing to preview yet.</b></p>
-          <p style="margin-top: 6px; opacity: .7">
-            The preview shows your app's local files as soon as the agent
-            writes an <code>index.html</code>. Click <b>${isNewBuild ? 'Add to home' : 'Save'}</b> to publish to the gateway once you're happy.
-          </p>`;
-        rightPaneContent.append(empty);
+        // §B4 — render the skeleton phone + an ambient building pill
+        // instead of an explanatory paragraph.
+        rightPane.classList.add('has-phone');
+        rightPaneContent.append(buildPreviewSkeleton());
+        rightPaneContent.append(
+          el('div', { class: 'preview-building-pill' }, [
+            el('span', { class: 'preview-building-dot' }),
+            'Building · preview refreshes on save',
+          ]),
+        );
         return;
       }
 

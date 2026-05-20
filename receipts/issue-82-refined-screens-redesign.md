@@ -14,7 +14,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] design-tokens — refined-screen icons + Send glyph fix
 - [x] Step 2 — Sidebar restructure (G2/G3)
 - [x] Step 3 — Home redesign (A1/A2/A3)
-- [ ] Step 4 — Builder B1–B6
+- [x] Step 4 — Builder B1–B6
 - [ ] Step 5 — Settings monolith split (C)
 - [ ] Step 6 — App view copilot (D)
 - [ ] Step 7 — Per-app settings tabbed popover (E)
@@ -75,6 +75,32 @@ a state-aware bottom strip — `DRAFT`, `NEW` only for the first 24h
 factors the shared textarea/submit wiring; `registerCleanup` chains the
 rotating-placeholder timer onto the page teardown.
 
+**Step 4 — Builder B1–B6.** The Builder was assessed against all six
+sub-items; this commit lands §B4 and records the state of the rest:
+
+- §B4 (skeleton preview) — *implemented.* `renderPreview`'s "Nothing to
+  preview yet" paragraph is replaced by a shimmering skeleton phone
+  (`buildPreviewSkeleton`): a status bar with `9:41` + battery glyph, a
+  title/sub/card stack, a 28-cell calendar grid, and list rows, each
+  animated by the new `skel-shimmer` keyframes. A floating
+  `Building · preview refreshes on save` pill sits on the device wall.
+- §B1 (single titlebar) — *already in place.* A prior Builder refactor
+  removed the full-width `cd-app-strip`; identity lives in the chat
+  pane header and view-context controls ride in the window chrome row.
+- §B2 (single agent stream) — *already largely in place.* The live
+  Builder consolidates progress into tool-group pills + thinking blocks
+  and updates status rows in place (`updateMessage`) rather than
+  stacking a new chip per step. The literal "3 grey chips" the handover
+  describes is from the design demo, not the live code.
+- §B3 (pane toolbar) — *conflict, deferred.* The handover wants the URL
+  bar + viewport + Preview/Code toggle in a right-pane toolbar; the
+  live Builder deliberately moved these into the window chrome row
+  (`titlebarCenter`) in a recent refactor. Per the handover's own note,
+  this conflict is flagged rather than silently reverted.
+- §B5 (editable code workspace) and §B6 (Cloud rebuild) — *deferred.*
+  Each is a substantial standalone feature (an in-pane editor with
+  tabs/diff; a Cloud hero + activity feed). Tracked for follow-up.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).
@@ -85,6 +111,9 @@ rotating-placeholder timer onto the page teardown.
   `updatedAt` as a recency proxy, so a republish inside 24h re-shows
   NEW. A precise `createdAt` would need plumbing through the publish
   flow — deferred.
+- Builder §B5 (editable code workspace) and §B6 (Cloud rebuild) —
+  larger standalone features deferred from this pass; §B3 (pane
+  toolbar) is a flagged conflict with a recent live-repo refactor.
 
 ## Verification
 
