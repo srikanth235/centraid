@@ -5586,12 +5586,16 @@ textarea {
 .cd-app-card-wrap {
   position: relative;
   display: block;
+  height: 100%;
 }
 /* RefinedAppTile (§A3) — a vertical card: gradient icon tile w/ status
-   dot, hover-revealed star, name, 2-line blurb, state-aware foot strip. */
+   dot, hover-revealed star, name, 2-line blurb, state-aware foot strip.
+   `height: 100%` makes every tile fill its grid cell so a row of cards
+   shares one height regardless of how many lines the blurb wraps to. */
 .cd-app-card {
   position: relative;
   width: 100%;
+  height: 100%;
   min-height: 92px;
   padding: 12px;
   background: color-mix(in srgb, var(--ink) 2.5%, transparent);
@@ -5686,6 +5690,9 @@ textarea {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  /* Reserve two lines so the name→blurb→foot rhythm is identical across
+     a row even when one blurb wraps to a single line. */
+  min-height: calc(2 * 1.35 * 11.5px);
 }
 /* State-aware bottom strip — status label · timestamp, all mono 9.5px. */
 .cd-app-card-foot {

@@ -27,6 +27,15 @@ applies the screen-level redesign, landed as one commit per step.
 
 ## What changed
 
+**2026-05-20 — Uniform app/template card grid.** `.cd-app-card` now
+takes `height: 100%` (and `.cd-app-card-wrap` too) so every tile fills
+its grid cell — a row of cards shares one height regardless of how
+many lines the blurb wraps to, fixing the ragged Templates-tab grid.
+`.cd-app-card-desc` reserves two lines (`min-height`) so the
+name→blurb→foot rhythm and the state-aware foot strip line up across
+the row. Applies to every `.cd-app-card` surface (the Home shelf's My
+apps / Starred / Templates tabs).
+
 **2026-05-20 — Top-anchored Day-1 Home hero.** Dropped `flex: 1` and
 `justify-content: center` from `.cd-hero` so the heading + composer no
 longer vertically center in the column — they now sit ~44px from the
