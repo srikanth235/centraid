@@ -137,6 +137,12 @@
         a.updatedAt = nowIso;
         touched = true;
       }
+      // Backfill createdAt from updatedAt for apps that predate the field
+      // (§A3 NEW badge keys off it). New apps get a real stamp at creation.
+      if (!a.createdAt) {
+        a.createdAt = a.updatedAt;
+        touched = true;
+      }
     }
     if (touched) Store.set('home.userApps', userApps);
   }
@@ -159,7 +165,14 @@
     // (packages/app-templates/*/index.html) listens for this and flips its
     // own <html> data-attrs / CSS vars to match.
     broadcastSettingsToFrames();
+    // §C2 — let an open Appearance settings page refresh its live-preview
+    // tile (tile/card/density variants aren't pure CSS-var swaps).
+    if (onAppearanceApplied) onAppearanceApplied();
   }
+
+  // §C2 — set by the Appearance settings page so its preview tile can
+  // re-render on every pref change; cleared on page teardown.
+  let onAppearanceApplied: (() => void) | null = null;
 
   // Project the renderer's typed prefs into the same `dataAttrs` / `cssVars`
   // shape the runtime uses for server-side injection. The bridge inside each
@@ -317,6 +330,9 @@
   type ShellRoute =
     | { kind: 'home' }
     | { kind: 'settings' }
+    | { kind: 'discover' }
+    | { kind: 'starred' }
+    | { kind: 'automations' }
     | { id: string; kind: 'app' }
     | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' };
 
@@ -327,6 +343,9 @@
   function routeKey(route: ShellRoute): string {
     if (route.kind === 'home') return 'home';
     if (route.kind === 'settings') return 'settings';
+    if (route.kind === 'discover') return 'discover';
+    if (route.kind === 'starred') return 'starred';
+    if (route.kind === 'automations') return 'automations';
     if (route.kind === 'app') return `app:${route.id}`;
     if (route.appContext) return `builder:${route.appContext.id}`;
     return `builder:new:${route.initialPrompt ?? ''}`;
@@ -367,6 +386,12 @@
         renderHome();
       } else if (route.kind === 'settings') {
         renderSettings();
+      } else if (route.kind === 'discover') {
+        renderDiscover();
+      } else if (route.kind === 'starred') {
+        renderStarred();
+      } else if (route.kind === 'automations') {
+        renderAutomations();
       } else if (route.kind === 'app') {
         openApp(route.id);
       } else {
@@ -397,8 +422,9 @@
 
   // Build the sidebar contents for the current home/app-view context. The
   // builder builds its own (it knows which project is active).
-  function buildHomeSidebar(activeId?: string): HTMLElement {
-    const all = getAppsWithDrafts();
+  function buildHomeSidebar(
+    active: { page?: SidebarPage; appId?: string; surface?: 'app' | 'cloud' } = {},
+  ): HTMLElement {
     const apps: ChromeSidebarApp[] = userApps.map((a) => ({
       color: a.color,
       iconKey: a.iconKey,
@@ -413,15 +439,26 @@
       name: d.name,
       status: 'draft',
     }));
-    void all;
     return window.Chrome.buildSidebar({
-      activeId,
+      activeId: active.appId,
+      activePage: active.page,
+      activeSurface: active.surface,
       apps,
       drafts: draftEntries,
       onAppClick: (id) => {
         const app = findApp(id);
         if (!app) return;
         if (isDraft(app)) enterBuilder({ appContext: app });
+        else openApp(id);
+      },
+      // §G2 — the expanded active app's App/Cloud children. "App" returns
+      // to the running app view; "Cloud" opens that app in the builder
+      // (which owns the Cloud surface — see §B6).
+      onAppSurface: (id, surface) => {
+        const app = findApp(id);
+        if (!app) return;
+        if (surface === 'cloud') enterBuilder({ appContext: app });
+        else if (isDraft(app)) enterBuilder({ appContext: app });
         else openApp(id);
       },
       // Both right-click on the row and the hover-revealed `•••` route
@@ -434,8 +471,11 @@
       },
       onHome: renderHome,
       onNewApp: openNewAppSheet,
+      onSearch: openCommandPalette,
+      onDiscover: renderDiscover,
+      onStarred: renderStarred,
+      onAutomations: renderAutomations,
       onSettings: renderSettings,
-      runtimeMode: currentRuntimeMode,
     });
   }
 
@@ -460,15 +500,6 @@
   function findUserApp(id: string): UserAppMeta | undefined {
     return userApps.find((a) => a.id === id);
   }
-  /**
-   * Legacy `usr_` ids stay treated as user apps for backwards-compat with
-   * stored localStorage entries. New centraid-backed apps use plain
-   * `<slug>-<rand>` ids and are detected by membership in `userApps`.
-   */
-  function isUserApp(id: string): boolean {
-    if (id.startsWith('usr_')) return true;
-    return !!findUserApp(id);
-  }
 
   function isDraft(app: AppMetaResolvedType): app is DraftAppMeta {
     return (app as DraftAppMeta).__draft === true;
@@ -488,6 +519,7 @@
     currentSetSidebarOpen = null;
     closeContextMenu();
     closeAppSettings();
+    closeCommandPalette();
     root.innerHTML = '';
   }
 
@@ -572,6 +604,50 @@
     }
   }
 
+  // ── Starred + recently-viewed (Refined Screens §A2/§A3) ─────────────
+  let starred = Store.get<Record<string, boolean>>('home.starred', {});
+  function isStarred(id: string): boolean {
+    return starred[id] === true;
+  }
+  function toggleStar(id: string): void {
+    const next = { ...starred };
+    if (next[id]) delete next[id];
+    else next[id] = true;
+    starred = next;
+    Store.set('home.starred', starred);
+  }
+
+  // Recently-viewed app ids, most-recent first, capped at 8.
+  function recordRecent(id: string): void {
+    const list = Store.get<string[]>('home.recent', []).filter((x) => x !== id);
+    list.unshift(id);
+    Store.set('home.recent', list.slice(0, 8));
+  }
+  function recentApps(): AppMetaResolvedType[] {
+    return Store.get<string[]>('home.recent', [])
+      .map((id) => findApp(id))
+      .filter((a): a is AppMetaResolvedType => !!a);
+  }
+
+  // "NEW" applies only for the first 24h after an app is created (§A3).
+  // Keyed off the immutable `createdAt` stamp, not `updatedAt`, so a
+  // republish doesn't re-show NEW.
+  function isRecentlyCreated(iso?: string): boolean {
+    if (!iso) return false;
+    const t = new Date(iso).getTime();
+    return !Number.isNaN(t) && Date.now() - t < 24 * 60 * 60 * 1000;
+  }
+
+  // Chains a teardown callback onto `currentCleanup` so page-scoped
+  // timers (rotating placeholders, etc.) stop when the page is replaced.
+  function registerCleanup(fn: () => void): void {
+    const prev = currentCleanup;
+    currentCleanup = (): void => {
+      if (prev) prev();
+      fn();
+    };
+  }
+
   function renderHome(): void {
     void renderHomeAsync();
   }
@@ -582,50 +658,18 @@
     await hydrateDrafts();
     const availableTemplates = await loadAvailableTemplates();
 
-    // ─ Main column: glass hero + "Your apps" grid + Templates strip ─
-    // `has-wall` paints the device-wall crosshatch behind everything —
-    // matches the Bold home screenshot. (UPDATES.md §5 said don't promote
-    // device-wall to a system token; the rendered design HTML uses it on
-    // Home anyway, so it lives here as a product choice, not a DS token.)
+    // `has-wall` paints the device-wall crosshatch behind everything.
     const main = el('div', { class: 'has-wall' });
     const scroll = el('div', { class: 'cd-main-scroll' });
     main.append(scroll);
 
-    scroll.append(buildHomeHero());
+    // Home is always the composer-led layout — centered composer hero +
+    // tabbed discovery shelf — regardless of how many apps exist. The
+    // shelf's "Browse all →" is the only path to the alternate (Discover)
+    // page; the workspace never auto-switches based on app count.
+    renderDay1Home(scroll, availableTemplates);
 
-    // Your apps section — always rendered so the home page keeps a stable
-    // shape. When the workspace is empty an inline empty-state card stands
-    // in for the grid, pointing users at the Templates strip below as the
-    // fastest way to get their first app on screen.
-    const apps = getApps();
-    const totalApps = apps.length;
-    const totalDrafts = drafts.length;
-    {
-      const section = el('section', { class: 'cd-section' });
-      const head = el('div', { class: 'cd-section-head' }, [el('h2', {}, 'Your apps')]);
-      section.append(head);
-      if (totalApps + totalDrafts > 0) {
-        const grid = el('div', { class: 'cd-apps-grid' });
-        for (const app of apps) grid.append(renderAppCard(app));
-        for (const d of drafts) grid.append(renderAppCard(d));
-        section.append(grid);
-      } else {
-        section.append(renderHomeAppsEmptyState());
-      }
-      scroll.append(section);
-    }
-
-    // Templates strip
-    if (availableTemplates.length > 0) {
-      const section = el('section', { class: 'cd-section' });
-      section.append(el('div', { class: 'cd-eyebrow' }, 'Templates · curated'));
-      const grid = el('div', { class: 'cd-tmpl-grid' });
-      for (const tmpl of availableTemplates) grid.append(renderTemplateCard(tmpl));
-      section.append(grid);
-      scroll.append(section);
-    }
-
-    const sidebar = buildHomeSidebar('home');
+    const sidebar = buildHomeSidebar({ page: 'home' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
       ...chromeNav(),
       main,
@@ -639,22 +683,21 @@
     root.append(shell);
   }
 
-  function buildHomeHero(): HTMLElement {
-    const wrap = el('div', { class: 'cd-hero' });
-    wrap.append(el('h1', {}, 'What should we build?'));
+  // §A1 — Day-1 home: centered composer hero + tabbed discovery shelf.
+  // Apps live only inside the shelf's "My apps" tab — there is no
+  // separate "Your apps" section above the shelf.
+  function renderDay1Home(scroll: HTMLElement, templates: TemplateEntry[]): void {
+    scroll.classList.add('cd-day1-scroll');
+    scroll.append(buildHomeHero());
+    scroll.append(buildTabbedShelf(templates));
+  }
 
-    const prompt = el('div', { class: 'cd-hero-prompt' });
-    const ta = el('textarea', {
-      placeholder: 'A habit tracker, a journal, a tiny calculator…',
-      rows: '2',
-    }) as HTMLTextAreaElement;
-    const buildBtn = el('button', { class: 'cd-hero-build-btn', disabled: '' });
-    buildBtn.innerHTML = `<span>Build</span>${Icon.Send({ size: 13 })}`;
-
+  // Shared composer behaviour — wires submit/keydown onto a textarea +
+  // build button pair. Used by the Day-1 hero.
+  function wireComposer(ta: HTMLTextAreaElement, buildBtn: HTMLElement): void {
     const submit = (): void => {
       const v = ta.value.trim();
-      if (!v) return;
-      enterBuilder({ initialPrompt: v });
+      if (v) enterBuilder({ initialPrompt: v });
     };
     ta.addEventListener('input', () => {
       if (ta.value.trim()) buildBtn.removeAttribute('disabled');
@@ -668,85 +711,665 @@
       }
     });
     buildBtn.addEventListener('click', submit);
+  }
 
-    const row = el('div', { class: 'cd-hero-prompt-row' });
-    row.append(el('span', { style: { flex: '1' } }));
-    row.append(buildBtn);
-    prompt.append(ta);
-    prompt.append(row);
-    wrap.append(prompt);
+  // Right-pointing arrow — the shared icon set ships only ArrowLeft, so
+  // the design's right-arrows are ArrowLeft rotated 180°.
+  function arrowRight(size: number): string {
+    return `<span style="display:inline-flex;transform:rotate(180deg)">${Icon.ArrowLeft({ size })}</span>`;
+  }
+  // Small chevron-down — ArrowLeft rotated -90°, matching Day1Composer.
+  function chevronDown(size: number): string {
+    return `<span style="display:inline-flex;transform:rotate(-90deg);opacity:0.6">${Icon.ArrowLeft(
+      { size },
+    )}</span>`;
+  }
+  // Microphone glyph — not in the shared icon set; inlined to match the
+  // design's voice affordance.
+  const MIC_SVG =
+    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">' +
+    '<rect x="9" y="2" width="6" height="11" rx="3"/>' +
+    '<path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>';
 
-    const suggestions = [
-      { icon: 'Habit', label: 'Habit tracker' } as const,
-      { icon: 'Journal', label: 'Daily journal' } as const,
-      { icon: 'Pomodoro', label: 'Pomodoro timer' } as const,
-      { icon: 'Water', label: 'Hydration' } as const,
-    ];
-    const sugRow = el('div', { class: 'cd-hero-suggestions' });
-    for (const s of suggestions) {
-      const chip = el('button', {
-        class: 'cd-chip',
-        onClick: () => {
-          ta.value = s.label;
-          ta.dispatchEvent(new Event('input'));
-          ta.focus();
-        },
-      });
-      chip.innerHTML = `${Icon[s.icon]({ size: 12 })}<span>${s.label}</span>`;
-      sugRow.append(chip);
-    }
-    wrap.append(sugRow);
+  function buildHomeHero(): HTMLElement {
+    const wrap = el('div', { class: 'cd-hero' });
+
+    // Personalized heading — no user-profile source exists in the
+    // renderer, so we fall back to the un-named form rather than fake one.
+    wrap.append(el('h1', {}, 'What should we build?'));
+
+    // Day1Composer — bg-elev card with descriptive placeholder + toolbar.
+    const composer = el('div', { class: 'cd-composer' });
+    const ta = el('textarea', {
+      class: 'cd-composer-input',
+      placeholder: 'Describe an app you want — a habit tracker, a journal, a tiny tool…',
+      rows: '2',
+    }) as HTMLTextAreaElement;
+
+    const buildBtn = el('button', { class: 'cd-composer-send', type: 'button', disabled: '' });
+    buildBtn.innerHTML = Icon.Send({ size: 14 });
+    wireComposer(ta, buildBtn);
+
+    const toolbar = el('div', { class: 'cd-composer-toolbar' }, [
+      el('button', {
+        class: 'cd-icon-btn cd-composer-attach',
+        type: 'button',
+        title: 'Attach',
+        trustedHtml: Icon.Plus({ size: 14 }),
+      }),
+      el('span', { class: 'cd-composer-spacer' }),
+      el('span', { class: 'cd-composer-mode' }, [
+        el('span', { trustedHtml: Icon.Sparkle({ size: 11 }) }),
+        el('span', {}, 'Build'),
+        el('span', { trustedHtml: chevronDown(9) }),
+      ]),
+      el('button', {
+        class: 'cd-icon-btn cd-composer-mic',
+        type: 'button',
+        title: 'Voice',
+        trustedHtml: MIC_SVG,
+      }),
+      el('span', { class: 'cd-kbd cd-composer-kbd' }, '⌘↵'),
+      buildBtn,
+    ]);
+
+    composer.append(ta, toolbar);
+    wrap.append(composer);
     return wrap;
   }
 
-  // Empty-state card shown under "Your apps" when the workspace is fresh.
-  // Carries the same visual weight as a populated grid row so the page
-  // silhouette stays steady when the first app lands. Points the user at
-  // the two ways forward — the hero prompt above, the templates below.
-  function renderHomeAppsEmptyState(): HTMLElement {
-    const card = el('div', { class: 'cd-apps-empty' });
-    card.append(el('div', { class: 'cd-apps-empty-halo' }));
-
-    const icon = el('div', {
-      class: 'cd-apps-empty-icon',
-      trustedHtml: Icon.Sparkle({ size: 22 }),
+  // A shelf tile — the same RefinedAppTile shape as renderAppCard but
+  // driven by a plain spec, so templates (which aren't AppMetaResolved)
+  // can share the exact card vocabulary.
+  function buildShelfTile(spec: {
+    name: string;
+    desc: string;
+    iconKey: string;
+    color: string;
+    status?: 'new' | 'draft' | 'template' | null;
+    timestamp?: string;
+    starred?: boolean;
+    onClick: () => void;
+    /** Optional right-click handler — wires the card's context menu. */
+    onContextMenu?: (e: MouseEvent) => void;
+    /** Optional hover-revealed `•••` action in the tile's bottom-right. */
+    more?: { label: string; onOpen: (rect: DOMRect) => void };
+  }): HTMLElement {
+    const card = el('button', {
+      class: 'cd-app-card cd-app-card--small',
+      type: 'button',
+      onClick: spec.onClick,
     });
-    card.append(icon);
+    if (spec.onContextMenu) {
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        spec.onContextMenu?.(e as MouseEvent);
+      });
+    }
 
-    card.append(
-      el('div', { class: 'cd-apps-empty-text' }, [
-        el('div', { class: 'cd-apps-empty-title' }, 'Your workspace is a blank canvas'),
-        el(
-          'div',
-          { class: 'cd-apps-empty-hint' },
-          'Clone a template or describe what you want — we’ll build it.',
-        ),
-      ]),
-    );
+    const iconEl = el('div', {
+      class: 'cd-app-card-icon',
+      trustedHtml: Icon[spec.iconKey as IconNameType]
+        ? Icon[spec.iconKey as IconNameType]({ size: 18, strokeWidth: 1.85 })
+        : '',
+    });
+    const finish = window.CentraidTokens.tileFinish(spec.color as ColorHexType, prefs.tileVariant);
+    iconEl.style.background = finish.background;
+    iconEl.style.color = finish.glyphColor;
+    if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
 
-    const cues = el('div', { class: 'cd-apps-empty-cues' });
-    const cueUp = el('div', { class: 'cd-apps-empty-cue' });
-    cueUp.innerHTML = `${Icon.ArrowLeft({ size: 12 })}<span>Describe above</span>`;
-    cueUp.querySelector('svg')?.setAttribute('style', 'transform: rotate(90deg)');
-    const cueDown = el('div', { class: 'cd-apps-empty-cue' });
-    cueDown.innerHTML = `<span>Pick a template</span>${Icon.ArrowLeft({ size: 12 })}`;
-    cueDown.querySelector('svg')?.setAttribute('style', 'transform: rotate(-90deg)');
-    cues.append(cueUp, cueDown);
-    card.append(cues);
+    const top = el('div', { class: 'cd-app-card-top' }, [iconEl]);
+    if (spec.status) {
+      const dot = el('span', { class: 'cd-app-card-icon-dot', 'data-tone': spec.status });
+      iconEl.style.position = 'relative';
+      iconEl.append(dot);
+    }
+    card.append(top);
 
-    return card;
+    card.append(el('div', { class: 'cd-app-card-name' }, spec.name));
+    card.append(el('div', { class: 'cd-app-card-desc' }, spec.desc));
+
+    const foot = el('div', { class: 'cd-app-card-foot' });
+    if (spec.status === 'new') foot.append(statusPillEl('new', 'new'));
+    else if (spec.status === 'draft') foot.append(statusPillEl('draft', 'draft'));
+    else if (spec.status === 'template') foot.append(statusPillEl('live', 'template'));
+    if (spec.status && spec.timestamp) {
+      foot.append(el('span', { class: 'cd-app-card-foot-sep' }, '·'));
+    }
+    if (spec.timestamp) {
+      foot.append(el('span', { class: 'cd-app-card-foot-time' }, spec.timestamp));
+    }
+    card.append(foot);
+
+    const wrap = el('div', { class: 'cd-app-card-wrap' }, [card]);
+    if (spec.more) {
+      wrap.append(buildMoreButton(spec.more.label, spec.more.onOpen));
+    }
+    return wrap;
   }
 
-  function renderAppCard(app: AppMetaResolvedType): HTMLElement {
-    const draft = isDraft(app);
-    const status: 'new' | 'draft' | null = draft ? 'draft' : isUserApp(app.id) ? 'new' : null;
+  // §A1 — HomeShelf: pill-tabbed shelf — My apps · Starred · Templates —
+  // each tab a count badge, "Browse all →" pushed right, a 6-col grid.
+  function buildTabbedShelf(templates: TemplateEntry[]): HTMLElement {
+    const section = el('section', { class: 'cd-shelf' });
 
-    // Wrap is the grid item; card is the clickable surface. The wrap also
-    // hosts the hover-revealed `•••` action button as a sibling so we don't
-    // nest a button inside a button.
+    const all: AppMetaResolvedType[] = [...getApps(), ...drafts];
+    const starredApps = all.filter((a) => isStarred(a.id));
+    const palette = window.ICON_PALETTE as Record<string, string>;
+
+    const appTiles = (list: AppMetaResolvedType[]): HTMLElement[] =>
+      list.map((a) => renderAppCard(a, true));
+
+    const tabs: ReadonlyArray<{
+      id: string;
+      label: string;
+      count: number;
+      render: () => HTMLElement[];
+    }> = [
+      {
+        id: 'apps',
+        label: 'My apps',
+        count: all.length,
+        render: () => appTiles(all),
+      },
+      {
+        id: 'starred',
+        label: 'Starred',
+        count: starredApps.length,
+        render: () => appTiles(starredApps),
+      },
+      {
+        id: 'templates',
+        label: 'Templates',
+        count: templates.length,
+        render: () =>
+          templates.map((t) =>
+            buildShelfTile({
+              name: t.name,
+              desc: t.desc,
+              iconKey: t.iconKey,
+              color: palette[t.colorKey] ?? '#7C5BD9',
+              status: 'template',
+              onClick: () => openTemplatePreview(t),
+            }),
+          ),
+      },
+    ];
+
+    const inner = el('div', { class: 'cd-shelf-inner' });
+    const tabRow = el('div', { class: 'cd-shelf-tabrow' });
+    const tabList = el('div', { class: 'cd-shelf-tabs', role: 'tablist' });
+    const grid = el('div', { class: 'cd-shelf-grid' });
+
+    const renderTab = (tabId: string): void => {
+      const t = tabs.find((x) => x.id === tabId) ?? tabs[0]!;
+      grid.innerHTML = '';
+      const tiles = t.render();
+      if (tiles.length === 0) {
+        grid.append(el('div', { class: 'cd-shelf-empty' }, 'Nothing here yet.'));
+      } else {
+        for (const tile of tiles) grid.append(tile);
+      }
+    };
+
+    for (const t of tabs) {
+      const btn = el(
+        'button',
+        {
+          class: 'cd-shelf-tab',
+          type: 'button',
+          role: 'tab',
+          'data-active': t.id === 'apps' ? 'true' : undefined,
+          onClick: () => {
+            for (const b of tabList.querySelectorAll<HTMLElement>('.cd-shelf-tab')) {
+              delete b.dataset.active;
+            }
+            btn.dataset.active = 'true';
+            renderTab(t.id);
+          },
+        },
+        [
+          el('span', {}, t.label),
+          el('span', { class: 'cd-shelf-tab-count' }, String(t.count).padStart(2, '0')),
+        ],
+      );
+      tabList.append(btn);
+    }
+
+    const browseAll = el(
+      'button',
+      { class: 'cd-shelf-browse', type: 'button', onClick: renderDiscover },
+      [el('span', {}, 'Browse all'), el('span', { trustedHtml: arrowRight(13) })],
+    );
+
+    tabRow.append(tabList, el('span', { class: 'cd-shelf-spacer' }), browseAll);
+    inner.append(tabRow, grid);
+    section.append(inner);
+    renderTab('apps');
+    return section;
+  }
+
+  // ---------- Sidebar destination pages ----------
+  // Discover / Starred / Automations are top-level sidebar destinations
+  // added by Refined Screens §G3. Discover surfaces the template gallery
+  // (which §A3 removes from Home); Starred and Automations are wired here
+  // with their list/empty states — the per-app star toggle (§A3) and the
+  // scheduler backing Automations (§E3) land in later steps.
+
+  function renderSimpleEmpty(message: string): HTMLElement {
+    return el('div', { class: 'cd-page-empty' }, [
+      el('div', { class: 'cd-page-empty-icon', trustedHtml: Icon.Sparkle({ size: 22 }) }),
+      el('div', { class: 'cd-page-empty-text' }, message),
+    ]);
+  }
+
+  function mountShellPage(page: SidebarPage, main: HTMLElement): void {
+    const sidebar = buildHomeSidebar({ page });
+    const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
+      ...chromeNav(),
+      main,
+      onNewChat: openNewAppSheet,
+      onToggleSidebar: toggleSidebar,
+      showNewChat: true,
+      sidebar,
+      sidebarOpen: prefs.sidebarOpen,
+    });
+    currentSetSidebarOpen = setSidebarOpen;
+    root.append(shell);
+  }
+
+  function pageScroll(title: string, subtitle: string): { main: HTMLElement; scroll: HTMLElement } {
+    const main = el('div', { class: 'has-wall' });
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
+    scroll.append(
+      el('div', { class: 'cd-page-head' }, [el('h1', {}, title), el('p', {}, subtitle)]),
+    );
+    return { main, scroll };
+  }
+
+  function renderDiscover(): void {
+    void renderDiscoverAsync();
+  }
+  async function renderDiscoverAsync(): Promise<void> {
+    recordRoute({ kind: 'discover' });
+    clear();
+    const availableTemplates = await loadAvailableTemplates();
+    const { main, scroll } = pageScroll(
+      'Discover',
+      'Start from a template — clone it and make it yours.',
+    );
+    if (availableTemplates.length > 0) {
+      const grid = el('div', { class: 'cd-tmpl-grid' });
+      for (const tmpl of availableTemplates) grid.append(renderTemplateCard(tmpl));
+      scroll.append(grid);
+    } else {
+      scroll.append(renderSimpleEmpty('No templates available yet.'));
+    }
+    mountShellPage('discover', main);
+  }
+
+  function renderStarred(): void {
+    recordRoute({ kind: 'starred' });
+    clear();
+    const { main, scroll } = pageScroll('Starred', 'Apps you star show up here for quick access.');
+    scroll.append(renderSimpleEmpty('Nothing starred yet. Hover an app tile and tap the star.'));
+    mountShellPage('starred', main);
+  }
+
+  function renderAutomations(): void {
+    recordRoute({ kind: 'automations' });
+    clear();
+    const { main, scroll } = pageScroll(
+      'Automations',
+      'Scheduled triggers that run scripts across your apps.',
+    );
+    scroll.append(
+      renderSimpleEmpty('No automations yet. Add one from an app’s settings → Automations.'),
+    );
+    mountShellPage('automations', main);
+  }
+
+  // ---------- ⌘K command palette (Refined Screens §F) ----------
+  let paletteCleanup: (() => void) | null = null;
+
+  function closeCommandPalette(): void {
+    if (paletteCleanup) {
+      paletteCleanup();
+      paletteCleanup = null;
+    }
+  }
+
+  interface PaletteRow {
+    label: string;
+    sub?: string;
+    icon: string;
+    tint?: string;
+    /** Variant changes the leading visual: action chip, app tile, chat dot. */
+    variant?: 'action' | 'app' | 'chat';
+    /** App reference — drives the gradient icon tile for `variant: 'app'`. */
+    app?: AppMetaResolvedType;
+    /** Right-aligned meta — relative time or a kbd hint. */
+    meta?: string;
+    /** Right-aligned mono kbd chip (e.g. ↵). */
+    kbd?: string;
+    /** Accent treatment for the leading chip (the primary "Build" action). */
+    accent?: boolean;
+    run: () => void;
+  }
+
+  // §F — a 640px command card over a dimmed, blurred copy of the current
+  // screen. Results group into Build / Apps / Chats / Settings with
+  // up/down + Enter keyboard navigation and a footer hint bar.
+  function openCommandPalette(): void {
+    if (paletteCleanup) return;
+    const backdrop = el('div', { class: 'cd-palette-backdrop' });
+    const card = el('div', {
+      class: 'cd-palette',
+      role: 'dialog',
+      'aria-label': 'Command palette',
+    });
+
+    // Input row — leading search glyph, the field, a trailing `esc` chip.
+    const input = el('input', {
+      class: 'cd-palette-input',
+      type: 'text',
+      autocomplete: 'off',
+      placeholder: 'Search apps, chats, templates — or describe a new one…',
+    }) as HTMLInputElement;
+    const inputRow = el('div', { class: 'cd-palette-inputrow' }, [
+      el('span', { class: 'cd-palette-search-icon', trustedHtml: Icon.Search({ size: 16 }) }),
+      input,
+      el('span', { class: 'cd-palette-esc' }, 'esc'),
+    ]);
+    const resultsEl = el('div', { class: 'cd-palette-results' });
+
+    // Footer hint bar — navigate / open / open-in-new-window / esc close.
+    const kbd = (k: string): HTMLElement => el('span', { class: 'cd-palette-kbd' }, k);
+    const footer = el('div', { class: 'cd-palette-footer' }, [
+      kbd('↑↓'),
+      el('span', {}, 'navigate'),
+      kbd('↵'),
+      el('span', {}, 'open'),
+      kbd('⌘↵'),
+      el('span', {}, 'open in new window'),
+      el('span', { class: 'cd-palette-footer-sp' }),
+      kbd('esc'),
+      el('span', {}, 'close'),
+    ]);
+    card.append(inputRow, resultsEl, footer);
+    backdrop.append(card);
+    document.body.append(backdrop);
+
+    let templates: TemplateEntry[] = [];
+    void loadAvailableTemplates().then((t) => {
+      templates = t;
+      render();
+    });
+
+    const settingsLabels = [
+      'Appearance',
+      'Layout',
+      'Workspace',
+      'AI providers',
+      'Inference endpoint',
+      'Where apps run',
+      'Sync & backups',
+    ];
+
+    let rows: PaletteRow[] = [];
+    let active = 0;
+
+    const settingsSubs: Record<string, string> = {
+      Appearance: 'Theme, accent, app tiles',
+      Layout: 'Density, cards, sidebar',
+      Workspace: 'Sidebar, chat model',
+      'AI providers': 'Codex · Claude Code · custom endpoint',
+      'Inference endpoint': 'Route Codex through any OpenAI endpoint',
+      'Where apps run': 'Local or remote runtime',
+      'Sync & backups': 'Cross-device sync and snapshots',
+    };
+
+    const collectGroups = (q: string): Array<{ group: string; items: PaletteRow[] }> => {
+      const lc = q.toLowerCase();
+      const groups: Array<{ group: string; items: PaletteRow[] }> = [];
+
+      // ── Build — describe-a-new-app primary action + template browse.
+      groups.push({
+        group: 'Build',
+        items: [
+          {
+            label: q ? `Build ${q}` : 'Build a new app',
+            sub: q
+              ? 'Start a new app with this prompt'
+              : 'Describe an app and let the agent build it',
+            icon: Icon.Sparkle({ size: 14 }),
+            variant: 'action',
+            accent: true,
+            kbd: '↵',
+            run: () => {
+              closeCommandPalette();
+              if (q) enterBuilder({ initialPrompt: q });
+              else openNewAppSheet();
+            },
+          },
+          {
+            label: q
+              ? `Browse templates · matching “${q}”`
+              : 'Browse templates · habit, journal, counter',
+            sub: templates.length
+              ? `${templates.length} curated templates`
+              : 'Curated starting points',
+            icon: Icon.Compass({ size: 14 }),
+            variant: 'action',
+            run: () => {
+              closeCommandPalette();
+              renderDiscover();
+            },
+          },
+        ],
+      });
+
+      // ── Apps — gradient app tiles. Matching apps, or recents pre-query.
+      const allApps = [...getApps(), ...drafts];
+      const recents = recentApps();
+      const appMatches = (
+        q
+          ? allApps.filter((a) => a.name.toLowerCase().includes(lc))
+          : recents.length
+            ? recents
+            : allApps
+      ).slice(0, 6);
+      if (appMatches.length > 0) {
+        groups.push({
+          group: `Apps · ${appMatches.length}`,
+          items: appMatches.map((a) => {
+            const ua = !isDraft(a) ? findUserApp(a.id) : undefined;
+            return {
+              label: a.name,
+              sub: a.desc || 'No description yet.',
+              icon: '',
+              variant: 'app' as const,
+              app: a,
+              meta: isDraft(a) ? 'draft' : relativeTime(ua?.updatedAt),
+              run: () => {
+                closeCommandPalette();
+                if (isDraft(a)) enterBuilder({ appContext: a });
+                else openApp(a.id);
+              },
+            };
+          }),
+        });
+      }
+
+      // ── Chats — recent builder conversations, one per app. The shell has
+      // no separate chat store, so each app's build conversation is the
+      // chat; opening a row drops you back into that app's builder.
+      const chatApps = (q ? appMatches : recents.length ? recents : allApps).slice(0, 3);
+      if (chatApps.length > 0) {
+        groups.push({
+          group: `Chats · ${chatApps.length}`,
+          items: chatApps.map((a) => {
+            const ua = !isDraft(a) ? findUserApp(a.id) : undefined;
+            return {
+              label: `Continue building ${a.name}`,
+              sub: `${a.name} · ${isDraft(a) ? 'draft' : relativeTime(ua?.updatedAt)}`,
+              icon: Icon.Sparkle({ size: 13 }),
+              variant: 'chat' as const,
+              run: () => {
+                closeCommandPalette();
+                enterBuilder({ appContext: a });
+              },
+            };
+          }),
+        });
+      }
+
+      // ── Settings — the seven inner pages, each with a one-line blurb.
+      const setMatches = settingsLabels.filter((s) => !q || s.toLowerCase().includes(lc));
+      if (setMatches.length > 0) {
+        groups.push({
+          group: 'Settings',
+          items: setMatches.map((s) => ({
+            label: s,
+            sub: settingsSubs[s] ?? 'Settings',
+            icon: Icon.Settings({ size: 14 }),
+            variant: 'action' as const,
+            run: () => {
+              closeCommandPalette();
+              renderSettings();
+            },
+          })),
+        });
+      }
+      return groups;
+    };
+
+    const highlight = (): void => {
+      const rowEls = resultsEl.querySelectorAll<HTMLElement>('.cd-palette-row');
+      let i = 0;
+      for (const r of rowEls) {
+        r.dataset.active = String(i === active);
+        if (i === active) r.scrollIntoView({ block: 'nearest' });
+        i += 1;
+      }
+    };
+
+    const render = (): void => {
+      const q = input.value.trim();
+      rows = [];
+      resultsEl.replaceChildren();
+      for (const g of collectGroups(q)) {
+        resultsEl.append(el('div', { class: 'cd-palette-group' }, g.group));
+        for (const item of g.items) {
+          rows.push(item);
+
+          // Leading visual — gradient app tile, accent action chip, or a
+          // plain bordered glyph chip (chat / non-accent action).
+          let lead: HTMLElement;
+          if (item.variant === 'app' && item.app) {
+            lead = el('div', { class: 'cd-palette-row-tile' });
+            const finish = window.CentraidTokens.tileFinish(item.app.color, 'gradient');
+            lead.style.background = finish.background;
+            lead.style.color = finish.glyphColor;
+            if (finish.boxShadow) lead.style.boxShadow = finish.boxShadow;
+            lead.innerHTML = Icon[item.app.iconKey]
+              ? Icon[item.app.iconKey]({ size: 14, strokeWidth: 1.85 })
+              : Icon.Sparkle({ size: 14 });
+          } else {
+            lead = el('span', {
+              class: 'cd-palette-row-icon',
+              'data-accent': item.accent ? 'true' : undefined,
+              trustedHtml: item.icon,
+            });
+            if (item.tint && !item.accent) lead.style.color = item.tint;
+          }
+
+          const txt = el('div', { class: 'cd-palette-row-text' }, [
+            el('div', { class: 'cd-palette-row-label' }, item.label),
+          ]);
+          if (item.sub) txt.append(el('div', { class: 'cd-palette-row-sub' }, item.sub));
+
+          const rowChildren: HTMLElement[] = [lead, txt];
+          if (item.kbd) {
+            rowChildren.push(el('span', { class: 'cd-palette-row-kbd' }, item.kbd));
+          } else if (item.meta) {
+            rowChildren.push(el('span', { class: 'cd-palette-row-meta' }, item.meta));
+          }
+
+          resultsEl.append(
+            el(
+              'button',
+              {
+                class: 'cd-palette-row',
+                'data-variant': item.variant ?? 'action',
+                type: 'button',
+                onClick: () => item.run(),
+              },
+              rowChildren,
+            ),
+          );
+        }
+      }
+      if (active >= rows.length) active = Math.max(0, rows.length - 1);
+      highlight();
+    };
+
+    input.addEventListener('input', () => {
+      active = 0;
+      render();
+    });
+    input.addEventListener('keydown', (e) => {
+      const k = e as KeyboardEvent;
+      if (k.key === 'Escape') {
+        k.preventDefault();
+        closeCommandPalette();
+      } else if (k.key === 'ArrowDown') {
+        k.preventDefault();
+        active = Math.min(rows.length - 1, active + 1);
+        highlight();
+      } else if (k.key === 'ArrowUp') {
+        k.preventDefault();
+        active = Math.max(0, active - 1);
+        highlight();
+      } else if (k.key === 'Enter') {
+        // ⌘↵ is the "open in new window" affordance from the footer hint
+        // bar; the shell is single-window today, so it runs the active row.
+        k.preventDefault();
+        rows[active]?.run();
+      }
+    });
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) closeCommandPalette();
+    });
+
+    paletteCleanup = (): void => {
+      backdrop.remove();
+    };
+
+    render();
+    input.focus();
+  }
+
+  function statusPillEl(tone: 'new' | 'draft' | 'live', label: string): HTMLElement {
+    return el('span', { class: 'cd-status', 'data-tone': tone }, [
+      el('span', { class: 'cd-status-dot' }),
+      label,
+    ]);
+  }
+
+  // §A3 — RefinedAppTile: gradient icon tile with a status dot, a
+  // hover-revealed star, a 2-line blurb, and a state-aware bottom strip
+  // (NEW for <24h, DRAFT, else last-opened).
+  function renderAppCard(app: AppMetaResolvedType, small = false): HTMLElement {
+    const draft = isDraft(app);
+
+    // Wrap is the grid item; the card is the clickable surface. The `•••`
+    // action rides as a wrap sibling so we don't nest a button in a button.
     const wrap = el('div', { class: 'cd-app-card-wrap', 'data-app-id': app.id });
     const card = el('button', {
-      class: 'cd-app-card',
+      class: small ? 'cd-app-card cd-app-card--small' : 'cd-app-card',
       type: 'button',
       onClick: () => (draft ? enterBuilder({ appContext: app }) : openApp(app.id)),
       onContextmenu: (e: Event) => {
@@ -756,87 +1379,78 @@
       },
     });
 
-    // Top row mirrors the template card layout — small icon on the
-    // left, name + description stacked to its right. Keeps app +
-    // template tiles visually related so the home page reads as one
-    // consistent grid family.
-    const row = el('div', { class: 'cd-app-card-row' });
+    const ua = !draft ? findUserApp(app.id) : undefined;
+    const isNew = !draft && isRecentlyCreated(ua?.createdAt);
+    const tone: 'new' | 'draft' | null = draft ? 'draft' : isNew ? 'new' : null;
+
     const iconEl = el('div', {
       class: 'cd-app-card-icon',
-      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 16, strokeWidth: 1.85 }) : '',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 18, strokeWidth: 1.85 }) : '',
     });
     const finish = window.CentraidTokens.tileFinish(app.color, prefs.tileVariant);
     iconEl.style.background = finish.background;
     iconEl.style.color = finish.glyphColor;
     if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
-    row.append(iconEl);
-    const text = el('div', { class: 'cd-app-card-text' });
-    text.append(el('div', { class: 'cd-app-card-name' }, app.name));
-    if (app.desc) text.append(el('div', { class: 'cd-app-card-desc' }, app.desc));
-    row.append(text);
-    card.append(row);
-
-    // Foot — edited time on the left, status pill pushed to the right.
-    // What separates an app tile from a template tile: templates show
-    // a description; apps show their lifecycle (last touched + state).
-    const ua = !draft ? findUserApp(app.id) : undefined;
-    const metaLabel = draft ? 'Continue editing' : relativeTime(ua?.updatedAt);
-    const foot = el('div', { class: 'cd-app-card-foot' });
-    foot.append(el('span', { class: 'cd-app-card-foot-time' }, metaLabel));
-    if (status) {
-      const pill = el('span', { class: 'cd-status', 'data-tone': status });
-      pill.append(el('span', { class: 'cd-status-dot' }));
-      pill.append(document.createTextNode(status));
-      foot.append(pill);
+    if (tone) {
+      iconEl.append(el('span', { class: 'cd-app-card-icon-dot', 'data-tone': tone }));
     }
-    card.append(foot);
 
+    // Hover-revealed star — toggles starred state without opening the app.
+    const star = el('button', {
+      class: 'cd-app-card-star',
+      type: 'button',
+      'aria-label': isStarred(app.id) ? 'Unstar app' : 'Star app',
+      'data-on': isStarred(app.id) ? 'true' : undefined,
+      trustedHtml: Icon.Star ? Icon.Star({ size: 14 }) : '',
+      onClick: (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleStar(app.id);
+        renderHome();
+      },
+    });
+
+    card.append(el('div', { class: 'cd-app-card-top' }, [iconEl, star]));
+    card.append(el('div', { class: 'cd-app-card-name' }, app.name));
+    card.append(el('div', { class: 'cd-app-card-desc' }, app.desc || 'No description yet.'));
+
+    // State-aware bottom strip — status label + "·" + timestamp.
+    const foot = el('div', { class: 'cd-app-card-foot' });
+    if (tone) foot.append(statusPillEl(tone, tone));
+    const stamp = draft ? 'saved' : relativeTime(ua?.updatedAt);
+    if (tone) foot.append(el('span', { class: 'cd-app-card-foot-sep' }, '·'));
+    foot.append(el('span', { class: 'cd-app-card-foot-time' }, stamp));
+    card.append(foot);
     wrap.append(card);
+
     wrap.append(
       buildMoreButton('App actions', (rect) => openContextMenu(app, { kind: 'rect', rect })),
     );
     return wrap;
   }
 
+  // Discover-page template card. Shares the exact RefinedAppTile vocabulary
+  // and uniform-height grid as the Home shelf — `buildShelfTile` is the one
+  // card builder, so Discover and the shelf's Templates tab stay in lockstep.
+  // Click opens a preview rather than cloning straight away — keeps a
+  // single-tap from becoming a surprise side effect on disk; the "Use this
+  // template" button in the preview commits the clone.
   function renderTemplateCard(tmpl: TemplateEntry): HTMLElement {
     const color = (window.ICON_PALETTE as Record<string, string>)[tmpl.colorKey] || '#7C5BD9';
-    const wrap = el('div', { class: 'cd-tmpl-card-wrap' });
-    const card = el(
-      'button',
-      {
-        class: 'cd-tmpl-card',
-        type: 'button',
-        // Click opens a preview rather than cloning straight away — keeps a
-        // single-tap from becoming a surprise side effect on disk. The
-        // "Use this template" button in the preview commits the clone.
-        onClick: () => openTemplatePreview(tmpl),
-        onContextmenu: (e: Event) => {
-          e.preventDefault();
-          const me = e as MouseEvent;
-          openTemplateContextMenu(tmpl, { kind: 'point', x: me.clientX, y: me.clientY });
-        },
+    return buildShelfTile({
+      name: tmpl.name,
+      desc: tmpl.desc,
+      iconKey: tmpl.iconKey,
+      color,
+      status: 'template',
+      onClick: () => openTemplatePreview(tmpl),
+      onContextMenu: (me) =>
+        openTemplateContextMenu(tmpl, { kind: 'point', x: me.clientX, y: me.clientY }),
+      more: {
+        label: 'Template actions',
+        onOpen: (rect) => openTemplateContextMenu(tmpl, { kind: 'rect', rect }),
       },
-      [],
-    );
-    const iconEl = el('div', {
-      class: 'cd-tmpl-card-icon',
-      style: { background: color },
-      trustedHtml: Icon[tmpl.iconKey as IconNameType]
-        ? Icon[tmpl.iconKey as IconNameType]({ size: 16, strokeWidth: 1.85 })
-        : '',
     });
-    card.append(iconEl);
-    const text = el('div', { style: { minWidth: '0', flex: '1' } });
-    text.append(el('div', { class: 'cd-tmpl-card-name' }, tmpl.name));
-    text.append(el('div', { class: 'cd-tmpl-card-desc' }, tmpl.desc));
-    card.append(text);
-    wrap.append(card);
-    wrap.append(
-      buildMoreButton('Template actions', (rect) =>
-        openTemplateContextMenu(tmpl, { kind: 'rect', rect }),
-      ),
-    );
-    return wrap;
   }
 
   // Hover-revealed `•••` action trigger. Sits as a sibling to the card so we
@@ -1607,14 +2221,16 @@
       return existing;
     }
 
+    const stampIso = new Date().toISOString();
     const newApp: UserAppMeta = {
       color: input.color || meta.color,
       colorKey: 'violet',
+      createdAt: stampIso,
       desc: input.prompt && input.prompt.length <= 60 ? input.prompt : 'Built with Centraid.',
       iconKey: input.iconKey || meta.iconKey,
       id,
       name: input.name || meta.name,
-      updatedAt: new Date().toISOString(),
+      updatedAt: stampIso,
       ...(input.projectId ? { centraidProjectId: input.projectId } : {}),
     };
     userApps.push(newApp);
@@ -1630,6 +2246,7 @@
     if (!app) {
       return;
     }
+    recordRecent(id);
     // Drafts can't be "opened" — they don't have a runnable build yet.
     // Route to the builder so the click is meaningful even when openApp
     // is called by surfaces (like the builder's own sidebar) that don't
@@ -1660,18 +2277,26 @@
     main.append(view);
     inner.style.setProperty('--accent-color', app.color);
 
-    // Titlebar right cluster: brand chip with app icon + name, gear button
-    // for per-app settings, then the floating Edit pill that returns to the
-    // builder.
+    // Titlebar identity lockup: a gradient app-icon tile + name + a LIVE
+    // status chip, then the Use / Build switch, the gear, and a ⋯ button —
+    // the same shape the refined Builder titlebar uses.
     const brandChip = el('span', { class: 'cd-brand-chip' });
-    brandChip.append(
-      el('span', {
-        class: 'cd-app-strip-icon',
-        style: { background: app.color, width: '18px', height: '18px', borderRadius: '4px' },
-        trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 11, strokeWidth: 2 }) : '',
-      }),
-    );
+    const brandFinish = window.CentraidTokens.tileFinish(app.color, 'gradient');
+    const brandIcon = el('span', {
+      class: 'cd-brand-chip-icon',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 11, strokeWidth: 1.9 }) : '',
+    });
+    brandIcon.style.background = brandFinish.background;
+    brandIcon.style.color = brandFinish.glyphColor;
+    if (brandFinish.boxShadow) brandIcon.style.boxShadow = brandFinish.boxShadow;
+    brandChip.append(brandIcon);
     brandChip.append(el('span', { class: 'cd-brand-chip-name' }, app.name));
+    brandChip.append(
+      el('span', { class: 'cd-brand-chip-live' }, [
+        el('span', { class: 'cd-brand-chip-live-dot' }),
+        'live',
+      ]),
+    );
 
     // Notion-style per-app customization popover, anchored to the gear.
     // The button toggles the panel; the panel closes on Esc, click-outside,
@@ -1688,20 +2313,43 @@
     gearWrap.append(gearBtn);
     gearWrap.append(el('span', { class: 'cd-tooltip' }, 'App settings'));
 
-    const editPill = el('button', {
-      class: 'cd-edit-pill',
+    // §D4/§G4 — Use / Build segmented switch replaces the floating Edit
+    // sparkle. "Use" is the running app (current); "Build" returns to the
+    // builder. The rename matters: "Edit" read like editing a list row,
+    // not switching into the build experience.
+    const useSeg = el('button', { class: 'cd-mode-seg', type: 'button', 'data-active': 'true' }, [
+      el('span', { class: 'cd-mode-seg-icon', trustedHtml: Icon.Eye({ size: 12 }) }),
+      'Use',
+    ]);
+    const buildSeg = el(
+      'button',
+      {
+        class: 'cd-mode-seg',
+        type: 'button',
+        onClick: () => enterBuilder({ appContext: app }),
+      },
+      [el('span', { class: 'cd-mode-seg-icon', trustedHtml: Icon.Sparkle({ size: 12 }) }), 'Build'],
+    );
+    const modeSwitch = el('div', { class: 'cd-mode-switch' }, [useSeg, buildSeg]);
+    const moreBtn = el('button', {
+      class: 'cd-tb-btn',
       type: 'button',
-      onClick: () => enterBuilder({ appContext: app }),
+      'aria-label': 'More',
+      title: 'More',
+      trustedHtml: Icon.MoreHoriz ? Icon.MoreHoriz({ size: 14 }) : '',
     });
-    editPill.innerHTML = `${Icon.Sparkle({ size: 11 })}<span>Edit</span>`;
+    // The identity lockup leads the trailing cluster; the Use/Build
+    // switch, the gear, and the ⋯ button follow — the refined-proposal
+    // titlebar shape.
     const titlebarRight = el('span', {
       style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
     });
     titlebarRight.append(brandChip);
+    titlebarRight.append(modeSwitch);
     titlebarRight.append(gearWrap);
-    titlebarRight.append(editPill);
+    titlebarRight.append(moreBtn);
 
-    const sidebar = buildHomeSidebar(app.id);
+    const sidebar = buildHomeSidebar({ appId: app.id, surface: 'app' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
       ...chromeNav(),
       main,
@@ -2002,13 +2650,17 @@
     panel.addEventListener('click', (e) => e.stopPropagation());
     backdrop.addEventListener('click', closeAppSettings);
 
-    // Header
+    // Header — gradient app-icon tile + name + an "APP SETTINGS" mono
+    // eyebrow, then a close button.
     const header = el('div', { class: 'cd-app-settings-header' });
+    const settingsFinish = window.CentraidTokens.tileFinish(app.color, 'gradient');
     const iconTile = el('span', {
       class: 'cd-app-settings-icon',
-      style: { background: app.color },
-      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 13, strokeWidth: 1.85 }) : '',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 15, strokeWidth: 1.85 }) : '',
     });
+    iconTile.style.background = settingsFinish.background;
+    iconTile.style.color = settingsFinish.glyphColor;
+    if (settingsFinish.boxShadow) iconTile.style.boxShadow = settingsFinish.boxShadow;
     const headerText = el('div', { class: 'cd-app-settings-header-text' }, [
       el('div', { class: 'cd-app-settings-name' }, app.name),
       el('div', { class: 'cd-app-settings-eyebrow' }, 'App settings'),
@@ -2023,14 +2675,64 @@
     header.append(iconTile, headerText, closeBtn);
     panel.append(header);
 
-    // Preferences (knobs) — only meaningful for centraid-backed apps.
-    // We render an empty host section synchronously and fill it in when
-    // the manifest + current values resolve, so the panel pops in
-    // immediately without waiting for HTTP/SQL.
-    let prefsHost: HTMLElement | null = null;
+    // §E1 — tabbed popover: Appearance · Automations · Manage. Each tab
+    // does one job instead of one flat stack.
+    type AppSettingsTab = 'appearance' | 'automations' | 'manage';
+    const panes: Record<AppSettingsTab, HTMLElement> = {
+      appearance: el('div', { class: 'cd-app-settings-pane' }),
+      automations: el('div', { class: 'cd-app-settings-pane' }),
+      manage: el('div', { class: 'cd-app-settings-pane' }),
+    };
+    const tabBarWrap = el('div', { class: 'cd-app-settings-tabs-wrap' });
+    const tabBar = el('div', { class: 'cd-app-settings-tabs' });
+    tabBarWrap.append(tabBar);
+    const tabButtons = new Map<AppSettingsTab, HTMLElement>();
+    const showAppSettingsTab = (id: AppSettingsTab): void => {
+      for (const [tid, btn] of tabButtons) btn.dataset.active = String(tid === id);
+      for (const [pid, pane] of Object.entries(panes)) pane.hidden = pid !== id;
+    };
+    // Tab glyphs — the shared icon set lacks palette/wrench, so the
+    // popover carries small inline SVGs that match the proposal.
+    const tabGlyph: Record<AppSettingsTab, string> = {
+      appearance:
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20 2.5 2.5 0 0 0 2-4 2.5 2.5 0 0 1 2-4h2a4 4 0 0 0 4-4 10 10 0 0 0-10-8z"/></svg>',
+      automations:
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
+      manage:
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4l-5.6 5.6a2 2 0 1 0 2.8 2.8l5.6-5.6a4 4 0 0 1 5.4-5.4l-3 3-2.2-2.2 3-3z"/></svg>',
+    };
+    for (const [id, label] of [
+      ['appearance', 'Appearance'],
+      ['automations', 'Automations'],
+      ['manage', 'Manage'],
+    ] as const) {
+      const btn = el('button', {
+        class: 'cd-app-settings-tab',
+        type: 'button',
+        onClick: () => showAppSettingsTab(id),
+      });
+      btn.append(
+        el('span', { class: 'cd-app-settings-tab-glyph', trustedHtml: tabGlyph[id] }),
+        el('span', { class: 'cd-app-settings-tab-label' }, label),
+      );
+      if (id === 'automations') {
+        btn.append(el('span', { class: 'cd-app-settings-tab-badge', hidden: '' }, '0'));
+      }
+      tabButtons.set(id, btn);
+      tabBar.append(btn);
+    }
+    panel.append(tabBarWrap);
+    panel.append(panes.appearance, panes.automations, panes.manage);
+
+    // Appearance — per-app knobs (font / width / corners / App color).
+    // Only meaningful for centraid-backed apps; an empty host fills in
+    // when the manifest + current values resolve.
+    let prefsHost: HTMLElement | null = el('div', { class: 'cd-app-settings-section-host' });
+    prefsHost.append(
+      el('div', { class: 'cd-app-settings-note' }, 'No appearance options for this app.'),
+    );
+    panes.appearance.append(prefsHost);
     if (appId) {
-      prefsHost = el('div', { class: 'cd-app-settings-section-host' });
-      panel.append(prefsHost);
       void Promise.all([fetchAppKnobsManifest(appId), fetchAppKnobValues(appId)]).then(
         ([manifest, stored]) => {
           if (!prefsHost || !document.contains(panel)) return;
@@ -2041,48 +2743,99 @@
     }
 
     // Automations (issue #70) — end-user surface for cron-scheduled
-    // actions the builder agent scaffolded. Same lazy pattern as
-    // Preferences: empty host first, replace once the mirror responds.
-    // End-user controls only — on/off toggle, Run now, and a
-    // human-readable schedule. Operator concerns (delete, schedule
-    // editing) live in the builder's Cloud → Automations rail item.
-    let automationsHost: HTMLElement | null = null;
+    // actions the builder agent scaffolded. Same lazy pattern.
+    const automationsHost = el('div', { class: 'cd-app-settings-section-host' });
+    automationsHost.append(
+      el('div', { class: 'cd-app-settings-note' }, 'No automations for this app yet.'),
+    );
+    panes.automations.append(automationsHost);
     if (appId) {
-      automationsHost = el('div', { class: 'cd-app-settings-section-host' });
-      panel.append(automationsHost);
       void window.CentraidApi.listAutomations({ appId }).then((rows) => {
-        if (!automationsHost || !document.contains(panel)) return;
+        if (!document.contains(panel)) return;
         if (rows.length === 0) return;
+        const badge = tabButtons.get('automations')?.querySelector('.cd-app-settings-tab-badge');
+        if (badge instanceof HTMLElement) {
+          badge.textContent = String(rows.length);
+          badge.hidden = false;
+        }
         automationsHost.replaceChildren(renderAutomationsSection(rows, appId, panel));
       });
     }
+    // §E3 — graduates to the top-level Automations destination.
+    panes.automations.append(
+      el(
+        'button',
+        {
+          class: 'cd-app-settings-pane-link',
+          type: 'button',
+          onClick: () => {
+            closeAppSettings();
+            renderAutomations();
+          },
+        },
+        'Open Automations →',
+      ),
+    );
 
-    // Manage
+    // Manage — Rename / Share / Reveal as icon-tiled rows, then a Danger
+    // zone whose Delete arms a confirmation step before it fires (§E1).
     const manage = el('div', { class: 'cd-app-settings-manage' });
     manage.append(
-      appSettingsMenuItem('Pencil', 'Rename', () => {
+      appSettingsMenuItem('Pencil', 'Rename', `Currently · ${app.name}`, () => {
         closeAppSettings();
         void renameAppFromSettings(app);
       }),
-      appSettingsMenuItem('Share', 'Share', () => {
+      appSettingsMenuItem('Share', 'Share…', 'Link or read-only invite', () => {
         closeAppSettings();
         openShareDialog(app);
       }),
-      appSettingsMenuItem('Folder', 'Reveal in Finder', () => {
+      appSettingsMenuItem('Folder', 'Reveal in Finder', 'Open the project folder', () => {
         closeAppSettings();
         void revealApp(app);
       }),
-      appSettingsMenuItem(
-        'Trash',
-        'Delete app',
-        () => {
-          closeAppSettings();
-          void deleteApp(app);
-        },
-        { destructive: true },
-      ),
     );
-    panel.append(manage);
+    panes.manage.append(manage);
+
+    const dangerZone = el('div', { class: 'cd-app-settings-danger' });
+    dangerZone.append(el('div', { class: 'cd-app-settings-danger-label' }, 'Danger zone'));
+    let deleteArmed = false;
+    const deleteBtn = el('button', {
+      class: 'cd-app-settings-menu-item cd-app-settings-danger-item',
+      type: 'button',
+      'data-danger': 'true',
+    });
+    const deleteIconTile = el('span', {
+      class: 'cd-app-settings-menu-icon',
+      trustedHtml: Icon.Trash ? Icon.Trash({ size: 13 }) : '',
+    });
+    const deleteText = el('span', { class: 'cd-app-settings-menu-text' }, [
+      el('span', { class: 'cd-app-settings-menu-label' }, 'Delete app'),
+      el(
+        'span',
+        { class: 'cd-app-settings-menu-sub' },
+        'Removes the project, its data, and its scheduled automations.',
+      ),
+    ]);
+    const deleteConfirm = el(
+      'span',
+      { class: 'cd-app-settings-confirm-pill', hidden: '' },
+      'click to confirm',
+    );
+    deleteBtn.append(deleteIconTile, deleteText, deleteConfirm);
+    deleteBtn.addEventListener('click', () => {
+      if (!deleteArmed) {
+        deleteArmed = true;
+        deleteBtn.dataset.armed = 'true';
+        deleteConfirm.hidden = false;
+        return;
+      }
+      closeAppSettings();
+      void deleteApp(app);
+    });
+    dangerZone.append(deleteBtn);
+    panes.manage.append(dangerZone);
+
+    showAppSettingsTab('appearance');
 
     view.append(backdrop);
     view.append(panel);
@@ -2465,6 +3218,7 @@
   function appSettingsMenuItem(
     iconKey: IconNameType,
     label: string,
+    sub: string,
     onClick: () => void,
     opts: { destructive?: boolean } = {},
   ): HTMLElement {
@@ -2474,7 +3228,16 @@
       'data-danger': opts.destructive ? 'true' : undefined,
       onClick,
     });
-    btn.innerHTML = `${Icon[iconKey]({ size: 13 })}<span>${label}</span>`;
+    btn.append(
+      el('span', {
+        class: 'cd-app-settings-menu-icon',
+        trustedHtml: Icon[iconKey] ? Icon[iconKey]({ size: 13 }) : '',
+      }),
+      el('span', { class: 'cd-app-settings-menu-text' }, [
+        el('span', { class: 'cd-app-settings-menu-label' }, label),
+        el('span', { class: 'cd-app-settings-menu-sub' }, sub),
+      ]),
+    );
     return btn;
   }
 
@@ -2526,52 +3289,53 @@
       chatModel: undefined as string | undefined,
     }));
 
-    const main = el('div');
-    const scroll = el('div', { class: 'cd-main-scroll' });
-    main.append(scroll);
+    const main = el('div', { class: 'cd-settings-main' });
 
-    // Constrain the form to a readable width inside the wider main panel;
-    // the drawer-* classes were authored for a ~360px column so giving them
-    // a similar max-width here preserves their visual rhythm.
-    const page = el('div', {
-      style: {
-        margin: '0 auto',
-        maxWidth: '720px',
-        padding: '28px 32px 48px',
-        width: '100%',
+    // §C1 — break the Settings monolith into discrete inner-sidebar
+    // pages. Each `drawerGroup` appends into its page host instead of
+    // one continuous scroll; an inner sidebar (built at the end) swaps
+    // which host is visible.
+    type SettingsPageId =
+      | 'appearance'
+      | 'layout'
+      | 'workspace'
+      | 'providers'
+      | 'inference'
+      | 'runtime'
+      | 'sync';
+    const pageHosts: Record<SettingsPageId, HTMLElement> = {
+      appearance: el('div', { class: 'cd-settings-page' }),
+      layout: el('div', { class: 'cd-settings-page' }),
+      workspace: el('div', { class: 'cd-settings-page' }),
+      providers: el('div', { class: 'cd-settings-page' }),
+      inference: el('div', { class: 'cd-settings-page' }),
+      runtime: el('div', { class: 'cd-settings-page' }),
+      sync: el('div', { class: 'cd-settings-page' }),
+    };
+
+    // ---- Theme group ----
+    // The proposal's Mode control offers Auto / Light / Dark. The shell
+    // only persists a concrete light|dark theme, so "Auto" is a one-shot
+    // that resolves the OS `prefers-color-scheme` and applies it — no new
+    // persisted state, persistence semantics stay intact.
+    const themeSeg = makeSegmentedLabeled(
+      ['auto', 'light', 'dark'],
+      { auto: 'Auto', light: 'Light', dark: 'Dark' },
+      prefs.theme,
+      (v) => {
+        const resolved: ThemeName =
+          v === 'auto'
+            ? window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark'
+            : (v as ThemeName);
+        setPrefs({ theme: resolved });
       },
-    });
-
-    page.append(
-      el(
-        'div',
-        {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '4px',
-            marginBottom: '20px',
-          },
-        },
-        [
-          el('h1', { style: { fontSize: '24px', fontWeight: '600', margin: '0' } }, 'Settings'),
-          el(
-            'div',
-            { class: 'settings-hint', style: { margin: '0' } },
-            'Appearance and gateway preferences for Centraid.',
-          ),
-        ],
-      ),
     );
-
-    // ---- Tweaks — Theme group ----
-    const themeSeg = makeSegmented<ThemeName>(['dark', 'light'], prefs.theme, (v) => {
-      setPrefs({ theme: v });
-    });
     const coolCastSwitch = makeSwitch(prefs.coolBlueCast, (v) => setPrefs({ coolBlueCast: v }));
     const accentSwatches = makeSwatches(prefs.accent, (v) => setPrefs({ accent: v }));
 
-    // ---- Tweaks — Layout group ----
+    // ---- Layout group ----
     const densitySeg = makeSegmented<Density>(['compact', 'regular', 'comfy'], prefs.density, (v) =>
       setPrefs({ density: v }),
     );
@@ -2594,19 +3358,85 @@
       },
     );
 
-    page.append(
+    // §C2 — live-preview tile. A 4-up grid of representative app tiles
+    // (icon + name) that re-renders on every appearance change so the
+    // user sees the theme / accent / tile-variant land on real tiles.
+    const previewHost = el('div', { class: 'ap-preview-host' });
+    const renderAppearancePreview = (): void => {
+      const seeds: ReadonlyArray<{ color: string; icon: IconNameType; name: string }> = [
+        { color: '#4E68DD', icon: 'Todo', name: 'Tasks' },
+        { color: '#7C5BD9', icon: 'Journal', name: 'Journal' },
+        { color: '#E55772', icon: 'Pencil', name: 'Notes' },
+        { color: '#2EA098', icon: 'Habit', name: 'Weekly' },
+      ];
+      const tiles = seeds.map((s) => {
+        const finish = window.CentraidTokens.tileFinish(s.color, prefs.tileVariant);
+        const icon = el('div', {
+          class: 'ap-preview-tile-icon',
+          trustedHtml: Icon[s.icon]
+            ? Icon[s.icon]({ size: 18, strokeWidth: 1.85 })
+            : Icon.Folder({ size: 18 }),
+        });
+        icon.style.background = finish.background;
+        icon.style.color = finish.glyphColor;
+        if (finish.boxShadow) icon.style.boxShadow = finish.boxShadow;
+        return el('div', { class: 'ap-preview-tile' }, [
+          icon,
+          el('span', { class: 'ap-preview-tile-name' }, s.name),
+        ]);
+      });
+      previewHost.replaceChildren(el('div', { class: 'ap-preview' }, tiles));
+    };
+    renderAppearancePreview();
+    onAppearanceApplied = renderAppearancePreview;
+    registerCleanup(() => {
+      onAppearanceApplied = null;
+    });
+
+    pageHosts.appearance.append(
       drawerGroup('Theme', [
-        el('div', { class: 'settings-note' }, 'Changes are saved automatically.'),
-        drawerRow('Mode', themeSeg),
-        drawerRowInline('Cool blue cast', coolCastSwitch),
-        drawerRow('Accent', accentSwatches),
+        drawerRowH('Mode', 'Light theme follows the system at night when set to Auto.', themeSeg),
+        drawerRowH(
+          'Cool blue cast',
+          'Tint dark surfaces toward blue. Off = neutral graphite.',
+          coolCastSwitch,
+        ),
       ]),
-      drawerGroup('Layout', [
-        drawerRow('Density', densitySeg),
-        drawerRow('Cards', cardsSeg),
-        drawerRowInline('Sidebar visible', sidebarSwitch),
+      drawerGroup('Accent', [
+        drawerRowH(
+          'Color',
+          'Used for the build button, sparkle, focus rings, and version badges.',
+          accentSwatches,
+        ),
       ]),
-      drawerGroup('App tiles', [drawerRow('Treatment', tileSeg)]),
+      drawerGroup('App tiles', [
+        drawerRowH('Treatment', 'How icon tiles on the home grid look.', tileSeg),
+        drawerRowH(
+          'Preview',
+          'How the home grid looks with your current choices.',
+          previewHost,
+          true,
+        ),
+      ]),
+    );
+    pageHosts.layout.append(
+      drawerGroup('Density', [
+        drawerRowH(
+          'Spacing',
+          'Affects row height, type sizes, and spacing across all apps.',
+          densitySeg,
+        ),
+      ]),
+      drawerGroup('Cards', [
+        drawerRowH(
+          'Surface',
+          'Affects every card-shaped surface — app tiles, message rows, settings groups.',
+          cardsSeg,
+        ),
+      ]),
+      drawerGroup('Sidebar', [
+        drawerRowH('Show sidebar', 'Toggle the apps + chats panel.', sidebarSwitch),
+      ]),
     );
 
     // ---- Runtime group ----
@@ -2695,7 +3525,7 @@
       refreshModelsBtn,
     ]);
 
-    page.append(
+    pageHosts.workspace.append(
       drawerGroup('Chat', [
         el(
           'div',
@@ -2726,11 +3556,15 @@
         authStatusHost.append(el('div', { class: 'settings-note' }, 'Reading credential status…'));
         return;
       }
+      // §C3 — each provider row carries a state badge (Connected /
+      // Standby / Not found) so the at-a-glance status doesn't rely on
+      // reading the subtitle prose.
       const providerRow = (params: {
         title: string;
         subtitle: string;
         connected: boolean;
         accent: string;
+        badge: { label: string; tone: 'on' | 'standby' | 'off' };
       }): HTMLElement => {
         const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
         return el(
@@ -2776,6 +3610,11 @@
                 ),
               ],
             ),
+            el(
+              'span',
+              { class: 'provider-badge', 'data-tone': params.badge.tone },
+              params.badge.label,
+            ),
           ],
         );
       };
@@ -2791,6 +3630,9 @@
             : 'not found — run `codex login`',
           connected: status.codexAvailable,
           accent: '#10b981',
+          badge: status.codexAvailable
+            ? { label: 'Preferred', tone: 'on' }
+            : { label: 'Not found', tone: 'off' },
         }),
       );
 
@@ -2805,6 +3647,11 @@
           subtitle: claudeSubtitle,
           connected: status.claudeAvailable,
           accent: '#a855f7',
+          badge: !status.claudeAvailable
+            ? { label: 'Not found', tone: 'off' }
+            : status.codexAvailable
+              ? { label: 'Standby', tone: 'standby' }
+              : { label: 'Connected', tone: 'on' },
         }),
       );
     };
@@ -2830,16 +3677,9 @@
       }
     });
 
-    page.append(
-      drawerGroup('AI providers', [
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Centraid auto-imports your Claude Code and Codex credentials on first launch so the coding agent rides on your existing subscription. Codex is preferred when both are present.',
-        ),
-        authStatusHost,
-        el('div', { class: 'sheet-actions' }, [resyncBtn]),
-      ]),
+    pageHosts.providers.append(
+      drawerGroup('Connected', [authStatusHost]),
+      el('div', { class: 'sheet-actions' }, [resyncBtn]),
     );
 
     // Initial status load — populates the rows after the page mounts.
@@ -3094,20 +3934,17 @@
     }) as HTMLButtonElement;
     clearProviderBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Disable</span>';
 
-    page.append(
-      drawerGroup('Custom inference endpoint', [
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Route Codex through any OpenAI-compatible endpoint (Ollama, vLLM, Groq, Together, LM Studio). Your ~/.codex/auth.json and config.toml are not touched — Centraid materializes a scoped CODEX_HOME for the spawned process.',
-        ),
-        labeled('Preset', 'Fill the fields below from a known provider.', presetSelect),
+    pageHosts.inference.append(
+      drawerGroup('Provider', [
+        labeled('Preset', 'Quick-fills the fields below from a known provider.', presetSelect),
         labeled(
           'Provider id',
           'Used as the [model_providers.<id>] key in codex config.',
           providerIdInput,
         ),
         labeled('Display name', 'Shown in codex logs.', providerNameInput),
+      ]),
+      drawerGroup('Connection', [
         labeled(
           'Base URL',
           'Must include /v1 (or whatever path precedes /chat/completions).',
@@ -3123,18 +3960,22 @@
           'Default is Chat completions; only flip if your provider supports /responses.',
           wireApiSelect,
         ),
+      ]),
+      drawerGroup('Credentials', [
         labeled(
           'API key',
           'Stored encrypted via OS keychain. Never written to disk in plaintext.',
           apiKeyInput,
         ),
-        el('div', { class: 'drawer-row' }, [
-          el('span', { class: 'drawer-row-label' }, 'Key status'),
-          apiKeyStatusEl,
+        el('div', { class: 'drawer-row drawer-row-grid' }, [
+          el('div', { class: 'drawer-row-head' }, [
+            el('span', { class: 'drawer-row-label' }, 'Key status'),
+          ]),
+          el('div', { class: 'drawer-row-control' }, [apiKeyStatusEl]),
         ]),
         providerStatusEl,
-        el('div', { class: 'sheet-actions' }, [saveProviderBtn, testProviderBtn, clearProviderBtn]),
       ]),
+      el('div', { class: 'sheet-actions' }, [saveProviderBtn, testProviderBtn, clearProviderBtn]),
     );
 
     void refreshKeyStatus();
@@ -3215,27 +4056,164 @@
     });
     testBtn.innerHTML = Icon.Eye({ size: 13 }) + '<span>Test connection</span>';
 
-    page.append(
-      drawerGroup('Runtime', [
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Where centraid runs your apps. Changes apply when you save.',
-        ),
-        drawerRow('Mode', modeSeg),
+    pageHosts.runtime.append(
+      drawerGroup('Mode', [
+        drawerRowH('Runtime', 'Changes apply when you save.', modeSeg),
         remoteRowsHost,
         labeled(
           'Projects directory',
           'Where each app project is scaffolded. Tilde is expanded to your home directory.',
           projectsDir,
         ),
-        el('div', { class: 'sheet-actions' }, [testBtn, saveBtn]),
+      ]),
+      el('div', { class: 'sheet-actions' }, [testBtn, saveBtn]),
+    );
+    pageHosts.sync.append(
+      drawerGroup('Sync', [
+        el('div', { class: 'settings-note' }, 'Project sync and backup settings will live here.'),
       ]),
     );
 
-    scroll.append(page);
+    // §C1 — inner-sidebar shell modelled on RefinedSettingsV2. A grouped
+    // category nav (Workspace / Models / Runtime) — each entry an icon +
+    // label + optional mono hint — sits beside a scrolling content pane
+    // that shows exactly one page (a PageHead + its controls) at a time.
+    interface SettingsPageDef {
+      id: SettingsPageId;
+      label: string;
+      section: string;
+      icon: IconNameType;
+      hint?: string;
+      subtitle: string;
+    }
+    const settingsPages: ReadonlyArray<SettingsPageDef> = [
+      {
+        id: 'appearance',
+        label: 'Appearance',
+        section: 'Workspace',
+        icon: 'Mood',
+        subtitle: 'Visual treatment for Centraid chrome and the app tiles on your home screen.',
+      },
+      {
+        id: 'layout',
+        label: 'Layout',
+        section: 'Workspace',
+        icon: 'Code',
+        subtitle: 'Density and surface treatment across every Centraid screen.',
+      },
+      {
+        id: 'workspace',
+        label: 'Workspace',
+        section: 'Workspace',
+        icon: 'Folder',
+        subtitle: 'Sidebar, navigation, and the in-app chat model.',
+      },
+      {
+        id: 'providers',
+        label: 'AI providers',
+        section: 'Models',
+        icon: 'Sparkle',
+        subtitle:
+          'Centraid auto-imports your Claude Code and Codex credentials on first launch so the coding agent rides on your existing subscription.',
+      },
+      {
+        id: 'inference',
+        label: 'Inference endpoint',
+        section: 'Models',
+        icon: 'Bolt',
+        hint: 'Custom',
+        subtitle:
+          'Route Codex through any OpenAI-compatible endpoint (Ollama, vLLM, Groq, Together, LM Studio). Your ~/.codex/auth.json and config.toml are not touched.',
+      },
+      {
+        id: 'runtime',
+        label: 'Where apps run',
+        section: 'Runtime',
+        icon: 'Monitor',
+        subtitle:
+          'Local mode runs apps inside this Electron process. Remote mode delegates to the Centraid gateway so they’re reachable from any device.',
+      },
+      {
+        id: 'sync',
+        label: 'Sync & backups',
+        section: 'Runtime',
+        icon: 'History',
+        subtitle:
+          'Keep apps, drafts, and chats in sync across your devices and back up automatically.',
+      },
+    ];
 
-    const sidebar = buildHomeSidebar('settings');
+    const innerNav = el('aside', { class: 'cd-settings-nav' });
+    const contentArea = el('section', { class: 'cd-settings-content' });
+    innerNav.append(
+      el('div', { class: 'cd-settings-nav-head' }, [
+        el('div', { class: 'cd-settings-nav-eyebrow' }, 'Settings'),
+        el('div', { class: 'cd-settings-nav-title' }, 'Personal'),
+      ]),
+    );
+
+    // §C4 — pages whose controls persist on change carry an "Auto-saved"
+    // marker; the credential pages (inference, runtime) keep their
+    // explicit Save/Test buttons and so get no marker.
+    const autoSavePages = new Set<SettingsPageId>(['appearance', 'layout', 'workspace']);
+
+    const navButtons = new Map<SettingsPageId, HTMLElement>();
+    const showSettingsPage = (id: SettingsPageId): void => {
+      const def = settingsPages.find((p) => p.id === id);
+      for (const [pid, btn] of navButtons) {
+        btn.dataset.active = String(pid === id);
+      }
+      const titleRow = el('div', { class: 'cd-settings-page-titlerow' }, [
+        el('h1', { class: 'cd-settings-page-title' }, def ? def.label : 'Settings'),
+        ...(autoSavePages.has(id)
+          ? [
+              el('span', {
+                class: 'cd-settings-autosaved',
+                trustedHtml: `${Icon.Check({ size: 10, strokeWidth: 2.5 })}<span>Auto-saved</span>`,
+              }),
+            ]
+          : []),
+      ]);
+      const head = el('header', { class: 'cd-settings-page-head' }, [
+        titleRow,
+        ...(def ? [el('p', { class: 'cd-settings-page-sub' }, def.subtitle)] : []),
+      ]);
+      contentArea.replaceChildren(head, pageHosts[id]);
+      contentArea.scrollTop = 0;
+    };
+    let lastSection = '';
+    for (const p of settingsPages) {
+      if (p.section !== lastSection) {
+        innerNav.append(el('div', { class: 'cd-settings-nav-section' }, p.section));
+        lastSection = p.section;
+      }
+      const btnChildren: HTMLElement[] = [
+        el('span', {
+          class: 'cd-settings-nav-icon',
+          trustedHtml: Icon[p.icon] ? Icon[p.icon]({ size: 14 }) : Icon.Folder({ size: 14 }),
+        }),
+        el('span', { class: 'cd-settings-nav-label' }, p.label),
+      ];
+      if (p.hint) btnChildren.push(el('span', { class: 'cd-settings-nav-hint' }, p.hint));
+      const btn = el(
+        'button',
+        { class: 'cd-settings-nav-item', type: 'button', onClick: () => showSettingsPage(p.id) },
+        btnChildren,
+      );
+      navButtons.set(p.id, btn);
+      innerNav.append(btn);
+    }
+    innerNav.append(
+      el('div', { class: 'cd-settings-nav-foot' }, [
+        el('span', { class: 'cd-settings-nav-ver' }, 'v0.5.2'),
+      ]),
+    );
+
+    const settingsShell = el('div', { class: 'cd-settings-shell' }, [innerNav, contentArea]);
+    main.append(settingsShell);
+    showSettingsPage('appearance');
+
+    const sidebar = buildHomeSidebar({ page: 'settings' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
       ...chromeNav(),
       main,
@@ -3249,25 +4227,34 @@
     root.append(shell);
   }
 
+  // §C — RefinedSettingsV2 `Sec`: a titled section — a plain bold heading
+  // above a body of rows that sits under a hairline rule.
   function drawerGroup(label: string, rows: HTMLElement[]): HTMLElement {
     return el('div', { class: 'drawer-group' }, [
       el('div', { class: 'drawer-group-label' }, label),
-      ...rows,
+      el('div', { class: 'drawer-group-body' }, rows),
     ]);
   }
-  function drawerRow(label: string, control: HTMLElement): HTMLElement {
-    return el('div', { class: 'drawer-row' }, [
-      el('span', { class: 'drawer-row-label' }, label),
-      control,
-    ]);
-  }
-  // Inline variant — label on the left, control on the right (used by the
-  // Tweaks switches "Cool blue cast" and "Sidebar visible").
-  function drawerRowInline(label: string, control: HTMLElement): HTMLElement {
-    return el('div', { class: 'drawer-row drawer-row-inline' }, [
-      el('span', { class: 'drawer-row-label' }, label),
-      control,
-    ]);
+  // §C — RefinedSettingsV2 `Row`: a two-column grid — a label + hint
+  // stack on the left, the control on the right. `full` stacks the
+  // control below the label across the whole row width.
+  function drawerRowH(
+    label: string,
+    hint: string,
+    control: HTMLElement,
+    full = false,
+  ): HTMLElement {
+    return el(
+      'div',
+      { class: full ? 'drawer-row drawer-row-full' : 'drawer-row drawer-row-grid' },
+      [
+        el('div', { class: 'drawer-row-head' }, [
+          el('span', { class: 'drawer-row-label' }, label),
+          el('span', { class: 'drawer-row-hint' }, hint),
+        ]),
+        el('div', { class: 'drawer-row-control' }, [control]),
+      ],
+    );
   }
   function makeSwitch(initial: boolean, onChange: (next: boolean) => void): HTMLElement {
     let on = initial;
@@ -3287,21 +4274,35 @@
     });
     return btn;
   }
+  // §C — RefinedSettingsV2 accent picker: a labelled swatch card per
+  // accent (a color bar + a name caption); the active card wears an ink
+  // border. Names match the proposal copy (Electric / Violet / …).
   function makeSwatches(selected: AccentKey, onSelect: (value: AccentKey) => void): HTMLElement {
-    const order: AccentKey[] = ['blue', 'violet', 'teal', 'ochre', 'rose'];
+    const order: ReadonlyArray<{ key: AccentKey; name: string }> = [
+      { key: 'blue', name: 'Electric' },
+      { key: 'violet', name: 'Violet' },
+      { key: 'teal', name: 'Teal' },
+      { key: 'ochre', name: 'Ochre' },
+      { key: 'rose', name: 'Rose' },
+    ];
     const wrap = el('div', { class: 'cd-swatches', role: 'radiogroup', 'aria-label': 'Accent' });
-    for (const key of order) {
+    for (const { key, name } of order) {
       const swatch = ACCENT_PALETTE[key];
-      const btn = el('button', {
-        'aria-checked': String(key === selected),
-        'aria-label': key,
-        class: 'cd-swatch',
-        'data-active': String(key === selected),
-        role: 'radio',
-        style: { background: swatch.accent },
-        type: 'button',
-      });
-      btn.innerHTML = Icon.Check({ size: 14, strokeWidth: 2.5 });
+      const btn = el(
+        'button',
+        {
+          'aria-checked': String(key === selected),
+          'aria-label': name,
+          class: 'cd-swatch',
+          'data-active': String(key === selected),
+          role: 'radio',
+          type: 'button',
+        },
+        [
+          el('span', { class: 'cd-swatch-chip', style: { background: swatch.accent } }),
+          el('span', { class: 'cd-swatch-name' }, name),
+        ],
+      );
       btn.addEventListener('click', () => {
         for (const child of wrap.children) {
           (child as HTMLElement).dataset.active = 'false';
@@ -3474,6 +4475,10 @@
     openBuilder: openNewAppSheet,
     openShare: openShareDialog,
     openSettings: renderSettings,
+    openDiscover: renderDiscover,
+    openStarred: renderStarred,
+    openAutomations: renderAutomations,
+    openSearch: openCommandPalette,
     renderHome,
     getRuntimeMode: () => currentRuntimeMode,
   };
@@ -3481,6 +4486,12 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && ctxMenu) {
       closeContextMenu();
+      return;
+    }
+    // §F — ⌘K opens the command palette from anywhere.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      openCommandPalette();
       return;
     }
     if ((e.metaKey || e.ctrlKey) && e.key === '[') {

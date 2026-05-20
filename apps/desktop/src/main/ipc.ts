@@ -56,6 +56,7 @@ export const Channel = {
   PROJECTS_LIST: 'centraid:projects:list',
   PROJECTS_CREATE: 'centraid:projects:create',
   PROJECTS_FILES: 'centraid:projects:files',
+  PROJECTS_WRITE_FILE: 'centraid:projects:write-file',
   PROJECTS_OPEN: 'centraid:projects:open',
   PROJECTS_DELETE: 'centraid:projects:delete',
   PROJECTS_UPDATE_META: 'centraid:projects:update-meta',
@@ -242,6 +243,16 @@ export function registerIpcHandlers(): void {
     const dir = path.join(settings.projectsDir, input.id);
     return readProjectFiles(dir);
   });
+
+  ipcMain.handle(
+    Channel.PROJECTS_WRITE_FILE,
+    async (_e, input: { id: string; path: string; content: string }) => {
+      const settings = await loadSettings();
+      const { writeProjectFile } = await import('@centraid/builder-harness');
+      const dir = path.join(settings.projectsDir, input.id);
+      return writeProjectFile(dir, input.path, input.content);
+    },
+  );
 
   ipcMain.handle(Channel.PROJECTS_OPEN, async (_e, input: { id: string }) => {
     const settings = await loadSettings();

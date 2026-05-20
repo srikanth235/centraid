@@ -88,6 +88,12 @@
         size,
         1.5,
       ),
+    // Fisheye dot — marks the "App" surface child under an expanded app.
+    dot: (size = 13): string =>
+      svg(
+        '<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
+        size,
+      ),
   };
 
   // The Electron window uses `titleBarStyle: 'hiddenInset'` (see
@@ -141,6 +147,10 @@
      *  Sits between the back/forward nav and the trailing flex spacer, so it
      *  reads as "what's the main canvas showing" rather than identity. */
     titlebarCenter?: HTMLElement | null;
+    /** Lead chrome element — placed in `.cd-tl-nav` immediately after the
+     *  forward button, so it hugs the back/forward arrows. Used by the
+     *  Builder titlebar for the app-identity lockup. */
+    titlebarLead?: HTMLElement | null;
     showNewChat?: boolean;
     onNewChat?: () => void;
     canGoBack?: boolean;
@@ -233,6 +243,11 @@
           }),
         );
       }
+      // Lead element — app-identity lockup, hugging the back/forward
+      // arrows (Builder titlebar). Sits before the chat-pane toggle.
+      if (opts.titlebarLead) {
+        navChildren.push(opts.titlebarLead);
+      }
       // Chat-pane toggle pinned to the trailing edge of cd-tl-nav (via
       // `.chat-toggle-wrap { margin-left: auto }` — see styles.css). Sits at
       // the chat-pane/canvas boundary, matching the panel-it-controls edge.
@@ -304,9 +319,10 @@
   }
 
   // ── Sidebar ────────────────────────────────────────────────────────
-  // Hybrid contents: live workspace switcher · live New app / Search /
-  // Settings · disabled placeholders for Plugins / Automations / Chats ·
-  // a live Apps section listing user apps and drafts with status dots.
+  // Refined Screens §G2/§G3: Build new + Search at the top, a Pages
+  // section (Home / Discover / Starred / Automations), the live Apps
+  // list (the active app expands into App/Cloud children), and Settings
+  // pinned to the bottom with a `live` status pill.
 
   interface SidebarApp {
     id: string;
@@ -316,18 +332,31 @@
     status?: 'new' | 'draft' | 'live' | null;
   }
 
+  type SidebarPage = 'home' | 'discover' | 'starred' | 'automations' | 'settings';
+
   interface SidebarOpts {
+    /** App id of the app/builder currently in focus — expands its row. */
     activeId?: string;
+    /** Which top-level page is current — drives the active highlight. */
+    activePage?: SidebarPage;
+    /** Which child of the expanded active app is current. */
+    activeSurface?: 'app' | 'cloud';
     apps: SidebarApp[];
     drafts: SidebarApp[];
     onHome: () => void;
     onNewApp: () => void;
+    /** New-chat action wired to the Chats section `+`. Falls back to
+     *  `onNewApp` when there is no dedicated chat-creation entry point. */
+    onNewChat?: () => void;
     onSearch?: () => void;
+    onDiscover?: () => void;
+    onStarred?: () => void;
+    onAutomations?: () => void;
     onAppClick: (id: string) => void;
-    onSettings: () => void;
+    /** Click on an expanded app's App/Cloud child destination. */
+    onAppSurface?: (id: string, surface: 'app' | 'cloud') => void;
     onAppContext?: (id: string, anchor: MenuAnchor) => void;
-    /** Rendered as a Local/Remote badge next to the Settings row. */
-    runtimeMode?: 'local' | 'remote';
+    onSettings: () => void;
   }
 
   // Hover-revealed `•••` + right-click on a sidebar row, both routing
@@ -362,15 +391,18 @@
     meta?: string;
     active?: boolean;
     disabled?: boolean;
+    accent?: boolean;
     onClick?: () => void;
     dotColor?: string;
     iconNode?: HTMLElement;
+    trailing?: HTMLElement;
   }): HTMLElement {
     const item = el('button', {
       class: 'cd-sb-item',
       type: 'button',
       'data-active': opts.active ? 'true' : undefined,
       'data-disabled': opts.disabled ? 'true' : undefined,
+      'data-accent': opts.accent ? 'true' : undefined,
       onClick: opts.onClick,
     });
     if (opts.iconNode) {
@@ -380,20 +412,99 @@
     }
     item.append(el('span', { class: 'cd-sb-label' }, opts.label));
     if (opts.meta) item.append(el('span', { class: 'cd-sb-meta' }, opts.meta));
+    if (opts.trailing) item.append(opts.trailing);
     if (opts.dotColor)
       item.append(el('span', { class: 'cd-sb-dot', style: { background: opts.dotColor } }));
     return item;
   }
 
+  // Small mono-caps status pill — see DS v0.5 `.cd-status`.
+  function statusPill(tone: 'new' | 'draft' | 'live', label: string): HTMLElement {
+    return el('span', { class: 'cd-status', 'data-tone': tone }, [
+      el('span', { class: 'cd-status-dot' }),
+      label,
+    ]);
+  }
+
+  // Inline tinted app-icon tile used in sidebar app rows.
+  function appIconNode(a: SidebarApp): HTMLElement {
+    return el('span', {
+      class: 'cd-sb-app-icon',
+      style: { background: a.color },
+      trustedHtml: window.Icon[a.iconKey]
+        ? window.Icon[a.iconKey]({ size: 11, strokeWidth: 1.85 })
+        : window.Icon.Sparkle({ size: 11 }),
+    });
+  }
+
+  // Refined Screens §G2 — the active app expands into App/Cloud children
+  // (destinations nest under the project, not in the titlebar).
+  function expandedApp(a: SidebarApp, opts: SidebarOpts): HTMLElement {
+    const group = el('div', { class: 'cd-sb-app-expanded' });
+    const row = sbItem({
+      iconNode: appIconNode(a),
+      icon: '',
+      label: a.name,
+      active: true,
+      onClick: () => opts.onAppClick(a.id),
+    });
+    group.append(appRow(row, a.id, opts.onAppContext));
+
+    const children = el('div', { class: 'cd-sb-folder-children' });
+    children.append(
+      sbItem({
+        icon: Glyph.dot(),
+        label: 'App',
+        active: (opts.activeSurface ?? 'app') === 'app',
+        onClick: () => {
+          if (opts.onAppSurface) opts.onAppSurface(a.id, 'app');
+          else opts.onAppClick(a.id);
+        },
+      }),
+    );
+    children.append(
+      sbItem({
+        icon: window.Icon.Bolt({ size: 14 }),
+        label: 'Cloud',
+        active: opts.activeSurface === 'cloud',
+        disabled: !opts.onAppSurface,
+        onClick: () => opts.onAppSurface?.(a.id, 'cloud'),
+      }),
+    );
+    group.append(children);
+    return group;
+  }
+
+  // Section header — uppercase mono-caps label, format "Apps · N" with an
+  // optional hover-revealed `+` action button (§G3 / RefinedSidebar).
+  function sbSection(label: string, onAction?: () => void): HTMLElement {
+    const section = el('div', { class: 'cd-sb-section' }, [el('span', {}, label)]);
+    if (onAction) {
+      section.append(
+        el('span', { class: 'cd-sb-section-actions' }, [
+          el('button', {
+            class: 'cd-sb-section-btn',
+            type: 'button',
+            'aria-label': 'Add',
+            trustedHtml: Glyph.plus(),
+            onClick: onAction,
+          }),
+        ]),
+      );
+    }
+    return section;
+  }
+
   function buildSidebar(opts: SidebarOpts): HTMLElement {
     const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', height: '100%' } });
 
-    // Top nav
+    // Top — Build new (accent) + Search (opens the ⌘K palette).
     wrap.append(
       sbItem({
         icon: Glyph.plus(),
-        label: 'New app',
+        label: 'Build new',
         meta: '⌘N',
+        accent: true,
         onClick: opts.onNewApp,
       }),
     );
@@ -406,93 +517,77 @@
         disabled: !opts.onSearch,
       }),
     );
-    wrap.append(sbItem({ icon: Glyph.plug(), label: 'Plugins', disabled: true }));
-    wrap.append(sbItem({ icon: Glyph.history(), label: 'Automations', disabled: true }));
 
-    // Pages
-    wrap.append(el('div', { class: 'cd-sb-section' }, 'Pages'));
+    // Pages — Home / Discover / Starred (RefinedSidebar §G3).
+    wrap.append(sbSection('Pages'));
     wrap.append(
       sbItem({
         icon: Glyph.home(),
         label: 'Home',
-        active: opts.activeId === 'home',
+        active: opts.activePage === 'home',
         onClick: opts.onHome,
       }),
     );
-    wrap.append(sbItem({ icon: Glyph.star(), label: 'Starred', disabled: true }));
+    wrap.append(
+      sbItem({
+        icon: window.Icon.Compass({ size: 15 }),
+        label: 'Discover',
+        active: opts.activePage === 'discover',
+        disabled: !opts.onDiscover,
+        onClick: opts.onDiscover,
+      }),
+    );
+    wrap.append(
+      sbItem({
+        icon: Glyph.star(),
+        label: 'Starred',
+        active: opts.activePage === 'starred',
+        disabled: !opts.onStarred,
+        onClick: opts.onStarred,
+      }),
+    );
 
-    // Apps section — always rendered so the workspace's information
-    // architecture stays stable; an empty-state row stands in for the
-    // list when the user hasn't cloned or built anything yet. Matches the
-    // Chats placeholder below.
-    wrap.append(el('div', { class: 'cd-sb-section' }, 'Apps'));
-    if (opts.apps.length > 0) {
-      for (const a of opts.apps) {
-        const iconNode = el('span', {
-          class: 'cd-sb-app-icon',
-          style: { background: a.color },
-          trustedHtml: window.Icon[a.iconKey]
-            ? window.Icon[a.iconKey]({ size: 11, strokeWidth: 1.85 })
-            : '',
-        });
+    // Apps section — the design folds drafts into the Apps list rather
+    // than carrying a separate Drafts header. Count appended to the
+    // header label; a hover-revealed `+` opens the new-app flow. The app
+    // matching `activeId` expands into App/Cloud children (§G2).
+    const appList = [...opts.apps, ...opts.drafts];
+    wrap.append(sbSection(`Apps · ${appList.length}`, opts.onNewApp));
+    if (appList.length > 0) {
+      for (const a of appList) {
+        if (a.id === opts.activeId) {
+          wrap.append(expandedApp(a, opts));
+          continue;
+        }
         const item = sbItem({
-          iconNode,
+          iconNode: appIconNode(a),
           icon: '',
           label: a.name,
-          active: opts.activeId === a.id,
           onClick: () => opts.onAppClick(a.id),
         });
         wrap.append(appRow(item, a.id, opts.onAppContext));
       }
     } else {
-      // No apps yet — show a hint instead of an empty section header.
-      // The "+ New app" affordance lives at the top of the sidebar, so we
-      // don't duplicate it here; the placeholder just keeps the section
-      // anchored so users can see where their apps will land.
       wrap.append(sbItem({ icon: Glyph.sparkle(), label: 'No apps yet', disabled: true }));
     }
 
-    // Drafts
-    if (opts.drafts.length > 0) {
-      wrap.append(el('div', { class: 'cd-sb-section' }, 'Drafts'));
-      for (const d of opts.drafts) {
-        const iconNode = el('span', {
-          class: 'cd-sb-app-icon',
-          style: { background: d.color },
-          trustedHtml: window.Icon[d.iconKey]
-            ? window.Icon[d.iconKey]({ size: 11, strokeWidth: 1.85 })
-            : window.Icon.Sparkle({ size: 11 }),
-        });
-        const item = sbItem({
-          iconNode,
-          icon: '',
-          label: d.name,
-          active: opts.activeId === d.id,
-          onClick: () => opts.onAppClick(d.id),
-        });
-        wrap.append(appRow(item, d.id, opts.onAppContext));
-      }
-    }
-
     // Placeholder: Chats — visible to preserve the design's information
-    // architecture for future wiring, but disabled today.
-    wrap.append(el('div', { class: 'cd-sb-section' }, 'Chats'));
+    // architecture for future wiring, but disabled today. The header's
+    // `+` reuses the new-app flow (the chat surface has no dedicated
+    // creation entry point yet — RefinedSidebar §G3).
+    wrap.append(sbSection('Chats · 0', opts.onNewChat ?? opts.onNewApp));
     wrap.append(sbItem({ icon: Glyph.sparkle(), label: 'No saved chats yet', disabled: true }));
 
-    // Spacer pushes Settings to the bottom
+    // Spacer pushes Settings to the bottom. Refined Screens §G3 swaps the
+    // old Local/Remote tag for a `live` status pill.
     wrap.append(el('span', { style: { flex: '1', minHeight: '12px' } }));
-    const modeBadge = opts.runtimeMode
-      ? opts.runtimeMode === 'local'
-        ? 'Local'
-        : 'Remote'
-      : undefined;
     wrap.append(
       sbItem({
         icon: Glyph.settings(),
         label: 'Settings',
-        meta: modeBadge,
-        active: opts.activeId === 'settings',
+        active: opts.activePage === 'settings',
         onClick: opts.onSettings,
+        trailing: statusPill('live', 'live'),
       }),
     );
 

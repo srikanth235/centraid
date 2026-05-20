@@ -121,77 +121,171 @@
 
     const Icon = window.Icon;
 
-    const fab = el('button', {
-      class: 'app-chat-fab',
-      type: 'button',
-      title: 'Ask about this app',
-      'aria-label': 'Open chat',
-      trustedHtml: Icon.Sparkle({ size: 18 }),
-    });
+    // §D2 — ambient copilot FAB. Collapsed by default; a quiet glass pill
+    // bottom-right — sparkle in a tinted disc, the app label, and a ⌘J hint
+    // so the entry point is legible, not just a glyph.
+    const fab = el(
+      'button',
+      {
+        class: 'app-chat-fab',
+        type: 'button',
+        title: 'Ask about this app',
+        'aria-label': `Ask ${app.name}`,
+      },
+      [
+        el('span', { class: 'app-chat-fab-icon', trustedHtml: Icon.Sparkle({ size: 11 }) }),
+        el('span', { class: 'app-chat-fab-label' }, `Ask ${app.name}`),
+        el('span', { class: 'app-chat-fab-kbd' }, '⌘J'),
+      ],
+    );
 
     const panel = el('aside', {
       class: 'app-chat-panel',
       'aria-hidden': 'true',
     });
 
-    // Header controls. The leading button doubles as "open history list" when
-    // in chat view and "back to chat" when in history view. The "+" mints a
-    // new chat (clearing the in-memory turns; persists on first send). Close
-    // hides the whole panel.
+    // Header controls. Back button — shown only in history view (returns
+    // to chat). In chat view its job (opening history) moves into the ⋯
+    // overflow (§D3). Close hides the whole panel.
     const headHistoryBtn = el('button', {
       class: 'app-chat-icon-btn',
       type: 'button',
-      'aria-label': 'Show chat history',
-      title: 'Chat history',
+      hidden: '',
+      'aria-label': 'Back to chat',
+      title: 'Back to chat',
       trustedHtml:
-        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>',
+        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 4l-4 4 4 4"/></svg>',
       onClick: () => {
         if (viewMode === 'history') setView('chat');
         else void openHistory();
       },
     });
-    const headTitle = el('div', { class: 'app-chat-title' }, [
-      el('span', {
-        class: 'app-chat-dot',
-        style: { background: app.color },
-      }),
-      el('span', { class: 'app-chat-title-text' }, `Ask ${app.name}`),
-    ]);
-    const headNewBtn = el('button', {
-      class: 'app-chat-icon-btn',
-      type: 'button',
-      'aria-label': 'New chat',
-      title: 'New chat',
-      trustedHtml:
-        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
-      onClick: () => {
-        void startNewChat();
-      },
+    // §D — copilot header reads as a product surface: a sparkle avatar,
+    // "Copilot" title, and a mono app·file sub-context line.
+    const headAvatar = el('span', {
+      class: 'app-chat-avatar',
+      trustedHtml: Icon.Sparkle({ size: 12 }),
     });
+    const scopedContext = `scoped · ${app.name.toLowerCase().replace(/\s+/g, '-')}.app`;
+    const headSub = el('span', { class: 'app-chat-sub' }, scopedContext);
+    // The header title is a static "Copilot"; the mono sub-line carries
+    // either the active chat's title or the default scoped app context.
+    const setHeadContext = (chatTitle: string | null): void => {
+      headSub.textContent = chatTitle && chatTitle.trim() ? chatTitle : scopedContext;
+    };
+    const headTitle = el('div', { class: 'app-chat-title' }, [
+      el('span', { class: 'app-chat-title-text' }, 'Copilot'),
+      headSub,
+    ]);
+    // Minimize collapses the panel back to the ambient FAB.
     const headCloseBtn = el('button', {
       class: 'app-chat-icon-btn app-chat-close',
       type: 'button',
-      'aria-label': 'Close',
-      title: 'Close',
+      'aria-label': 'Minimize',
+      title: 'Minimize',
       trustedHtml:
-        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>',
       onClick: () => toggle(false),
     });
+
+    // §D3 — secondary header actions (New chat, Chat history) collapse
+    // into a ⋯ overflow so the copilot header reads calmly: title · ⋯ · ×.
+    const overflowMenu = el('div', { class: 'app-chat-overflow-menu', hidden: '' });
+    const overflowItem = (label: string, onClick: () => void): HTMLElement =>
+      el(
+        'button',
+        {
+          class: 'app-chat-overflow-item',
+          type: 'button',
+          onClick: () => {
+            overflowMenu.setAttribute('hidden', '');
+            onClick();
+          },
+        },
+        label,
+      );
+    overflowMenu.append(
+      overflowItem('New chat', () => void startNewChat()),
+      overflowItem('Chat history', () => void openHistory()),
+    );
+    const overflowBtn = el('button', {
+      class: 'app-chat-icon-btn',
+      type: 'button',
+      'aria-label': 'More actions',
+      title: 'More',
+      trustedHtml:
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>',
+    });
+    overflowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (overflowMenu.hasAttribute('hidden')) overflowMenu.removeAttribute('hidden');
+      else overflowMenu.setAttribute('hidden', '');
+    });
+    document.addEventListener('click', () => overflowMenu.setAttribute('hidden', ''), {
+      capture: true,
+    });
+    const overflowWrap = el('div', { class: 'app-chat-overflow-wrap' }, [
+      overflowBtn,
+      overflowMenu,
+    ]);
+
     const head = el('div', { class: 'app-chat-head' }, [
       headHistoryBtn,
+      headAvatar,
       headTitle,
-      el('div', { class: 'app-chat-head-actions' }, [headNewBtn, headCloseBtn]),
+      el('div', { class: 'app-chat-head-actions' }, [overflowWrap, headCloseBtn]),
     ]);
     // chat-scroll mirrors the builder; the panel-specific padding override
     // lives in styles.css under `.app-chat-panel .chat-scroll`.
     const scroll = el('div', { class: 'chat-scroll app-chat-scroll' });
+    // §D1 — the empty state leads with an intro card: a one-line "Chat
+    // with your <app> data." headline, an explainer, and tappable prompt
+    // chips that drop into the composer, so a fresh copilot pane is never
+    // a blank box.
+    const starterPrompts = [
+      'What can this app do?',
+      'Show me all the records',
+      'Summarize the data',
+    ];
+    const starterRow = el('div', { class: 'app-chat-starters' });
+    for (const prompt of starterPrompts) {
+      starterRow.append(
+        el(
+          'button',
+          {
+            class: 'app-chat-starter',
+            type: 'button',
+            onClick: () => {
+              input.value = prompt;
+              input.dispatchEvent(new Event('input'));
+              input.focus();
+            },
+          },
+          prompt,
+        ),
+      );
+    }
+    const emptyTitle = el('div', { class: 'app-chat-empty-title' });
+    emptyTitle.innerHTML = `Chat with your <span class="app-chat-empty-accent">${escapeHtml(app.name)}</span> data.`;
+    // Recent-chats list inside the empty state — hydrated lazily from the
+    // gateway when the panel first opens, so a fresh copilot surfaces past
+    // conversations without a trip through the ⋯ menu.
+    const recentList = el('div', { class: 'app-chat-recent-list' });
+    const recentBlock = el('div', { class: 'app-chat-recent', hidden: '' }, [
+      el('div', { class: 'app-chat-recent-label' }, 'Recent chats'),
+      recentList,
+    ]);
     const empty = el('div', { class: 'app-chat-empty' }, [
-      el('div', { class: 'app-chat-empty-title' }, `Chat with ${app.name}`),
-      el(
-        'div',
-        { class: 'app-chat-empty-hint' },
-        'Ask questions about this app’s data, or have the assistant add, update, or delete records on your behalf.',
-      ),
+      el('div', { class: 'app-chat-intro-card' }, [
+        emptyTitle,
+        el(
+          'p',
+          { class: 'app-chat-empty-hint' },
+          'Ask questions, add items by talking, or have the assistant update or delete records for you.',
+        ),
+        starterRow,
+      ]),
+      recentBlock,
     ]);
 
     // History view chrome — list of past sessions with a search input and
@@ -240,7 +334,24 @@
         void window.CentraidApi.chatAbort({ appId });
       },
     }) as HTMLButtonElement;
-    const inputWrap = el('form', { class: 'app-chat-input-wrap' }, [input, sendBtn, stopBtn]);
+    // Composer card — the textarea sits above a toolbar row carrying a
+    // paperclip affordance, a ⌘↵ keycap hint, and the accent send button.
+    const attachBtn = el('button', {
+      class: 'app-chat-attach',
+      type: 'button',
+      'aria-label': 'Attach',
+      title: 'Attach',
+      trustedHtml:
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
+    });
+    const inputTools = el('div', { class: 'app-chat-input-tools' }, [
+      attachBtn,
+      el('span', { class: 'app-chat-input-spacer' }),
+      el('span', { class: 'app-chat-input-kbd' }, '⌘↵'),
+      sendBtn,
+      stopBtn,
+    ]);
+    const inputWrap = el('form', { class: 'app-chat-input-wrap' }, [input, inputTools]);
     inputWrap.addEventListener('submit', (e) => {
       e.preventDefault();
       void submit();
@@ -257,11 +368,21 @@
       fab.classList.toggle('hidden', open);
       if (open) {
         void ensureStarted();
+        void loadRecentChats();
         setTimeout(() => input.focus(), 60);
       }
     }
 
     fab.addEventListener('click', () => toggle(true));
+
+    // §D2 — ⌘J toggles the copilot from anywhere in the app view.
+    const onGlobalKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault();
+        toggle();
+      }
+    };
+    document.addEventListener('keydown', onGlobalKey);
 
     async function ensureStarted(): Promise<void> {
       if (started) return;
@@ -289,15 +410,10 @@
       historyWrap.hidden = !onHistory;
       scroll.hidden = onHistory;
       inputWrap.hidden = onHistory;
-      // Hamburger icon morphs into a back arrow when in history view.
-      headHistoryBtn.setAttribute('aria-label', onHistory ? 'Back to chat' : 'Show chat history');
-      headHistoryBtn.title = onHistory ? 'Back to chat' : 'Chat history';
-      headHistoryBtn.innerHTML = onHistory
-        ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 4l-4 4 4 4"/></svg>'
-        : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>';
-      // Hide the "+" while inside history — you don't start a new chat from
-      // a list view; tap a row or back out to chat first.
-      headNewBtn.hidden = onHistory;
+      // The back button shows only in history view; the ⋯ overflow shows
+      // only in chat view (§D3).
+      headHistoryBtn.hidden = !onHistory;
+      overflowWrap.hidden = onHistory;
       if (onHistory) historySearchInput.focus();
     }
 
@@ -349,7 +465,7 @@
       chat = [];
       turnState.clear();
       lastToolIdByTurn.clear();
-      headTitle.querySelector('.app-chat-title-text')!.textContent = `Ask ${app.name}`;
+      setHeadContext(null);
       await switchSession(null);
       setView('chat');
       renderChat();
@@ -370,8 +486,7 @@
       chat = [];
       turnState.clear();
       lastToolIdByTurn.clear();
-      headTitle.querySelector('.app-chat-title-text')!.textContent =
-        meta.title || `Ask ${app.name}`;
+      setHeadContext(meta.title || null);
       setView('chat');
       // Show a loading placeholder while we hydrate.
       scroll.innerHTML = '';
@@ -531,6 +646,43 @@
         }
       } catch (err) {
         console.warn('chat history delete failed', err);
+      }
+    }
+
+    // Populate the empty-state "Recent chats" list from the gateway.
+    // Best-effort: failures just leave the block hidden.
+    let recentLoaded = false;
+    async function loadRecentChats(): Promise<void> {
+      if (recentLoaded) return;
+      recentLoaded = true;
+      try {
+        const res = await window.CentraidApi.chatHistoryList({ appId });
+        const sessions = (res.sessions ?? []).slice(0, 4);
+        if (sessions.length === 0) return;
+        recentList.innerHTML = '';
+        const now = Date.now();
+        for (const s of sessions) {
+          recentList.append(
+            el(
+              'button',
+              {
+                class: 'app-chat-recent-row',
+                type: 'button',
+                onClick: () => {
+                  void resumeSession(s);
+                },
+              },
+              [
+                el('span', { class: 'app-chat-recent-dot' }),
+                el('span', { class: 'app-chat-recent-title' }, s.title || '(untitled chat)'),
+                el('span', { class: 'app-chat-recent-meta' }, relativeTime(s.updatedAt, now)),
+              ],
+            ),
+          );
+        }
+        recentBlock.hidden = false;
+      } catch {
+        /* swallow — recent list stays hidden */
       }
     }
 
@@ -942,10 +1094,7 @@
         // client-side `slice(0, 60)` would diverge for whitespace-heavy
         // first prompts. Take both straight from the response.
         currentSessionId = sendRes.sessionId;
-        const titleEl = headTitle.querySelector('.app-chat-title-text');
-        if (titleEl) {
-          titleEl.textContent = sendRes.title || `Ask ${app.name}`;
-        }
+        setHeadContext(sendRes.title || null);
       } catch (err) {
         const state = ensureTurnState(turnId);
         const msg = `Send failed: ${String(err)}`;
@@ -981,6 +1130,7 @@
       } catch {
         /* swallow */
       }
+      document.removeEventListener('keydown', onGlobalKey);
       fab.remove();
       panel.remove();
     };
