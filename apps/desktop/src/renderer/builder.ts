@@ -2053,46 +2053,50 @@
         // cards. Matches the journal-in-shell treatment.
         stage.classList.add('cloud-stage-atmospheric');
 
-        const grid = el('div', { class: 'cloud-stat-grid' });
-
-        // ---- Row 1: LIVE URL (span 2) · Versions · Tables ----
-        const liveCard = el('div', { class: 'cloud-stat-card cloud-stat-card--live' });
+        // §B6 — hero URL strip. The live deployment URL is the headline
+        // fact of the Cloud surface, so it gets a full-width strip above
+        // the stat tiles rather than competing as one card among many.
+        const hero = el('div', { class: 'cloud-hero', 'data-live': String(!!liveUrl) });
         if (liveUrl) {
-          // Capture into a const so TS keeps the narrowed `string` type
-          // inside the click handler closure (the outer `liveUrl` is
-          // mutable from the project's perspective).
           const url = liveUrl;
-          const eyebrow = el('div', { class: 'cloud-stat-eyebrow' }, [
-            el('span', { class: 'cloud-status-dot', 'data-status': 'live' }),
-            el('span', {}, 'Live URL'),
-          ]);
-          const value = el(
-            'div',
-            { class: 'cloud-stat-value cloud-stat-mono cloud-stat-url' },
-            formatPreviewUrl(url),
-          );
-          const copyBtn = el(
-            'button',
-            {
-              class: 'cloud-stat-copy',
-              type: 'button',
-              onClick: () => {
-                void navigator.clipboard
-                  .writeText(url)
-                  .then(() => showToast('Copied URL'))
-                  .catch(() => showToast('Copy failed'));
+          hero.append(
+            el('span', { class: 'cloud-hero-dot', 'data-status': 'live' }),
+            el('div', { class: 'cloud-hero-meta' }, [
+              el('span', { class: 'cloud-hero-eyebrow' }, 'Live deployment'),
+              el('span', { class: 'cloud-hero-url' }, formatPreviewUrl(url)),
+            ]),
+            el(
+              'button',
+              {
+                class: 'cloud-stat-copy cloud-hero-copy',
+                type: 'button',
+                trustedHtml: `${Icon.Copy({ size: 12 })}<span>Copy URL</span>`,
+                onClick: () => {
+                  void navigator.clipboard
+                    .writeText(url)
+                    .then(() => showToast('Copied URL'))
+                    .catch(() => showToast('Copy failed'));
+                },
               },
-            },
-            'Copy',
+              undefined,
+            ),
           );
-          liveCard.append(eyebrow);
-          liveCard.append(value);
-          liveCard.append(copyBtn);
         } else {
-          liveCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span class="cloud-status-dot" data-status="off"></span><span>Live URL</span></div><div class="cloud-stat-value cloud-stat-muted">Not published</div>';
+          hero.append(
+            el('span', { class: 'cloud-hero-dot', 'data-status': 'off' }),
+            el('div', { class: 'cloud-hero-meta' }, [
+              el('span', { class: 'cloud-hero-eyebrow' }, 'Not deployed'),
+              el(
+                'span',
+                { class: 'cloud-hero-url cloud-hero-url--muted' },
+                'Publish to get a live URL',
+              ),
+            ]),
+          );
         }
-        grid.append(liveCard);
+        stage.append(hero);
+
+        const grid = el('div', { class: 'cloud-stat-grid' });
 
         const versionCard = el('div', { class: 'cloud-stat-card' });
         if (versionsCache === 'pending' || versionsCache === undefined) {
@@ -2135,23 +2139,6 @@
         }
         grid.append(schemaCard);
 
-        // Last activity — newest version's uploadedAt. Cheap; reuses the
-        // same cache we already populated for the Versions card.
-        const activityCard = el('div', { class: 'cloud-stat-card' });
-        if (versionsCache === 'pending' || versionsCache === undefined) {
-          activityCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Last activity</span></div><div class="cloud-stat-value cloud-stat-muted">Loading…</div>';
-        } else if (versionsCache === 'error' || versionsCache.versions.length === 0) {
-          activityCard.innerHTML =
-            '<div class="cloud-stat-eyebrow"><span>Last activity</span></div><div class="cloud-stat-value cloud-stat-muted">—</div><div class="cloud-stat-sub">No publishes yet</div>';
-        } else {
-          const newest = [...versionsCache.versions].sort((a, b) =>
-            b.uploadedAt.localeCompare(a.uploadedAt),
-          )[0]!;
-          activityCard.innerHTML = `<div class="cloud-stat-eyebrow"><span>Last activity</span></div><div class="cloud-stat-value cloud-stat-mid">${escapeHtml(relativeWhen(newest.uploadedAt))}</div><div class="cloud-stat-sub">Published from the builder</div>`;
-        }
-        grid.append(activityCard);
-
         // Gateway reachability — derived from whether either cache resolved
         // successfully. Avoids a separate ping while still giving the user
         // a green/red signal in the corner.
@@ -2168,7 +2155,7 @@
           versionsCache === undefined ||
           schemaCache === 'pending' ||
           schemaCache === undefined;
-        const gatewayCard = el('div', { class: 'cloud-stat-card cloud-stat-card--gateway' });
+        const gatewayCard = el('div', { class: 'cloud-stat-card' });
         if (stillLoading && !anyOk) {
           gatewayCard.innerHTML =
             '<div class="cloud-stat-eyebrow"><span>Gateway</span></div><div class="cloud-stat-value cloud-stat-muted">Checking…</div>';
@@ -2182,6 +2169,53 @@
         grid.append(gatewayCard);
 
         stage.append(grid);
+
+        // §B6 — activity feed. The version history reads as a chronological
+        // deploy log: newest publish first, the active version flagged.
+        const feed = el('div', { class: 'cloud-feed' });
+        feed.append(el('div', { class: 'cloud-feed-head' }, 'Activity'));
+        if (versionsCache === 'pending' || versionsCache === undefined) {
+          feed.append(el('div', { class: 'cloud-feed-empty' }, 'Loading activity…'));
+        } else if (versionsCache === 'error' || versionsCache.versions.length === 0) {
+          feed.append(
+            el(
+              'div',
+              { class: 'cloud-feed-empty' },
+              'No activity yet — publish your app to deploy it.',
+            ),
+          );
+        } else {
+          const ordered = [...versionsCache.versions].sort((a, b) =>
+            b.uploadedAt.localeCompare(a.uploadedAt),
+          );
+          for (const v of ordered) {
+            const isActive = v.current || v.versionId === versionsCache.activeVersion;
+            const row = el('div', { class: 'cloud-feed-row' }, [
+              el('span', {
+                class: 'cloud-feed-dot',
+                'data-active': String(isActive),
+              }),
+              el('div', { class: 'cloud-feed-meta' }, [
+                el('div', { class: 'cloud-feed-title-row' }, [
+                  el(
+                    'span',
+                    { class: 'cloud-feed-title' },
+                    v.declaredVersion ? `Published v${v.declaredVersion}` : 'Published',
+                  ),
+                  ...(isActive ? [el('span', { class: 'cloud-feed-live' }, 'Active')] : []),
+                ]),
+                el(
+                  'span',
+                  { class: 'cloud-feed-sub' },
+                  `${v.files} file${v.files === 1 ? '' : 's'} · ${formatBytes(v.bytes)} · ${v.versionId.slice(0, 22)}`,
+                ),
+              ]),
+              el('span', { class: 'cloud-feed-when' }, relativeWhen(v.uploadedAt)),
+            ]);
+            feed.append(row);
+          }
+        }
+        stage.append(feed);
       }
 
       function drawDatabase(): void {

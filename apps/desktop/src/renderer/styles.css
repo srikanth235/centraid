@@ -3207,19 +3207,150 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
-.cloud-stat-card--live,
-.cloud-stat-card--gateway {
-  grid-column: span 2;
+/* §B6 — hero URL strip. Full-width band above the stat tiles carrying
+   the live deployment URL — the headline fact of the Cloud surface. */
+.cloud-hero {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
 }
-@media (max-width: 720px) {
-  .cloud-stat-card--live,
-  .cloud-stat-card--gateway {
-    grid-column: auto;
-  }
+.cloud-hero[data-live='true'] {
+  border-color: hsla(101 28% 42% / 0.28);
+  background: linear-gradient(180deg, hsla(101 28% 42% / 0.06), transparent 70%), var(--bg-elev);
 }
-.cloud-stat-card--live {
-  border-color: hsla(101 28% 42% / 0.22);
-  background: linear-gradient(180deg, hsla(101 28% 42% / 0.05), transparent 60%), var(--bg-elev);
+.cloud-hero-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-4);
+}
+.cloud-hero-dot[data-status='live'] {
+  background: var(--c-forest, #5c8a4e);
+  box-shadow: 0 0 0 4px hsla(101 28% 42% / 0.18);
+}
+.cloud-hero-dot[data-status='off'] {
+  background: var(--ink-4);
+}
+.cloud-hero-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.cloud-hero-eyebrow {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cloud-hero-url {
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  font-size: 13px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-hero-url--muted {
+  color: var(--ink-3);
+}
+.cloud-hero-copy {
+  margin-top: 0;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* §B6 — activity feed. Chronological deploy log under the stat tiles. */
+.cloud-feed {
+  margin-top: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.cloud-feed-head {
+  padding: 12px 16px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line);
+}
+.cloud-feed-empty {
+  padding: 20px 16px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.cloud-feed-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.cloud-feed-row:last-child {
+  border-bottom: 0;
+}
+.cloud-feed-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-4);
+}
+.cloud-feed-dot[data-active='true'] {
+  background: var(--c-forest, #5c8a4e);
+  box-shadow: 0 0 0 3px hsla(101 28% 42% / 0.18);
+}
+.cloud-feed-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.cloud-feed-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cloud-feed-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.cloud-feed-live {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: hsla(101 28% 42% / 0.16);
+  color: var(--c-forest, #5c8a4e);
+}
+.cloud-feed-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-feed-when {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--ink-3);
 }
 .cloud-stat-eyebrow {
   display: inline-flex;
@@ -3245,10 +3376,6 @@ textarea {
 .cloud-status-dot[data-status='off'] {
   background: var(--danger, #c44a4a);
   box-shadow: 0 0 0 3px hsla(0 50% 53% / 0.18);
-}
-.cloud-stat-url {
-  margin-top: 8px;
-  line-height: 1.4;
 }
 .cloud-stat-value.cloud-stat-mid {
   font-size: 14px;

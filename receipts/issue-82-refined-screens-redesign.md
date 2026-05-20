@@ -21,6 +21,7 @@ applies the screen-level redesign, landed as one commit per step.
 - [x] Step 8 — ⌘K command palette (F)
 - [x] Follow-up B2/B3 — Builder pane toolbar
 - [x] Follow-up B5 — Builder editable code workspace
+- [x] Follow-up B6 — Cloud Overview hero + activity feed
 
 ## What changed
 
@@ -194,17 +195,25 @@ rewrites are picked up. Persistence rides a new `writeProjectFile`
 helper in `@centraid/builder-harness` (path-traversal guarded, text
 extensions only) exposed over a `PROJECTS_WRITE_FILE` IPC channel.
 
+**Follow-up B6 — Cloud Overview hero + activity feed.** The Cloud
+surface's rail (Active sections + a "Coming soon" group) and section
+panels were already rebuilt in earlier work; this pass completes §B6's
+remaining Overview asks. The live deployment URL is promoted out of the
+stat grid into a full-width **hero strip** (`cloud-hero`) — status dot,
+eyebrow, mono URL, Copy button — so it reads as the headline fact
+rather than one card among many. The stat grid is trimmed to four
+tiles (Versions, Tables, Schema version, Gateway). Below it a new
+**activity feed** (`cloud-feed`) renders the version history as a
+chronological deploy log: newest publish first, the active version
+flagged, each row showing file count, byte size, and relative time.
+
 ## Out of scope
 
 - The DS v0.5 token + chrome-primitive layer (already landed).
 - Mobile-side adoption of the new screens (desktop renderer only).
 - The Automations scheduler (lands with §E3) — the page currently
   shows an empty state only.
-- A dedicated `createdAt` field. The §A3 "NEW" badge keys off
-  `updatedAt` as a recency proxy, so a republish inside 24h re-shows
-  NEW. A precise `createdAt` would need plumbing through the publish
-  flow — deferred.
-- Builder §B6 (Cloud rebuild) — tracked as a separate follow-up.
+- Mobile parity for any of the rebuilt desktop screens.
 
 ## Verification
 
