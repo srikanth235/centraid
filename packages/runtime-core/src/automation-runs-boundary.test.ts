@@ -5,7 +5,7 @@
  *
  * The run audit (`automation_runs`, `automation_run_nodes`,
  * `automation_state`) lives in the central gateway DB
- * (`centraid-automations.sqlite`). The `centraid_sql_*` tools — `describeOp`
+ * (`centraid-activity.sqlite`). The `centraid_sql_*` tools — `describeOp`
  * / `readOp` / `writeOp` — only ever receive an app's `data.sqlite`
  * path; they never see the gateway DB path, so the boundary holds even
  * though the audit moved out of a per-app file.
@@ -26,7 +26,7 @@ import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { AutomationRunsStore } from './automation-runs-store.js';
-import { makeAutomationDbProvider } from './gateway-db.js';
+import { makeActivityDbProvider } from './gateway-db.js';
 import { describeOp, readOp, SqlOpRefusalError } from './sql-ops.js';
 import { RunQueryError } from './run-query.js';
 
@@ -40,8 +40,8 @@ function makeApp(): { appDir: string; dataFile: string; runsStore: AutomationRun
   db.close();
   // The run audit lives in the gateway DB — a SEPARATE file the
   // centraid_sql_* tools never get a handle to.
-  const gatewayDb = path.join(appDir, 'centraid-automations.sqlite');
-  const runsStore = new AutomationRunsStore(makeAutomationDbProvider(gatewayDb), 'boundary-app');
+  const gatewayDb = path.join(appDir, 'centraid-activity.sqlite');
+  const runsStore = new AutomationRunsStore(makeActivityDbProvider(gatewayDb), 'boundary-app');
   // Seed it so we'd have a leak if the boundary was broken.
   runsStore.insertRun({
     runId: 'r1',

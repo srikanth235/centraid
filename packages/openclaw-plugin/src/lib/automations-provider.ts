@@ -69,7 +69,7 @@ export interface AutomationsProviderOptions {
    */
   resolveAppDir(appId: string): string | undefined;
   /**
-   * Automations DB provider (`centraid-automations.sqlite`). The
+   * Automations DB provider (`centraid-activity.sqlite`). The
    * automation run-audit store (`AutomationRunsStore`) is built from
    * this — the same connection `AutomationStore` uses.
    */

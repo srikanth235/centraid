@@ -10,7 +10,7 @@
  * one place.
  *
  * See `automation-manifest.ts` for the manifest schema and `gateway-db.ts`
- * AUTOMATION_MIGRATIONS[0] for the table DDL. The mirror row is keyed by
+ * ACTIVITY_MIGRATIONS[0] for the table DDL. The mirror row is keyed by
  * (origin_app_id, name).
  */
 

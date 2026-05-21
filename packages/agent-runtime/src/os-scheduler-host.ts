@@ -44,11 +44,11 @@ export interface OsSchedulerHostOptions {
   /** Absolute path to the `centraid` binary the scheduler should invoke. */
   centraidBin: string;
   /**
-   * Absolute path to the automations DB (`centraid-automations.sqlite`).
+   * Absolute path to the automations DB (`centraid-activity.sqlite`).
    * Baked into the OS scheduler artifact as `CENTRAID_AUTOMATION_DB` so
    * the scheduled `centraid run-automation` process writes its run audit
    * to the SAME automations DB the desktop reads — without this the fire
-   * would fall back to `<appDir>/centraid-automations.sqlite` and the run
+   * would fall back to `<appDir>/centraid-activity.sqlite` and the run
    * would be invisible in the desktop UI.
    */
   automationDbPath: string;

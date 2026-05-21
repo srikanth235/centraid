@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
-import { makeAutomationDbProvider } from './gateway-db.js';
+import { makeActivityDbProvider } from './gateway-db.js';
 import { AutomationRunsStore } from './automation-runs-store.js';
 
 function newStore(appId = 'some-app'): AutomationRunsStore {
   // A temp gateway DB — the provider runs the gateway migrations on
   // first use, creating the automation_* tables.
   const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-  const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
+  const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
   return new AutomationRunsStore(provider, appId);
 }
 
@@ -124,7 +124,7 @@ describe('AutomationRunsStore', () => {
 
   it('ctx.state get/set round-trip across store reopens', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
+    const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
     const s1 = new AutomationRunsStore(provider, 'some-app');
     s1.stateSet('foo', 'cursor', JSON.stringify({ since: 42 }), 1000);
     s1.close();
@@ -143,7 +143,7 @@ describe('AutomationRunsStore', () => {
 
   it('state is scoped per origin app', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
+    const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
     const appA = new AutomationRunsStore(provider, 'app-a');
     const appB = new AutomationRunsStore(provider, 'app-b');
     appA.stateSet('shared-name', 'k', JSON.stringify('A'), 1);
@@ -154,7 +154,7 @@ describe('AutomationRunsStore', () => {
 
   it('listRuns is scoped to the store origin app', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
+    const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
     const appA = new AutomationRunsStore(provider, 'app-a');
     const appB = new AutomationRunsStore(provider, 'app-b');
     appA.insertRun({ runId: 'a1', automationName: 'job', triggerKind: 'scheduled', startedAt: 1 });
@@ -367,7 +367,7 @@ describe('AutomationRunsStore', () => {
     // pointing at a run in a different app, and `listChildRuns` joins
     // them — a per-file split could not.
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
+    const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
     const appA = new AutomationRunsStore(provider, 'app-a');
     // forApp shares the same provider/connection — used by cross-app invoke.
     const appB = appA.forApp('app-b');
@@ -403,7 +403,7 @@ describe('AutomationRunsStore', () => {
 
   it('deleteAppData drops only the bound app run audit + state', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
+    const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
     const appA = new AutomationRunsStore(provider, 'app-a');
     const appB = new AutomationRunsStore(provider, 'app-b');
     for (const [store, id] of [

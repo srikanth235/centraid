@@ -110,7 +110,7 @@ export interface RuntimeOptions {
    * Optional automation DB provider (issue #80). When set, the
    * deregister handler builds an `AutomationRunsStore` from it to drop
    * the removed app's run audit + `ctx.state` rows. Must be a provider
-   * for the automations SQLite file (`centraid-automations.sqlite`) —
+   * for the automations SQLite file (`centraid-activity.sqlite`) —
    * the same one used to build `automationStore`.
    */
   automationDb?: DatabaseProvider;

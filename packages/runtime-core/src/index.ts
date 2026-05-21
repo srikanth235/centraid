@@ -132,24 +132,24 @@ export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
 // Gateway state DBs — three separate SQLite files, each with its own
 // connection + migration ladder:
-//   - gateway     (`centraid-gateway.sqlite`):     users, user_prefs
-//   - chat        (`centraid-chat.sqlite`):        chat_sessions, chat_messages
-//   - automations (`centraid-automations.sqlite`): automations mirror +
-//                                                  run-audit + ctx.state
+//   - gateway  (`centraid-gateway.sqlite`):  users, user_prefs
+//   - chat     (`centraid-chat.sqlite`):     chat_sessions, chat_messages
+//   - activity (`centraid-activity.sqlite`): automations, runs, run_nodes,
+//                                            automation_state
 // Hosts construct one provider per file and pass each to the matching
 // store: UserStore ← gateway, ChatHistoryStore ← chat, AutomationStore
-// + AutomationRunsStore ← automations. Cross-file FKs aren't possible in
-// SQLite, so `chat_sessions.user_id` is application-enforced.
+// + RunsStore ← activity. Cross-file FKs aren't possible in SQLite, so
+// `runs.user_id` is application-enforced.
 export {
   openGatewayDb,
   makeGatewayDbProvider,
   openChatDb,
   makeChatDbProvider,
-  openAutomationDb,
-  makeAutomationDbProvider,
+  openActivityDb,
+  makeActivityDbProvider,
   GATEWAY_MIGRATIONS,
   CHAT_MIGRATIONS,
-  AUTOMATION_MIGRATIONS,
+  ACTIVITY_MIGRATIONS,
   type DatabaseProvider,
 } from './gateway-db.js';
 
@@ -196,11 +196,10 @@ export {
   type AutomationHistoryKeep,
 } from './automation-manifest.js';
 
-// Automation run audit + ctx.state store. The three tables
-// (`automation_runs`, `automation_run_nodes`, `automation_state`) live
-// in the central gateway DB; the store is runtime-owned and never
-// reachable from handler `db` or the `centraid_sql_*` agent tools.
-// See issue #80.
+// Unified agent-run ledger + ctx.state store. The three tables
+// (`runs`, `run_nodes`, `automation_state`) live in the activity DB;
+// the store is runtime-owned and never reachable from handler `db` or
+// the `centraid_sql_*` agent tools. See issues #80 and #90.
 export {
   AutomationRunsStore,
   type InsertRunInput,
@@ -214,9 +213,10 @@ export type {
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationRunNodeKind,
+  RunKind,
 } from './automation-runs-schema.js';
 
-// Per-gateway automations mirror table (`gateway-db.ts` MIGRATIONS[1]).
+// Per-gateway automations mirror table (`gateway-db.ts` ACTIVITY_MIGRATIONS[0]).
 // The host scheduler (openclaw cron remote, OS scheduler local) owns
 // runtime state; this is centraid's own registration surface for the
 // list/UI and the reconciliation pass.

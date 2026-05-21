@@ -8,7 +8,7 @@ import {
   UserStore,
   makeGatewayDbProvider,
   makeChatDbProvider,
-  makeAutomationDbProvider,
+  makeActivityDbProvider,
   startRuntimeHttpServer,
   type AutomationHost,
   type RuntimeHttpServerHandle,
@@ -72,7 +72,7 @@ export function localRuntimeChatDb(): string {
 }
 
 export function localRuntimeAutomationDb(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-automations.sqlite');
+  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-activity.sqlite');
 }
 
 /**
@@ -99,7 +99,7 @@ export function localRuntimeAutomationHost(): AutomationHost {
     // Bake the desktop's automations DB path into every scheduled job so
     // an OS-scheduler-spawned `centraid run-automation` writes its run
     // audit to the SAME automations DB the desktop UI reads — not the
-    // `<appDir>/centraid-automations.sqlite` fallback.
+    // `<appDir>/centraid-activity.sqlite` fallback.
     automationDbPath: localRuntimeAutomationDb(),
     // Match the chat-runner default; toggling per-automation runner
     // isn't surfaced in the UI today.
@@ -121,7 +121,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     // a request hits the HTTP server).
     const gatewayDbProvider = makeGatewayDbProvider(localRuntimeGatewayDb());
     const chatDbProvider = makeChatDbProvider(localRuntimeChatDb());
-    const automationDbProvider = makeAutomationDbProvider(localRuntimeAutomationDb());
+    const automationDbProvider = makeActivityDbProvider(localRuntimeAutomationDb());
     const userStore = new UserStore(gatewayDbProvider);
     const chatHistoryStore = new ChatHistoryStore(chatDbProvider, () => userStore.getUserId());
     // Shared mirror for centraid automations (issue #70). The same

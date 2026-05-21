@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   AutomationRunsStore,
-  makeAutomationDbProvider,
+  makeActivityDbProvider,
   type DatabaseProvider,
   type AutomationManifest,
 } from '@centraid/runtime-core';
@@ -50,7 +50,7 @@ function makeAppHarness(appId = 'app1'): AppHarness {
   const appDir = mkdtempSync(path.join(tmpdir(), 'centraid-local-fire-'));
   // One gateway DB per harness; the run audit for every app fired
   // through it lives in this single file.
-  const automationDb = makeAutomationDbProvider(path.join(appDir, 'centraid-automations.sqlite'));
+  const automationDb = makeActivityDbProvider(path.join(appDir, 'centraid-activity.sqlite'));
   const store = new AutomationRunsStore(automationDb, appId);
   return { appDir, appId, automationDb, store };
 }

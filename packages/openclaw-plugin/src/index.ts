@@ -26,7 +26,7 @@ import {
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
   makeChatDbProvider,
-  makeAutomationDbProvider,
+  makeActivityDbProvider,
   AutomationStore,
 } from '@centraid/runtime-core';
 import { registerCentraidTools } from './lib/tools.js';
@@ -88,7 +88,7 @@ export default definePluginEntry({
     // Three sibling SQLite files, one per domain — identity
     // (`centraid-gateway.sqlite`: users + prefs), chat
     // (`centraid-chat.sqlite`: sessions + messages), automations
-    // (`centraid-automations.sqlite`: mirror + run audit). Each store
+    // (`centraid-activity.sqlite`: mirror + run audit). Each store
     // gets the provider for its domain. Providers are lazy: a file is
     // only opened when a store actually needs it, which keeps OpenClaw
     // worker subprocesses (which `register()` runs in but which don't
@@ -96,8 +96,8 @@ export default definePluginEntry({
     const dbDir = path.dirname(appsDir);
     const gatewayDbProvider = makeGatewayDbProvider(path.join(dbDir, 'centraid-gateway.sqlite'));
     const chatDbProvider = makeChatDbProvider(path.join(dbDir, 'centraid-chat.sqlite'));
-    const automationDbProvider = makeAutomationDbProvider(
-      path.join(dbDir, 'centraid-automations.sqlite'),
+    const automationDbProvider = makeActivityDbProvider(
+      path.join(dbDir, 'centraid-activity.sqlite'),
     );
     const userStore = new UserStore(gatewayDbProvider);
     const automationStore = new AutomationStore(automationDbProvider);

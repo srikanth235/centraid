@@ -7,13 +7,13 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   GATEWAY_MIGRATIONS,
   CHAT_MIGRATIONS,
-  AUTOMATION_MIGRATIONS,
+  ACTIVITY_MIGRATIONS,
   openGatewayDb,
   openChatDb,
-  openAutomationDb,
+  openActivityDb,
   makeGatewayDbProvider,
   makeChatDbProvider,
-  makeAutomationDbProvider,
+  makeActivityDbProvider,
 } from './gateway-db.js';
 
 function freshDbPath(): string {
@@ -157,46 +157,41 @@ describe('openChatDb (chat_sessions + chat_messages)', () => {
   });
 });
 
-describe('openAutomationDb (mirror + run audit)', () => {
-  it('advances PRAGMA user_version to AUTOMATION_MIGRATIONS.length on a fresh DB', () => {
+describe('openActivityDb (mirror + run audit)', () => {
+  it('advances PRAGMA user_version to ACTIVITY_MIGRATIONS.length on a fresh DB', () => {
     const path = freshDbPath();
-    openAutomationDb(path).close();
-    assert.equal(userVersion(path), AUTOMATION_MIGRATIONS.length);
-    assert.equal(AUTOMATION_MIGRATIONS.length, 2);
+    openActivityDb(path).close();
+    assert.equal(userVersion(path), ACTIVITY_MIGRATIONS.length);
+    assert.equal(ACTIVITY_MIGRATIONS.length, 2);
   });
 
-  it('creates the automations mirror + run-audit tables', () => {
+  it('creates the automations mirror + unified runs ledger tables', () => {
     const path = freshDbPath();
-    openAutomationDb(path).close();
-    assert.deepEqual(tableNames(path), [
-      'automation_run_nodes',
-      'automation_runs',
-      'automation_state',
-      'automations',
-    ]);
+    openActivityDb(path).close();
+    assert.deepEqual(tableNames(path), ['automation_state', 'automations', 'run_nodes', 'runs']);
   });
 
-  it('automation_run_nodes cascades off automation_runs; parent_run_id is SET NULL', () => {
+  it('run_nodes cascades off runs; parent_run_id is SET NULL', () => {
     const path = freshDbPath();
-    openAutomationDb(path).close();
+    openActivityDb(path).close();
     const db = new DatabaseSync(path);
     try {
       const nodeFk = (
-        db.prepare(`PRAGMA foreign_key_list('automation_run_nodes')`).all() as Array<{
+        db.prepare(`PRAGMA foreign_key_list('run_nodes')`).all() as Array<{
           table: string;
           on_delete: string;
         }>
-      ).find((f) => f.table === 'automation_runs');
-      assert.ok(nodeFk, 'expected FK on automation_run_nodes.run_id → automation_runs.run_id');
+      ).find((f) => f.table === 'runs');
+      assert.ok(nodeFk, 'expected FK on run_nodes.run_id → runs.id');
       assert.equal(nodeFk.on_delete, 'CASCADE');
 
       const parentFk = (
-        db.prepare(`PRAGMA foreign_key_list('automation_runs')`).all() as Array<{
+        db.prepare(`PRAGMA foreign_key_list('runs')`).all() as Array<{
           table: string;
           on_delete: string;
         }>
-      ).find((f) => f.table === 'automation_runs');
-      assert.ok(parentFk, 'expected self-FK on automation_runs.parent_run_id');
+      ).find((f) => f.table === 'runs');
+      assert.ok(parentFk, 'expected self-FK on runs.parent_run_id');
       assert.equal(parentFk.on_delete, 'SET NULL');
     } finally {
       db.close();
@@ -205,25 +200,25 @@ describe('openAutomationDb (mirror + run audit)', () => {
 
   it('re-opening an already-migrated DB is a no-op', () => {
     const path = freshDbPath();
-    openAutomationDb(path).close();
+    openActivityDb(path).close();
     const before = userVersion(path);
-    openAutomationDb(path).close();
+    openActivityDb(path).close();
     assert.equal(userVersion(path), before);
   });
 
   it('throws when the DB is at a newer version than this build supports', () => {
     const path = freshDbPath();
-    openAutomationDb(path).close();
+    openActivityDb(path).close();
     const db = new DatabaseSync(path);
-    db.exec(`PRAGMA user_version = ${AUTOMATION_MIGRATIONS.length + 1}`);
+    db.exec(`PRAGMA user_version = ${ACTIVITY_MIGRATIONS.length + 1}`);
     db.close();
-    assert.throws(() => openAutomationDb(path), /newer|update centraid/i);
+    assert.throws(() => openActivityDb(path), /newer|update centraid/i);
   });
 });
 
 describe('lazy providers', () => {
   it('opens the DB once and reuses the handle for subsequent calls', () => {
-    for (const make of [makeGatewayDbProvider, makeChatDbProvider, makeAutomationDbProvider]) {
+    for (const make of [makeGatewayDbProvider, makeChatDbProvider, makeActivityDbProvider]) {
       const provider = make(freshDbPath());
       const a = provider();
       const b = provider();
@@ -233,7 +228,7 @@ describe('lazy providers', () => {
   });
 
   it('does not touch the filesystem until the first call', () => {
-    for (const make of [makeGatewayDbProvider, makeChatDbProvider, makeAutomationDbProvider]) {
+    for (const make of [makeGatewayDbProvider, makeChatDbProvider, makeActivityDbProvider]) {
       const path = freshDbPath();
       make(path);
       assert.equal(existsSync(path), false);

@@ -37,7 +37,7 @@ import {
   AutomationStore,
   automationEnabledKey,
   deleteAppSetting,
-  makeAutomationDbProvider,
+  makeActivityDbProvider,
   readActiveCodeDir,
   syncAutomationsFromDisk,
   writeAppSetting,
@@ -581,7 +581,7 @@ export function registerIpcHandlers(): void {
   const getAutomationDbProvider = (() => {
     let provider: DatabaseProvider | undefined;
     return (): DatabaseProvider => {
-      if (!provider) provider = makeAutomationDbProvider(localRuntimeAutomationDb());
+      if (!provider) provider = makeActivityDbProvider(localRuntimeAutomationDb());
       return provider;
     };
   })();

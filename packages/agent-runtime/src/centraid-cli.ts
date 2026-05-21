@@ -30,7 +30,7 @@ import path from 'node:path';
 import { statSync } from 'node:fs';
 import {
   describeOp,
-  makeAutomationDbProvider,
+  makeActivityDbProvider,
   readActiveCodeDir,
   readOp,
   writeOp,
@@ -196,11 +196,11 @@ async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never>
   // handle. The run audit must land in the SAME automations DB the
   // desktop reads, so the OS scheduler bakes `CENTRAID_AUTOMATION_DB`
   // into the launchd plist / systemd unit / Task Scheduler artifact.
-  // Fall back to `<appDir>/centraid-automations.sqlite` for a bare CLI
+  // Fall back to `<appDir>/centraid-activity.sqlite` for a bare CLI
   // invocation.
   const automationDbPath =
-    process.env.CENTRAID_AUTOMATION_DB ?? path.join(appDir, 'centraid-automations.sqlite');
-  const automationDb = makeAutomationDbProvider(automationDbPath);
+    process.env.CENTRAID_AUTOMATION_DB ?? path.join(appDir, 'centraid-activity.sqlite');
+  const automationDb = makeActivityDbProvider(automationDbPath);
   try {
     const { outcome, record } = await runAutomationLocal({
       appId: parsed.appId,

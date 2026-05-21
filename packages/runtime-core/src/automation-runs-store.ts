@@ -1,25 +1,25 @@
 /*
- * AutomationRunsStore — automation run audit + ctx.state surface.
+ * AutomationRunsStore — unified agent-run ledger + ctx.state surface.
  *
- * The three tables — `automation_runs`, `automation_run_nodes`,
- * `automation_state` — live in the automations DB
- * (`centraid-automations.sqlite`), alongside the `automations` mirror.
- * The DDL is in `gateway-db.ts` AUTOMATION_MIGRATIONS[1]. Keeping the
- * audit in one file (rather than a per-app `automations.sqlite`) lets a
- * cross-app `ctx.invoke` child run link its `parent_run_id` self-FK
- * into one joinable DAG — a self-FK can't cross SQLite files.
+ * The three tables — `runs`, `run_nodes`, `automation_state` — live in
+ * the activity DB (`centraid-activity.sqlite`), alongside the
+ * `automations` mirror. The DDL is in `gateway-db.ts`
+ * ACTIVITY_MIGRATIONS[1]. Keeping the ledger in one file (rather than a
+ * per-app `automations.sqlite`) lets a cross-app `ctx.invoke` child run
+ * link its `parent_run_id` self-FK into one joinable DAG — a self-FK
+ * can't cross SQLite files.
  *
- *   automation_runs       — one row per automation fire (scheduled/
- *                           manual/replay/on_failure). Carries
- *                           parent_run_id for sub-invocations,
- *                           handler-return summary, validated
- *                           output_json, an `origin_app_id`.
- *   automation_run_nodes  — one row per ctx.tool / ctx.agent /
- *                           ctx.invoke call inside a run.
- *                           Promise.all-batched calls share a
- *                           `batch_id`.
- *   automation_state      — per-(origin_app_id, automation_name, key)
- *                           KV used by ctx.state.
+ *   runs             — one row per agent run (chat turn / automation
+ *                      fire / builder iteration; `kind` discriminates).
+ *                      Carries parent_run_id for sub-invocations, a
+ *                      handler-return summary, validated output_json,
+ *                      and a denormalized token/cost rollup.
+ *   run_nodes        — the ordered agentic trace: one `kind='step'` row
+ *                      per primary model-inference call, plus `tool` /
+ *                      `agent` / `invoke` audit rows. Promise.all-batched
+ *                      calls share a `batch_id`.
+ *   automation_state — per-(origin_app_id, automation_name, key) KV used
+ *                      by ctx.state.
  *
  * The store is runtime-owned: it is never reachable from the handler's
  * `db` proxy or the `centraid_sql_*` agent tools (those only ever see
@@ -43,6 +43,7 @@ import type {
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationRunNodeKind,
+  RunKind,
 } from './automation-runs-schema.js';
 import {
   prepare,
@@ -59,7 +60,13 @@ export interface InsertRunInput {
   readonly runId: string;
   readonly automationName: string;
   readonly triggerKind: AutomationTriggerKind;
+  /** Defaults to `'automation'`. */
+  readonly kind?: RunKind;
   readonly parentRunId?: string;
+  readonly chatSessionId?: string;
+  readonly appId?: string;
+  readonly note?: string;
+  readonly retryOf?: string;
   readonly inputJson?: string;
   readonly startedAt: number;
 }
@@ -79,7 +86,8 @@ export interface InsertNodeInput {
   readonly ordinal: number;
   readonly batchId?: number;
   readonly kind: AutomationRunNodeKind;
-  readonly name: string;
+  /** The tool name or `ctx.invoke` target. Omitted for `kind: 'step'`. */
+  readonly name?: string;
   readonly argsJson?: string;
   readonly outputJson?: string;
   readonly ok: boolean;
@@ -89,6 +97,15 @@ export interface InsertNodeInput {
   readonly durationMs: number;
   readonly inputTokens?: number;
   readonly outputTokens?: number;
+  readonly cacheReadTokens?: number;
+  readonly cacheWriteTokens?: number;
+  /** `step` / `agent` — the model + provider that served the call. */
+  readonly model?: string;
+  readonly provider?: string;
+  /** Frozen at write time from the per-model price table. */
+  readonly costUsd?: number;
+  /** `tool` / `agent` / `invoke` — the app whose data the call touched. */
+  readonly appId?: string;
   readonly childRunId?: string;
 }
 
@@ -141,10 +158,15 @@ export class AutomationRunsStore {
     const { stmts } = this.ensureReady();
     stmts.insertRun.run(
       input.runId,
+      input.kind ?? 'automation',
       this.originAppId,
       input.automationName,
+      input.chatSessionId ?? null,
+      input.appId ?? null,
       input.triggerKind,
       input.parentRunId ?? null,
+      input.retryOf ?? null,
+      input.note ?? null,
       input.inputJson ?? null,
       input.startedAt,
     );
@@ -152,14 +174,14 @@ export class AutomationRunsStore {
 
   finishRun(input: FinishRunInput): void {
     const { stmts } = this.ensureReady();
-    stmts.finishRun.run(
-      input.endedAt,
-      input.ok ? 1 : 0,
-      input.error ?? null,
-      input.summary ?? null,
-      input.outputJson ?? null,
-      input.runId,
-    );
+    stmts.finishRun.run({
+      endedAt: input.endedAt,
+      ok: input.ok ? 1 : 0,
+      error: input.error ?? null,
+      summary: input.summary ?? null,
+      outputJson: input.outputJson ?? null,
+      rid: input.runId,
+    });
   }
 
   getRun(runId: string): AutomationRunRow | undefined {
@@ -239,17 +261,23 @@ export class AutomationRunsStore {
       input.ordinal,
       input.batchId ?? null,
       input.kind,
-      input.name,
+      input.model ?? null,
+      input.provider ?? null,
+      input.inputTokens ?? null,
+      input.outputTokens ?? null,
+      input.cacheReadTokens ?? null,
+      input.cacheWriteTokens ?? null,
+      input.costUsd ?? null,
+      input.appId ?? null,
+      input.name ?? null,
       input.argsJson ?? null,
       input.outputJson ?? null,
+      input.childRunId ?? null,
       input.ok ? 1 : 0,
       input.error ?? null,
       input.startedAt,
       input.endedAt,
       input.durationMs,
-      input.inputTokens ?? null,
-      input.outputTokens ?? null,
-      input.childRunId ?? null,
     );
   }
 
