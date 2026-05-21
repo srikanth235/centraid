@@ -13,12 +13,13 @@ backfill.
 
 - [x] Step 0 spike — runner token capture
 - [x] Commit 1 — generalize the run-audit ledger
-- [ ] Commit 2 — automations model-B (user-owned UUID identity, drop
+- [x] Commit 2 — per-model token pricing
+- [ ] Commit 3 — automations model-B (user-owned UUID identity, drop
       `origin_app_id`, global cron / CLI / host)
-- [ ] Commit 3 — chat fold (delete `centraid-chat.sqlite`, eliminate
+- [ ] Commit 4 — chat fold (delete `centraid-chat.sqlite`, eliminate
       `chat_messages`)
-- [ ] Commit 4 — Insights backend wiring
-- [ ] Commit 5 — desktop renderer (Insights data, new-automation form)
+- [ ] Commit 5 — Insights backend wiring
+- [ ] Commit 6 — desktop renderer (Insights data, new-automation form)
 
 ## What changed
 
@@ -62,7 +63,19 @@ commit so the change compiles and tests pass without touching cron / CLI
 (`runId`, `nodeId`, `triggerKind`, …) so handler / ctx / CLI consumers
 are unchanged; new ledger fields are additive and optional.
 
-## Out of scope (this commit)
+### Commit 2 — per-model token pricing
+
+Adds [`model-pricing.ts`](../packages/runtime-core/src/model-pricing.ts) —
+a USD-per-million-token price table (`priceForModel`) and a
+`costForUsage(model, usage)` converter the ledger uses to freeze
+`run_nodes.cost_usd` at write time. An unknown model returns `undefined`
+(→ stored NULL), keeping "no price known" distinct from a genuine $0
+(resolves open question 4). Longest-prefix matching so `gpt-5-codex`
+beats `gpt-5`; provider prefixes are stripped before lookup. Exported
+from `@centraid/runtime-core` for the runner-capture and Insights
+commits to consume; covered by `model-pricing.test.ts`.
+
+## Out of scope (so far)
 
 - Model-B automation identity (UUID, user ownership, dropping
   `origin_app_id`), the agent-driven execution model, and the global
@@ -72,5 +85,6 @@ are unchanged; new ledger fields are additive and optional.
 ## Verification
 
 - `turbo run typecheck` / `turbo run build` — 16/16 tasks clean.
-- `turbo run test` — 12/12 task green; `runtime-core` 299/299.
-- `oxfmt` / `oxlint` on the changed files — clean.
+- `turbo run test` — 12/12 task green; `runtime-core` 308/308
+  (incl. `model-pricing` 9/9).
+- `oxfmt` on the changed files — clean.
