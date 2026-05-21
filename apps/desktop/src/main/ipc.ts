@@ -237,7 +237,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.PROJECTS_LIST, async () => {
     const settings = await loadSettings();
     const { listProjects } = await import('@centraid/builder-harness');
-    return listProjects(settings.projectsDir);
+    return listProjects(settings.appsDir);
   });
 
   ipcMain.handle(
@@ -245,7 +245,7 @@ export function registerIpcHandlers(): void {
     async (_e, input: { id: string; name?: string; version?: string }) => {
       const settings = await loadSettings();
       const { scaffoldProject } = await import('@centraid/builder-harness');
-      return scaffoldProject(settings.projectsDir, input.id, {
+      return scaffoldProject(settings.appsDir, input.id, {
         name: input.name,
         version: input.version,
       });
@@ -255,7 +255,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.PROJECTS_FILES, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
     const { readProjectFiles } = await import('@centraid/builder-harness');
-    const dir = path.join(settings.projectsDir, input.id);
+    const dir = path.join(settings.appsDir, input.id);
     return readProjectFiles(dir);
   });
 
@@ -264,14 +264,14 @@ export function registerIpcHandlers(): void {
     async (_e, input: { id: string; path: string; content: string }) => {
       const settings = await loadSettings();
       const { writeProjectFile } = await import('@centraid/builder-harness');
-      const dir = path.join(settings.projectsDir, input.id);
+      const dir = path.join(settings.appsDir, input.id);
       return writeProjectFile(dir, input.path, input.content);
     },
   );
 
   ipcMain.handle(Channel.PROJECTS_OPEN, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
-    const dir = path.join(settings.projectsDir, input.id);
+    const dir = path.join(settings.appsDir, input.id);
     await shell.openPath(dir);
     return { ok: true };
   });
@@ -279,7 +279,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.PROJECTS_DELETE, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
     const { deleteProject } = await import('@centraid/builder-harness');
-    await deleteProject(settings.projectsDir, input.id);
+    await deleteProject(settings.appsDir, input.id);
     return { ok: true };
   });
 
@@ -288,7 +288,7 @@ export function registerIpcHandlers(): void {
     async (_e, input: { id: string; name?: string; description?: string }) => {
       const settings = await loadSettings();
       const { updateProjectMeta } = await import('@centraid/builder-harness');
-      await updateProjectMeta(settings.projectsDir, input.id, {
+      await updateProjectMeta(settings.appsDir, input.id, {
         name: input.name,
         description: input.description,
       });
@@ -303,7 +303,7 @@ export function registerIpcHandlers(): void {
     Channel.PROJECTS_PREVIEW_URL,
     async (_e, input: { id: string }): Promise<{ url: string; available: boolean }> => {
       const settings = await loadSettings();
-      const indexPath = path.join(settings.projectsDir, input.id, 'index.html');
+      const indexPath = path.join(settings.appsDir, input.id, 'index.html');
       const available = await fs
         .stat(indexPath)
         .then((s) => s.isFile())
@@ -331,7 +331,7 @@ export function registerIpcHandlers(): void {
 
       const settings = await loadSettings();
       const { createCentraidAgentSession } = await import('@centraid/builder-harness');
-      const projectDir = path.join(settings.projectsDir, input.projectId);
+      const projectDir = path.join(settings.appsDir, input.projectId);
 
       const runnerPrefs = await loadRunnerPrefs();
 
@@ -399,7 +399,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.PUBLISH, async (_e, input: { id: string; skipBuild?: boolean }) => {
     const settings = await loadSettings();
     const { publishProject } = await import('@centraid/builder-harness');
-    const projectDir = path.join(settings.projectsDir, input.id);
+    const projectDir = path.join(settings.appsDir, input.id);
     return publishProject(projectDir, input.id, settings, {
       skipBuild: input.skipBuild,
     });
@@ -524,12 +524,12 @@ export function registerIpcHandlers(): void {
       // template's bare id (`todos`) is never consumed by a clone — keeps
       // the catalog and the user's workspace cleanly separated. Caller can
       // pass an explicit `newAppId` to override and claim any free id.
-      const newAppId = await suggestAppId(settings.projectsDir, input.newAppId ?? tmpl.id, {
+      const newAppId = await suggestAppId(settings.appsDir, input.newAppId ?? tmpl.id, {
         alwaysSuffix: !input.newAppId,
       });
 
       const project = await cloneTemplate({
-        projectsDir: settings.projectsDir,
+        projectsDir: settings.appsDir,
         newAppId,
         // The resolver tells us which copy is newer (cache vs bundle); clone
         // from that one so a remote update reaches users without a desktop

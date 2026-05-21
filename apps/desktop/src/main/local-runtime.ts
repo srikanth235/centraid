@@ -204,7 +204,8 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     // an uninstall, an automation toggled elsewhere, etc.).
     // Fire-and-forget so a slow scheduler shell-out doesn't block start.
     void (async () => {
-      const { automationsDir } = await loadPersistedSettings();
+      const { projectsDir } = await loadPersistedSettings();
+      const automationsDir = path.join(projectsDir, 'automations');
       const { rows } = await listAutomationProjects(automationsDir);
       return localRuntimeAutomationHost(automationsDir).reconcile(rows);
     })()

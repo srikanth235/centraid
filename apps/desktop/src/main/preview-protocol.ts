@@ -1,10 +1,10 @@
 // Local-files preview protocol.
 //
-// Serves files from `<projectsDir>/<id>/` into the builder's preview iframe
+// Serves files from `<appsDir>/<id>/` into the builder's preview iframe
 // before the project has been published to the gateway. URL shape:
 //
-//   centraid-preview://<id>/<path>     → <projectsDir>/<id>/<path>
-//   centraid-preview://<id>/           → <projectsDir>/<id>/index.html
+//   centraid-preview://<id>/<path>     → <appsDir>/<id>/<path>
+//   centraid-preview://<id>/           → <appsDir>/<id>/index.html
 //
 // Path-traversal hardening: the project id must match the same shape the
 // scaffolder enforces, and the resolved file must stay inside the project
@@ -32,7 +32,7 @@ export function registerPreviewProtocol(): void {
     const rel = decodeURIComponent(url.pathname.replace(/^\/+/, '')) || 'index.html';
 
     const settings = await loadSettings();
-    const projectRoot = path.resolve(settings.projectsDir, id);
+    const projectRoot = path.resolve(settings.appsDir, id);
     const target = path.resolve(projectRoot, rel);
 
     // Path traversal guard — `target` must be inside `projectRoot`.
