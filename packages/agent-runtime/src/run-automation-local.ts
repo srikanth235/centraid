@@ -1,29 +1,24 @@
 /**
- * Local-side orchestrator for one automation fire (issue #90 model-B).
+ * Local-side orchestrator for one automation fire (issue #91).
  *
  * Flow:
- *   1. Look up the user-owned automation row (manifest included) in the
- *      activity DB by its UUID.
+ *   1. Read the automation project (`automation.json` + `handler.js`)
+ *      from `automationsDir` by its id.
  *   2. Build the activity-DB-backed run ledger store.
- *   3. Run the manifest prompt as an agent turn via `runAutomationAgent`,
- *      driving the codex / claude CLI through the local dispatcher.
- *   4. On failure, fire the manifest's `onFailure` automation (depth-3
- *      capped). Return the run record + outcome.
- *
- * There is no JS handler, no per-app code dir, and no mock-LLM server —
- * the manifest prompt goes straight to the agent CLI against the user's
- * own provider auth.
+ *   3. Stand up the live `ctx.tool` / `ctx.agent` dispatch surface
+ *      (mock-LLM server + CLI spawn) and run the project's generated
+ *      `handler.js` in a worker thread via `runAutomationHandler`.
+ *   4. On failure, fire the manifest's `onFailure` automation
+ *      (depth-3 capped). Return the run record + outcome.
  */
 
-import os from 'node:os';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import {
   AutomationRunsStore,
-  AutomationStore,
-  runAutomationAgent,
-  type AutomationAgentOutcome,
+  automationHandlerPath,
+  readAutomationProject,
+  runAutomationHandler,
+  type AutomationHandlerOutcome,
   type AutomationTriggerKind,
   type DatabaseProvider,
 } from '@centraid/runtime-core';
@@ -34,7 +29,7 @@ import {
   type SpawnCliInput,
   type SpawnCliResult,
 } from './run-automation-cli-spawn.js';
-import { makeLocalAgentDispatcher } from './run-automation-agent-dispatch.js';
+import { startLiveDispatch } from './run-automation-live-dispatch.js';
 
 export {
   defaultSpawnCli,
@@ -45,18 +40,16 @@ export {
 };
 
 export interface RunAutomationLocalOptions {
-  /** UUID of the automation to fire. */
+  /** Id of the automation project to fire. */
   automationId: string;
-  /** Activity-DB provider — holds the automation row + the run ledger. */
-  automationDb: DatabaseProvider;
-  /** Workspace dir the agent CLI runs in. Defaults to a fresh temp dir. */
-  workdir?: string;
+  /** Directory holding the user's automation projects. */
+  automationsDir: string;
+  /** Activity-DB provider — holds the run ledger. */
+  activityDb: DatabaseProvider;
   /** Which CLI to drive. Defaults to codex. */
   runner?: LocalRunnerKind;
   /** Hard timeout. Defaults to 5 minutes. */
   timeoutMs?: number;
-  /** Override the CLI binary path. */
-  binPath?: string;
   /** Override spawn for tests. */
   spawnCli?: SpawnCli;
   /** Optional logger. */
@@ -86,87 +79,91 @@ export interface AutomationRunRecord {
   durationMs: number;
   ok: boolean;
   error?: string;
-  stepCount: number;
-  toolCount: number;
+  toolBatches: number;
+  agentCalls: number;
 }
 
 /**
- * Single automation fire. Returns the run record + the agent outcome.
- * A missing automation row throws; an agent-turn failure surfaces in
+ * Single automation fire. Returns the run record + the handler outcome.
+ * A missing automation project throws; a handler failure surfaces in
  * `outcome.ok === false`.
  */
 export async function runAutomationLocal(
   opts: RunAutomationLocalOptions,
-): Promise<{ outcome: AutomationAgentOutcome; record: AutomationRunRecord }> {
+): Promise<{ outcome: AutomationHandlerOutcome; record: AutomationRunRecord }> {
   const onLog = opts.onLog ?? (() => undefined);
   const runner: LocalRunnerKind = opts.runner ?? 'codex';
 
-  const store = new AutomationStore(opts.automationDb);
-  const auto = store.get(opts.automationId);
-  if (!auto) {
-    throw new Error(`automation ${opts.automationId}: not found in the activity DB`);
+  const row = await readAutomationProject(opts.automationsDir, opts.automationId);
+  if (!row) {
+    throw new Error(`automation ${opts.automationId}: not found under ${opts.automationsDir}`);
   }
 
-  const runsStore = new AutomationRunsStore(opts.automationDb);
+  const runsStore = new AutomationRunsStore(opts.activityDb);
   const runId = `${opts.automationId}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
 
-  const workdir =
-    opts.workdir ?? (await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-automation-')));
-  const dispatcher = makeLocalAgentDispatcher({
+  const dispatch = await startLiveDispatch({
+    workdir: row.dir,
+    automationId: opts.automationId,
+    runId,
     runner,
-    cwd: workdir,
-    ...(opts.binPath ? { binPath: opts.binPath } : {}),
-    ...(opts.spawnCli ? { spawnCli: opts.spawnCli } : {}),
+    spawnCli: opts.spawnCli ?? defaultSpawnCli,
+    toolsAllow: row.manifest.requires.tools ?? [],
     onLog,
   });
 
-  const outcome = await runAutomationAgent({
-    automationId: opts.automationId,
-    runId,
-    prompt: auto.prompt,
-    requires: auto.manifest.requires,
-    dispatcher,
-    runsStore,
-    triggerKind: opts.triggerKind ?? 'scheduled',
-    ...(opts.input !== undefined ? { input: opts.input } : {}),
-    ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-    ...(auto.manifest.outputSchema ? { outputSchema: auto.manifest.outputSchema } : {}),
-    history: auto.manifest.history,
-    ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
-  });
+  let outcome: AutomationHandlerOutcome;
+  try {
+    outcome = await runAutomationHandler({
+      automationId: opts.automationId,
+      automationDir: row.dir,
+      handlerFile: automationHandlerPath(opts.automationsDir, opts.automationId),
+      runId,
+      toolDispatcher: dispatch.toolDispatcher,
+      agentDispatcher: dispatch.agentDispatcher,
+      runsStore,
+      triggerKind: opts.triggerKind ?? 'scheduled',
+      ...(opts.input !== undefined ? { input: opts.input } : {}),
+      ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
+      ...(row.manifest.outputSchema ? { outputSchema: row.manifest.outputSchema } : {}),
+      history: row.manifest.history,
+      ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+    });
+  } finally {
+    await dispatch.close().catch(() => undefined);
+  }
 
-  // onFailure cascade: when the turn fails and the manifest names a
-  // follow-up automation owned by the same user, fire it with the
-  // failed run as input. Capped at depth 3.
-  if (!outcome.ok && auto.manifest.onFailure) {
+  // onFailure cascade: when the handler fails and the manifest names a
+  // follow-up automation, fire it with the failed run as input. Capped
+  // at depth 3.
+  if (!outcome.ok && row.manifest.onFailure) {
     if (failureDepth >= 3) {
-      onLog('warn', `onFailure cascade for ${auto.name} aborted at depth ${failureDepth} (cap=3)`);
+      onLog('warn', `onFailure cascade for ${row.name} aborted at depth ${failureDepth} (cap=3)`);
     } else {
-      const next = store.getByName(auto.userId, auto.manifest.onFailure);
+      const next = await readAutomationProject(opts.automationsDir, row.manifest.onFailure);
       if (!next) {
-        onLog('warn', `onFailure target "${auto.manifest.onFailure}" not found for ${auto.name}`);
+        onLog('warn', `onFailure target "${row.manifest.onFailure}" not found for ${row.name}`);
       } else {
         try {
           await runAutomationLocal({
             automationId: next.id,
-            automationDb: opts.automationDb,
-            ...(opts.workdir ? { workdir: opts.workdir } : {}),
+            automationsDir: opts.automationsDir,
+            activityDb: opts.activityDb,
             runner,
             ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
-            ...(opts.binPath ? { binPath: opts.binPath } : {}),
             ...(opts.spawnCli ? { spawnCli: opts.spawnCli } : {}),
             onLog,
             triggerKind: 'on_failure',
-            input: { runId, automationName: auto.name, error: outcome.error ?? 'unknown error' },
+            input: { runId, automationName: row.name, error: outcome.error ?? 'unknown error' },
             parentRunId: runId,
             failureDepth: failureDepth + 1,
           });
         } catch (err) {
           onLog(
             'error',
-            `onFailure dispatch ${auto.manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
+            `onFailure dispatch ${row.manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
       }
@@ -176,15 +173,15 @@ export async function runAutomationLocal(
   const endedAt = Date.now();
   const record: AutomationRunRecord = {
     automationId: opts.automationId,
-    automationName: auto.name,
+    automationName: row.name,
     runId,
     startedAt,
     endedAt,
     durationMs: endedAt - startedAt,
     ok: outcome.ok,
     ...(outcome.error ? { error: outcome.error } : {}),
-    stepCount: outcome.stepCount,
-    toolCount: outcome.toolCount,
+    toolBatches: outcome.toolBatches,
+    agentCalls: outcome.agentCalls,
   };
   return { outcome, record };
 }

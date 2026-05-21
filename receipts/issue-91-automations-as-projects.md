@@ -11,11 +11,12 @@ a sibling of an app project. The directory is the source of truth.
 ## Checklist
 
 - [x] Commit 1 — runtime-core: automations as first-class projects
-- [ ] Commit 2 — agent-runtime + openclaw: handler execution path
-- [ ] Commit 3 — builder-harness: automation scaffold
-- [ ] Commit 4 — desktop main: `automationsDir` setting + project IPC
-- [ ] Commit 5 — desktop renderer: Automations screen + preload + d.ts
-- [ ] Commit 6 — desktop renderer: automation builder chat
+- [x] Commit 2 — agent-runtime: local handler execution path
+- [ ] Commit 3 — openclaw-plugin: cloud handler execution path
+- [ ] Commit 4 — builder-harness: automation scaffold
+- [ ] Commit 5 — desktop main: `automationsDir` setting + project IPC
+- [ ] Commit 6 — desktop renderer: Automations screen + preload + d.ts
+- [ ] Commit 7 — desktop renderer: automation builder chat
 
 ## What changed
 
@@ -48,6 +49,27 @@ Moves the automation definition off SQLite and onto disk.
 
 The unified `runs` / `run_nodes` ledger is unchanged — an automation
 fire still records there.
+
+### Commit 2 — agent-runtime: local handler execution path
+
+Rewires the local desktop fire path onto the restored handler runtime.
+
+- `runAutomationLocal` now reads the automation project from
+  `automationsDir` (`readAutomationProject`) and runs its generated
+  `handler.js` via `runAutomationHandler`, instead of driving an
+  agent turn off the manifest prompt.
+- Restores `run-automation-live-dispatch.ts` (the mock-LLM-server +
+  CLI-spawn `ctx.tool` / `ctx.agent` dispatch) and the pre-#90
+  `run-automation-cli-spawn.ts`, re-adapted to the standalone-project
+  model — the CLI runs with the automation project dir as cwd, and the
+  dispatch context carries the automation id.
+- Deletes the model-B `run-automation-agent-dispatch.ts`.
+- The `centraid run-automation` CLI verb reads `CENTRAID_AUTOMATIONS_DIR`
+  (the OS scheduler bakes it into the launchd/systemd/Task Scheduler
+  artifact alongside `CENTRAID_AUTOMATION_DB`).
+
+`os-scheduler.ts` / `os-scheduler-host.ts` are unchanged — they already
+key everything by automation id. agent-runtime build + 80 tests pass.
 
 ## Out of scope
 

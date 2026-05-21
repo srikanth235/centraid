@@ -183,17 +183,21 @@ function parseRunAutomationArgs(args: string[]): ParsedRunAutomation {
 async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never> {
   // This is the OS-scheduler-spawned path — no in-process gateway
   // handle. The run record must land in the SAME activity DB the
-  // desktop reads, so the OS scheduler bakes `CENTRAID_AUTOMATION_DB`
+  // desktop reads, and the automation project is read from disk, so the
+  // OS scheduler bakes `CENTRAID_AUTOMATION_DB` + `CENTRAID_AUTOMATIONS_DIR`
   // into the launchd plist / systemd unit / Task Scheduler artifact.
-  // Fall back to `<cwd>/centraid-activity.sqlite` for a bare CLI run.
+  // Both fall back to a `<cwd>`-relative path for a bare CLI run.
   const automationDbPath =
     process.env.CENTRAID_AUTOMATION_DB ?? path.join(process.cwd(), 'centraid-activity.sqlite');
-  const automationDb = makeActivityDbProvider(automationDbPath);
+  const automationsDir =
+    process.env.CENTRAID_AUTOMATIONS_DIR ?? path.join(process.cwd(), 'centraid-automations');
+  const activityDb = makeActivityDbProvider(automationDbPath);
   try {
     const { outcome, record } = await runAutomationLocal({
       automationId: parsed.automationId,
+      automationsDir,
       runner: parsed.runner,
-      automationDb,
+      activityDb,
       ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
       onLog: (level, msg) => {
         process.stderr.write(`[automation:${level}] ${msg}\n`);
@@ -204,7 +208,7 @@ async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never>
     printJson(record);
     process.stderr.write(
       `centraid: automation ${record.automationName} ${record.ok ? 'ok' : 'FAILED'} ` +
-        `in ${record.durationMs}ms (${record.stepCount} steps, ${record.toolCount} tools)\n`,
+        `in ${record.durationMs}ms (${record.toolBatches} tool batches, ${record.agentCalls} agent calls)\n`,
     );
     process.exit(outcome.ok ? 0 : 1);
   } catch (err) {
