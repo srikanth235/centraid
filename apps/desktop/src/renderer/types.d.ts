@@ -229,12 +229,10 @@ declare global {
   type SidebarPage = 'home' | 'discover' | 'starred' | 'automations' | 'settings';
 
   interface ChromeBuildSidebarOpts {
-    /** App id of the app/builder currently in focus — expands its row. */
+    /** App id of the app/builder currently in focus — highlights its row. */
     activeId?: string;
     /** Which top-level page is current — drives the active highlight. */
     activePage?: SidebarPage;
-    /** Which child of the expanded active app is current (§G2). */
-    activeSurface?: 'app' | 'cloud';
     apps: ChromeSidebarApp[];
     drafts: ChromeSidebarApp[];
     onHome: () => void;
@@ -247,8 +245,6 @@ declare global {
     onStarred?: () => void;
     onAutomations?: () => void;
     onAppClick: (id: string) => void;
-    /** Click on an expanded app's App/Cloud child destination. */
-    onAppSurface?: (id: string, surface: 'app' | 'cloud') => void;
     onSettings: () => void;
     /**
      * Opens the per-app actions menu (Rename · Reveal in Finder · Delete

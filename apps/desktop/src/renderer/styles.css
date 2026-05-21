@@ -4971,29 +4971,6 @@ textarea {
   color: var(--accent);
 }
 
-/* Expanded active app — App/Cloud children nest under the project row,
-   bound by an indented hairline rule (§G2). */
-.cd-sb-app-expanded {
-  display: flex;
-  flex-direction: column;
-}
-.cd-sb-folder-children {
-  display: flex;
-  flex-direction: column;
-  margin: 2px 0 4px 17px;
-  padding-left: 9px;
-  border-left: 0.5px solid color-mix(in srgb, var(--ink) 11%, transparent);
-}
-.cd-sb-folder-children .cd-sb-item {
-  padding-top: 4px;
-  padding-bottom: 4px;
-  font-size: 12.5px;
-}
-.cd-sb-folder-children .cd-sb-icon svg {
-  width: 13px;
-  height: 13px;
-}
-
 /* The live status pill trailing the Settings row keeps its intrinsic
    width rather than stretching like a label. */
 .cd-sb-item .cd-status {

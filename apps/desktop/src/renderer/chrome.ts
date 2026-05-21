@@ -88,12 +88,6 @@
         size,
         1.5,
       ),
-    // Fisheye dot — marks the "App" surface child under an expanded app.
-    dot: (size = 13): string =>
-      svg(
-        '<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
-        size,
-      ),
   };
 
   // The Electron window uses `titleBarStyle: 'hiddenInset'` (see
@@ -319,10 +313,11 @@
   }
 
   // ── Sidebar ────────────────────────────────────────────────────────
-  // Refined Screens §G2/§G3: Build new + Search at the top, a Pages
+  // Refined Screens §G3: Build new + Search at the top, a Pages
   // section (Home / Discover / Starred / Automations), the live Apps
-  // list (the active app expands into App/Cloud children), and Settings
-  // pinned to the bottom with a `live` status pill.
+  // list (the active app row is highlighted — App/Cloud destinations now
+  // live in the top bar's Use/Build switch, not as sidebar children),
+  // and Settings pinned to the bottom with a `live` status pill.
 
   interface SidebarApp {
     id: string;
@@ -335,12 +330,10 @@
   type SidebarPage = 'home' | 'discover' | 'starred' | 'automations' | 'settings';
 
   interface SidebarOpts {
-    /** App id of the app/builder currently in focus — expands its row. */
+    /** App id of the app/builder currently in focus — highlights its row. */
     activeId?: string;
     /** Which top-level page is current — drives the active highlight. */
     activePage?: SidebarPage;
-    /** Which child of the expanded active app is current. */
-    activeSurface?: 'app' | 'cloud';
     apps: SidebarApp[];
     drafts: SidebarApp[];
     onHome: () => void;
@@ -353,8 +346,6 @@
     onStarred?: () => void;
     onAutomations?: () => void;
     onAppClick: (id: string) => void;
-    /** Click on an expanded app's App/Cloud child destination. */
-    onAppSurface?: (id: string, surface: 'app' | 'cloud') => void;
     onAppContext?: (id: string, anchor: MenuAnchor) => void;
     onSettings: () => void;
   }
@@ -437,44 +428,6 @@
     });
   }
 
-  // Refined Screens §G2 — the active app expands into App/Cloud children
-  // (destinations nest under the project, not in the titlebar).
-  function expandedApp(a: SidebarApp, opts: SidebarOpts): HTMLElement {
-    const group = el('div', { class: 'cd-sb-app-expanded' });
-    const row = sbItem({
-      iconNode: appIconNode(a),
-      icon: '',
-      label: a.name,
-      active: true,
-      onClick: () => opts.onAppClick(a.id),
-    });
-    group.append(appRow(row, a.id, opts.onAppContext));
-
-    const children = el('div', { class: 'cd-sb-folder-children' });
-    children.append(
-      sbItem({
-        icon: Glyph.dot(),
-        label: 'App',
-        active: (opts.activeSurface ?? 'app') === 'app',
-        onClick: () => {
-          if (opts.onAppSurface) opts.onAppSurface(a.id, 'app');
-          else opts.onAppClick(a.id);
-        },
-      }),
-    );
-    children.append(
-      sbItem({
-        icon: window.Icon.Bolt({ size: 14 }),
-        label: 'Cloud',
-        active: opts.activeSurface === 'cloud',
-        disabled: !opts.onAppSurface,
-        onClick: () => opts.onAppSurface?.(a.id, 'cloud'),
-      }),
-    );
-    group.append(children);
-    return group;
-  }
-
   // Section header — uppercase mono-caps label, format "Apps · N" with an
   // optional hover-revealed `+` action button (§G3 / RefinedSidebar).
   function sbSection(label: string, onAction?: () => void): HTMLElement {
@@ -550,19 +503,17 @@
     // Apps section — the design folds drafts into the Apps list rather
     // than carrying a separate Drafts header. Count appended to the
     // header label; a hover-revealed `+` opens the new-app flow. The app
-    // matching `activeId` expands into App/Cloud children (§G2).
+    // matching `activeId` is highlighted; App/Cloud destinations live in
+    // the top bar's Use/Build switch, not as sidebar children.
     const appList = [...opts.apps, ...opts.drafts];
     wrap.append(sbSection(`Apps · ${appList.length}`, opts.onNewApp));
     if (appList.length > 0) {
       for (const a of appList) {
-        if (a.id === opts.activeId) {
-          wrap.append(expandedApp(a, opts));
-          continue;
-        }
         const item = sbItem({
           iconNode: appIconNode(a),
           icon: '',
           label: a.name,
+          active: a.id === opts.activeId,
           onClick: () => opts.onAppClick(a.id),
         });
         wrap.append(appRow(item, a.id, opts.onAppContext));
