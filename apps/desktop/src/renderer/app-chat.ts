@@ -317,7 +317,7 @@
       type: 'button',
       title: 'Send',
       'aria-label': 'Send',
-      trustedHtml: Icon.Send({ size: 14 }),
+      trustedHtml: Icon.ArrowRight({ size: 14 }),
     }) as HTMLButtonElement;
     // Stop button swaps in for Send while a turn is active. The renderer
     // keeps both nodes mounted and toggles `hidden`, which avoids a layout

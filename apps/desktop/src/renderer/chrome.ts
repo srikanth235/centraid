@@ -327,7 +327,7 @@
     status?: 'new' | 'draft' | 'live' | null;
   }
 
-  type SidebarPage = 'home' | 'discover' | 'starred' | 'automations' | 'settings';
+  type SidebarPage = 'home' | 'insights' | 'discover' | 'starred' | 'automations' | 'settings';
 
   interface SidebarOpts {
     /** App id of the app/builder currently in focus — highlights its row. */
@@ -342,6 +342,7 @@
      *  `onNewApp` when there is no dedicated chat-creation entry point. */
     onNewChat?: () => void;
     onSearch?: () => void;
+    onInsights?: () => void;
     onDiscover?: () => void;
     onStarred?: () => void;
     onAutomations?: () => void;
@@ -483,6 +484,15 @@
     );
     wrap.append(
       sbItem({
+        icon: window.Icon.Activity({ size: 15 }),
+        label: 'Insights',
+        active: opts.activePage === 'insights',
+        disabled: !opts.onInsights,
+        onClick: opts.onInsights,
+      }),
+    );
+    wrap.append(
+      sbItem({
         icon: window.Icon.Compass({ size: 15 }),
         label: 'Discover',
         active: opts.activePage === 'discover',
@@ -497,6 +507,15 @@
         active: opts.activePage === 'starred',
         disabled: !opts.onStarred,
         onClick: opts.onStarred,
+      }),
+    );
+    wrap.append(
+      sbItem({
+        icon: window.Icon.Bolt({ size: 15 }),
+        label: 'Automations',
+        active: opts.activePage === 'automations',
+        disabled: !opts.onAutomations,
+        onClick: opts.onAutomations,
       }),
     );
 

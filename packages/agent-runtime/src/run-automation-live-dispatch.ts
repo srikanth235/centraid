@@ -12,7 +12,7 @@
  * serves recorded `run_nodes` and never spawns a process.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -62,6 +62,69 @@ function batchToStagedTurn(calls: readonly AutomationToolCall[]): StagedTurn {
       input: c.args,
     })),
   };
+}
+
+/** Drain a spawned CLI's stdout/stderr and resolve once it exits. */
+async function collectProcess(
+  proc: ChildProcess,
+): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  const out: Buffer[] = [];
+  const err: Buffer[] = [];
+  proc.stdout?.on('data', (c: Buffer) => out.push(c));
+  proc.stderr?.on('data', (c: Buffer) => err.push(c));
+  return await new Promise((resolve) => {
+    proc.on('exit', (code) =>
+      resolve({
+        ok: code === 0,
+        stdout: Buffer.concat(out).toString('utf8'),
+        stderr: Buffer.concat(err).toString('utf8'),
+      }),
+    );
+    proc.on('error', (e) =>
+      resolve({ ok: false, stdout: '', stderr: `spawn error: ${e.message}` }),
+    );
+  });
+}
+
+/**
+ * OpenAI structured outputs reject any object schema that doesn't
+ * explicitly set `additionalProperties: false`. Codex forwards the
+ * `--output-schema` file verbatim, so we deep-normalise the schema an
+ * automation passes to `ctx.agent({ json })` before writing it out.
+ */
+function normalizeOutputSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(normalizeOutputSchema);
+  if (schema && typeof schema === 'object') {
+    const obj: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(schema as Record<string, unknown>)) {
+      obj[k] = normalizeOutputSchema(v);
+    }
+    if (obj.type === 'object' && obj.additionalProperties === undefined) {
+      obj.additionalProperties = false;
+    }
+    return obj;
+  }
+  return schema;
+}
+
+/**
+ * Coerce a CLI's final answer into the shape `ctx.agent` promised: a
+ * plain prompt returns the text as-is; a `json` prompt parses it,
+ * tolerating a ```json fence the model may wrap around the object.
+ */
+function coerceAgentAnswer(text: string, json: unknown): unknown {
+  const trimmed = text.trim();
+  if (!json) return trimmed;
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(trimmed);
+  const candidate = fenced ? fenced[1]!.trim() : trimmed;
+  try {
+    return JSON.parse(candidate) as unknown;
+  } catch (err) {
+    throw new Error(
+      `ctx.agent expected JSON but got: ${trimmed.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
+      { cause: err },
+    );
+  }
 }
 
 /**
@@ -160,44 +223,74 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     });
   };
 
-  // ctx.agent routes to the user's REAL provider — no mock involvement.
-  // One-shot prompt, no tools; JSON schema enforcement is post-hoc.
-  const agentDispatcher: AutomationAgentDispatcher = async (call): Promise<unknown> => {
+  // ctx.agent routes to the user's REAL provider via the local CLI —
+  // no mock involvement. The final answer is read from a file the CLI
+  // writes (codex `--output-last-message`) rather than parsed out of
+  // the event stream, and `--output-schema` enforces the JSON shape.
+  const agentDispatcher: AutomationAgentDispatcher = async (call, ctx): Promise<unknown> => {
     const env = { ...process.env };
-    const args =
-      opts.runner === 'claude-code'
-        ? ['-p', call.prompt, '--output-format', 'text', '--permission-mode', 'bypassPermissions']
-        : ['exec', '--json', '--ask-for-approval', 'never', call.prompt];
-    const proc = spawn(opts.runner === 'claude-code' ? 'claude' : 'codex', args, { env });
-    const stdoutChunks: Buffer[] = [];
-    proc.stdout.on('data', (c: Buffer) => stdoutChunks.push(c));
-    const result = await new Promise<{ ok: boolean; text: string; stderr: string }>((resolve) => {
-      const stderrChunks: Buffer[] = [];
-      proc.stderr.on('data', (c: Buffer) => stderrChunks.push(c));
-      proc.on('exit', (code) =>
-        resolve({
-          ok: code === 0,
-          text: Buffer.concat(stdoutChunks).toString('utf8'),
-          stderr: Buffer.concat(stderrChunks).toString('utf8'),
-        }),
+    // `stdin: 'ignore'` is load-bearing: `codex exec` treats an open
+    // stdin pipe as an appended `<stdin>` instruction block and blocks
+    // until EOF — leaving it piped hangs the call until the run times
+    // out. `signal` lets a run timeout kill the CLI child too.
+    const spawnOpts: SpawnOptions = {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      signal: ctx.abortSignal,
+    };
+
+    if (opts.runner === 'claude-code') {
+      const result = await collectProcess(
+        spawn(
+          'claude',
+          ['-p', call.prompt, '--output-format', 'text', '--permission-mode', 'bypassPermissions'],
+          spawnOpts,
+        ),
       );
-      proc.on('error', (err) =>
-        resolve({ ok: false, text: '', stderr: `spawn error: ${err.message}` }),
-      );
-    });
+      if (!result.ok) {
+        throw new Error(`ctx.agent CLI failed: ${result.stderr.slice(0, 2000)}`);
+      }
+      return coerceAgentAnswer(result.stdout, call.json);
+    }
+
+    // codex exec — non-interactive, no approval prompts, runnable
+    // outside a git repo. The final assistant message is written to a
+    // file so we never have to parse the `--json` event stream.
+    const uid = randomUUID().slice(0, 8);
+    const lastMessageFile = path.join(scratchDir, `agent-${uid}.out.txt`);
+    const args = [
+      'exec',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '--skip-git-repo-check',
+      '--ephemeral',
+      '--color',
+      'never',
+      '--cd',
+      opts.appDir,
+      '--output-last-message',
+      lastMessageFile,
+    ];
+    if (call.json) {
+      const schemaFile = path.join(scratchDir, `agent-${uid}.schema.json`);
+      await fs.writeFile(schemaFile, JSON.stringify(normalizeOutputSchema(call.json)), 'utf8');
+      args.push('--output-schema', schemaFile);
+    }
+    args.push(call.prompt);
+
+    const result = await collectProcess(spawn('codex', args, spawnOpts));
     if (!result.ok) {
-      throw new Error(`ctx.agent CLI failed: ${result.stderr.slice(0, 2000)}`);
+      const detail = result.stderr.trim() || result.stdout.trim();
+      throw new Error(`ctx.agent CLI failed: ${detail.slice(0, 2000)}`);
     }
-    const text = result.text.trim();
-    if (!call.json) return text;
+    let answer: string;
     try {
-      return JSON.parse(text) as unknown;
-    } catch (err) {
-      throw new Error(
-        `ctx.agent expected JSON but got: ${text.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
-        { cause: err },
-      );
+      answer = await fs.readFile(lastMessageFile, 'utf8');
+    } catch {
+      // CLI exited 0 but didn't write the message file — fall back to
+      // whatever it printed to stdout.
+      answer = result.stdout;
     }
+    return coerceAgentAnswer(answer, call.json);
   };
 
   let closed = false;

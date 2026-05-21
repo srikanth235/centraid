@@ -655,6 +655,10 @@ export function registerIpcHandlers(): void {
         runsStore,
         automationDb,
         resolveApp,
+        // "Run now" is a manual fire — tag it so the executions log
+        // distinguishes it from the OS-scheduler trigger. (Replay mode
+        // overrides this to 'replay' inside runAutomationLocal.)
+        triggerKind: 'manual',
         ...(replayFromRunId ? { replayFromRunId } : {}),
       });
       return {
