@@ -27,7 +27,7 @@ function setup(): {
   const host = new OsSchedulerHost({
     resolveAppDir: (appId) => `/persistent/apps/${appId}`,
     centraidBin: '/usr/local/bin/centraid',
-    gatewayDbPath: '/persistent/centraid-gateway.sqlite',
+    automationDbPath: '/persistent/centraid-automations.sqlite',
     runner: 'codex',
     os: { execShell, platform: 'darwin', artifactRoot },
   });

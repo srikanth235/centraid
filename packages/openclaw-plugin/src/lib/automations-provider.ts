@@ -14,7 +14,7 @@
  *          `<<<centraid:appId:name>>>`.
  *       2. Loads `<appId>/automations/<name>.json` + `<appId>/actions/<name>.js`.
  *       3. Runs the handler via `runAutomationHandler` from runtime-core,
- *          wiring an `AutomationRunsStore` over the shared gateway DB
+ *          wiring an `AutomationRunsStore` over the automations DB
  *          for the run audit + `ctx.state`.
  *          - toolDispatcher routes through `callGatewayTool` (full
  *            harness MCP routing + audit + before-tool hooks for free).
@@ -69,11 +69,11 @@ export interface AutomationsProviderOptions {
    */
   resolveAppDir(appId: string): string | undefined;
   /**
-   * Shared gateway DB provider. The automation run-audit store
-   * (`AutomationRunsStore`) is built from this — the same connection
-   * `UserStore` / `ChatHistoryStore` / `AutomationStore` use.
+   * Automations DB provider (`centraid-automations.sqlite`). The
+   * automation run-audit store (`AutomationRunsStore`) is built from
+   * this — the same connection `AutomationStore` uses.
    */
-  gatewayDbProvider: DatabaseProvider;
+  automationDbProvider: DatabaseProvider;
   /** Optional logger. */
   logger?: { info(m: string): void; warn(m: string): void; error(m: string): void };
 }
@@ -221,10 +221,10 @@ async function executeAutomation(
       `centraid-mock: app "${dispatch.appId}" is not registered with the runtime`,
     );
   }
-  // Run audit lives in the central gateway DB; the store wraps the
+  // Run audit lives in the automations DB; the store wraps the
   // shared, host-owned provider connection (no per-fire handle to
   // close).
-  const runsStore = new AutomationRunsStore(opts.gatewayDbProvider, dispatch.appId);
+  const runsStore = new AutomationRunsStore(opts.automationDbProvider, dispatch.appId);
   const outcome = await runOpenclawFire(
     {
       appId: dispatch.appId,

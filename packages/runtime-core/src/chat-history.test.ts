@@ -6,30 +6,22 @@ import { join } from 'node:path';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { ChatHistoryStore, deriveTitle, isUserMessage } from './chat-history.js';
 import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
-import { type DatabaseProvider, makeGatewayDbProvider } from './gateway-db.js';
+import { makeChatDbProvider } from './gateway-db.js';
 
 // Tests that don't care about cross-user isolation share this stub UUID.
 const TEST_USER_ID = 'test-user-uuid-0000';
 const stubUserIdProvider = () => TEST_USER_ID;
 
-/**
- * Pre-insert each user id into the `users` table so the chat_sessions FK is
- * satisfied. Production wires this through `UserStore.getUserId`; the tests
- * skip that to keep IDs stable and named.
- */
-function seedUsers(dbProvider: DatabaseProvider, ids: string[]): void {
-  const db = dbProvider();
-  const stmt = db.prepare(`INSERT OR IGNORE INTO users (id, created_at) VALUES (?, ?)`);
-  for (const id of ids) stmt.run(id, Date.now());
-}
+// `chat_sessions.user_id` is application-enforced (no real FK — `users`
+// lives in a separate SQLite file), so tests no longer seed a `users`
+// row; they just pick stable ids via the user-id provider.
 
 function newStore(provider: () => string = stubUserIdProvider): ChatHistoryStore {
   // Each test gets its own DB file so cases stay isolated. Using a real path
   // (not :memory:) exercises the same code path as production — WAL pragmas
-  // and FK constraints behave differently on in-memory DBs.
+  // behave differently on in-memory DBs.
   const dir = mkdtempSync(join(tmpdir(), 'centraid-chat-history-'));
-  const dbProvider = makeGatewayDbProvider(join(dir, 'db.sqlite'));
-  seedUsers(dbProvider, [provider()]);
+  const dbProvider = makeChatDbProvider(join(dir, 'db.sqlite'));
   return new ChatHistoryStore(dbProvider, provider);
 }
 
@@ -248,11 +240,9 @@ describe('ChatHistoryStore per-user scoping', () => {
   // across users.
   function pair(): { alice: ChatHistoryStore; bob: ChatHistoryStore } {
     const dir = mkdtempSync(join(tmpdir(), 'centraid-chat-history-multi-'));
-    // Both stores share the same gateway DB provider — same connection,
-    // same on-disk file. Pre-seed both user rows so the chat_sessions FK
-    // accepts inserts from either store.
-    const dbProvider = makeGatewayDbProvider(join(dir, 'db.sqlite'));
-    seedUsers(dbProvider, ['alice', 'bob']);
+    // Both stores share the same chat DB provider — same connection,
+    // same on-disk file.
+    const dbProvider = makeChatDbProvider(join(dir, 'db.sqlite'));
     return {
       alice: new ChatHistoryStore(dbProvider, () => 'alice'),
       bob: new ChatHistoryStore(dbProvider, () => 'bob'),
@@ -311,14 +301,13 @@ describe('ChatHistoryStore per-user scoping', () => {
   });
 });
 
-// Migration tests live in `gateway-db.test.ts` — the schema for sessions
-// + messages + users + prefs is one ladder, so it's tested in one place.
+// Migration tests live in `gateway-db.test.ts` — the chat file's schema
+// (sessions + messages) is one ladder, so it's tested in one place.
 
 describe('ChatHistoryStore data persistence', () => {
   it("a second ChatHistoryStore on the same DB sees the first one's writes", () => {
     const dir = mkdtempSync(join(tmpdir(), 'centraid-chat-history-persist-'));
-    const dbProvider = makeGatewayDbProvider(join(dir, 'db.sqlite'));
-    seedUsers(dbProvider, [TEST_USER_ID]);
+    const dbProvider = makeChatDbProvider(join(dir, 'db.sqlite'));
     const first = new ChatHistoryStore(dbProvider, stubUserIdProvider);
     const s = first.createSession('todos', 'full', 'kept');
     first.appendMessages(s.id, [{ kind: 'user', text: 'hello' }]);

@@ -7,6 +7,8 @@ import {
   Runtime,
   UserStore,
   makeGatewayDbProvider,
+  makeChatDbProvider,
+  makeAutomationDbProvider,
   startRuntimeHttpServer,
   type AutomationHost,
   type RuntimeHttpServerHandle,
@@ -55,14 +57,22 @@ export function localRuntimeCodexHomeBaseDir(): string {
 }
 
 /**
- * Path of the single SQLite file that holds every per-user gateway record
- * (identity, prefs, chat sessions, chat messages). Lives next to (not
- * inside) the appsDir so it stays out of every individual app's data and
- * is never reachable from the centraid_sql_* tools. Mirrors the OpenClaw
- * plugin's placement.
+ * Paths of the three domain SQLite files — identity (users + prefs),
+ * chat (sessions + messages), automations (mirror + run audit). They
+ * live next to (not inside) the appsDir so they stay out of every
+ * individual app's data and are never reachable from the centraid_sql_*
+ * tools. Mirrors the OpenClaw plugin's placement.
  */
 export function localRuntimeGatewayDb(): string {
   return path.join(app.getPath('userData'), 'local-runtime', 'centraid-gateway.sqlite');
+}
+
+export function localRuntimeChatDb(): string {
+  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-chat.sqlite');
+}
+
+export function localRuntimeAutomationDb(): string {
+  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-automations.sqlite');
 }
 
 /**
@@ -86,11 +96,11 @@ export function localRuntimeAutomationHost(): AutomationHost {
   _automationHost = new OsSchedulerHost({
     resolveAppDir: (appId) => path.join(localRuntimeAppsDir(), appId),
     centraidBin: path.join(defaultCentraidCliDir(), 'centraid-cli.js'),
-    // Bake the desktop's gateway DB path into every scheduled job so an
-    // OS-scheduler-spawned `centraid run-automation` writes its run
-    // audit to the SAME gateway DB the desktop UI reads — not the
-    // `<appDir>/centraid-gateway.sqlite` fallback.
-    gatewayDbPath: localRuntimeGatewayDb(),
+    // Bake the desktop's automations DB path into every scheduled job so
+    // an OS-scheduler-spawned `centraid run-automation` writes its run
+    // audit to the SAME automations DB the desktop UI reads — not the
+    // `<appDir>/centraid-automations.sqlite` fallback.
+    automationDbPath: localRuntimeAutomationDb(),
     // Match the chat-runner default; toggling per-automation runner
     // isn't surfaced in the UI today.
     runner: 'codex',
@@ -105,20 +115,20 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     const appsDir = localRuntimeAppsDir();
     await fs.mkdir(appsDir, { recursive: true });
 
-    // One SQLite file holds every per-user gateway record. Both stores
-    // wrap the same lazy provider so they share one connection (real FK
-    // from `chat_sessions.user_id` to `users.id`, single migration ladder,
-    // single backup target). The provider opens the file on first use —
-    // lazy because nothing here actually touches the DB until a request
-    // hits the HTTP server.
+    // Three domain SQLite files — identity, chat, automations. Each
+    // store wraps the lazy provider for its file; the provider opens the
+    // file on first use (lazy because nothing here touches the DB until
+    // a request hits the HTTP server).
     const gatewayDbProvider = makeGatewayDbProvider(localRuntimeGatewayDb());
+    const chatDbProvider = makeChatDbProvider(localRuntimeChatDb());
+    const automationDbProvider = makeAutomationDbProvider(localRuntimeAutomationDb());
     const userStore = new UserStore(gatewayDbProvider);
-    const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
+    const chatHistoryStore = new ChatHistoryStore(chatDbProvider, () => userStore.getUserId());
     // Shared mirror for centraid automations (issue #70). The same
     // store backs the IPC handlers in `ipc.ts` and the upload-time
     // sync wired through `handleAppUpload` — every publish lands new
     // manifests here and the UI reads from this surface.
-    const automationStore = new AutomationStore(gatewayDbProvider);
+    const automationStore = new AutomationStore(automationDbProvider);
 
     // Resolve user prefs for the agent runtime — the desktop persists
     // the user's CLI choice (codex / claude-code) + optional override path
@@ -180,7 +190,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
         'chat-runner-sessions',
       ),
       automationStore,
-      gatewayDb: gatewayDbProvider,
+      automationDb: automationDbProvider,
       // On every publish that lands new/changed/removed automation
       // manifests, reconcile the OS scheduler so its installed
       // entries match the just-synced mirror state. Scoped to this

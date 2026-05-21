@@ -1,7 +1,7 @@
 /*
  * Automation run-audit row types.
  *
- * Pure types — the table DDL lives in `gateway-db.ts` (MIGRATIONS[2]:
+ * Pure types — the table DDL lives in `gateway-db.ts` (AUTOMATION_MIGRATIONS[1]:
  * `automation_runs`, `automation_run_nodes`, `automation_state`). These
  * shapes are exported separately so callers (the SQLite-backed store in
  * `automation-runs-store.ts` and the desktop UI) can import the row

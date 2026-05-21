@@ -107,13 +107,13 @@ export interface RuntimeOptions {
    */
   automationStore?: AutomationStore;
   /**
-   * Optional shared gateway DB provider (issue #80). When set, the
+   * Optional automation DB provider (issue #80). When set, the
    * deregister handler builds an `AutomationRunsStore` from it to drop
-   * the removed app's run audit + `ctx.state` rows. Hosts that pass an
-   * `automationStore` built from a provider should pass the same
-   * provider here.
+   * the removed app's run audit + `ctx.state` rows. Must be a provider
+   * for the automations SQLite file (`centraid-automations.sqlite`) —
+   * the same one used to build `automationStore`.
    */
-  gatewayDb?: DatabaseProvider;
+  automationDb?: DatabaseProvider;
   /**
    * Optional callback fired after every successful automation sync.
    * Hosts wire their scheduler reconciler here: the openclaw plugin
@@ -224,7 +224,7 @@ export class Runtime {
   private readonly logger: RuntimeLogger;
   private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
   private readonly automationStore?: AutomationStore;
-  private readonly gatewayDb?: DatabaseProvider;
+  private readonly automationDb?: DatabaseProvider;
   private readonly onAutomationsSynced?: (
     appId: string,
     result: SyncAutomationsResult,
@@ -246,7 +246,7 @@ export class Runtime {
     this.runnerStatus = opts.runnerStatus;
     this.withAppUploadLock = makeAppUploadLocks();
     if (opts.automationStore) this.automationStore = opts.automationStore;
-    if (opts.gatewayDb) this.gatewayDb = opts.gatewayDb;
+    if (opts.automationDb) this.automationDb = opts.automationDb;
     if (opts.onAutomationsSynced) this.onAutomationsSynced = opts.onAutomationsSynced;
   }
 
@@ -415,10 +415,10 @@ export class Runtime {
             }
           }
           // Drop the app's automation run audit + ctx.state from the
-          // gateway DB (issue #80). Best-effort like the mirror cleanup.
-          if (this.gatewayDb) {
+          // automations DB (issue #80). Best-effort like the mirror cleanup.
+          if (this.automationDb) {
             try {
-              new AutomationRunsStore(this.gatewayDb, route.appId).deleteAppData();
+              new AutomationRunsStore(this.automationDb, route.appId).deleteAppData();
             } catch (err) {
               this.logger.warn(
                 `[centraid] failed to clean automation run audit for "${route.appId}": ${err instanceof Error ? err.message : String(err)}`,

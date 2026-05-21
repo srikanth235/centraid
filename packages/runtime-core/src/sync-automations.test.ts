@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { mkdtempSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { writeAppSetting, automationEnabledKey } from './app-settings.js';
-import { makeGatewayDbProvider } from './gateway-db.js';
+import { makeAutomationDbProvider } from './gateway-db.js';
 import { AutomationStore } from './automation-store.js';
 import { syncAutomationsFromDisk } from './sync-automations.js';
 import type { AutomationManifest } from './automation-manifest.js';
@@ -19,7 +19,7 @@ function setup(): {
   const root = mkdtempSync(path.join(tmpdir(), 'centraid-sync-auto-'));
   const appDir = path.join(root, 'app');
   const dataDbFile = path.join(root, 'data.sqlite');
-  const store = new AutomationStore(makeGatewayDbProvider(path.join(root, 'gateway.sqlite')));
+  const store = new AutomationStore(makeAutomationDbProvider(path.join(root, 'gateway.sqlite')));
   return {
     appDir,
     dataDbFile,

@@ -106,15 +106,15 @@ export interface RunAutomationLocalOptions {
    */
   failureDepth?: number;
   /**
-   * Gateway DB provider for the central run-audit store. When
-   * `runsStore` is omitted, one is built from this provider bound to
-   * `appId`. Either `runsStore` or `gatewayDb` MUST be supplied.
+   * Automations DB provider for the run-audit store. When `runsStore`
+   * is omitted, one is built from this provider bound to `appId`.
+   * Either `runsStore` or `automationDb` MUST be supplied.
    */
-  gatewayDb?: DatabaseProvider;
+  automationDb?: DatabaseProvider;
   /**
    * Pre-built `AutomationRunsStore`. Mainly a test-injection seam; the
    * recursive `ctx.invoke` / `onFailure` paths pass the parent's store
-   * through. When omitted, one is built from `gatewayDb` + `appId`.
+   * through. When omitted, one is built from `automationDb` + `appId`.
    */
   runsStore?: AutomationRunsStore;
   /**
@@ -192,11 +192,11 @@ export async function runAutomationLocal(
   let runsStore: AutomationRunsStore;
   if (opts.runsStore) {
     runsStore = opts.runsStore;
-  } else if (opts.gatewayDb) {
-    runsStore = new AutomationRunsStore(opts.gatewayDb, opts.appId);
+  } else if (opts.automationDb) {
+    runsStore = new AutomationRunsStore(opts.automationDb, opts.appId);
   } else {
     throw new Error(
-      `automation ${opts.appId}/${opts.automationName}: runAutomationLocal requires either runsStore or gatewayDb`,
+      `automation ${opts.appId}/${opts.automationName}: runAutomationLocal requires either runsStore or automationDb`,
     );
   }
   const failureDepth = opts.failureDepth ?? 0;
@@ -265,7 +265,7 @@ export async function runAutomationLocal(
       onLog,
       ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
       ...(opts.resolveApp ? { resolveApp: opts.resolveApp } : {}),
-      ...(opts.gatewayDb ? { gatewayDb: opts.gatewayDb } : {}),
+      ...(opts.automationDb ? { automationDb: opts.automationDb } : {}),
       triggerKind: 'manual',
       input: args.input,
       // All run audit lives in one gateway DB, so the parent_run_id
@@ -340,7 +340,7 @@ export async function runAutomationLocal(
           onLog,
           ...(opts.onWrite ? { onWrite: opts.onWrite } : {}),
           ...(opts.resolveApp ? { resolveApp: opts.resolveApp } : {}),
-          ...(opts.gatewayDb ? { gatewayDb: opts.gatewayDb } : {}),
+          ...(opts.automationDb ? { automationDb: opts.automationDb } : {}),
           triggerKind: 'on_failure',
           input: failureInput,
           parentRunId: runId,

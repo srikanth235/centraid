@@ -4,10 +4,20 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { MIGRATIONS, openGatewayDb, makeGatewayDbProvider } from './gateway-db.js';
+import {
+  GATEWAY_MIGRATIONS,
+  CHAT_MIGRATIONS,
+  AUTOMATION_MIGRATIONS,
+  openGatewayDb,
+  openChatDb,
+  openAutomationDb,
+  makeGatewayDbProvider,
+  makeChatDbProvider,
+  makeAutomationDbProvider,
+} from './gateway-db.js';
 
 function freshDbPath(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-gateway-db-'));
+  const dir = mkdtempSync(join(tmpdir(), 'centraid-db-'));
   return join(dir, 'db.sqlite');
 }
 
@@ -21,69 +31,156 @@ function userVersion(path: string): number {
   }
 }
 
-describe('openGatewayDb', () => {
-  it('advances PRAGMA user_version to MIGRATIONS.length on a fresh DB', () => {
-    const path = freshDbPath();
-    const db = openGatewayDb(path);
+function tableNames(path: string): string[] {
+  const db = new DatabaseSync(path);
+  try {
+    return (
+      db.prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`).all() as Array<{
+        name: string;
+      }>
+    )
+      .map((t) => t.name)
+      .filter((n) => !n.startsWith('sqlite_'));
+  } finally {
     db.close();
-    assert.equal(userVersion(path), MIGRATIONS.length);
+  }
+}
+
+describe('openGatewayDb (users + user_prefs)', () => {
+  it('advances PRAGMA user_version to GATEWAY_MIGRATIONS.length on a fresh DB', () => {
+    const path = freshDbPath();
+    openGatewayDb(path).close();
+    assert.equal(userVersion(path), GATEWAY_MIGRATIONS.length);
   });
 
-  it('creates the expected tables with FK constraints', () => {
+  it('creates exactly the users + user_prefs tables', () => {
+    const path = freshDbPath();
+    openGatewayDb(path).close();
+    assert.deepEqual(tableNames(path), ['user_prefs', 'users']);
+  });
+
+  it('re-opening an already-migrated DB is a no-op', () => {
+    const path = freshDbPath();
+    openGatewayDb(path).close();
+    const before = userVersion(path);
+    openGatewayDb(path).close();
+    assert.equal(userVersion(path), before);
+  });
+
+  it('throws when the DB is at a newer version than this build supports', () => {
     const path = freshDbPath();
     openGatewayDb(path).close();
     const db = new DatabaseSync(path);
-    try {
-      const tables = db
-        .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
-        .all() as Array<{ name: string }>;
-      const names = tables.map((t) => t.name).filter((n) => !n.startsWith('sqlite_'));
-      assert.deepEqual(names.sort(), [
-        'automation_run_nodes',
-        'automation_runs',
-        'automation_state',
-        'automations',
-        'chat_messages',
-        'chat_sessions',
-        'user_prefs',
-        'users',
-      ]);
+    db.exec(`PRAGMA user_version = ${GATEWAY_MIGRATIONS.length + 1}`);
+    db.close();
+    assert.throws(() => openGatewayDb(path), /newer|update centraid/i);
+  });
 
-      // Verify the FK from chat_sessions → users with ON DELETE CASCADE.
-      const fks = db.prepare(`PRAGMA foreign_key_list('chat_sessions')`).all() as Array<{
-        table: string;
-        from: string;
-        to: string;
-        on_delete: string;
-      }>;
-      const userFk = fks.find((f) => f.table === 'users');
-      assert.ok(userFk, 'expected FK on chat_sessions.user_id → users.id');
-      assert.equal(userFk.from, 'user_id');
-      assert.equal(userFk.to, 'id');
-      assert.equal(userFk.on_delete, 'CASCADE');
+  it('FK cascade deletes a user’s prefs when the user is removed', () => {
+    // Confirms `PRAGMA foreign_keys=ON` is in effect — without it sqlite
+    // ignores the FK clause. user_prefs lives in the same file as users,
+    // so this cascade is a real foreign key.
+    const path = freshDbPath();
+    const db = openGatewayDb(path);
+    try {
+      db.prepare(`INSERT INTO users (id, created_at) VALUES (?, ?)`).run('u1', Date.now());
+      db.prepare(`INSERT INTO user_prefs (user_id, key, value) VALUES (?, ?, ?)`).run(
+        'u1',
+        'theme',
+        JSON.stringify('dark'),
+      );
+      db.prepare(`DELETE FROM users WHERE id = ?`).run('u1');
+      const prefs = db.prepare(`SELECT COUNT(*) AS n FROM user_prefs`).get() as { n: number };
+      assert.equal(Number(prefs.n), 0);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe('openChatDb (chat_sessions + chat_messages)', () => {
+  it('advances PRAGMA user_version to CHAT_MIGRATIONS.length on a fresh DB', () => {
+    const path = freshDbPath();
+    openChatDb(path).close();
+    assert.equal(userVersion(path), CHAT_MIGRATIONS.length);
+  });
+
+  it('creates exactly the chat_sessions + chat_messages tables', () => {
+    const path = freshDbPath();
+    openChatDb(path).close();
+    assert.deepEqual(tableNames(path), ['chat_messages', 'chat_sessions']);
+  });
+
+  it('chat_sessions has NO foreign key (user_id is application-enforced)', () => {
+    // `users` lives in a different file; SQLite has no cross-file FKs, so
+    // chat_sessions must not declare one.
+    const path = freshDbPath();
+    openChatDb(path).close();
+    const db = new DatabaseSync(path);
+    try {
+      const fks = db.prepare(`PRAGMA foreign_key_list('chat_sessions')`).all();
+      assert.equal(fks.length, 0, 'chat_sessions should declare no foreign keys');
     } finally {
       db.close();
     }
   });
 
-  it('advances to 3 migrations and creates the automation run-audit tables', () => {
+  it('FK cascade deletes messages when their session is removed', () => {
     const path = freshDbPath();
-    openGatewayDb(path).close();
-    assert.equal(MIGRATIONS.length, 3);
-    assert.equal(userVersion(path), 3);
+    const db = openChatDb(path);
+    try {
+      db.prepare(
+        `INSERT INTO chat_sessions (id, user_id, origin_app_id, title, mode, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run('s1', 'u1', 'todos', 'hi', 'full', Date.now(), Date.now());
+      db.prepare(
+        `INSERT INTO chat_messages (session_id, idx, app_id, payload_json, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run('s1', 0, 'todos', '{"kind":"user","text":"x"}', Date.now());
+
+      db.prepare(`DELETE FROM chat_sessions WHERE id = ?`).run('s1');
+
+      const messages = db.prepare(`SELECT COUNT(*) AS n FROM chat_messages`).get() as { n: number };
+      assert.equal(Number(messages.n), 0);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('throws when the DB is at a newer version than this build supports', () => {
+    const path = freshDbPath();
+    openChatDb(path).close();
+    const db = new DatabaseSync(path);
+    db.exec(`PRAGMA user_version = ${CHAT_MIGRATIONS.length + 1}`);
+    db.close();
+    assert.throws(() => openChatDb(path), /newer|update centraid/i);
+  });
+});
+
+describe('openAutomationDb (mirror + run audit)', () => {
+  it('advances PRAGMA user_version to AUTOMATION_MIGRATIONS.length on a fresh DB', () => {
+    const path = freshDbPath();
+    openAutomationDb(path).close();
+    assert.equal(userVersion(path), AUTOMATION_MIGRATIONS.length);
+    assert.equal(AUTOMATION_MIGRATIONS.length, 2);
+  });
+
+  it('creates the automations mirror + run-audit tables', () => {
+    const path = freshDbPath();
+    openAutomationDb(path).close();
+    assert.deepEqual(tableNames(path), [
+      'automation_run_nodes',
+      'automation_runs',
+      'automation_state',
+      'automations',
+    ]);
+  });
+
+  it('automation_run_nodes cascades off automation_runs; parent_run_id is SET NULL', () => {
+    const path = freshDbPath();
+    openAutomationDb(path).close();
     const db = new DatabaseSync(path);
     try {
-      const has = (name: string): boolean =>
-        (
-          db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`).get(name) as
-            | { name: string }
-            | undefined
-        )?.name === name;
-      assert.ok(has('automation_runs'), 'automation_runs table exists');
-      assert.ok(has('automation_run_nodes'), 'automation_run_nodes table exists');
-      assert.ok(has('automation_state'), 'automation_state table exists');
-
-      // automation_run_nodes cascades off automation_runs.
       const nodeFk = (
         db.prepare(`PRAGMA foreign_key_list('automation_run_nodes')`).all() as Array<{
           table: string;
@@ -93,8 +190,6 @@ describe('openGatewayDb', () => {
       assert.ok(nodeFk, 'expected FK on automation_run_nodes.run_id → automation_runs.run_id');
       assert.equal(nodeFk.on_delete, 'CASCADE');
 
-      // parent_run_id self-FK uses ON DELETE SET NULL so deleting one
-      // app's runs can't FK-fail against another app's cross-app child.
       const parentFk = (
         db.prepare(`PRAGMA foreign_key_list('automation_runs')`).all() as Array<{
           table: string;
@@ -110,73 +205,38 @@ describe('openGatewayDb', () => {
 
   it('re-opening an already-migrated DB is a no-op', () => {
     const path = freshDbPath();
-    openGatewayDb(path).close();
+    openAutomationDb(path).close();
     const before = userVersion(path);
-    openGatewayDb(path).close();
+    openAutomationDb(path).close();
     assert.equal(userVersion(path), before);
   });
 
   it('throws when the DB is at a newer version than this build supports', () => {
     const path = freshDbPath();
-    openGatewayDb(path).close();
+    openAutomationDb(path).close();
     const db = new DatabaseSync(path);
-    db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);
+    db.exec(`PRAGMA user_version = ${AUTOMATION_MIGRATIONS.length + 1}`);
     db.close();
-    assert.throws(() => openGatewayDb(path), /newer|update centraid/i);
-  });
-
-  it('FK cascade actually deletes child rows when a user is removed', () => {
-    // Confirms `PRAGMA foreign_keys=ON` is in effect on the connection
-    // openGatewayDb returns — without that pragma sqlite ignores FK clauses.
-    const path = freshDbPath();
-    const db = openGatewayDb(path);
-    try {
-      db.prepare(`INSERT INTO users (id, created_at) VALUES (?, ?)`).run('u1', Date.now());
-      db.prepare(`INSERT INTO user_prefs (user_id, key, value) VALUES (?, ?, ?)`).run(
-        'u1',
-        'theme',
-        JSON.stringify('dark'),
-      );
-      db.prepare(
-        `INSERT INTO chat_sessions (id, user_id, origin_app_id, title, mode, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).run('s1', 'u1', 'todos', 'hi', 'full', Date.now(), Date.now());
-      db.prepare(
-        `INSERT INTO chat_messages (session_id, idx, app_id, payload_json, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).run('s1', 0, 'todos', '{"kind":"user","text":"x"}', Date.now());
-
-      db.prepare(`DELETE FROM users WHERE id = ?`).run('u1');
-
-      const prefs = db.prepare(`SELECT COUNT(*) AS n FROM user_prefs`).get() as { n: number };
-      const sessions = db.prepare(`SELECT COUNT(*) AS n FROM chat_sessions`).get() as { n: number };
-      const messages = db.prepare(`SELECT COUNT(*) AS n FROM chat_messages`).get() as { n: number };
-      assert.equal(Number(prefs.n), 0);
-      assert.equal(Number(sessions.n), 0);
-      assert.equal(Number(messages.n), 0);
-    } finally {
-      db.close();
-    }
+    assert.throws(() => openAutomationDb(path), /newer|update centraid/i);
   });
 });
 
-describe('makeGatewayDbProvider', () => {
+describe('lazy providers', () => {
   it('opens the DB once and reuses the handle for subsequent calls', () => {
-    const path = freshDbPath();
-    const provider = makeGatewayDbProvider(path);
-    const a = provider();
-    const b = provider();
-    // Same JS reference — provider cached the handle, didn't re-open.
-    assert.equal(a, b);
-    a.close();
+    for (const make of [makeGatewayDbProvider, makeChatDbProvider, makeAutomationDbProvider]) {
+      const provider = make(freshDbPath());
+      const a = provider();
+      const b = provider();
+      assert.equal(a, b);
+      a.close();
+    }
   });
 
   it('does not touch the filesystem until the first call', () => {
-    const path = freshDbPath();
-    makeGatewayDbProvider(path);
-    // Provider was never called, so openGatewayDb wasn't either, so sqlite
-    // never created the file. (DatabaseSync creates on open by default;
-    // the assertion is on the filesystem, not on PRAGMA reads.)
-    assert.equal(existsSync(path), false);
+    for (const make of [makeGatewayDbProvider, makeChatDbProvider, makeAutomationDbProvider]) {
+      const path = freshDbPath();
+      make(path);
+      assert.equal(existsSync(path), false);
+    }
   });
 });
