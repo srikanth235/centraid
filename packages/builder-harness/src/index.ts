@@ -35,6 +35,12 @@ export {
   validateAppId,
 } from './scaffold.js';
 
+export {
+  scaffoldAutomationProject,
+  validateAutomationId,
+  type AutomationScaffoldOptions,
+} from './scaffold-automation.js';
+
 export { cloneTemplate, suggestAppId, type CloneTemplateOptions } from './clone.js';
 
 export { publishProject } from './publish.js';

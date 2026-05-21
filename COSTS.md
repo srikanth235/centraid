@@ -325,3 +325,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-cb704f3d-de7-1779389326 | claude-code | cb704f3d-de7f-413b-80b9-b9dafd0ed42d | #91 | claude-opus-4-7 | 0 | 0 | 0 | 0 | 0 | 0.0000 | feat(runtime-core): automations as first-class projects (#91) |
 | claude-code-831fdbad-c18-1779390812 | claude-code | 831fdbad-c183-4eb8-9426-21820fec99e0 | #91 | claude-opus-4-7 | 5 | 26694 | 0 | 110 | 26809 | 0.1696 | feat(agent-runtime): local automation handler execution path (#91) |
 | claude-code-53d1ff65-4a5-1779391075 | claude-code | 53d1ff65-4a5a-421a-8b8e-cafe8828bd78 | #91 | claude-opus-4-7 | 620 | 1617005 | 72820694 | 449076 | 2066701 | 57.7466 | feat(openclaw-plugin): cloud automation handler execution path (#91) |
+| claude-code-e1377bbf-fd3-1779391502 | claude-code | e1377bbf-fd37-4263-b305-931de8ce9be2 | #91 | claude-opus-4-7 | 5 | 10375 | 14870 | 971 | 11351 | 0.0966 | feat(builder-harness): automation project scaffold (#91) |

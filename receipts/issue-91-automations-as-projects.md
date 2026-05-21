@@ -13,7 +13,7 @@ a sibling of an app project. The directory is the source of truth.
 - [x] Commit 1 — runtime-core: automations as first-class projects
 - [x] Commit 2 — agent-runtime: local handler execution path
 - [x] Commit 3 — openclaw-plugin: cloud handler execution path
-- [ ] Commit 4 — builder-harness: automation scaffold
+- [x] Commit 4 — builder-harness: automation scaffold
 - [ ] Commit 5 — desktop main: `automationsDir` setting + project IPC
 - [ ] Commit 6 — desktop renderer: Automations screen + preload + d.ts
 - [ ] Commit 7 — desktop renderer: automation builder chat
@@ -88,6 +88,14 @@ The openclaw counterpart of Commit 2.
   automation id — unchanged.
 
 openclaw-plugin build + 21 tests pass.
+
+### Commit 4 — builder-harness: automation scaffold
+
+`scaffoldAutomationProject(automationsDir, id, opts)` writes the minimal
+automation project layout — a validator-checked `automation.json`, a
+starter `handler.js`, and a `versions/` dir — the sibling of
+`scaffoldProject` for apps. The builder agent rewrites both files
+during the build conversation. builder-harness build + tests pass.
 
 ## Out of scope
 
