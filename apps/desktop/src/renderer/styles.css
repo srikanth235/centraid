@@ -5085,10 +5085,107 @@ textarea {
 .cd-automations-topbar {
   flex: none;
   padding: 40px 40px 0;
+  position: relative;
 }
 .cd-automations-topbar .cd-page-head {
   max-width: none;
   margin: 0 0 18px;
+}
+
+/* "New automation" button — top-right of the Automations topbar. */
+.cd-automations-new {
+  position: absolute;
+  top: 40px;
+  right: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--cd-accent, #6366f1);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cd-automations-new:hover {
+  filter: brightness(1.08);
+}
+
+/* New-automation creation sheet (reuses the palette backdrop). */
+.cd-newauto {
+  width: 480px;
+  max-width: calc(100vw - 48px);
+  margin: 12vh auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px;
+  border-radius: 14px;
+  background: var(--cd-surface, #fff);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
+}
+.cd-newauto-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.cd-newauto-label {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.72;
+  margin-top: 6px;
+}
+.cd-newauto-input,
+.cd-newauto-prompt {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--cd-border, rgba(0, 0, 0, 0.16));
+  border-radius: 8px;
+  background: var(--cd-surface-2, #fafafa);
+  color: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cd-newauto-prompt {
+  resize: vertical;
+  min-height: 72px;
+}
+.cd-newauto-error {
+  font-size: 12px;
+  color: #dc2626;
+}
+.cd-newauto-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.cd-newauto-cancel,
+.cd-newauto-create {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.cd-newauto-cancel {
+  border: 1px solid var(--cd-border, rgba(0, 0, 0, 0.16));
+  background: transparent;
+  color: inherit;
+}
+.cd-newauto-create {
+  border: none;
+  background: var(--cd-accent, #6366f1);
+  color: #fff;
+}
+.cd-newauto-create:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .cd-automations-host {
   flex: 1;

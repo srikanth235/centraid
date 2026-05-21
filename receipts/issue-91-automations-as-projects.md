@@ -16,7 +16,7 @@ a sibling of an app project. The directory is the source of truth.
 - [x] Commit 4 — builder-harness: automation scaffold
 - [x] Commit 5 — desktop main: `automationsDir` setting + project IPC
 - [x] Commit 6 — desktop renderer: Automations screen + preload + d.ts
-- [ ] Commit 7 — desktop renderer: automation builder chat
+- [x] Commit 7 — desktop renderer: new-automation creation sheet
 
 ## What changed
 
@@ -133,6 +133,15 @@ desktop main typecheck + build pass; the renderer side is still model-A
 
 desktop typecheck + build pass.
 
+### Commit 7 — desktop renderer: new-automation creation sheet
+
+A "New automation" button on the Automations topbar opens a creation
+sheet — name, a natural-language "what should it do?" prompt, and a
+schedule (cron presets that translate intent → expression, plus a
+custom-cron escape hatch). Submitting calls `createAutomation`, which
+scaffolds the project (`automation.json` + a starter `handler.js`) and
+registers its schedule; the screen refreshes to show it.
+
 ## Out of scope
 
 - A backfill that migrates pre-#91 automations out of the dropped
@@ -140,11 +149,16 @@ desktop typecheck + build pass.
   backfill, consistent with the #90 migration approach.
 - Webhook / event triggers — `trigger` keeps the shape-room but only
   `cron` is wired.
-- The automation builder chat's preview/run-now pane polish is tracked
-  under Commit 6, not the earlier commits.
+- The fully conversational automation builder — a chat surface that
+  reuses the builder-harness agent to iteratively rewrite `handler.js`
+  with a live run-now pane — remains follow-up work. Commit 7 ships the
+  creation sheet (intent prompt + schedule) that scaffolds the project;
+  the agent-driven handler authoring loop is not wired yet.
 
 ## Verification
 
-- Commit 1 — `@centraid/runtime-core` typecheck + 271 tests pass. The
-  monorepo build is intentionally red between commits (no compatibility
-  shims); only the branch tip is guaranteed green.
+- Each commit was verified for its own package(s): runtime-core
+  typecheck + 271 tests; agent-runtime build + 80 tests; openclaw-plugin
+  build + 21 tests; builder-harness build + tests; desktop typecheck +
+  build. The monorepo build is intentionally red between commits (no
+  compatibility shims); the branch tip builds green end to end.

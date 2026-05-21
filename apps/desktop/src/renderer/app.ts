@@ -1410,11 +1410,18 @@
     // pageScroll's single scroll column) so the executions master-detail
     // can fill the viewport with independently-scrolling panes.
     const main = el('div', { class: 'has-wall' });
+    const newBtn = el('button', {
+      class: 'cd-automations-new',
+      type: 'button',
+      trustedHtml: `${Icon.Sparkle({ size: 13 })}<span>New automation</span>`,
+      onClick: () => openNewAutomationSheet(),
+    });
     const topbar = el('div', { class: 'cd-automations-topbar' }, [
       el('div', { class: 'cd-page-head' }, [
         el('h1', {}, 'Automations'),
-        el('p', {}, 'Scheduled triggers that run scripts across your apps.'),
+        el('p', {}, 'Scheduled tasks that run on their own.'),
       ]),
+      newBtn,
     ]);
     const tabRow = el('div', { class: 'cd-automations-tabswitch', role: 'tablist' });
     topbar.append(tabRow);
@@ -1460,6 +1467,131 @@
 
     mountShellPage('automations', main);
     select('runs');
+  }
+
+  // Cron presets the builder offers — a human label mapped to the
+  // 5-field expression, so the user states intent and we translate.
+  const CRON_PRESETS: ReadonlyArray<{ label: string; expr: string }> = [
+    { label: 'Every day at 9:00am', expr: '0 9 * * *' },
+    { label: 'Every hour', expr: '0 * * * *' },
+    { label: 'Every 30 minutes', expr: '*/30 * * * *' },
+    { label: 'Weekdays at 9:00am', expr: '0 9 * * 1-5' },
+    { label: 'Every Monday at 9:00am', expr: '0 9 * * 1' },
+  ];
+
+  function slugifyAutomationId(name: string): string {
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return slug || `automation-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  // "New automation" creation sheet. The user describes the automation
+  // in natural language and picks a schedule; `createAutomation`
+  // scaffolds the project (`automation.json` + a starter `handler.js`)
+  // which the builder agent then fills in.
+  function openNewAutomationSheet(): void {
+    const backdrop = el('div', { class: 'cd-palette-backdrop' });
+    const card = el('div', {
+      class: 'cd-newauto',
+      role: 'dialog',
+      'aria-label': 'New automation',
+    });
+
+    const nameInput = el('input', {
+      class: 'cd-newauto-input',
+      type: 'text',
+      placeholder: 'Automation name — e.g. Daily PR digest',
+    }) as HTMLInputElement;
+    const promptInput = el('textarea', {
+      class: 'cd-newauto-prompt',
+      rows: '4',
+      placeholder: 'Describe what this automation should do…',
+    }) as HTMLTextAreaElement;
+
+    const scheduleSelect = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
+    for (const p of CRON_PRESETS) {
+      scheduleSelect.append(el('option', { value: p.expr }, p.label));
+    }
+    scheduleSelect.append(el('option', { value: '__custom__' }, 'Custom cron…'));
+    const customCron = el('input', {
+      class: 'cd-newauto-input',
+      type: 'text',
+      placeholder: 'Custom 5-field cron — e.g. 0 9 * * *',
+      hidden: 'true',
+    }) as HTMLInputElement;
+    scheduleSelect.addEventListener('change', () => {
+      customCron.hidden = scheduleSelect.value !== '__custom__';
+    });
+
+    const errLine = el('div', { class: 'cd-newauto-error', hidden: 'true' });
+    const createBtn = el('button', {
+      class: 'cd-newauto-create',
+      type: 'button',
+    }) as HTMLButtonElement;
+    createBtn.textContent = 'Create automation';
+
+    const close = (): void => backdrop.remove();
+    const cancelBtn = el('button', {
+      class: 'cd-newauto-cancel',
+      type: 'button',
+      onClick: close,
+    });
+    cancelBtn.textContent = 'Cancel';
+
+    createBtn.addEventListener('click', () => {
+      const name = nameInput.value.trim();
+      const prompt = promptInput.value.trim();
+      const cronExpr =
+        scheduleSelect.value === '__custom__' ? customCron.value.trim() : scheduleSelect.value;
+      const showErr = (msg: string): void => {
+        errLine.textContent = msg;
+        errLine.hidden = false;
+      };
+      if (!name) return showErr('Give the automation a name.');
+      if (!prompt) return showErr('Describe what the automation should do.');
+      if (cronExpr.trim().split(/\s+/).length !== 5) {
+        return showErr('Schedule must be a 5-field cron expression.');
+      }
+      createBtn.disabled = true;
+      createBtn.textContent = 'Creating…';
+      void (async () => {
+        try {
+          await window.CentraidApi.createAutomation({
+            id: slugifyAutomationId(name),
+            name,
+            prompt,
+            cronExpr,
+          });
+          close();
+          renderAutomations();
+        } catch (err) {
+          createBtn.disabled = false;
+          createBtn.textContent = 'Create automation';
+          showErr(err instanceof Error ? err.message : String(err));
+        }
+      })();
+    });
+
+    card.append(
+      el('div', { class: 'cd-newauto-title' }, 'New automation'),
+      el('label', { class: 'cd-newauto-label' }, 'Name'),
+      nameInput,
+      el('label', { class: 'cd-newauto-label' }, 'What should it do?'),
+      promptInput,
+      el('label', { class: 'cd-newauto-label' }, 'Schedule'),
+      scheduleSelect,
+      customCron,
+      errLine,
+      el('div', { class: 'cd-newauto-actions' }, [cancelBtn, createBtn]),
+    );
+    backdrop.append(card);
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) close();
+    });
+    document.body.append(backdrop);
+    nameInput.focus();
   }
 
   function automationsEmpty(host: HTMLElement, title: string, sub: string): void {
