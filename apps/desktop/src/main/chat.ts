@@ -2,7 +2,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { loadSettings } from './settings.js';
 import {
-  historyAppendBatch,
   historyCreate,
   historyDelete,
   historyList,
@@ -11,7 +10,7 @@ import {
   type ChatSessionMeta,
   type ChatSessionWithMessages,
 } from './chat-history-client.js';
-import type { ChatMode, ChatStreamEvent } from '@centraid/runtime-core';
+import { deriveTitle, type ChatMode, type ChatStreamEvent } from '@centraid/runtime-core';
 
 /**
  * Per-app chat IPC. The desktop main process is now a thin proxy: every
@@ -70,6 +69,12 @@ interface ChatSession {
    * lifetime — the gateway reads it off the row, not the per-turn body.
    */
   mode: ChatMode;
+  /**
+   * Session title. Derived from the first user message on create and
+   * carried in-memory so `SEND` can echo it back to the renderer without
+   * a round-trip. Empty until the first turn of a brand-new session.
+   */
+  title: string;
   /** Abort handle for the currently streaming turn, or null when idle. */
   currentAbort: (() => void) | null;
   /** Per-turn id assigned by the renderer; null while idle. */
@@ -109,18 +114,10 @@ function emit(win: BrowserWindow, event: ChatEvent): void {
 interface TurnAccumulator {
   aiText: string;
   pending: Map<string, { tool: string; sql?: string; args?: unknown }>;
-  batch: unknown[];
 }
 
 function newAccumulator(): TurnAccumulator {
-  return { aiText: '', pending: new Map(), batch: [] };
-}
-
-function flushBatch(chatSessionId: string | null, batch: unknown[]): void {
-  if (!chatSessionId || batch.length === 0) return;
-  void historyAppendBatch(chatSessionId, batch).catch((err) => {
-    console.warn('[centraid] chat-history append failed:', err);
-  });
+  return { aiText: '', pending: new Map() };
 }
 
 /**
@@ -179,15 +176,6 @@ function handleStreamEvent(
           toolName: event.toolName || pending?.tool || 'tool',
           toolResult: event.result,
         });
-        acc.batch.push({
-          kind: 'tool',
-          id: event.toolCallId || `t${turnId}-${Date.now()}`,
-          tool: pending?.tool ?? event.toolName,
-          sql: pending?.sql,
-          args: pending?.args,
-          state: 'ok',
-          result: event.result,
-        });
       } else {
         const text = event.errorText ?? 'Tool failed.';
         emit(win, {
@@ -197,23 +185,10 @@ function handleStreamEvent(
           toolName: event.toolName || pending?.tool || 'tool',
           text,
         });
-        acc.batch.push({
-          kind: 'tool',
-          id: event.toolCallId || `t${turnId}-${Date.now()}`,
-          tool: pending?.tool ?? event.toolName,
-          sql: pending?.sql,
-          args: pending?.args,
-          state: 'error',
-          errorText: text,
-        });
       }
       return;
     }
     case 'final':
-      if (acc.aiText.trim().length > 0 || event.text.trim().length > 0) {
-        const text = acc.aiText || event.text;
-        acc.batch.push({ kind: 'ai', text });
-      }
       emit(win, {
         appId: session.appId,
         turnId,
@@ -226,7 +201,10 @@ function handleStreamEvent(
       return;
     case 'error':
       emit(win, { appId: session.appId, turnId, kind: 'error', text: event.message });
-      acc.batch.push({ kind: 'ai', text: event.message, error: true });
+      return;
+    case 'usage':
+      // Token usage is folded into the ledger server-side by the chat
+      // route; the renderer's event protocol doesn't surface it.
       return;
     case 'phase':
       // diagnostic — surface as thinking so the UI keeps a heartbeat.
@@ -268,10 +246,8 @@ async function runTurn(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     emit(win, { appId: session.appId, turnId, kind: 'error', text: msg });
-    acc.batch.push({ kind: 'ai', text: msg, error: true });
   } finally {
     session.turnId = null;
-    flushBatch(session.chatSessionId, acc.batch);
   }
 }
 
@@ -298,6 +274,8 @@ export function registerChatIpcHandlers(): void {
         appName: string;
         sessionId?: string | null;
         mode?: ChatMode;
+        /** Known title when resuming a persisted session — echoed back by SEND. */
+        title?: string;
       },
     ): Promise<{ ok: true; sessionId: string | null }> => {
       const win = BrowserWindow.fromWebContents(event.sender);
@@ -312,6 +290,7 @@ export function registerChatIpcHandlers(): void {
         chatSessionId,
         windowId: mintWindowId(chatSessionId),
         mode: input.mode === 'data' ? 'data' : 'full',
+        title: input.title ?? '',
         currentAbort: null,
         turnId: null,
       });
@@ -331,25 +310,24 @@ export function registerChatIpcHandlers(): void {
       if (!session) throw new Error('chat session not started');
 
       if (!session.chatSessionId) {
-        const created = await historyCreate(session.appId, session.mode, '');
+        // Derive the title from the first message at create time — the
+        // gateway no longer sees the transcript, so the client names the
+        // conversation. The chat route also back-fills an empty title on
+        // the first turn, so this stays correct if create races the turn.
+        const created = await historyCreate(session.mode, deriveTitle(input.text));
         session.chatSessionId = created.id;
+        session.title = created.title;
         // Rebind the window id to the freshly-created chat session so
         // subsequent reloads of this row resume the same gateway window.
         session.windowId = mintWindowId(session.chatSessionId);
       }
 
-      const appendRes = await historyAppendBatch(session.chatSessionId, [
-        { kind: 'user', text: input.text },
-      ]);
-      const title = appendRes.title;
-
       void runTurn(win, session, input.text, input.turnId).catch((err) => {
         const msg = err instanceof Error ? err.message : String(err);
         emit(win, { appId: input.appId, turnId: input.turnId, kind: 'error', text: msg });
-        flushBatch(session.chatSessionId, [{ kind: 'ai', text: msg, error: true }]);
       });
 
-      return { ok: true, sessionId: session.chatSessionId, title };
+      return { ok: true, sessionId: session.chatSessionId, title: session.title };
     },
   );
 
@@ -383,13 +361,10 @@ export function registerChatIpcHandlers(): void {
   );
 
   // ---------- Chat history (renderer's persistent chat list) ----------
-  ipcMain.handle(
-    ChatChannel.HISTORY_LIST,
-    async (_event, input: { appId: string }): Promise<{ sessions: ChatSessionMeta[] }> => {
-      const list = await historyList(input.appId);
-      return { sessions: list };
-    },
-  );
+  ipcMain.handle(ChatChannel.HISTORY_LIST, async (): Promise<{ sessions: ChatSessionMeta[] }> => {
+    const list = await historyList();
+    return { sessions: list };
+  });
   ipcMain.handle(
     ChatChannel.HISTORY_LOAD,
     async (_event, input: { sessionId: string }): Promise<ChatSessionWithMessages> =>

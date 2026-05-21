@@ -11,10 +11,10 @@ import {
 } from './os-scheduler.js';
 
 const baseSpec = {
-  appId: 'todos',
+  automationId: 'auto-xyz',
   automationName: 'daily-digest',
   cronExpr: '0 9 * * *',
-  cwd: '/var/centraid/todos',
+  cwd: '/var/centraid/work',
   runner: 'codex' as const,
   centraidBin: '/usr/local/bin/centraid',
 };
@@ -53,10 +53,9 @@ describe('buildLaunchdPlist', () => {
   it('emits a plist with the canonical structure', () => {
     const plist = buildLaunchdPlist(baseSpec);
     assert.match(plist, /<key>Label<\/key>/);
-    assert.match(plist, /com\.centraid\.todos\.daily-digest/);
+    assert.match(plist, /com\.centraid\.auto-xyz/);
     assert.match(plist, /<string>run-automation<\/string>/);
-    assert.match(plist, /<string>todos<\/string>/);
-    assert.match(plist, /<string>daily-digest<\/string>/);
+    assert.match(plist, /<string>auto-xyz<\/string>/);
     assert.match(plist, /<string>--runner<\/string>/);
     assert.match(plist, /<string>codex<\/string>/);
     assert.match(plist, /<key>StartCalendarInterval<\/key>/);
@@ -85,15 +84,15 @@ describe('buildSystemdService / buildSystemdTimer', () => {
     const service = buildSystemdService(baseSpec);
     assert.match(
       service,
-      /ExecStart=\/usr\/local\/bin\/centraid run-automation todos daily-digest --runner codex/,
+      /ExecStart=\/usr\/local\/bin\/centraid run-automation auto-xyz --runner codex/,
     );
-    assert.match(service, /WorkingDirectory=\/var\/centraid\/todos/);
+    assert.match(service, /WorkingDirectory=\/var\/centraid\/work/);
   });
 
   it('emits a timer pointing at the matching service unit', () => {
     const timer = buildSystemdTimer(baseSpec);
     assert.match(timer, /OnCalendar=\*-\*-\* 9:0:00/);
-    assert.match(timer, /Unit=com\.centraid\.todos\.daily-digest\.service/);
+    assert.match(timer, /Unit=com\.centraid\.auto-xyz\.service/);
     assert.match(timer, /Persistent=true/);
   });
 });
@@ -113,11 +112,8 @@ describe('cronToSchtasksArgs', () => {
 });
 
 describe('jobLabel', () => {
-  it('sanitizes app + automation ids into a launchd-safe label', () => {
-    assert.equal(jobLabel('todos', 'daily-digest'), 'com.centraid.todos.daily-digest');
-    assert.equal(
-      jobLabel('app/with weird chars', 'has.dots'),
-      'com.centraid.app_with_weird_chars.has_dots',
-    );
+  it('sanitizes the automation id into a launchd-safe label', () => {
+    assert.equal(jobLabel('auto-xyz'), 'com.centraid.auto-xyz');
+    assert.equal(jobLabel('weird.id/chars'), 'com.centraid.weird_id_chars');
   });
 });

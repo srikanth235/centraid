@@ -25,8 +25,7 @@ import {
   UserStore,
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
-  makeChatDbProvider,
-  makeAutomationDbProvider,
+  makeActivityDbProvider,
   AutomationStore,
 } from '@centraid/runtime-core';
 import { registerCentraidTools } from './lib/tools.js';
@@ -56,11 +55,6 @@ export type {
   RunQueryResult,
   LogEntry,
   LogLevel,
-  AutomationHandler,
-  AutomationHandlerArgs,
-  AutomationCtx,
-  AutomationAgentArgs,
-  AutomationJsonSchema,
   AutomationManifest,
   AutomationManifestRequires,
 } from '@centraid/runtime-core';
@@ -85,29 +79,30 @@ export default definePluginEntry({
       : path.join(resolveStateDir(process.env), appsDirRaw);
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
-    // Three sibling SQLite files, one per domain — identity
-    // (`centraid-gateway.sqlite`: users + prefs), chat
-    // (`centraid-chat.sqlite`: sessions + messages), automations
-    // (`centraid-automations.sqlite`: mirror + run audit). Each store
-    // gets the provider for its domain. Providers are lazy: a file is
-    // only opened when a store actually needs it, which keeps OpenClaw
-    // worker subprocesses (which `register()` runs in but which don't
-    // serve HTTP) from holding stray DB handles.
+    // Two sibling SQLite files, one per domain — identity
+    // (`centraid-gateway.sqlite`: users + prefs) and the activity ledger
+    // (`centraid-activity.sqlite`: automations, chat_sessions, runs,
+    // run_nodes). Each store gets the provider for its domain; the chat
+    // and automation stores all share the activity provider. Providers
+    // are lazy: a file is only opened when a store actually needs it,
+    // which keeps OpenClaw worker subprocesses (which `register()` runs
+    // in but which don't serve HTTP) from holding stray DB handles.
     const dbDir = path.dirname(appsDir);
     const gatewayDbProvider = makeGatewayDbProvider(path.join(dbDir, 'centraid-gateway.sqlite'));
-    const chatDbProvider = makeChatDbProvider(path.join(dbDir, 'centraid-chat.sqlite'));
-    const automationDbProvider = makeAutomationDbProvider(
-      path.join(dbDir, 'centraid-automations.sqlite'),
+    const automationDbProvider = makeActivityDbProvider(
+      path.join(dbDir, 'centraid-activity.sqlite'),
     );
     const userStore = new UserStore(gatewayDbProvider);
     const automationStore = new AutomationStore(automationDbProvider);
 
-    // Chat-history store — wraps the chat DB. It is THE chat store: the
-    // `/centraid/<id>/_chat` POST route reads sticky mode + runner-resume
-    // handles from it and records turn completion back. Constructed
-    // before the runtime so it can be handed to the Runtime and also
-    // mounted on the `/_centraid-chat` HTTP surface.
-    const chatHistoryStore = new ChatHistoryStore(chatDbProvider, () => userStore.getUserId());
+    // Chat-history store — wraps the activity DB. It is THE chat store:
+    // the `/centraid/<id>/_chat` POST route reads sticky mode +
+    // runner-resume handles from it and records each turn as a `runs`
+    // row. Constructed before the runtime so it can be handed to the
+    // Runtime and also mounted on the `/_centraid-chat` HTTP surface.
+    const chatHistoryStore = new ChatHistoryStore(automationDbProvider, () =>
+      userStore.getUserId(),
+    );
 
     const chatRunner = makeOpenClawChatRunner(api);
 
@@ -130,30 +125,6 @@ export default definePluginEntry({
       logger: api.logger,
       chatRunner,
       runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
-      automationStore,
-      automationDb: automationDbProvider,
-      // After every successful publish, sync runs against the new
-      // version's `automations/` (handled inside `handleAppUpload`).
-      // Once the mirror is updated, reconcile the host against the
-      // mirror so openclaw's cron store catches up immediately —
-      // without this the user would have to restart the gateway to
-      // see schedule changes take effect. Scoped to this app — a
-      // bare per-app `desired` against an unscoped reconcile would
-      // sweep every other app's cron entries.
-      onAutomationsSynced: async (appId, result) => {
-        api.logger.info(
-          `[centraid] automations synced for "${appId}": +${result.added.length} ~${result.updated.length} -${result.removed.length}`,
-        );
-        try {
-          await automationHost.reconcile(automationStore.listByApp(appId), {
-            scope: { appId },
-          });
-        } catch (err) {
-          api.logger.warn(
-            `[centraid] cron reconcile after sync failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      },
     });
 
     // Register the centraid-mock provider plugin. The provider's
@@ -163,10 +134,6 @@ export default definePluginEntry({
     // through the user's REAL provider via the simple-completion
     // runtime. See `lib/automations-provider.ts`.
     registerAutomationsProvider(api, {
-      resolveAppDir: (appId) => {
-        const entry = runtime.registry.get(appId);
-        return entry?.path;
-      },
       automationDbProvider,
       logger: api.logger,
     });

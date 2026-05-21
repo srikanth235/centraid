@@ -28,12 +28,79 @@
  * omitted.
  */
 
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { RunnerKind } from './types.js';
 import { startMockLlmServer } from './mock-llm-server.js';
-import { defaultSpawnCli, type SpawnCliInput } from './run-automation-cli-spawn.js';
+import { materializeCodexHome } from './codex-provider-config.js';
+
+/**
+ * Drive one throwaway CLI turn against a mock-LLM server. The probe
+ * needs the mock (not the real provider) so the CLI's first-request
+ * `tools` array can be snapshotted; the automation runtime's
+ * `defaultSpawnCli` runs against the real provider, so this probe
+ * carries its own mock-aware spawn.
+ */
+async function spawnProbeCli(input: {
+  kind: RunnerKind;
+  binPath?: string;
+  mockBaseUrl: string;
+  mockBearerToken: string;
+  cwd: string;
+  scratchDir: string;
+  abortSignal: AbortSignal;
+}): Promise<void> {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  const prompt = 'centraid tool-enumeration probe — reply with: ok';
+  let bin: string;
+  let args: string[];
+  if (input.kind === 'claude-code') {
+    env.ANTHROPIC_BASE_URL = input.mockBaseUrl;
+    env.ANTHROPIC_API_KEY = input.mockBearerToken;
+    bin = input.binPath ?? 'claude';
+    args = [
+      '-p',
+      prompt,
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--permission-mode',
+      'bypassPermissions',
+    ];
+  } else {
+    const codexHome = await materializeCodexHome(
+      {
+        id: 'centraid-mock',
+        name: 'Centraid Automation Mock',
+        baseUrl: input.mockBaseUrl,
+        envKey: 'CENTRAID_MOCK_KEY',
+      },
+      input.scratchDir,
+    );
+    env.CODEX_HOME = codexHome;
+    env.CENTRAID_MOCK_KEY = input.mockBearerToken;
+    bin = input.binPath ?? 'codex';
+    args = [
+      'exec',
+      '--json',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '--skip-git-repo-check',
+      prompt,
+    ];
+  }
+  const proc = spawn(bin, args, { cwd: input.cwd, env, stdio: ['ignore', 'ignore', 'ignore'] });
+  const onAbort = (): void => {
+    if (!proc.killed) proc.kill('SIGTERM');
+  };
+  input.abortSignal.addEventListener('abort', onAbort, { once: true });
+  await new Promise<void>((resolve) => {
+    proc.on('exit', () => resolve());
+    proc.on('error', () => resolve());
+  });
+  input.abortSignal.removeEventListener('abort', onAbort);
+}
 
 /** Hard cap on the probe — a hung/missing CLI must not stall the builder. */
 const PROBE_TIMEOUT_MS = 30_000;
@@ -102,18 +169,15 @@ async function probeRuntimeTools(
     const { dispatchId, bearerToken } = server.mintDispatchToken();
     // An immediate end-turn: the CLI sends its tools, gets "ok", exits.
     server.stageTurn(dispatchId, { text: 'ok', stopReason: 'end_turn' });
-    const input: SpawnCliInput = {
+    await spawnProbeCli({
       kind,
       mockBaseUrl: server.baseUrl,
       mockBearerToken: bearerToken,
-      prompt: 'centraid tool-enumeration probe — reply with: ok',
-      toolsAllow: [],
       cwd: opts.cwd,
       scratchDir,
       abortSignal: abort.signal,
       ...(opts.binPath ? { binPath: opts.binPath } : {}),
-    };
-    await defaultSpawnCli(input);
+    });
   } finally {
     clearTimeout(timer);
     await server.close();

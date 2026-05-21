@@ -33,7 +33,7 @@
  * this module just exports the ProviderPlugin descriptor as a factory.
  */
 
-import { AutomationRunsStore, type DatabaseProvider } from '@centraid/runtime-core';
+import type { DatabaseProvider } from '@centraid/runtime-core';
 import { runOpenclawFire } from './openclaw-fire.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 // pi-ai types — open-import (matches openclaw's own pattern) so this
@@ -64,14 +64,8 @@ interface ProviderPluginShape {
 
 export interface AutomationsProviderOptions {
   /**
-   * Look up an app's filesystem dir from its id. The plugin entry
-   * wires this through to `runtime.registry.get(...)`.
-   */
-  resolveAppDir(appId: string): string | undefined;
-  /**
-   * Automations DB provider (`centraid-automations.sqlite`). The
-   * automation run-audit store (`AutomationRunsStore`) is built from
-   * this — the same connection `AutomationStore` uses.
+   * Activity DB provider (`centraid-activity.sqlite`). The automation
+   * row + the run ledger (`AutomationRunsStore`) are read from this.
    */
   automationDbProvider: DatabaseProvider;
   /** Optional logger. */
@@ -157,17 +151,16 @@ function makeAutomationStreamFn(
   };
 }
 
-const PROMPT_SENTINEL = /<<<centraid:([^:>]+):([^>]+)>>>/;
+const PROMPT_SENTINEL = /<<<centraid:([^>]+)>>>/;
 
 interface ParsedDispatch {
-  appId: string;
-  automationName: string;
+  automationId: string;
 }
 
 function parsePromptSentinel(prompt: string): ParsedDispatch | undefined {
   const match = PROMPT_SENTINEL.exec(prompt);
   if (!match) return undefined;
-  return { appId: match[1]!, automationName: match[2]! };
+  return { automationId: match[1]! };
 }
 
 /**
@@ -212,38 +205,22 @@ async function executeAutomation(
   const dispatch = recoverDispatch(streamFnArgs);
   if (!dispatch) {
     return errorMessage(
-      'centraid-mock StreamFn invoked without the <<<centraid:appId:name>>> sentinel in the prompt — this provider should only be triggered by centraid-registered cron jobs',
+      'centraid-mock StreamFn invoked without the <<<centraid:automationId>>> sentinel in the prompt — this provider should only be triggered by centraid-registered cron jobs',
     );
   }
-  const appDir = opts.resolveAppDir(dispatch.appId);
-  if (!appDir) {
-    return errorMessage(
-      `centraid-mock: app "${dispatch.appId}" is not registered with the runtime`,
-    );
-  }
-  // Run audit lives in the automations DB; the store wraps the
-  // shared, host-owned provider connection (no per-fire handle to
-  // close).
-  const runsStore = new AutomationRunsStore(opts.automationDbProvider, dispatch.appId);
   const outcome = await runOpenclawFire(
     {
-      appId: dispatch.appId,
-      appDir,
-      automationName: dispatch.automationName,
+      automationId: dispatch.automationId,
+      automationDbProvider: opts.automationDbProvider,
       triggerKind: 'scheduled',
-      failureDepth: 0,
-      runsStore,
-      resolveAppDir: opts.resolveAppDir,
     },
     log,
   );
   if (!outcome.ok) {
-    log.error(`automation ${dispatch.appId}/${dispatch.automationName} failed: ${outcome.error}`);
+    log.error(`automation ${dispatch.automationId} failed: ${outcome.error}`);
     return errorMessage(`automation failed: ${outcome.error ?? 'unknown error'}`);
   }
-  const summary =
-    outcome.summary ?? (typeof outcome.value === 'string' ? outcome.value : undefined) ?? 'ok';
-  return successMessage(summary);
+  return successMessage(outcome.summary ?? 'ok');
 }
 
 function successMessage(text: string): AssistantMessage {

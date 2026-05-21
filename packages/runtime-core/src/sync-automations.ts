@@ -1,34 +1,28 @@
 /**
- * Sync the on-disk `automations/*.json` for one app into the gateway's
- * `automations` mirror table. This is the deploy boundary: every path
- * that lands new code in an app calls this so the mirror reflects what
- * the user just deployed.
+ * Sync a user's on-disk `automations/*.json` manifests into the
+ * `automations` table.
  *
- * Wired in two places today:
- *   - `handleAppUpload` (runtime-core) — after a tarball lands + migrations
- *     run, the just-extracted version's manifests get synced. Covers both
- *     remote (openclaw gateway) and local (desktop in-process gateway)
- *     publish paths since they share the same upload handler.
- *   - Hosts can also call directly for out-of-band syncs (tests, a
- *     "Refresh" button, etc.).
+ * Model-B (issue #90): automations are user-owned, not app-scoped. The
+ * manifests live in one global directory per user (not inside an app's
+ * source tree), so this is a single global scan rather than a per-app
+ * deploy step. The `enabled` toggle is a column on the `automations`
+ * row itself — sync preserves it across rescans.
+ *
+ * Wired at host startup (and callable on demand — a "Refresh" button,
+ * tests). Reconciliation with the host scheduler (openclaw cron, OS
+ * scheduler) is the caller's job — sync returns the diff.
  *
  * Semantics:
- *   - Each `<appCodeDir>/automations/*.json` is parsed + validated. Files
- *     that fail validation are reported in `errors` and skipped — the
- *     other manifests still apply.
- *   - The `enabled` flag is preserved from any existing mirror row, so a
- *     user toggle survives republish. New manifests default to enabled.
- *   - Manifests removed from disk are deleted from the mirror.
- *
- * Reconciliation with the host scheduler (openclaw cron, OS scheduler)
- * is the caller's job — sync returns the diff and an optional
- * `onSynced` hook lets the host fire its reconciler when the mirror
- * actually changed.
+ *   - Each `<automationsDir>/*.json` is parsed + validated. Files that
+ *     fail validation are reported in `errors` and skipped — the other
+ *     manifests still apply.
+ *   - An existing row keeps its UUID and its `enabled` flag across a
+ *     rescan; only the manifest content is refreshed.
+ *   - Manifests removed from disk are deleted from the table.
  */
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { automationEnabledKey, readAppSetting } from './app-settings.js';
 import {
   AutomationManifestError,
   parseManifest,
@@ -37,25 +31,16 @@ import {
 import type { AutomationRow, AutomationStore } from './automation-store.js';
 
 export interface SyncAutomationsOptions {
-  /** App id the manifests belong to. */
-  appId: string;
-  /** Directory containing the `automations/` subfolder for this app. */
-  appCodeDir: string;
-  /** Mirror store to write into. */
+  /** User the manifests belong to. */
+  userId: string;
+  /** Directory holding this user's `*.json` automation manifests. */
+  automationsDir: string;
+  /** Store to write into. */
   store: AutomationStore;
-  /**
-   * Path to the app's `data.sqlite` — used to read user-set toggle
-   * state from `__centraid_settings` (the source of truth for
-   * `enabled`). Optional: when omitted (or the file doesn't exist
-   * yet — common at clone time before first publish), every
-   * automation defaults to enabled. The mirror's `enabled` column is
-   * a derived projection of this; never read it back as authoritative.
-   */
-  dataDbFile?: string;
 }
 
 export interface SyncAutomationError {
-  /** Relative path under `automations/`, e.g. `weekly-recap.json`. */
+  /** Manifest filename, e.g. `weekly-recap.json`. */
   file: string;
   /** Human-readable error. `AutomationManifestError.code` when applicable. */
   error: string;
@@ -63,32 +48,29 @@ export interface SyncAutomationError {
 }
 
 export interface SyncAutomationsResult {
-  /** Automation names newly inserted into the mirror. */
+  /** Automation names newly inserted. */
   added: string[];
-  /** Automation names whose manifest changed (prompt, schedule, action, requires, …). */
+  /** Automation names whose manifest changed. */
   updated: string[];
   /** Automation names removed because the on-disk file disappeared. */
   removed: string[];
-  /** Automation names whose mirror row already matched the on-disk manifest. */
+  /** Automation names whose row already matched the on-disk manifest. */
   unchanged: string[];
   /** Files that failed to parse or validate — the other entries still applied. */
   errors: SyncAutomationError[];
 }
 
 /**
- * Scan `<appCodeDir>/automations/*.json`, upsert valid manifests into
- * the mirror, and remove rows whose file disappeared. Idempotent.
+ * Scan `<automationsDir>/*.json`, upsert valid manifests, and remove
+ * rows whose file disappeared. Idempotent.
  *
- * Missing `automations/` folder is treated as "no automations" — common
- * for older app templates and for apps the user hasn't added an
- * automation to yet. Returns an empty diff in that case (and clears any
- * stale mirror rows for the app).
+ * Missing directory is treated as "no automations" — returns an empty
+ * diff (and clears any stale rows for the user).
  */
 export async function syncAutomationsFromDisk(
   opts: SyncAutomationsOptions,
 ): Promise<SyncAutomationsResult> {
-  const { appId, appCodeDir, store, dataDbFile } = opts;
-  const automationsDir = path.join(appCodeDir, 'automations');
+  const { userId, automationsDir, store } = opts;
 
   const result: SyncAutomationsResult = {
     added: [],
@@ -99,7 +81,7 @@ export async function syncAutomationsFromDisk(
   };
 
   const filenames = await readAutomationFilenames(automationsDir);
-  const existingRows = store.listByApp(appId);
+  const existingRows = store.listByUser(userId);
   const existingByName = new Map(existingRows.map((r) => [r.name, r]));
 
   const seenNames = new Set<string>();
@@ -117,25 +99,23 @@ export async function syncAutomationsFromDisk(
     }
 
     const prev = existingByName.get(name);
-    // Source of truth for the toggle is the app's `data.sqlite`
-    // `__centraid_settings.__automation.<name>.enabled` row. Missing
-    // (no DB yet, or user hasn't flipped the toggle) means enabled —
-    // the agent scaffolded it, the user hasn't opted out, so it runs.
-    const enabled = readEnabledFlag(dataDbFile, name);
+    // An existing row keeps the user's `enabled` toggle; a brand-new
+    // manifest defaults to enabled.
+    const enabled = prev ? prev.enabled : true;
 
-    if (prev && manifestEquals(prev.manifest, manifest) && prev.enabled === enabled) {
+    if (prev && manifestEquals(prev.manifest, manifest)) {
       result.unchanged.push(name);
       continue;
     }
 
-    store.upsert(appId, name, manifest, enabled);
+    store.upsert(userId, name, manifest, enabled);
     if (prev) result.updated.push(name);
     else result.added.push(name);
   }
 
   for (const row of existingRows) {
     if (seenNames.has(row.name)) continue;
-    store.remove(appId, row.name);
+    store.remove(row.id);
     result.removed.push(row.name);
   }
 
@@ -172,20 +152,6 @@ function toSyncError(file: string, err: unknown): SyncAutomationError {
  */
 function manifestEquals(a: AutomationManifest, b: AutomationManifest): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
-}
-
-/**
- * Read the user-set enable flag for one automation from the app's
- * `__centraid_settings` row. `undefined` → defaults to enabled (the
- * agent just scaffolded it; user hasn't opted out). Non-boolean
- * values (corrupt setting) → also default enabled, since refusing to
- * run on a malformed row is worse than running by default.
- */
-function readEnabledFlag(dataDbFile: string | undefined, name: string): boolean {
-  if (!dataDbFile) return true;
-  const raw = readAppSetting(dataDbFile, automationEnabledKey(name));
-  if (typeof raw === 'boolean') return raw;
-  return true;
 }
 
 /** Re-export so a host receiving a sync result has the row type to hand. */

@@ -320,6 +320,15 @@ export async function runCodexAppServerTurn(
       } else if (!sawFinal) {
         emit({ type: 'final', text: finalText });
       }
+      const usage = readCodexUsage(turn);
+      if (usage) {
+        emit({
+          type: 'usage',
+          provider: 'codex',
+          ...(input.model ? { model: input.model } : {}),
+          ...usage,
+        });
+      }
       emit({ type: 'phase', phase: 'turn.completed' });
     }
   };
@@ -463,6 +472,48 @@ export async function runCodexAppServerTurn(
       signal.addEventListener('abort', finish, { once: true });
     });
   }
+}
+
+/**
+ * Pull per-turn token usage out of a codex `turn/completed` payload.
+ * The usage object lives at `turn.usage` and varies slightly across
+ * codex versions, so every field is read defensively under several
+ * candidate names. Returns `undefined` when no usage is present.
+ */
+function readCodexUsage(turn: Record<string, unknown>):
+  | {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+    }
+  | undefined {
+  const raw = (turn.usage ?? turn.token_usage ?? turn.total_token_usage) as
+    | Record<string, unknown>
+    | undefined;
+  if (!raw || typeof raw !== 'object') return undefined;
+  const num = (...keys: string[]): number | undefined => {
+    for (const k of keys) {
+      const v = raw[k];
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+    }
+    return undefined;
+  };
+  const out: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  } = {};
+  const input = num('input_tokens', 'inputTokens', 'prompt_tokens');
+  const output = num('output_tokens', 'outputTokens', 'completion_tokens');
+  const cacheRead = num('cached_input_tokens', 'cache_read_input_tokens', 'cacheReadInputTokens');
+  const cacheWrite = num('cache_creation_input_tokens', 'cacheCreationInputTokens');
+  if (input !== undefined) out.inputTokens = input;
+  if (output !== undefined) out.outputTokens = output;
+  if (cacheRead !== undefined) out.cacheReadTokens = cacheRead;
+  if (cacheWrite !== undefined) out.cacheWriteTokens = cacheWrite;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function describeStartedTool(type: string, item: Record<string, unknown>): string {
