@@ -17,6 +17,7 @@ a sibling of an app project. The directory is the source of truth.
 - [x] Commit 5 — desktop main: `automationsDir` setting + project IPC
 - [x] Commit 6 — desktop renderer: Automations screen + preload + d.ts
 - [x] Commit 7 — desktop renderer: new-automation creation sheet
+- [x] Commit 8 — desktop: apps + automations as `projectsDir` subdirs
 
 ## What changed
 
@@ -141,6 +142,16 @@ schedule (cron presets that translate intent → expression, plus a
 custom-cron escape hatch). Submitting calls `createAutomation`, which
 scaffolds the project (`automation.json` + a starter `handler.js`) and
 registers its schedule; the screen refreshes to show it.
+
+### Commit 8 — desktop: apps + automations as `projectsDir` subdirs
+
+Replaces the separate top-level `automationsDir` setting with a single
+workspace root. `projectsDir` is the persisted root; `appsDir`
+(`<projectsDir>/apps`) and `automationsDir` (`<projectsDir>/automations`)
+are derived on `DesktopSettings`. App-project IPC + the preview
+protocol read `appsDir`; automation IPC + the startup reconcile read
+the derived `automationsDir`. The builder-harness functions are
+unchanged — they operate on whatever directory the caller passes.
 
 ## Out of scope
 

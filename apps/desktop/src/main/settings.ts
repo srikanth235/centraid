@@ -26,9 +26,12 @@ import type { HarnessConfig } from '@centraid/builder-harness';
 export type RuntimeMode = 'local' | 'remote';
 
 export interface PersistedSettings {
+  /**
+   * Workspace root. Apps live under `<projectsDir>/apps/`, automations
+   * under `<projectsDir>/automations/` — both surfaced as the derived
+   * `appsDir` / `automationsDir` on {@link DesktopSettings}.
+   */
   projectsDir: string;
-  /** Directory holding the user's automation projects (issue #91). */
-  automationsDir: string;
   runtimeMode: RuntimeMode;
   remoteGatewayUrl: string;
   remoteGatewayToken: string;
@@ -45,7 +48,11 @@ export interface PersistedSettings {
 }
 
 export interface DesktopSettings extends HarnessConfig {
+  /** Workspace root (persisted). */
   projectsDir: string;
+  /** Derived — `<projectsDir>/apps`. App projects live here. */
+  appsDir: string;
+  /** Derived — `<projectsDir>/automations`. Automation projects live here. */
   automationsDir: string;
   runtimeMode: RuntimeMode;
   remoteGatewayUrl: string;
@@ -65,7 +72,6 @@ function settingsPath(): string {
 function persistedDefaults(): PersistedSettings {
   return {
     projectsDir: path.join(os.homedir(), 'centraid-projects'),
-    automationsDir: path.join(os.homedir(), 'centraid-automations'),
     runtimeMode: 'local',
     remoteGatewayUrl: DEFAULT_REMOTE_URL,
     remoteGatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN ?? '',
@@ -84,13 +90,11 @@ function migrate(
 ): PersistedSettings {
   const base = persistedDefaults();
   const projectsDir = raw.projectsDir?.trim() || base.projectsDir;
-  const automationsDir = raw.automationsDir?.trim() || base.automationsDir;
   const remoteTemplatesUrl = raw.remoteTemplatesUrl ?? base.remoteTemplatesUrl;
 
   if (raw.runtimeMode || raw.remoteGatewayUrl) {
     return {
       projectsDir,
-      automationsDir,
       runtimeMode: raw.runtimeMode ?? base.runtimeMode,
       remoteGatewayUrl: raw.remoteGatewayUrl?.trim() || base.remoteGatewayUrl,
       remoteGatewayToken: raw.remoteGatewayToken ?? base.remoteGatewayToken,
@@ -104,7 +108,6 @@ function migrate(
   const legacyToken = raw.gatewayToken ?? base.remoteGatewayToken;
   return {
     projectsDir,
-    automationsDir,
     runtimeMode: legacyToken ? 'remote' : 'local',
     remoteGatewayUrl: legacyUrl,
     remoteGatewayToken: legacyToken,
@@ -138,17 +141,24 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
 }
 
 async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> {
+  // Apps + automations are sibling subdirectories of the workspace root.
+  const derived = {
+    appsDir: path.join(p.projectsDir, 'apps'),
+    automationsDir: path.join(p.projectsDir, 'automations'),
+  };
   if (p.runtimeMode === 'local') {
     const { ensureLocalRuntime } = await import('./local-runtime.js');
     const handle = await ensureLocalRuntime();
     return {
       ...p,
+      ...derived,
       gatewayUrl: handle.url,
       gatewayToken: handle.token,
     };
   }
   return {
     ...p,
+    ...derived,
     gatewayUrl: p.remoteGatewayUrl,
     gatewayToken: p.remoteGatewayToken,
   };
@@ -173,7 +183,6 @@ export async function saveSettings(patch: Partial<DesktopSettings>): Promise<Des
   const current = await readPersisted();
   const next: PersistedSettings = {
     projectsDir: patch.projectsDir?.trim() || current.projectsDir,
-    automationsDir: patch.automationsDir?.trim() || current.automationsDir,
     runtimeMode: patch.runtimeMode ?? current.runtimeMode,
     remoteGatewayUrl: patch.remoteGatewayUrl?.trim() || current.remoteGatewayUrl,
     remoteGatewayToken:
