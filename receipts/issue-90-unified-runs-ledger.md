@@ -17,7 +17,8 @@ backfill.
 - [x] Commit 3 — automations model-B
 - [x] Commit 4 — chat fold
 - [x] Commit 5 — Insights backend wiring
-- [ ] Commit 6 — desktop renderer (Insights data, new-automation form)
+- [x] Commit 6 — Insights renderer
+- [ ] Commit 7 — automations renderer model-B + new-automation form
 
 ## What changed
 
@@ -163,9 +164,27 @@ analytics layer the Insights screen reads.
   preload method returns the `CentraidInsightsSummary` payload; covered
   by `insights-store.test.ts`.
 
+### Commit 6 — Insights renderer
+
+Replaces the desktop Insights screen's hardcoded mock data with a live
+bind to the `getInsightsSummary` IPC.
+
+- `renderInsights` becomes async: it fetches `CentraidInsightsSummary`
+  and renders the KPI row (tokens vs. quota meter, spend, forecast,
+  apps-touched, generations + retries), the daily-consumption line
+  chart, a "By source" breakdown (automations plus chat / build
+  buckets), a "By model" breakdown, and the recent-activity feed — all
+  from the unified run ledger. Empty states cover a ledger with no runs.
+- The mock `InsAppRow` / `InsModelRow` / `InsActivityRow` fixtures and
+  the now-unused `insAppTile` / `insSparkline` / `insDelta` helpers are
+  deleted; the filter chips (never wired) collapse to a static window
+  label. `CentraidInsights*` types are added to `centraid-api.d.ts`.
+
 ## Out of scope (so far)
 
-- Desktop renderer (Insights data, new-automation form) — Commit 6.
+- Automations renderer model-B migration + new-automation form —
+  Commit 7. The desktop Automations screen still assumes the pre-#90
+  app-scoped automation shapes.
 - OpenClaw chat runner usage capture — the openclaw `ChatRunner` does
   not emit a `usage` event, so openclaw chat turns record NULL token
   columns. The codex / Claude local runners are covered.
@@ -177,3 +196,5 @@ analytics layer the Insights screen reads.
 - `turbo run typecheck` / `turbo run build` — 16/16 tasks clean.
 - `turbo run test` — 12/12 task green; `runtime-core` 292/292.
 - `oxfmt` + `oxlint` on the changed files — clean.
+- Insights renderer verified by typecheck + the desktop build; the
+  live screen was not exercised in an Electron session.

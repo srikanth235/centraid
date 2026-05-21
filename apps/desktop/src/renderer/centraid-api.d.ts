@@ -873,4 +873,53 @@ declare global {
     outputTokens?: number;
     childRunId?: string;
   }
+  // Mirror of the module-level Insights types so the Insights screen can
+  // reference them by bare name without imports (issue #90).
+  interface CentraidInsightsKpis {
+    totalTokens: number;
+    totalCostUsd: number;
+    forecastCostUsd: number;
+    generations: number;
+    retries: number;
+    appsTouched: number;
+    quotaTokens: number;
+  }
+  interface CentraidInsightsDailyPoint {
+    date: string;
+    tokens: number;
+    costUsd: number;
+    runs: number;
+  }
+  interface CentraidInsightsAutomationRow {
+    key: string;
+    label: string;
+    kind: string;
+    runs: number;
+    tokens: number;
+    costUsd: number;
+  }
+  interface CentraidInsightsModelRow {
+    model: string;
+    runs: number;
+    tokens: number;
+    costUsd: number;
+  }
+  interface CentraidInsightsActivityRow {
+    runId: string;
+    kind: string;
+    label: string;
+    ok: boolean;
+    startedAt: number;
+    tokens: number;
+    costUsd: number;
+  }
+  interface CentraidInsightsSummary {
+    windowDays: number;
+    generatedAt: number;
+    kpis: CentraidInsightsKpis;
+    daily: CentraidInsightsDailyPoint[];
+    byAutomation: CentraidInsightsAutomationRow[];
+    byModel: CentraidInsightsModelRow[];
+    recent: CentraidInsightsActivityRow[];
+  }
 }
