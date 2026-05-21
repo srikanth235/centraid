@@ -130,16 +130,26 @@ export {
 } from './chat-history.js';
 export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
-// Shared gateway DB (single SQLite file holding `users`, `user_prefs`,
-// `chat_sessions`, `chat_messages`, the `automations` mirror, and the
-// automation run-audit tables). Hosts construct one provider and pass
-// it to UserStore, ChatHistoryStore, AutomationStore, and
-// AutomationRunsStore so they share a connection + a single migration
-// ladder + real cross-table FKs.
+// Gateway state DBs — three separate SQLite files, each with its own
+// connection + migration ladder:
+//   - gateway     (`centraid-gateway.sqlite`):     users, user_prefs
+//   - chat        (`centraid-chat.sqlite`):        chat_sessions, chat_messages
+//   - automations (`centraid-automations.sqlite`): automations mirror +
+//                                                  run-audit + ctx.state
+// Hosts construct one provider per file and pass each to the matching
+// store: UserStore ← gateway, ChatHistoryStore ← chat, AutomationStore
+// + AutomationRunsStore ← automations. Cross-file FKs aren't possible in
+// SQLite, so `chat_sessions.user_id` is application-enforced.
 export {
   openGatewayDb,
   makeGatewayDbProvider,
-  MIGRATIONS as GATEWAY_MIGRATIONS,
+  openChatDb,
+  makeChatDbProvider,
+  openAutomationDb,
+  makeAutomationDbProvider,
+  GATEWAY_MIGRATIONS,
+  CHAT_MIGRATIONS,
+  AUTOMATION_MIGRATIONS,
   type DatabaseProvider,
 } from './gateway-db.js';
 

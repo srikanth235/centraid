@@ -4,7 +4,7 @@
  * Split out of `automation-runs-store.ts` to keep that file under the
  * repo's 500-line cap. The SQL targets the gateway DB's automation
  * run-audit tables (`automation_runs`, `automation_run_nodes`,
- * `automation_state` — see `gateway-db.ts` MIGRATIONS[2]).
+ * `automation_state` — see `gateway-db.ts` AUTOMATION_MIGRATIONS[1]).
  *
  * Name-scoped statements carry an `origin_app_id IS ?` predicate so
  * each `AutomationRunsStore` only sees its own bound app's rows; `IS`

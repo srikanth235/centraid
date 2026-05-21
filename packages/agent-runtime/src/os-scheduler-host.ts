@@ -44,14 +44,14 @@ export interface OsSchedulerHostOptions {
   /** Absolute path to the `centraid` binary the scheduler should invoke. */
   centraidBin: string;
   /**
-   * Absolute path to the gateway DB (`centraid-gateway.sqlite`). Baked
-   * into the OS scheduler artifact as `CENTRAID_GATEWAY_DB` so the
-   * scheduled `centraid run-automation` process writes its run audit
-   * to the SAME gateway DB the desktop reads — without this the fire
-   * would fall back to `<appDir>/centraid-gateway.sqlite` and the run
+   * Absolute path to the automations DB (`centraid-automations.sqlite`).
+   * Baked into the OS scheduler artifact as `CENTRAID_AUTOMATION_DB` so
+   * the scheduled `centraid run-automation` process writes its run audit
+   * to the SAME automations DB the desktop reads — without this the fire
+   * would fall back to `<appDir>/centraid-automations.sqlite` and the run
    * would be invisible in the desktop UI.
    */
-  gatewayDbPath: string;
+  automationDbPath: string;
   /** Which CLI runner to drive (codex / claude-code). */
   runner: LocalRunnerKind;
   /** Options forwarded to os-scheduler (mostly used in tests for execShell + artifactRoot overrides). */
@@ -105,7 +105,7 @@ export class OsSchedulerHost implements AutomationHost {
       cwd: this.opts.resolveAppDir(row.originAppId),
       runner: this.opts.runner,
       centraidBin: this.opts.centraidBin,
-      env: { CENTRAID_GATEWAY_DB: this.opts.gatewayDbPath },
+      env: { CENTRAID_AUTOMATION_DB: this.opts.automationDbPath },
     };
   }
 }

@@ -209,3 +209,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-c6d63e62312-1779305500-11 | c6d63e62-3121-4c37-b790-4349949ad08f | #80 | correction | classifier | Rejected per-app automations design; automations must span multiple apps | refactor(automations): centralize run audit in the gateway SQLite (#80) |
 | steer-c6d63e62312-1779305500-12 | c6d63e62-3121-4c37-b790-4349949ad08f | #80 | interrupt | structural |  | refactor(automations): centralize run audit in the gateway SQLite (#80) |
 | steer-c6d63e62312-1779305500-13 | c6d63e62-3121-4c37-b790-4349949ad08f | #80 | correction | classifier | Overrode NOT NULL on origin_app_id column in DDL | refactor(automations): centralize run audit in the gateway SQLite (#80) |
+| steer-f36861a8b64-1779350261-1 | f36861a8-b64f-47f3-8d39-c4e0091ee61f |  | interrupt | structural |  | refactor(runtime-core): split gateway SQLite into three domain files |
