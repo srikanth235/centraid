@@ -105,30 +105,16 @@ export const GATEWAY_MIGRATIONS: readonly string[] = [
  * `centraid_sql_*` agent tools.
  */
 export const ACTIVITY_MIGRATIONS: readonly string[] = [
-  // 0 → 1: user-owned automations table.
+  // 0 → 1: drop the legacy `automations` definition table.
   //
-  // The cron schedule itself + last/next-run telemetry live in the host
-  // scheduler (openclaw cron on remote, OS scheduler on local — see
-  // issue #70). This table is centraid's canonical store so the desktop
-  // UI can list a user's automations, the reconciliation pass at
-  // `gateway_start` can diff DB-vs-host to clean up zombies, and editors
-  // have one place to read the prompt + manifest. `name` is unique per
-  // user; `id` is a UUID assigned at creation.
+  // Issue #91: an automation is a first-class *project* on disk — its
+  // own directory under `automationsDir`, with `automation.json` as the
+  // source of truth. There is no SQLite definition table any more; this
+  // migration is edited in place (v0, no backfill) to drop the table a
+  // pre-#91 build created.
   `
-    CREATE TABLE IF NOT EXISTS automations (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      prompt TEXT NOT NULL,
-      cron_expr TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      manifest_json TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      UNIQUE (user_id, name)
-    );
-    CREATE INDEX IF NOT EXISTS idx_automations_user
-      ON automations(user_id, name);
+    DROP INDEX IF EXISTS idx_automations_user;
+    DROP TABLE IF EXISTS automations;
   `,
   // 1 → 2: `chat_sessions` + the unified `runs` / `run_nodes` ledger +
   // automation KV (issue #90 — no backfill, v0).

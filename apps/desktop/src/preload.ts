@@ -62,12 +62,12 @@ const Channel = {
 
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 
-  // Automations (issue #70). The desktop reads the per-gateway
-  // `automations` mirror table and triggers manual runs via the
-  // headless `centraid run-automation` path. Reads route through the
-  // openclaw plugin's HTTP surface; the run-now action invokes the
-  // local CLI in-process for fast iteration.
+  // Automations (issue #91). Automations are first-class projects on
+  // disk under `automationsDir`; these channels read/write that project
+  // tree and the unified run ledger.
   AUTOMATIONS_LIST: 'centraid:automations:list',
+  AUTOMATIONS_READ: 'centraid:automations:read',
+  AUTOMATIONS_CREATE: 'centraid:automations:create',
   AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
   AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
   AUTOMATIONS_DELETE: 'centraid:automations:delete',
@@ -208,21 +208,30 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // settings panel opens or the user clicks "Test connection".
   getRunnerStatus: () => ipcRenderer.invoke(Channel.RUNNER_STATUS_GET),
 
-  // Automations (issue #70).
-  listAutomations: (input: { appId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_LIST, input),
-  runAutomationNow: (input: { appId: string; name: string; replay?: boolean }) =>
+  // Automations (issue #91) — first-class projects on disk.
+  listAutomations: () => ipcRenderer.invoke(Channel.AUTOMATIONS_LIST),
+  readAutomation: (input: { automationId: string }) =>
+    ipcRenderer.invoke(Channel.AUTOMATIONS_READ, input),
+  createAutomation: (input: {
+    id: string;
+    name?: string;
+    description?: string;
+    prompt?: string;
+    cronExpr?: string;
+    apps?: string[];
+  }) => ipcRenderer.invoke(Channel.AUTOMATIONS_CREATE, input),
+  runAutomationNow: (input: { automationId: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_RUN_NOW, input),
-  setAutomationEnabled: (input: { appId: string; name: string; enabled: boolean }) =>
+  setAutomationEnabled: (input: { automationId: string; enabled: boolean }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_SET_ENABLED, input),
-  deleteAutomation: (input: { appId: string; name: string }) =>
+  deleteAutomation: (input: { automationId: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_DELETE, input),
-  // Run audit reads (issue #80). Returns the rows newest-first.
-  listAutomationRuns: (input: { appId: string; name: string; limit?: number }) =>
+  // Run ledger reads. Returns the rows newest-first.
+  listAutomationRuns: (input: { automationId?: string; limit?: number }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUNS, input),
-  listAutomationRunNodes: (input: { appId: string; runId: string }) =>
+  listAutomationRunNodes: (input: { runId: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUN_NODES, input),
-  pinAutomationRun: (input: { appId: string; runId: string; pinned: boolean }) =>
+  pinAutomationRun: (input: { runId: string; pinned: boolean }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_PIN_RUN, input),
 
   // Insights (issue #90) — analytics over the unified run ledger.

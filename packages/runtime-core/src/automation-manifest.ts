@@ -1,11 +1,14 @@
 /**
  * Automation manifest schema + validator.
  *
- * An automation is a single artifact — `automations/<name>.json`, this
- * module's shape. Model-B (issue #90) replaced the generated
- * `actions/<name>.js` JS handler with an agent-driven model: a fire is
- * an agent turn driven by `manifest.prompt`, given the tools/mcps/model
- * in `manifest.requires`. There is no handler file.
+ * Issue #91: an automation is a first-class *project* — its own
+ * directory under `automationsDir`, structurally a sibling of an app.
+ * `automation.json` is the project manifest (this module's shape); the
+ * generated handler is a single `handler.js` in the same directory.
+ *
+ * The manifest is the source of truth — there is no SQLite definition
+ * table. `enabled` lives here (toggling it rewrites the file), so a
+ * scheduler host can register/suppress from the manifest alone.
  *
  * Trigger shape is `trigger: { kind: 'cron', expr }` — the shape leaves
  * room for webhook/event kinds without a second migration. Only `cron`
@@ -27,6 +30,11 @@ export {
   validateOutputAgainstSchema,
   type AutomationOutputSchema,
 } from './automation-manifest-output.js';
+
+/** Conventional handler filename inside an automation project directory. */
+export const AUTOMATION_HANDLER_FILE = 'handler.js';
+/** Conventional manifest filename inside an automation project directory. */
+export const AUTOMATION_MANIFEST_FILE = 'automation.json';
 
 export interface AutomationManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
@@ -54,8 +62,7 @@ export interface AutomationGeneratedMeta {
 
 /**
  * Trigger surface. Only `cron` is wired today; webhook / event kinds are
- * future work (issue #80 § Out). The shape leaves room without forcing
- * a second migration.
+ * future work. The shape leaves room without forcing a second migration.
  */
 export type AutomationTrigger = { readonly kind: 'cron'; readonly expr: string };
 
@@ -75,12 +82,29 @@ export interface AutomationHistoryConfig {
   readonly keep: AutomationHistoryKeep;
 }
 
+/**
+ * The `automation.json` project manifest.
+ *
+ * `name` / `version` / `description` mirror `app.json`. `enabled` is the
+ * user's on/off toggle — it lives in the manifest because the directory
+ * is the only source of truth. `prompt` is the human intent the builder
+ * agent translated into `handler.js`; `apps` lists the app ids this
+ * automation is associated with (reverse-looked-up by the app Settings
+ * screen).
+ */
 export interface AutomationManifest {
+  readonly name: string;
+  readonly version: string;
+  readonly description?: string;
+  readonly enabled: boolean;
   readonly prompt: string;
   readonly trigger: AutomationTrigger;
   readonly requires: AutomationManifestRequires;
+  /** App ids this automation is associated with. */
+  readonly apps?: readonly string[];
   readonly costEstimate?: AutomationCostEstimate;
   readonly outputSchema?: AutomationOutputSchema;
+  /** Sibling automation id to fire when this one fails. */
   readonly onFailure?: string;
   readonly history: AutomationHistoryConfig;
   readonly generated: AutomationGeneratedMeta;
@@ -96,9 +120,13 @@ export function isValidCronExpression(expr: string): boolean {
   return fields.every((f) => fieldPattern.test(f));
 }
 
-export function isValidAutomationName(name: string): boolean {
-  if (typeof name !== 'string' || name.length === 0) return false;
-  return /^[A-Za-z0-9_-]+$/.test(name);
+/**
+ * Validate an automation *id* (the directory slug). Same grammar an app
+ * project id uses — lowercase-safe, filesystem-safe.
+ */
+export function isValidAutomationId(id: string): boolean {
+  if (typeof id !== 'string' || id.length === 0) return false;
+  return /^[A-Za-z0-9_-]+$/.test(id);
 }
 
 function requireString(value: unknown, field: string): string {
@@ -274,10 +302,10 @@ function validateOnFailure(raw: unknown): string | undefined {
       'onFailure',
     );
   }
-  if (!isValidAutomationName(raw)) {
+  if (!isValidAutomationId(raw)) {
     throw new AutomationManifestError(
       'invalid_on_failure',
-      `manifest.onFailure "${raw}" is not a valid automation name`,
+      `manifest.onFailure "${raw}" is not a valid automation id`,
       'onFailure',
     );
   }
@@ -303,9 +331,24 @@ export function validateManifest(raw: unknown): AutomationManifest {
   }
   const r = raw as Record<string, unknown>;
 
+  const name = requireString(r.name, 'name');
+  const version = r.version === undefined ? '0.1.0' : requireString(r.version, 'version');
+  let description: string | undefined;
+  if (r.description !== undefined) {
+    if (typeof r.description !== 'string') {
+      throw new AutomationManifestError(
+        'invalid_field',
+        'manifest.description must be a string',
+        'description',
+      );
+    }
+    description = r.description;
+  }
+  const enabled = r.enabled === undefined ? true : r.enabled === true;
   const prompt = requireString(r.prompt, 'prompt');
   const trigger = resolveTrigger(r);
   const requires = validateRequires(r.requires);
+  const apps = optionalStringArray(r.apps, 'apps');
   const costEstimate = validateCostEstimate(r.costEstimate);
   const outputSchema = validateOutputSchema(r.outputSchema);
   const onFailure = validateOnFailure(r.onFailure);
@@ -326,9 +369,14 @@ export function validateManifest(raw: unknown): AutomationManifest {
   };
 
   return {
+    name,
+    version,
+    ...(description !== undefined ? { description } : {}),
+    enabled,
     prompt,
     trigger,
     requires,
+    ...(apps ? { apps } : {}),
     ...(costEstimate ? { costEstimate } : {}),
     ...(outputSchema ? { outputSchema } : {}),
     ...(onFailure ? { onFailure } : {}),
