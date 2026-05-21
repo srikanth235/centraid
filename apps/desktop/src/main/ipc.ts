@@ -19,7 +19,6 @@ import {
   type AuthStatus,
 } from './auth-import.js';
 import {
-  localRuntimeAppsDir,
   localRuntimeAutomationHost,
   localRuntimeCodexHomeBaseDir,
   localRuntimeAutomationDb,
@@ -35,12 +34,7 @@ import {
 import {
   AutomationRunsStore,
   AutomationStore,
-  automationEnabledKey,
-  deleteAppSetting,
   makeActivityDbProvider,
-  readActiveCodeDir,
-  syncAutomationsFromDisk,
-  writeAppSetting,
   type AutomationRow,
   type AutomationRunNodeRow,
   type AutomationRunRow,
@@ -537,25 +531,6 @@ export function registerIpcHandlers(): void {
         newDesc: tmpl.desc,
       });
 
-      // Templates can ship automation manifests (`automations/*.json`).
-      // The publish path syncs them into the per-gateway mirror via
-      // `handleAppUpload`, but a fresh clone is a draft that hasn't been
-      // uploaded yet — so without this call the cloned app's
-      // Settings → Automations panel would appear empty until first
-      // publish. Sync is idempotent and a no-op for templates that
-      // ship no manifests.
-      //
-      // `dataDbFile` points at the eventual `data.sqlite` location
-      // even though it doesn't exist yet at clone time — sync's read
-      // returns undefined and every automation defaults to enabled,
-      // which is the right initial state for freshly-cloned templates.
-      await syncAutomationsFromDisk({
-        appId: newAppId,
-        appCodeDir: project.dir,
-        store: getAutomationStore(),
-        dataDbFile: path.join(localRuntimeAppsDir(), newAppId, 'data.sqlite'),
-      });
-
       // Cloning only lays the project down on disk as a draft. The user
       // edits/previews in the builder and explicitly clicks Publish to
       // upload to the gateway (Channel.PUBLISH).
@@ -593,104 +568,59 @@ export function registerIpcHandlers(): void {
     };
   })();
 
-  ipcMain.handle(
-    Channel.AUTOMATIONS_LIST,
-    async (_e, input: { appId: string }): Promise<AutomationRow[]> => {
-      return getAutomationStore().listByApp(input.appId);
-    },
-  );
+  ipcMain.handle(Channel.AUTOMATIONS_LIST, async (): Promise<AutomationRow[]> => {
+    // Model-B: automations are user-owned, not app-scoped. The desktop
+    // is single-user, so the full list is the user's list.
+    return getAutomationStore().listAll();
+  });
 
   ipcMain.handle(
     Channel.AUTOMATIONS_RUN_NOW,
     async (
       _e,
-      input: { appId: string; name: string; replay?: boolean },
+      input: { automationId: string },
     ): Promise<{
       ok: boolean;
       durationMs: number;
       error?: string;
-      toolBatches: number;
-      agentCalls: number;
+      stepCount: number;
+      toolCount: number;
     }> => {
-      const appDir = path.join(localRuntimeAppsDir(), input.appId);
-      // Code (manifest + handler) lives in the active version's subdir
-      // after publish; data.sqlite + scratch live at the persistent app
-      // root. The CLI's `run-automation` path does the same resolution
-      // when fired by the OS scheduler.
-      const codeDir = await readActiveCodeDir(appDir);
       const prefs = await loadRunnerPrefs();
-      const automationDb = getAutomationDbProvider();
-      const runsStore = new AutomationRunsStore(automationDb, input.appId);
-      // Replay mode (issue #80 follow-up) — serve the run from the
-      // automation's pinned fixture instead of live tools.
-      let replayFromRunId: string | undefined;
-      if (input.replay) {
-        const pinned = runsStore.pinnedRun(input.name);
-        if (!pinned) {
-          throw new Error(
-            `No pinned run for "${input.name}" — pin a successful run first, then replay it.`,
-          );
-        }
-        replayFromRunId = pinned.runId;
-      }
-      // Cross-app ctx.invoke resolver — any registered app under the
-      // local apps dir is reachable via `ctx.invoke('appId/name')`.
-      const resolveApp = async (
-        otherId: string,
-      ): Promise<{ appDir: string; codeDir: string } | undefined> => {
-        const otherDir = path.join(localRuntimeAppsDir(), otherId);
-        try {
-          await fs.access(otherDir);
-        } catch {
-          return undefined;
-        }
-        return { appDir: otherDir, codeDir: await readActiveCodeDir(otherDir) };
-      };
       const { outcome, record } = await runAutomationLocal({
-        appId: input.appId,
-        appDir,
-        codeDir,
-        automationName: input.name,
+        automationId: input.automationId,
+        automationDb: getAutomationDbProvider(),
         runner: prefs.kind,
-        runsStore,
-        automationDb,
-        resolveApp,
         // "Run now" is a manual fire — tag it so the executions log
-        // distinguishes it from the OS-scheduler trigger. (Replay mode
-        // overrides this to 'replay' inside runAutomationLocal.)
+        // distinguishes it from the OS-scheduler trigger.
         triggerKind: 'manual',
-        ...(replayFromRunId ? { replayFromRunId } : {}),
       });
       return {
         ok: outcome.ok,
         durationMs: record.durationMs,
         ...(outcome.error ? { error: outcome.error } : {}),
-        toolBatches: record.toolBatches,
-        agentCalls: record.agentCalls,
+        stepCount: record.stepCount,
+        toolCount: record.toolCount,
       };
     },
   );
 
   ipcMain.handle(
     Channel.AUTOMATIONS_SET_ENABLED,
-    async (_e, input: { appId: string; name: string; enabled: boolean }) => {
-      // Source of truth: the app's data.sqlite __centraid_settings.
-      // Mirror is a derived projection; we update it eagerly so the
-      // UI list reflects the toggle without waiting for a sync. Host
-      // gets register(row) — OsSchedulerHost collapses
-      // enabled=false to unregister so launchd/systemd/Task
-      // Scheduler don't keep a suppressed-but-installed entry.
-      const dataDbFile = path.join(localRuntimeAppsDir(), input.appId, 'data.sqlite');
-      writeAppSetting(dataDbFile, automationEnabledKey(input.name), input.enabled);
+    async (_e, input: { automationId: string; enabled: boolean }) => {
+      // The `enabled` column on the automation row is the source of
+      // truth. Host gets register(row) — OsSchedulerHost collapses
+      // enabled=false to unregister so launchd/systemd/Task Scheduler
+      // don't keep a suppressed-but-installed entry.
       const store = getAutomationStore();
-      store.setEnabled(input.appId, input.name, input.enabled);
-      const row = store.get(input.appId, input.name);
+      store.setEnabled(input.automationId, input.enabled);
+      const row = store.get(input.automationId);
       if (row) {
         try {
           await localRuntimeAutomationHost().register(row);
         } catch (err) {
           console.warn(
-            `[automations] host register failed for ${input.appId}/${input.name}: ` +
+            `[automations] host register failed for ${input.automationId}: ` +
               (err instanceof Error ? err.message : String(err)),
           );
         }
@@ -699,82 +629,47 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { appId: string; name: string }) => {
-    // Delete is best-effort across four surfaces; we proceed past
-    // individual failures because a stale entry on any one of them
-    // is recoverable but a half-deleted state with no UI affordance
-    // is worse.
-    //
-    //   1. OS scheduler: tear down the launchd/systemd/Task entry.
-    //   2. Source project: remove the manifest from
-    //      `<projectsDir>/<appId>/automations/<name>.json` so the
-    //      next publish doesn't reintroduce it. The action handler
-    //      at `actions/<name>.js` is intentionally left alone — it
-    //      may be useful as a standalone script or referenced by a
-    //      different automation; the builder agent can prune it
-    //      explicitly if the user asks.
-    //   3. Per-app settings: clear the toggle key so a future
-    //      republish doesn't inherit a stale value if the user
-    //      re-creates an automation under the same name.
-    //   4. Mirror: drop the row so the UI hides it immediately.
+  ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { automationId: string }) => {
+    // Delete is best-effort: tear down the OS scheduler entry, then
+    // drop the row + its run ledger. We proceed past a host failure
+    // because a stale scheduler entry is recoverable but a row with
+    // no UI affordance is worse.
     try {
-      await localRuntimeAutomationHost().unregister(input.appId, input.name);
+      await localRuntimeAutomationHost().unregister(input.automationId);
     } catch (err) {
       console.warn(
-        `[automations] host unregister failed for ${input.appId}/${input.name}: ` +
+        `[automations] host unregister failed for ${input.automationId}: ` +
           (err instanceof Error ? err.message : String(err)),
       );
     }
-    try {
-      const settings = await loadSettings();
-      const manifestPath = path.join(
-        settings.projectsDir,
-        input.appId,
-        'automations',
-        `${input.name}.json`,
-      );
-      await fs.rm(manifestPath, { force: true });
-    } catch (err) {
-      console.warn(
-        `[automations] manifest rm failed for ${input.appId}/${input.name}: ` +
-          (err instanceof Error ? err.message : String(err)),
-      );
-    }
-    deleteAppSetting(
-      path.join(localRuntimeAppsDir(), input.appId, 'data.sqlite'),
-      automationEnabledKey(input.name),
-    );
-    getAutomationStore().remove(input.appId, input.name);
+    getAutomationStore().remove(input.automationId);
+    new AutomationRunsStore(getAutomationDbProvider()).deleteAutomationData(input.automationId);
     return { ok: true };
   });
 
-  // Run audit reads (issue #80). The run audit lives in the central
-  // gateway DB; an app with no fired automation simply has no rows, so
-  // these return an empty list naturally.
+  // Run ledger reads. An automation that never fired simply has no
+  // rows, so these return an empty list naturally.
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUNS,
-    async (
-      _e,
-      input: { appId: string; name: string; limit?: number },
-    ): Promise<AutomationRunRow[]> => {
-      const store = new AutomationRunsStore(getAutomationDbProvider(), input.appId);
-      return store.listRuns({ name: input.name, limit: input.limit ?? 25 });
+    async (_e, input: { automationId: string; limit?: number }): Promise<AutomationRunRow[]> => {
+      const store = new AutomationRunsStore(getAutomationDbProvider());
+      return store.listRuns({ automationId: input.automationId, limit: input.limit ?? 25 });
     },
   );
 
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUN_NODES,
-    async (_e, input: { appId: string; runId: string }): Promise<AutomationRunNodeRow[]> => {
-      const store = new AutomationRunsStore(getAutomationDbProvider(), input.appId);
+    async (_e, input: { runId: string }): Promise<AutomationRunNodeRow[]> => {
+      const store = new AutomationRunsStore(getAutomationDbProvider());
       return store.listNodes(input.runId);
     },
   );
 
-  // Pin / unpin a run as a replay fixture (issue #80 follow-up).
+  // Pin / unpin a run as a replay fixture.
   ipcMain.handle(
     Channel.AUTOMATIONS_PIN_RUN,
-    async (_e, input: { appId: string; runId: string; pinned: boolean }): Promise<{ ok: true }> => {
-      const store = new AutomationRunsStore(getAutomationDbProvider(), input.appId);
+    async (_e, input: { runId: string; pinned: boolean }): Promise<{ ok: true }> => {
+      const store = new AutomationRunsStore(getAutomationDbProvider());
       store.setPinned(input.runId, input.pinned);
       return { ok: true };
     },

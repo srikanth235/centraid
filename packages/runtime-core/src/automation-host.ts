@@ -14,9 +14,12 @@
  *
  * The IPC handlers in the desktop (and any future CLI verbs that mutate
  * automation state) should call into this interface rather than poking
- * the mirror table or the host's primitives directly. That keeps the
- * "user toggled off in App settings" path identical regardless of
- * whether the desktop is in local or remote-gateway mode.
+ * the `automations` table or the host's primitives directly.
+ *
+ * Model-B (issue #90): an automation is identified by its UUID `id`;
+ * the host keys its entries by that UUID. Automations are user-owned
+ * and globally scheduled — `reconcile` always receives the full desired
+ * set, so there is no per-app scoping to get wrong.
  *
  * Lifecycle contract:
  *   - `register` is idempotent. Calling it with the same row twice is a
@@ -31,15 +34,10 @@
  *   - `unregister` is also idempotent. Tolerates "not found" — happens
  *     when the user removed the host entry by hand between centraid
  *     registration and teardown.
- *   - `reconcile(desired, opts?)` brings the host into agreement with
- *     the supplied desired set. Used at gateway/runtime startup to
- *     absorb changes that landed while the host was offline, and on
- *     every per-app publish/deregister to settle that app's entries.
- *     Pass `opts.scope.appId` for the per-app case — without it the
- *     diff runs against every centraid-owned entry the host knows,
- *     and `desired` listing rows for only one app would sweep every
- *     other app's entries. The interface enforces the scoping so
- *     callers can't get this wrong silently.
+ *   - `reconcile(desired)` brings the host into agreement with the
+ *     supplied desired set. Used at gateway/runtime startup to absorb
+ *     changes that landed while the host was offline, and after a sync
+ *     to settle every entry.
  */
 
 import type { AutomationRow } from './automation-store.js';
@@ -54,9 +52,10 @@ export interface AutomationHost {
   register(row: AutomationRow): Promise<void>;
 
   /**
-   * Remove one automation from the host. Tolerates "not present".
+   * Remove one automation from the host by its UUID. Tolerates
+   * "not present".
    */
-  unregister(appId: string, name: string): Promise<void>;
+  unregister(automationId: string): Promise<void>;
 
   /**
    * List the centraid-owned host entries currently registered. The
@@ -68,37 +67,11 @@ export interface AutomationHost {
 
   /**
    * Bring the host into agreement with `desired`. Implementations
-   * compare against `list()` (filtered to `opts.scope.appId` when
-   * provided), then issue the smallest set of register/unregister
-   * calls needed.
-   *
-   * `opts.scope.appId` MUST be set whenever `desired` is a per-app
-   * subset of the mirror (i.e. came from `AutomationStore.listByApp`).
-   * Omit it only when `desired` is the full mirror via
-   * `AutomationStore.listAll` — typically at host startup.
-   *
-   * When `scope.appId` is set, `desired` rows that belong to other
-   * apps are ignored (host implementations defensively filter), and
-   * the removal pass only considers installed entries for that app.
+   * compare against `list()`, then issue the smallest set of
+   * register/unregister calls needed. `desired` is always the full
+   * set of centraid-owned automations.
    */
-  reconcile(
-    desired: ReadonlyArray<AutomationRow>,
-    opts?: AutomationReconcileOptions,
-  ): Promise<AutomationReconcileResult>;
-}
-
-/**
- * Options for {@link AutomationHost.reconcile}. Currently just the
- * scope; kept open as an object so we can grow it (timeouts, dry-run,
- * etc.) without breaking the call sites.
- */
-export interface AutomationReconcileOptions {
-  /**
-   * When set, reconcile only the named app's entries. The host filters
-   * its `list()` to entries for this app before computing removals so
-   * a per-app desired set can't sweep other apps' jobs.
-   */
-  scope?: { appId: string };
+  reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult>;
 }
 
 export interface AutomationReconcileResult {

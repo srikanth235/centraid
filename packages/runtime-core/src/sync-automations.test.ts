@@ -3,37 +3,33 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { mkdtempSync, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { writeAppSetting, automationEnabledKey } from './app-settings.js';
 import { makeActivityDbProvider } from './gateway-db.js';
 import { AutomationStore } from './automation-store.js';
 import { syncAutomationsFromDisk } from './sync-automations.js';
 import type { AutomationManifest } from './automation-manifest.js';
 
 function setup(): {
-  appDir: string;
-  dataDbFile: string;
+  automationsDir: string;
   store: AutomationStore;
   writeManifest: (name: string, manifest: AutomationManifest) => Promise<void>;
   writeRaw: (name: string, text: string) => Promise<void>;
 } {
   const root = mkdtempSync(path.join(tmpdir(), 'centraid-sync-auto-'));
-  const appDir = path.join(root, 'app');
-  const dataDbFile = path.join(root, 'data.sqlite');
-  const store = new AutomationStore(makeActivityDbProvider(path.join(root, 'gateway.sqlite')));
+  const automationsDir = path.join(root, 'automations');
+  const store = new AutomationStore(makeActivityDbProvider(path.join(root, 'activity.sqlite')));
   return {
-    appDir,
-    dataDbFile,
+    automationsDir,
     store,
     writeManifest: async (name, manifest) => {
-      await fs.mkdir(path.join(appDir, 'automations'), { recursive: true });
+      await fs.mkdir(automationsDir, { recursive: true });
       await fs.writeFile(
-        path.join(appDir, 'automations', `${name}.json`),
+        path.join(automationsDir, `${name}.json`),
         JSON.stringify(manifest, null, 2),
       );
     },
     writeRaw: async (name, text) => {
-      await fs.mkdir(path.join(appDir, 'automations'), { recursive: true });
-      await fs.writeFile(path.join(appDir, 'automations', `${name}.json`), text);
+      await fs.mkdir(automationsDir, { recursive: true });
+      await fs.writeFile(path.join(automationsDir, `${name}.json`), text);
     },
   };
 }
@@ -41,7 +37,6 @@ function setup(): {
 const baseManifest: AutomationManifest = {
   prompt: 'weekly recap',
   trigger: { kind: 'cron', expr: '0 20 * * 0' },
-  action: 'weekly-recap.js',
   requires: { model: 'anthropic/claude-3-5-sonnet' },
   history: { keep: { count: 100 } },
   generated: { by: 'builder', at: '2026-05-19T00:00:00Z' },
@@ -49,8 +44,8 @@ const baseManifest: AutomationManifest = {
 
 describe('syncAutomationsFromDisk', () => {
   it('returns an empty diff when the automations dir is missing', async () => {
-    const { appDir, store } = setup();
-    const r = await syncAutomationsFromDisk({ appId: 'todos', appCodeDir: appDir, store });
+    const { automationsDir, store } = setup();
+    const r = await syncAutomationsFromDisk({ userId: 'u1', automationsDir, store });
     assert.deepEqual(r, { added: [], updated: [], removed: [], unchanged: [], errors: [] });
   });
 
@@ -58,29 +53,29 @@ describe('syncAutomationsFromDisk', () => {
     const ctx = setup();
     await ctx.writeManifest('weekly-recap', baseManifest);
     const r = await syncAutomationsFromDisk({
-      appId: 'journal',
-      appCodeDir: ctx.appDir,
+      userId: 'u1',
+      automationsDir: ctx.automationsDir,
       store: ctx.store,
     });
     assert.deepEqual(r.added, ['weekly-recap']);
     assert.deepEqual(r.updated, []);
     assert.deepEqual(r.removed, []);
-    const row = ctx.store.get('journal', 'weekly-recap');
+    const row = ctx.store.getByName('u1', 'weekly-recap');
     assert.equal(row?.enabled, true);
-    assert.equal(row?.manifest.action, 'weekly-recap.js');
   });
 
-  it('preserves the enabled flag across re-sync (reads from __centraid_settings)', async () => {
+  it('preserves the enabled flag and the UUID across re-sync', async () => {
     const ctx = setup();
     await ctx.writeManifest('weekly-recap', baseManifest);
     await syncAutomationsFromDisk({
-      appId: 'journal',
-      appCodeDir: ctx.appDir,
+      userId: 'u1',
+      automationsDir: ctx.automationsDir,
       store: ctx.store,
-      dataDbFile: ctx.dataDbFile,
     });
-    // User toggles off via the new source of truth (per-app settings).
-    writeAppSetting(ctx.dataDbFile, automationEnabledKey('weekly-recap'), false);
+    const first = ctx.store.getByName('u1', 'weekly-recap');
+    assert.ok(first);
+    // User toggles off — the row's `enabled` column is the source of truth.
+    ctx.store.setEnabled(first.id, false);
 
     // Change the schedule on disk to force an update.
     await ctx.writeManifest('weekly-recap', {
@@ -88,27 +83,15 @@ describe('syncAutomationsFromDisk', () => {
       trigger: { kind: 'cron', expr: '0 21 * * 0' },
     });
     const r = await syncAutomationsFromDisk({
-      appId: 'journal',
-      appCodeDir: ctx.appDir,
+      userId: 'u1',
+      automationsDir: ctx.automationsDir,
       store: ctx.store,
-      dataDbFile: ctx.dataDbFile,
     });
     assert.deepEqual(r.updated, ['weekly-recap']);
-    const row = ctx.store.get('journal', 'weekly-recap');
+    const row = ctx.store.getByName('u1', 'weekly-recap');
+    assert.equal(row?.id, first.id, 'UUID survives resync');
     assert.equal(row?.enabled, false, 'enabled toggle must survive resync');
     assert.equal(row?.cronExpr, '0 21 * * 0');
-  });
-
-  it('defaults enabled=true when dataDbFile is omitted (clone-time, no DB yet)', async () => {
-    const ctx = setup();
-    await ctx.writeManifest('weekly-recap', baseManifest);
-    await syncAutomationsFromDisk({
-      appId: 'journal',
-      appCodeDir: ctx.appDir,
-      store: ctx.store,
-      // no dataDbFile — fresh clone before publish
-    });
-    assert.equal(ctx.store.get('journal', 'weekly-recap')?.enabled, true);
   });
 
   it('removes rows whose on-disk manifest disappeared', async () => {
@@ -116,19 +99,19 @@ describe('syncAutomationsFromDisk', () => {
     await ctx.writeManifest('one', baseManifest);
     await ctx.writeManifest('two', baseManifest);
     await syncAutomationsFromDisk({
-      appId: 'a',
-      appCodeDir: ctx.appDir,
+      userId: 'u1',
+      automationsDir: ctx.automationsDir,
       store: ctx.store,
     });
-    await fs.rm(path.join(ctx.appDir, 'automations', 'two.json'));
+    await fs.rm(path.join(ctx.automationsDir, 'two.json'));
     const r = await syncAutomationsFromDisk({
-      appId: 'a',
-      appCodeDir: ctx.appDir,
+      userId: 'u1',
+      automationsDir: ctx.automationsDir,
       store: ctx.store,
     });
     assert.deepEqual(r.removed, ['two']);
     assert.deepEqual(
-      ctx.store.listByApp('a').map((row) => row.name),
+      ctx.store.listByUser('u1').map((row) => row.name),
       ['one'],
     );
   });
@@ -137,13 +120,13 @@ describe('syncAutomationsFromDisk', () => {
     const ctx = setup();
     await ctx.writeManifest('one', baseManifest);
     await syncAutomationsFromDisk({
-      appId: 'a',
-      appCodeDir: ctx.appDir,
+      userId: 'u1',
+      automationsDir: ctx.automationsDir,
       store: ctx.store,
     });
     const r = await syncAutomationsFromDisk({
-      appId: 'a',
-      appCodeDir: ctx.appDir,
+      userId: 'u1',
+      automationsDir: ctx.automationsDir,
       store: ctx.store,
     });
     assert.deepEqual(r.unchanged, ['one']);
@@ -156,8 +139,8 @@ describe('syncAutomationsFromDisk', () => {
     await ctx.writeManifest('good', baseManifest);
     await ctx.writeRaw('bad', '{ not valid json');
     const r = await syncAutomationsFromDisk({
-      appId: 'a',
-      appCodeDir: ctx.appDir,
+      userId: 'u1',
+      automationsDir: ctx.automationsDir,
       store: ctx.store,
     });
     assert.deepEqual(r.added, ['good']);
@@ -166,15 +149,15 @@ describe('syncAutomationsFromDisk', () => {
     assert.equal(r.errors[0]?.code, 'invalid_json');
   });
 
-  it('rejects manifests that point ctx.agent at the mock provider', async () => {
+  it('rejects manifests that point the agent turn at the mock provider', async () => {
     const ctx = setup();
     await ctx.writeManifest('recurse', {
       ...baseManifest,
       requires: { model: 'centraid-mock/foo' },
     });
     const r = await syncAutomationsFromDisk({
-      appId: 'a',
-      appCodeDir: ctx.appDir,
+      userId: 'u1',
+      automationsDir: ctx.automationsDir,
       store: ctx.store,
     });
     assert.deepEqual(r.added, []);

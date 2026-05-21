@@ -86,10 +86,9 @@ export {
   type CapturedToolResult,
 } from './mock-llm-server.js';
 
-// Local-side per-fire orchestrator for automations. Loads the manifest,
-// stands up the mock-LLM, drives the worker, spawns claude / codex
-// subprocesses per ctx.tool batch, routes ctx.agent through the user's
-// real provider. See issue #70.
+// Local-side per-fire orchestrator for automations (issue #90 model-B).
+// Looks up the user-owned automation row and runs its manifest prompt
+// as an agent turn by spawning the claude / codex CLI.
 export {
   runAutomationLocal,
   defaultSpawnCli,

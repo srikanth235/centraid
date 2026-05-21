@@ -6,10 +6,10 @@
  * tables (`runs`, `run_nodes`, `automation_state` — see `gateway-db.ts`
  * ACTIVITY_MIGRATIONS).
  *
- * Name-scoped statements carry an `origin_app_id IS ?` predicate so each
- * `AutomationRunsStore` only sees its own bound app's rows; `IS` (not
- * `=`) is used so a NULL binding would still match. Run-id / node-id-
- * scoped statements need no app predicate — UUIDs are globally unique.
+ * Model-B (issue #90): a run is keyed to an automation by its UUID
+ * `automation_id`. The ledger is a single global store — no app scope —
+ * so `runs.automation_id` / `run_nodes.run_id` / `run_nodes.id` are all
+ * globally-unique keys that need no second predicate.
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
@@ -25,8 +25,7 @@ import type {
 export interface RawRun {
   id: string;
   kind: string;
-  origin_app_id: string | null;
-  automation_name: string | null;
+  automation_id: string | null;
   chat_session_id: string | null;
   app_id: string | null;
   trigger: string;
@@ -76,8 +75,7 @@ export interface RawNode {
 }
 
 export interface RawState {
-  origin_app_id: string | null;
-  automation_name: string;
+  automation_id: string;
   key: string;
   value_json: string;
   updated_at: number;
@@ -87,11 +85,11 @@ export interface PreparedStatements {
   insertRun: StatementSync;
   finishRun: StatementSync;
   getRun: StatementSync;
-  listRunsByName: StatementSync;
+  listRunsByAutomation: StatementSync;
   listRunsAll: StatementSync;
-  lastRunByName: StatementSync;
+  lastRunByAutomation: StatementSync;
   setPinned: StatementSync;
-  pinnedRunByName: StatementSync;
+  pinnedRunByAutomation: StatementSync;
   listChildRunsByParent: StatementSync;
   insertNode: StatementSync;
   listNodesByRun: StatementSync;
@@ -101,16 +99,16 @@ export interface PreparedStatements {
   pruneByCount: StatementSync;
   pruneByDays: StatementSync;
   pruneErrorsOnly: StatementSync;
-  countRunsByName: StatementSync;
-  deleteRunsByApp: StatementSync;
-  deleteStateByApp: StatementSync;
+  countRunsByAutomation: StatementSync;
+  deleteRunsByAutomation: StatementSync;
+  deleteStateByAutomation: StatementSync;
 }
 
 export function runFromRaw(raw: RawRun): AutomationRunRow {
   return {
     runId: raw.id,
     kind: raw.kind as RunKind,
-    automationName: raw.automation_name ?? '',
+    ...(raw.automation_id !== null ? { automationId: raw.automation_id } : {}),
     triggerKind: raw.trigger as AutomationTriggerKind,
     ...(raw.parent_run_id !== null ? { parentRunId: raw.parent_run_id } : {}),
     ...(raw.chat_session_id !== null ? { chatSessionId: raw.chat_session_id } : {}),
@@ -168,7 +166,7 @@ export function nodeFromRaw(raw: RawNode): AutomationRunNodeRow {
 
 export function stateFromRaw(raw: RawState): AutomationStateEntry {
   return {
-    automationName: raw.automation_name,
+    automationId: raw.automation_id,
     key: raw.key,
     valueJson: raw.value_json,
     updatedAt: raw.updated_at,
@@ -179,9 +177,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
   return {
     insertRun: db.prepare(`
       INSERT INTO runs
-        (id, kind, origin_app_id, automation_name, chat_session_id, app_id,
+        (id, kind, automation_id, chat_session_id, app_id,
          trigger, parent_run_id, retry_of, note, input_json, started_at, ok)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `),
     // The `total_*` rollup is Σ over this run's own step/agent nodes;
     // `step_count` / `tool_count` count the matching nodes. SUM over an
@@ -213,30 +211,28 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE id = $rid
     `),
     getRun: db.prepare(`SELECT * FROM runs WHERE id = ?`),
-    listRunsByName: db.prepare(`
+    listRunsByAutomation: db.prepare(`
       SELECT * FROM runs
-      WHERE automation_name = ?
-        AND origin_app_id IS ?
+      WHERE automation_id = ?
         AND (? IS NULL OR started_at >= ?)
         AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT ?
     `),
     listRunsAll: db.prepare(`
       SELECT * FROM runs
-      WHERE origin_app_id IS ?
-        AND (? IS NULL OR started_at >= ?)
+      WHERE (? IS NULL OR started_at >= ?)
         AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT ?
     `),
-    lastRunByName: db.prepare(`
+    lastRunByAutomation: db.prepare(`
       SELECT * FROM runs
-      WHERE automation_name = ? AND origin_app_id IS ? AND (? IS NULL OR ok = ?)
+      WHERE automation_id = ? AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT 1
     `),
     setPinned: db.prepare(`UPDATE runs SET pinned = ? WHERE id = ?`),
-    pinnedRunByName: db.prepare(`
+    pinnedRunByAutomation: db.prepare(`
       SELECT * FROM runs
-      WHERE automation_name = ? AND origin_app_id IS ? AND pinned = 1
+      WHERE automation_id = ? AND pinned = 1
       ORDER BY started_at DESC LIMIT 1
     `),
     listChildRunsByParent: db.prepare(`
@@ -254,39 +250,32 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SELECT * FROM run_nodes WHERE run_id = ? ORDER BY ordinal ASC, started_at ASC
     `),
     upsertState: db.prepare(`
-      INSERT INTO automation_state (origin_app_id, automation_name, key, value_json, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(origin_app_id, automation_name, key) DO UPDATE SET
+      INSERT INTO automation_state (automation_id, key, value_json, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(automation_id, key) DO UPDATE SET
         value_json = excluded.value_json,
         updated_at = excluded.updated_at
     `),
-    getState: db.prepare(
-      `SELECT * FROM automation_state WHERE origin_app_id IS ? AND automation_name = ? AND key = ?`,
-    ),
-    deleteState: db.prepare(
-      `DELETE FROM automation_state WHERE origin_app_id IS ? AND automation_name = ? AND key = ?`,
-    ),
+    getState: db.prepare(`SELECT * FROM automation_state WHERE automation_id = ? AND key = ?`),
+    deleteState: db.prepare(`DELETE FROM automation_state WHERE automation_id = ? AND key = ?`),
     pruneByCount: db.prepare(`
       DELETE FROM runs
-      WHERE automation_name = ?
-        AND origin_app_id IS ?
+      WHERE automation_id = ?
         AND pinned = 0
         AND id NOT IN (
           SELECT id FROM runs
-          WHERE automation_name = ? AND origin_app_id IS ?
+          WHERE automation_id = ?
           ORDER BY started_at DESC LIMIT ?
         )
     `),
     pruneByDays: db.prepare(
-      `DELETE FROM runs WHERE automation_name = ? AND origin_app_id IS ? AND pinned = 0 AND started_at < ?`,
+      `DELETE FROM runs WHERE automation_id = ? AND pinned = 0 AND started_at < ?`,
     ),
     pruneErrorsOnly: db.prepare(
-      `DELETE FROM runs WHERE automation_name = ? AND origin_app_id IS ? AND pinned = 0 AND ok = 1`,
+      `DELETE FROM runs WHERE automation_id = ? AND pinned = 0 AND ok = 1`,
     ),
-    countRunsByName: db.prepare(
-      `SELECT COUNT(*) AS c FROM runs WHERE automation_name = ? AND origin_app_id IS ?`,
-    ),
-    deleteRunsByApp: db.prepare(`DELETE FROM runs WHERE origin_app_id IS ?`),
-    deleteStateByApp: db.prepare(`DELETE FROM automation_state WHERE origin_app_id IS ?`),
+    countRunsByAutomation: db.prepare(`SELECT COUNT(*) AS c FROM runs WHERE automation_id = ?`),
+    deleteRunsByAutomation: db.prepare(`DELETE FROM runs WHERE automation_id = ?`),
+    deleteStateByAutomation: db.prepare(`DELETE FROM automation_state WHERE automation_id = ?`),
   };
 }

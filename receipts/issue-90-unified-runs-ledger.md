@@ -14,8 +14,7 @@ backfill.
 - [x] Step 0 spike — runner token capture
 - [x] Commit 1 — generalize the run-audit ledger
 - [x] Commit 2 — per-model token pricing
-- [ ] Commit 3 — automations model-B (user-owned UUID identity, drop
-      `origin_app_id`, global cron / CLI / host)
+- [x] Commit 3 — automations model-B
 - [ ] Commit 4 — chat fold (delete `centraid-chat.sqlite`, eliminate
       `chat_messages`)
 - [ ] Commit 5 — Insights backend wiring
@@ -75,16 +74,46 @@ beats `gpt-5`; provider prefixes are stripped before lookup. Exported
 from `@centraid/runtime-core` for the runner-capture and Insights
 commits to consume; covered by `model-pricing.test.ts`.
 
+### Commit 3 — automations model-B
+
+Re-architects automations onto a user-owned UUID identity and replaces
+the issue-#80 JS-handler engine with an agent-driven execution model.
+
+- **Identity.** `automations` is keyed by a UUID `id` with a `user_id`
+  owner (`name` unique per user); `origin_app_id` is dropped from the
+  table, the `runs` ledger (now `automation_id`), and `automation_state`
+  (now keyed `(automation_id, key)`). `AutomationStore` becomes
+  user-scoped (`create` / `upsert` / `getByName` / `listByUser`);
+  `AutomationRunsStore` becomes a single global ledger keyed by
+  `automation_id` — no app binding, no `forApp`.
+- **Agent-driven execution.** The generated `actions/<name>.js` handler,
+  the worker thread, and the `ctx.tool` / `ctx.agent` / `ctx.state` /
+  `ctx.invoke` surface are deleted (`automation-handler-runner.ts`,
+  `automation-handler-ctx.ts`, `automation-handler-audit.ts`,
+  `worker/automation-runner.ts`). A fire is now an agent turn driven by
+  the manifest prompt: new `automation-agent-runner.ts` owns the ledger
+  side (opens the `runs` row, records `step` / `tool` nodes with token
+  usage + frozen `cost_usd`, applies retention) and consumes a
+  host-supplied `AutomationAgentDispatcher`. The manifest loses its
+  `action` field.
+- **Global cron / CLI / host.** `AutomationHost` drops the per-app
+  reconcile scope (`unregister(automationId)`, global `reconcile`); the
+  OS scheduler keys jobs `com.centraid.<automationId>` and the CLI verb
+  is `run-automation <automationId>`. The openclaw cron job name is
+  `centraid:<automationId>`. agent-runtime and openclaw each implement
+  the agent dispatcher against their backend (codex/claude CLI locally,
+  the simple-completion runtime on the gateway). App upload no longer
+  syncs automations; `syncAutomationsFromDisk` is a global per-user scan.
+
 ## Out of scope (so far)
 
-- Model-B automation identity (UUID, user ownership, dropping
-  `origin_app_id`), the agent-driven execution model, and the global
-  cron / CLI / host rework — follow-up commit.
 - Chat fold and Insights backend / renderer — follow-up commits.
+- Per-tool-call trace extraction from the agent CLI transcript (the
+  turn is currently recorded as a single `step`) — wired with the
+  chat runner's usage capture in the Insights commit.
 
 ## Verification
 
 - `turbo run typecheck` / `turbo run build` — 16/16 tasks clean.
-- `turbo run test` — 12/12 task green; `runtime-core` 308/308
-  (incl. `model-pricing` 9/9).
+- `turbo run test` — 12/12 task green; `runtime-core` 288/288.
 - `oxfmt` on the changed files — clean.

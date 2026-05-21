@@ -56,11 +56,6 @@ export type {
   RunQueryResult,
   LogEntry,
   LogLevel,
-  AutomationHandler,
-  AutomationHandlerArgs,
-  AutomationCtx,
-  AutomationAgentArgs,
-  AutomationJsonSchema,
   AutomationManifest,
   AutomationManifestRequires,
 } from '@centraid/runtime-core';
@@ -130,30 +125,6 @@ export default definePluginEntry({
       logger: api.logger,
       chatRunner,
       runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
-      automationStore,
-      automationDb: automationDbProvider,
-      // After every successful publish, sync runs against the new
-      // version's `automations/` (handled inside `handleAppUpload`).
-      // Once the mirror is updated, reconcile the host against the
-      // mirror so openclaw's cron store catches up immediately —
-      // without this the user would have to restart the gateway to
-      // see schedule changes take effect. Scoped to this app — a
-      // bare per-app `desired` against an unscoped reconcile would
-      // sweep every other app's cron entries.
-      onAutomationsSynced: async (appId, result) => {
-        api.logger.info(
-          `[centraid] automations synced for "${appId}": +${result.added.length} ~${result.updated.length} -${result.removed.length}`,
-        );
-        try {
-          await automationHost.reconcile(automationStore.listByApp(appId), {
-            scope: { appId },
-          });
-        } catch (err) {
-          api.logger.warn(
-            `[centraid] cron reconcile after sync failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      },
     });
 
     // Register the centraid-mock provider plugin. The provider's
@@ -163,10 +134,6 @@ export default definePluginEntry({
     // through the user's REAL provider via the simple-completion
     // runtime. See `lib/automations-provider.ts`.
     registerAutomationsProvider(api, {
-      resolveAppDir: (appId) => {
-        const entry = runtime.registry.get(appId);
-        return entry?.path;
-      },
       automationDbProvider,
       logger: api.logger,
     });

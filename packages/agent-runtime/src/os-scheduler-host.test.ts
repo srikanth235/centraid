@@ -25,7 +25,7 @@ function setup(): {
     return { exitCode: 0, stdout: '', stderr: '' };
   };
   const host = new OsSchedulerHost({
-    resolveAppDir: (appId) => `/persistent/apps/${appId}`,
+    workdir: '/persistent/work',
     centraidBin: '/usr/local/bin/centraid',
     automationDbPath: '/persistent/centraid-activity.sqlite',
     runner: 'codex',
@@ -36,7 +36,8 @@ function setup(): {
 
 function row(overrides: Partial<AutomationRow> = {}): AutomationRow {
   return {
-    originAppId: 'todos',
+    id: 'auto-1',
+    userId: 'u1',
     name: 'daily-digest',
     prompt: 'do the thing',
     cronExpr: '0 17 * * 1-5',
@@ -44,8 +45,8 @@ function row(overrides: Partial<AutomationRow> = {}): AutomationRow {
     manifest: {
       prompt: 'do the thing',
       trigger: { kind: 'cron', expr: '0 17 * * 1-5' },
-      action: 'daily-digest.js',
       requires: { model: 'anthropic/claude-3-5-sonnet' },
+      history: { keep: { count: 100 } },
       generated: { by: 'template', at: '2026-05-19T00:00:00Z' },
     },
     createdAt: 1,
@@ -55,22 +56,20 @@ function row(overrides: Partial<AutomationRow> = {}): AutomationRow {
 }
 
 describe('OsSchedulerHost', () => {
-  it('register installs a launchd plist with the persistent app root as cwd', async () => {
+  it('register installs a launchd plist with the workdir as cwd', async () => {
     const ctx = setup();
     await ctx.host.register(row());
-    const artifactPath = path.join(ctx.artifactRoot, 'com.centraid.todos.daily-digest.plist');
+    const artifactPath = path.join(ctx.artifactRoot, 'com.centraid.auto-1.plist');
     const plist = await fs.readFile(artifactPath, 'utf8');
-    assert.match(
-      plist,
-      /<key>WorkingDirectory<\/key>\s*<string>\/persistent\/apps\/todos<\/string>/,
-    );
+    assert.match(plist, /<key>WorkingDirectory<\/key>\s*<string>\/persistent\/work<\/string>/);
     assert.match(plist, /run-automation/);
+    assert.match(plist, /<string>auto-1<\/string>/);
   });
 
   it('register with enabled=false unregisters instead', async () => {
     const ctx = setup();
     await ctx.host.register(row()); // first install
-    const artifactPath = path.join(ctx.artifactRoot, 'com.centraid.todos.daily-digest.plist');
+    const artifactPath = path.join(ctx.artifactRoot, 'com.centraid.auto-1.plist');
     await fs.access(artifactPath); // present
     await ctx.host.register(row({ enabled: false }));
     let stillPresent = true;
@@ -85,100 +84,62 @@ describe('OsSchedulerHost', () => {
   it('unregister removes the artifact and is idempotent on second call', async () => {
     const ctx = setup();
     await ctx.host.register(row());
-    await ctx.host.unregister('todos', 'daily-digest');
-    await ctx.host.unregister('todos', 'daily-digest'); // no throw
+    await ctx.host.unregister('auto-1');
+    await ctx.host.unregister('auto-1'); // no throw
   });
 
-  it('list reports the host-side label for installed entries', async () => {
+  it('list reports the automation id for installed entries', async () => {
     const ctx = setup();
     await ctx.host.register(row());
-    await ctx.host.register(row({ name: 'weekly-recap', cronExpr: '0 20 * * 0' }));
+    await ctx.host.register(row({ id: 'auto-2', name: 'weekly-recap', cronExpr: '0 20 * * 0' }));
     const names = await ctx.host.list();
-    assert.deepEqual([...names].sort(), [
-      'com.centraid.todos.daily-digest',
-      'com.centraid.todos.weekly-recap',
-    ]);
+    assert.deepEqual([...names].sort(), ['auto-1', 'auto-2']);
   });
 
   it('reconcile installs missing, updates existing, removes orphans', async () => {
     const ctx = setup();
     // Pre-state: one installed entry that's no longer desired.
-    await ctx.host.register(row({ name: 'old-one' }));
+    await ctx.host.register(row({ id: 'auto-old', name: 'old-one' }));
 
     const desired: AutomationRow[] = [
-      row(), // daily-digest — new
-      row({ name: 'old-one', cronExpr: '0 6 * * *' }), // existing — schedule changed
-      row({ name: 'paused-one', enabled: false }), // disabled — should not be installed
+      row(), // auto-1 — new
+      row({ id: 'auto-old', name: 'old-one', cronExpr: '0 6 * * *' }), // existing — changed
+      row({ id: 'auto-paused', name: 'paused-one', enabled: false }), // disabled — not installed
     ];
     const result = await ctx.host.reconcile(desired);
 
-    assert.deepEqual([...result.added].sort(), ['com.centraid.todos.daily-digest']);
-    assert.deepEqual([...result.updated].sort(), ['com.centraid.todos.old-one']);
+    assert.deepEqual([...result.added].sort(), ['com.centraid.auto-1']);
+    assert.deepEqual([...result.updated].sort(), ['com.centraid.auto-old']);
     assert.deepEqual(result.removed, []);
 
     // The disabled row should have produced no artifact.
     const finalList = await ctx.host.list();
-    assert.equal(finalList.includes('com.centraid.todos.paused-one'), false);
+    assert.equal(finalList.includes('auto-paused'), false);
   });
 
   it('reconcile removes installed entries that are absent from desired', async () => {
     const ctx = setup();
-    await ctx.host.register(row({ name: 'zombie' }));
+    await ctx.host.register(row({ id: 'auto-zombie', name: 'zombie' }));
     const result = await ctx.host.reconcile([]);
-    assert.deepEqual(result.removed, ['com.centraid.todos.zombie']);
+    assert.deepEqual(result.removed, ['com.centraid.auto-zombie']);
     const finalList = await ctx.host.list();
     assert.equal(finalList.length, 0);
   });
 
-  it('reconcile with scope.appId only touches that app — other apps survive', async () => {
-    // Two apps, one automation each, both installed.
+  it('reconcile updates an existing entry without removing unrelated ones', async () => {
     const ctx = setup();
-    await ctx.host.register(row({ originAppId: 'todos', name: 'daily-digest' }));
-    await ctx.host.register(
-      row({ originAppId: 'journal', name: 'weekly-recap', cronExpr: '0 20 * * 0' }),
-    );
-    const before = await ctx.host.list();
-    assert.deepEqual([...before].sort(), [
-      'com.centraid.journal.weekly-recap',
-      'com.centraid.todos.daily-digest',
-    ]);
+    await ctx.host.register(row({ id: 'auto-1', name: 'daily-digest' }));
+    await ctx.host.register(row({ id: 'auto-2', name: 'weekly-recap', cronExpr: '0 20 * * 0' }));
 
-    // Scoped reconcile against todos' rows. The desired set only
-    // contains the existing todos entry, so journal's row appears
-    // "absent" — but because we scope, journal's entry must survive.
-    const result = await ctx.host.reconcile([row({ originAppId: 'todos', name: 'daily-digest' })], {
-      scope: { appId: 'todos' },
-    });
+    // Reconcile with the full desired set — both survive, both updated.
+    const result = await ctx.host.reconcile([
+      row({ id: 'auto-1', name: 'daily-digest' }),
+      row({ id: 'auto-2', name: 'weekly-recap', cronExpr: '0 20 * * 0' }),
+    ]);
     assert.deepEqual(result.added, []);
-    assert.deepEqual([...result.updated].sort(), ['com.centraid.todos.daily-digest']);
+    assert.deepEqual([...result.updated].sort(), ['com.centraid.auto-1', 'com.centraid.auto-2']);
     assert.deepEqual(result.removed, []);
-    const afterUpdate = await ctx.host.list();
-    assert.deepEqual([...afterUpdate].sort(), [
-      'com.centraid.journal.weekly-recap',
-      'com.centraid.todos.daily-digest',
-    ]);
-
-    // Scoped reconcile against an empty todos desired set (the
-    // deregister path). Without scoping this would wipe both apps'
-    // entries; with scope it must only remove todos.
-    const wipeTodos = await ctx.host.reconcile([], { scope: { appId: 'todos' } });
-    assert.deepEqual(wipeTodos.removed, ['com.centraid.todos.daily-digest']);
-    const afterWipe = await ctx.host.list();
-    assert.deepEqual([...afterWipe], ['com.centraid.journal.weekly-recap']);
-  });
-
-  it('reconcile with scope ignores desired rows for other apps', async () => {
-    // Defense in depth: even if a caller hands us a cross-app row by
-    // mistake, a scoped reconcile must not register it.
-    const ctx = setup();
-    await ctx.host.reconcile(
-      [
-        row({ originAppId: 'todos', name: 'daily-digest' }),
-        row({ originAppId: 'journal', name: 'leak', cronExpr: '0 9 * * *' }),
-      ],
-      { scope: { appId: 'todos' } },
-    );
-    const installed = await ctx.host.list();
-    assert.deepEqual([...installed], ['com.centraid.todos.daily-digest']);
+    const after = await ctx.host.list();
+    assert.deepEqual([...after].sort(), ['auto-1', 'auto-2']);
   });
 });

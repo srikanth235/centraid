@@ -56,12 +56,6 @@ export type {
   HandlerFn,
   ScopedFetch,
   CommonHandlerArgs,
-  AutomationHandler,
-  AutomationHandlerArgs,
-  AutomationModule,
-  AutomationCtx,
-  AutomationAgentArgs,
-  AutomationJsonSchema,
 } from './types.js';
 
 // Live-schema and cloud-panel payload shapes — consumed by builder-harness
@@ -179,7 +173,6 @@ export type { SettingsInject } from './static-server.js';
 // and the desktop UI). See issue #70.
 export {
   AutomationManifestError,
-  isValidActionFilename,
   isValidAutomationName,
   isValidCronExpression,
   parseManifest,
@@ -226,11 +219,7 @@ export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from '.
 // runtime state; this is centraid's own registration surface for the
 // list/UI and the reconciliation pass.
 export { AutomationStore, type AutomationRow } from './automation-store.js';
-export type {
-  AutomationHost,
-  AutomationReconcileOptions,
-  AutomationReconcileResult,
-} from './automation-host.js';
+export type { AutomationHost, AutomationReconcileResult } from './automation-host.js';
 
 // Deploy boundary for automations: scan an app's `automations/*.json`
 // and bring the mirror into agreement. Called by `handleAppUpload`
@@ -243,20 +232,17 @@ export {
   type SyncAutomationError,
 } from './sync-automations.js';
 
-// Worker-isolated automation handler runner. Hosts provide
-// `toolDispatcher` + `agentDispatcher` to wire the worker boundary into
-// either the local-side mock-LLM + CLI subprocess flow (@centraid/agent-runtime)
-// or the openclaw in-process StreamFn flow (@centraid/openclaw-plugin).
+// Agent-driven automation runner (issue #90 model-B). An automation
+// fire is an agent turn driven by the manifest prompt — no JS handler,
+// no worker. Hosts supply an `AutomationAgentDispatcher` that runs the
+// turn against their agent backend (codex / claude locally, the
+// openclaw in-process StreamFn on the gateway) and yield the trace
+// events the runner records as `step` / `tool` nodes.
 export {
-  runAutomationHandler,
-  type RunAutomationHandlerOptions,
-  type AutomationHandlerOutcome,
-  type AutomationToolCall,
-  type AutomationToolResult,
-  type AutomationToolDispatcher,
-  type AutomationAgentCall,
+  runAutomationAgent,
+  type RunAutomationAgentOptions,
+  type AutomationAgentOutcome,
   type AutomationAgentDispatcher,
-  type AutomationInvokeDispatcher,
-  type AutomationInvokeResult,
-  type AutomationDispatchContext,
-} from './automation-handler-runner.js';
+  type AutomationAgentRunInput,
+  type AutomationAgentEvent,
+} from './automation-agent-runner.js';

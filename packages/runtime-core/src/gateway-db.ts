@@ -20,22 +20,24 @@
  *                      `app_id` naming the app a tool call touched.
  *
  *   activity    (`centraid-activity.sqlite`) — the unified agent-run ledger
- *     automations      — centraid's mirror of registered automations,
- *                        keyed by (origin_app_id, name).
+ *     automations      — user-owned automations, keyed by a UUID `id`.
+ *                        `user_id` is the owner; `name` is unique per
+ *                        user. No `origin_app_id` — an automation is no
+ *                        longer scoped to the app it was authored from
+ *                        (issue #90 model-B).
  *     runs             — one row per agent run. A chat turn, an automation
  *                        fire, and a builder iteration are the same object;
  *                        `kind` discriminates. Carries denormalized
  *                        token/cost rollups written at finish.
  *     run_nodes        — the ordered agentic trace. One row per model
- *                        inference call (`kind='step'`), tool call, agent
- *                        call, or `ctx.invoke`.
- *     automation_state — ctx.state KV, keyed by (origin_app_id,
- *                        automation_name, key).
+ *                        inference call (`kind='step'`), tool call, or
+ *                        sub-run.
+ *     automation_state — per-automation KV, keyed by (automation_id, key).
  *
- *     All four tables stay in one file so a cross-app `ctx.invoke` child
- *     run can link its `parent_run_id` self-FK into one joinable DAG (a
- *     self-FK can't cross SQLite files). Runtime-owned; never reachable
- *     from handler `db` or the `centraid_sql_*` agent tools.
+ *     All four tables stay in one file so a sub-run can link its
+ *     `parent_run_id` self-FK into one joinable DAG (a self-FK can't
+ *     cross SQLite files). Runtime-owned; never reachable from handler
+ *     `db` or the `centraid_sql_*` agent tools.
  *
  * Each file gets one connection and one provider. The OpenClaw plugin's
  * worker subprocesses (which construct the runtime in every context but
@@ -128,8 +130,8 @@ export const CHAT_MIGRATIONS: readonly string[] = [
 
 /**
  * Activity file migration ladder — the unified agent-run ledger
- * (issue #90, commit 1). The `automations` mirror plus a generalized
- * `runs` / `run_nodes` ledger and the `automation_state` ctx.state KV.
+ * (issue #90). The `automations` table plus a generalized
+ * `runs` / `run_nodes` ledger and the `automation_state` KV.
  *
  * `runs` / `run_nodes` are the run-audit tables from issue #80
  * generalized: a chat turn, an automation fire, and a builder iteration
@@ -137,25 +139,28 @@ export const CHAT_MIGRATIONS: readonly string[] = [
  * `run_nodes.kind='step'` is the genuinely-new node: one primary
  * model-inference call, where per-call token + cost accounting lives.
  *
- * This commit keeps automation identity app-scoped (`origin_app_id` +
- * `automation_name`); the model-B identity flip (user-owned UUIDs) and
- * the chat-fold land in later commits. All tables stay in one file so a
- * cross-app `ctx.invoke` child run can link its `parent_run_id` self-FK
- * into one joinable DAG. Runtime-owned; never reachable from handler
- * `db` or the `centraid_sql_*` agent tools.
+ * Model-B identity (issue #90): automations are user-owned and keyed by
+ * a UUID `id` — no `origin_app_id`. A run for `kind='automation'` points
+ * at `automation_id`; the JS-handler engine is gone, an automation fire
+ * is now an agent turn driven by the manifest prompt. All tables stay in
+ * one file so a sub-run can link its `parent_run_id` self-FK into one
+ * joinable DAG. Runtime-owned; never reachable from handler `db` or the
+ * `centraid_sql_*` agent tools.
  */
 export const ACTIVITY_MIGRATIONS: readonly string[] = [
-  // 0 → 1: automations mirror table.
+  // 0 → 1: user-owned automations table.
   //
   // The cron schedule itself + last/next-run telemetry live in the host
   // scheduler (openclaw cron on remote, OS scheduler on local — see
-  // issue #70). This table is centraid's own *mirror* so the desktop UI
-  // can list automations, the reconciliation pass at `gateway_start` can
-  // diff DB-vs-host to clean up zombies, and editors have one place to
-  // read the canonical prompt + manifest.
+  // issue #70). This table is centraid's canonical store so the desktop
+  // UI can list a user's automations, the reconciliation pass at
+  // `gateway_start` can diff DB-vs-host to clean up zombies, and editors
+  // have one place to read the prompt + manifest. `name` is unique per
+  // user; `id` is a UUID assigned at creation.
   `
     CREATE TABLE IF NOT EXISTS automations (
-      origin_app_id TEXT,
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       name TEXT NOT NULL,
       prompt TEXT NOT NULL,
       cron_expr TEXT NOT NULL,
@@ -163,21 +168,21 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
       manifest_json TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
-      PRIMARY KEY (origin_app_id, name)
+      UNIQUE (user_id, name)
     );
-    CREATE INDEX IF NOT EXISTS idx_automations_app
-      ON automations(origin_app_id);
+    CREATE INDEX IF NOT EXISTS idx_automations_user
+      ON automations(user_id, name);
   `,
-  // 1 → 2: the unified `runs` / `run_nodes` ledger + ctx.state
-  // (issue #90 commit 1 — no backfill, v0).
+  // 1 → 2: the unified `runs` / `run_nodes` ledger + automation KV
+  // (issue #90 — no backfill, v0).
   //
   // `runs` — one row per agent run. `kind` discriminates
-  // chat / automation / build; `origin_app_id` + `automation_name` are
-  // set for kind='automation', `chat_session_id` for kind='chat',
-  // `app_id` for kind='build'. `parent_run_id` is the `ctx.invoke` DAG
-  // edge. The `total_*` columns are a denormalized rollup written at
-  // finish, exclusive of child-`invoke` runs, so a SUM over every run is
-  // the true grand total with no double-count.
+  // chat / automation / build; `automation_id` is set for
+  // kind='automation', `chat_session_id` for kind='chat', `app_id` for
+  // kind='build'. `parent_run_id` is the sub-run DAG edge. The `total_*`
+  // columns are a denormalized rollup written at finish, exclusive of
+  // child sub-runs, so a SUM over every run is the true grand total
+  // with no double-count.
   //
   // `run_nodes` — the ordered trace. `kind='step'` is one primary
   // model-inference call (token accounting lives here — input tokens
@@ -189,8 +194,7 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
     CREATE TABLE IF NOT EXISTS runs (
       id                       TEXT PRIMARY KEY,
       kind                     TEXT NOT NULL DEFAULT 'automation',
-      origin_app_id            TEXT,
-      automation_name          TEXT,
+      automation_id            TEXT,
       chat_session_id          TEXT,
       app_id                   TEXT,
       trigger                  TEXT NOT NULL,
@@ -213,8 +217,8 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
       step_count               INTEGER,
       tool_count               INTEGER
     );
-    CREATE INDEX IF NOT EXISTS idx_runs_app_name_started
-      ON runs(origin_app_id, automation_name, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_runs_automation_started
+      ON runs(automation_id, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_runs_started
       ON runs(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_runs_chat_session
@@ -252,12 +256,11 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
       ON run_nodes(model, started_at DESC);
 
     CREATE TABLE IF NOT EXISTS automation_state (
-      origin_app_id   TEXT,
-      automation_name TEXT NOT NULL,
-      key             TEXT NOT NULL,
-      value_json      TEXT,
-      updated_at      INTEGER NOT NULL,
-      PRIMARY KEY (origin_app_id, automation_name, key)
+      automation_id TEXT NOT NULL,
+      key           TEXT NOT NULL,
+      value_json    TEXT,
+      updated_at    INTEGER NOT NULL,
+      PRIMARY KEY (automation_id, key)
     );
   `,
 ];

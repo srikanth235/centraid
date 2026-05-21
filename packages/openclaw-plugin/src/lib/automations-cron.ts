@@ -17,7 +17,7 @@
  *   - cron has it, DB doesn't  → remove (zombie from a deleted app)
  *   - both have it, mismatched → update
  *
- * Cron names follow `centraid:<appId>:<name>` so the diff is a
+ * Cron names follow `centraid:<automationId>` so the diff is a
  * straightforward set operation.
  */
 
@@ -28,8 +28,8 @@ import { CENTRAID_MOCK_MODEL_ID, CENTRAID_MOCK_PROVIDER_ID } from './automations
 /** Prefix every centraid-owned cron job's name so reconciliation can identify them. */
 const CRON_PREFIX = 'centraid';
 
-export function cronNameFor(appId: string, automationName: string): string {
-  return `${CRON_PREFIX}:${appId}:${automationName}`;
+export function cronNameFor(automationId: string): string {
+  return `${CRON_PREFIX}:${automationId}`;
 }
 
 interface CronJobLite {
@@ -55,14 +55,14 @@ interface CronAddPayload {
 
 export function payloadFor(row: AutomationRow): CronAddPayload {
   return {
-    name: cronNameFor(row.originAppId, row.name),
+    name: cronNameFor(row.id),
     enabled: row.enabled,
     schedule: { kind: 'cron', expr: row.cronExpr },
     sessionTarget: 'isolated',
     wakeMode: 'now',
     payload: {
       kind: 'agentTurn',
-      message: `<<<centraid:${row.originAppId}:${row.name}>>>`,
+      message: `<<<centraid:${row.id}>>>`,
       model: `${CENTRAID_MOCK_PROVIDER_ID}/${CENTRAID_MOCK_MODEL_ID}`,
       ...(row.manifest.requires.tools ? { toolsAllow: row.manifest.requires.tools } : {}),
       timeoutSeconds: 300,
@@ -90,8 +90,8 @@ export async function upsertCronJob(row: AutomationRow): Promise<void> {
   }
 }
 
-export async function removeCronJob(appId: string, name: string): Promise<void> {
-  const cronName = cronNameFor(appId, name);
+export async function removeCronJob(automationId: string): Promise<void> {
+  const cronName = cronNameFor(automationId);
   try {
     await callGatewayTool('cron.remove', {}, { name: cronName });
   } catch (err) {
@@ -120,5 +120,4 @@ export async function listCentraidCronJobs(): Promise<string[]> {
 // `OpenclawAutomationHost.reconcile(rows)` — same diff algorithm,
 // but the rows are passed in by the caller (matching the
 // `AutomationHost` contract shared with the local OS scheduler).
-// Callers that want "everything" pass `store.listAll()`; per-app
-// sync hooks pass `store.listByApp(appId)`.
+// Callers pass `store.listAll()` — model-B reconcile is always global.

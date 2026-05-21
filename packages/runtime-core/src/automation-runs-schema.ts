@@ -37,8 +37,8 @@ export type AutomationRunNodeKind = 'step' | 'tool' | 'agent' | 'invoke';
 export interface AutomationRunRow {
   readonly runId: string;
   readonly kind: RunKind;
-  /** Set for `kind: 'automation'`. */
-  readonly automationName: string;
+  /** UUID of the automation — set for `kind: 'automation'`. */
+  readonly automationId?: string;
   readonly triggerKind: AutomationTriggerKind;
   readonly parentRunId?: string;
   /** Set for `kind: 'chat'` — the conversation container. */
@@ -114,7 +114,7 @@ export interface AutomationRunNodeRow {
 }
 
 export interface AutomationStateEntry {
-  readonly automationName: string;
+  readonly automationId: string;
   readonly key: string;
   readonly valueJson: string;
   readonly updatedAt: number;
