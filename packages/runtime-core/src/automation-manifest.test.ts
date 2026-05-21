@@ -4,7 +4,6 @@ import {
   AutomationManifestError,
   isValidAutomationName,
   isValidCronExpression,
-  isValidActionFilename,
   parseManifest,
   validateManifest,
   validateOutputAgainstSchema,
@@ -28,22 +27,6 @@ describe('isValidCronExpression', () => {
   });
 });
 
-describe('isValidActionFilename', () => {
-  it('accepts simple .js basenames', () => {
-    assert.equal(isValidActionFilename('summarize-prs.js'), true);
-    assert.equal(isValidActionFilename('a.js'), true);
-    assert.equal(isValidActionFilename('snake_case.js'), true);
-  });
-
-  it('rejects paths, traversals, non-js, empty base', () => {
-    assert.equal(isValidActionFilename('foo/bar.js'), false);
-    assert.equal(isValidActionFilename('../x.js'), false);
-    assert.equal(isValidActionFilename('.js'), false);
-    assert.equal(isValidActionFilename('x.mjs'), false);
-    assert.equal(isValidActionFilename(''), false);
-  });
-});
-
 describe('isValidAutomationName', () => {
   it('accepts identifier-style names', () => {
     assert.equal(isValidAutomationName('summarize-prs'), true);
@@ -59,7 +42,6 @@ describe('isValidAutomationName', () => {
 const goodManifest = {
   prompt: 'every 30 min, summarize open PRs in foo/bar',
   trigger: { kind: 'cron', expr: '*/30 * * * *' },
-  action: 'summarize-prs.js',
   requires: {
     mcps: ['github'],
     tools: ['github.list_pull_requests'],
@@ -75,7 +57,6 @@ describe('parseManifest / validateManifest', () => {
     assert.equal(m.prompt, goodManifest.prompt);
     assert.equal(m.trigger.kind, 'cron');
     assert.equal(m.trigger.expr, '*/30 * * * *');
-    assert.equal(m.action, goodManifest.action);
     assert.deepEqual([...(m.requires.mcps ?? [])], ['github']);
     assert.deepEqual([...(m.requires.tools ?? [])], ['github.list_pull_requests']);
     assert.equal(m.requires.model, 'anthropic/claude-3-5-sonnet');
@@ -113,11 +94,6 @@ describe('parseManifest / validateManifest', () => {
     );
   });
 
-  it('rejects action path traversal', () => {
-    assert.throws(() => validateManifest({ ...goodManifest, action: '../evil.js' }), /action/);
-    assert.throws(() => validateManifest({ ...goodManifest, action: 'sub/a.js' }), /action/);
-  });
-
   it('rejects requires.model targeting centraid-mock (recursion guard)', () => {
     const bad = {
       ...goodManifest,
@@ -141,7 +117,6 @@ describe('parseManifest / validateManifest', () => {
     const minimal = {
       prompt: 'hello',
       trigger: { kind: 'cron', expr: '0 * * * *' },
-      action: 'h.js',
       requires: {},
       generated: { by: 'test', at: '2026-01-01T00:00:00Z' },
     };
@@ -154,7 +129,6 @@ describe('parseManifest / validateManifest', () => {
 describe('manifest trigger', () => {
   const base = {
     prompt: 'hi',
-    action: 'h.js',
     requires: {},
     generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
   };
@@ -195,7 +169,6 @@ describe('manifest outputSchema (issue #80)', () => {
   const base = {
     prompt: 'hi',
     trigger: { kind: 'cron', expr: '0 * * * *' },
-    action: 'h.js',
     requires: {},
     generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
   };
@@ -264,7 +237,6 @@ describe('manifest onFailure (issue #80)', () => {
   const base = {
     prompt: 'hi',
     trigger: { kind: 'cron', expr: '0 * * * *' },
-    action: 'h.js',
     requires: {},
     generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
   };
@@ -293,7 +265,6 @@ describe('manifest history.keep (issue #80)', () => {
   const base = {
     prompt: 'hi',
     trigger: { kind: 'cron', expr: '0 * * * *' },
-    action: 'h.js',
     requires: {},
     generated: { by: 'test', at: '2026-05-19T00:00:00Z' },
   };

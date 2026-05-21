@@ -51,13 +51,14 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  * via the `userIdProvider` it was constructed with.
  *
  * Dispatch map:
- *   GET    /_centraid-chat/sessions?appId=...           list (appId = origin app)
- *   POST   /_centraid-chat/sessions                     create  body: {appId?, mode?, title?}
- *   GET    /_centraid-chat/sessions/<id>                load (with messages)
+ *   GET    /_centraid-chat/sessions                     list (flat per-user)
+ *   POST   /_centraid-chat/sessions                     create  body: {mode?, title?}
+ *   GET    /_centraid-chat/sessions/<id>                load (with transcript)
  *   PATCH  /_centraid-chat/sessions/<id>                rename  body: {title}
  *   DELETE /_centraid-chat/sessions/<id>                delete
- *   POST   /_centraid-chat/sessions/<id>/messages       batch append
- *                                                       body: {payloads: [...], appId?}
+ *
+ * The transcript is not appended over HTTP — a chat turn is recorded as a
+ * `runs` row by the `/centraid/<id>/_chat` route's runner (issue #90 fold).
  */
 export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
@@ -71,51 +72,23 @@ export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
     try {
       if (sub === '/sessions' || sub === '/sessions/') {
         if (method === 'GET') {
-          const appId = url.searchParams.get('appId');
-          if (!appId) {
-            sendError(res, 400, 'appId is required');
-            return true;
-          }
-          sendJson(res, 200, { sessions: store.listSessions(appId) });
+          sendJson(res, 200, { sessions: store.listSessions() });
           return true;
         }
         if (method === 'POST') {
-          const body = (await readJsonBody(req)) as
-            | { appId?: string; mode?: string; title?: string }
-            | undefined;
+          const body = (await readJsonBody(req)) as { mode?: string; title?: string } | undefined;
           const mode = body?.mode === 'data' ? 'data' : 'full';
-          sendJson(res, 200, store.createSession(body?.appId ?? null, mode, body?.title ?? ''));
+          sendJson(res, 200, store.createSession(mode, body?.title ?? ''));
           return true;
         }
         sendError(res, 405, 'method not allowed');
         return true;
       }
 
-      // /sessions/<id> or /sessions/<id>/messages
-      const m = sub.match(/^\/sessions\/([^/]+)(?:\/(messages))?\/?$/);
+      // /sessions/<id>
+      const m = sub.match(/^\/sessions\/([^/]+)\/?$/);
       if (m && m[1]) {
         const id = decodeURIComponent(m[1]);
-        const tail = m[2];
-        if (tail === 'messages') {
-          if (method !== 'POST') {
-            sendError(res, 405, 'method not allowed');
-            return true;
-          }
-          const body = (await readJsonBody(req)) as
-            | { payloads?: unknown; appId?: string }
-            | undefined;
-          if (!Array.isArray(body?.payloads)) {
-            sendError(res, 400, 'payloads must be an array');
-            return true;
-          }
-          const result = store.appendMessages(id, body.payloads, body.appId ?? null);
-          if (!result) {
-            sendError(res, 404, 'session not found');
-            return true;
-          }
-          sendJson(res, 200, result);
-          return true;
-        }
         if (method === 'GET') {
           const full = store.getSession(id);
           if (!full) {

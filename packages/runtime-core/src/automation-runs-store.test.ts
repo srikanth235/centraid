@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
-import { makeAutomationDbProvider } from './gateway-db.js';
+import { makeActivityDbProvider } from './gateway-db.js';
 import { AutomationRunsStore } from './automation-runs-store.js';
 
-function newStore(appId = 'some-app'): AutomationRunsStore {
-  // A temp gateway DB — the provider runs the gateway migrations on
-  // first use, creating the automation_* tables.
+function newStore(): AutomationRunsStore {
+  // A temp activity DB — the provider runs the migrations on first use,
+  // creating the runs / run_nodes / automation_state tables.
   const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-  const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
-  return new AutomationRunsStore(provider, appId);
+  const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
+  return new AutomationRunsStore(provider);
 }
 
 describe('AutomationRunsStore', () => {
@@ -19,14 +19,14 @@ describe('AutomationRunsStore', () => {
     const store = newStore();
     store.insertRun({
       runId: 'parent-1',
-      automationName: 'parent',
+      automationId: 'auto-parent',
       triggerKind: 'scheduled',
       startedAt: 50,
     });
     store.finishRun({ runId: 'parent-1', endedAt: 60, ok: true });
     store.insertRun({
       runId: 'r1',
-      automationName: 'foo',
+      automationId: 'auto-foo',
       triggerKind: 'manual',
       parentRunId: 'parent-1',
       inputJson: '{"a":1}',
@@ -42,6 +42,7 @@ describe('AutomationRunsStore', () => {
     const row = store.getRun('r1');
     assert.ok(row);
     assert.equal(row.runId, 'r1');
+    assert.equal(row.automationId, 'auto-foo');
     assert.equal(row.triggerKind, 'manual');
     assert.equal(row.parentRunId, 'parent-1');
     assert.equal(row.inputJson, '{"a":1}');
@@ -55,12 +56,7 @@ describe('AutomationRunsStore', () => {
 
   it('finishRun with ok=false records the error', () => {
     const store = newStore();
-    store.insertRun({
-      runId: 'r1',
-      automationName: 'foo',
-      triggerKind: 'scheduled',
-      startedAt: 1,
-    });
+    store.insertRun({ runId: 'r1', automationId: 'a', triggerKind: 'scheduled', startedAt: 1 });
     store.finishRun({ runId: 'r1', endedAt: 2, ok: false, error: 'boom' });
     const row = store.getRun('r1');
     assert.equal(row?.ok, false);
@@ -70,7 +66,7 @@ describe('AutomationRunsStore', () => {
 
   it('inserts nodes with batch_id; lists in (ordinal, started_at) order', () => {
     const store = newStore();
-    store.insertRun({ runId: 'r', automationName: 'foo', triggerKind: 'scheduled', startedAt: 0 });
+    store.insertRun({ runId: 'r', automationId: 'a', triggerKind: 'scheduled', startedAt: 0 });
     store.insertNode({
       nodeId: 'n1',
       runId: 'r',
@@ -99,8 +95,8 @@ describe('AutomationRunsStore', () => {
       nodeId: 'n3',
       runId: 'r',
       ordinal: 2,
-      kind: 'agent',
-      name: 'agent',
+      kind: 'step',
+      model: 'claude-opus-4-7',
       ok: true,
       startedAt: 30,
       endedAt: 40,
@@ -119,63 +115,69 @@ describe('AutomationRunsStore', () => {
     assert.equal(nodes[0]?.batchId, 1);
     assert.equal(nodes[1]?.batchId, 1);
     assert.equal(nodes[2]?.batchId, undefined);
+    assert.equal(nodes[2]?.model, 'claude-opus-4-7');
     store.close();
   });
 
-  it('ctx.state get/set round-trip across store reopens', () => {
+  it('automation_state get/set round-trips across store reopens', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
-    const s1 = new AutomationRunsStore(provider, 'some-app');
-    s1.stateSet('foo', 'cursor', JSON.stringify({ since: 42 }), 1000);
+    const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
+    const s1 = new AutomationRunsStore(provider);
+    s1.stateSet('auto-foo', 'cursor', JSON.stringify({ since: 42 }), 1000);
     s1.close();
-    const s2 = new AutomationRunsStore(provider, 'some-app');
-    const entry = s2.stateGet('foo', 'cursor');
+    const s2 = new AutomationRunsStore(provider);
+    const entry = s2.stateGet('auto-foo', 'cursor');
     assert.equal(entry?.valueJson, JSON.stringify({ since: 42 }));
     assert.equal(entry?.updatedAt, 1000);
-    s2.stateSet('foo', 'cursor', JSON.stringify({ since: 99 }), 2000);
-    const updated = s2.stateGet('foo', 'cursor');
+    s2.stateSet('auto-foo', 'cursor', JSON.stringify({ since: 99 }), 2000);
+    const updated = s2.stateGet('auto-foo', 'cursor');
     assert.equal(updated?.valueJson, JSON.stringify({ since: 99 }));
     assert.equal(updated?.updatedAt, 2000);
-    s2.stateDelete('foo', 'cursor');
-    assert.equal(s2.stateGet('foo', 'cursor'), undefined);
+    s2.stateDelete('auto-foo', 'cursor');
+    assert.equal(s2.stateGet('auto-foo', 'cursor'), undefined);
     s2.close();
   });
 
-  it('state is scoped per origin app', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
-    const appA = new AutomationRunsStore(provider, 'app-a');
-    const appB = new AutomationRunsStore(provider, 'app-b');
-    appA.stateSet('shared-name', 'k', JSON.stringify('A'), 1);
-    appB.stateSet('shared-name', 'k', JSON.stringify('B'), 1);
-    assert.equal(appA.stateGet('shared-name', 'k')?.valueJson, JSON.stringify('A'));
-    assert.equal(appB.stateGet('shared-name', 'k')?.valueJson, JSON.stringify('B'));
+  it('state is scoped per automation', () => {
+    const store = newStore();
+    store.stateSet('auto-a', 'k', JSON.stringify('A'), 1);
+    store.stateSet('auto-b', 'k', JSON.stringify('B'), 1);
+    assert.equal(store.stateGet('auto-a', 'k')?.valueJson, JSON.stringify('A'));
+    assert.equal(store.stateGet('auto-b', 'k')?.valueJson, JSON.stringify('B'));
   });
 
-  it('listRuns is scoped to the store origin app', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
-    const appA = new AutomationRunsStore(provider, 'app-a');
-    const appB = new AutomationRunsStore(provider, 'app-b');
-    appA.insertRun({ runId: 'a1', automationName: 'job', triggerKind: 'scheduled', startedAt: 1 });
-    appB.insertRun({ runId: 'b1', automationName: 'job', triggerKind: 'scheduled', startedAt: 2 });
+  it('listRuns scopes to a single automation when automationId is given', () => {
+    const store = newStore();
+    store.insertRun({
+      runId: 'a1',
+      automationId: 'auto-a',
+      triggerKind: 'scheduled',
+      startedAt: 1,
+    });
+    store.insertRun({
+      runId: 'b1',
+      automationId: 'auto-b',
+      triggerKind: 'scheduled',
+      startedAt: 2,
+    });
     assert.deepEqual(
-      appA.listRuns({ name: 'job' }).map((r) => r.runId),
+      store.listRuns({ automationId: 'auto-a' }).map((r) => r.runId),
       ['a1'],
     );
+    // No automationId — the ledger is global, so every run is returned.
     assert.deepEqual(
-      appB.listRuns({}).map((r) => r.runId),
-      ['b1'],
+      store.listRuns({}).map((r) => r.runId),
+      ['b1', 'a1'],
     );
   });
 
   it('lastRun returns most recent run, optionally filtered by status', () => {
     const store = newStore();
-    store.insertRun({ runId: 'r1', automationName: 'foo', triggerKind: 'scheduled', startedAt: 1 });
+    store.insertRun({ runId: 'r1', automationId: 'foo', triggerKind: 'scheduled', startedAt: 1 });
     store.finishRun({ runId: 'r1', endedAt: 2, ok: false, error: 'bad' });
-    store.insertRun({ runId: 'r2', automationName: 'foo', triggerKind: 'scheduled', startedAt: 3 });
+    store.insertRun({ runId: 'r2', automationId: 'foo', triggerKind: 'scheduled', startedAt: 3 });
     store.finishRun({ runId: 'r2', endedAt: 4, ok: true });
-    store.insertRun({ runId: 'r3', automationName: 'foo', triggerKind: 'scheduled', startedAt: 5 });
+    store.insertRun({ runId: 'r3', automationId: 'foo', triggerKind: 'scheduled', startedAt: 5 });
     store.finishRun({ runId: 'r3', endedAt: 6, ok: false, error: 'bad2' });
     assert.equal(store.lastRun('foo')?.runId, 'r3');
     assert.equal(store.lastRun('foo', 'ok')?.runId, 'r2');
@@ -184,21 +186,21 @@ describe('AutomationRunsStore', () => {
     store.close();
   });
 
-  it('listRuns supports name/status/since/limit filters', () => {
+  it('listRuns supports automationId/status/since/limit filters', () => {
     const store = newStore();
     for (let i = 0; i < 5; i++) {
       const id = `r${i}`;
       store.insertRun({
         runId: id,
-        automationName: i < 3 ? 'foo' : 'bar',
+        automationId: i < 3 ? 'foo' : 'bar',
         triggerKind: 'scheduled',
         startedAt: 100 + i,
       });
       store.finishRun({ runId: id, endedAt: 200 + i, ok: i !== 1 });
     }
-    assert.equal(store.listRuns({ name: 'foo' }).length, 3);
-    assert.equal(store.listRuns({ name: 'foo', status: 'ok' }).length, 2);
-    assert.equal(store.listRuns({ name: 'foo', status: 'error' }).length, 1);
+    assert.equal(store.listRuns({ automationId: 'foo' }).length, 3);
+    assert.equal(store.listRuns({ automationId: 'foo', status: 'ok' }).length, 2);
+    assert.equal(store.listRuns({ automationId: 'foo', status: 'error' }).length, 1);
     assert.equal(store.listRuns({ since: 103 }).length, 2);
     assert.equal(store.listRuns({ limit: 2 }).length, 2);
     const newestFirst = store.listRuns({});
@@ -216,15 +218,13 @@ describe('AutomationRunsStore', () => {
       const id = `r${i}`;
       store.insertRun({
         runId: id,
-        automationName: 'win',
+        automationId: 'win',
         triggerKind: 'scheduled',
         startedAt: 100 + i,
       });
       store.finishRun({ runId: id, endedAt: 200 + i, ok: i < 2 });
     }
-    // The two newest runs are both failures — an after-LIMIT filter would
-    // return 0; the SQL predicate must still surface the 2 older oks.
-    const oks = store.listRuns({ name: 'win', status: 'ok', limit: 2 });
+    const oks = store.listRuns({ automationId: 'win', status: 'ok', limit: 2 });
     assert.equal(oks.length, 2);
     assert.deepEqual(
       oks.map((r) => r.runId),
@@ -239,7 +239,7 @@ describe('AutomationRunsStore', () => {
       const id = `r${i}`;
       store.insertRun({
         runId: id,
-        automationName: 'foo',
+        automationId: 'foo',
         triggerKind: 'scheduled',
         startedAt: 100 + i,
       });
@@ -259,9 +259,8 @@ describe('AutomationRunsStore', () => {
     assert.equal(store.countRuns('foo'), 10);
     store.prune('foo', { count: 3 });
     assert.equal(store.countRuns('foo'), 3);
-    const remaining = store.listRuns({ name: 'foo' }).map((r) => r.runId);
+    const remaining = store.listRuns({ automationId: 'foo' }).map((r) => r.runId);
     assert.deepEqual(remaining, ['r9', 'r8', 'r7']);
-    // Nodes for pruned runs are cascaded away.
     for (let i = 0; i < 7; i++) {
       assert.equal(store.listNodes(`r${i}`).length, 0);
     }
@@ -277,14 +276,14 @@ describe('AutomationRunsStore', () => {
       const id = `r${i}`;
       store.insertRun({
         runId: id,
-        automationName: 'foo',
+        automationId: 'foo',
         triggerKind: 'scheduled',
         startedAt: 100 + i,
       });
       store.finishRun({ runId: id, endedAt: 200 + i, ok: i % 2 === 0, error: 'x' });
     }
     store.prune('foo', { errorsOnly: true });
-    const remaining = store.listRuns({ name: 'foo' });
+    const remaining = store.listRuns({ automationId: 'foo' });
     assert.equal(remaining.length, 2);
     for (const r of remaining) assert.equal(r.ok, false);
     store.close();
@@ -292,7 +291,7 @@ describe('AutomationRunsStore', () => {
 
   it('prune all=true is a no-op', () => {
     const store = newStore();
-    store.insertRun({ runId: 'r1', automationName: 'foo', triggerKind: 'scheduled', startedAt: 1 });
+    store.insertRun({ runId: 'r1', automationId: 'foo', triggerKind: 'scheduled', startedAt: 1 });
     store.finishRun({ runId: 'r1', endedAt: 2, ok: true });
     store.prune('foo', { all: true });
     assert.equal(store.countRuns('foo'), 1);
@@ -305,7 +304,7 @@ describe('AutomationRunsStore', () => {
       const id = `r${i}`;
       store.insertRun({
         runId: id,
-        automationName: 'foo',
+        automationId: 'foo',
         triggerKind: 'scheduled',
         startedAt: 100 + i,
       });
@@ -315,9 +314,8 @@ describe('AutomationRunsStore', () => {
     store.setPinned('r0', true);
     assert.equal(store.getRun('r0')?.pinned, true);
     assert.equal(store.pinnedRun('foo')?.runId, 'r0');
-    // Keep newest 2 — r0 is oldest but pinned, so it must survive.
     store.prune('foo', { count: 2 });
-    const remaining = store.listRuns({ name: 'foo' }).map((r) => r.runId);
+    const remaining = store.listRuns({ automationId: 'foo' }).map((r) => r.runId);
     assert.ok(remaining.includes('r0'), 'pinned run must survive count pruning');
     assert.equal(remaining.length, 3); // r0 (pinned) + r5 + r4
     store.setPinned('r0', false);
@@ -327,15 +325,10 @@ describe('AutomationRunsStore', () => {
 
   it('insertNode records child_run_id; listChildRuns links parent to children', () => {
     const store = newStore();
-    store.insertRun({
-      runId: 'p',
-      automationName: 'parent',
-      triggerKind: 'scheduled',
-      startedAt: 0,
-    });
+    store.insertRun({ runId: 'p', automationId: 'parent', triggerKind: 'scheduled', startedAt: 0 });
     store.insertRun({
       runId: 'c1',
-      automationName: 'child',
+      automationId: 'child',
       triggerKind: 'manual',
       parentRunId: 'p',
       startedAt: 5,
@@ -361,56 +354,11 @@ describe('AutomationRunsStore', () => {
     store.close();
   });
 
-  it('cross-app ctx.invoke linkage — a child run under app B links to a parent under app A', () => {
-    // The whole point of folding the run audit into the gateway DB:
-    // a cross-app `ctx.invoke` child run can carry a `parentRunId`
-    // pointing at a run in a different app, and `listChildRuns` joins
-    // them — a per-file split could not.
-    const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
-    const appA = new AutomationRunsStore(provider, 'app-a');
-    // forApp shares the same provider/connection — used by cross-app invoke.
-    const appB = appA.forApp('app-b');
-
-    appA.insertRun({
-      runId: 'A-parent',
-      automationName: 'orchestrate',
-      triggerKind: 'scheduled',
-      startedAt: 1,
-    });
-    appB.insertRun({
-      runId: 'B-child',
-      automationName: 'do-work',
-      triggerKind: 'manual',
-      parentRunId: 'A-parent',
-      startedAt: 2,
-    });
-    appB.finishRun({ runId: 'B-child', endedAt: 3, ok: true });
-
-    // The child lives under app B's origin scope...
-    assert.deepEqual(
-      appB.listRuns({ name: 'do-work' }).map((r) => r.runId),
-      ['B-child'],
-    );
-    // ...but it does NOT show up under app A's name-scoped list.
-    assert.deepEqual(appA.listRuns({ name: 'do-work' }), []);
-    // The cross-file-impossible bit: listChildRuns(parent) finds the
-    // child even though parent and child belong to different apps.
-    const children = appA.listChildRuns('A-parent');
-    assert.equal(children.length, 1);
-    assert.equal(children[0]?.runId, 'B-child');
-  });
-
-  it('deleteAppData drops only the bound app run audit + state', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeAutomationDbProvider(path.join(dir, 'centraid-automations.sqlite'));
-    const appA = new AutomationRunsStore(provider, 'app-a');
-    const appB = new AutomationRunsStore(provider, 'app-b');
-    for (const [store, id] of [
-      [appA, 'a1'],
-      [appB, 'b1'],
-    ] as const) {
-      store.insertRun({ runId: id, automationName: 'job', triggerKind: 'scheduled', startedAt: 1 });
+  it('deleteAutomationData drops only that automation run ledger + state', () => {
+    const store = newStore();
+    for (const id of ['a1', 'b1']) {
+      const automationId = id === 'a1' ? 'auto-a' : 'auto-b';
+      store.insertRun({ runId: id, automationId, triggerKind: 'scheduled', startedAt: 1 });
       store.insertNode({
         nodeId: `${id}-n`,
         runId: id,
@@ -422,15 +370,15 @@ describe('AutomationRunsStore', () => {
         endedAt: 2,
         durationMs: 1,
       });
-      store.stateSet('job', 'k', JSON.stringify('v'), 1);
+      store.stateSet(automationId, 'k', JSON.stringify('v'), 1);
     }
-    appA.deleteAppData();
-    assert.equal(appA.listRuns({}).length, 0);
-    assert.equal(appA.listNodes('a1').length, 0); // cascaded
-    assert.equal(appA.stateGet('job', 'k'), undefined);
-    // app B is untouched.
-    assert.equal(appB.listRuns({}).length, 1);
-    assert.equal(appB.listNodes('b1').length, 1);
-    assert.ok(appB.stateGet('job', 'k'));
+    store.deleteAutomationData('auto-a');
+    assert.equal(store.listRuns({ automationId: 'auto-a' }).length, 0);
+    assert.equal(store.listNodes('a1').length, 0); // cascaded
+    assert.equal(store.stateGet('auto-a', 'k'), undefined);
+    // auto-b is untouched.
+    assert.equal(store.listRuns({ automationId: 'auto-b' }).length, 1);
+    assert.equal(store.listNodes('b1').length, 1);
+    assert.ok(store.stateGet('auto-b', 'k'));
   });
 });

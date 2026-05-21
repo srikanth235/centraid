@@ -1,11 +1,11 @@
 /**
  * Automation manifest schema + validator.
  *
- * Each automation in an app lives as three artifacts:
- *
- *   1. `automations/<name>.json` — manifest (this module's shape)
- *   2. `actions/<name>.js`       — generated JS handler
- *   3. cron expression           — embedded in the manifest's `trigger.expr`
+ * An automation is a single artifact — `automations/<name>.json`, this
+ * module's shape. Model-B (issue #90) replaced the generated
+ * `actions/<name>.js` JS handler with an agent-driven model: a fire is
+ * an agent turn driven by `manifest.prompt`, given the tools/mcps/model
+ * in `manifest.requires`. There is no handler file.
  *
  * Trigger shape is `trigger: { kind: 'cron', expr }` — the shape leaves
  * room for webhook/event kinds without a second migration. Only `cron`
@@ -78,7 +78,6 @@ export interface AutomationHistoryConfig {
 export interface AutomationManifest {
   readonly prompt: string;
   readonly trigger: AutomationTrigger;
-  readonly action: string;
   readonly requires: AutomationManifestRequires;
   readonly costEstimate?: AutomationCostEstimate;
   readonly outputSchema?: AutomationOutputSchema;
@@ -95,15 +94,6 @@ export function isValidCronExpression(expr: string): boolean {
   if (fields.length !== 5) return false;
   const fieldPattern = /^[0-9*,\-/?A-Za-z]+$/;
   return fields.every((f) => fieldPattern.test(f));
-}
-
-export function isValidActionFilename(name: string): boolean {
-  if (typeof name !== 'string') return false;
-  if (!name.endsWith('.js')) return false;
-  if (name.includes('/') || name.includes('\\') || name.includes('..')) return false;
-  const base = name.slice(0, -3);
-  if (!base) return false;
-  return /^[A-Za-z0-9_-]+$/.test(base);
 }
 
 export function isValidAutomationName(name: string): boolean {
@@ -315,14 +305,6 @@ export function validateManifest(raw: unknown): AutomationManifest {
 
   const prompt = requireString(r.prompt, 'prompt');
   const trigger = resolveTrigger(r);
-  const action = requireString(r.action, 'action');
-  if (!isValidActionFilename(action)) {
-    throw new AutomationManifestError(
-      'invalid_action_path',
-      `manifest.action "${action}" must be a bare filename ending in .js (no slashes, no '..')`,
-      'action',
-    );
-  }
   const requires = validateRequires(r.requires);
   const costEstimate = validateCostEstimate(r.costEstimate);
   const outputSchema = validateOutputSchema(r.outputSchema);
@@ -346,7 +328,6 @@ export function validateManifest(raw: unknown): AutomationManifest {
   return {
     prompt,
     trigger,
-    action,
     requires,
     ...(costEstimate ? { costEstimate } : {}),
     ...(outputSchema ? { outputSchema } : {}),

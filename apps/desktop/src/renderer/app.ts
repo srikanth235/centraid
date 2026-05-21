@@ -1011,19 +1011,6 @@
   // yet, so the figures here are a representative synthetic snapshot;
   // the layout is the deliverable, ready to bind to real data later.
 
-  // A tinted icon tile used in the By-app table and Recent-activity feed.
-  function insAppTile(iconKey: IconNameType, color: ColorHexType, size: number): HTMLElement {
-    const finish = window.CentraidTokens.tileFinish(color, 'gradient');
-    const tile = el('span', {
-      class: 'cd-ins-app-icon',
-      trustedHtml: Icon[iconKey] ? Icon[iconKey]({ size, strokeWidth: 1.9 }) : '',
-    });
-    tile.style.background = finish.background;
-    tile.style.color = finish.glyphColor;
-    if (finish.boxShadow) tile.style.boxShadow = finish.boxShadow;
-    return tile;
-  }
-
   // Inline SVG line chart for the daily-consumption panel. `values` is a
   // per-day token series; the peak point is marked with a labelled node.
   function insLineChart(values: readonly number[]): HTMLElement {
@@ -1068,28 +1055,6 @@
     return chart;
   }
 
-  // Compact 14-day sparkline (no fill, no markers) for the By-app table.
-  function insSparkline(values: readonly number[]): HTMLElement {
-    const W = 96;
-    const H = 26;
-    const n = values.length;
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    const span = max - min || 1;
-    const pts = values.map((v, i) => {
-      const x = n <= 1 ? 0 : (i / (n - 1)) * W;
-      const y = H - 3 - ((v - min) / span) * (H - 6);
-      return `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
-    });
-    return el('span', {
-      class: 'cd-ins-spark',
-      trustedHtml: `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-        <path d="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="1.5"
-          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-      </svg>`,
-    });
-  }
-
   // Format a raw token count as a compact k / M string.
   function insK(v: number): string {
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
@@ -1113,11 +1078,6 @@
     ]);
   }
 
-  // A "+18%" style delta chip — tone drives the colour.
-  function insDelta(text: string, tone: 'up' | 'down' | 'flat'): HTMLElement {
-    return el('span', { class: 'cd-ins-delta', 'data-tone': tone }, text);
-  }
-
   function insPanel(title: string, meta: string, body: HTMLElement): HTMLElement {
     return el('section', { class: 'cd-ins-panel' }, [
       el('header', { class: 'cd-ins-panel-head' }, [
@@ -1128,7 +1088,28 @@
     ]);
   }
 
+  // Format a USD figure for a KPI / table cell.
+  function insUsd(n: number): string {
+    if (n > 0 && n < 0.01) return '<$0.01';
+    return `$${n.toFixed(2)}`;
+  }
+
+  // Title-case a run `kind` for display ('chat' → 'Chat').
+  function insKindLabel(kind: string): string {
+    if (kind === 'chat') return 'Chat';
+    if (kind === 'build') return 'Build';
+    if (kind === 'automation') return 'Automation';
+    return kind;
+  }
+
   function renderInsights(): void {
+    void renderInsightsAsync();
+  }
+
+  // Usage analytics dashboard — bound to the unified run ledger via the
+  // `getInsightsSummary` IPC (issue #90). Token consumption, spend, and
+  // per-automation / per-model breakdowns over a trailing 30-day window.
+  async function renderInsightsAsync(): Promise<void> {
     recordRoute({ kind: 'insights' });
     clear();
     const { main, scroll } = pageScroll('', '');
@@ -1139,18 +1120,7 @@
     const page = el('div', { class: 'cd-ins-page' });
     scroll.append(page);
 
-    // ── Header — title + filter chips ────────────────────────────────
-    const filterChip = (icon: string, label: string, caret: boolean): HTMLElement =>
-      el('button', { class: 'cd-ins-filter', type: 'button', disabled: 'true' }, [
-        el('span', { class: 'cd-ins-filter-icon', trustedHtml: icon }),
-        el('span', {}, label),
-        caret
-          ? el('span', {
-              class: 'cd-ins-filter-caret',
-              trustedHtml: Icon.ChevronDown({ size: 12, strokeWidth: 2 }),
-            })
-          : false,
-      ]);
+    // ── Header — title + window label ────────────────────────────────
     page.append(
       el('div', { class: 'cd-ins-head' }, [
         el('div', { class: 'cd-ins-title' }, [
@@ -1161,338 +1131,221 @@
           el('h1', {}, 'Insights'),
         ]),
         el('div', { class: 'cd-ins-filters' }, [
-          filterChip(Icon.Folder({ size: 13 }), 'All apps', true),
-          filterChip(Icon.History({ size: 13 }), 'Last 30 days', true),
-          filterChip(Icon.Sparkle({ size: 13 }), 'Tokens · USD', true),
-          el('button', {
-            class: 'cd-ins-filter cd-ins-filter-icononly',
-            type: 'button',
-            disabled: 'true',
-            'aria-label': 'Export',
-            trustedHtml: Icon.Share({ size: 14 }),
-          }),
+          el('span', { class: 'cd-ins-filter cd-ins-filter-static' }, [
+            el('span', { class: 'cd-ins-filter-icon', trustedHtml: Icon.History({ size: 13 }) }),
+            el('span', {}, 'Last 30 days'),
+          ]),
         ]),
       ]),
     );
 
+    const bodyHost = el('div', { class: 'cd-ins-body' });
+    page.append(bodyHost);
+    bodyHost.append(el('div', { class: 'cd-automations-loading' }, 'Loading insights…'));
+    mountShellPage('insights', main);
+
+    let summary: CentraidInsightsSummary;
+    try {
+      summary = await window.CentraidApi.getInsightsSummary();
+    } catch (err) {
+      if (!document.contains(bodyHost)) return;
+      bodyHost.replaceChildren(
+        renderSimpleEmpty(
+          `Couldn’t load insights: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+    // The user may have navigated away while the IPC was in flight.
+    if (!document.contains(bodyHost)) return;
+    bodyHost.replaceChildren();
+
+    const { kpis } = summary;
+
     // ── KPI row ──────────────────────────────────────────────────────
-    page.append(
+    const quotaPct =
+      kpis.quotaTokens > 0
+        ? Math.min(100, Math.round((kpis.totalTokens / kpis.quotaTokens) * 100))
+        : 0;
+    bodyHost.append(
       el('div', { class: 'cd-ins-kpis' }, [
         insStatCard({
           icon: Icon.Activity({ size: 12 }),
-          label: 'Tokens · this month',
-          value: '3.53M',
+          label: 'Tokens · 30 days',
+          value: insK(kpis.totalTokens),
           foot: el('div', { class: 'cd-ins-meter' }, [
-            el('div', { class: 'cd-ins-meter-row' }, [
-              insDelta('+18%', 'up'),
-              el('span', { class: 'cd-ins-kpi-sub' }, 'of 8M included'),
-            ]),
             el('div', { class: 'cd-ins-bar' }, [
-              el('div', { class: 'cd-ins-bar-fill', style: { width: '44%' } }),
+              el('div', { class: 'cd-ins-bar-fill', style: { width: `${quotaPct}%` } }),
             ]),
             el('div', { class: 'cd-ins-meter-foot' }, [
-              el('span', {}, '3.53M of 8M included'),
-              el('span', {}, '44%'),
+              el('span', {}, `${insK(kpis.totalTokens)} of ${insK(kpis.quotaTokens)} included`),
+              el('span', {}, `${quotaPct}%`),
             ]),
           ]),
         }),
         insStatCard({
           icon: Icon.Coin({ size: 12 }),
           label: 'Spent · USD',
-          value: '$10.41',
-          foot: el('div', { class: 'cd-ins-kpi-row' }, [
-            insDelta('+18%', 'up'),
-            el('span', { class: 'cd-ins-kpi-sub' }, 'May 1 – 30'),
-          ]),
+          value: insUsd(kpis.totalCostUsd),
+          foot: el('span', { class: 'cd-ins-kpi-sub' }, 'last 30 days'),
         }),
         insStatCard({
           icon: Icon.History({ size: 12 }),
           label: 'Forecast · USD',
-          value: '$26.40',
-          foot: el('span', { class: 'cd-ins-kpi-sub' }, 'end of month'),
+          value: insUsd(kpis.forecastCostUsd),
+          foot: el('span', { class: 'cd-ins-kpi-sub' }, '30-day run rate'),
         }),
         insStatCard({
           icon: Icon.Folder({ size: 12 }),
           label: 'Apps touched',
-          value: '14',
-          foot: el('div', { class: 'cd-ins-kpi-row' }, [
-            insDelta('+27%', 'up'),
-            el('span', { class: 'cd-ins-kpi-sub' }, 'this month'),
-          ]),
+          value: String(kpis.appsTouched),
+          foot: el('span', { class: 'cd-ins-kpi-sub' }, 'last 30 days'),
         }),
         insStatCard({
           icon: Icon.Sparkle({ size: 12 }),
           label: 'Generations',
-          value: '62',
-          foot: el('div', { class: 'cd-ins-kpi-row' }, [
-            insDelta('+11%', 'up'),
-            el('span', { class: 'cd-ins-kpi-sub' }, '2 retries today'),
-          ]),
+          value: String(kpis.generations),
+          foot: el('span', { class: 'cd-ins-kpi-sub' }, `${kpis.retries} retries`),
         }),
       ]),
     );
 
     // ── Two-column grid ──────────────────────────────────────────────
     const grid = el('div', { class: 'cd-ins-grid' });
-    page.append(grid);
+    bodyHost.append(grid);
     const colMain = el('div', { class: 'cd-ins-col' });
     const colSide = el('div', { class: 'cd-ins-col' });
     grid.append(colMain, colSide);
 
     // Daily consumption ------------------------------------------------
-    const series = [
-      62, 71, 58, 66, 54, 88, 79, 72, 95, 84, 91, 103, 88, 110, 124, 96, 108, 119, 102, 131, 115,
-      142, 311, 168, 151, 139, 158, 171, 162, 175,
-    ].map((k) => k * 1000);
-    const chartBody = el('div', { class: 'cd-ins-chart' }, [
-      el('div', { class: 'cd-ins-chart-stats' }, [
-        insChartStat('Daily avg', '118k'),
-        insChartStat('Peak', '311k', 'May 23'),
-        insChartStat('Median', '108k'),
-        insChartStat('Trend', '↑ 1.4% / day', undefined, true),
-      ]),
-      insLineChart(series),
-      el('div', { class: 'cd-ins-chart-axis' }, [
-        el('span', {}, '30d ago'),
-        el('span', {}, '23d'),
-        el('span', {}, '16d'),
-        el('span', {}, '9d'),
-        el('span', {}, '1d'),
-      ]),
-    ]);
-    colMain.append(insPanel('Daily consumption', '30 days · tokens', chartBody));
-
-    // By app -----------------------------------------------------------
-    interface InsAppRow {
-      name: string;
-      iconKey: IconNameType;
-      color: ColorHexType;
-      spike?: boolean;
-      tokens: number;
-      usd: string;
-      delta: string;
-      tone: 'up' | 'down' | 'flat';
-      mix: number;
-      spark: number[];
-      lastTouched: string;
-      runs: number;
+    if (summary.daily.length > 0) {
+      const series = summary.daily.map((d) => d.tokens);
+      const total = series.reduce((s, v) => s + v, 0);
+      const avg = Math.round(total / series.length);
+      const peak = Math.max(...series);
+      const peakDay = summary.daily[series.indexOf(peak)]!.date;
+      const sorted = [...series].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)]!;
+      const chartBody = el('div', { class: 'cd-ins-chart' }, [
+        el('div', { class: 'cd-ins-chart-stats' }, [
+          insChartStat('Daily avg', insK(avg)),
+          insChartStat('Peak', insK(peak), peakDay),
+          insChartStat('Median', insK(median)),
+          insChartStat('Days', String(series.length)),
+        ]),
+        insLineChart(series.length === 1 ? [series[0]!, series[0]!] : series),
+        el('div', { class: 'cd-ins-chart-axis' }, [
+          el('span', {}, summary.daily[0]!.date),
+          el('span', {}, summary.daily[summary.daily.length - 1]!.date),
+        ]),
+      ]);
+      colMain.append(
+        insPanel('Daily consumption', `${summary.windowDays} days · tokens`, chartBody),
+      );
+    } else {
+      colMain.append(
+        insPanel(
+          'Daily consumption',
+          `${summary.windowDays} days · tokens`,
+          renderSimpleEmpty('No activity in this window yet.'),
+        ),
+      );
     }
-    const appRows: InsAppRow[] = [
-      {
-        name: 'Habit tracker',
-        iconKey: 'Habit',
-        color: '#C8516B' as ColorHexType,
-        tokens: 842_000,
-        usd: '$2.58',
-        delta: '+24%',
-        tone: 'up',
-        mix: 78,
-        spark: [4, 6, 5, 7, 6, 8, 7, 9, 8, 7, 9, 8, 10, 9],
-        lastTouched: '12m ago',
-        runs: 9,
-      },
-      {
-        name: 'Journal',
-        iconKey: 'Journal',
-        color: '#7C5BD9' as ColorHexType,
-        tokens: 614_000,
-        usd: '$1.87',
-        delta: '+8%',
-        tone: 'up',
-        mix: 64,
-        spark: [5, 5, 6, 5, 7, 6, 8, 7, 6, 8, 7, 9, 8, 9],
-        lastTouched: '1h ago',
-        runs: 7,
-      },
-      {
-        name: 'Plant care',
-        iconKey: 'Plant',
-        color: '#5E7A52' as ColorHexType,
-        spike: true,
-        tokens: 587_000,
-        usd: '$2.21',
-        delta: '+312%',
-        tone: 'up',
-        mix: 58,
-        spark: [2, 2, 3, 2, 3, 4, 3, 5, 6, 8, 7, 10, 12, 14],
-        lastTouched: 'yesterday',
-        runs: 4,
-      },
-      {
-        name: 'Task tracker',
-        iconKey: 'Todo',
-        color: '#4F6BD9' as ColorHexType,
-        tokens: 498_000,
-        usd: '$1.52',
-        delta: '−6%',
-        tone: 'down',
-        mix: 49,
-        spark: [9, 8, 9, 7, 8, 6, 7, 6, 5, 6, 5, 6, 5, 5],
-        lastTouched: '3h ago',
-        runs: 6,
-      },
-      {
-        name: 'Weekly planner',
-        iconKey: 'Todo',
-        color: '#3FA89A' as ColorHexType,
-        tokens: 312_000,
-        usd: '$0.96',
-        delta: '+2%',
-        tone: 'flat',
-        mix: 31,
-        spark: [4, 5, 4, 5, 5, 4, 5, 5, 6, 5, 5, 6, 5, 6],
-        lastTouched: 'yesterday',
-        runs: 3,
-      },
-      {
-        name: 'Notes',
-        iconKey: 'Journal',
-        color: '#C8516B' as ColorHexType,
-        tokens: 186_000,
-        usd: '$0.57',
-        delta: '−14%',
-        tone: 'down',
-        mix: 19,
-        spark: [7, 6, 6, 5, 6, 4, 5, 4, 4, 3, 4, 3, 3, 2],
-        lastTouched: '2d ago',
-        runs: 2,
-      },
-    ];
-    const table = el('div', { class: 'cd-ins-table' });
-    table.append(
+
+    // By automation ----------------------------------------------------
+    const autoTable = el('div', { class: 'cd-ins-table' });
+    autoTable.append(
       el('div', { class: 'cd-ins-tr cd-ins-tr-head' }, [
-        el('span', { class: 'cd-ins-th cd-ins-c-app' }, 'App'),
+        el('span', { class: 'cd-ins-th cd-ins-c-app' }, 'Source'),
         el('span', { class: 'cd-ins-th cd-ins-c-num' }, 'Tokens'),
         el('span', { class: 'cd-ins-th cd-ins-c-num' }, 'USD'),
-        el('span', { class: 'cd-ins-th cd-ins-c-num' }, 'Δ 30d'),
         el('span', { class: 'cd-ins-th cd-ins-c-mix' }, 'Mix'),
-        el('span', { class: 'cd-ins-th cd-ins-c-spark' }, '14-day'),
-        el('span', { class: 'cd-ins-th cd-ins-c-last' }, 'Last touched'),
         el('span', { class: 'cd-ins-th cd-ins-c-runs' }, 'Runs'),
       ]),
     );
-    for (const r of appRows) {
-      table.append(
+    const autoMax = Math.max(1, ...summary.byAutomation.map((r) => r.tokens));
+    for (const r of summary.byAutomation) {
+      autoTable.append(
         el('div', { class: 'cd-ins-tr' }, [
           el('span', { class: 'cd-ins-td cd-ins-c-app' }, [
-            insAppTile(r.iconKey, r.color, 13),
-            el('span', { class: 'cd-ins-app-name' }, r.name),
-            r.spike ? el('span', { class: 'cd-ins-tag' }, 'spike') : false,
+            el('span', { class: 'cd-ins-tag' }, insKindLabel(r.kind)),
+            el('span', { class: 'cd-ins-app-name' }, r.label),
           ]),
           el('span', { class: 'cd-ins-td cd-ins-c-num cd-ins-mono' }, insK(r.tokens)),
-          el('span', { class: 'cd-ins-td cd-ins-c-num cd-ins-mono' }, r.usd),
-          el('span', { class: 'cd-ins-td cd-ins-c-num' }, [insDelta(r.delta, r.tone)]),
+          el('span', { class: 'cd-ins-td cd-ins-c-num cd-ins-mono' }, insUsd(r.costUsd)),
           el('span', { class: 'cd-ins-td cd-ins-c-mix' }, [
             el('span', { class: 'cd-ins-mixbar' }, [
-              el('span', { class: 'cd-ins-mixbar-fill', style: { width: `${r.mix}%` } }),
+              el('span', {
+                class: 'cd-ins-mixbar-fill',
+                style: { width: `${Math.round((r.tokens / autoMax) * 100)}%` },
+              }),
             ]),
           ]),
-          el('span', { class: 'cd-ins-td cd-ins-c-spark' }, [insSparkline(r.spark)]),
-          el('span', { class: 'cd-ins-td cd-ins-c-last cd-ins-mono' }, r.lastTouched),
           el('span', { class: 'cd-ins-td cd-ins-c-runs cd-ins-mono' }, String(r.runs)),
         ]),
       );
     }
-    colMain.append(insPanel('By app', `${appRows.length} apps · sorted by tokens`, table));
+    if (summary.byAutomation.length === 0) {
+      autoTable.append(el('div', { class: 'cd-ins-tr' }, [renderSimpleEmpty('No runs yet.')]));
+    }
+    colMain.append(
+      insPanel('By source', `${summary.byAutomation.length} · sorted by tokens`, autoTable),
+    );
 
     // By model ---------------------------------------------------------
-    interface InsModelRow {
-      name: string;
-      pct: number;
-      tokens: string;
-      usd: string;
-    }
-    const models: InsModelRow[] = [
-      { name: 'Claude Sonnet 4.5', pct: 66, tokens: '2.87M', usd: '$8.61' },
-      { name: 'Claude Haiku 4.5', pct: 27, tokens: '1.18M', usd: '$1.18' },
-      { name: 'GPT-4o mini', pct: 6, tokens: '246k', usd: '$0.62' },
-      { name: 'Local · Llama 3.1', pct: 1, tokens: '18k', usd: '$0.00' },
-    ];
+    const modelTotal = Math.max(
+      1,
+      summary.byModel.reduce((s, m) => s + m.tokens, 0),
+    );
     const modelBody = el('div', { class: 'cd-ins-models' });
-    for (const m of models) {
+    for (const m of summary.byModel) {
+      const pct = Math.round((m.tokens / modelTotal) * 100);
       modelBody.append(
         el('div', { class: 'cd-ins-model' }, [
-          el('div', { class: 'cd-ins-model-name' }, m.name),
+          el('div', { class: 'cd-ins-model-name' }, m.model),
           el('div', { class: 'cd-ins-bar' }, [
-            el('div', { class: 'cd-ins-bar-fill', style: { width: `${m.pct}%` } }),
+            el('div', { class: 'cd-ins-bar-fill', style: { width: `${pct}%` } }),
           ]),
           el('div', { class: 'cd-ins-model-foot' }, [
-            el('span', { class: 'cd-ins-mono' }, `${m.pct}%  ${m.tokens}`),
-            el('span', { class: 'cd-ins-mono' }, m.usd),
+            el('span', { class: 'cd-ins-mono' }, `${pct}%  ${insK(m.tokens)}`),
+            el('span', { class: 'cd-ins-mono' }, insUsd(m.costUsd)),
           ]),
         ]),
       );
     }
-    colSide.append(insPanel('By model', 'this month', modelBody));
+    if (summary.byModel.length === 0) {
+      modelBody.append(renderSimpleEmpty('No model usage recorded yet.'));
+    }
+    colSide.append(insPanel('By model', 'last 30 days', modelBody));
 
     // Recent activity --------------------------------------------------
-    interface InsActivityRow {
-      app: string;
-      iconKey: IconNameType;
-      color: ColorHexType;
-      note: string;
-      ago: string;
-      tokens: string;
-      usd: string;
-    }
-    const activity: InsActivityRow[] = [
-      {
-        app: 'Habit tracker',
-        iconKey: 'Habit',
-        color: '#C8516B' as ColorHexType,
-        note: 'Iterated — fixed streak rollover bug',
-        ago: '12m ago',
-        tokens: '24k',
-        usd: '$0.07',
-      },
-      {
-        app: 'Journal',
-        iconKey: 'Journal',
-        color: '#7C5BD9' as ColorHexType,
-        note: 'Iterated — added weekly recap view',
-        ago: '1h ago',
-        tokens: '58k',
-        usd: '$0.17',
-      },
-      {
-        app: 'Journal',
-        iconKey: 'Journal',
-        color: '#7C5BD9' as ColorHexType,
-        note: 'Published v3',
-        ago: '3h ago',
-        tokens: '4k',
-        usd: '$0.01',
-      },
-      {
-        app: 'Plant care',
-        iconKey: 'Plant',
-        color: '#5E7A52' as ColorHexType,
-        note: 'Built — watering schedule generator',
-        ago: 'yesterday',
-        tokens: '142k',
-        usd: '$0.43',
-      },
-    ];
     const actBody = el('div', { class: 'cd-ins-activity' });
-    for (const a of activity) {
+    for (const a of summary.recent) {
       actBody.append(
         el('div', { class: 'cd-ins-act' }, [
-          el('span', { class: 'cd-ins-act-ago cd-ins-mono' }, a.ago),
-          insAppTile(a.iconKey, a.color, 13),
+          el(
+            'span',
+            { class: 'cd-ins-act-ago cd-ins-mono' },
+            relativeTime(new Date(a.startedAt).toISOString()),
+          ),
           el('div', { class: 'cd-ins-act-body' }, [
-            el('div', { class: 'cd-ins-act-app' }, a.app),
-            el('div', { class: 'cd-ins-act-note' }, a.note),
+            el('div', { class: 'cd-ins-act-app' }, [
+              el('span', { class: 'cd-ins-tag' }, insKindLabel(a.kind)),
+              el('span', {}, a.ok ? '' : ' · failed'),
+            ]),
+            el('div', { class: 'cd-ins-act-note' }, a.label),
           ]),
           el('div', { class: 'cd-ins-act-cost' }, [
-            el('span', { class: 'cd-ins-mono' }, a.tokens),
-            el('span', { class: 'cd-ins-mono cd-ins-act-usd' }, a.usd),
+            el('span', { class: 'cd-ins-mono' }, insK(a.tokens)),
+            el('span', { class: 'cd-ins-mono cd-ins-act-usd' }, insUsd(a.costUsd)),
           ]),
         ]),
       );
     }
-    colSide.append(insPanel('Recent activity', '62 generations', actBody));
-
-    mountShellPage('insights', main);
+    if (summary.recent.length === 0) {
+      actBody.append(renderSimpleEmpty('No activity yet.'));
+    }
+    colSide.append(insPanel('Recent activity', `${summary.kpis.generations} generations`, actBody));
   }
 
   // One labelled stat in the daily-consumption panel header strip.

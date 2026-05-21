@@ -30,8 +30,7 @@ import path from 'node:path';
 import { statSync } from 'node:fs';
 import {
   describeOp,
-  makeAutomationDbProvider,
-  readActiveCodeDir,
+  makeActivityDbProvider,
   readOp,
   writeOp,
   SqlOpRefusal,
@@ -66,16 +65,16 @@ function usage(): never {
       '  centraid sql read "SELECT ..."',
       '  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."',
       '  centraid preview snapshot',
-      '  centraid run-automation <appId> <name> [--runner codex|claude-code] [--timeout-ms <n>]',
+      '  centraid run-automation <automationId> [--runner codex|claude-code] [--timeout-ms <n>]',
       '',
       'The CLI operates relative to the current working directory.',
       'DDL (CREATE/ALTER/DROP) and PRAGMA are not allowed in `sql` subcommands.',
       '',
       '`run-automation` is the headless entry point invoked by host schedulers',
-      '(launchd / Task Scheduler / systemd timer). It loads the manifest at',
-      '`<cwd>/automations/<name>.json`, spawns the appropriate CLI per ctx.tool',
-      'batch, and writes a run record to stdout as JSON. Exits 0 on success,',
-      'non-zero on failure.',
+      '(launchd / Task Scheduler / systemd timer). It loads the user-owned',
+      'automation row from the activity DB by UUID, runs its manifest prompt',
+      'as an agent turn, and writes a run record to stdout as JSON. Exits 0 on',
+      'success, non-zero on failure.',
       '',
     ].join('\n'),
   );
@@ -140,22 +139,20 @@ function commandWrite(sql: string): void {
 }
 
 interface ParsedRunAutomation {
-  appId: string;
-  name: string;
+  automationId: string;
   runner: LocalRunnerKind;
   timeoutMs?: number;
 }
 
 function parseRunAutomationArgs(args: string[]): ParsedRunAutomation {
-  if (args.length < 2) {
-    process.stderr.write('centraid: `run-automation` requires <appId> <name>\n');
+  if (args.length < 1) {
+    process.stderr.write('centraid: `run-automation` requires <automationId>\n');
     process.exit(2);
   }
-  const appId = args[0]!;
-  const name = args[1]!;
+  const automationId = args[0]!;
   let runner: LocalRunnerKind = 'codex';
   let timeoutMs: number | undefined;
-  for (let i = 2; i < args.length; i++) {
+  for (let i = 1; i < args.length; i++) {
     const flag = args[i];
     if (flag === '--runner') {
       const value = args[++i];
@@ -180,46 +177,34 @@ function parseRunAutomationArgs(args: string[]): ParsedRunAutomation {
       process.exit(2);
     }
   }
-  return { appId, name, runner, ...(timeoutMs !== undefined ? { timeoutMs } : {}) };
+  return { automationId, runner, ...(timeoutMs !== undefined ? { timeoutMs } : {}) };
 }
 
 async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never> {
-  const appDir = process.cwd();
-  // The OS scheduler freezes `cwd` into its plist/service file at
-  // register-time, so the cron'd path is the persistent app root and
-  // must survive every subsequent publish. Resolve the active version
-  // here at fire-time so we load the manifest + handler from the
-  // currently-deployed version, not from a stale baked-in path.
-  // Falls back to `appDir` for path-registered apps (no current.json).
-  const codeDir = await readActiveCodeDir(appDir);
   // This is the OS-scheduler-spawned path — no in-process gateway
-  // handle. The run audit must land in the SAME automations DB the
+  // handle. The run record must land in the SAME activity DB the
   // desktop reads, so the OS scheduler bakes `CENTRAID_AUTOMATION_DB`
   // into the launchd plist / systemd unit / Task Scheduler artifact.
-  // Fall back to `<appDir>/centraid-automations.sqlite` for a bare CLI
-  // invocation.
+  // Fall back to `<cwd>/centraid-activity.sqlite` for a bare CLI run.
   const automationDbPath =
-    process.env.CENTRAID_AUTOMATION_DB ?? path.join(appDir, 'centraid-automations.sqlite');
-  const automationDb = makeAutomationDbProvider(automationDbPath);
+    process.env.CENTRAID_AUTOMATION_DB ?? path.join(process.cwd(), 'centraid-activity.sqlite');
+  const automationDb = makeActivityDbProvider(automationDbPath);
   try {
     const { outcome, record } = await runAutomationLocal({
-      appId: parsed.appId,
-      appDir,
-      codeDir,
-      automationName: parsed.name,
+      automationId: parsed.automationId,
       runner: parsed.runner,
       automationDb,
       ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
       onLog: (level, msg) => {
-        process.stderr.write(`[mock-llm:${level}] ${msg}\n`);
+        process.stderr.write(`[automation:${level}] ${msg}\n`);
       },
     });
     // Run record is the structured stdout. Human-friendly summary on
     // stderr so the OS scheduler's log shows the gist at a glance.
     printJson(record);
     process.stderr.write(
-      `centraid: automation ${record.appId}/${record.automationName} ${record.ok ? 'ok' : 'FAILED'} ` +
-        `in ${record.durationMs}ms (${record.toolBatches} tool batches, ${record.agentCalls} agent calls)\n`,
+      `centraid: automation ${record.automationName} ${record.ok ? 'ok' : 'FAILED'} ` +
+        `in ${record.durationMs}ms (${record.stepCount} steps, ${record.toolCount} tools)\n`,
     );
     process.exit(outcome.ok ? 0 : 1);
   } catch (err) {

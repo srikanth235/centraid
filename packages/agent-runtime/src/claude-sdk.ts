@@ -173,6 +173,7 @@ function makeSdkMessageTranslator(
 } {
   let sawFinalText = false;
   let finalText = '';
+  let lastModel: string | undefined;
   const seenToolStarts = new Set<string>();
 
   const fn = (msg: Record<string, unknown>): void => {
@@ -207,6 +208,15 @@ function makeSdkMessageTranslator(
         emit({ type: 'final', text });
       } else if (!sawFinalText && finalText) {
         emit({ type: 'final', text: finalText });
+      }
+      const usage = readClaudeUsage(msg.usage);
+      if (usage) {
+        emit({
+          type: 'usage',
+          provider: 'anthropic',
+          ...(lastModel ? { model: lastModel } : {}),
+          ...usage,
+        });
       }
       const sessionId = typeof msg.session_id === 'string' ? msg.session_id : undefined;
       if (sessionId) onSessionId(sessionId);
@@ -245,6 +255,7 @@ function makeSdkMessageTranslator(
 
   function handleAssistantMessage(msg: Record<string, unknown>): void {
     const message = msg.message as Record<string, unknown> | undefined;
+    if (typeof message?.model === 'string') lastModel = message.model;
     const content = message?.content;
     if (!Array.isArray(content)) return;
     for (const block of content) {
@@ -305,6 +316,45 @@ function makeSdkMessageTranslator(
     if (typeof msg.text === 'string') return msg.text;
     return '';
   }
+}
+
+/**
+ * Pull per-turn token usage out of a Claude SDK `result` message's
+ * `usage` block. Read defensively — the SDK's usage shape uses
+ * snake_case Anthropic field names. Returns `undefined` when absent.
+ */
+function readClaudeUsage(raw: unknown):
+  | {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+    }
+  | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const u = raw as Record<string, unknown>;
+  const num = (...keys: string[]): number | undefined => {
+    for (const k of keys) {
+      const v = u[k];
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+    }
+    return undefined;
+  };
+  const out: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  } = {};
+  const input = num('input_tokens', 'inputTokens');
+  const output = num('output_tokens', 'outputTokens');
+  const cacheRead = num('cache_read_input_tokens', 'cacheReadInputTokens');
+  const cacheWrite = num('cache_creation_input_tokens', 'cacheCreationInputTokens');
+  if (input !== undefined) out.inputTokens = input;
+  if (output !== undefined) out.outputTokens = output;
+  if (cacheRead !== undefined) out.cacheReadTokens = cacheRead;
+  if (cacheWrite !== undefined) out.cacheWriteTokens = cacheWrite;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**

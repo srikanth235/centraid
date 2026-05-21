@@ -2,26 +2,28 @@
  * AutomationHost adapter on top of `os-scheduler.ts`.
  *
  * `os-scheduler.ts` knows nothing about `AutomationRow` — it speaks
- * `OsSchedulerJobSpec` (cron + cwd + runner + bin path). This adapter
- * bridges the two so the desktop's IPC handlers (and any future
- * caller wanting register/unregister semantics) can talk to a single
- * `AutomationHost` interface that openclaw also implements.
+ * `OsSchedulerJobSpec` (automation id + cron + cwd + runner + bin
+ * path). This adapter bridges the two so the desktop's IPC handlers
+ * can talk to a single `AutomationHost` interface that openclaw also
+ * implements.
  *
- * Disabled rows: OS schedulers don't have a "registered but
- * suppressed" state — launchd, systemd, and Task Scheduler are
- * binary. So when `register` is called with `row.enabled === false`,
- * the host unregisters instead. Callers don't need to special-case
- * this; just call `register(row)` whenever a row changes.
+ * Model-B (issue #90): an automation is identified by its UUID; the OS
+ * scheduler job label is `com.centraid.<automationId>`. Automations are
+ * not app-scoped, so the job's working directory is just a stable
+ * workspace dir.
+ *
+ * Disabled rows: OS schedulers don't have a "registered but suppressed"
+ * state — launchd, systemd, and Task Scheduler are binary. So when
+ * `register` is called with `row.enabled === false`, the host
+ * unregisters instead.
  */
 
 import type {
   AutomationHost,
-  AutomationReconcileOptions,
   AutomationReconcileResult,
   AutomationRow,
 } from '@centraid/runtime-core';
 import {
-  jobLabel,
   list as listOsJobs,
   reconcile as reconcileOsJobs,
   register as registerOsJob,
@@ -34,27 +36,23 @@ import type { LocalRunnerKind } from './run-automation-local.js';
 
 export interface OsSchedulerHostOptions {
   /**
-   * Resolve the persistent app root for a given app id. Returned
-   * path is baked into the OS scheduler artifact at register time
-   * (launchd `WorkingDirectory`, systemd `WorkingDirectory`); must
-   * be stable across publishes — the CLI's `run-automation`
-   * re-resolves the active version inside that root each fire.
+   * Working directory baked into the OS scheduler artifact. Any stable
+   * workspace dir — model-B automations load their manifest from the
+   * activity DB by id, not from a path under this dir.
    */
-  resolveAppDir(appId: string): string;
+  workdir: string;
   /** Absolute path to the `centraid` binary the scheduler should invoke. */
   centraidBin: string;
   /**
-   * Absolute path to the automations DB (`centraid-automations.sqlite`).
+   * Absolute path to the activity DB (`centraid-activity.sqlite`).
    * Baked into the OS scheduler artifact as `CENTRAID_AUTOMATION_DB` so
-   * the scheduled `centraid run-automation` process writes its run audit
-   * to the SAME automations DB the desktop reads — without this the fire
-   * would fall back to `<appDir>/centraid-automations.sqlite` and the run
-   * would be invisible in the desktop UI.
+   * the scheduled `centraid run-automation` process reads the automation
+   * row + writes its run record to the SAME DB the desktop reads.
    */
   automationDbPath: string;
   /** Which CLI runner to drive (codex / claude-code). */
   runner: LocalRunnerKind;
-  /** Options forwarded to os-scheduler (mostly used in tests for execShell + artifactRoot overrides). */
+  /** Options forwarded to os-scheduler (mostly tests: execShell + artifactRoot overrides). */
   os?: OsSchedulerOptions;
 }
 
@@ -66,43 +64,36 @@ export class OsSchedulerHost implements AutomationHost {
     // collapse disabled to unregister so reconcile and toggle stay
     // consistent.
     if (!row.enabled) {
-      await this.unregister(row.originAppId, row.name);
+      await this.unregister(row.id);
       return;
     }
     await registerOsJob(this.specFor(row), this.opts.os);
   }
 
-  async unregister(appId: string, name: string): Promise<void> {
-    await unregisterOsJob(appId, name, this.opts.os);
+  async unregister(automationId: string): Promise<void> {
+    await unregisterOsJob(automationId, this.opts.os);
   }
 
   async list(): Promise<readonly string[]> {
     const installed = await listOsJobs(this.opts.os);
-    return installed.map((e) => jobLabel(e.appId, e.automationName));
+    return installed.map((e) => e.automationId);
   }
 
-  async reconcile(
-    desired: ReadonlyArray<AutomationRow>,
-    opts: AutomationReconcileOptions = {},
-  ): Promise<AutomationReconcileResult> {
+  async reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult> {
     const items: OsSchedulerReconcileDesired[] = desired.map((row) => ({
       spec: this.specFor(row),
       enabled: row.enabled,
     }));
-    const out = await reconcileOsJobs(items, this.opts.os, opts.scope);
-    return {
-      added: out.added,
-      updated: out.updated,
-      removed: out.removed,
-    };
+    const out = await reconcileOsJobs(items, this.opts.os);
+    return { added: out.added, updated: out.updated, removed: out.removed };
   }
 
   private specFor(row: AutomationRow): OsSchedulerJobSpec {
     return {
-      appId: row.originAppId,
+      automationId: row.id,
       automationName: row.name,
       cronExpr: row.cronExpr,
-      cwd: this.opts.resolveAppDir(row.originAppId),
+      cwd: this.opts.workdir,
       runner: this.opts.runner,
       centraidBin: this.opts.centraidBin,
       env: { CENTRAID_AUTOMATION_DB: this.opts.automationDbPath },

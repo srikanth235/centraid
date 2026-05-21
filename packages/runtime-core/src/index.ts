@@ -56,12 +56,6 @@ export type {
   HandlerFn,
   ScopedFetch,
   CommonHandlerArgs,
-  AutomationHandler,
-  AutomationHandlerArgs,
-  AutomationModule,
-  AutomationCtx,
-  AutomationAgentArgs,
-  AutomationJsonSchema,
 } from './types.js';
 
 // Live-schema and cloud-panel payload shapes — consumed by builder-harness
@@ -122,34 +116,31 @@ export { ChangeBus, type AppChange, type ChangeListener } from './change-bus.js'
 export {
   ChatHistoryStore,
   deriveTitle,
-  isUserMessage,
   type ChatSessionMeta,
   type ChatMessageRow,
-  type AppendBatchResult,
+  type ChatTurnNode,
+  type RecordTurnInput,
   type UserIdProvider,
 } from './chat-history.js';
 export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
-// Gateway state DBs — three separate SQLite files, each with its own
+// Gateway state DBs — two separate SQLite files, each with its own
 // connection + migration ladder:
-//   - gateway     (`centraid-gateway.sqlite`):     users, user_prefs
-//   - chat        (`centraid-chat.sqlite`):        chat_sessions, chat_messages
-//   - automations (`centraid-automations.sqlite`): automations mirror +
-//                                                  run-audit + ctx.state
+//   - gateway  (`centraid-gateway.sqlite`):  users, user_prefs
+//   - activity (`centraid-activity.sqlite`): automations, chat_sessions,
+//                                            runs, run_nodes, automation_state
 // Hosts construct one provider per file and pass each to the matching
-// store: UserStore ← gateway, ChatHistoryStore ← chat, AutomationStore
-// + AutomationRunsStore ← automations. Cross-file FKs aren't possible in
-// SQLite, so `chat_sessions.user_id` is application-enforced.
+// store: UserStore ← gateway; ChatHistoryStore + AutomationStore +
+// AutomationRunsStore all share the activity provider. Cross-file FKs
+// aren't possible in SQLite, so `chat_sessions.user_id` /
+// `automations.user_id` are application-enforced.
 export {
   openGatewayDb,
   makeGatewayDbProvider,
-  openChatDb,
-  makeChatDbProvider,
-  openAutomationDb,
-  makeAutomationDbProvider,
+  openActivityDb,
+  makeActivityDbProvider,
   GATEWAY_MIGRATIONS,
-  CHAT_MIGRATIONS,
-  AUTOMATION_MIGRATIONS,
+  ACTIVITY_MIGRATIONS,
   type DatabaseProvider,
 } from './gateway-db.js';
 
@@ -179,7 +170,6 @@ export type { SettingsInject } from './static-server.js';
 // and the desktop UI). See issue #70.
 export {
   AutomationManifestError,
-  isValidActionFilename,
   isValidAutomationName,
   isValidCronExpression,
   parseManifest,
@@ -196,11 +186,10 @@ export {
   type AutomationHistoryKeep,
 } from './automation-manifest.js';
 
-// Automation run audit + ctx.state store. The three tables
-// (`automation_runs`, `automation_run_nodes`, `automation_state`) live
-// in the central gateway DB; the store is runtime-owned and never
-// reachable from handler `db` or the `centraid_sql_*` agent tools.
-// See issue #80.
+// Unified agent-run ledger + ctx.state store. The three tables
+// (`runs`, `run_nodes`, `automation_state`) live in the activity DB;
+// the store is runtime-owned and never reachable from handler `db` or
+// the `centraid_sql_*` agent tools. See issues #80 and #90.
 export {
   AutomationRunsStore,
   type InsertRunInput,
@@ -214,18 +203,33 @@ export type {
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationRunNodeKind,
+  RunKind,
 } from './automation-runs-schema.js';
 
-// Per-gateway automations mirror table (`gateway-db.ts` MIGRATIONS[1]).
+// Per-model token pricing. `run_nodes.cost_usd` is frozen at write time
+// via `costForUsage`; an unknown model yields `undefined` so the ledger
+// records NULL (distinct from a genuine $0). See issue #90 question 4.
+export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from './model-pricing.js';
+
+// Insights — read-only analytics over the run ledger (issue #90). Powers
+// the desktop Insights screen via an `INSIGHTS_SUMMARY` IPC handler.
+export {
+  InsightsStore,
+  INSIGHTS_QUOTA_TOKENS,
+  type InsightsSummary,
+  type InsightsKpis,
+  type InsightsDailyPoint,
+  type InsightsAutomationRow,
+  type InsightsModelRow,
+  type InsightsActivityRow,
+} from './insights-store.js';
+
+// Per-gateway automations mirror table (`gateway-db.ts` ACTIVITY_MIGRATIONS[0]).
 // The host scheduler (openclaw cron remote, OS scheduler local) owns
 // runtime state; this is centraid's own registration surface for the
 // list/UI and the reconciliation pass.
 export { AutomationStore, type AutomationRow } from './automation-store.js';
-export type {
-  AutomationHost,
-  AutomationReconcileOptions,
-  AutomationReconcileResult,
-} from './automation-host.js';
+export type { AutomationHost, AutomationReconcileResult } from './automation-host.js';
 
 // Deploy boundary for automations: scan an app's `automations/*.json`
 // and bring the mirror into agreement. Called by `handleAppUpload`
@@ -238,20 +242,17 @@ export {
   type SyncAutomationError,
 } from './sync-automations.js';
 
-// Worker-isolated automation handler runner. Hosts provide
-// `toolDispatcher` + `agentDispatcher` to wire the worker boundary into
-// either the local-side mock-LLM + CLI subprocess flow (@centraid/agent-runtime)
-// or the openclaw in-process StreamFn flow (@centraid/openclaw-plugin).
+// Agent-driven automation runner (issue #90 model-B). An automation
+// fire is an agent turn driven by the manifest prompt — no JS handler,
+// no worker. Hosts supply an `AutomationAgentDispatcher` that runs the
+// turn against their agent backend (codex / claude locally, the
+// openclaw in-process StreamFn on the gateway) and yield the trace
+// events the runner records as `step` / `tool` nodes.
 export {
-  runAutomationHandler,
-  type RunAutomationHandlerOptions,
-  type AutomationHandlerOutcome,
-  type AutomationToolCall,
-  type AutomationToolResult,
-  type AutomationToolDispatcher,
-  type AutomationAgentCall,
+  runAutomationAgent,
+  type RunAutomationAgentOptions,
+  type AutomationAgentOutcome,
   type AutomationAgentDispatcher,
-  type AutomationInvokeDispatcher,
-  type AutomationInvokeResult,
-  type AutomationDispatchContext,
-} from './automation-handler-runner.js';
+  type AutomationAgentRunInput,
+  type AutomationAgentEvent,
+} from './automation-agent-runner.js';

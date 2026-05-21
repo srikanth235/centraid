@@ -20,7 +20,6 @@
 
 import type {
   AutomationHost,
-  AutomationReconcileOptions,
   AutomationReconcileResult,
   AutomationRow,
 } from '@centraid/runtime-core';
@@ -33,15 +32,6 @@ import {
   payloadFor,
 } from './automations-cron.js';
 
-/**
- * Centraid-owned cron job names follow `centraid:<appId>:<name>` (see
- * `cronNameFor`). The per-app reconcile filter uses this prefix to
- * pick out one app's entries from the host's flat list.
- */
-function appCronPrefix(appId: string): string {
-  return `centraid:${appId}:`;
-}
-
 export class OpenclawAutomationHost implements AutomationHost {
   async register(row: AutomationRow): Promise<void> {
     // `upsertCronJob` already issues add-or-update + carries
@@ -51,36 +41,21 @@ export class OpenclawAutomationHost implements AutomationHost {
     await upsertCronJob(row);
   }
 
-  async unregister(appId: string, name: string): Promise<void> {
-    await removeCronJob(appId, name);
+  async unregister(automationId: string): Promise<void> {
+    await removeCronJob(automationId);
   }
 
   async list(): Promise<readonly string[]> {
     return listCentraidCronJobs();
   }
 
-  async reconcile(
-    desired: ReadonlyArray<AutomationRow>,
-    opts: AutomationReconcileOptions = {},
-  ): Promise<AutomationReconcileResult> {
-    const scope = opts.scope;
+  async reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult> {
     const desiredByCronName = new Map<string, AutomationRow>();
     for (const row of desired) {
-      // Defensive cross-app drop: a scoped reconcile must not register
-      // entries for an app it wasn't asked to touch.
-      if (scope && row.originAppId !== scope.appId) continue;
-      desiredByCronName.set(cronNameFor(row.originAppId, row.name), row);
+      desiredByCronName.set(cronNameFor(row.id), row);
     }
 
-    // When scoped, the removal pass only considers the named app's
-    // entries; without this filter, every other app's cron jobs would
-    // appear "absent from desired" and get swept.
-    const allActualNames = await listCentraidCronJobs();
-    const actualNames = new Set(
-      scope
-        ? allActualNames.filter((n) => n.startsWith(appCronPrefix(scope.appId)))
-        : allActualNames,
-    );
+    const actualNames = new Set(await listCentraidCronJobs());
 
     const added: string[] = [];
     const updated: string[] = [];

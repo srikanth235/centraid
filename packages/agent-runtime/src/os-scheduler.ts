@@ -46,22 +46,17 @@ export function currentPlatform(): OsPlatform {
 }
 
 export interface OsSchedulerJobSpec {
-  /** App id the job belongs to. */
-  appId: string;
-  /** Automation name (matches the manifest filename without .json). */
+  /** UUID of the automation the job fires. */
+  automationId: string;
+  /** Automation name — used only for human-readable artifact labels. */
   automationName: string;
   /** 5-field cron expression from the manifest. */
   cronExpr: string;
   /**
    * Working directory the centraid CLI should cd into before running.
-   * Must be the **persistent app root** (the dir containing
-   * `data.sqlite` + `current.json`) — NOT a version subdir. The OS
-   * scheduler bakes this path into the launchd plist / systemd unit
-   * file at register-time, and subsequent publishes create new
-   * `versions/<vid>/` subdirs while the persistent root is stable.
-   * The CLI's `run-automation` resolves the active version itself via
-   * `readActiveCodeDir(cwd)` so the manifest + handler are loaded
-   * from the currently-deployed version each fire.
+   * Any stable workspace dir — model-B automations are not app-scoped,
+   * so the CLI loads the manifest from the activity DB by id rather
+   * than from a version subdir under this path.
    */
   cwd: string;
   /** Which runner the CLI should drive. */
@@ -80,18 +75,18 @@ export interface OsSchedulerJobSpec {
 export interface OsSchedulerJobInstalled extends OsSchedulerJobSpec {
   /** Absolute path to the on-disk artifact (plist/timer/task xml). */
   artifactPath: string;
-  /** Native job identifier (`com.centraid.<appId>.<name>` or similar). */
+  /** Native job identifier (`com.centraid.<automationId>`). */
   jobLabel: string;
 }
 
 const LABEL_PREFIX = 'com.centraid';
 
-export function jobLabel(appId: string, name: string): string {
+export function jobLabel(automationId: string): string {
   // launchd labels accept `A-Za-z0-9.` and are typically reverse-DNS;
   // systemd unit names accept `A-Za-z0-9.-_`. We use a conservative
   // intersection so the same label works everywhere.
   const safe = (s: string) => s.replace(/[^A-Za-z0-9-]/g, '_');
-  return `${LABEL_PREFIX}.${safe(appId)}.${safe(name)}`;
+  return `${LABEL_PREFIX}.${safe(automationId)}`;
 }
 
 // --- launchd (macOS) ------------------------------------------------------
@@ -184,7 +179,7 @@ export function buildLaunchdPlist(spec: OsSchedulerJobSpec): string {
     intervals.length === 1
       ? `    <key>StartCalendarInterval</key>\n    ${dictToXml(intervals[0]!, 4)}`
       : `    <key>StartCalendarInterval</key>\n    <array>\n${intervals.map((i) => '      ' + dictToXml(i, 6)).join('\n')}\n    </array>`;
-  const label = jobLabel(spec.appId, spec.automationName);
+  const label = jobLabel(spec.automationId);
   const envEntries = Object.entries(spec.env ?? {});
   const envXml =
     envEntries.length > 0
@@ -204,8 +199,7 @@ export function buildLaunchdPlist(spec: OsSchedulerJobSpec): string {
     <array>
       <string>${xmlEscape(spec.centraidBin)}</string>
       <string>run-automation</string>
-      <string>${xmlEscape(spec.appId)}</string>
-      <string>${xmlEscape(spec.automationName)}</string>
+      <string>${xmlEscape(spec.automationId)}</string>
       <string>--runner</string>
       <string>${xmlEscape(spec.runner)}</string>
     </array>
@@ -272,23 +266,23 @@ export function buildSystemdService(spec: OsSchedulerJobSpec): string {
     .map(([k, v]) => `Environment="${k}=${v}"\n`)
     .join('');
   return `[Unit]
-Description=Centraid automation ${spec.appId}/${spec.automationName}
+Description=Centraid automation ${spec.automationName} (${spec.automationId})
 
 [Service]
 Type=oneshot
 WorkingDirectory=${spec.cwd}
-${envLines}ExecStart=${spec.centraidBin} run-automation ${spec.appId} ${spec.automationName} --runner ${spec.runner}
+${envLines}ExecStart=${spec.centraidBin} run-automation ${spec.automationId} --runner ${spec.runner}
 `;
 }
 
 export function buildSystemdTimer(spec: OsSchedulerJobSpec): string {
   return `[Unit]
-Description=Centraid automation timer ${spec.appId}/${spec.automationName}
+Description=Centraid automation timer ${spec.automationName} (${spec.automationId})
 
 [Timer]
 OnCalendar=${cronToSystemdOnCalendar(spec.cronExpr)}
 Persistent=true
-Unit=${jobLabel(spec.appId, spec.automationName)}.service
+Unit=${jobLabel(spec.automationId)}.service
 
 [Install]
 WantedBy=timers.target
@@ -393,7 +387,7 @@ export async function register(
   const platform = opts.platform ?? currentPlatform();
   const exec = opts.execShell ?? defaultExecShell;
   const root = resolveArtifactRoot(platform, opts.artifactRoot);
-  const label = jobLabel(spec.appId, spec.automationName);
+  const label = jobLabel(spec.automationId);
   await fs.mkdir(root, { recursive: true });
 
   if (platform === 'darwin') {
@@ -439,7 +433,7 @@ export async function register(
     const envPrefix = Object.entries(spec.env ?? {})
       .map(([k, v]) => `set "${k}=${v}" && `)
       .join('');
-    const runCmd = `"${spec.centraidBin}" run-automation ${spec.appId} ${spec.automationName} --runner ${spec.runner}`;
+    const runCmd = `"${spec.centraidBin}" run-automation ${spec.automationId} --runner ${spec.runner}`;
     const trArg = envPrefix ? `cmd /c "${envPrefix}${runCmd}"` : runCmd;
     const cmd = ['/Create', '/TN', label, ...args, '/TR', trArg, '/F'];
     const res = await exec('schtasks', cmd);
@@ -454,14 +448,13 @@ export async function register(
 }
 
 export async function unregister(
-  appId: string,
-  automationName: string,
+  automationId: string,
   opts: OsSchedulerOptions = {},
 ): Promise<void> {
   const platform = opts.platform ?? currentPlatform();
   const exec = opts.execShell ?? defaultExecShell;
   const root = resolveArtifactRoot(platform, opts.artifactRoot);
-  const label = jobLabel(appId, automationName);
+  const label = jobLabel(automationId);
 
   if (platform === 'darwin') {
     const artifactPath = path.join(root, `${label}.plist`);
@@ -485,37 +478,32 @@ export async function unregister(
 }
 
 export interface OsSchedulerListEntry {
-  appId: string;
-  automationName: string;
+  automationId: string;
   artifactPath: string;
 }
 
 /**
  * Enumerate centraid-owned OS scheduler jobs by scanning the
  * artifact root for files matching our naming convention. Returns
- * the parsed `{appId, automationName}` pair plus the artifact path
- * so the desktop UI can show what the OS actually has registered
- * (independent of what the gateway DB thinks).
+ * the parsed `automationId` plus the artifact path so the desktop UI
+ * can show what the OS actually has registered (independent of what
+ * the activity DB thinks).
  */
 export async function list(opts: OsSchedulerOptions = {}): Promise<Array<OsSchedulerListEntry>> {
   const platform = opts.platform ?? currentPlatform();
   const root = resolveArtifactRoot(platform, opts.artifactRoot);
   const entries = await fs.readdir(root).catch(() => []);
-  const out: Array<{ appId: string; automationName: string; artifactPath: string }> = [];
+  const out: Array<OsSchedulerListEntry> = [];
   const prefix = `${LABEL_PREFIX}.`;
   for (const entry of entries) {
     if (!entry.startsWith(prefix)) continue;
-    // Strip trailing extension (.plist, .timer, .txt). We only emit
-    // one row per (appId, automationName); use .plist for darwin,
-    // .timer for linux, .txt for win32.
+    // Strip trailing extension (.plist, .timer, .txt). One row per
+    // automation; use .plist for darwin, .timer for linux, .txt win32.
     const wantSuffix = platform === 'darwin' ? '.plist' : platform === 'linux' ? '.timer' : '.txt';
     if (!entry.endsWith(wantSuffix)) continue;
-    const inner = entry.slice(prefix.length, -wantSuffix.length);
-    const lastDot = inner.lastIndexOf('.');
-    if (lastDot < 0) continue;
-    const appId = inner.slice(0, lastDot);
-    const automationName = inner.slice(lastDot + 1);
-    out.push({ appId, automationName, artifactPath: path.join(root, entry) });
+    const automationId = entry.slice(prefix.length, -wantSuffix.length);
+    if (!automationId) continue;
+    out.push({ automationId, artifactPath: path.join(root, entry) });
   }
   return out;
 }
@@ -549,38 +537,27 @@ export interface OsSchedulerReconcileResult {
  * re-registered to catch schedule or runner changes that landed
  * while the desktop was offline.
  *
- * Pass `scope.appId` for the per-app case (publish or deregister of
- * one app). Without scope, the removal pass considers every installed
- * centraid-owned entry — appropriate at startup against the full
- * mirror, catastrophic against `listByApp(...)` because every other
- * app's entries would look "absent from desired" and get swept.
+ * `desired` is always the full set of centraid-owned automations
+ * (model-B — automations are user-owned, not app-scoped), so the
+ * removal pass safely considers every installed entry.
  *
  * Called at local-runtime startup to absorb changes that happened
- * outside our hot path (publishes from another machine, manual edits
- * to the mirror, etc.). Best-effort per-entry: a failure on one
+ * outside our hot path. Best-effort per-entry: a failure on one
  * entry is logged and surfaced in the returned result; the others
  * still run.
  */
 export async function reconcile(
   desired: ReadonlyArray<OsSchedulerReconcileDesired>,
   opts: OsSchedulerOptions = {},
-  scope?: { appId: string },
 ): Promise<OsSchedulerReconcileResult> {
-  const installedAll = await list(opts);
-  // When scoped, the removal pass only considers entries for that app —
-  // other apps' entries are invisible to this reconcile pass.
-  const installed = scope ? installedAll.filter((e) => e.appId === scope.appId) : installedAll;
-  const installedLabels = new Set(installed.map((e) => jobLabel(e.appId, e.automationName)));
+  const installed = await list(opts);
+  const installedLabels = new Set(installed.map((e) => jobLabel(e.automationId)));
 
   // Desired-and-enabled keyed by label so we can diff against installed.
-  // When scoped, defensively drop any cross-app rows the caller passed
-  // in by mistake — without this, a scoped reconcile could register
-  // entries for an app it wasn't supposed to touch.
   const desiredEnabled = new Map<string, OsSchedulerJobSpec>();
   for (const d of desired) {
     if (!d.enabled) continue;
-    if (scope && d.spec.appId !== scope.appId) continue;
-    desiredEnabled.set(jobLabel(d.spec.appId, d.spec.automationName), d.spec);
+    desiredEnabled.set(jobLabel(d.spec.automationId), d.spec);
   }
 
   const result: OsSchedulerReconcileResult = { added: [], updated: [], removed: [] };
@@ -596,12 +573,12 @@ export async function reconcile(
   }
 
   for (const entry of installed) {
-    const label = jobLabel(entry.appId, entry.automationName);
+    const label = jobLabel(entry.automationId);
     if (desiredEnabled.has(label)) continue;
     // Either no longer desired, or desired-but-disabled — both
     // collapse to "remove from the host" since OS schedulers have no
     // suppressed-but-registered state.
-    await unregister(entry.appId, entry.automationName, opts);
+    await unregister(entry.automationId, opts);
     result.removed.push(label);
   }
 
