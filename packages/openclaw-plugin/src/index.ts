@@ -26,7 +26,7 @@ import {
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
   makeActivityDbProvider,
-  AutomationStore,
+  listAutomationProjects,
 } from '@centraid/runtime-core';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
@@ -92,8 +92,10 @@ export default definePluginEntry({
     const automationDbProvider = makeActivityDbProvider(
       path.join(dbDir, 'centraid-activity.sqlite'),
     );
+    // Automation projects live on disk (issue #91) — their own directory
+    // tree, a sibling of the apps dir.
+    const automationsDir = path.join(dbDir, 'centraid-automations');
     const userStore = new UserStore(gatewayDbProvider);
-    const automationStore = new AutomationStore(automationDbProvider);
 
     // Chat-history store — wraps the activity DB. It is THE chat store:
     // the `/centraid/<id>/_chat` POST route reads sticky mode +
@@ -135,6 +137,7 @@ export default definePluginEntry({
     // runtime. See `lib/automations-provider.ts`.
     registerAutomationsProvider(api, {
       automationDbProvider,
+      automationsDir,
       logger: api.logger,
     });
 
@@ -152,7 +155,8 @@ export default definePluginEntry({
       // network / SDK errors so a transient cron-store hiccup doesn't
       // prevent the plugin from booting.
       try {
-        const outcome = await automationHost.reconcile(automationStore.listAll());
+        const { rows } = await listAutomationProjects(automationsDir);
+        const outcome = await automationHost.reconcile(rows);
         if (outcome.added.length + outcome.updated.length + outcome.removed.length > 0) {
           api.logger.info(
             `[centraid] automations reconciled: +${outcome.added.length} ~${outcome.updated.length} -${outcome.removed.length}`,

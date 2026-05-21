@@ -12,7 +12,7 @@ a sibling of an app project. The directory is the source of truth.
 
 - [x] Commit 1 — runtime-core: automations as first-class projects
 - [x] Commit 2 — agent-runtime: local handler execution path
-- [ ] Commit 3 — openclaw-plugin: cloud handler execution path
+- [x] Commit 3 — openclaw-plugin: cloud handler execution path
 - [ ] Commit 4 — builder-harness: automation scaffold
 - [ ] Commit 5 — desktop main: `automationsDir` setting + project IPC
 - [ ] Commit 6 — desktop renderer: Automations screen + preload + d.ts
@@ -70,6 +70,24 @@ Rewires the local desktop fire path onto the restored handler runtime.
 
 `os-scheduler.ts` / `os-scheduler-host.ts` are unchanged — they already
 key everything by automation id. agent-runtime build + 80 tests pass.
+
+### Commit 3 — openclaw-plugin: cloud handler execution path
+
+The openclaw counterpart of Commit 2.
+
+- `runOpenclawFire` reads the automation project from an on-disk
+  `automationsDir` (a sibling of the gateway's apps dir) and runs its
+  `handler.js` via `runAutomationHandler`. `ctx.tool` routes through
+  `callGatewayTool` (the harness MCP routing); `ctx.agent` through the
+  user's real provider via the simple-completion runtime; `ctx.invoke`
+  re-enters for a sibling automation id.
+- `automations-provider.ts` / `index.ts` pass `automationsDir` through;
+  the `gateway_start` reconcile diffs `listAutomationProjects` against
+  openclaw's cron store instead of the dropped `automations` table.
+- `automations-cron.ts` / `automation-host.ts` were already keyed by
+  automation id — unchanged.
+
+openclaw-plugin build + 21 tests pass.
 
 ## Out of scope
 

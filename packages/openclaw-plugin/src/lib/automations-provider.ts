@@ -10,11 +10,12 @@
  *   - Cron fires with `model: "centraid-mock/run-automation"`. Openclaw's
  *     cron service routes to our StreamFn.
  *   - StreamFn:
- *       1. Recovers `(appId, automationName)` from the prompt sentinel
- *          `<<<centraid:appId:name>>>`.
- *       2. Loads `<appId>/automations/<name>.json` + `<appId>/actions/<name>.js`.
+ *       1. Recovers the `automationId` from the prompt sentinel
+ *          `<<<centraid:automationId>>>`.
+ *       2. Loads the automation project (`automation.json` + `handler.js`)
+ *          from `automationsDir` by its id.
  *       3. Runs the handler via `runAutomationHandler` from runtime-core,
- *          wiring an `AutomationRunsStore` over the automations DB
+ *          wiring an `AutomationRunsStore` over the activity DB
  *          for the run audit + `ctx.state`.
  *          - toolDispatcher routes through `callGatewayTool` (full
  *            harness MCP routing + audit + before-tool hooks for free).
@@ -64,10 +65,12 @@ interface ProviderPluginShape {
 
 export interface AutomationsProviderOptions {
   /**
-   * Activity DB provider (`centraid-activity.sqlite`). The automation
-   * row + the run ledger (`AutomationRunsStore`) are read from this.
+   * Activity DB provider (`centraid-activity.sqlite`) — the run ledger
+   * (`AutomationRunsStore`) is read from this.
    */
   automationDbProvider: DatabaseProvider;
+  /** Directory holding the user's automation projects. */
+  automationsDir: string;
   /** Optional logger. */
   logger?: { info(m: string): void; warn(m: string): void; error(m: string): void };
 }
@@ -211,7 +214,8 @@ async function executeAutomation(
   const outcome = await runOpenclawFire(
     {
       automationId: dispatch.automationId,
-      automationDbProvider: opts.automationDbProvider,
+      automationsDir: opts.automationsDir,
+      activityDbProvider: opts.automationDbProvider,
       triggerKind: 'scheduled',
     },
     log,
