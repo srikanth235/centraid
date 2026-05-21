@@ -2,16 +2,17 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { app } from 'electron';
 import {
-  AutomationStore,
   ChatHistoryStore,
   Runtime,
   UserStore,
+  listAutomationProjects,
   makeGatewayDbProvider,
   makeActivityDbProvider,
   startRuntimeHttpServer,
   type AutomationHost,
   type RuntimeHttpServerHandle,
 } from '@centraid/runtime-core';
+import { loadPersistedSettings } from './settings.js';
 import {
   defaultCentraidCliDir,
   makeChatRunner,
@@ -85,15 +86,17 @@ export function localRuntimeAutomationDb(): string {
  * expected to ensure the file is executable (see CLI install hooks).
  */
 let _automationHost: AutomationHost | undefined;
-export function localRuntimeAutomationHost(): AutomationHost {
+export function localRuntimeAutomationHost(automationsDir: string): AutomationHost {
   if (_automationHost) return _automationHost;
   _automationHost = new OsSchedulerHost({
     workdir: localRuntimeAppsDir(),
     centraidBin: path.join(defaultCentraidCliDir(), 'centraid-cli.js'),
-    // Bake the desktop's activity DB path into every scheduled job so an
-    // OS-scheduler-spawned `centraid run-automation` reads + writes the
-    // SAME DB the desktop UI uses — not the cwd-relative fallback.
+    // Bake the desktop's activity DB path + automations dir into every
+    // scheduled job so an OS-scheduler-spawned `centraid run-automation`
+    // resolves the project + writes its run record against the SAME
+    // paths the desktop UI uses — not the cwd-relative fallback.
     automationDbPath: localRuntimeAutomationDb(),
+    automationsDir,
     // Match the chat-runner default; toggling per-automation runner
     // isn't surfaced in the UI today.
     runner: 'codex',
@@ -200,9 +203,11 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     // changed while the desktop was closed (a stale plist orphaned by
     // an uninstall, an automation toggled elsewhere, etc.).
     // Fire-and-forget so a slow scheduler shell-out doesn't block start.
-    const automationStore = new AutomationStore(automationDbProvider);
-    void localRuntimeAutomationHost()
-      .reconcile(automationStore.listAll())
+    void (async () => {
+      const { automationsDir } = await loadPersistedSettings();
+      const { rows } = await listAutomationProjects(automationsDir);
+      return localRuntimeAutomationHost(automationsDir).reconcile(rows);
+    })()
       .then((diff) => {
         if (diff.added.length || diff.updated.length || diff.removed.length) {
           console.info(

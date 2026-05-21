@@ -46,10 +46,17 @@ export interface OsSchedulerHostOptions {
   /**
    * Absolute path to the activity DB (`centraid-activity.sqlite`).
    * Baked into the OS scheduler artifact as `CENTRAID_AUTOMATION_DB` so
-   * the scheduled `centraid run-automation` process reads the automation
-   * row + writes its run record to the SAME DB the desktop reads.
+   * the scheduled `centraid run-automation` process writes its run
+   * record to the SAME DB the desktop reads.
    */
   automationDbPath: string;
+  /**
+   * Directory holding the user's automation projects (issue #91). Baked
+   * into the artifact as `CENTRAID_AUTOMATIONS_DIR` so the scheduled
+   * `centraid run-automation` resolves the project off the same disk
+   * tree the desktop scaffolds into.
+   */
+  automationsDir: string;
   /** Which CLI runner to drive (codex / claude-code). */
   runner: LocalRunnerKind;
   /** Options forwarded to os-scheduler (mostly tests: execShell + artifactRoot overrides). */
@@ -96,7 +103,10 @@ export class OsSchedulerHost implements AutomationHost {
       cwd: this.opts.workdir,
       runner: this.opts.runner,
       centraidBin: this.opts.centraidBin,
-      env: { CENTRAID_AUTOMATION_DB: this.opts.automationDbPath },
+      env: {
+        CENTRAID_AUTOMATION_DB: this.opts.automationDbPath,
+        CENTRAID_AUTOMATIONS_DIR: this.opts.automationsDir,
+      },
     };
   }
 }

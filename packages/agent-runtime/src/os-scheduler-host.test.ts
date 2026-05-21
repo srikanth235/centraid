@@ -28,6 +28,7 @@ function setup(): {
     workdir: '/persistent/work',
     centraidBin: '/usr/local/bin/centraid',
     automationDbPath: '/persistent/centraid-activity.sqlite',
+    automationsDir: '/persistent/centraid-automations',
     runner: 'codex',
     os: { execShell, platform: 'darwin', artifactRoot },
   });

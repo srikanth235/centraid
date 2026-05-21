@@ -95,7 +95,7 @@ describe('openGatewayDb (users + user_prefs)', () => {
   });
 });
 
-describe('openActivityDb (automations + chat_sessions + run ledger)', () => {
+describe('openActivityDb (chat_sessions + run ledger)', () => {
   it('advances PRAGMA user_version to ACTIVITY_MIGRATIONS.length on a fresh DB', () => {
     const path = freshDbPath();
     openActivityDb(path).close();
@@ -103,16 +103,11 @@ describe('openActivityDb (automations + chat_sessions + run ledger)', () => {
     assert.equal(ACTIVITY_MIGRATIONS.length, 2);
   });
 
-  it('creates the automations mirror + chat_sessions + unified runs ledger', () => {
+  it('creates chat_sessions + the unified runs ledger (no automations table)', () => {
+    // Issue #91: automation definitions live on disk, not in SQLite.
     const path = freshDbPath();
     openActivityDb(path).close();
-    assert.deepEqual(tableNames(path), [
-      'automation_state',
-      'automations',
-      'chat_sessions',
-      'run_nodes',
-      'runs',
-    ]);
+    assert.deepEqual(tableNames(path), ['automation_state', 'chat_sessions', 'run_nodes', 'runs']);
   });
 
   it('chat_sessions has NO foreign key (user_id is application-enforced)', () => {

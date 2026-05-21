@@ -1,17 +1,20 @@
 /**
- * CLI-spawn implementation for the local agent-driven automation runner
- * (issue #90 model-B).
+ * Default CLI-spawn implementation for the local automation runner.
  *
- * An automation fire is now an agent turn: the manifest prompt is handed
- * straight to `codex exec` / `claude -p`, which run the agentic loop
- * against the user's own provider auth (no mock-LLM server, no JS
- * handler). The spawn returns once the turn finishes.
+ * The production `defaultSpawnCli` lives here (separately from
+ * `run-automation-local.ts` which owns the orchestration loop). Tests
+ * inject their own spawn via the `spawnCli` option and never hit this
+ * file.
  *
- * Tests inject their own spawn via the `spawnCli` option and never hit
- * this file.
+ * Both runners (`claude -p` for Claude, `codex exec` for codex) are
+ * pointed at the per-fire mock-LLM URL + bearer token so tool dispatch
+ * round-trips through the mock server. The codex path materializes a
+ * transient `CODEX_HOME` so the per-invocation provider override lands
+ * even if `codex exec -c` doesn't accept it on the installed version.
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import { materializeCodexHome } from './codex-provider-config.js';
 
 export type LocalRunnerKind = 'codex' | 'claude-code';
 
@@ -20,12 +23,22 @@ export interface SpawnCliInput {
   readonly kind: LocalRunnerKind;
   /** Override the CLI binary location; defaults to a PATH lookup of `codex`/`claude`. */
   readonly binPath?: string;
-  /** The manifest prompt — the instruction handed to the agent. */
+  /** Mock-LLM base URL (`http://127.0.0.1:<port>/v1`). */
+  readonly mockBaseUrl: string;
+  /** Per-spawn bearer token (`centraid-mock-<dispatchId>`). */
+  readonly mockBearerToken: string;
+  /** The natural-language prompt to feed the CLI. Contains the dispatch sentinel. */
   readonly prompt: string;
-  /** Tool allowlist from the manifest. Passed to `claude --allowed-tools`. */
+  /**
+   * Tool allowlist from the manifest. Passed to `claude --allowed-tools`;
+   * ignored for `codex` (which has no `exec` allowlist flag — the mock
+   * server enforces the allowlist by only staging permitted calls).
+   */
   readonly toolsAllow: readonly string[];
-  /** Workspace dir the CLI should treat as cwd. */
+  /** Workspace dir (app code dir) the CLI should treat as cwd. */
   readonly cwd: string;
+  /** Scratch dir for transient files (CODEX_HOME, etc). Auto-cleaned on close. */
+  readonly scratchDir: string;
   /** AbortSignal — fires on timeout or external cancel. */
   readonly abortSignal: AbortSignal;
 }
@@ -35,8 +48,6 @@ export interface SpawnCliResult {
   readonly exitCode: number | null;
   /** True on graceful exit (code === 0). */
   readonly ok: boolean;
-  /** Buffered stdout — the agent's stream-json trace. */
-  readonly stdout: string;
   /** Buffered stderr — surfaced in the run record on failure. */
   readonly stderr: string;
 }
@@ -44,8 +55,11 @@ export interface SpawnCliResult {
 export type SpawnCli = (input: SpawnCliInput) => Promise<SpawnCliResult>;
 
 export const defaultSpawnCli: SpawnCli = async (input) => {
+  const env: NodeJS.ProcessEnv = { ...process.env };
   let proc: ChildProcess;
   if (input.kind === 'claude-code') {
+    env.ANTHROPIC_BASE_URL = input.mockBaseUrl;
+    env.ANTHROPIC_API_KEY = input.mockBearerToken;
     // `claude --print --output-format=stream-json` requires `--verbose`
     // on current claude (2.1.x); without it the CLI exits non-zero
     // before making a single model request.
@@ -61,14 +75,27 @@ export const defaultSpawnCli: SpawnCli = async (input) => {
     for (const tool of input.toolsAllow) args.push('--allowed-tools', tool);
     proc = spawn(input.binPath ?? 'claude', args, {
       cwd: input.cwd,
-      env: process.env,
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
   } else {
-    // `codex exec` has no tool-allowlist flag.
-    // `--dangerously-bypass-approvals-and-sandbox` lets staged calls run
-    // without an interactive prompt; `--skip-git-repo-check` allows app
-    // dirs that aren't git repos.
+    const codexHome = await materializeCodexHome(
+      {
+        id: 'centraid-mock',
+        name: 'Centraid Automation Mock',
+        baseUrl: input.mockBaseUrl,
+        // wireApi defaults to 'responses' — the only format codex 0.128+ accepts.
+        envKey: 'CENTRAID_MOCK_KEY',
+      },
+      input.scratchDir,
+    );
+    env.CODEX_HOME = codexHome;
+    env.CENTRAID_MOCK_KEY = input.mockBearerToken;
+    // `codex exec` has no tool-allowlist flag; the mock-LLM server only
+    // ever stages tool calls the manifest permits, so the allowlist is
+    // already enforced upstream. `--dangerously-bypass-approvals-and-sandbox`
+    // lets the staged calls run without an interactive prompt;
+    // `--skip-git-repo-check` allows app dirs that aren't git repos.
     const args = [
       'exec',
       '--json',
@@ -78,15 +105,16 @@ export const defaultSpawnCli: SpawnCli = async (input) => {
     ];
     proc = spawn(input.binPath ?? 'codex', args, {
       cwd: input.cwd,
-      env: process.env,
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
   }
 
-  const stdoutChunks: Buffer[] = [];
   const stderrChunks: Buffer[] = [];
-  proc.stdout?.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
   proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+  // Drain stdout so the buffer doesn't fill up and block exit. Tool
+  // results arrive via the mock server, not the CLI's stdout.
+  proc.stdout?.on('data', () => undefined);
 
   const abortListener = (): void => {
     if (!proc.killed) proc.kill('SIGTERM');
@@ -99,7 +127,6 @@ export const defaultSpawnCli: SpawnCli = async (input) => {
       resolve({
         exitCode: code,
         ok: code === 0,
-        stdout: Buffer.concat(stdoutChunks).toString('utf8'),
         stderr: Buffer.concat(stderrChunks).toString('utf8'),
       });
     });
@@ -108,7 +135,6 @@ export const defaultSpawnCli: SpawnCli = async (input) => {
       resolve({
         exitCode: null,
         ok: false,
-        stdout: Buffer.concat(stdoutChunks).toString('utf8'),
         stderr: `spawn error: ${err.message}\n${Buffer.concat(stderrChunks).toString('utf8')}`,
       });
     });

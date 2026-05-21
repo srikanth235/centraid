@@ -163,14 +163,17 @@ export {
 export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
 export type { SettingsInject } from './static-server.js';
 
-// Automation manifest schema + validator. Shared between producers
-// (`@centraid/builder-harness` writes manifests during scaffolding /
-// re-prompt) and consumers (the local automation runner in
-// `@centraid/agent-runtime`, the openclaw plugin's reconciliation pass,
-// and the desktop UI). See issue #70.
+// Automation manifest schema + validator. The `automation.json`
+// manifest is the source of truth for an automation project — shared
+// between producers (`@centraid/builder-harness` writes manifests
+// during scaffolding / re-prompt) and consumers (the local automation
+// runner in `@centraid/agent-runtime`, the openclaw plugin's
+// reconciliation pass, and the desktop UI). See issue #91.
 export {
   AutomationManifestError,
-  isValidAutomationName,
+  AUTOMATION_HANDLER_FILE,
+  AUTOMATION_MANIFEST_FILE,
+  isValidAutomationId,
   isValidCronExpression,
   parseManifest,
   validateManifest,
@@ -224,35 +227,38 @@ export {
   type InsightsActivityRow,
 } from './insights-store.js';
 
-// Per-gateway automations mirror table (`gateway-db.ts` ACTIVITY_MIGRATIONS[0]).
-// The host scheduler (openclaw cron remote, OS scheduler local) owns
-// runtime state; this is centraid's own registration surface for the
-// list/UI and the reconciliation pass.
-export { AutomationStore, type AutomationRow } from './automation-store.js';
+// Automation projects on disk (issue #91). An automation is a
+// first-class project — its own directory under `automationsDir` — and
+// the directory is the source of truth (no SQLite definition table).
+export {
+  automationManifestPath,
+  automationHandlerPath,
+  readAutomationProject,
+  listAutomationProjects,
+  writeAutomationManifest,
+  setAutomationEnabled,
+  deleteAutomationProject,
+  type AutomationRow,
+  type AutomationProjectError,
+  type ListAutomationProjectsResult,
+} from './automation-project.js';
 export type { AutomationHost, AutomationReconcileResult } from './automation-host.js';
 
-// Deploy boundary for automations: scan an app's `automations/*.json`
-// and bring the mirror into agreement. Called by `handleAppUpload`
-// after a publish lands; hosts can also call directly for out-of-band
-// syncs (tests, manual refresh).
+// Automation handler runtime (issue #91). A fire executes the project's
+// generated `handler.js` in a worker thread; the host supplies the
+// tool / agent / invoke dispatchers. `runAutomationHandler` owns the
+// ledger side — opening the `runs` row and recording the trace.
 export {
-  syncAutomationsFromDisk,
-  type SyncAutomationsOptions,
-  type SyncAutomationsResult,
-  type SyncAutomationError,
-} from './sync-automations.js';
-
-// Agent-driven automation runner (issue #90 model-B). An automation
-// fire is an agent turn driven by the manifest prompt — no JS handler,
-// no worker. Hosts supply an `AutomationAgentDispatcher` that runs the
-// turn against their agent backend (codex / claude locally, the
-// openclaw in-process StreamFn on the gateway) and yield the trace
-// events the runner records as `step` / `tool` nodes.
-export {
-  runAutomationAgent,
-  type RunAutomationAgentOptions,
-  type AutomationAgentOutcome,
+  runAutomationHandler,
+  type RunAutomationHandlerOptions,
+  type AutomationHandlerOutcome,
+  type AutomationToolCall,
+  type AutomationToolResult,
+  type AutomationToolDispatcher,
+  type AutomationAgentCall,
   type AutomationAgentDispatcher,
-  type AutomationAgentRunInput,
-  type AutomationAgentEvent,
-} from './automation-agent-runner.js';
+  type AutomationInvokeResult,
+  type AutomationInvokeDispatcher,
+  type AutomationDispatchContext,
+} from './automation-handler-runner.js';
+export { truncateForAudit } from './automation-handler-audit.js';
