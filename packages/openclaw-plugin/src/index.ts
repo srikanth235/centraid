@@ -25,6 +25,8 @@ import {
   UserStore,
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
+  makeChatDbProvider,
+  makeAutomationDbProvider,
   AutomationStore,
 } from '@centraid/runtime-core';
 import { registerCentraidTools } from './lib/tools.js';
@@ -83,25 +85,29 @@ export default definePluginEntry({
       : path.join(resolveStateDir(process.env), appsDirRaw);
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
-    // Single SQLite file for every per-user record the gateway owns —
-    // identity (`users`), prefs (`user_prefs`), chat sessions, chat
-    // messages. UserStore + ChatHistoryStore share this provider so they
-    // share one connection, one migration ladder, and real cross-table
-    // foreign keys. The provider is lazy: the file is only opened when
-    // a store actually needs it, which keeps OpenClaw worker subprocesses
-    // (which `register()` runs in but which don't serve HTTP) from
-    // holding stray DB handles.
-    const gatewayDbPath = path.join(path.dirname(appsDir), 'centraid-gateway.sqlite');
-    const gatewayDbProvider = makeGatewayDbProvider(gatewayDbPath);
+    // Three sibling SQLite files, one per domain — identity
+    // (`centraid-gateway.sqlite`: users + prefs), chat
+    // (`centraid-chat.sqlite`: sessions + messages), automations
+    // (`centraid-automations.sqlite`: mirror + run audit). Each store
+    // gets the provider for its domain. Providers are lazy: a file is
+    // only opened when a store actually needs it, which keeps OpenClaw
+    // worker subprocesses (which `register()` runs in but which don't
+    // serve HTTP) from holding stray DB handles.
+    const dbDir = path.dirname(appsDir);
+    const gatewayDbProvider = makeGatewayDbProvider(path.join(dbDir, 'centraid-gateway.sqlite'));
+    const chatDbProvider = makeChatDbProvider(path.join(dbDir, 'centraid-chat.sqlite'));
+    const automationDbProvider = makeAutomationDbProvider(
+      path.join(dbDir, 'centraid-automations.sqlite'),
+    );
     const userStore = new UserStore(gatewayDbProvider);
-    const automationStore = new AutomationStore(gatewayDbProvider);
+    const automationStore = new AutomationStore(automationDbProvider);
 
-    // Chat-history store — wraps the same shared gateway DB. It is THE chat
-    // store: the `/centraid/<id>/_chat` POST route reads sticky mode +
-    // runner-resume handles from it and records turn completion back.
-    // Constructed before the runtime so it can be handed to the Runtime
-    // and also mounted on the `/_centraid-chat` HTTP surface.
-    const chatHistoryStore = new ChatHistoryStore(gatewayDbProvider, () => userStore.getUserId());
+    // Chat-history store — wraps the chat DB. It is THE chat store: the
+    // `/centraid/<id>/_chat` POST route reads sticky mode + runner-resume
+    // handles from it and records turn completion back. Constructed
+    // before the runtime so it can be handed to the Runtime and also
+    // mounted on the `/_centraid-chat` HTTP surface.
+    const chatHistoryStore = new ChatHistoryStore(chatDbProvider, () => userStore.getUserId());
 
     const chatRunner = makeOpenClawChatRunner(api);
 
@@ -125,7 +131,7 @@ export default definePluginEntry({
       chatRunner,
       runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
       automationStore,
-      gatewayDb: gatewayDbProvider,
+      automationDb: automationDbProvider,
       // After every successful publish, sync runs against the new
       // version's `automations/` (handled inside `handleAppUpload`).
       // Once the mirror is updated, reconcile the host against the
@@ -161,7 +167,7 @@ export default definePluginEntry({
         const entry = runtime.registry.get(appId);
         return entry?.path;
       },
-      gatewayDbProvider,
+      automationDbProvider,
       logger: api.logger,
     });
 

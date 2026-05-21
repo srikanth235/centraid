@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   AutomationRunsStore,
-  makeGatewayDbProvider,
+  makeAutomationDbProvider,
   type DatabaseProvider,
   type AutomationManifest,
 } from '@centraid/runtime-core';
@@ -14,7 +14,7 @@ import { runAutomationLocal } from './run-automation-local.js';
 interface AppHarness {
   appDir: string;
   appId: string;
-  gatewayDb: DatabaseProvider;
+  automationDb: DatabaseProvider;
   store: AutomationRunsStore;
 }
 
@@ -50,9 +50,9 @@ function makeAppHarness(appId = 'app1'): AppHarness {
   const appDir = mkdtempSync(path.join(tmpdir(), 'centraid-local-fire-'));
   // One gateway DB per harness; the run audit for every app fired
   // through it lives in this single file.
-  const gatewayDb = makeGatewayDbProvider(path.join(appDir, 'centraid-gateway.sqlite'));
-  const store = new AutomationRunsStore(gatewayDb, appId);
-  return { appDir, appId, gatewayDb, store };
+  const automationDb = makeAutomationDbProvider(path.join(appDir, 'centraid-automations.sqlite'));
+  const store = new AutomationRunsStore(automationDb, appId);
+  return { appDir, appId, automationDb, store };
 }
 
 describe('runAutomationLocal onFailure cascade (issue #80)', () => {
@@ -273,7 +273,7 @@ describe('runAutomationLocal pinned-data replay + cross-app invoke (issue #80)',
       appDir: appA.appDir,
       automationName: 'caller',
       runsStore: appA.store,
-      gatewayDb: appA.gatewayDb,
+      automationDb: appA.automationDb,
       resolveApp: (id) => (id === 'appB' ? { appDir: appBDir } : undefined),
     });
     assert.equal(outcome.ok, true);

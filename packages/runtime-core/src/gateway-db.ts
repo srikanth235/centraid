@@ -1,60 +1,61 @@
 /*
- * Centraid gateway state — single SQLite file (`centraid-gateway.sqlite`)
- * holding every per-user record the gateway owns:
+ * Centraid gateway state — split across THREE SQLite files, each with its
+ * own connection, migration ladder, and `PRAGMA user_version`:
  *
- *   users          — the user identity row(s). Single-user model today;
- *                    schema is multi-user-ready so a future shift to
- *                    multi-tenant doesn't need a column-add migration.
- *   user_prefs     — global prefs keyed by (user_id, key); JSON-encoded
- *                    values. FK-cascaded from `users`.
- *   chat_sessions  — chat sessions, scoped by user_id (FK-cascaded from
- *                    `users`). A session is the single chat concept — its
- *                    id IS the chat window id. Carries a nullable
- *                    `origin_app_id` (the app the chat was opened from;
- *                    NULL = started from the centraid shell), a sticky
- *                    `mode` ('full' | 'data'), per-turn `turn_count`, and
- *                    the runner-resume handle (`adapter_kind` +
- *                    `adapter_session_id`). Real FK so deleting a user
- *                    cleans up their sessions atomically.
- *   chat_messages  — append-only message log, FK-cascaded from
- *                    `chat_sessions`. Each row carries a nullable `app_id`
- *                    naming the app a tool call in that message touched.
- *   automations    — centraid's mirror of registered automations, keyed
- *                    by (origin_app_id, name).
- *   automation_runs / automation_run_nodes / automation_state
- *                  — the automation run-audit + ctx.state surface
- *                    (issue #80). One run row per automation fire, one
- *                    node row per ctx.tool/ctx.agent/ctx.invoke call,
- *                    one state row per (automation, key). Runtime-owned;
- *                    never reachable from handler `db` or the
- *                    `centraid_sql_*` agent tools. Living here (not in a
- *                    per-app file) lets a cross-app `ctx.invoke` child
- *                    link its `parent_run_id` into one joinable DAG.
+ *   gateway     (`centraid-gateway.sqlite`)
+ *     users          — the user identity row(s). Single-user model today;
+ *                      schema is multi-user-ready so a future shift to
+ *                      multi-tenant doesn't need a column-add migration.
+ *     user_prefs     — global prefs keyed by (user_id, key); JSON-encoded
+ *                      values. Real FK-cascaded from `users` (same file).
  *
- * One file, one connection, one migration ladder, real foreign keys
- * (`PRAGMA foreign_keys=ON`). UserStore + ChatHistoryStore both wrap
- * the same `DatabaseSync` handle through a shared `DatabaseProvider`
- * lazy getter — the OpenClaw plugin's worker subprocesses (which
- * construct the runtime in every context but only the gateway worker
- * serves HTTP) never open the file unless they actually serve a route.
+ *   chat        (`centraid-chat.sqlite`)
+ *     chat_sessions  — chat sessions, scoped by `user_id`. A session is the
+ *                      single chat concept — its id IS the chat window id.
+ *                      Carries a nullable `origin_app_id` (the app the chat
+ *                      was opened from; NULL = started from the centraid
+ *                      shell), a sticky `mode` ('full' | 'data'), per-turn
+ *                      `turn_count`, and the runner-resume handle
+ *                      (`adapter_kind` + `adapter_session_id`).
  *
- * The earlier two-file split (`centraid-user.sqlite` +
- * `centraid-chat-history.sqlite`) was path-dependent, not principled —
- * we lived with an application-enforced FK on `chat_sessions.user_id`
- * because cross-attached-DB FKs aren't a thing in SQLite. Pre-1.0 with
- * a single-user model and both files in the same directory anyway, the
- * FK + atomic cross-table ops + single backup target are clear wins.
+ *                      NOTE: `chat_sessions.user_id` is *application-enforced*,
+ *                      NOT a real foreign key. `users` lives in a different
+ *                      SQLite file and SQLite has no cross-file foreign keys,
+ *                      so deleting a user no longer cascades its sessions —
+ *                      callers must clean those up themselves.
+ *     chat_messages  — append-only message log, real FK-cascaded from
+ *                      `chat_sessions` (same file). Each row carries a
+ *                      nullable `app_id` naming the app a tool call in that
+ *                      message touched.
  *
- * Migration policy: pre-1.0, the baseline slot can absorb shape
- * changes. Once we ship 1.0 we flip to strict append-only.
+ *   automations (`centraid-automations.sqlite`)
+ *     automations    — centraid's mirror of registered automations, keyed
+ *                      by (origin_app_id, name).
+ *     automation_runs / automation_run_nodes / automation_state
+ *                    — the automation run-audit + ctx.state surface
+ *                      (issue #80). One run row per automation fire, one
+ *                      node row per ctx.tool/ctx.agent/ctx.invoke call,
+ *                      one state row per (automation, key). Runtime-owned;
+ *                      never reachable from handler `db` or the
+ *                      `centraid_sql_*` agent tools. All three tables stay
+ *                      together so a cross-app `ctx.invoke` child can link
+ *                      its `parent_run_id` self-FK into one joinable DAG.
+ *
+ * Each file gets one connection and one provider. The OpenClaw plugin's
+ * worker subprocesses (which construct the runtime in every context but
+ * only the gateway worker serves HTTP) never open a file unless they
+ * actually serve a route, because providers open lazily.
+ *
+ * Migration policy: pre-1.0, the baseline slot can absorb shape changes.
+ * Once we ship 1.0 we flip to strict append-only.
  */
 
 import { DatabaseSync } from 'node:sqlite';
 
 /**
- * Lazy provider for the shared gateway `DatabaseSync` handle. Both stores
- * call this once on their first method invocation; the provider opens the
- * file (and runs migrations) on first call and caches the handle.
+ * Lazy provider for a `DatabaseSync` handle. Stores call this once on
+ * their first method invocation; the provider opens the file (and runs
+ * migrations) on first call and caches the handle.
  *
  * Lazy because the OpenClaw plugin's `register()` runs in every worker
  * subprocess — only the gateway worker actually serves the HTTP routes
@@ -63,17 +64,16 @@ import { DatabaseSync } from 'node:sqlite';
  */
 export type DatabaseProvider = () => DatabaseSync;
 
-export const MIGRATIONS: readonly string[] = [
-  // 0 → 1: baseline schema for the entire gateway state file.
-  //
-  // The user identity gets its own table (rather than a key='id' row in a
-  // generic key/value bag) so other tables can carry a real FK reference.
-  // Prefs are scoped per user from day one — single-user today, but the
-  // shape doesn't need to change if we ever go multi-tenant.
-  //
-  // All cross-table relationships use `ON DELETE CASCADE` so a `DELETE
-  // FROM users WHERE id=?` cleans up that user's prefs, sessions, and
-  // messages atomically inside one transaction.
+/**
+ * Gateway file migration ladder — `users` + `user_prefs`. The user
+ * identity gets its own table (rather than a key='id' row in a generic
+ * key/value bag) so other tables can carry a real FK reference. Prefs
+ * are scoped per user from day one — single-user today, but the shape
+ * doesn't need to change if we ever go multi-tenant. `user_prefs`
+ * cascades from `users` (same file).
+ */
+export const GATEWAY_MIGRATIONS: readonly string[] = [
+  // 0 → 1: baseline schema for the gateway (users) file.
   `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -87,7 +87,20 @@ export const MIGRATIONS: readonly string[] = [
       PRIMARY KEY (user_id, key),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+  `,
+];
 
+/**
+ * Chat file migration ladder — `chat_sessions` + `chat_messages`.
+ *
+ * `chat_sessions.user_id` is kept as a plain column but has NO foreign
+ * key: `users` now lives in a different SQLite file and cross-file FKs
+ * aren't possible. The relationship is application-enforced. `chat_messages`
+ * still cascades from `chat_sessions` (same file).
+ */
+export const CHAT_MIGRATIONS: readonly string[] = [
+  // 0 → 1: baseline schema for the chat file.
+  `
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -98,8 +111,7 @@ export const MIGRATIONS: readonly string[] = [
       adapter_session_id TEXT,
       turn_count INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_app_updated
       ON chat_sessions(user_id, origin_app_id, updated_at DESC);
@@ -116,7 +128,18 @@ export const MIGRATIONS: readonly string[] = [
     CREATE INDEX IF NOT EXISTS idx_chat_messages_session
       ON chat_messages(session_id);
   `,
-  // 1 → 2: automations mirror table.
+];
+
+/**
+ * Automations file migration ladder — the `automations` mirror plus the
+ * automation run-audit + ctx.state tables. All three audit tables stay
+ * in one file so a cross-app `ctx.invoke` child run can link its
+ * `parent_run_id` self-FK into one joinable DAG (a self-FK can't cross
+ * SQLite files). Runtime-owned; never reachable from handler `db` or the
+ * `centraid_sql_*` agent tools.
+ */
+export const AUTOMATION_MIGRATIONS: readonly string[] = [
+  // 0 → 1: automations mirror table.
   //
   // The cron schedule itself + last/next-run telemetry live in the host
   // scheduler (openclaw cron on remote, OS scheduler on local — see
@@ -145,13 +168,7 @@ export const MIGRATIONS: readonly string[] = [
     CREATE INDEX IF NOT EXISTS idx_automations_app
       ON automations(origin_app_id);
   `,
-  // 2 → 3: automation run-audit + ctx.state tables (issue #80).
-  //
-  // These were a per-app `automations.sqlite` file; folded into the
-  // gateway DB so a cross-app `ctx.invoke` child run can link its
-  // `parent_run_id` self-FK into one joinable DAG (a self-FK can't
-  // cross SQLite files). Runtime-owned; never reachable from handler
-  // `db` or the `centraid_sql_*` agent tools.
+  // 1 → 2: automation run-audit + ctx.state tables (issue #80).
   //
   // `origin_app_id` is nullable on `automation_runs` / `automation_state`
   // for forward-compat with app-less automations (not built in v0);
@@ -213,21 +230,27 @@ export const MIGRATIONS: readonly string[] = [
   `,
 ];
 
-function migrate(db: DatabaseSync): void {
+/**
+ * Run the pending migration tail of `migrations` against `db`. `label`
+ * names the file in the version-mismatch error. Idempotent on an
+ * already-current DB; throws if the DB is at a version newer than this
+ * build understands.
+ */
+function migrate(db: DatabaseSync, migrations: readonly string[], label: string): void {
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
   const current = row?.user_version ?? 0;
-  if (current > MIGRATIONS.length) {
+  if (current > migrations.length) {
     throw new Error(
-      `gateway DB is at version ${current} but this build only supports up to ${MIGRATIONS.length}. ` +
+      `${label} DB is at version ${current} but this build only supports up to ${migrations.length}. ` +
         `Please update centraid before opening this database.`,
     );
   }
-  if (current === MIGRATIONS.length) return;
+  if (current === migrations.length) return;
   db.exec('BEGIN IMMEDIATE');
   try {
-    for (let v = current; v < MIGRATIONS.length; v++) {
-      db.exec(MIGRATIONS[v]!);
-      // v is a loop index bounded by MIGRATIONS.length, never user input,
+    for (let v = current; v < migrations.length; v++) {
+      db.exec(migrations[v]!);
+      // v is a loop index bounded by migrations.length, never user input,
       // so it's safe to interpolate into the PRAGMA (which doesn't accept
       // bind parameters).
       db.exec(`PRAGMA user_version = ${v + 1}`);
@@ -244,35 +267,67 @@ function migrate(db: DatabaseSync): void {
 }
 
 /**
- * Open the gateway DB file at `dbPath`, set the per-connection pragmas
- * (WAL journal, FK enforcement), and run the pending migration tail.
- * Idempotent on an already-current DB; throws if the DB is at a version
- * newer than this build understands.
+ * Open a centraid DB file at `dbPath`, set the per-connection pragmas
+ * (WAL journal, FK enforcement), and run the pending migration tail of
+ * `migrations`. Idempotent on an already-current DB; throws if the DB is
+ * at a version newer than this build understands.
  *
  * Pragmas must run outside any transaction (journal_mode in particular),
  * so they happen before migrate() opens its BEGIN IMMEDIATE block.
  */
-export function openGatewayDb(dbPath: string): DatabaseSync {
+function openDb(dbPath: string, migrations: readonly string[], label: string): DatabaseSync {
   const db = new DatabaseSync(dbPath);
   db.exec(`
     PRAGMA journal_mode=WAL;
     PRAGMA foreign_keys=ON;
   `);
-  migrate(db);
+  migrate(db, migrations, label);
   return db;
 }
 
 /**
  * Wrap a fixed `dbPath` into a lazy `DatabaseProvider`. The provider
  * opens the file on the first call (running migrations as a side effect)
- * and caches the handle for subsequent calls. Hosts hand the same
- * provider to every store that wraps the gateway DB so they all share
- * one connection.
+ * and caches the handle for subsequent calls.
  */
-export function makeGatewayDbProvider(dbPath: string): DatabaseProvider {
+function makeProvider(
+  dbPath: string,
+  migrations: readonly string[],
+  label: string,
+): DatabaseProvider {
   let db: DatabaseSync | undefined;
   return () => {
-    if (!db) db = openGatewayDb(dbPath);
+    if (!db) db = openDb(dbPath, migrations, label);
     return db;
   };
+}
+
+/** Open the gateway (users + user_prefs) DB file. */
+export function openGatewayDb(dbPath: string): DatabaseSync {
+  return openDb(dbPath, GATEWAY_MIGRATIONS, 'gateway');
+}
+
+/** Lazy provider for the gateway (users + user_prefs) DB file. */
+export function makeGatewayDbProvider(dbPath: string): DatabaseProvider {
+  return makeProvider(dbPath, GATEWAY_MIGRATIONS, 'gateway');
+}
+
+/** Open the chat (chat_sessions + chat_messages) DB file. */
+export function openChatDb(dbPath: string): DatabaseSync {
+  return openDb(dbPath, CHAT_MIGRATIONS, 'chat');
+}
+
+/** Lazy provider for the chat (chat_sessions + chat_messages) DB file. */
+export function makeChatDbProvider(dbPath: string): DatabaseProvider {
+  return makeProvider(dbPath, CHAT_MIGRATIONS, 'chat');
+}
+
+/** Open the automations (mirror + run-audit + ctx.state) DB file. */
+export function openAutomationDb(dbPath: string): DatabaseSync {
+  return openDb(dbPath, AUTOMATION_MIGRATIONS, 'automation');
+}
+
+/** Lazy provider for the automations (mirror + run-audit + ctx.state) DB file. */
+export function makeAutomationDbProvider(dbPath: string): DatabaseProvider {
+  return makeProvider(dbPath, AUTOMATION_MIGRATIONS, 'automation');
 }

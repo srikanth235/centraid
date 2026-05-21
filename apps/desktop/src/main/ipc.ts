@@ -22,7 +22,7 @@ import {
   localRuntimeAppsDir,
   localRuntimeAutomationHost,
   localRuntimeCodexHomeBaseDir,
-  localRuntimeGatewayDb,
+  localRuntimeAutomationDb,
   noteRunnerPrefsChanged,
   resolveProviderPrefs,
 } from './local-runtime.js';
@@ -37,7 +37,7 @@ import {
   AutomationStore,
   automationEnabledKey,
   deleteAppSetting,
-  makeGatewayDbProvider,
+  makeAutomationDbProvider,
   readActiveCodeDir,
   syncAutomationsFromDisk,
   writeAppSetting,
@@ -574,21 +574,21 @@ export function registerIpcHandlers(): void {
   );
 
   // ----- Automations (issue #70 / #80) -----
-  // The desktop reads the gateway DB directly — the automations mirror
-  // and (issue #80) the automation run-audit tables. One lazily-opened
-  // provider over `localRuntimeGatewayDb()` is shared by every store
-  // built here so they ride a single connection.
-  const getGatewayDbProvider = (() => {
+  // The desktop reads the automations DB directly — the automations
+  // mirror and (issue #80) the automation run-audit tables. One
+  // lazily-opened provider over `localRuntimeAutomationDb()` is shared
+  // by every store built here so they ride a single connection.
+  const getAutomationDbProvider = (() => {
     let provider: DatabaseProvider | undefined;
     return (): DatabaseProvider => {
-      if (!provider) provider = makeGatewayDbProvider(localRuntimeGatewayDb());
+      if (!provider) provider = makeAutomationDbProvider(localRuntimeAutomationDb());
       return provider;
     };
   })();
   const getAutomationStore = (() => {
     let store: AutomationStore | undefined;
     return (): AutomationStore => {
-      if (!store) store = new AutomationStore(getGatewayDbProvider());
+      if (!store) store = new AutomationStore(getAutomationDbProvider());
       return store;
     };
   })();
@@ -619,8 +619,8 @@ export function registerIpcHandlers(): void {
       // when fired by the OS scheduler.
       const codeDir = await readActiveCodeDir(appDir);
       const prefs = await loadRunnerPrefs();
-      const gatewayDb = getGatewayDbProvider();
-      const runsStore = new AutomationRunsStore(gatewayDb, input.appId);
+      const automationDb = getAutomationDbProvider();
+      const runsStore = new AutomationRunsStore(automationDb, input.appId);
       // Replay mode (issue #80 follow-up) — serve the run from the
       // automation's pinned fixture instead of live tools.
       let replayFromRunId: string | undefined;
@@ -653,7 +653,7 @@ export function registerIpcHandlers(): void {
         automationName: input.name,
         runner: prefs.kind,
         runsStore,
-        automationDb: gatewayDb,
+        automationDb,
         resolveApp,
         ...(replayFromRunId ? { replayFromRunId } : {}),
       });
@@ -753,7 +753,7 @@ export function registerIpcHandlers(): void {
       _e,
       input: { appId: string; name: string; limit?: number },
     ): Promise<AutomationRunRow[]> => {
-      const store = new AutomationRunsStore(getGatewayDbProvider(), input.appId);
+      const store = new AutomationRunsStore(getAutomationDbProvider(), input.appId);
       return store.listRuns({ name: input.name, limit: input.limit ?? 25 });
     },
   );
@@ -761,7 +761,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUN_NODES,
     async (_e, input: { appId: string; runId: string }): Promise<AutomationRunNodeRow[]> => {
-      const store = new AutomationRunsStore(getGatewayDbProvider(), input.appId);
+      const store = new AutomationRunsStore(getAutomationDbProvider(), input.appId);
       return store.listNodes(input.runId);
     },
   );
@@ -770,7 +770,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_PIN_RUN,
     async (_e, input: { appId: string; runId: string; pinned: boolean }): Promise<{ ok: true }> => {
-      const store = new AutomationRunsStore(getGatewayDbProvider(), input.appId);
+      const store = new AutomationRunsStore(getAutomationDbProvider(), input.appId);
       store.setPinned(input.runId, input.pinned);
       return { ok: true };
     },

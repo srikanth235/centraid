@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
-import { makeGatewayDbProvider } from './gateway-db.js';
+import { makeAutomationDbProvider } from './gateway-db.js';
 import { AutomationStore } from './automation-store.js';
 import type { AutomationManifest } from './automation-manifest.js';
 
 function newStore(): AutomationStore {
   const dir = mkdtempSync(path.join(tmpdir(), 'centraid-automation-store-'));
-  return new AutomationStore(makeGatewayDbProvider(path.join(dir, 'gateway.sqlite')));
+  return new AutomationStore(makeAutomationDbProvider(path.join(dir, 'gateway.sqlite')));
 }
 
 const sampleManifest: AutomationManifest = {

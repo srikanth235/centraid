@@ -2,13 +2,12 @@
  * AutomationRunsStore — automation run audit + ctx.state surface.
  *
  * The three tables — `automation_runs`, `automation_run_nodes`,
- * `automation_state` — live in the central gateway DB
- * (`centraid-gateway.sqlite`), alongside `users`, `chat_sessions`, and
- * the `automations` mirror. The DDL is in `gateway-db.ts`
- * MIGRATIONS[2]. Folding the audit into the gateway DB (it was a
- * per-app `automations.sqlite` file) lets a cross-app `ctx.invoke`
- * child run link its `parent_run_id` self-FK into one joinable DAG —
- * a self-FK can't cross SQLite files.
+ * `automation_state` — live in the automations DB
+ * (`centraid-automations.sqlite`), alongside the `automations` mirror.
+ * The DDL is in `gateway-db.ts` AUTOMATION_MIGRATIONS[1]. Keeping the
+ * audit in one file (rather than a per-app `automations.sqlite`) lets a
+ * cross-app `ctx.invoke` child run link its `parent_run_id` self-FK
+ * into one joinable DAG — a self-FK can't cross SQLite files.
  *
  *   automation_runs       — one row per automation fire (scheduled/
  *                           manual/replay/on_failure). Carries

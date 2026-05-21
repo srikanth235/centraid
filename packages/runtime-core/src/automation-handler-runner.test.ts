@@ -10,7 +10,7 @@ import {
   type AutomationInvokeDispatcher,
 } from './automation-handler-runner.js';
 import { AutomationRunsStore } from './automation-runs-store.js';
-import { makeGatewayDbProvider } from './gateway-db.js';
+import { makeAutomationDbProvider } from './gateway-db.js';
 
 interface Harness {
   appDir: string;
@@ -22,7 +22,7 @@ function makeHarness(): Harness {
   const appDir = mkdtempSync(path.join(tmpdir(), 'centraid-handler-runner-'));
   const actionsDir = path.join(appDir, 'actions');
   mkdirSync(actionsDir, { recursive: true });
-  const provider = makeGatewayDbProvider(path.join(appDir, 'centraid-gateway.sqlite'));
+  const provider = makeAutomationDbProvider(path.join(appDir, 'centraid-automations.sqlite'));
   const store = new AutomationRunsStore(provider, 'handler-runner-app');
   return {
     appDir,
