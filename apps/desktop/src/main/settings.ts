@@ -27,6 +27,8 @@ export type RuntimeMode = 'local' | 'remote';
 
 export interface PersistedSettings {
   projectsDir: string;
+  /** Directory holding the user's automation projects (issue #91). */
+  automationsDir: string;
   runtimeMode: RuntimeMode;
   remoteGatewayUrl: string;
   remoteGatewayToken: string;
@@ -44,6 +46,7 @@ export interface PersistedSettings {
 
 export interface DesktopSettings extends HarnessConfig {
   projectsDir: string;
+  automationsDir: string;
   runtimeMode: RuntimeMode;
   remoteGatewayUrl: string;
   remoteGatewayToken: string;
@@ -62,6 +65,7 @@ function settingsPath(): string {
 function persistedDefaults(): PersistedSettings {
   return {
     projectsDir: path.join(os.homedir(), 'centraid-projects'),
+    automationsDir: path.join(os.homedir(), 'centraid-automations'),
     runtimeMode: 'local',
     remoteGatewayUrl: DEFAULT_REMOTE_URL,
     remoteGatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN ?? '',
@@ -80,11 +84,13 @@ function migrate(
 ): PersistedSettings {
   const base = persistedDefaults();
   const projectsDir = raw.projectsDir?.trim() || base.projectsDir;
+  const automationsDir = raw.automationsDir?.trim() || base.automationsDir;
   const remoteTemplatesUrl = raw.remoteTemplatesUrl ?? base.remoteTemplatesUrl;
 
   if (raw.runtimeMode || raw.remoteGatewayUrl) {
     return {
       projectsDir,
+      automationsDir,
       runtimeMode: raw.runtimeMode ?? base.runtimeMode,
       remoteGatewayUrl: raw.remoteGatewayUrl?.trim() || base.remoteGatewayUrl,
       remoteGatewayToken: raw.remoteGatewayToken ?? base.remoteGatewayToken,
@@ -98,6 +104,7 @@ function migrate(
   const legacyToken = raw.gatewayToken ?? base.remoteGatewayToken;
   return {
     projectsDir,
+    automationsDir,
     runtimeMode: legacyToken ? 'remote' : 'local',
     remoteGatewayUrl: legacyUrl,
     remoteGatewayToken: legacyToken,
@@ -152,10 +159,21 @@ export async function loadSettings(): Promise<DesktopSettings> {
   return resolveEffective(persisted);
 }
 
+/**
+ * Read the persisted settings WITHOUT resolving the effective runtime
+ * gateway. `loadSettings` routes through `resolveEffective`, which (in
+ * local mode) starts the in-process runtime — code reachable from
+ * `ensureLocalRuntime` must use this to avoid a startup cycle.
+ */
+export async function loadPersistedSettings(): Promise<PersistedSettings> {
+  return readPersisted();
+}
+
 export async function saveSettings(patch: Partial<DesktopSettings>): Promise<DesktopSettings> {
   const current = await readPersisted();
   const next: PersistedSettings = {
     projectsDir: patch.projectsDir?.trim() || current.projectsDir,
+    automationsDir: patch.automationsDir?.trim() || current.automationsDir,
     runtimeMode: patch.runtimeMode ?? current.runtimeMode,
     remoteGatewayUrl: patch.remoteGatewayUrl?.trim() || current.remoteGatewayUrl,
     remoteGatewayToken:

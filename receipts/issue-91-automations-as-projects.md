@@ -14,7 +14,7 @@ a sibling of an app project. The directory is the source of truth.
 - [x] Commit 2 — agent-runtime: local handler execution path
 - [x] Commit 3 — openclaw-plugin: cloud handler execution path
 - [x] Commit 4 — builder-harness: automation scaffold
-- [ ] Commit 5 — desktop main: `automationsDir` setting + project IPC
+- [x] Commit 5 — desktop main: `automationsDir` setting + project IPC
 - [ ] Commit 6 — desktop renderer: Automations screen + preload + d.ts
 - [ ] Commit 7 — desktop renderer: automation builder chat
 
@@ -96,6 +96,22 @@ automation project layout — a validator-checked `automation.json`, a
 starter `handler.js`, and a `versions/` dir — the sibling of
 `scaffoldProject` for apps. The builder agent rewrites both files
 during the build conversation. builder-harness build + tests pass.
+
+### Commit 5 — desktop main: `automationsDir` setting + project IPC
+
+- New `automationsDir` desktop setting (default `~/centraid-automations`,
+  a sibling of `projectsDir`).
+- The automation IPC handlers are rewritten over the on-disk project
+  model: `AUTOMATIONS_LIST` / `READ` / `CREATE` (scaffold + host
+  register) / `RUN_NOW` / `SET_ENABLED` (rewrite the manifest) /
+  `DELETE` / `LIST_RUNS` (now accepts an optional `automationId` and
+  filters to `kind:'automation'`) / `LIST_RUN_NODES` / `PIN_RUN`.
+- `OsSchedulerHost` bakes `CENTRAID_AUTOMATIONS_DIR` into the scheduler
+  artifact; `localRuntimeAutomationHost` takes the dir; the startup
+  reconcile diffs `listAutomationProjects` instead of the SQLite store.
+
+desktop main typecheck + build pass; the renderer side is still model-A
+(updated in Commit 6).
 
 ## Out of scope
 

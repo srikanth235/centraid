@@ -33,8 +33,11 @@ import {
 } from '@centraid/agent-runtime';
 import {
   AutomationRunsStore,
-  AutomationStore,
   InsightsStore,
+  listAutomationProjects,
+  readAutomationProject,
+  setAutomationEnabled,
+  deleteAutomationProject,
   makeActivityDbProvider,
   type AutomationRow,
   type AutomationRunNodeRow,
@@ -101,15 +104,17 @@ export const Channel = {
   // runner (binary version + optional provider endpoint probe).
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 
-  // Automations (issue #70) — desktop UI surface. Reads the
-  // per-gateway automations mirror table; manual run-now fires the
-  // local `centraid run-automation` headless path in-process.
+  // Automations (issue #91) — desktop UI surface over the on-disk
+  // automation projects under `automationsDir`. Manual run-now fires
+  // the local handler runtime in-process.
   AUTOMATIONS_LIST: 'centraid:automations:list',
+  AUTOMATIONS_READ: 'centraid:automations:read',
+  AUTOMATIONS_CREATE: 'centraid:automations:create',
   AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
   AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
   AUTOMATIONS_DELETE: 'centraid:automations:delete',
-  // Run audit + node timeline (issue #80). Read-only views over the
-  // per-app `automations.sqlite` runs / run_nodes tables.
+  // Run audit + node timeline (issue #80 / #90). Read-only views over
+  // the unified `runs` / `run_nodes` ledger.
   AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
   AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
   // Pin / unpin a run as a replay fixture (issue #80 follow-up).
@@ -554,31 +559,71 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  // ----- Automations (issue #70 / #80) -----
-  // The desktop reads the automations DB directly — the automations
-  // mirror and (issue #80) the automation run-audit tables. One
-  // lazily-opened provider over `localRuntimeAutomationDb()` is shared
-  // by every store built here so they ride a single connection.
-  const getAutomationDbProvider = (() => {
+  // ----- Automations (issue #91) -----
+  // Automation *definitions* are projects on disk under `automationsDir`
+  // (read via runtime-core's `automation-project` helpers). The unified
+  // run ledger lives in the activity DB — one lazily-opened provider
+  // over `localRuntimeAutomationDb()` is shared by every store here.
+  const getActivityDbProvider = (() => {
     let provider: DatabaseProvider | undefined;
     return (): DatabaseProvider => {
       if (!provider) provider = makeActivityDbProvider(localRuntimeAutomationDb());
       return provider;
     };
   })();
-  const getAutomationStore = (() => {
-    let store: AutomationStore | undefined;
-    return (): AutomationStore => {
-      if (!store) store = new AutomationStore(getAutomationDbProvider());
-      return store;
-    };
-  })();
 
   ipcMain.handle(Channel.AUTOMATIONS_LIST, async (): Promise<AutomationRow[]> => {
-    // Model-B: automations are user-owned, not app-scoped. The desktop
-    // is single-user, so the full list is the user's list.
-    return getAutomationStore().listAll();
+    const settings = await loadSettings();
+    const { rows } = await listAutomationProjects(settings.automationsDir);
+    return rows;
   });
+
+  ipcMain.handle(
+    Channel.AUTOMATIONS_READ,
+    async (_e, input: { automationId: string }): Promise<AutomationRow | null> => {
+      const settings = await loadSettings();
+      const row = await readAutomationProject(settings.automationsDir, input.automationId).catch(
+        () => undefined,
+      );
+      return row ?? null;
+    },
+  );
+
+  ipcMain.handle(
+    Channel.AUTOMATIONS_CREATE,
+    async (
+      _e,
+      input: {
+        id: string;
+        name?: string;
+        description?: string;
+        prompt?: string;
+        cronExpr?: string;
+        apps?: string[];
+      },
+    ): Promise<AutomationRow> => {
+      const settings = await loadSettings();
+      const { scaffoldAutomationProject } = await import('@centraid/builder-harness');
+      await scaffoldAutomationProject(settings.automationsDir, input.id, {
+        ...(input.name ? { name: input.name } : {}),
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.prompt ? { prompt: input.prompt } : {}),
+        ...(input.cronExpr ? { cronExpr: input.cronExpr } : {}),
+        ...(input.apps ? { apps: input.apps } : {}),
+      });
+      const row = await readAutomationProject(settings.automationsDir, input.id);
+      if (!row) throw new Error(`automation ${input.id}: scaffolded but not found on disk`);
+      try {
+        await localRuntimeAutomationHost(settings.automationsDir).register(row);
+      } catch (err) {
+        console.warn(
+          `[automations] host register failed for ${input.id}: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
+      return row;
+    },
+  );
 
   ipcMain.handle(
     Channel.AUTOMATIONS_RUN_NOW,
@@ -589,13 +634,15 @@ export function registerIpcHandlers(): void {
       ok: boolean;
       durationMs: number;
       error?: string;
-      stepCount: number;
-      toolCount: number;
+      toolBatches: number;
+      agentCalls: number;
     }> => {
+      const settings = await loadSettings();
       const prefs = await loadRunnerPrefs();
       const { outcome, record } = await runAutomationLocal({
         automationId: input.automationId,
-        automationDb: getAutomationDbProvider(),
+        automationsDir: settings.automationsDir,
+        activityDb: getActivityDbProvider(),
         runner: prefs.kind,
         // "Run now" is a manual fire — tag it so the executions log
         // distinguishes it from the OS-scheduler trigger.
@@ -605,8 +652,8 @@ export function registerIpcHandlers(): void {
         ok: outcome.ok,
         durationMs: record.durationMs,
         ...(outcome.error ? { error: outcome.error } : {}),
-        stepCount: record.stepCount,
-        toolCount: record.toolCount,
+        toolBatches: record.toolBatches,
+        agentCalls: record.agentCalls,
       };
     },
   );
@@ -614,16 +661,18 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_SET_ENABLED,
     async (_e, input: { automationId: string; enabled: boolean }) => {
-      // The `enabled` column on the automation row is the source of
-      // truth. Host gets register(row) — OsSchedulerHost collapses
-      // enabled=false to unregister so launchd/systemd/Task Scheduler
-      // don't keep a suppressed-but-installed entry.
-      const store = getAutomationStore();
-      store.setEnabled(input.automationId, input.enabled);
-      const row = store.get(input.automationId);
+      // `manifest.enabled` is the source of truth — toggling rewrites
+      // `automation.json`. Host gets register(row); OsSchedulerHost
+      // collapses enabled=false to unregister.
+      const settings = await loadSettings();
+      const row = await setAutomationEnabled(
+        settings.automationsDir,
+        input.automationId,
+        input.enabled,
+      );
       if (row) {
         try {
-          await localRuntimeAutomationHost().register(row);
+          await localRuntimeAutomationHost(settings.automationsDir).register(row);
         } catch (err) {
           console.warn(
             `[automations] host register failed for ${input.automationId}: ` +
@@ -637,36 +686,42 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { automationId: string }) => {
     // Delete is best-effort: tear down the OS scheduler entry, then
-    // drop the row + its run ledger. We proceed past a host failure
-    // because a stale scheduler entry is recoverable but a row with
-    // no UI affordance is worse.
+    // drop the project dir + its run ledger.
+    const settings = await loadSettings();
     try {
-      await localRuntimeAutomationHost().unregister(input.automationId);
+      await localRuntimeAutomationHost(settings.automationsDir).unregister(input.automationId);
     } catch (err) {
       console.warn(
         `[automations] host unregister failed for ${input.automationId}: ` +
           (err instanceof Error ? err.message : String(err)),
       );
     }
-    getAutomationStore().remove(input.automationId);
-    new AutomationRunsStore(getAutomationDbProvider()).deleteAutomationData(input.automationId);
+    await deleteAutomationProject(settings.automationsDir, input.automationId);
+    new AutomationRunsStore(getActivityDbProvider()).deleteAutomationData(input.automationId);
     return { ok: true };
   });
 
-  // Run ledger reads. An automation that never fired simply has no
-  // rows, so these return an empty list naturally.
+  // Run ledger reads. `automationId` is optional — omit it for the
+  // global Executions feed. An automation that never fired has no rows.
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUNS,
-    async (_e, input: { automationId: string; limit?: number }): Promise<AutomationRunRow[]> => {
-      const store = new AutomationRunsStore(getAutomationDbProvider());
-      return store.listRuns({ automationId: input.automationId, limit: input.limit ?? 25 });
+    async (_e, input: { automationId?: string; limit?: number }): Promise<AutomationRunRow[]> => {
+      const store = new AutomationRunsStore(getActivityDbProvider());
+      const limit = input.limit ?? 50;
+      const runs = store.listRuns({
+        ...(input.automationId ? { automationId: input.automationId } : {}),
+        limit,
+      });
+      // The global feed mixes chat / build runs in — the Automations
+      // screen only wants automation fires.
+      return runs.filter((r) => r.kind === 'automation');
     },
   );
 
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUN_NODES,
     async (_e, input: { runId: string }): Promise<AutomationRunNodeRow[]> => {
-      const store = new AutomationRunsStore(getAutomationDbProvider());
+      const store = new AutomationRunsStore(getActivityDbProvider());
       return store.listNodes(input.runId);
     },
   );
@@ -675,7 +730,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_PIN_RUN,
     async (_e, input: { runId: string; pinned: boolean }): Promise<{ ok: true }> => {
-      const store = new AutomationRunsStore(getAutomationDbProvider());
+      const store = new AutomationRunsStore(getActivityDbProvider());
       store.setPinned(input.runId, input.pinned);
       return { ok: true };
     },
@@ -686,7 +741,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.INSIGHTS_SUMMARY,
     async (_e, input?: { windowDays?: number }): Promise<InsightsSummary> => {
-      const store = new InsightsStore(getAutomationDbProvider());
+      const store = new InsightsStore(getActivityDbProvider());
       return store.summary(input?.windowDays !== undefined ? { windowDays: input.windowDays } : {});
     },
   );
