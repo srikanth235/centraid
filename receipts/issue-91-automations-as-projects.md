@@ -15,7 +15,7 @@ a sibling of an app project. The directory is the source of truth.
 - [x] Commit 3 — openclaw-plugin: cloud handler execution path
 - [x] Commit 4 — builder-harness: automation scaffold
 - [x] Commit 5 — desktop main: `automationsDir` setting + project IPC
-- [ ] Commit 6 — desktop renderer: Automations screen + preload + d.ts
+- [x] Commit 6 — desktop renderer: Automations screen + preload + d.ts
 - [ ] Commit 7 — desktop renderer: automation builder chat
 
 ## What changed
@@ -112,6 +112,26 @@ during the build conversation. builder-harness build + tests pass.
 
 desktop main typecheck + build pass; the renderer side is still model-A
 (updated in Commit 6).
+
+### Commit 6 — desktop renderer: Automations screen + preload + d.ts
+
+- `centraid-api.d.ts` + `preload.ts` migrated to the project-shaped
+  automation API (`listAutomations()` / `readAutomation` /
+  `createAutomation` / `runAutomationNow` / `setAutomationEnabled` /
+  `deleteAutomation` / `listAutomationRuns` (optional `automationId`) /
+  `listAutomationRunNodes` / `pinAutomationRun`). New types:
+  `CentraidAutomationManifest`, reshaped `CentraidAutomationRow` /
+  `RunRecord` / `RunNode` — both the module exports and the
+  `declare global` mirror.
+- The Automations screen drops the per-app grouping
+  (`resolveAutomationApps` / `renderAutomationsGroupHead` / the per-app
+  run fan-out): "Standing orders" is a flat user-owned list, "Executions"
+  reads the global ledger, and the execution detail loses the app-icon
+  lockup. `step` nodes + per-step cost render in the timeline.
+- The per-app Settings → Automations tab and the builder's Cloud →
+  Automations panel become a `manifest.apps` reverse lookup.
+
+desktop typecheck + build pass.
 
 ## Out of scope
 

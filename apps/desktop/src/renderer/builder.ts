@@ -2950,16 +2950,16 @@
 
         // Prompt body (the user's NL prompt verbatim).
         const promptEl = el('div', { class: 'cloud-automation-prompt' });
-        promptEl.textContent = row.prompt;
+        promptEl.textContent = row.manifest.prompt;
         card.append(promptEl);
 
-        // Metadata strip: handler file · generated-by · model.
+        // Metadata strip: automation id · generated-by · model.
         const meta = el('div', { class: 'cloud-automation-meta' });
         meta.append(
           el(
             'span',
-            { class: 'cloud-automation-meta-item', title: 'Handler file under actions/' },
-            `actions/${row.manifest.action}`,
+            { class: 'cloud-automation-meta-item', title: 'Automation project id' },
+            row.id,
           ),
         );
         if (row.manifest.requires.model) {
@@ -3021,7 +3021,11 @@
         automationsCache = 'pending';
         if (prior === undefined && active === 'automations') drawStage();
         try {
-          automationsCache = await Api().listAutomations({ appId: projectId });
+          // Automations are user-owned projects; this panel shows the
+          // ones associated with the app being built (issue #91).
+          const pid = projectId;
+          const all = await Api().listAutomations();
+          automationsCache = all.filter((r) => r.manifest.apps?.includes(pid));
           automationsError = undefined;
         } catch (err) {
           automationsCache = 'error';
@@ -3037,7 +3041,7 @@
         if (!projectId) return;
         const next = checkbox.checked;
         try {
-          await Api().setAutomationEnabled({ appId: projectId, name: row.name, enabled: next });
+          await Api().setAutomationEnabled({ automationId: row.id, enabled: next });
           await refreshAutomations();
         } catch (err) {
           // Revert the toggle so the UI doesn't misrepresent persisted state.
@@ -3053,7 +3057,7 @@
         automationRunState.set(row.name, { kind: 'running' });
         if (active === 'automations') drawStage();
         try {
-          const result = await Api().runAutomationNow({ appId: projectId, name: row.name });
+          const result = await Api().runAutomationNow({ automationId: row.id });
           automationRunState.set(row.name, { kind: 'done', result, finishedAt: Date.now() });
         } catch (err) {
           automationRunState.set(row.name, {
@@ -3074,11 +3078,11 @@
       async function onDeleteAutomation(row: CentraidAutomationRow): Promise<void> {
         if (!projectId) return;
         const ok = confirm(
-          `Delete automation "${row.name}"?\n\nThis removes the mirror row only. The on-disk manifest and handler stay — republish (or re-sync) to reinstate.`,
+          `Delete automation "${row.name}"?\n\nThis permanently removes the automation project directory and its run history.`,
         );
         if (!ok) return;
         try {
-          await Api().deleteAutomation({ appId: projectId, name: row.name });
+          await Api().deleteAutomation({ automationId: row.id });
           automationRunState.delete(row.name);
           await refreshAutomations();
         } catch (err) {
