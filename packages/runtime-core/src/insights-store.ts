@@ -139,16 +139,18 @@ export class InsightsStore {
         WHERE started_at >= ?
         GROUP BY day ORDER BY day ASC
       `),
+      // Automation definitions live on disk (issue #91) — there is no
+      // `automations` table to join for a display name. `name` is NULL
+      // here; the desktop resolves it from the project manifest.
       byAutomation: db.prepare(`
         SELECT
           r.kind AS kind,
           r.automation_id AS automation_id,
-          a.name AS name,
+          NULL AS name,
           COUNT(*) AS runs,
           SUM(${TOKEN_SUM}) AS tokens,
           SUM(COALESCE(r.total_cost_usd, 0)) AS cost
         FROM runs r
-        LEFT JOIN automations a ON r.automation_id = a.id
         WHERE r.started_at >= ?
         GROUP BY r.kind, r.automation_id
         ORDER BY tokens DESC
@@ -168,10 +170,9 @@ export class InsightsStore {
       recent: db.prepare(`
         SELECT
           r.id AS id, r.kind AS kind, r.ok AS ok, r.started_at AS started_at,
-          r.summary AS summary, r.note AS note, a.name AS name,
+          r.summary AS summary, r.note AS note, NULL AS name,
           ${TOKEN_SUM} AS tokens, COALESCE(r.total_cost_usd, 0) AS cost
         FROM runs r
-        LEFT JOIN automations a ON r.automation_id = a.id
         WHERE r.started_at >= ?
         ORDER BY r.started_at DESC LIMIT ?
       `),
