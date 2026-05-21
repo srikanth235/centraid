@@ -927,7 +927,7 @@
       const sendBtn = el('button', {
         'aria-label': 'Send',
         class: 'send-btn',
-        trustedHtml: Icon.Send({ size: 14, strokeWidth: 2.5 }),
+        trustedHtml: Icon.ArrowRight({ size: 14, strokeWidth: 2.5 }),
         onClick: send,
       });
 

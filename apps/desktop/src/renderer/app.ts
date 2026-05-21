@@ -330,6 +330,7 @@
   type ShellRoute =
     | { kind: 'home' }
     | { kind: 'settings' }
+    | { kind: 'insights' }
     | { kind: 'discover' }
     | { kind: 'starred' }
     | { kind: 'automations' }
@@ -343,6 +344,7 @@
   function routeKey(route: ShellRoute): string {
     if (route.kind === 'home') return 'home';
     if (route.kind === 'settings') return 'settings';
+    if (route.kind === 'insights') return 'insights';
     if (route.kind === 'discover') return 'discover';
     if (route.kind === 'starred') return 'starred';
     if (route.kind === 'automations') return 'automations';
@@ -386,6 +388,8 @@
         renderHome();
       } else if (route.kind === 'settings') {
         renderSettings();
+      } else if (route.kind === 'insights') {
+        renderInsights();
       } else if (route.kind === 'discover') {
         renderDiscover();
       } else if (route.kind === 'starred') {
@@ -442,12 +446,11 @@
       activePage: active.page,
       apps,
       drafts: draftEntries,
-      onAppClick: (id) => {
-        const app = findApp(id);
-        if (!app) return;
-        if (isDraft(app)) enterBuilder({ appContext: app });
-        else openApp(id);
-      },
+      // Selecting a sidebar app always shows its app (Use) view — the
+      // builder is reached from the top-bar Use/Build switch, not by
+      // clicking the row. `openApp` still falls back to the builder for
+      // drafts that have no runnable build yet.
+      onAppClick: (id) => openApp(id),
       // Both right-click on the row and the hover-revealed `•••` route
       // through the same context menu used on the home grid — keeps the
       // verb set (Rename, Reveal in Finder, Delete, …) in lockstep across
@@ -459,6 +462,7 @@
       onHome: renderHome,
       onNewApp: openNewAppSheet,
       onSearch: openCommandPalette,
+      onInsights: renderInsights,
       onDiscover: renderDiscover,
       onStarred: renderStarred,
       onAutomations: renderAutomations,
@@ -735,7 +739,7 @@
     }) as HTMLTextAreaElement;
 
     const buildBtn = el('button', { class: 'cd-composer-send', type: 'button', disabled: '' });
-    buildBtn.innerHTML = Icon.Send({ size: 14 });
+    buildBtn.innerHTML = Icon.ArrowRight({ size: 14 });
     wireComposer(ta, buildBtn);
 
     const toolbar = el('div', { class: 'cd-composer-toolbar' }, [
@@ -853,23 +857,39 @@
       label: string;
       count: number;
       render: () => HTMLElement[];
+      empty: { icon: IconNameType; title: string; sub: string };
     }> = [
       {
         id: 'apps',
         label: 'My apps',
         count: all.length,
         render: () => appTiles(all),
+        empty: {
+          icon: 'Sparkle',
+          title: 'No apps yet',
+          sub: 'Describe an app in the box above — Centraid will build it for you.',
+        },
       },
       {
         id: 'starred',
         label: 'Starred',
         count: starredApps.length,
         render: () => appTiles(starredApps),
+        empty: {
+          icon: 'Star',
+          title: 'Nothing starred yet',
+          sub: 'Hover an app tile and tap the star to pin it here.',
+        },
       },
       {
         id: 'templates',
         label: 'Templates',
         count: templates.length,
+        empty: {
+          icon: 'Compass',
+          title: 'No templates yet',
+          sub: 'Starter templates will show up here once they’re available.',
+        },
         render: () =>
           templates.map((t) =>
             buildShelfTile({
@@ -894,7 +914,16 @@
       grid.innerHTML = '';
       const tiles = t.render();
       if (tiles.length === 0) {
-        grid.append(el('div', { class: 'cd-shelf-empty' }, 'Nothing here yet.'));
+        grid.append(
+          el('div', { class: 'cd-shelf-empty' }, [
+            el('div', {
+              class: 'cd-shelf-empty-icon',
+              trustedHtml: (Icon[t.empty.icon] ?? Icon.Sparkle)({ size: 20 }),
+            }),
+            el('div', { class: 'cd-shelf-empty-title' }, t.empty.title),
+            el('div', { class: 'cd-shelf-empty-sub' }, t.empty.sub),
+          ]),
+        );
       } else {
         for (const tile of tiles) grid.append(tile);
       }
@@ -976,6 +1005,513 @@
     return { main, scroll };
   }
 
+  // ───────────────────────── Insights page ─────────────────────────
+  // Usage analytics dashboard — token consumption, spend, per-model and
+  // per-app breakdowns. The desktop shell has no usage-metering backend
+  // yet, so the figures here are a representative synthetic snapshot;
+  // the layout is the deliverable, ready to bind to real data later.
+
+  // A tinted icon tile used in the By-app table and Recent-activity feed.
+  function insAppTile(iconKey: IconNameType, color: ColorHexType, size: number): HTMLElement {
+    const finish = window.CentraidTokens.tileFinish(color, 'gradient');
+    const tile = el('span', {
+      class: 'cd-ins-app-icon',
+      trustedHtml: Icon[iconKey] ? Icon[iconKey]({ size, strokeWidth: 1.9 }) : '',
+    });
+    tile.style.background = finish.background;
+    tile.style.color = finish.glyphColor;
+    if (finish.boxShadow) tile.style.boxShadow = finish.boxShadow;
+    return tile;
+  }
+
+  // Inline SVG line chart for the daily-consumption panel. `values` is a
+  // per-day token series; the peak point is marked with a labelled node.
+  function insLineChart(values: readonly number[]): HTMLElement {
+    const W = 760;
+    const H = 200;
+    const PAD = 14;
+    const n = values.length;
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const span = max - min || 1;
+    const px = (i: number): number => (n <= 1 ? 0 : (i / (n - 1)) * W);
+    const py = (v: number): number => H - PAD - ((v - min) / span) * (H - PAD * 2);
+    const pts = values.map((v, i) => [px(i), py(v)] as const);
+    const line = pts
+      .map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`)
+      .join(' ');
+    const area = `${line} L${W} ${H} L0 ${H} Z`;
+    const peakIdx = values.indexOf(max);
+    const [peakX, peakY] = pts[peakIdx]!;
+    const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="cd-ins-chart-svg">
+      <defs><linearGradient id="insArea" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.32"/>
+        <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${area}" fill="url(#insArea)"/>
+      <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      <circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="4"
+        fill="var(--bg-elev)" stroke="var(--accent)" stroke-width="2"/>
+    </svg>`;
+    const chart = el('div', { class: 'cd-ins-chart-plot' }, [
+      el('div', { class: 'cd-ins-chart-svg-wrap', trustedHtml: svg }),
+      el(
+        'div',
+        {
+          class: 'cd-ins-chart-peak',
+          style: { left: `${((peakX / W) * 100).toFixed(2)}%` },
+        },
+        `${insK(max)}`,
+      ),
+    ]);
+    return chart;
+  }
+
+  // Compact 14-day sparkline (no fill, no markers) for the By-app table.
+  function insSparkline(values: readonly number[]): HTMLElement {
+    const W = 96;
+    const H = 26;
+    const n = values.length;
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const span = max - min || 1;
+    const pts = values.map((v, i) => {
+      const x = n <= 1 ? 0 : (i / (n - 1)) * W;
+      const y = H - 3 - ((v - min) / span) * (H - 6);
+      return `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
+    });
+    return el('span', {
+      class: 'cd-ins-spark',
+      trustedHtml: `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <path d="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="1.5"
+          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      </svg>`,
+    });
+  }
+
+  // Format a raw token count as a compact k / M string.
+  function insK(v: number): string {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+    if (v >= 1_000) return `${Math.round(v / 1_000)}k`;
+    return String(v);
+  }
+
+  function insStatCard(opts: {
+    icon: string;
+    label: string;
+    value: string;
+    foot?: HTMLElement | string;
+  }): HTMLElement {
+    return el('div', { class: 'cd-ins-kpi' }, [
+      el('div', { class: 'cd-ins-kpi-label' }, [
+        el('span', { class: 'cd-ins-kpi-icon', trustedHtml: opts.icon }),
+        opts.label,
+      ]),
+      el('div', { class: 'cd-ins-kpi-value' }, opts.value),
+      opts.foot ? el('div', { class: 'cd-ins-kpi-foot' }, [opts.foot]) : false,
+    ]);
+  }
+
+  // A "+18%" style delta chip — tone drives the colour.
+  function insDelta(text: string, tone: 'up' | 'down' | 'flat'): HTMLElement {
+    return el('span', { class: 'cd-ins-delta', 'data-tone': tone }, text);
+  }
+
+  function insPanel(title: string, meta: string, body: HTMLElement): HTMLElement {
+    return el('section', { class: 'cd-ins-panel' }, [
+      el('header', { class: 'cd-ins-panel-head' }, [
+        el('h2', {}, title),
+        meta ? el('span', { class: 'cd-ins-panel-meta' }, meta) : false,
+      ]),
+      body,
+    ]);
+  }
+
+  function renderInsights(): void {
+    recordRoute({ kind: 'insights' });
+    clear();
+    const { main, scroll } = pageScroll('', '');
+    // pageScroll seeds an empty cd-page-head; the Insights page owns its
+    // own header treatment, so drop it.
+    scroll.replaceChildren();
+
+    const page = el('div', { class: 'cd-ins-page' });
+    scroll.append(page);
+
+    // ── Header — title + filter chips ────────────────────────────────
+    const filterChip = (icon: string, label: string, caret: boolean): HTMLElement =>
+      el('button', { class: 'cd-ins-filter', type: 'button', disabled: 'true' }, [
+        el('span', { class: 'cd-ins-filter-icon', trustedHtml: icon }),
+        el('span', {}, label),
+        caret
+          ? el('span', {
+              class: 'cd-ins-filter-caret',
+              trustedHtml: Icon.ChevronDown({ size: 12, strokeWidth: 2 }),
+            })
+          : false,
+      ]);
+    page.append(
+      el('div', { class: 'cd-ins-head' }, [
+        el('div', { class: 'cd-ins-title' }, [
+          el('span', {
+            class: 'cd-ins-title-icon',
+            trustedHtml: Icon.Activity({ size: 18, strokeWidth: 2 }),
+          }),
+          el('h1', {}, 'Insights'),
+        ]),
+        el('div', { class: 'cd-ins-filters' }, [
+          filterChip(Icon.Folder({ size: 13 }), 'All apps', true),
+          filterChip(Icon.History({ size: 13 }), 'Last 30 days', true),
+          filterChip(Icon.Sparkle({ size: 13 }), 'Tokens · USD', true),
+          el('button', {
+            class: 'cd-ins-filter cd-ins-filter-icononly',
+            type: 'button',
+            disabled: 'true',
+            'aria-label': 'Export',
+            trustedHtml: Icon.Share({ size: 14 }),
+          }),
+        ]),
+      ]),
+    );
+
+    // ── KPI row ──────────────────────────────────────────────────────
+    page.append(
+      el('div', { class: 'cd-ins-kpis' }, [
+        insStatCard({
+          icon: Icon.Activity({ size: 12 }),
+          label: 'Tokens · this month',
+          value: '3.53M',
+          foot: el('div', { class: 'cd-ins-meter' }, [
+            el('div', { class: 'cd-ins-meter-row' }, [
+              insDelta('+18%', 'up'),
+              el('span', { class: 'cd-ins-kpi-sub' }, 'of 8M included'),
+            ]),
+            el('div', { class: 'cd-ins-bar' }, [
+              el('div', { class: 'cd-ins-bar-fill', style: { width: '44%' } }),
+            ]),
+            el('div', { class: 'cd-ins-meter-foot' }, [
+              el('span', {}, '3.53M of 8M included'),
+              el('span', {}, '44%'),
+            ]),
+          ]),
+        }),
+        insStatCard({
+          icon: Icon.Coin({ size: 12 }),
+          label: 'Spent · USD',
+          value: '$10.41',
+          foot: el('div', { class: 'cd-ins-kpi-row' }, [
+            insDelta('+18%', 'up'),
+            el('span', { class: 'cd-ins-kpi-sub' }, 'May 1 – 30'),
+          ]),
+        }),
+        insStatCard({
+          icon: Icon.History({ size: 12 }),
+          label: 'Forecast · USD',
+          value: '$26.40',
+          foot: el('span', { class: 'cd-ins-kpi-sub' }, 'end of month'),
+        }),
+        insStatCard({
+          icon: Icon.Folder({ size: 12 }),
+          label: 'Apps touched',
+          value: '14',
+          foot: el('div', { class: 'cd-ins-kpi-row' }, [
+            insDelta('+27%', 'up'),
+            el('span', { class: 'cd-ins-kpi-sub' }, 'this month'),
+          ]),
+        }),
+        insStatCard({
+          icon: Icon.Sparkle({ size: 12 }),
+          label: 'Generations',
+          value: '62',
+          foot: el('div', { class: 'cd-ins-kpi-row' }, [
+            insDelta('+11%', 'up'),
+            el('span', { class: 'cd-ins-kpi-sub' }, '2 retries today'),
+          ]),
+        }),
+      ]),
+    );
+
+    // ── Two-column grid ──────────────────────────────────────────────
+    const grid = el('div', { class: 'cd-ins-grid' });
+    page.append(grid);
+    const colMain = el('div', { class: 'cd-ins-col' });
+    const colSide = el('div', { class: 'cd-ins-col' });
+    grid.append(colMain, colSide);
+
+    // Daily consumption ------------------------------------------------
+    const series = [
+      62, 71, 58, 66, 54, 88, 79, 72, 95, 84, 91, 103, 88, 110, 124, 96, 108, 119, 102, 131, 115,
+      142, 311, 168, 151, 139, 158, 171, 162, 175,
+    ].map((k) => k * 1000);
+    const chartBody = el('div', { class: 'cd-ins-chart' }, [
+      el('div', { class: 'cd-ins-chart-stats' }, [
+        insChartStat('Daily avg', '118k'),
+        insChartStat('Peak', '311k', 'May 23'),
+        insChartStat('Median', '108k'),
+        insChartStat('Trend', '↑ 1.4% / day', undefined, true),
+      ]),
+      insLineChart(series),
+      el('div', { class: 'cd-ins-chart-axis' }, [
+        el('span', {}, '30d ago'),
+        el('span', {}, '23d'),
+        el('span', {}, '16d'),
+        el('span', {}, '9d'),
+        el('span', {}, '1d'),
+      ]),
+    ]);
+    colMain.append(insPanel('Daily consumption', '30 days · tokens', chartBody));
+
+    // By app -----------------------------------------------------------
+    interface InsAppRow {
+      name: string;
+      iconKey: IconNameType;
+      color: ColorHexType;
+      spike?: boolean;
+      tokens: number;
+      usd: string;
+      delta: string;
+      tone: 'up' | 'down' | 'flat';
+      mix: number;
+      spark: number[];
+      lastTouched: string;
+      runs: number;
+    }
+    const appRows: InsAppRow[] = [
+      {
+        name: 'Habit tracker',
+        iconKey: 'Habit',
+        color: '#C8516B' as ColorHexType,
+        tokens: 842_000,
+        usd: '$2.58',
+        delta: '+24%',
+        tone: 'up',
+        mix: 78,
+        spark: [4, 6, 5, 7, 6, 8, 7, 9, 8, 7, 9, 8, 10, 9],
+        lastTouched: '12m ago',
+        runs: 9,
+      },
+      {
+        name: 'Journal',
+        iconKey: 'Journal',
+        color: '#7C5BD9' as ColorHexType,
+        tokens: 614_000,
+        usd: '$1.87',
+        delta: '+8%',
+        tone: 'up',
+        mix: 64,
+        spark: [5, 5, 6, 5, 7, 6, 8, 7, 6, 8, 7, 9, 8, 9],
+        lastTouched: '1h ago',
+        runs: 7,
+      },
+      {
+        name: 'Plant care',
+        iconKey: 'Plant',
+        color: '#5E7A52' as ColorHexType,
+        spike: true,
+        tokens: 587_000,
+        usd: '$2.21',
+        delta: '+312%',
+        tone: 'up',
+        mix: 58,
+        spark: [2, 2, 3, 2, 3, 4, 3, 5, 6, 8, 7, 10, 12, 14],
+        lastTouched: 'yesterday',
+        runs: 4,
+      },
+      {
+        name: 'Task tracker',
+        iconKey: 'Todo',
+        color: '#4F6BD9' as ColorHexType,
+        tokens: 498_000,
+        usd: '$1.52',
+        delta: '−6%',
+        tone: 'down',
+        mix: 49,
+        spark: [9, 8, 9, 7, 8, 6, 7, 6, 5, 6, 5, 6, 5, 5],
+        lastTouched: '3h ago',
+        runs: 6,
+      },
+      {
+        name: 'Weekly planner',
+        iconKey: 'Todo',
+        color: '#3FA89A' as ColorHexType,
+        tokens: 312_000,
+        usd: '$0.96',
+        delta: '+2%',
+        tone: 'flat',
+        mix: 31,
+        spark: [4, 5, 4, 5, 5, 4, 5, 5, 6, 5, 5, 6, 5, 6],
+        lastTouched: 'yesterday',
+        runs: 3,
+      },
+      {
+        name: 'Notes',
+        iconKey: 'Journal',
+        color: '#C8516B' as ColorHexType,
+        tokens: 186_000,
+        usd: '$0.57',
+        delta: '−14%',
+        tone: 'down',
+        mix: 19,
+        spark: [7, 6, 6, 5, 6, 4, 5, 4, 4, 3, 4, 3, 3, 2],
+        lastTouched: '2d ago',
+        runs: 2,
+      },
+    ];
+    const table = el('div', { class: 'cd-ins-table' });
+    table.append(
+      el('div', { class: 'cd-ins-tr cd-ins-tr-head' }, [
+        el('span', { class: 'cd-ins-th cd-ins-c-app' }, 'App'),
+        el('span', { class: 'cd-ins-th cd-ins-c-num' }, 'Tokens'),
+        el('span', { class: 'cd-ins-th cd-ins-c-num' }, 'USD'),
+        el('span', { class: 'cd-ins-th cd-ins-c-num' }, 'Δ 30d'),
+        el('span', { class: 'cd-ins-th cd-ins-c-mix' }, 'Mix'),
+        el('span', { class: 'cd-ins-th cd-ins-c-spark' }, '14-day'),
+        el('span', { class: 'cd-ins-th cd-ins-c-last' }, 'Last touched'),
+        el('span', { class: 'cd-ins-th cd-ins-c-runs' }, 'Runs'),
+      ]),
+    );
+    for (const r of appRows) {
+      table.append(
+        el('div', { class: 'cd-ins-tr' }, [
+          el('span', { class: 'cd-ins-td cd-ins-c-app' }, [
+            insAppTile(r.iconKey, r.color, 13),
+            el('span', { class: 'cd-ins-app-name' }, r.name),
+            r.spike ? el('span', { class: 'cd-ins-tag' }, 'spike') : false,
+          ]),
+          el('span', { class: 'cd-ins-td cd-ins-c-num cd-ins-mono' }, insK(r.tokens)),
+          el('span', { class: 'cd-ins-td cd-ins-c-num cd-ins-mono' }, r.usd),
+          el('span', { class: 'cd-ins-td cd-ins-c-num' }, [insDelta(r.delta, r.tone)]),
+          el('span', { class: 'cd-ins-td cd-ins-c-mix' }, [
+            el('span', { class: 'cd-ins-mixbar' }, [
+              el('span', { class: 'cd-ins-mixbar-fill', style: { width: `${r.mix}%` } }),
+            ]),
+          ]),
+          el('span', { class: 'cd-ins-td cd-ins-c-spark' }, [insSparkline(r.spark)]),
+          el('span', { class: 'cd-ins-td cd-ins-c-last cd-ins-mono' }, r.lastTouched),
+          el('span', { class: 'cd-ins-td cd-ins-c-runs cd-ins-mono' }, String(r.runs)),
+        ]),
+      );
+    }
+    colMain.append(insPanel('By app', `${appRows.length} apps · sorted by tokens`, table));
+
+    // By model ---------------------------------------------------------
+    interface InsModelRow {
+      name: string;
+      pct: number;
+      tokens: string;
+      usd: string;
+    }
+    const models: InsModelRow[] = [
+      { name: 'Claude Sonnet 4.5', pct: 66, tokens: '2.87M', usd: '$8.61' },
+      { name: 'Claude Haiku 4.5', pct: 27, tokens: '1.18M', usd: '$1.18' },
+      { name: 'GPT-4o mini', pct: 6, tokens: '246k', usd: '$0.62' },
+      { name: 'Local · Llama 3.1', pct: 1, tokens: '18k', usd: '$0.00' },
+    ];
+    const modelBody = el('div', { class: 'cd-ins-models' });
+    for (const m of models) {
+      modelBody.append(
+        el('div', { class: 'cd-ins-model' }, [
+          el('div', { class: 'cd-ins-model-name' }, m.name),
+          el('div', { class: 'cd-ins-bar' }, [
+            el('div', { class: 'cd-ins-bar-fill', style: { width: `${m.pct}%` } }),
+          ]),
+          el('div', { class: 'cd-ins-model-foot' }, [
+            el('span', { class: 'cd-ins-mono' }, `${m.pct}%  ${m.tokens}`),
+            el('span', { class: 'cd-ins-mono' }, m.usd),
+          ]),
+        ]),
+      );
+    }
+    colSide.append(insPanel('By model', 'this month', modelBody));
+
+    // Recent activity --------------------------------------------------
+    interface InsActivityRow {
+      app: string;
+      iconKey: IconNameType;
+      color: ColorHexType;
+      note: string;
+      ago: string;
+      tokens: string;
+      usd: string;
+    }
+    const activity: InsActivityRow[] = [
+      {
+        app: 'Habit tracker',
+        iconKey: 'Habit',
+        color: '#C8516B' as ColorHexType,
+        note: 'Iterated — fixed streak rollover bug',
+        ago: '12m ago',
+        tokens: '24k',
+        usd: '$0.07',
+      },
+      {
+        app: 'Journal',
+        iconKey: 'Journal',
+        color: '#7C5BD9' as ColorHexType,
+        note: 'Iterated — added weekly recap view',
+        ago: '1h ago',
+        tokens: '58k',
+        usd: '$0.17',
+      },
+      {
+        app: 'Journal',
+        iconKey: 'Journal',
+        color: '#7C5BD9' as ColorHexType,
+        note: 'Published v3',
+        ago: '3h ago',
+        tokens: '4k',
+        usd: '$0.01',
+      },
+      {
+        app: 'Plant care',
+        iconKey: 'Plant',
+        color: '#5E7A52' as ColorHexType,
+        note: 'Built — watering schedule generator',
+        ago: 'yesterday',
+        tokens: '142k',
+        usd: '$0.43',
+      },
+    ];
+    const actBody = el('div', { class: 'cd-ins-activity' });
+    for (const a of activity) {
+      actBody.append(
+        el('div', { class: 'cd-ins-act' }, [
+          el('span', { class: 'cd-ins-act-ago cd-ins-mono' }, a.ago),
+          insAppTile(a.iconKey, a.color, 13),
+          el('div', { class: 'cd-ins-act-body' }, [
+            el('div', { class: 'cd-ins-act-app' }, a.app),
+            el('div', { class: 'cd-ins-act-note' }, a.note),
+          ]),
+          el('div', { class: 'cd-ins-act-cost' }, [
+            el('span', { class: 'cd-ins-mono' }, a.tokens),
+            el('span', { class: 'cd-ins-mono cd-ins-act-usd' }, a.usd),
+          ]),
+        ]),
+      );
+    }
+    colSide.append(insPanel('Recent activity', '62 generations', actBody));
+
+    mountShellPage('insights', main);
+  }
+
+  // One labelled stat in the daily-consumption panel header strip.
+  function insChartStat(label: string, value: string, sub?: string, accent?: boolean): HTMLElement {
+    return el('div', { class: 'cd-ins-chart-stat' }, [
+      el('div', { class: 'cd-ins-chart-stat-label' }, label),
+      el(
+        'div',
+        {
+          class: accent
+            ? 'cd-ins-chart-stat-value cd-ins-chart-stat-accent'
+            : 'cd-ins-chart-stat-value',
+        },
+        value,
+      ),
+      sub ? el('div', { class: 'cd-ins-chart-stat-sub' }, sub) : false,
+    ]);
+  }
+
   function renderDiscover(): void {
     void renderDiscoverAsync();
   }
@@ -1005,17 +1541,587 @@
     mountShellPage('starred', main);
   }
 
+  // One execution in the Automations "Runs" feed.
+  interface AutomationFeedEntry {
+    app: AppMetaResolvedType;
+    projectId: string;
+    automationName: string;
+    run: CentraidAutomationRunRecord;
+  }
+
+  // App-grouped header for the top-level Automations page — a gradient
+  // icon tile + name, clicking through to the app's own view.
+  function renderAutomationsGroupHead(app: AppMetaResolvedType): HTMLElement {
+    const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
+    const icon = el('span', {
+      class: 'cd-automations-group-icon',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 14, strokeWidth: 1.85 }) : '',
+    });
+    icon.style.background = finish.background;
+    icon.style.color = finish.glyphColor;
+    if (finish.boxShadow) icon.style.boxShadow = finish.boxShadow;
+    return el(
+      'button',
+      {
+        class: 'cd-automations-group-head',
+        type: 'button',
+        onClick: () => openApp(app.id),
+      },
+      [icon, el('span', { class: 'cd-automations-group-name' }, app.name)],
+    );
+  }
+
+  // Apps whose automations are reachable — published apps via their
+  // centraid project id, drafts via their tile id (id == project id).
+  function resolveAutomationApps(): { app: AppMetaResolvedType; projectId: string }[] {
+    return getAppsWithDrafts()
+      .map((app) => {
+        const ua = findUserApp(app.id);
+        const projectId = ua?.centraidProjectId ?? (isDraft(app) ? app.id : undefined);
+        return projectId ? { app, projectId } : null;
+      })
+      .filter((x): x is { app: AppMetaResolvedType; projectId: string } => x !== null);
+  }
+
   function renderAutomations(): void {
     recordRoute({ kind: 'automations' });
     clear();
-    const { main, scroll } = pageScroll(
-      'Automations',
-      'Scheduled triggers that run scripts across your apps.',
-    );
-    scroll.append(
-      renderSimpleEmpty('No automations yet. Add one from an app’s settings → Automations.'),
-    );
+    // The Automations page owns a flex-column layout (rather than
+    // pageScroll's single scroll column) so the executions master-detail
+    // can fill the viewport with independently-scrolling panes.
+    const main = el('div', { class: 'has-wall' });
+    const topbar = el('div', { class: 'cd-automations-topbar' }, [
+      el('div', { class: 'cd-page-head' }, [
+        el('h1', {}, 'Automations'),
+        el('p', {}, 'Scheduled triggers that run scripts across your apps.'),
+      ]),
+    ]);
+    const tabRow = el('div', { class: 'cd-automations-tabswitch', role: 'tablist' });
+    topbar.append(tabRow);
+    const host = el('div', { class: 'cd-automations-host' });
+    main.append(topbar, host);
+
+    // Two views, n8n-style: the executions log (every run, with per-step
+    // timing) and the standing-order definitions grouped by app.
+    const tabs: ReadonlyArray<{
+      id: string;
+      label: string;
+      render: (host: HTMLElement, isStale: () => boolean) => void;
+    }> = [
+      { id: 'runs', label: 'Executions', render: renderAutomationsRunsInto },
+      { id: 'orders', label: 'Standing orders', render: renderAutomationsOrdersInto },
+    ];
+    const tabBtns = new Map<string, HTMLElement>();
+
+    // Bumped on every tab switch so an in-flight async render that
+    // resolves after the user moved away can detect it's stale.
+    let renderSeq = 0;
+    const select = (id: string): void => {
+      const tab = tabs.find((t) => t.id === id) ?? tabs[0]!;
+      for (const [tid, btn] of tabBtns) {
+        if (tid === tab.id) btn.dataset.active = 'true';
+        else delete btn.dataset.active;
+      }
+      const seq = ++renderSeq;
+      host.replaceChildren(el('div', { class: 'cd-automations-loading' }, 'Loading…'));
+      tab.render(host, () => seq !== renderSeq || !document.contains(host));
+    };
+    for (const t of tabs) {
+      const btn = el('button', {
+        class: 'cd-automations-tab',
+        type: 'button',
+        role: 'tab',
+        onClick: () => select(t.id),
+      });
+      btn.textContent = t.label;
+      tabBtns.set(t.id, btn);
+      tabRow.append(btn);
+    }
+
     mountShellPage('automations', main);
+    select('runs');
+  }
+
+  function automationsEmpty(host: HTMLElement, title: string, sub: string): void {
+    host.replaceChildren(
+      el('div', { class: 'cd-automations-empty-wrap' }, [
+        el('div', { class: 'cd-page-empty' }, [
+          el('div', { class: 'cd-page-empty-icon', trustedHtml: Icon.Bolt({ size: 22 }) }),
+          el('div', { class: 'cd-page-empty-text' }, [
+            el('div', { class: 'cd-page-empty-title' }, title),
+            el('div', {}, sub),
+          ]),
+        ]),
+      ]),
+    );
+  }
+
+  // "Standing orders" tab — the automation definitions, grouped by app.
+  function renderAutomationsOrdersInto(host: HTMLElement, isStale: () => boolean): void {
+    void (async () => {
+      const groups = await Promise.all(
+        resolveAutomationApps().map(async ({ app, projectId }) => {
+          try {
+            const rows = await window.CentraidApi.listAutomations({ appId: projectId });
+            return { app, projectId, rows };
+          } catch {
+            return { app, projectId, rows: [] as CentraidAutomationRow[] };
+          }
+        }),
+      );
+      if (isStale()) return;
+
+      const nonEmpty = groups.filter((g) => g.rows.length > 0);
+      if (nonEmpty.length === 0) {
+        automationsEmpty(
+          host,
+          'No automations yet',
+          'Add one from an app’s settings → Automations.',
+        );
+        return;
+      }
+      const scroll = el('div', { class: 'cd-automations-orders' });
+      const col = el('div', { class: 'cd-automations-orders-col' });
+      for (const g of nonEmpty) {
+        const group = el('div', { class: 'cd-automations-group' });
+        group.append(renderAutomationsGroupHead(g.app));
+        // `group` is the panel handed to renderStandingOrder so its
+        // run/toggle re-renders scope `.cd-app-orders-list` to this app.
+        group.append(renderAutomationsSection(g.rows, g.projectId, group));
+        col.append(group);
+      }
+      scroll.append(col);
+      host.replaceChildren(scroll);
+    })();
+  }
+
+  // Fan out across every app's automations and collect their runs into
+  // one flat list (newest-first sorting is the caller's job).
+  async function collectAutomationRuns(): Promise<AutomationFeedEntry[]> {
+    const perApp = await Promise.all(
+      resolveAutomationApps().map(async ({ app, projectId }) => {
+        try {
+          const autos = await window.CentraidApi.listAutomations({ appId: projectId });
+          return { app, projectId, autos };
+        } catch {
+          return { app, projectId, autos: [] as CentraidAutomationRow[] };
+        }
+      }),
+    );
+    const jobs: Promise<AutomationFeedEntry[]>[] = [];
+    for (const { app, projectId, autos } of perApp) {
+      for (const auto of autos) {
+        jobs.push(
+          (async () => {
+            try {
+              const runs = await window.CentraidApi.listAutomationRuns({
+                appId: projectId,
+                name: auto.name,
+                limit: 25,
+              });
+              return runs.map((run) => ({ app, projectId, automationName: auto.name, run }));
+            } catch {
+              return [];
+            }
+          })(),
+        );
+      }
+    }
+    return (await Promise.all(jobs)).flat();
+  }
+
+  // "Executions" tab — n8n-style master/detail: a list of every run on
+  // the left, the selected run's stats + per-step timeline on the right.
+  function renderAutomationsRunsInto(host: HTMLElement, isStale: () => boolean): void {
+    void (async () => {
+      const entries = await collectAutomationRuns();
+      if (isStale()) return;
+
+      if (entries.length === 0) {
+        automationsEmpty(
+          host,
+          'No executions yet',
+          'Every time an automation fires — on schedule or run manually — it shows up here.',
+        );
+        return;
+      }
+      entries.sort((a, b) => b.run.startedAt - a.run.startedAt);
+
+      const layout = el('div', { class: 'cd-exec' });
+      const listCol = el('div', { class: 'cd-exec-list' });
+      const detailCol = el('div', { class: 'cd-exec-detail' });
+      layout.append(listCol, detailCol);
+
+      listCol.append(
+        el('div', { class: 'cd-exec-list-head' }, [
+          el('span', { class: 'cd-exec-eyebrow' }, 'Executions'),
+          el('span', { class: 'cd-exec-list-count' }, String(entries.length)),
+        ]),
+      );
+      const listScroll = el('div', { class: 'cd-exec-list-scroll' });
+      listCol.append(listScroll);
+
+      const rows: HTMLElement[] = [];
+      let selected = -1;
+      const select = (idx: number): void => {
+        if (selected === idx) return;
+        if (selected >= 0) delete rows[selected]!.dataset.selected;
+        selected = idx;
+        rows[idx]!.dataset.selected = 'true';
+        void renderExecutionDetail(detailCol, entries[idx]!);
+      };
+      entries.forEach((entry, idx) => {
+        const row = renderExecutionRow(entry, () => select(idx));
+        rows.push(row);
+        listScroll.append(row);
+      });
+
+      host.replaceChildren(layout);
+      select(0);
+    })();
+  }
+
+  // One row in the executions list (left rail of the master/detail).
+  function renderExecutionRow(entry: AutomationFeedEntry, onClick: () => void): HTMLElement {
+    const { app, automationName, run } = entry;
+    const row = el('button', {
+      type: 'button',
+      class: 'cd-exec-row',
+      'data-ok': String(run.ok),
+      onClick,
+    });
+    const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
+    const icon = el('span', {
+      class: 'cd-exec-row-icon',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 11, strokeWidth: 1.9 }) : '',
+    });
+    icon.style.background = finish.background;
+    icon.style.color = finish.glyphColor;
+    const duration =
+      run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
+    row.append(
+      el('span', { class: 'cd-exec-row-spine', 'aria-hidden': 'true' }),
+      icon,
+      el('span', { class: 'cd-exec-row-main' }, [
+        el('span', { class: 'cd-exec-row-name' }, automationName),
+        el(
+          'span',
+          { class: 'cd-exec-row-sub' },
+          `${app.name} · ${relativeTime(new Date(run.startedAt).toISOString())}`,
+        ),
+      ]),
+      el('span', { class: 'cd-exec-row-dur' }, duration),
+    );
+    return row;
+  }
+
+  // Bumped before each detail fetch so a slow listAutomationRunNodes
+  // resolving after the user picked another row can detect it's stale.
+  let execDetailToken = 0;
+
+  async function renderExecutionDetail(
+    detailCol: HTMLElement,
+    entry: AutomationFeedEntry,
+  ): Promise<void> {
+    const token = String(++execDetailToken);
+    detailCol.dataset.token = token;
+    detailCol.replaceChildren(el('div', { class: 'cd-exec-detail-loading' }, 'Loading execution…'));
+    let nodes: CentraidAutomationRunNode[] = [];
+    try {
+      nodes = await window.CentraidApi.listAutomationRunNodes({
+        appId: entry.projectId,
+        runId: entry.run.runId,
+      });
+    } catch {
+      /* leave nodes empty — the detail still shows run-level stats */
+    }
+    if (detailCol.dataset.token !== token) return;
+    detailCol.replaceChildren(buildExecutionDetail(entry, nodes));
+  }
+
+  function buildExecutionDetail(
+    entry: AutomationFeedEntry,
+    nodes: CentraidAutomationRunNode[],
+  ): HTMLElement {
+    const { app, run, automationName, projectId } = entry;
+    const scroll = el('div', { class: 'cd-exec-detail-scroll' });
+
+    // ── Header — app-icon lockup, status, trigger, Run again ──────────
+    const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
+    const iconTile = el('span', {
+      class: 'cd-exec-hd-icon',
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 17, strokeWidth: 1.85 }) : '',
+    });
+    iconTile.style.background = finish.background;
+    iconTile.style.color = finish.glyphColor;
+    if (finish.boxShadow) iconTile.style.boxShadow = finish.boxShadow;
+
+    const runAgainBtn = el('button', {
+      type: 'button',
+      class: 'cd-exec-runagain',
+      trustedHtml: `${Icon.Play({ size: 12 })}<span>Run again</span>`,
+    }) as HTMLButtonElement;
+    runAgainBtn.addEventListener('click', () => {
+      runAgainBtn.disabled = true;
+      runAgainBtn.querySelector('span')!.textContent = 'Running…';
+      void (async () => {
+        try {
+          await window.CentraidApi.runAutomationNow({ appId: projectId, name: automationName });
+        } catch (err) {
+          showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        renderAutomations();
+      })();
+    });
+
+    const header = el('div', { class: 'cd-exec-hd' }, [
+      iconTile,
+      el('div', { class: 'cd-exec-hd-text' }, [
+        el('div', { class: 'cd-exec-hd-eyebrow' }, app.name),
+        el('div', { class: 'cd-exec-hd-title' }, automationName),
+      ]),
+      el('div', { class: 'cd-exec-hd-actions' }, [
+        el('span', { class: 'cd-exec-status', 'data-ok': String(run.ok) }, [
+          el('span', { class: 'cd-exec-status-dot' }),
+          run.ok ? 'Success' : 'Failed',
+        ]),
+        runAgainBtn,
+      ]),
+    ]);
+    scroll.append(header);
+
+    // ── Stat strip — n8n-style KPI tiles ──────────────────────────────
+    const totalMs = run.endedAt !== undefined ? run.endedAt - run.startedAt : undefined;
+    const tokens = nodes.reduce((sum, n) => sum + (n.inputTokens ?? 0) + (n.outputTokens ?? 0), 0);
+    const statTile = (label: string, value: string, kind?: string): HTMLElement =>
+      el('div', { class: 'cd-exec-stat', ...(kind ? { 'data-kind': kind } : {}) }, [
+        el('div', { class: 'cd-exec-stat-label' }, label),
+        el('div', { class: 'cd-exec-stat-value' }, value),
+      ]);
+    scroll.append(
+      el('div', { class: 'cd-exec-stats' }, [
+        statTile('Duration', totalMs !== undefined ? formatDuration(totalMs) : '—'),
+        statTile('Steps', String(nodes.length)),
+        statTile('Tokens', tokens > 0 ? tokens.toLocaleString() : '—'),
+        statTile('Trigger', run.triggerKind.replace('_', ' ')),
+        statTile('Started', new Date(run.startedAt).toLocaleString()),
+      ]),
+    );
+
+    // ── Input / Output preview ────────────────────────────────────────
+    const io = el('div', { class: 'cd-exec-io' }, [
+      renderExecPreview('Input', run.inputJson),
+      renderExecPreview('Output', run.outputJson, run.ok ? run.summary : run.error),
+    ]);
+    scroll.append(io);
+
+    // ── Steps timeline ────────────────────────────────────────────────
+    const stepsSection = el('div', { class: 'cd-exec-section' });
+    stepsSection.append(
+      el('div', { class: 'cd-exec-section-head' }, [
+        el('span', { class: 'cd-exec-eyebrow' }, 'Steps'),
+        el('span', { class: 'cd-exec-section-count' }, String(nodes.length)),
+      ]),
+    );
+    if (nodes.length === 0) {
+      stepsSection.append(
+        el(
+          'div',
+          { class: 'cd-exec-steps-empty' },
+          'No steps recorded — this run did not call any tools or agents.',
+        ),
+      );
+    } else {
+      stepsSection.append(renderExecSteps(projectId, nodes, 0));
+    }
+    scroll.append(stepsSection);
+
+    return scroll;
+  }
+
+  // A labelled JSON/text preview block. `fallbackText` is shown as a
+  // plain line when there's no JSON payload (e.g. a run summary).
+  function renderExecPreview(label: string, json?: string, fallbackText?: string): HTMLElement {
+    const block = el('div', { class: 'cd-exec-preview' });
+    block.append(el('div', { class: 'cd-exec-preview-label' }, label));
+    if (json) {
+      block.append(el('pre', { class: 'cd-exec-preview-body' }, prettyJson(json)));
+    } else if (fallbackText) {
+      block.append(el('div', { class: 'cd-exec-preview-text' }, fallbackText));
+    } else {
+      block.append(el('div', { class: 'cd-exec-preview-empty' }, 'Not recorded'));
+    }
+    return block;
+  }
+
+  // Render a run's nodes as a timeline. Nodes sharing a `batchId` (a
+  // Promise.all frontier) render side-by-side in a parallel lane; the
+  // duration bar of every step is scaled to the slowest node so the
+  // relative cost of each tool call reads at a glance.
+  function renderExecSteps(
+    appId: string,
+    nodes: CentraidAutomationRunNode[],
+    depth: number,
+  ): HTMLElement {
+    const wrap = el('div', { class: 'cd-exec-steps' });
+    const maxMs = Math.max(1, ...nodes.map((n) => n.durationMs ?? 0));
+    let i = 0;
+    while (i < nodes.length) {
+      const bid = nodes[i]!.batchId;
+      if (bid !== undefined) {
+        const group: CentraidAutomationRunNode[] = [];
+        while (i < nodes.length && nodes[i]!.batchId === bid) group.push(nodes[i++]!);
+        if (group.length > 1) {
+          const lane = el('div', { class: 'cd-exec-lane' }, [
+            el('div', { class: 'cd-exec-lane-label' }, `Parallel · ${group.length} steps`),
+          ]);
+          const laneSteps = el('div', { class: 'cd-exec-lane-steps' });
+          for (const g of group) laneSteps.append(renderExecStep(appId, g, maxMs, depth));
+          lane.append(laneSteps);
+          wrap.append(lane);
+          continue;
+        }
+        wrap.append(renderExecStep(appId, group[0]!, maxMs, depth));
+        continue;
+      }
+      wrap.append(renderExecStep(appId, nodes[i]!, maxMs, depth));
+      i++;
+    }
+    return wrap;
+  }
+
+  // One step (tool / agent / invoke call) — header carries the duration
+  // bar; the body expands to args, output, token counts, and — for
+  // ctx.invoke nodes — the nested child-run timeline.
+  function renderExecStep(
+    appId: string,
+    node: CentraidAutomationRunNode,
+    maxMs: number,
+    depth: number,
+  ): HTMLElement {
+    const step = el('div', {
+      class: 'cd-exec-step',
+      'data-ok': String(node.ok),
+      'data-kind': node.kind,
+    });
+    const pct = node.durationMs ? Math.max(3, (node.durationMs / maxMs) * 100) : 0;
+    const barFill = el('span', { class: 'cd-exec-step-bar-fill' });
+    barFill.style.width = `${pct}%`;
+
+    const head = el('button', {
+      type: 'button',
+      class: 'cd-exec-step-head',
+      'aria-expanded': 'false',
+    }) as HTMLButtonElement;
+    head.append(
+      el('span', { class: 'cd-exec-step-ord' }, String(node.ordinal)),
+      el('span', { class: 'cd-exec-step-kind', 'data-kind': node.kind }, node.kind),
+      el('span', { class: 'cd-exec-step-name' }, node.name),
+      el('span', { class: 'cd-exec-step-bar' }, [barFill]),
+      el(
+        'span',
+        { class: 'cd-exec-step-dur' },
+        node.durationMs !== undefined ? formatDuration(node.durationMs) : '—',
+      ),
+      el('span', { class: 'cd-exec-step-caret', trustedHtml: Icon.ArrowRight({ size: 13 }) }),
+    );
+
+    const body = el('div', { class: 'cd-exec-step-body', hidden: 'true' });
+    let bodyBuilt = false;
+    const buildBody = (): void => {
+      if (bodyBuilt) return;
+      bodyBuilt = true;
+      if (node.error) {
+        body.append(el('div', { class: 'cd-exec-step-error' }, node.error));
+      }
+      if (node.inputTokens !== undefined || node.outputTokens !== undefined) {
+        body.append(
+          el('div', { class: 'cd-exec-step-tokens' }, [
+            el('span', {}, `${node.inputTokens ?? 0} in`),
+            el('span', { class: 'cd-exec-step-tokens-sep' }, '·'),
+            el('span', {}, `${node.outputTokens ?? 0} out`),
+          ]),
+        );
+      }
+      body.append(
+        el('div', { class: 'cd-exec-step-io' }, [
+          renderExecPreview('Args', node.argsJson),
+          renderExecPreview('Output', node.outputJson),
+        ]),
+      );
+      // ctx.invoke — nest the child run's own timeline. Cross-app
+      // children (`appId/name`) live in another app's audit file.
+      const childRunId = node.childRunId;
+      if (node.kind === 'invoke' && childRunId) {
+        if (node.name.includes('/')) {
+          body.append(
+            el(
+              'div',
+              { class: 'cd-exec-step-note' },
+              'Cross-app sub-run — recorded in the target app.',
+            ),
+          );
+        } else if (depth < 4) {
+          const childHost = el('div', { class: 'cd-exec-step-child', hidden: 'true' });
+          const childToggle = el('button', {
+            type: 'button',
+            class: 'cd-exec-step-childtoggle',
+            'aria-expanded': 'false',
+          }) as HTMLButtonElement;
+          childToggle.textContent = 'Show sub-run steps';
+          childToggle.addEventListener('click', () => {
+            const open = childToggle.getAttribute('aria-expanded') === 'true';
+            childToggle.setAttribute('aria-expanded', String(!open));
+            childToggle.textContent = open ? 'Show sub-run steps' : 'Hide sub-run steps';
+            childHost.hidden = open;
+            if (!open && !childHost.dataset.loaded) {
+              void loadExecChildSteps(appId, childRunId, childHost, depth);
+            }
+          });
+          body.append(childToggle, childHost);
+        }
+      }
+    };
+
+    head.addEventListener('click', () => {
+      const open = head.getAttribute('aria-expanded') === 'true';
+      head.setAttribute('aria-expanded', String(!open));
+      if (!open) buildBody();
+      body.hidden = open;
+    });
+
+    step.append(head, body);
+    return step;
+  }
+
+  async function loadExecChildSteps(
+    appId: string,
+    runId: string,
+    host: HTMLElement,
+    depth: number,
+  ): Promise<void> {
+    host.dataset.loaded = 'true';
+    host.replaceChildren(el('div', { class: 'cd-exec-steps-empty' }, 'Loading sub-run…'));
+    let nodes: CentraidAutomationRunNode[];
+    try {
+      nodes = await window.CentraidApi.listAutomationRunNodes({ appId, runId });
+    } catch (err) {
+      host.replaceChildren(
+        el(
+          'div',
+          { class: 'cd-exec-steps-empty' },
+          `Failed to load sub-run: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+    if (nodes.length === 0) {
+      host.replaceChildren(
+        el('div', { class: 'cd-exec-steps-empty' }, 'Sub-run recorded no steps.'),
+      );
+      return;
+    }
+    host.replaceChildren(renderExecSteps(appId, nodes, depth + 1));
   }
 
   // ---------- ⌘K command palette (Refined Screens §F) ----------
@@ -2234,18 +3340,19 @@
       return;
     }
     recordRecent(id);
-    // Drafts can't be "opened" — they don't have a runnable build yet.
-    // Route to the builder so the click is meaningful even when openApp
-    // is called by surfaces (like the builder's own sidebar) that don't
-    // pre-branch on draft status.
-    if (isDraft(app)) {
+    // A draft with no built index.html has nothing to serve — route to the
+    // builder so the click still does something. Drafts that *have* a build
+    // mount in the app view just like published apps (their tile id is the
+    // project id — see `enterBuilder`'s projectId note).
+    if (isDraft(app) && !app.hasIndex) {
       enterBuilder({ appContext: app });
       return;
     }
     recordRoute({ id, kind: 'app' });
-    // Every app on the grid is a user app now (built-ins were retired in
-    // favour of templates), so we always mount via the iframe-backed path.
+    // Published apps carry their project id on the UserAppMeta; drafts use
+    // their tile id directly (tile id == project id for unpublished apps).
     const ua = findUserApp(id);
+    const projectId = ua?.centraidProjectId ?? (isDraft(app) ? app.id : undefined);
     clear();
 
     // Main area: the running app fills the canvas inside a scrollable column.
@@ -2295,7 +3402,7 @@
       'aria-label': 'App settings',
       'aria-haspopup': 'dialog',
       trustedHtml: Icon.Settings ? Icon.Settings({ size: 15 }) : '',
-      onClick: () => toggleAppSettings(app, gearBtn, view, ua?.centraidProjectId),
+      onClick: () => toggleAppSettings(app, gearBtn, view, projectId),
     });
     gearWrap.append(gearBtn);
     gearWrap.append(el('span', { class: 'cd-tooltip' }, 'App settings'));
@@ -2325,13 +3432,13 @@
       title: 'More',
       trustedHtml: Icon.MoreHoriz ? Icon.MoreHoriz({ size: 14 }) : '',
     });
-    // The identity lockup leads the trailing cluster; the Use/Build
-    // switch, the gear, and the ⋯ button follow — the refined-proposal
-    // titlebar shape.
+    // The identity lockup hugs the back/forward arrows on the left
+    // (titlebarLead) — matching the builder and the other views. The
+    // Use/Build switch, the gear, and the ⋯ button form the trailing
+    // cluster on the right.
     const titlebarRight = el('span', {
       style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
     });
-    titlebarRight.append(brandChip);
     titlebarRight.append(modeSwitch);
     titlebarRight.append(gearWrap);
     titlebarRight.append(moreBtn);
@@ -2345,20 +3452,21 @@
       showNewChat: true,
       sidebar,
       sidebarOpen: prefs.sidebarOpen,
+      titlebarLead: brandChip,
       titlebarRight,
     });
     currentSetSidebarOpen = setSidebarOpen;
     root.append(shell);
 
     try {
-      mountUserApp(app, ua, inner);
+      mountUserApp(app, projectId, inner);
       // Per-app agentic chat: only wire it up for centraid-backed apps,
       // since the agent reads the app's data.sqlite via the gateway.
-      if (ua?.centraidProjectId) {
+      if (projectId) {
         currentCleanup = window.AppChat.mount({
           view,
           app,
-          appId: ua.centraidProjectId,
+          appId: projectId,
           el,
         });
       } else {
@@ -2372,10 +3480,10 @@
 
   function mountUserApp(
     app: AppMetaResolvedType,
-    ua: UserAppMeta | undefined,
+    projectId: string | undefined,
     container: HTMLElement,
   ): void {
-    if (ua?.centraidProjectId) {
+    if (projectId) {
       // Real centraid app — host its iframe served by the openclaw plugin.
       // The frame fills the main pane edge-to-edge; the app supplies its
       // own header and chrome.
@@ -2409,7 +3517,7 @@
       // covering the builder-preview path that bypasses the runtime).
       // Theme is intentionally global — every mini app inherits the
       // Centraid shell theme so the workspace stays visually coherent.
-      void window.CentraidApi.appLiveUrl({ id: ua.centraidProjectId })
+      void window.CentraidApi.appLiveUrl({ id: projectId })
         .then((r) => {
           const qsep = r.url.includes('?') ? '&' : '?';
           const themeQs = `theme=${prefs.theme}&bgL=${prefs.bgL}`;
@@ -4798,6 +5906,7 @@
     openBuilder: openNewAppSheet,
     openShare: openShareDialog,
     openSettings: renderSettings,
+    openInsights: renderInsights,
     openDiscover: renderDiscover,
     openStarred: renderStarred,
     openAutomations: renderAutomations,

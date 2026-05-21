@@ -210,3 +210,6 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-c6d63e62312-1779305500-12 | c6d63e62-3121-4c37-b790-4349949ad08f | #80 | interrupt | structural |  | refactor(automations): centralize run audit in the gateway SQLite (#80) |
 | steer-c6d63e62312-1779305500-13 | c6d63e62-3121-4c37-b790-4349949ad08f | #80 | correction | classifier | Overrode NOT NULL on origin_app_id column in DDL | refactor(automations): centralize run audit in the gateway SQLite (#80) |
 | steer-f36861a8b64-1779350261-1 | f36861a8-b64f-47f3-8d39-c4e0091ee61f |  | interrupt | structural |  | refactor(runtime-core): split gateway SQLite into three domain files |
+| steer-5e4ea0c004b-1779362162-1 | 5e4ea0c0-04b0-4a8e-aa48-9d6aeeba3019 |  | interrupt | structural |  | feat(desktop): add Insights page; app-view routing, automations & codex fixes |
+| steer-5e4ea0c004b-1779362162-2 | 5e4ea0c0-04b0-4a8e-aa48-9d6aeeba3019 |  | correction | classifier | asked to redesign the page rather than accept the current implementation | feat(desktop): add Insights page; app-view routing, automations & codex fixes |
+| steer-5e4ea0c004b-1779362162-3 | 5e4ea0c0-04b0-4a8e-aa48-9d6aeeba3019 |  | correction | classifier | pointed out Run now is not triggering script/capturing tool calls | feat(desktop): add Insights page; app-view routing, automations & codex fixes |
