@@ -74,6 +74,7 @@ const Channel = {
   AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
   AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
   AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
+  INSIGHTS_SUMMARY: 'centraid:insights:summary',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -223,4 +224,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUN_NODES, input),
   pinAutomationRun: (input: { appId: string; runId: string; pinned: boolean }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_PIN_RUN, input),
+
+  // Insights (issue #90) — analytics over the unified run ledger.
+  getInsightsSummary: (input?: { windowDays?: number }) =>
+    ipcRenderer.invoke(Channel.INSIGHTS_SUMMARY, input ?? {}),
 });

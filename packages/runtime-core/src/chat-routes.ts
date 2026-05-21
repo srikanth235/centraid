@@ -239,9 +239,9 @@ async function handlePostTurn(
   };
 
   // Turn accumulator — folds the runner's `ChatStreamEvent`s into the
-  // `runs` / `run_nodes` audit trace (issue #90). Token usage is not yet
-  // on `ChatStreamEvent`; the `step` node's token columns stay NULL until
-  // the runner-capture commit wires per-call usage through.
+  // `runs` / `run_nodes` audit trace (issue #90). The runner's `usage`
+  // event (when emitted) is folded into the turn's `step` node so the
+  // ledger carries real token + cost accounting for chat turns.
   const turnStartedAt = Date.now();
   const acc = {
     aiText: '',
@@ -252,6 +252,16 @@ async function handlePostTurn(
       { toolName: string; sql?: string; args?: unknown; startedAt: number }
     >(),
     toolNodes: [] as ChatTurnNode[],
+    usage: undefined as
+      | {
+          model?: string;
+          provider?: string;
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+        }
+      | undefined,
   };
   const accumulate = (event: ChatStreamEvent): void => {
     switch (event.type) {
@@ -285,6 +295,20 @@ async function handlePostTurn(
       }
       case 'final':
         acc.finalText = acc.aiText || event.text;
+        return;
+      case 'usage':
+        acc.usage = {
+          ...(event.model !== undefined ? { model: event.model } : {}),
+          ...(event.provider !== undefined ? { provider: event.provider } : {}),
+          ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
+          ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
+          ...(event.cacheReadTokens !== undefined
+            ? { cacheReadTokens: event.cacheReadTokens }
+            : {}),
+          ...(event.cacheWriteTokens !== undefined
+            ? { cacheWriteTokens: event.cacheWriteTokens }
+            : {}),
+        };
         return;
       case 'error':
         acc.errorMessage = event.message;
@@ -348,11 +372,15 @@ async function handlePostTurn(
         try {
           const endedAt = Date.now();
           const nodes: ChatTurnNode[] = [...acc.toolNodes];
+          // The turn consumed tokens whether it ended in a reply or an
+          // error, so the `usage` totals apply to either step node.
+          const usage = acc.usage ?? {};
           if (acc.errorMessage !== undefined) {
             nodes.push({
               kind: 'step',
               text: acc.errorMessage,
               isError: true,
+              ...usage,
               startedAt: turnStartedAt,
               endedAt,
             });
@@ -360,6 +388,7 @@ async function handlePostTurn(
             nodes.push({
               kind: 'step',
               text: acc.finalText,
+              ...usage,
               startedAt: turnStartedAt,
               endedAt,
             });

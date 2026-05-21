@@ -16,7 +16,7 @@ backfill.
 - [x] Commit 2 — per-model token pricing
 - [x] Commit 3 — automations model-B
 - [x] Commit 4 — chat fold
-- [ ] Commit 5 — Insights backend wiring
+- [x] Commit 5 — Insights backend wiring
 - [ ] Commit 6 — desktop renderer (Insights data, new-automation form)
 
 ## What changed
@@ -136,16 +136,44 @@ a chat turn is now a `runs` row and its transcript is `run_nodes`.
   activity-provider + no-append shapes; the desktop derives the session
   title client-side at create time.
 
+### Commit 5 — Insights backend wiring
+
+Wires runner token capture for chat turns and adds the read-only
+analytics layer the Insights screen reads.
+
+- **Runner token capture (chat).** `ChatStreamEvent` gains a `usage`
+  variant. The codex adapter emits it from the `turn/completed`
+  notification's usage object (`readCodexUsage`, read defensively across
+  codex versions); the Claude SDK adapter emits it from the `result`
+  message's `usage` block (`readClaudeUsage`), tagged with the model
+  seen on assistant messages. The chat route folds the turn's `usage`
+  event into the `kind='step'` node, and `ChatHistoryStore.recordTurn`
+  freezes `cost_usd` via `costForUsage` — so chat turns now carry the
+  same per-step token + cost accounting automation fires already had.
+- **`InsightsStore`.** New read-only store over the activity DB
+  ([`insights-store.ts`](../packages/runtime-core/src/insights-store.ts)).
+  `summary({ windowDays })` returns the whole screen in one read: KPIs
+  (tokens / cost / forecast / generations / retries / apps-touched, plus
+  a placeholder `quotaTokens` constant), a daily consumption series, a
+  by-automation breakdown (chat / build runs collapse into synthetic
+  buckets), a by-model breakdown over `step`/`agent` nodes, and a
+  recent-activity feed. KPIs sum the `runs.total_*` rollup — exclusive
+  of child `invoke` sub-runs, so the grand total never double-counts.
+- **IPC.** A single `INSIGHTS_SUMMARY` channel + `getInsightsSummary`
+  preload method returns the `CentraidInsightsSummary` payload; covered
+  by `insights-store.test.ts`.
+
 ## Out of scope (so far)
 
-- Insights backend / renderer — follow-up commits.
-- Per-tool-call trace extraction beyond the chat route's own
-  `tool` nodes, and per-step token capture — wired with the chat
-  runner's usage capture in the Insights commit (`run_nodes` token
-  columns are NULL for chat turns until then).
+- Desktop renderer (Insights data, new-automation form) — Commit 6.
+- OpenClaw chat runner usage capture — the openclaw `ChatRunner` does
+  not emit a `usage` event, so openclaw chat turns record NULL token
+  columns. The codex / Claude local runners are covered.
+- Per-tool-call trace extraction from the agent CLI transcript (an
+  automation turn is still recorded as a single `step`).
 
 ## Verification
 
 - `turbo run typecheck` / `turbo run build` — 16/16 tasks clean.
-- `turbo run test` — 12/12 task green; `runtime-core` 284/284.
+- `turbo run test` — 12/12 task green; `runtime-core` 292/292.
 - `oxfmt` + `oxlint` on the changed files — clean.

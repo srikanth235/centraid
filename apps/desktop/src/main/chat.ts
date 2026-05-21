@@ -202,6 +202,10 @@ function handleStreamEvent(
     case 'error':
       emit(win, { appId: session.appId, turnId, kind: 'error', text: event.message });
       return;
+    case 'usage':
+      // Token usage is folded into the ledger server-side by the chat
+      // route; the renderer's event protocol doesn't surface it.
+      return;
     case 'phase':
       // diagnostic — surface as thinking so the UI keeps a heartbeat.
       emit(win, { appId: session.appId, turnId, kind: 'thinking' });

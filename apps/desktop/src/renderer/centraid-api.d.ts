@@ -541,6 +541,76 @@ interface CentraidApi {
   }): Promise<CentraidAutomationRunNode[]>;
   /** Pin / unpin a run as a replay fixture (issue #80 follow-up). */
   pinAutomationRun(input: { appId: string; runId: string; pinned: boolean }): Promise<{ ok: true }>;
+
+  /**
+   * Insights (issue #90) — the whole analytics screen's payload in one
+   * read over the unified run ledger (chat turns + automation fires +
+   * builder runs). `windowDays` defaults to 30.
+   */
+  getInsightsSummary(input?: { windowDays?: number }): Promise<CentraidInsightsSummary>;
+}
+
+/** KPI tiles for the Insights screen. */
+export interface CentraidInsightsKpis {
+  /** input + output + cache tokens summed over the window. */
+  totalTokens: number;
+  totalCostUsd: number;
+  /** Window run-rate projected to a 30-day month. */
+  forecastCostUsd: number;
+  generations: number;
+  retries: number;
+  appsTouched: number;
+  /** Placeholder monthly token allowance — no billing model exists yet. */
+  quotaTokens: number;
+}
+
+/** One day of the consumption chart. `date` is `YYYY-MM-DD` (UTC). */
+export interface CentraidInsightsDailyPoint {
+  date: string;
+  tokens: number;
+  costUsd: number;
+  runs: number;
+}
+
+/** One row of the "by automation" breakdown. Chat / build runs collapse
+ *  into synthetic buckets keyed by `kind`. */
+export interface CentraidInsightsAutomationRow {
+  key: string;
+  label: string;
+  kind: 'automation' | 'chat' | 'build' | string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+
+/** One row of the "by model" breakdown. */
+export interface CentraidInsightsModelRow {
+  model: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+
+/** One entry of the recent-activity feed. */
+export interface CentraidInsightsActivityRow {
+  runId: string;
+  kind: 'automation' | 'chat' | 'build' | string;
+  label: string;
+  ok: boolean;
+  startedAt: number;
+  tokens: number;
+  costUsd: number;
+}
+
+/** Full payload for the Insights screen. */
+export interface CentraidInsightsSummary {
+  windowDays: number;
+  generatedAt: number;
+  kpis: CentraidInsightsKpis;
+  daily: CentraidInsightsDailyPoint[];
+  byAutomation: CentraidInsightsAutomationRow[];
+  byModel: CentraidInsightsModelRow[];
+  recent: CentraidInsightsActivityRow[];
 }
 
 /** A single run record from `automations.sqlite#runs`. */

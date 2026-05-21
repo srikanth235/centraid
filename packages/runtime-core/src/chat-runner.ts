@@ -50,7 +50,23 @@ export type ChatStreamEvent =
   | { type: 'phase'; phase: string; detail?: unknown }
   | { type: 'final'; text: string }
   | { type: 'error'; message: string }
-  | { type: 'aborted' };
+  | { type: 'aborted' }
+  /**
+   * Per-turn token usage, emitted once when the runner reports the
+   * turn's totals (codex `turn/completed`, Claude SDK `result`). The
+   * chat route folds this into the turn's `kind='step'` run node so the
+   * unified ledger has real token + cost accounting for chat turns.
+   * Adapters that can't surface usage simply never emit it.
+   */
+  | {
+      type: 'usage';
+      model?: string;
+      provider?: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+    };
 
 export interface ChatRunInput {
   appId: string;

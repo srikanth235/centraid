@@ -34,11 +34,13 @@ import {
 import {
   AutomationRunsStore,
   AutomationStore,
+  InsightsStore,
   makeActivityDbProvider,
   type AutomationRow,
   type AutomationRunNodeRow,
   type AutomationRunRow,
   type DatabaseProvider,
+  type InsightsSummary,
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
@@ -112,6 +114,10 @@ export const Channel = {
   AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
   // Pin / unpin a run as a replay fixture (issue #80 follow-up).
   AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
+
+  // Insights (issue #90) — read-only analytics over the unified run
+  // ledger. One channel returns the whole screen's payload.
+  INSIGHTS_SUMMARY: 'centraid:insights:summary',
 } as const;
 
 interface AgentSessionHandle {
@@ -672,6 +678,16 @@ export function registerIpcHandlers(): void {
       const store = new AutomationRunsStore(getAutomationDbProvider());
       store.setPinned(input.runId, input.pinned);
       return { ok: true };
+    },
+  );
+
+  // Insights — the whole screen's analytics payload in one read over the
+  // unified run ledger (chat turns + automation fires + builder runs).
+  ipcMain.handle(
+    Channel.INSIGHTS_SUMMARY,
+    async (_e, input?: { windowDays?: number }): Promise<InsightsSummary> => {
+      const store = new InsightsStore(getAutomationDbProvider());
+      return store.summary(input?.windowDays !== undefined ? { windowDays: input.windowDays } : {});
     },
   );
 }

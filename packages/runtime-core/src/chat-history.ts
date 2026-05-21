@@ -21,6 +21,13 @@ import { type DatabaseSync, type StatementSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseProvider } from './gateway-db.js';
 import { AutomationRunsStore } from './automation-runs-store.js';
+import { costForUsage } from './model-pricing.js';
+import {
+  parseStepOutput,
+  parseToolArgs,
+  parseToolOutput,
+  parseUserMessage,
+} from './chat-transcript.js';
 
 export interface ChatSessionMeta {
   id: string;
@@ -58,6 +65,14 @@ export type ChatTurnNode =
       text: string;
       /** True when this step carries a runner/turn error message. */
       isError?: boolean;
+      /** The model + provider that served the turn, when the runner reports it. */
+      model?: string;
+      provider?: string;
+      /** Per-turn token usage from the runner's `usage` event, when reported. */
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
       startedAt: number;
       endedAt: number;
     }
@@ -358,6 +373,18 @@ export class ChatHistoryStore {
       });
       input.nodes.forEach((node, ordinal) => {
         if (node.kind === 'step') {
+          // Freeze the per-call cost at write time from the model price
+          // table — NULL when the model is unknown (distinct from $0).
+          const cost = costForUsage(node.model, {
+            ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
+            ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
+            ...(node.cacheReadTokens !== undefined
+              ? { cacheReadTokens: node.cacheReadTokens }
+              : {}),
+            ...(node.cacheWriteTokens !== undefined
+              ? { cacheWriteTokens: node.cacheWriteTokens }
+              : {}),
+          });
           this.runs.insertNode({
             nodeId: randomUUID(),
             runId,
@@ -368,6 +395,17 @@ export class ChatHistoryStore {
               ...(node.isError ? { error: true } : {}),
             }),
             ok: !node.isError,
+            ...(node.model !== undefined ? { model: node.model } : {}),
+            ...(node.provider !== undefined ? { provider: node.provider } : {}),
+            ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
+            ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
+            ...(node.cacheReadTokens !== undefined
+              ? { cacheReadTokens: node.cacheReadTokens }
+              : {}),
+            ...(node.cacheWriteTokens !== undefined
+              ? { cacheWriteTokens: node.cacheWriteTokens }
+              : {}),
+            ...(cost !== undefined ? { costUsd: cost } : {}),
             startedAt: node.startedAt,
             endedAt: node.endedAt,
             durationMs: Math.max(0, node.endedAt - node.startedAt),
@@ -444,47 +482,6 @@ export class ChatHistoryStore {
     }
     if (Number(res.changes) === 0) return undefined;
     return this.getSessionMeta(sessionId);
-  }
-}
-
-function parseUserMessage(inputJson: string | undefined): string {
-  if (!inputJson) return '';
-  try {
-    const parsed = JSON.parse(inputJson) as { message?: unknown };
-    return typeof parsed.message === 'string' ? parsed.message : '';
-  } catch {
-    return '';
-  }
-}
-
-function parseStepOutput(outputJson: string | undefined): { text: string; error: boolean } {
-  if (!outputJson) return { text: '', error: false };
-  try {
-    const parsed = JSON.parse(outputJson) as { text?: unknown; error?: unknown };
-    return {
-      text: typeof parsed.text === 'string' ? parsed.text : '',
-      error: parsed.error === true,
-    };
-  } catch {
-    return { text: '', error: false };
-  }
-}
-
-function parseToolArgs(argsJson: string | undefined): { sql?: string; args?: unknown } {
-  if (!argsJson) return {};
-  try {
-    return JSON.parse(argsJson) as { sql?: string; args?: unknown };
-  } catch {
-    return {};
-  }
-}
-
-function parseToolOutput(outputJson: string | undefined): { result?: unknown; errorText?: string } {
-  if (!outputJson) return {};
-  try {
-    return JSON.parse(outputJson) as { result?: unknown; errorText?: string };
-  } catch {
-    return {};
   }
 }
 

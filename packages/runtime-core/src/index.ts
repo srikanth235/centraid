@@ -211,6 +211,19 @@ export type {
 // records NULL (distinct from a genuine $0). See issue #90 question 4.
 export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from './model-pricing.js';
 
+// Insights — read-only analytics over the run ledger (issue #90). Powers
+// the desktop Insights screen via an `INSIGHTS_SUMMARY` IPC handler.
+export {
+  InsightsStore,
+  INSIGHTS_QUOTA_TOKENS,
+  type InsightsSummary,
+  type InsightsKpis,
+  type InsightsDailyPoint,
+  type InsightsAutomationRow,
+  type InsightsModelRow,
+  type InsightsActivityRow,
+} from './insights-store.js';
+
 // Per-gateway automations mirror table (`gateway-db.ts` ACTIVITY_MIGRATIONS[0]).
 // The host scheduler (openclaw cron remote, OS scheduler local) owns
 // runtime state; this is centraid's own registration surface for the
