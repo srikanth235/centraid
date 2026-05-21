@@ -653,7 +653,7 @@ export function registerIpcHandlers(): void {
         automationName: input.name,
         runner: prefs.kind,
         runsStore,
-        gatewayDb,
+        automationDb: gatewayDb,
         resolveApp,
         ...(replayFromRunId ? { replayFromRunId } : {}),
       });

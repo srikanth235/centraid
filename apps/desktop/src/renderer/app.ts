@@ -422,9 +422,7 @@
 
   // Build the sidebar contents for the current home/app-view context. The
   // builder builds its own (it knows which project is active).
-  function buildHomeSidebar(
-    active: { page?: SidebarPage; appId?: string; surface?: 'app' | 'cloud' } = {},
-  ): HTMLElement {
+  function buildHomeSidebar(active: { page?: SidebarPage; appId?: string } = {}): HTMLElement {
     const apps: ChromeSidebarApp[] = userApps.map((a) => ({
       color: a.color,
       iconKey: a.iconKey,
@@ -442,23 +440,12 @@
     return window.Chrome.buildSidebar({
       activeId: active.appId,
       activePage: active.page,
-      activeSurface: active.surface,
       apps,
       drafts: draftEntries,
       onAppClick: (id) => {
         const app = findApp(id);
         if (!app) return;
         if (isDraft(app)) enterBuilder({ appContext: app });
-        else openApp(id);
-      },
-      // §G2 — the expanded active app's App/Cloud children. "App" returns
-      // to the running app view; "Cloud" opens that app in the builder
-      // (which owns the Cloud surface — see §B6).
-      onAppSurface: (id, surface) => {
-        const app = findApp(id);
-        if (!app) return;
-        if (surface === 'cloud') enterBuilder({ appContext: app });
-        else if (isDraft(app)) enterBuilder({ appContext: app });
         else openApp(id);
       },
       // Both right-click on the row and the hover-revealed `•••` route
@@ -2349,7 +2336,7 @@
     titlebarRight.append(gearWrap);
     titlebarRight.append(moreBtn);
 
-    const sidebar = buildHomeSidebar({ appId: app.id, surface: 'app' });
+    const sidebar = buildHomeSidebar({ appId: app.id });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
       ...chromeNav(),
       main,

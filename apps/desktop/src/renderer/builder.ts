@@ -423,6 +423,7 @@
     const tabDefs: [Tab, string, () => string][] = [
       ['preview', 'Preview', () => Icon.Eye({ size: 13 })],
       ['code', 'Code', () => Icon.Code({ size: 13 })],
+      ['cloud', 'Cloud', () => Icon.Bolt({ size: 13 })],
     ];
 
     // History toggle — swaps the chat pane between live chat and version
@@ -3689,9 +3690,6 @@
     }));
     const sidebar = window.Chrome.buildSidebar({
       activeId: opts.projectId,
-      // The builder IS the app's Cloud/Build surface — highlight that child
-      // under the expanded active app (§G2).
-      activeSurface: 'cloud',
       apps: sidebarApps,
       // Drafts come from the shell's hydrated cache (passed via
       // BuilderOptions). Older callers may omit them — default to empty.
@@ -3733,19 +3731,6 @@
       onSettings: () => {
         if (typeof window.Centraid?.openSettings === 'function') {
           void window.Centraid.openSettings();
-        }
-      },
-      // §G2 — the expanded active app's App child returns to the running
-      // app view; the Cloud child switches the right pane to the Cloud
-      // surface (now a sidebar destination rather than a pane tab).
-      onAppSurface: (id: string, surface: 'app' | 'cloud') => {
-        if (surface === 'app' && typeof window.Centraid?.openApp === 'function') {
-          window.Centraid.openApp(id);
-        } else if (surface === 'cloud') {
-          tab = 'cloud';
-          renderRight();
-          refreshTabs();
-          refreshTopbarToggles();
         }
       },
     });

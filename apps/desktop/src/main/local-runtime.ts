@@ -89,8 +89,10 @@ export function localRuntimeAutomationHost(): AutomationHost {
     // Bake the desktop's gateway DB path into every scheduled job so an
     // OS-scheduler-spawned `centraid run-automation` writes its run
     // audit to the SAME gateway DB the desktop UI reads — not the
-    // `<appDir>/centraid-gateway.sqlite` fallback.
-    gatewayDbPath: localRuntimeGatewayDb(),
+    // `<appDir>/centraid-gateway.sqlite` fallback. The desktop keeps
+    // gateway + automation records in one SQLite file, so the gateway
+    // DB path doubles as the automation DB path.
+    automationDbPath: localRuntimeGatewayDb(),
     // Match the chat-runner default; toggling per-automation runner
     // isn't surfaced in the UI today.
     runner: 'codex',
@@ -180,7 +182,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
         'chat-runner-sessions',
       ),
       automationStore,
-      gatewayDb: gatewayDbProvider,
+      automationDb: gatewayDbProvider,
       // On every publish that lands new/changed/removed automation
       // manifests, reconcile the OS scheduler so its installed
       // entries match the just-synced mirror state. Scoped to this
