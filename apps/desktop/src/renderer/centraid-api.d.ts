@@ -430,6 +430,8 @@ interface CentraidApi {
     appId: string;
     appName: string;
     sessionId?: string | null;
+    /** Known title when resuming a persisted session; echoed back by `chatSend`. */
+    title?: string;
   }): Promise<{ ok: true; sessionId: string | null }>;
   /**
    * Send one user turn. Progress + result arrive via `onChatEvent` with the

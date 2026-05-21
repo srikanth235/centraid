@@ -15,8 +15,7 @@ backfill.
 - [x] Commit 1 — generalize the run-audit ledger
 - [x] Commit 2 — per-model token pricing
 - [x] Commit 3 — automations model-B
-- [ ] Commit 4 — chat fold (delete `centraid-chat.sqlite`, eliminate
-      `chat_messages`)
+- [x] Commit 4 — chat fold
 - [ ] Commit 5 — Insights backend wiring
 - [ ] Commit 6 — desktop renderer (Insights data, new-automation form)
 
@@ -105,15 +104,48 @@ the issue-#80 JS-handler engine with an agent-driven execution model.
   the simple-completion runtime on the gateway). App upload no longer
   syncs automations; `syncAutomationsFromDisk` is a global per-user scan.
 
+### Commit 4 — chat fold
+
+Deletes the `centraid-chat.sqlite` file and the `chat_messages` table;
+a chat turn is now a `runs` row and its transcript is `run_nodes`.
+
+- **Schema.** `CHAT_MIGRATIONS` / `openChatDb` / `makeChatDbProvider` are
+  removed. `chat_sessions` moves into the activity DB
+  (`ACTIVITY_MIGRATIONS` step 1→2), losing `origin_app_id` — chat is now
+  a flat per-user store; `appId` is per-turn context only.
+  `runs.chat_session_id` becomes a real same-file FK
+  (`ON DELETE CASCADE`), so deleting a session drops its turns and their
+  cascading `run_nodes`.
+- **Runner-driven persistence.** The `/centraid/<id>/_chat` route folds
+  the runner's `ChatStreamEvent`s into the ledger: each tool call is a
+  `run_nodes.kind='tool'` row, the assistant reply (or the turn error) a
+  `kind='step'` row, and the whole turn one `runs` row
+  (`kind='chat'`, `trigger='interactive'`). The renderer no longer
+  POSTs the transcript — the `POST /_centraid-chat/sessions/<id>/messages`
+  append route and `ChatHistoryStore.appendMessages` are gone. Step-node
+  token columns stay NULL until the runner-capture commit; choosing
+  `step`/`tool` kinds (not a new `message` kind) means that commit
+  enriches the same rows instead of writing a parallel trace.
+- **Store.** `ChatHistoryStore` wraps the activity DB. `getSession`
+  reconstructs the renderer transcript out of `runs` + `run_nodes` via
+  the new `AutomationRunsStore.listChatRuns`; `recordTurn` writes the
+  trace and back-fills an empty session title from the first user
+  message. `listSessions` / `createSession` drop their `appId`
+  parameter. Desktop main (`chat.ts`, `chat-history-client.ts`) and both
+  hosts (`local-runtime.ts`, openclaw `index.ts`) are updated to the
+  activity-provider + no-append shapes; the desktop derives the session
+  title client-side at create time.
+
 ## Out of scope (so far)
 
-- Chat fold and Insights backend / renderer — follow-up commits.
-- Per-tool-call trace extraction from the agent CLI transcript (the
-  turn is currently recorded as a single `step`) — wired with the
-  chat runner's usage capture in the Insights commit.
+- Insights backend / renderer — follow-up commits.
+- Per-tool-call trace extraction beyond the chat route's own
+  `tool` nodes, and per-step token capture — wired with the chat
+  runner's usage capture in the Insights commit (`run_nodes` token
+  columns are NULL for chat turns until then).
 
 ## Verification
 
 - `turbo run typecheck` / `turbo run build` — 16/16 tasks clean.
-- `turbo run test` — 12/12 task green; `runtime-core` 288/288.
-- `oxfmt` on the changed files — clean.
+- `turbo run test` — 12/12 task green; `runtime-core` 284/284.
+- `oxfmt` + `oxlint` on the changed files — clean.

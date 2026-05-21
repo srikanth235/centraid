@@ -441,9 +441,14 @@
      * the user switches chats. (Without this split, every assistant delta
      * gets dispatched once per past switch, producing "HeyHey Sri Sri" output.)
      */
-    async function switchSession(sessionId: string | null): Promise<void> {
+    async function switchSession(sessionId: string | null, title?: string): Promise<void> {
       try {
-        await window.CentraidApi.chatStart({ appId, appName: app.name, sessionId });
+        await window.CentraidApi.chatStart({
+          appId,
+          appName: app.name,
+          sessionId,
+          ...(title !== undefined ? { title } : {}),
+        });
       } catch (err) {
         appendError(`Failed to switch chat: ${String(err)}`);
       }
@@ -503,7 +508,7 @@
         appendError(`Failed to load chat: ${String(err)}`);
         return;
       }
-      await switchSession(meta.id);
+      await switchSession(meta.id, meta.title);
       renderChat();
     }
 

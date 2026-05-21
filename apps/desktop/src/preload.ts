@@ -157,8 +157,12 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.TEMPLATES_CLONE, input),
 
   // App-scoped agentic chat
-  chatStart: (input: { appId: string; appName: string; sessionId?: string | null }) =>
-    ipcRenderer.invoke(Channel.CHAT_START, input),
+  chatStart: (input: {
+    appId: string;
+    appName: string;
+    sessionId?: string | null;
+    title?: string;
+  }) => ipcRenderer.invoke(Channel.CHAT_START, input),
   chatSend: (input: { appId: string; text: string; turnId: number; model?: string }) =>
     ipcRenderer.invoke(Channel.CHAT_SEND, input),
   chatAbort: (input: { appId: string }) => ipcRenderer.invoke(Channel.CHAT_ABORT, input),

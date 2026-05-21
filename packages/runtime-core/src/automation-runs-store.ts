@@ -193,6 +193,13 @@ export class AutomationRunsStore {
     return rows.map(runFromRaw);
   }
 
+  /** Every run for a chat session, oldest first — the conversation's turns. */
+  listChatRuns(chatSessionId: string): AutomationRunRow[] {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listRunsByChatSession.all(chatSessionId) as unknown as RawRun[];
+    return rows.map(runFromRaw);
+  }
+
   lastRun(automationId: string, status?: 'ok' | 'error'): AutomationRunRow | undefined {
     const { stmts } = this.ensureReady();
     const okFilter = status === undefined ? null : status === 'ok' ? 1 : 0;

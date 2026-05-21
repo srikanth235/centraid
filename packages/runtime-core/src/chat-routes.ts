@@ -27,7 +27,7 @@ import { sendError, readBody, MAX_BODY_BYTES } from './http-utils.js';
 import { readAppSchema } from './schema.js';
 import { buildExtraPrompt } from './build-extra-prompt.js';
 import type { ChatMode, ChatRunInput, ChatRunner, ChatStreamEvent } from './chat-runner.js';
-import type { ChatHistoryStore } from './chat-history.js';
+import type { ChatHistoryStore, ChatTurnNode } from './chat-history.js';
 import type { Registry } from './registry.js';
 import { appDataDir } from './app-paths.js';
 import type { RegistryEntry } from './types.js';
@@ -238,6 +238,66 @@ async function handlePostTurn(
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
+  // Turn accumulator — folds the runner's `ChatStreamEvent`s into the
+  // `runs` / `run_nodes` audit trace (issue #90). Token usage is not yet
+  // on `ChatStreamEvent`; the `step` node's token columns stay NULL until
+  // the runner-capture commit wires per-call usage through.
+  const turnStartedAt = Date.now();
+  const acc = {
+    aiText: '',
+    finalText: undefined as string | undefined,
+    errorMessage: undefined as string | undefined,
+    pending: new Map<
+      string,
+      { toolName: string; sql?: string; args?: unknown; startedAt: number }
+    >(),
+    toolNodes: [] as ChatTurnNode[],
+  };
+  const accumulate = (event: ChatStreamEvent): void => {
+    switch (event.type) {
+      case 'assistant.delta':
+        acc.aiText += event.delta;
+        return;
+      case 'tool.start':
+        acc.pending.set(event.toolCallId, {
+          toolName: event.toolName,
+          ...(event.sql !== undefined ? { sql: event.sql } : {}),
+          ...(event.args !== undefined ? { args: event.args } : {}),
+          startedAt: Date.now(),
+        });
+        return;
+      case 'tool.result': {
+        const pending = acc.pending.get(event.toolCallId);
+        acc.pending.delete(event.toolCallId);
+        acc.toolNodes.push({
+          kind: 'tool',
+          toolName: event.toolName || pending?.toolName || 'tool',
+          ...(pending?.sql !== undefined ? { sql: pending.sql } : {}),
+          ...(pending?.args !== undefined ? { args: pending.args } : {}),
+          ok: event.ok,
+          ...(event.result !== undefined ? { result: event.result } : {}),
+          ...(!event.ok ? { errorText: event.errorText ?? 'Tool failed.' } : {}),
+          appId: entry.id,
+          startedAt: pending?.startedAt ?? Date.now(),
+          endedAt: Date.now(),
+        });
+        return;
+      }
+      case 'final':
+        acc.finalText = acc.aiText || event.text;
+        return;
+      case 'error':
+        acc.errorMessage = event.message;
+        break;
+      // assistant.start / reasoning.delta / phase / aborted — no ledger
+      // state to fold; the SSE write still happens via `writeEvent`.
+    }
+  };
+  const onEvent = (event: ChatStreamEvent): void => {
+    accumulate(event);
+    writeEvent(event);
+  };
+
   const abortController = new AbortController();
   const onClientClose = (): void => {
     if (!abortController.signal.aborted) abortController.abort();
@@ -260,7 +320,7 @@ async function handlePostTurn(
     message,
     extraSystemPrompt,
     abortSignal: abortController.signal,
-    onEvent: writeEvent,
+    onEvent,
     ...(body.model ? { model: body.model } : {}),
     ...(body.thinking ? { thinking: body.thinking } : {}),
     ...(body.idempotencyKey ? { idempotencyKey: body.idempotencyKey } : {}),
@@ -275,17 +335,52 @@ async function handlePostTurn(
       runResult = out ?? undefined;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      writeEvent({ type: 'error', message: msg });
+      onEvent({ type: 'error', message: msg });
     } finally {
       clearInterval(heartbeat);
       req.off('close', onClientClose);
       req.off('error', onClientClose);
-      // Record turn completion regardless of whether the runner returned a
-      // result — `turn_count` counts every completed turn. The resume-handle
-      // update only happens when the runner reported an `adapterKind`
-      // (codex / claude-code; the OpenClaw runner resumes via `sessionFile`
-      // and returns void).
       if (ctx.chatStore) {
+        // Persist the turn as a `runs` row + its `run_nodes` trace. The
+        // assistant reply (or the turn error) is one `step` node ordered
+        // after the turn's `tool` nodes — matching the transcript shape
+        // `getSession` reconstructs.
+        try {
+          const endedAt = Date.now();
+          const nodes: ChatTurnNode[] = [...acc.toolNodes];
+          if (acc.errorMessage !== undefined) {
+            nodes.push({
+              kind: 'step',
+              text: acc.errorMessage,
+              isError: true,
+              startedAt: turnStartedAt,
+              endedAt,
+            });
+          } else if (acc.finalText && acc.finalText.trim().length > 0) {
+            nodes.push({
+              kind: 'step',
+              text: acc.finalText,
+              startedAt: turnStartedAt,
+              endedAt,
+            });
+          }
+          ctx.chatStore.recordTurn({
+            chatSessionId: windowId,
+            userMessage: message,
+            startedAt: turnStartedAt,
+            endedAt,
+            ok: acc.errorMessage === undefined,
+            ...(acc.errorMessage !== undefined ? { error: acc.errorMessage } : {}),
+            ...(acc.finalText !== undefined ? { finalText: acc.finalText } : {}),
+            nodes,
+          });
+        } catch {
+          /* best-effort — a ledger miss never fails the turn */
+        }
+        // Persist the runner-resume handle. The resume-handle update only
+        // happens when the runner reported an `adapterKind` (codex /
+        // claude-code; the OpenClaw runner resumes via `sessionFile` and
+        // returns void).
         try {
           ctx.chatStore.noteTurn(
             windowId,

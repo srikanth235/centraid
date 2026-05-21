@@ -6,13 +6,10 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
   GATEWAY_MIGRATIONS,
-  CHAT_MIGRATIONS,
   ACTIVITY_MIGRATIONS,
   openGatewayDb,
-  openChatDb,
   openActivityDb,
   makeGatewayDbProvider,
-  makeChatDbProvider,
   makeActivityDbProvider,
 } from './gateway-db.js';
 
@@ -98,24 +95,31 @@ describe('openGatewayDb (users + user_prefs)', () => {
   });
 });
 
-describe('openChatDb (chat_sessions + chat_messages)', () => {
-  it('advances PRAGMA user_version to CHAT_MIGRATIONS.length on a fresh DB', () => {
+describe('openActivityDb (automations + chat_sessions + run ledger)', () => {
+  it('advances PRAGMA user_version to ACTIVITY_MIGRATIONS.length on a fresh DB', () => {
     const path = freshDbPath();
-    openChatDb(path).close();
-    assert.equal(userVersion(path), CHAT_MIGRATIONS.length);
+    openActivityDb(path).close();
+    assert.equal(userVersion(path), ACTIVITY_MIGRATIONS.length);
+    assert.equal(ACTIVITY_MIGRATIONS.length, 2);
   });
 
-  it('creates exactly the chat_sessions + chat_messages tables', () => {
+  it('creates the automations mirror + chat_sessions + unified runs ledger', () => {
     const path = freshDbPath();
-    openChatDb(path).close();
-    assert.deepEqual(tableNames(path), ['chat_messages', 'chat_sessions']);
+    openActivityDb(path).close();
+    assert.deepEqual(tableNames(path), [
+      'automation_state',
+      'automations',
+      'chat_sessions',
+      'run_nodes',
+      'runs',
+    ]);
   });
 
   it('chat_sessions has NO foreign key (user_id is application-enforced)', () => {
-    // `users` lives in a different file; SQLite has no cross-file FKs, so
-    // chat_sessions must not declare one.
+    // `users` lives in the separate gateway file; SQLite has no cross-file
+    // FKs, so chat_sessions must not declare one.
     const path = freshDbPath();
-    openChatDb(path).close();
+    openActivityDb(path).close();
     const db = new DatabaseSync(path);
     try {
       const fks = db.prepare(`PRAGMA foreign_key_list('chat_sessions')`).all();
@@ -125,53 +129,7 @@ describe('openChatDb (chat_sessions + chat_messages)', () => {
     }
   });
 
-  it('FK cascade deletes messages when their session is removed', () => {
-    const path = freshDbPath();
-    const db = openChatDb(path);
-    try {
-      db.prepare(
-        `INSERT INTO chat_sessions (id, user_id, origin_app_id, title, mode, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).run('s1', 'u1', 'todos', 'hi', 'full', Date.now(), Date.now());
-      db.prepare(
-        `INSERT INTO chat_messages (session_id, idx, app_id, payload_json, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).run('s1', 0, 'todos', '{"kind":"user","text":"x"}', Date.now());
-
-      db.prepare(`DELETE FROM chat_sessions WHERE id = ?`).run('s1');
-
-      const messages = db.prepare(`SELECT COUNT(*) AS n FROM chat_messages`).get() as { n: number };
-      assert.equal(Number(messages.n), 0);
-    } finally {
-      db.close();
-    }
-  });
-
-  it('throws when the DB is at a newer version than this build supports', () => {
-    const path = freshDbPath();
-    openChatDb(path).close();
-    const db = new DatabaseSync(path);
-    db.exec(`PRAGMA user_version = ${CHAT_MIGRATIONS.length + 1}`);
-    db.close();
-    assert.throws(() => openChatDb(path), /newer|update centraid/i);
-  });
-});
-
-describe('openActivityDb (mirror + run audit)', () => {
-  it('advances PRAGMA user_version to ACTIVITY_MIGRATIONS.length on a fresh DB', () => {
-    const path = freshDbPath();
-    openActivityDb(path).close();
-    assert.equal(userVersion(path), ACTIVITY_MIGRATIONS.length);
-    assert.equal(ACTIVITY_MIGRATIONS.length, 2);
-  });
-
-  it('creates the automations mirror + unified runs ledger tables', () => {
-    const path = freshDbPath();
-    openActivityDb(path).close();
-    assert.deepEqual(tableNames(path), ['automation_state', 'automations', 'run_nodes', 'runs']);
-  });
-
-  it('run_nodes cascades off runs; parent_run_id is SET NULL', () => {
+  it('run_nodes cascades off runs; parent_run_id is SET NULL; chat_session_id cascades', () => {
     const path = freshDbPath();
     openActivityDb(path).close();
     const db = new DatabaseSync(path);
@@ -185,14 +143,46 @@ describe('openActivityDb (mirror + run audit)', () => {
       assert.ok(nodeFk, 'expected FK on run_nodes.run_id → runs.id');
       assert.equal(nodeFk.on_delete, 'CASCADE');
 
-      const parentFk = (
-        db.prepare(`PRAGMA foreign_key_list('runs')`).all() as Array<{
-          table: string;
-          on_delete: string;
-        }>
-      ).find((f) => f.table === 'runs');
+      const runFks = db.prepare(`PRAGMA foreign_key_list('runs')`).all() as Array<{
+        table: string;
+        on_delete: string;
+      }>;
+      const parentFk = runFks.find((f) => f.table === 'runs');
       assert.ok(parentFk, 'expected self-FK on runs.parent_run_id');
       assert.equal(parentFk.on_delete, 'SET NULL');
+
+      const chatFk = runFks.find((f) => f.table === 'chat_sessions');
+      assert.ok(chatFk, 'expected FK on runs.chat_session_id → chat_sessions.id');
+      assert.equal(chatFk.on_delete, 'CASCADE');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('deleting a chat session cascades its runs and their run_nodes', () => {
+    const path = freshDbPath();
+    const db = openActivityDb(path);
+    try {
+      const now = Date.now();
+      db.prepare(
+        `INSERT INTO chat_sessions (id, user_id, title, mode, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run('s1', 'u1', 'hi', 'full', now, now);
+      db.prepare(
+        `INSERT INTO runs (id, kind, chat_session_id, trigger, started_at)
+         VALUES (?, 'chat', ?, 'interactive', ?)`,
+      ).run('r1', 's1', now);
+      db.prepare(
+        `INSERT INTO run_nodes (id, run_id, ordinal, kind, ok, started_at)
+         VALUES (?, ?, 0, 'step', 1, ?)`,
+      ).run('n1', 'r1', now);
+
+      db.prepare(`DELETE FROM chat_sessions WHERE id = ?`).run('s1');
+
+      const runs = db.prepare(`SELECT COUNT(*) AS n FROM runs`).get() as { n: number };
+      const nodes = db.prepare(`SELECT COUNT(*) AS n FROM run_nodes`).get() as { n: number };
+      assert.equal(Number(runs.n), 0);
+      assert.equal(Number(nodes.n), 0);
     } finally {
       db.close();
     }
@@ -218,7 +208,7 @@ describe('openActivityDb (mirror + run audit)', () => {
 
 describe('lazy providers', () => {
   it('opens the DB once and reuses the handle for subsequent calls', () => {
-    for (const make of [makeGatewayDbProvider, makeChatDbProvider, makeActivityDbProvider]) {
+    for (const make of [makeGatewayDbProvider, makeActivityDbProvider]) {
       const provider = make(freshDbPath());
       const a = provider();
       const b = provider();
@@ -228,7 +218,7 @@ describe('lazy providers', () => {
   });
 
   it('does not touch the filesystem until the first call', () => {
-    for (const make of [makeGatewayDbProvider, makeChatDbProvider, makeActivityDbProvider]) {
+    for (const make of [makeGatewayDbProvider, makeActivityDbProvider]) {
       const path = freshDbPath();
       make(path);
       assert.equal(existsSync(path), false);

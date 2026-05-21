@@ -7,7 +7,6 @@ import {
   Runtime,
   UserStore,
   makeGatewayDbProvider,
-  makeChatDbProvider,
   makeActivityDbProvider,
   startRuntimeHttpServer,
   type AutomationHost,
@@ -57,18 +56,14 @@ export function localRuntimeCodexHomeBaseDir(): string {
 }
 
 /**
- * Paths of the three domain SQLite files — identity (users + prefs),
- * chat (sessions + messages), automations (mirror + run audit). They
- * live next to (not inside) the appsDir so they stay out of every
+ * Paths of the two domain SQLite files — identity (users + prefs) and
+ * the activity ledger (automations, chat_sessions, runs, run_nodes).
+ * They live next to (not inside) the appsDir so they stay out of every
  * individual app's data and are never reachable from the centraid_sql_*
  * tools. Mirrors the OpenClaw plugin's placement.
  */
 export function localRuntimeGatewayDb(): string {
   return path.join(app.getPath('userData'), 'local-runtime', 'centraid-gateway.sqlite');
-}
-
-export function localRuntimeChatDb(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-chat.sqlite');
 }
 
 export function localRuntimeAutomationDb(): string {
@@ -113,15 +108,17 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     const appsDir = localRuntimeAppsDir();
     await fs.mkdir(appsDir, { recursive: true });
 
-    // Three domain SQLite files — identity, chat, automations. Each
+    // Two domain SQLite files — identity and the activity ledger. Each
     // store wraps the lazy provider for its file; the provider opens the
     // file on first use (lazy because nothing here touches the DB until
-    // a request hits the HTTP server).
+    // a request hits the HTTP server). The chat-history store and the
+    // automation stores all share the activity provider.
     const gatewayDbProvider = makeGatewayDbProvider(localRuntimeGatewayDb());
-    const chatDbProvider = makeChatDbProvider(localRuntimeChatDb());
     const automationDbProvider = makeActivityDbProvider(localRuntimeAutomationDb());
     const userStore = new UserStore(gatewayDbProvider);
-    const chatHistoryStore = new ChatHistoryStore(chatDbProvider, () => userStore.getUserId());
+    const chatHistoryStore = new ChatHistoryStore(automationDbProvider, () =>
+      userStore.getUserId(),
+    );
 
     // Resolve user prefs for the agent runtime — the desktop persists
     // the user's CLI choice (codex / claude-code) + optional override path

@@ -1,5 +1,5 @@
 /*
- * Centraid gateway state — split across THREE SQLite files, each with its
+ * Centraid gateway state — split across TWO SQLite files, each with its
  * own connection, migration ladder, and `PRAGMA user_version`:
  *
  *   gateway     (`centraid-gateway.sqlite`)
@@ -9,35 +9,32 @@
  *     user_prefs     — global prefs keyed by (user_id, key); JSON-encoded
  *                      values. Real FK-cascaded from `users` (same file).
  *
- *   chat        (`centraid-chat.sqlite`)
- *     chat_sessions  — chat sessions, scoped by `user_id`, carrying a
- *                      nullable `origin_app_id` (the app the chat was
- *                      opened from; NULL = started from the shell). A
- *                      session is the single chat concept — its id IS
- *                      the chat window id.
- *     chat_messages  — append-only message log, FK-cascaded from
- *                      `chat_sessions`. Each row carries a nullable
- *                      `app_id` naming the app a tool call touched.
- *
  *   activity    (`centraid-activity.sqlite`) — the unified agent-run ledger
  *     automations      — user-owned automations, keyed by a UUID `id`.
  *                        `user_id` is the owner; `name` is unique per
  *                        user. No `origin_app_id` — an automation is no
  *                        longer scoped to the app it was authored from
  *                        (issue #90 model-B).
+ *     chat_sessions    — conversation containers, scoped by `user_id`. A
+ *                        session is the single chat concept — its id IS
+ *                        the chat window id. No `origin_app_id`: chat is
+ *                        a flat per-user store (issue #90); `appId` is
+ *                        per-turn context, never persisted on the session.
  *     runs             — one row per agent run. A chat turn, an automation
  *                        fire, and a builder iteration are the same object;
  *                        `kind` discriminates. Carries denormalized
  *                        token/cost rollups written at finish.
  *     run_nodes        — the ordered agentic trace. One row per model
  *                        inference call (`kind='step'`), tool call, or
- *                        sub-run.
+ *                        sub-run. A chat turn's transcript is folded here:
+ *                        `chat_messages` no longer exists (issue #90).
  *     automation_state — per-automation KV, keyed by (automation_id, key).
  *
- *     All four tables stay in one file so a sub-run can link its
+ *     All five tables stay in one file so a sub-run can link its
  *     `parent_run_id` self-FK into one joinable DAG (a self-FK can't
- *     cross SQLite files). Runtime-owned; never reachable from handler
- *     `db` or the `centraid_sql_*` agent tools.
+ *     cross SQLite files), and `runs.chat_session_id` is a real same-file
+ *     FK. Runtime-owned; never reachable from handler `db` or the
+ *     `centraid_sql_*` agent tools.
  *
  * Each file gets one connection and one provider. The OpenClaw plugin's
  * worker subprocesses (which construct the runtime in every context but
@@ -89,46 +86,6 @@ export const GATEWAY_MIGRATIONS: readonly string[] = [
 ];
 
 /**
- * Chat file migration ladder — `chat_sessions` + `chat_messages`.
- *
- * `chat_sessions.user_id` is kept as a plain column but has NO foreign
- * key: `users` now lives in a different SQLite file and cross-file FKs
- * aren't possible. The relationship is application-enforced. `chat_messages`
- * still cascades from `chat_sessions` (same file).
- */
-export const CHAT_MIGRATIONS: readonly string[] = [
-  // 0 → 1: baseline schema for the chat file.
-  `
-    CREATE TABLE IF NOT EXISTS chat_sessions (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      origin_app_id TEXT,
-      title TEXT NOT NULL DEFAULT '',
-      mode TEXT NOT NULL DEFAULT 'full',
-      adapter_kind TEXT,
-      adapter_session_id TEXT,
-      turn_count INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_app_updated
-      ON chat_sessions(user_id, origin_app_id, updated_at DESC);
-
-    CREATE TABLE IF NOT EXISTS chat_messages (
-      session_id TEXT NOT NULL,
-      idx INTEGER NOT NULL,
-      app_id TEXT,
-      payload_json TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      PRIMARY KEY (session_id, idx),
-      FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS idx_chat_messages_session
-      ON chat_messages(session_id);
-  `,
-];
-
-/**
  * Activity file migration ladder — the unified agent-run ledger
  * (issue #90). The `automations` table plus a generalized
  * `runs` / `run_nodes` ledger and the `automation_state` KV.
@@ -173,16 +130,24 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
     CREATE INDEX IF NOT EXISTS idx_automations_user
       ON automations(user_id, name);
   `,
-  // 1 → 2: the unified `runs` / `run_nodes` ledger + automation KV
-  // (issue #90 — no backfill, v0).
+  // 1 → 2: `chat_sessions` + the unified `runs` / `run_nodes` ledger +
+  // automation KV (issue #90 — no backfill, v0).
+  //
+  // `chat_sessions` — conversation containers. The id IS the chat window
+  // id. `user_id` is a plain column with no FK (`users` lives in the
+  // separate gateway file); the relationship is application-enforced.
+  // No `origin_app_id`: chat is a flat per-user store. The transcript is
+  // NOT stored here — a chat turn is a `runs` row and its messages are
+  // `run_nodes` (issue #90 fold; `chat_messages` is gone).
   //
   // `runs` — one row per agent run. `kind` discriminates
   // chat / automation / build; `automation_id` is set for
   // kind='automation', `chat_session_id` for kind='chat', `app_id` for
-  // kind='build'. `parent_run_id` is the sub-run DAG edge. The `total_*`
-  // columns are a denormalized rollup written at finish, exclusive of
-  // child sub-runs, so a SUM over every run is the true grand total
-  // with no double-count.
+  // kind='build'. `chat_session_id` is a real same-file FK so deleting a
+  // session cascades its turns. `parent_run_id` is the sub-run DAG edge.
+  // The `total_*` columns are a denormalized rollup written at finish,
+  // exclusive of child sub-runs, so a SUM over every run is the true
+  // grand total with no double-count.
   //
   // `run_nodes` — the ordered trace. `kind='step'` is one primary
   // model-inference call (token accounting lives here — input tokens
@@ -191,11 +156,25 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
   // `cost_usd` is frozen at write time from a per-model price table;
   // NULL means "no price known" (distinct from a genuine $0).
   `
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id                 TEXT PRIMARY KEY,
+      user_id            TEXT NOT NULL,
+      title              TEXT NOT NULL DEFAULT '',
+      mode               TEXT NOT NULL DEFAULT 'full',
+      adapter_kind       TEXT,
+      adapter_session_id TEXT,
+      turn_count         INTEGER NOT NULL DEFAULT 0,
+      created_at         INTEGER NOT NULL,
+      updated_at         INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_updated
+      ON chat_sessions(user_id, updated_at DESC);
+
     CREATE TABLE IF NOT EXISTS runs (
       id                       TEXT PRIMARY KEY,
       kind                     TEXT NOT NULL DEFAULT 'automation',
       automation_id            TEXT,
-      chat_session_id          TEXT,
+      chat_session_id          TEXT REFERENCES chat_sessions(id) ON DELETE CASCADE,
       app_id                   TEXT,
       trigger                  TEXT NOT NULL,
       parent_run_id            TEXT REFERENCES runs(id) ON DELETE SET NULL,
@@ -347,22 +326,12 @@ export function makeGatewayDbProvider(dbPath: string): DatabaseProvider {
   return makeProvider(dbPath, GATEWAY_MIGRATIONS, 'gateway');
 }
 
-/** Open the chat (chat_sessions + chat_messages) DB file. */
-export function openChatDb(dbPath: string): DatabaseSync {
-  return openDb(dbPath, CHAT_MIGRATIONS, 'chat');
-}
-
-/** Lazy provider for the chat (chat_sessions + chat_messages) DB file. */
-export function makeChatDbProvider(dbPath: string): DatabaseProvider {
-  return makeProvider(dbPath, CHAT_MIGRATIONS, 'chat');
-}
-
-/** Open the activity (automations + runs + run_nodes + ctx.state) DB file. */
+/** Open the activity (automations + chat_sessions + runs + run_nodes + ctx.state) DB file. */
 export function openActivityDb(dbPath: string): DatabaseSync {
   return openDb(dbPath, ACTIVITY_MIGRATIONS, 'activity');
 }
 
-/** Lazy provider for the activity (automations + runs + run_nodes + ctx.state) DB file. */
+/** Lazy provider for the activity (automations + chat_sessions + runs + run_nodes + ctx.state) DB file. */
 export function makeActivityDbProvider(dbPath: string): DatabaseProvider {
   return makeProvider(dbPath, ACTIVITY_MIGRATIONS, 'activity');
 }

@@ -86,6 +86,7 @@ export interface PreparedStatements {
   finishRun: StatementSync;
   getRun: StatementSync;
   listRunsByAutomation: StatementSync;
+  listRunsByChatSession: StatementSync;
   listRunsAll: StatementSync;
   lastRunByAutomation: StatementSync;
   setPinned: StatementSync;
@@ -217,6 +218,12 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         AND (? IS NULL OR started_at >= ?)
         AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT ?
+    `),
+    // Ascending — the chat transcript is replayed oldest-turn-first.
+    listRunsByChatSession: db.prepare(`
+      SELECT * FROM runs
+      WHERE chat_session_id = ?
+      ORDER BY started_at ASC
     `),
     listRunsAll: db.prepare(`
       SELECT * FROM runs
