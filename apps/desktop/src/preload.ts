@@ -217,8 +217,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     name?: string;
     description?: string;
     prompt?: string;
-    cronExpr?: string;
+    triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
     apps?: string[];
+    model?: string;
+    historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
+    onFailure?: string;
   }) => ipcRenderer.invoke(Channel.AUTOMATIONS_CREATE, input),
   runAutomationNow: (input: { automationId: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_RUN_NOW, input),

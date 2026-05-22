@@ -18,6 +18,7 @@ import type {
   AutomationRunNodeRow,
   AutomationStateEntry,
   AutomationTriggerKind,
+  AutomationTriggerOrigin,
   AutomationRunNodeKind,
   RunKind,
 } from './automation-runs-schema.js';
@@ -29,6 +30,7 @@ export interface RawRun {
   chat_session_id: string | null;
   app_id: string | null;
   trigger: string;
+  trigger_origin: string | null;
   parent_run_id: string | null;
   note: string | null;
   summary: string | null;
@@ -111,6 +113,9 @@ export function runFromRaw(raw: RawRun): AutomationRunRow {
     kind: raw.kind as RunKind,
     ...(raw.automation_id !== null ? { automationId: raw.automation_id } : {}),
     triggerKind: raw.trigger as AutomationTriggerKind,
+    ...(raw.trigger_origin !== null
+      ? { triggerOrigin: raw.trigger_origin as AutomationTriggerOrigin }
+      : {}),
     ...(raw.parent_run_id !== null ? { parentRunId: raw.parent_run_id } : {}),
     ...(raw.chat_session_id !== null ? { chatSessionId: raw.chat_session_id } : {}),
     ...(raw.app_id !== null ? { appId: raw.app_id } : {}),
@@ -179,8 +184,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     insertRun: db.prepare(`
       INSERT INTO runs
         (id, kind, automation_id, chat_session_id, app_id,
-         trigger, parent_run_id, retry_of, note, input_json, started_at, ok)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+         trigger, trigger_origin, parent_run_id, retry_of, note,
+         input_json, started_at, ok)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `),
     // The `total_*` rollup is Σ over this run's own step/agent nodes;
     // `step_count` / `tool_count` count the matching nodes. SUM over an

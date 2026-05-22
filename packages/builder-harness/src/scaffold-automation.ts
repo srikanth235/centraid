@@ -21,6 +21,8 @@ import {
   isValidAutomationId,
   validateManifest,
   type AutomationManifest,
+  type AutomationTrigger,
+  type AutomationHistoryKeep,
 } from '@centraid/runtime-core';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
@@ -31,10 +33,26 @@ export interface AutomationScaffoldOptions {
   description?: string;
   /** The human intent the builder agent translates into `handler.js`. */
   prompt?: string;
-  /** 5-field cron expression. Defaults to a daily 9am schedule. */
+  /**
+   * 5-field cron expression for a single cron trigger. Ignored when
+   * `triggers` is set. Defaults to a daily 9am schedule.
+   */
   cronExpr?: string;
+  /**
+   * Explicit trigger list — overrides `cronExpr`. An empty array is a
+   * legal "manual fire only" automation. Webhook triggers must already
+   * carry their generated `id` + `secretHash` (the desktop IPC mints
+   * the secret server-side).
+   */
+  triggers?: readonly AutomationTrigger[];
   /** App ids this automation is associated with. */
   apps?: readonly string[];
+  /** Model `ctx.agent` calls route through (`provider/model-id`). */
+  model?: string;
+  /** Run-retention policy. Defaults to keeping the last 100 runs. */
+  historyKeep?: AutomationHistoryKeep;
+  /** Sibling automation id to fire when this one fails. */
+  onFailure?: string;
 }
 
 /** Validate an automation project id (the directory slug). */
@@ -66,18 +84,25 @@ export default async ({ ctx, log }) => {
 `;
 
 function starterManifest(id: string, opts: AutomationScaffoldOptions): AutomationManifest {
+  const triggers: readonly AutomationTrigger[] =
+    opts.triggers !== undefined
+      ? opts.triggers
+      : [{ kind: 'cron', expr: opts.cronExpr?.trim() || '0 9 * * *' }];
+  const requires: Record<string, unknown> = {};
+  if (opts.model?.trim()) requires.model = opts.model.trim();
   const raw: Record<string, unknown> = {
     name: opts.name?.trim() || id,
     version: '0.1.0',
     enabled: true,
     prompt: opts.prompt?.trim() || 'Describe what this automation should do.',
-    trigger: { kind: 'cron', expr: opts.cronExpr?.trim() || '0 9 * * *' },
-    requires: {},
-    history: { keep: { count: 100 } },
+    triggers: [...triggers],
+    requires,
+    history: { keep: opts.historyKeep ?? { count: 100 } },
     generated: { by: 'centraid-builder', at: new Date().toISOString() },
   };
   if (opts.description?.trim()) raw.description = opts.description.trim();
   if (opts.apps && opts.apps.length > 0) raw.apps = [...opts.apps];
+  if (opts.onFailure?.trim()) raw.onFailure = opts.onFailure.trim();
   // Round-trip through the validator so a scaffold can never write a
   // manifest the runtime would later reject.
   return validateManifest(raw);

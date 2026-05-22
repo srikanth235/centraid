@@ -100,7 +100,7 @@ describe('openActivityDb (chat_sessions + run ledger)', () => {
     const path = freshDbPath();
     openActivityDb(path).close();
     assert.equal(userVersion(path), ACTIVITY_MIGRATIONS.length);
-    assert.equal(ACTIVITY_MIGRATIONS.length, 2);
+    assert.equal(ACTIVITY_MIGRATIONS.length, 3);
   });
 
   it('creates chat_sessions + the unified runs ledger (no automations table)', () => {

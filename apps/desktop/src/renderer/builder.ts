@@ -2929,8 +2929,9 @@
         titleWrap.append(
           el(
             'span',
-            { class: 'cloud-automation-cron', title: 'Cron expression (UTC)' },
-            row.cronExpr,
+            { class: 'cloud-automation-cron', title: 'Triggers' },
+            row.triggers.map((t) => (t.kind === 'cron' ? t.expr : 'webhook')).join(' · ') ||
+              'manual',
           ),
         );
         head.append(titleWrap);

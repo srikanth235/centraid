@@ -25,11 +25,11 @@ import type {
 } from '@centraid/runtime-core';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
-  cronNameFor,
+  desiredCronJobs,
   listCentraidCronJobs,
   removeCronJob,
   upsertCronJob,
-  payloadFor,
+  type CronAddPayload,
 } from './automations-cron.js';
 
 export class OpenclawAutomationHost implements AutomationHost {
@@ -50,9 +50,14 @@ export class OpenclawAutomationHost implements AutomationHost {
   }
 
   async reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult> {
-    const desiredByCronName = new Map<string, AutomationRow>();
+    // One automation fans out to several cron jobs (one per cron
+    // trigger); flatten every row's desired jobs into a name→payload
+    // map so the diff stays a straightforward set operation.
+    const desiredByCronName = new Map<string, CronAddPayload>();
     for (const row of desired) {
-      desiredByCronName.set(cronNameFor(row.id), row);
+      for (const [name, payload] of desiredCronJobs(row)) {
+        desiredByCronName.set(name, payload);
+      }
     }
 
     const actualNames = new Set(await listCentraidCronJobs());
@@ -64,12 +69,12 @@ export class OpenclawAutomationHost implements AutomationHost {
     // Re-issue `cron.update` for entries on both sides — covers the
     // case where the mirror absorbed an enabled toggle or schedule
     // change while the plugin was offline. Idempotent server-side.
-    for (const [cronName, row] of desiredByCronName) {
+    for (const [cronName, payload] of desiredByCronName) {
       if (actualNames.has(cronName)) {
-        await callGatewayTool('cron.update', {}, payloadFor(row));
+        await callGatewayTool('cron.update', {}, payload);
         updated.push(cronName);
       } else {
-        await callGatewayTool('cron.add', {}, payloadFor(row));
+        await callGatewayTool('cron.add', {}, payload);
         added.push(cronName);
       }
     }

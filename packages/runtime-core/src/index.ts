@@ -178,12 +178,16 @@ export {
   parseManifest,
   validateManifest,
   validateOutputAgainstSchema,
+  cronTriggersOf,
+  webhookTriggerOf,
   type AutomationManifest,
   type AutomationManifestRequires,
   type AutomationCostEstimate,
   type AutomationGeneratedMeta,
   type AutomationManifestValidationCode,
   type AutomationTrigger,
+  type CronTrigger,
+  type WebhookTrigger,
   type AutomationOutputSchema,
   type AutomationHistoryConfig,
   type AutomationHistoryKeep,
@@ -205,6 +209,7 @@ export type {
   AutomationRunNodeRow,
   AutomationStateEntry,
   AutomationTriggerKind,
+  AutomationTriggerOrigin,
   AutomationRunNodeKind,
   RunKind,
 } from './automation-runs-schema.js';
@@ -243,6 +248,22 @@ export {
   type ListAutomationProjectsResult,
 } from './automation-project.js';
 export type { AutomationHost, AutomationReconcileResult } from './automation-host.js';
+
+// Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
+// automation on an inbound HTTP POST; the gateway mounts the route
+// built by `makeWebhookRouteHandler`. Secret helpers are shared by the
+// desktop's create flow (hash at scaffold time) and the route (verify).
+export {
+  WEBHOOK_ROUTE_PREFIX,
+  generateWebhookId,
+  generateWebhookSecret,
+  hashWebhookSecret,
+  verifyWebhookSecret,
+  makeWebhookRouteHandler,
+  type WebhookFireFn,
+  type WebhookFireResult,
+  type WebhookRouteOptions,
+} from './automation-webhook.js';
 
 // Automation handler runtime (issue #91). A fire executes the project's
 // generated `handler.js` in a worker thread; the host supplies the

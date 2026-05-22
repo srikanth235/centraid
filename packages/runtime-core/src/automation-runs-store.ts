@@ -35,6 +35,7 @@ import type {
   AutomationRunNodeRow,
   AutomationStateEntry,
   AutomationTriggerKind,
+  AutomationTriggerOrigin,
   AutomationRunNodeKind,
   RunKind,
 } from './automation-runs-schema.js';
@@ -52,6 +53,8 @@ import {
 export interface InsertRunInput {
   readonly runId: string;
   readonly triggerKind: AutomationTriggerKind;
+  /** Source that fired the run (`cron` / `webhook` / `manual`). */
+  readonly triggerOrigin?: AutomationTriggerOrigin;
   /** Defaults to `'automation'`. */
   readonly kind?: RunKind;
   /** UUID of the automation — set for `kind: 'automation'`. */
@@ -145,6 +148,7 @@ export class AutomationRunsStore {
       input.chatSessionId ?? null,
       input.appId ?? null,
       input.triggerKind,
+      input.triggerOrigin ?? null,
       input.parentRunId ?? null,
       input.retryOf ?? null,
       input.note ?? null,

@@ -35,24 +35,29 @@ function setup(): {
   return { artifactRoot, shellCalls, execShell, host };
 }
 
-function row(overrides: Partial<AutomationRow> = {}): AutomationRow {
+function row(
+  overrides: { id?: string; name?: string; cronExpr?: string; enabled?: boolean } = {},
+): AutomationRow {
+  const id = overrides.id ?? 'auto-1';
+  const name = overrides.name ?? 'daily-digest';
+  const enabled = overrides.enabled ?? true;
+  const triggers = [{ kind: 'cron' as const, expr: overrides.cronExpr ?? '0 17 * * 1-5' }];
   return {
-    id: 'auto-1',
-    userId: 'u1',
-    name: 'daily-digest',
-    prompt: 'do the thing',
-    cronExpr: '0 17 * * 1-5',
-    enabled: true,
+    id,
+    dir: `/persistent/centraid-automations/${id}`,
+    name,
+    triggers,
+    enabled,
     manifest: {
+      name,
+      version: '0.1.0',
+      enabled,
       prompt: 'do the thing',
-      trigger: { kind: 'cron', expr: '0 17 * * 1-5' },
+      triggers,
       requires: { model: 'anthropic/claude-3-5-sonnet' },
       history: { keep: { count: 100 } },
       generated: { by: 'template', at: '2026-05-19T00:00:00Z' },
     },
-    createdAt: 1,
-    updatedAt: 1,
-    ...overrides,
   };
 }
 

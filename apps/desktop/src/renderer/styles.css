@@ -5118,7 +5118,9 @@ textarea {
 .cd-newauto {
   width: 480px;
   max-width: calc(100vw - 48px);
-  margin: 12vh auto 0;
+  max-height: 78vh;
+  overflow-y: auto;
+  margin: 8vh auto 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -5186,6 +5188,101 @@ textarea {
 .cd-newauto-create:disabled {
   opacity: 0.6;
   cursor: default;
+}
+.cd-newauto-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cd-border, rgba(0, 0, 0, 0.12));
+}
+.cd-newauto-section-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+.cd-newauto-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: 0.66;
+}
+.cd-newauto-triggers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-newauto-trigger-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--cd-border, rgba(0, 0, 0, 0.14));
+  border-radius: 8px;
+  background: var(--cd-surface-2, #fafafa);
+}
+.cd-newauto-trigger-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cd-newauto-trigger-kind {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+.cd-newauto-trigger-remove {
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 7px;
+  border: 1px solid var(--cd-border, rgba(0, 0, 0, 0.16));
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.cd-newauto-trigger-remove:hover {
+  opacity: 1;
+}
+.cd-newauto-addrow {
+  display: flex;
+  gap: 8px;
+}
+.cd-newauto-add {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border: 1px dashed var(--cd-border, rgba(0, 0, 0, 0.22));
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.cd-newauto-add:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.cd-newauto-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+.cd-newauto-app {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 4px 2px;
+  cursor: pointer;
 }
 .cd-automations-host {
   flex: 1;

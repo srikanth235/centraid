@@ -32,7 +32,7 @@ describe('scaffoldAutomationProject', () => {
     );
     assert.equal(manifest.name, 'Daily digest');
     assert.equal(manifest.prompt, 'Summarize my PRs');
-    assert.equal(manifest.trigger.expr, '0 8 * * *');
+    assert.deepEqual(manifest.triggers, [{ kind: 'cron', expr: '0 8 * * *' }]);
     assert.deepEqual(manifest.apps, ['todos']);
     assert.equal(manifest.enabled, true);
 
@@ -48,7 +48,7 @@ describe('scaffoldAutomationProject', () => {
       await fs.readFile(path.join(dir, 'autox', 'automation.json'), 'utf8'),
     );
     assert.equal(manifest.name, 'autox');
-    assert.equal(manifest.trigger.expr, '0 9 * * *');
+    assert.deepEqual(manifest.triggers, [{ kind: 'cron', expr: '0 9 * * *' }]);
   });
 
   it('rejects a duplicate directory', async () => {
