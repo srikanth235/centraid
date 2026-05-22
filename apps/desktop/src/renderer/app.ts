@@ -2375,7 +2375,17 @@
     main.append(scroll);
     scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading run…'));
     mountShellPage('automations', main);
-    void (async () => {
+
+    // While the run is still in flight (`endedAt` unset) the ledger is
+    // re-read on an interval, so the thread streams its steps live.
+    let stopped = false;
+    let pollTimer: number | undefined;
+    registerCleanup(() => {
+      stopped = true;
+      if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+    });
+
+    const load = async (): Promise<void> => {
       let row: CentraidAutomationRow | null = null;
       let run: CentraidAutomationRunRecord | null = null;
       let nodes: CentraidAutomationRunNode[] = [];
@@ -2386,7 +2396,7 @@
           window.CentraidApi.listAutomationRunNodes({ runId }),
         ]);
       } catch (err) {
-        if (document.contains(scroll)) {
+        if (!stopped && document.contains(scroll)) {
           scroll.replaceChildren(
             el(
               'div',
@@ -2397,13 +2407,21 @@
         }
         return;
       }
-      if (!document.contains(scroll)) return;
+      if (stopped || !document.contains(scroll)) return;
       if (!row || !run) {
         scroll.replaceChildren(el('div', { class: 'cd-au-loading' }, 'Run not found.'));
         return;
       }
+      // Re-render in place; keep the scroll position so a live refresh
+      // doesn't yank the page while the user is reading.
+      const prevTop = scroll.scrollTop;
       scroll.replaceChildren(buildRunView(row, run, nodes));
-    })();
+      scroll.scrollTop = prevTop;
+      if (run.endedAt === undefined) {
+        pollTimer = window.setTimeout(() => void load(), 1500);
+      }
+    };
+    void load();
   }
 
   function buildRunView(
@@ -2414,6 +2432,9 @@
     const wrap = el('div', { class: 'cd-au-rv' });
     const trigger = runTriggerLabel(run);
     const model = row.manifest.requires.model ?? 'Centraid';
+    // A run with no `endedAt` is still executing — the viewer polls and
+    // re-renders it until it finishes.
+    const inFlight = run.endedAt === undefined;
 
     // ── Breadcrumb ──
     wrap.append(
@@ -2468,11 +2489,13 @@
         el('div', { class: 'cd-au-rv-head-main' }, [
           el('div', { class: 'cd-au-rv-head-name' }, [
             row.name,
-            el(
-              'span',
-              { class: 'cd-au-status', 'data-on': String(run.ok) },
-              run.ok ? 'Completed' : 'Failed',
-            ),
+            inFlight
+              ? el('span', { class: 'cd-au-status', 'data-running': 'true' }, 'Running')
+              : el(
+                  'span',
+                  { class: 'cd-au-status', 'data-on': String(run.ok) },
+                  run.ok ? 'Completed' : 'Failed',
+                ),
           ]),
           el(
             'div',
@@ -2531,7 +2554,7 @@
       const stepsWrap = el('div', { class: 'cd-au-work-steps' });
       for (const node of nodes) stepsWrap.append(renderThreadStep(node));
       const workGroup = el('div', { class: 'cd-au-work' });
-      if (failed) workGroup.classList.add('cd-au-work--open');
+      if (failed || inFlight) workGroup.classList.add('cd-au-work--open');
       const workSum = el('button', {
         class: 'cd-au-work-sum',
         type: 'button',
@@ -2539,13 +2562,21 @@
       workSum.append(
         el('span', {
           class: 'cd-au-work-spin',
-          'data-ok': String(!failed),
-          trustedHtml: failed ? Icon.X({ size: 10 }) : Icon.Check({ size: 10 }),
+          ...(inFlight ? { 'data-running': 'true' } : { 'data-ok': String(!failed) }),
+          trustedHtml: inFlight
+            ? Icon.History({ size: 10 })
+            : failed
+              ? Icon.X({ size: 10 })
+              : Icon.Check({ size: 10 }),
         }),
         el(
           'span',
           { class: 'cd-au-work-sum-t' },
-          failed ? 'Worked, then hit an error' : 'Worked through the run',
+          inFlight
+            ? 'Working through the run'
+            : failed
+              ? 'Worked, then hit an error'
+              : 'Worked through the run',
         ),
         el('span', { class: 'cd-au-work-sum-m' }, `${nodes.length} steps`),
         el('span', { class: 'cd-au-work-chev', trustedHtml: Icon.ChevronDown({ size: 14 }) }),
@@ -2566,32 +2597,56 @@
       );
     }
 
-    // Reply message — the run's outcome as the closing turn.
-    const replyCard = el('div', { class: 'cd-au-reply-card' });
-    if (run.ok) {
-      replyCard.append(el('p', { class: 'cd-au-reply-lead' }, run.summary ?? 'The run completed.'));
-      if (run.outputJson) {
+    // Reply message — the run's outcome as the closing turn. While the
+    // run is still in flight there is no reply yet, so a pending bubble
+    // stands in until the next poll resolves it.
+    if (inFlight) {
+      thread.append(
+        el('div', { class: 'cd-au-msg' }, [
+          el('span', {
+            class: 'cd-au-node cd-au-node-reply',
+            trustedHtml: Icon.Sparkle({ size: 11 }),
+          }),
+          el('div', { class: 'cd-au-msg-actor' }, `Centraid · ${model}`),
+          el('div', { class: 'cd-au-pending' }, [
+            el('span', { class: 'cd-au-pending-dots', 'aria-hidden': 'true' }, [
+              el('i', {}),
+              el('i', {}),
+              el('i', {}),
+            ]),
+            el('span', {}, 'Working — this updates live as the run progresses.'),
+          ]),
+        ]),
+      );
+    } else {
+      const replyCard = el('div', { class: 'cd-au-reply-card' });
+      if (run.ok) {
         replyCard.append(
-          el('div', { class: 'cd-au-step-label' }, 'Output'),
-          el('pre', { class: 'cd-au-step-pre' }, prettyJson(run.outputJson)),
+          el('p', { class: 'cd-au-reply-lead' }, run.summary ?? 'The run completed.'),
+        );
+        if (run.outputJson) {
+          replyCard.append(
+            el('div', { class: 'cd-au-step-label' }, 'Output'),
+            el('pre', { class: 'cd-au-step-pre' }, prettyJson(run.outputJson)),
+          );
+        }
+      } else {
+        replyCard.append(
+          el('p', { class: 'cd-au-reply-lead' }, 'This run did not complete.'),
+          el('div', { class: 'cd-au-fail-box' }, run.error ?? 'No error detail was recorded.'),
         );
       }
-    } else {
-      replyCard.append(
-        el('p', { class: 'cd-au-reply-lead' }, 'This run did not complete.'),
-        el('div', { class: 'cd-au-fail-box' }, run.error ?? 'No error detail was recorded.'),
+      thread.append(
+        el('div', { class: 'cd-au-msg' }, [
+          el('span', {
+            class: run.ok ? 'cd-au-node cd-au-node-reply' : 'cd-au-node cd-au-node-fail',
+            trustedHtml: run.ok ? Icon.Sparkle({ size: 11 }) : Icon.X({ size: 11 }),
+          }),
+          el('div', { class: 'cd-au-msg-actor' }, run.ok ? `Centraid · ${model}` : 'Run failed'),
+          replyCard,
+        ]),
       );
     }
-    thread.append(
-      el('div', { class: 'cd-au-msg' }, [
-        el('span', {
-          class: run.ok ? 'cd-au-node cd-au-node-reply' : 'cd-au-node cd-au-node-fail',
-          trustedHtml: run.ok ? Icon.Sparkle({ size: 11 }) : Icon.X({ size: 11 }),
-        }),
-        el('div', { class: 'cd-au-msg-actor' }, run.ok ? `Centraid · ${model}` : 'Run failed'),
-        replyCard,
-      ]),
-    );
 
     // ── Side rail ──
     const railRow = (k: string, v: string): HTMLElement =>
@@ -2602,7 +2657,7 @@
     const side = el('div', { class: 'cd-au-rside' }, [
       el('div', { class: 'cd-au-rside-card' }, [
         el('div', { class: 'cd-au-rside-h' }, 'Run detail'),
-        railRow('Status', run.ok ? 'completed' : 'failed'),
+        railRow('Status', inFlight ? 'running' : run.ok ? 'completed' : 'failed'),
         railRow('Trigger', run.triggerOrigin ?? run.triggerKind),
         railRow('Duration', duration),
         railRow('Started', new Date(run.startedAt).toLocaleString()),

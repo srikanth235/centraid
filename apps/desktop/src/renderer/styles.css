@@ -8916,6 +8916,21 @@ textarea {
   background: color-mix(in srgb, var(--success) 18%, transparent);
   color: var(--success);
 }
+.cd-au-status[data-running] {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.cd-au-status[data-running]::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+  animation: cd-pulse 1.4s ease-in-out infinite;
+}
 .cd-au-actions {
   margin-left: auto;
   display: flex;
@@ -9560,6 +9575,16 @@ button.cd-au-run:hover .cd-au-run-go {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
 }
+.cd-au-work-spin[data-running] {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  animation: cd-au-spin 1.6s linear infinite;
+}
+@keyframes cd-au-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .cd-au-work-sum-t {
   font-size: 12.5px;
   font-weight: 500;
@@ -9695,6 +9720,37 @@ button.cd-au-run:hover .cd-au-run-go {
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--ink);
+}
+
+/* pending reply — shown while a run is still in flight */
+.cd-au-pending {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.cd-au-pending-dots {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+.cd-au-pending-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: cd-pulse 1.2s ease-in-out infinite;
+}
+.cd-au-pending-dots i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.cd-au-pending-dots i:nth-child(3) {
+  animation-delay: 0.36s;
 }
 
 /* run-viewer side rail */

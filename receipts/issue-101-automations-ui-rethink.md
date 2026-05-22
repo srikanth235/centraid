@@ -15,6 +15,7 @@ conversation-native model. Approved off a standalone prototype.
 - [x] Commit 3 — run viewer as chat thread
 - [x] Commit 4 — overview redesign
 - [x] Commit 5 — single-run read API
+- [x] Commit 6 — live run viewer (in-flight polling)
 
 ## What changed
 
@@ -105,6 +106,23 @@ already uses (`runsStoreForRunId`). That record carries the validated
 `outputJson`. `renderRunView` now fetches `readAutomation`,
 `readAutomationRun`, and `listAutomationRunNodes` in one `Promise.all`,
 dropping the limited list-and-find entirely.
+
+### Commit 6 — live run viewer (in-flight polling)
+
+The run viewer rendered a run once and never refreshed — a run still
+executing showed stale, and (because the ledger row's `ok` is false
+until `finishRun`) an in-flight run was even mislabelled "Failed".
+
+`renderRunView` now treats a run with no `endedAt` as in-flight: it
+re-reads `readAutomation` / `readAutomationRun` / `listAutomationRunNodes`
+every 1.5s and re-renders in place (scroll position preserved), stopping
+when the run finishes or the page is replaced (`registerCleanup`).
+`buildRunView` gained in-flight states — a pulsing "Running" status
+pill, the work group held open with a spinning marker, a pending reply
+bubble in place of the reply card, and a "running" side-rail status.
+
+This is observable today for a scheduled run opened mid-fire; commit 7
+makes "Run now" hand off straight into it.
 
 ## Out of scope
 
