@@ -72,6 +72,7 @@ const Channel = {
   AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
   AUTOMATIONS_DELETE: 'centraid:automations:delete',
   AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
+  AUTOMATIONS_READ_RUN: 'centraid:automations:read-run',
   AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
   AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
   INSIGHTS_SUMMARY: 'centraid:insights:summary',
@@ -236,6 +237,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // Run ledger reads. Returns the rows newest-first.
   listAutomationRuns: (input: { automationId?: string; limit?: number }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUNS, input),
+  readAutomationRun: (input: { runId: string }) =>
+    ipcRenderer.invoke(Channel.AUTOMATIONS_READ_RUN, input),
   listAutomationRunNodes: (input: { runId: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUN_NODES, input),
   pinAutomationRun: (input: { runId: string; pinned: boolean }) =>

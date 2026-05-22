@@ -571,6 +571,11 @@ interface CentraidApi {
     automationId?: string;
     limit?: number;
   }): Promise<CentraidAutomationRunRecord[]>;
+  /**
+   * One run's full record from its own ledger — unlike the summary rows
+   * `listAutomationRuns` returns, this carries `inputJson` / `outputJson`.
+   */
+  readAutomationRun(input: { runId: string }): Promise<CentraidAutomationRunRecord | null>;
   listAutomationRunNodes(input: { runId: string }): Promise<CentraidAutomationRunNode[]>;
   /** Pin / unpin a run as a replay fixture. */
   pinAutomationRun(input: { runId: string; pinned: boolean }): Promise<{ ok: true }>;
@@ -743,13 +748,12 @@ export interface CentraidAutomationRow {
   manifest: CentraidAutomationManifest;
 }
 
-/** Result of `runAutomationNow`. */
+/**
+ * Result of `runAutomationNow`. The fire runs in the background; the
+ * `runId` lets the caller open the run viewer and poll for progress.
+ */
 export interface CentraidAutomationRunResult {
-  ok: boolean;
-  durationMs: number;
-  error?: string;
-  toolBatches: number;
-  agentCalls: number;
+  runId: string;
 }
 
 /**
@@ -940,11 +944,7 @@ declare global {
     manifest: CentraidAutomationManifest;
   }
   interface CentraidAutomationRunResult {
-    ok: boolean;
-    durationMs: number;
-    error?: string;
-    toolBatches: number;
-    agentCalls: number;
+    runId: string;
   }
   interface CentraidMintedWebhook {
     automationId: string;

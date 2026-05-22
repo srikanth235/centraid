@@ -2154,7 +2154,7 @@
         string,
         | { kind: 'idle' }
         | { kind: 'running' }
-        | { kind: 'done'; result: CentraidAutomationRunResult; finishedAt: number }
+        | { kind: 'done'; ok: boolean; durationMs: number; error?: string; finishedAt: number }
       >();
       // Uses the hoisted `cloudLogsPoll` + `stopCloudLogsPoll` so renderRight
       // (which tears down the right pane on tab switch) can clear it.
@@ -3204,13 +3204,12 @@
         if (runState.kind === 'done') {
           const chip = el('span', {
             class: 'cloud-automation-result',
-            'data-ok': String(runState.result.ok),
+            'data-ok': String(runState.ok),
           });
-          const ms = runState.result.durationMs;
-          const summary = runState.result.ok
-            ? `OK in ${ms}ms — ${runState.result.toolBatches} tool batch${runState.result.toolBatches === 1 ? '' : 'es'}, ${runState.result.agentCalls} agent call${runState.result.agentCalls === 1 ? '' : 's'}`
-            : `FAILED in ${ms}ms — ${runState.result.error ?? 'unknown error'}`;
-          chip.textContent = summary;
+          const ms = runState.durationMs;
+          chip.textContent = runState.ok
+            ? `OK in ${ms}ms`
+            : `FAILED in ${ms}ms — ${runState.error ?? 'unknown error'}`;
           actions.append(chip);
         }
         card.append(actions);
@@ -3261,22 +3260,39 @@
         automationRunState.set(row.name, { kind: 'running' });
         if (active === 'automations') drawStage();
         try {
-          const result = await Api().runAutomationNow({ automationId: row.ref });
-          automationRunState.set(row.name, { kind: 'done', result, finishedAt: Date.now() });
+          // run-now fires in the background and returns the run id; poll
+          // the ledger for the finished record to report the outcome.
+          const { runId } = await Api().runAutomationNow({ automationId: row.ref });
+          const rec = await waitForAutomationRun(runId);
+          automationRunState.set(row.name, {
+            kind: 'done',
+            ok: rec.ok,
+            durationMs: (rec.endedAt ?? Date.now()) - rec.startedAt,
+            ...(rec.error ? { error: rec.error } : {}),
+            finishedAt: Date.now(),
+          });
         } catch (err) {
           automationRunState.set(row.name, {
             kind: 'done',
-            result: {
-              ok: false,
-              durationMs: 0,
-              error: err instanceof Error ? err.message : String(err),
-              toolBatches: 0,
-              agentCalls: 0,
-            },
+            ok: false,
+            durationMs: 0,
+            error: err instanceof Error ? err.message : String(err),
             finishedAt: Date.now(),
           });
         }
         if (active === 'automations') drawStage();
+      }
+
+      // Poll the run ledger until a run finishes — run-now fires in the
+      // background, so a caller reporting an outcome must wait for it.
+      async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
+        const deadline = Date.now() + 6 * 60 * 1000;
+        while (Date.now() < deadline) {
+          const rec = await Api().readAutomationRun({ runId });
+          if (rec && rec.endedAt !== undefined) return rec;
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        throw new Error('run did not finish within 6 minutes');
       }
 
       async function onDeleteAutomation(row: CentraidAutomationRow): Promise<void> {
@@ -3915,16 +3931,28 @@
         spinning: true,
       });
       try {
-        const res = await Api().runAutomationNow({ automationId: ref });
+        // run-now fires in the background and returns the run id; poll
+        // the ledger for the finished record to surface the outcome.
+        const { runId } = await Api().runAutomationNow({ automationId: ref });
+        const deadline = Date.now() + 6 * 60 * 1000;
+        let rec: CentraidAutomationRunRecord | null = null;
+        while (Date.now() < deadline) {
+          rec = await Api().readAutomationRun({ runId });
+          if (rec && rec.endedAt !== undefined) break;
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        if (!rec || rec.endedAt === undefined) {
+          throw new Error('run did not finish within 6 minutes');
+        }
+        const durationMs = rec.endedAt - rec.startedAt;
         updateMessage(statusIdx, {
           kind: 'status',
           spinning: false,
-          text: res.ok
-            ? `Test run finished in ${(res.durationMs / 1000).toFixed(1)}s · ` +
-              `${res.toolBatches} tool batch(es), ${res.agentCalls} agent call(s)`
-            : `Test run failed: ${res.error ?? 'unknown error'}`,
+          text: rec.ok
+            ? `Test run finished in ${(durationMs / 1000).toFixed(1)}s`
+            : `Test run failed: ${rec.error ?? 'unknown error'}`,
         });
-        showToast(res.ok ? 'Test run finished' : 'Test run failed');
+        showToast(rec.ok ? 'Test run finished' : 'Test run failed');
       } catch (err) {
         updateMessage(statusIdx, {
           kind: 'status',

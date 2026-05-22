@@ -334,6 +334,9 @@
     | { kind: 'discover' }
     | { kind: 'starred' }
     | { kind: 'automations' }
+    | { kind: 'templates' }
+    | { automationId: string; kind: 'automation-view' }
+    | { automationId: string; kind: 'run-view'; runId: string }
     | { id: string; kind: 'app' }
     | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' }
     | { automationId: string; kind: 'automation-builder' };
@@ -349,6 +352,9 @@
     if (route.kind === 'discover') return 'discover';
     if (route.kind === 'starred') return 'starred';
     if (route.kind === 'automations') return 'automations';
+    if (route.kind === 'templates') return 'templates';
+    if (route.kind === 'automation-view') return `automation-view:${route.automationId}`;
+    if (route.kind === 'run-view') return `run-view:${route.runId}`;
     if (route.kind === 'app') return `app:${route.id}`;
     if (route.kind === 'automation-builder') return `automation-builder:${route.automationId}`;
     if (route.appContext) return `builder:${route.appContext.id}`;
@@ -398,6 +404,12 @@
         renderStarred();
       } else if (route.kind === 'automations') {
         renderAutomations();
+      } else if (route.kind === 'templates') {
+        renderAutomationTemplates();
+      } else if (route.kind === 'automation-view') {
+        renderAutomationView(route.automationId);
+      } else if (route.kind === 'run-view') {
+        renderRunView(route.automationId, route.runId);
       } else if (route.kind === 'app') {
         openApp(route.id);
       } else if (route.kind === 'automation-builder') {
@@ -1145,7 +1157,7 @@
 
     const bodyHost = el('div', { class: 'cd-ins-body' });
     page.append(bodyHost);
-    bodyHost.append(el('div', { class: 'cd-automations-loading' }, 'Loading insights…'));
+    bodyHost.append(el('div', { class: 'cd-au-loading' }, 'Loading insights…'));
     mountShellPage('insights', main);
 
     let summary: CentraidInsightsSummary;
@@ -1407,70 +1419,215 @@
     run: CentraidAutomationRunRecord;
   }
 
+  // The Automations landing — a single overview rather than the old
+  // two-tab (Executions / Standing orders) shell: your automations on
+  // the left, the recent-run stream on the right. Each automation opens
+  // its viewer; each run opens as a thread.
   function renderAutomations(): void {
     recordRoute({ kind: 'automations' });
     clear();
-    // The Automations page owns a flex-column layout (rather than
-    // pageScroll's single scroll column) so the executions master-detail
-    // can fill the viewport with independently-scrolling panes.
     const main = el('div', { class: 'has-wall' });
-    const newBtn = el('button', {
-      class: 'cd-automations-new',
-      type: 'button',
-      trustedHtml: `${Icon.Sparkle({ size: 13 })}<span>New automation</span>`,
-      onClick: () => void createAndOpenAutomationBuilder(),
-    });
-    const topbar = el('div', { class: 'cd-automations-topbar' }, [
-      el('div', { class: 'cd-page-head' }, [
-        el('h1', {}, 'Automations'),
-        el('p', {}, 'Scheduled tasks that run on their own.'),
-      ]),
-      newBtn,
-    ]);
-    const tabRow = el('div', { class: 'cd-automations-tabswitch', role: 'tablist' });
-    topbar.append(tabRow);
-    const host = el('div', { class: 'cd-automations-host' });
-    main.append(topbar, host);
-
-    // Two views, n8n-style: the executions log (every run, with per-step
-    // timing) and the standing-order definitions grouped by app.
-    const tabs: ReadonlyArray<{
-      id: string;
-      label: string;
-      render: (host: HTMLElement, isStale: () => boolean) => void;
-    }> = [
-      { id: 'runs', label: 'Executions', render: renderAutomationsRunsInto },
-      { id: 'orders', label: 'Standing orders', render: renderAutomationsOrdersInto },
-    ];
-    const tabBtns = new Map<string, HTMLElement>();
-
-    // Bumped on every tab switch so an in-flight async render that
-    // resolves after the user moved away can detect it's stale.
-    let renderSeq = 0;
-    const select = (id: string): void => {
-      const tab = tabs.find((t) => t.id === id) ?? tabs[0]!;
-      for (const [tid, btn] of tabBtns) {
-        if (tid === tab.id) btn.dataset.active = 'true';
-        else delete btn.dataset.active;
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
+    scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading automations…'));
+    mountShellPage('automations', main);
+    void (async () => {
+      let rows: CentraidAutomationRow[] = [];
+      let entries: AutomationFeedEntry[] = [];
+      try {
+        [rows, entries] = await Promise.all([
+          window.CentraidApi.listAutomations(),
+          collectAutomationRuns(),
+        ]);
+      } catch (err) {
+        if (document.contains(scroll)) {
+          scroll.replaceChildren(
+            el(
+              'div',
+              { class: 'cd-au-loading' },
+              `Could not load automations: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
+        }
+        return;
       }
-      const seq = ++renderSeq;
-      host.replaceChildren(el('div', { class: 'cd-automations-loading' }, 'Loading…'));
-      tab.render(host, () => seq !== renderSeq || !document.contains(host));
-    };
-    for (const t of tabs) {
-      const btn = el('button', {
-        class: 'cd-automations-tab',
+      if (!document.contains(scroll)) return;
+      scroll.replaceChildren(buildAutomationsOverview(rows, entries));
+    })();
+  }
+
+  // Header actions shared by the overview and its empty state.
+  function automationsHeaderActions(): HTMLElement {
+    return el('div', { class: 'cd-au-actions' }, [
+      el('button', {
+        class: 'cd-au-btn cd-au-btn-ghost',
         type: 'button',
-        role: 'tab',
-        onClick: () => select(t.id),
-      });
-      btn.textContent = t.label;
-      tabBtns.set(t.id, btn);
-      tabRow.append(btn);
+        trustedHtml: `${Icon.Bolt({ size: 14 })}<span>Browse templates</span>`,
+        onClick: () => renderAutomationTemplates(),
+      }),
+      el('button', {
+        class: 'cd-au-btn cd-au-btn-primary',
+        type: 'button',
+        trustedHtml: `${Icon.Sparkle({ size: 14 })}<span>New automation</span>`,
+        onClick: () => void createAndOpenAutomationBuilder(),
+      }),
+    ]);
+  }
+
+  // One automation in the overview list — opens the automation viewer.
+  function renderOverviewAutomationRow(
+    row: CentraidAutomationRow,
+    last: AutomationFeedEntry | undefined,
+  ): HTMLElement {
+    const hasCron = row.triggers.some((t) => t.kind === 'cron');
+    const hasWebhook = row.triggers.some((t) => t.kind === 'webhook');
+    const trigIcon = hasWebhook && !hasCron ? Icon.Globe({ size: 12 }) : Icon.History({ size: 12 });
+    return el(
+      'button',
+      {
+        class: 'cd-au-ov-row',
+        type: 'button',
+        'data-on': String(row.enabled),
+        onClick: () => renderAutomationView(row.ref),
+      },
+      [
+        el('span', {
+          class: 'cd-au-ov-glyph',
+          'data-on': String(row.enabled),
+          trustedHtml: Icon.Bolt({ size: 17 }),
+        }),
+        el('span', { class: 'cd-au-ov-body' }, [
+          el('span', { class: 'cd-au-ov-name' }, row.name),
+          el('span', { class: 'cd-au-ov-trig' }, [
+            el('span', { class: 'cd-au-ov-trig-ic', trustedHtml: trigIcon }),
+            triggersSummary(row.triggers),
+          ]),
+        ]),
+        el('span', { class: 'cd-au-ov-right' }, [
+          el(
+            'span',
+            { class: 'cd-au-status', 'data-on': String(row.enabled) },
+            row.enabled ? 'Active' : 'Paused',
+          ),
+          el(
+            'span',
+            { class: 'cd-au-ov-last' },
+            last
+              ? `Last run ${relativeTime(new Date(last.run.startedAt).toISOString())}`
+              : 'No runs yet',
+          ),
+        ]),
+      ],
+    );
+  }
+
+  // One run in the overview's recent-activity stream — opens the thread.
+  function renderOverviewRunRow(entry: AutomationFeedEntry): HTMLElement {
+    const { run, automationName, automationId } = entry;
+    return el(
+      'button',
+      {
+        class: 'cd-au-ov-run',
+        type: 'button',
+        'data-ok': String(run.ok),
+        onClick: () => renderRunView(automationId, run.runId),
+      },
+      [
+        el('span', {
+          class: 'cd-au-ov-run-ic',
+          'data-ok': String(run.ok),
+          trustedHtml: run.ok ? Icon.Check({ size: 12 }) : Icon.X({ size: 12 }),
+        }),
+        el('span', { class: 'cd-au-ov-run-body' }, [
+          el('span', { class: 'cd-au-ov-run-name' }, automationName),
+          el(
+            'span',
+            { class: 'cd-au-ov-run-sum' },
+            run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
+          ),
+        ]),
+        el('span', { class: 'cd-au-ov-run-when' }, [
+          el('b', {}, relativeTime(new Date(run.startedAt).toISOString())),
+          el('span', {}, run.triggerOrigin ?? run.triggerKind),
+        ]),
+      ],
+    );
+  }
+
+  function buildAutomationsOverview(
+    rows: readonly CentraidAutomationRow[],
+    entries: readonly AutomationFeedEntry[],
+  ): HTMLElement {
+    const wrap = el('div', { class: 'cd-au-ov' });
+
+    // Recent runs — automation fires only, newest first.
+    const runs = entries
+      .filter((e) => e.automationId)
+      .slice()
+      .sort((a, b) => b.run.startedAt - a.run.startedAt);
+    // Most-recent run per automation, for the "last run" line.
+    const lastByRef = new Map<string, AutomationFeedEntry>();
+    for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
+
+    const active = rows.filter((r) => r.enabled).length;
+    const subParts = [`${active} active`, `${rows.length - active} paused`];
+    if (runs.length > 0) subParts.push(`${runs.length} recent runs`);
+
+    wrap.append(
+      el('div', { class: 'cd-au-ov-head' }, [
+        el('div', {}, [
+          el('h1', { class: 'cd-au-ov-title' }, 'Automations'),
+          el(
+            'p',
+            { class: 'cd-au-ov-sub' },
+            rows.length > 0 ? subParts.join('  ·  ') : 'Conversations that run on their own.',
+          ),
+        ]),
+        automationsHeaderActions(),
+      ]),
+    );
+
+    if (rows.length === 0) {
+      wrap.append(
+        el('div', { class: 'cd-au-empty' }, [
+          el('div', { class: 'cd-au-empty-icon', trustedHtml: Icon.Bolt({ size: 22 }) }),
+          el('div', { class: 'cd-au-empty-title' }, 'No automations yet'),
+          el(
+            'div',
+            { class: 'cd-au-empty-text' },
+            'An automation is a saved conversation that fires on a trigger. Start from a template, or describe one from scratch.',
+          ),
+        ]),
+      );
+      return wrap;
     }
 
-    mountShellPage('automations', main);
-    select('runs');
+    // Left — your automations.
+    const listCol = el('div', {}, [
+      el('div', { class: 'cd-au-ov-sec' }, [
+        el('span', { class: 'cd-au-ov-sec-t' }, 'Your automations'),
+        el('span', { class: 'cd-au-ov-sec-m' }, String(rows.length)),
+      ]),
+      el(
+        'div',
+        { class: 'cd-au-ov-list' },
+        rows.map((r) => renderOverviewAutomationRow(r, lastByRef.get(r.ref))),
+      ),
+    ]);
+
+    // Right — recent run stream.
+    const runStream = runs.length
+      ? el('div', { class: 'cd-au-ov-stream' }, runs.slice(0, 24).map(renderOverviewRunRow))
+      : el('div', { class: 'cd-au-ov-stream cd-au-ov-stream-empty' }, 'No runs recorded yet.');
+    const runCol = el('div', {}, [
+      el('div', { class: 'cd-au-ov-sec' }, [
+        el('span', { class: 'cd-au-ov-sec-t' }, 'Recent runs'),
+      ]),
+      runStream,
+    ]);
+
+    wrap.append(el('div', { class: 'cd-au-ov-cols' }, [listCol, runCol]));
+    return wrap;
   }
 
   // Scaffold a fresh draft automation, then open the conversational
@@ -1514,40 +1671,1026 @@
       }) ?? null;
   }
 
-  function automationsEmpty(host: HTMLElement, title: string, sub: string): void {
-    host.replaceChildren(
-      el('div', { class: 'cd-automations-empty-wrap' }, [
-        el('div', { class: 'cd-page-empty' }, [
-          el('div', { class: 'cd-page-empty-icon', trustedHtml: Icon.Bolt({ size: 22 }) }),
-          el('div', { class: 'cd-page-empty-text' }, [
-            el('div', { class: 'cd-page-empty-title' }, title),
-            el('div', {}, sub),
-          ]),
-        ]),
+  // ───────────────────────── Templates gallery ─────────────────────
+  // Automations have no backend template concept — a "template" is a
+  // front-end seed: a name, a trigger, and a prompt. Adopting one
+  // scaffolds a real (disabled) automation via createAutomation and
+  // drops the user into the conversational builder to refine it.
+  interface AutomationTemplate {
+    emoji: string;
+    name: string;
+    category: string;
+    description: string;
+    triggerKind: 'cron' | 'webhook';
+    triggerLabel: string;
+    triggers: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
+    integrations: readonly string[];
+    prompt: string;
+  }
+
+  // Integration name → app-icon hue (the --c-<hue> palette tokens).
+  const INTEGRATION_HUES: Readonly<Record<string, string>> = {
+    Gmail: 'rose',
+    'Google Calendar': 'indigo',
+    Slack: 'violet',
+    GitHub: 'slate',
+    Linear: 'indigo',
+    PagerDuty: 'forest',
+    Datadog: 'violet',
+    Sentry: 'ochre',
+    npm: 'ochre',
+    Notion: 'slate',
+  };
+
+  const AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
+    {
+      emoji: '🌤',
+      name: 'Briefing',
+      category: 'Daily rhythm',
+      description:
+        'A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 6:00 PM',
+      triggers: [{ kind: 'cron', expr: '0 18 * * 1-5' }],
+      integrations: ['Google Calendar', 'Gmail', 'Slack'],
+      prompt: [
+        'Generate a briefing to help me catch up. Include:',
+        '',
+        '1. Schedule — upcoming meetings and events with times, attendees, and any prep needed.',
+        '2. Important emails — unread mail that needs attention, grouped by urgency.',
+        '3. Messages requiring response — direct messages or mentions that need a reply.',
+        '4. Action items — pending tasks or follow-ups from recent activity.',
+        '',
+        'Keep it concise and scannable. If a section has nothing notable, skip it rather than saying "nothing to report."',
+      ].join('\n'),
+    },
+    {
+      emoji: '🌙',
+      name: 'Evening wrap-up',
+      category: 'Daily rhythm',
+      description:
+        'Reflects on what got done today and stages tomorrow’s top three so mornings start sharp.',
+      triggerKind: 'cron',
+      triggerLabel: 'Daily · 9:00 PM',
+      triggers: [{ kind: 'cron', expr: '0 21 * * *' }],
+      integrations: ['Linear', 'Notion'],
+      prompt: [
+        'Wrap up my day. Summarize what was completed, what slipped, and why.',
+        'Then propose the three most important things to tackle tomorrow, ordered by impact.',
+        'Keep it short — a few lines per section.',
+      ].join('\n'),
+    },
+    {
+      emoji: '📨',
+      name: 'Email triage',
+      category: 'Inbox & comms',
+      description:
+        'Sorts your inbox by urgency and drafts replies for anything that genuinely needs one.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 8:30 AM',
+      triggers: [{ kind: 'cron', expr: '30 8 * * 1-5' }],
+      integrations: ['Gmail'],
+      prompt: [
+        'Triage my unread inbox. Group messages into: needs a reply today, can wait, and FYI only.',
+        'For anything that needs a reply, draft a concise response I can review and send.',
+        'Ignore newsletters and automated notifications.',
+      ].join('\n'),
+    },
+    {
+      emoji: '📋',
+      name: 'Meeting prep',
+      category: 'Inbox & comms',
+      description:
+        'Each weekday morning, gathers context, recent threads, and open questions for the day’s meetings.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 8:45 AM',
+      triggers: [{ kind: 'cron', expr: '45 8 * * 1-5' }],
+      integrations: ['Google Calendar', 'Notion'],
+      prompt: [
+        'For each meeting on my calendar today, prepare a short brief:',
+        'who is attending, what the meeting is about, recent related threads or docs, and any open questions I should raise.',
+      ].join('\n'),
+    },
+    {
+      emoji: '🔍',
+      name: 'PR review digest',
+      category: 'Engineering',
+      description:
+        'Surfaces open pull requests, who is blocked on whom, and what is ready to merge.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 11:30 PM',
+      triggers: [{ kind: 'cron', expr: '30 23 * * 1-5' }],
+      integrations: ['GitHub'],
+      prompt: [
+        'Summarize open pull requests across the repo. Group by: needs my review, waiting on others, ready to merge, and failing CI.',
+        'For anything stale more than two days, say how long it has been waiting.',
+      ].join('\n'),
+    },
+    {
+      emoji: '📝',
+      name: 'Release notes drafter',
+      category: 'Engineering',
+      description: 'Drafts user-facing release notes the moment a pull request merges into main.',
+      triggerKind: 'webhook',
+      triggerLabel: 'On merge to main',
+      triggers: [{ kind: 'webhook' }],
+      integrations: ['GitHub'],
+      prompt: [
+        'When a pull request merges to main, draft user-facing release notes.',
+        'Write for end users, not engineers. Skip internal refactors. Lead with the most visible change.',
+      ].join('\n'),
+    },
+    {
+      emoji: '📦',
+      name: 'Dependency update check',
+      category: 'Engineering',
+      description:
+        'Scans for outdated packages, security patches, and breaking changes before they bite.',
+      triggerKind: 'cron',
+      triggerLabel: 'Tuesdays · 12:00 AM',
+      triggers: [{ kind: 'cron', expr: '0 0 * * 2' }],
+      integrations: ['npm', 'GitHub'],
+      prompt: [
+        'Scan package manifests for outdated dependencies.',
+        'Flag security advisories first, then majors with breaking changes, then routine minors.',
+        'Suggest a safe upgrade order.',
+      ].join('\n'),
+    },
+    {
+      emoji: '🩺',
+      name: 'System health check',
+      category: 'Reliability',
+      description:
+        'Watches infrastructure and services for errors, outages, and creeping performance issues.',
+      triggerKind: 'cron',
+      triggerLabel: 'Daily · 5:30 PM',
+      triggers: [{ kind: 'cron', expr: '30 17 * * *' }],
+      integrations: ['PagerDuty', 'Datadog', 'Sentry'],
+      prompt: [
+        'Review infrastructure and service health for the last 24 hours.',
+        'Report active incidents, error-rate spikes, and any metric trending toward a threshold.',
+        'If everything is healthy, say so in one line.',
+      ].join('\n'),
+    },
+    {
+      emoji: '🎫',
+      name: 'Issue triage',
+      category: 'Reliability',
+      description:
+        'Reviews incoming bugs and feature requests, labels them, and routes the urgent ones.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 9:00 AM',
+      triggers: [{ kind: 'cron', expr: '0 9 * * 1-5' }],
+      integrations: ['Linear'],
+      prompt: [
+        'Review issues opened since the last run. For each, propose a label (bug / feature / question),',
+        'a priority, and the team it should route to. Flag anything that looks like an outage.',
+      ].join('\n'),
+    },
+    {
+      emoji: '🎲',
+      name: 'Flaky test tracker',
+      category: 'Reliability',
+      description:
+        'Finds tests that pass and fail intermittently across recent CI runs and ranks the worst.',
+      triggerKind: 'cron',
+      triggerLabel: 'Mondays · 9:30 AM',
+      triggers: [{ kind: 'cron', expr: '30 9 * * 1' }],
+      integrations: ['GitHub'],
+      prompt: [
+        'Find tests that pass and fail intermittently across the last 50 CI runs.',
+        'Rank by flake rate. Note which were introduced recently.',
+      ].join('\n'),
+    },
+  ];
+
+  // A row of integration chips — colored dot + name.
+  function renderIntegrationChips(integrations: readonly string[]): HTMLElement {
+    const wrap = el('div', { class: 'cd-au-chips' });
+    for (const name of integrations) {
+      const hue = INTEGRATION_HUES[name] ?? 'slate';
+      const dot = el('i', { class: 'cd-au-chip-dot', 'aria-hidden': 'true' });
+      dot.style.background = `var(--c-${hue})`;
+      wrap.append(el('span', { class: 'cd-au-chip' }, [dot, name]));
+    }
+    return wrap;
+  }
+
+  function renderAutomationTemplateCard(template: AutomationTemplate): HTMLElement {
+    const card = el('button', {
+      class: 'cd-au-tpl-card',
+      type: 'button',
+      onClick: () => void adoptTemplate(template),
+    });
+    const trigIcon =
+      template.triggerKind === 'webhook' ? Icon.Globe({ size: 13 }) : Icon.History({ size: 13 });
+    card.append(
+      el('span', {
+        class: 'cd-au-tpl-use',
+        trustedHtml: `<span>Use template</span>${Icon.ArrowRight({ size: 13 })}`,
+      }),
+      el('span', { class: 'cd-au-tpl-top' }, [
+        el('span', { class: 'cd-au-tpl-emoji' }, template.emoji),
+        el('span', { class: 'cd-au-tpl-name' }, template.name),
       ]),
+      el('span', { class: 'cd-au-tpl-desc' }, template.description),
+      el('span', { class: 'cd-au-tpl-foot' }, [
+        el('span', { class: 'cd-au-tpl-trig' }, [
+          el('span', { class: 'cd-au-tpl-trig-icon', trustedHtml: trigIcon }),
+          template.triggerLabel,
+        ]),
+        renderIntegrationChips(template.integrations),
+      ]),
+    );
+    return card;
+  }
+
+  function renderAutomationTemplates(): void {
+    recordRoute({ kind: 'templates' });
+    clear();
+    const { main, scroll } = pageScroll(
+      'Templates',
+      'Proven automations, pre-wired with triggers and integrations. Adopt one and tune it to your workflow.',
+    );
+    const cats: string[] = [];
+    for (const t of AUTOMATION_TEMPLATES) if (!cats.includes(t.category)) cats.push(t.category);
+    const catsWrap = el('div', { class: 'cd-au-tpl-cats' });
+    for (const cat of cats) {
+      const grid = el('div', { class: 'cd-au-tpl-grid' });
+      for (const t of AUTOMATION_TEMPLATES) {
+        if (t.category === cat) grid.append(renderAutomationTemplateCard(t));
+      }
+      catsWrap.append(
+        el('section', { class: 'cd-au-tpl-cat' }, [
+          el('div', { class: 'cd-au-tpl-cat-label' }, cat),
+          grid,
+        ]),
+      );
+    }
+    scroll.append(catsWrap);
+    mountShellPage('automations', main);
+  }
+
+  // Scaffold a disabled automation from a template, then open the
+  // builder so the user can review the trigger + prompt before enabling.
+  async function adoptTemplate(template: AutomationTemplate): Promise<void> {
+    const id = `auto.${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      await window.CentraidApi.createAutomation({
+        id,
+        name: template.name,
+        description: template.description,
+        prompt: template.prompt,
+        triggers: template.triggers,
+        enabled: false,
+      });
+    } catch (err) {
+      showToast(`Could not create automation: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    enterAutomationBuilder({ automationId: id });
+  }
+
+  // ───────────────────────── Automation viewer ─────────────────────
+  // A per-automation detail page: the trigger as a sentence, the prompt
+  // it runs, and its run history. `automationId` is the `<appId>/<id>`
+  // ref. Reached from the standing-order list.
+
+  function fmtTokens(n: number): string {
+    if (n <= 0) return '—';
+    if (n < 1000) return String(n);
+    return `${(n / 1000).toFixed(1)}k`;
+  }
+
+  // Sum/derive the lifetime KPIs shown in the viewer's side rail.
+  function automationLifetime(runs: readonly CentraidAutomationRunRecord[]): {
+    total: number;
+    successPct: number | null;
+    avg: string;
+    cost: string;
+  } {
+    const total = runs.length;
+    const ok = runs.filter((r) => r.ok).length;
+    const durations = runs
+      .filter((r) => r.endedAt !== undefined)
+      .map((r) => r.endedAt! - r.startedAt);
+    const avgMs = durations.length
+      ? durations.reduce((a, b) => a + b, 0) / durations.length
+      : undefined;
+    const cost = runs.reduce((s, r) => s + (r.totalCostUsd ?? 0), 0);
+    return {
+      total,
+      successPct: total ? Math.round((ok / total) * 100) : null,
+      avg: avgMs !== undefined ? formatDuration(Math.round(avgMs)) : '—',
+      cost: cost > 0 ? `$${cost.toFixed(2)}` : '—',
+    };
+  }
+
+  // One run in the viewer's history list — opens as a chat thread.
+  function renderAuRunRow(run: CentraidAutomationRunRecord): HTMLElement {
+    const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
+    const duration =
+      run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
+    const meta = [run.triggerOrigin ?? run.triggerKind, duration, `${fmtTokens(tokens)} tokens`];
+    if (run.totalCostUsd) meta.push(`$${run.totalCostUsd.toFixed(2)}`);
+    return el(
+      'button',
+      {
+        class: 'cd-au-run',
+        type: 'button',
+        'data-ok': String(run.ok),
+        onClick: () => {
+          if (run.automationId) renderRunView(run.automationId, run.runId);
+        },
+      },
+      [
+        el('span', { class: 'cd-au-run-dot', 'aria-hidden': 'true' }),
+        el('span', { class: 'cd-au-run-mid' }, [
+          el(
+            'span',
+            { class: 'cd-au-run-sum' },
+            run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
+          ),
+          el('span', { class: 'cd-au-run-meta' }, meta.join('  ·  ')),
+        ]),
+        el('span', { class: 'cd-au-run-when' }, new Date(run.startedAt).toLocaleString()),
+        el('span', { class: 'cd-au-run-go', trustedHtml: Icon.ArrowRight({ size: 15 }) }),
+      ],
     );
   }
 
-  // "Standing orders" tab — the flat list of automation projects.
-  function renderAutomationsOrdersInto(host: HTMLElement, isStale: () => boolean): void {
+  function renderAutomationView(automationId: string): void {
+    recordRoute({ kind: 'automation-view', automationId });
+    clear();
+    const main = el('div', { class: 'has-wall' });
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
+    scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading automation…'));
+    mountShellPage('automations', main);
     void (async () => {
-      let rows: CentraidAutomationRow[];
+      let row: CentraidAutomationRow | null = null;
+      let runs: CentraidAutomationRunRecord[] = [];
       try {
-        rows = await window.CentraidApi.listAutomations();
-      } catch {
-        rows = [];
-      }
-      if (isStale()) return;
-      if (rows.length === 0) {
-        automationsEmpty(host, 'No automations yet', 'Create one to run a task on a schedule.');
+        [row, runs] = await Promise.all([
+          window.CentraidApi.readAutomation({ automationId }),
+          window.CentraidApi.listAutomationRuns({ automationId, limit: 40 }),
+        ]);
+      } catch (err) {
+        if (document.contains(scroll)) {
+          scroll.replaceChildren(
+            el(
+              'div',
+              { class: 'cd-au-loading' },
+              `Could not load automation: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
+        }
         return;
       }
-      const scroll = el('div', { class: 'cd-automations-orders' });
-      const col = el('div', { class: 'cd-automations-orders-col' });
-      col.append(renderAutomationsSection(rows, col));
-      scroll.append(col);
-      host.replaceChildren(scroll);
+      if (!document.contains(scroll)) return;
+      if (!row) {
+        scroll.replaceChildren(el('div', { class: 'cd-au-loading' }, 'Automation not found.'));
+        return;
+      }
+      scroll.replaceChildren(buildAutomationView(row, runs));
     })();
+  }
+
+  function buildAutomationView(
+    row: CentraidAutomationRow,
+    runs: readonly CentraidAutomationRunRecord[],
+  ): HTMLElement {
+    const view = el('div', { class: 'cd-au-view' });
+    const hasWebhook = row.triggers.some((t) => t.kind === 'webhook');
+    const hasCron = row.triggers.some((t) => t.kind === 'cron');
+
+    // ── Breadcrumb + header ──
+    const crumb = el('div', { class: 'cd-au-crumb' }, [
+      el('button', { type: 'button', onClick: () => renderAutomations() }, 'Automations'),
+      el('span', { class: 'cd-au-crumb-sep', trustedHtml: Icon.ArrowRight({ size: 12 }) }),
+      el('span', {}, row.name),
+    ]);
+
+    const statusPill = el(
+      'span',
+      { class: 'cd-au-status', 'data-on': String(row.enabled) },
+      row.enabled ? 'Active' : 'Paused',
+    );
+    const title = el('div', { class: 'cd-au-vtitle' }, [
+      el('span', {
+        class: 'cd-au-glyph',
+        'data-on': String(row.enabled),
+        trustedHtml: Icon.Bolt({ size: 19 }),
+      }),
+      el('h1', {}, row.name),
+      statusPill,
+    ]);
+
+    const editBtn = el('button', {
+      class: 'cd-au-btn cd-au-btn-ghost cd-au-btn-icon',
+      type: 'button',
+      title: 'Edit in builder',
+      trustedHtml: Icon.Pencil({ size: 15 }),
+      onClick: () => enterAutomationBuilder({ automationId: row.id }),
+    });
+    const runBtn = el('button', {
+      class: 'cd-au-btn cd-au-btn-primary',
+      type: 'button',
+      trustedHtml: `${Icon.Play({ size: 14 })}<span>Run now</span>`,
+    }) as HTMLButtonElement;
+    runBtn.addEventListener('click', () => {
+      runBtn.disabled = true;
+      runBtn.querySelector('span')!.textContent = 'Starting…';
+      void (async () => {
+        try {
+          const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          // Hand off to the run viewer, which streams the run live.
+          renderRunView(row.ref, runId);
+        } catch (err) {
+          runBtn.disabled = false;
+          runBtn.querySelector('span')!.textContent = 'Run now';
+          showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      })();
+    });
+    const header = el('div', { class: 'cd-au-vhead' }, [
+      el('div', {}, [crumb, title]),
+      el('div', { class: 'cd-au-actions' }, [editBtn, runBtn]),
+    ]);
+    view.append(header);
+
+    // ── Trigger hero ──
+    const cronExprs = row.triggers
+      .filter((t): t is { kind: 'cron'; expr: string } => t.kind === 'cron')
+      .map((t) => t.expr);
+    const triggerDetail = el('div', { class: 'cd-au-hero-detail' });
+    if (hasCron) {
+      for (const expr of cronExprs) {
+        triggerDetail.append(el('span', { class: 'cd-au-hero-tag' }, 'cron'), el('code', {}, expr));
+      }
+    }
+    if (hasWebhook) {
+      const wh = row.triggers.find((t) => t.kind === 'webhook') as
+        | { kind: 'webhook'; id?: string; pending?: true }
+        | undefined;
+      triggerDetail.append(
+        el('span', { class: 'cd-au-hero-tag' }, 'webhook'),
+        el('code', {}, wh?.pending ? 'pending activation' : (wh?.id ?? 'endpoint assigned')),
+      );
+    }
+
+    const statusToggle = el('label', {
+      class: 'cd-au-switch',
+      'aria-label': `${row.enabled ? 'Disable' : 'Enable'} ${row.name}`,
+    });
+    const toggleInput = el('input', { type: 'checkbox' }) as HTMLInputElement;
+    toggleInput.checked = row.enabled;
+    toggleInput.addEventListener('change', () => {
+      const next = toggleInput.checked;
+      void (async () => {
+        try {
+          await window.CentraidApi.setAutomationEnabled({ automationId: row.ref, enabled: next });
+          renderAutomationView(row.ref);
+        } catch (err) {
+          toggleInput.checked = row.enabled;
+          showToast(
+            `Could not ${next ? 'enable' : 'disable'} ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      })();
+    });
+    statusToggle.append(
+      toggleInput,
+      el('span', { class: 'cd-au-switch-track', 'aria-hidden': 'true' }),
+    );
+
+    const hero = el('div', { class: 'cd-au-hero' }, [
+      el('span', {
+        class: 'cd-au-hero-icon',
+        trustedHtml: hasWebhook && !hasCron ? Icon.Globe({ size: 26 }) : Icon.History({ size: 26 }),
+      }),
+      el('div', { class: 'cd-au-hero-main' }, [
+        el('div', { class: 'cd-au-hero-eyebrow' }, hasWebhook && !hasCron ? 'Trigger' : 'Schedule'),
+        el('div', { class: 'cd-au-hero-when' }, triggersSummary(row.triggers)),
+        triggerDetail,
+      ]),
+      el('div', { class: 'cd-au-hero-status' }, [
+        el('div', { class: 'cd-au-hero-eyebrow' }, 'Status'),
+        el('div', { class: 'cd-au-hero-toggle' }, [
+          statusToggle,
+          el('span', {}, row.enabled ? 'Active' : 'Paused'),
+        ]),
+      ]),
+    ]);
+    view.append(hero);
+
+    // ── Two columns: instructions + runs / side rail ──
+    const cols = el('div', { class: 'cd-au-cols' });
+
+    const instrCard = el('div', { class: 'cd-au-card' }, [
+      el('div', { class: 'cd-au-card-h' }, [el('h3', {}, 'Instructions')]),
+      el('div', { class: 'cd-au-instr' }, row.manifest.prompt || 'No instructions yet.'),
+    ]);
+
+    // Runs card — filter chips repaint just the list container.
+    const runsBody = el('div', { class: 'cd-au-runs' });
+    const filters = el('div', { class: 'cd-au-filters' });
+    let runFilter = 'all';
+    const matchesFilter = (run: CentraidAutomationRunRecord): boolean => {
+      if (runFilter === 'all') return true;
+      if (runFilter === 'webhook') return run.triggerOrigin === 'webhook';
+      return run.triggerKind === runFilter;
+    };
+    const paintRuns = (): void => {
+      const shown = runs.filter(matchesFilter);
+      runsBody.replaceChildren(
+        ...(shown.length
+          ? shown.map(renderAuRunRow)
+          : [el('div', { class: 'cd-au-runs-empty' }, `No ${runFilter} runs yet.`)]),
+      );
+      for (const chip of filters.children) {
+        const c = chip as HTMLElement;
+        if (c.dataset.filter === runFilter) c.dataset.active = 'true';
+        else delete c.dataset.active;
+      }
+    };
+    for (const f of ['all', 'scheduled', 'manual', 'webhook']) {
+      filters.append(
+        el(
+          'button',
+          {
+            class: 'cd-au-filter',
+            type: 'button',
+            'data-filter': f,
+            onClick: () => {
+              runFilter = f;
+              paintRuns();
+            },
+          },
+          f,
+        ),
+      );
+    }
+    paintRuns();
+    const runsCard = el('div', { class: 'cd-au-card' }, [
+      el('div', { class: 'cd-au-card-h' }, [
+        el('h3', {}, 'Runs'),
+        el('span', { class: 'cd-au-card-count' }, String(runs.length)),
+      ]),
+      filters,
+      runsBody,
+    ]);
+
+    cols.append(el('div', { class: 'cd-au-col-main' }, [instrCard, runsCard]));
+
+    // ── Side rail ──
+    const aboutRow = (k: string, v: HTMLElement | string): HTMLElement =>
+      el('div', { class: 'cd-au-about-row' }, [
+        el('span', { class: 'cd-au-about-k' }, k),
+        typeof v === 'string' ? el('span', { class: 'cd-au-about-v' }, v) : v,
+      ]);
+    const aboutCard = el('div', { class: 'cd-au-card' }, [
+      el('div', { class: 'cd-au-card-h' }, [el('h3', {}, 'About')]),
+      aboutRow('Owner', row.ownerApp),
+      aboutRow('Model', row.manifest.requires.model ?? 'Default'),
+      aboutRow(
+        'Apps',
+        row.manifest.apps && row.manifest.apps.length > 0
+          ? row.manifest.apps.join(', ')
+          : 'None linked',
+      ),
+    ]);
+    const mcps = row.manifest.requires.mcps ?? [];
+    if (mcps.length > 0) {
+      aboutCard.append(
+        el('div', { class: 'cd-au-about-row cd-au-about-row-wrap' }, [
+          el('span', { class: 'cd-au-about-k' }, 'Uses'),
+          renderIntegrationChips([...mcps]),
+        ]),
+      );
+    }
+
+    const life = automationLifetime(runs);
+    const statTile = (value: string, label: string, ok?: boolean): HTMLElement =>
+      el('div', { class: 'cd-au-stat' }, [
+        el('div', { class: 'cd-au-stat-v', ...(ok ? { 'data-ok': 'true' } : {}) }, value),
+        el('div', { class: 'cd-au-stat-k' }, label),
+      ]);
+    const statsCard = el('div', { class: 'cd-au-card' }, [
+      el('div', { class: 'cd-au-card-h' }, [el('h3', {}, 'Lifetime')]),
+      el('div', { class: 'cd-au-stats' }, [
+        statTile(String(life.total), 'Runs'),
+        statTile(life.successPct === null ? '—' : `${life.successPct}%`, 'Success', true),
+        statTile(life.avg, 'Avg time'),
+        statTile(life.cost, 'Total cost'),
+      ]),
+    ]);
+
+    cols.append(el('div', { class: 'cd-au-side' }, [aboutCard, statsCard]));
+    view.append(cols);
+    return view;
+  }
+
+  // ───────────────────── Run viewer (chat thread) ──────────────────
+  // A run is just a chat thread: the trigger kicked it off, Centraid
+  // worked through some steps, and it ended with a reply. The n8n-style
+  // step timeline is folded into a collapsible group inside the thread.
+
+  // Human label + icon for what fired a run.
+  function runTriggerLabel(run: CentraidAutomationRunRecord): { label: string; icon: string } {
+    if (run.triggerOrigin === 'webhook') {
+      return { label: 'Webhook trigger', icon: Icon.Globe({ size: 12 }) };
+    }
+    const byKind: Record<string, string> = {
+      scheduled: 'Scheduled run',
+      manual: 'Manual run',
+      replay: 'Replayed run',
+      on_failure: 'Failure-triggered run',
+      interactive: 'Interactive run',
+    };
+    const icon =
+      run.triggerKind === 'manual'
+        ? Icon.Bolt({ size: 12 })
+        : run.triggerKind === 'scheduled'
+          ? Icon.History({ size: 12 })
+          : Icon.Reset({ size: 12 });
+    return { label: byKind[run.triggerKind] ?? 'Run', icon };
+  }
+
+  // One node of a run rendered as a thread step — an expandable row
+  // carrying the tool/agent name, duration, and (on open) its payload.
+  function renderThreadStep(node: CentraidAutomationRunNode): HTMLElement {
+    const step = el('div', { class: 'cd-au-step', 'data-ok': String(node.ok) });
+    const body = el('div', { class: 'cd-au-step-body', hidden: 'true' });
+    const head = el('button', {
+      class: 'cd-au-step-head',
+      type: 'button',
+      'aria-expanded': 'false',
+    }) as HTMLButtonElement;
+    head.append(
+      el('span', {
+        class: 'cd-au-step-ic',
+        'data-ok': String(node.ok),
+        trustedHtml: node.ok ? Icon.Check({ size: 13 }) : Icon.X({ size: 13 }),
+      }),
+      el('span', { class: 'cd-au-step-name' }, node.name ?? node.model ?? node.kind),
+      el('span', { class: 'cd-au-step-kind' }, node.kind),
+      el(
+        'span',
+        { class: 'cd-au-step-dur' },
+        node.durationMs !== undefined ? formatDuration(node.durationMs) : '—',
+      ),
+    );
+    let built = false;
+    head.addEventListener('click', () => {
+      const open = head.getAttribute('aria-expanded') === 'true';
+      head.setAttribute('aria-expanded', String(!open));
+      body.hidden = open;
+      if (!built) {
+        built = true;
+        if (node.error) body.append(el('div', { class: 'cd-au-step-error' }, node.error));
+        if (node.argsJson) {
+          body.append(
+            el('div', { class: 'cd-au-step-label' }, 'Input'),
+            el('pre', { class: 'cd-au-step-pre' }, prettyJson(node.argsJson)),
+          );
+        }
+        if (node.outputJson) {
+          body.append(
+            el('div', { class: 'cd-au-step-label' }, 'Output'),
+            el('pre', { class: 'cd-au-step-pre' }, prettyJson(node.outputJson)),
+          );
+        }
+        if (!node.error && !node.argsJson && !node.outputJson) {
+          body.append(el('div', { class: 'cd-au-step-empty' }, 'No payload recorded.'));
+        }
+      }
+    });
+    step.append(head, body);
+    return step;
+  }
+
+  function renderRunView(automationId: string, runId: string): void {
+    recordRoute({ kind: 'run-view', automationId, runId });
+    clear();
+    const main = el('div', { class: 'has-wall' });
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
+    scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading run…'));
+    mountShellPage('automations', main);
+
+    // While the run is still in flight (`endedAt` unset) the ledger is
+    // re-read on an interval, so the thread streams its steps live.
+    let stopped = false;
+    let pollTimer: number | undefined;
+    registerCleanup(() => {
+      stopped = true;
+      if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+    });
+
+    const load = async (): Promise<void> => {
+      let row: CentraidAutomationRow | null = null;
+      let run: CentraidAutomationRunRecord | null = null;
+      let nodes: CentraidAutomationRunNode[] = [];
+      try {
+        [row, run, nodes] = await Promise.all([
+          window.CentraidApi.readAutomation({ automationId }),
+          window.CentraidApi.readAutomationRun({ runId }),
+          window.CentraidApi.listAutomationRunNodes({ runId }),
+        ]);
+      } catch (err) {
+        if (!stopped && document.contains(scroll)) {
+          scroll.replaceChildren(
+            el(
+              'div',
+              { class: 'cd-au-loading' },
+              `Could not load run: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
+        }
+        return;
+      }
+      if (stopped || !document.contains(scroll)) return;
+      if (!row || !run) {
+        scroll.replaceChildren(el('div', { class: 'cd-au-loading' }, 'Run not found.'));
+        return;
+      }
+      // Re-render in place; keep the scroll position so a live refresh
+      // doesn't yank the page while the user is reading.
+      const prevTop = scroll.scrollTop;
+      scroll.replaceChildren(buildRunView(row, run, nodes));
+      scroll.scrollTop = prevTop;
+      if (run.endedAt === undefined) {
+        pollTimer = window.setTimeout(() => void load(), 1500);
+      }
+    };
+    void load();
+  }
+
+  function buildRunView(
+    row: CentraidAutomationRow,
+    run: CentraidAutomationRunRecord,
+    nodes: readonly CentraidAutomationRunNode[],
+  ): HTMLElement {
+    const wrap = el('div', { class: 'cd-au-rv' });
+    const trigger = runTriggerLabel(run);
+    const model = row.manifest.requires.model ?? 'Centraid';
+    // A run with no `endedAt` is still executing — the viewer polls and
+    // re-renders it until it finishes.
+    const inFlight = run.endedAt === undefined;
+
+    // ── Breadcrumb ──
+    wrap.append(
+      el('div', { class: 'cd-au-crumb' }, [
+        el('button', { type: 'button', onClick: () => renderAutomations() }, 'Automations'),
+        el('span', { class: 'cd-au-crumb-sep', trustedHtml: Icon.ArrowRight({ size: 12 }) }),
+        el('button', { type: 'button', onClick: () => renderAutomationView(row.ref) }, row.name),
+        el('span', { class: 'cd-au-crumb-sep', trustedHtml: Icon.ArrowRight({ size: 12 }) }),
+        el('span', {}, 'Run'),
+      ]),
+    );
+
+    // ── Header ──
+    const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
+    const duration =
+      run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
+    const runAgain = el('button', {
+      class: 'cd-au-btn cd-au-btn-ghost cd-au-btn-sm',
+      type: 'button',
+      trustedHtml: `${Icon.Reset({ size: 13 })}<span>Run again</span>`,
+    }) as HTMLButtonElement;
+    runAgain.addEventListener('click', () => {
+      runAgain.disabled = true;
+      void (async () => {
+        try {
+          const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          renderRunView(row.ref, runId);
+        } catch (err) {
+          runAgain.disabled = false;
+          showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      })();
+    });
+
+    const grid = el('div', { class: 'cd-au-rv-grid' });
+    const detailsBtn = el('button', {
+      class: 'cd-au-btn cd-au-btn-ghost cd-au-btn-sm',
+      type: 'button',
+      trustedHtml: `${Icon.Eye({ size: 13 })}<span>Hide details</span>`,
+    }) as HTMLButtonElement;
+    detailsBtn.addEventListener('click', () => {
+      const narrow = grid.classList.toggle('cd-au-rv-grid--narrow');
+      detailsBtn.querySelector('span')!.textContent = narrow ? 'Show details' : 'Hide details';
+    });
+
+    wrap.append(
+      el('div', { class: 'cd-au-rv-head' }, [
+        el('span', {
+          class: 'cd-au-glyph',
+          'data-on': 'true',
+          trustedHtml: Icon.Bolt({ size: 19 }),
+        }),
+        el('div', { class: 'cd-au-rv-head-main' }, [
+          el('div', { class: 'cd-au-rv-head-name' }, [
+            row.name,
+            inFlight
+              ? el('span', { class: 'cd-au-status', 'data-running': 'true' }, 'Running')
+              : el(
+                  'span',
+                  { class: 'cd-au-status', 'data-on': String(run.ok) },
+                  run.ok ? 'Completed' : 'Failed',
+                ),
+          ]),
+          el(
+            'div',
+            { class: 'cd-au-rv-head-meta' },
+            `${trigger.label}  ·  ${new Date(run.startedAt).toLocaleString()}  ·  ${duration}  ·  ${fmtTokens(tokens)} tokens`,
+          ),
+        ]),
+        el('div', { class: 'cd-au-actions' }, [detailsBtn, runAgain]),
+      ]),
+    );
+
+    // ── Thread ──
+    const thread = el('div', { class: 'cd-au-thread' });
+
+    // Trigger message — the instruction that kicked the run off.
+    const instr = el(
+      'div',
+      { class: 'cd-au-trig-instr' },
+      row.manifest.prompt || 'No instructions.',
+    );
+    const instrMore = el('button', {
+      class: 'cd-au-trig-more',
+      type: 'button',
+    }) as HTMLButtonElement;
+    instrMore.textContent = 'Show full instructions';
+    instrMore.addEventListener('click', () => {
+      const open = instr.classList.toggle('cd-au-trig-instr--open');
+      instrMore.textContent = open ? 'Collapse instructions' : 'Show full instructions';
+    });
+    thread.append(
+      el('div', { class: 'cd-au-msg' }, [
+        el('span', {
+          class: 'cd-au-node cd-au-node-trigger',
+          trustedHtml: Icon.Bolt({ size: 11 }),
+        }),
+        el('div', { class: 'cd-au-msg-actor' }, [
+          el('span', { class: 'cd-au-msg-actor-trig', trustedHtml: trigger.icon }),
+          trigger.label,
+          el('time', {}, new Date(run.startedAt).toLocaleString()),
+        ]),
+        el('div', { class: 'cd-au-trig-card' }, [
+          el('div', { class: 'cd-au-trig-line' }, [
+            el('span', { trustedHtml: Icon.History({ size: 14 }) }),
+            triggersSummary(row.triggers),
+          ]),
+          instr,
+          instrMore,
+        ]),
+      ]),
+    );
+
+    // Work message — the steps, folded into a collapsible group.
+    if (nodes.length > 0) {
+      const okCount = nodes.filter((n) => n.ok).length;
+      const failed = okCount < nodes.length;
+      const stepsWrap = el('div', { class: 'cd-au-work-steps' });
+      for (const node of nodes) stepsWrap.append(renderThreadStep(node));
+      const workGroup = el('div', { class: 'cd-au-work' });
+      if (failed || inFlight) workGroup.classList.add('cd-au-work--open');
+      const workSum = el('button', {
+        class: 'cd-au-work-sum',
+        type: 'button',
+      }) as HTMLButtonElement;
+      workSum.append(
+        el('span', {
+          class: 'cd-au-work-spin',
+          ...(inFlight ? { 'data-running': 'true' } : { 'data-ok': String(!failed) }),
+          trustedHtml: inFlight
+            ? Icon.History({ size: 10 })
+            : failed
+              ? Icon.X({ size: 10 })
+              : Icon.Check({ size: 10 }),
+        }),
+        el(
+          'span',
+          { class: 'cd-au-work-sum-t' },
+          inFlight
+            ? 'Working through the run'
+            : failed
+              ? 'Worked, then hit an error'
+              : 'Worked through the run',
+        ),
+        el('span', { class: 'cd-au-work-sum-m' }, `${nodes.length} steps`),
+        el('span', { class: 'cd-au-work-chev', trustedHtml: Icon.ChevronDown({ size: 14 }) }),
+      );
+      workSum.addEventListener('click', () => {
+        workGroup.classList.toggle('cd-au-work--open');
+      });
+      workGroup.append(workSum, stepsWrap);
+      thread.append(
+        el('div', { class: 'cd-au-msg' }, [
+          el('span', {
+            class: 'cd-au-node cd-au-node-work',
+            trustedHtml: Icon.Settings({ size: 11 }),
+          }),
+          el('div', { class: 'cd-au-msg-actor' }, 'Centraid · working'),
+          workGroup,
+        ]),
+      );
+    }
+
+    // Reply message — the run's outcome as the closing turn. While the
+    // run is still in flight there is no reply yet, so a pending bubble
+    // stands in until the next poll resolves it.
+    if (inFlight) {
+      thread.append(
+        el('div', { class: 'cd-au-msg' }, [
+          el('span', {
+            class: 'cd-au-node cd-au-node-reply',
+            trustedHtml: Icon.Sparkle({ size: 11 }),
+          }),
+          el('div', { class: 'cd-au-msg-actor' }, `Centraid · ${model}`),
+          el('div', { class: 'cd-au-pending' }, [
+            el('span', { class: 'cd-au-pending-dots', 'aria-hidden': 'true' }, [
+              el('i', {}),
+              el('i', {}),
+              el('i', {}),
+            ]),
+            el('span', {}, 'Working — this updates live as the run progresses.'),
+          ]),
+        ]),
+      );
+    } else {
+      const replyCard = el('div', { class: 'cd-au-reply-card' });
+      if (run.ok) {
+        replyCard.append(
+          el('p', { class: 'cd-au-reply-lead' }, run.summary ?? 'The run completed.'),
+        );
+        if (run.outputJson) {
+          replyCard.append(
+            el('div', { class: 'cd-au-step-label' }, 'Output'),
+            el('pre', { class: 'cd-au-step-pre' }, prettyJson(run.outputJson)),
+          );
+        }
+      } else {
+        replyCard.append(
+          el('p', { class: 'cd-au-reply-lead' }, 'This run did not complete.'),
+          el('div', { class: 'cd-au-fail-box' }, run.error ?? 'No error detail was recorded.'),
+        );
+      }
+      thread.append(
+        el('div', { class: 'cd-au-msg' }, [
+          el('span', {
+            class: run.ok ? 'cd-au-node cd-au-node-reply' : 'cd-au-node cd-au-node-fail',
+            trustedHtml: run.ok ? Icon.Sparkle({ size: 11 }) : Icon.X({ size: 11 }),
+          }),
+          el('div', { class: 'cd-au-msg-actor' }, run.ok ? `Centraid · ${model}` : 'Run failed'),
+          replyCard,
+        ]),
+      );
+    }
+
+    // ── Side rail ──
+    const railRow = (k: string, v: string): HTMLElement =>
+      el('div', { class: 'cd-au-rside-row' }, [
+        el('span', { class: 'cd-au-rside-k' }, k),
+        el('span', { class: 'cd-au-rside-v' }, v),
+      ]);
+    const side = el('div', { class: 'cd-au-rside' }, [
+      el('div', { class: 'cd-au-rside-card' }, [
+        el('div', { class: 'cd-au-rside-h' }, 'Run detail'),
+        railRow('Status', inFlight ? 'running' : run.ok ? 'completed' : 'failed'),
+        railRow('Trigger', run.triggerOrigin ?? run.triggerKind),
+        railRow('Duration', duration),
+        railRow('Started', new Date(run.startedAt).toLocaleString()),
+        railRow('Run ID', run.runId),
+      ]),
+      el('div', { class: 'cd-au-rside-card' }, [
+        el('div', { class: 'cd-au-rside-h' }, 'Usage'),
+        railRow('Tokens', fmtTokens(tokens)),
+        railRow('Cost', run.totalCostUsd ? `$${run.totalCostUsd.toFixed(2)}` : '—'),
+        railRow('Steps', String(run.stepCount ?? nodes.length)),
+        railRow('Model', model),
+      ]),
+      el('div', { class: 'cd-au-rside-card' }, [
+        el('div', { class: 'cd-au-rside-h' }, 'Belongs to'),
+        el(
+          'button',
+          {
+            class: 'cd-au-rside-link',
+            type: 'button',
+            onClick: () => renderAutomationView(row.ref),
+          },
+          [el('span', {}, row.name), el('span', { trustedHtml: Icon.ArrowRight({ size: 14 }) })],
+        ),
+      ]),
+    ]);
+
+    grid.append(el('div', { class: 'cd-au-rv-thread-col' }, [thread]), side);
+    wrap.append(grid);
+    return wrap;
   }
 
   // Collect the global automation-run ledger into one flat list. The
@@ -1573,386 +2716,6 @@
         : 'Automation',
       run,
     }));
-  }
-
-  // "Executions" tab — n8n-style master/detail: a list of every run on
-  // the left, the selected run's stats + per-step timeline on the right.
-  function renderAutomationsRunsInto(host: HTMLElement, isStale: () => boolean): void {
-    void (async () => {
-      const entries = await collectAutomationRuns();
-      if (isStale()) return;
-
-      if (entries.length === 0) {
-        automationsEmpty(
-          host,
-          'No executions yet',
-          'Every time an automation fires — on schedule or run manually — it shows up here.',
-        );
-        return;
-      }
-      entries.sort((a, b) => b.run.startedAt - a.run.startedAt);
-
-      const layout = el('div', { class: 'cd-exec' });
-      const listCol = el('div', { class: 'cd-exec-list' });
-      const detailCol = el('div', { class: 'cd-exec-detail' });
-      layout.append(listCol, detailCol);
-
-      listCol.append(
-        el('div', { class: 'cd-exec-list-head' }, [
-          el('span', { class: 'cd-exec-eyebrow' }, 'Executions'),
-          el('span', { class: 'cd-exec-list-count' }, String(entries.length)),
-        ]),
-      );
-      const listScroll = el('div', { class: 'cd-exec-list-scroll' });
-      listCol.append(listScroll);
-
-      const rows: HTMLElement[] = [];
-      let selected = -1;
-      const select = (idx: number): void => {
-        if (selected === idx) return;
-        if (selected >= 0) delete rows[selected]!.dataset.selected;
-        selected = idx;
-        rows[idx]!.dataset.selected = 'true';
-        void renderExecutionDetail(detailCol, entries[idx]!);
-      };
-      entries.forEach((entry, idx) => {
-        const row = renderExecutionRow(entry, () => select(idx));
-        rows.push(row);
-        listScroll.append(row);
-      });
-
-      host.replaceChildren(layout);
-      select(0);
-    })();
-  }
-
-  // One row in the executions list (left rail of the master/detail).
-  function renderExecutionRow(entry: AutomationFeedEntry, onClick: () => void): HTMLElement {
-    const { automationName, run } = entry;
-    const row = el('button', {
-      type: 'button',
-      class: 'cd-exec-row',
-      'data-ok': String(run.ok),
-      onClick,
-    });
-    const icon = el('span', {
-      class: 'cd-exec-row-icon',
-      trustedHtml: Icon.Bolt({ size: 11, strokeWidth: 1.9 }),
-    });
-    const duration =
-      run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
-    row.append(
-      el('span', { class: 'cd-exec-row-spine', 'aria-hidden': 'true' }),
-      icon,
-      el('span', { class: 'cd-exec-row-main' }, [
-        el('span', { class: 'cd-exec-row-name' }, automationName),
-        el(
-          'span',
-          { class: 'cd-exec-row-sub' },
-          `${run.triggerKind.replace('_', ' ')} · ${relativeTime(new Date(run.startedAt).toISOString())}`,
-        ),
-      ]),
-      el('span', { class: 'cd-exec-row-dur' }, duration),
-    );
-    return row;
-  }
-
-  // Bumped before each detail fetch so a slow listAutomationRunNodes
-  // resolving after the user picked another row can detect it's stale.
-  let execDetailToken = 0;
-
-  async function renderExecutionDetail(
-    detailCol: HTMLElement,
-    entry: AutomationFeedEntry,
-  ): Promise<void> {
-    const token = String(++execDetailToken);
-    detailCol.dataset.token = token;
-    detailCol.replaceChildren(el('div', { class: 'cd-exec-detail-loading' }, 'Loading execution…'));
-    let nodes: CentraidAutomationRunNode[] = [];
-    try {
-      nodes = await window.CentraidApi.listAutomationRunNodes({
-        runId: entry.run.runId,
-      });
-    } catch {
-      /* leave nodes empty — the detail still shows run-level stats */
-    }
-    if (detailCol.dataset.token !== token) return;
-    detailCol.replaceChildren(buildExecutionDetail(entry, nodes));
-  }
-
-  function buildExecutionDetail(
-    entry: AutomationFeedEntry,
-    nodes: CentraidAutomationRunNode[],
-  ): HTMLElement {
-    const { run, automationName, automationId } = entry;
-    const scroll = el('div', { class: 'cd-exec-detail-scroll' });
-
-    // ── Header — status, trigger, Run again ───────────────────────────
-    const iconTile = el('span', {
-      class: 'cd-exec-hd-icon',
-      trustedHtml: Icon.Bolt({ size: 17, strokeWidth: 1.85 }),
-    });
-
-    const runAgainBtn = el('button', {
-      type: 'button',
-      class: 'cd-exec-runagain',
-      trustedHtml: `${Icon.Play({ size: 12 })}<span>Run again</span>`,
-    }) as HTMLButtonElement;
-    runAgainBtn.addEventListener('click', () => {
-      if (!automationId) return;
-      runAgainBtn.disabled = true;
-      runAgainBtn.querySelector('span')!.textContent = 'Running…';
-      void (async () => {
-        try {
-          await window.CentraidApi.runAutomationNow({ automationId });
-        } catch (err) {
-          showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-        renderAutomations();
-      })();
-    });
-
-    const header = el('div', { class: 'cd-exec-hd' }, [
-      iconTile,
-      el('div', { class: 'cd-exec-hd-text' }, [
-        el('div', { class: 'cd-exec-hd-eyebrow' }, 'Automation'),
-        el('div', { class: 'cd-exec-hd-title' }, automationName),
-      ]),
-      el('div', { class: 'cd-exec-hd-actions' }, [
-        el('span', { class: 'cd-exec-status', 'data-ok': String(run.ok) }, [
-          el('span', { class: 'cd-exec-status-dot' }),
-          run.ok ? 'Success' : 'Failed',
-        ]),
-        runAgainBtn,
-      ]),
-    ]);
-    scroll.append(header);
-
-    // ── Stat strip — n8n-style KPI tiles ──────────────────────────────
-    const totalMs = run.endedAt !== undefined ? run.endedAt - run.startedAt : undefined;
-    const tokens = nodes.reduce((sum, n) => sum + (n.inputTokens ?? 0) + (n.outputTokens ?? 0), 0);
-    const statTile = (label: string, value: string, kind?: string): HTMLElement =>
-      el('div', { class: 'cd-exec-stat', ...(kind ? { 'data-kind': kind } : {}) }, [
-        el('div', { class: 'cd-exec-stat-label' }, label),
-        el('div', { class: 'cd-exec-stat-value' }, value),
-      ]);
-    scroll.append(
-      el('div', { class: 'cd-exec-stats' }, [
-        statTile('Duration', totalMs !== undefined ? formatDuration(totalMs) : '—'),
-        statTile('Steps', String(nodes.length)),
-        statTile('Tokens', tokens > 0 ? tokens.toLocaleString() : '—'),
-        statTile(
-          'Trigger',
-          run.triggerOrigin
-            ? `${run.triggerKind.replace('_', ' ')} · ${run.triggerOrigin}`
-            : run.triggerKind.replace('_', ' '),
-        ),
-        statTile('Started', new Date(run.startedAt).toLocaleString()),
-      ]),
-    );
-
-    // ── Input / Output preview ────────────────────────────────────────
-    const io = el('div', { class: 'cd-exec-io' }, [
-      renderExecPreview('Input', run.inputJson),
-      renderExecPreview('Output', run.outputJson, run.ok ? run.summary : run.error),
-    ]);
-    scroll.append(io);
-
-    // ── Steps timeline ────────────────────────────────────────────────
-    const stepsSection = el('div', { class: 'cd-exec-section' });
-    stepsSection.append(
-      el('div', { class: 'cd-exec-section-head' }, [
-        el('span', { class: 'cd-exec-eyebrow' }, 'Steps'),
-        el('span', { class: 'cd-exec-section-count' }, String(nodes.length)),
-      ]),
-    );
-    if (nodes.length === 0) {
-      stepsSection.append(
-        el(
-          'div',
-          { class: 'cd-exec-steps-empty' },
-          'No steps recorded — this run did not call any tools or agents.',
-        ),
-      );
-    } else {
-      stepsSection.append(renderExecSteps(nodes, 0));
-    }
-    scroll.append(stepsSection);
-
-    return scroll;
-  }
-
-  // A labelled JSON/text preview block. `fallbackText` is shown as a
-  // plain line when there's no JSON payload (e.g. a run summary).
-  function renderExecPreview(label: string, json?: string, fallbackText?: string): HTMLElement {
-    const block = el('div', { class: 'cd-exec-preview' });
-    block.append(el('div', { class: 'cd-exec-preview-label' }, label));
-    if (json) {
-      block.append(el('pre', { class: 'cd-exec-preview-body' }, prettyJson(json)));
-    } else if (fallbackText) {
-      block.append(el('div', { class: 'cd-exec-preview-text' }, fallbackText));
-    } else {
-      block.append(el('div', { class: 'cd-exec-preview-empty' }, 'Not recorded'));
-    }
-    return block;
-  }
-
-  // Render a run's nodes as a timeline. Nodes sharing a `batchId` (a
-  // Promise.all frontier) render side-by-side in a parallel lane; the
-  // duration bar of every step is scaled to the slowest node so the
-  // relative cost of each tool call reads at a glance.
-  function renderExecSteps(nodes: CentraidAutomationRunNode[], depth: number): HTMLElement {
-    const wrap = el('div', { class: 'cd-exec-steps' });
-    const maxMs = Math.max(1, ...nodes.map((n) => n.durationMs ?? 0));
-    let i = 0;
-    while (i < nodes.length) {
-      const bid = nodes[i]!.batchId;
-      if (bid !== undefined) {
-        const group: CentraidAutomationRunNode[] = [];
-        while (i < nodes.length && nodes[i]!.batchId === bid) group.push(nodes[i++]!);
-        if (group.length > 1) {
-          const lane = el('div', { class: 'cd-exec-lane' }, [
-            el('div', { class: 'cd-exec-lane-label' }, `Parallel · ${group.length} steps`),
-          ]);
-          const laneSteps = el('div', { class: 'cd-exec-lane-steps' });
-          for (const g of group) laneSteps.append(renderExecStep(g, maxMs, depth));
-          lane.append(laneSteps);
-          wrap.append(lane);
-          continue;
-        }
-        wrap.append(renderExecStep(group[0]!, maxMs, depth));
-        continue;
-      }
-      wrap.append(renderExecStep(nodes[i]!, maxMs, depth));
-      i++;
-    }
-    return wrap;
-  }
-
-  // One node (step / tool / agent / invoke) — header carries the
-  // duration bar; the body expands to args, output, token counts, and —
-  // for ctx.invoke nodes — the nested child-run timeline.
-  function renderExecStep(
-    node: CentraidAutomationRunNode,
-    maxMs: number,
-    depth: number,
-  ): HTMLElement {
-    const step = el('div', {
-      class: 'cd-exec-step',
-      'data-ok': String(node.ok),
-      'data-kind': node.kind,
-    });
-    const pct = node.durationMs ? Math.max(3, (node.durationMs / maxMs) * 100) : 0;
-    const barFill = el('span', { class: 'cd-exec-step-bar-fill' });
-    barFill.style.width = `${pct}%`;
-
-    const head = el('button', {
-      type: 'button',
-      class: 'cd-exec-step-head',
-      'aria-expanded': 'false',
-    }) as HTMLButtonElement;
-    head.append(
-      el('span', { class: 'cd-exec-step-ord' }, String(node.ordinal)),
-      el('span', { class: 'cd-exec-step-kind', 'data-kind': node.kind }, node.kind),
-      el('span', { class: 'cd-exec-step-name' }, node.name ?? node.model ?? node.kind),
-      el('span', { class: 'cd-exec-step-bar' }, [barFill]),
-      el(
-        'span',
-        { class: 'cd-exec-step-dur' },
-        node.durationMs !== undefined ? formatDuration(node.durationMs) : '—',
-      ),
-      el('span', { class: 'cd-exec-step-caret', trustedHtml: Icon.ArrowRight({ size: 13 }) }),
-    );
-
-    const body = el('div', { class: 'cd-exec-step-body', hidden: 'true' });
-    let bodyBuilt = false;
-    const buildBody = (): void => {
-      if (bodyBuilt) return;
-      bodyBuilt = true;
-      if (node.error) {
-        body.append(el('div', { class: 'cd-exec-step-error' }, node.error));
-      }
-      if (node.inputTokens !== undefined || node.outputTokens !== undefined) {
-        const tokenLine = el('div', { class: 'cd-exec-step-tokens' }, [
-          el('span', {}, `${node.inputTokens ?? 0} in`),
-          el('span', { class: 'cd-exec-step-tokens-sep' }, '·'),
-          el('span', {}, `${node.outputTokens ?? 0} out`),
-        ]);
-        if (node.costUsd !== undefined) {
-          tokenLine.append(
-            el('span', { class: 'cd-exec-step-tokens-sep' }, '·'),
-            el('span', {}, `$${node.costUsd.toFixed(4)}`),
-          );
-        }
-        body.append(tokenLine);
-      }
-      body.append(
-        el('div', { class: 'cd-exec-step-io' }, [
-          renderExecPreview('Args', node.argsJson),
-          renderExecPreview('Output', node.outputJson),
-        ]),
-      );
-      // ctx.invoke — nest the child run's own timeline.
-      const childRunId = node.childRunId;
-      if (node.kind === 'invoke' && childRunId && depth < 4) {
-        const childHost = el('div', { class: 'cd-exec-step-child', hidden: 'true' });
-        const childToggle = el('button', {
-          type: 'button',
-          class: 'cd-exec-step-childtoggle',
-          'aria-expanded': 'false',
-        }) as HTMLButtonElement;
-        childToggle.textContent = 'Show sub-run steps';
-        childToggle.addEventListener('click', () => {
-          const open = childToggle.getAttribute('aria-expanded') === 'true';
-          childToggle.setAttribute('aria-expanded', String(!open));
-          childToggle.textContent = open ? 'Show sub-run steps' : 'Hide sub-run steps';
-          childHost.hidden = open;
-          if (!open && !childHost.dataset.loaded) {
-            void loadExecChildSteps(childRunId, childHost, depth);
-          }
-        });
-        body.append(childToggle, childHost);
-      }
-    };
-
-    head.addEventListener('click', () => {
-      const open = head.getAttribute('aria-expanded') === 'true';
-      head.setAttribute('aria-expanded', String(!open));
-      if (!open) buildBody();
-      body.hidden = open;
-    });
-
-    step.append(head, body);
-    return step;
-  }
-
-  async function loadExecChildSteps(
-    runId: string,
-    host: HTMLElement,
-    depth: number,
-  ): Promise<void> {
-    host.dataset.loaded = 'true';
-    host.replaceChildren(el('div', { class: 'cd-exec-steps-empty' }, 'Loading sub-run…'));
-    let nodes: CentraidAutomationRunNode[];
-    try {
-      nodes = await window.CentraidApi.listAutomationRunNodes({ runId });
-    } catch (err) {
-      host.replaceChildren(
-        el(
-          'div',
-          { class: 'cd-exec-steps-empty' },
-          `Failed to load sub-run: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
-      return;
-    }
-    if (nodes.length === 0) {
-      host.replaceChildren(
-        el('div', { class: 'cd-exec-steps-empty' }, 'Sub-run recorded no steps.'),
-      );
-      return;
-    }
-    host.replaceChildren(renderExecSteps(nodes, depth + 1));
   }
 
   // ---------- ⌘K command palette (Refined Screens §F) ----------
@@ -3895,7 +4658,16 @@
     // Header line: automation name + schedule · run-now affordance.
     const head = el('div', { class: 'cd-app-order-head' });
     head.append(
-      el('span', { class: 'cd-app-order-name' }, row.name),
+      el(
+        'button',
+        {
+          class: 'cd-app-order-name',
+          type: 'button',
+          title: `Open ${row.name}`,
+          onClick: () => renderAutomationView(row.ref),
+        },
+        row.name,
+      ),
       el('span', { class: 'cd-app-order-schedule' }, triggersSummary(row.triggers)),
     );
 
@@ -4020,18 +4792,34 @@
     }
   }
 
+  // Poll the run ledger until a run finishes (its `endedAt` is set).
+  // Used where the caller needs the run-now outcome but has no live
+  // viewer to watch it — the standing-order panel in app settings.
+  async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
+    const deadline = Date.now() + 6 * 60 * 1000;
+    while (Date.now() < deadline) {
+      const rec = await window.CentraidApi.readAutomationRun({ runId });
+      if (rec && rec.endedAt !== undefined) return rec;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    throw new Error('run did not finish within 6 minutes');
+  }
+
   async function onRunStandingOrder(row: CentraidAutomationRow, panel: HTMLElement): Promise<void> {
     const stateKey = row.ref;
     automationRunState.set(stateKey, { kind: 'running' });
     // Repaint just this card so the rest of the panel doesn't blink.
     rerenderOrderCard(row, panel);
     try {
-      const result = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+      // run-now fires in the background and returns the run id; poll the
+      // ledger for the finished record to report the card's outcome.
+      const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+      const rec = await waitForAutomationRun(runId);
       automationRunState.set(stateKey, {
         kind: 'done',
-        ok: result.ok,
-        durationMs: result.durationMs,
-        ...(result.error ? { error: result.error } : {}),
+        ok: rec.ok,
+        durationMs: (rec.endedAt ?? Date.now()) - rec.startedAt,
+        ...(rec.error ? { error: rec.error } : {}),
         finishedAt: Date.now(),
       });
     } catch (err) {
