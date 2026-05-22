@@ -18,6 +18,7 @@ Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid
 - [x] Commit 4 — builder-harness: automation apps scaffold + publish
 - [x] Commit 5 — openclaw-plugin: gateway fires automations as apps
 - [x] Commit 6 — agent-runtime: local fire path under appsDir
+- [x] Commit 7 — desktop: unified app/automation surface
 
 Follow-up (tracked on #98, not in this commit):
 
@@ -251,6 +252,41 @@ automations by their handle, resolved under `appsDir`.
 - `os-scheduler-host.ts` bakes `row.ref` into the spec and
   `CENTRAID_APPS_DIR` into the artifact env.
 
+### Commit 7 — desktop: unified app/automation surface
+
+Final commit of the [#98 revision](https://github.com/srikanth235/centraid/issues/98):
+the desktop resolves every automation under `appsDir`, and the whole
+repo typechecks + builds + tests end-to-end.
+
+#### desktop — settings + local runtime
+
+- `settings.ts` drops the derived `automationsDir` — every project
+  (UI app or automation app) lives under `appsDir`.
+- `local-runtime.ts`: `localRuntimeAutomationHost(appsDir)` and the
+  startup OS-scheduler reconcile use `listAutomations(appsDir)`.
+
+#### desktop — IPC
+
+- `ipc.ts`: the `AUTOMATIONS_*` handlers resolve automations by their
+  `<appId>/<id>` handle under `appsDir` — `listAutomations`,
+  `readAppOwnedAutomation`, `runAutomationLocal({ automationRef })`,
+  `setAutomationEnabledAt`. `AUTOMATIONS_CREATE` scaffolds an `auto.`-
+  prefixed automation app; `AUTOMATIONS_DELETE` removes the whole app
+  folder for an `auto.` app, or just the `automations/<id>/` subdir for
+  a UI-app-owned automation. `agent:start` routes every project under
+  `appsDir`; the post-turn webhook provisioning always scans the
+  project's `automations/`.
+
+#### desktop — renderer
+
+- `centraid-api.d.ts`: `CentraidAutomationRow` gains `ownerApp` + `ref`;
+  an `automationId` IPC argument is documented as the `<appId>/<id>`
+  handle. `CentraidMintedWebhook.ownerApp` is now required.
+- `builder.ts` / `app.ts`: every automation IPC call passes `row.ref`.
+  The automation builder resolves its app folder id to the owned
+  automation via `listAutomations`; "New automation" scaffolds an
+  `auto.`-prefixed app.
+
 ## Out of scope
 
 - Scheduling and execution of app-owned automations — the OS scheduler
@@ -259,12 +295,23 @@ automations by their handle, resolved under `appsDir`.
   tracked follow-up on the checklist above.
 - Bidirectional form editing — the config pane is a read-only rendered
   view of the manifest; chat is the only input.
-- Commit 3 reworks only the runtime-core discovery layer. Its consumers
-  — builder-harness scaffold/publish, the openclaw-plugin gateway, the
-  agent-runtime scheduler host + CLI, and the desktop IPC/renderer —
-  still reference the deleted `automationsDir` API and are updated in
-  the follow-on commits of this PR (4–6). The repo typechecks
-  end-to-end only once commit 6 lands.
+- Commits 3–7 of the #98 revision land the unified folder model
+  incrementally, one package per commit. Each commit leaves its own
+  package green; the repo typechecks + builds + tests end-to-end only
+  once commit 7 lands.
+- **Per-app `runtime.sqlite` (revision decision 3) and push-based
+  central analytics (decision 4) are NOT in this PR.** The run ledger
+  + `ctx.state` still use the global `centraid-activity.sqlite`, and
+  Insights still reads it directly. The unification delivered here is
+  *discovery + versioning + upload + scheduling* — every automation is
+  an app folder. Splitting the ledger per app and the write-through
+  analytics DB are a tracked follow-up.
+- Desktop "fire the active version" (decision 2) is realized on the
+  gateway (commit 5 resolves versioned apps); the desktop's local OS
+  scheduler still fires the editable draft folder via
+  `CENTRAID_APPS_DIR = <projectsDir>/apps` — `readActiveCodeDir` falls
+  back to the flat draft. Wiring the desktop to publish into its own
+  local runtime is a follow-up.
 
 ## Verification
 
@@ -319,3 +366,13 @@ automations by their handle, resolved under `appsDir`.
   `OsSchedulerHost` tests (handle-based job labels, `list()` decoding)
   and a new round-trip test for the `automationSlug` codec.
 - Only the desktop still references the old discovery API — commit 7.
+
+### Commit 7 verification
+
+- Whole repo green end-to-end: `turbo typecheck` 16/16, `turbo test`
+  12/12, `turbo build` 8/8. Lint (`oxlint`) + format (`oxfmt`) clean
+  across every changed file.
+- The Electron automation surface — the builder's automation mode, the
+  Automations page (Standing orders + Executions), "New automation",
+  Run-now, Enable/Disable, per-automation Runs — was not interactively
+  click-tested; it is type/build-verified only.

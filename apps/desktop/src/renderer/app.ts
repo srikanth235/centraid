@@ -1479,7 +1479,9 @@
   // in `automation.json` + `handler.js`. The draft is created disabled —
   // the user enables it from the builder once it looks right.
   async function createAndOpenAutomationBuilder(): Promise<void> {
-    const id = `automation-${Math.random().toString(36).slice(2, 8)}`;
+    // An automation is an app folder — the `auto.` prefix marks it as an
+    // automation app (issue #98).
+    const id = `auto.${Math.random().toString(36).slice(2, 8)}`;
     try {
       await window.CentraidApi.createAutomation({
         id,
@@ -1562,11 +1564,12 @@
     } catch {
       return [];
     }
-    const nameById = new Map(autos.map((a) => [a.id, a.name]));
+    // Run records key the automation by its `<appId>/<id>` handle.
+    const nameByRef = new Map(autos.map((a) => [a.ref, a.name]));
     return runs.map((run) => ({
       automationId: run.automationId ?? '',
       automationName: run.automationId
-        ? (nameById.get(run.automationId) ?? run.automationId)
+        ? (nameByRef.get(run.automationId) ?? run.automationId)
         : 'Automation',
       run,
     }));
@@ -3896,7 +3899,7 @@
       el('span', { class: 'cd-app-order-schedule' }, triggersSummary(row.triggers)),
     );
 
-    const stateKey = row.id;
+    const stateKey = row.ref;
     const runBtn = el('button', {
       class: 'cd-app-order-run',
       type: 'button',
@@ -3957,7 +3960,7 @@
       runsToggle.setAttribute('aria-expanded', String(next));
       runsHost.hidden = !next;
       if (next && !runsHost.dataset.loaded) {
-        void loadRunsInto(row.id, runsHost);
+        void loadRunsInto(row.ref, runsHost);
       }
     });
     foot.append(runsToggle);
@@ -4001,7 +4004,7 @@
     const next = input.checked;
     card.dataset.enabled = String(next);
     try {
-      await window.CentraidApi.setAutomationEnabled({ automationId: row.id, enabled: next });
+      await window.CentraidApi.setAutomationEnabled({ automationId: row.ref, enabled: next });
       // The in-memory row stored by closure is now stale; reflect the
       // new state so a subsequent toggle reads the right "current."
       (row as { enabled: boolean }).enabled = next;
@@ -4018,12 +4021,12 @@
   }
 
   async function onRunStandingOrder(row: CentraidAutomationRow, panel: HTMLElement): Promise<void> {
-    const stateKey = row.id;
+    const stateKey = row.ref;
     automationRunState.set(stateKey, { kind: 'running' });
     // Repaint just this card so the rest of the panel doesn't blink.
     rerenderOrderCard(row, panel);
     try {
-      const result = await window.CentraidApi.runAutomationNow({ automationId: row.id });
+      const result = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
       automationRunState.set(stateKey, {
         kind: 'done',
         ok: result.ok,

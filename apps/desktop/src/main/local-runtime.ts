@@ -5,7 +5,7 @@ import {
   ChatHistoryStore,
   Runtime,
   UserStore,
-  listAutomationProjects,
+  listAutomations,
   makeGatewayDbProvider,
   makeActivityDbProvider,
   startRuntimeHttpServer,
@@ -86,17 +86,17 @@ export function localRuntimeAutomationDb(): string {
  * expected to ensure the file is executable (see CLI install hooks).
  */
 let _automationHost: AutomationHost | undefined;
-export function localRuntimeAutomationHost(automationsDir: string): AutomationHost {
+export function localRuntimeAutomationHost(appsDir: string): AutomationHost {
   if (_automationHost) return _automationHost;
   _automationHost = new OsSchedulerHost({
     workdir: localRuntimeAppsDir(),
     centraidBin: path.join(defaultCentraidCliDir(), 'centraid-cli.js'),
-    // Bake the desktop's activity DB path + automations dir into every
+    // Bake the desktop's activity DB path + apps dir into every
     // scheduled job so an OS-scheduler-spawned `centraid run-automation`
-    // resolves the project + writes its run record against the SAME
+    // resolves the automation + writes its run record against the SAME
     // paths the desktop UI uses — not the cwd-relative fallback.
     automationDbPath: localRuntimeAutomationDb(),
-    automationsDir,
+    appsDir,
     // Match the chat-runner default; toggling per-automation runner
     // isn't surfaced in the UI today.
     runner: 'codex',
@@ -205,9 +205,9 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     // Fire-and-forget so a slow scheduler shell-out doesn't block start.
     void (async () => {
       const { projectsDir } = await loadPersistedSettings();
-      const automationsDir = path.join(projectsDir, 'automations');
-      const { rows } = await listAutomationProjects(automationsDir);
-      return localRuntimeAutomationHost(automationsDir).reconcile(rows);
+      const appsDir = path.join(projectsDir, 'apps');
+      const { rows } = await listAutomations(appsDir);
+      return localRuntimeAutomationHost(appsDir).reconcile(rows);
     })()
       .then((diff) => {
         if (diff.added.length || diff.updated.length || diff.removed.length) {

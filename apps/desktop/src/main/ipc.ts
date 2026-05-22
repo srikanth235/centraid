@@ -34,15 +34,15 @@ import {
 import {
   AutomationRunsStore,
   InsightsStore,
-  listAutomationProjects,
-  readAutomationProject,
-  setAutomationEnabled,
-  deleteAutomationProject,
+  listAutomations,
+  readAppOwnedAutomation,
+  setAutomationEnabledAt,
+  deleteAutomationAt,
+  parseAutomationRef,
   makeActivityDbProvider,
   generateWebhookId,
   generateWebhookSecret,
   hashWebhookSecret,
-  provisionPendingWebhookAt,
   provisionAppPendingWebhooks,
   WEBHOOK_ROUTE_PREFIX,
   type ProvisionedWebhook,
@@ -113,9 +113,9 @@ export const Channel = {
   // runner (binary version + optional provider endpoint probe).
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 
-  // Automations (issue #91) — desktop UI surface over the on-disk
-  // automation projects under `automationsDir`. Manual run-now fires
-  // the local handler runtime in-process.
+  // Automations (issue #98) — desktop UI surface over the automations
+  // owned by app folders under `appsDir`. Manual run-now fires the
+  // local handler runtime in-process.
   AUTOMATIONS_LIST: 'centraid:automations:list',
   AUTOMATIONS_READ: 'centraid:automations:read',
   AUTOMATIONS_CREATE: 'centraid:automations:create',
@@ -142,7 +142,7 @@ export const Channel = {
  */
 interface MintedWebhookInfo {
   automationId: string;
-  ownerApp?: string;
+  ownerApp: string;
   webhookId: string;
   url: string;
   secret: string;
@@ -358,14 +358,11 @@ export function registerIpcHandlers(): void {
 
       const settings = await loadSettings();
       const { createCentraidAgentSession } = await import('@centraid/builder-harness');
-      // Automations are first-class projects under `automationsDir`; apps
-      // live under `appsDir`. The kind also picks the system prompt and
+      // Every project — UI app or automation app — lives under `appsDir`
+      // (issue #98). `projectKind` still picks the system prompt and
       // gates the app-only live-schema injection / preview snapshot.
       const isAutomation = input.projectKind === 'automation';
-      const projectDir = path.join(
-        isAutomation ? settings.automationsDir : settings.appsDir,
-        input.projectId,
-      );
+      const projectDir = path.join(settings.appsDir, input.projectId);
 
       const runnerPrefs = await loadRunnerPrefs();
 
@@ -397,16 +394,14 @@ export function registerIpcHandlers(): void {
         const gatewayBase = settings.remoteGatewayUrl.replace(/\/+$/, '');
         const toInfo = (w: ProvisionedWebhook): MintedWebhookInfo => ({
           automationId: w.automationId,
-          ...(w.ownerApp ? { ownerApp: w.ownerApp } : {}),
+          ownerApp: w.ownerApp,
           webhookId: w.webhookId,
           url: `${gatewayBase}${WEBHOOK_ROUTE_PREFIX}/${w.webhookId}`,
           secret: w.secret,
         });
         try {
-          if (isAutomation) {
-            const minted = await provisionPendingWebhookAt(projectDir);
-            return minted ? [toInfo(minted)] : [];
-          }
+          // Both UI apps and automation apps are app folders that may own
+          // automations under `automations/` — scan the whole folder.
           return (await provisionAppPendingWebhooks(projectDir)).map(toInfo);
         } catch (err) {
           console.warn(
@@ -629,11 +624,12 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  // ----- Automations (issue #91) -----
-  // Automation *definitions* are projects on disk under `automationsDir`
-  // (read via runtime-core's `automation-project` helpers). The unified
-  // run ledger lives in the activity DB — one lazily-opened provider
-  // over `localRuntimeAutomationDb()` is shared by every store here.
+  // ----- Automations (issue #98) -----
+  // An automation lives inside an app folder under `appsDir`
+  // (`listAutomations` scans every app's active version). An
+  // `automationId` IPC argument is the automation's `<appId>/<id>`
+  // handle. The unified run ledger lives in the activity DB — one
+  // lazily-opened provider over `localRuntimeAutomationDb()` is shared.
   const getActivityDbProvider = (() => {
     let provider: DatabaseProvider | undefined;
     return (): DatabaseProvider => {
@@ -644,7 +640,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.AUTOMATIONS_LIST, async (): Promise<AutomationRow[]> => {
     const settings = await loadSettings();
-    const { rows } = await listAutomationProjects(settings.automationsDir);
+    const { rows } = await listAutomations(settings.appsDir);
     return rows;
   });
 
@@ -652,7 +648,9 @@ export function registerIpcHandlers(): void {
     Channel.AUTOMATIONS_READ,
     async (_e, input: { automationId: string }): Promise<AutomationRow | null> => {
       const settings = await loadSettings();
-      const row = await readAutomationProject(settings.automationsDir, input.automationId).catch(
+      const ref = parseAutomationRef(input.automationId);
+      if (!ref) return null;
+      const row = await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId).catch(
         () => undefined,
       );
       return row ?? null;
@@ -710,7 +708,8 @@ export function registerIpcHandlers(): void {
         return { kind: 'cron', expr: t.expr };
       });
 
-      await scaffoldAutomationProject(settings.automationsDir, input.id, {
+      // `input.id` is the `auto.`-prefixed automation app folder id.
+      await scaffoldAutomationProject(settings.appsDir, input.id, {
         ...(input.name ? { name: input.name } : {}),
         ...(input.description ? { description: input.description } : {}),
         ...(input.prompt ? { prompt: input.prompt } : {}),
@@ -721,10 +720,11 @@ export function registerIpcHandlers(): void {
         ...(input.onFailure ? { onFailure: input.onFailure } : {}),
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       });
-      const row = await readAutomationProject(settings.automationsDir, input.id);
-      if (!row) throw new Error(`automation ${input.id}: scaffolded but not found on disk`);
+      const { rows } = await listAutomations(settings.appsDir);
+      const row = rows.find((r) => r.ownerApp === input.id);
+      if (!row) throw new Error(`automation app ${input.id}: scaffolded but not found on disk`);
       try {
-        await localRuntimeAutomationHost(settings.automationsDir).register(row);
+        await localRuntimeAutomationHost(settings.appsDir).register(row);
       } catch (err) {
         console.warn(
           `[automations] host register failed for ${input.id}: ` +
@@ -750,8 +750,8 @@ export function registerIpcHandlers(): void {
       const settings = await loadSettings();
       const prefs = await loadRunnerPrefs();
       const { outcome, record } = await runAutomationLocal({
-        automationId: input.automationId,
-        automationsDir: settings.automationsDir,
+        automationRef: input.automationId,
+        appsDir: settings.appsDir,
         activityDb: getActivityDbProvider(),
         runner: prefs.kind,
         // "Run now" is a manual fire — tag it so the executions log
@@ -776,14 +776,16 @@ export function registerIpcHandlers(): void {
       // `automation.json`. Host gets register(row); OsSchedulerHost
       // collapses enabled=false to unregister.
       const settings = await loadSettings();
-      const row = await setAutomationEnabled(
-        settings.automationsDir,
-        input.automationId,
-        input.enabled,
-      );
+      const ref = parseAutomationRef(input.automationId);
+      const current = ref
+        ? await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId)
+        : undefined;
+      const row = current
+        ? await setAutomationEnabledAt(current.dir, current.ownerApp, input.enabled)
+        : undefined;
       if (row) {
         try {
-          await localRuntimeAutomationHost(settings.automationsDir).register(row);
+          await localRuntimeAutomationHost(settings.appsDir).register(row);
         } catch (err) {
           console.warn(
             `[automations] host register failed for ${input.automationId}: ` +
@@ -797,17 +799,28 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { automationId: string }) => {
     // Delete is best-effort: tear down the OS scheduler entry, then
-    // drop the project dir + its run ledger.
+    // drop the project + its run ledger.
     const settings = await loadSettings();
     try {
-      await localRuntimeAutomationHost(settings.automationsDir).unregister(input.automationId);
+      await localRuntimeAutomationHost(settings.appsDir).unregister(input.automationId);
     } catch (err) {
       console.warn(
         `[automations] host unregister failed for ${input.automationId}: ` +
           (err instanceof Error ? err.message : String(err)),
       );
     }
-    await deleteAutomationProject(settings.automationsDir, input.automationId);
+    const ref = parseAutomationRef(input.automationId);
+    if (ref) {
+      // An automation app (`auto.`-prefixed, a single automation) is
+      // deleted whole; an automation owned by a UI app drops just its
+      // `automations/<id>/` subdir.
+      if (ref.appId.startsWith('auto.')) {
+        await deleteAutomationAt(path.join(settings.appsDir, ref.appId));
+      } else {
+        const row = await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId);
+        if (row) await deleteAutomationAt(row.dir);
+      }
+    }
     new AutomationRunsStore(getActivityDbProvider()).deleteAutomationData(input.automationId);
     return { ok: true };
   });

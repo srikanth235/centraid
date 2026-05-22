@@ -3245,7 +3245,7 @@
         if (!projectId) return;
         const next = checkbox.checked;
         try {
-          await Api().setAutomationEnabled({ automationId: row.id, enabled: next });
+          await Api().setAutomationEnabled({ automationId: row.ref, enabled: next });
           await refreshAutomations();
         } catch (err) {
           // Revert the toggle so the UI doesn't misrepresent persisted state.
@@ -3261,7 +3261,7 @@
         automationRunState.set(row.name, { kind: 'running' });
         if (active === 'automations') drawStage();
         try {
-          const result = await Api().runAutomationNow({ automationId: row.id });
+          const result = await Api().runAutomationNow({ automationId: row.ref });
           automationRunState.set(row.name, { kind: 'done', result, finishedAt: Date.now() });
         } catch (err) {
           automationRunState.set(row.name, {
@@ -3286,7 +3286,7 @@
         );
         if (!ok) return;
         try {
-          await Api().deleteAutomation({ automationId: row.id });
+          await Api().deleteAutomation({ automationId: row.ref });
           automationRunState.delete(row.name);
           await refreshAutomations();
         } catch (err) {
@@ -3865,7 +3865,10 @@
     async function refreshAutomationRow(): Promise<void> {
       if (!projectId) return;
       try {
-        const row = await Api().readAutomation({ automationId: projectId });
+        // The builder opens an automation app by its folder id; resolve
+        // the single automation it owns to get the `<appId>/<id>` handle.
+        const all = await Api().listAutomations();
+        const row = all.find((r) => r.ownerApp === projectId);
         if (row) automationRow = row;
       } catch {
         /* keep the last good snapshot */
@@ -3880,13 +3883,14 @@
     }
 
     async function handleToggleEnabled(): Promise<void> {
-      if (!projectId || automationBusy) return;
-      const next = !(automationRow?.enabled === true);
+      if (!projectId || automationBusy || !automationRow) return;
+      const ref = automationRow.ref;
+      const next = !(automationRow.enabled === true);
       automationBusy = true;
       primaryBtn.setAttribute('disabled', '');
       refreshSyncStatus();
       try {
-        await Api().setAutomationEnabled({ automationId: projectId, enabled: next });
+        await Api().setAutomationEnabled({ automationId: ref, enabled: next });
         showToast(next ? 'Automation enabled — schedule is live' : 'Automation disabled');
         await refreshAutomationRow();
       } catch (err) {
@@ -3900,7 +3904,8 @@
 
     // Test fire — run the handler once now, surfacing the outcome in chat.
     async function runAutomationOnce(): Promise<void> {
-      if (!projectId || automationBusy) return;
+      if (!projectId || automationBusy || !automationRow) return;
+      const ref = automationRow.ref;
       automationBusy = true;
       refreshSyncStatus();
       if (tab === 'runs') renderRight();
@@ -3910,7 +3915,7 @@
         spinning: true,
       });
       try {
-        const res = await Api().runAutomationNow({ automationId: projectId });
+        const res = await Api().runAutomationNow({ automationId: ref });
         updateMessage(statusIdx, {
           kind: 'status',
           spinning: false,
@@ -4123,9 +4128,9 @@
       );
       rightPaneContent.append(wrap);
 
-      if (!projectId) return;
+      if (!projectId || !automationRow) return;
       void Api()
-        .listAutomationRuns({ automationId: projectId, limit: 20 })
+        .listAutomationRuns({ automationId: automationRow.ref, limit: 20 })
         .then((runs) => {
           list.innerHTML = '';
           if (runs.length === 0) {
