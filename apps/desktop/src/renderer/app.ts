@@ -335,6 +335,7 @@
     | { kind: 'starred' }
     | { kind: 'automations' }
     | { kind: 'templates' }
+    | { automationId: string; kind: 'automation-view' }
     | { id: string; kind: 'app' }
     | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' }
     | { automationId: string; kind: 'automation-builder' };
@@ -351,6 +352,7 @@
     if (route.kind === 'starred') return 'starred';
     if (route.kind === 'automations') return 'automations';
     if (route.kind === 'templates') return 'templates';
+    if (route.kind === 'automation-view') return `automation-view:${route.automationId}`;
     if (route.kind === 'app') return `app:${route.id}`;
     if (route.kind === 'automation-builder') return `automation-builder:${route.automationId}`;
     if (route.appContext) return `builder:${route.appContext.id}`;
@@ -402,6 +404,8 @@
         renderAutomations();
       } else if (route.kind === 'templates') {
         renderAutomationTemplates();
+      } else if (route.kind === 'automation-view') {
+        renderAutomationView(route.automationId);
       } else if (route.kind === 'app') {
         openApp(route.id);
       } else if (route.kind === 'automation-builder') {
@@ -1802,6 +1806,332 @@
       return;
     }
     enterAutomationBuilder({ automationId: id });
+  }
+
+  // ───────────────────────── Automation viewer ─────────────────────
+  // A per-automation detail page: the trigger as a sentence, the prompt
+  // it runs, and its run history. `automationId` is the `<appId>/<id>`
+  // ref. Reached from the standing-order list.
+
+  function fmtTokens(n: number): string {
+    if (n <= 0) return '—';
+    if (n < 1000) return String(n);
+    return `${(n / 1000).toFixed(1)}k`;
+  }
+
+  // Sum/derive the lifetime KPIs shown in the viewer's side rail.
+  function automationLifetime(runs: readonly CentraidAutomationRunRecord[]): {
+    total: number;
+    successPct: number | null;
+    avg: string;
+    cost: string;
+  } {
+    const total = runs.length;
+    const ok = runs.filter((r) => r.ok).length;
+    const durations = runs
+      .filter((r) => r.endedAt !== undefined)
+      .map((r) => r.endedAt! - r.startedAt);
+    const avgMs = durations.length
+      ? durations.reduce((a, b) => a + b, 0) / durations.length
+      : undefined;
+    const cost = runs.reduce((s, r) => s + (r.totalCostUsd ?? 0), 0);
+    return {
+      total,
+      successPct: total ? Math.round((ok / total) * 100) : null,
+      avg: avgMs !== undefined ? formatDuration(Math.round(avgMs)) : '—',
+      cost: cost > 0 ? `$${cost.toFixed(2)}` : '—',
+    };
+  }
+
+  // One run in the viewer's history list. Display-only in this commit;
+  // the run-as-thread viewer (issue #101 commit 3) makes it openable.
+  function renderAuRunRow(run: CentraidAutomationRunRecord): HTMLElement {
+    const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
+    const duration =
+      run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
+    const meta = [run.triggerOrigin ?? run.triggerKind, duration, `${fmtTokens(tokens)} tokens`];
+    if (run.totalCostUsd) meta.push(`$${run.totalCostUsd.toFixed(2)}`);
+    return el('div', { class: 'cd-au-run', 'data-ok': String(run.ok) }, [
+      el('span', { class: 'cd-au-run-dot', 'aria-hidden': 'true' }),
+      el('span', { class: 'cd-au-run-mid' }, [
+        el(
+          'span',
+          { class: 'cd-au-run-sum' },
+          run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
+        ),
+        el('span', { class: 'cd-au-run-meta' }, meta.join('  ·  ')),
+      ]),
+      el('span', { class: 'cd-au-run-when' }, new Date(run.startedAt).toLocaleString()),
+    ]);
+  }
+
+  function renderAutomationView(automationId: string): void {
+    recordRoute({ kind: 'automation-view', automationId });
+    clear();
+    const main = el('div', { class: 'has-wall' });
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
+    scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading automation…'));
+    mountShellPage('automations', main);
+    void (async () => {
+      let row: CentraidAutomationRow | null = null;
+      let runs: CentraidAutomationRunRecord[] = [];
+      try {
+        [row, runs] = await Promise.all([
+          window.CentraidApi.readAutomation({ automationId }),
+          window.CentraidApi.listAutomationRuns({ automationId, limit: 40 }),
+        ]);
+      } catch (err) {
+        if (document.contains(scroll)) {
+          scroll.replaceChildren(
+            el(
+              'div',
+              { class: 'cd-au-loading' },
+              `Could not load automation: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
+        }
+        return;
+      }
+      if (!document.contains(scroll)) return;
+      if (!row) {
+        scroll.replaceChildren(el('div', { class: 'cd-au-loading' }, 'Automation not found.'));
+        return;
+      }
+      scroll.replaceChildren(buildAutomationView(row, runs));
+    })();
+  }
+
+  function buildAutomationView(
+    row: CentraidAutomationRow,
+    runs: readonly CentraidAutomationRunRecord[],
+  ): HTMLElement {
+    const view = el('div', { class: 'cd-au-view' });
+    const hasWebhook = row.triggers.some((t) => t.kind === 'webhook');
+    const hasCron = row.triggers.some((t) => t.kind === 'cron');
+
+    // ── Breadcrumb + header ──
+    const crumb = el('div', { class: 'cd-au-crumb' }, [
+      el('button', { type: 'button', onClick: () => renderAutomations() }, 'Automations'),
+      el('span', { class: 'cd-au-crumb-sep', trustedHtml: Icon.ArrowRight({ size: 12 }) }),
+      el('span', {}, row.name),
+    ]);
+
+    const statusPill = el(
+      'span',
+      { class: 'cd-au-status', 'data-on': String(row.enabled) },
+      row.enabled ? 'Active' : 'Paused',
+    );
+    const title = el('div', { class: 'cd-au-vtitle' }, [
+      el('span', {
+        class: 'cd-au-glyph',
+        'data-on': String(row.enabled),
+        trustedHtml: Icon.Bolt({ size: 19 }),
+      }),
+      el('h1', {}, row.name),
+      statusPill,
+    ]);
+
+    const editBtn = el('button', {
+      class: 'cd-au-btn cd-au-btn-ghost cd-au-btn-icon',
+      type: 'button',
+      title: 'Edit in builder',
+      trustedHtml: Icon.Pencil({ size: 15 }),
+      onClick: () => enterAutomationBuilder({ automationId: row.id }),
+    });
+    const runBtn = el('button', {
+      class: 'cd-au-btn cd-au-btn-primary',
+      type: 'button',
+      trustedHtml: `${Icon.Play({ size: 14 })}<span>Run now</span>`,
+    }) as HTMLButtonElement;
+    runBtn.addEventListener('click', () => {
+      runBtn.disabled = true;
+      runBtn.querySelector('span')!.textContent = 'Running…';
+      void (async () => {
+        try {
+          await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+        } catch (err) {
+          showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        renderAutomationView(row.ref);
+      })();
+    });
+    const header = el('div', { class: 'cd-au-vhead' }, [
+      el('div', {}, [crumb, title]),
+      el('div', { class: 'cd-au-actions' }, [editBtn, runBtn]),
+    ]);
+    view.append(header);
+
+    // ── Trigger hero ──
+    const cronExprs = row.triggers
+      .filter((t): t is { kind: 'cron'; expr: string } => t.kind === 'cron')
+      .map((t) => t.expr);
+    const triggerDetail = el('div', { class: 'cd-au-hero-detail' });
+    if (hasCron) {
+      for (const expr of cronExprs) {
+        triggerDetail.append(el('span', { class: 'cd-au-hero-tag' }, 'cron'), el('code', {}, expr));
+      }
+    }
+    if (hasWebhook) {
+      const wh = row.triggers.find((t) => t.kind === 'webhook') as
+        | { kind: 'webhook'; id?: string; pending?: true }
+        | undefined;
+      triggerDetail.append(
+        el('span', { class: 'cd-au-hero-tag' }, 'webhook'),
+        el('code', {}, wh?.pending ? 'pending activation' : (wh?.id ?? 'endpoint assigned')),
+      );
+    }
+
+    const statusToggle = el('label', {
+      class: 'cd-au-switch',
+      'aria-label': `${row.enabled ? 'Disable' : 'Enable'} ${row.name}`,
+    });
+    const toggleInput = el('input', { type: 'checkbox' }) as HTMLInputElement;
+    toggleInput.checked = row.enabled;
+    toggleInput.addEventListener('change', () => {
+      const next = toggleInput.checked;
+      void (async () => {
+        try {
+          await window.CentraidApi.setAutomationEnabled({ automationId: row.ref, enabled: next });
+          renderAutomationView(row.ref);
+        } catch (err) {
+          toggleInput.checked = row.enabled;
+          showToast(
+            `Could not ${next ? 'enable' : 'disable'} ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      })();
+    });
+    statusToggle.append(
+      toggleInput,
+      el('span', { class: 'cd-au-switch-track', 'aria-hidden': 'true' }),
+    );
+
+    const hero = el('div', { class: 'cd-au-hero' }, [
+      el('span', {
+        class: 'cd-au-hero-icon',
+        trustedHtml: hasWebhook && !hasCron ? Icon.Globe({ size: 26 }) : Icon.History({ size: 26 }),
+      }),
+      el('div', { class: 'cd-au-hero-main' }, [
+        el('div', { class: 'cd-au-hero-eyebrow' }, hasWebhook && !hasCron ? 'Trigger' : 'Schedule'),
+        el('div', { class: 'cd-au-hero-when' }, triggersSummary(row.triggers)),
+        triggerDetail,
+      ]),
+      el('div', { class: 'cd-au-hero-status' }, [
+        el('div', { class: 'cd-au-hero-eyebrow' }, 'Status'),
+        el('div', { class: 'cd-au-hero-toggle' }, [
+          statusToggle,
+          el('span', {}, row.enabled ? 'Active' : 'Paused'),
+        ]),
+      ]),
+    ]);
+    view.append(hero);
+
+    // ── Two columns: instructions + runs / side rail ──
+    const cols = el('div', { class: 'cd-au-cols' });
+
+    const instrCard = el('div', { class: 'cd-au-card' }, [
+      el('div', { class: 'cd-au-card-h' }, [el('h3', {}, 'Instructions')]),
+      el('div', { class: 'cd-au-instr' }, row.manifest.prompt || 'No instructions yet.'),
+    ]);
+
+    // Runs card — filter chips repaint just the list container.
+    const runsBody = el('div', { class: 'cd-au-runs' });
+    const filters = el('div', { class: 'cd-au-filters' });
+    let runFilter = 'all';
+    const matchesFilter = (run: CentraidAutomationRunRecord): boolean => {
+      if (runFilter === 'all') return true;
+      if (runFilter === 'webhook') return run.triggerOrigin === 'webhook';
+      return run.triggerKind === runFilter;
+    };
+    const paintRuns = (): void => {
+      const shown = runs.filter(matchesFilter);
+      runsBody.replaceChildren(
+        ...(shown.length
+          ? shown.map(renderAuRunRow)
+          : [el('div', { class: 'cd-au-runs-empty' }, `No ${runFilter} runs yet.`)]),
+      );
+      for (const chip of filters.children) {
+        const c = chip as HTMLElement;
+        if (c.dataset.filter === runFilter) c.dataset.active = 'true';
+        else delete c.dataset.active;
+      }
+    };
+    for (const f of ['all', 'scheduled', 'manual', 'webhook']) {
+      filters.append(
+        el(
+          'button',
+          {
+            class: 'cd-au-filter',
+            type: 'button',
+            'data-filter': f,
+            onClick: () => {
+              runFilter = f;
+              paintRuns();
+            },
+          },
+          f,
+        ),
+      );
+    }
+    paintRuns();
+    const runsCard = el('div', { class: 'cd-au-card' }, [
+      el('div', { class: 'cd-au-card-h' }, [
+        el('h3', {}, 'Runs'),
+        el('span', { class: 'cd-au-card-count' }, String(runs.length)),
+      ]),
+      filters,
+      runsBody,
+    ]);
+
+    cols.append(el('div', { class: 'cd-au-col-main' }, [instrCard, runsCard]));
+
+    // ── Side rail ──
+    const aboutRow = (k: string, v: HTMLElement | string): HTMLElement =>
+      el('div', { class: 'cd-au-about-row' }, [
+        el('span', { class: 'cd-au-about-k' }, k),
+        typeof v === 'string' ? el('span', { class: 'cd-au-about-v' }, v) : v,
+      ]);
+    const aboutCard = el('div', { class: 'cd-au-card' }, [
+      el('div', { class: 'cd-au-card-h' }, [el('h3', {}, 'About')]),
+      aboutRow('Owner', row.ownerApp),
+      aboutRow('Model', row.manifest.requires.model ?? 'Default'),
+      aboutRow(
+        'Apps',
+        row.manifest.apps && row.manifest.apps.length > 0
+          ? row.manifest.apps.join(', ')
+          : 'None linked',
+      ),
+    ]);
+    const mcps = row.manifest.requires.mcps ?? [];
+    if (mcps.length > 0) {
+      aboutCard.append(
+        el('div', { class: 'cd-au-about-row cd-au-about-row-wrap' }, [
+          el('span', { class: 'cd-au-about-k' }, 'Uses'),
+          renderIntegrationChips([...mcps]),
+        ]),
+      );
+    }
+
+    const life = automationLifetime(runs);
+    const statTile = (value: string, label: string, ok?: boolean): HTMLElement =>
+      el('div', { class: 'cd-au-stat' }, [
+        el('div', { class: 'cd-au-stat-v', ...(ok ? { 'data-ok': 'true' } : {}) }, value),
+        el('div', { class: 'cd-au-stat-k' }, label),
+      ]);
+    const statsCard = el('div', { class: 'cd-au-card' }, [
+      el('div', { class: 'cd-au-card-h' }, [el('h3', {}, 'Lifetime')]),
+      el('div', { class: 'cd-au-stats' }, [
+        statTile(String(life.total), 'Runs'),
+        statTile(life.successPct === null ? '—' : `${life.successPct}%`, 'Success', true),
+        statTile(life.avg, 'Avg time'),
+        statTile(life.cost, 'Total cost'),
+      ]),
+    ]);
+
+    cols.append(el('div', { class: 'cd-au-side' }, [aboutCard, statsCard]));
+    view.append(cols);
+    return view;
   }
 
   function automationsEmpty(host: HTMLElement, title: string, sub: string): void {
@@ -4185,7 +4515,16 @@
     // Header line: automation name + schedule · run-now affordance.
     const head = el('div', { class: 'cd-app-order-head' });
     head.append(
-      el('span', { class: 'cd-app-order-name' }, row.name),
+      el(
+        'button',
+        {
+          class: 'cd-app-order-name',
+          type: 'button',
+          title: `Open ${row.name}`,
+          onClick: () => renderAutomationView(row.ref),
+        },
+        row.name,
+      ),
       el('span', { class: 'cd-app-order-schedule' }, triggersSummary(row.triggers)),
     );
 
