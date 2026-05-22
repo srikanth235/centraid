@@ -12,7 +12,7 @@ conversation-native model. Approved off a standalone prototype.
 
 - [x] Commit 1 — templates gallery
 - [x] Commit 2 — automation viewer
-- [ ] Commit 3 — run viewer as chat thread
+- [x] Commit 3 — run viewer as chat thread
 - [ ] Commit 4 — overview redesign
 
 ## What changed
@@ -52,11 +52,31 @@ derived from the run records.
 
 Run rows are display-only here; commit 3 makes each one open as a thread.
 
+### Commit 3 — run viewer as chat thread
+
+A `run-view` `ShellRoute` and `renderRunView` → `buildRunView` that
+render a run as a conversation rather than an n8n step timeline. It
+reads the automation, the run record, and its nodes in one `Promise.all`
+(`readAutomation`, `listAutomationRuns`, `listAutomationRunNodes`).
+
+The thread has three nodes on a connecting spine: a **trigger** message
+(what fired it + the collapsible instructions prompt), a **work** message
+(every run node folded into one collapsible group; each step expands to
+its args/output JSON and any error — the n8n detail, tucked away), and a
+**reply** message (the run summary + output JSON, or a failure box). A
+side rail carries run detail, usage, and a link back to the automation;
+"Hide details" collapses it.
+
+Standing-order run rows (`renderAuRunRow`) become buttons that open the
+thread, keyed by the run record's own `automationId`.
+
 ## Out of scope
 
 - A backend template catalog — templates stay front-end seeds.
 - A computed "next run" timestamp — no cron-projection API exists, so
   the hero shows the schedule + live status rather than a fake ETA.
+- Continuing a run as a live conversation — there is no API to resume a
+  finished run, so the thread is read-only (no composer).
 - Standing-order rendering is left in place where the app settings panel
   reuses it.
 

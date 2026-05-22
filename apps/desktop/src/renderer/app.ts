@@ -336,6 +336,7 @@
     | { kind: 'automations' }
     | { kind: 'templates' }
     | { automationId: string; kind: 'automation-view' }
+    | { automationId: string; kind: 'run-view'; runId: string }
     | { id: string; kind: 'app' }
     | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' }
     | { automationId: string; kind: 'automation-builder' };
@@ -353,6 +354,7 @@
     if (route.kind === 'automations') return 'automations';
     if (route.kind === 'templates') return 'templates';
     if (route.kind === 'automation-view') return `automation-view:${route.automationId}`;
+    if (route.kind === 'run-view') return `run-view:${route.runId}`;
     if (route.kind === 'app') return `app:${route.id}`;
     if (route.kind === 'automation-builder') return `automation-builder:${route.automationId}`;
     if (route.appContext) return `builder:${route.appContext.id}`;
@@ -406,6 +408,8 @@
         renderAutomationTemplates();
       } else if (route.kind === 'automation-view') {
         renderAutomationView(route.automationId);
+      } else if (route.kind === 'run-view') {
+        renderRunView(route.automationId, route.runId);
       } else if (route.kind === 'app') {
         openApp(route.id);
       } else if (route.kind === 'automation-builder') {
@@ -1843,26 +1847,37 @@
     };
   }
 
-  // One run in the viewer's history list. Display-only in this commit;
-  // the run-as-thread viewer (issue #101 commit 3) makes it openable.
+  // One run in the viewer's history list — opens as a chat thread.
   function renderAuRunRow(run: CentraidAutomationRunRecord): HTMLElement {
     const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
     const duration =
       run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
     const meta = [run.triggerOrigin ?? run.triggerKind, duration, `${fmtTokens(tokens)} tokens`];
     if (run.totalCostUsd) meta.push(`$${run.totalCostUsd.toFixed(2)}`);
-    return el('div', { class: 'cd-au-run', 'data-ok': String(run.ok) }, [
-      el('span', { class: 'cd-au-run-dot', 'aria-hidden': 'true' }),
-      el('span', { class: 'cd-au-run-mid' }, [
-        el(
-          'span',
-          { class: 'cd-au-run-sum' },
-          run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
-        ),
-        el('span', { class: 'cd-au-run-meta' }, meta.join('  ·  ')),
-      ]),
-      el('span', { class: 'cd-au-run-when' }, new Date(run.startedAt).toLocaleString()),
-    ]);
+    return el(
+      'button',
+      {
+        class: 'cd-au-run',
+        type: 'button',
+        'data-ok': String(run.ok),
+        onClick: () => {
+          if (run.automationId) renderRunView(run.automationId, run.runId);
+        },
+      },
+      [
+        el('span', { class: 'cd-au-run-dot', 'aria-hidden': 'true' }),
+        el('span', { class: 'cd-au-run-mid' }, [
+          el(
+            'span',
+            { class: 'cd-au-run-sum' },
+            run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
+          ),
+          el('span', { class: 'cd-au-run-meta' }, meta.join('  ·  ')),
+        ]),
+        el('span', { class: 'cd-au-run-when' }, new Date(run.startedAt).toLocaleString()),
+        el('span', { class: 'cd-au-run-go', trustedHtml: Icon.ArrowRight({ size: 15 }) }),
+      ],
+    );
   }
 
   function renderAutomationView(automationId: string): void {
@@ -2132,6 +2147,353 @@
     cols.append(el('div', { class: 'cd-au-side' }, [aboutCard, statsCard]));
     view.append(cols);
     return view;
+  }
+
+  // ───────────────────── Run viewer (chat thread) ──────────────────
+  // A run is just a chat thread: the trigger kicked it off, Centraid
+  // worked through some steps, and it ended with a reply. The n8n-style
+  // step timeline is folded into a collapsible group inside the thread.
+
+  // Human label + icon for what fired a run.
+  function runTriggerLabel(run: CentraidAutomationRunRecord): { label: string; icon: string } {
+    if (run.triggerOrigin === 'webhook') {
+      return { label: 'Webhook trigger', icon: Icon.Globe({ size: 12 }) };
+    }
+    const byKind: Record<string, string> = {
+      scheduled: 'Scheduled run',
+      manual: 'Manual run',
+      replay: 'Replayed run',
+      on_failure: 'Failure-triggered run',
+      interactive: 'Interactive run',
+    };
+    const icon =
+      run.triggerKind === 'manual'
+        ? Icon.Bolt({ size: 12 })
+        : run.triggerKind === 'scheduled'
+          ? Icon.History({ size: 12 })
+          : Icon.Reset({ size: 12 });
+    return { label: byKind[run.triggerKind] ?? 'Run', icon };
+  }
+
+  // One node of a run rendered as a thread step — an expandable row
+  // carrying the tool/agent name, duration, and (on open) its payload.
+  function renderThreadStep(node: CentraidAutomationRunNode): HTMLElement {
+    const step = el('div', { class: 'cd-au-step', 'data-ok': String(node.ok) });
+    const body = el('div', { class: 'cd-au-step-body', hidden: 'true' });
+    const head = el('button', {
+      class: 'cd-au-step-head',
+      type: 'button',
+      'aria-expanded': 'false',
+    }) as HTMLButtonElement;
+    head.append(
+      el('span', {
+        class: 'cd-au-step-ic',
+        'data-ok': String(node.ok),
+        trustedHtml: node.ok ? Icon.Check({ size: 13 }) : Icon.X({ size: 13 }),
+      }),
+      el('span', { class: 'cd-au-step-name' }, node.name ?? node.model ?? node.kind),
+      el('span', { class: 'cd-au-step-kind' }, node.kind),
+      el(
+        'span',
+        { class: 'cd-au-step-dur' },
+        node.durationMs !== undefined ? formatDuration(node.durationMs) : '—',
+      ),
+    );
+    let built = false;
+    head.addEventListener('click', () => {
+      const open = head.getAttribute('aria-expanded') === 'true';
+      head.setAttribute('aria-expanded', String(!open));
+      body.hidden = open;
+      if (!built) {
+        built = true;
+        if (node.error) body.append(el('div', { class: 'cd-au-step-error' }, node.error));
+        if (node.argsJson) {
+          body.append(
+            el('div', { class: 'cd-au-step-label' }, 'Input'),
+            el('pre', { class: 'cd-au-step-pre' }, prettyJson(node.argsJson)),
+          );
+        }
+        if (node.outputJson) {
+          body.append(
+            el('div', { class: 'cd-au-step-label' }, 'Output'),
+            el('pre', { class: 'cd-au-step-pre' }, prettyJson(node.outputJson)),
+          );
+        }
+        if (!node.error && !node.argsJson && !node.outputJson) {
+          body.append(el('div', { class: 'cd-au-step-empty' }, 'No payload recorded.'));
+        }
+      }
+    });
+    step.append(head, body);
+    return step;
+  }
+
+  function renderRunView(automationId: string, runId: string): void {
+    recordRoute({ kind: 'run-view', automationId, runId });
+    clear();
+    const main = el('div', { class: 'has-wall' });
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
+    scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading run…'));
+    mountShellPage('automations', main);
+    void (async () => {
+      let row: CentraidAutomationRow | null = null;
+      let runs: CentraidAutomationRunRecord[] = [];
+      let nodes: CentraidAutomationRunNode[] = [];
+      try {
+        [row, runs, nodes] = await Promise.all([
+          window.CentraidApi.readAutomation({ automationId }),
+          window.CentraidApi.listAutomationRuns({ automationId, limit: 100 }),
+          window.CentraidApi.listAutomationRunNodes({ runId }),
+        ]);
+      } catch (err) {
+        if (document.contains(scroll)) {
+          scroll.replaceChildren(
+            el(
+              'div',
+              { class: 'cd-au-loading' },
+              `Could not load run: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
+        }
+        return;
+      }
+      if (!document.contains(scroll)) return;
+      const run = runs.find((r) => r.runId === runId);
+      if (!row || !run) {
+        scroll.replaceChildren(el('div', { class: 'cd-au-loading' }, 'Run not found.'));
+        return;
+      }
+      scroll.replaceChildren(buildRunView(row, run, nodes));
+    })();
+  }
+
+  function buildRunView(
+    row: CentraidAutomationRow,
+    run: CentraidAutomationRunRecord,
+    nodes: readonly CentraidAutomationRunNode[],
+  ): HTMLElement {
+    const wrap = el('div', { class: 'cd-au-rv' });
+    const trigger = runTriggerLabel(run);
+    const model = row.manifest.requires.model ?? 'Centraid';
+
+    // ── Breadcrumb ──
+    wrap.append(
+      el('div', { class: 'cd-au-crumb' }, [
+        el('button', { type: 'button', onClick: () => renderAutomations() }, 'Automations'),
+        el('span', { class: 'cd-au-crumb-sep', trustedHtml: Icon.ArrowRight({ size: 12 }) }),
+        el('button', { type: 'button', onClick: () => renderAutomationView(row.ref) }, row.name),
+        el('span', { class: 'cd-au-crumb-sep', trustedHtml: Icon.ArrowRight({ size: 12 }) }),
+        el('span', {}, 'Run'),
+      ]),
+    );
+
+    // ── Header ──
+    const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
+    const duration =
+      run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
+    const runAgain = el('button', {
+      class: 'cd-au-btn cd-au-btn-ghost cd-au-btn-sm',
+      type: 'button',
+      trustedHtml: `${Icon.Reset({ size: 13 })}<span>Run again</span>`,
+    }) as HTMLButtonElement;
+    runAgain.addEventListener('click', () => {
+      runAgain.disabled = true;
+      void (async () => {
+        try {
+          await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+        } catch (err) {
+          showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        renderAutomationView(row.ref);
+      })();
+    });
+
+    const grid = el('div', { class: 'cd-au-rv-grid' });
+    const detailsBtn = el('button', {
+      class: 'cd-au-btn cd-au-btn-ghost cd-au-btn-sm',
+      type: 'button',
+      trustedHtml: `${Icon.Eye({ size: 13 })}<span>Hide details</span>`,
+    }) as HTMLButtonElement;
+    detailsBtn.addEventListener('click', () => {
+      const narrow = grid.classList.toggle('cd-au-rv-grid--narrow');
+      detailsBtn.querySelector('span')!.textContent = narrow ? 'Show details' : 'Hide details';
+    });
+
+    wrap.append(
+      el('div', { class: 'cd-au-rv-head' }, [
+        el('span', {
+          class: 'cd-au-glyph',
+          'data-on': 'true',
+          trustedHtml: Icon.Bolt({ size: 19 }),
+        }),
+        el('div', { class: 'cd-au-rv-head-main' }, [
+          el('div', { class: 'cd-au-rv-head-name' }, [
+            row.name,
+            el(
+              'span',
+              { class: 'cd-au-status', 'data-on': String(run.ok) },
+              run.ok ? 'Completed' : 'Failed',
+            ),
+          ]),
+          el(
+            'div',
+            { class: 'cd-au-rv-head-meta' },
+            `${trigger.label}  ·  ${new Date(run.startedAt).toLocaleString()}  ·  ${duration}  ·  ${fmtTokens(tokens)} tokens`,
+          ),
+        ]),
+        el('div', { class: 'cd-au-actions' }, [detailsBtn, runAgain]),
+      ]),
+    );
+
+    // ── Thread ──
+    const thread = el('div', { class: 'cd-au-thread' });
+
+    // Trigger message — the instruction that kicked the run off.
+    const instr = el(
+      'div',
+      { class: 'cd-au-trig-instr' },
+      row.manifest.prompt || 'No instructions.',
+    );
+    const instrMore = el('button', {
+      class: 'cd-au-trig-more',
+      type: 'button',
+    }) as HTMLButtonElement;
+    instrMore.textContent = 'Show full instructions';
+    instrMore.addEventListener('click', () => {
+      const open = instr.classList.toggle('cd-au-trig-instr--open');
+      instrMore.textContent = open ? 'Collapse instructions' : 'Show full instructions';
+    });
+    thread.append(
+      el('div', { class: 'cd-au-msg' }, [
+        el('span', {
+          class: 'cd-au-node cd-au-node-trigger',
+          trustedHtml: Icon.Bolt({ size: 11 }),
+        }),
+        el('div', { class: 'cd-au-msg-actor' }, [
+          el('span', { class: 'cd-au-msg-actor-trig', trustedHtml: trigger.icon }),
+          trigger.label,
+          el('time', {}, new Date(run.startedAt).toLocaleString()),
+        ]),
+        el('div', { class: 'cd-au-trig-card' }, [
+          el('div', { class: 'cd-au-trig-line' }, [
+            el('span', { trustedHtml: Icon.History({ size: 14 }) }),
+            triggersSummary(row.triggers),
+          ]),
+          instr,
+          instrMore,
+        ]),
+      ]),
+    );
+
+    // Work message — the steps, folded into a collapsible group.
+    if (nodes.length > 0) {
+      const okCount = nodes.filter((n) => n.ok).length;
+      const failed = okCount < nodes.length;
+      const stepsWrap = el('div', { class: 'cd-au-work-steps' });
+      for (const node of nodes) stepsWrap.append(renderThreadStep(node));
+      const workGroup = el('div', { class: 'cd-au-work' });
+      if (failed) workGroup.classList.add('cd-au-work--open');
+      const workSum = el('button', {
+        class: 'cd-au-work-sum',
+        type: 'button',
+      }) as HTMLButtonElement;
+      workSum.append(
+        el('span', {
+          class: 'cd-au-work-spin',
+          'data-ok': String(!failed),
+          trustedHtml: failed ? Icon.X({ size: 10 }) : Icon.Check({ size: 10 }),
+        }),
+        el(
+          'span',
+          { class: 'cd-au-work-sum-t' },
+          failed ? 'Worked, then hit an error' : 'Worked through the run',
+        ),
+        el('span', { class: 'cd-au-work-sum-m' }, `${nodes.length} steps`),
+        el('span', { class: 'cd-au-work-chev', trustedHtml: Icon.ChevronDown({ size: 14 }) }),
+      );
+      workSum.addEventListener('click', () => {
+        workGroup.classList.toggle('cd-au-work--open');
+      });
+      workGroup.append(workSum, stepsWrap);
+      thread.append(
+        el('div', { class: 'cd-au-msg' }, [
+          el('span', {
+            class: 'cd-au-node cd-au-node-work',
+            trustedHtml: Icon.Settings({ size: 11 }),
+          }),
+          el('div', { class: 'cd-au-msg-actor' }, 'Centraid · working'),
+          workGroup,
+        ]),
+      );
+    }
+
+    // Reply message — the run's outcome as the closing turn.
+    const replyCard = el('div', { class: 'cd-au-reply-card' });
+    if (run.ok) {
+      replyCard.append(el('p', { class: 'cd-au-reply-lead' }, run.summary ?? 'The run completed.'));
+      if (run.outputJson) {
+        replyCard.append(
+          el('div', { class: 'cd-au-step-label' }, 'Output'),
+          el('pre', { class: 'cd-au-step-pre' }, prettyJson(run.outputJson)),
+        );
+      }
+    } else {
+      replyCard.append(
+        el('p', { class: 'cd-au-reply-lead' }, 'This run did not complete.'),
+        el('div', { class: 'cd-au-fail-box' }, run.error ?? 'No error detail was recorded.'),
+      );
+    }
+    thread.append(
+      el('div', { class: 'cd-au-msg' }, [
+        el('span', {
+          class: run.ok ? 'cd-au-node cd-au-node-reply' : 'cd-au-node cd-au-node-fail',
+          trustedHtml: run.ok ? Icon.Sparkle({ size: 11 }) : Icon.X({ size: 11 }),
+        }),
+        el('div', { class: 'cd-au-msg-actor' }, run.ok ? `Centraid · ${model}` : 'Run failed'),
+        replyCard,
+      ]),
+    );
+
+    // ── Side rail ──
+    const railRow = (k: string, v: string): HTMLElement =>
+      el('div', { class: 'cd-au-rside-row' }, [
+        el('span', { class: 'cd-au-rside-k' }, k),
+        el('span', { class: 'cd-au-rside-v' }, v),
+      ]);
+    const side = el('div', { class: 'cd-au-rside' }, [
+      el('div', { class: 'cd-au-rside-card' }, [
+        el('div', { class: 'cd-au-rside-h' }, 'Run detail'),
+        railRow('Status', run.ok ? 'completed' : 'failed'),
+        railRow('Trigger', run.triggerOrigin ?? run.triggerKind),
+        railRow('Duration', duration),
+        railRow('Started', new Date(run.startedAt).toLocaleString()),
+        railRow('Run ID', run.runId),
+      ]),
+      el('div', { class: 'cd-au-rside-card' }, [
+        el('div', { class: 'cd-au-rside-h' }, 'Usage'),
+        railRow('Tokens', fmtTokens(tokens)),
+        railRow('Cost', run.totalCostUsd ? `$${run.totalCostUsd.toFixed(2)}` : '—'),
+        railRow('Steps', String(run.stepCount ?? nodes.length)),
+        railRow('Model', model),
+      ]),
+      el('div', { class: 'cd-au-rside-card' }, [
+        el('div', { class: 'cd-au-rside-h' }, 'Belongs to'),
+        el(
+          'button',
+          {
+            class: 'cd-au-rside-link',
+            type: 'button',
+            onClick: () => renderAutomationView(row.ref),
+          },
+          [el('span', {}, row.name), el('span', { trustedHtml: Icon.ArrowRight({ size: 14 }) })],
+        ),
+      ]),
+    ]);
+
+    grid.append(el('div', { class: 'cd-au-rv-thread-col' }, [thread]), side);
+    wrap.append(grid);
+    return wrap;
   }
 
   function automationsEmpty(host: HTMLElement, title: string, sub: string): void {

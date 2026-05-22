@@ -357,3 +357,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-46781f14-b51-1779475661 | claude-code | 46781f14-b51f-4dc8-90d8-cd2b2d3a4f05 | #101 | claude-opus-4-7 | 394 | 1010011 | 29449806 | 250330 | 1260735 | 27.2977 | feat(desktop): automation templates gallery (#101) |
 | claude-code-46781f14-b51-1779475713 | claude-code | 46781f14-b51f-4dc8-90d8-cd2b2d3a4f05 | #101 | claude-opus-4-7 | 14 | 11634 | 1580140 | 3587 | 15235 | 0.9525 | feat(desktop): automation templates gallery (#101) |
 | claude-code-46781f14-b51-1779476048 | claude-code | 46781f14-b51f-4dc8-90d8-cd2b2d3a4f05 | #101 | claude-opus-4-7 | 66 | 49695 | 8024036 | 54159 | 103920 | 5.6769 | feat(desktop): per-automation viewer page (#101) |
+| claude-code-46781f14-b51-1779476365 | claude-code | 46781f14-b51f-4dc8-90d8-cd2b2d3a4f05 | #101 | claude-opus-4-7 | 62 | 39269 | 8357495 | 41352 | 80683 | 5.4583 | feat(desktop): render an automation run as a chat thread (#101) |
