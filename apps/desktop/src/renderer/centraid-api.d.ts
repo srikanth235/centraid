@@ -364,6 +364,11 @@ interface CentraidApi {
 
   startAgent(input: {
     projectId: string;
+    /**
+     * Whether the project is an app (default) or a first-class
+     * automation. Selects the project directory and system prompt.
+     */
+    projectKind?: 'app' | 'automation';
     sessionMode?: 'fresh' | 'continue' | 'in-memory';
   }): Promise<{ ok: true; messages: CentraidAgentMessage[] }>;
   promptAgent(input: { text: string }): Promise<{ ok: true }>;
@@ -529,6 +534,11 @@ interface CentraidApi {
     model?: string;
     historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
     onFailure?: string;
+    /**
+     * Initial enabled flag. The conversational builder passes `false`
+     * to scaffold a draft the user enables after reviewing it.
+     */
+    enabled?: boolean;
   }): Promise<{
     row: CentraidAutomationRow;
     webhook?: { id: string; secret: string; url: string };

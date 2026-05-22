@@ -326,7 +326,11 @@ export function registerIpcHandlers(): void {
     Channel.AGENT_START,
     async (
       event,
-      input: { projectId: string; sessionMode?: 'fresh' | 'continue' | 'in-memory' },
+      input: {
+        projectId: string;
+        projectKind?: 'app' | 'automation';
+        sessionMode?: 'fresh' | 'continue' | 'in-memory';
+      },
     ): Promise<{ ok: true; messages: unknown[] }> => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win) throw new Error('no window for agent session');
@@ -336,7 +340,14 @@ export function registerIpcHandlers(): void {
 
       const settings = await loadSettings();
       const { createCentraidAgentSession } = await import('@centraid/builder-harness');
-      const projectDir = path.join(settings.appsDir, input.projectId);
+      // Automations are first-class projects under `automationsDir`; apps
+      // live under `appsDir`. The kind also picks the system prompt and
+      // gates the app-only live-schema injection / preview snapshot.
+      const isAutomation = input.projectKind === 'automation';
+      const projectDir = path.join(
+        isAutomation ? settings.automationsDir : settings.appsDir,
+        input.projectId,
+      );
 
       const runnerPrefs = await loadRunnerPrefs();
 
@@ -344,8 +355,10 @@ export function registerIpcHandlers(): void {
         projectDir,
         runnerPrefs,
         sessionMode: input.sessionMode,
-        liveSchema: { config: settings, appId: input.projectId },
         codexHomeBaseDir: localRuntimeCodexHomeBaseDir(),
+        ...(isAutomation
+          ? { projectKind: 'automation' as const }
+          : { liveSchema: { config: settings, appId: input.projectId } }),
       });
 
       const unsubscribe = session.subscribe((evt) => {
@@ -364,8 +377,11 @@ export function registerIpcHandlers(): void {
           // `Read` tool / `centraid preview snapshot`. Best-effort —
           // capture errors (preview tab not visible, no index.html yet)
           // shouldn't block the turn; the snapshot subcommand will just
-          // report `exists: false` and the agent can adapt.
-          await capturePreviewSnapshot(win, projectDir).catch(() => undefined);
+          // report `exists: false` and the agent can adapt. Automations
+          // have no preview iframe, so there is nothing to snapshot.
+          if (!isAutomation) {
+            await capturePreviewSnapshot(win, projectDir).catch(() => undefined);
+          }
           await session.prompt(text);
         },
         stop: async () => {
@@ -614,6 +630,11 @@ export function registerIpcHandlers(): void {
         model?: string;
         historyKeep?: AutomationHistoryKeep;
         onFailure?: string;
+        /**
+         * Initial enabled flag. The conversational builder passes
+         * `false` to scaffold a draft the user enables after review.
+         */
+        enabled?: boolean;
       },
     ): Promise<{
       row: AutomationRow;
@@ -649,6 +670,7 @@ export function registerIpcHandlers(): void {
         ...(input.model ? { model: input.model } : {}),
         ...(input.historyKeep ? { historyKeep: input.historyKeep } : {}),
         ...(input.onFailure ? { onFailure: input.onFailure } : {}),
+        ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       });
       const row = await readAutomationProject(settings.automationsDir, input.id);
       if (!row) throw new Error(`automation ${input.id}: scaffolded but not found on disk`);

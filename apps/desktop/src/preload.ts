@@ -122,8 +122,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   previewUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_PREVIEW_URL, input),
 
   // Agent (one session per window)
-  startAgent: (input: { projectId: string; sessionMode?: 'fresh' | 'continue' | 'in-memory' }) =>
-    ipcRenderer.invoke(Channel.AGENT_START, input),
+  startAgent: (input: {
+    projectId: string;
+    projectKind?: 'app' | 'automation';
+    sessionMode?: 'fresh' | 'continue' | 'in-memory';
+  }) => ipcRenderer.invoke(Channel.AGENT_START, input),
   promptAgent: (input: { text: string }) => ipcRenderer.invoke(Channel.AGENT_PROMPT, input),
   stopAgent: () => ipcRenderer.invoke(Channel.AGENT_STOP),
   onAgentEvent: (cb: (msg: { projectId: string; event: unknown }) => void) => {
@@ -222,6 +225,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     model?: string;
     historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
     onFailure?: string;
+    enabled?: boolean;
   }) => ipcRenderer.invoke(Channel.AUTOMATIONS_CREATE, input),
   runAutomationNow: (input: { automationId: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_RUN_NOW, input),

@@ -53,6 +53,12 @@ export interface AutomationScaffoldOptions {
   historyKeep?: AutomationHistoryKeep;
   /** Sibling automation id to fire when this one fails. */
   onFailure?: string;
+  /**
+   * Initial `enabled` flag. Defaults to `true`. The conversational
+   * builder scaffolds a *draft* (`false`) so the cron does not start
+   * firing before the user reviews the automation and enables it.
+   */
+  enabled?: boolean;
 }
 
 /** Validate an automation project id (the directory slug). */
@@ -93,7 +99,7 @@ function starterManifest(id: string, opts: AutomationScaffoldOptions): Automatio
   const raw: Record<string, unknown> = {
     name: opts.name?.trim() || id,
     version: '0.1.0',
-    enabled: true,
+    enabled: opts.enabled ?? true,
     prompt: opts.prompt?.trim() || 'Describe what this automation should do.',
     triggers: [...triggers],
     requires,

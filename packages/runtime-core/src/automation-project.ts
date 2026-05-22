@@ -43,8 +43,19 @@ export interface AutomationRow {
   readonly triggers: readonly AutomationTrigger[];
   /** User on/off toggle from the manifest. */
   readonly enabled: boolean;
+  /**
+   * App id when this automation is *owned by an app* — it lives at
+   * `<appsDir>/<ownerApp>/automations/<id>/` rather than as a standalone
+   * project under `automationsDir` (issue #98). Absent for standalone
+   * automations. Consumers that need a globally-unique handle should use
+   * `(ownerApp, id)` together; `dir` is always the authoritative path.
+   */
+  readonly ownerApp?: string;
   readonly manifest: AutomationManifest;
 }
+
+/** Subdirectory under an app project that holds the app's automations. */
+export const APP_AUTOMATIONS_SUBDIR = 'automations';
 
 /** One project that failed to parse during a directory scan. */
 export interface AutomationProjectError {
@@ -58,13 +69,19 @@ export interface ListAutomationProjectsResult {
   readonly errors: AutomationProjectError[];
 }
 
-function rowFrom(id: string, dir: string, manifest: AutomationManifest): AutomationRow {
+function rowFrom(
+  id: string,
+  dir: string,
+  manifest: AutomationManifest,
+  ownerApp?: string,
+): AutomationRow {
   return {
     id,
     dir,
     name: manifest.name,
     triggers: manifest.triggers,
     enabled: manifest.enabled,
+    ...(ownerApp ? { ownerApp } : {}),
     manifest,
   };
 }
@@ -84,19 +101,20 @@ export function automationHandlerPath(automationsDir: string, id: string): strin
 }
 
 /**
- * Read one automation project. Returns `undefined` if the directory or
- * its `automation.json` is missing; throws `AutomationManifestError`
- * when the manifest exists but is invalid.
+ * Read one automation project from an explicit project directory. The
+ * id is the directory basename. `ownerApp` is carried onto the row when
+ * the project is app-owned. Returns `undefined` if the directory or its
+ * `automation.json` is missing; throws `AutomationManifestError` when
+ * the manifest exists but is invalid.
  */
-export async function readAutomationProject(
-  automationsDir: string,
-  id: string,
+export async function readAutomationProjectAt(
+  dir: string,
+  ownerApp?: string,
 ): Promise<AutomationRow | undefined> {
-  if (!isValidAutomationId(id)) return undefined;
-  const dir = path.join(automationsDir, id);
+  const id = path.basename(dir);
   let raw: string;
   try {
-    raw = await fs.readFile(automationManifestPath(automationsDir, id), 'utf8');
+    raw = await fs.readFile(path.join(dir, AUTOMATION_MANIFEST_FILE), 'utf8');
   } catch (err) {
     if (isEnoent(err)) return undefined;
     throw err;
@@ -110,7 +128,20 @@ export async function readAutomationProject(
     }
     throw err;
   }
-  return rowFrom(id, dir, manifest);
+  return rowFrom(id, dir, manifest, ownerApp);
+}
+
+/**
+ * Read one standalone automation project under `automationsDir`.
+ * Returns `undefined` if the directory or its `automation.json` is
+ * missing; throws `AutomationManifestError` when the manifest is invalid.
+ */
+export async function readAutomationProject(
+  automationsDir: string,
+  id: string,
+): Promise<AutomationRow | undefined> {
+  if (!isValidAutomationId(id)) return undefined;
+  return readAutomationProjectAt(path.join(automationsDir, id));
 }
 
 /**
@@ -146,6 +177,71 @@ export async function listAutomationProjects(
   }
   rows.sort((a, b) => a.name.localeCompare(b.name));
   return { rows, errors };
+}
+
+/**
+ * Scan every app project under `appsDir` for app-owned automations at
+ * `<appsDir>/<appId>/automations/<id>/` (issue #98). Each row carries
+ * `ownerApp = <appId>`. A missing `appsDir`, or an app with no
+ * `automations/` subdir, contributes nothing.
+ */
+export async function listAppOwnedAutomations(
+  appsDir: string,
+): Promise<ListAutomationProjectsResult> {
+  let appEntries: import('node:fs').Dirent[];
+  try {
+    appEntries = await fs.readdir(appsDir, { withFileTypes: true });
+  } catch (err) {
+    if (isEnoent(err)) return { rows: [], errors: [] };
+    throw err;
+  }
+  const rows: AutomationRow[] = [];
+  const errors: AutomationProjectError[] = [];
+  for (const app of appEntries) {
+    if (!app.isDirectory()) continue;
+    if (app.name.startsWith('.') || app.name.startsWith('_')) continue;
+    const autoRoot = path.join(appsDir, app.name, APP_AUTOMATIONS_SUBDIR);
+    let autoEntries: import('node:fs').Dirent[];
+    try {
+      autoEntries = await fs.readdir(autoRoot, { withFileTypes: true });
+    } catch (err) {
+      if (isEnoent(err)) continue;
+      throw err;
+    }
+    for (const e of autoEntries) {
+      if (!e.isDirectory()) continue;
+      if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
+      try {
+        const row = await readAutomationProjectAt(path.join(autoRoot, e.name), app.name);
+        if (row) rows.push(row);
+      } catch (err) {
+        errors.push({
+          id: `${app.name}/${e.name}`,
+          error: err instanceof Error ? err.message : String(err),
+          ...(err instanceof AutomationManifestError ? { code: err.code } : {}),
+        });
+      }
+    }
+  }
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  return { rows, errors };
+}
+
+/**
+ * The full automation registry: standalone projects under
+ * `automationsDir` plus every app-owned automation under
+ * `<appsDir>/<appId>/automations/`. App-owned rows carry `ownerApp`.
+ */
+export async function listAllAutomationProjects(roots: {
+  automationsDir: string;
+  appsDir: string;
+}): Promise<ListAutomationProjectsResult> {
+  const [standalone, appOwned] = await Promise.all([
+    listAutomationProjects(roots.automationsDir),
+    listAppOwnedAutomations(roots.appsDir),
+  ]);
+  const rows = [...standalone.rows, ...appOwned.rows].sort((a, b) => a.name.localeCompare(b.name));
+  return { rows, errors: [...standalone.errors, ...appOwned.errors] };
 }
 
 /** Overwrite a project's `automation.json` with `manifest`. */

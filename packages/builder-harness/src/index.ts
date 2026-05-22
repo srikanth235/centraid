@@ -80,7 +80,11 @@ export {
 
 export { defaultHarnessConfig, resolveHarnessConfig } from './config.js';
 
-export { CENTRAID_APPEND_PROMPT, centraidAppendPrompt } from './system-prompt.js';
+export {
+  CENTRAID_APPEND_PROMPT,
+  AUTOMATION_APPEND_PROMPT,
+  centraidAppendPrompt,
+} from './system-prompt.js';
 
 export { buildUiGroundingBlocks } from './ui-grounding.js';
 

@@ -236,10 +236,14 @@ export {
 // first-class project — its own directory under `automationsDir` — and
 // the directory is the source of truth (no SQLite definition table).
 export {
+  APP_AUTOMATIONS_SUBDIR,
   automationManifestPath,
   automationHandlerPath,
   readAutomationProject,
+  readAutomationProjectAt,
   listAutomationProjects,
+  listAppOwnedAutomations,
+  listAllAutomationProjects,
   writeAutomationManifest,
   setAutomationEnabled,
   deleteAutomationProject,

@@ -32,7 +32,7 @@ import {
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
 import type { ChatStreamEvent, AppSchema } from '@centraid/runtime-core';
-import { CENTRAID_APPEND_PROMPT } from './system-prompt.js';
+import { CENTRAID_APPEND_PROMPT, AUTOMATION_APPEND_PROMPT } from './system-prompt.js';
 import { buildUiGroundingBlocks } from './ui-grounding.js';
 import { buildToolsGroundingBlock } from './tools-grounding.js';
 import { fetchAppSchema } from './gateway-client.js';
@@ -43,6 +43,13 @@ export type CentraidSessionMode = 'fresh' | 'continue' | 'in-memory';
 export interface CreateCentraidAgentSessionOptions {
   /** Project directory the agent operates in (its cwd). */
   projectDir: string;
+  /**
+   * What kind of project the agent is building. `'app'` (default) gets
+   * the app-authoring system prompt + UI grounding blocks; `'automation'`
+   * gets the automation-authoring prompt and skips the UI grounding (an
+   * automation has no front end).
+   */
+  projectKind?: 'app' | 'automation';
   /** Which CLI / SDK to drive the session. Required. */
   runnerPrefs: RunnerPrefs;
   /**
@@ -321,7 +328,12 @@ function makeStreamTranslator(emit: (event: CentraidAgentEvent) => void): {
 }
 
 async function buildExtraSystemPrompt(opts: CreateCentraidAgentSessionOptions): Promise<string> {
-  const blocks: string[] = [CENTRAID_APPEND_PROMPT, ...buildUiGroundingBlocks()];
+  // Automations have no front end — skip the UI grounding (design tokens,
+  // icon set, component primitives) and use the automation-authoring prompt.
+  const blocks: string[] =
+    opts.projectKind === 'automation'
+      ? [AUTOMATION_APPEND_PROMPT]
+      : [CENTRAID_APPEND_PROMPT, ...buildUiGroundingBlocks()];
 
   // Available-tools grounding (issue #80 follow-up): ask the host runtime
   // which tools it exposes so the agent declares `ctx.tool` + `requires`
