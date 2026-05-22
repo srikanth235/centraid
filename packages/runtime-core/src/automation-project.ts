@@ -24,6 +24,7 @@ import {
   isValidAutomationId,
   parseManifest,
   type AutomationManifest,
+  type AutomationTrigger,
 } from './automation-manifest.js';
 
 /**
@@ -38,8 +39,8 @@ export interface AutomationRow {
   readonly dir: string;
   /** Display name from the manifest. */
   readonly name: string;
-  /** Cron expression from `manifest.trigger.expr`. */
-  readonly cronExpr: string;
+  /** Trigger list hoisted from `manifest.triggers`. */
+  readonly triggers: readonly AutomationTrigger[];
   /** User on/off toggle from the manifest. */
   readonly enabled: boolean;
   readonly manifest: AutomationManifest;
@@ -62,7 +63,7 @@ function rowFrom(id: string, dir: string, manifest: AutomationManifest): Automat
     id,
     dir,
     name: manifest.name,
-    cronExpr: manifest.trigger.expr,
+    triggers: manifest.triggers,
     enabled: manifest.enabled,
     manifest,
   };

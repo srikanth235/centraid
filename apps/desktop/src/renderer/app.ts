@@ -1487,10 +1487,26 @@
     return slug || `automation-${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  // Run-retention presets — a label mapped to the manifest `history.keep`.
+  const RETENTION_PRESETS: ReadonlyArray<{
+    label: string;
+    keep: { count: number } | { days: number } | 'all' | 'errors';
+  }> = [
+    { label: 'Last 100 runs', keep: { count: 100 } },
+    { label: 'Last 30 days', keep: { days: 30 } },
+    { label: 'Keep all', keep: 'all' },
+    { label: 'Errors only', keep: 'errors' },
+  ];
+
+  // One draft trigger in the New-automation form. A webhook draft has no
+  // secret — the main process mints id + secret server-side at create.
+  type TriggerDraft = { kind: 'cron'; expr: string } | { kind: 'webhook' };
+
   // "New automation" creation sheet. The user describes the automation
-  // in natural language and picks a schedule; `createAutomation`
-  // scaffolds the project (`automation.json` + a starter `handler.js`)
-  // which the builder agent then fills in.
+  // in natural language, stacks one or more triggers, and tunes the
+  // Behavior / Apps sections; `createAutomation` scaffolds the project
+  // (`automation.json` + a starter `handler.js`) which the builder
+  // agent then fills in.
   function openNewAutomationSheet(): void {
     const backdrop = el('div', { class: 'cd-palette-backdrop' });
     const card = el('div', {
@@ -1498,6 +1514,7 @@
       role: 'dialog',
       'aria-label': 'New automation',
     });
+    const close = (): void => backdrop.remove();
 
     const nameInput = el('input', {
       class: 'cd-newauto-input',
@@ -1510,29 +1527,181 @@
       placeholder: 'Describe what this automation should do…',
     }) as HTMLTextAreaElement;
 
-    const scheduleSelect = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
-    for (const p of CRON_PRESETS) {
-      scheduleSelect.append(el('option', { value: p.expr }, p.label));
+    // ----- Triggers — an additive list of cron + webhook rows. -----
+    const triggers: TriggerDraft[] = [{ kind: 'cron', expr: '0 9 * * *' }];
+    const triggersBox = el('div', { class: 'cd-newauto-triggers' });
+
+    const cronRow = (draft: { kind: 'cron'; expr: string }): HTMLElement => {
+      const row = el('div', { class: 'cd-newauto-trigger-row' });
+      const select = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
+      let known = false;
+      for (const p of CRON_PRESETS) {
+        const opt = el('option', { value: p.expr }, p.label) as HTMLOptionElement;
+        if (p.expr === draft.expr) {
+          opt.selected = true;
+          known = true;
+        }
+        select.append(opt);
+      }
+      const customOpt = el('option', { value: '__custom__' }, 'Custom cron…') as HTMLOptionElement;
+      if (!known) customOpt.selected = true;
+      select.append(customOpt);
+      const customCron = el('input', {
+        class: 'cd-newauto-input',
+        type: 'text',
+        placeholder: 'Custom 5-field cron — e.g. 0 9 * * *',
+      }) as HTMLInputElement;
+      if (!known) customCron.value = draft.expr;
+      customCron.hidden = known;
+      const syncExpr = (): void => {
+        draft.expr = select.value === '__custom__' ? customCron.value.trim() : select.value;
+      };
+      select.addEventListener('change', () => {
+        customCron.hidden = select.value !== '__custom__';
+        syncExpr();
+      });
+      customCron.addEventListener('input', syncExpr);
+      row.append(
+        el('div', { class: 'cd-newauto-trigger-main' }, [
+          el('span', { class: 'cd-newauto-trigger-kind' }, 'Schedule'),
+          select,
+          customCron,
+        ]),
+        removeBtn(draft),
+      );
+      return row;
+    };
+
+    const webhookRow = (draft: { kind: 'webhook' }): HTMLElement => {
+      const row = el('div', { class: 'cd-newauto-trigger-row' });
+      row.append(
+        el('div', { class: 'cd-newauto-trigger-main' }, [
+          el('span', { class: 'cd-newauto-trigger-kind' }, 'Webhook'),
+          el(
+            'div',
+            { class: 'cd-newauto-hint' },
+            'Fires on an inbound HTTP POST. The URL + secret are shown once after you create the automation. Active only on a cloud gateway.',
+          ),
+        ]),
+        removeBtn(draft),
+      );
+      return row;
+    };
+
+    function removeBtn(draft: TriggerDraft): HTMLElement {
+      const btn = el('button', {
+        class: 'cd-newauto-trigger-remove',
+        type: 'button',
+        'aria-label': 'Remove trigger',
+        onClick: () => {
+          const idx = triggers.indexOf(draft);
+          if (idx >= 0) triggers.splice(idx, 1);
+          renderTriggers();
+        },
+      });
+      btn.textContent = '✕';
+      return btn;
     }
-    scheduleSelect.append(el('option', { value: '__custom__' }, 'Custom cron…'));
-    const customCron = el('input', {
-      class: 'cd-newauto-input',
-      type: 'text',
-      placeholder: 'Custom 5-field cron — e.g. 0 9 * * *',
-      hidden: 'true',
-    }) as HTMLInputElement;
-    scheduleSelect.addEventListener('change', () => {
-      customCron.hidden = scheduleSelect.value !== '__custom__';
+
+    const addWebhookBtn = el('button', {
+      class: 'cd-newauto-add',
+      type: 'button',
+      onClick: () => {
+        triggers.push({ kind: 'webhook' });
+        renderTriggers();
+      },
+    }) as HTMLButtonElement;
+    addWebhookBtn.textContent = '+ Webhook';
+    const addCronBtn = el('button', {
+      class: 'cd-newauto-add',
+      type: 'button',
+      onClick: () => {
+        triggers.push({ kind: 'cron', expr: '0 9 * * *' });
+        renderTriggers();
+      },
+    }) as HTMLButtonElement;
+    addCronBtn.textContent = '+ Schedule';
+
+    function renderTriggers(): void {
+      triggersBox.replaceChildren();
+      if (triggers.length === 0) {
+        triggersBox.append(
+          el('div', { class: 'cd-newauto-hint' }, 'No triggers — runs only via “Run now”.'),
+        );
+      }
+      for (const d of triggers) {
+        triggersBox.append(d.kind === 'cron' ? cronRow(d) : webhookRow(d));
+      }
+      // At most one webhook trigger is allowed per automation.
+      addWebhookBtn.disabled = triggers.some((t) => t.kind === 'webhook');
+    }
+    renderTriggers();
+
+    // ----- Behavior — model / retention / on-failure. -----
+    const modelSelect = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
+    modelSelect.append(el('option', { value: '' }, 'Default (gateway)'));
+    void window.CentraidApi.listChatModels()
+      .catch(() => [])
+      .then((models) => {
+        for (const m of models) {
+          modelSelect.append(el('option', { value: m.id }, `${m.name} · ${m.provider}`));
+        }
+      });
+
+    const retentionSelect = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
+    RETENTION_PRESETS.forEach((p, i) => {
+      const opt = el('option', { value: String(i) }, p.label) as HTMLOptionElement;
+      if (i === 0) opt.selected = true;
+      retentionSelect.append(opt);
     });
 
+    const onFailureSelect = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
+    onFailureSelect.append(el('option', { value: '' }, 'Nothing'));
+    void window.CentraidApi.listAutomations()
+      .catch(() => [])
+      .then((rows) => {
+        for (const r of rows) {
+          onFailureSelect.append(el('option', { value: r.id }, r.name));
+        }
+      });
+
+    // ----- Apps — multi-select over the app projects. -----
+    const appsBox = el('div', { class: 'cd-newauto-apps' });
+    const selectedApps = new Set<string>();
+    appsBox.append(el('div', { class: 'cd-newauto-hint' }, 'Loading apps…'));
+    void window.CentraidApi.listProjects()
+      .catch(() => [])
+      .then((projects) => {
+        appsBox.replaceChildren();
+        if (projects.length === 0) {
+          appsBox.append(el('div', { class: 'cd-newauto-hint' }, 'No apps yet.'));
+          return;
+        }
+        for (const p of projects) {
+          const checkbox = el('input', { type: 'checkbox' }) as HTMLInputElement;
+          checkbox.addEventListener('change', () => {
+            if (checkbox.checked) selectedApps.add(p.id);
+            else selectedApps.delete(p.id);
+          });
+          const label = el('label', { class: 'cd-newauto-app' }, [
+            checkbox,
+            el('span', {}, p.name ?? p.id),
+          ]);
+          appsBox.append(label);
+        }
+      });
+
     const errLine = el('div', { class: 'cd-newauto-error', hidden: 'true' });
+    const showErr = (msg: string): void => {
+      errLine.textContent = msg;
+      errLine.hidden = false;
+    };
+
     const createBtn = el('button', {
       class: 'cd-newauto-create',
       type: 'button',
     }) as HTMLButtonElement;
     createBtn.textContent = 'Create automation';
-
-    const close = (): void => backdrop.remove();
     const cancelBtn = el('button', {
       class: 'cd-newauto-cancel',
       type: 'button',
@@ -1540,32 +1709,74 @@
     });
     cancelBtn.textContent = 'Cancel';
 
+    // Replace the card body with a one-time reveal of the webhook URL +
+    // secret. The secret is never recoverable after this screen.
+    function showWebhookReveal(webhook: { id: string; secret: string; url: string }): void {
+      const field = (labelText: string, value: string): HTMLElement => {
+        const input = el('input', {
+          class: 'cd-newauto-input',
+          type: 'text',
+          readonly: 'true',
+        }) as HTMLInputElement;
+        input.value = value;
+        input.addEventListener('focus', () => input.select());
+        return el('div', {}, [el('label', { class: 'cd-newauto-label' }, labelText), input]);
+      };
+      const doneBtn = el('button', {
+        class: 'cd-newauto-create',
+        type: 'button',
+        onClick: () => {
+          close();
+          renderAutomations();
+        },
+      });
+      doneBtn.textContent = 'Done';
+      card.replaceChildren(
+        el('div', { class: 'cd-newauto-title' }, 'Webhook created'),
+        el(
+          'div',
+          { class: 'cd-newauto-hint' },
+          'Copy the secret now — it is shown only once. Send it as an Authorization: Bearer header (or x-openclaw-webhook-secret).',
+        ),
+        field('Webhook URL', webhook.url),
+        field('Secret', webhook.secret),
+        el('div', { class: 'cd-newauto-actions' }, [doneBtn]),
+      );
+    }
+
     createBtn.addEventListener('click', () => {
       const name = nameInput.value.trim();
       const prompt = promptInput.value.trim();
-      const cronExpr =
-        scheduleSelect.value === '__custom__' ? customCron.value.trim() : scheduleSelect.value;
-      const showErr = (msg: string): void => {
-        errLine.textContent = msg;
-        errLine.hidden = false;
-      };
       if (!name) return showErr('Give the automation a name.');
       if (!prompt) return showErr('Describe what the automation should do.');
-      if (cronExpr.trim().split(/\s+/).length !== 5) {
-        return showErr('Schedule must be a 5-field cron expression.');
+      for (const t of triggers) {
+        if (t.kind === 'cron' && t.expr.trim().split(/\s+/).length !== 5) {
+          return showErr('Every schedule must be a 5-field cron expression.');
+        }
       }
+      const retention = RETENTION_PRESETS[Number(retentionSelect.value)] ?? RETENTION_PRESETS[0]!;
       createBtn.disabled = true;
       createBtn.textContent = 'Creating…';
       void (async () => {
         try {
-          await window.CentraidApi.createAutomation({
+          const result = await window.CentraidApi.createAutomation({
             id: slugifyAutomationId(name),
             name,
             prompt,
-            cronExpr,
+            triggers: triggers.map((t) =>
+              t.kind === 'cron' ? { kind: 'cron', expr: t.expr } : { kind: 'webhook' },
+            ),
+            ...(modelSelect.value ? { model: modelSelect.value } : {}),
+            historyKeep: retention.keep,
+            ...(onFailureSelect.value ? { onFailure: onFailureSelect.value } : {}),
+            ...(selectedApps.size > 0 ? { apps: [...selectedApps] } : {}),
           });
-          close();
-          renderAutomations();
+          if (result.webhook) {
+            showWebhookReveal(result.webhook);
+          } else {
+            close();
+            renderAutomations();
+          }
         } catch (err) {
           createBtn.disabled = false;
           createBtn.textContent = 'Create automation';
@@ -1574,15 +1785,33 @@
       })();
     });
 
+    const section = (title: string, ...body: HTMLElement[]): HTMLElement =>
+      el('div', { class: 'cd-newauto-section' }, [
+        el('div', { class: 'cd-newauto-section-title' }, title),
+        ...body,
+      ]);
+
     card.append(
       el('div', { class: 'cd-newauto-title' }, 'New automation'),
       el('label', { class: 'cd-newauto-label' }, 'Name'),
       nameInput,
       el('label', { class: 'cd-newauto-label' }, 'What should it do?'),
       promptInput,
-      el('label', { class: 'cd-newauto-label' }, 'Schedule'),
-      scheduleSelect,
-      customCron,
+      section(
+        'Triggers',
+        triggersBox,
+        el('div', { class: 'cd-newauto-addrow' }, [addCronBtn, addWebhookBtn]),
+      ),
+      section(
+        'Behavior',
+        el('label', { class: 'cd-newauto-label' }, 'Model'),
+        modelSelect,
+        el('label', { class: 'cd-newauto-label' }, 'Run retention'),
+        retentionSelect,
+        el('label', { class: 'cd-newauto-label' }, 'On failure, run'),
+        onFailureSelect,
+      ),
+      section('Apps', appsBox),
       errLine,
       el('div', { class: 'cd-newauto-actions' }, [cancelBtn, createBtn]),
     );
@@ -1820,7 +2049,12 @@
         statTile('Duration', totalMs !== undefined ? formatDuration(totalMs) : '—'),
         statTile('Steps', String(nodes.length)),
         statTile('Tokens', tokens > 0 ? tokens.toLocaleString() : '—'),
-        statTile('Trigger', run.triggerKind.replace('_', ' ')),
+        statTile(
+          'Trigger',
+          run.triggerOrigin
+            ? `${run.triggerKind.replace('_', ' ')} · ${run.triggerOrigin}`
+            : run.triggerKind.replace('_', ' '),
+        ),
         statTile('Started', new Date(run.startedAt).toLocaleString()),
       ]),
     );
@@ -3923,6 +4157,19 @@
     return expr;
   }
 
+  // Human-readable summary of an automation's trigger list. One cron →
+  // its `cronToHuman` form; many crons → a count; a webhook adds a
+  // "Webhook" tag; an empty list reads "Manual only".
+  function triggersSummary(triggers: ReadonlyArray<{ kind: string; expr?: string }>): string {
+    const crons = triggers.filter((t) => t.kind === 'cron');
+    const hasWebhook = triggers.some((t) => t.kind === 'webhook');
+    const parts: string[] = [];
+    if (crons.length === 1 && crons[0]!.expr) parts.push(cronToHuman(crons[0]!.expr));
+    else if (crons.length > 1) parts.push(`${crons.length} schedules`);
+    if (hasWebhook) parts.push('Webhook');
+    return parts.join(' · ') || 'Manual only';
+  }
+
   function renderAutomationsSection(
     rows: CentraidAutomationRow[],
     panel: HTMLElement,
@@ -3957,7 +4204,7 @@
     const head = el('div', { class: 'cd-app-order-head' });
     head.append(
       el('span', { class: 'cd-app-order-name' }, row.name),
-      el('span', { class: 'cd-app-order-schedule' }, cronToHuman(row.cronExpr)),
+      el('span', { class: 'cd-app-order-schedule' }, triggersSummary(row.triggers)),
     );
 
     const stateKey = row.id;

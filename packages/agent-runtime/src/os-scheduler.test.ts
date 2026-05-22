@@ -13,7 +13,7 @@ import {
 const baseSpec = {
   automationId: 'auto-xyz',
   automationName: 'daily-digest',
-  cronExpr: '0 9 * * *',
+  cronExprs: ['0 9 * * *'],
   cwd: '/var/centraid/work',
   runner: 'codex' as const,
   centraidBin: '/usr/local/bin/centraid',
@@ -63,9 +63,20 @@ describe('buildLaunchdPlist', () => {
   });
 
   it('emits an <array> wrapper when cron expands to multiple intervals', () => {
-    const plist = buildLaunchdPlist({ ...baseSpec, cronExpr: '*/30 * * * *' });
+    const plist = buildLaunchdPlist({ ...baseSpec, cronExprs: ['*/30 * * * *'] });
     assert.match(plist, /<array>/);
     assert.match(plist, /<integer>0<\/integer>[\s\S]*<integer>30<\/integer>/);
+  });
+
+  it('folds multiple cron triggers into one plist', () => {
+    const plist = buildLaunchdPlist({ ...baseSpec, cronExprs: ['0 9 * * *', '0 17 * * *'] });
+    assert.match(plist, /<array>/);
+    assert.match(plist, /<integer>9<\/integer>[\s\S]*<integer>17<\/integer>/);
+  });
+
+  it('folds multiple cron triggers into one systemd timer', () => {
+    const timer = buildSystemdTimer({ ...baseSpec, cronExprs: ['0 9 * * *', '0 17 * * *'] });
+    assert.equal(timer.match(/OnCalendar=/g)?.length, 2);
   });
 });
 

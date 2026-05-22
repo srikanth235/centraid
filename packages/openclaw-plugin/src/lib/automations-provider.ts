@@ -217,6 +217,7 @@ async function executeAutomation(
       automationsDir: opts.automationsDir,
       activityDbProvider: opts.automationDbProvider,
       triggerKind: 'scheduled',
+      triggerOrigin: 'cron',
     },
     log,
   );

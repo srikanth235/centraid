@@ -28,7 +28,7 @@ import { appendLogs, type LogEntry } from './log-store.js';
 import type { AutomationRunsStore } from './automation-runs-store.js';
 import type { AutomationHistoryConfig, AutomationOutputSchema } from './automation-manifest.js';
 import { validateOutputAgainstSchema } from './automation-manifest-output.js';
-import type { AutomationTriggerKind } from './automation-runs-schema.js';
+import type { AutomationTriggerKind, AutomationTriggerOrigin } from './automation-runs-schema.js';
 import {
   applyRetention,
   extractReturnEnvelope,
@@ -120,6 +120,8 @@ export interface RunAutomationHandlerOptions {
   /** Activity-DB-backed run-audit store for audit + ctx.state + ctx.runs. */
   runsStore: AutomationRunsStore;
   triggerKind?: AutomationTriggerKind;
+  /** Source that fired the run (`cron` / `webhook` / `manual`). */
+  triggerOrigin?: AutomationTriggerOrigin;
   input?: unknown;
   parentRunId?: string;
   outputSchema?: AutomationOutputSchema;
@@ -191,6 +193,7 @@ export async function runAutomationHandler(
     kind: 'automation',
     automationId: audit.automationId,
     triggerKind: opts.triggerKind ?? 'scheduled',
+    ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
     ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
     ...(opts.input !== undefined ? { inputJson: truncateForAudit(opts.input) ?? '' } : {}),
     startedAt: Date.now(),

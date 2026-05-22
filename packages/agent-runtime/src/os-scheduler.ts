@@ -50,8 +50,14 @@ export interface OsSchedulerJobSpec {
   automationId: string;
   /** Automation name — used only for human-readable artifact labels. */
   automationName: string;
-  /** 5-field cron expression from the manifest. */
-  cronExpr: string;
+  /**
+   * 5-field cron expressions from the manifest's cron triggers. An
+   * automation may declare several; launchd folds them into one plist
+   * (multiple `StartCalendarInterval` entries) and systemd into one
+   * timer (multiple `OnCalendar=` lines). Must be non-empty — a
+   * webhook-only automation is never handed to the OS scheduler.
+   */
+  cronExprs: readonly string[];
   /**
    * Working directory the centraid CLI should cd into before running.
    * Any stable workspace dir — model-B automations are not app-scoped,
@@ -174,7 +180,7 @@ function expandField(field: string, min: number, max: number): Array<number | un
 }
 
 export function buildLaunchdPlist(spec: OsSchedulerJobSpec): string {
-  const intervals = cronToLaunchdIntervals(spec.cronExpr);
+  const intervals = spec.cronExprs.flatMap((c) => cronToLaunchdIntervals(c));
   const intervalsXml =
     intervals.length === 1
       ? `    <key>StartCalendarInterval</key>\n    ${dictToXml(intervals[0]!, 4)}`
@@ -276,11 +282,14 @@ ${envLines}ExecStart=${spec.centraidBin} run-automation ${spec.automationId} --r
 }
 
 export function buildSystemdTimer(spec: OsSchedulerJobSpec): string {
+  const onCalendar = spec.cronExprs
+    .map((c) => `OnCalendar=${cronToSystemdOnCalendar(c)}`)
+    .join('\n');
   return `[Unit]
 Description=Centraid automation timer ${spec.automationName} (${spec.automationId})
 
 [Timer]
-OnCalendar=${cronToSystemdOnCalendar(spec.cronExpr)}
+${onCalendar}
 Persistent=true
 Unit=${jobLabel(spec.automationId)}.service
 
@@ -426,7 +435,12 @@ export async function register(
     return { ...spec, artifactPath: timerPath, jobLabel: label };
   }
   if (platform === 'win32') {
-    const args = cronToSchtasksArgs(spec.cronExpr);
+    if (spec.cronExprs.length !== 1) {
+      throw new Error(
+        `automation "${spec.automationId}" declares ${spec.cronExprs.length} cron schedules — Windows Task Scheduler supports exactly one per automation in v1`,
+      );
+    }
+    const args = cronToSchtasksArgs(spec.cronExprs[0]!);
     // Task Scheduler has no per-task env-var field; bake the env into
     // the command line via `cmd /c "set VAR=val && ..."` so the
     // scheduled `centraid run-automation` process inherits it.

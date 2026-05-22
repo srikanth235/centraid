@@ -27,11 +27,13 @@ import {
   makeGatewayDbProvider,
   makeActivityDbProvider,
   listAutomationProjects,
+  makeWebhookRouteHandler,
 } from '@centraid/runtime-core';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
 import { registerAutomationsProvider, setOpenClawConfig } from './lib/automations-provider.js';
 import { OpenclawAutomationHost } from './lib/automation-host.js';
+import { runOpenclawFire } from './lib/openclaw-fire.js';
 
 // Re-export the public handler & payload types from runtime-core so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -203,6 +205,38 @@ export default definePluginEntry({
       match: 'prefix',
       auth: 'gateway',
       handler: makeUserStoreRouteHandler(() => userStore),
+    });
+
+    // Webhook-trigger route (issue #96). One prefix route fronts every
+    // automation with a `webhook` trigger: the path slug resolves to an
+    // automation and the handler verifies the shared secret itself, so
+    // it runs at `auth: 'plugin'` (no gateway bearer required). The fire
+    // rides the same `runOpenclawFire` path a cron trigger uses.
+    api.registerHttpRoute({
+      path: '/_centraid-hook',
+      match: 'prefix',
+      auth: 'plugin',
+      handler: makeWebhookRouteHandler({
+        automationsDir,
+        fire: async ({ automationId, body }) => {
+          const outcome = await runOpenclawFire(
+            {
+              automationId,
+              automationsDir,
+              activityDbProvider: automationDbProvider,
+              triggerKind: 'scheduled',
+              triggerOrigin: 'webhook',
+              ...(body !== undefined ? { input: body } : {}),
+            },
+            api.logger,
+          );
+          return {
+            ok: outcome.ok,
+            ...(outcome.runId ? { runId: outcome.runId } : {}),
+            ...(outcome.error ? { error: outcome.error } : {}),
+          };
+        },
+      }),
     });
   },
 });

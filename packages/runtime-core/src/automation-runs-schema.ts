@@ -28,6 +28,15 @@ export type AutomationTriggerKind =
   | 'interactive';
 
 /**
+ * What *source* fired the run — recorded once an automation can fire
+ * from more than one place (issue #96). `cron` is a scheduler fire,
+ * `webhook` an inbound HTTP POST, `manual` an explicit "Run now".
+ * Distinct from `AutomationTriggerKind`, which records the run's
+ * intent rather than its transport.
+ */
+export type AutomationTriggerOrigin = 'cron' | 'webhook' | 'manual';
+
+/**
  * Trace-node discriminator. `step` is one primary model-inference call —
  * per-call token + cost accounting lives at this grain. `tool` / `agent`
  * / `invoke` are the per-call audit rows.
@@ -40,6 +49,8 @@ export interface AutomationRunRow {
   /** UUID of the automation — set for `kind: 'automation'`. */
   readonly automationId?: string;
   readonly triggerKind: AutomationTriggerKind;
+  /** Source that fired the run (`cron` / `webhook` / `manual`). */
+  readonly triggerOrigin?: AutomationTriggerOrigin;
   readonly parentRunId?: string;
   /** Set for `kind: 'chat'` — the conversation container. */
   readonly chatSessionId?: string;

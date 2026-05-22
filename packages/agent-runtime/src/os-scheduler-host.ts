@@ -16,12 +16,19 @@
  * state — launchd, systemd, and Task Scheduler are binary. So when
  * `register` is called with `row.enabled === false`, the host
  * unregisters instead.
+ *
+ * Trigger fan-out (issue #96): a row carries a plural `triggers` list.
+ * This host registers only the `cron` triggers; `webhook` triggers are
+ * skipped (the desktop is a gateway *client*, not an HTTP host). A row
+ * whose triggers are all webhooks — or which has no triggers at all —
+ * registers nothing and is treated like a disabled row.
  */
 
-import type {
-  AutomationHost,
-  AutomationReconcileResult,
-  AutomationRow,
+import {
+  cronTriggersOf,
+  type AutomationHost,
+  type AutomationReconcileResult,
+  type AutomationRow,
 } from '@centraid/runtime-core';
 import {
   list as listOsJobs,
@@ -68,13 +75,14 @@ export class OsSchedulerHost implements AutomationHost {
 
   async register(row: AutomationRow): Promise<void> {
     // OS schedulers don't distinguish "disabled" from "absent" —
-    // collapse disabled to unregister so reconcile and toggle stay
-    // consistent.
-    if (!row.enabled) {
+    // collapse disabled (and webhook-only) rows to unregister so
+    // reconcile and toggle stay consistent.
+    const spec = this.specFor(row);
+    if (!row.enabled || !spec) {
       await this.unregister(row.id);
       return;
     }
-    await registerOsJob(this.specFor(row), this.opts.os);
+    await registerOsJob(spec, this.opts.os);
   }
 
   async unregister(automationId: string): Promise<void> {
@@ -87,19 +95,36 @@ export class OsSchedulerHost implements AutomationHost {
   }
 
   async reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult> {
-    const items: OsSchedulerReconcileDesired[] = desired.map((row) => ({
-      spec: this.specFor(row),
-      enabled: row.enabled,
-    }));
+    const items: OsSchedulerReconcileDesired[] = [];
+    for (const row of desired) {
+      const cronExprs = cronTriggersOf(row.triggers).map((t) => t.expr);
+      // A webhook-only row has no cron schedule — fold it into the
+      // desired set as disabled so reconcile removes any stale OS job.
+      items.push({
+        spec: this.buildSpec(row, cronExprs),
+        enabled: row.enabled && cronExprs.length > 0,
+      });
+    }
     const out = await reconcileOsJobs(items, this.opts.os);
     return { added: out.added, updated: out.updated, removed: out.removed };
   }
 
-  private specFor(row: AutomationRow): OsSchedulerJobSpec {
+  /**
+   * Build the OS scheduler spec for a row's cron triggers. Returns
+   * `undefined` when the row has no cron trigger (webhook-only) — there
+   * is nothing for the OS scheduler to register.
+   */
+  private specFor(row: AutomationRow): OsSchedulerJobSpec | undefined {
+    const cronExprs = cronTriggersOf(row.triggers).map((t) => t.expr);
+    if (cronExprs.length === 0) return undefined;
+    return this.buildSpec(row, cronExprs);
+  }
+
+  private buildSpec(row: AutomationRow, cronExprs: readonly string[]): OsSchedulerJobSpec {
     return {
       automationId: row.id,
       automationName: row.name,
-      cronExpr: row.cronExpr,
+      cronExprs,
       cwd: this.opts.workdir,
       runner: this.opts.runner,
       centraidBin: this.opts.centraidBin,

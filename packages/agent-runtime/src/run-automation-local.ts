@@ -20,6 +20,7 @@ import {
   runAutomationHandler,
   type AutomationHandlerOutcome,
   type AutomationTriggerKind,
+  type AutomationTriggerOrigin,
   type DatabaseProvider,
 } from '@centraid/runtime-core';
 import {
@@ -59,6 +60,11 @@ export interface RunAutomationLocalOptions {
    * onFailure dispatch loop uses `'on_failure'`.
    */
   triggerKind?: AutomationTriggerKind;
+  /**
+   * Source that fired this run (`cron` / `webhook` / `manual`).
+   * Defaults to `'cron'` — the scheduler is the usual local caller.
+   */
+  triggerOrigin?: AutomationTriggerOrigin;
   /** Optional input payload (e.g. for on_failure dispatch). */
   input?: unknown;
   /** Optional parent run id for the onFailure sub-run DAG link. */
@@ -125,6 +131,7 @@ export async function runAutomationLocal(
       agentDispatcher: dispatch.agentDispatcher,
       runsStore,
       triggerKind: opts.triggerKind ?? 'scheduled',
+      triggerOrigin: opts.triggerOrigin ?? 'cron',
       ...(opts.input !== undefined ? { input: opts.input } : {}),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(row.manifest.outputSchema ? { outputSchema: row.manifest.outputSchema } : {}),
@@ -156,6 +163,7 @@ export async function runAutomationLocal(
             ...(opts.spawnCli ? { spawnCli: opts.spawnCli } : {}),
             onLog,
             triggerKind: 'on_failure',
+            ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
             input: { runId, automationName: row.name, error: outcome.error ?? 'unknown error' },
             parentRunId: runId,
             failureDepth: failureDepth + 1,

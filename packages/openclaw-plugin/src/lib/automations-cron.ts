@@ -22,14 +22,34 @@
  */
 
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
-import type { AutomationRow } from '@centraid/runtime-core';
+import { cronTriggersOf, type AutomationRow } from '@centraid/runtime-core';
 import { CENTRAID_MOCK_MODEL_ID, CENTRAID_MOCK_PROVIDER_ID } from './automations-provider.js';
 
 /** Prefix every centraid-owned cron job's name so reconciliation can identify them. */
 const CRON_PREFIX = 'centraid';
 
+/**
+ * Base cron-job name for an automation — also the name of its first
+ * (or only) cron trigger.
+ */
 export function cronNameFor(automationId: string): string {
   return `${CRON_PREFIX}:${automationId}`;
+}
+
+/**
+ * Cron-job name for the Nth cron trigger of an automation. Index 0 is
+ * the bare `centraid:<id>`; later triggers get a `:<n>` suffix so a
+ * multi-cron automation maps to several distinctly-named cron jobs.
+ * Automation ids never contain `:`, so the boundary is unambiguous.
+ */
+function cronNameAt(automationId: string, index: number): string {
+  return index === 0 ? cronNameFor(automationId) : `${cronNameFor(automationId)}:${index}`;
+}
+
+/** True when `name` is a centraid cron job belonging to `automationId`. */
+function cronNameBelongsTo(name: string, automationId: string): boolean {
+  const base = cronNameFor(automationId);
+  return name === base || name.startsWith(`${base}:`);
 }
 
 interface CronJobLite {
@@ -37,7 +57,7 @@ interface CronJobLite {
   enabled?: boolean;
 }
 
-interface CronAddPayload {
+export interface CronAddPayload {
   name: string;
   enabled: boolean;
   schedule: { kind: 'cron'; expr: string; tz?: string };
@@ -53,11 +73,11 @@ interface CronAddPayload {
   };
 }
 
-export function payloadFor(row: AutomationRow): CronAddPayload {
+function payloadFor(row: AutomationRow, name: string, expr: string): CronAddPayload {
   return {
-    name: cronNameFor(row.id),
+    name,
     enabled: row.enabled,
-    schedule: { kind: 'cron', expr: row.cronExpr },
+    schedule: { kind: 'cron', expr },
     sessionTarget: 'isolated',
     wakeMode: 'now',
     payload: {
@@ -72,12 +92,20 @@ export function payloadFor(row: AutomationRow): CronAddPayload {
 }
 
 /**
- * Register or update one automation's cron job. Idempotent: tries
- * `cron.add` first; if openclaw reports the job already exists,
- * falls back to `cron.update`.
+ * The cron-job payloads an automation should have on the gateway — one
+ * per cron trigger. Webhook triggers produce no cron job (they ride the
+ * `/_centraid-hook` HTTP route instead).
  */
-export async function upsertCronJob(row: AutomationRow): Promise<void> {
-  const payload = payloadFor(row);
+export function desiredCronJobs(row: AutomationRow): Map<string, CronAddPayload> {
+  const out = new Map<string, CronAddPayload>();
+  cronTriggersOf(row.triggers).forEach((t, i) => {
+    const name = cronNameAt(row.id, i);
+    out.set(name, payloadFor(row, name, t.expr));
+  });
+  return out;
+}
+
+async function upsertCronPayload(payload: CronAddPayload): Promise<void> {
   try {
     await callGatewayTool('cron.add', {}, payload);
   } catch (err) {
@@ -90,16 +118,42 @@ export async function upsertCronJob(row: AutomationRow): Promise<void> {
   }
 }
 
-export async function removeCronJob(automationId: string): Promise<void> {
-  const cronName = cronNameFor(automationId);
+async function removeCronByName(name: string): Promise<void> {
   try {
-    await callGatewayTool('cron.remove', {}, { name: cronName });
+    await callGatewayTool('cron.remove', {}, { name });
   } catch (err) {
     // Tolerate "not found" — happens when the user deleted the
     // openclaw cron job manually between centraid registration and
     // teardown.
     const msg = err instanceof Error ? err.message : String(err);
     if (!/not found|no such/i.test(msg)) throw err;
+  }
+}
+
+/**
+ * Register or update an automation's cron jobs — one per cron trigger.
+ * Idempotent (`cron.add`, falling back to `cron.update`). Also drops any
+ * cron job left over from a previous, longer trigger list.
+ */
+export async function upsertCronJob(row: AutomationRow): Promise<void> {
+  const desired = desiredCronJobs(row);
+  for (const payload of desired.values()) {
+    await upsertCronPayload(payload);
+  }
+  for (const name of await listCentraidCronJobs()) {
+    if (cronNameBelongsTo(name, row.id) && !desired.has(name)) {
+      await removeCronByName(name);
+    }
+  }
+}
+
+/** Remove every cron job belonging to an automation. */
+export async function removeCronJob(automationId: string): Promise<void> {
+  const own = (await listCentraidCronJobs()).filter((n) => cronNameBelongsTo(n, automationId));
+  // The base name may not appear in `cron.list` if the job was never
+  // registered; remove it explicitly so teardown stays idempotent.
+  for (const name of new Set([cronNameFor(automationId), ...own])) {
+    await removeCronByName(name);
   }
 }
 

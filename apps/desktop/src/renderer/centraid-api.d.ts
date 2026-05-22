@@ -514,15 +514,25 @@ interface CentraidApi {
   listAutomations(): Promise<CentraidAutomationRow[]>;
   /** Read one automation project, or `null` if it does not exist. */
   readAutomation(input: { automationId: string }): Promise<CentraidAutomationRow | null>;
-  /** Scaffold a new automation project and register its schedule. */
+  /**
+   * Scaffold a new automation project and register its triggers. When a
+   * webhook trigger is requested the result carries the one-time
+   * plaintext secret + URL — the manifest stores only the hash.
+   */
   createAutomation(input: {
     id: string;
     name?: string;
     description?: string;
     prompt?: string;
-    cronExpr?: string;
+    triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
     apps?: string[];
-  }): Promise<CentraidAutomationRow>;
+    model?: string;
+    historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
+    onFailure?: string;
+  }): Promise<{
+    row: CentraidAutomationRow;
+    webhook?: { id: string; secret: string; url: string };
+  }>;
   /** Fire an automation now (a manual-trigger run). */
   runAutomationNow(input: { automationId: string }): Promise<CentraidAutomationRunResult>;
   setAutomationEnabled(input: { automationId: string; enabled: boolean }): Promise<{ ok: true }>;
@@ -617,6 +627,8 @@ export interface CentraidAutomationRunRecord {
   /** Set for `kind: 'automation'` — the automation project id. */
   automationId?: string;
   triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
+  /** Source that fired the run (`cron` / `webhook` / `manual`). */
+  triggerOrigin?: 'cron' | 'webhook' | 'manual';
   parentRunId?: string;
   inputJson?: string;
   startedAt: number;
@@ -673,7 +685,9 @@ export interface CentraidAutomationManifest {
   description?: string;
   enabled: boolean;
   prompt: string;
-  trigger: { kind: 'cron'; expr: string };
+  triggers: Array<
+    { kind: 'cron'; expr: string } | { kind: 'webhook'; id: string; secretHash: string }
+  >;
   requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
   /** App ids this automation is associated with. */
   apps?: readonly string[];
@@ -690,7 +704,9 @@ export interface CentraidAutomationRow {
   /** Absolute path to the project directory. */
   dir: string;
   name: string;
-  cronExpr: string;
+  triggers: Array<
+    { kind: 'cron'; expr: string } | { kind: 'webhook'; id: string; secretHash: string }
+  >;
   enabled: boolean;
   manifest: CentraidAutomationManifest;
 }
@@ -848,7 +864,9 @@ declare global {
     description?: string;
     enabled: boolean;
     prompt: string;
-    trigger: { kind: 'cron'; expr: string };
+    triggers: Array<
+      { kind: 'cron'; expr: string } | { kind: 'webhook'; id: string; secretHash: string }
+    >;
     requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
     apps?: readonly string[];
     costEstimate?: { model: string; tokensPerFire: number };
@@ -860,7 +878,9 @@ declare global {
     id: string;
     dir: string;
     name: string;
-    cronExpr: string;
+    triggers: Array<
+      { kind: 'cron'; expr: string } | { kind: 'webhook'; id: string; secretHash: string }
+    >;
     enabled: boolean;
     manifest: CentraidAutomationManifest;
   }
@@ -876,6 +896,7 @@ declare global {
     kind: 'automation' | 'chat' | 'build';
     automationId?: string;
     triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
+    triggerOrigin?: 'cron' | 'webhook' | 'manual';
     parentRunId?: string;
     inputJson?: string;
     startedAt: number;

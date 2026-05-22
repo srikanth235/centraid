@@ -17,7 +17,7 @@ function manifest(over: Partial<AutomationManifest> = {}): AutomationManifest {
     version: '0.1.0',
     enabled: true,
     prompt: 'do the thing',
-    trigger: { kind: 'cron', expr: '0 9 * * *' },
+    triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
     requires: {},
     history: { keep: { count: 100 } },
     generated: { by: 'test', at: '2026-05-22' },
@@ -58,7 +58,7 @@ describe('automation-project', () => {
     assert.ok(row);
     assert.equal(row.id, 'digest');
     assert.equal(row.name, 'Morning digest');
-    assert.equal(row.cronExpr, '0 9 * * *');
+    assert.deepEqual(row.triggers, [{ kind: 'cron', expr: '0 9 * * *' }]);
     assert.equal(row.enabled, true);
   });
 

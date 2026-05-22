@@ -39,9 +39,14 @@ import {
   setAutomationEnabled,
   deleteAutomationProject,
   makeActivityDbProvider,
+  generateWebhookId,
+  generateWebhookSecret,
+  hashWebhookSecret,
   type AutomationRow,
   type AutomationRunNodeRow,
   type AutomationRunRow,
+  type AutomationTrigger,
+  type AutomationHistoryKeep,
   type DatabaseProvider,
   type InsightsSummary,
   type RunnerStatus,
@@ -598,18 +603,52 @@ export function registerIpcHandlers(): void {
         name?: string;
         description?: string;
         prompt?: string;
-        cronExpr?: string;
+        /**
+         * Trigger list. A `webhook` entry carries no secret — the
+         * handler mints id + secret server-side. Omit the field to take
+         * the scaffold default (a daily cron); pass `[]` for a
+         * manual-only automation.
+         */
+        triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
         apps?: string[];
+        model?: string;
+        historyKeep?: AutomationHistoryKeep;
+        onFailure?: string;
       },
-    ): Promise<AutomationRow> => {
+    ): Promise<{
+      row: AutomationRow;
+      /** Present when a webhook trigger was created — shown to the user once. */
+      webhook?: { id: string; secret: string; url: string };
+    }> => {
       const settings = await loadSettings();
       const { scaffoldAutomationProject } = await import('@centraid/builder-harness');
+
+      // Mint webhook secrets server-side: the plaintext is returned once
+      // here, the manifest persists only its hash.
+      let webhook: { id: string; secret: string; url: string } | undefined;
+      const triggers: AutomationTrigger[] | undefined = input.triggers?.map((t) => {
+        if (t.kind === 'webhook') {
+          const id = generateWebhookId();
+          const secret = generateWebhookSecret();
+          webhook = {
+            id,
+            secret,
+            url: `${settings.remoteGatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${id}`,
+          };
+          return { kind: 'webhook', id, secretHash: hashWebhookSecret(secret) };
+        }
+        return { kind: 'cron', expr: t.expr };
+      });
+
       await scaffoldAutomationProject(settings.automationsDir, input.id, {
         ...(input.name ? { name: input.name } : {}),
         ...(input.description ? { description: input.description } : {}),
         ...(input.prompt ? { prompt: input.prompt } : {}),
-        ...(input.cronExpr ? { cronExpr: input.cronExpr } : {}),
+        ...(triggers !== undefined ? { triggers } : {}),
         ...(input.apps ? { apps: input.apps } : {}),
+        ...(input.model ? { model: input.model } : {}),
+        ...(input.historyKeep ? { historyKeep: input.historyKeep } : {}),
+        ...(input.onFailure ? { onFailure: input.onFailure } : {}),
       });
       const row = await readAutomationProject(settings.automationsDir, input.id);
       if (!row) throw new Error(`automation ${input.id}: scaffolded but not found on disk`);
@@ -621,7 +660,7 @@ export function registerIpcHandlers(): void {
             (err instanceof Error ? err.message : String(err)),
         );
       }
-      return row;
+      return { row, ...(webhook ? { webhook } : {}) };
     },
   );
 
@@ -647,6 +686,7 @@ export function registerIpcHandlers(): void {
         // "Run now" is a manual fire — tag it so the executions log
         // distinguishes it from the OS-scheduler trigger.
         triggerKind: 'manual',
+        triggerOrigin: 'manual',
       });
       return {
         ok: outcome.ok,

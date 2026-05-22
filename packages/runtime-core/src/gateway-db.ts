@@ -228,6 +228,13 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
       PRIMARY KEY (automation_id, key)
     );
   `,
+  // 2 → 3: `runs.trigger_origin` — what *source* fired the run (issue
+  // #96). Once an automation can fire from a cron schedule, an inbound
+  // webhook, or an explicit "Run now", the Executions tab needs to show
+  // which. Nullable: pre-#96 rows leave it NULL.
+  `
+    ALTER TABLE runs ADD COLUMN trigger_origin TEXT;
+  `,
 ];
 
 /**

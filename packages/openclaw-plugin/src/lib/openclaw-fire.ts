@@ -26,6 +26,7 @@ import {
   type AutomationToolCall,
   type AutomationToolResult,
   type AutomationTriggerKind,
+  type AutomationTriggerOrigin,
   type DatabaseProvider,
 } from '@centraid/runtime-core';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
@@ -42,6 +43,8 @@ export interface OpenclawFireOptions {
   /** Activity-DB provider — holds the run ledger. */
   activityDbProvider: DatabaseProvider;
   triggerKind: AutomationTriggerKind;
+  /** Source that fired the run (`cron` / `webhook` / `manual`). */
+  triggerOrigin?: AutomationTriggerOrigin;
   failureDepth?: number;
   parentRunId?: string;
   input?: unknown;
@@ -143,6 +146,7 @@ export async function runOpenclawFire(
         automationsDir: opts.automationsDir,
         activityDbProvider: opts.activityDbProvider,
         triggerKind: 'manual',
+        ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
         failureDepth,
         parentRunId: args.parentRunId,
         ...(args.input !== undefined ? { input: args.input } : {}),
@@ -167,6 +171,7 @@ export async function runOpenclawFire(
     invokeDispatcher,
     runsStore,
     triggerKind: opts.triggerKind,
+    ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
     ...(opts.input !== undefined ? { input: opts.input } : {}),
     ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
     ...(manifest.outputSchema ? { outputSchema: manifest.outputSchema } : {}),
@@ -197,6 +202,7 @@ export async function runOpenclawFire(
             automationsDir: opts.automationsDir,
             activityDbProvider: opts.activityDbProvider,
             triggerKind: 'on_failure',
+            ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
             failureDepth: failureDepth + 1,
             parentRunId: runId,
             input: failureInput,

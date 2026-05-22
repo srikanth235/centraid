@@ -61,7 +61,45 @@ describe('validateManifest', () => {
     assert.equal(m.name, 'Daily digest');
     assert.equal(m.version, '0.1.0');
     assert.equal(m.enabled, true);
-    assert.equal(m.trigger.expr, '0 9 * * *');
+    // Legacy single `trigger` is dual-read into the plural `triggers`.
+    assert.equal(m.triggers.length, 1);
+    assert.deepEqual(m.triggers[0], { kind: 'cron', expr: '0 9 * * *' });
+  });
+
+  it('reads a plural triggers list with multiple crons', () => {
+    const raw = baseManifest();
+    delete raw.trigger;
+    raw.triggers = [
+      { kind: 'cron', expr: '0 9 * * *' },
+      { kind: 'cron', expr: '0 17 * * *' },
+    ];
+    const m = validateManifest(raw);
+    assert.equal(m.triggers.length, 2);
+  });
+
+  it('accepts a webhook trigger with an id + secret hash', () => {
+    const raw = baseManifest();
+    delete raw.trigger;
+    raw.triggers = [{ kind: 'webhook', id: 'abc123', secretHash: 'deadbeef' }];
+    const m = validateManifest(raw);
+    assert.equal(m.triggers[0]?.kind, 'webhook');
+  });
+
+  it('treats an empty triggers list as legal (manual fire only)', () => {
+    const raw = baseManifest();
+    delete raw.trigger;
+    raw.triggers = [];
+    assert.deepEqual(validateManifest(raw).triggers, []);
+  });
+
+  it('rejects more than one webhook trigger', () => {
+    const raw = baseManifest();
+    delete raw.trigger;
+    raw.triggers = [
+      { kind: 'webhook', id: 'a', secretHash: 'h1' },
+      { kind: 'webhook', id: 'b', secretHash: 'h2' },
+    ];
+    assert.throws(() => validateManifest(raw), AutomationManifestError);
   });
 
   it('defaults version to 0.1.0 and enabled to true when absent', () => {
