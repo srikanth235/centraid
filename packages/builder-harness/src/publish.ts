@@ -12,6 +12,7 @@ const EXCLUDE = new Set([
   '.DS_Store',
   'dist',
   'data.sqlite',
+  'runtime.sqlite',
   'current.json',
   '_registry.json',
   'versions',

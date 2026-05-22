@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   AutomationManifestError,
-  isValidAutomationId,
+  isPendingWebhookTrigger,
   isValidCronExpression,
   parseManifest,
   validateManifest,
@@ -40,21 +40,6 @@ describe('isValidCronExpression', () => {
   });
 });
 
-describe('isValidAutomationId', () => {
-  it('accepts filesystem-safe slugs', () => {
-    assert.equal(isValidAutomationId('daily-digest'), true);
-    assert.equal(isValidAutomationId('summarize_prs'), true);
-    assert.equal(isValidAutomationId('Auto123'), true);
-  });
-
-  it('rejects empty / path-unsafe ids', () => {
-    assert.equal(isValidAutomationId(''), false);
-    assert.equal(isValidAutomationId('has space'), false);
-    assert.equal(isValidAutomationId('../escape'), false);
-    assert.equal(isValidAutomationId('dot.dot'), false);
-  });
-});
-
 describe('validateManifest', () => {
   it('accepts a minimal valid manifest', () => {
     const m = validateManifest(baseManifest());
@@ -83,6 +68,22 @@ describe('validateManifest', () => {
     raw.triggers = [{ kind: 'webhook', id: 'abc123', secretHash: 'deadbeef' }];
     const m = validateManifest(raw);
     assert.equal(m.triggers[0]?.kind, 'webhook');
+  });
+
+  it('accepts a pending webhook trigger (un-provisioned)', () => {
+    const raw = baseManifest();
+    delete raw.trigger;
+    raw.triggers = [{ kind: 'webhook', pending: true }];
+    const m = validateManifest(raw);
+    assert.equal(m.triggers[0]?.kind, 'webhook');
+    assert.equal(isPendingWebhookTrigger(m.triggers[0]!), true);
+  });
+
+  it('rejects a webhook trigger that is neither provisioned nor pending', () => {
+    const raw = baseManifest();
+    delete raw.trigger;
+    raw.triggers = [{ kind: 'webhook' }];
+    assert.throws(() => validateManifest(raw), AutomationManifestError);
   });
 
   it('treats an empty triggers list as legal (manual fire only)', () => {

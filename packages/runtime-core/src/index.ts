@@ -124,25 +124,32 @@ export {
 } from './chat-history.js';
 export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
-// Gateway state DBs — two separate SQLite files, each with its own
-// connection + migration ladder:
-//   - gateway  (`centraid-gateway.sqlite`):  users, user_prefs
-//   - activity (`centraid-activity.sqlite`): automations, chat_sessions,
-//                                            runs, run_nodes, automation_state
-// Hosts construct one provider per file and pass each to the matching
-// store: UserStore ← gateway; ChatHistoryStore + AutomationStore +
-// AutomationRunsStore all share the activity provider. Cross-file FKs
-// aren't possible in SQLite, so `chat_sessions.user_id` /
-// `automations.user_id` are application-enforced.
+// SQLite state — three migration ladders, each its own file + connection:
+//   - gateway   (`centraid-gateway.sqlite`):   users, user_prefs
+//   - runtime   (`<appRoot>/runtime.sqlite`):  chat_sessions, runs,
+//                                              run_nodes, automation_state
+//   - analytics (`centraid-analytics.sqlite`): run_summary
+// `UserStore` ← gateway; `ChatHistoryStore` + the per-app run ledger ←
+// each app's runtime.sqlite; `AnalyticsStore` ← analytics. Cross-file FKs
+// aren't possible in SQLite, so `chat_sessions.user_id` is
+// application-enforced.
 export {
   openGatewayDb,
   makeGatewayDbProvider,
-  openActivityDb,
-  makeActivityDbProvider,
+  openRuntimeDb,
+  makeRuntimeDbProvider,
+  openAnalyticsDb,
+  makeAnalyticsDbProvider,
   GATEWAY_MIGRATIONS,
-  ACTIVITY_MIGRATIONS,
+  RUNTIME_MIGRATIONS,
+  ANALYTICS_MIGRATIONS,
   type DatabaseProvider,
 } from './gateway-db.js';
+
+// Central analytics — push-based run summaries (issue #98, decision 4).
+// `AutomationRunsStore.finishRun` write-throughs one row per run;
+// `InsightsStore` reads them as the single Insights source.
+export { AnalyticsStore, type RunSummary, type ListSummariesOptions } from './analytics-store.js';
 
 // User-prefs store + HTTP route dispatcher. Wraps the gateway DB; mounted
 // by both hosts at `/_centraid-user`.
@@ -173,13 +180,14 @@ export {
   AutomationManifestError,
   AUTOMATION_HANDLER_FILE,
   AUTOMATION_MANIFEST_FILE,
-  isValidAutomationId,
   isValidCronExpression,
+  isPendingWebhookTrigger,
   parseManifest,
   validateManifest,
   validateOutputAgainstSchema,
   cronTriggersOf,
   webhookTriggerOf,
+  pendingWebhookTriggerOf,
   type AutomationManifest,
   type AutomationManifestRequires,
   type AutomationCostEstimate,
@@ -188,10 +196,23 @@ export {
   type AutomationTrigger,
   type CronTrigger,
   type WebhookTrigger,
+  type PendingWebhookTrigger,
   type AutomationOutputSchema,
   type AutomationHistoryConfig,
   type AutomationHistoryKeep,
 } from './automation-manifest.js';
+
+// Automation identity — the directory-slug grammar and the
+// `<appId>/<id>` handle that scheduler labels, webhook routing,
+// `ctx.invoke`, and `onFailure` address an automation by (issue #98).
+export {
+  isValidAutomationId,
+  isValidAppId,
+  isValidAutomationRef,
+  formatAutomationRef,
+  parseAutomationRef,
+  type AutomationRef,
+} from './automation-ref.js';
 
 // Unified agent-run ledger + ctx.state store. The three tables
 // (`runs`, `run_nodes`, `automation_state`) live in the activity DB;
@@ -232,17 +253,20 @@ export {
   type InsightsActivityRow,
 } from './insights-store.js';
 
-// Automation projects on disk (issue #91). An automation is a
-// first-class project — its own directory under `automationsDir` — and
-// the directory is the source of truth (no SQLite definition table).
+// Automation projects on disk (issue #98 unified model). An automation
+// always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
+// `listAutomations` scans every app's active version. The directory is
+// the source of truth (no SQLite definition table).
 export {
+  APP_AUTOMATIONS_SUBDIR,
   automationManifestPath,
   automationHandlerPath,
-  readAutomationProject,
-  listAutomationProjects,
-  writeAutomationManifest,
-  setAutomationEnabled,
-  deleteAutomationProject,
+  readAutomationProjectAt,
+  readAppOwnedAutomation,
+  listAutomations,
+  writeAutomationManifestAt,
+  setAutomationEnabledAt,
+  deleteAutomationAt,
   type AutomationRow,
   type AutomationProjectError,
   type ListAutomationProjectsResult,
@@ -260,6 +284,9 @@ export {
   hashWebhookSecret,
   verifyWebhookSecret,
   makeWebhookRouteHandler,
+  provisionPendingWebhookAt,
+  provisionAppPendingWebhooks,
+  type ProvisionedWebhook,
   type WebhookFireFn,
   type WebhookFireResult,
   type WebhookRouteOptions,

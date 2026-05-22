@@ -6,11 +6,11 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
   GATEWAY_MIGRATIONS,
-  ACTIVITY_MIGRATIONS,
+  RUNTIME_MIGRATIONS,
   openGatewayDb,
-  openActivityDb,
+  openRuntimeDb,
   makeGatewayDbProvider,
-  makeActivityDbProvider,
+  makeRuntimeDbProvider,
 } from './gateway-db.js';
 
 function freshDbPath(): string {
@@ -95,18 +95,18 @@ describe('openGatewayDb (users + user_prefs)', () => {
   });
 });
 
-describe('openActivityDb (chat_sessions + run ledger)', () => {
-  it('advances PRAGMA user_version to ACTIVITY_MIGRATIONS.length on a fresh DB', () => {
+describe('openRuntimeDb (per-app chat_sessions + run ledger)', () => {
+  it('advances PRAGMA user_version to RUNTIME_MIGRATIONS.length on a fresh DB', () => {
     const path = freshDbPath();
-    openActivityDb(path).close();
-    assert.equal(userVersion(path), ACTIVITY_MIGRATIONS.length);
-    assert.equal(ACTIVITY_MIGRATIONS.length, 3);
+    openRuntimeDb(path).close();
+    assert.equal(userVersion(path), RUNTIME_MIGRATIONS.length);
+    assert.equal(RUNTIME_MIGRATIONS.length, 1);
   });
 
-  it('creates chat_sessions + the unified runs ledger (no automations table)', () => {
+  it('creates chat_sessions + the run ledger (no automations table)', () => {
     // Issue #91: automation definitions live on disk, not in SQLite.
     const path = freshDbPath();
-    openActivityDb(path).close();
+    openRuntimeDb(path).close();
     assert.deepEqual(tableNames(path), ['automation_state', 'chat_sessions', 'run_nodes', 'runs']);
   });
 
@@ -114,7 +114,7 @@ describe('openActivityDb (chat_sessions + run ledger)', () => {
     // `users` lives in the separate gateway file; SQLite has no cross-file
     // FKs, so chat_sessions must not declare one.
     const path = freshDbPath();
-    openActivityDb(path).close();
+    openRuntimeDb(path).close();
     const db = new DatabaseSync(path);
     try {
       const fks = db.prepare(`PRAGMA foreign_key_list('chat_sessions')`).all();
@@ -124,9 +124,11 @@ describe('openActivityDb (chat_sessions + run ledger)', () => {
     }
   });
 
-  it('run_nodes cascades off runs; parent_run_id is SET NULL; chat_session_id cascades', () => {
+  it('run_nodes cascades off runs; chat_session_id cascades; parent_run_id has no FK', () => {
+    // `parent_run_id` is a plain column — a cross-app `ctx.invoke` sub-run's
+    // parent lives in a different app's file and a SQLite FK can't span files.
     const path = freshDbPath();
-    openActivityDb(path).close();
+    openRuntimeDb(path).close();
     const db = new DatabaseSync(path);
     try {
       const nodeFk = (
@@ -142,9 +144,11 @@ describe('openActivityDb (chat_sessions + run ledger)', () => {
         table: string;
         on_delete: string;
       }>;
-      const parentFk = runFks.find((f) => f.table === 'runs');
-      assert.ok(parentFk, 'expected self-FK on runs.parent_run_id');
-      assert.equal(parentFk.on_delete, 'SET NULL');
+      assert.equal(
+        runFks.find((f) => f.table === 'runs'),
+        undefined,
+        'runs.parent_run_id must NOT declare a self-FK',
+      );
 
       const chatFk = runFks.find((f) => f.table === 'chat_sessions');
       assert.ok(chatFk, 'expected FK on runs.chat_session_id → chat_sessions.id');
@@ -156,7 +160,7 @@ describe('openActivityDb (chat_sessions + run ledger)', () => {
 
   it('deleting a chat session cascades its runs and their run_nodes', () => {
     const path = freshDbPath();
-    const db = openActivityDb(path);
+    const db = openRuntimeDb(path);
     try {
       const now = Date.now();
       db.prepare(
@@ -185,25 +189,25 @@ describe('openActivityDb (chat_sessions + run ledger)', () => {
 
   it('re-opening an already-migrated DB is a no-op', () => {
     const path = freshDbPath();
-    openActivityDb(path).close();
+    openRuntimeDb(path).close();
     const before = userVersion(path);
-    openActivityDb(path).close();
+    openRuntimeDb(path).close();
     assert.equal(userVersion(path), before);
   });
 
   it('throws when the DB is at a newer version than this build supports', () => {
     const path = freshDbPath();
-    openActivityDb(path).close();
+    openRuntimeDb(path).close();
     const db = new DatabaseSync(path);
-    db.exec(`PRAGMA user_version = ${ACTIVITY_MIGRATIONS.length + 1}`);
+    db.exec(`PRAGMA user_version = ${RUNTIME_MIGRATIONS.length + 1}`);
     db.close();
-    assert.throws(() => openActivityDb(path), /newer|update centraid/i);
+    assert.throws(() => openRuntimeDb(path), /newer|update centraid/i);
   });
 });
 
 describe('lazy providers', () => {
   it('opens the DB once and reuses the handle for subsequent calls', () => {
-    for (const make of [makeGatewayDbProvider, makeActivityDbProvider]) {
+    for (const make of [makeGatewayDbProvider, makeRuntimeDbProvider]) {
       const provider = make(freshDbPath());
       const a = provider();
       const b = provider();
@@ -213,7 +217,7 @@ describe('lazy providers', () => {
   });
 
   it('does not touch the filesystem until the first call', () => {
-    for (const make of [makeGatewayDbProvider, makeActivityDbProvider]) {
+    for (const make of [makeGatewayDbProvider, makeRuntimeDbProvider]) {
       const path = freshDbPath();
       make(path);
       assert.equal(existsSync(path), false);

@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
-import { makeActivityDbProvider } from './gateway-db.js';
+import { makeRuntimeDbProvider } from './gateway-db.js';
 import { AutomationRunsStore } from './automation-runs-store.js';
 
 function newStore(): AutomationRunsStore {
-  // A temp activity DB — the provider runs the migrations on first use,
-  // creating the runs / run_nodes / automation_state tables.
+  // A temp runtime.sqlite — the provider runs the migrations on first use,
+  // creating the chat_sessions / runs / run_nodes / automation_state tables.
   const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-  const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
+  const provider = makeRuntimeDbProvider(path.join(dir, 'runtime.sqlite'));
   return new AutomationRunsStore(provider);
 }
 
@@ -121,7 +121,7 @@ describe('AutomationRunsStore', () => {
 
   it('automation_state get/set round-trips across store reopens', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
-    const provider = makeActivityDbProvider(path.join(dir, 'centraid-activity.sqlite'));
+    const provider = makeRuntimeDbProvider(path.join(dir, 'runtime.sqlite'));
     const s1 = new AutomationRunsStore(provider);
     s1.stateSet('auto-foo', 'cursor', JSON.stringify({ since: 42 }), 1000);
     s1.close();

@@ -27,8 +27,8 @@ You are working inside a centraid app project folder. Your job is to author or m
   package.json             # devDependency on @centraid/openclaw-plugin (for editor types)
   queries/<name>.js        # GET /centraid/<id>/_data/<name> handler
   actions/<name>.js        # POST /centraid/<id>/_run handler (body.action picks)
-  automations/<name>.json  # cron-scheduled deterministic action manifest
-                           #   the generated handler lives at actions/<name>.js
+  automations/<id>/automation.json  # a scheduled automation the app owns
+  automations/<id>/handler.js       #   its handler (see "Automations" below)
   migrations/NNNN_<slug>.sql  # schema migrations (numbered, plain DDL)
 \`\`\`
 
@@ -36,7 +36,7 @@ Handlers are authored as **plain \`.js\` ES modules** — there is no \`tsconfig
 
 ### Files you must NEVER create or commit
 
-- \`data.sqlite\` — managed by the plugin at runtime; persists across versions and would be **rejected at upload**.
+- \`data.sqlite\`, \`runtime.sqlite\` — managed by the plugin at runtime; persist across versions and would be **rejected at upload**.
 - \`current.json\`, \`_registry.json\`, \`versions/\` — runtime artifacts owned by the plugin.
 - \`tsconfig.json\`, \`*.ts\`, \`*.tsx\`, \`*.d.ts\` — handlers are \`.js\`-only. If you find legacy \`.ts\` files in an existing project, do **not** add new ones; leave the old ones alone and write new handlers as \`.js\`.
 - Any binary executable, native module, or symlink.
@@ -163,141 +163,69 @@ Practical patterns:
 
 The runtime guarantees: every successful write (handler / agent / external) emits a single event with a precise non-empty \`tables\` array. Empty-table emissions are suppressed by the bus, so subscribers never see no-op events.
 
-### Automations — cron-scheduled deterministic actions
+### Automations — scheduled background work inside an app
 
-When the user asks for something **scheduled** — "every 30 minutes, ...", "each morning, ...", "weekly summary of ..." — that's an automation, not a regular action. Three artifacts ship together:
+An app is a **capability bundle**, not just a UI. Alongside \`index.html\`, \`queries/\`, and \`actions/\`, an app can own **automations**: handlers that run on a schedule with no user present and no page open.
 
-1. \`automations/<name>.json\` — the manifest. Canonical record of the user's prompt + schedule + capability declarations. The manifest is the source of truth.
-2. \`actions/<name>.js\` — the generated JS handler the scheduler fires. **Never hand-edited**; re-prompting regenerates it.
-3. The cron expression — embedded in the manifest as \`trigger.expr\`.
+**Recognize automation intent.** When the user's request has a recurring or time-based aspect — "every morning…", "each Monday…", "every 30 minutes…", "remind me to…", "send me a weekly…", "on a schedule" — that part is an automation, not front-end code. A habit tracker that "pings me every evening" is a UI *and* an evening-reminder automation; an inbox that "checks for new mail hourly" is a UI *and* an hourly poll. Build both halves in the same conversation. **Never** fake scheduled work with a browser \`setInterval\` — the page would have to stay open forever.
 
-Recognize automation prompts. If the user says "do X every N minutes/hours/days/weeks," write a manifest + handler instead of a regular action.
+#### Layout
 
-#### Manifest shape
+Each automation the app owns is its own folder inside the app:
+
+\`\`\`
+<app root>/
+  automations/<id>/automation.json   # the manifest
+  automations/<id>/handler.js        # the handler the scheduler fires
+\`\`\`
+
+\`<id>\` is a short stable slug — \`daily-digest\`, \`evening-reminder\`. **An app may own several automations** — create one \`automations/<id>/\` folder per automation, each with a distinct slug. The slug is the identity: reuse the same \`<id>\` to *revise* an existing automation (its two files are overwritten), and pick a new \`<id>\` to *add* another. Don't pile multiple schedules into one handler when they're really separate jobs — a "morning digest" and a "Friday wrap-up" are two automations, two folders.
+
+When one automation references another — \`onFailure\`, or \`ctx.invoke(id, …)\` — use the sibling's bare \`<id>\`; siblings are the other automations in the same app.
+
+#### automation.json
 
 \`\`\`json
 {
-  "prompt": "every 30 min, summarize new PRs in foo/bar",
-  "trigger": { "kind": "cron", "expr": "*/30 * * * *" },
-  "action": "summarize-prs.js",
-  "requires": {
-    "mcps": ["github"],
-    "tools": ["github.list_pull_requests"],
-    "model": "anthropic/claude-3-5-sonnet"
-  },
-  "outputSchema": {
-    "type": "object",
-    "properties": { "summary": { "type": "string" } },
-    "required": ["summary"]
-  },
-  "onFailure": "digest-alert",
-  "history": { "keep": { "count": 50 } },
-  "costEstimate": { "model": "anthropic/claude-3-5-sonnet", "tokensPerFire": 5000 },
-  "generated": { "by": "builder", "at": "<ISO-8601 timestamp>" }
+  "name": "Evening reminder",
+  "version": "0.1.0",
+  "enabled": true,
+  "prompt": "every evening at 8pm, remind me about unfinished habits",
+  "triggers": [{ "kind": "cron", "expr": "0 20 * * *" }],
+  "requires": { "model": "anthropic/claude-3-5-sonnet" },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "centraid-builder", "at": "<ISO-8601 timestamp>" }
 }
 \`\`\`
 
-- \`trigger\` is the trigger shape. Today only \`{ kind: "cron", expr }\` is supported; the cron expression is a standard 5-field UTC string. Common patterns: \`*/30 * * * *\` (every 30 min), \`0 * * * *\` (top of every hour), \`0 9 * * MON-FRI\` (9 AM weekdays).
-- \`requires.mcps\` lists the MCP servers the handler depends on. The host runtime checks these are installed before activating the schedule.
-- \`requires.tools\` lists the fully-qualified tool names the handler calls via \`ctx.tool(...)\`. The host scoping policy enforces this allowlist.
-- \`requires.model\` is the model \`ctx.agent\` should route through. **Never set this to \`centraid-mock/...\`** — that would recurse into the runner.
-- \`outputSchema\` declares the shape of the handler's optional \`return { output }\`. The runtime validates and surfaces a failed run when the shape drifts. See "Run audit & state" below.
-- \`onFailure\` names a sibling automation to fire when the handler fails. See "Run audit & state".
-- \`history.keep\` controls audit retention. Defaults to \`{ count: 100 }\`.
-- \`costEstimate\` powers the UI's "≈ $X/month" line.
+- \`triggers\` is an array. A cron trigger is \`{ "kind": "cron", "expr": "<5-field UTC cron>" }\`. Translate the user's schedule into a cron expression yourself: "every evening at 8" → \`0 20 * * *\`, "every 30 minutes" → \`*/30 * * * *\`, "weekdays at 9" → \`0 9 * * MON-FRI\`. \`"triggers": []\` is a legal manual-only automation.
+- \`enabled\` — set \`true\`. An automation authored because the user asked for that behaviour is part of the app and runs once the app is published.
+- **Webhook triggers.** When the app needs to react to an inbound HTTP POST, declare the trigger as \`{ "kind": "webhook", "pending": true }\` — nothing else. You cannot mint the route \`id\` or \`secretHash\`; that is a privileged server step, so never invent them. After your turn the builder provisions the webhook (mints the id + secret, rewrites the trigger to its final form) and shows the user the endpoint URL + secret once. An automation may carry at most one webhook trigger.
+- \`requires.tools\` must list every fully-qualified tool the handler calls via \`ctx.tool(...)\`; \`requires.mcps\` lists the MCP servers they belong to. \`requires.model\` is the model \`ctx.agent\` routes through — never \`centraid-mock/...\`.
+- The runtime validates the manifest on every read; keep the shape exactly as shown.
 
-#### Handler contract
+#### handler.js
 
-Automation handlers receive \`{ ctx, db, log, app }\` — no \`body\`, no \`query\`. The handler returns nothing (or an optional summary string for the run log).
+A plain \`.js\` ES module — same JS-only discipline as \`queries/\` and \`actions/\` (no \`import type\`, no \`x as Foo\`, no \`interface\`; use JSDoc). It receives \`{ ctx, log }\` only — **no \`db\`, no \`body\`, no \`query\`, no \`window\`**. A cron fire has no request and no DOM.
 
 \`\`\`js
-// actions/summarize-prs.js
 /** @type {import('@centraid/openclaw-plugin').AutomationHandler} */
-export default async ({ ctx, db, log }) => {
-  const prs = /** @type {Array<{ number:number, title:string, body:string }>} */ (
-    await ctx.tool('github.list_pull_requests', { repo: 'foo/bar', state: 'open' })
-  );
-  for (const pr of prs) {
-    const { summary } = /** @type {{ summary: string }} */ (
-      await ctx.agent({
-        prompt: \`Summarize this PR in 2 sentences:\\n\\n\${pr.title}\\n\\n\${pr.body}\`,
-        json: {
-          type: 'object',
-          properties: { summary: { type: 'string' } },
-          required: ['summary'],
-        },
-      })
-    );
-    await db
-      .prepare(\`INSERT OR REPLACE INTO pr_summaries (number, title, summary) VALUES (?,?,?)\`)
-      .run(pr.number, pr.title, summary);
-  }
+export default async ({ ctx, log }) => {
+  // ctx.tool(name, args)         — one host / MCP tool call; Promise.all batches independents
+  // ctx.agent({ prompt, json })  — one constrained model turn (pass json when consumed structurally)
+  // ctx.state.get/set/del(key)   — cross-run KV scoped to this automation (cursors, watermarks)
+  // ctx.runs.last/list(...)      — this automation's prior run records
+  // ctx.invoke(id, { input })    — fire a sibling automation
+  log.info('automation fired');
+  return { summary: 'one-line run description' };
 };
 \`\`\`
 
-- \`ctx.tool(name, args)\` — invoke one host tool deterministically. Use this for MCP integrations (GitHub, Linear, Slack, etc). The runner batches concurrent \`ctx.tool\` calls into a single agent turn, so prefer \`Promise.all([ctx.tool(...), ctx.tool(...)])\` over sequential awaits when the calls are independent — that's a 1-shot turn instead of N shots.
-- \`ctx.agent({prompt, json?})\` — one-shot constrained inference against the user's real model. **Always pass a \`json\` schema when the result will be written to the DB** — it both gives you a parsed object back and acts as a runtime failure detector if the model can't fulfil the prompt (e.g. because a required MCP is missing). No tool calls are surfaced to the handler; no multi-turn.
-- \`db\` / \`log\` / \`app\` — same as regular handlers.
-
-#### What to avoid in automation handlers
-
-- **No \`ctx.fetch\`** — automations don't get an arbitrary HTTP capability. Use \`ctx.tool\` through an MCP if external data is needed.
-- **No loops calling \`ctx.agent\` per item when one call would do.** Token cost is real; prefer one structured call over a loop.
-- **No DDL.** Schema changes still ship as \`migrations/NNNN_*.sql\`.
-- **Don't reference user-interactive surfaces.** Cron fires have no human in the loop, no chat session, no \`window\`.
+Return \`{ summary?, output? }\` — \`summary\` shows in the run list. There is no runtime retry on \`ctx.tool\`; classify the error and write your own \`try/catch\` backoff when warranted.
 
 #### Authoring flow
 
-When the user prompts an automation:
-1. Write \`automations/<name>.json\` with the manifest above. Pick a stable name like \`summarize-prs\` or \`daily-digest\`.
-2. Write \`actions/<name>.js\` with the handler.
-3. If the handler writes to a new table, add the migration under \`migrations/\` and the table schema.
-
-The host runtime will register the schedule on activation. On re-prompt, overwrite both files; the prompt in the manifest stays canonical.
-
-### Run audit & state
-
-Every automation fire is recorded in a per-app \`automations.sqlite\` file the runtime owns (sibling to \`data.sqlite\`). You do not write to this file directly — the runtime instruments \`ctx.tool\` / \`ctx.agent\` calls automatically and exposes a narrow read+write surface through \`ctx\`:
-
-- **\`ctx.state.get(key)\` / \`ctx.state.set(key, value)\`** — cross-fire KV scoped to the current automation. Use for watermarks, cursors, ETags, dedup hashes — anything that needs to survive between runs. JSON-serializable values only. Survives desktop restart.
-- **\`ctx.runs.last({ status: 'ok' })\`** — the most-recent successful run record. Use for the "since last successful run" pattern. The in-progress self-run is filtered out, so you never see your own incomplete row.
-- **\`ctx.runs.list({ since, limit })\`** — newest-first history of runs. Use for aggregating windows ("summarize last week's runs") and catch-up patterns ("on first fire after a gap, replay missed windows").
-- **\`ctx.invoke(name, { input })\`** — synchronously fire another automation and receive its \`output\`. \`name\` is \`"automation"\` for a sibling in this app, or \`"appId/automation"\` to invoke an automation in another installed app. Use to compose deterministic workflows out of named building blocks. The invoked run reads its payload as \`ctx.input\`.
-- **\`ctx.input\`** — the payload this run was invoked with: the \`input\` from a \`ctx.invoke\`, the failed-run summary on an \`onFailure\` dispatch, or \`undefined\` for a plain scheduled fire. Narrow it with a JSDoc cast.
-
-There is **no retry knob** on \`ctx.tool\`. A failed tool call rejects the Promise; the handler is plain JavaScript, so retry / backoff / error-classification is yours to write with \`try/catch\`. This is deliberate — retry policy depends on *which* failure it is (a 429 wants backoff, a 404 wants no retry, a "not ready yet" wants a short poll), and only the handler knows the tool's error semantics. Each \`ctx.tool\` call is its own audit node, so a handler-driven retry loop shows up as distinct nodes in the run timeline.
-
-\`\`\`js
-// Retry only on transient failures — the handler classifies the error.
-async function withRetry(fn, { max = 3 } = {}) {
-  for (let i = 0; i < max; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      if (i === max - 1 || !/\\b(429|503|timeout)\\b/i.test(String(e.message))) throw e;
-      await new Promise((r) => setTimeout(r, 250 * 2 ** i));
-    }
-  }
-}
-const prs = await withRetry(() => ctx.tool('github.list_pull_requests', { repo }));
-\`\`\`
-
-Your handler can optionally \`return { summary, output }\`. \`summary\` is a one-line description shown in the UI run list. \`output\` is the structured value persisted to \`runs.output_json\`; if your manifest declares \`outputSchema\`, the runtime validates \`output\` against it and flips the run to failed if the shape drifts.
-
-#### Patterns to recognize in user prompts
-
-When the user describes an automation, identify which of these shapes it matches and lean on \`ctx\` instead of inventing a new \`data.sqlite\` table for state:
-
-- **Stateless poll** — "every N minutes, check X and notify if Y". No \`ctx.state\` / \`ctx.runs\` needed; just \`ctx.tool\` + DB write.
-- **Incremental** — "every N minutes, ingest new items since the last run". Use \`ctx.state.get('cursor')\` / \`ctx.state.set('cursor', ...)\`, OR \`ctx.runs.last({ status: 'ok' })?.startedAt\`. **Do not invent a \`runs\` or \`watermark\` table in \`data.sqlite\`** — the runtime already has one.
-- **Aggregating** — "every Monday, summarize last week". Use \`ctx.runs.list({ since: Date.now() - 7*24*3600*1000 })\` to enumerate the prior fires.
-- **Catch-up** — "on first fire after a gap, replay missed windows". Combine \`ctx.runs.last({ status: 'ok' })?.startedAt\` with the cron interval to detect the gap, then loop over windows.
-
-#### \`onFailure\` and \`history.keep\`
-
-The manifest's optional \`onFailure: "alerter-name"\` dispatches the named sibling automation when the handler fails (including \`outputSchema\` rejection and timeout). The failed run record lands in the alerter's \`ctx.runs.last()\`. Recursion is capped at depth 3 by the runtime, so a misconfigured pair can't loop.
-
-\`history.keep\` controls audit retention per-automation: \`{ count: 100 }\` (default) keeps the newest 100, \`{ days: 30 }\` drops anything older, \`"all"\` keeps everything, \`"errors"\` keeps only failed runs.
+When the user's request includes scheduled behaviour: build the UI / queries / actions as normal **and** create \`automations/<id>/automation.json\` + \`automations/<id>/handler.js\`. The automation ships with the app — it is part of the same project, not a separate one.
 
 ### Security model (do not weaken)
 
@@ -317,3 +245,116 @@ Default layout is already in place when you start. Add or modify files; do not m
 export function centraidAppendPrompt(): string {
   return CENTRAID_APPEND_PROMPT;
 }
+
+/**
+ * The system prompt for an **automation** project.
+ *
+ * Issue #98: an automation is an *automation app* — one `auto.`-prefixed
+ * app folder holding `app.json` and a single automation under
+ * `automations/<id>/` (`automation.json` + `handler.js`). It carries no
+ * UI: no `index.html`, no `queries/` / `actions/`, no migrations. The
+ * builder drives one conversation that maintains the two automation
+ * files; the user reviews the config and enables it.
+ */
+export const AUTOMATION_APPEND_PROMPT = `## Centraid automation authoring
+
+You are working inside a centraid **automation app** — an app folder that runs a scheduled, deterministic job with no human in the loop. It has no UI: the work you maintain is a manifest and a handler under \`automations/\`. Read this section before making changes.
+
+### Project layout (canonical)
+
+\`\`\`
+<project root>/                       # an automation app (auto.-prefixed folder)
+  app.json                            # app metadata — leave as the scaffold wrote it
+  automations/<id>/automation.json     # the manifest you maintain
+  automations/<id>/handler.js          # the handler you maintain
+\`\`\`
+
+The two files under \`automations/<id>/\` ARE the automation. Maintain both across the conversation. There is no \`index.html\`, no \`queries/\`, no \`actions/\`, no \`migrations/\` — an automation app has no UI. \`<id>\` is the slug the scaffold created; do not rename it.
+
+### Files you must NEVER create or edit
+
+- \`current.json\`, \`versions/\`, \`.centraid-builder-state.json\` — runtime/harness artifacts.
+- \`*.ts\`, \`*.tsx\`, \`*.d.ts\`, \`tsconfig.json\` — the handler is \`.js\`-only.
+- \`data.sqlite\`, \`runtime.sqlite\` — runtime-managed databases.
+
+### The manifest — \`automation.json\`
+
+\`\`\`json
+{
+  "name": "Daily PR digest",
+  "version": "0.1.0",
+  "description": "Summarize new PRs each morning.",
+  "enabled": false,
+  "prompt": "every morning, summarize new PRs in foo/bar",
+  "triggers": [{ "kind": "cron", "expr": "0 9 * * *" }],
+  "requires": {
+    "mcps": ["github"],
+    "tools": ["github.list_pull_requests"],
+    "model": "anthropic/claude-3-5-sonnet"
+  },
+  "apps": ["my-app"],
+  "outputSchema": {
+    "type": "object",
+    "properties": { "summary": { "type": "string" } },
+    "required": ["summary"]
+  },
+  "onFailure": "alert-me",
+  "history": { "keep": { "count": 100 } },
+  "costEstimate": { "model": "anthropic/claude-3-5-sonnet", "tokensPerFire": 5000 },
+  "generated": { "by": "centraid-builder", "at": "<ISO-8601 timestamp>" }
+}
+\`\`\`
+
+Rules for editing \`automation.json\`:
+
+- **Never set \`enabled\` to \`true\`.** The automation stays a draft (\`enabled: false\`) until the user explicitly enables it from the builder. Enabling it starts the cron firing before the user has reviewed the result — that decision is the user's, not yours. Leave \`enabled\` exactly as the scaffold wrote it.
+- **\`triggers\`** is an array. A cron trigger is \`{ "kind": "cron", "expr": "<5-field UTC cron>" }\`. Translate the user's natural-language schedule into a cron expression yourself: "every morning" → \`0 9 * * *\`, "every 30 minutes" → \`*/30 * * * *\`, "weekdays at 9" → \`0 9 * * MON-FRI\`, "top of every hour" → \`0 * * * *\`. An empty \`triggers\` array is legal — that's a manual-fire-only automation.
+- **Webhook triggers.** When the user wants the automation to fire on an inbound HTTP POST, declare the trigger as \`{ "kind": "webhook", "pending": true }\` — nothing else. You cannot mint the route \`id\` or \`secretHash\`; that is a privileged server step, so never invent them. After your turn the builder provisions the webhook (mints the id + secret, rewrites the trigger to its final form) and shows the user the endpoint URL + secret once. At most one webhook trigger per automation; combine it with cron triggers freely.
+- Keep \`prompt\` current — it is the canonical record of what the user asked for.
+- \`requires.tools\` must list every fully-qualified tool name the handler calls via \`ctx.tool(...)\`; \`requires.mcps\` lists the MCP servers those tools belong to. The host enforces this allowlist — an undeclared tool call fails.
+- \`requires.model\` is the model \`ctx.agent\` routes through (\`provider/model-id\`). Never set it to \`centraid-mock/...\` — that recurses into the runner.
+- The runtime validates the manifest on every read; a malformed shape is rejected. Keep the structure exactly as shown.
+
+### The handler — \`handler.js\`
+
+A plain \`.js\` ES module. The same JS-only discipline as app handlers applies — no \`import type\`, no \`x as Foo\` casts, no \`interface\`, no generic call arguments. Use JSDoc \`@type\` / \`@typedef\` for types.
+
+\`\`\`js
+/** @type {import('@centraid/openclaw-plugin').AutomationHandler} */
+export default async ({ ctx, log }) => {
+  log.info('automation fired');
+  // do work
+  return { summary: 'one-line run description', output: { /* ... */ } };
+};
+\`\`\`
+
+The handler receives \`{ ctx, log }\` — no \`db\`, no \`body\`, no \`query\`, no \`window\`. There is no human in the loop and no DOM.
+
+\`ctx\` surface:
+
+- \`ctx.tool(name, args)\` — invoke one host / MCP tool deterministically. Independent calls should be \`Promise.all([...])\` so the runner batches them into one turn.
+- \`ctx.agent({ prompt, json? })\` — one constrained model turn. Always pass a \`json\` schema when the result is consumed structurally — it both parses the result and detects a model failure.
+- \`ctx.state.get(key)\` / \`ctx.state.set(key, value)\` / \`ctx.state.del(key)\` — cross-run key/value store scoped to this automation. Use for watermarks, cursors, ETags, dedup hashes. JSON-serializable values only; survives restart.
+- \`ctx.runs.last({ status })\` / \`ctx.runs.list({ since, limit })\` — this automation's prior run records. Use for "since last successful run" and aggregation windows. The in-progress self-run is filtered out.
+- \`ctx.invoke(id, { input })\` — synchronously fire a sibling automation and receive its \`output\`.
+- \`ctx.input\` — the payload for an invoked or \`onFailure\` run; \`undefined\` for a plain scheduled fire.
+
+Return \`{ summary?, output? }\`: \`summary\` is the one-line description shown in the run list; \`output\` is persisted and, if the manifest declares \`outputSchema\`, validated against it (a shape mismatch fails the run).
+
+There is **no runtime retry** on \`ctx.tool\` — a failed call rejects the Promise. Classify the error and write your own \`try/catch\` backoff when retry is warranted.
+
+Avoid in handlers:
+
+- \`ctx.fetch\` — does not exist. Use \`ctx.tool\` through an MCP for external data.
+- Per-item \`ctx.agent\` loops when one structured call covers the batch — token cost is real.
+- Any reference to \`window\`, the DOM, or an interactive chat surface — cron fires have none.
+
+### Authoring flow
+
+The scaffold already wrote a draft \`automations/<id>/automation.json\` and a starter \`automations/<id>/handler.js\`. On each turn:
+
+1. Update \`automations/<id>/automation.json\` so \`name\`, \`prompt\`, \`triggers\`, \`requires\`, and \`apps\` match the user's current intent. Keep \`enabled: false\`.
+2. Rewrite \`automations/<id>/handler.js\` to do the work the prompt describes.
+
+The user reviews the manifest in the builder's config pane and enables the automation themselves when satisfied.
+`;

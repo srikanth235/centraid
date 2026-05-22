@@ -197,7 +197,7 @@ async function handlePostTurn(
   let prevAdapterSessionId: string | undefined;
   let prevAdapterKind: string | undefined;
   if (ctx.chatStore) {
-    const session = ctx.chatStore.getSessionMeta(windowId);
+    const session = ctx.chatStore.getSessionMeta(entry.id, windowId);
     if (!session) {
       sendError(res, 404, 'not_found', 'No such chat session.');
       return;
@@ -393,7 +393,7 @@ async function handlePostTurn(
               endedAt,
             });
           }
-          ctx.chatStore.recordTurn({
+          ctx.chatStore.recordTurn(entry.id, {
             chatSessionId: windowId,
             userMessage: message,
             startedAt: turnStartedAt,
@@ -412,6 +412,7 @@ async function handlePostTurn(
         // returns void).
         try {
           ctx.chatStore.noteTurn(
+            entry.id,
             windowId,
             runResult?.adapterKind
               ? {

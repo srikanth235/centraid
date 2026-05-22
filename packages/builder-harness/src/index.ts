@@ -38,6 +38,8 @@ export {
 export {
   scaffoldAutomationProject,
   validateAutomationId,
+  validateAutomationAppId,
+  AUTOMATION_APP_PREFIX,
   type AutomationScaffoldOptions,
 } from './scaffold-automation.js';
 
@@ -80,7 +82,11 @@ export {
 
 export { defaultHarnessConfig, resolveHarnessConfig } from './config.js';
 
-export { CENTRAID_APPEND_PROMPT, centraidAppendPrompt } from './system-prompt.js';
+export {
+  CENTRAID_APPEND_PROMPT,
+  AUTOMATION_APPEND_PROMPT,
+  centraidAppendPrompt,
+} from './system-prompt.js';
 
 export { buildUiGroundingBlocks } from './ui-grounding.js';
 

@@ -34,7 +34,7 @@
     // across re-renders.
     | { kind: 'toolGroup'; id: string; calls: ToolCall[]; open: boolean };
 
-  type Tab = 'preview' | 'code' | 'cloud';
+  type Tab = 'preview' | 'code' | 'cloud' | 'config' | 'runs';
   type ChatView = 'chat' | 'history';
   type DeviceKey = 'mobile' | 'tablet' | 'desktop';
 
@@ -211,11 +211,161 @@
     return m ? m[1]!.replace('T', ' ') : v.versionId.slice(0, 24);
   }
 
+  // ---------- Cron (automation builder) ----------
+  // A 5-field cron is "min hour day-of-month month day-of-week" in UTC.
+  // The automation config pane shows a plain-English gloss + the next
+  // few fire times; no cron library is on the renderer, so this is a
+  // minimal self-contained evaluator covering `*`, `*/n`, lists, ranges,
+  // and the named day/month tokens the manifest may carry.
+  const CRON_DOW: Record<string, number> = {
+    SUN: 0,
+    MON: 1,
+    TUE: 2,
+    WED: 3,
+    THU: 4,
+    FRI: 5,
+    SAT: 6,
+  };
+  const CRON_MON: Record<string, number> = {
+    JAN: 1,
+    FEB: 2,
+    MAR: 3,
+    APR: 4,
+    MAY: 5,
+    JUN: 6,
+    JUL: 7,
+    AUG: 8,
+    SEP: 9,
+    OCT: 10,
+    NOV: 11,
+    DEC: 12,
+  };
+
+  function cronFieldMatch(
+    field: string,
+    value: number,
+    min: number,
+    max: number,
+    names: Record<string, number>,
+  ): boolean {
+    for (let part of field.split(',')) {
+      part = part.trim();
+      let step = 1;
+      const slash = part.indexOf('/');
+      if (slash >= 0) {
+        step = parseInt(part.slice(slash + 1), 10) || 1;
+        part = part.slice(0, slash);
+      }
+      let lo = min;
+      let hi = max;
+      if (part !== '*' && part !== '?' && part !== '') {
+        const resolve = (t: string): number => {
+          const named = names[t.trim().toUpperCase()];
+          return named !== undefined ? named : parseInt(t, 10);
+        };
+        if (part.includes('-')) {
+          const [a, b] = part.split('-');
+          lo = resolve(a ?? '');
+          hi = resolve(b ?? '');
+        } else {
+          lo = resolve(part);
+          hi = lo;
+        }
+      }
+      if (Number.isNaN(lo) || Number.isNaN(hi)) continue;
+      if (value < lo || value > hi) continue;
+      if ((value - lo) % step === 0) return true;
+    }
+    return false;
+  }
+
+  /** Next `count` fire times (UTC) for a 5-field cron, or `[]` if unparseable. */
+  function cronNextRuns(expr: string, count: number, from: Date = new Date()): Date[] {
+    const f = expr.trim().split(/\s+/);
+    if (f.length !== 5) return [];
+    const [minF, hourF, domF, monF, dowF] = f as [string, string, string, string, string];
+    const out: Date[] = [];
+    const d = new Date(
+      Date.UTC(
+        from.getUTCFullYear(),
+        from.getUTCMonth(),
+        from.getUTCDate(),
+        from.getUTCHours(),
+        from.getUTCMinutes() + 1,
+      ),
+    );
+    const cap = 366 * 24 * 60; // step at most one year of minutes
+    for (let i = 0; i < cap && out.length < count; i++) {
+      const domStar = domF === '*' || domF === '?';
+      const dowStar = dowF === '*' || dowF === '?';
+      const domOk = cronFieldMatch(domF, d.getUTCDate(), 1, 31, {});
+      const dow = d.getUTCDay();
+      const dowOk =
+        cronFieldMatch(dowF, dow, 0, 7, CRON_DOW) ||
+        cronFieldMatch(dowF, dow === 0 ? 7 : dow, 0, 7, CRON_DOW);
+      // Standard cron: when both day fields are restricted they OR;
+      // when one is `*` the other governs.
+      const dayOk = domStar && dowStar ? true : domStar ? dowOk : dowStar ? domOk : domOk || dowOk;
+      if (
+        dayOk &&
+        cronFieldMatch(minF, d.getUTCMinutes(), 0, 59, {}) &&
+        cronFieldMatch(hourF, d.getUTCHours(), 0, 23, {}) &&
+        cronFieldMatch(monF, d.getUTCMonth() + 1, 1, 12, CRON_MON)
+      ) {
+        out.push(new Date(d));
+      }
+      d.setUTCMinutes(d.getUTCMinutes() + 1);
+    }
+    return out;
+  }
+
+  /** Best-effort plain-English gloss of a 5-field cron expression. */
+  function describeCron(expr: string): string {
+    const t = expr.trim().replace(/\s+/g, ' ');
+    const known: Record<string, string> = {
+      '0 9 * * *': 'Every day at 09:00 UTC',
+      '0 0 * * *': 'Every day at midnight UTC',
+      '0 * * * *': 'Every hour, on the hour',
+      '*/30 * * * *': 'Every 30 minutes',
+      '*/15 * * * *': 'Every 15 minutes',
+      '*/5 * * * *': 'Every 5 minutes',
+      '0 9 * * 1-5': 'Weekdays at 09:00 UTC',
+      '0 9 * * MON-FRI': 'Weekdays at 09:00 UTC',
+      '0 9 * * 1': 'Every Monday at 09:00 UTC',
+    };
+    if (known[t]) return known[t];
+    const f = t.split(' ');
+    const pad2 = (n: string): string => n.padStart(2, '0');
+    if (f.length === 5) {
+      if (
+        /^\d+$/.test(f[0]!) &&
+        /^\d+$/.test(f[1]!) &&
+        f[2] === '*' &&
+        f[3] === '*' &&
+        f[4] === '*'
+      ) {
+        return `Every day at ${pad2(f[1]!)}:${pad2(f[0]!)} UTC`;
+      }
+      if (f[0]!.startsWith('*/') && f.slice(1).every((x) => x === '*')) {
+        return `Every ${f[0]!.slice(2)} minutes`;
+      }
+      if (/^\d+$/.test(f[0]!) && f.slice(1).every((x) => x === '*')) {
+        return `Every hour at :${pad2(f[0]!)}`;
+      }
+    }
+    return `Cron: ${t}`;
+  }
+
   function openBuilder(opts: BuilderOptions): () => void {
     const { root, el, onExit, initialPrompt, appContext, onAddToHome, onMetaChange } = opts;
 
     const isUpdateMode = !!opts.projectId;
     const isNewBuild = !isUpdateMode && !!initialPrompt;
+    // Automations are first-class projects with their own builder mode:
+    // the right pane shows a read-only config view of `automation.json`
+    // (which the chat agent fills) instead of an app preview iframe.
+    const projectKind: 'app' | 'automation' = opts.projectKind ?? 'app';
+    const isAutomation = projectKind === 'automation';
     let projName = appContext?.name || (isNewBuild ? 'New app' : 'Untitled');
     // Description still rides on app.json — the inline editor was removed
     // when the subtitle slot became the read-only status row. The value
@@ -226,7 +376,12 @@
     // ---------- State ----------
     let projectId: string | undefined = opts.projectId;
     let chat: ChatMsg[] = [];
-    let tab: Tab = 'preview';
+    let tab: Tab = isAutomation ? 'config' : 'preview';
+    // Latest `automation.json` snapshot, re-read after each agent turn so
+    // the config pane reflects what the agent wrote. Automation mode only.
+    let automationRow: CentraidAutomationRow | undefined;
+    // True while a run-now / enable IPC is in flight (disables the controls).
+    let automationBusy = false;
     let chatView = 'chat' as ChatView;
     let previewDevice = 'mobile' as DeviceKey;
     let generating = false;
@@ -345,10 +500,20 @@
     // Update mode reuses the same publish flow; the gateway semantics
     // (uploading a new version) are identical, so the label unifies.
     const primaryBtn = el('button', { class: 'btn btn-primary cd-tl-publish' });
-    primaryBtn.innerHTML = Icon.Share({ size: 11 }) + '<span>Publish</span>';
-    primaryBtn.addEventListener('click', () => {
-      void handlePublish();
-    });
+    if (isAutomation) {
+      // Automation draft → "Enable" turns on the schedule; once enabled
+      // the button flips to "Disable". paintAutomationPrimary() owns the
+      // label and is re-run whenever the manifest snapshot changes.
+      paintAutomationPrimary();
+      primaryBtn.addEventListener('click', () => {
+        void handleToggleEnabled();
+      });
+    } else {
+      primaryBtn.innerHTML = Icon.Share({ size: 11 }) + '<span>Publish</span>';
+      primaryBtn.addEventListener('click', () => {
+        void handlePublish();
+      });
+    }
 
     // Titlebar app-icon tile — a gradient finish from the project color,
     // matching how app icons are tiled on Home (renderAppCard) and in the
@@ -398,6 +563,16 @@
       // editing / live / draft) plus version + edit-time facts. The dot
       // colour is owned by the parent's [data-state] attribute, set by
       // refreshSyncStatus().
+      if (isAutomation) {
+        projStatusText.textContent = generating
+          ? 'Editing…'
+          : automationBusy
+            ? 'Working…'
+            : automationRow?.enabled
+              ? 'Enabled'
+              : 'Draft';
+        return;
+      }
       let text: string;
       if (publishing) {
         text = 'Publishing…';
@@ -420,11 +595,16 @@
     // fn so we can mix design-token icons (Eye, Code) with inline SVGs (Cloud).
     // §B3 — the pane toggle is Preview/Code only. Cloud is a sidebar
     // destination (§G2), reached via the expanded app's Cloud child.
-    const tabDefs: [Tab, string, () => string][] = [
-      ['preview', 'Preview', () => Icon.Eye({ size: 13 })],
-      ['code', 'Code', () => Icon.Code({ size: 13 })],
-      ['cloud', 'Cloud', () => Icon.Bolt({ size: 13 })],
-    ];
+    const tabDefs: [Tab, string, () => string][] = isAutomation
+      ? [
+          ['config', 'Config', () => Icon.Settings({ size: 13 })],
+          ['runs', 'Runs', () => Icon.History({ size: 13 })],
+        ]
+      : [
+          ['preview', 'Preview', () => Icon.Eye({ size: 13 })],
+          ['code', 'Code', () => Icon.Code({ size: 13 })],
+          ['cloud', 'Cloud', () => Icon.Bolt({ size: 13 })],
+        ];
 
     // History toggle — swaps the chat pane between live chat and version
     // history (matches Lovable; keeps the right pane on Preview/Code so the
@@ -441,6 +621,10 @@
         refreshTopbarToggles();
       },
     });
+
+    // Automations have no gateway versions — hide the version-history
+    // toggle in automation mode (the chat pane keeps the conversation).
+    if (isAutomation) historyBtn.style.display = 'none';
 
     // The window chrome (cd-tl-main) owns its own sidebar toggle — the
     // duplicate in the old cd-app-strip is gone with the strip itself.
@@ -529,6 +713,12 @@
       projName,
     );
     projNameEl.setAttribute('title', 'Click to rename');
+    // An automation's name lives in `automation.json` — the agent owns
+    // it, so the builder title is read-only here (renamed via chat).
+    if (isAutomation) {
+      projNameEl.setAttribute('contenteditable', 'false');
+      projNameEl.removeAttribute('title');
+    }
     function commitProjNameEdit(): void {
       const next = (projNameEl.textContent ?? '').trim();
       if (!next || next === projName) {
@@ -607,6 +797,7 @@
       if (publishing) state = 'publishing';
       else if (generating) state = 'editing';
       else if (lastPublishedVersionId) state = 'idle-live';
+      else if (isAutomation && automationRow?.enabled) state = 'idle-live';
       projSubtitleEl.dataset.state = state;
       paintStatus();
     }
@@ -733,6 +924,8 @@
       title: 'Open in new tab',
       trustedHtml: Icon.Share({ size: 12 }),
     });
+    // Automations have no previewable URL — drop the open-in-new-tab control.
+    if (isAutomation) rbShareBtn.style.display = 'none';
     const rbToolbar = el('div', { class: 'rb-toolbar', 'data-tab': tab }, [
       previewUrlPill,
       el('div', { class: 'rb-toolbar-spacer' }),
@@ -1029,6 +1222,16 @@
       // Always stop any in-flight cloud polling before re-rendering; the
       // cloud branch below will restart it if logs is the active section.
       stopCloudLogsPoll();
+      // Automation mode — the right pane is a read-only config view of
+      // `automation.json` or the run history, not an app preview. The
+      // chat pane always stays visible (the conversation IS the builder).
+      if (isAutomation) {
+        main.dataset.chat = builderChatOpen ? 'open' : 'closed';
+        setShellChatPaneOpen(builderChatOpen);
+        if (tab === 'runs') renderRuns();
+        else renderConfig();
+        return;
+      }
       // Code + Cloud are full-focus surfaces — the refined Builder
       // artboards show no chat pane on these tabs, so the file tree /
       // cloud rail + content span the whole body. Preview restores the
@@ -3042,7 +3245,7 @@
         if (!projectId) return;
         const next = checkbox.checked;
         try {
-          await Api().setAutomationEnabled({ automationId: row.id, enabled: next });
+          await Api().setAutomationEnabled({ automationId: row.ref, enabled: next });
           await refreshAutomations();
         } catch (err) {
           // Revert the toggle so the UI doesn't misrepresent persisted state.
@@ -3058,7 +3261,7 @@
         automationRunState.set(row.name, { kind: 'running' });
         if (active === 'automations') drawStage();
         try {
-          const result = await Api().runAutomationNow({ automationId: row.id });
+          const result = await Api().runAutomationNow({ automationId: row.ref });
           automationRunState.set(row.name, { kind: 'done', result, finishedAt: Date.now() });
         } catch (err) {
           automationRunState.set(row.name, {
@@ -3083,7 +3286,7 @@
         );
         if (!ok) return;
         try {
-          await Api().deleteAutomation({ automationId: row.id });
+          await Api().deleteAutomation({ automationId: row.ref });
           automationRunState.delete(row.name);
           await refreshAutomations();
         } catch (err) {
@@ -3196,7 +3399,7 @@
         if (msg.projectId !== id) return;
         handleAgentEvent(msg.event);
       });
-      const result = await Api().startAgent({ projectId: id, sessionMode });
+      const result = await Api().startAgent({ projectId: id, projectKind, sessionMode });
       return { messages: result.messages };
     }
 
@@ -3448,14 +3651,41 @@
           closeAi();
           closeThinking();
           renderChat();
-          // Refresh code/preview tab if visible — agent may have written files.
-          if (tab === 'code') renderRight();
-          if (tab === 'preview' && previewReloadPending) renderRight();
+          if (isAutomation) {
+            // The agent rewrote `automation.json` / `handler.js` — pull the
+            // fresh manifest so the config pane reflects what it wrote.
+            if (previewReloadPending) void refreshAutomationRow();
+          } else {
+            // Refresh code/preview tab if visible — agent may have written files.
+            if (tab === 'code') renderRight();
+            if (tab === 'preview' && previewReloadPending) renderRight();
+          }
           previewReloadPending = false;
           break;
         default:
           break;
       }
+    }
+
+    // A webhook trigger the agent declared this turn cannot be minted
+    // by the agent — the builder provisions it server-side and returns
+    // the one-time secret here. Surface it as an assistant message so
+    // it stays copyable; it is never persisted (the manifest keeps only
+    // the hash) and won't survive a reload, which is the intent.
+    function announceMintedWebhooks(minted: CentraidMintedWebhook[]): void {
+      for (const w of minted) {
+        pushMessage({
+          kind: 'ai',
+          text:
+            `Webhook provisioned for “${w.automationId}”.\n\n` +
+            `Endpoint (POST): ${w.url}\n` +
+            `Secret (shown once — save it now): ${w.secret}\n\n` +
+            'Authenticate each request with the header ' +
+            '`Authorization: Bearer <secret>`. The secret is not stored — ' +
+            'only a hash is kept in automation.json.',
+        });
+      }
+      if (minted.length > 0) renderChat();
     }
 
     async function sendUserPrompt(text: string): Promise<void> {
@@ -3466,7 +3696,8 @@
       currentThinkingMsgIndex = -1;
       renderChat();
       try {
-        await Api().promptAgent({ text });
+        const { mintedWebhooks } = await Api().promptAgent({ text });
+        announceMintedWebhooks(mintedWebhooks);
       } catch (err) {
         generating = false;
         pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
@@ -3474,6 +3705,45 @@
     }
 
     async function bootstrap(): Promise<void> {
+      if (isAutomation && projectId) {
+        // The automation project is scaffolded as a draft before the
+        // builder opens, so this is always a "reopen" — load the manifest
+        // snapshot, then resume (or start fresh, the harness falls back)
+        // the builder session.
+        chat = [];
+        renderChat();
+        await refreshAutomationRow();
+        const { messages } = await startAgentSession(projectId, 'continue');
+        const hydrated = hydrateChatFromMessages(messages);
+        if (hydrated.length > 0) {
+          chat = chat.concat(hydrated);
+        } else {
+          chat = chat.concat([
+            {
+              kind: 'ai',
+              text:
+                'Let’s build your automation. Describe what it should do and ' +
+                'when it should run — for example, “every weekday morning, ' +
+                'summarize yesterday’s new GitHub issues.”',
+            },
+          ]);
+        }
+        renderChat();
+        if (initialPrompt) {
+          pushMessage({ kind: 'user', text: initialPrompt });
+          generating = true;
+          renderChat();
+          try {
+            const { mintedWebhooks } = await Api().promptAgent({ text: initialPrompt });
+            announceMintedWebhooks(mintedWebhooks);
+          } catch (err) {
+            generating = false;
+            pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
+          }
+        }
+        return;
+      }
+
       if (isUpdateMode && projectId) {
         // No "Editing existing project" divider — the project context lives
         // in the header now (icon + name + version + sync state). Real chat
@@ -3569,11 +3839,325 @@
       generating = true;
       renderChat();
       try {
-        await Api().promptAgent({ text: initialPrompt });
+        const { mintedWebhooks } = await Api().promptAgent({ text: initialPrompt });
+        announceMintedWebhooks(mintedWebhooks);
       } catch (err) {
         generating = false;
         pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
       }
+    }
+
+    // ---------- Automation builder ----------
+    // The primary button is the draft commit gate: a draft automation
+    // shows "Enable" (turns the schedule on); an enabled one shows
+    // "Disable". The agent never flips `enabled` itself — that decision
+    // is the user's, made here.
+    function paintAutomationPrimary(): void {
+      const enabled = automationRow?.enabled === true;
+      primaryBtn.innerHTML =
+        (enabled ? Icon.Pause({ size: 11 }) : Icon.Play({ size: 11 })) +
+        `<span>${enabled ? 'Disable' : 'Enable'}</span>`;
+      primaryBtn.dataset.kind = enabled ? 'disable' : 'enable';
+    }
+
+    // Re-read `automation.json` and repaint the header + config pane.
+    // Called on bootstrap and after every agent turn that touched files.
+    async function refreshAutomationRow(): Promise<void> {
+      if (!projectId) return;
+      try {
+        // The builder opens an automation app by its folder id; resolve
+        // the single automation it owns to get the `<appId>/<id>` handle.
+        const all = await Api().listAutomations();
+        const row = all.find((r) => r.ownerApp === projectId);
+        if (row) automationRow = row;
+      } catch {
+        /* keep the last good snapshot */
+      }
+      if (automationRow) {
+        projName = automationRow.manifest.name || automationRow.id;
+        projNameEl.textContent = projName;
+      }
+      paintAutomationPrimary();
+      refreshSyncStatus();
+      if (isAutomation && (tab === 'config' || tab === 'runs')) renderRight();
+    }
+
+    async function handleToggleEnabled(): Promise<void> {
+      if (!projectId || automationBusy || !automationRow) return;
+      const ref = automationRow.ref;
+      const next = !(automationRow.enabled === true);
+      automationBusy = true;
+      primaryBtn.setAttribute('disabled', '');
+      refreshSyncStatus();
+      try {
+        await Api().setAutomationEnabled({ automationId: ref, enabled: next });
+        showToast(next ? 'Automation enabled — schedule is live' : 'Automation disabled');
+        await refreshAutomationRow();
+      } catch (err) {
+        showToast(`Could not ${next ? 'enable' : 'disable'}: ${String(err)}`);
+      } finally {
+        automationBusy = false;
+        primaryBtn.removeAttribute('disabled');
+        refreshSyncStatus();
+      }
+    }
+
+    // Test fire — run the handler once now, surfacing the outcome in chat.
+    async function runAutomationOnce(): Promise<void> {
+      if (!projectId || automationBusy || !automationRow) return;
+      const ref = automationRow.ref;
+      automationBusy = true;
+      refreshSyncStatus();
+      if (tab === 'runs') renderRight();
+      const statusIdx = pushMessage({
+        kind: 'status',
+        text: 'Running automation…',
+        spinning: true,
+      });
+      try {
+        const res = await Api().runAutomationNow({ automationId: ref });
+        updateMessage(statusIdx, {
+          kind: 'status',
+          spinning: false,
+          text: res.ok
+            ? `Test run finished in ${(res.durationMs / 1000).toFixed(1)}s · ` +
+              `${res.toolBatches} tool batch(es), ${res.agentCalls} agent call(s)`
+            : `Test run failed: ${res.error ?? 'unknown error'}`,
+        });
+        showToast(res.ok ? 'Test run finished' : 'Test run failed');
+      } catch (err) {
+        updateMessage(statusIdx, {
+          kind: 'status',
+          spinning: false,
+          text: `Test run error: ${String(err)}`,
+        });
+      } finally {
+        automationBusy = false;
+        refreshSyncStatus();
+        if (tab === 'runs') renderRight();
+      }
+    }
+
+    function fmtRetention(keep: CentraidAutomationManifest['history']['keep']): string {
+      if (keep === 'all') return 'Keep all runs';
+      if (keep === 'errors') return 'Keep failed runs only';
+      if (typeof keep === 'object' && 'count' in keep) return `Last ${keep.count} runs`;
+      if (typeof keep === 'object' && 'days' in keep) return `Last ${keep.days} days`;
+      return '—';
+    }
+
+    function cfgRow(label: string, value: string): HTMLElement {
+      return el('div', { class: 'ab-row' }, [
+        el('span', { class: 'ab-row-label' }, label),
+        el('span', { class: 'ab-row-value' }, value),
+      ]);
+    }
+
+    // Read-only config pane — a rendered view of `automation.json`. Every
+    // field here is filled by the chat agent; the user changes them by
+    // describing the change in the conversation, not by editing the form.
+    function renderConfig(): void {
+      rightPaneContent.innerHTML = '';
+      const wrap = el('div', { class: 'ab-config' });
+      if (!automationRow) {
+        wrap.append(el('p', { class: 'ab-muted ab-config-loading' }, 'Loading automation…'));
+        rightPaneContent.append(wrap);
+        return;
+      }
+      const m = automationRow.manifest;
+      const enabled = automationRow.enabled === true;
+
+      wrap.append(
+        el('div', { class: 'ab-config-head' }, [
+          el('div', { class: 'ab-config-title' }, m.name || automationRow.id),
+          el(
+            'span',
+            { class: 'ab-chip', 'data-on': String(enabled) },
+            enabled ? 'Enabled' : 'Draft',
+          ),
+        ]),
+      );
+
+      wrap.append(
+        el('div', { class: 'ab-section' }, [
+          el('div', { class: 'ab-section-label' }, 'What it does'),
+          el('p', { class: 'ab-prompt' }, m.prompt || 'Not described yet.'),
+        ]),
+      );
+
+      const triggersBody = el('div', { class: 'ab-triggers' });
+      if (m.triggers.length === 0) {
+        triggersBody.append(el('p', { class: 'ab-muted' }, 'Manual runs only — no schedule.'));
+      } else {
+        for (const t of m.triggers) {
+          if (t.kind === 'cron') {
+            const card = el('div', { class: 'ab-trigger' }, [
+              el('div', { class: 'ab-trigger-main' }, [
+                el('span', { class: 'ab-trigger-icon', trustedHtml: Icon.History({ size: 14 }) }),
+                el('span', { class: 'ab-trigger-desc' }, describeCron(t.expr)),
+                el('code', { class: 'ab-trigger-expr' }, t.expr),
+              ]),
+            ]);
+            const next = cronNextRuns(t.expr, 3);
+            if (next.length > 0) {
+              card.append(
+                el('div', { class: 'ab-nextruns' }, [
+                  el('span', { class: 'ab-muted' }, 'Next: '),
+                  ...next.map((d) =>
+                    el(
+                      'span',
+                      { class: 'ab-nextrun' },
+                      d.toLocaleString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }),
+                    ),
+                  ),
+                ]),
+              );
+            }
+            triggersBody.append(card);
+          } else {
+            // A webhook trigger is either provisioned (carries a minted
+            // route id) or still pending — the builder mints id + secret
+            // on the next agent turn.
+            const pending = t.id === undefined;
+            const card = el('div', { class: 'ab-trigger' }, [
+              el('div', { class: 'ab-trigger-main' }, [
+                el('span', { class: 'ab-trigger-icon', trustedHtml: Icon.Globe({ size: 14 }) }),
+                el(
+                  'span',
+                  { class: 'ab-trigger-desc' },
+                  pending ? 'Webhook trigger — provisioning…' : 'Webhook trigger',
+                ),
+                ...(pending ? [] : [el('code', { class: 'ab-trigger-expr' }, `/${t.id}`)]),
+              ]),
+            ]);
+            if (pending) {
+              card.append(
+                el('div', { class: 'ab-nextruns' }, [
+                  el('span', { class: 'ab-muted' }, 'A URL + secret are minted server-side.'),
+                ]),
+              );
+            }
+            triggersBody.append(card);
+          }
+        }
+      }
+      wrap.append(
+        el('div', { class: 'ab-section' }, [
+          el('div', { class: 'ab-section-label' }, 'When it runs'),
+          triggersBody,
+        ]),
+      );
+
+      const behavior = el('div', { class: 'ab-rows' });
+      behavior.append(cfgRow('Model', m.requires.model || 'Workspace default'));
+      behavior.append(cfgRow('Run history', fmtRetention(m.history.keep)));
+      if (m.onFailure) behavior.append(cfgRow('On failure', `Run "${m.onFailure}"`));
+      const tools = m.requires.tools ?? [];
+      if (tools.length > 0) behavior.append(cfgRow('Tools', tools.join(', ')));
+      wrap.append(
+        el('div', { class: 'ab-section' }, [
+          el('div', { class: 'ab-section-label' }, 'Behavior'),
+          behavior,
+        ]),
+      );
+
+      const apps = m.apps ?? [];
+      wrap.append(
+        el('div', { class: 'ab-section' }, [
+          el('div', { class: 'ab-section-label' }, 'Connected apps'),
+          apps.length > 0
+            ? el(
+                'div',
+                { class: 'ab-tags' },
+                apps.map((a) => el('span', { class: 'ab-tag' }, a)),
+              )
+            : el('p', { class: 'ab-muted' }, 'Not linked to any app.'),
+        ]),
+      );
+
+      wrap.append(
+        el(
+          'div',
+          { class: 'ab-hint' },
+          'This view is filled in by the chat. Describe any change in the conversation.',
+        ),
+      );
+      rightPaneContent.append(wrap);
+    }
+
+    // Test-run pane — a "Run once" affordance plus the recent run history.
+    function renderRuns(): void {
+      rightPaneContent.innerHTML = '';
+      const wrap = el('div', { class: 'ab-runs' });
+
+      const runBtn = el('button', {
+        class: 'btn btn-primary ab-runbtn',
+        trustedHtml: Icon.Play({ size: 12 }) + '<span>Run once</span>',
+        onClick: () => {
+          void runAutomationOnce();
+        },
+      });
+      if (automationBusy) runBtn.setAttribute('disabled', '');
+      wrap.append(
+        el('div', { class: 'ab-runs-head' }, [
+          el('div', { class: 'ab-runs-head-text' }, [
+            el('div', { class: 'ab-section-label' }, 'Test run'),
+            el(
+              'p',
+              { class: 'ab-muted' },
+              'Fire the automation once now, without waiting for the schedule.',
+            ),
+          ]),
+          runBtn,
+        ]),
+      );
+
+      const list = el('div', { class: 'ab-runlist' }, [
+        el('p', { class: 'ab-muted' }, 'Loading runs…'),
+      ]);
+      wrap.append(
+        el('div', { class: 'ab-section' }, [
+          el('div', { class: 'ab-section-label' }, 'Recent runs'),
+          list,
+        ]),
+      );
+      rightPaneContent.append(wrap);
+
+      if (!projectId || !automationRow) return;
+      void Api()
+        .listAutomationRuns({ automationId: automationRow.ref, limit: 20 })
+        .then((runs) => {
+          list.innerHTML = '';
+          if (runs.length === 0) {
+            list.append(el('p', { class: 'ab-muted' }, 'No runs yet. Use "Run once" to test it.'));
+            return;
+          }
+          for (const r of runs) {
+            const dur =
+              r.endedAt !== undefined ? `${((r.endedAt - r.startedAt) / 1000).toFixed(1)}s` : '—';
+            list.append(
+              el('div', { class: 'ab-runrow', 'data-ok': String(r.ok) }, [
+                el('span', { class: 'ab-run-dot', 'data-ok': String(r.ok) }),
+                el(
+                  'span',
+                  { class: 'ab-run-summary' },
+                  r.summary || r.error || (r.ok ? 'Completed' : 'Failed'),
+                ),
+                el('span', { class: 'ab-run-trigger' }, r.triggerKind),
+                el('span', { class: 'ab-run-meta' }, `${dur} · ${relTime(r.startedAt)}`),
+              ]),
+            );
+          }
+        })
+        .catch(() => {
+          list.innerHTML = '';
+          list.append(el('p', { class: 'ab-muted' }, 'Could not load run history.'));
+        });
     }
 
     // ---------- Publish ----------
@@ -3754,7 +4338,9 @@
       // The chat pane only exists on the Preview surface — Code + Cloud
       // are full-focus surfaces with no chat — so the toggle is inert
       // there (renderRight forces the pane hidden on those tabs).
-      if (tab !== 'preview') return;
+      // Automations keep the chat pane on every tab — the conversation
+      // is the builder.
+      if (!isAutomation && tab !== 'preview') return;
       builderChatOpen = !builderChatOpen;
       Store.set('builder.chatPaneOpen', builderChatOpen);
       main.dataset.chat = builderChatOpen ? 'open' : 'closed';

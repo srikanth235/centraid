@@ -41,8 +41,8 @@ export class OpenclawAutomationHost implements AutomationHost {
     await upsertCronJob(row);
   }
 
-  async unregister(automationId: string): Promise<void> {
-    await removeCronJob(automationId);
+  async unregister(automationRef: string): Promise<void> {
+    await removeCronJob(automationRef);
   }
 
   async list(): Promise<readonly string[]> {

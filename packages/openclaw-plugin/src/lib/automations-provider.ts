@@ -10,10 +10,10 @@
  *   - Cron fires with `model: "centraid-mock/run-automation"`. Openclaw's
  *     cron service routes to our StreamFn.
  *   - StreamFn:
- *       1. Recovers the `automationId` from the prompt sentinel
- *          `<<<centraid:automationId>>>`.
+ *       1. Recovers the automation handle from the prompt sentinel
+ *          `<<<centraid:<appId>/<automationId>>>>`.
  *       2. Loads the automation project (`automation.json` + `handler.js`)
- *          from `automationsDir` by its id.
+ *          from the owning app's active version under `appsDir`.
  *       3. Runs the handler via `runAutomationHandler` from runtime-core,
  *          wiring an `AutomationRunsStore` over the activity DB
  *          for the run audit + `ctx.state`.
@@ -34,7 +34,7 @@
  * this module just exports the ProviderPlugin descriptor as a factory.
  */
 
-import type { DatabaseProvider } from '@centraid/runtime-core';
+import type { AnalyticsStore } from '@centraid/runtime-core';
 import { runOpenclawFire } from './openclaw-fire.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 // pi-ai types — open-import (matches openclaw's own pattern) so this
@@ -64,13 +64,14 @@ interface ProviderPluginShape {
 }
 
 export interface AutomationsProviderOptions {
+  /** Directory holding the gateway's app folders. */
+  appsDir: string;
   /**
-   * Activity DB provider (`centraid-activity.sqlite`) — the run ledger
-   * (`AutomationRunsStore`) is read from this.
+   * Central analytics store — a finished automation run write-throughs
+   * its summary here (issue #98). The run ledger itself is the per-app
+   * `runtime.sqlite`, resolved per fire from `appsDir`.
    */
-  automationDbProvider: DatabaseProvider;
-  /** Directory holding the user's automation projects. */
-  automationsDir: string;
+  analytics?: AnalyticsStore;
   /** Optional logger. */
   logger?: { info(m: string): void; warn(m: string): void; error(m: string): void };
 }
@@ -157,13 +158,13 @@ function makeAutomationStreamFn(
 const PROMPT_SENTINEL = /<<<centraid:([^>]+)>>>/;
 
 interface ParsedDispatch {
-  automationId: string;
+  automationRef: string;
 }
 
 function parsePromptSentinel(prompt: string): ParsedDispatch | undefined {
   const match = PROMPT_SENTINEL.exec(prompt);
   if (!match) return undefined;
-  return { automationId: match[1]! };
+  return { automationRef: match[1]! };
 }
 
 /**
@@ -208,21 +209,21 @@ async function executeAutomation(
   const dispatch = recoverDispatch(streamFnArgs);
   if (!dispatch) {
     return errorMessage(
-      'centraid-mock StreamFn invoked without the <<<centraid:automationId>>> sentinel in the prompt — this provider should only be triggered by centraid-registered cron jobs',
+      'centraid-mock StreamFn invoked without the <<<centraid:<appId>/<id>>>> sentinel in the prompt — this provider should only be triggered by centraid-registered cron jobs',
     );
   }
   const outcome = await runOpenclawFire(
     {
-      automationId: dispatch.automationId,
-      automationsDir: opts.automationsDir,
-      activityDbProvider: opts.automationDbProvider,
+      automationRef: dispatch.automationRef,
+      appsDir: opts.appsDir,
+      ...(opts.analytics ? { analytics: opts.analytics } : {}),
       triggerKind: 'scheduled',
       triggerOrigin: 'cron',
     },
     log,
   );
   if (!outcome.ok) {
-    log.error(`automation ${dispatch.automationId} failed: ${outcome.error}`);
+    log.error(`automation ${dispatch.automationRef} failed: ${outcome.error}`);
     return errorMessage(`automation failed: ${outcome.error ?? 'unknown error'}`);
   }
   return successMessage(outcome.summary ?? 'ok');

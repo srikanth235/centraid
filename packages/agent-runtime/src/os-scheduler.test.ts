@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  automationRefFromSlug,
+  automationSlug,
   buildLaunchdPlist,
   buildSystemdService,
   buildSystemdTimer,
@@ -123,8 +125,20 @@ describe('cronToSchtasksArgs', () => {
 });
 
 describe('jobLabel', () => {
-  it('sanitizes the automation id into a launchd-safe label', () => {
+  it('encodes the automation handle into a launchd-safe label', () => {
     assert.equal(jobLabel('auto-xyz'), 'com.centraid.auto-xyz');
-    assert.equal(jobLabel('weird.id/chars'), 'com.centraid.weird_id_chars');
+    assert.equal(jobLabel('auto.bot/daily'), 'com.centraid.auto.bot_sdaily');
+  });
+});
+
+describe('automationSlug codec', () => {
+  it('round-trips handles containing / and _', () => {
+    for (const ref of ['auto.bot/daily', 'svc/auto-1', 'a_b/c_d', 'plain']) {
+      assert.equal(automationRefFromSlug(automationSlug(ref)), ref);
+    }
+  });
+
+  it('produces a slug free of path separators', () => {
+    assert.equal(automationSlug('auto.bot/daily').includes('/'), false);
   });
 });

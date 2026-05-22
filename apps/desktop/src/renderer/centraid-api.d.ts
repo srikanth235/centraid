@@ -364,9 +364,22 @@ interface CentraidApi {
 
   startAgent(input: {
     projectId: string;
+    /**
+     * Whether the project is an app (default) or a first-class
+     * automation. Selects the project directory and system prompt.
+     */
+    projectKind?: 'app' | 'automation';
     sessionMode?: 'fresh' | 'continue' | 'in-memory';
   }): Promise<{ ok: true; messages: CentraidAgentMessage[] }>;
-  promptAgent(input: { text: string }): Promise<{ ok: true }>;
+  /**
+   * Send a turn to the agent. When the agent declared one or more
+   * pending webhook triggers this turn, the builder mints the route
+   * id + secret server-side and returns them in `mintedWebhooks` —
+   * the plaintext `secret` is shown to the user exactly once.
+   */
+  promptAgent(input: {
+    text: string;
+  }): Promise<{ ok: true; mintedWebhooks: CentraidMintedWebhook[] }>;
   stopAgent(): Promise<{ ok: true }>;
   onAgentEvent(cb: (msg: { projectId: string; event: CentraidAgentEvent }) => void): () => void;
 
@@ -457,11 +470,18 @@ interface CentraidApi {
   /** List persisted chat sessions for an app, newest first. */
   chatHistoryList(input: { appId: string }): Promise<{ sessions: CentraidChatSessionMeta[] }>;
   /** Load one persisted chat session's metadata + ordered message log. */
-  chatHistoryLoad(input: { sessionId: string }): Promise<CentraidChatSessionWithMessages>;
+  chatHistoryLoad(input: {
+    appId: string;
+    sessionId: string;
+  }): Promise<CentraidChatSessionWithMessages>;
   /** Permanently delete one chat session and its messages. */
-  chatHistoryDelete(input: { sessionId: string }): Promise<{ ok: boolean }>;
+  chatHistoryDelete(input: { appId: string; sessionId: string }): Promise<{ ok: boolean }>;
   /** Rename a chat session (overrides the auto-generated title). */
-  chatHistoryRename(input: { sessionId: string; title: string }): Promise<CentraidChatSessionMeta>;
+  chatHistoryRename(input: {
+    appId: string;
+    sessionId: string;
+    title: string;
+  }): Promise<CentraidChatSessionMeta>;
 
   /** Snapshot of which coding-agent credentials are present on this machine. */
   authStatus(): Promise<CentraidAuthStatus>;
@@ -507,12 +527,13 @@ interface CentraidApi {
    */
   getRunnerStatus(): Promise<CentraidRunnerStatus>;
 
-  // Automations (issue #91). Automations are first-class projects on
-  // disk under `automationsDir`; these read/write that project tree and
-  // the unified run ledger.
-  /** Every automation project, newest-first by name. */
+  // Automations (issue #98). Every automation lives inside an app
+  // folder under `appsDir`; these read/write that project tree and the
+  // unified run ledger. An `automationId` argument is the automation's
+  // `<appId>/<id>` handle (the `ref` field of `CentraidAutomationRow`).
+  /** Every automation across all app folders, sorted by name. */
   listAutomations(): Promise<CentraidAutomationRow[]>;
-  /** Read one automation project, or `null` if it does not exist. */
+  /** Read one automation by its `<appId>/<id>` handle, or `null`. */
   readAutomation(input: { automationId: string }): Promise<CentraidAutomationRow | null>;
   /**
    * Scaffold a new automation project and register its triggers. When a
@@ -529,6 +550,11 @@ interface CentraidApi {
     model?: string;
     historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
     onFailure?: string;
+    /**
+     * Initial enabled flag. The conversational builder passes `false`
+     * to scaffold a draft the user enables after reviewing it.
+     */
+    enabled?: boolean;
   }): Promise<{
     row: CentraidAutomationRow;
     webhook?: { id: string; secret: string; url: string };
@@ -686,7 +712,8 @@ export interface CentraidAutomationManifest {
   enabled: boolean;
   prompt: string;
   triggers: Array<
-    { kind: 'cron'; expr: string } | { kind: 'webhook'; id: string; secretHash: string }
+    | { kind: 'cron'; expr: string }
+    | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
   >;
   requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
   /** App ids this automation is associated with. */
@@ -699,15 +726,20 @@ export interface CentraidAutomationManifest {
 
 /** Row shape returned by `listAutomations`. Mirrors `AutomationRow` from runtime-core. */
 export interface CentraidAutomationRow {
-  /** Directory id of the automation project. */
+  /** Automation id — the directory slug, unique within its owning app. */
   id: string;
-  /** Absolute path to the project directory. */
+  /** Absolute path to the automation project directory. */
   dir: string;
   name: string;
   triggers: Array<
-    { kind: 'cron'; expr: string } | { kind: 'webhook'; id: string; secretHash: string }
+    | { kind: 'cron'; expr: string }
+    | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
   >;
   enabled: boolean;
+  /** Id of the app folder this automation belongs to. */
+  ownerApp: string;
+  /** Globally-unique handle — `<ownerApp>/<id>`. Pass this as `automationId`. */
+  ref: string;
   manifest: CentraidAutomationManifest;
 }
 
@@ -718,6 +750,25 @@ export interface CentraidAutomationRunResult {
   error?: string;
   toolBatches: number;
   agentCalls: number;
+}
+
+/**
+ * A webhook the builder minted while provisioning a pending trigger
+ * the agent authored. The `secret` is the plaintext shared secret —
+ * surfaced to the user once and never persisted (`automation.json`
+ * keeps only its SHA-256 hash).
+ */
+export interface CentraidMintedWebhook {
+  /** Id of the automation that owns the webhook trigger. */
+  automationId: string;
+  /** Id of the app folder that owns the automation. */
+  ownerApp: string;
+  /** Minted route slug — the path segment under `/_centraid-hook/`. */
+  webhookId: string;
+  /** Full gateway URL callers POST to. */
+  url: string;
+  /** Plaintext shared secret — shown once, never stored. */
+  secret: string;
 }
 
 /** Sub-status for a custom OpenAI-compatible provider on a codex runner. */
@@ -865,7 +916,8 @@ declare global {
     enabled: boolean;
     prompt: string;
     triggers: Array<
-      { kind: 'cron'; expr: string } | { kind: 'webhook'; id: string; secretHash: string }
+      | { kind: 'cron'; expr: string }
+      | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
     >;
     requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
     apps?: readonly string[];
@@ -879,9 +931,12 @@ declare global {
     dir: string;
     name: string;
     triggers: Array<
-      { kind: 'cron'; expr: string } | { kind: 'webhook'; id: string; secretHash: string }
+      | { kind: 'cron'; expr: string }
+      | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
     >;
     enabled: boolean;
+    ownerApp: string;
+    ref: string;
     manifest: CentraidAutomationManifest;
   }
   interface CentraidAutomationRunResult {
@@ -890,6 +945,13 @@ declare global {
     error?: string;
     toolBatches: number;
     agentCalls: number;
+  }
+  interface CentraidMintedWebhook {
+    automationId: string;
+    ownerApp: string;
+    webhookId: string;
+    url: string;
+    secret: string;
   }
   interface CentraidAutomationRunRecord {
     runId: string;

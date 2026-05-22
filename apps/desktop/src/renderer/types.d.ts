@@ -117,6 +117,13 @@ declare global {
      */
     projectId?: string;
     /**
+     * Project kind. `'app'` (default) is the standard chat-driven app
+     * builder; `'automation'` swaps the right pane for a read-only
+     * automation config view + test-run pane. Automation mode always
+     * receives a pre-scaffolded draft via `projectId`.
+     */
+    projectKind?: 'app' | 'automation';
+    /**
      * Called after a successful publish of a fresh build. Receives the centraid
      * project id (used to look up the app on subsequent opens) plus the
      * suggested name/icon/color so the home screen can render a tile.

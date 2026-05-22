@@ -1,13 +1,12 @@
 /**
  * Parent-side orchestrator for automation handlers.
  *
- * Issue #91: an automation is a standalone *project* (its own directory
- * under `automationsDir`), not a script bound to an app. The generated
- * handler is a single `handler.js` in that directory, executed in a
- * worker thread that exposes `ctx.tool` / `ctx.agent` / `ctx.state` /
- * `ctx.runs` / `ctx.invoke` — there is no app `db` proxy, because a
- * standalone automation has no owning app. Cross-run persistence is
- * `ctx.state` (the `automation_state` KV keyed by the automation id).
+ * Issue #98: an automation is a *project* that lives inside an app
+ * folder (`<appCodeDir>/automations/<id>/`). The generated handler is a
+ * single `handler.js` in that directory, executed in a worker thread
+ * that exposes `ctx.tool` / `ctx.agent` / `ctx.state` / `ctx.runs` /
+ * `ctx.invoke`. Cross-run persistence is `ctx.state` (the
+ * `automation_state` KV keyed by the automation id).
  *
  *   - Worker entry is `worker/automation-runner.js`.
  *   - The parent supplies `toolDispatcher`, `agentDispatcher`, and an

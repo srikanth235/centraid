@@ -27,9 +27,9 @@ export type RuntimeMode = 'local' | 'remote';
 
 export interface PersistedSettings {
   /**
-   * Workspace root. Apps live under `<projectsDir>/apps/`, automations
-   * under `<projectsDir>/automations/` — both surfaced as the derived
-   * `appsDir` / `automationsDir` on {@link DesktopSettings}.
+   * Workspace root. Every project — UI apps and automation apps alike —
+   * lives under `<projectsDir>/apps/`, surfaced as the derived `appsDir`
+   * on {@link DesktopSettings} (issue #98).
    */
   projectsDir: string;
   runtimeMode: RuntimeMode;
@@ -50,10 +50,8 @@ export interface PersistedSettings {
 export interface DesktopSettings extends HarnessConfig {
   /** Workspace root (persisted). */
   projectsDir: string;
-  /** Derived — `<projectsDir>/apps`. App projects live here. */
+  /** Derived — `<projectsDir>/apps`. Every project (UI + automation apps). */
   appsDir: string;
-  /** Derived — `<projectsDir>/automations`. Automation projects live here. */
-  automationsDir: string;
   runtimeMode: RuntimeMode;
   remoteGatewayUrl: string;
   remoteGatewayToken: string;
@@ -141,10 +139,9 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
 }
 
 async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> {
-  // Apps + automations are sibling subdirectories of the workspace root.
+  // Every project — UI app or automation app — lives under `apps/`.
   const derived = {
     appsDir: path.join(p.projectsDir, 'apps'),
-    automationsDir: path.join(p.projectsDir, 'automations'),
   };
   if (p.runtimeMode === 'local') {
     const { ensureLocalRuntime } = await import('./local-runtime.js');

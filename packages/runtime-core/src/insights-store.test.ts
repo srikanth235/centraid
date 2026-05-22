@@ -4,28 +4,39 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { makeActivityDbProvider } from './gateway-db.js';
+import { makeRuntimeDbProvider, makeAnalyticsDbProvider } from './gateway-db.js';
+import { AnalyticsStore } from './analytics-store.js';
 import { AutomationRunsStore } from './automation-runs-store.js';
 import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
 
+/**
+ * `runs` writes to a run ledger and — because it is constructed WITH an
+ * `AnalyticsStore` — write-throughs each finished run's summary to the
+ * central analytics DB. `insights` reads only that central DB.
+ */
 function setup(): { runs: AutomationRunsStore; insights: InsightsStore } {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-insights-'));
-  const provider = makeActivityDbProvider(join(dir, 'db.sqlite'));
-  return { runs: new AutomationRunsStore(provider), insights: new InsightsStore(provider) };
+  const ledger = makeRuntimeDbProvider(join(dir, 'runtime.sqlite'));
+  const analyticsProvider = makeAnalyticsDbProvider(join(dir, 'analytics.sqlite'));
+  const analytics = new AnalyticsStore(analyticsProvider);
+  return {
+    runs: new AutomationRunsStore(ledger, analytics),
+    insights: new InsightsStore(analyticsProvider),
+  };
 }
 
-/** Insert a finished run with one step node (model + tokens) and an
- *  optional tool node touching `appId`. Returns the run id. */
+/** Insert a finished run with one step node (model + tokens). For an
+ *  automation run, `automationRef` is its `<appId>/<id>` handle — the
+ *  write-through derives the owning app id from it. Returns the run id. */
 function seedRun(
   runs: AutomationRunsStore,
   opts: {
     kind: 'automation' | 'chat' | 'build';
-    automationId?: string;
+    automationRef?: string;
     model?: string;
     inputTokens?: number;
     outputTokens?: number;
     costUsd?: number;
-    appId?: string;
     retryOf?: string;
     startedAt?: number;
   },
@@ -36,7 +47,7 @@ function seedRun(
     runId,
     kind: opts.kind,
     triggerKind: opts.kind === 'chat' ? 'interactive' : 'manual',
-    ...(opts.automationId ? { automationId: opts.automationId } : {}),
+    ...(opts.automationRef ? { automationId: opts.automationRef } : {}),
     ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
     startedAt,
   });
@@ -54,21 +65,8 @@ function seedRun(
     endedAt: startedAt + 100,
     durationMs: 100,
   });
-  if (opts.appId) {
-    runs.insertNode({
-      nodeId: randomUUID(),
-      runId,
-      ordinal: 1,
-      kind: 'tool',
-      name: 'centraid_sql_read',
-      ok: true,
-      appId: opts.appId,
-      startedAt,
-      endedAt: startedAt + 10,
-      durationMs: 10,
-    });
-  }
-  // finishRun rolls the step nodes up into runs.total_*.
+  // finishRun rolls the step nodes up into runs.total_* AND
+  // write-throughs the summary to the central analytics DB.
   runs.finishRun({ runId, endedAt: startedAt + 200, ok: true });
   return runId;
 }
@@ -92,12 +90,11 @@ describe('InsightsStore', () => {
     const { runs, insights } = setup();
     seedRun(runs, {
       kind: 'automation',
-      automationId: 'auto-1',
+      automationRef: 'auto.todos/digest',
       model: 'claude-sonnet-4-5',
       inputTokens: 1000,
       outputTokens: 500,
       costUsd: 0.02,
-      appId: 'todos',
     });
     seedRun(runs, {
       kind: 'chat',
@@ -105,21 +102,38 @@ describe('InsightsStore', () => {
       inputTokens: 200,
       outputTokens: 100,
       costUsd: 0.01,
-      appId: 'habits',
     });
     const s = insights.summary();
     assert.equal(s.kpis.generations, 2);
     assert.equal(s.kpis.totalTokens, 1800);
     assert.equal(s.kpis.totalCostUsd, 0.03);
-    assert.equal(s.kpis.appsTouched, 2);
+    // Only the automation run carries an owning app; chat has none.
+    assert.equal(s.kpis.appsTouched, 1);
     assert.equal(s.kpis.retries, 0);
     assert.ok(s.kpis.forecastCostUsd >= 0);
   });
 
+  it('counts distinct owning apps across automation runs', () => {
+    const { runs, insights } = setup();
+    seedRun(runs, { kind: 'automation', automationRef: 'auto.todos/digest', inputTokens: 10 });
+    seedRun(runs, { kind: 'automation', automationRef: 'auto.habits/nudge', inputTokens: 10 });
+    seedRun(runs, { kind: 'automation', automationRef: 'auto.todos/sweep', inputTokens: 10 });
+    assert.equal(insights.summary().kpis.appsTouched, 2);
+  });
+
   it('counts retries via retry_of', () => {
     const { runs, insights } = setup();
-    const first = seedRun(runs, { kind: 'automation', automationId: 'a', inputTokens: 10 });
-    seedRun(runs, { kind: 'automation', automationId: 'a', inputTokens: 10, retryOf: first });
+    const first = seedRun(runs, {
+      kind: 'automation',
+      automationRef: 'auto.a/job',
+      inputTokens: 10,
+    });
+    seedRun(runs, {
+      kind: 'automation',
+      automationRef: 'auto.a/job',
+      inputTokens: 10,
+      retryOf: first,
+    });
     const s = insights.summary();
     assert.equal(s.kpis.generations, 2);
     assert.equal(s.kpis.retries, 1);
@@ -127,7 +141,7 @@ describe('InsightsStore', () => {
 
   it('groups by automation, collapsing chat into a synthetic bucket', () => {
     const { runs, insights } = setup();
-    seedRun(runs, { kind: 'automation', automationId: 'auto-1', inputTokens: 500 });
+    seedRun(runs, { kind: 'automation', automationRef: 'auto.x/auto-1', inputTokens: 500 });
     seedRun(runs, { kind: 'chat', inputTokens: 300 });
     const s = insights.summary();
     const chat = s.byAutomation.find((r) => r.kind === 'chat');
@@ -137,11 +151,11 @@ describe('InsightsStore', () => {
     assert.equal(chat.label, 'Chat');
     assert.equal(chat.tokens, 300);
     assert.ok(auto, 'expected an automation row');
-    assert.equal(auto.key, 'auto-1');
+    assert.equal(auto.key, 'auto.x/auto-1');
     assert.equal(auto.tokens, 500);
   });
 
-  it('groups by model over step nodes', () => {
+  it('groups by each run’s dominant model', () => {
     const { runs, insights } = setup();
     seedRun(runs, { kind: 'chat', model: 'claude-sonnet-4-5', inputTokens: 100, outputTokens: 50 });
     seedRun(runs, { kind: 'chat', model: 'claude-sonnet-4-5', inputTokens: 200, outputTokens: 80 });
@@ -156,7 +170,11 @@ describe('InsightsStore', () => {
 
   it('returns recent activity newest-first', () => {
     const { runs, insights } = setup();
-    seedRun(runs, { kind: 'automation', automationId: 'a', startedAt: Date.now() - 60_000 });
+    seedRun(runs, {
+      kind: 'automation',
+      automationRef: 'auto.a/job',
+      startedAt: Date.now() - 60_000,
+    });
     seedRun(runs, { kind: 'chat', startedAt: Date.now() });
     const s = insights.summary();
     assert.equal(s.recent.length, 2);

@@ -1,10 +1,11 @@
 /**
  * Automation manifest schema + validator.
  *
- * Issue #91: an automation is a first-class *project* — its own
- * directory under `automationsDir`, structurally a sibling of an app.
- * `automation.json` is the project manifest (this module's shape); the
- * generated handler is a single `handler.js` in the same directory.
+ * Issue #98 (unified folder model): an automation is a first-class
+ * *project* that always lives inside an app folder, at
+ * `<appCodeDir>/automations/<id>/`. `automation.json` is the project
+ * manifest (this module's shape); the generated handler is a single
+ * `handler.js` in the same directory.
  *
  * The manifest is the source of truth — there is no SQLite definition
  * table. `enabled` lives here (toggling it rewrites the file), so a
@@ -22,6 +23,7 @@
 
 import { AutomationManifestError } from './automation-manifest-errors.js';
 import { validateOutputSchema, type AutomationOutputSchema } from './automation-manifest-output.js';
+import { isValidAutomationRef } from './automation-ref.js';
 
 export {
   AutomationManifestError,
@@ -80,18 +82,44 @@ export type WebhookTrigger = {
    */
   readonly secretHash: string;
 };
-export type AutomationTrigger = CronTrigger | WebhookTrigger;
+/**
+ * A webhook trigger the builder agent declared but cannot provision —
+ * minting the route `id` + `secret` is a privileged server step. The
+ * desktop's `provisionPendingWebhookAt` pass rewrites it to a
+ * `WebhookTrigger`; this is the agent→builder handoff form.
+ */
+export type PendingWebhookTrigger = {
+  readonly kind: 'webhook';
+  readonly pending: true;
+};
+export type AutomationTrigger = CronTrigger | WebhookTrigger | PendingWebhookTrigger;
 
 /** The cron triggers from a trigger list, in declaration order. */
 export function cronTriggersOf(triggers: readonly AutomationTrigger[]): readonly CronTrigger[] {
   return triggers.filter((t): t is CronTrigger => t.kind === 'cron');
 }
 
-/** The single webhook trigger from a trigger list, if any. */
+/** True for a webhook trigger still awaiting server-side provisioning. */
+export function isPendingWebhookTrigger(t: AutomationTrigger): t is PendingWebhookTrigger {
+  return t.kind === 'webhook' && 'pending' in t;
+}
+
+/**
+ * The single *provisioned* webhook trigger from a trigger list, if any.
+ * A pending (un-minted) webhook trigger is skipped — it has no `id` to
+ * route on yet.
+ */
 export function webhookTriggerOf(
   triggers: readonly AutomationTrigger[],
 ): WebhookTrigger | undefined {
-  return triggers.find((t): t is WebhookTrigger => t.kind === 'webhook');
+  return triggers.find((t): t is WebhookTrigger => t.kind === 'webhook' && 'id' in t);
+}
+
+/** The single pending (un-provisioned) webhook trigger, if any. */
+export function pendingWebhookTriggerOf(
+  triggers: readonly AutomationTrigger[],
+): PendingWebhookTrigger | undefined {
+  return triggers.find(isPendingWebhookTrigger);
 }
 
 /**
@@ -136,7 +164,10 @@ export interface AutomationManifest {
   readonly apps?: readonly string[];
   readonly costEstimate?: AutomationCostEstimate;
   readonly outputSchema?: AutomationOutputSchema;
-  /** Sibling automation id to fire when this one fails. */
+  /**
+   * Automation to fire when this one fails — a `<appId>/<id>` handle, or
+   * a bare `<id>` for a sibling within the same app.
+   */
   readonly onFailure?: string;
   readonly history: AutomationHistoryConfig;
   readonly generated: AutomationGeneratedMeta;
@@ -150,15 +181,6 @@ export function isValidCronExpression(expr: string): boolean {
   if (fields.length !== 5) return false;
   const fieldPattern = /^[0-9*,\-/?A-Za-z]+$/;
   return fields.every((f) => fieldPattern.test(f));
-}
-
-/**
- * Validate an automation *id* (the directory slug). Same grammar an app
- * project id uses — lowercase-safe, filesystem-safe.
- */
-export function isValidAutomationId(id: string): boolean {
-  if (typeof id !== 'string' || id.length === 0) return false;
-  return /^[A-Za-z0-9_-]+$/.test(id);
 }
 
 function requireString(value: unknown, field: string): string {
@@ -219,6 +241,19 @@ function validateOneTrigger(raw: unknown, field: string): AutomationTrigger {
     return { kind: 'cron', expr };
   }
   if (t.kind === 'webhook') {
+    // A pending webhook (`{ kind: 'webhook', pending: true }`) the
+    // builder agent declared but cannot provision — accepted here so
+    // the manifest round-trips until the builder mints id + secret.
+    if (t.id === undefined && t.secretHash === undefined) {
+      if (t.pending !== true) {
+        throw new AutomationManifestError(
+          'invalid_trigger',
+          `manifest.${field} webhook trigger needs a minted "id" + "secretHash", or "pending": true`,
+          field,
+        );
+      }
+      return { kind: 'webhook', pending: true };
+    }
     const id = requireString(t.id, `${field}.id`);
     if (!isValidWebhookId(id)) {
       throw new AutomationManifestError(
@@ -376,10 +411,10 @@ function validateOnFailure(raw: unknown): string | undefined {
       'onFailure',
     );
   }
-  if (!isValidAutomationId(raw)) {
+  if (!isValidAutomationRef(raw)) {
     throw new AutomationManifestError(
       'invalid_on_failure',
-      `manifest.onFailure "${raw}" is not a valid automation id`,
+      `manifest.onFailure "${raw}" is not a valid automation handle`,
       'onFailure',
     );
   }

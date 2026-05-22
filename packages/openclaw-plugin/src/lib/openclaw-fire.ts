@@ -1,25 +1,31 @@
 /*
- * One automation fire on the openclaw remote path (issue #91).
+ * One automation fire on the openclaw remote path (issue #98).
  *
  * `runOpenclawFire` is the openclaw counterpart to agent-runtime's
- * `runAutomationLocal`: it reads the automation project from disk and
- * runs its generated `handler.js` through `runAutomationHandler`.
+ * `runAutomationLocal`: it resolves an automation by its `<appId>/<id>`
+ * handle — reading the *active version* of the owning app folder — and
+ * runs the generated `handler.js` through `runAutomationHandler`.
  *
  *   - `toolDispatcher` routes `ctx.tool` through `callGatewayTool` (full
  *     harness MCP routing + audit + before-tool hooks for free).
  *   - `agentDispatcher` routes `ctx.agent` through the user's real
  *     provider via `prepareSimpleCompletionModelForAgent`.
- *   - `invokeDispatcher` re-enters this function for a sibling
- *     automation id.
- *   - `onFailure` cascade fires the named sibling, depth-3 capped.
+ *   - `invokeDispatcher` re-enters this function for another automation
+ *     by its handle (a bare id resolves within the same app).
+ *   - `onFailure` cascade fires the named automation, depth-3 capped.
  */
 
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import {
   AutomationRunsStore,
   automationHandlerPath,
-  readAutomationProject,
+  formatAutomationRef,
+  makeRuntimeDbProvider,
+  parseAutomationRef,
+  readAppOwnedAutomation,
   runAutomationHandler,
+  type AnalyticsStore,
   type AutomationDispatchContext,
   type AutomationHandlerOutcome,
   type AutomationInvokeDispatcher,
@@ -27,7 +33,6 @@ import {
   type AutomationToolResult,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type DatabaseProvider,
 } from '@centraid/runtime-core';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
@@ -36,12 +41,15 @@ import {
 } from 'openclaw/plugin-sdk/simple-completion-runtime';
 
 export interface OpenclawFireOptions {
-  /** Id of the automation project to fire. */
-  automationId: string;
-  /** Directory holding the user's automation projects. */
-  automationsDir: string;
-  /** Activity-DB provider — holds the run ledger. */
-  activityDbProvider: DatabaseProvider;
+  /** `<appId>/<automationId>` handle of the automation to fire. */
+  automationRef: string;
+  /** Directory holding the gateway's app folders. */
+  appsDir: string;
+  /**
+   * Central analytics store. When set, the per-app run ledger
+   * write-throughs each finished run's summary to it (issue #98).
+   */
+  analytics?: AnalyticsStore;
   triggerKind: AutomationTriggerKind;
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
   triggerOrigin?: AutomationTriggerOrigin;
@@ -57,13 +65,24 @@ export async function runOpenclawFire(
   opts: OpenclawFireOptions,
   log: FireLog,
 ): Promise<AutomationHandlerOutcome & { runId: string }> {
-  const runId = `${opts.automationId}:${Date.now()}:${randomUUID().slice(0, 8)}`;
+  const runId = `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const failureDepth = opts.failureDepth ?? 0;
 
-  const row = await readAutomationProject(opts.automationsDir, opts.automationId).catch(
+  const parsed = parseAutomationRef(opts.automationRef);
+  if (!parsed) {
+    return {
+      ok: false,
+      error: `automation "${opts.automationRef}": not a valid <appId>/<id> handle`,
+      logs: [],
+      toolBatches: 0,
+      agentCalls: 0,
+      runId,
+    };
+  }
+  const row = await readAppOwnedAutomation(opts.appsDir, parsed.appId, parsed.automationId).catch(
     (err: unknown) => {
       log.error(
-        `automation ${opts.automationId}: manifest load failed — ${err instanceof Error ? err.message : String(err)}`,
+        `automation ${opts.automationRef}: manifest load failed — ${err instanceof Error ? err.message : String(err)}`,
       );
       return undefined;
     },
@@ -71,7 +90,7 @@ export async function runOpenclawFire(
   if (!row) {
     return {
       ok: false,
-      error: `automation ${opts.automationId}: not found under ${opts.automationsDir}`,
+      error: `automation ${opts.automationRef}: not found under ${opts.appsDir}`,
       logs: [],
       toolBatches: 0,
       agentCalls: 0,
@@ -79,7 +98,10 @@ export async function runOpenclawFire(
     };
   }
   const manifest = row.manifest;
-  const runsStore = new AutomationRunsStore(opts.activityDbProvider);
+  // The automation's run ledger is its app's per-app `runtime.sqlite`
+  // (issue #98); `finishRun` write-throughs a summary to `analytics`.
+  const runtimeDbPath = path.join(opts.appsDir, parsed.appId, 'runtime.sqlite');
+  const runsStore = new AutomationRunsStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
 
   const toolDispatcher = async (
     calls: readonly AutomationToolCall[],
@@ -135,16 +157,18 @@ export async function runOpenclawFire(
     }
   };
 
-  // ctx.invoke targets a sibling automation by id.
+  // ctx.invoke targets another automation by handle — `<appId>/<id>`,
+  // or a bare `<id>` resolved within the calling automation's app.
   const invokeDispatcher: AutomationInvokeDispatcher = async (targetId, args) => {
-    if (!targetId || targetId.includes('/')) {
-      throw new Error(`ctx.invoke("${targetId}"): target must be a sibling automation id`);
+    const target = parseAutomationRef(targetId, parsed.appId);
+    if (!target) {
+      throw new Error(`ctx.invoke("${targetId}"): not a valid automation handle`);
     }
     const child = await runOpenclawFire(
       {
-        automationId: targetId,
-        automationsDir: opts.automationsDir,
-        activityDbProvider: opts.activityDbProvider,
+        automationRef: formatAutomationRef(target.appId, target.automationId),
+        appsDir: opts.appsDir,
+        ...(opts.analytics ? { analytics: opts.analytics } : {}),
         triggerKind: 'manual',
         ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
         failureDepth,
@@ -162,9 +186,9 @@ export async function runOpenclawFire(
   };
 
   const outcome = await runAutomationHandler({
-    automationId: opts.automationId,
+    automationId: opts.automationRef,
     automationDir: row.dir,
-    handlerFile: automationHandlerPath(opts.automationsDir, opts.automationId),
+    handlerFile: automationHandlerPath(row.dir),
     runId,
     toolDispatcher,
     agentDispatcher,
@@ -195,24 +219,31 @@ export async function runOpenclawFire(
           ...(n.error !== undefined ? { error: n.error } : {}),
         })),
       };
-      try {
-        await runOpenclawFire(
-          {
-            automationId: manifest.onFailure,
-            automationsDir: opts.automationsDir,
-            activityDbProvider: opts.activityDbProvider,
-            triggerKind: 'on_failure',
-            ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
-            failureDepth: failureDepth + 1,
-            parentRunId: runId,
-            input: failureInput,
-          },
-          log,
+      const failTarget = parseAutomationRef(manifest.onFailure, parsed.appId);
+      if (!failTarget) {
+        log.warn(
+          `onFailure target "${manifest.onFailure}" is not a valid automation handle for ${row.name}`,
         );
-      } catch (err) {
-        log.error(
-          `onFailure dispatch ${manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      } else {
+        try {
+          await runOpenclawFire(
+            {
+              automationRef: formatAutomationRef(failTarget.appId, failTarget.automationId),
+              appsDir: opts.appsDir,
+              ...(opts.analytics ? { analytics: opts.analytics } : {}),
+              triggerKind: 'on_failure',
+              ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
+              failureDepth: failureDepth + 1,
+              parentRunId: runId,
+              input: failureInput,
+            },
+            log,
+          );
+        } catch (err) {
+          log.error(
+            `onFailure dispatch ${manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     }
   }

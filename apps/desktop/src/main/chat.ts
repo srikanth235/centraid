@@ -314,7 +314,7 @@ export function registerChatIpcHandlers(): void {
         // gateway no longer sees the transcript, so the client names the
         // conversation. The chat route also back-fills an empty title on
         // the first turn, so this stays correct if create races the turn.
-        const created = await historyCreate(session.mode, deriveTitle(input.text));
+        const created = await historyCreate(session.appId, session.mode, deriveTitle(input.text));
         session.chatSessionId = created.id;
         session.title = created.title;
         // Rebind the window id to the freshly-created chat session so
@@ -361,24 +361,30 @@ export function registerChatIpcHandlers(): void {
   );
 
   // ---------- Chat history (renderer's persistent chat list) ----------
-  ipcMain.handle(ChatChannel.HISTORY_LIST, async (): Promise<{ sessions: ChatSessionMeta[] }> => {
-    const list = await historyList();
-    return { sessions: list };
-  });
+  // Chat is app-scoped (issue #98): every call carries the owning app id.
+  ipcMain.handle(
+    ChatChannel.HISTORY_LIST,
+    async (_event, input: { appId: string }): Promise<{ sessions: ChatSessionMeta[] }> => {
+      const list = await historyList(input.appId);
+      return { sessions: list };
+    },
+  );
   ipcMain.handle(
     ChatChannel.HISTORY_LOAD,
-    async (_event, input: { sessionId: string }): Promise<ChatSessionWithMessages> =>
-      historyLoad(input.sessionId),
+    async (_event, input: { appId: string; sessionId: string }): Promise<ChatSessionWithMessages> =>
+      historyLoad(input.appId, input.sessionId),
   );
   ipcMain.handle(
     ChatChannel.HISTORY_DELETE,
-    async (_event, input: { sessionId: string }): Promise<{ ok: boolean }> =>
-      historyDelete(input.sessionId),
+    async (_event, input: { appId: string; sessionId: string }): Promise<{ ok: boolean }> =>
+      historyDelete(input.appId, input.sessionId),
   );
   ipcMain.handle(
     ChatChannel.HISTORY_RENAME,
-    async (_event, input: { sessionId: string; title: string }): Promise<ChatSessionMeta> =>
-      historyRename(input.sessionId, input.title),
+    async (
+      _event,
+      input: { appId: string; sessionId: string; title: string },
+    ): Promise<ChatSessionMeta> => historyRename(input.appId, input.sessionId, input.title),
   );
 }
 

@@ -335,7 +335,8 @@
     | { kind: 'starred' }
     | { kind: 'automations' }
     | { id: string; kind: 'app' }
-    | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' };
+    | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' }
+    | { automationId: string; kind: 'automation-builder' };
 
   const navStack: ShellRoute[] = [];
   let navIndex = -1;
@@ -349,6 +350,7 @@
     if (route.kind === 'starred') return 'starred';
     if (route.kind === 'automations') return 'automations';
     if (route.kind === 'app') return `app:${route.id}`;
+    if (route.kind === 'automation-builder') return `automation-builder:${route.automationId}`;
     if (route.appContext) return `builder:${route.appContext.id}`;
     return `builder:new:${route.initialPrompt ?? ''}`;
   }
@@ -398,6 +400,8 @@
         renderAutomations();
       } else if (route.kind === 'app') {
         openApp(route.id);
+      } else if (route.kind === 'automation-builder') {
+        enterAutomationBuilder({ automationId: route.automationId });
       } else {
         enterBuilder({ appContext: route.appContext, initialPrompt: route.initialPrompt });
       }
@@ -1414,7 +1418,7 @@
       class: 'cd-automations-new',
       type: 'button',
       trustedHtml: `${Icon.Sparkle({ size: 13 })}<span>New automation</span>`,
-      onClick: () => openNewAutomationSheet(),
+      onClick: () => void createAndOpenAutomationBuilder(),
     });
     const topbar = el('div', { class: 'cd-automations-topbar' }, [
       el('div', { class: 'cd-page-head' }, [
@@ -1469,358 +1473,45 @@
     select('runs');
   }
 
-  // Cron presets the builder offers — a human label mapped to the
-  // 5-field expression, so the user states intent and we translate.
-  const CRON_PRESETS: ReadonlyArray<{ label: string; expr: string }> = [
-    { label: 'Every day at 9:00am', expr: '0 9 * * *' },
-    { label: 'Every hour', expr: '0 * * * *' },
-    { label: 'Every 30 minutes', expr: '*/30 * * * *' },
-    { label: 'Weekdays at 9:00am', expr: '0 9 * * 1-5' },
-    { label: 'Every Monday at 9:00am', expr: '0 9 * * 1' },
-  ];
-
-  function slugifyAutomationId(name: string): string {
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    return slug || `automation-${Math.random().toString(36).slice(2, 8)}`;
+  // Scaffold a fresh draft automation, then open the conversational
+  // builder on it (issue #98). This replaces the old form-based creation
+  // sheet: the user describes the automation in chat and the agent fills
+  // in `automation.json` + `handler.js`. The draft is created disabled —
+  // the user enables it from the builder once it looks right.
+  async function createAndOpenAutomationBuilder(): Promise<void> {
+    // An automation is an app folder — the `auto.` prefix marks it as an
+    // automation app (issue #98).
+    const id = `auto.${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      await window.CentraidApi.createAutomation({
+        id,
+        name: 'New automation',
+        enabled: false,
+      });
+    } catch (err) {
+      console.error('[automations] could not scaffold draft', err);
+      return;
+    }
+    enterAutomationBuilder({ automationId: id });
   }
 
-  // Run-retention presets — a label mapped to the manifest `history.keep`.
-  const RETENTION_PRESETS: ReadonlyArray<{
-    label: string;
-    keep: { count: number } | { days: number } | 'all' | 'errors';
-  }> = [
-    { label: 'Last 100 runs', keep: { count: 100 } },
-    { label: 'Last 30 days', keep: { days: 30 } },
-    { label: 'Keep all', keep: 'all' },
-    { label: 'Errors only', keep: 'errors' },
-  ];
-
-  // One draft trigger in the New-automation form. A webhook draft has no
-  // secret — the main process mints id + secret server-side at create.
-  type TriggerDraft = { kind: 'cron'; expr: string } | { kind: 'webhook' };
-
-  // "New automation" creation sheet. The user describes the automation
-  // in natural language, stacks one or more triggers, and tunes the
-  // Behavior / Apps sections; `createAutomation` scaffolds the project
-  // (`automation.json` + a starter `handler.js`) which the builder
-  // agent then fills in.
-  function openNewAutomationSheet(): void {
-    const backdrop = el('div', { class: 'cd-palette-backdrop' });
-    const card = el('div', {
-      class: 'cd-newauto',
-      role: 'dialog',
-      'aria-label': 'New automation',
-    });
-    const close = (): void => backdrop.remove();
-
-    const nameInput = el('input', {
-      class: 'cd-newauto-input',
-      type: 'text',
-      placeholder: 'Automation name — e.g. Daily PR digest',
-    }) as HTMLInputElement;
-    const promptInput = el('textarea', {
-      class: 'cd-newauto-prompt',
-      rows: '4',
-      placeholder: 'Describe what this automation should do…',
-    }) as HTMLTextAreaElement;
-
-    // ----- Triggers — an additive list of cron + webhook rows. -----
-    const triggers: TriggerDraft[] = [{ kind: 'cron', expr: '0 9 * * *' }];
-    const triggersBox = el('div', { class: 'cd-newauto-triggers' });
-
-    const cronRow = (draft: { kind: 'cron'; expr: string }): HTMLElement => {
-      const row = el('div', { class: 'cd-newauto-trigger-row' });
-      const select = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
-      let known = false;
-      for (const p of CRON_PRESETS) {
-        const opt = el('option', { value: p.expr }, p.label) as HTMLOptionElement;
-        if (p.expr === draft.expr) {
-          opt.selected = true;
-          known = true;
-        }
-        select.append(opt);
-      }
-      const customOpt = el('option', { value: '__custom__' }, 'Custom cron…') as HTMLOptionElement;
-      if (!known) customOpt.selected = true;
-      select.append(customOpt);
-      const customCron = el('input', {
-        class: 'cd-newauto-input',
-        type: 'text',
-        placeholder: 'Custom 5-field cron — e.g. 0 9 * * *',
-      }) as HTMLInputElement;
-      if (!known) customCron.value = draft.expr;
-      customCron.hidden = known;
-      const syncExpr = (): void => {
-        draft.expr = select.value === '__custom__' ? customCron.value.trim() : select.value;
-      };
-      select.addEventListener('change', () => {
-        customCron.hidden = select.value !== '__custom__';
-        syncExpr();
-      });
-      customCron.addEventListener('input', syncExpr);
-      row.append(
-        el('div', { class: 'cd-newauto-trigger-main' }, [
-          el('span', { class: 'cd-newauto-trigger-kind' }, 'Schedule'),
-          select,
-          customCron,
-        ]),
-        removeBtn(draft),
-      );
-      return row;
-    };
-
-    const webhookRow = (draft: { kind: 'webhook' }): HTMLElement => {
-      const row = el('div', { class: 'cd-newauto-trigger-row' });
-      row.append(
-        el('div', { class: 'cd-newauto-trigger-main' }, [
-          el('span', { class: 'cd-newauto-trigger-kind' }, 'Webhook'),
-          el(
-            'div',
-            { class: 'cd-newauto-hint' },
-            'Fires on an inbound HTTP POST. The URL + secret are shown once after you create the automation. Active only on a cloud gateway.',
-          ),
-        ]),
-        removeBtn(draft),
-      );
-      return row;
-    };
-
-    function removeBtn(draft: TriggerDraft): HTMLElement {
-      const btn = el('button', {
-        class: 'cd-newauto-trigger-remove',
-        type: 'button',
-        'aria-label': 'Remove trigger',
-        onClick: () => {
-          const idx = triggers.indexOf(draft);
-          if (idx >= 0) triggers.splice(idx, 1);
-          renderTriggers();
-        },
-      });
-      btn.textContent = '✕';
-      return btn;
+  // Open the conversational builder on an existing automation project.
+  function enterAutomationBuilder(input: { automationId: string }): void {
+    recordRoute({ kind: 'automation-builder', automationId: input.automationId });
+    clear();
+    if (typeof window.openBuilder !== 'function') {
+      console.error('Builder not loaded');
+      return;
     }
-
-    const addWebhookBtn = el('button', {
-      class: 'cd-newauto-add',
-      type: 'button',
-      onClick: () => {
-        triggers.push({ kind: 'webhook' });
-        renderTriggers();
-      },
-    }) as HTMLButtonElement;
-    addWebhookBtn.textContent = '+ Webhook';
-    const addCronBtn = el('button', {
-      class: 'cd-newauto-add',
-      type: 'button',
-      onClick: () => {
-        triggers.push({ kind: 'cron', expr: '0 9 * * *' });
-        renderTriggers();
-      },
-    }) as HTMLButtonElement;
-    addCronBtn.textContent = '+ Schedule';
-
-    function renderTriggers(): void {
-      triggersBox.replaceChildren();
-      if (triggers.length === 0) {
-        triggersBox.append(
-          el('div', { class: 'cd-newauto-hint' }, 'No triggers — runs only via “Run now”.'),
-        );
-      }
-      for (const d of triggers) {
-        triggersBox.append(d.kind === 'cron' ? cronRow(d) : webhookRow(d));
-      }
-      // At most one webhook trigger is allowed per automation.
-      addWebhookBtn.disabled = triggers.some((t) => t.kind === 'webhook');
-    }
-    renderTriggers();
-
-    // ----- Behavior — model / retention / on-failure. -----
-    const modelSelect = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
-    modelSelect.append(el('option', { value: '' }, 'Default (gateway)'));
-    void window.CentraidApi.listChatModels()
-      .catch(() => [])
-      .then((models) => {
-        for (const m of models) {
-          modelSelect.append(el('option', { value: m.id }, `${m.name} · ${m.provider}`));
-        }
-      });
-
-    const retentionSelect = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
-    RETENTION_PRESETS.forEach((p, i) => {
-      const opt = el('option', { value: String(i) }, p.label) as HTMLOptionElement;
-      if (i === 0) opt.selected = true;
-      retentionSelect.append(opt);
-    });
-
-    const onFailureSelect = el('select', { class: 'cd-newauto-input' }) as HTMLSelectElement;
-    onFailureSelect.append(el('option', { value: '' }, 'Nothing'));
-    void window.CentraidApi.listAutomations()
-      .catch(() => [])
-      .then((rows) => {
-        for (const r of rows) {
-          onFailureSelect.append(el('option', { value: r.id }, r.name));
-        }
-      });
-
-    // ----- Apps — multi-select over the app projects. -----
-    const appsBox = el('div', { class: 'cd-newauto-apps' });
-    const selectedApps = new Set<string>();
-    appsBox.append(el('div', { class: 'cd-newauto-hint' }, 'Loading apps…'));
-    void window.CentraidApi.listProjects()
-      .catch(() => [])
-      .then((projects) => {
-        appsBox.replaceChildren();
-        if (projects.length === 0) {
-          appsBox.append(el('div', { class: 'cd-newauto-hint' }, 'No apps yet.'));
-          return;
-        }
-        for (const p of projects) {
-          const checkbox = el('input', { type: 'checkbox' }) as HTMLInputElement;
-          checkbox.addEventListener('change', () => {
-            if (checkbox.checked) selectedApps.add(p.id);
-            else selectedApps.delete(p.id);
-          });
-          const label = el('label', { class: 'cd-newauto-app' }, [
-            checkbox,
-            el('span', {}, p.name ?? p.id),
-          ]);
-          appsBox.append(label);
-        }
-      });
-
-    const errLine = el('div', { class: 'cd-newauto-error', hidden: 'true' });
-    const showErr = (msg: string): void => {
-      errLine.textContent = msg;
-      errLine.hidden = false;
-    };
-
-    const createBtn = el('button', {
-      class: 'cd-newauto-create',
-      type: 'button',
-    }) as HTMLButtonElement;
-    createBtn.textContent = 'Create automation';
-    const cancelBtn = el('button', {
-      class: 'cd-newauto-cancel',
-      type: 'button',
-      onClick: close,
-    });
-    cancelBtn.textContent = 'Cancel';
-
-    // Replace the card body with a one-time reveal of the webhook URL +
-    // secret. The secret is never recoverable after this screen.
-    function showWebhookReveal(webhook: { id: string; secret: string; url: string }): void {
-      const field = (labelText: string, value: string): HTMLElement => {
-        const input = el('input', {
-          class: 'cd-newauto-input',
-          type: 'text',
-          readonly: 'true',
-        }) as HTMLInputElement;
-        input.value = value;
-        input.addEventListener('focus', () => input.select());
-        return el('div', {}, [el('label', { class: 'cd-newauto-label' }, labelText), input]);
-      };
-      const doneBtn = el('button', {
-        class: 'cd-newauto-create',
-        type: 'button',
-        onClick: () => {
-          close();
-          renderAutomations();
-        },
-      });
-      doneBtn.textContent = 'Done';
-      card.replaceChildren(
-        el('div', { class: 'cd-newauto-title' }, 'Webhook created'),
-        el(
-          'div',
-          { class: 'cd-newauto-hint' },
-          'Copy the secret now — it is shown only once. Send it as an Authorization: Bearer header (or x-openclaw-webhook-secret).',
-        ),
-        field('Webhook URL', webhook.url),
-        field('Secret', webhook.secret),
-        el('div', { class: 'cd-newauto-actions' }, [doneBtn]),
-      );
-    }
-
-    createBtn.addEventListener('click', () => {
-      const name = nameInput.value.trim();
-      const prompt = promptInput.value.trim();
-      if (!name) return showErr('Give the automation a name.');
-      if (!prompt) return showErr('Describe what the automation should do.');
-      for (const t of triggers) {
-        if (t.kind === 'cron' && t.expr.trim().split(/\s+/).length !== 5) {
-          return showErr('Every schedule must be a 5-field cron expression.');
-        }
-      }
-      const retention = RETENTION_PRESETS[Number(retentionSelect.value)] ?? RETENTION_PRESETS[0]!;
-      createBtn.disabled = true;
-      createBtn.textContent = 'Creating…';
-      void (async () => {
-        try {
-          const result = await window.CentraidApi.createAutomation({
-            id: slugifyAutomationId(name),
-            name,
-            prompt,
-            triggers: triggers.map((t) =>
-              t.kind === 'cron' ? { kind: 'cron', expr: t.expr } : { kind: 'webhook' },
-            ),
-            ...(modelSelect.value ? { model: modelSelect.value } : {}),
-            historyKeep: retention.keep,
-            ...(onFailureSelect.value ? { onFailure: onFailureSelect.value } : {}),
-            ...(selectedApps.size > 0 ? { apps: [...selectedApps] } : {}),
-          });
-          if (result.webhook) {
-            showWebhookReveal(result.webhook);
-          } else {
-            close();
-            renderAutomations();
-          }
-        } catch (err) {
-          createBtn.disabled = false;
-          createBtn.textContent = 'Create automation';
-          showErr(err instanceof Error ? err.message : String(err));
-        }
-      })();
-    });
-
-    const section = (title: string, ...body: HTMLElement[]): HTMLElement =>
-      el('div', { class: 'cd-newauto-section' }, [
-        el('div', { class: 'cd-newauto-section-title' }, title),
-        ...body,
-      ]);
-
-    card.append(
-      el('div', { class: 'cd-newauto-title' }, 'New automation'),
-      el('label', { class: 'cd-newauto-label' }, 'Name'),
-      nameInput,
-      el('label', { class: 'cd-newauto-label' }, 'What should it do?'),
-      promptInput,
-      section(
-        'Triggers',
-        triggersBox,
-        el('div', { class: 'cd-newauto-addrow' }, [addCronBtn, addWebhookBtn]),
-      ),
-      section(
-        'Behavior',
-        el('label', { class: 'cd-newauto-label' }, 'Model'),
-        modelSelect,
-        el('label', { class: 'cd-newauto-label' }, 'Run retention'),
-        retentionSelect,
-        el('label', { class: 'cd-newauto-label' }, 'On failure, run'),
-        onFailureSelect,
-      ),
-      section('Apps', appsBox),
-      errLine,
-      el('div', { class: 'cd-newauto-actions' }, [cancelBtn, createBtn]),
-    );
-    backdrop.append(card);
-    backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) close();
-    });
-    document.body.append(backdrop);
-    nameInput.focus();
+    currentCleanup =
+      window.openBuilder({
+        root,
+        el,
+        onExit: renderAutomations,
+        projectId: input.automationId,
+        projectKind: 'automation',
+        ...chromeNav(),
+      }) ?? null;
   }
 
   function automationsEmpty(host: HTMLElement, title: string, sub: string): void {
@@ -1873,11 +1564,12 @@
     } catch {
       return [];
     }
-    const nameById = new Map(autos.map((a) => [a.id, a.name]));
+    // Run records key the automation by its `<appId>/<id>` handle.
+    const nameByRef = new Map(autos.map((a) => [a.ref, a.name]));
     return runs.map((run) => ({
       automationId: run.automationId ?? '',
       automationName: run.automationId
-        ? (nameById.get(run.automationId) ?? run.automationId)
+        ? (nameByRef.get(run.automationId) ?? run.automationId)
         : 'Automation',
       run,
     }));
@@ -4207,7 +3899,7 @@
       el('span', { class: 'cd-app-order-schedule' }, triggersSummary(row.triggers)),
     );
 
-    const stateKey = row.id;
+    const stateKey = row.ref;
     const runBtn = el('button', {
       class: 'cd-app-order-run',
       type: 'button',
@@ -4268,7 +3960,7 @@
       runsToggle.setAttribute('aria-expanded', String(next));
       runsHost.hidden = !next;
       if (next && !runsHost.dataset.loaded) {
-        void loadRunsInto(row.id, runsHost);
+        void loadRunsInto(row.ref, runsHost);
       }
     });
     foot.append(runsToggle);
@@ -4312,7 +4004,7 @@
     const next = input.checked;
     card.dataset.enabled = String(next);
     try {
-      await window.CentraidApi.setAutomationEnabled({ automationId: row.id, enabled: next });
+      await window.CentraidApi.setAutomationEnabled({ automationId: row.ref, enabled: next });
       // The in-memory row stored by closure is now stale; reflect the
       // new state so a subsequent toggle reads the right "current."
       (row as { enabled: boolean }).enabled = next;
@@ -4329,12 +4021,12 @@
   }
 
   async function onRunStandingOrder(row: CentraidAutomationRow, panel: HTMLElement): Promise<void> {
-    const stateKey = row.id;
+    const stateKey = row.ref;
     automationRunState.set(stateKey, { kind: 'running' });
     // Repaint just this card so the rest of the panel doesn't blink.
     rerenderOrderCard(row, panel);
     try {
-      const result = await window.CentraidApi.runAutomationNow({ automationId: row.id });
+      const result = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
       automationRunState.set(stateKey, {
         kind: 'done',
         ok: result.ok,

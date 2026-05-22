@@ -1,12 +1,8 @@
 /*
- * AutomationRunsStore — unified agent-run ledger + automation KV.
+ * AutomationRunsStore — agent-run ledger + automation KV.
  *
- * The three tables — `runs`, `run_nodes`, `automation_state` — live in
- * the activity DB (`centraid-activity.sqlite`), alongside the
- * `automations` table. The DDL is in `gateway-db.ts`
- * ACTIVITY_MIGRATIONS[1]. Keeping the ledger in one file lets a sub-run
- * link its `parent_run_id` self-FK into one joinable DAG — a self-FK
- * can't cross SQLite files.
+ * The three tables — `runs`, `run_nodes`, `automation_state` — are the
+ * `RUNTIME_MIGRATIONS` / `ACTIVITY_MIGRATIONS` shape in `gateway-db.ts`.
  *
  *   runs             — one row per agent run (chat turn / automation
  *                      fire / builder iteration; `kind` discriminates).
@@ -18,11 +14,13 @@
  *                      `agent` / `invoke` audit rows.
  *   automation_state — per-(automation_id, key) KV.
  *
- * Model-B (issue #90): the ledger is a single global store — automation
- * runs are keyed by the automation's UUID `automation_id`, not by the
- * app they were authored from. The store is runtime-owned: it is never
- * reachable from the handler's `db` proxy or the `centraid_sql_*` agent
- * tools (those only ever see an app's `data.sqlite`).
+ * Issue #98: an automation's run ledger is per-app — the store is
+ * constructed over that app's `runtime.sqlite`; a chat run's ledger is
+ * `centraid-activity.sqlite`. Either way the store is runtime-owned: it
+ * is never reachable from the handler's `db` proxy or the
+ * `centraid_sql_*` agent tools (those only see an app's `data.sqlite`).
+ * When an `AnalyticsStore` is supplied, `finishRun` write-throughs a
+ * one-row summary to the central analytics DB.
  *
  * Row types live in `automation-runs-schema.ts`; the prepared-statement
  * block + raw-row mappers live in `automation-runs-store-sql.ts`.
@@ -30,6 +28,7 @@
 
 import { type DatabaseSync } from 'node:sqlite';
 import type { DatabaseProvider } from './gateway-db.js';
+import type { AnalyticsStore } from './analytics-store.js';
 import type {
   AutomationRunRow,
   AutomationRunNodeRow,
@@ -123,11 +122,20 @@ export interface ListRunsOptions {
  */
 export class AutomationRunsStore {
   private readonly provider: DatabaseProvider;
+  private readonly analytics: AnalyticsStore | undefined;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
 
-  constructor(provider: DatabaseProvider) {
+  /**
+   * Construct over a run-ledger `DatabaseProvider` — a per-app
+   * `runtime.sqlite` for automation runs, or `centraid-activity.sqlite`
+   * for chat runs. When an `analytics` store is supplied, `finishRun`
+   * write-throughs a summary row to the central analytics DB
+   * (best-effort — issue #98, decision 4).
+   */
+  constructor(provider: DatabaseProvider, analytics?: AnalyticsStore) {
     this.provider = provider;
+    this.analytics = analytics;
   }
 
   private ensureReady(): { db: DatabaseSync; stmts: PreparedStatements } {
@@ -167,6 +175,59 @@ export class AutomationRunsStore {
       outputJson: input.outputJson ?? null,
       rid: input.runId,
     });
+    if (this.analytics) this.writeRunSummary(input.runId);
+  }
+
+  /**
+   * Write-through this run's one-row summary to the central analytics
+   * DB. Best-effort — an analytics-DB failure is swallowed so it never
+   * fails the run; the run ledger here stays authoritative.
+   */
+  private writeRunSummary(runId: string): void {
+    if (!this.analytics) return;
+    try {
+      const { stmts } = this.ensureReady();
+      const row = this.getRun(runId);
+      if (!row) return;
+      const dom = stmts.dominantModel.get(runId) as { model: string } | undefined;
+      // For an automation run, `automation_id` is the `<appId>/<id>`
+      // handle; the app id is the segment before the slash.
+      const automationRef = row.kind === 'automation' ? row.automationId : undefined;
+      const slash = automationRef ? automationRef.indexOf('/') : -1;
+      const appId = slash > 0 ? automationRef!.slice(0, slash) : row.appId;
+      this.analytics.recordRunSummary({
+        runId: row.runId,
+        kind: row.kind,
+        ...(automationRef !== undefined ? { automationRef } : {}),
+        ...(appId !== undefined ? { appId } : {}),
+        trigger: row.triggerKind,
+        ...(row.triggerOrigin !== undefined ? { triggerOrigin: row.triggerOrigin } : {}),
+        ok: row.ok,
+        pinned: row.pinned,
+        ...(row.summary !== undefined ? { summary: row.summary } : {}),
+        ...(row.note !== undefined ? { note: row.note } : {}),
+        ...(row.error !== undefined ? { error: row.error } : {}),
+        ...(row.retryOf !== undefined ? { retryOf: row.retryOf } : {}),
+        ...(dom?.model ? { model: dom.model } : {}),
+        startedAt: row.startedAt,
+        ...(row.endedAt !== undefined ? { endedAt: row.endedAt } : {}),
+        ...(row.totalInputTokens !== undefined ? { totalInputTokens: row.totalInputTokens } : {}),
+        ...(row.totalOutputTokens !== undefined
+          ? { totalOutputTokens: row.totalOutputTokens }
+          : {}),
+        ...(row.totalCacheReadTokens !== undefined
+          ? { totalCacheReadTokens: row.totalCacheReadTokens }
+          : {}),
+        ...(row.totalCacheWriteTokens !== undefined
+          ? { totalCacheWriteTokens: row.totalCacheWriteTokens }
+          : {}),
+        ...(row.totalCostUsd !== undefined ? { totalCostUsd: row.totalCostUsd } : {}),
+        ...(row.stepCount !== undefined ? { stepCount: row.stepCount } : {}),
+        ...(row.toolCount !== undefined ? { toolCount: row.toolCount } : {}),
+      });
+    } catch {
+      // Best-effort — see the method doc.
+    }
   }
 
   getRun(runId: string): AutomationRunRow | undefined {

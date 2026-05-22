@@ -25,8 +25,9 @@ import {
   UserStore,
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
-  makeActivityDbProvider,
-  listAutomationProjects,
+  makeAnalyticsDbProvider,
+  AnalyticsStore,
+  listAutomations,
   makeWebhookRouteHandler,
 } from '@centraid/runtime-core';
 import { registerCentraidTools } from './lib/tools.js';
@@ -81,31 +82,34 @@ export default definePluginEntry({
       : path.join(resolveStateDir(process.env), appsDirRaw);
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
-    // Two sibling SQLite files, one per domain — identity
-    // (`centraid-gateway.sqlite`: users + prefs) and the activity ledger
-    // (`centraid-activity.sqlite`: automations, chat_sessions, runs,
-    // run_nodes). Each store gets the provider for its domain; the chat
-    // and automation stores all share the activity provider. Providers
-    // are lazy: a file is only opened when a store actually needs it,
-    // which keeps OpenClaw worker subprocesses (which `register()` runs
-    // in but which don't serve HTTP) from holding stray DB handles.
+    // Sibling SQLite files, one per domain — identity
+    // (`centraid-gateway.sqlite`: users + prefs) and the central
+    // analytics DB (`centraid-analytics.sqlite`: one summary row per
+    // run, every kind — issue #98). Automation *and* chat runs live in
+    // each app's own `runtime.sqlite`, resolved per app. Providers are
+    // lazy: a file is only opened when a store actually needs it, which
+    // keeps OpenClaw worker subprocesses (which `register()` runs in but
+    // which don't serve HTTP) from holding stray DB handles.
     const dbDir = path.dirname(appsDir);
     const gatewayDbProvider = makeGatewayDbProvider(path.join(dbDir, 'centraid-gateway.sqlite'));
-    const automationDbProvider = makeActivityDbProvider(
-      path.join(dbDir, 'centraid-activity.sqlite'),
+    const analyticsStore = new AnalyticsStore(
+      makeAnalyticsDbProvider(path.join(dbDir, 'centraid-analytics.sqlite')),
     );
-    // Automation projects live on disk (issue #91) — their own directory
-    // tree, a sibling of the apps dir.
-    const automationsDir = path.join(dbDir, 'centraid-automations');
+    // Issue #98: an automation is never standalone — it lives inside an
+    // app folder under `appsDir`. There is no separate automations dir;
+    // `listAutomations(appsDir)` scans every app's active version.
     const userStore = new UserStore(gatewayDbProvider);
 
-    // Chat-history store — wraps the activity DB. It is THE chat store:
-    // the `/centraid/<id>/_chat` POST route reads sticky mode +
+    // Chat-history store — app-scoped (issue #98): every chat session +
+    // turn lives in its app's `runtime.sqlite`, resolved from `appsDir`.
+    // The `/centraid/<id>/_chat` POST route reads sticky mode +
     // runner-resume handles from it and records each turn as a `runs`
     // row. Constructed before the runtime so it can be handed to the
     // Runtime and also mounted on the `/_centraid-chat` HTTP surface.
-    const chatHistoryStore = new ChatHistoryStore(automationDbProvider, () =>
-      userStore.getUserId(),
+    const chatHistoryStore = new ChatHistoryStore(
+      appsDir,
+      () => userStore.getUserId(),
+      analyticsStore,
     );
 
     const chatRunner = makeOpenClawChatRunner(api);
@@ -138,8 +142,8 @@ export default definePluginEntry({
     // through the user's REAL provider via the simple-completion
     // runtime. See `lib/automations-provider.ts`.
     registerAutomationsProvider(api, {
-      automationDbProvider,
-      automationsDir,
+      appsDir,
+      analytics: analyticsStore,
       logger: api.logger,
     });
 
@@ -157,7 +161,7 @@ export default definePluginEntry({
       // network / SDK errors so a transient cron-store hiccup doesn't
       // prevent the plugin from booting.
       try {
-        const { rows } = await listAutomationProjects(automationsDir);
+        const { rows } = await listAutomations(appsDir);
         const outcome = await automationHost.reconcile(rows);
         if (outcome.added.length + outcome.updated.length + outcome.removed.length > 0) {
           api.logger.info(
@@ -217,13 +221,13 @@ export default definePluginEntry({
       match: 'prefix',
       auth: 'plugin',
       handler: makeWebhookRouteHandler({
-        automationsDir,
-        fire: async ({ automationId, body }) => {
+        appsDir,
+        fire: async ({ automationRef, body }) => {
           const outcome = await runOpenclawFire(
             {
-              automationId,
-              automationsDir,
-              activityDbProvider: automationDbProvider,
+              automationRef,
+              appsDir,
+              analytics: analyticsStore,
               triggerKind: 'scheduled',
               triggerOrigin: 'webhook',
               ...(body !== undefined ? { input: body } : {}),

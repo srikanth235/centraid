@@ -105,6 +105,7 @@ export interface PreparedStatements {
   countRunsByAutomation: StatementSync;
   deleteRunsByAutomation: StatementSync;
   deleteStateByAutomation: StatementSync;
+  dominantModel: StatementSync;
 }
 
 export function runFromRaw(raw: RawRun): AutomationRunRow {
@@ -290,5 +291,14 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     countRunsByAutomation: db.prepare(`SELECT COUNT(*) AS c FROM runs WHERE automation_id = ?`),
     deleteRunsByAutomation: db.prepare(`DELETE FROM runs WHERE automation_id = ?`),
     deleteStateByAutomation: db.prepare(`DELETE FROM automation_state WHERE automation_id = ?`),
+    // The run's dominant model — the one that burned the most tokens
+    // across its step/agent nodes. Feeds the central analytics summary.
+    dominantModel: db.prepare(`
+      SELECT model FROM run_nodes
+      WHERE run_id = ? AND model IS NOT NULL AND kind IN ('step','agent')
+      GROUP BY model
+      ORDER BY SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)) DESC
+      LIMIT 1
+    `),
   };
 }
