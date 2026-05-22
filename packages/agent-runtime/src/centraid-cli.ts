@@ -29,8 +29,9 @@
 import path from 'node:path';
 import { statSync } from 'node:fs';
 import {
+  AnalyticsStore,
   describeOp,
-  makeActivityDbProvider,
+  makeAnalyticsDbProvider,
   readOp,
   writeOp,
   SqlOpRefusal,
@@ -182,21 +183,22 @@ function parseRunAutomationArgs(args: string[]): ParsedRunAutomation {
 
 async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never> {
   // This is the OS-scheduler-spawned path — no in-process gateway
-  // handle. The run record must land in the SAME activity DB the
-  // desktop reads, and the automation project is read from disk, so the
-  // OS scheduler bakes `CENTRAID_AUTOMATION_DB` + `CENTRAID_APPS_DIR`
-  // into the launchd plist / systemd unit / Task Scheduler artifact.
-  // Both fall back to a `<cwd>`-relative path for a bare CLI run.
-  const automationDbPath =
-    process.env.CENTRAID_AUTOMATION_DB ?? path.join(process.cwd(), 'centraid-activity.sqlite');
+  // handle. The automation's full run ledger lands in its app's
+  // `runtime.sqlite` (resolved from `appsDir`); the run summary
+  // write-throughs to the central analytics DB the desktop reads. The
+  // OS scheduler bakes `CENTRAID_APPS_DIR` + `CENTRAID_ANALYTICS_DB`
+  // into the launchd plist / systemd unit / Task Scheduler artifact;
+  // both fall back to a `<cwd>`-relative path for a bare CLI run.
   const appsDir = process.env.CENTRAID_APPS_DIR ?? path.join(process.cwd(), 'apps');
-  const activityDb = makeActivityDbProvider(automationDbPath);
+  const analyticsDbPath =
+    process.env.CENTRAID_ANALYTICS_DB ?? path.join(process.cwd(), 'centraid-analytics.sqlite');
+  const analytics = new AnalyticsStore(makeAnalyticsDbProvider(analyticsDbPath));
   try {
     const { outcome, record } = await runAutomationLocal({
       automationRef: parsed.automationRef,
       appsDir,
       runner: parsed.runner,
-      activityDb,
+      analytics,
       ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
       onLog: (level, msg) => {
         process.stderr.write(`[automation:${level}] ${msg}\n`);

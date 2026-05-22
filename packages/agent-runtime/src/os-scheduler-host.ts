@@ -51,12 +51,13 @@ export interface OsSchedulerHostOptions {
   /** Absolute path to the `centraid` binary the scheduler should invoke. */
   centraidBin: string;
   /**
-   * Absolute path to the activity DB (`centraid-activity.sqlite`).
-   * Baked into the OS scheduler artifact as `CENTRAID_AUTOMATION_DB` so
-   * the scheduled `centraid run-automation` process writes its run
-   * record to the SAME DB the desktop reads.
+   * Absolute path to the central analytics DB
+   * (`centraid-analytics.sqlite`). Baked into the OS scheduler artifact
+   * as `CENTRAID_ANALYTICS_DB` so the scheduled `centraid
+   * run-automation` write-throughs its run summary to the SAME DB the
+   * desktop Insights screen reads (issue #98).
    */
-  automationDbPath: string;
+  analyticsDbPath: string;
   /**
    * Directory holding the app folders (issue #98). Baked into the
    * artifact as `CENTRAID_APPS_DIR` so the scheduled `centraid
@@ -129,7 +130,7 @@ export class OsSchedulerHost implements AutomationHost {
       runner: this.opts.runner,
       centraidBin: this.opts.centraidBin,
       env: {
-        CENTRAID_AUTOMATION_DB: this.opts.automationDbPath,
+        CENTRAID_ANALYTICS_DB: this.opts.analyticsDbPath,
         CENTRAID_APPS_DIR: this.opts.appsDir,
       },
     };

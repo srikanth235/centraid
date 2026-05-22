@@ -16,13 +16,16 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import {
   AutomationRunsStore,
   automationHandlerPath,
   formatAutomationRef,
+  makeRuntimeDbProvider,
   parseAutomationRef,
   readAppOwnedAutomation,
   runAutomationHandler,
+  type AnalyticsStore,
   type AutomationDispatchContext,
   type AutomationHandlerOutcome,
   type AutomationInvokeDispatcher,
@@ -30,7 +33,6 @@ import {
   type AutomationToolResult,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type DatabaseProvider,
 } from '@centraid/runtime-core';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
@@ -43,8 +45,11 @@ export interface OpenclawFireOptions {
   automationRef: string;
   /** Directory holding the gateway's app folders. */
   appsDir: string;
-  /** Activity-DB provider — holds the run ledger. */
-  activityDbProvider: DatabaseProvider;
+  /**
+   * Central analytics store. When set, the per-app run ledger
+   * write-throughs each finished run's summary to it (issue #98).
+   */
+  analytics?: AnalyticsStore;
   triggerKind: AutomationTriggerKind;
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
   triggerOrigin?: AutomationTriggerOrigin;
@@ -93,7 +98,10 @@ export async function runOpenclawFire(
     };
   }
   const manifest = row.manifest;
-  const runsStore = new AutomationRunsStore(opts.activityDbProvider);
+  // The automation's run ledger is its app's per-app `runtime.sqlite`
+  // (issue #98); `finishRun` write-throughs a summary to `analytics`.
+  const runtimeDbPath = path.join(opts.appsDir, parsed.appId, 'runtime.sqlite');
+  const runsStore = new AutomationRunsStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
 
   const toolDispatcher = async (
     calls: readonly AutomationToolCall[],
@@ -160,7 +168,7 @@ export async function runOpenclawFire(
       {
         automationRef: formatAutomationRef(target.appId, target.automationId),
         appsDir: opts.appsDir,
-        activityDbProvider: opts.activityDbProvider,
+        ...(opts.analytics ? { analytics: opts.analytics } : {}),
         triggerKind: 'manual',
         ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
         failureDepth,
@@ -222,7 +230,7 @@ export async function runOpenclawFire(
             {
               automationRef: formatAutomationRef(failTarget.appId, failTarget.automationId),
               appsDir: opts.appsDir,
-              activityDbProvider: opts.activityDbProvider,
+              ...(opts.analytics ? { analytics: opts.analytics } : {}),
               triggerKind: 'on_failure',
               ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
               failureDepth: failureDepth + 1,

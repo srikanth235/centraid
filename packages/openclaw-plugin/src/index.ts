@@ -26,6 +26,8 @@ import {
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
   makeActivityDbProvider,
+  makeAnalyticsDbProvider,
+  AnalyticsStore,
   listAutomations,
   makeWebhookRouteHandler,
 } from '@centraid/runtime-core';
@@ -81,18 +83,22 @@ export default definePluginEntry({
       : path.join(resolveStateDir(process.env), appsDirRaw);
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
-    // Two sibling SQLite files, one per domain — identity
-    // (`centraid-gateway.sqlite`: users + prefs) and the activity ledger
-    // (`centraid-activity.sqlite`: automations, chat_sessions, runs,
-    // run_nodes). Each store gets the provider for its domain; the chat
-    // and automation stores all share the activity provider. Providers
-    // are lazy: a file is only opened when a store actually needs it,
-    // which keeps OpenClaw worker subprocesses (which `register()` runs
-    // in but which don't serve HTTP) from holding stray DB handles.
+    // Sibling SQLite files, one per domain — identity
+    // (`centraid-gateway.sqlite`: users + prefs), the activity ledger
+    // (`centraid-activity.sqlite`: chat_sessions + chat runs), and the
+    // central analytics DB (`centraid-analytics.sqlite`: one summary
+    // row per run, every kind — issue #98). Automation runs live in
+    // each app's own `runtime.sqlite`, resolved per fire. Providers are
+    // lazy: a file is only opened when a store actually needs it, which
+    // keeps OpenClaw worker subprocesses (which `register()` runs in but
+    // which don't serve HTTP) from holding stray DB handles.
     const dbDir = path.dirname(appsDir);
     const gatewayDbProvider = makeGatewayDbProvider(path.join(dbDir, 'centraid-gateway.sqlite'));
     const automationDbProvider = makeActivityDbProvider(
       path.join(dbDir, 'centraid-activity.sqlite'),
+    );
+    const analyticsStore = new AnalyticsStore(
+      makeAnalyticsDbProvider(path.join(dbDir, 'centraid-analytics.sqlite')),
     );
     // Issue #98: an automation is never standalone — it lives inside an
     // app folder under `appsDir`. There is no separate automations dir;
@@ -104,8 +110,10 @@ export default definePluginEntry({
     // runner-resume handles from it and records each turn as a `runs`
     // row. Constructed before the runtime so it can be handed to the
     // Runtime and also mounted on the `/_centraid-chat` HTTP surface.
-    const chatHistoryStore = new ChatHistoryStore(automationDbProvider, () =>
-      userStore.getUserId(),
+    const chatHistoryStore = new ChatHistoryStore(
+      automationDbProvider,
+      () => userStore.getUserId(),
+      analyticsStore,
     );
 
     const chatRunner = makeOpenClawChatRunner(api);
@@ -138,8 +146,8 @@ export default definePluginEntry({
     // through the user's REAL provider via the simple-completion
     // runtime. See `lib/automations-provider.ts`.
     registerAutomationsProvider(api, {
-      automationDbProvider,
       appsDir,
+      analytics: analyticsStore,
       logger: api.logger,
     });
 
@@ -223,7 +231,7 @@ export default definePluginEntry({
             {
               automationRef,
               appsDir,
-              activityDbProvider: automationDbProvider,
+              analytics: analyticsStore,
               triggerKind: 'scheduled',
               triggerOrigin: 'webhook',
               ...(body !== undefined ? { input: body } : {}),

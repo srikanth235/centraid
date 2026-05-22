@@ -34,7 +34,7 @@
  * this module just exports the ProviderPlugin descriptor as a factory.
  */
 
-import type { DatabaseProvider } from '@centraid/runtime-core';
+import type { AnalyticsStore } from '@centraid/runtime-core';
 import { runOpenclawFire } from './openclaw-fire.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 // pi-ai types — open-import (matches openclaw's own pattern) so this
@@ -64,13 +64,14 @@ interface ProviderPluginShape {
 }
 
 export interface AutomationsProviderOptions {
-  /**
-   * Activity DB provider (`centraid-activity.sqlite`) — the run ledger
-   * (`AutomationRunsStore`) is read from this.
-   */
-  automationDbProvider: DatabaseProvider;
   /** Directory holding the gateway's app folders. */
   appsDir: string;
+  /**
+   * Central analytics store — a finished automation run write-throughs
+   * its summary here (issue #98). The run ledger itself is the per-app
+   * `runtime.sqlite`, resolved per fire from `appsDir`.
+   */
+  analytics?: AnalyticsStore;
   /** Optional logger. */
   logger?: { info(m: string): void; warn(m: string): void; error(m: string): void };
 }
@@ -215,7 +216,7 @@ async function executeAutomation(
     {
       automationRef: dispatch.automationRef,
       appsDir: opts.appsDir,
-      activityDbProvider: opts.automationDbProvider,
+      ...(opts.analytics ? { analytics: opts.analytics } : {}),
       triggerKind: 'scheduled',
       triggerOrigin: 'cron',
     },

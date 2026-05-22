@@ -27,7 +27,7 @@ function setup(): {
   const host = new OsSchedulerHost({
     workdir: '/persistent/work',
     centraidBin: '/usr/local/bin/centraid',
-    automationDbPath: '/persistent/centraid-activity.sqlite',
+    analyticsDbPath: '/persistent/centraid-analytics.sqlite',
     appsDir: '/persistent/apps',
     runner: 'codex',
     os: { execShell, platform: 'darwin', artifactRoot },

@@ -13,16 +13,18 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import {
   AutomationRunsStore,
   automationHandlerPath,
+  makeRuntimeDbProvider,
   parseAutomationRef,
   readAppOwnedAutomation,
   runAutomationHandler,
+  type AnalyticsStore,
   type AutomationHandlerOutcome,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type DatabaseProvider,
 } from '@centraid/runtime-core';
 import {
   defaultSpawnCli,
@@ -46,8 +48,11 @@ export interface RunAutomationLocalOptions {
   automationRef: string;
   /** Directory holding the app folders. */
   appsDir: string;
-  /** Activity-DB provider — holds the run ledger. */
-  activityDb: DatabaseProvider;
+  /**
+   * Central analytics store. When set, the per-app run ledger
+   * write-throughs each finished run's summary to it (issue #98).
+   */
+  analytics?: AnalyticsStore;
   /** Which CLI to drive. Defaults to codex. */
   runner?: LocalRunnerKind;
   /** Hard timeout. Defaults to 5 minutes. */
@@ -111,7 +116,10 @@ export async function runAutomationLocal(
     throw new Error(`automation ${opts.automationRef}: not found under ${opts.appsDir}`);
   }
 
-  const runsStore = new AutomationRunsStore(opts.activityDb);
+  // The automation's run ledger is its app's per-app `runtime.sqlite`
+  // (issue #98); `finishRun` write-throughs a summary to `analytics`.
+  const runtimeDbPath = path.join(opts.appsDir, parsed.appId, 'runtime.sqlite');
+  const runsStore = new AutomationRunsStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
   const runId = `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
@@ -166,7 +174,7 @@ export async function runAutomationLocal(
           await runAutomationLocal({
             automationRef: next.ref,
             appsDir: opts.appsDir,
-            activityDb: opts.activityDb,
+            ...(opts.analytics ? { analytics: opts.analytics } : {}),
             runner,
             ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
             ...(opts.spawnCli ? { spawnCli: opts.spawnCli } : {}),

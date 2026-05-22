@@ -20,6 +20,7 @@ Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid
 - [x] Commit 6 — agent-runtime: local fire path under appsDir
 - [x] Commit 7 — desktop: unified app/automation surface
 - [x] Commit 8 — runtime-core: per-app runtime.sqlite + central analytics
+- [x] Commit 9 — gateway + agent-runtime: per-app ledger + analytics wiring
 
 Follow-up (tracked on #98, not in this commit):
 
@@ -318,6 +319,31 @@ the automation run ledger goes per-app, and analytics is push-based.
   source, no `run_nodes` descent; the by-model breakdown keys off each
   run's dominant model.
 
+### Commit 9 — gateway + agent-runtime: per-app ledger + analytics wiring
+
+The fire paths construct the run ledger over the firing automation's
+per-app `runtime.sqlite` and pass the central `AnalyticsStore`.
+
+#### openclaw-plugin
+
+- `runOpenclawFire` resolves `<appsDir>/<appId>/runtime.sqlite` for the
+  fired automation and builds the `AutomationRunsStore` over it +
+  the `analytics` store; `ctx.invoke` / `onFailure` sub-runs each
+  resolve their own app's file. `OpenclawFireOptions` swaps
+  `activityDbProvider` for `analytics`.
+- `index.ts` constructs `centraid-analytics.sqlite` (sibling of the
+  activity + gateway DBs) and threads the `AnalyticsStore` into the
+  automations provider, the webhook fire, and `ChatHistoryStore`.
+
+#### agent-runtime
+
+- `runAutomationLocal` resolves the per-app `runtime.sqlite` the same
+  way; `RunAutomationLocalOptions` swaps `activityDb` for `analytics`.
+- `centraid-cli.ts` `run-automation` reads `CENTRAID_ANALYTICS_DB`
+  (was `CENTRAID_AUTOMATION_DB`); `os-scheduler-host.ts` bakes that env
+  var (`analyticsDbPath`) into the launchd / systemd / Task Scheduler
+  artifact.
+
 ## Out of scope
 
 - Scheduling and execution of app-owned automations — the OS scheduler
@@ -416,3 +442,11 @@ the automation run ledger goes per-app, and analytics is push-based.
 - The fire paths (openclaw / agent-runtime) and the desktop still
   construct the ledger over the global activity DB — wired to the
   per-app `runtime.sqlite` + analytics DB in commits 9–10.
+
+### Commit 9 verification
+
+- `openclaw-plugin` typechecks clean; tests 21/21. `agent-runtime`
+  typechecks clean; tests 84/84 (the `OsSchedulerHost` test now passes
+  `analyticsDbPath`).
+- The desktop still builds the ledger + Insights over the global
+  activity DB — wired to the per-app + analytics DBs in commit 10.
