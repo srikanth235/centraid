@@ -27,7 +27,7 @@ Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid
 Chat moves to the per-app `runtime.sqlite` (app-scoped chat):
 
 - [x] Commit 12 — runtime-core: per-app chat store
-- [ ] Commit 13 — openclaw-plugin: wire the app-scoped chat store
+- [x] Commit 13 — openclaw-plugin: wire the app-scoped chat store
 - [ ] Commit 14 — desktop: thread appId through the chat-history IPC
 
 Schedule/execute of app-owned automations was originally scoped as a
@@ -421,6 +421,13 @@ left it in #98 and chat was the last tenant.
   per-app isolation suite; `automation-runs-store` / `insights-store`
   tests move off `makeActivityDbProvider`.
 
+### Commit 13 — openclaw-plugin: wire the app-scoped chat store
+
+- `index.ts` constructs `ChatHistoryStore` with `appsDir` instead of the
+  activity-DB provider; the `centraid-activity.sqlite` provider +
+  `makeActivityDbProvider` import are dropped. The cloud gateway's chat
+  now writes into each app's `runtime.sqlite`, same as the desktop.
+
 ## Out of scope
 
 - Bidirectional form editing — the config pane is a read-only rendered
@@ -546,3 +553,9 @@ left it in #98 and chat was the last tenant.
 - Downstream `openclaw-plugin` + `desktop` do not yet typecheck — they
   still construct `ChatHistoryStore` with the old activity-DB provider;
   wired in commits 13–14. Expected, see Out of scope.
+
+### Commit 13 verification
+
+- `openclaw-plugin` typecheck + build + test green — 21/21 tests pass.
+- The desktop still constructs `ChatHistoryStore` with the activity-DB
+  provider — wired in commit 14.

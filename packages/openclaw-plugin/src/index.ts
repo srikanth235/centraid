@@ -25,7 +25,6 @@ import {
   UserStore,
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
-  makeActivityDbProvider,
   makeAnalyticsDbProvider,
   AnalyticsStore,
   listAutomations,
@@ -84,19 +83,15 @@ export default definePluginEntry({
     const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
 
     // Sibling SQLite files, one per domain — identity
-    // (`centraid-gateway.sqlite`: users + prefs), the activity ledger
-    // (`centraid-activity.sqlite`: chat_sessions + chat runs), and the
-    // central analytics DB (`centraid-analytics.sqlite`: one summary
-    // row per run, every kind — issue #98). Automation runs live in
-    // each app's own `runtime.sqlite`, resolved per fire. Providers are
+    // (`centraid-gateway.sqlite`: users + prefs) and the central
+    // analytics DB (`centraid-analytics.sqlite`: one summary row per
+    // run, every kind — issue #98). Automation *and* chat runs live in
+    // each app's own `runtime.sqlite`, resolved per app. Providers are
     // lazy: a file is only opened when a store actually needs it, which
     // keeps OpenClaw worker subprocesses (which `register()` runs in but
     // which don't serve HTTP) from holding stray DB handles.
     const dbDir = path.dirname(appsDir);
     const gatewayDbProvider = makeGatewayDbProvider(path.join(dbDir, 'centraid-gateway.sqlite'));
-    const automationDbProvider = makeActivityDbProvider(
-      path.join(dbDir, 'centraid-activity.sqlite'),
-    );
     const analyticsStore = new AnalyticsStore(
       makeAnalyticsDbProvider(path.join(dbDir, 'centraid-analytics.sqlite')),
     );
@@ -105,13 +100,14 @@ export default definePluginEntry({
     // `listAutomations(appsDir)` scans every app's active version.
     const userStore = new UserStore(gatewayDbProvider);
 
-    // Chat-history store — wraps the activity DB. It is THE chat store:
-    // the `/centraid/<id>/_chat` POST route reads sticky mode +
+    // Chat-history store — app-scoped (issue #98): every chat session +
+    // turn lives in its app's `runtime.sqlite`, resolved from `appsDir`.
+    // The `/centraid/<id>/_chat` POST route reads sticky mode +
     // runner-resume handles from it and records each turn as a `runs`
     // row. Constructed before the runtime so it can be handed to the
     // Runtime and also mounted on the `/_centraid-chat` HTTP surface.
     const chatHistoryStore = new ChatHistoryStore(
-      automationDbProvider,
+      appsDir,
       () => userStore.getUserId(),
       analyticsStore,
     );
