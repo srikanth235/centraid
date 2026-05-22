@@ -2377,12 +2377,12 @@
     mountShellPage('automations', main);
     void (async () => {
       let row: CentraidAutomationRow | null = null;
-      let runs: CentraidAutomationRunRecord[] = [];
+      let run: CentraidAutomationRunRecord | null = null;
       let nodes: CentraidAutomationRunNode[] = [];
       try {
-        [row, runs, nodes] = await Promise.all([
+        [row, run, nodes] = await Promise.all([
           window.CentraidApi.readAutomation({ automationId }),
-          window.CentraidApi.listAutomationRuns({ automationId, limit: 100 }),
+          window.CentraidApi.readAutomationRun({ runId }),
           window.CentraidApi.listAutomationRunNodes({ runId }),
         ]);
       } catch (err) {
@@ -2398,7 +2398,6 @@
         return;
       }
       if (!document.contains(scroll)) return;
-      const run = runs.find((r) => r.runId === runId);
       if (!row || !run) {
         scroll.replaceChildren(el('div', { class: 'cd-au-loading' }, 'Run not found.'));
         return;

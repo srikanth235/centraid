@@ -131,6 +131,7 @@ export const Channel = {
   // Run audit + node timeline (issue #80 / #90). Read-only views over
   // the unified `runs` / `run_nodes` ledger.
   AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
+  AUTOMATIONS_READ_RUN: 'centraid:automations:read-run',
   AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
   // Pin / unpin a run as a replay fixture (issue #80 follow-up).
   AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
@@ -898,6 +899,17 @@ export function registerIpcHandlers(): void {
       });
       // The Automations screen only wants automation fires, not chat.
       return summaries.filter((s) => s.kind === 'automation').map(summaryToRunRow);
+    },
+  );
+
+  // Single run — the full record from the run's own ledger. Unlike the
+  // central summary `listRuns` returns, this carries `inputJson` /
+  // `outputJson`, so the run viewer can show the run's actual output.
+  ipcMain.handle(
+    Channel.AUTOMATIONS_READ_RUN,
+    async (_e, input: { runId: string }): Promise<AutomationRunRow | null> => {
+      const store = await runsStoreForRunId(input.runId);
+      return store?.getRun(input.runId) ?? null;
     },
   );
 

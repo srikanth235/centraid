@@ -571,6 +571,11 @@ interface CentraidApi {
     automationId?: string;
     limit?: number;
   }): Promise<CentraidAutomationRunRecord[]>;
+  /**
+   * One run's full record from its own ledger — unlike the summary rows
+   * `listAutomationRuns` returns, this carries `inputJson` / `outputJson`.
+   */
+  readAutomationRun(input: { runId: string }): Promise<CentraidAutomationRunRecord | null>;
   listAutomationRunNodes(input: { runId: string }): Promise<CentraidAutomationRunNode[]>;
   /** Pin / unpin a run as a replay fixture. */
   pinAutomationRun(input: { runId: string; pinned: boolean }): Promise<{ ok: true }>;

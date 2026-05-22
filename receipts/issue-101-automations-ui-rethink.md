@@ -14,6 +14,7 @@ conversation-native model. Approved off a standalone prototype.
 - [x] Commit 2 — automation viewer
 - [x] Commit 3 — run viewer as chat thread
 - [x] Commit 4 — overview redesign
+- [x] Commit 5 — single-run read API
 
 ## What changed
 
@@ -57,7 +58,7 @@ Run rows are display-only here; commit 3 makes each one open as a thread.
 A `run-view` `ShellRoute` and `renderRunView` → `buildRunView` that
 render a run as a conversation rather than an n8n step timeline. It
 reads the automation, the run record, and its nodes in one `Promise.all`
-(`readAutomation`, `listAutomationRuns`, `listAutomationRunNodes`).
+(commit 5 swaps the run-record read for a dedicated single-run API).
 
 The thread has three nodes on a connecting spine: a **trigger** message
 (what fired it + the collapsible instructions prompt), a **work** message
@@ -87,6 +88,23 @@ The dead `Executions`-tab code is removed: `renderAutomationsRunsInto`,
 is kept and reused for the run stream. The standing-order rendering
 (`renderAutomationsSection` / `renderStandingOrder` and its run/node
 chain) stays — the app settings panel still uses it.
+
+### Commit 5 — single-run read API
+
+The run viewer originally rebuilt its run record by listing the central
+run-summary feed (`listAutomationRuns`, limit 100) and `.find()`-ing the
+matching `runId`. Two problems: the central summary row carries no
+`inputJson` / `outputJson`, so the reply card's "Output" block never
+rendered; and any run older than the 100 most recent resolved to "Run
+not found."
+
+A new `AUTOMATIONS_READ_RUN` IPC channel (`readAutomationRun`) reads one
+run's full record straight from its own per-app `runtime.sqlite` ledger
+via `AutomationRunsStore.getRun` — the same store the node timeline
+already uses (`runsStoreForRunId`). That record carries the validated
+`outputJson`. `renderRunView` now fetches `readAutomation`,
+`readAutomationRun`, and `listAutomationRunNodes` in one `Promise.all`,
+dropping the limited list-and-find entirely.
 
 ## Out of scope
 
