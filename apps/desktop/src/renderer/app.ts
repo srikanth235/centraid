@@ -2100,14 +2100,17 @@
     }) as HTMLButtonElement;
     runBtn.addEventListener('click', () => {
       runBtn.disabled = true;
-      runBtn.querySelector('span')!.textContent = 'Running…';
+      runBtn.querySelector('span')!.textContent = 'Starting…';
       void (async () => {
         try {
-          await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          // Hand off to the run viewer, which streams the run live.
+          renderRunView(row.ref, runId);
         } catch (err) {
+          runBtn.disabled = false;
+          runBtn.querySelector('span')!.textContent = 'Run now';
           showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
         }
-        renderAutomationView(row.ref);
       })();
     });
     const header = el('div', { class: 'cd-au-vhead' }, [
@@ -2460,11 +2463,12 @@
       runAgain.disabled = true;
       void (async () => {
         try {
-          await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          renderRunView(row.ref, runId);
         } catch (err) {
+          runAgain.disabled = false;
           showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
         }
-        renderAutomationView(row.ref);
       })();
     });
 
@@ -4788,18 +4792,34 @@
     }
   }
 
+  // Poll the run ledger until a run finishes (its `endedAt` is set).
+  // Used where the caller needs the run-now outcome but has no live
+  // viewer to watch it — the standing-order panel in app settings.
+  async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
+    const deadline = Date.now() + 6 * 60 * 1000;
+    while (Date.now() < deadline) {
+      const rec = await window.CentraidApi.readAutomationRun({ runId });
+      if (rec && rec.endedAt !== undefined) return rec;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    throw new Error('run did not finish within 6 minutes');
+  }
+
   async function onRunStandingOrder(row: CentraidAutomationRow, panel: HTMLElement): Promise<void> {
     const stateKey = row.ref;
     automationRunState.set(stateKey, { kind: 'running' });
     // Repaint just this card so the rest of the panel doesn't blink.
     rerenderOrderCard(row, panel);
     try {
-      const result = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+      // run-now fires in the background and returns the run id; poll the
+      // ledger for the finished record to report the card's outcome.
+      const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+      const rec = await waitForAutomationRun(runId);
       automationRunState.set(stateKey, {
         kind: 'done',
-        ok: result.ok,
-        durationMs: result.durationMs,
-        ...(result.error ? { error: result.error } : {}),
+        ok: rec.ok,
+        durationMs: (rec.endedAt ?? Date.now()) - rec.startedAt,
+        ...(rec.error ? { error: rec.error } : {}),
         finishedAt: Date.now(),
       });
     } catch (err) {

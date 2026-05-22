@@ -16,6 +16,7 @@ conversation-native model. Approved off a standalone prototype.
 - [x] Commit 4 — overview redesign
 - [x] Commit 5 — single-run read API
 - [x] Commit 6 — live run viewer (in-flight polling)
+- [x] Commit 7 — background run-now → live viewer hand-off
 
 ## What changed
 
@@ -123,6 +124,26 @@ bubble in place of the reply card, and a "running" side-rail status.
 
 This is observable today for a scheduled run opened mid-fire; commit 7
 makes "Run now" hand off straight into it.
+
+### Commit 7 — background run-now → live viewer hand-off
+
+"Run now" `await`ed the whole fire — the button sat frozen on
+"Running…" for up to the 5-minute handler timeout — and because the
+invoke resolved (not rejected) on a handler failure, a failed run
+triggered from the viewer raised no toast at all.
+
+`runAutomationLocal` now accepts a caller-supplied `runId`. The
+`AUTOMATIONS_RUN_NOW` handler mints one, fires the run in the background,
+and returns `{ runId }` immediately. The viewer's "Run now" / "Run
+again" hand off straight into `renderRunView`, which streams the run
+live (commit 6) — so the outcome, success or failure, is always
+visible. The two callers with no live viewer — the app-settings
+standing-order panel and the builder's automations panel + test-fire —
+poll `readAutomationRun` to completion instead.
+
+`CentraidAutomationRunResult` changes from the finished
+`{ ok, durationMs, error, toolBatches, agentCalls }` rollup to
+`{ runId }`.
 
 ## Out of scope
 

@@ -46,6 +46,11 @@ export {
 export interface RunAutomationLocalOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
   automationRef: string;
+  /**
+   * Caller-supplied run id. Lets the caller open the run viewer before
+   * the fire completes. Defaults to `<ref>:<ts>:<uuid8>`.
+   */
+  runId?: string;
   /** Directory holding the app folders. */
   appsDir: string;
   /**
@@ -120,7 +125,7 @@ export async function runAutomationLocal(
   // (issue #98); `finishRun` write-throughs a summary to `analytics`.
   const runtimeDbPath = path.join(opts.appsDir, parsed.appId, 'runtime.sqlite');
   const runsStore = new AutomationRunsStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
-  const runId = `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
+  const runId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
 

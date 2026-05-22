@@ -2,6 +2,7 @@
 import { ipcMain, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { loadSettings, saveSettings, templatesCacheDir, type DesktopSettings } from './settings.js';
 import { PREVIEW_SCHEME } from './preview-protocol.js';
 import { refreshAuthInjector } from './auth-injector.js';
@@ -797,20 +798,17 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     Channel.AUTOMATIONS_RUN_NOW,
-    async (
-      _e,
-      input: { automationId: string },
-    ): Promise<{
-      ok: boolean;
-      durationMs: number;
-      error?: string;
-      toolBatches: number;
-      agentCalls: number;
-    }> => {
+    async (_e, input: { automationId: string }): Promise<{ runId: string }> => {
       const settings = await loadSettings();
       const prefs = await loadRunnerPrefs();
-      const { outcome, record } = await runAutomationLocal({
+      // The renderer opens the run viewer on this id and polls the
+      // ledger for live progress, so the run id is minted here and the
+      // fire runs in the background — a handler failure surfaces as a
+      // failed run row, not a rejected invoke.
+      const runId = `${input.automationId}:${Date.now()}:${randomUUID().slice(0, 8)}`;
+      void runAutomationLocal({
         automationRef: input.automationId,
+        runId,
         appsDir: settings.appsDir,
         analytics: new AnalyticsStore(getAnalyticsProvider()),
         runner: prefs.kind,
@@ -818,14 +816,13 @@ export function registerIpcHandlers(): void {
         // distinguishes it from the OS-scheduler trigger.
         triggerKind: 'manual',
         triggerOrigin: 'manual',
+      }).catch((err: unknown) => {
+        console.error(
+          `[automations] run-now ${input.automationId} threw: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
       });
-      return {
-        ok: outcome.ok,
-        durationMs: record.durationMs,
-        ...(outcome.error ? { error: outcome.error } : {}),
-        toolBatches: record.toolBatches,
-        agentCalls: record.agentCalls,
-      };
+      return { runId };
     },
   );
 
