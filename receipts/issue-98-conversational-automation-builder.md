@@ -22,15 +22,18 @@ Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid
 - [x] Commit 8 — runtime-core: per-app runtime.sqlite + central analytics
 - [x] Commit 9 — gateway + agent-runtime: per-app ledger + analytics wiring
 - [x] Commit 10 — desktop: Insights + run feeds on the central DB
+- [x] Commit 11 — builder-harness: scaffold/clone docs on the unified model
 
-Follow-up (tracked on #98, not in this commit):
-
-- [ ] Schedule/execute app-owned automations — OS scheduler host + the
-      `centraid run-automation` CLI resolving under `appsDir`,
-      `runAutomationLocal` resolution, cloud `openclaw-plugin` host.
-- [ ] Sibling resolution (`onFailure` / `ctx.invoke`) scoped per app.
-- [ ] OS scheduler job labels namespaced by `ownerApp` to stay unique
-      across apps.
+Schedule/execute of app-owned automations was originally scoped as a
+follow-up, but landed inside this PR across commits 5–10 — see those
+commit sections below. In short: the OS scheduler host + the `centraid
+run-automation` CLI resolve automations under `appsDir`
+(`run-automation-local.ts`), the cloud `openclaw-plugin` host does the
+same (`openclaw-fire.ts`); sibling `onFailure` / `ctx.invoke` resolve
+via `parseAutomationRef(ref, ownerAppId)` (bare id within the owning
+app, full handle cross-app); and OS scheduler job labels are namespaced
+by the full `<appId>/<id>` handle through the reversible
+`automationSlug` codec.
 
 ## What changed
 
@@ -367,12 +370,25 @@ each app's per-app `runtime.sqlite` — closing out decisions 3 + 4.
 - `run_summary` gains a `pinned` column so the Executions feed and
   Insights reflect replay-fixture pins without a per-app scan.
 
+### Commit 11 — builder-harness: scaffold/clone docs on the unified model
+
+The scaffold + clone code shipped correct *behavior* for the unified
+model (commit 4), but the in-folder docs they seed still described the
+pre-#91 `automations/<name>.json` + `actions/<name>.js` layout — which
+the builder agent reads. Docs-only fix, no behavior change.
+
+- `scaffold.ts`: the project `README.md` "Layout" section, the seeded
+  `automations/README.md` (`AUTOMATIONS_README`), and the `automations/`
+  subdir comment now describe `automations/<id>/automation.json` +
+  `automations/<id>/handler.js`, the `triggers` array, and the
+  server-side-minted `{ kind: 'webhook', pending: true }` trigger —
+  matching `system-prompt.ts` and the runtime.
+- `clone.ts`: its `AUTOMATIONS_README` and the `ensureCanonicalSubdirs`
+  comment get the same correction (folder-per-automation, not flat
+  `.json`).
+
 ## Out of scope
 
-- Scheduling and execution of app-owned automations — the OS scheduler
-  host + `centraid run-automation` CLI + cloud gateway. This commit
-  lands only the *discovery* foundation; the runtime wiring is the
-  tracked follow-up on the checklist above.
 - Bidirectional form editing — the config pane is a read-only rendered
   view of the manifest; chat is the only input.
 - Commits 3–7 of the #98 revision land the unified folder model
@@ -481,3 +497,9 @@ each app's per-app `runtime.sqlite` — closing out decisions 3 + 4.
 - `analytics-store` tests cover the new `pinned` mirror + `deleteByRef`.
 - The desktop Insights / Executions / Run-detail / pin surface is
   type/build-verified only — not interactively click-tested.
+
+### Commit 11 verification
+
+- `builder-harness` typecheck + test green (10/10 turbo tasks).
+- Docs-only change — seeded README/comment strings; no test asserts on
+  their content, no behavior touched.

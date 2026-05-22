@@ -70,12 +70,11 @@ export async function scaffoldProject(
   // rules in `app.css`.
   await fs.writeFile(path.join(dir, 'app-knobs.json'), DEFAULT_APP_KNOBS);
 
-  // Canonical centraid subdirs. `automations/` holds one .json manifest
-  // per cron-scheduled automation (see runtime-core's
-  // `automation-manifest.ts`); the runtime artifact — the generated .js
-  // handler — lives next to user-authored actions under `actions/` so
-  // author-side tooling treats them uniformly. Kept in sync with
-  // `clone.ts#CANONICAL_SUBDIRS` so cloned projects match fresh ones.
+  // Canonical centraid subdirs. `automations/` holds one folder per
+  // automation the app owns — `automations/<id>/automation.json` (the
+  // manifest) + `automations/<id>/handler.js` (the handler the scheduler
+  // fires); see runtime-core's `automation-manifest.ts`. Kept in sync
+  // with `clone.ts#CANONICAL_SUBDIRS` so cloned projects match fresh ones.
   for (const sub of ['queries', 'actions', 'migrations', 'automations']) {
     await fs.mkdir(path.join(dir, sub));
   }
@@ -377,10 +376,9 @@ bun install   # or: npm install
 - \`index.html\`, \`app.css\`, \`app.js\` — static, served from \`/centraid/${id}/\`
 - \`queries/<name>.js\` — GET \`/centraid/${id}/_data/<name>\`
 - \`actions/<name>.js\` — POST \`/centraid/${id}/_run\` (body picks \`action\`)
-- \`automations/<name>.json\` — cron-scheduled deterministic action manifest;
-  the generated handler lives under \`actions/<name>.js\` and is fired by the
-  host scheduler. The manifest is the source of truth; the handler is
-  regenerated from the user's prompt and is **not** hand-edited.
+- \`automations/<id>/\` — one folder per automation the app owns:
+  \`automation.json\` (the manifest) + \`handler.js\` (fired by the host
+  scheduler, no page open). See \`automations/README.md\`.
 - \`migrations/NNNN_<slug>.sql\` — schema migrations applied on publish
 - \`app.json\` — metadata (\`name\`, \`version\`)
 
@@ -389,43 +387,51 @@ See \`@centraid/openclaw-plugin\` for the full handler-arg types.
 
 const AUTOMATIONS_README = `# automations/
 
-Cron-scheduled deterministic actions for this app. Drop one \`.json\`
-manifest per automation here; the matching handler ships at
-\`actions/<name>.js\`. The host scheduler (launchd / Task Scheduler /
-systemd timer locally, openclaw cron remotely) fires
-\`centraid run-automation\` against each manifest on schedule.
+Automations this app owns — scheduled jobs that run with no page open
+and no user present. Each automation is its own folder:
 
-## Manifest shape
+\`\`\`
+automations/<id>/automation.json   # the manifest
+automations/<id>/handler.js        # the handler the scheduler fires
+\`\`\`
+
+\`<id>\` is a short stable slug (\`daily-digest\`, \`evening-reminder\`). An
+app may own several automations — one folder each, distinct slugs. Reuse
+a slug to revise it; pick a new slug to add another. The host scheduler
+(launchd / Task Scheduler / systemd timer locally, openclaw cron
+remotely) fires \`centraid run-automation <appId>/<id>\` on schedule.
+
+## automation.json
 
 \`\`\`json
 {
-  "prompt": "every 30 min, summarize new PRs in foo/bar",
-  "schedule": "*/30 * * * *",
-  "action": "summarize-prs.js",
-  "requires": {
-    "mcps": ["github"],
-    "tools": ["github.list_pull_requests"],
-    "model": "anthropic/claude-3-5-sonnet"
-  },
-  "costEstimate": { "model": "anthropic/claude-3-5-sonnet", "tokensPerFire": 5000 },
-  "generated": { "by": "builder", "at": "<ISO-8601>" }
+  "name": "Evening reminder",
+  "version": "0.1.0",
+  "enabled": true,
+  "prompt": "every evening at 8pm, remind me about unfinished habits",
+  "triggers": [{ "kind": "cron", "expr": "0 20 * * *" }],
+  "requires": { "model": "anthropic/claude-3-5-sonnet" },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "centraid-builder", "at": "<ISO-8601>" }
 }
 \`\`\`
 
-- \`schedule\` is a 5-field cron expression (UTC).
-- \`requires.mcps\` / \`requires.tools\` declare which host tools the
-  handler will call via \`ctx.tool(name, args)\`. Install-time check
-  verifies the host has them before activating the schedule.
-- \`requires.model\` is the model \`ctx.agent({prompt, json?})\` should
-  route through. **Never set this to \`centraid-mock/*\`** — that would
-  recurse into the runner.
-- \`generated.at\` is an ISO-8601 timestamp.
+- \`triggers\` is an array. A cron trigger is
+  \`{ "kind": "cron", "expr": "<5-field UTC cron>" }\`; \`[]\` is a legal
+  manual-fire-only automation. A webhook trigger is declared as
+  \`{ "kind": "webhook", "pending": true }\` — the route id + secret are
+  minted server-side, never hand-written.
+- \`requires.mcps\` / \`requires.tools\` declare the host tools the handler
+  calls via \`ctx.tool(name, args)\`. \`requires.model\` is the model
+  \`ctx.agent({ prompt, json? })\` routes through. **Never set this to
+  \`centraid-mock/*\`** — that would recurse into the runner.
+- The runtime validates the manifest on every read; keep the shape exactly.
 
-## Authoring
+## handler.js
 
-The prompt is canonical. Re-prompting the builder regenerates the JS
-under \`actions/\`. Do not hand-edit the generated handler — your edits
-will be overwritten on the next regeneration.
+A plain \`.js\` ES module receiving \`{ ctx, log }\` only — no \`db\`, no
+\`body\`, no \`window\`. The \`prompt\` is canonical: re-prompting the
+builder regenerates the handler, so don't hand-edit it.
 
 See \`@centraid/openclaw-plugin\`'s \`AutomationHandler\` type for the
 full handler-arg shape.

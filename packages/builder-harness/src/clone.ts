@@ -59,10 +59,11 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
 
   // Ensure the canonical centraid subdirs exist. `scaffoldProject`
   // produces all four; this call backstops templates that pre-date
-  // one. Bundled templates routinely ship `automations/*.json`
-  // manifests (e.g. `journal/automations/weekly-recap.json`); those
-  // carry through unchanged via `copyDir` above — this step only
-  // adds missing directories, never overwrites contents (issue #70).
+  // one. Bundled templates may ship automations as
+  // `automations/<id>/` folders (e.g.
+  // `journal/automations/weekly-recap/`); those carry through
+  // unchanged via `copyDir` above — this step only adds missing
+  // directories, never overwrites contents (issue #70).
   await ensureCanonicalSubdirs(destDir);
 
   await rewriteAppJson(destDir, opts.newName, opts.newDesc);
@@ -221,12 +222,12 @@ async function ensureCanonicalSubdirs(projectDir: string): Promise<void> {
 
 const AUTOMATIONS_README = `# automations/
 
-This folder holds cron-scheduled deterministic actions for the app.
-Each automation is a \`.json\` manifest here plus a matching handler
-at \`actions/<name>.js\`. Existing automations appear in the
-desktop's App settings → Automations panel; this README is only
-seeded when the folder is empty, so seeing it means no manifests
-ship with this app yet.
+This folder holds the scheduled jobs the app owns. Each automation is
+its own folder — \`automations/<id>/automation.json\` (the manifest) +
+\`automations/<id>/handler.js\` (the handler the scheduler fires).
+Existing automations appear in the desktop's App settings →
+Automations panel; this README is only seeded when the folder is
+empty, so seeing it means no automations ship with this app yet.
 
 To add one, ask the builder agent ("set up an automation that
 runs every Monday at 9am…") — it scaffolds both files and the
