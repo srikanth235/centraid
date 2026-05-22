@@ -179,11 +179,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // App chat history (persisted on the gateway)
   chatHistoryList: (input: { appId: string }) =>
     ipcRenderer.invoke(Channel.CHAT_HISTORY_LIST, input),
-  chatHistoryLoad: (input: { sessionId: string }) =>
+  chatHistoryLoad: (input: { appId: string; sessionId: string }) =>
     ipcRenderer.invoke(Channel.CHAT_HISTORY_LOAD, input),
-  chatHistoryDelete: (input: { sessionId: string }) =>
+  chatHistoryDelete: (input: { appId: string; sessionId: string }) =>
     ipcRenderer.invoke(Channel.CHAT_HISTORY_DELETE, input),
-  chatHistoryRename: (input: { sessionId: string; title: string }) =>
+  chatHistoryRename: (input: { appId: string; sessionId: string; title: string }) =>
     ipcRenderer.invoke(Channel.CHAT_HISTORY_RENAME, input),
 
   // Credential import (Claude Code / Codex → pi auth.json)

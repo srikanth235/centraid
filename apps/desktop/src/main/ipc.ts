@@ -21,7 +21,7 @@ import {
 import {
   localRuntimeAutomationHost,
   localRuntimeCodexHomeBaseDir,
-  localRuntimeAutomationDb,
+  localRuntimeAppsDir,
   localRuntimeAnalyticsDb,
   noteRunnerPrefsChanged,
   resolveProviderPrefs,
@@ -41,7 +41,6 @@ import {
   setAutomationEnabledAt,
   deleteAutomationAt,
   parseAutomationRef,
-  makeActivityDbProvider,
   makeAnalyticsDbProvider,
   makeRuntimeDbProvider,
   generateWebhookId,
@@ -638,13 +637,6 @@ export function registerIpcHandlers(): void {
   // handle. An automation's full run ledger is its app's per-app
   // `runtime.sqlite`; the central `centraid-analytics.sqlite` holds one
   // summary row per run and is what the Executions feed + Insights read.
-  const getActivityDbProvider = (() => {
-    let provider: DatabaseProvider | undefined;
-    return (): DatabaseProvider => {
-      if (!provider) provider = makeActivityDbProvider(localRuntimeAutomationDb());
-      return provider;
-    };
-  })();
   const getAnalyticsProvider = (() => {
     let provider: DatabaseProvider | undefined;
     return (): DatabaseProvider => {
@@ -652,14 +644,26 @@ export function registerIpcHandlers(): void {
       return provider;
     };
   })();
-  /** Run-ledger store for one run id — its app's `runtime.sqlite` for an
-   *  automation run (`<appId>/...`), the activity DB for a chat run. */
-  const runsStoreForRunId = async (runId: string): Promise<AutomationRunsStore> => {
+  /**
+   * Run-ledger store for one run id — every run's full ledger is its
+   * app's `runtime.sqlite`. An automation runId is `<appId>/<id>:...`
+   * (the app id is inline, under the projects `appsDir`); a chat runId
+   * is a bare UUID, so its owning app comes from the central run summary
+   * and the file is under the embedded runtime's apps dir. Returns
+   * undefined when the run can't be located.
+   */
+  const runsStoreForRunId = async (runId: string): Promise<AutomationRunsStore | undefined> => {
     const slash = runId.indexOf('/');
-    if (slash <= 0) return new AutomationRunsStore(getActivityDbProvider());
-    const { appsDir } = await loadSettings();
+    if (slash > 0) {
+      const { appsDir } = await loadSettings();
+      return new AutomationRunsStore(
+        makeRuntimeDbProvider(path.join(appsDir, runId.slice(0, slash), 'runtime.sqlite')),
+      );
+    }
+    const summary = new AnalyticsStore(getAnalyticsProvider()).getSummary(runId);
+    if (!summary?.appId) return undefined;
     return new AutomationRunsStore(
-      makeRuntimeDbProvider(path.join(appsDir, runId.slice(0, slash), 'runtime.sqlite')),
+      makeRuntimeDbProvider(path.join(localRuntimeAppsDir(), summary.appId, 'runtime.sqlite')),
     );
   };
   /** Map a central run summary into the `AutomationRunRow` feed shape. */
@@ -898,12 +902,12 @@ export function registerIpcHandlers(): void {
   );
 
   // Run detail — the node timeline lives in the run's full ledger: the
-  // owning app's `runtime.sqlite` for an automation run, the activity DB
-  // for a chat run.
+  // owning app's `runtime.sqlite` (automation and chat alike).
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUN_NODES,
     async (_e, input: { runId: string }): Promise<AutomationRunNodeRow[]> => {
-      return (await runsStoreForRunId(input.runId)).listNodes(input.runId);
+      const store = await runsStoreForRunId(input.runId);
+      return store ? store.listNodes(input.runId) : [];
     },
   );
 
@@ -913,7 +917,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_PIN_RUN,
     async (_e, input: { runId: string; pinned: boolean }): Promise<{ ok: true }> => {
-      (await runsStoreForRunId(input.runId)).setPinned(input.runId, input.pinned);
+      const store = await runsStoreForRunId(input.runId);
+      store?.setPinned(input.runId, input.pinned);
       new AnalyticsStore(getAnalyticsProvider()).setPinned(input.runId, input.pinned);
       return { ok: true };
     },

@@ -28,7 +28,7 @@ Chat moves to the per-app `runtime.sqlite` (app-scoped chat):
 
 - [x] Commit 12 — runtime-core: per-app chat store
 - [x] Commit 13 — openclaw-plugin: wire the app-scoped chat store
-- [ ] Commit 14 — desktop: thread appId through the chat-history IPC
+- [x] Commit 14 — desktop: thread appId through the chat-history IPC
 
 Schedule/execute of app-owned automations was originally scoped as a
 follow-up, but landed inside this PR across commits 5–10 — see those
@@ -428,6 +428,24 @@ left it in #98 and chat was the last tenant.
   `makeActivityDbProvider` import are dropped. The cloud gateway's chat
   now writes into each app's `runtime.sqlite`, same as the desktop.
 
+### Commit 14 — desktop: thread appId through the chat-history IPC
+
+- `chat-history-client.ts`: every `historyX` call carries the owning
+  app — the `/_centraid-chat` URLs become
+  `/_centraid-chat/apps/<appId>/sessions[/<id>]`.
+- `chat.ts`: the `HISTORY_LIST` / `LOAD` / `DELETE` / `RENAME` IPC
+  handlers take `appId`; first-turn `historyCreate` passes the chat
+  session's `appId`.
+- `preload.ts` + `centraid-api.d.ts`: the `chatHistoryLoad` / `Delete` /
+  `Rename` IPC signatures gain `appId` (`chatHistoryList` already had
+  it); the renderer chat panel — already mounted per app — passes it.
+- `local-runtime.ts`: `ChatHistoryStore` is constructed with the
+  embedded runtime's `appsDir`; `localRuntimeAutomationDb` +
+  `makeActivityDbProvider` are dropped.
+- `ipc.ts`: `runsStoreForRunId` resolves a chat run's ledger from the
+  central summary's `appId` (chat run ids are bare UUIDs) under the
+  runtime's apps dir; the activity-DB provider is removed.
+
 ## Out of scope
 
 - Bidirectional form editing — the config pane is a read-only rendered
@@ -559,3 +577,15 @@ left it in #98 and chat was the last tenant.
 - `openclaw-plugin` typecheck + build + test green — 21/21 tests pass.
 - The desktop still constructs `ChatHistoryStore` with the activity-DB
   provider — wired in commit 14.
+
+### Commit 14 verification
+
+- Whole repo green end-to-end: `turbo typecheck` + `turbo test` +
+  `turbo build` — 22/22 tasks.
+- The desktop chat panel + Insights run-detail surface is
+  type/build-verified only — not interactively click-tested.
+- Note: the embedded runtime serves apps from its own `appsDir` while
+  automations fire from the projects `appsDir`; chat `runtime.sqlite`
+  files therefore sit under the runtime's apps dir. Unifying the two
+  (desktop publishing into its own local runtime) stays the tracked
+  #98 follow-up.

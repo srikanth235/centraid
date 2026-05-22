@@ -1,10 +1,11 @@
 /*
  * HTTP client for the centraid chat routes exposed under `/_centraid-chat`.
- * The gateway owns the chat sessions in the activity SQLite — see
+ * The gateway owns the chat sessions — see
  * packages/runtime-core/src/chat-history.ts. A chat session IS the chat
- * window: the session id is the window id. Chat is a flat per-user store
- * (no app scoping). The transcript is reconstructed from the run ledger;
- * there is no append surface.
+ * window: the session id is the window id. Chat is app-scoped (issue
+ * #98): every call carries the owning app and the session lives in that
+ * app's `runtime.sqlite`. The transcript is reconstructed from the run
+ * ledger; there is no append surface.
  *
  * The client is thin on purpose: it shapes URLs, attaches the bearer token,
  * and JSON-decodes. Auth resolution is cached for the process lifetime.
@@ -92,23 +93,38 @@ async function call<T>(method: string, pathAndQuery: string, body?: unknown): Pr
   return parsed as T;
 }
 
-export async function historyList(): Promise<ChatSessionMeta[]> {
-  const out = await call<{ sessions: ChatSessionMeta[] }>('GET', '/sessions');
+/** Chat is app-scoped (issue #98) — every call carries the owning app. */
+function sessionsPath(appId: string): string {
+  return `/apps/${encodeURIComponent(appId)}/sessions`;
+}
+
+export async function historyList(appId: string): Promise<ChatSessionMeta[]> {
+  const out = await call<{ sessions: ChatSessionMeta[] }>('GET', sessionsPath(appId));
   return out.sessions ?? [];
 }
 
-export async function historyCreate(mode: 'full' | 'data', title = ''): Promise<ChatSessionMeta> {
-  return call<ChatSessionMeta>('POST', '/sessions', { mode, title });
+export async function historyCreate(
+  appId: string,
+  mode: 'full' | 'data',
+  title = '',
+): Promise<ChatSessionMeta> {
+  return call<ChatSessionMeta>('POST', sessionsPath(appId), { mode, title });
 }
 
-export async function historyLoad(id: string): Promise<ChatSessionWithMessages> {
-  return call<ChatSessionWithMessages>('GET', `/sessions/${encodeURIComponent(id)}`);
+export async function historyLoad(appId: string, id: string): Promise<ChatSessionWithMessages> {
+  return call<ChatSessionWithMessages>('GET', `${sessionsPath(appId)}/${encodeURIComponent(id)}`);
 }
 
-export async function historyRename(id: string, title: string): Promise<ChatSessionMeta> {
-  return call<ChatSessionMeta>('PATCH', `/sessions/${encodeURIComponent(id)}`, { title });
+export async function historyRename(
+  appId: string,
+  id: string,
+  title: string,
+): Promise<ChatSessionMeta> {
+  return call<ChatSessionMeta>('PATCH', `${sessionsPath(appId)}/${encodeURIComponent(id)}`, {
+    title,
+  });
 }
 
-export async function historyDelete(id: string): Promise<{ ok: boolean }> {
-  return call<{ ok: boolean }>('DELETE', `/sessions/${encodeURIComponent(id)}`);
+export async function historyDelete(appId: string, id: string): Promise<{ ok: boolean }> {
+  return call<{ ok: boolean }>('DELETE', `${sessionsPath(appId)}/${encodeURIComponent(id)}`);
 }

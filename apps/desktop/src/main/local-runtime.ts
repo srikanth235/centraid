@@ -8,7 +8,6 @@ import {
   UserStore,
   listAutomations,
   makeGatewayDbProvider,
-  makeActivityDbProvider,
   makeAnalyticsDbProvider,
   startRuntimeHttpServer,
   type AutomationHost,
@@ -59,18 +58,14 @@ export function localRuntimeCodexHomeBaseDir(): string {
 }
 
 /**
- * Paths of the two domain SQLite files — identity (users + prefs) and
- * the activity ledger (automations, chat_sessions, runs, run_nodes).
- * They live next to (not inside) the appsDir so they stay out of every
- * individual app's data and are never reachable from the centraid_sql_*
- * tools. Mirrors the OpenClaw plugin's placement.
+ * Path of the gateway identity SQLite file (users + prefs). It lives
+ * next to (not inside) the appsDir so it stays out of every individual
+ * app's data and is never reachable from the centraid_sql_* tools.
+ * Mirrors the OpenClaw plugin's placement. Automation *and* chat runs
+ * live in each app's own `runtime.sqlite` (issue #98).
  */
 export function localRuntimeGatewayDb(): string {
   return path.join(app.getPath('userData'), 'local-runtime', 'centraid-gateway.sqlite');
-}
-
-export function localRuntimeAutomationDb(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-activity.sqlite');
 }
 
 /** Central push-based run-summary DB — the source the Insights screen reads. */
@@ -118,16 +113,16 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     const appsDir = localRuntimeAppsDir();
     await fs.mkdir(appsDir, { recursive: true });
 
-    // Domain SQLite files — identity, the chat activity ledger, and the
-    // central analytics DB (one run-summary row per run — issue #98).
-    // Each store wraps the lazy provider for its file; the provider
-    // opens the file on first use.
+    // Gateway identity DB + the central analytics DB (one run-summary
+    // row per run — issue #98). Each store wraps a lazy provider that
+    // opens its file on first use. Chat sessions + chat runs live in
+    // each app's `runtime.sqlite` under `appsDir`, so `ChatHistoryStore`
+    // is constructed with `appsDir` and resolves the file per app.
     const gatewayDbProvider = makeGatewayDbProvider(localRuntimeGatewayDb());
-    const automationDbProvider = makeActivityDbProvider(localRuntimeAutomationDb());
     const analyticsStore = new AnalyticsStore(makeAnalyticsDbProvider(localRuntimeAnalyticsDb()));
     const userStore = new UserStore(gatewayDbProvider);
     const chatHistoryStore = new ChatHistoryStore(
-      automationDbProvider,
+      appsDir,
       () => userStore.getUserId(),
       analyticsStore,
     );

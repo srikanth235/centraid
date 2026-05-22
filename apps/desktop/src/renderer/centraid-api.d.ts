@@ -470,11 +470,18 @@ interface CentraidApi {
   /** List persisted chat sessions for an app, newest first. */
   chatHistoryList(input: { appId: string }): Promise<{ sessions: CentraidChatSessionMeta[] }>;
   /** Load one persisted chat session's metadata + ordered message log. */
-  chatHistoryLoad(input: { sessionId: string }): Promise<CentraidChatSessionWithMessages>;
+  chatHistoryLoad(input: {
+    appId: string;
+    sessionId: string;
+  }): Promise<CentraidChatSessionWithMessages>;
   /** Permanently delete one chat session and its messages. */
-  chatHistoryDelete(input: { sessionId: string }): Promise<{ ok: boolean }>;
+  chatHistoryDelete(input: { appId: string; sessionId: string }): Promise<{ ok: boolean }>;
   /** Rename a chat session (overrides the auto-generated title). */
-  chatHistoryRename(input: { sessionId: string; title: string }): Promise<CentraidChatSessionMeta>;
+  chatHistoryRename(input: {
+    appId: string;
+    sessionId: string;
+    title: string;
+  }): Promise<CentraidChatSessionMeta>;
 
   /** Snapshot of which coding-agent credentials are present on this machine. */
   authStatus(): Promise<CentraidAuthStatus>;

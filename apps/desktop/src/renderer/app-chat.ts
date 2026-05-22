@@ -502,7 +502,7 @@
         ]),
       );
       try {
-        const loaded = await window.CentraidApi.chatHistoryLoad({ sessionId: meta.id });
+        const loaded = await window.CentraidApi.chatHistoryLoad({ appId, sessionId: meta.id });
         chat = hydrateMessages(loaded.messages);
       } catch (err) {
         appendError(`Failed to load chat: ${String(err)}`);
@@ -640,7 +640,7 @@
 
     async function deleteSession(s: CentraidChatSessionMeta): Promise<void> {
       try {
-        await window.CentraidApi.chatHistoryDelete({ sessionId: s.id });
+        await window.CentraidApi.chatHistoryDelete({ appId, sessionId: s.id });
         historySessions = historySessions.filter((x) => x.id !== s.id);
         renderHistory();
         // If we just deleted the chat the user is currently viewing, reset
