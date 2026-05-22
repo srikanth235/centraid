@@ -17,6 +17,7 @@ Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid
 - [x] Commit 3 — runtime-core: unified automation discovery
 - [x] Commit 4 — builder-harness: automation apps scaffold + publish
 - [x] Commit 5 — openclaw-plugin: gateway fires automations as apps
+- [x] Commit 6 — agent-runtime: local fire path under appsDir
 
 Follow-up (tracked on #98, not in this commit):
 
@@ -226,6 +227,30 @@ handle, reading the owning app's active version. The separate
   `gateway_start` reconcile and the `/_centraid-hook` webhook route both
   resolve automations via `listAutomations(appsDir)`.
 
+### Commit 6 — agent-runtime: local fire path under appsDir
+
+Fourth commit of the [#98 revision](https://github.com/srikanth235/centraid/issues/98):
+the desktop's OS scheduler + the `centraid run-automation` CLI fire
+automations by their handle, resolved under `appsDir`.
+
+#### agent-runtime — fire by handle
+
+- `runAutomationLocal` takes an `automationRef` + `appsDir` and resolves
+  via `readAppOwnedAutomation`; `onFailure` resolves a handle.
+  `AutomationRunRecord.automationId` becomes `automationRef`.
+- `centraid-cli.ts` — `run-automation <appId>/<automationId>`; the OS
+  scheduler env var is `CENTRAID_APPS_DIR` (was `CENTRAID_AUTOMATIONS_DIR`).
+
+#### agent-runtime — OS scheduler job labels
+
+- `os-scheduler.ts` gains the reversible `automationSlug` /
+  `automationRefFromSlug` codec: a handle's `/` (unsafe in a launchd
+  label / artifact filename) maps to `_s`, `_` escapes to `_u`. Job
+  labels are `com.centraid.<slug>`, unique across apps; `list()` decodes
+  the slug back to the handle so reconcile round-trips.
+- `os-scheduler-host.ts` bakes `row.ref` into the spec and
+  `CENTRAID_APPS_DIR` into the artifact env.
+
 ## Out of scope
 
 - Scheduling and execution of app-owned automations — the OS scheduler
@@ -286,3 +311,11 @@ handle, reading the owning app's active version. The separate
 - `openclaw-plugin` test suite — 21/21 pass.
 - The agent-runtime local fire path and the desktop still reference the
   old discovery API — updated in the remaining commits.
+
+### Commit 6 verification
+
+- `agent-runtime` typechecks clean against the rebuilt `runtime-core`.
+- `agent-runtime` test suite — 84/84 pass, including the rewritten
+  `OsSchedulerHost` tests (handle-based job labels, `list()` decoding)
+  and a new round-trip test for the `automationSlug` codec.
+- Only the desktop still references the old discovery API — commit 7.

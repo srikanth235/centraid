@@ -28,12 +28,15 @@ function setup(): {
     workdir: '/persistent/work',
     centraidBin: '/usr/local/bin/centraid',
     automationDbPath: '/persistent/centraid-activity.sqlite',
-    automationsDir: '/persistent/centraid-automations',
+    appsDir: '/persistent/apps',
     runner: 'codex',
     os: { execShell, platform: 'darwin', artifactRoot },
   });
   return { artifactRoot, shellCalls, execShell, host };
 }
+
+/** The owning app id every test row shares — `<ownerApp>/<id>` is the handle. */
+const OWNER = 'svc';
 
 function row(
   overrides: { id?: string; name?: string; cronExpr?: string; enabled?: boolean } = {},
@@ -44,10 +47,12 @@ function row(
   const triggers = [{ kind: 'cron' as const, expr: overrides.cronExpr ?? '0 17 * * 1-5' }];
   return {
     id,
-    dir: `/persistent/centraid-automations/${id}`,
+    dir: `/persistent/apps/${OWNER}/automations/${id}`,
     name,
     triggers,
     enabled,
+    ownerApp: OWNER,
+    ref: `${OWNER}/${id}`,
     manifest: {
       name,
       version: '0.1.0',
@@ -65,17 +70,17 @@ describe('OsSchedulerHost', () => {
   it('register installs a launchd plist with the workdir as cwd', async () => {
     const ctx = setup();
     await ctx.host.register(row());
-    const artifactPath = path.join(ctx.artifactRoot, 'com.centraid.auto-1.plist');
+    const artifactPath = path.join(ctx.artifactRoot, 'com.centraid.svc_sauto-1.plist');
     const plist = await fs.readFile(artifactPath, 'utf8');
     assert.match(plist, /<key>WorkingDirectory<\/key>\s*<string>\/persistent\/work<\/string>/);
     assert.match(plist, /run-automation/);
-    assert.match(plist, /<string>auto-1<\/string>/);
+    assert.match(plist, /<string>svc\/auto-1<\/string>/);
   });
 
   it('register with enabled=false unregisters instead', async () => {
     const ctx = setup();
     await ctx.host.register(row()); // first install
-    const artifactPath = path.join(ctx.artifactRoot, 'com.centraid.auto-1.plist');
+    const artifactPath = path.join(ctx.artifactRoot, 'com.centraid.svc_sauto-1.plist');
     await fs.access(artifactPath); // present
     await ctx.host.register(row({ enabled: false }));
     let stillPresent = true;
@@ -90,16 +95,16 @@ describe('OsSchedulerHost', () => {
   it('unregister removes the artifact and is idempotent on second call', async () => {
     const ctx = setup();
     await ctx.host.register(row());
-    await ctx.host.unregister('auto-1');
-    await ctx.host.unregister('auto-1'); // no throw
+    await ctx.host.unregister('svc/auto-1');
+    await ctx.host.unregister('svc/auto-1'); // no throw
   });
 
-  it('list reports the automation id for installed entries', async () => {
+  it('list reports the automation handle for installed entries', async () => {
     const ctx = setup();
     await ctx.host.register(row());
     await ctx.host.register(row({ id: 'auto-2', name: 'weekly-recap', cronExpr: '0 20 * * 0' }));
     const names = await ctx.host.list();
-    assert.deepEqual([...names].sort(), ['auto-1', 'auto-2']);
+    assert.deepEqual([...names].sort(), ['svc/auto-1', 'svc/auto-2']);
   });
 
   it('reconcile installs missing, updates existing, removes orphans', async () => {
@@ -108,26 +113,26 @@ describe('OsSchedulerHost', () => {
     await ctx.host.register(row({ id: 'auto-old', name: 'old-one' }));
 
     const desired: AutomationRow[] = [
-      row(), // auto-1 — new
+      row(), // svc/auto-1 — new
       row({ id: 'auto-old', name: 'old-one', cronExpr: '0 6 * * *' }), // existing — changed
       row({ id: 'auto-paused', name: 'paused-one', enabled: false }), // disabled — not installed
     ];
     const result = await ctx.host.reconcile(desired);
 
-    assert.deepEqual([...result.added].sort(), ['com.centraid.auto-1']);
-    assert.deepEqual([...result.updated].sort(), ['com.centraid.auto-old']);
+    assert.deepEqual([...result.added].sort(), ['com.centraid.svc_sauto-1']);
+    assert.deepEqual([...result.updated].sort(), ['com.centraid.svc_sauto-old']);
     assert.deepEqual(result.removed, []);
 
     // The disabled row should have produced no artifact.
     const finalList = await ctx.host.list();
-    assert.equal(finalList.includes('auto-paused'), false);
+    assert.equal(finalList.includes('svc/auto-paused'), false);
   });
 
   it('reconcile removes installed entries that are absent from desired', async () => {
     const ctx = setup();
     await ctx.host.register(row({ id: 'auto-zombie', name: 'zombie' }));
     const result = await ctx.host.reconcile([]);
-    assert.deepEqual(result.removed, ['com.centraid.auto-zombie']);
+    assert.deepEqual(result.removed, ['com.centraid.svc_sauto-zombie']);
     const finalList = await ctx.host.list();
     assert.equal(finalList.length, 0);
   });
@@ -143,9 +148,12 @@ describe('OsSchedulerHost', () => {
       row({ id: 'auto-2', name: 'weekly-recap', cronExpr: '0 20 * * 0' }),
     ]);
     assert.deepEqual(result.added, []);
-    assert.deepEqual([...result.updated].sort(), ['com.centraid.auto-1', 'com.centraid.auto-2']);
+    assert.deepEqual([...result.updated].sort(), [
+      'com.centraid.svc_sauto-1',
+      'com.centraid.svc_sauto-2',
+    ]);
     assert.deepEqual(result.removed, []);
     const after = await ctx.host.list();
-    assert.deepEqual([...after].sort(), ['auto-1', 'auto-2']);
+    assert.deepEqual([...after].sort(), ['svc/auto-1', 'svc/auto-2']);
   });
 });

@@ -1,9 +1,9 @@
 /**
- * Local-side orchestrator for one automation fire (issue #91).
+ * Local-side orchestrator for one automation fire (issue #98).
  *
  * Flow:
- *   1. Read the automation project (`automation.json` + `handler.js`)
- *      from `automationsDir` by its id.
+ *   1. Resolve the automation by its `<appId>/<id>` handle — read the
+ *      owning app's active version under `appsDir`.
  *   2. Build the activity-DB-backed run ledger store.
  *   3. Stand up the live `ctx.tool` / `ctx.agent` dispatch surface
  *      (mock-LLM server + CLI spawn) and run the project's generated
@@ -16,7 +16,8 @@ import { randomUUID } from 'node:crypto';
 import {
   AutomationRunsStore,
   automationHandlerPath,
-  readAutomationProject,
+  parseAutomationRef,
+  readAppOwnedAutomation,
   runAutomationHandler,
   type AutomationHandlerOutcome,
   type AutomationTriggerKind,
@@ -41,10 +42,10 @@ export {
 };
 
 export interface RunAutomationLocalOptions {
-  /** Id of the automation project to fire. */
-  automationId: string;
-  /** Directory holding the user's automation projects. */
-  automationsDir: string;
+  /** `<appId>/<automationId>` handle of the automation to fire. */
+  automationRef: string;
+  /** Directory holding the app folders. */
+  appsDir: string;
   /** Activity-DB provider — holds the run ledger. */
   activityDb: DatabaseProvider;
   /** Which CLI to drive. Defaults to codex. */
@@ -77,7 +78,8 @@ export interface RunAutomationLocalOptions {
 }
 
 export interface AutomationRunRecord {
-  automationId: string;
+  /** `<appId>/<automationId>` handle of the fired automation. */
+  automationRef: string;
   automationName: string;
   runId: string;
   startedAt: number;
@@ -100,19 +102,23 @@ export async function runAutomationLocal(
   const onLog = opts.onLog ?? (() => undefined);
   const runner: LocalRunnerKind = opts.runner ?? 'codex';
 
-  const row = await readAutomationProject(opts.automationsDir, opts.automationId);
+  const parsed = parseAutomationRef(opts.automationRef);
+  if (!parsed) {
+    throw new Error(`automation "${opts.automationRef}": not a valid <appId>/<id> handle`);
+  }
+  const row = await readAppOwnedAutomation(opts.appsDir, parsed.appId, parsed.automationId);
   if (!row) {
-    throw new Error(`automation ${opts.automationId}: not found under ${opts.automationsDir}`);
+    throw new Error(`automation ${opts.automationRef}: not found under ${opts.appsDir}`);
   }
 
   const runsStore = new AutomationRunsStore(opts.activityDb);
-  const runId = `${opts.automationId}:${Date.now()}:${randomUUID().slice(0, 8)}`;
+  const runId = `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
 
   const dispatch = await startLiveDispatch({
     workdir: row.dir,
-    automationId: opts.automationId,
+    automationId: opts.automationRef,
     runId,
     runner,
     spawnCli: opts.spawnCli ?? defaultSpawnCli,
@@ -123,9 +129,9 @@ export async function runAutomationLocal(
   let outcome: AutomationHandlerOutcome;
   try {
     outcome = await runAutomationHandler({
-      automationId: opts.automationId,
+      automationId: opts.automationRef,
       automationDir: row.dir,
-      handlerFile: automationHandlerPath(opts.automationsDir, opts.automationId),
+      handlerFile: automationHandlerPath(row.dir),
       runId,
       toolDispatcher: dispatch.toolDispatcher,
       agentDispatcher: dispatch.agentDispatcher,
@@ -143,20 +149,23 @@ export async function runAutomationLocal(
   }
 
   // onFailure cascade: when the handler fails and the manifest names a
-  // follow-up automation, fire it with the failed run as input. Capped
-  // at depth 3.
+  // follow-up automation, fire it with the failed run as input. The
+  // handle resolves a bare id within the same app. Capped at depth 3.
   if (!outcome.ok && row.manifest.onFailure) {
     if (failureDepth >= 3) {
       onLog('warn', `onFailure cascade for ${row.name} aborted at depth ${failureDepth} (cap=3)`);
     } else {
-      const next = await readAutomationProject(opts.automationsDir, row.manifest.onFailure);
+      const failTarget = parseAutomationRef(row.manifest.onFailure, parsed.appId);
+      const next = failTarget
+        ? await readAppOwnedAutomation(opts.appsDir, failTarget.appId, failTarget.automationId)
+        : undefined;
       if (!next) {
         onLog('warn', `onFailure target "${row.manifest.onFailure}" not found for ${row.name}`);
       } else {
         try {
           await runAutomationLocal({
-            automationId: next.id,
-            automationsDir: opts.automationsDir,
+            automationRef: next.ref,
+            appsDir: opts.appsDir,
             activityDb: opts.activityDb,
             runner,
             ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
@@ -180,7 +189,7 @@ export async function runAutomationLocal(
 
   const endedAt = Date.now();
   const record: AutomationRunRecord = {
-    automationId: opts.automationId,
+    automationRef: opts.automationRef,
     automationName: row.name,
     runId,
     startedAt,

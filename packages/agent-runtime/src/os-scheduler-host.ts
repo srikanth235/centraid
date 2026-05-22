@@ -7,10 +7,10 @@
  * can talk to a single `AutomationHost` interface that openclaw also
  * implements.
  *
- * Model-B (issue #90): an automation is identified by its UUID; the OS
- * scheduler job label is `com.centraid.<automationId>`. Automations are
- * not app-scoped, so the job's working directory is just a stable
- * workspace dir.
+ * Issue #98: an automation is identified by its `<appId>/<id>` handle;
+ * the OS scheduler job label is `com.centraid.<slug>` (the handle run
+ * through `automationSlug`). The job's working directory is a stable
+ * workspace dir — the CLI resolves the automation from `appsDir`.
  *
  * Disabled rows: OS schedulers don't have a "registered but suppressed"
  * state — launchd, systemd, and Task Scheduler are binary. So when
@@ -58,12 +58,12 @@ export interface OsSchedulerHostOptions {
    */
   automationDbPath: string;
   /**
-   * Directory holding the user's automation projects (issue #91). Baked
-   * into the artifact as `CENTRAID_AUTOMATIONS_DIR` so the scheduled
-   * `centraid run-automation` resolves the project off the same disk
-   * tree the desktop scaffolds into.
+   * Directory holding the app folders (issue #98). Baked into the
+   * artifact as `CENTRAID_APPS_DIR` so the scheduled `centraid
+   * run-automation` resolves the automation off the same disk tree the
+   * desktop scaffolds into.
    */
-  automationsDir: string;
+  appsDir: string;
   /** Which CLI runner to drive (codex / claude-code). */
   runner: LocalRunnerKind;
   /** Options forwarded to os-scheduler (mostly tests: execShell + artifactRoot overrides). */
@@ -79,7 +79,7 @@ export class OsSchedulerHost implements AutomationHost {
     // reconcile and toggle stay consistent.
     const spec = this.specFor(row);
     if (!row.enabled || !spec) {
-      await this.unregister(row.id);
+      await this.unregister(row.ref);
       return;
     }
     await registerOsJob(spec, this.opts.os);
@@ -122,7 +122,7 @@ export class OsSchedulerHost implements AutomationHost {
 
   private buildSpec(row: AutomationRow, cronExprs: readonly string[]): OsSchedulerJobSpec {
     return {
-      automationId: row.id,
+      automationId: row.ref,
       automationName: row.name,
       cronExprs,
       cwd: this.opts.workdir,
@@ -130,7 +130,7 @@ export class OsSchedulerHost implements AutomationHost {
       centraidBin: this.opts.centraidBin,
       env: {
         CENTRAID_AUTOMATION_DB: this.opts.automationDbPath,
-        CENTRAID_AUTOMATIONS_DIR: this.opts.automationsDir,
+        CENTRAID_APPS_DIR: this.opts.appsDir,
       },
     };
   }

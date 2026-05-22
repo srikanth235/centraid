@@ -3,11 +3,11 @@
  * OS-level scheduler glue for local-side automations.
  *
  * Each automation registered locally becomes one OS scheduler job
- * that fires `centraid run-automation <appId> <name>` headlessly at
- * the cron-expression cadence. The OS-specific transport differs:
+ * that fires `centraid run-automation <appId>/<automationId>` headlessly
+ * at the cron-expression cadence. The OS-specific transport differs:
  *
  *   - macOS: launchd LaunchAgent plist under
- *     `~/Library/LaunchAgents/com.centraid.<appId>.<name>.plist`,
+ *     `~/Library/LaunchAgents/com.centraid.<slug>.plist`,
  *     loaded via `launchctl bootstrap`.
  *   - Linux: systemd user timer pair (`.service` + `.timer`) under
  *     `~/.config/systemd/user/`, enabled via `systemctl --user`.
@@ -46,7 +46,7 @@ export function currentPlatform(): OsPlatform {
 }
 
 export interface OsSchedulerJobSpec {
-  /** UUID of the automation the job fires. */
+  /** `<appId>/<automationId>` handle of the automation the job fires. */
   automationId: string;
   /** Automation name — used only for human-readable artifact labels. */
   automationName: string;
@@ -59,10 +59,9 @@ export interface OsSchedulerJobSpec {
    */
   cronExprs: readonly string[];
   /**
-   * Working directory the centraid CLI should cd into before running.
-   * Any stable workspace dir — model-B automations are not app-scoped,
-   * so the CLI loads the manifest from the activity DB by id rather
-   * than from a version subdir under this path.
+   * Working directory the centraid CLI runs in. Any stable workspace
+   * dir — the CLI resolves the automation by its handle from the apps
+   * dir baked into the artifact env, not from a path under this `cwd`.
    */
   cwd: string;
   /** Which runner the CLI should drive. */
@@ -81,18 +80,30 @@ export interface OsSchedulerJobSpec {
 export interface OsSchedulerJobInstalled extends OsSchedulerJobSpec {
   /** Absolute path to the on-disk artifact (plist/timer/task xml). */
   artifactPath: string;
-  /** Native job identifier (`com.centraid.<automationId>`). */
+  /** Native job identifier (`com.centraid.<slug>`). */
   jobLabel: string;
 }
 
 const LABEL_PREFIX = 'com.centraid';
 
+/**
+ * Reversible codec mapping an automation handle (`<appId>/<id>`, which
+ * may contain `/` and `.`) to a launchd/systemd/Task-Scheduler-safe
+ * slug. launchd labels accept `A-Za-z0-9.-_`; only the handle's `/` is
+ * unsafe, so `/` → `_s` and `_` is escaped to `_u` to keep the mapping
+ * unambiguous. `automationRefFromSlug` is its exact inverse.
+ */
+export function automationSlug(automationRef: string): string {
+  return automationRef.replaceAll('_', '_u').replaceAll('/', '_s');
+}
+
+/** Inverse of `automationSlug` — recover the handle from a job slug. */
+export function automationRefFromSlug(slug: string): string {
+  return slug.replace(/_[us]/g, (m) => (m === '_s' ? '/' : '_'));
+}
+
 export function jobLabel(automationId: string): string {
-  // launchd labels accept `A-Za-z0-9.` and are typically reverse-DNS;
-  // systemd unit names accept `A-Za-z0-9.-_`. We use a conservative
-  // intersection so the same label works everywhere.
-  const safe = (s: string) => s.replace(/[^A-Za-z0-9-]/g, '_');
-  return `${LABEL_PREFIX}.${safe(automationId)}`;
+  return `${LABEL_PREFIX}.${automationSlug(automationId)}`;
 }
 
 // --- launchd (macOS) ------------------------------------------------------
@@ -515,9 +526,12 @@ export async function list(opts: OsSchedulerOptions = {}): Promise<Array<OsSched
     // automation; use .plist for darwin, .timer for linux, .txt win32.
     const wantSuffix = platform === 'darwin' ? '.plist' : platform === 'linux' ? '.timer' : '.txt';
     if (!entry.endsWith(wantSuffix)) continue;
-    const automationId = entry.slice(prefix.length, -wantSuffix.length);
-    if (!automationId) continue;
-    out.push({ automationId, artifactPath: path.join(root, entry) });
+    const slug = entry.slice(prefix.length, -wantSuffix.length);
+    if (!slug) continue;
+    out.push({
+      automationId: automationRefFromSlug(slug),
+      artifactPath: path.join(root, entry),
+    });
   }
   return out;
 }
