@@ -80,18 +80,44 @@ export type WebhookTrigger = {
    */
   readonly secretHash: string;
 };
-export type AutomationTrigger = CronTrigger | WebhookTrigger;
+/**
+ * A webhook trigger the builder agent declared but cannot provision —
+ * minting the route `id` + `secret` is a privileged server step. The
+ * desktop's `provisionPendingWebhookAt` pass rewrites it to a
+ * `WebhookTrigger`; this is the agent→builder handoff form.
+ */
+export type PendingWebhookTrigger = {
+  readonly kind: 'webhook';
+  readonly pending: true;
+};
+export type AutomationTrigger = CronTrigger | WebhookTrigger | PendingWebhookTrigger;
 
 /** The cron triggers from a trigger list, in declaration order. */
 export function cronTriggersOf(triggers: readonly AutomationTrigger[]): readonly CronTrigger[] {
   return triggers.filter((t): t is CronTrigger => t.kind === 'cron');
 }
 
-/** The single webhook trigger from a trigger list, if any. */
+/** True for a webhook trigger still awaiting server-side provisioning. */
+export function isPendingWebhookTrigger(t: AutomationTrigger): t is PendingWebhookTrigger {
+  return t.kind === 'webhook' && 'pending' in t;
+}
+
+/**
+ * The single *provisioned* webhook trigger from a trigger list, if any.
+ * A pending (un-minted) webhook trigger is skipped — it has no `id` to
+ * route on yet.
+ */
 export function webhookTriggerOf(
   triggers: readonly AutomationTrigger[],
 ): WebhookTrigger | undefined {
-  return triggers.find((t): t is WebhookTrigger => t.kind === 'webhook');
+  return triggers.find((t): t is WebhookTrigger => t.kind === 'webhook' && 'id' in t);
+}
+
+/** The single pending (un-provisioned) webhook trigger, if any. */
+export function pendingWebhookTriggerOf(
+  triggers: readonly AutomationTrigger[],
+): PendingWebhookTrigger | undefined {
+  return triggers.find(isPendingWebhookTrigger);
 }
 
 /**
@@ -219,6 +245,19 @@ function validateOneTrigger(raw: unknown, field: string): AutomationTrigger {
     return { kind: 'cron', expr };
   }
   if (t.kind === 'webhook') {
+    // A pending webhook (`{ kind: 'webhook', pending: true }`) the
+    // builder agent declared but cannot provision — accepted here so
+    // the manifest round-trips until the builder mints id + secret.
+    if (t.id === undefined && t.secretHash === undefined) {
+      if (t.pending !== true) {
+        throw new AutomationManifestError(
+          'invalid_trigger',
+          `manifest.${field} webhook trigger needs a minted "id" + "secretHash", or "pending": true`,
+          field,
+        );
+      }
+      return { kind: 'webhook', pending: true };
+    }
     const id = requireString(t.id, `${field}.id`);
     if (!isValidWebhookId(id)) {
       throw new AutomationManifestError(

@@ -22,9 +22,22 @@
  */
 
 import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { listAutomationProjects } from './automation-project.js';
-import { webhookTriggerOf } from './automation-manifest.js';
+import {
+  APP_AUTOMATIONS_SUBDIR,
+  listAutomationProjects,
+  readAutomationProjectAt,
+  writeAutomationManifestAt,
+} from './automation-project.js';
+import {
+  isPendingWebhookTrigger,
+  pendingWebhookTriggerOf,
+  webhookTriggerOf,
+  type AutomationTrigger,
+  type WebhookTrigger,
+} from './automation-manifest.js';
 
 /** URL prefix the gateway mounts the webhook route under. */
 export const WEBHOOK_ROUTE_PREFIX = '/_centraid-hook';
@@ -57,6 +70,90 @@ export function verifyWebhookSecret(provided: string, expectedHash: string): boo
   const b = Buffer.from(expectedHash, 'hex');
   if (a.length !== b.length || a.length === 0) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+function isEnoent(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'ENOENT';
+}
+
+/**
+ * A webhook freshly minted by the provisioning pass. `secret` is the
+ * plaintext shared secret — surfaced to the user exactly once and never
+ * persisted; the manifest keeps only its SHA-256 hash.
+ */
+export interface ProvisionedWebhook {
+  /** Automation project directory. */
+  readonly dir: string;
+  /** Automation id (the directory basename). */
+  readonly automationId: string;
+  /** Owning app id, when the automation is app-owned (issue #98). */
+  readonly ownerApp?: string;
+  /** Minted webhook route slug — the path segment under the prefix. */
+  readonly webhookId: string;
+  /** Plaintext shared secret — shown once, never written to disk. */
+  readonly secret: string;
+}
+
+/**
+ * Provision a pending webhook trigger in the automation project at
+ * `dir`. A pending trigger — `{ kind: 'webhook', pending: true }` — is
+ * what the builder agent writes when the user asks for a webhook: the
+ * agent cannot mint crypto-random credentials. This pass mints a route
+ * id + secret, rewrites the trigger to its provisioned form, and
+ * persists the manifest. Returns the minted secret (to be shown once)
+ * or `undefined` when the project has no pending webhook.
+ */
+export async function provisionPendingWebhookAt(
+  dir: string,
+  ownerApp?: string,
+): Promise<ProvisionedWebhook | undefined> {
+  const row = await readAutomationProjectAt(dir, ownerApp);
+  if (!row) return undefined;
+  if (!pendingWebhookTriggerOf(row.triggers)) return undefined;
+
+  const webhookId = generateWebhookId();
+  const secret = generateWebhookSecret();
+  const provisioned: WebhookTrigger = {
+    kind: 'webhook',
+    id: webhookId,
+    secretHash: hashWebhookSecret(secret),
+  };
+  const triggers: AutomationTrigger[] = row.triggers.map((t) =>
+    isPendingWebhookTrigger(t) ? provisioned : t,
+  );
+  await writeAutomationManifestAt(dir, { ...row.manifest, triggers });
+  return {
+    dir,
+    automationId: row.id,
+    ...(ownerApp ? { ownerApp } : {}),
+    webhookId,
+    secret,
+  };
+}
+
+/**
+ * Provision every pending webhook across an app's owned automations at
+ * `<appDir>/automations/<id>/` (issue #98). A missing `automations/`
+ * subdir contributes nothing. Each entry's `ownerApp` is the app id.
+ */
+export async function provisionAppPendingWebhooks(appDir: string): Promise<ProvisionedWebhook[]> {
+  const autoRoot = path.join(appDir, APP_AUTOMATIONS_SUBDIR);
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = await fs.readdir(autoRoot, { withFileTypes: true });
+  } catch (err) {
+    if (isEnoent(err)) return [];
+    throw err;
+  }
+  const appId = path.basename(appDir);
+  const out: ProvisionedWebhook[] = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
+    const minted = await provisionPendingWebhookAt(path.join(autoRoot, e.name), appId);
+    if (minted) out.push(minted);
+  }
+  return out;
 }
 
 /** Result of the caller-supplied automation fire. */

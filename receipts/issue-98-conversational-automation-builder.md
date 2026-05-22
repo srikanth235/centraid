@@ -10,6 +10,7 @@ as UI.
 ## Checklist
 
 - [x] Commit 1 — conversational automation builder + app-owned automations
+- [x] Commit 2 — builder-minted webhook triggers
 
 Follow-up (tracked on #98, not in this commit):
 
@@ -70,26 +71,77 @@ Follow-up (tracked on #98, not in this commit):
   draft and opens the builder; the old `openNewAutomationSheet` form
   (and its `CRON_PRESETS` / `RETENTION_PRESETS` helpers) is removed.
 
+### Commit 2 — builder-minted webhook triggers
+
+The chat builder previously could not author webhook automations — the
+prompts told the agent to avoid them, because minting a route id +
+secret is a privileged step the LLM cannot do. This commit splits that
+responsibility: the **agent declares** a webhook, the **builder mints**
+it.
+
+#### runtime-core — pending-webhook manifest form + provisioning pass
+
+- New `PendingWebhookTrigger` (`{ kind: 'webhook', pending: true }`) —
+  the handoff form the builder agent writes. `AutomationTrigger` is now
+  `CronTrigger | WebhookTrigger | PendingWebhookTrigger`.
+  `validateManifest` accepts the pending form; a webhook trigger with
+  neither a minted `id`/`secretHash` nor `pending: true` is still
+  rejected. `webhookTriggerOf` returns only *provisioned* webhooks (it
+  guards on `'id' in t`); `pendingWebhookTriggerOf` /
+  `isPendingWebhookTrigger` cover the pending form.
+- `provisionPendingWebhookAt(dir, ownerApp?)` mints a crypto-random
+  `id` + `secret`, rewrites the pending trigger to its provisioned
+  shape, and persists the manifest — returning the plaintext secret
+  once (`ProvisionedWebhook`). `provisionAppPendingWebhooks(appDir)`
+  runs it across an app's `automations/` subdir.
+  `writeAutomationManifestAt(dir, manifest)` is the by-directory write
+  primitive `writeAutomationManifest` now delegates to.
+
+#### desktop — post-turn provisioning + one-time secret surfacing
+
+- The `agent:start` IPC's per-turn `prompt` wrapper runs a provisioning
+  pass *after* `session.prompt` resolves: an automation project
+  provisions itself, an app project scans its `automations/`. The
+  `agent:prompt` IPC returns the minted webhooks; the builder renderer
+  surfaces each as a one-time assistant message carrying the endpoint
+  URL + plaintext secret (never persisted — the manifest keeps only the
+  hash). The config pane renders a pending webhook as
+  "provisioning…" until the next turn mints it.
+
+#### builder-harness — prompts declare, not refuse
+
+- Both `CENTRAID_APPEND_PROMPT` and `AUTOMATION_APPEND_PROMPT` now tell
+  the agent to declare `{ "kind": "webhook", "pending": true }` when the
+  user wants an inbound-HTTP trigger, and never to invent an `id` or
+  `secretHash`.
+
 ## Out of scope
 
 - Scheduling and execution of app-owned automations — the OS scheduler
   host + `centraid run-automation` CLI + cloud gateway. This commit
   lands only the *discovery* foundation; the runtime wiring is the
   tracked follow-up on the checklist above.
-- Webhook triggers in the chat builder — they need server-side secret
-  minting the agent cannot do, so the prompts steer the agent to cron /
-  manual automations.
+- Webhook *routing* of app-owned automations — the gateway resolves
+  `POST /_centraid-hook/<id>` only against standalone projects under
+  `automationsDir` (`listAutomationProjects`). Routing app-owned
+  webhooks is deferred to the scheduling/runtime pass.
 - Bidirectional form editing — the config pane is a read-only rendered
   view of the manifest; chat is the only input.
 
 ## Verification
 
-- Full monorepo `typecheck` — 16/16 turbo tasks green. `build` for the
-  desktop chain green. Lint (`oxlint`) + format (`oxfmt`) clean across
-  all changed files.
+- `typecheck` green across the runtime-core / builder-harness /
+  openclaw-plugin / agent-runtime / desktop chain (15/15 turbo tasks).
+  `build` for the desktop chain green. Lint (`oxlint`) + format
+  (`oxfmt`) clean across all changed files.
+- runtime-core `automation-manifest` tests — 23/23 pass, including new
+  cases for the pending webhook form and the
+  neither-provisioned-nor-pending rejection. `automation-project`
+  tests — 6/6 pass.
 - The worktree had no `node_modules`; a worktree-local `bun install`
   was run so cross-package imports resolve to the worktree's own
   sources rather than the parent checkout's stale builds.
 - The Electron builder UI was not interactively click-tested — the
-  automation builder mode, chat→config-pane sync, test-fire, and the
-  Enable gate are type/build-verified only.
+  automation builder mode, chat→config-pane sync, test-fire, the Enable
+  gate, and the webhook-secret one-time chat message are
+  type/build-verified only.

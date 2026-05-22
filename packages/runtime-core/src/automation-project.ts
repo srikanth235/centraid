@@ -244,16 +244,24 @@ export async function listAllAutomationProjects(roots: {
   return { rows, errors: [...standalone.errors, ...appOwned.errors] };
 }
 
-/** Overwrite a project's `automation.json` with `manifest`. */
+/** Overwrite the `automation.json` in an explicit project directory. */
+export async function writeAutomationManifestAt(
+  dir: string,
+  manifest: AutomationManifest,
+): Promise<void> {
+  await fs.writeFile(
+    path.join(dir, AUTOMATION_MANIFEST_FILE),
+    JSON.stringify(manifest, null, 2) + '\n',
+  );
+}
+
+/** Overwrite a standalone project's `automation.json` with `manifest`. */
 export async function writeAutomationManifest(
   automationsDir: string,
   id: string,
   manifest: AutomationManifest,
 ): Promise<void> {
-  await fs.writeFile(
-    automationManifestPath(automationsDir, id),
-    JSON.stringify(manifest, null, 2) + '\n',
-  );
+  await writeAutomationManifestAt(path.join(automationsDir, id), manifest);
 }
 
 /**

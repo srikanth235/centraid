@@ -42,6 +42,10 @@ import {
   generateWebhookId,
   generateWebhookSecret,
   hashWebhookSecret,
+  provisionPendingWebhookAt,
+  provisionAppPendingWebhooks,
+  WEBHOOK_ROUTE_PREFIX,
+  type ProvisionedWebhook,
   type AutomationRow,
   type AutomationRunNodeRow,
   type AutomationRunRow,
@@ -130,10 +134,24 @@ export const Channel = {
   INSIGHTS_SUMMARY: 'centraid:insights:summary',
 } as const;
 
+/**
+ * A webhook the post-turn provisioning pass minted for an automation
+ * the builder agent authored. The plaintext `secret` crosses to the
+ * renderer exactly once — it is shown to the user and never persisted
+ * (the manifest keeps only the SHA-256 hash).
+ */
+interface MintedWebhookInfo {
+  automationId: string;
+  ownerApp?: string;
+  webhookId: string;
+  url: string;
+  secret: string;
+}
+
 interface AgentSessionHandle {
   projectId: string;
   projectDir: string;
-  prompt(text: string): Promise<void>;
+  prompt(text: string): Promise<{ mintedWebhooks: MintedWebhookInfo[] }>;
   stop(): Promise<void>;
 }
 
@@ -369,6 +387,36 @@ export function registerIpcHandlers(): void {
         });
       });
 
+      // Mint id + secret for any pending webhook trigger the agent
+      // declared this turn (`{ kind: 'webhook', pending: true }`). The
+      // agent cannot generate crypto-random credentials; the builder
+      // can. Rewrites the manifest in place and returns the one-time
+      // secrets for the renderer to show. Best-effort — a provisioning
+      // failure must not fail the turn.
+      const provisionPendingWebhooks = async (): Promise<MintedWebhookInfo[]> => {
+        const gatewayBase = settings.remoteGatewayUrl.replace(/\/+$/, '');
+        const toInfo = (w: ProvisionedWebhook): MintedWebhookInfo => ({
+          automationId: w.automationId,
+          ...(w.ownerApp ? { ownerApp: w.ownerApp } : {}),
+          webhookId: w.webhookId,
+          url: `${gatewayBase}${WEBHOOK_ROUTE_PREFIX}/${w.webhookId}`,
+          secret: w.secret,
+        });
+        try {
+          if (isAutomation) {
+            const minted = await provisionPendingWebhookAt(projectDir);
+            return minted ? [toInfo(minted)] : [];
+          }
+          return (await provisionAppPendingWebhooks(projectDir)).map(toInfo);
+        } catch (err) {
+          console.warn(
+            `[automations] webhook provisioning failed for ${input.projectId}: ` +
+              (err instanceof Error ? err.message : String(err)),
+          );
+          return [];
+        }
+      };
+
       sessions.set(win.id, {
         projectId: input.projectId,
         projectDir,
@@ -383,6 +431,7 @@ export function registerIpcHandlers(): void {
             await capturePreviewSnapshot(win, projectDir).catch(() => undefined);
           }
           await session.prompt(text);
+          return { mintedWebhooks: await provisionPendingWebhooks() };
         },
         stop: async () => {
           session.abort();
@@ -404,8 +453,8 @@ export function registerIpcHandlers(): void {
     if (!win) throw new Error('no window for agent prompt');
     const handle = sessions.get(win.id);
     if (!handle) throw new Error('agent session not started for this window');
-    await handle.prompt(input.text);
-    return { ok: true };
+    const { mintedWebhooks } = await handle.prompt(input.text);
+    return { ok: true, mintedWebhooks };
   });
 
   ipcMain.handle(Channel.AGENT_STOP, async (event) => {

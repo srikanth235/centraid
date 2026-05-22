@@ -3667,6 +3667,27 @@
       }
     }
 
+    // A webhook trigger the agent declared this turn cannot be minted
+    // by the agent — the builder provisions it server-side and returns
+    // the one-time secret here. Surface it as an assistant message so
+    // it stays copyable; it is never persisted (the manifest keeps only
+    // the hash) and won't survive a reload, which is the intent.
+    function announceMintedWebhooks(minted: CentraidMintedWebhook[]): void {
+      for (const w of minted) {
+        pushMessage({
+          kind: 'ai',
+          text:
+            `Webhook provisioned for “${w.automationId}”.\n\n` +
+            `Endpoint (POST): ${w.url}\n` +
+            `Secret (shown once — save it now): ${w.secret}\n\n` +
+            'Authenticate each request with the header ' +
+            '`Authorization: Bearer <secret>`. The secret is not stored — ' +
+            'only a hash is kept in automation.json.',
+        });
+      }
+      if (minted.length > 0) renderChat();
+    }
+
     async function sendUserPrompt(text: string): Promise<void> {
       if (!projectId) return;
       pushMessage({ kind: 'user', text });
@@ -3675,7 +3696,8 @@
       currentThinkingMsgIndex = -1;
       renderChat();
       try {
-        await Api().promptAgent({ text });
+        const { mintedWebhooks } = await Api().promptAgent({ text });
+        announceMintedWebhooks(mintedWebhooks);
       } catch (err) {
         generating = false;
         pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
@@ -3712,7 +3734,8 @@
           generating = true;
           renderChat();
           try {
-            await Api().promptAgent({ text: initialPrompt });
+            const { mintedWebhooks } = await Api().promptAgent({ text: initialPrompt });
+            announceMintedWebhooks(mintedWebhooks);
           } catch (err) {
             generating = false;
             pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
@@ -3816,7 +3839,8 @@
       generating = true;
       renderChat();
       try {
-        await Api().promptAgent({ text: initialPrompt });
+        const { mintedWebhooks } = await Api().promptAgent({ text: initialPrompt });
+        announceMintedWebhooks(mintedWebhooks);
       } catch (err) {
         generating = false;
         pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
@@ -3991,14 +4015,29 @@
             }
             triggersBody.append(card);
           } else {
-            triggersBody.append(
-              el('div', { class: 'ab-trigger' }, [
-                el('div', { class: 'ab-trigger-main' }, [
-                  el('span', { class: 'ab-trigger-icon', trustedHtml: Icon.Globe({ size: 14 }) }),
-                  el('span', { class: 'ab-trigger-desc' }, 'Webhook trigger'),
-                ]),
+            // A webhook trigger is either provisioned (carries a minted
+            // route id) or still pending — the builder mints id + secret
+            // on the next agent turn.
+            const pending = t.id === undefined;
+            const card = el('div', { class: 'ab-trigger' }, [
+              el('div', { class: 'ab-trigger-main' }, [
+                el('span', { class: 'ab-trigger-icon', trustedHtml: Icon.Globe({ size: 14 }) }),
+                el(
+                  'span',
+                  { class: 'ab-trigger-desc' },
+                  pending ? 'Webhook trigger — provisioning…' : 'Webhook trigger',
+                ),
+                ...(pending ? [] : [el('code', { class: 'ab-trigger-expr' }, `/${t.id}`)]),
               ]),
-            );
+            ]);
+            if (pending) {
+              card.append(
+                el('div', { class: 'ab-nextruns' }, [
+                  el('span', { class: 'ab-muted' }, 'A URL + secret are minted server-side.'),
+                ]),
+              );
+            }
+            triggersBody.append(card);
           }
         }
       }

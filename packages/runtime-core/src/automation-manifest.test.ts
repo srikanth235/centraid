@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   AutomationManifestError,
+  isPendingWebhookTrigger,
   isValidAutomationId,
   isValidCronExpression,
   parseManifest,
@@ -83,6 +84,22 @@ describe('validateManifest', () => {
     raw.triggers = [{ kind: 'webhook', id: 'abc123', secretHash: 'deadbeef' }];
     const m = validateManifest(raw);
     assert.equal(m.triggers[0]?.kind, 'webhook');
+  });
+
+  it('accepts a pending webhook trigger (un-provisioned)', () => {
+    const raw = baseManifest();
+    delete raw.trigger;
+    raw.triggers = [{ kind: 'webhook', pending: true }];
+    const m = validateManifest(raw);
+    assert.equal(m.triggers[0]?.kind, 'webhook');
+    assert.equal(isPendingWebhookTrigger(m.triggers[0]!), true);
+  });
+
+  it('rejects a webhook trigger that is neither provisioned nor pending', () => {
+    const raw = baseManifest();
+    delete raw.trigger;
+    raw.triggers = [{ kind: 'webhook' }];
+    assert.throws(() => validateManifest(raw), AutomationManifestError);
   });
 
   it('treats an empty triggers list as legal (manual fire only)', () => {
