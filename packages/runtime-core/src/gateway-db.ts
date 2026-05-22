@@ -1,40 +1,37 @@
 /*
- * Centraid gateway state — split across TWO SQLite files, each with its
- * own connection, migration ladder, and `PRAGMA user_version`:
+ * Centraid SQLite state — three migration ladders, each with its own
+ * connection and `PRAGMA user_version`:
  *
- *   gateway     (`centraid-gateway.sqlite`)
+ *   gateway     (`centraid-gateway.sqlite`) — gateway-scoped identity
  *     users          — the user identity row(s). Single-user model today;
  *                      schema is multi-user-ready so a future shift to
  *                      multi-tenant doesn't need a column-add migration.
  *     user_prefs     — global prefs keyed by (user_id, key); JSON-encoded
  *                      values. Real FK-cascaded from `users` (same file).
  *
- *   activity    (`centraid-activity.sqlite`) — the unified agent-run ledger
- *     automations      — user-owned automations, keyed by a UUID `id`.
- *                        `user_id` is the owner; `name` is unique per
- *                        user. No `origin_app_id` — an automation is no
- *                        longer scoped to the app it was authored from
- *                        (issue #90 model-B).
+ *   runtime     (`<appRoot>/runtime.sqlite`) — one per app, the app's
+ *                run ledger + chat history + automation KV
  *     chat_sessions    — conversation containers, scoped by `user_id`. A
  *                        session is the single chat concept — its id IS
- *                        the chat window id. No `origin_app_id`: chat is
- *                        a flat per-user store (issue #90); `appId` is
- *                        per-turn context, never persisted on the session.
- *     runs             — one row per agent run. A chat turn, an automation
- *                        fire, and a builder iteration are the same object;
- *                        `kind` discriminates. Carries denormalized
- *                        token/cost rollups written at finish.
+ *                        the chat window id. Chat is app-scoped (#98):
+ *                        every session belongs to the app whose file it
+ *                        lives in.
+ *     runs             — one row per agent run. A chat turn and an
+ *                        automation fire are the same object; `kind`
+ *                        discriminates. Carries denormalized token/cost
+ *                        rollups written at finish.
  *     run_nodes        — the ordered agentic trace. One row per model
  *                        inference call (`kind='step'`), tool call, or
- *                        sub-run. A chat turn's transcript is folded here:
- *                        `chat_messages` no longer exists (issue #90).
+ *                        sub-run. A chat turn's transcript is folded here.
  *     automation_state — per-automation KV, keyed by (automation_id, key).
  *
- *     All five tables stay in one file so a sub-run can link its
- *     `parent_run_id` self-FK into one joinable DAG (a self-FK can't
- *     cross SQLite files), and `runs.chat_session_id` is a real same-file
- *     FK. Runtime-owned; never reachable from handler `db` or the
- *     `centraid_sql_*` agent tools.
+ *     Within one app's file `runs.chat_session_id` is a real same-file
+ *     FK; `parent_run_id` is a plain column (a cross-app `ctx.invoke`
+ *     sub-run's parent lives in another file). Runtime-owned; never
+ *     reachable from handler `db` or the `centraid_sql_*` agent tools.
+ *
+ *   analytics   (`centraid-analytics.sqlite`) — gateway-scoped, one
+ *                `run_summary` row per run; the Insights source.
  *
  * Each file gets one connection and one provider. The OpenClaw plugin's
  * worker subprocesses (which construct the runtime in every context but
@@ -104,44 +101,25 @@ export const GATEWAY_MIGRATIONS: readonly string[] = [
  * joinable DAG. Runtime-owned; never reachable from handler `db` or the
  * `centraid_sql_*` agent tools.
  */
-export const ACTIVITY_MIGRATIONS: readonly string[] = [
-  // 0 → 1: drop the legacy `automations` definition table.
-  //
-  // Issue #91: an automation is a first-class *project* on disk — its
-  // own directory (`<appCodeDir>/automations/<id>/`), with
-  // `automation.json` as the source of truth. There is no SQLite
-  // definition table any more; this
-  // migration is edited in place (v0, no backfill) to drop the table a
-  // pre-#91 build created.
-  `
-    DROP INDEX IF EXISTS idx_automations_user;
-    DROP TABLE IF EXISTS automations;
-  `,
-  // 1 → 2: `chat_sessions` + the unified `runs` / `run_nodes` ledger +
-  // automation KV (issue #90 — no backfill, v0).
-  //
-  // `chat_sessions` — conversation containers. The id IS the chat window
-  // id. `user_id` is a plain column with no FK (`users` lives in the
-  // separate gateway file); the relationship is application-enforced.
-  // No `origin_app_id`: chat is a flat per-user store. The transcript is
-  // NOT stored here — a chat turn is a `runs` row and its messages are
-  // `run_nodes` (issue #90 fold; `chat_messages` is gone).
-  //
-  // `runs` — one row per agent run. `kind` discriminates
-  // chat / automation / build; `automation_id` is set for
-  // kind='automation', `chat_session_id` for kind='chat', `app_id` for
-  // kind='build'. `chat_session_id` is a real same-file FK so deleting a
-  // session cascades its turns. `parent_run_id` is the sub-run DAG edge.
-  // The `total_*` columns are a denormalized rollup written at finish,
-  // exclusive of child sub-runs, so a SUM over every run is the true
-  // grand total with no double-count.
-  //
-  // `run_nodes` — the ordered trace. `kind='step'` is one primary
-  // model-inference call (token accounting lives here — input tokens
-  // compound across steps, cache read/write differ per call);
-  // `kind IN ('tool','agent','invoke')` are the per-call audit rows.
-  // `cost_usd` is frozen at write time from a per-model price table;
-  // NULL means "no price known" (distinct from a genuine $0).
+/**
+ * Per-app run-ledger migration ladder — `runtime.sqlite` (issue #98).
+ *
+ * Decision 3 of the #98 revision: an app's automation run ledger,
+ * chat sessions, and `ctx.state` are per-app, in
+ * `<appRoot>/runtime.sqlite` — a separate file from the handler-owned
+ * `data.sqlite`, version-persistent. The global
+ * `centraid-activity.sqlite` is gone; chat is app-scoped now.
+ *
+ * `chat_sessions` is the conversation-container table; a chat turn is a
+ * `runs` row (`kind='chat'`) and `runs.chat_session_id` is a real
+ * same-file FK so deleting a session cascades its turns. The other
+ * sub-run edge — `parent_run_id` — stays a plain column with no FK: a
+ * cross-app `ctx.invoke` sub-run's parent lives in a *different* app's
+ * file and a SQLite FK cannot span files.
+ */
+export const RUNTIME_MIGRATIONS: readonly string[] = [
+  // 0 → 1: the per-app run ledger + chat sessions. `runs.trigger_origin`
+  // is in the baseline (a fresh file never needs the #96 column-add).
   `
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id                 TEXT PRIMARY KEY,
@@ -164,7 +142,8 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
       chat_session_id          TEXT REFERENCES chat_sessions(id) ON DELETE CASCADE,
       app_id                   TEXT,
       trigger                  TEXT NOT NULL,
-      parent_run_id            TEXT REFERENCES runs(id) ON DELETE SET NULL,
+      trigger_origin           TEXT,
+      parent_run_id            TEXT,
       note                     TEXT,
       summary                  TEXT,
       input_json               TEXT,
@@ -229,105 +208,6 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
       PRIMARY KEY (automation_id, key)
     );
   `,
-  // 2 → 3: `runs.trigger_origin` — what *source* fired the run (issue
-  // #96). Once an automation can fire from a cron schedule, an inbound
-  // webhook, or an explicit "Run now", the Executions tab needs to show
-  // which. Nullable: pre-#96 rows leave it NULL.
-  `
-    ALTER TABLE runs ADD COLUMN trigger_origin TEXT;
-  `,
-];
-
-/**
- * Per-app run-ledger migration ladder — `runtime.sqlite` (issue #98).
- *
- * Decision 3 of the #98 revision: an app's automation run ledger +
- * `ctx.state` are per-app, in `<appRoot>/runtime.sqlite` — a separate
- * file from the handler-owned `data.sqlite`, version-persistent. The
- * global `centraid-activity.sqlite` no longer holds automation runs.
- *
- * The tables are the same `runs` / `run_nodes` / `automation_state`
- * shape as the activity ledger, with two differences: there is no
- * `chat_sessions` table (chat is not per-app), and `parent_run_id` /
- * `chat_session_id` are plain columns with no foreign key — a
- * cross-app `ctx.invoke` sub-run's `parent_run_id` points at a run in
- * a *different* app's file, and a SQLite FK cannot span files.
- */
-export const RUNTIME_MIGRATIONS: readonly string[] = [
-  // 0 → 1: the per-app run ledger. `runs.trigger_origin` is in the
-  // baseline (a fresh file never needs the #96 column-add migration).
-  `
-    CREATE TABLE IF NOT EXISTS runs (
-      id                       TEXT PRIMARY KEY,
-      kind                     TEXT NOT NULL DEFAULT 'automation',
-      automation_id            TEXT,
-      chat_session_id          TEXT,
-      app_id                   TEXT,
-      trigger                  TEXT NOT NULL,
-      trigger_origin           TEXT,
-      parent_run_id            TEXT,
-      note                     TEXT,
-      summary                  TEXT,
-      input_json               TEXT,
-      output_json              TEXT,
-      ok                       INTEGER NOT NULL DEFAULT 0,
-      error                    TEXT,
-      pinned                   INTEGER NOT NULL DEFAULT 0,
-      retry_of                 TEXT,
-      started_at               INTEGER NOT NULL,
-      ended_at                 INTEGER,
-      total_input_tokens       INTEGER,
-      total_output_tokens      INTEGER,
-      total_cache_read_tokens  INTEGER,
-      total_cache_write_tokens INTEGER,
-      total_cost_usd           REAL,
-      step_count               INTEGER,
-      tool_count               INTEGER
-    );
-    CREATE INDEX IF NOT EXISTS idx_runs_automation_started
-      ON runs(automation_id, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_runs_started
-      ON runs(started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_runs_parent
-      ON runs(parent_run_id);
-
-    CREATE TABLE IF NOT EXISTS run_nodes (
-      id                 TEXT PRIMARY KEY,
-      run_id             TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-      ordinal            INTEGER NOT NULL,
-      batch_id           INTEGER,
-      kind               TEXT NOT NULL,
-      model              TEXT,
-      provider           TEXT,
-      input_tokens       INTEGER,
-      output_tokens      INTEGER,
-      cache_read_tokens  INTEGER,
-      cache_write_tokens INTEGER,
-      cost_usd           REAL,
-      app_id             TEXT,
-      name               TEXT,
-      args_json          TEXT,
-      output_json        TEXT,
-      child_run_id       TEXT,
-      ok                 INTEGER NOT NULL DEFAULT 1,
-      error              TEXT,
-      started_at         INTEGER NOT NULL,
-      ended_at           INTEGER,
-      duration_ms        INTEGER
-    );
-    CREATE INDEX IF NOT EXISTS idx_run_nodes_by_run
-      ON run_nodes(run_id, ordinal);
-    CREATE INDEX IF NOT EXISTS idx_run_nodes_by_model
-      ON run_nodes(model, started_at DESC);
-
-    CREATE TABLE IF NOT EXISTS automation_state (
-      automation_id TEXT NOT NULL,
-      key           TEXT NOT NULL,
-      value_json    TEXT,
-      updated_at    INTEGER NOT NULL,
-      PRIMARY KEY (automation_id, key)
-    );
-  `,
 ];
 
 /**
@@ -336,8 +216,8 @@ export const RUNTIME_MIGRATIONS: readonly string[] = [
  *
  * Push-based analytics: at run completion the runtime write-throughs a
  * one-row summary to this gateway-scoped file. Full run detail stays in
- * the per-app `runtime.sqlite` (automations) or `centraid-activity.sqlite`
- * (chat); this file is the single source the Insights screen reads, so
+ * the per-app `runtime.sqlite` (automation *and* chat runs); this file
+ * is the single source the Insights screen reads, so
  * it has no cross-file scan and no cron aggregator. The write is
  * best-effort — a failure never fails the run, and the per-app file
  * stays authoritative for a future backfill.
@@ -458,17 +338,7 @@ export function makeGatewayDbProvider(dbPath: string): DatabaseProvider {
   return makeProvider(dbPath, GATEWAY_MIGRATIONS, 'gateway');
 }
 
-/** Open the activity (automations + chat_sessions + runs + run_nodes + ctx.state) DB file. */
-export function openActivityDb(dbPath: string): DatabaseSync {
-  return openDb(dbPath, ACTIVITY_MIGRATIONS, 'activity');
-}
-
-/** Lazy provider for the activity (automations + chat_sessions + runs + run_nodes + ctx.state) DB file. */
-export function makeActivityDbProvider(dbPath: string): DatabaseProvider {
-  return makeProvider(dbPath, ACTIVITY_MIGRATIONS, 'activity');
-}
-
-/** Open an app's per-app `runtime.sqlite` (runs + run_nodes + ctx.state). */
+/** Open an app's per-app `runtime.sqlite` (chat_sessions + runs + run_nodes + ctx.state). */
 export function openRuntimeDb(dbPath: string): DatabaseSync {
   return openDb(dbPath, RUNTIME_MIGRATIONS, 'runtime');
 }

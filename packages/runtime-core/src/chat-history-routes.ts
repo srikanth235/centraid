@@ -46,16 +46,16 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  * process (route handlers don't fire in agent-worker contexts), avoiding
  * stray DB handles in subprocesses that never touch chat history.
  *
- * Per-user scoping is enforced inside the store, not here — the handler
- * never sees the user UUID because `ChatHistoryStore` resolves it itself
- * via the `userIdProvider` it was constructed with.
+ * Chat is app-scoped (issue #98): every route carries the owning `appId`,
+ * which the store uses to resolve that app's `runtime.sqlite`. Per-user
+ * scoping is still enforced inside the store via its `userIdProvider`.
  *
  * Dispatch map:
- *   GET    /_centraid-chat/sessions                     list (flat per-user)
- *   POST   /_centraid-chat/sessions                     create  body: {mode?, title?}
- *   GET    /_centraid-chat/sessions/<id>                load (with transcript)
- *   PATCH  /_centraid-chat/sessions/<id>                rename  body: {title}
- *   DELETE /_centraid-chat/sessions/<id>                delete
+ *   GET    /_centraid-chat/apps/<appId>/sessions        list (this app)
+ *   POST   /_centraid-chat/apps/<appId>/sessions        create  body: {mode?, title?}
+ *   GET    /_centraid-chat/apps/<appId>/sessions/<id>   load (with transcript)
+ *   PATCH  /_centraid-chat/apps/<appId>/sessions/<id>   rename  body: {title}
+ *   DELETE /_centraid-chat/apps/<appId>/sessions/<id>   delete
  *
  * The transcript is not appended over HTTP — a chat turn is recorded as a
  * `runs` row by the `/centraid/<id>/_chat` route's runner (issue #90 fold).
@@ -65,58 +65,61 @@ export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
     if (!req.url || !req.url.startsWith(ROUTE_PREFIX)) return false;
     // Use a dummy host because IncomingMessage.url is path-only.
     const url = new URL(req.url, 'http://x');
-    const sub = url.pathname.slice(ROUTE_PREFIX.length); // e.g. "/sessions/abc/messages"
+    const sub = url.pathname.slice(ROUTE_PREFIX.length); // e.g. "/apps/foo/sessions/abc"
     const method = (req.method ?? 'GET').toUpperCase();
     const store = getStore();
 
     try {
-      if (sub === '/sessions' || sub === '/sessions/') {
+      // /apps/<appId>/sessions  and  /apps/<appId>/sessions/<id>
+      const m = sub.match(/^\/apps\/([^/]+)\/sessions(?:\/([^/]+))?\/?$/);
+      if (!m || !m[1]) {
+        sendError(res, 404, 'unknown chat-history route');
+        return true;
+      }
+      const appId = decodeURIComponent(m[1]);
+      const id = m[2] ? decodeURIComponent(m[2]) : undefined;
+
+      if (!id) {
         if (method === 'GET') {
-          sendJson(res, 200, { sessions: store.listSessions() });
+          sendJson(res, 200, { sessions: store.listSessions(appId) });
           return true;
         }
         if (method === 'POST') {
           const body = (await readJsonBody(req)) as { mode?: string; title?: string } | undefined;
           const mode = body?.mode === 'data' ? 'data' : 'full';
-          sendJson(res, 200, store.createSession(mode, body?.title ?? ''));
+          sendJson(res, 200, store.createSession(appId, mode, body?.title ?? ''));
           return true;
         }
         sendError(res, 405, 'method not allowed');
         return true;
       }
 
-      // /sessions/<id>
-      const m = sub.match(/^\/sessions\/([^/]+)\/?$/);
-      if (m && m[1]) {
-        const id = decodeURIComponent(m[1]);
-        if (method === 'GET') {
-          const full = store.getSession(id);
-          if (!full) {
-            sendError(res, 404, 'session not found');
-            return true;
-          }
-          sendJson(res, 200, full);
+      if (method === 'GET') {
+        const full = store.getSession(appId, id);
+        if (!full) {
+          sendError(res, 404, 'session not found');
           return true;
         }
-        if (method === 'PATCH') {
-          const body = (await readJsonBody(req)) as { title?: string } | undefined;
-          const title = typeof body?.title === 'string' ? body.title : '';
-          const updated = store.renameSession(id, title);
-          if (!updated) {
-            sendError(res, 404, 'session not found');
-            return true;
-          }
-          sendJson(res, 200, updated);
-          return true;
-        }
-        if (method === 'DELETE') {
-          const ok = store.deleteSession(id);
-          sendJson(res, ok ? 200 : 404, { ok });
-          return true;
-        }
+        sendJson(res, 200, full);
+        return true;
       }
-
-      sendError(res, 404, 'unknown chat-history route');
+      if (method === 'PATCH') {
+        const body = (await readJsonBody(req)) as { title?: string } | undefined;
+        const title = typeof body?.title === 'string' ? body.title : '';
+        const updated = store.renameSession(appId, id, title);
+        if (!updated) {
+          sendError(res, 404, 'session not found');
+          return true;
+        }
+        sendJson(res, 200, updated);
+        return true;
+      }
+      if (method === 'DELETE') {
+        const ok = store.deleteSession(appId, id);
+        sendJson(res, ok ? 200 : 404, { ok });
+        return true;
+      }
+      sendError(res, 405, 'method not allowed');
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

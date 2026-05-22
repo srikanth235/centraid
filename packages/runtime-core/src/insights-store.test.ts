@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { makeActivityDbProvider, makeAnalyticsDbProvider } from './gateway-db.js';
+import { makeRuntimeDbProvider, makeAnalyticsDbProvider } from './gateway-db.js';
 import { AnalyticsStore } from './analytics-store.js';
 import { AutomationRunsStore } from './automation-runs-store.js';
 import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
@@ -16,7 +16,7 @@ import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
  */
 function setup(): { runs: AutomationRunsStore; insights: InsightsStore } {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-insights-'));
-  const ledger = makeActivityDbProvider(join(dir, 'ledger.sqlite'));
+  const ledger = makeRuntimeDbProvider(join(dir, 'runtime.sqlite'));
   const analyticsProvider = makeAnalyticsDbProvider(join(dir, 'analytics.sqlite'));
   const analytics = new AnalyticsStore(analyticsProvider);
   return {

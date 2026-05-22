@@ -24,6 +24,12 @@ Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid
 - [x] Commit 10 — desktop: Insights + run feeds on the central DB
 - [x] Commit 11 — builder-harness: scaffold/clone docs on the unified model
 
+Chat moves to the per-app `runtime.sqlite` (app-scoped chat):
+
+- [x] Commit 12 — runtime-core: per-app chat store
+- [ ] Commit 13 — openclaw-plugin: wire the app-scoped chat store
+- [ ] Commit 14 — desktop: thread appId through the chat-history IPC
+
 Schedule/execute of app-owned automations was originally scoped as a
 follow-up, but landed inside this PR across commits 5–10 — see those
 commit sections below. In short: the OS scheduler host + the `centraid
@@ -387,6 +393,34 @@ the builder agent reads. Docs-only fix, no behavior change.
   comment get the same correction (folder-per-automation, not flat
   `.json`).
 
+### Commit 12 — runtime-core: per-app chat store
+
+Chat moves into each app's `runtime.sqlite` — the same file as the app's
+automation run ledger. `centraid-activity.sqlite` is gone: automations
+left it in #98 and chat was the last tenant.
+
+- `gateway-db.ts`: `RUNTIME_MIGRATIONS` baseline gains the `chat_sessions`
+  table; `runs.chat_session_id` is a real same-file `ON DELETE CASCADE`
+  FK again (both tables now share the app's file). `ACTIVITY_MIGRATIONS`
+  / `openActivityDb` / `makeActivityDbProvider` are deleted — nothing
+  writes that file any more.
+- `ChatHistoryStore` is app-scoped: constructed with an `appsDir`, every
+  method takes the owning `appId` and resolves
+  `<appsDir>/<appId>/runtime.sqlite`, caching one connection + statement
+  set per app. The prepared-statement set moved to a new
+  `chat-history-sql.ts` to keep the store under the file-size limit.
+- `chat-history-routes.ts`: the `/_centraid-chat` surface carries the
+  app — `/_centraid-chat/apps/<appId>/sessions[/<id>]`.
+- `chat-routes.ts`: the per-app `_chat` POST route already had the
+  `appId` (`entry.id`); it now threads it into `getSessionMeta` /
+  `recordTurn` / `noteTurn`. A chat run's `app_id` is now persisted, so
+  its central analytics summary carries the owning app.
+- Tests: `gateway-db.test.ts` swaps the activity-DB suite for an
+  `openRuntimeDb` suite (chat_sessions + cascade in the runtime ladder);
+  `chat-history.test.ts` rewritten for the app-scoped API with a new
+  per-app isolation suite; `automation-runs-store` / `insights-store`
+  tests move off `makeActivityDbProvider`.
+
 ## Out of scope
 
 - Bidirectional form editing — the config pane is a read-only rendered
@@ -503,3 +537,12 @@ the builder agent reads. Docs-only fix, no behavior change.
 - `builder-harness` typecheck + test green (10/10 turbo tasks).
 - Docs-only change — seeded README/comment strings; no test asserts on
   their content, no behavior touched.
+
+### Commit 12 verification
+
+- `runtime-core` typecheck + build + test green — 289/289 tests pass,
+  including the rewritten `openRuntimeDb` schema suite and the
+  app-scoped `ChatHistoryStore` suite (per-app + per-user isolation).
+- Downstream `openclaw-plugin` + `desktop` do not yet typecheck — they
+  still construct `ChatHistoryStore` with the old activity-DB provider;
+  wired in commits 13–14. Expected, see Out of scope.

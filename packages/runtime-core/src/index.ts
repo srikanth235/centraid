@@ -124,27 +124,23 @@ export {
 } from './chat-history.js';
 export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
-// Gateway state DBs — two separate SQLite files, each with its own
-// connection + migration ladder:
-//   - gateway  (`centraid-gateway.sqlite`):  users, user_prefs
-//   - activity (`centraid-activity.sqlite`): automations, chat_sessions,
-//                                            runs, run_nodes, automation_state
-// Hosts construct one provider per file and pass each to the matching
-// store: UserStore ← gateway; ChatHistoryStore + AutomationStore +
-// AutomationRunsStore all share the activity provider. Cross-file FKs
-// aren't possible in SQLite, so `chat_sessions.user_id` /
-// `automations.user_id` are application-enforced.
+// SQLite state — three migration ladders, each its own file + connection:
+//   - gateway   (`centraid-gateway.sqlite`):   users, user_prefs
+//   - runtime   (`<appRoot>/runtime.sqlite`):  chat_sessions, runs,
+//                                              run_nodes, automation_state
+//   - analytics (`centraid-analytics.sqlite`): run_summary
+// `UserStore` ← gateway; `ChatHistoryStore` + the per-app run ledger ←
+// each app's runtime.sqlite; `AnalyticsStore` ← analytics. Cross-file FKs
+// aren't possible in SQLite, so `chat_sessions.user_id` is
+// application-enforced.
 export {
   openGatewayDb,
   makeGatewayDbProvider,
-  openActivityDb,
-  makeActivityDbProvider,
   openRuntimeDb,
   makeRuntimeDbProvider,
   openAnalyticsDb,
   makeAnalyticsDbProvider,
   GATEWAY_MIGRATIONS,
-  ACTIVITY_MIGRATIONS,
   RUNTIME_MIGRATIONS,
   ANALYTICS_MIGRATIONS,
   type DatabaseProvider,
