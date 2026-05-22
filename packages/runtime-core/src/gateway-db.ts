@@ -239,6 +239,143 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
 ];
 
 /**
+ * Per-app run-ledger migration ladder — `runtime.sqlite` (issue #98).
+ *
+ * Decision 3 of the #98 revision: an app's automation run ledger +
+ * `ctx.state` are per-app, in `<appRoot>/runtime.sqlite` — a separate
+ * file from the handler-owned `data.sqlite`, version-persistent. The
+ * global `centraid-activity.sqlite` no longer holds automation runs.
+ *
+ * The tables are the same `runs` / `run_nodes` / `automation_state`
+ * shape as the activity ledger, with two differences: there is no
+ * `chat_sessions` table (chat is not per-app), and `parent_run_id` /
+ * `chat_session_id` are plain columns with no foreign key — a
+ * cross-app `ctx.invoke` sub-run's `parent_run_id` points at a run in
+ * a *different* app's file, and a SQLite FK cannot span files.
+ */
+export const RUNTIME_MIGRATIONS: readonly string[] = [
+  // 0 → 1: the per-app run ledger. `runs.trigger_origin` is in the
+  // baseline (a fresh file never needs the #96 column-add migration).
+  `
+    CREATE TABLE IF NOT EXISTS runs (
+      id                       TEXT PRIMARY KEY,
+      kind                     TEXT NOT NULL DEFAULT 'automation',
+      automation_id            TEXT,
+      chat_session_id          TEXT,
+      app_id                   TEXT,
+      trigger                  TEXT NOT NULL,
+      trigger_origin           TEXT,
+      parent_run_id            TEXT,
+      note                     TEXT,
+      summary                  TEXT,
+      input_json               TEXT,
+      output_json              TEXT,
+      ok                       INTEGER NOT NULL DEFAULT 0,
+      error                    TEXT,
+      pinned                   INTEGER NOT NULL DEFAULT 0,
+      retry_of                 TEXT,
+      started_at               INTEGER NOT NULL,
+      ended_at                 INTEGER,
+      total_input_tokens       INTEGER,
+      total_output_tokens      INTEGER,
+      total_cache_read_tokens  INTEGER,
+      total_cache_write_tokens INTEGER,
+      total_cost_usd           REAL,
+      step_count               INTEGER,
+      tool_count               INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_runs_automation_started
+      ON runs(automation_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_runs_started
+      ON runs(started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_runs_parent
+      ON runs(parent_run_id);
+
+    CREATE TABLE IF NOT EXISTS run_nodes (
+      id                 TEXT PRIMARY KEY,
+      run_id             TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      ordinal            INTEGER NOT NULL,
+      batch_id           INTEGER,
+      kind               TEXT NOT NULL,
+      model              TEXT,
+      provider           TEXT,
+      input_tokens       INTEGER,
+      output_tokens      INTEGER,
+      cache_read_tokens  INTEGER,
+      cache_write_tokens INTEGER,
+      cost_usd           REAL,
+      app_id             TEXT,
+      name               TEXT,
+      args_json          TEXT,
+      output_json        TEXT,
+      child_run_id       TEXT,
+      ok                 INTEGER NOT NULL DEFAULT 1,
+      error              TEXT,
+      started_at         INTEGER NOT NULL,
+      ended_at           INTEGER,
+      duration_ms        INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_run_nodes_by_run
+      ON run_nodes(run_id, ordinal);
+    CREATE INDEX IF NOT EXISTS idx_run_nodes_by_model
+      ON run_nodes(model, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS automation_state (
+      automation_id TEXT NOT NULL,
+      key           TEXT NOT NULL,
+      value_json    TEXT,
+      updated_at    INTEGER NOT NULL,
+      PRIMARY KEY (automation_id, key)
+    );
+  `,
+];
+
+/**
+ * Central analytics migration ladder — `centraid-analytics.sqlite`
+ * (issue #98, decision 4).
+ *
+ * Push-based analytics: at run completion the runtime write-throughs a
+ * one-row summary to this gateway-scoped file. Full run detail stays in
+ * the per-app `runtime.sqlite` (automations) or `centraid-activity.sqlite`
+ * (chat); this file is the single source the Insights screen reads, so
+ * it has no cross-file scan and no cron aggregator. The write is
+ * best-effort — a failure never fails the run, and the per-app file
+ * stays authoritative for a future backfill.
+ */
+export const ANALYTICS_MIGRATIONS: readonly string[] = [
+  // 0 → 1: one summary row per agent run, every kind.
+  `
+    CREATE TABLE IF NOT EXISTS run_summary (
+      run_id                   TEXT PRIMARY KEY,
+      kind                     TEXT NOT NULL,
+      automation_ref           TEXT,
+      app_id                   TEXT,
+      trigger                  TEXT NOT NULL,
+      trigger_origin           TEXT,
+      ok                       INTEGER NOT NULL DEFAULT 0,
+      summary                  TEXT,
+      note                     TEXT,
+      error                    TEXT,
+      retry_of                 TEXT,
+      model                    TEXT,
+      started_at               INTEGER NOT NULL,
+      ended_at                 INTEGER,
+      total_input_tokens       INTEGER,
+      total_output_tokens      INTEGER,
+      total_cache_read_tokens  INTEGER,
+      total_cache_write_tokens INTEGER,
+      total_cost_usd           REAL,
+      step_count               INTEGER,
+      tool_count               INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_run_summary_started
+      ON run_summary(started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_run_summary_kind_ref
+      ON run_summary(kind, automation_ref, started_at DESC);
+  `,
+];
+
+/**
  * Run the pending migration tail of `migrations` against `db`. `label`
  * names the file in the version-mismatch error. Idempotent on an
  * already-current DB; throws if the DB is at a version newer than this
@@ -328,4 +465,24 @@ export function openActivityDb(dbPath: string): DatabaseSync {
 /** Lazy provider for the activity (automations + chat_sessions + runs + run_nodes + ctx.state) DB file. */
 export function makeActivityDbProvider(dbPath: string): DatabaseProvider {
   return makeProvider(dbPath, ACTIVITY_MIGRATIONS, 'activity');
+}
+
+/** Open an app's per-app `runtime.sqlite` (runs + run_nodes + ctx.state). */
+export function openRuntimeDb(dbPath: string): DatabaseSync {
+  return openDb(dbPath, RUNTIME_MIGRATIONS, 'runtime');
+}
+
+/** Lazy provider for an app's per-app `runtime.sqlite` run ledger. */
+export function makeRuntimeDbProvider(dbPath: string): DatabaseProvider {
+  return makeProvider(dbPath, RUNTIME_MIGRATIONS, 'runtime');
+}
+
+/** Open the central `centraid-analytics.sqlite` (run summaries). */
+export function openAnalyticsDb(dbPath: string): DatabaseSync {
+  return openDb(dbPath, ANALYTICS_MIGRATIONS, 'analytics');
+}
+
+/** Lazy provider for the central `centraid-analytics.sqlite` file. */
+export function makeAnalyticsDbProvider(dbPath: string): DatabaseProvider {
+  return makeProvider(dbPath, ANALYTICS_MIGRATIONS, 'analytics');
 }

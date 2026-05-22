@@ -19,6 +19,7 @@ Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid
 - [x] Commit 5 — openclaw-plugin: gateway fires automations as apps
 - [x] Commit 6 — agent-runtime: local fire path under appsDir
 - [x] Commit 7 — desktop: unified app/automation surface
+- [x] Commit 8 — runtime-core: per-app runtime.sqlite + central analytics
 
 Follow-up (tracked on #98, not in this commit):
 
@@ -287,6 +288,36 @@ repo typechecks + builds + tests end-to-end.
   automation via `listAutomations`; "New automation" scaffolds an
   `auto.`-prefixed app.
 
+### Commit 8 — runtime-core: per-app runtime.sqlite + central analytics
+
+Decisions 3 + 4 of the [#98 revision](https://github.com/srikanth235/centraid/issues/98):
+the automation run ledger goes per-app, and analytics is push-based.
+
+#### runtime-core — per-app `runtime.sqlite`
+
+- `gateway-db.ts` gains `RUNTIME_MIGRATIONS` + `makeRuntimeDbProvider` /
+  `openRuntimeDb`. An app's automation run ledger (`runs` / `run_nodes`
+  / `automation_state`) is its own `<appRoot>/runtime.sqlite` — a
+  separate file from the handler-owned `data.sqlite`. The schema drops
+  `chat_sessions` and the `parent_run_id` / `chat_session_id` foreign
+  keys (a cross-app `ctx.invoke` sub-run's `parent_run_id` points into
+  a different app's file — a SQLite FK cannot span files).
+
+#### runtime-core — central analytics DB
+
+- New `analytics-store.ts`: `AnalyticsStore` over
+  `centraid-analytics.sqlite` (`ANALYTICS_MIGRATIONS` +
+  `makeAnalyticsDbProvider`). One `run_summary` row per run, every kind.
+  `recordRunSummary` upserts; `listSummaries` / `getSummary` read.
+- `AutomationRunsStore` takes an optional `AnalyticsStore`; `finishRun`
+  write-throughs the finished run's summary (with its dominant model)
+  best-effort — an analytics-DB failure never fails the run.
+  `ChatHistoryStore` threads the analytics store into its internal runs
+  store, so chat turns get a summary too.
+- `InsightsStore` now reads only the central `run_summary` table — one
+  source, no `run_nodes` descent; the by-model breakdown keys off each
+  run's dominant model.
+
 ## Out of scope
 
 - Scheduling and execution of app-owned automations — the OS scheduler
@@ -296,16 +327,14 @@ repo typechecks + builds + tests end-to-end.
 - Bidirectional form editing — the config pane is a read-only rendered
   view of the manifest; chat is the only input.
 - Commits 3–7 of the #98 revision land the unified folder model
-  incrementally, one package per commit. Each commit leaves its own
-  package green; the repo typechecks + builds + tests end-to-end only
-  once commit 7 lands.
-- **Per-app `runtime.sqlite` (revision decision 3) and push-based
-  central analytics (decision 4) are NOT in this PR.** The run ledger
-  + `ctx.state` still use the global `centraid-activity.sqlite`, and
-  Insights still reads it directly. The unification delivered here is
-  *discovery + versioning + upload + scheduling* — every automation is
-  an app folder. Splitting the ledger per app and the write-through
-  analytics DB are a tracked follow-up.
+  incrementally, one package per commit; commits 8–10 land decisions
+  3 + 4 (per-app `runtime.sqlite` + push-based analytics). Each commit
+  leaves its own package green; the repo typechecks + builds + tests
+  end-to-end at commits 7 and 10.
+- Decision 3's per-app `runtime.sqlite` ledger and decision 4's central
+  analytics DB land in commits 8–10. Commit 8 builds the runtime-core
+  layer (schema + `AnalyticsStore` + write-through + `InsightsStore`
+  rewrite); commits 9–10 wire the fire paths + desktop to it.
 - Desktop "fire the active version" (decision 2) is realized on the
   gateway (commit 5 resolves versioned apps); the desktop's local OS
   scheduler still fires the editable draft folder via
@@ -376,3 +405,14 @@ repo typechecks + builds + tests end-to-end.
   Automations page (Standing orders + Executions), "New automation",
   Run-now, Enable/Disable, per-automation Runs — was not interactively
   click-tested; it is type/build-verified only.
+
+### Commit 8 verification
+
+- `runtime-core` typechecks clean; full suite 287/287 pass.
+- New `analytics-store` tests (record / upsert / scoped list) + the
+  rewritten `insights-store` tests, which now exercise the write-through
+  end-to-end: an `AutomationRunsStore` built with an `AnalyticsStore`
+  populates `run_summary`, and `InsightsStore` reads it back.
+- The fire paths (openclaw / agent-runtime) and the desktop still
+  construct the ledger over the global activity DB — wired to the
+  per-app `runtime.sqlite` + analytics DB in commits 9–10.

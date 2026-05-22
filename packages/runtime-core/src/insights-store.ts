@@ -1,19 +1,21 @@
 /*
- * InsightsStore — read-only analytics over the unified run ledger.
+ * InsightsStore — read-only analytics over the central `run_summary`
+ * ledger (issue #98, decision 4).
  *
- * The Insights screen reads almost entirely from `runs` (the denormalized
- * token/cost rollup written at finish); only the "by model" breakdown
- * descends into `run_nodes`. Every figure is scoped to a trailing
+ * The Insights screen reads entirely from the push-based
+ * `centraid-analytics.sqlite` — one summary row per run, every kind. No
+ * cross-file scan, no `run_nodes` descent: the by-model breakdown keys
+ * off each run's dominant model. Every figure is scoped to a trailing
  * `windowDays` window (default 30).
  *
- * The `runs.total_*` rollup is exclusive of child `invoke` sub-runs, so a
- * plain SUM over every run in the window is the true grand total with no
- * double-count (issue #90, open question 2). A run that crashed before
- * `finishRun` has NULL rollups — it still counts as a "generation" but
- * contributes 0 tokens/cost (open question 1; accepted for v0).
+ * The `total_*` rollup is exclusive of child `invoke` sub-runs, so a
+ * plain SUM over every summary in the window is the true grand total
+ * with no double-count. A run that crashed before `finishRun` has NULL
+ * rollups — it still counts as a "generation" but contributes 0
+ * tokens/cost (accepted for v0).
  *
- * Constructed with the shared activity `DatabaseProvider` — the same one
- * `AutomationRunsStore` / `ChatHistoryStore` use.
+ * Constructed with the analytics `DatabaseProvider`
+ * (`makeAnalyticsDbProvider`).
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
@@ -51,7 +53,7 @@ export interface InsightsDailyPoint {
 }
 
 export interface InsightsAutomationRow {
-  /** Automation UUID, or the synthetic bucket key `chat` / `build`. */
+  /** `<appId>/<id>` automation handle, or the bucket key `chat` / `build`. */
   key: string;
   label: string;
   kind: string;
@@ -90,8 +92,6 @@ export interface InsightsSummary {
 // Token total summed inline in SQL — NULL rollup columns coalesce to 0.
 const TOKEN_SUM = `(COALESCE(total_input_tokens,0)+COALESCE(total_output_tokens,0)
   +COALESCE(total_cache_read_tokens,0)+COALESCE(total_cache_write_tokens,0))`;
-const NODE_TOKEN_SUM = `(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)
-  +COALESCE(cache_read_tokens,0)+COALESCE(cache_write_tokens,0))`;
 
 interface PreparedStatements {
   kpis: StatementSync;
@@ -121,13 +121,13 @@ export class InsightsStore {
           SUM(CASE WHEN retry_of IS NOT NULL THEN 1 ELSE 0 END) AS retries,
           SUM(${TOKEN_SUM}) AS tokens,
           SUM(COALESCE(total_cost_usd, 0)) AS cost
-        FROM runs
+        FROM run_summary
         WHERE started_at >= ?
       `),
       appsTouched: db.prepare(`
-        SELECT COUNT(DISTINCT n.app_id) AS apps
-        FROM run_nodes n JOIN runs r ON n.run_id = r.id
-        WHERE r.started_at >= ? AND n.app_id IS NOT NULL
+        SELECT COUNT(DISTINCT app_id) AS apps
+        FROM run_summary
+        WHERE started_at >= ? AND app_id IS NOT NULL
       `),
       daily: db.prepare(`
         SELECT
@@ -135,46 +135,44 @@ export class InsightsStore {
           SUM(${TOKEN_SUM}) AS tokens,
           SUM(COALESCE(total_cost_usd, 0)) AS cost,
           COUNT(*) AS runs
-        FROM runs
+        FROM run_summary
         WHERE started_at >= ?
         GROUP BY day ORDER BY day ASC
       `),
-      // Automation definitions live on disk (issue #91) — there is no
-      // `automations` table to join for a display name. `name` is NULL
-      // here; the desktop resolves it from the project manifest.
+      // Automations live on disk (issue #98) — there is no table to
+      // join for a display name. `name` is NULL here; the desktop
+      // resolves it from the project manifest.
       byAutomation: db.prepare(`
         SELECT
-          r.kind AS kind,
-          r.automation_id AS automation_id,
+          kind AS kind,
+          automation_ref AS automation_ref,
           NULL AS name,
           COUNT(*) AS runs,
           SUM(${TOKEN_SUM}) AS tokens,
-          SUM(COALESCE(r.total_cost_usd, 0)) AS cost
-        FROM runs r
-        WHERE r.started_at >= ?
-        GROUP BY r.kind, r.automation_id
+          SUM(COALESCE(total_cost_usd, 0)) AS cost
+        FROM run_summary
+        WHERE started_at >= ?
+        GROUP BY kind, automation_ref
         ORDER BY tokens DESC
       `),
       byModel: db.prepare(`
         SELECT
-          n.model AS model,
+          model AS model,
           COUNT(*) AS runs,
-          SUM(${NODE_TOKEN_SUM}) AS tokens,
-          SUM(COALESCE(n.cost_usd, 0)) AS cost
-        FROM run_nodes n JOIN runs r ON n.run_id = r.id
-        WHERE r.started_at >= ?
-          AND n.kind IN ('step', 'agent')
-          AND n.model IS NOT NULL
-        GROUP BY n.model ORDER BY tokens DESC
+          SUM(${TOKEN_SUM}) AS tokens,
+          SUM(COALESCE(total_cost_usd, 0)) AS cost
+        FROM run_summary
+        WHERE started_at >= ? AND model IS NOT NULL
+        GROUP BY model ORDER BY tokens DESC
       `),
       recent: db.prepare(`
         SELECT
-          r.id AS id, r.kind AS kind, r.ok AS ok, r.started_at AS started_at,
-          r.summary AS summary, r.note AS note, NULL AS name,
-          ${TOKEN_SUM} AS tokens, COALESCE(r.total_cost_usd, 0) AS cost
-        FROM runs r
-        WHERE r.started_at >= ?
-        ORDER BY r.started_at DESC LIMIT ?
+          run_id AS id, kind AS kind, ok AS ok, started_at AS started_at,
+          summary AS summary, note AS note, NULL AS name,
+          ${TOKEN_SUM} AS tokens, COALESCE(total_cost_usd, 0) AS cost
+        FROM run_summary
+        WHERE started_at >= ?
+        ORDER BY started_at DESC LIMIT ?
       `),
     };
     this.db = db;
@@ -224,14 +222,14 @@ export class InsightsStore {
     const byAutomation: InsightsAutomationRow[] = (
       stmts.byAutomation.all(since) as Array<{
         kind: string;
-        automation_id: string | null;
+        automation_ref: string | null;
         name: string | null;
         runs: number;
         tokens: number | null;
         cost: number | null;
       }>
     ).map((r) => ({
-      key: r.automation_id ?? r.kind,
+      key: r.automation_ref ?? r.kind,
       label: r.name ?? bucketLabel(r.kind),
       kind: r.kind,
       runs: r.runs,

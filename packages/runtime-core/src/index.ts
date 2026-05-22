@@ -139,10 +139,21 @@ export {
   makeGatewayDbProvider,
   openActivityDb,
   makeActivityDbProvider,
+  openRuntimeDb,
+  makeRuntimeDbProvider,
+  openAnalyticsDb,
+  makeAnalyticsDbProvider,
   GATEWAY_MIGRATIONS,
   ACTIVITY_MIGRATIONS,
+  RUNTIME_MIGRATIONS,
+  ANALYTICS_MIGRATIONS,
   type DatabaseProvider,
 } from './gateway-db.js';
+
+// Central analytics — push-based run summaries (issue #98, decision 4).
+// `AutomationRunsStore.finishRun` write-throughs one row per run;
+// `InsightsStore` reads them as the single Insights source.
+export { AnalyticsStore, type RunSummary, type ListSummariesOptions } from './analytics-store.js';
 
 // User-prefs store + HTTP route dispatcher. Wraps the gateway DB; mounted
 // by both hosts at `/_centraid-user`.

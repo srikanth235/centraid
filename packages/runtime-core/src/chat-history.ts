@@ -2,18 +2,15 @@
  * Centraid chat store — the conversation-container store + transcript fold.
  *
  * Wraps the activity SQLite (see `gateway-db.ts`) to read/write the
- * `chat_sessions` table. A chat session IS the chat window (the session
- * id is the window id); sessions are scoped by the gateway-side user
- * UUID (`UserStore.getUserId`). Chat is a flat per-user store — no
- * `origin_app_id`; the app a turn ran against is per-turn context only.
+ * `chat_sessions` table. A chat session IS the chat window; sessions
+ * are scoped by the gateway-side user UUID (`UserStore.getUserId`).
+ * Chat is a flat per-user store — no `origin_app_id`.
  *
  * The transcript is NOT its own table. A chat turn is a `runs` row
- * (`kind='chat'`, `trigger='interactive'`, `chat_session_id` FK) and the
- * turn's messages are `run_nodes` — assistant text as a `step` node, each
- * tool call as a `tool` node (issue #90 fold: `chat_messages` is gone).
- * `recordTurn` writes that trace; `getSession` reconstructs the renderer
- * transcript back out of it. Exposed over HTTP at `/_centraid-chat`
- * (dispatcher in `chat-history-routes.ts`), mounted identically by the
+ * (`kind='chat'`, `chat_session_id` FK) and the turn's messages are
+ * `run_nodes` (issue #90 fold: `chat_messages` is gone). `recordTurn`
+ * writes that trace; `getSession` reconstructs the renderer transcript.
+ * Exposed over HTTP at `/_centraid-chat`, mounted identically by the
  * OpenClaw plugin and the embedded local runtime.
  */
 
@@ -21,6 +18,7 @@ import { type DatabaseSync, type StatementSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseProvider } from './gateway-db.js';
 import { AutomationRunsStore } from './automation-runs-store.js';
+import type { AnalyticsStore } from './analytics-store.js';
 import { costForUsage } from './model-pricing.js';
 import {
   parseStepOutput,
@@ -175,10 +173,16 @@ export class ChatHistoryStore {
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
 
-  constructor(dbProvider: DatabaseProvider, userIdProvider: UserIdProvider) {
+  /** `analytics`, when set, threads into the internal runs store so a
+   *  chat turn's `finishRun` write-throughs a summary (issue #98). */
+  constructor(
+    dbProvider: DatabaseProvider,
+    userIdProvider: UserIdProvider,
+    analytics?: AnalyticsStore,
+  ) {
     this.dbProvider = dbProvider;
     this.userIdProvider = userIdProvider;
-    this.runs = new AutomationRunsStore(dbProvider);
+    this.runs = new AutomationRunsStore(dbProvider, analytics);
   }
 
   private ensureReady(): { db: DatabaseSync; stmts: PreparedStatements } {
