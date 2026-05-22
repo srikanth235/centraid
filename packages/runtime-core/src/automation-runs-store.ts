@@ -203,6 +203,7 @@ export class AutomationRunsStore {
         trigger: row.triggerKind,
         ...(row.triggerOrigin !== undefined ? { triggerOrigin: row.triggerOrigin } : {}),
         ok: row.ok,
+        pinned: row.pinned,
         ...(row.summary !== undefined ? { summary: row.summary } : {}),
         ...(row.note !== undefined ? { note: row.note } : {}),
         ...(row.error !== undefined ? { error: row.error } : {}),

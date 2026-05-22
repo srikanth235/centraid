@@ -2,12 +2,14 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { app } from 'electron';
 import {
+  AnalyticsStore,
   ChatHistoryStore,
   Runtime,
   UserStore,
   listAutomations,
   makeGatewayDbProvider,
   makeActivityDbProvider,
+  makeAnalyticsDbProvider,
   startRuntimeHttpServer,
   type AutomationHost,
   type RuntimeHttpServerHandle,
@@ -71,6 +73,11 @@ export function localRuntimeAutomationDb(): string {
   return path.join(app.getPath('userData'), 'local-runtime', 'centraid-activity.sqlite');
 }
 
+/** Central push-based run-summary DB — the source the Insights screen reads. */
+export function localRuntimeAnalyticsDb(): string {
+  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-analytics.sqlite');
+}
+
 /**
  * Singleton OS-scheduler-backed AutomationHost for the local runtime.
  *
@@ -91,11 +98,11 @@ export function localRuntimeAutomationHost(appsDir: string): AutomationHost {
   _automationHost = new OsSchedulerHost({
     workdir: localRuntimeAppsDir(),
     centraidBin: path.join(defaultCentraidCliDir(), 'centraid-cli.js'),
-    // Bake the desktop's activity DB path + apps dir into every
+    // Bake the desktop's analytics DB path + apps dir into every
     // scheduled job so an OS-scheduler-spawned `centraid run-automation`
-    // resolves the automation + writes its run record against the SAME
-    // paths the desktop UI uses — not the cwd-relative fallback.
-    automationDbPath: localRuntimeAutomationDb(),
+    // resolves the automation + write-throughs its run summary against
+    // the SAME paths the desktop UI uses — not the cwd-relative fallback.
+    analyticsDbPath: localRuntimeAnalyticsDb(),
     appsDir,
     // Match the chat-runner default; toggling per-automation runner
     // isn't surfaced in the UI today.
@@ -111,16 +118,18 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     const appsDir = localRuntimeAppsDir();
     await fs.mkdir(appsDir, { recursive: true });
 
-    // Two domain SQLite files — identity and the activity ledger. Each
-    // store wraps the lazy provider for its file; the provider opens the
-    // file on first use (lazy because nothing here touches the DB until
-    // a request hits the HTTP server). The chat-history store and the
-    // automation stores all share the activity provider.
+    // Domain SQLite files — identity, the chat activity ledger, and the
+    // central analytics DB (one run-summary row per run — issue #98).
+    // Each store wraps the lazy provider for its file; the provider
+    // opens the file on first use.
     const gatewayDbProvider = makeGatewayDbProvider(localRuntimeGatewayDb());
     const automationDbProvider = makeActivityDbProvider(localRuntimeAutomationDb());
+    const analyticsStore = new AnalyticsStore(makeAnalyticsDbProvider(localRuntimeAnalyticsDb()));
     const userStore = new UserStore(gatewayDbProvider);
-    const chatHistoryStore = new ChatHistoryStore(automationDbProvider, () =>
-      userStore.getUserId(),
+    const chatHistoryStore = new ChatHistoryStore(
+      automationDbProvider,
+      () => userStore.getUserId(),
+      analyticsStore,
     );
 
     // Resolve user prefs for the agent runtime — the desktop persists

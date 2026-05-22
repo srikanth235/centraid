@@ -21,6 +21,7 @@ Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid
 - [x] Commit 7 — desktop: unified app/automation surface
 - [x] Commit 8 — runtime-core: per-app runtime.sqlite + central analytics
 - [x] Commit 9 — gateway + agent-runtime: per-app ledger + analytics wiring
+- [x] Commit 10 — desktop: Insights + run feeds on the central DB
 
 Follow-up (tracked on #98, not in this commit):
 
@@ -344,6 +345,28 @@ per-app `runtime.sqlite` and pass the central `AnalyticsStore`.
   var (`analyticsDbPath`) into the launchd / systemd / Task Scheduler
   artifact.
 
+### Commit 10 — desktop: Insights + run feeds on the central DB
+
+The desktop reads analytics from the central DB and run detail from
+each app's per-app `runtime.sqlite` — closing out decisions 3 + 4.
+
+- `local-runtime.ts` adds `localRuntimeAnalyticsDb()`; the embedded
+  `ChatHistoryStore` is constructed with the `AnalyticsStore` (desktop
+  chat turns land in Insights); `localRuntimeAutomationHost` bakes
+  `analyticsDbPath` into the OS scheduler.
+- `ipc.ts`: `INSIGHTS_SUMMARY` and `AUTOMATIONS_LIST_RUNS` read the
+  central `run_summary` DB (the feed maps summaries into the
+  `AutomationRunRow` shape, so the renderer is unchanged);
+  `AUTOMATIONS_LIST_RUN_NODES` resolves the run's full ledger — the
+  owning app's `runtime.sqlite` for an automation run (the app id is
+  recoverable from the `<appId>/<id>:…` run id), the activity DB for a
+  chat run. `AUTOMATIONS_PIN_RUN` flips the pin in both the per-app
+  ledger and the central summary; `AUTOMATIONS_RUN_NOW` passes the
+  `AnalyticsStore`; `AUTOMATIONS_DELETE` drops the automation's central
+  summaries via `deleteByRef`.
+- `run_summary` gains a `pinned` column so the Executions feed and
+  Insights reflect replay-fixture pins without a per-app scan.
+
 ## Out of scope
 
 - Scheduling and execution of app-owned automations — the OS scheduler
@@ -450,3 +473,11 @@ per-app `runtime.sqlite` and pass the central `AnalyticsStore`.
   `analyticsDbPath`).
 - The desktop still builds the ledger + Insights over the global
   activity DB — wired to the per-app + analytics DBs in commit 10.
+
+### Commit 10 verification
+
+- Whole repo green end-to-end: `turbo typecheck` + `turbo test` +
+  `turbo build` — 22/22 tasks. Lint + format clean.
+- `analytics-store` tests cover the new `pinned` mirror + `deleteByRef`.
+- The desktop Insights / Executions / Run-detail / pin surface is
+  type/build-verified only — not interactively click-tested.

@@ -28,6 +28,8 @@ export interface RunSummary {
   readonly trigger: string;
   readonly triggerOrigin?: string;
   readonly ok: boolean;
+  /** Replay-fixture pin — kept in sync with the per-app ledger. */
+  readonly pinned?: boolean;
   readonly summary?: string;
   readonly note?: string;
   readonly error?: string;
@@ -59,6 +61,7 @@ interface RawSummary {
   trigger: string;
   trigger_origin: string | null;
   ok: number;
+  pinned: number;
   summary: string | null;
   note: string | null;
   error: string | null;
@@ -84,6 +87,7 @@ function fromRaw(raw: RawSummary): RunSummary {
     trigger: raw.trigger,
     ...(raw.trigger_origin !== null ? { triggerOrigin: raw.trigger_origin } : {}),
     ok: raw.ok !== 0,
+    pinned: raw.pinned !== 0,
     ...(raw.summary !== null ? { summary: raw.summary } : {}),
     ...(raw.note !== null ? { note: raw.note } : {}),
     ...(raw.error !== null ? { error: raw.error } : {}),
@@ -110,6 +114,8 @@ interface PreparedStatements {
   getOne: StatementSync;
   listAll: StatementSync;
   listByRef: StatementSync;
+  setPinned: StatementSync;
+  deleteByRef: StatementSync;
 }
 
 /**
@@ -132,12 +138,12 @@ export class AnalyticsStore {
       upsert: db.prepare(`
         INSERT INTO run_summary (
           run_id, kind, automation_ref, app_id, trigger, trigger_origin,
-          ok, summary, note, error, retry_of, model, started_at, ended_at,
+          ok, pinned, summary, note, error, retry_of, model, started_at, ended_at,
           total_input_tokens, total_output_tokens, total_cache_read_tokens,
           total_cache_write_tokens, total_cost_usd, step_count, tool_count
         ) VALUES (
           $runId, $kind, $automationRef, $appId, $trigger, $triggerOrigin,
-          $ok, $summary, $note, $error, $retryOf, $model, $startedAt, $endedAt,
+          $ok, $pinned, $summary, $note, $error, $retryOf, $model, $startedAt, $endedAt,
           $totalInputTokens, $totalOutputTokens, $totalCacheReadTokens,
           $totalCacheWriteTokens, $totalCostUsd, $stepCount, $toolCount
         )
@@ -145,6 +151,7 @@ export class AnalyticsStore {
           kind = excluded.kind, automation_ref = excluded.automation_ref,
           app_id = excluded.app_id, trigger = excluded.trigger,
           trigger_origin = excluded.trigger_origin, ok = excluded.ok,
+          pinned = excluded.pinned,
           summary = excluded.summary, note = excluded.note,
           error = excluded.error, retry_of = excluded.retry_of,
           model = excluded.model, started_at = excluded.started_at,
@@ -164,6 +171,8 @@ export class AnalyticsStore {
         SELECT * FROM run_summary WHERE automation_ref = ?
         ORDER BY started_at DESC LIMIT ?
       `),
+      setPinned: db.prepare(`UPDATE run_summary SET pinned = ? WHERE run_id = ?`),
+      deleteByRef: db.prepare(`DELETE FROM run_summary WHERE automation_ref = ?`),
     };
     this.db = db;
     return this.stmts;
@@ -180,6 +189,7 @@ export class AnalyticsStore {
       trigger: s.trigger,
       triggerOrigin: s.triggerOrigin ?? null,
       ok: s.ok ? 1 : 0,
+      pinned: s.pinned ? 1 : 0,
       summary: s.summary ?? null,
       note: s.note ?? null,
       error: s.error ?? null,
@@ -213,5 +223,15 @@ export class AnalyticsStore {
         ? (listByRef.all(opts.automationRef, limit) as unknown as RawSummary[])
         : (listAll.all(limit) as unknown as RawSummary[]);
     return rows.map(fromRaw);
+  }
+
+  /** Mirror a run's replay-fixture pin into the central summary. */
+  setPinned(runId: string, pinned: boolean): void {
+    this.ensureReady().setPinned.run(pinned ? 1 : 0, runId);
+  }
+
+  /** Drop every summary for one automation handle (the automation is gone). */
+  deleteByRef(automationRef: string): void {
+    this.ensureReady().deleteByRef.run(automationRef);
   }
 }

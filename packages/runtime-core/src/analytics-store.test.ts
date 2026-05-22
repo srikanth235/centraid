@@ -65,4 +65,16 @@ describe('AnalyticsStore', () => {
       ['r3', 'r1'],
     );
   });
+
+  it('mirrors a pin flag and deletes by automation handle', () => {
+    const s = store();
+    s.recordRunSummary(summary({ runId: 'r1', automationRef: 'auto.a/job' }));
+    s.recordRunSummary(summary({ runId: 'r2', automationRef: 'auto.b/job' }));
+    assert.equal(s.getSummary('r1')?.pinned, false);
+    s.setPinned('r1', true);
+    assert.equal(s.getSummary('r1')?.pinned, true);
+    s.deleteByRef('auto.a/job');
+    assert.equal(s.getSummary('r1'), undefined);
+    assert.ok(s.getSummary('r2'), 'unrelated automation untouched');
+  });
 });

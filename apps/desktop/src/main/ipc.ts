@@ -22,6 +22,7 @@ import {
   localRuntimeAutomationHost,
   localRuntimeCodexHomeBaseDir,
   localRuntimeAutomationDb,
+  localRuntimeAnalyticsDb,
   noteRunnerPrefsChanged,
   resolveProviderPrefs,
 } from './local-runtime.js';
@@ -32,6 +33,7 @@ import {
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
 import {
+  AnalyticsStore,
   AutomationRunsStore,
   InsightsStore,
   listAutomations,
@@ -40,6 +42,8 @@ import {
   deleteAutomationAt,
   parseAutomationRef,
   makeActivityDbProvider,
+  makeAnalyticsDbProvider,
+  makeRuntimeDbProvider,
   generateWebhookId,
   generateWebhookSecret,
   hashWebhookSecret,
@@ -50,9 +54,12 @@ import {
   type AutomationRunNodeRow,
   type AutomationRunRow,
   type AutomationTrigger,
+  type AutomationTriggerKind,
+  type AutomationTriggerOrigin,
   type AutomationHistoryKeep,
   type DatabaseProvider,
   type InsightsSummary,
+  type RunSummary,
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
@@ -628,8 +635,9 @@ export function registerIpcHandlers(): void {
   // An automation lives inside an app folder under `appsDir`
   // (`listAutomations` scans every app's active version). An
   // `automationId` IPC argument is the automation's `<appId>/<id>`
-  // handle. The unified run ledger lives in the activity DB — one
-  // lazily-opened provider over `localRuntimeAutomationDb()` is shared.
+  // handle. An automation's full run ledger is its app's per-app
+  // `runtime.sqlite`; the central `centraid-analytics.sqlite` holds one
+  // summary row per run and is what the Executions feed + Insights read.
   const getActivityDbProvider = (() => {
     let provider: DatabaseProvider | undefined;
     return (): DatabaseProvider => {
@@ -637,6 +645,53 @@ export function registerIpcHandlers(): void {
       return provider;
     };
   })();
+  const getAnalyticsProvider = (() => {
+    let provider: DatabaseProvider | undefined;
+    return (): DatabaseProvider => {
+      if (!provider) provider = makeAnalyticsDbProvider(localRuntimeAnalyticsDb());
+      return provider;
+    };
+  })();
+  /** Run-ledger store for one run id — its app's `runtime.sqlite` for an
+   *  automation run (`<appId>/...`), the activity DB for a chat run. */
+  const runsStoreForRunId = async (runId: string): Promise<AutomationRunsStore> => {
+    const slash = runId.indexOf('/');
+    if (slash <= 0) return new AutomationRunsStore(getActivityDbProvider());
+    const { appsDir } = await loadSettings();
+    return new AutomationRunsStore(
+      makeRuntimeDbProvider(path.join(appsDir, runId.slice(0, slash), 'runtime.sqlite')),
+    );
+  };
+  /** Map a central run summary into the `AutomationRunRow` feed shape. */
+  const summaryToRunRow = (s: RunSummary): AutomationRunRow => ({
+    runId: s.runId,
+    kind: s.kind,
+    ...(s.automationRef !== undefined ? { automationId: s.automationRef } : {}),
+    triggerKind: s.trigger as AutomationTriggerKind,
+    ...(s.triggerOrigin !== undefined
+      ? { triggerOrigin: s.triggerOrigin as AutomationTriggerOrigin }
+      : {}),
+    ...(s.appId !== undefined ? { appId: s.appId } : {}),
+    ...(s.note !== undefined ? { note: s.note } : {}),
+    ...(s.retryOf !== undefined ? { retryOf: s.retryOf } : {}),
+    startedAt: s.startedAt,
+    ...(s.endedAt !== undefined ? { endedAt: s.endedAt } : {}),
+    ok: s.ok,
+    ...(s.error !== undefined ? { error: s.error } : {}),
+    ...(s.summary !== undefined ? { summary: s.summary } : {}),
+    pinned: s.pinned ?? false,
+    ...(s.totalInputTokens !== undefined ? { totalInputTokens: s.totalInputTokens } : {}),
+    ...(s.totalOutputTokens !== undefined ? { totalOutputTokens: s.totalOutputTokens } : {}),
+    ...(s.totalCacheReadTokens !== undefined
+      ? { totalCacheReadTokens: s.totalCacheReadTokens }
+      : {}),
+    ...(s.totalCacheWriteTokens !== undefined
+      ? { totalCacheWriteTokens: s.totalCacheWriteTokens }
+      : {}),
+    ...(s.totalCostUsd !== undefined ? { totalCostUsd: s.totalCostUsd } : {}),
+    ...(s.stepCount !== undefined ? { stepCount: s.stepCount } : {}),
+    ...(s.toolCount !== undefined ? { toolCount: s.toolCount } : {}),
+  });
 
   ipcMain.handle(Channel.AUTOMATIONS_LIST, async (): Promise<AutomationRow[]> => {
     const settings = await loadSettings();
@@ -752,7 +807,7 @@ export function registerIpcHandlers(): void {
       const { outcome, record } = await runAutomationLocal({
         automationRef: input.automationId,
         appsDir: settings.appsDir,
-        activityDb: getActivityDbProvider(),
+        analytics: new AnalyticsStore(getAnalyticsProvider()),
         runner: prefs.kind,
         // "Run now" is a manual fire — tag it so the executions log
         // distinguishes it from the OS-scheduler trigger.
@@ -821,51 +876,55 @@ export function registerIpcHandlers(): void {
         if (row) await deleteAutomationAt(row.dir);
       }
     }
-    new AutomationRunsStore(getActivityDbProvider()).deleteAutomationData(input.automationId);
+    // Drop the automation's central run summaries. Its full ledger
+    // (the app's `runtime.sqlite`) goes with the deleted folder.
+    new AnalyticsStore(getAnalyticsProvider()).deleteByRef(input.automationId);
     return { ok: true };
   });
 
-  // Run ledger reads. `automationId` is optional — omit it for the
-  // global Executions feed. An automation that never fired has no rows.
+  // Run feed — central run summaries. `automationId` is optional: omit
+  // it for the global Executions feed, pass it to scope to one handle.
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUNS,
     async (_e, input: { automationId?: string; limit?: number }): Promise<AutomationRunRow[]> => {
-      const store = new AutomationRunsStore(getActivityDbProvider());
-      const limit = input.limit ?? 50;
-      const runs = store.listRuns({
-        ...(input.automationId ? { automationId: input.automationId } : {}),
-        limit,
+      const analytics = new AnalyticsStore(getAnalyticsProvider());
+      const summaries = analytics.listSummaries({
+        ...(input.automationId ? { automationRef: input.automationId } : {}),
+        limit: input.limit ?? 50,
       });
-      // The global feed mixes chat / build runs in — the Automations
-      // screen only wants automation fires.
-      return runs.filter((r) => r.kind === 'automation');
+      // The Automations screen only wants automation fires, not chat.
+      return summaries.filter((s) => s.kind === 'automation').map(summaryToRunRow);
     },
   );
 
+  // Run detail — the node timeline lives in the run's full ledger: the
+  // owning app's `runtime.sqlite` for an automation run, the activity DB
+  // for a chat run.
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUN_NODES,
     async (_e, input: { runId: string }): Promise<AutomationRunNodeRow[]> => {
-      const store = new AutomationRunsStore(getActivityDbProvider());
-      return store.listNodes(input.runId);
+      return (await runsStoreForRunId(input.runId)).listNodes(input.runId);
     },
   );
 
-  // Pin / unpin a run as a replay fixture.
+  // Pin / unpin a run as a replay fixture — flip it in the run's own
+  // ledger and mirror the flag into the central summary so the feed and
+  // Insights stay consistent.
   ipcMain.handle(
     Channel.AUTOMATIONS_PIN_RUN,
     async (_e, input: { runId: string; pinned: boolean }): Promise<{ ok: true }> => {
-      const store = new AutomationRunsStore(getActivityDbProvider());
-      store.setPinned(input.runId, input.pinned);
+      (await runsStoreForRunId(input.runId)).setPinned(input.runId, input.pinned);
+      new AnalyticsStore(getAnalyticsProvider()).setPinned(input.runId, input.pinned);
       return { ok: true };
     },
   );
 
   // Insights — the whole screen's analytics payload in one read over the
-  // unified run ledger (chat turns + automation fires + builder runs).
+  // central `run_summary` ledger (chat turns + automation fires).
   ipcMain.handle(
     Channel.INSIGHTS_SUMMARY,
     async (_e, input?: { windowDays?: number }): Promise<InsightsSummary> => {
-      const store = new InsightsStore(getActivityDbProvider());
+      const store = new InsightsStore(getAnalyticsProvider());
       return store.summary(input?.windowDays !== undefined ? { windowDays: input.windowDays } : {});
     },
   );

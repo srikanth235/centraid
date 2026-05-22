@@ -353,6 +353,7 @@ export const ANALYTICS_MIGRATIONS: readonly string[] = [
       trigger                  TEXT NOT NULL,
       trigger_origin           TEXT,
       ok                       INTEGER NOT NULL DEFAULT 0,
+      pinned                   INTEGER NOT NULL DEFAULT 0,
       summary                  TEXT,
       note                     TEXT,
       error                    TEXT,
