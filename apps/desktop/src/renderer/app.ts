@@ -334,6 +334,7 @@
     | { kind: 'discover' }
     | { kind: 'starred' }
     | { kind: 'automations' }
+    | { kind: 'templates' }
     | { id: string; kind: 'app' }
     | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' }
     | { automationId: string; kind: 'automation-builder' };
@@ -349,6 +350,7 @@
     if (route.kind === 'discover') return 'discover';
     if (route.kind === 'starred') return 'starred';
     if (route.kind === 'automations') return 'automations';
+    if (route.kind === 'templates') return 'templates';
     if (route.kind === 'app') return `app:${route.id}`;
     if (route.kind === 'automation-builder') return `automation-builder:${route.automationId}`;
     if (route.appContext) return `builder:${route.appContext.id}`;
@@ -398,6 +400,8 @@
         renderStarred();
       } else if (route.kind === 'automations') {
         renderAutomations();
+      } else if (route.kind === 'templates') {
+        renderAutomationTemplates();
       } else if (route.kind === 'app') {
         openApp(route.id);
       } else if (route.kind === 'automation-builder') {
@@ -1414,6 +1418,12 @@
     // pageScroll's single scroll column) so the executions master-detail
     // can fill the viewport with independently-scrolling panes.
     const main = el('div', { class: 'has-wall' });
+    const tplBtn = el('button', {
+      class: 'cd-automations-tpl',
+      type: 'button',
+      trustedHtml: `${Icon.Bolt({ size: 13 })}<span>Browse templates</span>`,
+      onClick: () => renderAutomationTemplates(),
+    });
     const newBtn = el('button', {
       class: 'cd-automations-new',
       type: 'button',
@@ -1425,7 +1435,7 @@
         el('h1', {}, 'Automations'),
         el('p', {}, 'Scheduled tasks that run on their own.'),
       ]),
-      newBtn,
+      el('div', { class: 'cd-au-topbar-actions' }, [tplBtn, newBtn]),
     ]);
     const tabRow = el('div', { class: 'cd-automations-tabswitch', role: 'tablist' });
     topbar.append(tabRow);
@@ -1512,6 +1522,286 @@
         projectKind: 'automation',
         ...chromeNav(),
       }) ?? null;
+  }
+
+  // ───────────────────────── Templates gallery ─────────────────────
+  // Automations have no backend template concept — a "template" is a
+  // front-end seed: a name, a trigger, and a prompt. Adopting one
+  // scaffolds a real (disabled) automation via createAutomation and
+  // drops the user into the conversational builder to refine it.
+  interface AutomationTemplate {
+    emoji: string;
+    name: string;
+    category: string;
+    description: string;
+    triggerKind: 'cron' | 'webhook';
+    triggerLabel: string;
+    triggers: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
+    integrations: readonly string[];
+    prompt: string;
+  }
+
+  // Integration name → app-icon hue (the --c-<hue> palette tokens).
+  const INTEGRATION_HUES: Readonly<Record<string, string>> = {
+    Gmail: 'rose',
+    'Google Calendar': 'indigo',
+    Slack: 'violet',
+    GitHub: 'slate',
+    Linear: 'indigo',
+    PagerDuty: 'forest',
+    Datadog: 'violet',
+    Sentry: 'ochre',
+    npm: 'ochre',
+    Notion: 'slate',
+  };
+
+  const AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
+    {
+      emoji: '🌤',
+      name: 'Briefing',
+      category: 'Daily rhythm',
+      description:
+        'A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 6:00 PM',
+      triggers: [{ kind: 'cron', expr: '0 18 * * 1-5' }],
+      integrations: ['Google Calendar', 'Gmail', 'Slack'],
+      prompt: [
+        'Generate a briefing to help me catch up. Include:',
+        '',
+        '1. Schedule — upcoming meetings and events with times, attendees, and any prep needed.',
+        '2. Important emails — unread mail that needs attention, grouped by urgency.',
+        '3. Messages requiring response — direct messages or mentions that need a reply.',
+        '4. Action items — pending tasks or follow-ups from recent activity.',
+        '',
+        'Keep it concise and scannable. If a section has nothing notable, skip it rather than saying "nothing to report."',
+      ].join('\n'),
+    },
+    {
+      emoji: '🌙',
+      name: 'Evening wrap-up',
+      category: 'Daily rhythm',
+      description:
+        'Reflects on what got done today and stages tomorrow’s top three so mornings start sharp.',
+      triggerKind: 'cron',
+      triggerLabel: 'Daily · 9:00 PM',
+      triggers: [{ kind: 'cron', expr: '0 21 * * *' }],
+      integrations: ['Linear', 'Notion'],
+      prompt: [
+        'Wrap up my day. Summarize what was completed, what slipped, and why.',
+        'Then propose the three most important things to tackle tomorrow, ordered by impact.',
+        'Keep it short — a few lines per section.',
+      ].join('\n'),
+    },
+    {
+      emoji: '📨',
+      name: 'Email triage',
+      category: 'Inbox & comms',
+      description:
+        'Sorts your inbox by urgency and drafts replies for anything that genuinely needs one.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 8:30 AM',
+      triggers: [{ kind: 'cron', expr: '30 8 * * 1-5' }],
+      integrations: ['Gmail'],
+      prompt: [
+        'Triage my unread inbox. Group messages into: needs a reply today, can wait, and FYI only.',
+        'For anything that needs a reply, draft a concise response I can review and send.',
+        'Ignore newsletters and automated notifications.',
+      ].join('\n'),
+    },
+    {
+      emoji: '📋',
+      name: 'Meeting prep',
+      category: 'Inbox & comms',
+      description:
+        'Each weekday morning, gathers context, recent threads, and open questions for the day’s meetings.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 8:45 AM',
+      triggers: [{ kind: 'cron', expr: '45 8 * * 1-5' }],
+      integrations: ['Google Calendar', 'Notion'],
+      prompt: [
+        'For each meeting on my calendar today, prepare a short brief:',
+        'who is attending, what the meeting is about, recent related threads or docs, and any open questions I should raise.',
+      ].join('\n'),
+    },
+    {
+      emoji: '🔍',
+      name: 'PR review digest',
+      category: 'Engineering',
+      description:
+        'Surfaces open pull requests, who is blocked on whom, and what is ready to merge.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 11:30 PM',
+      triggers: [{ kind: 'cron', expr: '30 23 * * 1-5' }],
+      integrations: ['GitHub'],
+      prompt: [
+        'Summarize open pull requests across the repo. Group by: needs my review, waiting on others, ready to merge, and failing CI.',
+        'For anything stale more than two days, say how long it has been waiting.',
+      ].join('\n'),
+    },
+    {
+      emoji: '📝',
+      name: 'Release notes drafter',
+      category: 'Engineering',
+      description: 'Drafts user-facing release notes the moment a pull request merges into main.',
+      triggerKind: 'webhook',
+      triggerLabel: 'On merge to main',
+      triggers: [{ kind: 'webhook' }],
+      integrations: ['GitHub'],
+      prompt: [
+        'When a pull request merges to main, draft user-facing release notes.',
+        'Write for end users, not engineers. Skip internal refactors. Lead with the most visible change.',
+      ].join('\n'),
+    },
+    {
+      emoji: '📦',
+      name: 'Dependency update check',
+      category: 'Engineering',
+      description:
+        'Scans for outdated packages, security patches, and breaking changes before they bite.',
+      triggerKind: 'cron',
+      triggerLabel: 'Tuesdays · 12:00 AM',
+      triggers: [{ kind: 'cron', expr: '0 0 * * 2' }],
+      integrations: ['npm', 'GitHub'],
+      prompt: [
+        'Scan package manifests for outdated dependencies.',
+        'Flag security advisories first, then majors with breaking changes, then routine minors.',
+        'Suggest a safe upgrade order.',
+      ].join('\n'),
+    },
+    {
+      emoji: '🩺',
+      name: 'System health check',
+      category: 'Reliability',
+      description:
+        'Watches infrastructure and services for errors, outages, and creeping performance issues.',
+      triggerKind: 'cron',
+      triggerLabel: 'Daily · 5:30 PM',
+      triggers: [{ kind: 'cron', expr: '30 17 * * *' }],
+      integrations: ['PagerDuty', 'Datadog', 'Sentry'],
+      prompt: [
+        'Review infrastructure and service health for the last 24 hours.',
+        'Report active incidents, error-rate spikes, and any metric trending toward a threshold.',
+        'If everything is healthy, say so in one line.',
+      ].join('\n'),
+    },
+    {
+      emoji: '🎫',
+      name: 'Issue triage',
+      category: 'Reliability',
+      description:
+        'Reviews incoming bugs and feature requests, labels them, and routes the urgent ones.',
+      triggerKind: 'cron',
+      triggerLabel: 'Weekdays · 9:00 AM',
+      triggers: [{ kind: 'cron', expr: '0 9 * * 1-5' }],
+      integrations: ['Linear'],
+      prompt: [
+        'Review issues opened since the last run. For each, propose a label (bug / feature / question),',
+        'a priority, and the team it should route to. Flag anything that looks like an outage.',
+      ].join('\n'),
+    },
+    {
+      emoji: '🎲',
+      name: 'Flaky test tracker',
+      category: 'Reliability',
+      description:
+        'Finds tests that pass and fail intermittently across recent CI runs and ranks the worst.',
+      triggerKind: 'cron',
+      triggerLabel: 'Mondays · 9:30 AM',
+      triggers: [{ kind: 'cron', expr: '30 9 * * 1' }],
+      integrations: ['GitHub'],
+      prompt: [
+        'Find tests that pass and fail intermittently across the last 50 CI runs.',
+        'Rank by flake rate. Note which were introduced recently.',
+      ].join('\n'),
+    },
+  ];
+
+  // A row of integration chips — colored dot + name.
+  function renderIntegrationChips(integrations: readonly string[]): HTMLElement {
+    const wrap = el('div', { class: 'cd-au-chips' });
+    for (const name of integrations) {
+      const hue = INTEGRATION_HUES[name] ?? 'slate';
+      const dot = el('i', { class: 'cd-au-chip-dot', 'aria-hidden': 'true' });
+      dot.style.background = `var(--c-${hue})`;
+      wrap.append(el('span', { class: 'cd-au-chip' }, [dot, name]));
+    }
+    return wrap;
+  }
+
+  function renderAutomationTemplateCard(template: AutomationTemplate): HTMLElement {
+    const card = el('button', {
+      class: 'cd-au-tpl-card',
+      type: 'button',
+      onClick: () => void adoptTemplate(template),
+    });
+    const trigIcon =
+      template.triggerKind === 'webhook' ? Icon.Globe({ size: 13 }) : Icon.History({ size: 13 });
+    card.append(
+      el('span', {
+        class: 'cd-au-tpl-use',
+        trustedHtml: `<span>Use template</span>${Icon.ArrowRight({ size: 13 })}`,
+      }),
+      el('span', { class: 'cd-au-tpl-top' }, [
+        el('span', { class: 'cd-au-tpl-emoji' }, template.emoji),
+        el('span', { class: 'cd-au-tpl-name' }, template.name),
+      ]),
+      el('span', { class: 'cd-au-tpl-desc' }, template.description),
+      el('span', { class: 'cd-au-tpl-foot' }, [
+        el('span', { class: 'cd-au-tpl-trig' }, [
+          el('span', { class: 'cd-au-tpl-trig-icon', trustedHtml: trigIcon }),
+          template.triggerLabel,
+        ]),
+        renderIntegrationChips(template.integrations),
+      ]),
+    );
+    return card;
+  }
+
+  function renderAutomationTemplates(): void {
+    recordRoute({ kind: 'templates' });
+    clear();
+    const { main, scroll } = pageScroll(
+      'Templates',
+      'Proven automations, pre-wired with triggers and integrations. Adopt one and tune it to your workflow.',
+    );
+    const cats: string[] = [];
+    for (const t of AUTOMATION_TEMPLATES) if (!cats.includes(t.category)) cats.push(t.category);
+    const catsWrap = el('div', { class: 'cd-au-tpl-cats' });
+    for (const cat of cats) {
+      const grid = el('div', { class: 'cd-au-tpl-grid' });
+      for (const t of AUTOMATION_TEMPLATES) {
+        if (t.category === cat) grid.append(renderAutomationTemplateCard(t));
+      }
+      catsWrap.append(
+        el('section', { class: 'cd-au-tpl-cat' }, [
+          el('div', { class: 'cd-au-tpl-cat-label' }, cat),
+          grid,
+        ]),
+      );
+    }
+    scroll.append(catsWrap);
+    mountShellPage('automations', main);
+  }
+
+  // Scaffold a disabled automation from a template, then open the
+  // builder so the user can review the trigger + prompt before enabling.
+  async function adoptTemplate(template: AutomationTemplate): Promise<void> {
+    const id = `auto.${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      await window.CentraidApi.createAutomation({
+        id,
+        name: template.name,
+        description: template.description,
+        prompt: template.prompt,
+        triggers: template.triggers,
+        enabled: false,
+      });
+    } catch (err) {
+      showToast(`Could not create automation: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    enterAutomationBuilder({ automationId: id });
   }
 
   function automationsEmpty(host: HTMLElement, title: string, sub: string): void {
