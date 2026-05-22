@@ -27,7 +27,7 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   APP_AUTOMATIONS_SUBDIR,
-  listAutomationProjects,
+  listAutomations,
   readAutomationProjectAt,
   writeAutomationManifestAt,
 } from './automation-project.js';
@@ -86,8 +86,8 @@ export interface ProvisionedWebhook {
   readonly dir: string;
   /** Automation id (the directory basename). */
   readonly automationId: string;
-  /** Owning app id, when the automation is app-owned (issue #98). */
-  readonly ownerApp?: string;
+  /** Owning app id — every automation is app-owned (issue #98). */
+  readonly ownerApp: string;
   /** Minted webhook route slug — the path segment under the prefix. */
   readonly webhookId: string;
   /** Plaintext shared secret — shown once, never written to disk. */
@@ -105,7 +105,7 @@ export interface ProvisionedWebhook {
  */
 export async function provisionPendingWebhookAt(
   dir: string,
-  ownerApp?: string,
+  ownerApp: string,
 ): Promise<ProvisionedWebhook | undefined> {
   const row = await readAutomationProjectAt(dir, ownerApp);
   if (!row) return undefined;
@@ -122,13 +122,7 @@ export async function provisionPendingWebhookAt(
     isPendingWebhookTrigger(t) ? provisioned : t,
   );
   await writeAutomationManifestAt(dir, { ...row.manifest, triggers });
-  return {
-    dir,
-    automationId: row.id,
-    ...(ownerApp ? { ownerApp } : {}),
-    webhookId,
-    secret,
-  };
+  return { dir, automationId: row.id, ownerApp, webhookId, secret };
 }
 
 /**
@@ -168,13 +162,14 @@ export interface WebhookFireResult {
  * (`runOpenclawFire`) so this module carries no openclaw dependency.
  */
 export type WebhookFireFn = (input: {
-  automationId: string;
+  /** `<appId>/<automationId>` handle of the resolved automation. */
+  automationRef: string;
   body: unknown;
 }) => Promise<WebhookFireResult>;
 
 export interface WebhookRouteOptions {
-  /** Directory holding the user's automation projects. */
-  automationsDir: string;
+  /** Directory holding the app folders that own the automations. */
+  appsDir: string;
   /** Runs the automation once auth + resolution succeed. */
   fire: WebhookFireFn;
 }
@@ -267,8 +262,8 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
 
     try {
       // Resolve the webhook id to its automation. Webhook slugs are
-      // globally unique, so the first manifest match wins.
-      const { rows } = await listAutomationProjects(opts.automationsDir);
+      // globally unique, so the first active-version match wins.
+      const { rows } = await listAutomations(opts.appsDir);
       const target = rows.find((r) => webhookTriggerOf(r.triggers)?.id === slug);
       if (!target) {
         sendJson(res, 404, { error: 'unknown webhook' });
@@ -294,7 +289,7 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
 
       inFlight.add(slug);
       try {
-        const result = await opts.fire({ automationId: target.id, body: body.body });
+        const result = await opts.fire({ automationRef: target.ref, body: body.body });
         sendJson(res, result.ok ? 200 : 500, result);
       } finally {
         inFlight.delete(slug);

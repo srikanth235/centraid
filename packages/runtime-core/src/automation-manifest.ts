@@ -1,10 +1,11 @@
 /**
  * Automation manifest schema + validator.
  *
- * Issue #91: an automation is a first-class *project* — its own
- * directory under `automationsDir`, structurally a sibling of an app.
- * `automation.json` is the project manifest (this module's shape); the
- * generated handler is a single `handler.js` in the same directory.
+ * Issue #98 (unified folder model): an automation is a first-class
+ * *project* that always lives inside an app folder, at
+ * `<appCodeDir>/automations/<id>/`. `automation.json` is the project
+ * manifest (this module's shape); the generated handler is a single
+ * `handler.js` in the same directory.
  *
  * The manifest is the source of truth — there is no SQLite definition
  * table. `enabled` lives here (toggling it rewrites the file), so a
@@ -22,6 +23,7 @@
 
 import { AutomationManifestError } from './automation-manifest-errors.js';
 import { validateOutputSchema, type AutomationOutputSchema } from './automation-manifest-output.js';
+import { isValidAutomationRef } from './automation-ref.js';
 
 export {
   AutomationManifestError,
@@ -162,7 +164,10 @@ export interface AutomationManifest {
   readonly apps?: readonly string[];
   readonly costEstimate?: AutomationCostEstimate;
   readonly outputSchema?: AutomationOutputSchema;
-  /** Sibling automation id to fire when this one fails. */
+  /**
+   * Automation to fire when this one fails — a `<appId>/<id>` handle, or
+   * a bare `<id>` for a sibling within the same app.
+   */
   readonly onFailure?: string;
   readonly history: AutomationHistoryConfig;
   readonly generated: AutomationGeneratedMeta;
@@ -176,15 +181,6 @@ export function isValidCronExpression(expr: string): boolean {
   if (fields.length !== 5) return false;
   const fieldPattern = /^[0-9*,\-/?A-Za-z]+$/;
   return fields.every((f) => fieldPattern.test(f));
-}
-
-/**
- * Validate an automation *id* (the directory slug). Same grammar an app
- * project id uses — lowercase-safe, filesystem-safe.
- */
-export function isValidAutomationId(id: string): boolean {
-  if (typeof id !== 'string' || id.length === 0) return false;
-  return /^[A-Za-z0-9_-]+$/.test(id);
 }
 
 function requireString(value: unknown, field: string): string {
@@ -415,10 +411,10 @@ function validateOnFailure(raw: unknown): string | undefined {
       'onFailure',
     );
   }
-  if (!isValidAutomationId(raw)) {
+  if (!isValidAutomationRef(raw)) {
     throw new AutomationManifestError(
       'invalid_on_failure',
-      `manifest.onFailure "${raw}" is not a valid automation id`,
+      `manifest.onFailure "${raw}" is not a valid automation handle`,
       'onFailure',
     );
   }

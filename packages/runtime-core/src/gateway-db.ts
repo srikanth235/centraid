@@ -108,8 +108,9 @@ export const ACTIVITY_MIGRATIONS: readonly string[] = [
   // 0 → 1: drop the legacy `automations` definition table.
   //
   // Issue #91: an automation is a first-class *project* on disk — its
-  // own directory under `automationsDir`, with `automation.json` as the
-  // source of truth. There is no SQLite definition table any more; this
+  // own directory (`<appCodeDir>/automations/<id>/`), with
+  // `automation.json` as the source of truth. There is no SQLite
+  // definition table any more; this
   // migration is edited in place (v0, no backfill) to drop the table a
   // pre-#91 build created.
   `

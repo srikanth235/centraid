@@ -173,7 +173,6 @@ export {
   AutomationManifestError,
   AUTOMATION_HANDLER_FILE,
   AUTOMATION_MANIFEST_FILE,
-  isValidAutomationId,
   isValidCronExpression,
   isPendingWebhookTrigger,
   parseManifest,
@@ -195,6 +194,18 @@ export {
   type AutomationHistoryConfig,
   type AutomationHistoryKeep,
 } from './automation-manifest.js';
+
+// Automation identity — the directory-slug grammar and the
+// `<appId>/<id>` handle that scheduler labels, webhook routing,
+// `ctx.invoke`, and `onFailure` address an automation by (issue #98).
+export {
+  isValidAutomationId,
+  isValidAppId,
+  isValidAutomationRef,
+  formatAutomationRef,
+  parseAutomationRef,
+  type AutomationRef,
+} from './automation-ref.js';
 
 // Unified agent-run ledger + ctx.state store. The three tables
 // (`runs`, `run_nodes`, `automation_state`) live in the activity DB;
@@ -235,22 +246,20 @@ export {
   type InsightsActivityRow,
 } from './insights-store.js';
 
-// Automation projects on disk (issue #91). An automation is a
-// first-class project — its own directory under `automationsDir` — and
-// the directory is the source of truth (no SQLite definition table).
+// Automation projects on disk (issue #98 unified model). An automation
+// always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
+// `listAutomations` scans every app's active version. The directory is
+// the source of truth (no SQLite definition table).
 export {
   APP_AUTOMATIONS_SUBDIR,
   automationManifestPath,
   automationHandlerPath,
-  readAutomationProject,
   readAutomationProjectAt,
-  listAutomationProjects,
-  listAppOwnedAutomations,
-  listAllAutomationProjects,
-  writeAutomationManifest,
+  readAppOwnedAutomation,
+  listAutomations,
   writeAutomationManifestAt,
-  setAutomationEnabled,
-  deleteAutomationProject,
+  setAutomationEnabledAt,
+  deleteAutomationAt,
   type AutomationRow,
   type AutomationProjectError,
   type ListAutomationProjectsResult,

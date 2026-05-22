@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   AutomationManifestError,
   isPendingWebhookTrigger,
-  isValidAutomationId,
   isValidCronExpression,
   parseManifest,
   validateManifest,
@@ -38,21 +37,6 @@ describe('isValidCronExpression', () => {
     assert.equal(isValidCronExpression('* * * * * *'), false);
     assert.equal(isValidCronExpression('@hourly'), false);
     assert.equal(isValidCronExpression('rm -rf / * * * *'), false);
-  });
-});
-
-describe('isValidAutomationId', () => {
-  it('accepts filesystem-safe slugs', () => {
-    assert.equal(isValidAutomationId('daily-digest'), true);
-    assert.equal(isValidAutomationId('summarize_prs'), true);
-    assert.equal(isValidAutomationId('Auto123'), true);
-  });
-
-  it('rejects empty / path-unsafe ids', () => {
-    assert.equal(isValidAutomationId(''), false);
-    assert.equal(isValidAutomationId('has space'), false);
-    assert.equal(isValidAutomationId('../escape'), false);
-    assert.equal(isValidAutomationId('dot.dot'), false);
   });
 });
 

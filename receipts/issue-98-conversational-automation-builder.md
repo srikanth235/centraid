@@ -12,6 +12,10 @@ as UI.
 - [x] Commit 1 — conversational automation builder + app-owned automations
 - [x] Commit 2 — builder-minted webhook triggers
 
+Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid/issues/98) — every automation is an app):
+
+- [x] Commit 3 — runtime-core: unified automation discovery
+
 Follow-up (tracked on #98, not in this commit):
 
 - [ ] Schedule/execute app-owned automations — OS scheduler host + the
@@ -115,18 +119,65 @@ it.
   user wants an inbound-HTTP trigger, and never to invent an `id` or
   `secretHash`.
 
+### Commit 3 — runtime-core: unified automation discovery
+
+First commit of the [#98 revision](https://github.com/srikanth235/centraid/issues/98)
+big-bang refactor: the standalone-vs-app-owned automation duality is
+collapsed. There is no `automationsDir` — every automation lives inside
+an app folder, and the app folder is the unit of upload and versioning.
+
+#### runtime-core — `automation-project.ts` rewrite
+
+- `automationsDir`-based functions are deleted (`readAutomationProject`,
+  `listAutomationProjects`, `listAppOwnedAutomations`,
+  `listAllAutomationProjects`, `writeAutomationManifest`,
+  `setAutomationEnabled`, `deleteAutomationProject`).
+- `listAutomations(appsDir)` is the single discovery entry point. It
+  scans every app folder, resolves each app's *active version* code dir
+  via `readActiveCodeDir` (which falls back to the flat folder for an
+  editable desktop draft), and reads every `<codeDir>/automations/<id>/`.
+  One scan covers both the versioned gateway and the flat desktop draft.
+- `AutomationRow.ownerApp` is now required (every automation is
+  app-owned) and a `ref` field carries the `<appId>/<id>` handle.
+- `readAppOwnedAutomation(appsDir, appId, id)` resolves one automation
+  through the active version. `readAutomationProjectAt`,
+  `writeAutomationManifestAt`, `setAutomationEnabledAt`, and
+  `deleteAutomationAt` are the by-directory primitives;
+  `automationManifestPath` / `automationHandlerPath` take a project dir.
+
+#### runtime-core — automation identity module
+
+- New `automation-ref.ts` holds the automation-identity surface:
+  `isValidAutomationId` (moved here), `isValidAppId` (permits the
+  `auto.` prefix's dot, excludes `_`-prefixed / path-unsafe ids), the
+  `AutomationRef` type, and `formatAutomationRef` / `parseAutomationRef`
+  / `isValidAutomationRef`. `manifest.onFailure` now validates against
+  `isValidAutomationRef`, so a `<appId>/<id>` handle (or a bare sibling
+  id) is accepted. The split also keeps `automation-manifest.ts` under
+  the 500-line repo-hygiene limit.
+
+#### runtime-core — webhook discovery
+
+- `automation-webhook.ts`: `WebhookRouteOptions` takes `appsDir` (not
+  `automationsDir`); the route handler resolves a slug via
+  `listAutomations` against active versions. `WebhookFireFn` now
+  receives an `automationRef` handle. `provisionPendingWebhookAt`'s
+  `ownerApp` and `ProvisionedWebhook.ownerApp` are now required.
+
 ## Out of scope
 
 - Scheduling and execution of app-owned automations — the OS scheduler
   host + `centraid run-automation` CLI + cloud gateway. This commit
   lands only the *discovery* foundation; the runtime wiring is the
   tracked follow-up on the checklist above.
-- Webhook *routing* of app-owned automations — the gateway resolves
-  `POST /_centraid-hook/<id>` only against standalone projects under
-  `automationsDir` (`listAutomationProjects`). Routing app-owned
-  webhooks is deferred to the scheduling/runtime pass.
 - Bidirectional form editing — the config pane is a read-only rendered
   view of the manifest; chat is the only input.
+- Commit 3 reworks only the runtime-core discovery layer. Its consumers
+  — builder-harness scaffold/publish, the openclaw-plugin gateway, the
+  agent-runtime scheduler host + CLI, and the desktop IPC/renderer —
+  still reference the deleted `automationsDir` API and are updated in
+  the follow-on commits of this PR (4–6). The repo typechecks
+  end-to-end only once commit 6 lands.
 
 ## Verification
 
@@ -145,3 +196,14 @@ it.
   automation builder mode, chat→config-pane sync, test-fire, the Enable
   gate, and the webhook-secret one-time chat message are
   type/build-verified only.
+
+### Commit 3 verification
+
+- `runtime-core` typechecks clean (`tsc --noEmit`).
+- `runtime-core` full test suite — 283/283 pass, including the rewritten
+  `automation-project` tests (7 — flat draft + versioned-app discovery,
+  the `<appId>/<id>` handle, by-dir mutators) and new
+  `automation-manifest` ref-helper tests (`isValidAppId`, the
+  `formatAutomationRef` / `parseAutomationRef` / `isValidAutomationRef`
+  round-trip).
+- Downstream packages do not yet typecheck — expected; see Out of scope.
