@@ -38,6 +38,8 @@ export {
 export {
   scaffoldAutomationProject,
   validateAutomationId,
+  validateAutomationAppId,
+  AUTOMATION_APP_PREFIX,
   type AutomationScaffoldOptions,
 } from './scaffold-automation.js';
 

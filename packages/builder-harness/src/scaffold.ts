@@ -10,14 +10,16 @@ const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 /** Templates ship inside @centraid/openclaw-plugin/templates. */
 const PLUGIN_TEMPLATES = path.resolve(HARNESS_DIR, '..', '..', 'openclaw-plugin', 'templates');
 
-const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+// Dots are permitted so an automation app can carry the `auto.` prefix
+// (issue #98); a `..` sequence is still rejected as path-unsafe.
+const ID_RE = /^[a-z0-9][a-z0-9.-]{0,62}$/;
 
 /** Validate an app id against centraid's reserved-prefix and shape rules. */
 export function validateAppId(id: string): void {
-  if (id.startsWith('_') || !ID_RE.test(id)) {
+  if (id.startsWith('_') || id.includes('..') || !ID_RE.test(id)) {
     throw new HarnessError(
       'invalid_id',
-      `Invalid app id "${id}". Lowercase a-z / 0-9 / "-", 1-63 chars, no leading "_".`,
+      `Invalid app id "${id}". Lowercase a-z / 0-9 / "-" / ".", 1-63 chars, no leading "_".`,
     );
   }
 }

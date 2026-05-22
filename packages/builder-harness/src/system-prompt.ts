@@ -36,7 +36,7 @@ Handlers are authored as **plain \`.js\` ES modules** — there is no \`tsconfig
 
 ### Files you must NEVER create or commit
 
-- \`data.sqlite\` — managed by the plugin at runtime; persists across versions and would be **rejected at upload**.
+- \`data.sqlite\`, \`runtime.sqlite\` — managed by the plugin at runtime; persist across versions and would be **rejected at upload**.
 - \`current.json\`, \`_registry.json\`, \`versions/\` — runtime artifacts owned by the plugin.
 - \`tsconfig.json\`, \`*.ts\`, \`*.tsx\`, \`*.d.ts\` — handlers are \`.js\`-only. If you find legacy \`.ts\` files in an existing project, do **not** add new ones; leave the old ones alone and write new handlers as \`.js\`.
 - Any binary executable, native module, or symlink.
@@ -249,33 +249,33 @@ export function centraidAppendPrompt(): string {
 /**
  * The system prompt for an **automation** project.
  *
- * An automation is a first-class project (issue #91) — its own folder
- * under `<projectsDir>/automations/<id>/` holding `automation.json` (the
- * manifest) and `handler.js` (the scheduled handler). This is a separate
- * layout from the app prompt above: no `index.html`, no `queries/` /
- * `actions/`, no migrations, no UI. The builder drives one conversation
- * that maintains both files; the user reviews the config and enables it.
+ * Issue #98: an automation is an *automation app* — one `auto.`-prefixed
+ * app folder holding `app.json` and a single automation under
+ * `automations/<id>/` (`automation.json` + `handler.js`). It carries no
+ * UI: no `index.html`, no `queries/` / `actions/`, no migrations. The
+ * builder drives one conversation that maintains the two automation
+ * files; the user reviews the config and enables it.
  */
 export const AUTOMATION_APPEND_PROMPT = `## Centraid automation authoring
 
-You are working inside a centraid **automation** project — a scheduled, deterministic job that runs with no human in the loop. An automation has no UI: it is exactly two files, a manifest and a handler. Read this section before making changes.
+You are working inside a centraid **automation app** — an app folder that runs a scheduled, deterministic job with no human in the loop. It has no UI: the work you maintain is a manifest and a handler under \`automations/\`. Read this section before making changes.
 
 ### Project layout (canonical)
 
 \`\`\`
-<project root>/
-  automation.json   # the manifest — schedule, model, capability declarations
-  handler.js        # the handler the scheduler fires
-  versions/         # published snapshots — runtime-owned, never touch
+<project root>/                       # an automation app (auto.-prefixed folder)
+  app.json                            # app metadata — leave as the scaffold wrote it
+  automations/<id>/automation.json     # the manifest you maintain
+  automations/<id>/handler.js          # the handler you maintain
 \`\`\`
 
-\`automation.json\` and \`handler.js\` ARE the automation. Maintain both across the conversation. There is no \`index.html\`, no \`queries/\`, no \`actions/\`, no \`migrations/\` — this is not an app.
+The two files under \`automations/<id>/\` ARE the automation. Maintain both across the conversation. There is no \`index.html\`, no \`queries/\`, no \`actions/\`, no \`migrations/\` — an automation app has no UI. \`<id>\` is the slug the scaffold created; do not rename it.
 
 ### Files you must NEVER create or edit
 
-- \`versions/\`, \`.centraid-builder-state.json\` — runtime/harness artifacts.
+- \`current.json\`, \`versions/\`, \`.centraid-builder-state.json\` — runtime/harness artifacts.
 - \`*.ts\`, \`*.tsx\`, \`*.d.ts\`, \`tsconfig.json\` — the handler is \`.js\`-only.
-- \`data.sqlite\`, \`automations.sqlite\` — runtime-managed databases.
+- \`data.sqlite\`, \`runtime.sqlite\` — runtime-managed databases.
 
 ### The manifest — \`automation.json\`
 
@@ -351,10 +351,10 @@ Avoid in handlers:
 
 ### Authoring flow
 
-The scaffold already wrote a draft \`automation.json\` and a starter \`handler.js\`. On each turn:
+The scaffold already wrote a draft \`automations/<id>/automation.json\` and a starter \`automations/<id>/handler.js\`. On each turn:
 
-1. Update \`automation.json\` so \`name\`, \`prompt\`, \`triggers\`, \`requires\`, and \`apps\` match the user's current intent. Keep \`enabled: false\`.
-2. Rewrite \`handler.js\` to do the work the prompt describes.
+1. Update \`automations/<id>/automation.json\` so \`name\`, \`prompt\`, \`triggers\`, \`requires\`, and \`apps\` match the user's current intent. Keep \`enabled: false\`.
+2. Rewrite \`automations/<id>/handler.js\` to do the work the prompt describes.
 
 The user reviews the manifest in the builder's config pane and enables the automation themselves when satisfied.
 `;

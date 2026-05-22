@@ -15,6 +15,7 @@ as UI.
 Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid/issues/98) — every automation is an app):
 
 - [x] Commit 3 — runtime-core: unified automation discovery
+- [x] Commit 4 — builder-harness: automation apps scaffold + publish
 
 Follow-up (tracked on #98, not in this commit):
 
@@ -164,6 +165,39 @@ an app folder, and the app folder is the unit of upload and versioning.
   receives an `automationRef` handle. `provisionPendingWebhookAt`'s
   `ownerApp` and `ProvisionedWebhook.ownerApp` are now required.
 
+### Commit 4 — builder-harness: automation apps scaffold + publish
+
+Second commit of the [#98 revision](https://github.com/srikanth235/centraid/issues/98):
+the builder-harness scaffolds and publishes an automation as an app.
+
+#### builder-harness — `scaffold-automation.ts` rewrite
+
+- `scaffoldAutomationProject(appsDir, appId, opts)` now scaffolds a whole
+  *automation app*: an `auto.`-prefixed app folder with an `app.json`
+  plus a single automation under `automations/<autoId>/`
+  (`automation.json` + `handler.js`). No root-level `automation.json`,
+  no `versions/` at scaffold time.
+- `validateAutomationAppId` enforces the `auto.` prefix (the listing-
+  level kind hint); `AUTOMATION_APP_PREFIX` is exported.
+  `opts.automationId` defaults to the app id with the prefix stripped,
+  falling back to `main`.
+
+#### builder-harness — app id grammar + publish excludes
+
+- `scaffold.ts`'s `validateAppId` / `ID_RE` now permit dots so an
+  automation app can carry the `auto.` prefix; a `..` sequence is still
+  rejected.
+- `publish.ts` adds `runtime.sqlite` to the upload-exclude set — the new
+  per-app run ledger is runtime-managed and never shipped.
+
+#### builder-harness — prompts for the unified model
+
+- `AUTOMATION_APPEND_PROMPT` describes the automation-app layout
+  (`app.json` + `automations/<id>/automation.json` + `handler.js`),
+  tells the agent to leave `app.json` alone, and lists `runtime.sqlite`
+  among the never-create files. `CENTRAID_APPEND_PROMPT` adds
+  `runtime.sqlite` to its never-create list.
+
 ## Out of scope
 
 - Scheduling and execution of app-owned automations — the OS scheduler
@@ -207,3 +241,13 @@ an app folder, and the app folder is the unit of upload and versioning.
   `formatAutomationRef` / `parseAutomationRef` / `isValidAutomationRef`
   round-trip).
 - Downstream packages do not yet typecheck — expected; see Out of scope.
+
+### Commit 4 verification
+
+- `builder-harness` typechecks clean against the rebuilt `runtime-core`.
+- `builder-harness` test suite — 10/10 pass, including the rewritten
+  `scaffoldAutomationProject` tests (app-folder layout, derived vs
+  explicit automation id, `auto.`-prefix enforcement, duplicate
+  rejection).
+- The openclaw-plugin / agent-runtime / desktop packages still
+  reference the old discovery + scaffold APIs — updated in commits 5–6.
