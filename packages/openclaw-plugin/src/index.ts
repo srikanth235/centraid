@@ -26,7 +26,7 @@ import {
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
   makeActivityDbProvider,
-  listAutomationProjects,
+  listAutomations,
   makeWebhookRouteHandler,
 } from '@centraid/runtime-core';
 import { registerCentraidTools } from './lib/tools.js';
@@ -94,9 +94,9 @@ export default definePluginEntry({
     const automationDbProvider = makeActivityDbProvider(
       path.join(dbDir, 'centraid-activity.sqlite'),
     );
-    // Automation projects live on disk (issue #91) — their own directory
-    // tree, a sibling of the apps dir.
-    const automationsDir = path.join(dbDir, 'centraid-automations');
+    // Issue #98: an automation is never standalone — it lives inside an
+    // app folder under `appsDir`. There is no separate automations dir;
+    // `listAutomations(appsDir)` scans every app's active version.
     const userStore = new UserStore(gatewayDbProvider);
 
     // Chat-history store — wraps the activity DB. It is THE chat store:
@@ -139,7 +139,7 @@ export default definePluginEntry({
     // runtime. See `lib/automations-provider.ts`.
     registerAutomationsProvider(api, {
       automationDbProvider,
-      automationsDir,
+      appsDir,
       logger: api.logger,
     });
 
@@ -157,7 +157,7 @@ export default definePluginEntry({
       // network / SDK errors so a transient cron-store hiccup doesn't
       // prevent the plugin from booting.
       try {
-        const { rows } = await listAutomationProjects(automationsDir);
+        const { rows } = await listAutomations(appsDir);
         const outcome = await automationHost.reconcile(rows);
         if (outcome.added.length + outcome.updated.length + outcome.removed.length > 0) {
           api.logger.info(
@@ -217,12 +217,12 @@ export default definePluginEntry({
       match: 'prefix',
       auth: 'plugin',
       handler: makeWebhookRouteHandler({
-        automationsDir,
-        fire: async ({ automationId, body }) => {
+        appsDir,
+        fire: async ({ automationRef, body }) => {
           const outcome = await runOpenclawFire(
             {
-              automationId,
-              automationsDir,
+              automationRef,
+              appsDir,
               activityDbProvider: automationDbProvider,
               triggerKind: 'scheduled',
               triggerOrigin: 'webhook',

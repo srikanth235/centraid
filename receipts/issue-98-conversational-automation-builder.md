@@ -16,6 +16,7 @@ Unified folder model (the [#98 revision](https://github.com/srikanth235/centraid
 
 - [x] Commit 3 — runtime-core: unified automation discovery
 - [x] Commit 4 — builder-harness: automation apps scaffold + publish
+- [x] Commit 5 — openclaw-plugin: gateway fires automations as apps
 
 Follow-up (tracked on #98, not in this commit):
 
@@ -198,6 +199,33 @@ the builder-harness scaffolds and publishes an automation as an app.
   among the never-create files. `CENTRAID_APPEND_PROMPT` adds
   `runtime.sqlite` to its never-create list.
 
+### Commit 5 — openclaw-plugin: gateway fires automations as apps
+
+Third commit of the [#98 revision](https://github.com/srikanth235/centraid/issues/98):
+the gateway resolves and fires automations by their `<appId>/<id>`
+handle, reading the owning app's active version. The separate
+`centraid-automations` directory is gone.
+
+#### openclaw-plugin — fire by handle, off the active version
+
+- `runOpenclawFire` takes an `automationRef` + `appsDir` (was
+  `automationId` + `automationsDir`). It parses the handle and resolves
+  the automation via `readAppOwnedAutomation`, which reads the owning
+  app's *active version*. `ctx.invoke` and `onFailure` resolve a handle
+  (a bare id resolves within the calling automation's app).
+- `automations-provider.ts` — the cron StreamFn's `<<<centraid:…>>>`
+  sentinel now carries the `<appId>/<id>` handle; the provider resolves
+  under `appsDir`.
+
+#### openclaw-plugin — cron names + discovery
+
+- `automations-cron.ts` names every cron job `centraid:<appId>/<id>`
+  (was `centraid:<id>`) — unique across apps. `automation-host.ts`'s
+  `unregister` takes the handle.
+- `index.ts` drops the `centraid-automations` directory; the
+  `gateway_start` reconcile and the `/_centraid-hook` webhook route both
+  resolve automations via `listAutomations(appsDir)`.
+
 ## Out of scope
 
 - Scheduling and execution of app-owned automations — the OS scheduler
@@ -251,3 +279,10 @@ the builder-harness scaffolds and publishes an automation as an app.
   rejection).
 - The openclaw-plugin / agent-runtime / desktop packages still
   reference the old discovery + scaffold APIs — updated in commits 5–6.
+
+### Commit 5 verification
+
+- `openclaw-plugin` typechecks clean against the rebuilt `runtime-core`.
+- `openclaw-plugin` test suite — 21/21 pass.
+- The agent-runtime local fire path and the desktop still reference the
+  old discovery API — updated in the remaining commits.

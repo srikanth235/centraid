@@ -17,8 +17,9 @@
  *   - cron has it, DB doesn't  → remove (zombie from a deleted app)
  *   - both have it, mismatched → update
  *
- * Cron names follow `centraid:<automationId>` so the diff is a
- * straightforward set operation.
+ * Cron names follow `centraid:<appId>/<automationId>` (the automation's
+ * globally-unique handle) so the diff is a straightforward set
+ * operation and stays unique across apps.
  */
 
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
@@ -29,26 +30,27 @@ import { CENTRAID_MOCK_MODEL_ID, CENTRAID_MOCK_PROVIDER_ID } from './automations
 const CRON_PREFIX = 'centraid';
 
 /**
- * Base cron-job name for an automation — also the name of its first
- * (or only) cron trigger.
+ * Base cron-job name for an automation handle — also the name of its
+ * first (or only) cron trigger.
  */
-export function cronNameFor(automationId: string): string {
-  return `${CRON_PREFIX}:${automationId}`;
+export function cronNameFor(automationRef: string): string {
+  return `${CRON_PREFIX}:${automationRef}`;
 }
 
 /**
  * Cron-job name for the Nth cron trigger of an automation. Index 0 is
- * the bare `centraid:<id>`; later triggers get a `:<n>` suffix so a
+ * the bare `centraid:<ref>`; later triggers get a `:<n>` suffix so a
  * multi-cron automation maps to several distinctly-named cron jobs.
- * Automation ids never contain `:`, so the boundary is unambiguous.
+ * Neither an app id nor an automation id contains `:`, so the boundary
+ * is unambiguous.
  */
-function cronNameAt(automationId: string, index: number): string {
-  return index === 0 ? cronNameFor(automationId) : `${cronNameFor(automationId)}:${index}`;
+function cronNameAt(automationRef: string, index: number): string {
+  return index === 0 ? cronNameFor(automationRef) : `${cronNameFor(automationRef)}:${index}`;
 }
 
-/** True when `name` is a centraid cron job belonging to `automationId`. */
-function cronNameBelongsTo(name: string, automationId: string): boolean {
-  const base = cronNameFor(automationId);
+/** True when `name` is a centraid cron job belonging to `automationRef`. */
+function cronNameBelongsTo(name: string, automationRef: string): boolean {
+  const base = cronNameFor(automationRef);
   return name === base || name.startsWith(`${base}:`);
 }
 
@@ -82,7 +84,7 @@ function payloadFor(row: AutomationRow, name: string, expr: string): CronAddPayl
     wakeMode: 'now',
     payload: {
       kind: 'agentTurn',
-      message: `<<<centraid:${row.id}>>>`,
+      message: `<<<centraid:${row.ref}>>>`,
       model: `${CENTRAID_MOCK_PROVIDER_ID}/${CENTRAID_MOCK_MODEL_ID}`,
       ...(row.manifest.requires.tools ? { toolsAllow: row.manifest.requires.tools } : {}),
       timeoutSeconds: 300,
@@ -99,7 +101,7 @@ function payloadFor(row: AutomationRow, name: string, expr: string): CronAddPayl
 export function desiredCronJobs(row: AutomationRow): Map<string, CronAddPayload> {
   const out = new Map<string, CronAddPayload>();
   cronTriggersOf(row.triggers).forEach((t, i) => {
-    const name = cronNameAt(row.id, i);
+    const name = cronNameAt(row.ref, i);
     out.set(name, payloadFor(row, name, t.expr));
   });
   return out;
@@ -141,18 +143,18 @@ export async function upsertCronJob(row: AutomationRow): Promise<void> {
     await upsertCronPayload(payload);
   }
   for (const name of await listCentraidCronJobs()) {
-    if (cronNameBelongsTo(name, row.id) && !desired.has(name)) {
+    if (cronNameBelongsTo(name, row.ref) && !desired.has(name)) {
       await removeCronByName(name);
     }
   }
 }
 
-/** Remove every cron job belonging to an automation. */
-export async function removeCronJob(automationId: string): Promise<void> {
-  const own = (await listCentraidCronJobs()).filter((n) => cronNameBelongsTo(n, automationId));
+/** Remove every cron job belonging to an automation handle. */
+export async function removeCronJob(automationRef: string): Promise<void> {
+  const own = (await listCentraidCronJobs()).filter((n) => cronNameBelongsTo(n, automationRef));
   // The base name may not appear in `cron.list` if the job was never
   // registered; remove it explicitly so teardown stays idempotent.
-  for (const name of new Set([cronNameFor(automationId), ...own])) {
+  for (const name of new Set([cronNameFor(automationRef), ...own])) {
     await removeCronByName(name);
   }
 }
