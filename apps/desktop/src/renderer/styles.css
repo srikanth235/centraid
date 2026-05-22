@@ -5078,827 +5078,6 @@ textarea {
   text-align: center;
 }
 
-/* ───────────────────────── Automations page ─────────────────────────
-   Flex-column layout: a fixed topbar (title + tab switch) over a
-   flex:1 host that the active tab fills. The Executions tab renders an
-   n8n-style master/detail; Standing orders renders a scrolling list. */
-.cd-automations-topbar {
-  flex: none;
-  padding: 40px 40px 0;
-  position: relative;
-}
-.cd-automations-topbar .cd-page-head {
-  max-width: none;
-  margin: 0 0 18px;
-}
-
-/* "New automation" button — top-right of the Automations topbar. */
-.cd-automations-new {
-  position: absolute;
-  top: 40px;
-  right: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: none;
-  border-radius: 8px;
-  background: var(--cd-accent, #6366f1);
-  color: #fff;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.cd-automations-new:hover {
-  filter: brightness(1.08);
-}
-
-/* New-automation creation sheet (reuses the palette backdrop). */
-.cd-newauto {
-  width: 480px;
-  max-width: calc(100vw - 48px);
-  max-height: 78vh;
-  overflow-y: auto;
-  margin: 8vh auto 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 22px;
-  border-radius: 14px;
-  background: var(--cd-surface, #fff);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
-}
-.cd-newauto-title {
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.cd-newauto-label {
-  font-size: 12px;
-  font-weight: 600;
-  opacity: 0.72;
-  margin-top: 6px;
-}
-.cd-newauto-input,
-.cd-newauto-prompt {
-  font: inherit;
-  font-size: 13px;
-  padding: 8px 10px;
-  border: 1px solid var(--cd-border, rgba(0, 0, 0, 0.16));
-  border-radius: 8px;
-  background: var(--cd-surface-2, #fafafa);
-  color: inherit;
-  width: 100%;
-  box-sizing: border-box;
-}
-.cd-newauto-prompt {
-  resize: vertical;
-  min-height: 72px;
-}
-.cd-newauto-error {
-  font-size: 12px;
-  color: #dc2626;
-}
-.cd-newauto-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
-.cd-newauto-cancel,
-.cd-newauto-create {
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.cd-newauto-cancel {
-  border: 1px solid var(--cd-border, rgba(0, 0, 0, 0.16));
-  background: transparent;
-  color: inherit;
-}
-.cd-newauto-create {
-  border: none;
-  background: var(--cd-accent, #6366f1);
-  color: #fff;
-}
-.cd-newauto-create:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-.cd-newauto-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--cd-border, rgba(0, 0, 0, 0.12));
-}
-.cd-newauto-section-title {
-  font-size: 13px;
-  font-weight: 700;
-}
-.cd-newauto-hint {
-  font-size: 11px;
-  line-height: 1.45;
-  opacity: 0.66;
-}
-.cd-newauto-triggers {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cd-newauto-trigger-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--cd-border, rgba(0, 0, 0, 0.14));
-  border-radius: 8px;
-  background: var(--cd-surface-2, #fafafa);
-}
-.cd-newauto-trigger-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cd-newauto-trigger-kind {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.6;
-}
-.cd-newauto-trigger-remove {
-  flex: none;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1;
-  padding: 4px 7px;
-  border: 1px solid var(--cd-border, rgba(0, 0, 0, 0.16));
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  opacity: 0.7;
-}
-.cd-newauto-trigger-remove:hover {
-  opacity: 1;
-}
-.cd-newauto-addrow {
-  display: flex;
-  gap: 8px;
-}
-.cd-newauto-add {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border: 1px dashed var(--cd-border, rgba(0, 0, 0, 0.22));
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-.cd-newauto-add:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.cd-newauto-apps {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 168px;
-  overflow-y: auto;
-}
-.cd-newauto-app {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  padding: 4px 2px;
-  cursor: pointer;
-}
-.cd-automations-host {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-.cd-automations-loading {
-  flex: 1;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  color: var(--ink-4);
-}
-.cd-automations-empty-wrap {
-  flex: 1;
-  display: grid;
-  place-items: center;
-  padding: 24px 40px 56px;
-}
-.cd-page-empty-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink-1);
-  margin-bottom: 4px;
-}
-
-/* Tab switch — segmented pill, left-aligned under the title. */
-.cd-automations-tabswitch {
-  display: inline-flex;
-  gap: 4px;
-  padding: 3px;
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-elev) 50%, transparent);
-}
-.cd-automations-tab {
-  border: none;
-  background: transparent;
-  border-radius: 7px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition:
-    background 100ms,
-    color 100ms;
-}
-.cd-automations-tab:hover {
-  color: var(--ink-1);
-}
-.cd-automations-tab[data-active='true'] {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
-  color: var(--ink-1);
-}
-
-/* Standing orders — scrolling, app-grouped list. */
-.cd-automations-orders {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px 40px 56px;
-  width: 100%;
-}
-.cd-automations-orders-col {
-  max-width: 1080px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-}
-.cd-automations-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.cd-automations-group-head {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  align-self: flex-start;
-  padding: 4px 8px 4px 4px;
-  border: none;
-  background: transparent;
-  border-radius: 9px;
-  cursor: pointer;
-  transition: background 100ms;
-}
-.cd-automations-group-head:hover {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-}
-.cd-automations-group-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  flex: none;
-}
-.cd-automations-group-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink-1);
-}
-
-/* Mono eyebrow used across the executions view. */
-.cd-exec-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-
-/* ── Executions — master/detail ──────────────────────────────────── */
-.cd-exec {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  border-top: 0.5px solid var(--line);
-}
-.cd-exec-list {
-  width: 326px;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-right: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 30%, transparent);
-}
-.cd-exec-list-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 18px 10px;
-}
-.cd-exec-list-count {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  padding: 1px 7px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-.cd-exec-list-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 10px 16px;
-}
-.cd-exec-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 10px;
-  margin-block: 1.5px;
-  border: none;
-  background: transparent;
-  border-radius: 9px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 100ms;
-}
-.cd-exec-row:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-.cd-exec-row[data-selected='true'] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-.cd-exec-row-spine {
-  width: 3px;
-  height: 26px;
-  border-radius: 2px;
-  flex: none;
-  background: var(--ink-4);
-}
-.cd-exec-row[data-ok='true'] .cd-exec-row-spine {
-  background: #3ecf8e;
-}
-.cd-exec-row[data-ok='false'] .cd-exec-row-spine {
-  background: #f0506e;
-}
-.cd-exec-row-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  flex: none;
-}
-.cd-exec-row-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.cd-exec-row-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-exec-row-sub {
-  font-size: 11.5px;
-  color: var(--ink-4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-exec-row-dur {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
-  flex: none;
-}
-
-/* ── Executions — detail pane ────────────────────────────────────── */
-.cd-exec-detail {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.cd-exec-detail-loading {
-  flex: 1;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  color: var(--ink-4);
-}
-.cd-exec-detail-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 26px 32px 56px;
-}
-
-/* Detail header — app lockup + status + Run again. */
-.cd-exec-hd {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 22px;
-}
-.cd-exec-hd-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  flex: none;
-}
-.cd-exec-hd-text {
-  flex: 1;
-  min-width: 0;
-}
-.cd-exec-hd-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  margin-bottom: 3px;
-}
-.cd-exec-hd-title {
-  font-family: var(--font-display);
-  font-size: 21px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--ink-1);
-}
-.cd-exec-hd-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: none;
-}
-.cd-exec-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.cd-exec-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.cd-exec-status[data-ok='true'] {
-  color: #3ecf8e;
-  background: color-mix(in srgb, #3ecf8e 14%, transparent);
-}
-.cd-exec-status[data-ok='false'] {
-  color: #f0506e;
-  background: color-mix(in srgb, #f0506e 14%, transparent);
-}
-.cd-exec-runagain {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg-elev);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-2);
-  cursor: pointer;
-  transition:
-    background 100ms,
-    color 100ms;
-}
-.cd-exec-runagain:hover {
-  color: var(--ink-1);
-  background: color-mix(in srgb, var(--ink) 7%, var(--bg-elev));
-}
-.cd-exec-runagain:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-/* Stat strip — KPI tiles. */
-.cd-exec-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
-  gap: 10px;
-  margin-bottom: 22px;
-}
-.cd-exec-stat {
-  padding: 12px 14px;
-  border: 0.5px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-elev);
-}
-.cd-exec-stat-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  margin-bottom: 7px;
-}
-.cd-exec-stat-value {
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--ink-1);
-  text-transform: capitalize;
-}
-
-/* Input / Output preview. */
-.cd-exec-io {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-.cd-exec-preview {
-  min-width: 0;
-  padding: 12px 14px;
-  border: 0.5px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-elev);
-}
-.cd-exec-preview-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  margin-bottom: 8px;
-}
-.cd-exec-preview-body {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--ink-2);
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.cd-exec-preview-text {
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--ink-2);
-}
-.cd-exec-preview-empty {
-  font-size: 12px;
-  font-style: italic;
-  color: var(--ink-4);
-}
-
-/* Section heading (Steps). */
-.cd-exec-section-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.cd-exec-section-count {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  padding: 1px 7px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-.cd-exec-steps-empty {
-  padding: 16px;
-  border: 0.5px dashed var(--line-strong, var(--line));
-  border-radius: 10px;
-  font-size: 12.5px;
-  color: var(--ink-4);
-  text-align: center;
-}
-
-/* Steps timeline. */
-.cd-exec-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cd-exec-lane {
-  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  padding-left: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cd-exec-lane-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-.cd-exec-lane-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cd-exec-step {
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.cd-exec-step[data-ok='false'] {
-  border-color: color-mix(in srgb, #f0506e 45%, var(--line));
-}
-.cd-exec-step-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 12px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: background 100ms;
-}
-.cd-exec-step-head:hover {
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-}
-.cd-exec-step-ord {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-4);
-  flex: none;
-  min-width: 16px;
-}
-.cd-exec-step-kind {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 2px 6px;
-  border-radius: 4px;
-  flex: none;
-}
-.cd-exec-step-kind[data-kind='tool'] {
-  color: #4f9cf0;
-  background: color-mix(in srgb, #4f9cf0 15%, transparent);
-}
-.cd-exec-step-kind[data-kind='agent'] {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-.cd-exec-step-kind[data-kind='invoke'] {
-  color: #e0a23c;
-  background: color-mix(in srgb, #e0a23c 16%, transparent);
-}
-.cd-exec-step-name {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink-1);
-  flex: none;
-  max-width: 220px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-exec-step-bar {
-  flex: 1;
-  min-width: 36px;
-  height: 6px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  overflow: hidden;
-}
-.cd-exec-step-bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-  background: #4f9cf0;
-}
-.cd-exec-step[data-kind='agent'] .cd-exec-step-bar-fill {
-  background: var(--accent);
-}
-.cd-exec-step[data-kind='invoke'] .cd-exec-step-bar-fill {
-  background: #e0a23c;
-}
-.cd-exec-step[data-ok='false'] .cd-exec-step-bar-fill {
-  background: #f0506e;
-}
-.cd-exec-step-dur {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-2);
-  flex: none;
-  width: 54px;
-  text-align: right;
-}
-.cd-exec-step-caret {
-  display: grid;
-  place-items: center;
-  color: var(--ink-4);
-  flex: none;
-  transition: transform 120ms;
-}
-.cd-exec-step-head[aria-expanded='true'] .cd-exec-step-caret {
-  transform: rotate(90deg);
-}
-.cd-exec-step-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border-top: 0.5px solid var(--line);
-}
-.cd-exec-step-body[hidden] {
-  display: none;
-}
-.cd-exec-step-error {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.55;
-  color: #f0506e;
-  background: color-mix(in srgb, #f0506e 10%, transparent);
-  padding: 8px 10px;
-  border-radius: 7px;
-}
-.cd-exec-step-tokens {
-  display: flex;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.cd-exec-step-tokens-sep {
-  color: var(--ink-4);
-}
-.cd-exec-step-io {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.cd-exec-step-note {
-  font-size: 12px;
-  font-style: italic;
-  color: var(--ink-4);
-}
-.cd-exec-step-childtoggle {
-  align-self: flex-start;
-  border: 0.5px solid var(--line);
-  background: transparent;
-  border-radius: 7px;
-  padding: 5px 10px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.cd-exec-step-childtoggle:hover {
-  color: var(--ink-1);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-.cd-exec-step-child {
-  padding-top: 2px;
-}
-
 /* Day-1 home — centered hero with the composer as the centre of gravity.
    The scroll column centers its content vertically when the page is the
    Day-1 layout (a single hero block above the shelf). */
@@ -9483,47 +8662,9 @@ textarea {
   flex-shrink: 0;
 }
 
-/* ═══════════════════════ Automations — rethink ═══════════════════════
+/* ═══════════════════════ Automations ═══════════════════════════════
    A run is a chat thread; an automation is a saved conversation that
-   fires on a trigger; templates seed them. All classes are prefixed
-   `cd-au-` to coexist with the legacy cd-exec-* / cd-app-order-* CSS
-   while the surfaces are migrated commit-by-commit. */
-
-/* ── Automations topbar actions (templates + new) ── */
-.cd-au-topbar-actions {
-  position: absolute;
-  top: 40px;
-  right: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.cd-au-topbar-actions .cd-automations-new {
-  position: static;
-  top: auto;
-  right: auto;
-}
-.cd-automations-tpl {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: 0.5px solid var(--line-strong);
-  border-radius: 8px;
-  background: var(--bg-elev);
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.14s ease;
-}
-.cd-automations-tpl:hover {
-  background: var(--bg-sunken);
-}
-.cd-automations-tpl svg {
-  opacity: 0.7;
-}
+   fires on a trigger; templates seed them. */
 
 /* ── Templates gallery ── */
 .cd-au-tpl-cats {
@@ -10630,5 +9771,279 @@ button.cd-au-run:hover .cd-au-run-go {
   }
   .cd-au-rv-grid .cd-au-rside {
     display: none;
+  }
+}
+
+/* ── Automations overview (landing) ── */
+.cd-au-ov {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-bottom: 56px;
+}
+.cd-au-ov-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.cd-au-ov-title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+.cd-au-ov-sub {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.cd-au-ov-head .cd-au-actions {
+  margin-left: auto;
+}
+
+/* empty state */
+.cd-au-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 64px 24px;
+  border: 0.5px dashed var(--line-strong);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-elev) 40%, transparent);
+}
+.cd-au-empty-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(160deg, var(--accent-light), var(--accent-deep));
+  color: #fff;
+}
+.cd-au-empty-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cd-au-empty-text {
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+
+/* section labels */
+.cd-au-ov-sec {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 13px;
+}
+.cd-au-ov-sec-t {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.cd-au-ov-sec-m {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.cd-au-ov-cols {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 26px;
+  align-items: start;
+}
+
+/* automation rows */
+.cd-au-ov-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-au-ov-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px 14px 17px;
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    transform 0.16s cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-color 0.16s ease;
+}
+.cd-au-ov-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--ink-4);
+  transition: width 0.16s ease;
+}
+.cd-au-ov-row[data-on='true']::before {
+  background: var(--success);
+}
+.cd-au-ov-row:hover {
+  transform: translateX(2px);
+  border-color: var(--line-strong);
+}
+.cd-au-ov-row:hover::before {
+  width: 4px;
+}
+.cd-au-ov-glyph {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-3);
+}
+.cd-au-ov-glyph[data-on='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.cd-au-ov-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cd-au-ov-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cd-au-ov-trig {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.cd-au-ov-trig-ic {
+  display: inline-flex;
+}
+.cd-au-ov-right {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+.cd-au-ov-last {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* recent run stream */
+.cd-au-ov-stream {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.cd-au-ov-stream-empty {
+  padding: 28px 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.cd-au-ov-run {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 15px;
+  background: none;
+  border: none;
+  border-bottom: 0.5px solid var(--line);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.cd-au-ov-run:last-child {
+  border-bottom: none;
+}
+.cd-au-ov-run:hover {
+  background: var(--bg-sunken);
+}
+.cd-au-ov-run-ic {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.cd-au-ov-run-ic[data-ok='false'] {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+.cd-au-ov-run-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cd-au-ov-run-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cd-au-ov-run-sum {
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cd-au-ov-run-when {
+  flex: none;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.cd-au-ov-run-when b {
+  display: block;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+@media (max-width: 860px) {
+  .cd-au-ov-cols {
+    grid-template-columns: 1fr;
   }
 }

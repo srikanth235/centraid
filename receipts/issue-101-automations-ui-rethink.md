@@ -13,7 +13,7 @@ conversation-native model. Approved off a standalone prototype.
 - [x] Commit 1 — templates gallery
 - [x] Commit 2 — automation viewer
 - [x] Commit 3 — run viewer as chat thread
-- [ ] Commit 4 — overview redesign
+- [x] Commit 4 — overview redesign
 
 ## What changed
 
@@ -70,6 +70,24 @@ side rail carries run detail, usage, and a link back to the automation;
 Standing-order run rows (`renderAuRunRow`) become buttons that open the
 thread, keyed by the run record's own `automationId`.
 
+### Commit 4 — overview redesign
+
+`renderAutomations` is rewritten from the two-tab (Executions / Standing
+orders) shell into a single overview: a header with live/paused counts
+and the templates + new-automation actions, then two columns — "Your
+automations" (each row opens its viewer, with a status spine and a last-
+run line) and "Recent runs" (the automation-fire stream, each row opens
+its thread). An empty state replaces the list when no automations exist.
+
+The dead `Executions`-tab code is removed: `renderAutomationsRunsInto`,
+`renderAutomationsOrdersInto`, `automationsEmpty`, `renderExecutionRow`,
+`renderExecutionDetail`, `buildExecutionDetail`, `renderExecPreview`,
+`renderExecSteps`, `renderExecStep`, `loadExecChildSteps`, and the
+`cd-automations-*` / `cd-exec-*` CSS (~820 lines). `collectAutomationRuns`
+is kept and reused for the run stream. The standing-order rendering
+(`renderAutomationsSection` / `renderStandingOrder` and its run/node
+chain) stays — the app settings panel still uses it.
+
 ## Out of scope
 
 - A backend template catalog — templates stay front-end seeds.
@@ -82,7 +100,7 @@ thread, keyed by the run record's own `automationId`.
 
 ## Verification
 
-- `bun run typecheck` + `bun run build` — full monorepo turbo tasks
-  green. Lint + format clean.
+- Full monorepo `bun run typecheck` (16/16), `bun run build` (8/8), and
+  `bun run test` (12/12) — all turbo tasks green. Format clean.
 - The Electron UI was not interactively click-tested; the design was
   validated on a standalone HTML prototype before porting.
