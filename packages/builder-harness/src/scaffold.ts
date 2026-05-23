@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { toCss } from '@centraid/design-tokens';
+import { rewriteAutomationManifestNames, rewriteIndexHtmlTitle } from './project-rewrites.js';
 import { DEFAULT_APP_CSS } from './scaffold-defaults.js';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
@@ -165,6 +166,19 @@ export async function updateProjectMeta(
     else delete parsed.description;
   }
   await fs.writeFile(appJsonPath, JSON.stringify(parsed, null, 2) + '\n');
+
+  // Propagate the rename to the project's subordinate files so the
+  // browser-tab title and Automations row title don't drift from
+  // `app.json#name`. Both helpers are no-ops when their target file
+  // doesn't apply (a UI app has no `automations/`; an automation app
+  // has no `index.html`), so the same call serves both kinds. The
+  // rename path leaves `generated.{by,at}` on automation manifests
+  // alone — only the clone path stamps it (manifest was just produced).
+  if (patch.name !== undefined) {
+    const trimmed = patch.name.trim();
+    await rewriteIndexHtmlTitle(dir, trimmed);
+    await rewriteAutomationManifestNames(dir, trimmed);
+  }
 }
 
 /**

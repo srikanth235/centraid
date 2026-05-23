@@ -17,6 +17,7 @@ refactor that routes both kinds of templates through the same
 - [x] Commit 4 — unify automation + app template paths
 - [x] Commit 5 — home tile reads suffixed name from project, not template
 - [x] Commit 6 — first clone uses bare template name (no -2 suffix)
+- [x] Commit 7 — rename propagates to index.html title + automation.json
 
 ## What changed
 
@@ -68,6 +69,34 @@ Fixes:
   the same call site serves both kinds.
 - The `TEMPLATES_CLONE` IPC default branch uses `suggestCloneIdentity`;
   the caller-specified-id branch keeps the old `suggestAppId` behavior.
+
+### Commit 7 — rename propagates to index.html title + automation.json
+
+Two drift sources surfaced once the rename flow was traced
+end-to-end: the cloned `index.html`'s `<title>` was set at clone time
+and never updated, and the inner `automations/<sub>/automation.json#name`
+(which the Automations page reads as its row title) was likewise
+fixed at clone/scaffold time.
+
+The rewrite helpers from `cloneTemplate` (originally `clone.ts`-local)
+moved into a new `project-rewrites.ts` so both `cloneTemplate` and
+`updateProjectMeta` can share them without a circular import.
+`rewriteAutomationManifestNames` gained a `stampGenerated` option:
+the clone path passes `true` (so `generated.{by,at}` reflects the
+clone time), the rename path leaves `generated` alone (it's
+clone-time metadata, not "last rename time").
+
+`updateProjectMeta` now calls both helpers after writing `app.json`
+when `patch.name` is set. Each helper is a no-op when its target
+doesn't apply, so the same call handles both kinds: a UI app gets the
+`<title>` synced (no automations/ to rewrite), an automation app gets
+the manifest synced (no index.html to rewrite).
+
+3 new tests in `update-project-meta.test.ts` cover:
+- `<title>` propagation on rename of a scaffolded UI project.
+- `automation.json#name` propagation on rename of an automation app,
+  with assertion that `generated` is left untouched.
+- No-op safety when neither subordinate file exists.
 
 ### Commit 6 — first clone uses bare template name (no -2 suffix)
 

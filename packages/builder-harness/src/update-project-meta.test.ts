@@ -73,4 +73,69 @@ describe('updateProjectMeta', () => {
     assert.equal(appJson.name, 'Same');
     assert.equal(appJson.description, 'updated');
   });
+
+  it("propagates rename to index.html's <title> tag", async () => {
+    // scaffoldProject lays down an index.html with `<title>Todos</title>`
+    // (the seeded display name). Renaming should sync the title.
+    await scaffoldProject(dir, 'todos', { name: 'Todos' });
+    const before = await fs.readFile(path.join(dir, 'todos', 'index.html'), 'utf8');
+    assert.match(before, /<title>Todos<\/title>/);
+
+    await updateProjectMeta(dir, 'todos', { name: 'My Cups' });
+
+    const after = await fs.readFile(path.join(dir, 'todos', 'index.html'), 'utf8');
+    assert.match(after, /<title>My Cups<\/title>/);
+    assert.doesNotMatch(after, /<title>Todos<\/title>/);
+  });
+
+  it('propagates rename to automations/<sub>/automation.json#name', async () => {
+    // An automation-app-shaped project: app.json + an automation
+    // manifest sitting under automations/<sub>/automation.json. Both
+    // names start at "Briefing"; rename should sync both.
+    const appId = 'auto.briefing';
+    await fs.mkdir(path.join(dir, appId, 'automations', 'briefing'), { recursive: true });
+    await fs.writeFile(
+      path.join(dir, appId, 'app.json'),
+      JSON.stringify({ name: 'Briefing', version: '0.1.0' }, null, 2),
+    );
+    const originalGenerated = { by: 'centraid-template', at: '2026-01-01T00:00:00.000Z' };
+    await fs.writeFile(
+      path.join(dir, appId, 'automations', 'briefing', 'automation.json'),
+      JSON.stringify({ name: 'Briefing', prompt: 'do', generated: originalGenerated }, null, 2),
+    );
+
+    await updateProjectMeta(dir, appId, { name: 'Morning Briefing' });
+
+    const appJson = JSON.parse(await fs.readFile(path.join(dir, appId, 'app.json'), 'utf8')) as {
+      name: string;
+    };
+    assert.equal(appJson.name, 'Morning Briefing');
+
+    const manifest = JSON.parse(
+      await fs.readFile(
+        path.join(dir, appId, 'automations', 'briefing', 'automation.json'),
+        'utf8',
+      ),
+    ) as { name: string; prompt: string; generated: { by: string; at: string } };
+    assert.equal(manifest.name, 'Morning Briefing');
+    // Rename must NOT re-stamp `generated`: that's clone-time metadata,
+    // not "last rename time".
+    assert.deepEqual(manifest.generated, originalGenerated);
+    // Unrelated fields carry through.
+    assert.equal(manifest.prompt, 'do');
+  });
+
+  it("rename is a no-op on subordinate files that don't exist", async () => {
+    // A bare project with only app.json — no index.html, no
+    // automations/. Rename must not throw, and must not create either.
+    const appId = 'bare';
+    await fs.mkdir(path.join(dir, appId));
+    await fs.writeFile(
+      path.join(dir, appId, 'app.json'),
+      JSON.stringify({ name: 'Bare', version: '0.1.0' }, null, 2),
+    );
+    await updateProjectMeta(dir, appId, { name: 'Renamed' });
+    const entries = await fs.readdir(path.join(dir, appId));
+    assert.deepEqual(entries.sort(), ['app.json']);
+  });
 });

@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
+import { rewriteAutomationManifestNames, rewriteIndexHtmlTitle } from './project-rewrites.js';
 import { isDisplayNameTaken, validateAppId } from './scaffold.js';
 
 /**
@@ -76,9 +77,13 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
   // Automation templates carry a sibling `automation.json#name` whose
   // value the Automations page surfaces as the row title. Keep it in
   // sync with `app.json#name` so a clone of "Briefing" → "Briefing 2"
-  // is consistent across both surfaces. No-op for app templates (no
-  // automations/<id>/ subdirs).
-  if (opts.newName) await rewriteAutomationManifestNames(destDir, opts.newName);
+  // is consistent across both surfaces. The clone path stamps
+  // `generated.{by,at}` too so the manifest reflects the clone time
+  // rather than the original template's authoring time. No-op for app
+  // templates with no automations/<id>/ subdirs.
+  if (opts.newName) {
+    await rewriteAutomationManifestNames(destDir, opts.newName, { stampGenerated: true });
+  }
 
   const stat = await fs.stat(destDir);
   const hasIndex = await fileExists(path.join(destDir, 'index.html'));
@@ -225,89 +230,6 @@ async function rewritePackageJson(destDir: string, newAppId: string): Promise<vo
   if (!currentName.startsWith('centraid-app-')) return;
   parsed.name = `centraid-app-${newAppId}`;
   await fs.writeFile(pkgPath, JSON.stringify(parsed, null, 2) + '\n');
-}
-
-/**
- * Replace the first `<title>...</title>` in the cloned `index.html` with
- * the new display name. HTML-escapes the name so a user-chosen
- * "Foo & Bar" can't break the markup or smuggle a tag in.
- *
- * Defensive on every branch: missing file → skip; no `<title>` tag → skip.
- * Only the first occurrence is replaced (templates never ship more than
- * one, but the bound keeps the rewrite predictable).
- */
-async function rewriteIndexHtmlTitle(destDir: string, newName: string): Promise<void> {
-  const htmlPath = path.join(destDir, 'index.html');
-  let raw: string;
-  try {
-    raw = await fs.readFile(htmlPath, 'utf8');
-  } catch {
-    return; // template doesn't ship an index.html; nothing to rewrite.
-  }
-  const escaped = escapeHtml(newName);
-  let replaced = false;
-  const next = raw.replace(/<title>[\s\S]*?<\/title>/i, () => {
-    if (replaced) return `<title>${escaped}</title>`;
-    replaced = true;
-    return `<title>${escaped}</title>`;
-  });
-  if (!replaced) return; // no <title> tag — leave the file untouched.
-  await fs.writeFile(htmlPath, next);
-}
-
-/**
- * Walk `<destDir>/automations/<id>/automation.json` and clone-stamp each
- * manifest: top-level `name` becomes `newName`, and `generated` becomes
- * `{by:'centraid-builder', at:<now>}` so the manifest reflects the
- * clone time, not the template authoring time.
- *
- * Used by the clone path so an automation template ('Briefing') cloned
- * as 'Briefing 2' surfaces the new name on the Automations page and
- * carries a fresh `generated.at`. The `prompt`, `triggers`, `requires`,
- * `history`, and other fields carry through unchanged.
- *
- * Defensive: a missing `automations/` subdir, missing per-automation
- * manifest, or unparseable JSON each falls through silently — the file
- * stays untouched.
- */
-async function rewriteAutomationManifestNames(destDir: string, newName: string): Promise<void> {
-  const autoRoot = path.join(destDir, 'automations');
-  let entries: import('node:fs').Dirent[];
-  try {
-    entries = await fs.readdir(autoRoot, { withFileTypes: true });
-  } catch {
-    return; // no automations/ subdir — nothing to do.
-  }
-  const nowIso = new Date().toISOString();
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
-    const manifestPath = path.join(autoRoot, e.name, 'automation.json');
-    let raw: string;
-    try {
-      raw = await fs.readFile(manifestPath, 'utf8');
-    } catch {
-      continue; // not every subdir has a manifest (legacy / partial).
-    }
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      continue; // unparseable — leave alone.
-    }
-    parsed.name = newName;
-    parsed.generated = { by: 'centraid-builder', at: nowIso };
-    await fs.writeFile(manifestPath, JSON.stringify(parsed, null, 2) + '\n');
-  }
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }
 
 async function readAppMeta(projectDir: string): Promise<{ name?: string; description?: string }> {
