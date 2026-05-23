@@ -2,6 +2,8 @@
 
 GitHub issue: [#103](https://github.com/srikanth235/centraid/issues/103)
 
+Landed across two commits: the design-tokens registry split + new presets, then the desktop renderer picker UI + iframe-kind propagation.
+
 ## Checklist
 
 - [x] 12 theme presets shipped

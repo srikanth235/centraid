@@ -68,7 +68,10 @@
 
   // Renderer prefs — appearance settings live here (vs gateway settings,
   // which live in the main process via window.CentraidApi.getSettings).
-  type ThemeName = 'light' | 'dark';
+  // ThemeName mirrors the keys of @centraid/design-tokens' THEME_PRESETS;
+  // any string read off the gateway is validated against this set at the
+  // pickAppearance boundary, so unknown names never reach `applyPrefs`.
+  type ThemeName = keyof typeof window.CentraidTokens.themes;
   type Density = 'compact' | 'regular' | 'comfy';
   type TileVariant = 'solid' | 'gradient' | 'glassy' | 'flat';
   type AccentKey = 'blue' | 'violet' | 'teal' | 'ochre' | 'rose';
@@ -178,6 +181,14 @@
   // shape the runtime uses for server-side injection. The bridge inside each
   // app applies them as `<html data-…>` attrs and `--…` CSS vars — symmetric
   // with what the gateway bakes on first paint.
+  // Iframes (app-templates, user apps) only know how to style
+  // `data-theme='light'|'dark'`. Third-party shell themes (Monokai, Nord…)
+  // still resolve to one of those two on the iframe side; the shell
+  // itself wears the full named theme.
+  function iframeThemeKind(): 'light' | 'dark' {
+    return window.CentraidTokens.themes[prefs.theme]?.kind ?? 'dark';
+  }
+
   function buildIframeSettings(): {
     dataAttrs: Record<string, string>;
     cssVars: Record<string, string>;
@@ -185,7 +196,7 @@
     const remote = toRemoteShape(prefs);
     const dataAttrs: Record<string, string> = {};
     const cssVars: Record<string, string> = {};
-    if (typeof remote.theme === 'string') dataAttrs['theme'] = remote.theme;
+    if (typeof remote.theme === 'string') dataAttrs['theme'] = iframeThemeKind();
     if (typeof remote.density === 'string') dataAttrs['density'] = remote.density;
     if (typeof remote.cards === 'string') dataAttrs['cards'] = remote.cards;
     if (typeof remote.coolCast === 'boolean')
@@ -205,7 +216,7 @@
     // Legacy payload — kept for any old `theme-bridge.js` still in the wild
     // (older published apps that haven't been re-served since the bridge
     // moved inline). New inline bridges accept both.
-    const legacyPayload = { type: 'centraid:theme', theme: prefs.theme, bgL: prefs.bgL };
+    const legacyPayload = { type: 'centraid:theme', theme: iframeThemeKind(), bgL: prefs.bgL };
     const frames = document.querySelectorAll<HTMLIFrameElement>('iframe[data-centraid-app]');
     frames.forEach((f) => {
       try {
@@ -243,7 +254,9 @@
   // pref there, add it here too.
   function pickAppearance(remote: Record<string, unknown>): Partial<AppearancePrefs> {
     const out: Partial<AppearancePrefs> = {};
-    if (remote.theme === 'dark' || remote.theme === 'light') out.theme = remote.theme;
+    if (typeof remote.theme === 'string' && remote.theme in window.CentraidTokens.themes) {
+      out.theme = remote.theme as ThemeName;
+    }
     if (
       remote.density === 'compact' ||
       remote.density === 'regular' ||
@@ -4094,7 +4107,7 @@
       frame.addEventListener('load', () => {
         try {
           frame.contentWindow?.postMessage(
-            { type: 'centraid:theme', theme: prefs.theme, bgL: prefs.bgL },
+            { type: 'centraid:theme', theme: iframeThemeKind(), bgL: prefs.bgL },
             '*',
           );
         } catch {
@@ -4109,12 +4122,13 @@
       // `data-theme` / `--bg-l` into the served `index.html` server-side)
       // AND the hash (read by the inline live-settings bridge before paint,
       // covering the builder-preview path that bypasses the runtime).
-      // Theme is intentionally global — every mini app inherits the
-      // Centraid shell theme so the workspace stays visually coherent.
+      // Iframe theme is resolved to its light/dark kind — third-party
+      // shell themes don't ship template-side CSS, so apps stay in the
+      // Centraid look while the shell wears the named theme.
       void window.CentraidApi.appLiveUrl({ id: projectId })
         .then((r) => {
           const qsep = r.url.includes('?') ? '&' : '?';
-          const themeQs = `theme=${prefs.theme}&bgL=${prefs.bgL}`;
+          const themeQs = `theme=${iframeThemeKind()}&bgL=${prefs.bgL}`;
           frame.src = `${r.url}${qsep}${themeQs}#${themeQs}`;
         })
         .catch(() => {
@@ -5304,24 +5318,21 @@
     };
 
     // ---- Theme group ----
-    // The proposal's Mode control offers Auto / Light / Dark. The shell
-    // only persists a concrete light|dark theme, so "Auto" is a one-shot
-    // that resolves the OS `prefers-color-scheme` and applies it — no new
-    // persisted state, persistence semantics stay intact.
-    const themeSeg = makeSegmentedLabeled(
-      ['auto', 'light', 'dark'],
-      { auto: 'Auto', light: 'Light', dark: 'Dark' },
-      prefs.theme,
-      (v) => {
-        const resolved: ThemeName =
-          v === 'auto'
-            ? window.matchMedia('(prefers-color-scheme: light)').matches
-              ? 'light'
-              : 'dark'
-            : (v as ThemeName);
-        setPrefs({ theme: resolved });
-      },
+    // VSCode-style preset picker — every entry in THEME_PRESETS gets a
+    // card with a live mini-preview built from that theme's tokens. The
+    // "Match system" button resolves OS `prefers-color-scheme` to the
+    // matching Centraid theme; it's a one-shot, no new persisted state.
+    const themePicker = makeThemePicker(
+      () => prefs.theme,
+      (v) => setPrefs({ theme: v }),
     );
+    const matchSystemBtn = el('button', { class: 'cd-link-btn', type: 'button' }, 'Match system');
+    matchSystemBtn.addEventListener('click', () => {
+      const next: ThemeName = window.matchMedia('(prefers-color-scheme: light)').matches
+        ? 'light'
+        : 'dark';
+      setPrefs({ theme: next });
+    });
     const coolCastSwitch = makeSwitch(prefs.coolBlueCast, (v) => setPrefs({ coolBlueCast: v }));
     const accentSwatches = makeSwatches(prefs.accent, (v) => setPrefs({ accent: v }));
 
@@ -5378,17 +5389,34 @@
       previewHost.replaceChildren(el('div', { class: 'ap-preview' }, tiles));
     };
     renderAppearancePreview();
-    onAppearanceApplied = renderAppearancePreview;
+    // Chain both refresh hooks behind `onAppearanceApplied` so a setPrefs
+    // call from elsewhere (e.g. Match-system) keeps the theme picker's
+    // active highlight in lockstep with the live tile preview.
+    const refreshPicker = (themePicker as HTMLElement & { _refresh?: () => void })._refresh;
+    onAppearanceApplied = () => {
+      renderAppearancePreview();
+      refreshPicker?.();
+    };
     registerCleanup(() => {
       onAppearanceApplied = null;
     });
 
     pageHosts.appearance.append(
       drawerGroup('Theme', [
-        drawerRowH('Mode', 'Light theme follows the system at night when set to Auto.', themeSeg),
+        drawerRowH(
+          'Color theme',
+          'Pick a preset for the Centraid shell. Apps stay in their own light/dark palette.',
+          themePicker,
+          true,
+        ),
+        drawerRowH(
+          'Match system',
+          'Snap the theme to your OS appearance right now.',
+          matchSystemBtn,
+        ),
         drawerRowH(
           'Cool blue cast',
-          'Tint dark surfaces toward blue. Off = neutral graphite.',
+          'Tint dark surfaces toward blue. Off = neutral graphite. Centraid Dark only.',
           coolCastSwitch,
         ),
       ]),
@@ -6306,6 +6334,78 @@
     }
     return wrap;
   }
+
+  // VSCode-style theme picker. One card per THEME_PRESETS entry; each
+  // card paints a 3-stripe preview (bg / sidebar / accent) sampled from
+  // that theme's own tokens, so the user can see what they're picking
+  // without applying it. The element exposes a `_refresh()` method on
+  // itself so external setPrefs() calls (e.g. Match-system) can update
+  // the active highlight without rebuilding the whole DOM.
+  function makeThemePicker(
+    getCurrent: () => ThemeName,
+    onSelect: (value: ThemeName) => void,
+  ): HTMLElement {
+    const wrap = el('div', {
+      class: 'cd-theme-picker',
+      role: 'radiogroup',
+      'aria-label': 'Color theme',
+    });
+    const cardByName = new Map<ThemeName, HTMLElement>();
+
+    for (const preset of window.CentraidTokens.themePresets) {
+      const theme = window.CentraidTokens.themes[preset.name];
+      // Surfaces under `hsl(... var(--bg-l))` aren't resolvable outside
+      // the theme's own document scope — fall back to a literal swatch
+      // so the preview still paints when bgL is referenced (Centraid Dark).
+      const previewBg = theme.bgL ? `hsl(222 11% ${theme.bgL.replace('%', '')}%)` : theme.bg;
+      const previewElev = theme.bgL
+        ? `hsl(222 11% calc(${theme.bgL.replace('%', '')}% + 4.5%))`
+        : theme.bgElev;
+      const card = el(
+        'button',
+        {
+          class: 'cd-theme-card',
+          'data-name': preset.name,
+          'data-active': String(preset.name === getCurrent()),
+          'aria-checked': String(preset.name === getCurrent()),
+          'aria-label': preset.label,
+          role: 'radio',
+          type: 'button',
+        },
+        [
+          el('div', { class: 'cd-theme-card-preview', style: { background: previewBg } }, [
+            el('span', {
+              class: 'cd-theme-card-bar',
+              style: { background: previewElev },
+            }),
+            el('span', {
+              class: 'cd-theme-card-dot',
+              style: { background: theme.accent },
+            }),
+          ]),
+          el('div', { class: 'cd-theme-card-foot' }, [
+            el('span', { class: 'cd-theme-card-label' }, preset.label),
+            el('span', { class: 'cd-theme-card-kind' }, preset.kind),
+          ]),
+        ],
+      );
+      card.addEventListener('click', () => onSelect(preset.name));
+      cardByName.set(preset.name, card);
+      wrap.append(card);
+    }
+
+    const refresh = (): void => {
+      const current = getCurrent();
+      for (const [name, card] of cardByName) {
+        const active = name === current;
+        card.dataset.active = String(active);
+        card.setAttribute('aria-checked', String(active));
+      }
+    };
+    (wrap as HTMLElement & { _refresh?: () => void })._refresh = refresh;
+    return wrap;
+  }
+
   function makeSegmented<T extends string>(
     options: readonly T[],
     selected: T,
