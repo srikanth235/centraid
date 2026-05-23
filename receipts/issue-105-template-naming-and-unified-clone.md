@@ -150,6 +150,11 @@ Full repo: 16/16 typecheck, 12/12 test suites, format clean.
   `@centraid/builder-harness` including the 17 new tests added in this
   receipt's scope.
 - `bun run format:check` — clean.
+- Commit 2 (rename collision): 6 dedicated tests in
+  `packages/builder-harness/src/update-project-meta.test.ts` cover
+  happy-path rename, name-already-taken rejection, case + whitespace
+  insensitivity, self-rename allowed, empty-name rejection, and
+  description-only updates bypassing the check.
 - End-to-end demo (one-shot node script against the real bundled
   templates) confirms: three back-to-back clones of `hydrate` produce
   `hydrate-2/3/4` with display names `Hydrate 2/3/4`; three back-to-back
