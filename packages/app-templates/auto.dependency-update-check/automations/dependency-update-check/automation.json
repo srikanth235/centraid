@@ -1,0 +1,23 @@
+{
+  "name": "Dependency update check",
+  "version": "0.1.0",
+  "description": "Scans for outdated packages, security patches, and breaking changes before they bite.",
+  "enabled": false,
+  "prompt": "Scan package manifests for outdated dependencies.\nFlag security advisories first, then majors with breaking changes, then routine minors.\nSuggest a safe upgrade order.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "0 0 * * 2"
+    }
+  ],
+  "requires": {},
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-05-23T00:00:00.000Z"
+  }
+}

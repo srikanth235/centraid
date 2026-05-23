@@ -1,0 +1,5 @@
+{
+  "name": "Email triage",
+  "description": "Sorts your inbox by urgency and drafts replies for anything that genuinely needs one.",
+  "version": "0.1.0"
+}

@@ -160,6 +160,15 @@ Full repo: 16/16 typecheck, 12/12 test suites, format clean.
   `suggestCloneIdentity` (5), `suggestAppId` sanity (2), and the
   `<title>` rewrite (4) including HTML escaping and graceful no-op
   when the template doesn't ship an `index.html`.
+- Commit 4 (unify automation + app template paths): 1 additional test
+  in `clone.test.ts` covers the automation manifest rewrite
+  (`automation.json#name` + `generated.{by,at}` stamping) during
+  clone. End-to-end demo against the bundled `auto.briefing` and
+  `auto.release-notes-drafter` templates confirms paired
+  `auto.briefing-{2,3,4}` / "Briefing {2,3,4}" output and webhook
+  secret minting on the webhook template (manifest's
+  `{kind:'webhook',pending:true}` → provisioned `{id, secretHash}`,
+  plaintext secret returned exactly once).
 - End-to-end demo (one-shot node script against the real bundled
   templates) confirms: three back-to-back clones of `hydrate` produce
   `hydrate-2/3/4` with display names `Hydrate 2/3/4`; three back-to-back

@@ -1,0 +1,23 @@
+{
+  "name": "Release notes drafter",
+  "version": "0.1.0",
+  "description": "Drafts user-facing release notes the moment a pull request merges into main.",
+  "enabled": false,
+  "prompt": "When a pull request merges to main, draft user-facing release notes.\nWrite for end users, not engineers. Skip internal refactors. Lead with the most visible change.",
+  "triggers": [
+    {
+      "kind": "webhook",
+      "pending": true
+    }
+  ],
+  "requires": {},
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-05-23T00:00:00.000Z"
+  }
+}

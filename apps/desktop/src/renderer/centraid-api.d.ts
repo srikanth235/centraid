@@ -234,6 +234,37 @@ export interface CentraidTemplateMeta {
   colorKey: string;
   iconKey: string;
   version: string;
+  /**
+   * 'app' (default — full UI app like Hydrate / Todos) or 'automation'
+   * (an `auto.`-prefixed app folder with no UI, surfaced on the
+   * Automations gallery). Defaults to derive-from-id-prefix when absent.
+   */
+  kind?: 'app' | 'automation';
+  // ----- automation-only display fields ('automation' kind) -----
+  /** Emoji on the gallery card (e.g. '🌤'). */
+  emoji?: string;
+  /** Gallery section header (e.g. 'Daily rhythm'). */
+  category?: string;
+  /** Trigger-style glyph picker on the card. */
+  triggerKind?: 'cron' | 'webhook';
+  /** Human-readable trigger label (e.g. 'Weekdays · 6:00 PM'). */
+  triggerLabel?: string;
+  /** Integration chip labels (e.g. ['Gmail', 'Slack']). */
+  integrations?: readonly string[];
+}
+
+/**
+ * Minted webhook credential returned by `cloneTemplate` when the cloned
+ * automation template ships a `{kind:'webhook',pending:true}` trigger. The
+ * plaintext `secret` crosses the IPC boundary exactly once (the manifest
+ * persists only the SHA-256 hash) — the renderer shows it to the user.
+ */
+export interface CentraidMintedWebhook {
+  automationId: string;
+  ownerApp: string;
+  webhookId: string;
+  secret: string;
+  url: string;
 }
 
 /**
@@ -242,7 +273,9 @@ export interface CentraidTemplateMeta {
  */
 export interface CentraidCloneTemplateResult {
   project: CentraidProjectInfo;
-  template: CentraidTemplateMeta;
+  template: CentraidTemplateMeta & { kind: 'app' | 'automation' };
+  /** Empty array for app templates and automation templates with no webhook triggers. */
+  webhooks: CentraidMintedWebhook[];
 }
 
 /**

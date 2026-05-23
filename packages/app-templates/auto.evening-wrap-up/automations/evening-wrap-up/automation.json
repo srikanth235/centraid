@@ -1,0 +1,23 @@
+{
+  "name": "Evening wrap-up",
+  "version": "0.1.0",
+  "description": "Reflects on what got done today and stages tomorrow’s top three so mornings start sharp.",
+  "enabled": false,
+  "prompt": "Wrap up my day. Summarize what was completed, what slipped, and why.\nThen propose the three most important things to tackle tomorrow, ordered by impact.\nKeep it short — a few lines per section.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "0 21 * * *"
+    }
+  ],
+  "requires": {},
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-05-23T00:00:00.000Z"
+  }
+}

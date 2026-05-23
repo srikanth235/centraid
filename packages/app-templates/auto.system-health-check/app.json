@@ -1,0 +1,5 @@
+{
+  "name": "System health check",
+  "description": "Watches infrastructure and services for errors, outages, and creeping performance issues.",
+  "version": "0.1.0"
+}

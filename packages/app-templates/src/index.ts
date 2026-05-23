@@ -30,6 +30,7 @@ export type {
   AppKnobOption,
   AppKnobsManifest,
   ResolvedTemplate,
+  TemplateKind,
   TemplateManifest,
   TemplateMeta,
   TemplateSource,

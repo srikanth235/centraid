@@ -136,6 +136,59 @@ describe('cloneTemplate index.html <title> rewrite', () => {
     assert.equal(html, '<!doctype html><html><body>no head</body></html>');
   });
 
+  it('rewrites automation.json#name + stamps generated for automation templates', async () => {
+    // Lay down an automation-template-shaped source: app.json + automations/<id>/...
+    const templateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-auto-tmpl-'));
+    await fs.writeFile(
+      path.join(templateDir, 'app.json'),
+      JSON.stringify({ name: 'Briefing', version: '0.1.0' }, null, 2),
+    );
+    await fs.mkdir(path.join(templateDir, 'automations', 'briefing'), { recursive: true });
+    await fs.writeFile(
+      path.join(templateDir, 'automations', 'briefing', 'automation.json'),
+      JSON.stringify(
+        {
+          name: 'Briefing',
+          version: '0.1.0',
+          enabled: false,
+          prompt: 'do the thing',
+          triggers: [{ kind: 'cron', expr: '0 18 * * 1-5' }],
+          requires: {},
+          history: { keep: { count: 100 } },
+          generated: { by: 'centraid-template', at: '2026-01-01T00:00:00.000Z' },
+        },
+        null,
+        2,
+      ),
+    );
+    await fs.writeFile(
+      path.join(templateDir, 'automations', 'briefing', 'handler.js'),
+      'export default async () => ({ summary: "ok" });',
+    );
+
+    await cloneTemplate({
+      projectsDir,
+      newAppId: 'auto.briefing-2',
+      templateDir,
+      newName: 'Briefing 2',
+    });
+
+    const mf = JSON.parse(
+      await fs.readFile(
+        path.join(projectsDir, 'auto.briefing-2', 'automations', 'briefing', 'automation.json'),
+        'utf8',
+      ),
+    );
+    assert.equal(mf.name, 'Briefing 2');
+    assert.equal(mf.generated.by, 'centraid-builder');
+    assert.match(mf.generated.at, /^\d{4}-\d{2}-\d{2}T/);
+    // Other fields carry through unchanged.
+    assert.equal(mf.prompt, 'do the thing');
+    assert.deepEqual(mf.triggers, [{ kind: 'cron', expr: '0 18 * * 1-5' }]);
+
+    await fs.rm(templateDir, { recursive: true, force: true });
+  });
+
   it('skips silently when the template has no index.html', async () => {
     await fs.rm(path.join(templateDir, 'index.html'));
     // Should not throw — the clone simply doesn't have an index.html.

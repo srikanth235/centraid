@@ -61,7 +61,10 @@ for (const tmpl of src.templates) {
   } catch {
     /* template doesn't ship knobs — fine, popover just shows manage actions */
   }
-  enriched.templates.push(appKnobs ? { ...tmpl, files, appKnobs } : { ...tmpl, files });
+  // Default `kind` from the `auto.` prefix when not set explicitly. Lets
+  // index.json stay lean — only carry `kind` when overriding the default.
+  const kind = tmpl.kind ?? (tmpl.id.startsWith('auto.') ? 'automation' : 'app');
+  enriched.templates.push(appKnobs ? { ...tmpl, kind, files, appKnobs } : { ...tmpl, kind, files });
 }
 
 await fs.writeFile(OUTPUT, JSON.stringify(enriched, null, 2) + '\n');

@@ -630,6 +630,41 @@ export function registerIpcHandlers(): void {
         newDesc: tmpl.desc,
       });
 
+      // Automation templates may ship `{kind:'webhook',pending:true}`
+      // triggers — the template author can't know the secret in advance,
+      // so the clone path mints id + secret here, rewrites the manifest
+      // to its provisioned form, and returns the plaintext secret to the
+      // renderer to show once. App templates never have webhook triggers,
+      // so this is a no-op for them. The minted webhook secret needs the
+      // remote gateway base URL for the final `/_centraid-hook/<id>` URL.
+      const minted = await provisionAppPendingWebhooks(project.dir);
+      const webhooks = minted.map((m) => ({
+        automationId: m.automationId,
+        ownerApp: m.ownerApp,
+        webhookId: m.webhookId,
+        secret: m.secret,
+        url: `${settings.remoteGatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
+      }));
+
+      // Register any automations the template shipped with the local
+      // host so cron triggers fire and webhook routes resolve without
+      // waiting for the next app start. Best-effort: failures are
+      // logged but don't fail the clone.
+      if (project.id.startsWith('auto.')) {
+        try {
+          const { rows } = await listAutomations(settings.appsDir);
+          for (const row of rows) {
+            if (row.ownerApp !== project.id) continue;
+            await localRuntimeAutomationHost(settings.appsDir).register(row);
+          }
+        } catch (err) {
+          console.warn(
+            `[templates:clone] host register failed for ${project.id}: ` +
+              (err instanceof Error ? err.message : String(err)),
+          );
+        }
+      }
+
       // Cloning only lays the project down on disk as a draft. The user
       // edits/previews in the builder and explicitly clicks Publish to
       // upload to the gateway (Channel.PUBLISH).
@@ -642,7 +677,9 @@ export function registerIpcHandlers(): void {
           colorKey: tmpl.colorKey,
           iconKey: tmpl.iconKey,
           version: tmpl.version,
+          kind: tmpl.kind ?? (tmpl.id.startsWith('auto.') ? 'automation' : 'app'),
         },
+        webhooks,
       };
     },
   );

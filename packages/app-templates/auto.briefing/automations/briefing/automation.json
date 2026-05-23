@@ -1,0 +1,23 @@
+{
+  "name": "Briefing",
+  "version": "0.1.0",
+  "description": "A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.",
+  "enabled": false,
+  "prompt": "Generate a briefing to help me catch up. Include:\n\n1. Schedule — upcoming meetings and events with times, attendees, and any prep needed.\n2. Important emails — unread mail that needs attention, grouped by urgency.\n3. Messages requiring response — direct messages or mentions that need a reply.\n4. Action items — pending tasks or follow-ups from recent activity.\n\nKeep it concise and scannable. If a section has nothing notable, skip it rather than saying \"nothing to report.\"",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "0 18 * * 1-5"
+    }
+  ],
+  "requires": {},
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-05-23T00:00:00.000Z"
+  }
+}

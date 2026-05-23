@@ -40,6 +40,18 @@ export interface AppKnobsManifest {
  * Metadata for a single template entry. Mirrors @centraid/design-tokens'
  * `AppMeta` plus a `version` field (so the gallery can detect updates) and
  * a `files` list (so the remote fetcher knows what to download).
+ *
+ * Two kinds share this shape:
+ *   - `kind: 'app'` (default) — a full UI app like `hydrate` / `todos` /
+ *     `journal`. Carries `index.html`, `app.css`, optional `app-knobs.json`.
+ *   - `kind: 'automation'` — an `auto.`-prefixed app folder with no UI
+ *     assets; just `app.json` + `automations/<id>/{automation.json,handler.js}`.
+ *     Automation templates carry extra display fields (`emoji`, `category`,
+ *     `triggerKind`, `triggerLabel`, `integrations`) the Automations
+ *     gallery uses to render its richer cards.
+ *
+ * Both go through the same `cloneTemplate` path — the kind only affects
+ * which gallery surfaces the template and how the card is laid out.
  */
 export interface TemplateMeta {
   /** Unique template id; also the folder name at the package root. */
@@ -67,7 +79,27 @@ export interface TemplateMeta {
    * runtime; the desktop popover renders only the rows declared here.
    */
   appKnobs?: AppKnob[];
+  /**
+   * 'app' (default) or 'automation'. Build script derives this from the
+   * `auto.` id prefix when omitted, but it can also be set explicitly in
+   * `index.json` for clarity.
+   */
+  kind?: TemplateKind;
+  // ----- automation-only display fields (kind === 'automation') -----
+  /** Emoji shown on the automation gallery card (e.g. '🌤'). */
+  emoji?: string;
+  /** Gallery section header (e.g. 'Daily rhythm', 'Engineering'). */
+  category?: string;
+  /** Trigger-style glyph picker on the card ('cron' → clock, 'webhook' → globe). */
+  triggerKind?: 'cron' | 'webhook';
+  /** Human-readable trigger label (e.g. 'Weekdays · 6:00 PM'). */
+  triggerLabel?: string;
+  /** Integration chip labels (e.g. ['Gmail', 'Slack']). */
+  integrations?: readonly string[];
 }
+
+/** App template = full UI app. Automation template = `auto.`-prefixed app folder, no UI assets. */
+export type TemplateKind = 'app' | 'automation';
 
 /**
  * Shape of `manifest.json` — the bundled (and remotely-served)

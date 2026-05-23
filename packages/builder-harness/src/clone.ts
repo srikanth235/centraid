@@ -73,6 +73,12 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
   // would otherwise leak into every clone's tab title even after the
   // user renames the app.
   if (opts.newName) await rewriteIndexHtmlTitle(destDir, opts.newName);
+  // Automation templates carry a sibling `automation.json#name` whose
+  // value the Automations page surfaces as the row title. Keep it in
+  // sync with `app.json#name` so a clone of "Briefing" → "Briefing 2"
+  // is consistent across both surfaces. No-op for app templates (no
+  // automations/<id>/ subdirs).
+  if (opts.newName) await rewriteAutomationManifestNames(destDir, opts.newName);
 
   const stat = await fs.stat(destDir);
   const hasIndex = await fileExists(path.join(destDir, 'index.html'));
@@ -240,6 +246,52 @@ async function rewriteIndexHtmlTitle(destDir: string, newName: string): Promise<
   });
   if (!replaced) return; // no <title> tag — leave the file untouched.
   await fs.writeFile(htmlPath, next);
+}
+
+/**
+ * Walk `<destDir>/automations/<id>/automation.json` and clone-stamp each
+ * manifest: top-level `name` becomes `newName`, and `generated` becomes
+ * `{by:'centraid-builder', at:<now>}` so the manifest reflects the
+ * clone time, not the template authoring time.
+ *
+ * Used by the clone path so an automation template ('Briefing') cloned
+ * as 'Briefing 2' surfaces the new name on the Automations page and
+ * carries a fresh `generated.at`. The `prompt`, `triggers`, `requires`,
+ * `history`, and other fields carry through unchanged.
+ *
+ * Defensive: a missing `automations/` subdir, missing per-automation
+ * manifest, or unparseable JSON each falls through silently — the file
+ * stays untouched.
+ */
+async function rewriteAutomationManifestNames(destDir: string, newName: string): Promise<void> {
+  const autoRoot = path.join(destDir, 'automations');
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = await fs.readdir(autoRoot, { withFileTypes: true });
+  } catch {
+    return; // no automations/ subdir — nothing to do.
+  }
+  const nowIso = new Date().toISOString();
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
+    const manifestPath = path.join(autoRoot, e.name, 'automation.json');
+    let raw: string;
+    try {
+      raw = await fs.readFile(manifestPath, 'utf8');
+    } catch {
+      continue; // not every subdir has a manifest (legacy / partial).
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      continue; // unparseable — leave alone.
+    }
+    parsed.name = newName;
+    parsed.generated = { by: 'centraid-builder', at: nowIso };
+    await fs.writeFile(manifestPath, JSON.stringify(parsed, null, 2) + '\n');
+  }
 }
 
 function escapeHtml(s: string): string {
