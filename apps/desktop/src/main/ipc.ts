@@ -584,7 +584,8 @@ export function registerIpcHandlers(): void {
     async (_e, input: { templateId: string; newAppId?: string; newName?: string }) => {
       const settings = await loadSettings();
       const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
-      const { cloneTemplate, suggestAppId } = await import('@centraid/builder-harness');
+      const { cloneTemplate, suggestAppId, suggestCloneIdentity } =
+        await import('@centraid/builder-harness');
 
       const cacheDir = templatesCacheDir();
       const templates = await resolveTemplates({ cacheDir });
@@ -593,13 +594,27 @@ export function registerIpcHandlers(): void {
         throw new Error(`Unknown template "${input.templateId}".`);
       }
 
-      // Default clones always get a suffixed id (e.g. `todos-2`) so the
-      // template's bare id (`todos`) is never consumed by a clone — keeps
-      // the catalog and the user's workspace cleanly separated. Caller can
-      // pass an explicit `newAppId` to override and claim any free id.
-      const newAppId = await suggestAppId(settings.appsDir, input.newAppId ?? tmpl.id, {
-        alwaysSuffix: !input.newAppId,
-      });
+      // Pick (id, name) together so both are unique:
+      // - Default clones: `suggestCloneIdentity` ratchets `N` upward until
+      //   the directory `<tmpl.id>-N` AND the display name `<tmpl.name> N`
+      //   are both free. The template's bare id is never consumed (clones
+      //   start at N=2), and `Hydrate 2` won't duplicate an earlier app
+      //   that the user renamed to "Hydrate 2".
+      // - Caller-specified `newAppId`: only id uniqueness is enforced via
+      //   `suggestAppId` (the caller chose intent); display name falls
+      //   through to `newName ?? tmpl.name`.
+      let newAppId: string;
+      let newName: string;
+      if (input.newAppId === undefined && input.newName === undefined) {
+        const picked = await suggestCloneIdentity(settings.appsDir, tmpl.id, tmpl.name);
+        newAppId = picked.id;
+        newName = picked.name;
+      } else {
+        newAppId = await suggestAppId(settings.appsDir, input.newAppId ?? tmpl.id, {
+          alwaysSuffix: !input.newAppId,
+        });
+        newName = input.newName ?? tmpl.name;
+      }
 
       const project = await cloneTemplate({
         projectsDir: settings.appsDir,
@@ -608,7 +623,7 @@ export function registerIpcHandlers(): void {
         // from that one so a remote update reaches users without a desktop
         // release.
         templateDir: templateSourceDir(tmpl.id, { cacheDir, source: tmpl.source }),
-        newName: input.newName ?? tmpl.name,
+        newName,
         // Carry the template's description into the cloned project's
         // `app.json` so the builder topbar + home tile show something
         // meaningful out of the gate.

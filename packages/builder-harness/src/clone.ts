@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
-import { validateAppId } from './scaffold.js';
+import { isDisplayNameTaken, validateAppId } from './scaffold.js';
 
 /**
  * Options for {@link cloneTemplate}.
@@ -68,6 +68,11 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
 
   await rewriteAppJson(destDir, opts.newName, opts.newDesc);
   await rewritePackageJson(destDir, opts.newAppId);
+  // Keep the browser-tab title aligned with the new display name. The
+  // template's <title> is hardcoded to its own brand ("Hydrate"), which
+  // would otherwise leak into every clone's tab title even after the
+  // user renames the app.
+  if (opts.newName) await rewriteIndexHtmlTitle(destDir, opts.newName);
 
   const stat = await fs.stat(destDir);
   const hasIndex = await fileExists(path.join(destDir, 'index.html'));
@@ -112,6 +117,37 @@ export async function suggestAppId(
   throw new HarnessError(
     'already_exists',
     `Could not find a free id starting from "${preferred}".`,
+  );
+}
+
+/**
+ * Pick a `(id, name)` pair where the directory id is free AND the display
+ * name doesn't collide with any existing project's `app.json#name`. Used by
+ * the default template-clone path so two clones never both surface as
+ * "Hydrate" on the home shelf — directory ids are unique by construction
+ * (`suggestAppId`), but display names have to be probed against siblings
+ * (the user may have renamed an unrelated app to "Hydrate 2" earlier).
+ *
+ * Always returns a suffixed pair (`preferredId-N`, `${preferredName} N`)
+ * with `N >= 2`, keeping the template's bare id/name out of clones. Caps
+ * at 1000 attempts; throws `already_exists` if every candidate is taken.
+ */
+export async function suggestCloneIdentity(
+  projectsDir: string,
+  preferredId: string,
+  preferredName: string,
+): Promise<{ id: string; name: string }> {
+  validateAppId(preferredId);
+  for (let n = 2; n <= 1000; n++) {
+    const id = `${preferredId}-${n}`;
+    if (await pathExists(path.join(projectsDir, id))) continue;
+    const name = `${preferredName} ${n}`;
+    if (await isDisplayNameTaken(projectsDir, name)) continue;
+    return { id, name };
+  }
+  throw new HarnessError(
+    'already_exists',
+    `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`,
   );
 }
 
@@ -176,6 +212,43 @@ async function rewritePackageJson(destDir: string, newAppId: string): Promise<vo
   if (!currentName.startsWith('centraid-app-')) return;
   parsed.name = `centraid-app-${newAppId}`;
   await fs.writeFile(pkgPath, JSON.stringify(parsed, null, 2) + '\n');
+}
+
+/**
+ * Replace the first `<title>...</title>` in the cloned `index.html` with
+ * the new display name. HTML-escapes the name so a user-chosen
+ * "Foo & Bar" can't break the markup or smuggle a tag in.
+ *
+ * Defensive on every branch: missing file → skip; no `<title>` tag → skip.
+ * Only the first occurrence is replaced (templates never ship more than
+ * one, but the bound keeps the rewrite predictable).
+ */
+async function rewriteIndexHtmlTitle(destDir: string, newName: string): Promise<void> {
+  const htmlPath = path.join(destDir, 'index.html');
+  let raw: string;
+  try {
+    raw = await fs.readFile(htmlPath, 'utf8');
+  } catch {
+    return; // template doesn't ship an index.html; nothing to rewrite.
+  }
+  const escaped = escapeHtml(newName);
+  let replaced = false;
+  const next = raw.replace(/<title>[\s\S]*?<\/title>/i, () => {
+    if (replaced) return `<title>${escaped}</title>`;
+    replaced = true;
+    return `<title>${escaped}</title>`;
+  });
+  if (!replaced) return; // no <title> tag — leave the file untouched.
+  await fs.writeFile(htmlPath, next);
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 async function readAppMeta(projectDir: string): Promise<{ name?: string; description?: string }> {

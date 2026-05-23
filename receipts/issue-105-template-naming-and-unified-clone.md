@@ -155,6 +155,11 @@ Full repo: 16/16 typecheck, 12/12 test suites, format clean.
   happy-path rename, name-already-taken rejection, case + whitespace
   insensitivity, self-rename allowed, empty-name rejection, and
   description-only updates bypassing the check.
+- Commit 3 (collision-safe clone): 11 dedicated tests in
+  `packages/builder-harness/src/clone.test.ts` cover
+  `suggestCloneIdentity` (5), `suggestAppId` sanity (2), and the
+  `<title>` rewrite (4) including HTML escaping and graceful no-op
+  when the template doesn't ship an `index.html`.
 - End-to-end demo (one-shot node script against the real bundled
   templates) confirms: three back-to-back clones of `hydrate` produce
   `hydrate-2/3/4` with display names `Hydrate 2/3/4`; three back-to-back

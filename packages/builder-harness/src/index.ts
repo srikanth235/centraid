@@ -43,7 +43,12 @@ export {
   type AutomationScaffoldOptions,
 } from './scaffold-automation.js';
 
-export { cloneTemplate, suggestAppId, type CloneTemplateOptions } from './clone.js';
+export {
+  cloneTemplate,
+  suggestAppId,
+  suggestCloneIdentity,
+  type CloneTemplateOptions,
+} from './clone.js';
 
 export { publishProject } from './publish.js';
 
