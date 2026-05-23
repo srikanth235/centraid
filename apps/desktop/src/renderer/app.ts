@@ -581,11 +581,15 @@
 
   // Refresh `drafts` from disk. Drafts = projects on disk whose ids aren't
   // already in `userApps` (= already pinned to home, with full metadata).
+  // Automation apps (`auto.*` folder ids) live in the same `appsDir` but
+  // belong to the Automations surface — skip them here so My apps stays
+  // app-only.
   async function hydrateDrafts(): Promise<void> {
     try {
       const projs = await window.CentraidApi.listProjects();
       const knownIds = new Set(getApps().map((a) => a.id));
       drafts = projs
+        .filter((p) => !p.id.startsWith('auto.'))
         .filter((p) => !knownIds.has(p.id))
         .map((p) => {
           // Drafts default to the Sparkle icon (no inference has run yet);
