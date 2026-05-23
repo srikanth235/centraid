@@ -7,8 +7,8 @@
 export { palette } from './palette';
 export type { Palette, ColorKey, ColorHex } from './palette';
 
-export { themes, lightTheme, darkTheme } from './themes';
-export type { Theme, ThemeName } from './themes';
+export { themes, lightTheme, darkTheme, THEME_PRESETS } from './themes';
+export type { Theme, ThemeName, ThemePreset } from './themes';
 
 export { densities, spacing } from './density';
 export type { DensityScale, DensityName } from './density';
