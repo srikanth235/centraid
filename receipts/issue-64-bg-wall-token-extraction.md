@@ -20,7 +20,7 @@ The home main pane gradient ran `--bg-l - 2%` → `--bg-l - 6%` (16% → 12% lig
 
 ### Add bgWall token
 
-[packages/design-tokens/themes.ts](../packages/design-tokens/themes.ts) gains a new `bgWall: string` field on the `Theme` interface. Dark = the lifted blue gradient anchored on `var(--bg-l)`. Light = flat `#FCFCFC` (matches the existing flat treatment for light-mode `.cd-main`). The dark `deviceWall` token's composite now ends in `var(--bg-wall)` instead of inlining the gradient again — single source of truth at the token layer.
+[packages/design-tokens/themes/](../packages/design-tokens/themes/) gains a new `bgWall: string` field on the `Theme` interface. (Originally a single `themes.ts`; later split into one file per family — see issue #103.) Dark = the lifted blue gradient anchored on `var(--bg-l)`. Light = flat `#FCFCFC` (matches the existing flat treatment for light-mode `.cd-main`). The dark `deviceWall` token's composite now ends in `var(--bg-wall)` instead of inlining the gradient again — single source of truth at the token layer.
 
 ### Emit --bg-wall in css.ts
 
