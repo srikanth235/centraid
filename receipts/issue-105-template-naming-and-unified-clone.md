@@ -15,6 +15,7 @@ refactor that routes both kinds of templates through the same
 - [x] Commit 2 — reject rename to a display name already in use
 - [x] Commit 3 — collision-safe template clone — paired id+name suffix + index.html title rewrite
 - [x] Commit 4 — unify automation + app template paths
+- [x] Commit 5 — home tile reads suffixed name from project, not template
 
 ## What changed
 
@@ -66,6 +67,24 @@ Fixes:
   the same call site serves both kinds.
 - The `TEMPLATES_CLONE` IPC default branch uses `suggestCloneIdentity`;
   the caller-specified-id branch keeps the old `suggestAppId` behavior.
+
+### Commit 5 — home tile reads suffixed name from project, not template
+
+User-reported follow-up. After Commit 4 landed, cloning Hydrate twice
+still rendered both home tiles as "Hydrate". The IPC was correctly
+writing `app.json#name = "Hydrate 2"` / `"Hydrate 3"` (confirmed by
+inspecting disk: `hydrate-2/app.json`, `hydrate-3/app.json`), but
+`apps/desktop/src/renderer/app.ts#cloneTemplate` was constructing the
+in-memory `DraftAppMeta` with `name: result.template.name` — the
+**template's** display name, not the **clone's**. The tile therefore
+read "Hydrate" until the user refreshed Home (at which point
+`hydrateDrafts()` re-read disk and picked up the correct suffixed
+name).
+
+Fix: read `name: result.project.name ?? result.template.name`.
+`project.name` comes from `cloneTemplate`'s `readAppMeta(destDir)`
+which reads the just-rewritten `app.json#name`, so the tile and the
+builder topbar agree the moment the draft is created.
 
 ### Commit 4 — unify automation + app template paths
 

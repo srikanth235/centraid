@@ -3618,7 +3618,12 @@
         hasIndex: true,
         iconKey: tmpl.iconKey as IconNameType,
         id: result.project.id,
-        name: result.template.name,
+        // The IPC's `suggestCloneIdentity` picks a unique suffixed name
+        // (e.g. "Hydrate 2") and writes it to `app.json#name` — read that
+        // back via `project.name` so the home tile shows the same string
+        // the builder topbar will. Fall back to the template's bare name
+        // only when project.name wasn't populated (older project shapes).
+        name: result.project.name ?? result.template.name,
       };
       enterBuilder({ appContext: draft, focusName: true });
     } catch (err) {
