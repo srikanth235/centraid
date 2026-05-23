@@ -16,13 +16,21 @@ describe('suggestCloneIdentity', () => {
     await fs.rm(dir, { recursive: true, force: true });
   });
 
-  it('returns (id-2, "Name 2") on a fresh projects dir', async () => {
+  it('returns the bare (id, name) on a fresh projects dir', async () => {
+    const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
+    assert.equal(picked.id, 'hydrate');
+    assert.equal(picked.name, 'Hydrate');
+  });
+
+  it('returns (id-2, "Name 2") when the bare slot is taken', async () => {
+    await scaffoldProject(dir, 'hydrate', { name: 'Hydrate' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
     assert.equal(picked.id, 'hydrate-2');
     assert.equal(picked.name, 'Hydrate 2');
   });
 
   it('skips past existing directory ids', async () => {
+    await scaffoldProject(dir, 'hydrate', { name: 'Hydrate' });
     await scaffoldProject(dir, 'hydrate-2', { name: 'Some unrelated name' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
     assert.equal(picked.id, 'hydrate-3');
@@ -30,9 +38,11 @@ describe('suggestCloneIdentity', () => {
   });
 
   it('skips past existing display-name collisions even when the id slot is free', async () => {
-    // The user previously renamed an unrelated app to "Hydrate 2". The
-    // dir id `hydrate-2` is free, but the name is taken — bump both to
-    // the next free slot so id and name stay visually paired.
+    // Bare "Hydrate" is taken by an unrelated app. The dir id `hydrate`
+    // is also taken by that same scaffold. Then `hydrate-2` is free as a
+    // dir but the user renamed yet another app to "Hydrate 2" — bump
+    // both to N=3.
+    await scaffoldProject(dir, 'hydrate', { name: 'Hydrate' });
     await scaffoldProject(dir, 'something', { name: 'Hydrate 2' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
     assert.equal(picked.id, 'hydrate-3');
@@ -40,7 +50,9 @@ describe('suggestCloneIdentity', () => {
   });
 
   it('keeps id and name advancing together when both classes of collision interleave', async () => {
-    // N=2: id taken. N=3: id free but name taken. N=4: both free.
+    // N=1: id+name taken (bare). N=2: id taken. N=3: id free but name
+    // taken. N=4: both free.
+    await scaffoldProject(dir, 'hydrate', { name: 'Hydrate' });
     await scaffoldProject(dir, 'hydrate-2', { name: 'Hydrate 2' });
     await scaffoldProject(dir, 'whatever', { name: 'Hydrate 3' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
@@ -49,10 +61,11 @@ describe('suggestCloneIdentity', () => {
   });
 
   it('does case-insensitive display-name comparison', async () => {
-    await scaffoldProject(dir, 'x', { name: 'HYDRATE 2' });
+    await scaffoldProject(dir, 'x', { name: 'HYDRATE' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
-    assert.equal(picked.id, 'hydrate-3');
-    assert.equal(picked.name, 'Hydrate 3');
+    // Bare name "Hydrate" collides with "HYDRATE" case-insensitively → bump.
+    assert.equal(picked.id, 'hydrate-2');
+    assert.equal(picked.name, 'Hydrate 2');
   });
 });
 

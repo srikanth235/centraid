@@ -16,6 +16,7 @@ refactor that routes both kinds of templates through the same
 - [x] Commit 3 — collision-safe template clone — paired id+name suffix + index.html title rewrite
 - [x] Commit 4 — unify automation + app template paths
 - [x] Commit 5 — home tile reads suffixed name from project, not template
+- [x] Commit 6 — first clone uses bare template name (no -2 suffix)
 
 ## What changed
 
@@ -67,6 +68,37 @@ Fixes:
   the same call site serves both kinds.
 - The `TEMPLATES_CLONE` IPC default branch uses `suggestCloneIdentity`;
   the caller-specified-id branch keeps the old `suggestAppId` behavior.
+
+### Commit 6 — first clone uses bare template name (no -2 suffix)
+
+User-reported follow-up. After the previous commits landed, the very
+first clone of `hydrate` still produced `id=hydrate-2, name="Hydrate 2"`
+— jumping straight to "2" with no preceding "1" felt awkward. The
+old `suggestCloneIdentity` (and the underlying `suggestAppId` with
+`alwaysSuffix: true`) intentionally never consumed the template's
+bare id, treating template and clone as disjoint namespaces.
+
+That separation is unnecessary in practice: the template lives in
+`packages/app-templates/<id>/` (bundled, never gateway-routed), and
+the user's clone lives in `<appsDir>/<id>/`. They can share an `id`
+string without colliding on disk or in the gateway router.
+
+Fix: `suggestCloneIdentity` now starts at `N=1`, probing the bare
+`(preferredId, preferredName)` first and only falling through to
+`N=2, 3, …` on collision. Subsequent clones still get suffixed names
+in lockstep, so the home shelf never shows two identical tiles.
+
+Updated tests cover the new "bare slot first" semantics + the
+fall-through cases (id taken, name taken, both classes interleaving,
+case-insensitive name compare).
+
+End-to-end demo:
+```
+3× hydrate clone     → hydrate / hydrate-2 / hydrate-3
+                       "Hydrate" / "Hydrate 2" / "Hydrate 3"
+3× auto.briefing     → auto.briefing / auto.briefing-2 / auto.briefing-3
+                       "Briefing" / "Briefing 2" / "Briefing 3"
+```
 
 ### Commit 5 — home tile reads suffixed name from project, not template
 

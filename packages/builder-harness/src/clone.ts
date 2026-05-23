@@ -134,9 +134,16 @@ export async function suggestAppId(
  * (`suggestAppId`), but display names have to be probed against siblings
  * (the user may have renamed an unrelated app to "Hydrate 2" earlier).
  *
- * Always returns a suffixed pair (`preferredId-N`, `${preferredName} N`)
- * with `N >= 2`, keeping the template's bare id/name out of clones. Caps
- * at 1000 attempts; throws `already_exists` if every candidate is taken.
+ * Probes the bare `(preferredId, preferredName)` first — the very first
+ * clone of `hydrate` should be just "Hydrate" / `hydrate`, not awkward
+ * "Hydrate 2" / `hydrate-2`. Falls through to `(preferredId-N,
+ * `${preferredName} N`)` with `N = 2, 3, …` only on collision. Caps at
+ * 1000 attempts; throws `already_exists` if every candidate is taken.
+ *
+ * The template and the user's clone live in different filesystem trees
+ * (`packages/app-templates/<id>/` vs `<appsDir>/<id>/`), so a clone
+ * using the template's bare id is not a collision — the gateway only
+ * routes `<appsDir>` entries.
  */
 export async function suggestCloneIdentity(
   projectsDir: string,
@@ -144,10 +151,10 @@ export async function suggestCloneIdentity(
   preferredName: string,
 ): Promise<{ id: string; name: string }> {
   validateAppId(preferredId);
-  for (let n = 2; n <= 1000; n++) {
-    const id = `${preferredId}-${n}`;
+  for (let n = 1; n <= 1000; n++) {
+    const id = n === 1 ? preferredId : `${preferredId}-${n}`;
     if (await pathExists(path.join(projectsDir, id))) continue;
-    const name = `${preferredName} ${n}`;
+    const name = n === 1 ? preferredName : `${preferredName} ${n}`;
     if (await isDisplayNameTaken(projectsDir, name)) continue;
     return { id, name };
   }
