@@ -32,30 +32,38 @@ export interface CentraidPublishResult {
 }
 
 export interface CentraidSettings {
-  projectsDir: string;
   /**
-   * Where centraid runs apps. `local` (default) spawns an in-process
-   * runtime inside the Electron main; `remote` points at an externally
-   * hosted gateway (e.g., OpenClaw).
+   * Active gateway id — `'local'` (always present) or a UUID for a
+   * remote gateway. Switching this is the multi-gateway "log in to
+   * another workspace" action (issue #109). Use `setActiveGateway`
+   * on the API rather than patching this through `saveSettings`.
    */
-  runtimeMode: 'local' | 'remote';
+  activeGatewayId: string;
+  /** Kind of the active gateway. */
+  activeGatewayKind: 'local' | 'remote';
+  /** User-facing label for the active gateway (shown in the switcher). */
+  activeGatewayLabel: string;
   /**
-   * Effective base URL for the runtime — automatically set to the local
-   * loopback URL when `runtimeMode === 'local'`, otherwise the configured
-   * `remoteGatewayUrl`. The renderer should read this for all runtime HTTP
-   * calls; do not write to it.
+   * Effective base URL for the active gateway. Local = the in-process
+   * runtime's URL; remote = the active gateway's `profile.url`. Read-only.
    */
   gatewayUrl: string;
   /** Effective bearer token; companion to `gatewayUrl`. Read-only. */
   gatewayToken?: string;
-  /** User-configured remote gateway URL — only used when `runtimeMode === 'remote'`. */
-  remoteGatewayUrl: string;
-  /** User-configured remote gateway token — only used when `runtimeMode === 'remote'`. */
-  remoteGatewayToken?: string;
   /** Provider/model id (e.g. `openai/gpt-4o`) used by the app-view agentic chat. */
   chatModel?: string;
   /** ISO timestamp of the last Claude Code / Codex credential import. */
   authImportedAt?: string;
+}
+
+/** Lightweight profile describing one gateway (issue #109). */
+export interface CentraidGatewayProfile {
+  id: string;
+  kind: 'local' | 'remote';
+  label: string;
+  /** Defined for remote gateways only. */
+  url?: string;
+  createdAt: string;
 }
 
 export interface CentraidAuthStatus {
@@ -453,6 +461,60 @@ interface CentraidApi {
     level?: CentraidLogLevel;
   }): Promise<{ entries: CentraidLogEntry[] }>;
   deregisterApp(input: { id: string }): Promise<{ id: string }>;
+
+  /**
+   * Snapshot of the auto-publish queue (issue #108). Every workspace
+   * mutation triggers a debounced upload to the local gateway; this
+   * read surfaces the in-flight flag, the last error string (if any),
+   * and the timestamp of the last successful publish.
+   */
+  getPublishStatus(input: { id: string }): Promise<{
+    inFlight: boolean;
+    lastError?: string;
+    lastPublishedAt?: number;
+  }>;
+  /**
+   * Subscribe to per-app publish events. Fired once per auto-publish
+   * resolution (success or failure). Returns the unsubscribe.
+   */
+  onPublishEvent(
+    cb: (msg: { id: string; ok: boolean; error?: string; publishedAt?: number }) => void,
+  ): () => void;
+
+  // ----- Gateways (issue #109) -----
+  /** List every gateway profile (local + remote). Sorted local-first. */
+  listGateways(): Promise<CentraidGatewayProfile[]>;
+  /**
+   * Add a remote gateway. UUID id is minted server-side; the token is
+   * stored in keychain and is NOT echoed back. The plaintext crosses
+   * the bridge exactly once on this call.
+   */
+  addGateway(input: { label: string; url: string; token: string }): Promise<CentraidGatewayProfile>;
+  /**
+   * Remove a remote gateway. Refuses to remove `'local'`. Returns the
+   * new active gateway id (falls back to `'local'` if the removed
+   * gateway was active).
+   */
+  removeGateway(input: { id: string }): Promise<{ activeGatewayId: string }>;
+  /** Rename a gateway's user-facing label. Id and paths never change. */
+  renameGateway(input: { id: string; label: string }): Promise<CentraidGatewayProfile>;
+  /**
+   * Switch the active gateway. The renderer should treat the response
+   * as the new authoritative settings and drop gateway-scoped state
+   * (project list, agent session, iframe).
+   */
+  setActiveGateway(input: { id: string }): Promise<CentraidSettings>;
+  /**
+   * Subscribe to active-gateway changes (any cause — add/remove/rename
+   * of the active one, or explicit switch). Returns the unsubscribe.
+   */
+  onGatewayChanged(
+    cb: (msg: {
+      activeGatewayId: string;
+      activeGatewayKind: 'local' | 'remote';
+      activeGatewayLabel: string;
+    }) => void,
+  ): () => void;
 
   /** List bundled templates from `@centraid/app-templates`. */
   listTemplates(): Promise<CentraidTemplateMeta[]>;

@@ -35,6 +35,16 @@ const Channel = {
   APP_QUERY: 'centraid:app:query',
   APP_LOGS: 'centraid:app:logs',
   APPS_DEREGISTER: 'centraid:apps:deregister',
+  PUBLISH_STATUS: 'centraid:publish:status',
+  PUBLISH_EVENT: 'centraid:publish:event',
+
+  // Gateways (issue #109)
+  GATEWAYS_LIST: 'centraid:gateways:list',
+  GATEWAYS_ADD: 'centraid:gateways:add',
+  GATEWAYS_REMOVE: 'centraid:gateways:remove',
+  GATEWAYS_RENAME: 'centraid:gateways:rename',
+  GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
+  GATEWAY_CHANGED: 'centraid:gateways:changed',
 
   TEMPLATES_LIST: 'centraid:templates:list',
   TEMPLATES_CLONE: 'centraid:templates:clone',
@@ -159,6 +169,49 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     level?: 'info' | 'warn' | 'error';
   }) => ipcRenderer.invoke(Channel.APP_LOGS, input),
   deregisterApp: (input: { id: string }) => ipcRenderer.invoke(Channel.APPS_DEREGISTER, input),
+  // Auto-publish queue (issue #108) — workspaces upload to the gateway
+  // on every save. Renderer can poll a snapshot of the status, or
+  // subscribe to per-event broadcasts to toast failures inline.
+  getPublishStatus: (input: { id: string }) => ipcRenderer.invoke(Channel.PUBLISH_STATUS, input),
+  onPublishEvent: (
+    cb: (msg: { id: string; ok: boolean; error?: string; publishedAt?: number }) => void,
+  ) => {
+    const handler = (_e: IpcRendererEvent, msg: unknown): void =>
+      cb(msg as { id: string; ok: boolean; error?: string; publishedAt?: number });
+    ipcRenderer.on(Channel.PUBLISH_EVENT, handler);
+    return () => ipcRenderer.off(Channel.PUBLISH_EVENT, handler);
+  },
+
+  // Gateways (issue #109) — multi-gateway lifecycle. Local gateway is
+  // always present; remote gateways have UUID ids. Tokens never cross
+  // the bridge back — they're set when adding a gateway and live in
+  // keychain thereafter.
+  listGateways: () => ipcRenderer.invoke(Channel.GATEWAYS_LIST),
+  addGateway: (input: { label: string; url: string; token: string }) =>
+    ipcRenderer.invoke(Channel.GATEWAYS_ADD, input),
+  removeGateway: (input: { id: string }) => ipcRenderer.invoke(Channel.GATEWAYS_REMOVE, input),
+  renameGateway: (input: { id: string; label: string }) =>
+    ipcRenderer.invoke(Channel.GATEWAYS_RENAME, input),
+  setActiveGateway: (input: { id: string }) =>
+    ipcRenderer.invoke(Channel.GATEWAYS_SET_ACTIVE, input),
+  onGatewayChanged: (
+    cb: (msg: {
+      activeGatewayId: string;
+      activeGatewayKind: 'local' | 'remote';
+      activeGatewayLabel: string;
+    }) => void,
+  ) => {
+    const handler = (_e: IpcRendererEvent, msg: unknown): void =>
+      cb(
+        msg as {
+          activeGatewayId: string;
+          activeGatewayKind: 'local' | 'remote';
+          activeGatewayLabel: string;
+        },
+      );
+    ipcRenderer.on(Channel.GATEWAY_CHANGED, handler);
+    return () => ipcRenderer.off(Channel.GATEWAY_CHANGED, handler);
+  },
 
   // Templates
   listTemplates: () => ipcRenderer.invoke(Channel.TEMPLATES_LIST),

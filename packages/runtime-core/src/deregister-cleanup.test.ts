@@ -31,7 +31,6 @@ function makeUploadedEntry(id: string): RegistryEntry {
   return {
     id,
     path: path.join(appsDir, id),
-    mode: 'uploaded',
     registeredAt: new Date().toISOString(),
   };
 }
@@ -88,40 +87,16 @@ test('appsDir itself is preserved', async () => {
   await assert.rejects(fs.stat(a.path));
 });
 
-test('skips path-mode entries (user-owned dir, never delete)', async () => {
-  // User registered an external dir outside appsDir — we must not touch it.
-  const externalDir = path.join(workspace, 'user-stuff');
-  await fs.mkdir(externalDir, { recursive: true });
-  await fs.writeFile(path.join(externalDir, 'precious.txt'), 'do not delete me');
-
-  const entry: RegistryEntry = {
-    id: 'external',
-    path: externalDir,
-    mode: 'path',
-    registeredAt: new Date().toISOString(),
-  };
-
-  const result = await cleanupDeregisteredApp(appsDir, entry, logger);
-
-  assert.deepEqual(result, { kind: 'skipped', reason: 'path-mode' });
-  assert.ok((await fs.stat(externalDir)).isDirectory());
-  assert.equal(
-    await fs.readFile(path.join(externalDir, 'precious.txt'), 'utf8'),
-    'do not delete me',
-  );
-});
-
 test('refuses to remove a corrupt entry whose path is outside appsDir', async () => {
   const externalDir = path.join(workspace, 'outside');
   await fs.mkdir(externalDir, { recursive: true });
   await fs.writeFile(path.join(externalDir, 'keep.txt'), 'safe');
 
-  // Simulate a corrupt registry row: mode says "uploaded" but path is not
-  // under appsDir. The defense-in-depth check should refuse.
+  // Simulate a corrupt registry row whose path is not under appsDir.
+  // The defense-in-depth check should refuse.
   const entry: RegistryEntry = {
     id: 'corrupt',
     path: externalDir,
-    mode: 'uploaded',
     registeredAt: new Date().toISOString(),
   };
 
@@ -138,7 +113,6 @@ test('refuses when path === appsDir (would wipe the entire state dir)', async ()
   const entry: RegistryEntry = {
     id: 'evil',
     path: appsDir,
-    mode: 'uploaded',
     registeredAt: new Date().toISOString(),
   };
 
@@ -156,7 +130,6 @@ test('refuses on traversal attempts via "..", appsDir untouched', async () => {
   const entry: RegistryEntry = {
     id: 'traversal',
     path: traversal,
-    mode: 'uploaded',
     registeredAt: new Date().toISOString(),
   };
 

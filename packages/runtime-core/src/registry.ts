@@ -1,10 +1,15 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { AppId, AppMode, RegistryEntry } from './types.js';
+import type { AppId, RegistryEntry } from './types.js';
 import { isReservedAppId } from './security.js';
 
 /**
- * Persistent registry of registered apps stored at <appsDir>/_registry.json.
+ * Persistent registry of registered apps stored at `<appsDir>/_registry.json`.
+ *
+ * Every app is created via `ensureUploaded(id)` from the upload route —
+ * there is no longer a way to register an external folder live. Older
+ * rows carrying a `mode` field are loaded transparently and the field
+ * is dropped on next persist.
  */
 /* eslint-disable max-classes-per-file -- error class is colocated with its module */
 export class Registry {
@@ -22,12 +27,15 @@ export class Registry {
     await fs.mkdir(this.appsDir, { recursive: true });
     try {
       const raw = await fs.readFile(this.filePath, 'utf8');
-      const parsed = JSON.parse(raw) as { apps: Array<RegistryEntry & { mode?: AppMode }> };
-      // Backfill: older registry rows didn't have `mode`. Default to "path".
+      const parsed = JSON.parse(raw) as {
+        apps: Array<{ id: string; path: string; registeredAt: string; mode?: string }>;
+      };
+      // Drop the legacy `mode` field if present — every app is uploaded
+      // mode now. The path stays exactly as written.
       this.cache = new Map(
         parsed.apps.map((a) => [
           a.id,
-          { ...a, mode: a.mode ?? ('path' as const) } as RegistryEntry,
+          { id: a.id, path: a.path, registeredAt: a.registeredAt } as RegistryEntry,
         ]),
       );
     } catch (err: unknown) {
@@ -54,59 +62,22 @@ export class Registry {
     return this.cache.get(id);
   }
 
-  async register(input: { id: AppId; path: string; mode?: AppMode }): Promise<RegistryEntry> {
-    if (isReservedAppId(input.id)) {
-      throw new RegistryError('invalid_id', `App id "${input.id}" is reserved or invalid.`);
-    }
-    if (this.cache.has(input.id)) {
-      throw new RegistryError('already_registered', `App "${input.id}" is already registered.`);
-    }
-
-    const absPath = path.isAbsolute(input.path)
-      ? input.path
-      : path.resolve(this.appsDir, input.path);
-
-    const stat = await fs.stat(absPath).catch(() => null);
-    if (!stat || !stat.isDirectory()) {
-      throw new RegistryError('not_a_directory', `App path "${absPath}" is not a directory.`);
-    }
-
-    const entry: RegistryEntry = {
-      id: input.id,
-      path: absPath,
-      mode: input.mode ?? 'path',
-      registeredAt: new Date().toISOString(),
-    };
-    this.cache.set(input.id, entry);
-    await this.persist();
-    return entry;
-  }
-
   /**
-   * Idempotent upsert used by the upload endpoint. Creates the app record if
-   * missing (mode = "uploaded", path = `<appsDir>/<id>`) and creates the
-   * directory on disk. Existing path-mode entries are refused with `already_registered`.
+   * Idempotent upsert used by the upload endpoint. Creates the app
+   * record if missing (path = `<appsDir>/<id>`) and creates the
+   * directory on disk. The only way to add an app to the registry.
    */
   async ensureUploaded(id: AppId): Promise<RegistryEntry> {
     if (isReservedAppId(id)) {
       throw new RegistryError('invalid_id', `App id "${id}" is reserved or invalid.`);
     }
     const existing = this.cache.get(id);
-    if (existing) {
-      if (existing.mode !== 'uploaded') {
-        throw new RegistryError(
-          'already_registered',
-          `App "${id}" was registered as a path-mode app; upload is only supported for uploaded-mode apps.`,
-        );
-      }
-      return existing;
-    }
+    if (existing) return existing;
     const dir = path.join(this.appsDir, id);
     await fs.mkdir(dir, { recursive: true });
     const entry: RegistryEntry = {
       id,
       path: dir,
-      mode: 'uploaded',
       registeredAt: new Date().toISOString(),
     };
     this.cache.set(id, entry);
@@ -125,7 +96,7 @@ export class Registry {
 
 export class RegistryError extends Error {
   constructor(
-    public readonly code: 'invalid_id' | 'already_registered' | 'not_a_directory',
+    public readonly code: 'invalid_id' | 'already_registered',
     message: string,
   ) {
     super(message);

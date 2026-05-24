@@ -1,6 +1,4 @@
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { app } from 'electron';
 import {
   AnalyticsStore,
   ChatHistoryStore,
@@ -13,7 +11,6 @@ import {
   type AutomationHost,
   type RuntimeHttpServerHandle,
 } from '@centraid/runtime-core';
-import { loadPersistedSettings } from './settings.js';
 import {
   defaultCentraidCliDir,
   makeChatRunner,
@@ -23,7 +20,17 @@ import {
   type RunnerPrefs,
   type OpenAICompatProvider,
 } from '@centraid/agent-runtime';
+import path from 'node:path';
 import { getProviderApiKey } from './provider-secrets.js';
+import {
+  gatewayAnalyticsDb,
+  gatewayAppsDir,
+  gatewayChatRunnerSessionsDir,
+  gatewayCodexHomeBaseDir,
+  gatewayIdentityDb,
+  LOCAL_GATEWAY_ID,
+} from './gateway-paths.js';
+import { setLocalRuntimeInfoProvider } from './gateway-store.js';
 
 /**
  * In-process runtime embedded inside the Electron main process. Spawned
@@ -42,35 +49,46 @@ import { getProviderApiKey } from './provider-secrets.js';
 let handle: RuntimeHttpServerHandle | undefined;
 let starting: Promise<RuntimeHttpServerHandle> | undefined;
 
-export function localRuntimeAppsDir(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', 'apps');
+/**
+ * Local gateway storage directory — `<userData>/gateways/local/apps/`
+ * (versioned; the in-process gateway writes here when the desktop
+ * publishes a workspace). The home shelf + preview protocol + dispatcher
+ * all read from here. Per-gateway after #109 (workspace + apps namespace
+ * by gateway so the same id can mean different artifacts on different
+ * accounts).
+ */
+export async function localRuntimeAppsDir(): Promise<string> {
+  return gatewayAppsDir(LOCAL_GATEWAY_ID);
 }
 
 /**
  * Parent directory under which provider-scoped `CODEX_HOME`s are
  * materialized when the user has configured a custom OpenAI-compatible
- * provider on the codex runner. Stable across launches so codex thread
- * state survives. Sibling to `apps/` and the gateway DB so all
- * local-runtime-generated state lives under one tree.
+ * provider on the codex runner. Per-gateway because codex stores
+ * thread state under `CODEX_HOME`, and conversations on different
+ * gateways should not commingle.
  */
 export function localRuntimeCodexHomeBaseDir(): string {
-  return path.join(app.getPath('userData'), 'local-runtime');
+  return gatewayCodexHomeBaseDir(LOCAL_GATEWAY_ID);
 }
 
 /**
- * Path of the gateway identity SQLite file (users + prefs). It lives
- * next to (not inside) the appsDir so it stays out of every individual
- * app's data and is never reachable from the centraid_sql_* tools.
- * Mirrors the OpenClaw plugin's placement. Automation *and* chat runs
- * live in each app's own `runtime.sqlite` (issue #98).
+ * Identity SQLite for the local gateway (users + prefs). The remote
+ * gateway has its own identity store server-side; we don't keep a
+ * local mirror in v0. Per-gateway layout is consistent across
+ * gateway kinds (the slot just stays empty for remote).
  */
 export function localRuntimeGatewayDb(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-gateway.sqlite');
+  return gatewayIdentityDb(LOCAL_GATEWAY_ID);
 }
 
-/** Central push-based run-summary DB — the source the Insights screen reads. */
+/**
+ * Central run-summary DB for the local gateway — the source the
+ * Insights screen reads. Remote gateways track their own analytics
+ * server-side; a "show me runs across gateways" view is post-v0.
+ */
 export function localRuntimeAnalyticsDb(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', 'centraid-analytics.sqlite');
+  return gatewayAnalyticsDb(LOCAL_GATEWAY_ID);
 }
 
 /**
@@ -91,7 +109,7 @@ let _automationHost: AutomationHost | undefined;
 export function localRuntimeAutomationHost(appsDir: string): AutomationHost {
   if (_automationHost) return _automationHost;
   _automationHost = new OsSchedulerHost({
-    workdir: localRuntimeAppsDir(),
+    workdir: appsDir,
     centraidBin: path.join(defaultCentraidCliDir(), 'centraid-cli.js'),
     // Bake the desktop's analytics DB path + apps dir into every
     // scheduled job so an OS-scheduler-spawned `centraid run-automation`
@@ -110,7 +128,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
   if (handle) return handle;
   if (starting) return starting;
   starting = (async () => {
-    const appsDir = localRuntimeAppsDir();
+    const appsDir = await localRuntimeAppsDir();
     await fs.mkdir(appsDir, { recursive: true });
 
     // Gateway identity DB + the central analytics DB (one run-summary
@@ -148,7 +166,9 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       const extraArgs = Array.isArray(extraArgsRaw)
         ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
         : undefined;
-      const provider = await resolveProviderPrefs(allPrefs);
+      // Prefs come from the local gateway's identity DB; the matching
+      // provider API key sits in the local gateway's keychain slot.
+      const provider = await resolveProviderPrefs(allPrefs, LOCAL_GATEWAY_ID);
       return {
         kind,
         ...(binPath ? { binPath } : {}),
@@ -175,11 +195,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       userStore,
       chatHistoryStore,
       chatRunner,
-      chatRunnerSessionDir: path.join(
-        app.getPath('userData'),
-        'local-runtime',
-        'chat-runner-sessions',
-      ),
+      chatRunnerSessionDir: gatewayChatRunnerSessionsDir(LOCAL_GATEWAY_ID),
       runnerStatus: async () => {
         const prefs = await prefsLoader();
         if (!prefs) {
@@ -208,10 +224,9 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     // an uninstall, an automation toggled elsewhere, etc.).
     // Fire-and-forget so a slow scheduler shell-out doesn't block start.
     void (async () => {
-      const { projectsDir } = await loadPersistedSettings();
-      const appsDir = path.join(projectsDir, 'apps');
-      const { rows } = await listAutomations(appsDir);
-      return localRuntimeAutomationHost(appsDir).reconcile(rows);
+      const dir = await localRuntimeAppsDir();
+      const { rows } = await listAutomations(dir);
+      return localRuntimeAutomationHost(dir).reconcile(rows);
     })()
       .then((diff) => {
         if (diff.added.length || diff.updated.length || diff.removed.length) {
@@ -229,6 +244,13 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
       );
 
     handle = server;
+    // Publish the local gateway's effective URL+token to the
+    // gateway-store so `resolveGateway('local')` returns them. The
+    // store snapshots through this getter on every call rather than
+    // caching, so a future restart cleanly invalidates.
+    setLocalRuntimeInfoProvider(() =>
+      handle ? { url: handle.url, token: handle.token } : undefined,
+    );
     return handle;
   })().finally(() => {
     starting = undefined;
@@ -286,6 +308,14 @@ export function parseProviderPrefs(
  * config with the safeStorage-side API key. Used by the prefs loader on
  * every turn; the safeStorage read is cheap (a single file decrypt).
  *
+ * `gatewayId` scopes both halves of the provider — the prefs the
+ * caller passes in already came from that gateway's identity DB (or
+ * its remote `/_centraid-user/*` equivalent), and the key here is
+ * read from `<userData>/gateways/<id>/provider-key.bin`. Together
+ * they keep "provider config and its API key" matched per-gateway
+ * even when the user has different providers configured on different
+ * gateways.
+ *
  * If the user configured `envKey` but the safeStorage slot is empty,
  * the returned provider has no `apiKey`. The codex adapter will still
  * launch — and the first model call will surface a 401 from the
@@ -293,11 +323,12 @@ export function parseProviderPrefs(
  */
 export async function resolveProviderPrefs(
   prefs: Record<string, unknown>,
+  gatewayId: string,
 ): Promise<OpenAICompatProvider | undefined> {
   const base = parseProviderPrefs(prefs);
   if (!base) return undefined;
   if (!base.envKey) return base;
-  const apiKey = await getProviderApiKey();
+  const apiKey = await getProviderApiKey(gatewayId);
   return apiKey ? { ...base, apiKey } : base;
 }
 

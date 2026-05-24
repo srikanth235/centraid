@@ -26,7 +26,23 @@ beforeEach(async () => {
   await fs.mkdir(projectDir);
   await fs.writeFile(
     path.join(projectDir, 'app.json'),
-    JSON.stringify({ name: 'Sample', version: '0.2.0' }, null, 2),
+    JSON.stringify(
+      {
+        manifestVersion: 1,
+        id: 'sample',
+        name: 'Sample',
+        version: '0.2.0',
+        actions: [],
+        queries: [
+          {
+            name: 'ping',
+            input: { type: 'object', properties: {}, additionalProperties: false },
+          },
+        ],
+      },
+      null,
+      2,
+    ),
   );
   await fs.writeFile(path.join(projectDir, 'index.html'), '<!doctype html><h1>hi</h1>');
   await fs.mkdir(path.join(projectDir, 'queries'));

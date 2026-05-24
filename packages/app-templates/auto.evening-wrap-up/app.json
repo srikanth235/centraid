@@ -1,5 +1,9 @@
 {
+  "manifestVersion": 1,
+  "id": "auto.evening-wrap-up",
   "name": "Evening wrap-up",
   "description": "Reflects on what got done today and stages tomorrow’s top three so mornings start sharp.",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
 }

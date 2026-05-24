@@ -329,11 +329,15 @@
   // settings (modeSeg / saveBtn / testBtn). Undefined until the first
   // settings fetch resolves, which suppresses the badge rather than
   // flashing a stale value.
+  // Cache of the active gateway's kind ('local' | 'remote') for any
+  // UI affordance that surfaces "where is this app running". After
+  // #109 this comes from `settings.activeGatewayKind`, not the old
+  // top-level `runtimeMode` field.
   let currentRuntimeMode: 'local' | 'remote' | undefined;
   function refreshRuntimeMode(): Promise<void> {
     return window.CentraidApi.getSettings()
       .then((s) => {
-        currentRuntimeMode = s.runtimeMode;
+        currentRuntimeMode = s.activeGatewayKind;
       })
       .catch(() => {
         /* ignore — badge stays hidden until the next save */
@@ -5346,26 +5350,10 @@
     );
 
     // ---- Runtime group ----
-    let runtimeMode: 'local' | 'remote' = current.runtimeMode ?? 'local';
-
-    const remoteUrl = el('input', {
-      class: 'input',
-      type: 'text',
-      placeholder: 'http://127.0.0.1:18789',
-      value: current.remoteGatewayUrl ?? '',
-    }) as HTMLInputElement;
-    const remoteToken = el('input', {
-      class: 'input',
-      type: 'password',
-      placeholder: 'paste your gateway.auth.token (leave empty for loopback no-auth)',
-      value: current.remoteGatewayToken ?? '',
-    }) as HTMLInputElement;
-    const projectsDir = el('input', {
-      class: 'input',
-      type: 'text',
-      placeholder: '~/centraid-projects',
-      value: current.projectsDir,
-    }) as HTMLInputElement;
+    // After #109 the runtime page is the Gateways panel. Gateway
+    // selection + lifecycle (add / rename / remove) replaces the old
+    // "Local vs Remote toggle + URL/token/projectsDir form". Paths
+    // are fixed under userData and are no longer user-configurable.
 
     const labeled = (label: string, hint: string, input: HTMLElement): HTMLElement =>
       el('div', { class: 'drawer-row' }, [
@@ -5887,93 +5875,193 @@
     void refreshKeyStatus();
     void refreshProviderStatus();
 
-    const remoteRowsHost = el('div');
-    const renderRemoteRows = (): void => {
-      remoteRowsHost.replaceChildren();
-      if (runtimeMode === 'remote') {
-        remoteRowsHost.append(
-          labeled(
-            'Gateway URL',
-            'Base URL of the remote openclaw gateway (typically loopback).',
-            remoteUrl,
-          ),
-          labeled(
-            'Gateway token',
-            'From ~/.openclaw/openclaw.json → gateway.auth.token. Leave empty if the gateway runs in mode "none".',
-            remoteToken,
-          ),
+    // Gateways panel — list every profile, switch the active one,
+    // add/rename/remove remote gateways. The local gateway is special:
+    // always present, cannot be removed, label can be edited.
+    const gatewaysListHost = el('div', {
+      style: { display: 'flex', flexDirection: 'column', gap: '8px' },
+    });
+
+    const newGatewayLabel = el('input', {
+      class: 'input',
+      type: 'text',
+      placeholder: 'Centraid Cloud',
+    }) as HTMLInputElement;
+    const newGatewayUrl = el('input', {
+      class: 'input',
+      type: 'text',
+      placeholder: 'https://gateway.example.com',
+    }) as HTMLInputElement;
+    const newGatewayToken = el('input', {
+      class: 'input',
+      type: 'password',
+      placeholder: 'paste your gateway bearer token',
+    }) as HTMLInputElement;
+
+    const renderGatewaysList = async (): Promise<void> => {
+      gatewaysListHost.replaceChildren();
+      const [gateways, settings] = await Promise.all([
+        window.CentraidApi.listGateways(),
+        window.CentraidApi.getSettings(),
+      ]);
+      for (const g of gateways) {
+        const isActive = g.id === settings.activeGatewayId;
+        const labelInput = el('input', {
+          class: 'input',
+          type: 'text',
+          value: g.label,
+        }) as HTMLInputElement;
+        const renameBtn = el(
+          'button',
+          {
+            class: 'btn btn-soft',
+            onClick: async () => {
+              const nextLabel = labelInput.value.trim();
+              if (!nextLabel || nextLabel === g.label) return;
+              try {
+                await window.CentraidApi.renameGateway({ id: g.id, label: nextLabel });
+                showToast('Gateway renamed');
+                await renderGatewaysList();
+              } catch (err) {
+                showToast(`Rename failed: ${String(err)}`);
+              }
+            },
+          },
+          'Rename',
         );
-      } else {
-        remoteRowsHost.append(
+        const activateBtn = el(
+          'button',
+          {
+            class: 'btn btn-primary',
+            onClick: async () => {
+              try {
+                await window.CentraidApi.setActiveGateway({ id: g.id });
+                showToast(`Switched to ${g.label}`);
+                renderSettings();
+              } catch (err) {
+                showToast(`Switch failed: ${String(err)}`);
+              }
+            },
+          },
+          isActive ? 'Active' : 'Switch',
+        );
+        if (isActive) activateBtn.setAttribute('disabled', '');
+        const removeBtn =
+          g.id === 'local'
+            ? null
+            : el(
+                'button',
+                {
+                  class: 'btn btn-soft',
+                  onClick: async () => {
+                    if (!confirm(`Remove gateway "${g.label}"? Its workspace will be deleted.`)) {
+                      return;
+                    }
+                    try {
+                      await window.CentraidApi.removeGateway({ id: g.id });
+                      showToast('Gateway removed');
+                      renderSettings();
+                    } catch (err) {
+                      showToast(`Remove failed: ${String(err)}`);
+                    }
+                  },
+                },
+                'Remove',
+              );
+
+        gatewaysListHost.append(
           el(
             'div',
-            { class: 'settings-note' },
-            'Local mode: apps run inside this Electron process. No external gateway required.',
+            {
+              style: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                padding: '10px',
+                border: '0.5px solid var(--line)',
+                borderRadius: '8px',
+                background: 'var(--bg-elev)',
+              },
+            },
+            [
+              el(
+                'div',
+                {
+                  style: { display: 'flex', alignItems: 'center', gap: '8px' },
+                },
+                [
+                  labelInput,
+                  el(
+                    'span',
+                    {
+                      class: 'settings-hint',
+                      style: { fontSize: '11px' },
+                    },
+                    g.kind === 'local' ? 'local · in-process' : (g.url ?? 'remote'),
+                  ),
+                ],
+              ),
+              el(
+                'div',
+                {
+                  style: { display: 'flex', gap: '6px' },
+                },
+                [activateBtn, renameBtn, ...(removeBtn ? [removeBtn] : [])],
+              ),
+            ],
           ),
         );
       }
     };
 
-    const modeSeg = makeSegmented<'local' | 'remote'>(['local', 'remote'], runtimeMode, (v) => {
-      runtimeMode = v;
-      renderRemoteRows();
-    });
-
-    renderRemoteRows();
-
-    const saveBtn = el('button', {
-      class: 'btn btn-primary',
-      onClick: async () => {
-        try {
-          const next = await window.CentraidApi.saveSettings({
-            projectsDir: projectsDir.value.trim(),
-            runtimeMode,
-            remoteGatewayUrl: remoteUrl.value.trim(),
-            remoteGatewayToken: remoteToken.value,
-          });
-          currentRuntimeMode = next.runtimeMode;
-          renderSettings();
-          showToast('Settings saved');
-        } catch (err) {
-          showToast(`Save failed: ${String(err)}`);
-        }
+    const addBtn = el(
+      'button',
+      {
+        class: 'btn btn-primary',
+        onClick: async () => {
+          const label = newGatewayLabel.value.trim();
+          const url = newGatewayUrl.value.trim();
+          const token = newGatewayToken.value;
+          if (!label || !url) {
+            showToast('Label and URL are required');
+            return;
+          }
+          try {
+            await window.CentraidApi.addGateway({ label, url, token });
+            newGatewayLabel.value = '';
+            newGatewayUrl.value = '';
+            newGatewayToken.value = '';
+            showToast('Gateway added');
+            await renderGatewaysList();
+          } catch (err) {
+            showToast(`Add failed: ${String(err)}`);
+          }
+        },
       },
-    });
-    saveBtn.innerHTML = Icon.Save({ size: 13 }) + '<span>Save</span>';
-
-    const testBtn = el('button', {
-      class: 'btn btn-soft',
-      onClick: async () => {
-        try {
-          const next = await window.CentraidApi.saveSettings({
-            projectsDir: projectsDir.value.trim(),
-            runtimeMode,
-            remoteGatewayUrl: remoteUrl.value.trim(),
-            remoteGatewayToken: remoteToken.value,
-          });
-          currentRuntimeMode = next.runtimeMode;
-          const base = (next.gatewayUrl ?? '').replace(/\/+$/, '');
-          const health = await fetch(`${base}/health`).catch(() => null);
-          showToast(health?.ok ? 'Runtime reachable' : 'Settings saved. Health check unavailable.');
-        } catch (err) {
-          showToast(`Runtime check failed: ${String(err)}`);
-        }
-      },
-    });
-    testBtn.innerHTML = Icon.Eye({ size: 13 }) + '<span>Test connection</span>';
+      'Add gateway',
+    );
 
     pageHosts.runtime.append(
-      drawerGroup('Mode', [
-        drawerRowH('Runtime', 'Changes apply when you save.', modeSeg),
-        remoteRowsHost,
-        labeled(
-          'Projects directory',
-          'Where each app project is scaffolded. Tilde is expanded to your home directory.',
-          projectsDir,
+      drawerGroup('Active gateway', [
+        el(
+          'div',
+          { class: 'settings-note' },
+          'Switch which gateway the home shelf and builder are targeting. Each gateway has its own workspace; the local gateway is always available.',
         ),
+        gatewaysListHost,
       ]),
-      el('div', { class: 'sheet-actions' }, [testBtn, saveBtn]),
+      drawerGroup('Add remote gateway', [
+        labeled('Label', 'How this gateway shows up in the switcher.', newGatewayLabel),
+        labeled('URL', 'Base URL of the remote gateway.', newGatewayUrl),
+        labeled(
+          'Bearer token',
+          'Stored in the OS keychain; never written to disk. Leave empty for loopback no-auth.',
+          newGatewayToken,
+        ),
+        el('div', { class: 'sheet-actions' }, [addBtn]),
+      ]),
     );
+    void renderGatewaysList();
     pageHosts.sync.append(
       drawerGroup('Sync', [
         el('div', { class: 'settings-note' }, 'Project sync and backup settings will live here.'),
@@ -6495,4 +6583,20 @@
     await refreshRuntimeMode();
     renderHome();
   })();
+
+  // Multi-gateway (#109): when the active gateway flips, every
+  // gateway-scoped piece of renderer state goes stale at once — the
+  // home shelf's project list belongs to gateway A, the builder is
+  // editing gateway A's workspace, the iframe is loading from gateway
+  // A's appsDir, the agent session is rooted in gateway A. Drop all
+  // of it by re-priming the badge and bouncing back to Home (which
+  // refetches the project list against the new active gateway). Main
+  // already invalidates its HTTP-client caches before broadcasting,
+  // so the next IPC after Home renders sees the new URL+token.
+  window.CentraidApi.onGatewayChanged(() => {
+    void (async (): Promise<void> => {
+      await refreshRuntimeMode();
+      applyRoute({ kind: 'home' });
+    })();
+  });
 })();

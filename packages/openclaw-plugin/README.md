@@ -9,27 +9,37 @@ OpenClaw plugin that mounts a single `/centraid` prefix on the gateway and dispa
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/centraid/_apps` | List registered apps |
-| `POST` | `/centraid/_apps` | Register a path-mode app: `{ id, path }` |
 | `DELETE` | `/centraid/_apps/<id>` | Deregister |
-| `POST` | `/centraid/_apps/<id>/upload` | Upload tar.gz of an uploaded-mode app — auto-registers + activates |
+| `POST` | `/centraid/_apps/<id>/upload` | Upload tar.gz of an app — auto-registers + activates |
 | `GET` | `/centraid/_apps/<id>/versions` | List versions with active flag |
 | `POST` | `/centraid/_apps/<id>/activate` | Atomic version flip: `{ versionId }` |
 | `DELETE` | `/centraid/_apps/<id>/versions/<versionId>` | Prune a single non-active version |
 
-### Per-app surface (works for both modes)
+### Per-app surface
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/centraid/<id>/` | Serves `index.html` from the active code dir |
 | `GET` | `/centraid/<id>/<file>` | Static asset (extension allowlist) |
-| `GET` | `/centraid/<id>/_data/<query>` | Runs `queries/<query>.js` |
-| `POST` | `/centraid/<id>/_run` | Runs `actions/<body.action>.js` |
+| `GET` | `/centraid/<id>/_changes` | SSE stream of mutations (table-level invalidations) |
 | `POST` | `/centraid/<id>/_chat` | Send a chat turn → SSE stream of normalized events |
 | `GET` | `/centraid/<id>/_chat/windows` | List per-window chat metadata |
 | `GET` | `/centraid/<id>/_chat/windows/<wid>/history` | Replay one window's transcript |
 | `DELETE` | `/centraid/<id>/_chat/windows/<wid>` | Clear one window |
 
 App ids starting with `_` are reserved (so `_apps`, `_chat` etc. can't collide).
+
+### Three-tool invocation surface (issue #107)
+
+All handler invocations flow through three generic tools, available both as OpenClaw agent tools and as an HTTP shim:
+
+| Tool | HTTP | Purpose |
+| --- | --- | --- |
+| `centraid_describe` | `POST /centraid/_tool/centraid_describe` | Return the app manifest (or a filtered slice). Body: `{ app?, action?, query? }` |
+| `centraid_read` | `POST /centraid/_tool/centraid_read` | Invoke a query handler. Body: `{ app, query, input }` |
+| `centraid_write` | `POST /centraid/_tool/centraid_write` | Invoke an action handler. Body: `{ app, action, input }` |
+
+The dispatcher validates `input` against the JSON Schema declared in `app.json` (Ajv, draft 2020-12) before invoking the handler. Errors come back as MCP-shaped `isError: true` envelopes with a `{ code, message, path? }` payload; the HTTP shim maps `code` to a 4xx/5xx status (`UNKNOWN_APP`/`UNKNOWN_ACTION`/`UNKNOWN_QUERY` → 404, `WRONG_KIND`/`INVALID_INPUT` → 400, `NO_ACTIVE_VERSION` → 503, `INVALID_MANIFEST`/`HANDLER_ERROR` → 500).
 
 ### Chat surface (host-agnostic)
 
@@ -42,24 +52,18 @@ Either way, the harness client at `@centraid/chat-harness` sees one HTTP/SSE con
 
 Per-window transcripts live at `<appsDir>/<id>/_chat/w<windowId>.jsonl`; a sibling `index.json` records mode + adapter session id so the next turn can resume.
 
-## App modes
+## App layout on disk
 
-An app is one of two modes, decided at registration:
+Every app is registered + delivered via `POST /centraid/_apps/<id>/upload`. Code is **versioned**; data is persistent across versions. The legacy "path mode" (register an external folder live for dev) was retired so the local gateway behaves identically to the remote one — every change goes through the upload + version-flip path.
 
-- **`uploaded`** — registered + content delivered via `POST /centraid/_apps/<id>/upload`. Code is **versioned**; data is persistent across versions.
-
-  ```
-  <appsDir>/<id>/
-    data.sqlite                   ← persistent, never moved
-    current.json                  ← { activeVersion, history } (atomic pointer)
-    versions/
-      v_<UTC ts>_<sha[:6]>/       ← immutable, code-only
-      v_…/
-  ```
-
-- **`path`** — registered with `{ id, path: "/external/folder" }`. The plugin reads code, data, and handlers directly from that folder. No versioning, no upload.
-
-The same per-app URL surface works for both — the plugin transparently resolves the active code dir.
+```
+<appsDir>/<id>/
+  data.sqlite                   ← persistent, never moved
+  current.json                  ← { activeVersion, history } (atomic pointer)
+  versions/
+    v_<UTC ts>_<sha[:6]>/       ← immutable, code-only
+    v_…/
+```
 
 ## Upload flow
 
@@ -71,7 +75,7 @@ tar czf - --exclude data.sqlite --exclude current.json --exclude versions . | \
        https://gw/centraid/_apps/my-app/upload
 ```
 
-- First upload to a new id auto-registers it as `mode: "uploaded"`.
+- First upload to a new id auto-registers it.
 - Each upload becomes an immutable version dir; `current.json#activeVersion` flips atomically once extraction succeeds.
 - Re-uploading identical content (same sha256) collapses to a single version dir; history records the latest timestamp.
 - After upload, retention pruning keeps the most recent N versions (default 5; `versionRetention` in plugin config; minimum 2).
@@ -101,9 +105,9 @@ curl -X POST -d '{"versionId":"v_2026-05-08T14-30-00-000Z_a1b2c3"}' \
   index.html
   app.css, app.js, …       # static — see allowlist below
   data.sqlite              # never served as a static file
-  queries/<name>.js        # GET /centraid/<id>/_data/<name>
-  actions/<name>.js        # POST /centraid/<id>/_run  (body.action picks)
-  app.json                 # optional metadata
+  queries/<name>.js        # dispatched by centraid_read against queries[name]
+  actions/<name>.js        # dispatched by centraid_write against actions[name]
+  app.json                 # the app manifest (manifestVersion, actions[], queries[], …)
 ```
 
 Static extension allowlist: `.html .htm .css .js .mjs .json .svg .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map`.

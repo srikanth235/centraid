@@ -1,5 +1,85 @@
 {
+  "manifestVersion": 1,
+  "id": "todos",
   "name": "Todos",
   "description": "Capture and clear small things.",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "tables": [
+    {
+      "name": "todos",
+      "columns": [
+        { "name": "id", "type": "INTEGER" },
+        { "name": "text", "type": "TEXT" },
+        { "name": "done", "type": "INTEGER" },
+        { "name": "created_at", "type": "INTEGER" }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "add",
+      "description": "Add a new todo item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "text": { "type": "string", "minLength": 1 } },
+        "required": ["text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "number" },
+          "text": { "type": "string" },
+          "done": { "type": "boolean" },
+          "createdAt": { "type": "number" }
+        }
+      },
+      "writes": ["todos"]
+    },
+    {
+      "name": "toggle",
+      "description": "Flip a todo's done bit.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "id": { "type": "number", "minimum": 1 } },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "writes": ["todos"]
+    },
+    {
+      "name": "delete",
+      "description": "Delete a todo by id.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": { "id": { "type": "number", "minimum": 1 } },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "writes": ["todos"]
+    }
+  ],
+  "queries": [
+    {
+      "name": "list",
+      "description": "All todos, open first then by most-recently created.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "number" },
+            "text": { "type": "string" },
+            "done": { "type": "boolean" },
+            "createdAt": { "type": "number" }
+          }
+        }
+      },
+      "reads": ["todos"]
+    }
+  ]
 }

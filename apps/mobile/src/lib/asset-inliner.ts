@@ -9,8 +9,10 @@
 // submissions fall through to the WebView, triggering "HTTP 401" errors.
 //
 // Once the WebView is loaded via { html, baseUrl }, the page's own runtime
-// fetch() calls (e.g. `_data/list`, `_run`) are intercepted by the injected
-// bridge shim, which proxies them through native with the bearer attached.
+// fetch() calls (e.g. `/centraid/_tool/centraid_read` via
+// `window.centraid.read` and the `_changes` SSE) are intercepted by the
+// injected bridge shim, which proxies them through native with the
+// bearer attached.
 
 import { appLiveUrl, authHeader } from './gateway';
 

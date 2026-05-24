@@ -1,67 +1,67 @@
 import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import type { HarnessConfig } from '@centraid/builder-harness';
-// `local-runtime` is loaded lazily because it pulls in `@centraid/runtime-core`
-// which uses `node:sqlite` — a built-in Electron's Node doesn't expose.
-// Importing it statically would crash the renderer at boot for remote-mode
-// users who never need the embedded runtime.
+import { gatewayTemplatesCacheDir, LOCAL_GATEWAY_ID } from './gateway-paths.js';
+import { ensureLocalGateway, listGateways, resolveGateway } from './gateway-store.js';
 
 /**
  * Persisted desktop settings live at `<userData>/centraid-settings.json`
- * with mode `0600` — it holds the remote gateway bearer token.
+ * with mode `0600`. After issue #109 it carries only UI preferences and
+ * a pointer at the active gateway — connection state (gateway URL,
+ * token, workspace path) is per-gateway and lives under
+ * `<userData>/gateways/<id>/` (URLs / labels) and the OS keychain
+ * (tokens). See `gateway-store.ts`.
  *
  * Two shapes coexist here:
- *   - **Persisted form** (`PersistedSettings`): exactly what's serialized
- *     to disk. Includes `runtimeMode` + the user-edited `remoteGatewayUrl`
- *     / `remoteGatewayToken`.
- *   - **Effective form** (`DesktopSettings`, returned by `loadSettings()`):
- *     same persisted fields, plus `gatewayUrl` / `gatewayToken` resolved
- *     against the chosen `runtimeMode`. The renderer reads the effective
- *     values for runtime HTTP calls; the persisted fields drive the
- *     Settings UI editor.
+ *   - **Persisted form** (`PersistedSettings`): exactly what's
+ *     serialized. Just the active gateway pointer + UI-level prefs.
+ *   - **Effective form** (`DesktopSettings`, returned by `loadSettings`):
+ *     the persisted fields, plus everything derived from the active
+ *     gateway — `gatewayUrl`, `gatewayToken`, `workspaceDir`, `appsDir`.
+ *     Every IPC handler that needs to act against the active gateway
+ *     reads the effective form; that's why the shape didn't shrink
+ *     when `runtimeMode` / `remoteGateway*` left it.
  */
 
-export type RuntimeMode = 'local' | 'remote';
-
 export interface PersistedSettings {
-  /**
-   * Workspace root. Every project — UI apps and automation apps alike —
-   * lives under `<projectsDir>/apps/`, surfaced as the derived `appsDir`
-   * on {@link DesktopSettings} (issue #98).
-   */
-  projectsDir: string;
-  runtimeMode: RuntimeMode;
-  remoteGatewayUrl: string;
-  remoteGatewayToken: string;
+  /** Active gateway id. Defaults to `'local'` on a fresh install. */
+  activeGatewayId: string;
+  /** Optional URL the home shelf hits for remote-template updates. */
   remoteTemplatesUrl?: string;
-  /** Model id used by the app-view agentic chat (openclaw infer model run). */
+  /** Model id used by the app-view agentic chat. */
   chatModel?: string;
   /**
    * ISO timestamp of the most recent Claude Code / Codex credential
-   * auto-import. Empty/undefined on first launch — main.ts uses that as
-   * the trigger to run the importer once. The Settings → AI providers
-   * "Re-sync" button is independent of this field.
+   * auto-import. Empty/undefined on first launch — main.ts uses that
+   * as the trigger to run the importer once.
    */
   authImportedAt?: string;
 }
 
 export interface DesktopSettings extends HarnessConfig {
-  /** Workspace root (persisted). */
-  projectsDir: string;
-  /** Derived — `<projectsDir>/apps`. Every project (UI + automation apps). */
+  /** Persisted — the gateway the renderer is currently pointing at. */
+  activeGatewayId: string;
+  /** Derived — `<userData>/gateways/<active>/workspace/`. */
+  workspaceDir: string;
+  /** Derived — `<userData>/gateways/<active>/apps/`. */
   appsDir: string;
-  runtimeMode: RuntimeMode;
-  remoteGatewayUrl: string;
-  remoteGatewayToken: string;
+  /**
+   * Derived — kind of the active gateway. `'local'` means the
+   * in-process runtime owns the URL/token; `'remote'` means the URL
+   * comes from the active gateway's `profile.json` and the token
+   * comes from the OS keychain.
+   */
+  activeGatewayKind: 'local' | 'remote';
+  /** Derived — the active gateway's user-facing label. */
+  activeGatewayLabel: string;
+  /** UI prefs (unchanged from earlier shapes). */
   remoteTemplatesUrl?: string;
   chatModel?: string;
   authImportedAt?: string;
 }
 
 const FILE_NAME = 'centraid-settings.json';
-const DEFAULT_REMOTE_URL = 'http://127.0.0.1:18789';
 
 function settingsPath(): string {
   return path.join(app.getPath('userData'), FILE_NAME);
@@ -69,59 +69,37 @@ function settingsPath(): string {
 
 function persistedDefaults(): PersistedSettings {
   return {
-    projectsDir: path.join(os.homedir(), 'centraid-projects'),
-    runtimeMode: 'local',
-    remoteGatewayUrl: DEFAULT_REMOTE_URL,
-    remoteGatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN ?? '',
-    remoteTemplatesUrl: '',
+    activeGatewayId: LOCAL_GATEWAY_ID,
   };
 }
 
 /**
- * Migrate legacy persisted JSON to the new shape. Older builds wrote
- * `gatewayUrl` / `gatewayToken` at the top level with no `runtimeMode`. If
- * `gatewayToken` was set the user was previously configured for remote
- * OpenClaw, so keep them on remote mode; otherwise default to local.
+ * Type-narrow a raw `settings.json` blob into `PersistedSettings`.
+ * Unknown fields are silently dropped. v0 is greenfield — no legacy
+ * shape support; users upgrading from a pre-#109 build get a fresh
+ * settings file with `activeGatewayId: 'local'` and lose their
+ * previously configured remote-gateway URL/token (which they re-enter
+ * from the Settings → Runtime panel).
  */
-function migrate(
-  raw: Partial<PersistedSettings & { gatewayUrl?: string; gatewayToken?: string }>,
-): PersistedSettings {
+function narrow(raw: Record<string, unknown>): PersistedSettings {
   const base = persistedDefaults();
-  const projectsDir = raw.projectsDir?.trim() || base.projectsDir;
-  const remoteTemplatesUrl = raw.remoteTemplatesUrl ?? base.remoteTemplatesUrl;
-
-  if (raw.runtimeMode || raw.remoteGatewayUrl) {
-    return {
-      projectsDir,
-      runtimeMode: raw.runtimeMode ?? base.runtimeMode,
-      remoteGatewayUrl: raw.remoteGatewayUrl?.trim() || base.remoteGatewayUrl,
-      remoteGatewayToken: raw.remoteGatewayToken ?? base.remoteGatewayToken,
-      remoteTemplatesUrl,
-      chatModel: raw.chatModel,
-      authImportedAt: raw.authImportedAt,
-    };
-  }
-
-  const legacyUrl = raw.gatewayUrl?.trim() || base.remoteGatewayUrl;
-  const legacyToken = raw.gatewayToken ?? base.remoteGatewayToken;
+  const activeRaw = raw.activeGatewayId;
   return {
-    projectsDir,
-    runtimeMode: legacyToken ? 'remote' : 'local',
-    remoteGatewayUrl: legacyUrl,
-    remoteGatewayToken: legacyToken,
-    remoteTemplatesUrl,
-    chatModel: raw.chatModel,
-    authImportedAt: raw.authImportedAt,
+    activeGatewayId:
+      typeof activeRaw === 'string' && activeRaw.length > 0 ? activeRaw : base.activeGatewayId,
+    ...(typeof raw.remoteTemplatesUrl === 'string'
+      ? { remoteTemplatesUrl: raw.remoteTemplatesUrl }
+      : {}),
+    ...(typeof raw.chatModel === 'string' ? { chatModel: raw.chatModel } : {}),
+    ...(typeof raw.authImportedAt === 'string' ? { authImportedAt: raw.authImportedAt } : {}),
   };
 }
 
 async function readPersisted(): Promise<PersistedSettings> {
   try {
     const raw = await fs.readFile(settingsPath(), 'utf8');
-    const parsed = JSON.parse(raw) as Partial<
-      PersistedSettings & { gatewayUrl?: string; gatewayToken?: string }
-    >;
-    return migrate(parsed);
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return narrow(parsed);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
       console.error('[centraid] failed to read settings:', err);
@@ -139,25 +117,47 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
 }
 
 async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> {
-  // Every project — UI app or automation app — lives under `apps/`.
-  const derived = {
-    appsDir: path.join(p.projectsDir, 'apps'),
-  };
-  if (p.runtimeMode === 'local') {
+  // The local gateway must exist before we resolve — its profile
+  // is auto-created on first read. If the persisted `activeGatewayId`
+  // is stale (gateway was removed externally), fall back to local
+  // rather than crashing the whole settings read.
+  await ensureLocalGateway();
+  let resolved = await resolveGateway(p.activeGatewayId);
+  if (!resolved) {
+    console.warn(
+      `[centraid] active gateway "${p.activeGatewayId}" not found; falling back to local.`,
+    );
+    resolved = await resolveGateway(LOCAL_GATEWAY_ID);
+  }
+  if (!resolved) {
+    // Should be impossible after ensureLocalGateway, but TypeScript
+    // can't see that. Throw with a useful message.
+    throw new Error('Local gateway resolution failed unexpectedly.');
+  }
+  // For local gateways, the URL/token are minted by the in-process
+  // runtime. If the runtime hasn't started yet we still return the
+  // settings (with empty URL/token) so boot-time code paths that just
+  // need workspaceDir/appsDir don't deadlock waiting for it.
+  if (resolved.profile.kind === 'local' && !resolved.url) {
     const { ensureLocalRuntime } = await import('./local-runtime.js');
     const handle = await ensureLocalRuntime();
-    return {
-      ...p,
-      ...derived,
-      gatewayUrl: handle.url,
-      gatewayToken: handle.token,
+    resolved = {
+      ...resolved,
+      url: handle.url,
+      token: handle.token,
     };
   }
   return {
-    ...p,
-    ...derived,
-    gatewayUrl: p.remoteGatewayUrl,
-    gatewayToken: p.remoteGatewayToken,
+    activeGatewayId: resolved.profile.id,
+    activeGatewayKind: resolved.profile.kind,
+    activeGatewayLabel: resolved.profile.label,
+    workspaceDir: resolved.workspaceDir,
+    appsDir: resolved.appsDir,
+    gatewayUrl: resolved.url,
+    gatewayToken: resolved.token,
+    ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
+    ...(p.chatModel !== undefined ? { chatModel: p.chatModel } : {}),
+    ...(p.authImportedAt !== undefined ? { authImportedAt: p.authImportedAt } : {}),
   };
 }
 
@@ -167,38 +167,84 @@ export async function loadSettings(): Promise<DesktopSettings> {
 }
 
 /**
- * Read the persisted settings WITHOUT resolving the effective runtime
- * gateway. `loadSettings` routes through `resolveEffective`, which (in
- * local mode) starts the in-process runtime — code reachable from
- * `ensureLocalRuntime` must use this to avoid a startup cycle.
+ * Read the persisted settings WITHOUT resolving the active gateway.
+ * Used by code that needs the raw `activeGatewayId` pointer before
+ * (or instead of) booting the in-process runtime — currently only
+ * the test surface.
  */
 export async function loadPersistedSettings(): Promise<PersistedSettings> {
   return readPersisted();
 }
 
+/**
+ * Patch the persisted settings. Connection state — gateway URL /
+ * token / workspace dir — is NOT settable through here; those go
+ * through the gateway-store IPCs (`gateways:add`, `gateways:rename`,
+ * etc.). The patch is rejected for any of those fields with an error
+ * loud enough to fail fast in tests.
+ */
 export async function saveSettings(patch: Partial<DesktopSettings>): Promise<DesktopSettings> {
+  const forbidden = [
+    'workspaceDir',
+    'appsDir',
+    'gatewayUrl',
+    'gatewayToken',
+    'activeGatewayKind',
+    'activeGatewayLabel',
+  ] as const;
+  for (const key of forbidden) {
+    if (key in patch) {
+      throw new Error(
+        `Cannot patch "${key}" through saveSettings — use the gateways IPC surface instead.`,
+      );
+    }
+  }
   const current = await readPersisted();
   const next: PersistedSettings = {
-    projectsDir: patch.projectsDir?.trim() || current.projectsDir,
-    runtimeMode: patch.runtimeMode ?? current.runtimeMode,
-    remoteGatewayUrl: patch.remoteGatewayUrl?.trim() || current.remoteGatewayUrl,
-    remoteGatewayToken:
-      patch.remoteGatewayToken !== undefined
-        ? patch.remoteGatewayToken
-        : current.remoteGatewayToken,
-    remoteTemplatesUrl:
-      patch.remoteTemplatesUrl !== undefined
-        ? patch.remoteTemplatesUrl
-        : current.remoteTemplatesUrl,
-    chatModel: patch.chatModel !== undefined ? patch.chatModel : current.chatModel,
-    authImportedAt:
-      patch.authImportedAt !== undefined ? patch.authImportedAt : current.authImportedAt,
+    activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
+    ...(patch.remoteTemplatesUrl !== undefined
+      ? { remoteTemplatesUrl: patch.remoteTemplatesUrl }
+      : current.remoteTemplatesUrl !== undefined
+        ? { remoteTemplatesUrl: current.remoteTemplatesUrl }
+        : {}),
+    ...(patch.chatModel !== undefined
+      ? { chatModel: patch.chatModel }
+      : current.chatModel !== undefined
+        ? { chatModel: current.chatModel }
+        : {}),
+    ...(patch.authImportedAt !== undefined
+      ? { authImportedAt: patch.authImportedAt }
+      : current.authImportedAt !== undefined
+        ? { authImportedAt: current.authImportedAt }
+        : {}),
   };
   await writePersisted(next);
   return resolveEffective(next);
 }
 
-/** Where remote-fetched template copies are cached. Per-user, persistent. */
-export function templatesCacheDir(): string {
-  return path.join(app.getPath('userData'), 'templates-cache');
+/**
+ * Public helper — used by the gateway IPCs to flip the active id.
+ * Identical wire format to `saveSettings({ activeGatewayId })` but
+ * crashes loudly if the requested id doesn't resolve, so the caller
+ * doesn't write an unresolvable pointer.
+ */
+export async function setActiveGatewayId(id: string): Promise<DesktopSettings> {
+  if (!(await listGateways()).some((g) => g.id === id)) {
+    throw new Error(`Cannot activate unknown gateway: ${id}`);
+  }
+  return saveSettings({ activeGatewayId: id });
+}
+
+/**
+ * Where remote-fetched template copies are cached for a given gateway.
+ * Per-gateway (issue #109) so the gateway directory is the complete
+ * record of that gateway's local state — `rm -rf gateways/<id>/` wipes
+ * everything including downloaded templates. Today the
+ * `remoteTemplatesUrl` setting is single-valued (one feed per machine),
+ * so the cache content will usually be identical across gateways —
+ * the per-gateway slot future-proofs per-gateway template feeds at
+ * the cost of duplicate bytes on disk in the single-feed case.
+ */
+export function templatesCacheDir(activeGatewayId: string): string {
+  return gatewayTemplatesCacheDir(activeGatewayId);
 }

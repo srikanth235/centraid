@@ -8,7 +8,6 @@
 
 export type Route =
   | { kind: 'registry-list' }
-  | { kind: 'registry-register' }
   | { kind: 'registry-deregister'; appId: string }
   | { kind: 'app-upload'; appId: string }
   | { kind: 'app-versions-list'; appId: string }
@@ -25,9 +24,8 @@ export type Route =
   | { kind: 'app-logs'; appId: string; query: Record<string, string> }
   | { kind: 'app-index'; appId: string; query: Record<string, string> }
   | { kind: 'app-static'; appId: string; rel: string }
-  | { kind: 'app-data'; appId: string; queryName: string; query: Record<string, string> }
-  | { kind: 'app-run'; appId: string }
   | { kind: 'app-changes'; appId: string }
+  | { kind: 'tool-invoke'; toolName: string }
   | {
       kind: 'app-chat';
       appId: string;
@@ -49,11 +47,13 @@ export function parseRoute(method: string, rawUrl: string): Route {
   const segments = pathname.split('/').filter(Boolean);
   const m = method.toUpperCase();
 
-  // Registry endpoints — reserved id "_apps".
+  // Registry endpoints — reserved id "_apps". Apps are registered
+  // implicitly by uploading (no POST /centraid/_apps anymore — path-
+  // mode registration was retired so the local gateway behaves
+  // identically to the remote one).
   if (segments[0] === '_apps') {
     if (segments.length === 1) {
       if (m === 'GET') return { kind: 'registry-list' };
-      if (m === 'POST') return { kind: 'registry-register' };
       return { kind: 'not-found' };
     }
     const appId = decodeURIComponent(segments[1] ?? '');
@@ -111,6 +111,18 @@ export function parseRoute(method: string, rawUrl: string): Route {
     return { kind: 'not-found' };
   }
 
+  // /centraid/_tool/<toolName> — the generic three-tool HTTP shim that
+  // dispatches `centraid_write`/`_read`/`_describe` for non-MCP callers
+  // (the in-iframe `window.centraid.{write,read,describe}` helpers,
+  // browser DevTools, scripts). The per-handler `/_run` and `/_data`
+  // routes were removed in favour of this shim — see issue #107.
+  if (segments[0] === '_tool') {
+    if (segments.length !== 2 || m !== 'POST') return { kind: 'not-found' };
+    const toolName = decodeURIComponent(segments[1] ?? '');
+    if (!toolName) return { kind: 'not-found' };
+    return { kind: 'tool-invoke', toolName };
+  }
+
   const appId = decodeURIComponent(segments[0] ?? '');
   if (!appId || appId.startsWith('_')) return { kind: 'not-found' };
 
@@ -124,20 +136,6 @@ export function parseRoute(method: string, rawUrl: string): Route {
   }
 
   const second = decodeURIComponent(segments[1] ?? '');
-
-  // /centraid/<id>/_data/<query>
-  if (second === '_data') {
-    if (m !== 'GET' || segments.length < 3) return { kind: 'not-found' };
-    const queryName = decodeURIComponent(segments[2] ?? '');
-    const query = Object.fromEntries(url.searchParams.entries());
-    return { kind: 'app-data', appId, queryName, query };
-  }
-
-  // /centraid/<id>/_run
-  if (second === '_run') {
-    if (m !== 'POST') return { kind: 'not-found' };
-    return { kind: 'app-run', appId };
-  }
 
   // /centraid/<id>/_changes — Server-Sent Events stream of mutations to the
   // app's data.sqlite. The connection stays open until the client closes.

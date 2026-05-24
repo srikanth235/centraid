@@ -110,7 +110,7 @@ async function backgroundFetchTemplates(): Promise<void> {
     if (!settings.remoteTemplatesUrl) return;
     const { fetchRemoteTemplates } = await import('@centraid/app-templates');
     await fetchRemoteTemplates({
-      cacheDir: templatesCacheDir(),
+      cacheDir: templatesCacheDir(settings.activeGatewayId),
       remoteUrl: settings.remoteTemplatesUrl,
     });
   } catch (err) {

@@ -7,29 +7,26 @@ export interface DeregisterLogger {
 }
 
 /**
- * Result of attempting to clean an uploaded app's wrapper dir on deregister.
+ * Result of attempting to clean an app's wrapper dir on deregister.
  * Used by tests; the production handler just calls and logs.
  */
 export type CleanupOutcome =
   | { kind: 'removed' }
-  | { kind: 'skipped'; reason: 'path-mode' | 'outside-appsdir' }
+  | { kind: 'skipped'; reason: 'outside-appsdir' }
   | { kind: 'failed'; error: Error };
 
 /**
- * Remove an uploaded app's wrapper dir (`<appsDir>/<id>/`) after the registry
- * entry has been dropped. Path-mode entries point at user-owned dirs and are
- * never touched. The defense-in-depth check ensures `entry.path` resolves
- * inside `appsDir` before we recursively delete — a corrupt registry row with
- * an absolute path elsewhere on disk must not wipe anything outside our state.
+ * Remove an app's wrapper dir (`<appsDir>/<id>/`) after the registry
+ * entry has been dropped. The defense-in-depth check ensures
+ * `entry.path` resolves inside `appsDir` before we recursively delete —
+ * a corrupt registry row with an absolute path elsewhere on disk must
+ * not wipe anything outside our state.
  */
 export async function cleanupDeregisteredApp(
   appsDir: string,
   entry: RegistryEntry,
   logger: DeregisterLogger,
 ): Promise<CleanupOutcome> {
-  if (entry.mode !== 'uploaded') {
-    return { kind: 'skipped', reason: 'path-mode' };
-  }
   const rel = path.relative(appsDir, entry.path);
   const insideAppsDir = !!rel && !rel.startsWith('..') && !path.isAbsolute(rel) && rel.length > 0;
   if (!insideAppsDir) {

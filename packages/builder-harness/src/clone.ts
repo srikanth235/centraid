@@ -67,7 +67,7 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
   // directories, never overwrites contents (issue #70).
   await ensureCanonicalSubdirs(destDir);
 
-  await rewriteAppJson(destDir, opts.newName, opts.newDesc);
+  await rewriteAppJson(destDir, opts.newName, opts.newDesc, opts.newAppId);
   await rewritePackageJson(destDir, opts.newAppId);
   // Keep the browser-tab title aligned with the new display name. The
   // template's <title> is hardcoded to its own brand ("Hydrate"), which
@@ -184,7 +184,12 @@ async function copyDir(src: string, dest: string): Promise<void> {
   }
 }
 
-async function rewriteAppJson(destDir: string, newName?: string, newDesc?: string): Promise<void> {
+async function rewriteAppJson(
+  destDir: string,
+  newName?: string,
+  newDesc?: string,
+  newAppId?: string,
+): Promise<void> {
   const appJsonPath = path.join(destDir, 'app.json');
   let parsed: { name?: unknown; description?: unknown; version?: unknown } & Record<
     string,
@@ -201,6 +206,11 @@ async function rewriteAppJson(destDir: string, newName?: string, newDesc?: strin
     name: newName ?? (typeof parsed.name === 'string' ? parsed.name : 'Untitled'),
     version: '0.1.0',
   };
+  // The cloned app gets a fresh id — the manifest's `id` field must
+  // track the new folder name, not the template's original id. Without
+  // this the dispatcher's manifest-id check would mismatch the
+  // registry id (which is the folder name).
+  if (newAppId) next.id = newAppId;
   // Caller-provided `newDesc` wins; otherwise preserve whatever the template
   // had. Empty strings clear the field.
   const descSource = newDesc ?? (typeof parsed.description === 'string' ? parsed.description : '');

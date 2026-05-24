@@ -8,22 +8,21 @@
 
 export type AppId = string;
 
-/** A registered app's metadata persisted in <appsDir>/_registry.json. */
-export type AppMode = 'uploaded' | 'path';
-
+/**
+ * A registered app's metadata persisted in `<appsDir>/_registry.json`.
+ *
+ * Every registered app is "uploaded" mode: a wrapper folder under
+ * `<appsDir>/<id>/` containing `data.sqlite`, `current.json`, and
+ * `versions/<v_...>/`. Code is resolved through
+ * `current.json#activeVersion`. The legacy `path` mode (register an
+ * external folder live for dev) was retired so the local gateway
+ * behaves identically to the remote one — every change goes through
+ * the upload + version-flip path.
+ */
 export interface RegistryEntry {
   id: AppId;
-  /**
-   * Absolute path to the app's *root* folder.
-   *
-   * - In `uploaded` mode this is `<appsDir>/<id>/` — a wrapper containing
-   *   `data.sqlite`, `current.json`, and `versions/<v_...>/`. Code is
-   *   resolved through `current.json#activeVersion`.
-   * - In `path` mode this is whatever external folder the user registered
-   *   directly. Code, data, and handlers all live there with no versioning.
-   */
+  /** Absolute path to the app's root folder: `<appsDir>/<id>/`. */
   path: string;
-  mode: AppMode;
   registeredAt: string;
 }
 

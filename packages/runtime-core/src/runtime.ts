@@ -5,8 +5,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Registry, RegistryError } from './registry.js';
 import { VersionStore, VersionStoreError } from './version-store.js';
 import { UploadError } from './upload.js';
-import { runHandler } from './handler-runner.js';
 import { parseRoute } from './router.js';
+import {
+  Dispatcher,
+  isToolName,
+  statusForToolError,
+  type ToolName,
+  type ToolResult,
+} from './dispatcher.js';
 import { serveStatic } from './static-server.js';
 import { readBody, sendError, sendJson } from './http-utils.js';
 import { appCodeDir, appDataDir } from './app-paths.js';
@@ -168,6 +174,13 @@ export class Runtime {
   readonly registry: Registry;
   readonly versions: VersionStore;
   /**
+   * Three-tool dispatcher (issue #107). Exposed so the OpenClaw plugin
+   * can register `centraid_write`/`_read`/`_describe` tools that
+   * delegate here rather than re-implementing the manifest + validation
+   * surface.
+   */
+  readonly dispatcher: Dispatcher;
+  /**
    * Per-app change notification bus. Subscribed by the `/centraid/<id>/_changes`
    * SSE endpoint and emitted by `runQuery` (HTTP path + openclaw legacy tool)
    * and `handler-runner` (app action writes). Hosts can subscribe from
@@ -210,6 +223,11 @@ export class Runtime {
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
     this.withAppUploadLock = makeAppUploadLocks();
+    this.dispatcher = new Dispatcher({
+      registry: this.registry,
+      versions: this.versions,
+      onWriteFor: (appId) => this.emitForApp(appId, 'handler'),
+    });
   }
 
   /**
@@ -254,7 +272,6 @@ export class Runtime {
     await this.registry.load();
 
     for (const entry of this.registry.list()) {
-      if (entry.mode !== 'uploaded') continue;
       try {
         const repaired = await this.versions.recover(entry.path);
         if (repaired) {
@@ -292,16 +309,92 @@ export class Runtime {
   }
 
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    if (entry.mode === 'uploaded') {
-      const active = await this.versions.getActiveVersion(entry.path);
-      if (!active) return undefined;
-      return appCodeDir(entry, active);
-    }
-    return appCodeDir(entry);
+    const active = await this.versions.getActiveVersion(entry.path);
+    if (!active) return undefined;
+    return appCodeDir(entry, active);
   }
 
   private refOf(entry: RegistryEntry): AppRef {
     return { id: entry.id, dir: appDataDir(entry) };
+  }
+
+  /**
+   * HTTP shim for the three-tool surface (issue #107). Parses
+   * `POST /centraid/_tool/<toolName>`, dispatches to the right method
+   * on the shared `Dispatcher`, and maps the MCP-shaped `ToolResult`
+   * to an HTTP response: success → 200 with the `structuredContent` as
+   * the JSON body; `isError: true` → status from `statusForToolError`
+   * with `{code, message, path?}` as the body.
+   *
+   * This is the only path non-MCP callers (browser UI, scripts, the
+   * mobile bridge) take to invoke handlers.
+   */
+  private async handleToolInvoke(
+    req: IncomingMessage,
+    res: ServerResponse,
+    toolName: string,
+  ): Promise<void> {
+    if (!isToolName(toolName)) {
+      sendError(
+        res,
+        404,
+        'unknown_tool',
+        `tool "${toolName}" is not a centraid tool — expected one of centraid_write, centraid_read, centraid_describe`,
+      );
+      return;
+    }
+    let body: Record<string, unknown> = {};
+    try {
+      const raw = (await readBody(req)).toString('utf8');
+      if (raw.length > 0) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          sendError(res, 400, 'bad_request', 'Tool body must be a JSON object.');
+          return;
+        }
+        body = parsed as Record<string, unknown>;
+      }
+    } catch (err) {
+      sendError(
+        res,
+        400,
+        'bad_request',
+        `tool body is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+
+    const result = await this.dispatchTool(toolName, body);
+    if (result.isError) {
+      res.statusCode = statusForToolError(result.structuredContent.code);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(result.structuredContent));
+      return;
+    }
+    sendJson(res, 200, result.structuredContent ?? null);
+  }
+
+  private dispatchTool(toolName: ToolName, body: Record<string, unknown>): Promise<ToolResult> {
+    switch (toolName) {
+      case 'centraid_write':
+        return this.dispatcher.write({
+          app: String(body.app ?? ''),
+          action: String(body.action ?? ''),
+          input: body.input,
+        });
+      case 'centraid_read':
+        return this.dispatcher.read({
+          app: String(body.app ?? ''),
+          query: String(body.query ?? ''),
+          input: body.input,
+        });
+      case 'centraid_describe':
+        return this.dispatcher.describe({
+          ...(typeof body.app === 'string' ? { app: body.app } : {}),
+          ...(typeof body.action === 'string' ? { action: body.action } : {}),
+          ...(typeof body.query === 'string' ? { query: body.query } : {}),
+        });
+    }
   }
 
   /**
@@ -321,28 +414,9 @@ export class Runtime {
             this.registry.list().map((e) => ({
               id: e.id,
               path: e.path,
-              mode: e.mode,
               registeredAt: e.registeredAt,
             })),
           );
-          return;
-        }
-
-        case 'registry-register': {
-          const body = JSON.parse((await readBody(req)).toString('utf8')) as {
-            id?: string;
-            path?: string;
-          };
-          if (!body.id || !body.path) {
-            sendError(res, 400, 'bad_request', 'Body must include { id, path }.');
-            return;
-          }
-          const entry = await this.registry.register({
-            id: body.id,
-            path: body.path,
-            mode: 'path',
-          });
-          sendJson(res, 201, { id: entry.id, path: entry.path, mode: entry.mode });
           return;
         }
 
@@ -368,10 +442,6 @@ export class Runtime {
             sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          if (entry.mode !== 'uploaded') {
-            sendError(res, 409, 'not_uploaded', 'Versioning is only available for uploaded apps.');
-            return;
-          }
           const { activeVersion, versions: history } = await this.versions.listVersions(entry.path);
           sendJson(res, 200, {
             activeVersion,
@@ -384,10 +454,6 @@ export class Runtime {
           const entry = this.registry.get(route.appId);
           if (!entry) {
             sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          if (entry.mode !== 'uploaded') {
-            sendError(res, 409, 'not_uploaded', 'Activate is uploaded-mode only.');
             return;
           }
           const body = JSON.parse((await readBody(req)).toString('utf8')) as {
@@ -408,10 +474,6 @@ export class Runtime {
             sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          if (entry.mode !== 'uploaded') {
-            sendError(res, 409, 'not_uploaded', 'Versioning is uploaded-mode only.');
-            return;
-          }
           await this.versions.deleteVersion(entry.path, route.versionId);
           sendJson(res, 200, { id: route.appId, versionId: route.versionId });
           return;
@@ -421,10 +483,6 @@ export class Runtime {
           const entry = this.registry.get(route.appId);
           if (!entry) {
             sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          if (entry.mode !== 'uploaded') {
-            sendError(res, 409, 'not_uploaded', 'Schema endpoint is uploaded-mode only.');
             return;
           }
           const active = await this.versions.getActiveVersion(entry.path);
@@ -494,67 +552,8 @@ export class Runtime {
           return;
         }
 
-        case 'app-data': {
-          const entry = this.registry.get(route.appId);
-          if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          const codeDir = await this.resolveCodeDir(entry);
-          if (!codeDir) {
-            sendError(res, 503, 'no_active_version', 'App has no active version yet.');
-            return;
-          }
-          const file = path.join(codeDir, 'queries', `${route.queryName}.js`);
-          const outcome = await runHandler({
-            app: this.refOf(entry),
-            handlerFile: file,
-            handlerKind: 'query',
-            args: { params: {}, query: route.query },
-            timeoutMs: 10_000,
-          });
-          if (!outcome.ok) {
-            sendError(res, 500, 'handler_error', outcome.error ?? 'query failed');
-            return;
-          }
-          sendJson(res, 200, outcome.value ?? null);
-          return;
-        }
-
-        case 'app-run': {
-          const entry = this.registry.get(route.appId);
-          if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          const codeDir = await this.resolveCodeDir(entry);
-          if (!codeDir) {
-            sendError(res, 503, 'no_active_version', 'App has no active version yet.');
-            return;
-          }
-          const body = JSON.parse((await readBody(req)).toString('utf8')) as {
-            action?: string;
-            args?: unknown;
-          };
-          if (!body.action) {
-            sendError(res, 400, 'bad_request', 'Body must include { action }.');
-            return;
-          }
-          const file = path.join(codeDir, 'actions', `${body.action}.js`);
-          const outcome = await runHandler({
-            app: this.refOf(entry),
-            handlerFile: file,
-            handlerKind: 'action',
-            args: { params: {}, body: body.args },
-            timeoutMs: 30_000,
-            onWrite: this.emitForApp(route.appId, 'handler'),
-          });
-          if (!outcome.ok) {
-            sendError(res, 500, 'handler_error', outcome.error ?? 'action failed');
-            return;
-          }
-          const result = (outcome.value ?? {}) as { status?: number; body?: unknown };
-          sendJson(res, result.status ?? 200, result.body ?? null);
+        case 'tool-invoke': {
+          await this.handleToolInvoke(req, res, route.toolName);
           return;
         }
 

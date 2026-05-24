@@ -49,7 +49,6 @@ export type {
   ScopedLog,
   AppRef,
   AppId,
-  AppMode,
   RegistryEntry,
   QueryModule,
   ActionModule,
@@ -94,6 +93,45 @@ export {
 export { readAppSchema } from './schema.js';
 export { Registry } from './registry.js';
 export { appDataDir, readActiveCodeDir } from './app-paths.js';
+
+// App manifest + three-tool dispatcher (issue #107). The dispatcher
+// replaces the per-handler HTTP routes; openclaw-plugin registers MCP
+// tools that delegate to `runtime.dispatcher.write/read/describe`.
+export {
+  APP_MANIFEST_FILE,
+  MANIFEST_VERSION,
+  MANIFEST_JSON_SCHEMA,
+  ManifestError,
+  parseManifest as parseAppManifest,
+  validateManifest as validateAppManifest,
+  compileSchema,
+  findAction,
+  findQuery,
+  type Manifest as AppManifest,
+  type ManifestActionEntry,
+  type ManifestQueryEntry,
+  type ManifestTable,
+  type ManifestColumn,
+  type HandlerConfirmation,
+  type JsonSchema,
+  type ManifestValidationCode as AppManifestValidationCode,
+} from './manifest.js';
+export {
+  Dispatcher,
+  isToolName,
+  statusForToolError,
+  TOOL_NAMES,
+  type CentraidWriteInput,
+  type CentraidReadInput,
+  type CentraidDescribeInput,
+  type DispatcherOptions,
+  type ToolErrorCode,
+  type ToolErrorContent,
+  type ToolErrorResult,
+  type ToolSuccessResult,
+  type ToolResult,
+  type ToolName,
+} from './dispatcher.js';
 
 // Error classes — hosts that want to translate them to their own response
 // shapes can import these directly. (The Runtime.handle() default handler

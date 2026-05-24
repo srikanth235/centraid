@@ -29,7 +29,6 @@ export interface VersionRecord {
 export interface AppRegistryRow {
   id: string;
   path: string;
-  mode: 'uploaded' | 'path';
   registeredAt: string;
 }
 
@@ -151,9 +150,9 @@ export async function fetchAppSchema(
     method: 'GET',
     headers: authHeaders(config),
   });
-  if (res.status === 404 || res.status === 503 || res.status === 409) {
-    // 404: app not registered. 503: no active version yet. 409: path-mode app.
-    // All three legitimately mean "no live schema to inject".
+  if (res.status === 404 || res.status === 503) {
+    // 404: app not registered. 503: no active version yet. Both mean
+    // "no live schema to inject yet".
     await res.body?.cancel().catch(() => {});
     return undefined;
   }

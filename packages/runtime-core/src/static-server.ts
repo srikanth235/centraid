@@ -97,7 +97,19 @@ export async function serveStatic(
  * re-open after 5s if it lands in CLOSED (`readyState === 2`) so the iframe
  * recovers from gateway restarts without a page reload.
  */
-const CHANGE_BRIDGE_SCRIPT = `<script>(function(){var w=window;w.centraid=w.centraid||{};var listeners=new Set();w.centraid.onChange=function(cb){if(typeof cb!=='function')return function(){};listeners.add(cb);return function(){listeners.delete(cb);};};if(typeof EventSource!=='function')return;var es;function connect(){try{es=new EventSource('_changes');}catch(_){return;}es.addEventListener('change',function(ev){var d;try{d=JSON.parse(ev.data);}catch(_){d={tables:[],ts:Date.now()};}try{w.dispatchEvent(new CustomEvent('centraid:datachange',{detail:d}));}catch(_){}listeners.forEach(function(cb){try{cb(d);}catch(_){}});});es.addEventListener('error',function(){if(es&&es.readyState===2){setTimeout(function(){if(es&&es.readyState===2){try{es.close();}catch(_){}connect();}},5000);}});}connect();})();</script>`;
+// Inline bridge baked into every served HTML. Two responsibilities:
+//
+// 1. **Change feed.** Subscribes to `_changes` SSE and exposes
+//    `window.centraid.onChange(cb)` + the `centraid:datachange` event.
+//
+// 2. **Three-tool helpers.** Issue #107 removed the per-handler
+//    `_run` / `_data/<name>` routes; in their place is one shim at
+//    `/centraid/_tool/<toolName>`. To keep templates terse we inject
+//    `window.centraid.write({action,input})`, `.read({query,input})`,
+//    and `.describe(filter?)`. They derive the app id from
+//    `location.pathname` (`/centraid/<id>/...`) so the bridge is
+//    portable across apps without per-app code-gen.
+const CHANGE_BRIDGE_SCRIPT = `<script>(function(){var w=window;w.centraid=w.centraid||{};var listeners=new Set();w.centraid.onChange=function(cb){if(typeof cb!=='function')return function(){};listeners.add(cb);return function(){listeners.delete(cb);};};var m=/^\\/centraid\\/([^/]+)\\//.exec(w.location.pathname);var appId=m?decodeURIComponent(m[1]):null;w.centraid.appId=appId;var toolUrl='/centraid/_tool/';function callTool(name,body){return fetch(toolUrl+name,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(_){}if(!r.ok){var err=j&&j.message?j.message:('tool '+name+' failed: '+r.status);var e=new Error(err);e.code=j&&j.code;e.status=r.status;throw e;}return j;});});}w.centraid.write=function(opts){if(!opts||!opts.action)return Promise.reject(new Error('write requires {action}'));return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input});};w.centraid.read=function(opts){if(!opts||!opts.query)return Promise.reject(new Error('read requires {query}'));return callTool('centraid_read',{app:appId,query:opts.query,input:opts.input});};w.centraid.describe=function(filter){var body=Object.assign({},filter||{});if(!body.app&&appId)body.app=appId;return callTool('centraid_describe',body);};if(typeof EventSource!=='function')return;var es;function connect(){try{es=new EventSource('_changes');}catch(_){return;}es.addEventListener('change',function(ev){var d;try{d=JSON.parse(ev.data);}catch(_){d={tables:[],ts:Date.now()};}try{w.dispatchEvent(new CustomEvent('centraid:datachange',{detail:d}));}catch(_){}listeners.forEach(function(cb){try{cb(d);}catch(_){}});});es.addEventListener('error',function(){if(es&&es.readyState===2){setTimeout(function(){if(es&&es.readyState===2){try{es.close();}catch(_){}connect();}},5000);}});}connect();})();</script>`;
 
 function injectChangeBridge(html: string): string {
   // Inject right after the opening <head>. If the document has no <head>

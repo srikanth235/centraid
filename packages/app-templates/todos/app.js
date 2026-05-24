@@ -1,10 +1,10 @@
 // Todos — frontend.
 // All state lives on the gateway (SQLite). The page is a thin shell that
-// fetches the list, renders it, and forwards mutations to actions/.
-//
-// Mobile bridge: when running inside the Centraid mobile WebView, the shell
-// injects `window.centraid` (see apps/mobile/src/lib/bridge). Feature-detect
-// so the same template still works in the desktop iframe.
+// reads the list via `centraid.read(...)` and forwards mutations through
+// `centraid.write(...)`. Both helpers are baked into every served HTML
+// by the runtime — they delegate to the three-tool dispatcher
+// (`centraid_write` / `centraid_read`), which validates input against
+// the app.json manifest before invoking the handler.
 
 const $ = (id) => document.getElementById(id);
 const bridge = typeof window !== 'undefined' ? window.centraid : undefined;
@@ -12,20 +12,20 @@ const bridge = typeof window !== 'undefined' ? window.centraid : undefined;
 let todos = [];
 
 async function refresh() {
-  const res = await fetch('_data/list');
-  if (!res.ok) return;
-  todos = await res.json();
-  render();
+  try {
+    todos = (await window.centraid.read({ query: 'list' })) ?? [];
+    render();
+  } catch (_err) {
+    /* leave list as-is; the change feed will retry */
+  }
 }
 
-async function run(action, args) {
-  const res = await fetch('_run', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action, args }),
-  });
-  if (!res.ok) return null;
-  return res.json();
+async function run(action, input) {
+  try {
+    return await window.centraid.write({ action, input });
+  } catch (_err) {
+    return null;
+  }
 }
 
 function render() {

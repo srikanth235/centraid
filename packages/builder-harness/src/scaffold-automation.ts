@@ -173,7 +173,19 @@ export async function scaffoldAutomationProject(
   const autoDir = path.join(appDir, APP_AUTOMATIONS_SUBDIR, automationId);
   await fs.mkdir(autoDir, { recursive: true });
 
-  const appJson: Record<string, unknown> = { name, version: '0.1.0' };
+  // Manifest must satisfy the post-#107 schema (manifestVersion + id +
+  // actions[] + queries[]) so the publish-on-save loop introduced in
+  // #108 doesn't bounce the upload. An automation app has no
+  // user-facing actions/queries — the automation lives entirely under
+  // `automations/<id>/`.
+  const appJson: Record<string, unknown> = {
+    manifestVersion: 1,
+    id: appId,
+    name,
+    version: '0.1.0',
+    actions: [],
+    queries: [],
+  };
   if (opts.description?.trim()) appJson.description = opts.description.trim();
   await fs.writeFile(path.join(appDir, 'app.json'), JSON.stringify(appJson, null, 2) + '\n');
 

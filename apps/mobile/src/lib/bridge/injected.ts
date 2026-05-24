@@ -79,9 +79,10 @@ export function buildInjectedJs(gatewayOrigin: string): string {
 
   // --- fetch shim ---
   // Resolve a request URL against the page origin so we can compare against
-  // the configured gateway. Relative URLs (the common case for in-page
-  // _data/_run calls) resolve against the WebView's location, which is the
-  // gateway origin itself.
+  // the configured gateway. Relative URLs (in-app _changes SSE, plus
+  // /centraid/_tool/* POSTs that the injected
+  // window.centraid.read/write/describe helpers issue) resolve against
+  // the WebView's location, which is the gateway origin itself.
   function resolveUrl(input) {
     if (typeof input === 'string') {
       try { return new URL(input, window.location.href).toString(); } catch (e) { return input; }
