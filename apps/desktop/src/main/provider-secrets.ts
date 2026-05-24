@@ -1,26 +1,35 @@
 /*
  * Persisted secret for the custom OpenAI-compatible provider's API key.
  *
- * Stored encrypted at `<userData>/local-runtime/provider-key.bin` via
- * Electron's `safeStorage` (macOS Keychain / DPAPI / libsecret depending
- * on platform). The plaintext key never reaches the renderer or
- * `user_prefs.sqlite` — the renderer asks main to "set" / "has" / "clear"
- * the key, and main is the only process that ever sees plaintext.
+ * Stored encrypted at `<userData>/gateways/<id>/provider-key.bin` via
+ * Electron's `safeStorage` (macOS Keychain / DPAPI / libsecret). The
+ * plaintext key never reaches the renderer or `identity.sqlite` — the
+ * renderer asks main to "set" / "has" / "clear" the key, and main is
+ * the only process that ever sees plaintext.
  *
- * The local-runtime's prefs loader calls `getProviderApiKey()` when
- * building `RunnerPrefs.provider.apiKey`, so the engine plumbing in
+ * Per-gateway (issue #109) so the provider config and its API key live
+ * at the same scope. The provider's URL + envKey are already stored
+ * per-gateway in `identity.sqlite#agent.runner.provider.*`; storing the
+ * key alongside (instead of one global slot) means a user can configure
+ * different providers on different gateways — e.g., a local Ollama on
+ * the local gateway and a corp-internal endpoint on a remote one — and
+ * each gateway's saved key matches its saved provider config.
+ *
+ * The local-runtime's prefs loader calls `getProviderApiKey(gatewayId)`
+ * when building `RunnerPrefs.provider.apiKey`, so the engine plumbing in
  * `@centraid/agent-runtime` keeps its existing in-memory shape — only
  * the *source* of the key changed.
  */
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { app, safeStorage } from 'electron';
+import { safeStorage } from 'electron';
+import { gatewayDir } from './gateway-paths.js';
 
 const KEY_FILE_NAME = 'provider-key.bin';
 
-function keyFilePath(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', KEY_FILE_NAME);
+function keyFilePath(gatewayId: string): string {
+  return path.join(gatewayDir(gatewayId), KEY_FILE_NAME);
 }
 
 /**
@@ -38,21 +47,21 @@ function ensureEncryptionAvailable(): void {
   }
 }
 
-export async function setProviderApiKey(plaintext: string): Promise<void> {
+export async function setProviderApiKey(gatewayId: string, plaintext: string): Promise<void> {
   ensureEncryptionAvailable();
-  const file = keyFilePath();
+  const file = keyFilePath(gatewayId);
   await fs.mkdir(path.dirname(file), { recursive: true });
   if (!plaintext) {
-    await clearProviderApiKey();
+    await clearProviderApiKey(gatewayId);
     return;
   }
   const encrypted = safeStorage.encryptString(plaintext);
   await fs.writeFile(file, encrypted, { mode: 0o600 });
 }
 
-export async function getProviderApiKey(): Promise<string | undefined> {
+export async function getProviderApiKey(gatewayId: string): Promise<string | undefined> {
   try {
-    const encrypted = await fs.readFile(keyFilePath());
+    const encrypted = await fs.readFile(keyFilePath(gatewayId));
     if (encrypted.length === 0) return undefined;
     ensureEncryptionAvailable();
     return safeStorage.decryptString(encrypted);
@@ -66,15 +75,15 @@ export async function getProviderApiKey(): Promise<string | undefined> {
   }
 }
 
-export async function hasProviderApiKey(): Promise<boolean> {
+export async function hasProviderApiKey(gatewayId: string): Promise<boolean> {
   try {
-    const stat = await fs.stat(keyFilePath());
+    const stat = await fs.stat(keyFilePath(gatewayId));
     return stat.isFile() && stat.size > 0;
   } catch {
     return false;
   }
 }
 
-export async function clearProviderApiKey(): Promise<void> {
-  await fs.rm(keyFilePath(), { force: true });
+export async function clearProviderApiKey(gatewayId: string): Promise<void> {
+  await fs.rm(keyFilePath(gatewayId), { force: true });
 }

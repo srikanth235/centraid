@@ -3,7 +3,21 @@ import { ipcMain, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { loadSettings, saveSettings, templatesCacheDir, type DesktopSettings } from './settings.js';
+import {
+  loadSettings,
+  saveSettings,
+  setActiveGatewayId,
+  templatesCacheDir,
+  type DesktopSettings,
+} from './settings.js';
+import {
+  addGateway,
+  GatewayError,
+  listGateways,
+  removeGateway,
+  renameGateway,
+  type GatewayProfile,
+} from './gateway-store.js';
 import { PREVIEW_SCHEME } from './preview-protocol.js';
 import { refreshAuthInjector } from './auth-injector.js';
 import { resetChatHistoryAuthCache } from './chat-history-client.js';
@@ -71,6 +85,7 @@ import {
   requestPublish,
   type PublishStatus,
 } from './publish-on-save.js';
+import { disposeWindowChatSessions } from './chat.js';
 
 /**
  * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
@@ -106,6 +121,15 @@ export const Channel = {
 
   /** Status read for the auto-publish queue (renderer toast / debug). */
   PUBLISH_STATUS: 'centraid:publish:status',
+
+  // Gateway lifecycle (issue #109). The local gateway is special-cased
+  // (always present, can't be removed). Remote gateways get UUID ids.
+  GATEWAYS_LIST: 'centraid:gateways:list',
+  GATEWAYS_ADD: 'centraid:gateways:add',
+  GATEWAYS_REMOVE: 'centraid:gateways:remove',
+  GATEWAYS_RENAME: 'centraid:gateways:rename',
+  GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
+  GATEWAY_CHANGED: 'centraid:gateways:changed',
 
   TEMPLATES_LIST: 'centraid:templates:list',
   TEMPLATES_CLONE: 'centraid:templates:clone',
@@ -182,6 +206,10 @@ async function loadRunnerPrefs(): Promise<{
   extraArgs?: string[];
   provider?: OpenAICompatProvider;
 }> {
+  // `fetchUserPrefs` routes to the active gateway's `/_centraid-user/prefs`,
+  // so we need to scope the provider API key to that same active gateway —
+  // otherwise we'd mix one gateway's config with another's key.
+  const settings = await loadSettings();
   const prefs = await fetchUserPrefs();
   const kindRaw = prefs['agent.runner.kind'];
   // Codex is the preferred default — mirrors the chat-side loader in
@@ -197,7 +225,7 @@ async function loadRunnerPrefs(): Promise<{
   const extraArgs = Array.isArray(extraArgsRaw)
     ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
     : undefined;
-  const provider = await resolveProviderPrefs(prefs);
+  const provider = await resolveProviderPrefs(prefs, settings.activeGatewayId);
   return {
     kind,
     ...(binPath ? { binPath } : {}),
@@ -207,17 +235,125 @@ async function loadRunnerPrefs(): Promise<{
 }
 
 export function registerIpcHandlers(): void {
+  // Broadcast helper for "active gateway changed" — fires after any
+  // mutation that affects the active gateway's URL/token/identity so
+  // the renderer can drop and re-fetch gateway-scoped state.
+  const broadcastGatewayChanged = (next: DesktopSettings): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      win.webContents.send(Channel.GATEWAY_CHANGED, {
+        activeGatewayId: next.activeGatewayId,
+        activeGatewayKind: next.activeGatewayKind,
+        activeGatewayLabel: next.activeGatewayLabel,
+      });
+    }
+  };
+
+  // Invalidate the renderer's HTTP-client caches after a gateway swap
+  // or token rotation. The auth-injector caches an Authorization
+  // header per origin; the user-prefs / chat-history clients cache
+  // their bearer too. All three need to drop their caches together.
+  const invalidateGatewayCaches = async (): Promise<void> => {
+    resetChatHistoryAuthCache();
+    resetUserPrefsAuthCache();
+    await refreshAuthInjector();
+  };
+
+  // Stop every live agent + chat session across every window when the
+  // active gateway changes. Those sessions were rooted in the previous
+  // gateway's workspace + identity DB; letting them keep running would
+  // mean the agent writing into gateway A's workspace + auto-publishing
+  // to gateway A's appsDir while the user thinks they're on gateway B.
+  // Disposing here is unconditional — the renderer's onGatewayChanged
+  // handler also bounces back to Home, so there's no live UI tied to
+  // these sessions at the moment they end.
+  const disposeAllSessionsForGatewaySwap = async (): Promise<void> => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      await disposeWindowSession(win.id);
+      disposeWindowChatSessions(win.id);
+    }
+  };
+
   // ----- Settings -----
   ipcMain.handle(Channel.SETTINGS_GET, async () => loadSettings());
   ipcMain.handle(Channel.SETTINGS_SAVE, async (_e, patch: Partial<DesktopSettings>) => {
     const next = await saveSettings(patch);
-    // gatewayUrl/token may have flipped; invalidate the per-client auth caches
-    // so the next request picks up the new values.
-    resetChatHistoryAuthCache();
-    resetUserPrefsAuthCache();
-    await refreshAuthInjector();
+    // Settings can no longer flip gateway URL/token directly (those
+    // live in the gateway store), but the active gateway pointer can
+    // change through here — invalidate caches the same way.
+    await invalidateGatewayCaches();
     return next;
   });
+
+  // ----- Gateways (issue #109) -----
+  // The local gateway is always present and can't be removed; remote
+  // gateways are added/removed/renamed through the Settings → Gateways
+  // panel. Tokens never cross the bridge — `add` accepts plaintext
+  // and immediately persists to keychain via gateway-secrets.
+  ipcMain.handle(Channel.GATEWAYS_LIST, async (): Promise<GatewayProfile[]> => listGateways());
+
+  ipcMain.handle(
+    Channel.GATEWAYS_ADD,
+    async (_e, input: { label: string; url: string; token: string }): Promise<GatewayProfile> =>
+      addGateway(input),
+  );
+
+  ipcMain.handle(
+    Channel.GATEWAYS_REMOVE,
+    async (_e, input: { id: string }): Promise<{ activeGatewayId: string }> => {
+      try {
+        await removeGateway(input.id);
+      } catch (err) {
+        if (err instanceof GatewayError && err.code === 'local_not_removable') {
+          throw new Error(err.message, { cause: err });
+        }
+        throw err;
+      }
+      // If the active gateway was removed, fall back to local. Either
+      // way the caches need to drop so the renderer's HTTP clients
+      // re-resolve via the (possibly new) active gateway. Sessions
+      // are disposed too — they may have been rooted in the removed
+      // gateway's workspace, and even when they weren't, the renderer
+      // will bounce home on the broadcast so any UI tying back to them
+      // is gone anyway.
+      const current = await loadSettings();
+      let next: DesktopSettings = current;
+      if (current.activeGatewayId === input.id) {
+        await disposeAllSessionsForGatewaySwap();
+        next = await setActiveGatewayId('local');
+      }
+      await invalidateGatewayCaches();
+      broadcastGatewayChanged(next);
+      return { activeGatewayId: next.activeGatewayId };
+    },
+  );
+
+  ipcMain.handle(
+    Channel.GATEWAYS_RENAME,
+    async (_e, input: { id: string; label: string }): Promise<GatewayProfile> => {
+      const updated = await renameGateway(input.id, input.label);
+      // Label-only change — no token/URL flip — but the renderer's
+      // switcher label cache wants to refresh, so emit on the bus.
+      const next = await loadSettings();
+      broadcastGatewayChanged(next);
+      return updated;
+    },
+  );
+
+  ipcMain.handle(
+    Channel.GATEWAYS_SET_ACTIVE,
+    async (_e, input: { id: string }): Promise<DesktopSettings> => {
+      // Stop sessions BEFORE flipping the pointer — otherwise an
+      // in-flight `prompt` could land its writes after the swap with
+      // the old session handle still mapping to old paths.
+      await disposeAllSessionsForGatewaySwap();
+      const next = await setActiveGatewayId(input.id);
+      await invalidateGatewayCaches();
+      broadcastGatewayChanged(next);
+      return next;
+    },
+  );
 
   // ----- User identity + prefs (gateway-backed) -----
   ipcMain.handle(Channel.USER_ID_GET, async () => fetchUserId());
@@ -235,21 +371,27 @@ export function registerIpcHandlers(): void {
 
   // ----- Provider secret (custom OpenAI-compatible endpoint API key) -----
   // The plaintext lives only in the main process — renderer can set, query
-  // presence, or clear, but never read the key back.
+  // presence, or clear, but never read the key back. Per-gateway (#109)
+  // because the matching provider config (URL, envKey, ...) is already
+  // per-gateway in the identity DB; storing the key against the same
+  // active gateway keeps config + key matched. Switching gateways
+  // surfaces a different (possibly empty) slot to the AI providers panel.
   ipcMain.handle(
     Channel.PROVIDER_API_KEY_SET,
     async (_e, input: { apiKey: string }): Promise<{ ok: true }> => {
-      await setProviderApiKey(input.apiKey);
+      const settings = await loadSettings();
+      await setProviderApiKey(settings.activeGatewayId, input.apiKey);
       noteRunnerPrefsChanged();
       return { ok: true };
     },
   );
-  ipcMain.handle(
-    Channel.PROVIDER_API_KEY_HAS,
-    async (): Promise<{ present: boolean }> => ({ present: await hasProviderApiKey() }),
-  );
+  ipcMain.handle(Channel.PROVIDER_API_KEY_HAS, async (): Promise<{ present: boolean }> => {
+    const settings = await loadSettings();
+    return { present: await hasProviderApiKey(settings.activeGatewayId) };
+  });
   ipcMain.handle(Channel.PROVIDER_API_KEY_CLEAR, async (): Promise<{ ok: true }> => {
-    await clearProviderApiKey();
+    const settings = await loadSettings();
+    await clearProviderApiKey(settings.activeGatewayId);
     noteRunnerPrefsChanged();
     return { ok: true };
   });
@@ -438,7 +580,10 @@ export function registerIpcHandlers(): void {
       // secrets for the renderer to show. Best-effort — a provisioning
       // failure must not fail the turn.
       const provisionPendingWebhooks = async (): Promise<MintedWebhookInfo[]> => {
-        const gatewayBase = settings.remoteGatewayUrl.replace(/\/+$/, '');
+        // Webhook URLs always point at the active gateway — local or
+        // remote — so the agent's manifest references match wherever
+        // the user actually publishes.
+        const gatewayBase = settings.gatewayUrl.replace(/\/+$/, '');
         const toInfo = (w: ProvisionedWebhook): MintedWebhookInfo => ({
           automationId: w.automationId,
           ownerApp: w.ownerApp,
@@ -612,10 +757,14 @@ export function registerIpcHandlers(): void {
 
   // ----- Templates -----
   ipcMain.handle(Channel.TEMPLATES_LIST, async () => {
+    const settings = await loadSettings();
     const { resolveTemplates } = await import('@centraid/app-templates');
     // Strip `files` + `source` from the wire response — the renderer only
-    // needs the display metadata, and the lists can be sizable.
-    const resolved = await resolveTemplates({ cacheDir: templatesCacheDir() });
+    // needs the display metadata, and the lists can be sizable. Cache
+    // is per-gateway (#109) so we resolve against the active one.
+    const resolved = await resolveTemplates({
+      cacheDir: templatesCacheDir(settings.activeGatewayId),
+    });
     return resolved.map((t) => ({
       id: t.id,
       name: t.name,
@@ -631,7 +780,7 @@ export function registerIpcHandlers(): void {
     const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
     const { cloneTemplate, suggestCloneIdentity } = await import('@centraid/builder-harness');
 
-    const cacheDir = templatesCacheDir();
+    const cacheDir = templatesCacheDir(settings.activeGatewayId);
     const templates = await resolveTemplates({ cacheDir });
     const tmpl = templates.find((t) => t.id === input.templateId);
     if (!tmpl) {
@@ -670,15 +819,16 @@ export function registerIpcHandlers(): void {
     // so the clone path mints id + secret here, rewrites the manifest
     // to its provisioned form, and returns the plaintext secret to the
     // renderer to show once. App templates never have webhook triggers,
-    // so this is a no-op for them. The minted webhook secret needs the
-    // remote gateway base URL for the final `/_centraid-hook/<id>` URL.
+    // so this is a no-op for them. URL points at the active gateway —
+    // the secret is hashed into the manifest and the plaintext is shown
+    // once here.
     const minted = await provisionAppPendingWebhooks(project.dir);
     const webhooks = minted.map((m) => ({
       automationId: m.automationId,
       ownerApp: m.ownerApp,
       webhookId: m.webhookId,
       secret: m.secret,
-      url: `${settings.remoteGatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
+      url: `${settings.gatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
     }));
 
     // Publish the freshly cloned workspace to the gateway so the iframe
@@ -864,7 +1014,7 @@ export function registerIpcHandlers(): void {
           webhook = {
             id,
             secret,
-            url: `${settings.remoteGatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${id}`,
+            url: `${settings.gatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${id}`,
           };
           return { kind: 'webhook', id, secretHash: hashWebhookSecret(secret) };
         }
