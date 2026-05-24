@@ -160,12 +160,9 @@ export class Dispatcher {
   // --------- resolution helpers ---------
 
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    if (entry.mode === 'uploaded') {
-      const active = await this.versions.getActiveVersion(entry.path);
-      if (!active) return undefined;
-      return appCodeDir(entry, active);
-    }
-    return appCodeDir(entry);
+    const active = await this.versions.getActiveVersion(entry.path);
+    if (!active) return undefined;
+    return appCodeDir(entry, active);
   }
 
   private async loadManifest(codeDir: string): Promise<Manifest> {

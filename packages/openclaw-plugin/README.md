@@ -9,14 +9,13 @@ OpenClaw plugin that mounts a single `/centraid` prefix on the gateway and dispa
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/centraid/_apps` | List registered apps |
-| `POST` | `/centraid/_apps` | Register a path-mode app: `{ id, path }` |
 | `DELETE` | `/centraid/_apps/<id>` | Deregister |
-| `POST` | `/centraid/_apps/<id>/upload` | Upload tar.gz of an uploaded-mode app — auto-registers + activates |
+| `POST` | `/centraid/_apps/<id>/upload` | Upload tar.gz of an app — auto-registers + activates |
 | `GET` | `/centraid/_apps/<id>/versions` | List versions with active flag |
 | `POST` | `/centraid/_apps/<id>/activate` | Atomic version flip: `{ versionId }` |
 | `DELETE` | `/centraid/_apps/<id>/versions/<versionId>` | Prune a single non-active version |
 
-### Per-app surface (works for both modes)
+### Per-app surface
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -53,24 +52,18 @@ Either way, the harness client at `@centraid/chat-harness` sees one HTTP/SSE con
 
 Per-window transcripts live at `<appsDir>/<id>/_chat/w<windowId>.jsonl`; a sibling `index.json` records mode + adapter session id so the next turn can resume.
 
-## App modes
+## App layout on disk
 
-An app is one of two modes, decided at registration:
+Every app is registered + delivered via `POST /centraid/_apps/<id>/upload`. Code is **versioned**; data is persistent across versions. The legacy "path mode" (register an external folder live for dev) was retired so the local gateway behaves identically to the remote one — every change goes through the upload + version-flip path.
 
-- **`uploaded`** — registered + content delivered via `POST /centraid/_apps/<id>/upload`. Code is **versioned**; data is persistent across versions.
-
-  ```
-  <appsDir>/<id>/
-    data.sqlite                   ← persistent, never moved
-    current.json                  ← { activeVersion, history } (atomic pointer)
-    versions/
-      v_<UTC ts>_<sha[:6]>/       ← immutable, code-only
-      v_…/
-  ```
-
-- **`path`** — registered with `{ id, path: "/external/folder" }`. The plugin reads code, data, and handlers directly from that folder. No versioning, no upload.
-
-The same per-app URL surface works for both — the plugin transparently resolves the active code dir.
+```
+<appsDir>/<id>/
+  data.sqlite                   ← persistent, never moved
+  current.json                  ← { activeVersion, history } (atomic pointer)
+  versions/
+    v_<UTC ts>_<sha[:6]>/       ← immutable, code-only
+    v_…/
+```
 
 ## Upload flow
 
@@ -82,7 +75,7 @@ tar czf - --exclude data.sqlite --exclude current.json --exclude versions . | \
        https://gw/centraid/_apps/my-app/upload
 ```
 
-- First upload to a new id auto-registers it as `mode: "uploaded"`.
+- First upload to a new id auto-registers it.
 - Each upload becomes an immutable version dir; `current.json#activeVersion` flips atomically once extraction succeeds.
 - Re-uploading identical content (same sha256) collapses to a single version dir; history records the latest timestamp.
 - After upload, retention pruning keeps the most recent N versions (default 5; `versionRetention` in plugin config; minimum 2).

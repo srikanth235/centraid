@@ -484,10 +484,9 @@ export function registerIpcHandlers(): void {
     try {
       return await listVersions(settings, input.id);
     } catch (err) {
-      // 404 = app not registered, 409 = path-mode (no versioning). Both are
-      // the "never published" probe result the renderer expects — collapse to
-      // an empty list rather than rejecting (which Electron logs noisily).
-      if (err instanceof HarnessError && (err.code === 'not_found' || err.code === 'conflict')) {
+      // 404 = app not registered (never published). Collapse to an
+      // empty list rather than rejecting (which Electron logs noisily).
+      if (err instanceof HarnessError && err.code === 'not_found') {
         return { versions: [] };
       }
       throw err;

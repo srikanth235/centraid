@@ -67,7 +67,8 @@ export interface ChatRouteContext {
   /**
    * Optional per-app metadata reader. Used to populate `appName` / `appDescription`
    * in the extra-system-prompt. Returns undefined when the app has no
-   * authored `app.json` yet (path-mode apps, freshly registered uploads).
+   * authored `app.json` yet (freshly registered uploads with no
+   * committed version).
    */
   appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
 }

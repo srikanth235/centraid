@@ -49,7 +49,6 @@ export type {
   ScopedLog,
   AppRef,
   AppId,
-  AppMode,
   RegistryEntry,
   QueryModule,
   ActionModule,

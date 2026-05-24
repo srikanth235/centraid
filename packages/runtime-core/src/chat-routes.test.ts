@@ -27,9 +27,10 @@ afterEach(async () => {
 });
 
 async function registerApp(appId: string): Promise<void> {
-  const appDir = path.join(workspace, appId);
-  await fs.mkdir(appDir, { recursive: true });
-  await runtime.registry.register({ id: appId, path: appDir, mode: 'path' });
+  // Test apps are uploaded-mode shells — empty wrapper dir, no
+  // versions. The chat route surface doesn't read code, so we don't
+  // need to commit an actual version for these tests.
+  await runtime.registry.ensureUploaded(appId);
 }
 
 test('POST /_chat returns 503 when no runner is configured', async () => {

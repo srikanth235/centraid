@@ -5,36 +5,23 @@ import type { RegistryEntry } from './types.js';
 /**
  * Resolve where an app's persistent data file lives.
  *
- * For uploaded apps the data file is at `<appsDir>/<id>/data.sqlite` —
- * outside any version dir, so it survives version swaps.
- *
- * For path-registered apps the data file is at `<path>/data.sqlite` —
- * the external folder is the data root.
+ * Every app's data file is at `<appsDir>/<id>/data.sqlite` — outside
+ * any version dir, so it survives version swaps.
  */
 export function appDataDir(entry: RegistryEntry): string {
   return entry.path;
 }
 
 /**
- * Resolve where the active *code* lives (handlers + static + app.json).
- *
- * For uploaded apps this is `<path>/versions/<activeVersion>/`.
- * For path-registered apps this is just `<path>` itself.
- *
- * The `activeVersion` for uploaded apps is read from `current.json` by the
- * caller (typically `VersionStore.getActiveVersion`).
+ * Resolve where the active *code* lives (handlers + static + app.json):
+ * `<path>/versions/<activeVersion>/`. The `activeVersion` is read from
+ * `current.json` by the caller (typically `VersionStore.getActiveVersion`).
  */
-export function appCodeDir(entry: RegistryEntry, activeVersion?: string): string {
-  if (entry.mode === 'uploaded') {
-    if (!activeVersion) {
-      throw new AppPathError(
-        'no_active_version',
-        `App "${entry.id}" is uploaded mode but has no active version.`,
-      );
-    }
-    return path.join(entry.path, 'versions', activeVersion);
+export function appCodeDir(entry: RegistryEntry, activeVersion: string): string {
+  if (!activeVersion) {
+    throw new AppPathError('no_active_version', `App "${entry.id}" has no active version.`);
   }
-  return entry.path;
+  return path.join(entry.path, 'versions', activeVersion);
 }
 
 /**

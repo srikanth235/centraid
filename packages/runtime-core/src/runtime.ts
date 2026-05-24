@@ -272,7 +272,6 @@ export class Runtime {
     await this.registry.load();
 
     for (const entry of this.registry.list()) {
-      if (entry.mode !== 'uploaded') continue;
       try {
         const repaired = await this.versions.recover(entry.path);
         if (repaired) {
@@ -310,12 +309,9 @@ export class Runtime {
   }
 
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    if (entry.mode === 'uploaded') {
-      const active = await this.versions.getActiveVersion(entry.path);
-      if (!active) return undefined;
-      return appCodeDir(entry, active);
-    }
-    return appCodeDir(entry);
+    const active = await this.versions.getActiveVersion(entry.path);
+    if (!active) return undefined;
+    return appCodeDir(entry, active);
   }
 
   private refOf(entry: RegistryEntry): AppRef {
@@ -418,28 +414,9 @@ export class Runtime {
             this.registry.list().map((e) => ({
               id: e.id,
               path: e.path,
-              mode: e.mode,
               registeredAt: e.registeredAt,
             })),
           );
-          return;
-        }
-
-        case 'registry-register': {
-          const body = JSON.parse((await readBody(req)).toString('utf8')) as {
-            id?: string;
-            path?: string;
-          };
-          if (!body.id || !body.path) {
-            sendError(res, 400, 'bad_request', 'Body must include { id, path }.');
-            return;
-          }
-          const entry = await this.registry.register({
-            id: body.id,
-            path: body.path,
-            mode: 'path',
-          });
-          sendJson(res, 201, { id: entry.id, path: entry.path, mode: entry.mode });
           return;
         }
 
@@ -465,10 +442,6 @@ export class Runtime {
             sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          if (entry.mode !== 'uploaded') {
-            sendError(res, 409, 'not_uploaded', 'Versioning is only available for uploaded apps.');
-            return;
-          }
           const { activeVersion, versions: history } = await this.versions.listVersions(entry.path);
           sendJson(res, 200, {
             activeVersion,
@@ -481,10 +454,6 @@ export class Runtime {
           const entry = this.registry.get(route.appId);
           if (!entry) {
             sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          if (entry.mode !== 'uploaded') {
-            sendError(res, 409, 'not_uploaded', 'Activate is uploaded-mode only.');
             return;
           }
           const body = JSON.parse((await readBody(req)).toString('utf8')) as {
@@ -505,10 +474,6 @@ export class Runtime {
             sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          if (entry.mode !== 'uploaded') {
-            sendError(res, 409, 'not_uploaded', 'Versioning is uploaded-mode only.');
-            return;
-          }
           await this.versions.deleteVersion(entry.path, route.versionId);
           sendJson(res, 200, { id: route.appId, versionId: route.versionId });
           return;
@@ -518,10 +483,6 @@ export class Runtime {
           const entry = this.registry.get(route.appId);
           if (!entry) {
             sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          if (entry.mode !== 'uploaded') {
-            sendError(res, 409, 'not_uploaded', 'Schema endpoint is uploaded-mode only.');
             return;
           }
           const active = await this.versions.getActiveVersion(entry.path);

@@ -12,13 +12,27 @@ const writeJson = (file: string, data: unknown) =>
 
 const writeFile = (file: string, body: string) => fs.writeFile(file, body, 'utf8');
 
-async function makeTodoApp(appsDir: string): Promise<string> {
-  const appId = 'todos';
-  const codeDir = path.join(appsDir, appId);
-  await fs.mkdir(path.join(codeDir, 'actions'), { recursive: true });
-  await fs.mkdir(path.join(codeDir, 'queries'), { recursive: true });
+/**
+ * Build an uploaded-mode app on disk with a single committed version.
+ *
+ * Layout produced (matches what `VersionStore.commit` writes after an
+ * upload):
+ *
+ *   <appsDir>/<id>/
+ *     current.json                          ← { activeVersion: 'v_test_1', history: [...] }
+ *     versions/v_test_1/
+ *       app.json
+ *       actions/<...>.js
+ *       queries/<...>.js
+ */
+async function makeTodoApp(appsDir: string, appId = 'todos'): Promise<void> {
+  const appRoot = path.join(appsDir, appId);
+  const versionId = 'v_test_1';
+  const versionDir = path.join(appRoot, 'versions', versionId);
+  await fs.mkdir(path.join(versionDir, 'actions'), { recursive: true });
+  await fs.mkdir(path.join(versionDir, 'queries'), { recursive: true });
 
-  await writeJson(path.join(codeDir, 'app.json'), {
+  await writeJson(path.join(versionDir, 'app.json'), {
     manifestVersion: 1,
     id: appId,
     name: 'Todos',
@@ -44,7 +58,7 @@ async function makeTodoApp(appsDir: string): Promise<string> {
   });
 
   await writeFile(
-    path.join(codeDir, 'actions', 'add.js'),
+    path.join(versionDir, 'actions', 'add.js'),
     `export default async ({ body, db }) => {
        await db.exec('CREATE TABLE IF NOT EXISTS todos(id INTEGER PRIMARY KEY, text TEXT)');
        const r = await db.prepare('INSERT INTO todos(text) VALUES (?)').run(String(body?.text ?? ''));
@@ -52,16 +66,28 @@ async function makeTodoApp(appsDir: string): Promise<string> {
      };\n`,
   );
   await writeFile(
-    path.join(codeDir, 'queries', 'list.js'),
+    path.join(versionDir, 'queries', 'list.js'),
     `export default async ({ db }) => {
        await db.exec('CREATE TABLE IF NOT EXISTS todos(id INTEGER PRIMARY KEY, text TEXT)');
        return await db.prepare('SELECT id, text FROM todos ORDER BY id').all();
      };\n`,
   );
-  return codeDir;
+
+  await writeJson(path.join(appRoot, 'current.json'), {
+    activeVersion: versionId,
+    history: [
+      {
+        versionId,
+        sha256: 'x'.repeat(64),
+        uploadedAt: new Date().toISOString(),
+        bytes: 0,
+        files: 3,
+      },
+    ],
+  });
 }
 
-describe('Dispatcher (path-mode app)', () => {
+describe('Dispatcher', () => {
   let workDir: string;
   let registry: Registry;
   let versions: VersionStore;
@@ -69,10 +95,10 @@ describe('Dispatcher (path-mode app)', () => {
 
   before(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-'));
-    const codeDir = await makeTodoApp(workDir);
+    await makeTodoApp(workDir, 'todos');
     registry = new Registry(workDir);
     await registry.load();
-    await registry.register({ id: 'todos', path: codeDir, mode: 'path' });
+    await registry.ensureUploaded('todos');
     versions = new VersionStore();
     dispatcher = new Dispatcher({ registry, versions });
   });
@@ -194,17 +220,30 @@ describe('manifest validation surfaces as INVALID_MANIFEST', () => {
 
   before(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-bad-'));
-    const codeDir = path.join(workDir, 'broken');
-    await fs.mkdir(codeDir, { recursive: true });
-    await writeJson(path.join(codeDir, 'app.json'), {
+    const versionId = 'v_bad_1';
+    const versionDir = path.join(workDir, 'broken', 'versions', versionId);
+    await fs.mkdir(versionDir, { recursive: true });
+    await writeJson(path.join(versionDir, 'app.json'), {
       // Missing manifestVersion + actions/queries
       id: 'broken',
       name: 'Broken',
       version: '0.1.0',
     });
+    await writeJson(path.join(workDir, 'broken', 'current.json'), {
+      activeVersion: versionId,
+      history: [
+        {
+          versionId,
+          sha256: 'x'.repeat(64),
+          uploadedAt: new Date().toISOString(),
+          bytes: 0,
+          files: 1,
+        },
+      ],
+    });
     registry = new Registry(workDir);
     await registry.load();
-    await registry.register({ id: 'broken', path: codeDir, mode: 'path' });
+    await registry.ensureUploaded('broken');
     dispatcher = new Dispatcher({ registry, versions: new VersionStore() });
   });
 

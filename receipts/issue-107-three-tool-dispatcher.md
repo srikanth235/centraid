@@ -19,6 +19,7 @@ exports.
 - [x] Builder harness updates
 - [x] openclaw-plugin tool registration
 - [x] Browser UI helpers
+- [x] Path-mode retirement (follow-up commit)
 
 ## What changed
 
@@ -127,6 +128,47 @@ delegate to `runtime.dispatcher`. The scope guard enforces both
 `app` (the new field name), and exempts `centraid_describe` from the
 session-scope check when no `app` is provided (the legal cross-app
 "list all apps" call).
+
+### Path-mode retirement (follow-up commit)
+
+Discussion around the deferred "dev-watch manifest regeneration"
+criterion surfaced the architectural smell behind it: the desktop's
+local gateway used path-mode (register an external folder live) for
+authored apps, which is a divergent execution path the remote
+gateway doesn't have. The decision for v0 was to retire path-mode
+entirely so the local and remote gateways take identical input.
+
+- `packages/runtime-core/src/types.ts` — `AppMode` removed; `RegistryEntry`
+  drops the `mode` field. The doc on the type spells out the new
+  invariant.
+- `packages/runtime-core/src/registry.ts` — `register({mode})` removed;
+  only `ensureUploaded(id)` (idempotent upsert from the upload route)
+  remains. Legacy `_registry.json` rows carrying a `mode` field are
+  loaded transparently and the field is dropped on next persist. The
+  `not_a_directory` error code is gone (no external paths to validate).
+- `packages/runtime-core/src/app-paths.ts` — `appCodeDir` no longer
+  branches; `activeVersion` is required, falsy throws
+  `AppPathError('no_active_version')`.
+- `packages/runtime-core/src/dispatcher.ts` + `runtime.ts` —
+  `resolveCodeDir` simplified to one branch.
+- `packages/runtime-core/src/router.ts` — removed
+  `kind: 'registry-register'`; the `POST /centraid/_apps` route is gone.
+- `packages/runtime-core/src/runtime.ts` — removed all
+  `entry.mode !== 'uploaded'` 409 guards (unreachable now) and the
+  `registry-register` case.
+- `packages/runtime-core/src/deregister-cleanup.ts` — dropped the
+  `'path-mode'` skip reason; the defense-in-depth "outside appsDir"
+  check stays.
+- `packages/builder-harness/src/gateway-client.ts` — `AppRegistryRow`
+  drops `mode`; `fetchAppSchema` no longer treats 409 as "no schema".
+- `apps/desktop/src/main/ipc.ts` — comment + version-list 409 fallback
+  trimmed.
+- Tests: `chat-routes.test.ts`, `dispatcher.test.ts`, and
+  `deregister-cleanup.test.ts` updated to use `ensureUploaded(id)`
+  with a real `current.json` + `versions/v_*/` layout instead of the
+  former path-mode shortcut.
+
+Total: -83 net lines, 470 tests still pass.
 
 ## What did NOT change
 

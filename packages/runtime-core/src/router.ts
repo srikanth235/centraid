@@ -8,7 +8,6 @@
 
 export type Route =
   | { kind: 'registry-list' }
-  | { kind: 'registry-register' }
   | { kind: 'registry-deregister'; appId: string }
   | { kind: 'app-upload'; appId: string }
   | { kind: 'app-versions-list'; appId: string }
@@ -48,11 +47,13 @@ export function parseRoute(method: string, rawUrl: string): Route {
   const segments = pathname.split('/').filter(Boolean);
   const m = method.toUpperCase();
 
-  // Registry endpoints — reserved id "_apps".
+  // Registry endpoints — reserved id "_apps". Apps are registered
+  // implicitly by uploading (no POST /centraid/_apps anymore — path-
+  // mode registration was retired so the local gateway behaves
+  // identically to the remote one).
   if (segments[0] === '_apps') {
     if (segments.length === 1) {
       if (m === 'GET') return { kind: 'registry-list' };
-      if (m === 'POST') return { kind: 'registry-register' };
       return { kind: 'not-found' };
     }
     const appId = decodeURIComponent(segments[1] ?? '');
