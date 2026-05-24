@@ -1,5 +1,54 @@
 {
+  "manifestVersion": 1,
+  "id": "hydrate",
   "name": "Hydrate",
   "description": "Track 8 cups a day.",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "tables": [
+    {
+      "name": "hydrate_daily",
+      "columns": [
+        { "name": "date", "type": "TEXT" },
+        { "name": "cups", "type": "INTEGER" }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "set-cups",
+      "description": "Set today's cup count (clamped 0..8).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "cups": { "type": "number", "minimum": 0, "maximum": 8 } },
+        "required": ["cups"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "date": { "type": "string" },
+          "cups": { "type": "number" },
+          "goal": { "type": "number" }
+        }
+      },
+      "writes": ["hydrate_daily"]
+    }
+  ],
+  "queries": [
+    {
+      "name": "get-today",
+      "description": "Read today's cup count, defaulting to 0 when no row exists yet.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "date": { "type": "string" },
+          "cups": { "type": "number" },
+          "goal": { "type": "number" }
+        }
+      },
+      "reads": ["hydrate_daily"]
+    }
+  ]
 }

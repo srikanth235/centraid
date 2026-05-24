@@ -1,0 +1,346 @@
+/**
+ * App manifest — the per-app machine-readable contract that the
+ * three-tool invocation surface (`centraid_write`/`_read`/`_describe`)
+ * dispatches against (issue #107).
+ *
+ * The manifest lives on disk as `app.json` inside each app's code dir
+ * (alongside `actions/`, `queries/`). It is the single source of truth
+ * for "what handlers exist, what input do they accept, what do they
+ * return" — handler files themselves are pure function bodies, no
+ * JSDoc-driven validation.
+ *
+ * Schemas in `input` / `output` are arbitrary JSON Schema (draft
+ * 2020-12) — that's what Anthropic tool-use, OpenAI functions, MCP and
+ * OpenAPI all consume, and what the builder LLM natively knows how to
+ * emit. They are validated at call time by Ajv (see `dispatcher.ts`).
+ *
+ * `manifestVersion: 1` is required at the root — the dispatcher rejects
+ * unsupported versions explicitly so future incompatible changes fail
+ * loudly. Cheap insurance.
+ */
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- Ajv2020 is both value (constructor) and type (instance).
+import { Ajv2020 } from 'ajv/dist/2020.js';
+import type { ValidateFunction } from 'ajv';
+
+/** Current manifest schema version. Bump on any incompatible field change. */
+export const MANIFEST_VERSION = 1;
+
+/** Filename inside an app's code dir. */
+export const APP_MANIFEST_FILE = 'app.json';
+
+export type ManifestValidationCode =
+  | 'invalid_json'
+  | 'invalid_manifest'
+  | 'unsupported_manifest_version'
+  | 'missing_field'
+  | 'invalid_field'
+  | 'invalid_handler_entry'
+  | 'duplicate_handler';
+
+export class ManifestError extends Error {
+  readonly code: ManifestValidationCode;
+  readonly path?: string;
+  constructor(code: ManifestValidationCode, message: string, path?: string) {
+    super(message);
+    this.name = 'ManifestError';
+    this.code = code;
+    if (path !== undefined) this.path = path;
+  }
+}
+
+/** A JSON Schema fragment — kept as an opaque record. Validated by Ajv at use. */
+export type JsonSchema = Record<string, unknown>;
+
+export interface ManifestColumn {
+  readonly name: string;
+  readonly type?: string;
+}
+
+export interface ManifestTable {
+  readonly name: string;
+  readonly columns?: readonly ManifestColumn[];
+}
+
+export type HandlerConfirmation = 'none' | 'required';
+
+export interface ManifestActionEntry {
+  readonly name: string;
+  readonly description?: string;
+  /**
+   * Chat-side confirmation policy. The dispatcher itself is
+   * permissionless — the chat/agent surface checks this field before
+   * invoking autonomously and prompts the user when `"required"`.
+   * Multi-caller RBAC is a follow-up; this is the v1 lever.
+   */
+  readonly confirmation: HandlerConfirmation;
+  readonly input: JsonSchema;
+  readonly output?: JsonSchema;
+  /** Tables this action writes — surfaced for chat permissions / docs. */
+  readonly writes?: readonly string[];
+}
+
+export interface ManifestQueryEntry {
+  readonly name: string;
+  readonly description?: string;
+  readonly input: JsonSchema;
+  readonly output?: JsonSchema;
+  readonly reads?: readonly string[];
+}
+
+export interface Manifest {
+  readonly manifestVersion: number;
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
+  readonly description?: string;
+  readonly tables?: readonly ManifestTable[];
+  readonly actions: readonly ManifestActionEntry[];
+  readonly queries: readonly ManifestQueryEntry[];
+}
+
+// ----------------------------------------------------------------------------
+// Meta-schema document — the JSON Schema *for the manifest itself*. Exported
+// so builder consumers (and external tooling) can validate `app.json` against
+// it without depending on our runtime module.
+// ----------------------------------------------------------------------------
+export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://centraid.dev/schemas/app-manifest/v1.json',
+  type: 'object',
+  required: ['manifestVersion', 'id', 'name', 'version'],
+  additionalProperties: true,
+  properties: {
+    manifestVersion: { type: 'integer', const: MANIFEST_VERSION },
+    id: { type: 'string', minLength: 1 },
+    name: { type: 'string', minLength: 1 },
+    version: { type: 'string', minLength: 1 },
+    description: { type: 'string' },
+    tables: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { type: 'string', minLength: 1 },
+          columns: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['name'],
+              properties: {
+                name: { type: 'string', minLength: 1 },
+                type: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+    actions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['name', 'confirmation', 'input'],
+        properties: {
+          name: { type: 'string', minLength: 1 },
+          description: { type: 'string' },
+          confirmation: { type: 'string', enum: ['none', 'required'] },
+          input: { type: 'object' },
+          output: { type: 'object' },
+          writes: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    queries: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['name', 'input'],
+        properties: {
+          name: { type: 'string', minLength: 1 },
+          description: { type: 'string' },
+          input: { type: 'object' },
+          output: { type: 'object' },
+          reads: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+  },
+};
+
+// ----------------------------------------------------------------------------
+// Validators
+// ----------------------------------------------------------------------------
+
+/**
+ * Shared Ajv instance for input/output schema validation. Configured for
+ * draft 2020-12 (the schema dialect the manifest uses).
+ *
+ * `coerceTypes` is off — handler inputs come from JSON so the types are
+ * already settled. `useDefaults` is off — we don't want a JSON Schema
+ * default to mask a missing required field. `removeAdditional` is off —
+ * the manifest may set `additionalProperties: true` deliberately.
+ */
+let sharedAjv: Ajv2020 | undefined;
+function getAjv(): Ajv2020 {
+  if (!sharedAjv) {
+    sharedAjv = new Ajv2020({
+      allErrors: true,
+      strict: false,
+      coerceTypes: false,
+      useDefaults: false,
+      removeAdditional: false,
+    });
+  }
+  return sharedAjv;
+}
+
+let manifestValidator: ValidateFunction | undefined;
+function getManifestValidator(): ValidateFunction {
+  if (!manifestValidator) manifestValidator = getAjv().compile(MANIFEST_JSON_SCHEMA);
+  return manifestValidator;
+}
+
+/**
+ * Compile a JSON Schema into an Ajv validator. Throws if the schema
+ * itself is malformed. Callers cache by reference (typically per
+ * codeDir + handler name) to avoid recompiling per call.
+ */
+export function compileSchema(schema: JsonSchema): ValidateFunction {
+  return getAjv().compile(schema);
+}
+
+/**
+ * Format an Ajv error array into a single `{path, message}` pair. We
+ * surface the first error since the chat-facing error format only
+ * carries one message.
+ */
+export function formatAjvErrors(validate: ValidateFunction): {
+  path: string;
+  message: string;
+} {
+  const errs = validate.errors ?? [];
+  if (errs.length === 0) return { path: '', message: 'validation failed' };
+  const first = errs[0]!;
+  const path =
+    first.instancePath || (first.params as { missingProperty?: string }).missingProperty
+      ? first.instancePath ||
+        `/${(first.params as { missingProperty?: string }).missingProperty ?? ''}`
+      : '';
+  return {
+    path,
+    message: first.message ?? 'validation failed',
+  };
+}
+
+/**
+ * Parse + validate `app.json` content. Throws `ManifestError` on any
+ * shape problem.
+ */
+export function parseManifest(json: string): Manifest {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch (err) {
+    throw new ManifestError(
+      'invalid_json',
+      `app.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return validateManifest(raw);
+}
+
+/**
+ * Validate a parsed manifest object. Returns the typed manifest on
+ * success; throws `ManifestError` on any shape problem.
+ *
+ * Validation runs in two passes:
+ *   1. Ajv against `MANIFEST_JSON_SCHEMA` — catches type / required
+ *      field problems with structured error paths.
+ *   2. Manual cross-cuts — `manifestVersion` mustmatch, no duplicate
+ *      handler names within an app.
+ */
+export function validateManifest(raw: unknown): Manifest {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ManifestError('invalid_manifest', 'manifest must be a JSON object');
+  }
+  const r = raw as Record<string, unknown>;
+
+  // Explicit, friendly check for missing manifestVersion — Ajv's
+  // "required" error is less actionable for the most common drift case.
+  if (r.manifestVersion === undefined) {
+    throw new ManifestError(
+      'unsupported_manifest_version',
+      `app.json is missing "manifestVersion"; expected ${MANIFEST_VERSION}`,
+      'manifestVersion',
+    );
+  }
+  if (r.manifestVersion !== MANIFEST_VERSION) {
+    throw new ManifestError(
+      'unsupported_manifest_version',
+      `app.json declares manifestVersion ${String(r.manifestVersion)}, but this runtime understands ${MANIFEST_VERSION}`,
+      'manifestVersion',
+    );
+  }
+
+  const validate = getManifestValidator();
+  if (!validate(raw)) {
+    const errs = validate.errors ?? [];
+    const first = errs[0];
+    const path = first?.instancePath || '';
+    const msg = first?.message ?? 'manifest failed schema validation';
+    throw new ManifestError('invalid_manifest', `manifest invalid: ${msg}`, path);
+  }
+
+  // Cross-cut: detect duplicate handler names. The same name appearing
+  // in both actions and queries is *allowed* — they're invoked through
+  // different tools — but two actions with the same name would mean the
+  // dispatcher silently picks one, which is a footgun.
+  const actions = (r.actions as ManifestActionEntry[] | undefined) ?? [];
+  const queries = (r.queries as ManifestQueryEntry[] | undefined) ?? [];
+
+  const seenActions = new Set<string>();
+  for (const a of actions) {
+    if (seenActions.has(a.name)) {
+      throw new ManifestError(
+        'duplicate_handler',
+        `manifest declares the action "${a.name}" twice`,
+        `actions[name=${a.name}]`,
+      );
+    }
+    seenActions.add(a.name);
+  }
+  const seenQueries = new Set<string>();
+  for (const q of queries) {
+    if (seenQueries.has(q.name)) {
+      throw new ManifestError(
+        'duplicate_handler',
+        `manifest declares the query "${q.name}" twice`,
+        `queries[name=${q.name}]`,
+      );
+    }
+    seenQueries.add(q.name);
+  }
+
+  return {
+    manifestVersion: MANIFEST_VERSION,
+    id: r.id as string,
+    name: r.name as string,
+    version: r.version as string,
+    ...(typeof r.description === 'string' ? { description: r.description } : {}),
+    ...(Array.isArray(r.tables) ? { tables: r.tables as ManifestTable[] } : {}),
+    actions,
+    queries,
+  };
+}
+
+/** Look up an action entry by name. */
+export function findAction(manifest: Manifest, name: string): ManifestActionEntry | undefined {
+  return manifest.actions.find((a) => a.name === name);
+}
+
+/** Look up a query entry by name. */
+export function findQuery(manifest: Manifest, name: string): ManifestQueryEntry | undefined {
+  return manifest.queries.find((q) => q.name === name);
+}

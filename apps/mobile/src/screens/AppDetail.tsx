@@ -56,8 +56,9 @@ export default function AppDetailScreen({
   // Workaround: native fetches the HTML + every referenced asset with
   // the bearer attached and inlines them, then we hand the WebView a
   // self-contained document. The page's runtime fetch() calls (e.g.
-  // `_data/list`, `_run`) are intercepted by the injected bridge shim
-  // and proxied through native — see lib/bridge/injected.ts.
+  // `/centraid/_tool/centraid_read` issued by `window.centraid.read`,
+  // and the `_changes` SSE stream) are intercepted by the injected
+  // bridge shim and proxied through native — see lib/bridge/injected.ts.
   const gatewayOrigin = useMemo(() => parseOrigin(getGatewayUrl()), []);
   const injectedJs = useMemo(() => buildInjectedJs(gatewayOrigin), [gatewayOrigin]);
 

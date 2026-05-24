@@ -217,3 +217,108 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px;
 }
 `;
+
+/**
+ * Per-project README written into every new app folder. The id is
+ * interpolated so the brief reads naturally.
+ */
+export const README_TEMPLATE = (id: string): string => `# ${id}
+
+Centraid app project. Files here are the source for the published app.
+
+## Author handlers in JavaScript
+
+Handlers are \`.js\` ES modules. There is no build step — the runtime loads
+them directly. Type-check via JSDoc annotations:
+
+\`\`\`js
+/** @type {import('@centraid/openclaw-plugin').QueryHandler} */
+export default async ({ query, db }) => { /* ... */ };
+\`\`\`
+
+For editor IntelliSense, run \`bun install\` once so the type package
+resolves locally:
+
+\`\`\`sh
+bun install   # or: npm install
+\`\`\`
+
+## Layout
+
+- \`index.html\`, \`app.css\`, \`app.js\` — static, served from \`/centraid/${id}/\`
+- \`queries/<name>.js\` — pure function bodies invoked via
+  \`window.centraid.read({ query: '<name>', input })\` → dispatches as
+  \`centraid_read\` against the \`queries[]\` entry in \`app.json\`.
+- \`actions/<name>.js\` — pure function bodies invoked via
+  \`window.centraid.write({ action: '<name>', input })\` → dispatches as
+  \`centraid_write\` against the \`actions[]\` entry in \`app.json\`.
+- \`automations/<id>/\` — one folder per automation the app owns:
+  \`automation.json\` (the manifest) + \`handler.js\` (fired by the host
+  scheduler, no page open). See \`automations/README.md\`.
+- \`migrations/NNNN_<slug>.sql\` — schema migrations applied on publish
+- \`app.json\` — the **app manifest** (issue #107). Lists every
+  action/query along with its JSON Schema for \`input\`/\`output\`. The
+  dispatcher validates input against these schemas before invoking the
+  handler. Required top-level fields: \`manifestVersion: 1\`, \`id\`,
+  \`name\`, \`version\`. Every new handler file needs a matching entry —
+  the dispatcher refuses to invoke a file that isn't declared.
+
+See \`@centraid/openclaw-plugin\` for the full handler-arg types.
+`;
+
+/**
+ * README dropped into every new project's `automations/` folder so empty-
+ * dir file viewers don't hide it and the agent has an in-folder pointer
+ * to the manifest shape.
+ */
+export const AUTOMATIONS_README = `# automations/
+
+Automations this app owns — scheduled jobs that run with no page open
+and no user present. Each automation is its own folder:
+
+\`\`\`
+automations/<id>/automation.json   # the manifest
+automations/<id>/handler.js        # the handler the scheduler fires
+\`\`\`
+
+\`<id>\` is a short stable slug (\`daily-digest\`, \`evening-reminder\`). An
+app may own several automations — one folder each, distinct slugs. Reuse
+a slug to revise it; pick a new slug to add another. The host scheduler
+(launchd / Task Scheduler / systemd timer locally, openclaw cron
+remotely) fires \`centraid run-automation <appId>/<id>\` on schedule.
+
+## automation.json
+
+\`\`\`json
+{
+  "name": "Evening reminder",
+  "version": "0.1.0",
+  "enabled": true,
+  "prompt": "every evening at 8pm, remind me about unfinished habits",
+  "triggers": [{ "kind": "cron", "expr": "0 20 * * *" }],
+  "requires": { "model": "anthropic/claude-3-5-sonnet" },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "centraid-builder", "at": "<ISO-8601>" }
+}
+\`\`\`
+
+- \`triggers\` is an array. A cron trigger is
+  \`{ "kind": "cron", "expr": "<5-field UTC cron>" }\`; \`[]\` is a legal
+  manual-fire-only automation. A webhook trigger is declared as
+  \`{ "kind": "webhook", "pending": true }\` — the route id + secret are
+  minted server-side, never hand-written.
+- \`requires.mcps\` / \`requires.tools\` declare the host tools the handler
+  calls via \`ctx.tool(name, args)\`. \`requires.model\` is the model
+  \`ctx.agent({ prompt, json? })\` routes through. **Never set this to
+  \`centraid-mock/*\`** — that would recurse into the runner.
+- The runtime validates the manifest on every read; keep the shape exactly.
+
+## handler.js
+
+A plain \`.js\` ES module receiving \`{ ctx, log }\` only — no \`db\`, no
+\`body\`, no \`window\`. The \`prompt\` is canonical: re-prompting the
+builder regenerates the handler, so don't hand-edit it.
+
+See \`@centraid/openclaw-plugin\`'s \`AutomationHandler\` type for the
+full handler-arg shape.
+`;

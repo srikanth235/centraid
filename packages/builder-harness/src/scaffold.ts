@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { toCss } from '@centraid/design-tokens';
 import { rewriteAutomationManifestNames, rewriteIndexHtmlTitle } from './project-rewrites.js';
-import { DEFAULT_APP_CSS } from './scaffold-defaults.js';
+import { AUTOMATIONS_README, DEFAULT_APP_CSS, README_TEMPLATE } from './scaffold-defaults.js';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
 
@@ -48,11 +48,18 @@ export async function scaffoldProject(
     raw.replace('"name": "centraid-app-example"', `"name": "centraid-app-${id}"`),
   );
 
+  // app.json is the *manifest* — source of truth for the three-tool
+  // dispatcher (issue #107). New projects start with no actions/queries;
+  // the builder agent fills them in as it generates handlers.
   const appJson: Record<string, unknown> = {
+    manifestVersion: 1,
+    id,
     name: opts.name ?? id,
     version: opts.version ?? '0.1.0',
+    ...(opts.description?.trim() ? { description: opts.description.trim() } : {}),
+    actions: [],
+    queries: [],
   };
-  if (opts.description?.trim()) appJson.description = opts.description.trim();
   await fs.writeFile(path.join(dir, 'app.json'), JSON.stringify(appJson, null, 2) + '\n');
 
   await fs.writeFile(path.join(dir, 'index.html'), DEFAULT_INDEX_HTML(id, opts.name ?? id));
@@ -328,8 +335,10 @@ const DEFAULT_INDEX_HTML = (id: string, name: string): string => `<!doctype html
 </html>
 `;
 
-const DEFAULT_APP_JS = `// Runs in the browser. Hit your queries via fetch.
-//   const rows = await fetch('_data/list-things').then(r => r.json());
+const DEFAULT_APP_JS = `// Runs in the browser. Invoke handlers via the three-tool surface
+// exposed on window.centraid:
+//   const rows = await window.centraid.read({ query: 'list-things' });
+//   await window.centraid.write({ action: 'add-thing', input: { name } });
 //
 // Remember the state triad: render Empty / Loading / Error views for
 // every async surface. Toggle elements via the \`hidden\` attribute so
@@ -409,93 +418,6 @@ const DEFAULT_APP_KNOBS =
 //      postMessage listener accepts both `centraid:settings` (full
 //      data-attrs + CSS vars) and the legacy `centraid:theme` shape.
 const INLINE_SETTINGS_BRIDGE = `(function(){var h=document.documentElement;function aT(t,b){if(t==='dark'||t==='light')h.dataset.theme=t;if(b!=null&&b!=='')h.style.setProperty('--bg-l',b+'%');}function aS(s){if(s.dataAttrs)for(var k in s.dataAttrs)h.setAttribute('data-'+k,s.dataAttrs[k]);if(s.cssVars)for(var k in s.cssVars)h.style.setProperty('--'+k,s.cssVars[k]);}try{var p=new URLSearchParams((location.hash||'').slice(1));aT(p.get('theme'),p.get('bgL'));}catch(_){}addEventListener('message',function(e){var d=e&&e.data;if(!d)return;if(d.type==='centraid:settings')aS(d);else if(d.type==='centraid:theme')aT(d.theme,d.bgL);});})();`;
-
-const README_TEMPLATE = (id: string): string => `# ${id}
-
-Centraid app project. Files here are the source for the published app.
-
-## Author handlers in JavaScript
-
-Handlers are \`.js\` ES modules. There is no build step — the runtime loads
-them directly. Type-check via JSDoc annotations:
-
-\`\`\`js
-/** @type {import('@centraid/openclaw-plugin').QueryHandler} */
-export default async ({ query, db }) => { /* ... */ };
-\`\`\`
-
-For editor IntelliSense, run \`bun install\` once so the type package
-resolves locally:
-
-\`\`\`sh
-bun install   # or: npm install
-\`\`\`
-
-## Layout
-
-- \`index.html\`, \`app.css\`, \`app.js\` — static, served from \`/centraid/${id}/\`
-- \`queries/<name>.js\` — GET \`/centraid/${id}/_data/<name>\`
-- \`actions/<name>.js\` — POST \`/centraid/${id}/_run\` (body picks \`action\`)
-- \`automations/<id>/\` — one folder per automation the app owns:
-  \`automation.json\` (the manifest) + \`handler.js\` (fired by the host
-  scheduler, no page open). See \`automations/README.md\`.
-- \`migrations/NNNN_<slug>.sql\` — schema migrations applied on publish
-- \`app.json\` — metadata (\`name\`, \`version\`)
-
-See \`@centraid/openclaw-plugin\` for the full handler-arg types.
-`;
-
-const AUTOMATIONS_README = `# automations/
-
-Automations this app owns — scheduled jobs that run with no page open
-and no user present. Each automation is its own folder:
-
-\`\`\`
-automations/<id>/automation.json   # the manifest
-automations/<id>/handler.js        # the handler the scheduler fires
-\`\`\`
-
-\`<id>\` is a short stable slug (\`daily-digest\`, \`evening-reminder\`). An
-app may own several automations — one folder each, distinct slugs. Reuse
-a slug to revise it; pick a new slug to add another. The host scheduler
-(launchd / Task Scheduler / systemd timer locally, openclaw cron
-remotely) fires \`centraid run-automation <appId>/<id>\` on schedule.
-
-## automation.json
-
-\`\`\`json
-{
-  "name": "Evening reminder",
-  "version": "0.1.0",
-  "enabled": true,
-  "prompt": "every evening at 8pm, remind me about unfinished habits",
-  "triggers": [{ "kind": "cron", "expr": "0 20 * * *" }],
-  "requires": { "model": "anthropic/claude-3-5-sonnet" },
-  "history": { "keep": { "count": 100 } },
-  "generated": { "by": "centraid-builder", "at": "<ISO-8601>" }
-}
-\`\`\`
-
-- \`triggers\` is an array. A cron trigger is
-  \`{ "kind": "cron", "expr": "<5-field UTC cron>" }\`; \`[]\` is a legal
-  manual-fire-only automation. A webhook trigger is declared as
-  \`{ "kind": "webhook", "pending": true }\` — the route id + secret are
-  minted server-side, never hand-written.
-- \`requires.mcps\` / \`requires.tools\` declare the host tools the handler
-  calls via \`ctx.tool(name, args)\`. \`requires.model\` is the model
-  \`ctx.agent({ prompt, json? })\` routes through. **Never set this to
-  \`centraid-mock/*\`** — that would recurse into the runner.
-- The runtime validates the manifest on every read; keep the shape exactly.
-
-## handler.js
-
-A plain \`.js\` ES module receiving \`{ ctx, log }\` only — no \`db\`, no
-\`body\`, no \`window\`. The \`prompt\` is canonical: re-prompting the
-builder regenerates the handler, so don't hand-edit it.
-
-See \`@centraid/openclaw-plugin\`'s \`AutomationHandler\` type for the
-full handler-arg shape.
-`;
 
 function escapeHtml(s: string): string {
   return s

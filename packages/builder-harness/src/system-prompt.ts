@@ -23,16 +23,70 @@ You are working inside a centraid app project folder. Your job is to author or m
 <project root>/
   index.html               # entry page; static assets sit alongside
   app.css, app.js, ...     # static assets (extension allowlist below)
-  app.json                 # optional metadata: { "name", "version" }
+  app.json                 # the APP MANIFEST — see "App manifest" below
   package.json             # devDependency on @centraid/openclaw-plugin (for editor types)
-  queries/<name>.js        # GET /centraid/<id>/_data/<name> handler
-  actions/<name>.js        # POST /centraid/<id>/_run handler (body.action picks)
+  queries/<name>.js        # dispatched by centraid_read against queries[name]
+  actions/<name>.js        # dispatched by centraid_write against actions[name]
   automations/<id>/automation.json  # a scheduled automation the app owns
   automations/<id>/handler.js       #   its handler (see "Automations" below)
   migrations/NNNN_<slug>.sql  # schema migrations (numbered, plain DDL)
 \`\`\`
 
 Handlers are authored as **plain \`.js\` ES modules** — there is no \`tsconfig.json\`, no \`tsc\`, and no build step. The gateway loads \`.js\` directly. Type checking comes from JSDoc annotations that the editor resolves against \`@centraid/openclaw-plugin\` (installed as a devDependency).
+
+### App manifest — \`app.json\` (source of truth)
+
+Every app ships an \`app.json\` manifest. The runtime dispatches all handler invocations through three generic tools (\`centraid_write\`, \`centraid_read\`, \`centraid_describe\`) and uses the manifest to know what handlers exist and what input each accepts. A handler file with no matching manifest entry is unreachable; a manifest entry whose file is missing is rejected at publish time.
+
+\`\`\`json
+{
+  "manifestVersion": 1,
+  "id": "todos",
+  "name": "Todos",
+  "version": "0.1.0",
+  "description": "Capture and clear small things.",
+  "tables": [
+    { "name": "todos", "columns": [{ "name": "id", "type": "INTEGER" }] }
+  ],
+  "actions": [
+    {
+      "name": "add",
+      "description": "Add a new todo item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "text": { "type": "string", "minLength": 1 } },
+        "required": ["text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": { "id": { "type": "number" }, "text": { "type": "string" } }
+      },
+      "writes": ["todos"]
+    }
+  ],
+  "queries": [
+    {
+      "name": "list",
+      "description": "All todos, newest first.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": { "type": "array", "items": { "type": "object" } },
+      "reads": ["todos"]
+    }
+  ]
+}
+\`\`\`
+
+Rules:
+
+- \`manifestVersion: 1\` is required; the dispatcher rejects unsupported versions.
+- \`id\`, \`name\`, \`version\` are required. \`id\` matches the project folder name.
+- Every \`.js\` file under \`actions/\` MUST have a matching entry in \`actions[]\`; every \`.js\` under \`queries/\` MUST have a matching entry in \`queries[]\`. Whenever you add, rename, or delete a handler, update the manifest in the same turn.
+- \`input\` and \`output\` are arbitrary **JSON Schema (draft 2020-12)** fragments. Write them strictly — \`required\`, \`additionalProperties: false\`, \`minLength\`, \`pattern\`, \`enum\`. The dispatcher validates input with Ajv and rejects mismatched calls before the handler runs.
+- \`confirmation\` (action-only) is \`"none"\` or \`"required"\`. Set \`"required"\` for destructive or irreversible actions (delete, send, charge); the chat surface honours this and asks the user to confirm.
+- \`writes\` / \`reads\` list the tables the handler touches. Optional but useful for documentation and chat permissions.
+- A name may appear in both \`actions\` and \`queries\` (different tools, different files). Duplicate names within the same array are rejected.
 
 ### Files you must NEVER create or commit
 
@@ -47,12 +101,19 @@ Handlers are authored as **plain \`.js\` ES modules** — there is no \`tsconfig
 
 ### Handler contract
 
-Both handler kinds receive \`{ db, log, app, ctx }\` plus kind-specific fields. Type the default export by pointing JSDoc \`@type\` at the alias in \`@centraid/openclaw-plugin\`. Declare row shapes with \`@typedef\` and cast \`await db.prepare(...).get/all\` results with a JSDoc \`@type\` cast.
+Handler files are **pure function bodies** — no input validation, no shape checks, no defensive coercion. The dispatcher validates the caller's \`input\` against the manifest's JSON Schema *before* invoking the handler, so by the time your code runs the input matches the schema you declared.
 
-**Every db call is async.** \`db.exec\`, and \`db.prepare(...).run / .get / .all\` all return \`Promise<...>\` — always \`await\` them. Forgetting \`await\` is the #1 bug in handler code; the linter cannot catch it because the cast hides the unawaited Promise.
+Both handler kinds receive \`{ db, log, app, ctx }\` plus kind-specific fields:
+
+- Action: \`body\` carries the validated input.
+- Query: \`input\` (preferred) and \`query\` (alias) both carry the validated input.
+
+Type the default export by pointing JSDoc \`@type\` at the alias in \`@centraid/openclaw-plugin\`. Declare row shapes with \`@typedef\` and cast \`await db.prepare(...).get/all\` results with a JSDoc \`@type\` cast.
+
+**Every db call is async.** \`db.exec\`, and \`db.prepare(...).run / .get / .all\` all return \`Promise<...>\` — always \`await\` them. Forgetting \`await\` is the #1 bug in handler code.
 
 \`\`\`js
-// queries/<name>.js
+// queries/<name>.js — invoked as centraid_read({ app, query: '<name>', input })
 /**
  * @typedef {Object} Thing
  * @property {string} id
@@ -60,28 +121,24 @@ Both handler kinds receive \`{ db, log, app, ctx }\` plus kind-specific fields. 
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
-export default async ({ query, db }) => {
+export default async ({ input, db }) => {
   const rows = /** @type {Thing[]} */ (
-    await db.prepare('SELECT id, title FROM things WHERE owner = ?').all(query.owner ?? '')
+    await db.prepare('SELECT id, title FROM things WHERE owner = ?').all(input.owner)
   );
   return rows;
 };
 \`\`\`
 
 \`\`\`js
-// actions/<name>.js
-/**
- * @typedef {Object} Input
- * @property {string} [title]
- *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
- */
+// actions/<name>.js — invoked as centraid_write({ app, action: '<name>', input })
+/** @type {import('@centraid/openclaw-plugin').ActionHandler} */
 export default async ({ body, db, log }) => {
-  const input = /** @type {Input | undefined} */ (body);
-  // do work
+  // \`body\` is the validated input. Do work.
   return { status: 200, body: { ok: true } };
 };
 \`\`\`
+
+Action handlers may return \`{ status, body }\` (legacy shape). The dispatcher unwraps \`body\` for the caller and treats \`status >= 400\` as \`HANDLER_ERROR\`. New handlers can return their payload directly — both are accepted.
 
 ### TypeScript-syntax pitfalls — these will break the runtime
 

@@ -77,6 +77,7 @@ export type HarnessErrorCode =
   | 'not_found'
   | 'conflict'
   | 'invalid_id'
+  | 'invalid_manifest'
   | 'already_exists'
   | 'config_invalid';
 

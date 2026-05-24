@@ -29,29 +29,35 @@ let saveTimer = null;
 let lastSavedAt = null;
 let entries = [];
 
-async function run(action, args) {
-  const res = await fetch('_run', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action, args }),
-  });
-  if (!res.ok) return null;
-  return res.json();
+async function run(action, input) {
+  try {
+    return await window.centraid.write({ action, input });
+  } catch (_err) {
+    return null;
+  }
 }
 
 async function loadEntries() {
-  const res = await fetch('_data/list-dates');
-  if (!res.ok) return;
-  entries = await res.json();
-  renderList();
+  try {
+    entries = (await window.centraid.read({ query: 'list-dates' })) ?? [];
+    renderList();
+  } catch (_err) {
+    /* keep last-known list */
+  }
 }
 
 async function loadActive() {
-  const res = await fetch('_data/get?date=' + encodeURIComponent(activeDate));
-  if (!res.ok) return;
-  const data = await res.json();
-  savedBody = data.body ?? '';
-  lastSavedAt = data.updatedAt ?? null;
+  let data;
+  try {
+    data = await window.centraid.read({
+      query: 'get',
+      input: { date: activeDate },
+    });
+  } catch (_err) {
+    return;
+  }
+  savedBody = data?.body ?? '';
+  lastSavedAt = data?.updatedAt ?? null;
   const ta = $('body');
   ta.value = savedBody;
   renderHeader();

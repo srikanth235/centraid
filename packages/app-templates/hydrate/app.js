@@ -15,20 +15,20 @@ const bridge = typeof window !== 'undefined' ? window.centraid : undefined;
 let state = { date: '', cups: 0, goal: 8 };
 
 async function refresh() {
-  const res = await fetch('_data/get-today');
-  if (!res.ok) return;
-  state = await res.json();
-  render();
+  try {
+    state = (await window.centraid.read({ query: 'get-today' })) ?? state;
+    render();
+  } catch (_err) {
+    /* keep current state */
+  }
 }
 
 async function setCups(n) {
-  const res = await fetch('_run', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'set-cups', args: { cups: n } }),
-  });
-  if (!res.ok) return;
-  state = await res.json();
+  try {
+    state = (await window.centraid.write({ action: 'set-cups', input: { cups: n } })) ?? state;
+  } catch (_err) {
+    return;
+  }
   if (n > 0) bridge?.haptic?.selection?.();
   render();
 }

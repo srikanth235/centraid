@@ -22,14 +22,25 @@ OpenClaw plugin that mounts a single `/centraid` prefix on the gateway and dispa
 | --- | --- | --- |
 | `GET` | `/centraid/<id>/` | Serves `index.html` from the active code dir |
 | `GET` | `/centraid/<id>/<file>` | Static asset (extension allowlist) |
-| `GET` | `/centraid/<id>/_data/<query>` | Runs `queries/<query>.js` |
-| `POST` | `/centraid/<id>/_run` | Runs `actions/<body.action>.js` |
+| `GET` | `/centraid/<id>/_changes` | SSE stream of mutations (table-level invalidations) |
 | `POST` | `/centraid/<id>/_chat` | Send a chat turn → SSE stream of normalized events |
 | `GET` | `/centraid/<id>/_chat/windows` | List per-window chat metadata |
 | `GET` | `/centraid/<id>/_chat/windows/<wid>/history` | Replay one window's transcript |
 | `DELETE` | `/centraid/<id>/_chat/windows/<wid>` | Clear one window |
 
 App ids starting with `_` are reserved (so `_apps`, `_chat` etc. can't collide).
+
+### Three-tool invocation surface (issue #107)
+
+All handler invocations flow through three generic tools, available both as OpenClaw agent tools and as an HTTP shim:
+
+| Tool | HTTP | Purpose |
+| --- | --- | --- |
+| `centraid_describe` | `POST /centraid/_tool/centraid_describe` | Return the app manifest (or a filtered slice). Body: `{ app?, action?, query? }` |
+| `centraid_read` | `POST /centraid/_tool/centraid_read` | Invoke a query handler. Body: `{ app, query, input }` |
+| `centraid_write` | `POST /centraid/_tool/centraid_write` | Invoke an action handler. Body: `{ app, action, input }` |
+
+The dispatcher validates `input` against the JSON Schema declared in `app.json` (Ajv, draft 2020-12) before invoking the handler. Errors come back as MCP-shaped `isError: true` envelopes with a `{ code, message, path? }` payload; the HTTP shim maps `code` to a 4xx/5xx status (`UNKNOWN_APP`/`UNKNOWN_ACTION`/`UNKNOWN_QUERY` → 404, `WRONG_KIND`/`INVALID_INPUT` → 400, `NO_ACTIVE_VERSION` → 503, `INVALID_MANIFEST`/`HANDLER_ERROR` → 500).
 
 ### Chat surface (host-agnostic)
 
@@ -101,9 +112,9 @@ curl -X POST -d '{"versionId":"v_2026-05-08T14-30-00-000Z_a1b2c3"}' \
   index.html
   app.css, app.js, …       # static — see allowlist below
   data.sqlite              # never served as a static file
-  queries/<name>.js        # GET /centraid/<id>/_data/<name>
-  actions/<name>.js        # POST /centraid/<id>/_run  (body.action picks)
-  app.json                 # optional metadata
+  queries/<name>.js        # dispatched by centraid_read against queries[name]
+  actions/<name>.js        # dispatched by centraid_write against actions[name]
+  app.json                 # the app manifest (manifestVersion, actions[], queries[], …)
 ```
 
 Static extension allowlist: `.html .htm .css .js .mjs .json .svg .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map`.

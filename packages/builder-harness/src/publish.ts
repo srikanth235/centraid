@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import * as tar from 'tar';
+import { ManifestError, parseAppManifest } from '@centraid/runtime-core';
 import type { HarnessConfig, PublishOptions, PublishResult } from './types.js';
 import { HarnessError } from './types.js';
 
@@ -39,6 +40,13 @@ export async function publishProject(
   if (!options.skipBuild) {
     await runBuild(projectDir, options.buildCommand);
   }
+
+  // Validate the manifest *before* tarring + uploading so an invalid
+  // manifest fails loudly at publish time — the runtime would otherwise
+  // accept the upload, then the dispatcher would 503/400 on every
+  // subsequent invocation, which is a much worse failure mode (the user
+  // sees a successful publish but a dead app).
+  await assertManifestValid(projectDir);
 
   const tarStream = tar.create(
     {
@@ -186,5 +194,56 @@ async function fileExists(p: string): Promise<boolean> {
     return s.isFile();
   } catch {
     return false;
+  }
+}
+
+/**
+ * Read `app.json` from the project, parse it through the runtime-core
+ * validator, and throw `HarnessError('invalid_manifest')` on any
+ * shape problem. Also enforces the additional rule that every declared
+ * action/query has a matching handler file on disk — a manifest entry
+ * that points at a missing file would 500 on first invocation.
+ */
+async function assertManifestValid(projectDir: string): Promise<void> {
+  const manifestPath = path.join(projectDir, 'app.json');
+  let raw: string;
+  try {
+    raw = await fs.readFile(manifestPath, 'utf8');
+  } catch (err) {
+    throw new HarnessError(
+      'invalid_manifest',
+      `Cannot read app.json at ${manifestPath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  let manifest;
+  try {
+    manifest = parseAppManifest(raw);
+  } catch (err) {
+    if (err instanceof ManifestError) {
+      throw new HarnessError(
+        'invalid_manifest',
+        `app.json invalid (${err.code})${err.path ? ` at ${err.path}` : ''}: ${err.message}`,
+      );
+    }
+    throw err;
+  }
+  // Walk every declared handler; require a matching .js file.
+  for (const a of manifest.actions) {
+    const file = path.join(projectDir, 'actions', `${a.name}.js`);
+    if (!(await fileExists(file))) {
+      throw new HarnessError(
+        'invalid_manifest',
+        `app.json declares action "${a.name}" but ${path.relative(projectDir, file)} does not exist`,
+      );
+    }
+  }
+  for (const q of manifest.queries) {
+    const file = path.join(projectDir, 'queries', `${q.name}.js`);
+    if (!(await fileExists(file))) {
+      throw new HarnessError(
+        'invalid_manifest',
+        `app.json declares query "${q.name}" but ${path.relative(projectDir, file)} does not exist`,
+      );
+    }
   }
 }

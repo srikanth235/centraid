@@ -1,5 +1,9 @@
 {
+  "manifestVersion": 1,
+  "id": "auto.issue-triage",
   "name": "Issue triage",
   "description": "Reviews incoming bugs and feature requests, labels them, and routes the urgent ones.",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
 }
