@@ -1,0 +1,23 @@
+{
+  "name": "PR review digest",
+  "version": "0.1.0",
+  "description": "Surfaces open pull requests, who is blocked on whom, and what is ready to merge.",
+  "enabled": false,
+  "prompt": "Summarize open pull requests across the repo. Group by: needs my review, waiting on others, ready to merge, and failing CI.\nFor anything stale more than two days, say how long it has been waiting.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "30 23 * * 1-5"
+    }
+  ],
+  "requires": {},
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-05-23T00:00:00.000Z"
+  }
+}

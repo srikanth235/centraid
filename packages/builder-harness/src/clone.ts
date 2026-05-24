@@ -2,7 +2,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
-import { validateAppId } from './scaffold.js';
+import { rewriteAutomationManifestNames, rewriteIndexHtmlTitle } from './project-rewrites.js';
+import { isDisplayNameTaken, validateAppId } from './scaffold.js';
 
 /**
  * Options for {@link cloneTemplate}.
@@ -68,6 +69,21 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<Project
 
   await rewriteAppJson(destDir, opts.newName, opts.newDesc);
   await rewritePackageJson(destDir, opts.newAppId);
+  // Keep the browser-tab title aligned with the new display name. The
+  // template's <title> is hardcoded to its own brand ("Hydrate"), which
+  // would otherwise leak into every clone's tab title even after the
+  // user renames the app.
+  if (opts.newName) await rewriteIndexHtmlTitle(destDir, opts.newName);
+  // Automation templates carry a sibling `automation.json#name` whose
+  // value the Automations page surfaces as the row title. Keep it in
+  // sync with `app.json#name` so a clone of "Briefing" → "Briefing 2"
+  // is consistent across both surfaces. The clone path stamps
+  // `generated.{by,at}` too so the manifest reflects the clone time
+  // rather than the original template's authoring time. No-op for app
+  // templates with no automations/<id>/ subdirs.
+  if (opts.newName) {
+    await rewriteAutomationManifestNames(destDir, opts.newName, { stampGenerated: true });
+  }
 
   const stat = await fs.stat(destDir);
   const hasIndex = await fileExists(path.join(destDir, 'index.html'));
@@ -112,6 +128,44 @@ export async function suggestAppId(
   throw new HarnessError(
     'already_exists',
     `Could not find a free id starting from "${preferred}".`,
+  );
+}
+
+/**
+ * Pick a `(id, name)` pair where the directory id is free AND the display
+ * name doesn't collide with any existing project's `app.json#name`. Used by
+ * the default template-clone path so two clones never both surface as
+ * "Hydrate" on the home shelf — directory ids are unique by construction
+ * (`suggestAppId`), but display names have to be probed against siblings
+ * (the user may have renamed an unrelated app to "Hydrate 2" earlier).
+ *
+ * Probes the bare `(preferredId, preferredName)` first — the very first
+ * clone of `hydrate` should be just "Hydrate" / `hydrate`, not awkward
+ * "Hydrate 2" / `hydrate-2`. Falls through to `(preferredId-N,
+ * `${preferredName} N`)` with `N = 2, 3, …` only on collision. Caps at
+ * 1000 attempts; throws `already_exists` if every candidate is taken.
+ *
+ * The template and the user's clone live in different filesystem trees
+ * (`packages/app-templates/<id>/` vs `<appsDir>/<id>/`), so a clone
+ * using the template's bare id is not a collision — the gateway only
+ * routes `<appsDir>` entries.
+ */
+export async function suggestCloneIdentity(
+  projectsDir: string,
+  preferredId: string,
+  preferredName: string,
+): Promise<{ id: string; name: string }> {
+  validateAppId(preferredId);
+  for (let n = 1; n <= 1000; n++) {
+    const id = n === 1 ? preferredId : `${preferredId}-${n}`;
+    if (await pathExists(path.join(projectsDir, id))) continue;
+    const name = n === 1 ? preferredName : `${preferredName} ${n}`;
+    if (await isDisplayNameTaken(projectsDir, name)) continue;
+    return { id, name };
+  }
+  throw new HarnessError(
+    'already_exists',
+    `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`,
   );
 }
 

@@ -1,0 +1,295 @@
+# issue-105 — Template + app naming: collision handling + unified clone path
+
+GitHub issue: [#105](https://github.com/srikanth235/centraid/issues/105)
+
+Three interlocking naming issues across the home shelf, rename flow, and
+clone paths get resolved together. The mental model the user pushed
+for — "an automation is just an app with no UI assets" — drives a final
+refactor that routes both kinds of templates through the same
+`cloneTemplate` IPC, eliminating the divergent `createAutomation` /
+`scaffoldAutomationProject` path for template adoption.
+
+## Checklist
+
+- [x] Commit 1 — hide `auto.*` automation apps from home My apps
+- [x] Commit 2 — reject rename to a display name already in use
+- [x] Commit 3 — collision-safe template clone — paired id+name suffix + index.html title rewrite
+- [x] Commit 4 — unify automation + app template paths
+- [x] Commit 5 — home tile reads suffixed name from project, not template
+- [x] Commit 6 — first clone uses bare template name (no -2 suffix)
+- [x] Commit 7 — rename propagates to index.html title + automation.json
+- [x] Commit 8 — simplify rewrite helpers + updateProjectMeta + IPC
+
+## What changed
+
+### Commit 1 — hide `auto.*` automation apps from home My apps
+
+`hydrateDrafts()` was sourcing the home draft grid from
+`listProjects(appsDir)`, which returns every directory under `appsDir`
+including `auto.*` automation app folders. The fix is one filter at the
+source — all downstream consumers (home shelf "My apps" tab, sidebar
+drafts list, Discover all-apps view) read from the same `drafts` array,
+so one filter covers them.
+
+### Commit 2 — reject rename to a display name already in use
+
+`updateProjectMeta` previously validated only the directory id, never
+the new `app.json#name`, so two apps could end up with the exact same
+tile title (only distinguishable by hovering). A new
+`assertDisplayNameUnique(projectsDir, selfId, name)` scans sibling
+projects and throws `HarnessError('already_exists')` on a
+case-insensitive, whitespace-trimmed match. The existing renderer
+try/catch paths surface the error verbatim as a toast.
+
+Globally unique across `appsDir` — including `auto.*` automation apps —
+matching the user's explicit "hard reject" choice. Description-only
+patches bypass the check so legacy duplicate names don't block
+description edits.
+
+### Commit 3 — collision-safe template clone — paired id+name suffix + index.html title rewrite
+
+Two prior gaps:
+
+- **Display name was verbatim**, regardless of the suffix on the id.
+  Cloning "Hydrate" three times produced `hydrate-2/3/4` but every tile
+  read "Hydrate".
+- **`index.html` `<title>`** was copied unchanged from the template's
+  hardcoded brand.
+
+Fixes:
+
+- New `suggestCloneIdentity(projectsDir, baseId, baseName)` in
+  `clone.ts` advances both `id` and `name` in lockstep — `N=2,3,4,…` —
+  until both `<baseId>-N` is free as a directory AND `<baseName> N` is
+  free as a display name. The template's bare id/name is never consumed
+  (`N >= 2`), and a sibling app the user previously renamed to e.g.
+  "Hydrate 2" forces the next clone to skip to `N=3`.
+- New `rewriteIndexHtmlTitle(destDir, newName)` replaces the first
+  `<title>...</title>` in the cloned `index.html` with the HTML-escaped
+  new name. No-op when no `index.html` ships (automation templates), so
+  the same call site serves both kinds.
+- The `TEMPLATES_CLONE` IPC default branch uses `suggestCloneIdentity`;
+  the caller-specified-id branch keeps the old `suggestAppId` behavior.
+
+### Commit 8 — simplify rewrite helpers + updateProjectMeta + IPC
+
+Step-back code-review pass. Four behavior-preserving simplifications:
+
+1. **`rewriteIndexHtmlTitle`** dropped a `replaced` flag whose two
+   branches returned the same string. The regex has no `/g`, so
+   `String.replace` only fires the callback once anyway. Now uses
+   `RegExp.test(raw)` to detect the no-match case and a single
+   `replace(re, () => …)` for the rewrite.
+
+2. **`updateProjectMeta`** trimmed `patch.name` twice (once before the
+   `app.json` write for `assertDisplayNameUnique`, again before the
+   post-write propagation calls). Hoisted into a single `renameTo`
+   constant computed once at the top.
+
+3. **`TEMPLATES_CLONE` IPC** carried an `else` branch routing through
+   `suggestAppId({alwaysSuffix: !input.newAppId})` for the case where
+   the caller passes an explicit `newAppId` or `newName`. No caller
+   ever passes either — both renderer callsites send
+   `{templateId}` only. Dropped the dead branch, the unused
+   `suggestAppId` import, and the `newAppId?`/`newName?` optionals
+   from the IPC contract (preload + centraid-api.d.ts). The handler
+   is now a single straight-line call into `suggestCloneIdentity`.
+
+4. **`rewriteAutomationManifestNames`** used `fs.readdir(..., {
+   withFileTypes: true })` plus `e.isDirectory()` to skip
+   non-directory entries. But the subsequent `fs.readFile(<entry>/
+   automation.json)` already fails (and `continue`s) for non-dirs,
+   missing manifests, and anything else unreadable. Dropped the
+   Dirent dance — plain `readdir(...)` returning names.
+
+Net: −20 lines, no behavior change. 32 builder-harness tests still
+pass.
+
+### Commit 7 — rename propagates to index.html title + automation.json
+
+Two drift sources surfaced once the rename flow was traced
+end-to-end: the cloned `index.html`'s `<title>` was set at clone time
+and never updated, and the inner `automations/<sub>/automation.json#name`
+(which the Automations page reads as its row title) was likewise
+fixed at clone/scaffold time.
+
+The rewrite helpers from `cloneTemplate` (originally `clone.ts`-local)
+moved into a new `project-rewrites.ts` so both `cloneTemplate` and
+`updateProjectMeta` can share them without a circular import.
+`rewriteAutomationManifestNames` gained a `stampGenerated` option:
+the clone path passes `true` (so `generated.{by,at}` reflects the
+clone time), the rename path leaves `generated` alone (it's
+clone-time metadata, not "last rename time").
+
+`updateProjectMeta` now calls both helpers after writing `app.json`
+when `patch.name` is set. Each helper is a no-op when its target
+doesn't apply, so the same call handles both kinds: a UI app gets the
+`<title>` synced (no automations/ to rewrite), an automation app gets
+the manifest synced (no index.html to rewrite).
+
+3 new tests in `update-project-meta.test.ts` cover:
+- `<title>` propagation on rename of a scaffolded UI project.
+- `automation.json#name` propagation on rename of an automation app,
+  with assertion that `generated` is left untouched.
+- No-op safety when neither subordinate file exists.
+
+### Commit 6 — first clone uses bare template name (no -2 suffix)
+
+User-reported follow-up. After the previous commits landed, the very
+first clone of `hydrate` still produced `id=hydrate-2, name="Hydrate 2"`
+— jumping straight to "2" with no preceding "1" felt awkward. The
+old `suggestCloneIdentity` (and the underlying `suggestAppId` with
+`alwaysSuffix: true`) intentionally never consumed the template's
+bare id, treating template and clone as disjoint namespaces.
+
+That separation is unnecessary in practice: the template lives in
+`packages/app-templates/<id>/` (bundled, never gateway-routed), and
+the user's clone lives in `<appsDir>/<id>/`. They can share an `id`
+string without colliding on disk or in the gateway router.
+
+Fix: `suggestCloneIdentity` now starts at `N=1`, probing the bare
+`(preferredId, preferredName)` first and only falling through to
+`N=2, 3, …` on collision. Subsequent clones still get suffixed names
+in lockstep, so the home shelf never shows two identical tiles.
+
+Updated tests cover the new "bare slot first" semantics + the
+fall-through cases (id taken, name taken, both classes interleaving,
+case-insensitive name compare).
+
+End-to-end demo:
+```
+3× hydrate clone     → hydrate / hydrate-2 / hydrate-3
+                       "Hydrate" / "Hydrate 2" / "Hydrate 3"
+3× auto.briefing     → auto.briefing / auto.briefing-2 / auto.briefing-3
+                       "Briefing" / "Briefing 2" / "Briefing 3"
+```
+
+### Commit 5 — home tile reads suffixed name from project, not template
+
+User-reported follow-up. After Commit 4 landed, cloning Hydrate twice
+still rendered both home tiles as "Hydrate". The IPC was correctly
+writing `app.json#name = "Hydrate 2"` / `"Hydrate 3"` (confirmed by
+inspecting disk: `hydrate-2/app.json`, `hydrate-3/app.json`), but
+`apps/desktop/src/renderer/app.ts#cloneTemplate` was constructing the
+in-memory `DraftAppMeta` with `name: result.template.name` — the
+**template's** display name, not the **clone's**. The tile therefore
+read "Hydrate" until the user refreshed Home (at which point
+`hydrateDrafts()` re-read disk and picked up the correct suffixed
+name).
+
+Fix: read `name: result.project.name ?? result.template.name`.
+`project.name` comes from `cloneTemplate`'s `readAppMeta(destDir)`
+which reads the just-rewritten `app.json#name`, so the tile and the
+builder topbar agree the moment the draft is created.
+
+### Commit 4 — unify automation + app template paths
+
+Automation templates were a hardcoded `AUTOMATION_TEMPLATES` array in
+the renderer that drove `adoptTemplate(...)` → `createAutomation` IPC →
+`scaffoldAutomationProject`. That code path bypassed
+`suggestCloneIdentity` and produced three identical-looking "Briefing"
+rows on the Automations page when the user clicked the template thrice.
+
+The user's framing: "automations are just apps without UI assets — they
+should share the code path." This commit makes that true.
+
+- `TemplateMeta` (in `@centraid/app-templates`) gains an optional
+  `kind: 'app' | 'automation'` plus automation-only display fields
+  (`emoji`, `category`, `triggerKind`, `triggerLabel`, `integrations`).
+  `build-manifest.mjs` auto-derives `kind` from the `auto.` id prefix
+  when not set explicitly in `index.json`.
+- Ten new filesystem templates land under
+  `packages/app-templates/auto.<slug>/`, mirroring the
+  `scaffoldAutomationProject` layout: `app.json` plus
+  `automations/<slug>/{automation.json, handler.js}` — no UI assets.
+  These replace the deleted in-renderer `AUTOMATION_TEMPLATES` array.
+- `cloneTemplate` gains `rewriteAutomationManifestNames(destDir,
+  newName)` — for each `automations/<id>/automation.json`, the top-level
+  `name` becomes `newName` and `generated` is stamped to
+  `{by:'centraid-builder', at:<now>}` so the Automations page and the
+  manifest stay in sync with the wrapping `app.json#name`. No-op for
+  app templates with no `automations/` subdir.
+- `TEMPLATES_CLONE` IPC post-clones with
+  `provisionAppPendingWebhooks(project.dir)` to mint webhook secrets
+  for templates that ship `{kind:'webhook',pending:true}` triggers
+  (e.g. `auto.release-notes-drafter`). Plaintext secret returns to the
+  renderer exactly once. Also registers the cloned automation with the
+  local host so cron triggers fire without waiting for the next app
+  start.
+- Renderer: `loadAvailableTemplates()` filters `listTemplates` to
+  `kind === 'app'` (home Templates tab); sibling
+  `loadAutomationTemplates()` returns the automation half for the
+  Automations gallery. `adoptTemplate(template: TemplateEntry)` now
+  calls `cloneTemplate` IPC and enters the automation builder on the
+  resulting `auto.<slug>-N` project. The hardcoded
+  `AUTOMATION_TEMPLATES` array and `AutomationTemplate` interface are
+  deleted (~160 lines net).
+- `CentraidTemplateMeta` mirrors the new fields; a new
+  `CentraidMintedWebhook` interface and the extended
+  `CentraidCloneTemplateResult` carry the webhook plaintext to the
+  renderer.
+
+The "New automation" button (manual creation, not template-based) still
+calls `createAutomation` → `scaffoldAutomationProject`. That path stays
+because no template is involved.
+
+## Tests
+
+- `packages/builder-harness/src/update-project-meta.test.ts` — 6 tests
+  covering rename happy path, collision, case-insensitive comparison,
+  self-rename allowed, empty-name rejection, description-only bypass.
+- `packages/builder-harness/src/clone.test.ts` — 11 tests covering
+  `suggestCloneIdentity` (5), `suggestAppId` sanity (2),
+  `cloneTemplate` `<title>` rewrite (4), and the automation manifest
+  rewrite + `generated` stamp.
+
+Full repo: 16/16 typecheck, 12/12 test suites, format clean.
+
+## Out of scope
+
+- The "New automation" button on the Automations overview (manual,
+  non-template creation) keeps using `createAutomation` →
+  `scaffoldAutomationProject`. No template is involved, so the unified
+  clone path doesn't apply.
+- Webhook-secret presentation UX: the minted plaintext currently
+  surfaces via a toast + console line. A proper "copy this URL +
+  secret" sheet is a follow-up.
+- Automation-template `index.json` entries hardcode `iconKey: 'Sparkle'`
+  for v1; per-template icon variety can land later without touching
+  the clone path.
+
+## Verification
+
+- `bun run typecheck` — 16/16 packages green (force-rebuilt, no cache).
+- `bun run test` — all 12 packages green; 28/28 in
+  `@centraid/builder-harness` including the 17 new tests added in this
+  receipt's scope.
+- `bun run format:check` — clean.
+- Commit 2 (rename collision): 6 dedicated tests in
+  `packages/builder-harness/src/update-project-meta.test.ts` cover
+  happy-path rename, name-already-taken rejection, case + whitespace
+  insensitivity, self-rename allowed, empty-name rejection, and
+  description-only updates bypassing the check.
+- Commit 3 (collision-safe clone): 11 dedicated tests in
+  `packages/builder-harness/src/clone.test.ts` cover
+  `suggestCloneIdentity` (5), `suggestAppId` sanity (2), and the
+  `<title>` rewrite (4) including HTML escaping and graceful no-op
+  when the template doesn't ship an `index.html`.
+- Commit 4 (unify automation + app template paths): 1 additional test
+  in `clone.test.ts` covers the automation manifest rewrite
+  (`automation.json#name` + `generated.{by,at}` stamping) during
+  clone. End-to-end demo against the bundled `auto.briefing` and
+  `auto.release-notes-drafter` templates confirms paired
+  `auto.briefing-{2,3,4}` / "Briefing {2,3,4}" output and webhook
+  secret minting on the webhook template (manifest's
+  `{kind:'webhook',pending:true}` → provisioned `{id, secretHash}`,
+  plaintext secret returned exactly once).
+- End-to-end demo (one-shot node script against the real bundled
+  templates) confirms: three back-to-back clones of `hydrate` produce
+  `hydrate-2/3/4` with display names `Hydrate 2/3/4`; three back-to-back
+  clones of `auto.briefing` produce `auto.briefing-2/3/4` with names
+  `Briefing 2/3/4` and matching `automations/briefing/automation.json#name`;
+  cloning `auto.release-notes-drafter` mints a webhook secret and
+  rewrites the manifest's `{pending:true}` trigger to a provisioned
+  `{id, secretHash}` form.
+

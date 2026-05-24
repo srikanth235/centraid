@@ -1,0 +1,5 @@
+{
+  "name": "PR review digest",
+  "description": "Surfaces open pull requests, who is blocked on whom, and what is ready to merge.",
+  "version": "0.1.0"
+}

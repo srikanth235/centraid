@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { toCss } from '@centraid/design-tokens';
+import { rewriteAutomationManifestNames, rewriteIndexHtmlTitle } from './project-rewrites.js';
 import { DEFAULT_APP_CSS } from './scaffold-defaults.js';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
@@ -147,12 +148,21 @@ export async function updateProjectMeta(
   } catch {
     /* fall through: write a fresh app.json */
   }
+  // Hoisted once so the rename-time validation, the app.json#name write,
+  // and the post-write propagation pass to subordinate files (index.html
+  // <title>, automations/<id>/automation.json#name) all use the same
+  // trimmed string. `undefined` when the caller didn't ask to rename.
+  const renameTo = patch.name === undefined ? undefined : patch.name.trim();
   if (patch.name !== undefined) {
-    const trimmed = patch.name.trim();
-    if (!trimmed) {
+    if (!renameTo) {
       throw new HarnessError('invalid_id', 'Project name cannot be empty.');
     }
-    parsed.name = trimmed;
+    // Reject duplicates against any sibling project's display name
+    // (case-insensitive, trimmed). Directory ids stay immutable; only the
+    // user-visible `app.json#name` is constrained so two apps don't both
+    // surface as "Hydrate" on the home shelf, sidebar, or palette.
+    await assertDisplayNameUnique(projectsDir, id, renameTo);
+    parsed.name = renameTo;
   }
   if (patch.description !== undefined) {
     const trimmed = patch.description.trim();
@@ -160,6 +170,56 @@ export async function updateProjectMeta(
     else delete parsed.description;
   }
   await fs.writeFile(appJsonPath, JSON.stringify(parsed, null, 2) + '\n');
+
+  // Propagate the rename to the project's subordinate files so the
+  // browser-tab title and Automations row title don't drift from
+  // `app.json#name`. Both helpers are no-ops when their target file
+  // doesn't apply (a UI app has no `automations/`; an automation app
+  // has no `index.html`), so the same call serves both kinds. The
+  // rename path leaves `generated.{by,at}` on automation manifests
+  // alone — only the clone path stamps it (manifest was just produced).
+  if (renameTo !== undefined) {
+    await rewriteIndexHtmlTitle(dir, renameTo);
+    await rewriteAutomationManifestNames(dir, renameTo);
+  }
+}
+
+/**
+ * True when any sibling project under `projectsDir` (other than `selfId`,
+ * when given) already uses `name` as its `app.json#name`. Comparison is
+ * case-insensitive and whitespace-trimmed.
+ */
+export async function isDisplayNameTaken(
+  projectsDir: string,
+  name: string,
+  opts: { excludeId?: string } = {},
+): Promise<boolean> {
+  const target = name.trim().toLowerCase();
+  if (!target) return false;
+  const entries = await fs.readdir(projectsDir, { withFileTypes: true }).catch(() => []);
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (opts.excludeId !== undefined && e.name === opts.excludeId) continue;
+    if (e.name.startsWith('_') || e.name.startsWith('.')) continue;
+    const meta = await readAppMeta(path.join(projectsDir, e.name));
+    if (meta.name && meta.name.trim().toLowerCase() === target) return true;
+  }
+  return false;
+}
+
+/**
+ * Throw `HarnessError('already_exists')` when any sibling project under
+ * `projectsDir` (other than `selfId`) already uses `name` as its display
+ * name. Comparison is case-insensitive and whitespace-trimmed.
+ */
+async function assertDisplayNameUnique(
+  projectsDir: string,
+  selfId: string,
+  name: string,
+): Promise<void> {
+  if (await isDisplayNameTaken(projectsDir, name, { excludeId: selfId })) {
+    throw new HarnessError('already_exists', `An app named "${name}" already exists.`);
+  }
 }
 
 /** Best-effort read of `app.json#{name,description}`. Both may be undefined. */

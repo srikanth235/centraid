@@ -1,0 +1,5 @@
+{
+  "name": "Flaky test tracker",
+  "description": "Finds tests that pass and fail intermittently across recent CI runs and ranks the worst.",
+  "version": "0.1.0"
+}

@@ -10,7 +10,8 @@
     "**/node_modules/**",
     "packages/app-templates/hydrate/**",
     "packages/app-templates/journal/**",
-    "packages/app-templates/todos/**"
+    "packages/app-templates/todos/**",
+    "packages/app-templates/auto.*/**"
   ],
   "rules": {
     "arrow-body-style": "off",
