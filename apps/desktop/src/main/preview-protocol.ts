@@ -1,19 +1,26 @@
-// Local-files preview protocol.
+// Active-version preview protocol.
 //
-// Serves files from `<appsDir>/<id>/` into the builder's preview iframe
-// before the project has been published to the gateway. URL shape:
+// Serves files from the gateway's *active version* of an app into the
+// builder's preview iframe. URL shape:
 //
-//   centraid-preview://<id>/<path>     → <appsDir>/<id>/<path>
-//   centraid-preview://<id>/           → <appsDir>/<id>/index.html
+//   centraid-preview://<id>/<path>     → <appsDir>/<id>/versions/<active>/<path>
+//   centraid-preview://<id>/           → <appsDir>/<id>/versions/<active>/index.html
+//
+// Pre-#108 this served from the workspace directly (flat `<appsDir>/<id>/`),
+// which made the iframe show unpublished edits the gateway dispatcher could
+// not actually run. The split fixes that: the preview iframe and the
+// dispatcher both see the same bytes (the active version on disk), and the
+// publish-on-save loop is what makes a workspace edit visible here.
 //
 // Path-traversal hardening: the project id must match the same shape the
-// scaffolder enforces, and the resolved file must stay inside the project
-// directory. Anything else is rejected before touching disk.
+// scaffolder enforces, and the resolved file must stay inside the active
+// version directory. Anything else is rejected before touching disk.
 
 import { protocol, net } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readActiveCodeDir } from '@centraid/runtime-core';
 import { loadSettings } from './settings.js';
 
 export const PREVIEW_SCHEME = 'centraid-preview';
@@ -32,7 +39,11 @@ export function registerPreviewProtocol(): void {
     const rel = decodeURIComponent(url.pathname.replace(/^\/+/, '')) || 'index.html';
 
     const settings = await loadSettings();
-    const projectRoot = path.resolve(settings.appsDir, id);
+    // `readActiveCodeDir` reads `<appsDir>/<id>/current.json` and returns
+    // `<appsDir>/<id>/versions/<activeVersion>/`. Before the first publish
+    // this falls back to the flat dir, which doesn't exist post-#108 — so
+    // the file stat below will 404 cleanly.
+    const projectRoot = path.resolve(await readActiveCodeDir(path.join(settings.appsDir, id)));
     const target = path.resolve(projectRoot, rel);
 
     // Path traversal guard — `target` must be inside `projectRoot`.

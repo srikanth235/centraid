@@ -42,8 +42,20 @@ import { getProviderApiKey } from './provider-secrets.js';
 let handle: RuntimeHttpServerHandle | undefined;
 let starting: Promise<RuntimeHttpServerHandle> | undefined;
 
-export function localRuntimeAppsDir(): string {
-  return path.join(app.getPath('userData'), 'local-runtime', 'apps');
+/**
+ * Local gateway storage directory — `<projectsDir>/apps/` (versioned;
+ * the in-process gateway writes here when the desktop publishes a
+ * workspace). Reads from the persisted settings so a change to
+ * `projectsDir` in the Settings UI takes effect after a restart without
+ * us tracking two parallel locations.
+ *
+ * Pre-#108 this lived under `userData/local-runtime/apps` — a separate
+ * physical path from `settings.appsDir`, which is why the home shelf
+ * couldn't see what the gateway had stored. The two are now one path.
+ */
+export async function localRuntimeAppsDir(): Promise<string> {
+  const { projectsDir } = await loadPersistedSettings();
+  return path.join(projectsDir, 'apps');
 }
 
 /**
@@ -91,7 +103,7 @@ let _automationHost: AutomationHost | undefined;
 export function localRuntimeAutomationHost(appsDir: string): AutomationHost {
   if (_automationHost) return _automationHost;
   _automationHost = new OsSchedulerHost({
-    workdir: localRuntimeAppsDir(),
+    workdir: appsDir,
     centraidBin: path.join(defaultCentraidCliDir(), 'centraid-cli.js'),
     // Bake the desktop's analytics DB path + apps dir into every
     // scheduled job so an OS-scheduler-spawned `centraid run-automation`
@@ -110,7 +122,7 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
   if (handle) return handle;
   if (starting) return starting;
   starting = (async () => {
-    const appsDir = localRuntimeAppsDir();
+    const appsDir = await localRuntimeAppsDir();
     await fs.mkdir(appsDir, { recursive: true });
 
     // Gateway identity DB + the central analytics DB (one run-summary
@@ -208,10 +220,9 @@ export async function ensureLocalRuntime(): Promise<RuntimeHttpServerHandle> {
     // an uninstall, an automation toggled elsewhere, etc.).
     // Fire-and-forget so a slow scheduler shell-out doesn't block start.
     void (async () => {
-      const { projectsDir } = await loadPersistedSettings();
-      const appsDir = path.join(projectsDir, 'apps');
-      const { rows } = await listAutomations(appsDir);
-      return localRuntimeAutomationHost(appsDir).reconcile(rows);
+      const dir = await localRuntimeAppsDir();
+      const { rows } = await listAutomations(dir);
+      return localRuntimeAutomationHost(dir).reconcile(rows);
     })()
       .then((diff) => {
         if (diff.added.length || diff.updated.length || diff.removed.length) {

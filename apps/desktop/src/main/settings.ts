@@ -27,9 +27,15 @@ export type RuntimeMode = 'local' | 'remote';
 
 export interface PersistedSettings {
   /**
-   * Workspace root. Every project — UI apps and automation apps alike —
-   * lives under `<projectsDir>/apps/`, surfaced as the derived `appsDir`
-   * on {@link DesktopSettings} (issue #98).
+   * Root directory for everything the desktop persists per-user. Two
+   * derived subdirs hang off this on the effective {@link DesktopSettings}:
+   *   - `workspaceDir` (`<projectsDir>/workspace/`) — flat, editable
+   *     source files. The builder owns this. One copy per app.
+   *   - `appsDir` (`<projectsDir>/apps/`) — gateway storage, versioned.
+   *     Populated by uploads from the workspace. The dispatcher,
+   *     iframe, and automations all read from `<appsDir>/<id>/versions/<active>/`.
+   * Issue #108 split these two roles apart; #98 introduced the
+   * single-`apps/` layout that the gateway side keeps.
    */
   projectsDir: string;
   runtimeMode: RuntimeMode;
@@ -48,9 +54,23 @@ export interface PersistedSettings {
 }
 
 export interface DesktopSettings extends HarnessConfig {
-  /** Workspace root (persisted). */
+  /** Root dir (persisted). See {@link PersistedSettings.projectsDir}. */
   projectsDir: string;
-  /** Derived — `<projectsDir>/apps`. Every project (UI + automation apps). */
+  /**
+   * Derived — `<projectsDir>/workspace`. Editable source files the
+   * builder reads/writes. Flat layout: `<workspaceDir>/<id>/app.json`,
+   * `actions/*.js`, etc. Never read by the dispatcher or iframe.
+   */
+  workspaceDir: string;
+  /**
+   * Derived — `<projectsDir>/apps`. Local gateway storage, versioned.
+   * Layout: `<appsDir>/<id>/current.json` + `versions/v_<ts>_<sha>/`.
+   * In local-runtime mode, the in-process gateway owns this directory;
+   * the renderer reads it only via the gateway HTTP surface or the
+   * preview protocol (which resolves the active version). In remote
+   * mode, the directory is unused — the renderer talks to the remote
+   * gateway, which owns its own storage.
+   */
   appsDir: string;
   runtimeMode: RuntimeMode;
   remoteGatewayUrl: string;
@@ -139,8 +159,10 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
 }
 
 async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> {
-  // Every project — UI app or automation app — lives under `apps/`.
+  // Workspace (editable source) and gateway storage (versioned) are
+  // sibling subdirs under the user's project root — see #108.
   const derived = {
+    workspaceDir: path.join(p.projectsDir, 'workspace'),
     appsDir: path.join(p.projectsDir, 'apps'),
   };
   if (p.runtimeMode === 'local') {

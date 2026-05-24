@@ -5,6 +5,7 @@ import { installAuthInjector } from './main/auth-injector.js';
 import { importAvailableCreds } from './main/auth-import.js';
 import { registerChatIpcHandlers, disposeWindowChatSessions } from './main/chat.js';
 import { disposeWindowSession, registerIpcHandlers } from './main/ipc.js';
+import { migrateLegacyFlatLayout } from './main/migrate-workspace.js';
 import { PREVIEW_SCHEME, registerPreviewProtocol } from './main/preview-protocol.js';
 import { loadSettings, saveSettings, templatesCacheDir } from './main/settings.js';
 
@@ -86,6 +87,15 @@ app.whenReady().then(() => {
   void installAuthInjector();
   registerIpcHandlers();
   registerChatIpcHandlers();
+  // One-shot: move any pre-#108 flat-layout apps into the workspace and
+  // queue an initial publish. Fire-and-forget — the renderer will reflect
+  // the moved apps the next time it polls listProjects, and a failure
+  // doesn't block app start (it surfaces in the console).
+  void migrateLegacyFlatLayout().catch((err) =>
+    console.warn(
+      `[migrate-workspace] failed: ` + (err instanceof Error ? err.message : String(err)),
+    ),
+  );
   createWindow();
   // Kick off a background check for template updates. Fire-and-forget — the
   // fetcher is silent on every failure (offline, 404, parse error, etc.) so

@@ -454,6 +454,25 @@ interface CentraidApi {
   }): Promise<{ entries: CentraidLogEntry[] }>;
   deregisterApp(input: { id: string }): Promise<{ id: string }>;
 
+  /**
+   * Snapshot of the auto-publish queue (issue #108). Every workspace
+   * mutation triggers a debounced upload to the local gateway; this
+   * read surfaces the in-flight flag, the last error string (if any),
+   * and the timestamp of the last successful publish.
+   */
+  getPublishStatus(input: { id: string }): Promise<{
+    inFlight: boolean;
+    lastError?: string;
+    lastPublishedAt?: number;
+  }>;
+  /**
+   * Subscribe to per-app publish events. Fired once per auto-publish
+   * resolution (success or failure). Returns the unsubscribe.
+   */
+  onPublishEvent(
+    cb: (msg: { id: string; ok: boolean; error?: string; publishedAt?: number }) => void,
+  ): () => void;
+
   /** List bundled templates from `@centraid/app-templates`. */
   listTemplates(): Promise<CentraidTemplateMeta[]>;
   /**

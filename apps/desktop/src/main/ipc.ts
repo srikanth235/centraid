@@ -35,10 +35,12 @@ import {
 } from '@centraid/agent-runtime';
 import {
   AnalyticsStore,
+  APP_AUTOMATIONS_SUBDIR,
   AutomationRunsStore,
   InsightsStore,
   listAutomations,
   readAppOwnedAutomation,
+  readAutomationProjectAt,
   setAutomationEnabledAt,
   deleteAutomationAt,
   parseAutomationRef,
@@ -63,6 +65,12 @@ import {
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
+import {
+  forgetPublish,
+  getPublishStatus,
+  requestPublish,
+  type PublishStatus,
+} from './publish-on-save.js';
 
 /**
  * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
@@ -95,6 +103,9 @@ export const Channel = {
   APP_QUERY: 'centraid:app:query',
   APP_LOGS: 'centraid:app:logs',
   APPS_DEREGISTER: 'centraid:apps:deregister',
+
+  /** Status read for the auto-publish queue (renderer toast / debug). */
+  PUBLISH_STATUS: 'centraid:publish:status',
 
   TEMPLATES_LIST: 'centraid:templates:list',
   TEMPLATES_CLONE: 'centraid:templates:clone',
@@ -265,10 +276,17 @@ export function registerIpcHandlers(): void {
   });
 
   // ----- Projects -----
+  // The desktop owns two sibling dirs (issue #108):
+  //   - `workspaceDir` — flat, editable. Project IPCs read/write here.
+  //   - `appsDir` — versioned gateway storage. Populated by uploads from
+  //     the workspace via `requestPublish`; the preview protocol and
+  //     dispatcher read from here.
+  // Every IPC that mutates the workspace pings `requestPublish(id)` so
+  // the gateway picks up the change on the next debounce tick.
   ipcMain.handle(Channel.PROJECTS_LIST, async () => {
     const settings = await loadSettings();
     const { listProjects } = await import('@centraid/builder-harness');
-    return listProjects(settings.appsDir);
+    return listProjects(settings.workspaceDir);
   });
 
   ipcMain.handle(
@@ -276,17 +294,21 @@ export function registerIpcHandlers(): void {
     async (_e, input: { id: string; name?: string; version?: string }) => {
       const settings = await loadSettings();
       const { scaffoldProject } = await import('@centraid/builder-harness');
-      return scaffoldProject(settings.appsDir, input.id, {
+      const info = await scaffoldProject(settings.workspaceDir, input.id, {
         name: input.name,
         version: input.version,
       });
+      // Initial publish so the fresh app is browsable in the iframe
+      // without waiting for a first edit (edge case #1 in the design).
+      requestPublish(input.id, { immediate: true });
+      return info;
     },
   );
 
   ipcMain.handle(Channel.PROJECTS_FILES, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
     const { readProjectFiles } = await import('@centraid/builder-harness');
-    const dir = path.join(settings.appsDir, input.id);
+    const dir = path.join(settings.workspaceDir, input.id);
     return readProjectFiles(dir);
   });
 
@@ -295,14 +317,16 @@ export function registerIpcHandlers(): void {
     async (_e, input: { id: string; path: string; content: string }) => {
       const settings = await loadSettings();
       const { writeProjectFile } = await import('@centraid/builder-harness');
-      const dir = path.join(settings.appsDir, input.id);
-      return writeProjectFile(dir, input.path, input.content);
+      const dir = path.join(settings.workspaceDir, input.id);
+      const result = await writeProjectFile(dir, input.path, input.content);
+      requestPublish(input.id);
+      return result;
     },
   );
 
   ipcMain.handle(Channel.PROJECTS_OPEN, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
-    const dir = path.join(settings.appsDir, input.id);
+    const dir = path.join(settings.workspaceDir, input.id);
     await shell.openPath(dir);
     return { ok: true };
   });
@@ -310,7 +334,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.PROJECTS_DELETE, async (_e, input: { id: string }) => {
     const settings = await loadSettings();
     const { deleteProject } = await import('@centraid/builder-harness');
-    await deleteProject(settings.appsDir, input.id);
+    // Forget any queued publish before deleting the workspace so a
+    // stale request doesn't re-create the gateway version after the
+    // renderer separately calls deregisterApp.
+    forgetPublish(input.id);
+    await deleteProject(settings.workspaceDir, input.id);
     return { ok: true };
   });
 
@@ -319,32 +347,40 @@ export function registerIpcHandlers(): void {
     async (_e, input: { id: string; name?: string; description?: string }) => {
       const settings = await loadSettings();
       const { updateProjectMeta } = await import('@centraid/builder-harness');
-      await updateProjectMeta(settings.appsDir, input.id, {
+      await updateProjectMeta(settings.workspaceDir, input.id, {
         name: input.name,
         description: input.description,
       });
+      requestPublish(input.id);
       return { ok: true };
     },
   );
 
-  // Local-files preview URL for an unpublished project. Returns
-  // `{ url, available }` where `available` indicates that `index.html`
-  // exists on disk (i.e. the iframe will actually render something).
+  // Preview URL for the iframe. After #108 the preview always serves
+  // the active gateway version (not the workspace), so the URL is only
+  // "available" once an initial publish has succeeded — the preview
+  // protocol returns 404 until then.
   ipcMain.handle(
     Channel.PROJECTS_PREVIEW_URL,
     async (_e, input: { id: string }): Promise<{ url: string; available: boolean }> => {
       const settings = await loadSettings();
-      const indexPath = path.join(settings.appsDir, input.id, 'index.html');
+      const currentJsonPath = path.join(settings.appsDir, input.id, 'current.json');
       const available = await fs
-        .stat(indexPath)
+        .stat(currentJsonPath)
         .then((s) => s.isFile())
         .catch(() => false);
-      // Cache-bust on each request so the iframe always picks up the latest
-      // bytes after the agent writes new files. The path stays the same;
-      // only the query string changes.
+      // Cache-bust per request — the iframe URL is stable but the
+      // active version under the hood changes after each publish.
       const url = `${PREVIEW_SCHEME}://${encodeURIComponent(input.id)}/index.html?t=${Date.now()}`;
       return { url, available };
     },
+  );
+
+  // Snapshot of the auto-publish queue for project `id`. Cheap; safe to
+  // poll from the renderer if a toast wants the latest error string.
+  ipcMain.handle(
+    Channel.PUBLISH_STATUS,
+    async (_e, input: { id: string }): Promise<PublishStatus> => getPublishStatus(input.id),
   );
 
   // ----- Agent (per-window session) -----
@@ -366,11 +402,14 @@ export function registerIpcHandlers(): void {
 
       const settings = await loadSettings();
       const { createCentraidAgentSession } = await import('@centraid/builder-harness');
-      // Every project — UI app or automation app — lives under `appsDir`
-      // (issue #98). `projectKind` still picks the system prompt and
-      // gates the app-only live-schema injection / preview snapshot.
+      // Every project — UI app or automation app — lives under
+      // `workspaceDir` (issue #108; previously `appsDir` per #98). The
+      // builder agent reads/writes the workspace; publish-on-save copies
+      // each turn's writes into the gateway's `appsDir`. `projectKind`
+      // still picks the system prompt and gates the app-only
+      // live-schema injection / preview snapshot.
       const isAutomation = input.projectKind === 'automation';
-      const projectDir = path.join(settings.appsDir, input.projectId);
+      const projectDir = path.join(settings.workspaceDir, input.projectId);
 
       const runnerPrefs = await loadRunnerPrefs();
 
@@ -434,6 +473,11 @@ export function registerIpcHandlers(): void {
             await capturePreviewSnapshot(win, projectDir).catch(() => undefined);
           }
           await session.prompt(text);
+          // Agents edit workspace files via their native Read/Write tools
+          // — those bypass our PROJECTS_WRITE_FILE handler, so we queue
+          // the publish here. Debounced like a normal save: the iframe
+          // picks up the new version after the agent's turn settles.
+          requestPublish(input.projectId);
           return { mintedWebhooks: await provisionPendingWebhooks() };
         },
         stop: async () => {
@@ -469,10 +513,14 @@ export function registerIpcHandlers(): void {
   });
 
   // ----- Publish + versions -----
+  // The explicit Publish button stays — it's an "I want this published
+  // RIGHT NOW, with build" escape hatch over the auto-publish queue.
+  // It still bypasses the debouncer (immediate execution, blocking
+  // result) so the user gets a synchronous error if the upload fails.
   ipcMain.handle(Channel.PUBLISH, async (_e, input: { id: string; skipBuild?: boolean }) => {
     const settings = await loadSettings();
     const { publishProject } = await import('@centraid/builder-harness');
-    const projectDir = path.join(settings.appsDir, input.id);
+    const projectDir = path.join(settings.workspaceDir, input.id);
     return publishProject(projectDir, input.id, settings, {
       skipBuild: input.skipBuild,
     });
@@ -595,15 +643,16 @@ export function registerIpcHandlers(): void {
     // to `hydrate-2` / "Hydrate 2", `-3` / " 3", etc. Display-name
     // collisions against unrelated renamed apps are caught too — the
     // pair advances in lockstep so the home shelf can never show two
-    // identically-titled tiles for new clones.
+    // identically-titled tiles for new clones. Uniqueness is computed
+    // against the workspace (where the user actually has the apps).
     const { id: newAppId, name: newName } = await suggestCloneIdentity(
-      settings.appsDir,
+      settings.workspaceDir,
       tmpl.id,
       tmpl.name,
     );
 
     const project = await cloneTemplate({
-      projectsDir: settings.appsDir,
+      projectsDir: settings.workspaceDir,
       newAppId,
       // The resolver tells us which copy is newer (cache vs bundle); clone
       // from that one so a remote update reaches users without a desktop
@@ -632,10 +681,27 @@ export function registerIpcHandlers(): void {
       url: `${settings.remoteGatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
     }));
 
+    // Publish the freshly cloned workspace to the gateway so the iframe
+    // can preview it immediately and — for automation templates — so
+    // the OS scheduler has an active version to fire from. Synchronous
+    // (not via the debouncer) because automation registration below
+    // needs `appsDir/<id>/versions/<active>/` to exist on disk first.
+    try {
+      const { publishProject } = await import('@centraid/builder-harness');
+      await publishProject(project.dir, project.id, settings, { skipBuild: true });
+    } catch (err) {
+      console.warn(
+        `[templates:clone] initial publish failed for ${project.id}: ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
+    }
+
     // Register any automations the template shipped with the local
     // host so cron triggers fire and webhook routes resolve without
     // waiting for the next app start. Best-effort: failures are
-    // logged but don't fail the clone.
+    // logged but don't fail the clone. Scans `appsDir` because that's
+    // the storage layer the OS scheduler will fire from — same dir the
+    // publish above just populated.
     if (project.id.startsWith('auto.')) {
       try {
         const { rows } = await listAutomations(settings.appsDir);
@@ -651,9 +717,6 @@ export function registerIpcHandlers(): void {
       }
     }
 
-    // Cloning only lays the project down on disk as a draft. The user
-    // edits/previews in the builder and explicitly clicks Publish to
-    // upload to the gateway (Channel.PUBLISH).
     return {
       project,
       template: {
@@ -702,7 +765,9 @@ export function registerIpcHandlers(): void {
     const summary = new AnalyticsStore(getAnalyticsProvider()).getSummary(runId);
     if (!summary?.appId) return undefined;
     return new AutomationRunsStore(
-      makeRuntimeDbProvider(path.join(localRuntimeAppsDir(), summary.appId, 'runtime.sqlite')),
+      makeRuntimeDbProvider(
+        path.join(await localRuntimeAppsDir(), summary.appId, 'runtime.sqlite'),
+      ),
     );
   };
   /** Map a central run summary into the `AutomationRunRow` feed shape. */
@@ -807,7 +872,10 @@ export function registerIpcHandlers(): void {
       });
 
       // `input.id` is the `auto.`-prefixed automation app folder id.
-      await scaffoldAutomationProject(settings.appsDir, input.id, {
+      // Scaffold goes into the workspace; the immediate publish below
+      // populates `appsDir/<id>/versions/<active>/` so the OS scheduler
+      // (which fires from the versioned dir) has something to read.
+      await scaffoldAutomationProject(settings.workspaceDir, input.id, {
         ...(input.name ? { name: input.name } : {}),
         ...(input.description ? { description: input.description } : {}),
         ...(input.prompt ? { prompt: input.prompt } : {}),
@@ -818,6 +886,20 @@ export function registerIpcHandlers(): void {
         ...(input.onFailure ? { onFailure: input.onFailure } : {}),
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       });
+      // Publish the new automation immediately (no debounce) so the
+      // OS-scheduler registration that follows has a versioned manifest
+      // on disk to point at.
+      try {
+        const { publishProject } = await import('@centraid/builder-harness');
+        await publishProject(path.join(settings.workspaceDir, input.id), input.id, settings, {
+          skipBuild: true,
+        });
+      } catch (err) {
+        console.warn(
+          `[automations] initial publish failed for ${input.id}: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
       const { rows } = await listAutomations(settings.appsDir);
       const row = rows.find((r) => r.ownerApp === input.id);
       if (!row) throw new Error(`automation app ${input.id}: scaffolded but not found on disk`);
@@ -867,16 +949,37 @@ export function registerIpcHandlers(): void {
     Channel.AUTOMATIONS_SET_ENABLED,
     async (_e, input: { automationId: string; enabled: boolean }) => {
       // `manifest.enabled` is the source of truth — toggling rewrites
-      // `automation.json`. Host gets register(row); OsSchedulerHost
-      // collapses enabled=false to unregister.
+      // the WORKSPACE `automation.json`, then publishes so the OS
+      // scheduler reads the new value from the fresh active version.
+      // Pre-#108 this mutated the active version dir in place; with
+      // the workspace/storage split that would diverge the workspace
+      // from what the gateway runs.
       const settings = await loadSettings();
       const ref = parseAutomationRef(input.automationId);
-      const current = ref
-        ? await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId)
-        : undefined;
-      const row = current
-        ? await setAutomationEnabledAt(current.dir, current.ownerApp, input.enabled)
-        : undefined;
+      if (!ref) return { ok: true };
+      const workspaceAutoDir = path.join(
+        settings.workspaceDir,
+        ref.appId,
+        APP_AUTOMATIONS_SUBDIR,
+        ref.automationId,
+      );
+      const current = await readAutomationProjectAt(workspaceAutoDir, ref.appId);
+      if (!current) return { ok: true };
+      await setAutomationEnabledAt(workspaceAutoDir, ref.appId, input.enabled);
+      // Synchronous publish (not via debounce) so the host register
+      // below sees the updated manifest in `appsDir`.
+      try {
+        const { publishProject } = await import('@centraid/builder-harness');
+        await publishProject(path.join(settings.workspaceDir, ref.appId), ref.appId, settings, {
+          skipBuild: true,
+        });
+      } catch (err) {
+        console.warn(
+          `[automations] publish failed for ${input.automationId}: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
+      const row = await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId);
       if (row) {
         try {
           await localRuntimeAutomationHost(settings.appsDir).register(row);
@@ -892,8 +995,11 @@ export function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { automationId: string }) => {
-    // Delete is best-effort: tear down the OS scheduler entry, then
-    // drop the project + its run ledger.
+    // Delete is best-effort: tear down the OS scheduler entry, drop the
+    // workspace source, then publish so the gateway storage catches up.
+    // For an `auto.`-prefixed automation app (whole-app automation),
+    // delete the workspace entry and forget the publish queue; the next
+    // bootstrap reconcile drops the orphaned `appsDir` version.
     const settings = await loadSettings();
     try {
       await localRuntimeAutomationHost(settings.appsDir).unregister(input.automationId);
@@ -905,14 +1011,34 @@ export function registerIpcHandlers(): void {
     }
     const ref = parseAutomationRef(input.automationId);
     if (ref) {
-      // An automation app (`auto.`-prefixed, a single automation) is
-      // deleted whole; an automation owned by a UI app drops just its
-      // `automations/<id>/` subdir.
       if (ref.appId.startsWith('auto.')) {
-        await deleteAutomationAt(path.join(settings.appsDir, ref.appId));
+        // Whole automation app — drop the workspace; the explicit
+        // deregisterApp call from the renderer (or a later cleanup)
+        // will purge `appsDir/<id>/`.
+        forgetPublish(ref.appId);
+        await deleteAutomationAt(path.join(settings.workspaceDir, ref.appId));
       } else {
-        const row = await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId);
-        if (row) await deleteAutomationAt(row.dir);
+        // App-owned automation — just drop its workspace subdir, then
+        // publish so the gateway version no longer lists it.
+        const wsAutoDir = path.join(
+          settings.workspaceDir,
+          ref.appId,
+          APP_AUTOMATIONS_SUBDIR,
+          ref.automationId,
+        );
+        const exists = await readAutomationProjectAt(wsAutoDir, ref.appId).catch(() => undefined);
+        if (exists) await deleteAutomationAt(wsAutoDir);
+        try {
+          const { publishProject } = await import('@centraid/builder-harness');
+          await publishProject(path.join(settings.workspaceDir, ref.appId), ref.appId, settings, {
+            skipBuild: true,
+          });
+        } catch (err) {
+          console.warn(
+            `[automations] publish after delete failed for ${input.automationId}: ` +
+              (err instanceof Error ? err.message : String(err)),
+          );
+        }
       }
     }
     // Drop the automation's central run summaries. Its full ledger
