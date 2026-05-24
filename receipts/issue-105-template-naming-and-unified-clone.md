@@ -18,6 +18,7 @@ refactor that routes both kinds of templates through the same
 - [x] Commit 5 — home tile reads suffixed name from project, not template
 - [x] Commit 6 — first clone uses bare template name (no -2 suffix)
 - [x] Commit 7 — rename propagates to index.html title + automation.json
+- [x] Commit 8 — simplify rewrite helpers + updateProjectMeta + IPC
 
 ## What changed
 
@@ -69,6 +70,40 @@ Fixes:
   the same call site serves both kinds.
 - The `TEMPLATES_CLONE` IPC default branch uses `suggestCloneIdentity`;
   the caller-specified-id branch keeps the old `suggestAppId` behavior.
+
+### Commit 8 — simplify rewrite helpers + updateProjectMeta + IPC
+
+Step-back code-review pass. Four behavior-preserving simplifications:
+
+1. **`rewriteIndexHtmlTitle`** dropped a `replaced` flag whose two
+   branches returned the same string. The regex has no `/g`, so
+   `String.replace` only fires the callback once anyway. Now uses
+   `RegExp.test(raw)` to detect the no-match case and a single
+   `replace(re, () => …)` for the rewrite.
+
+2. **`updateProjectMeta`** trimmed `patch.name` twice (once before the
+   `app.json` write for `assertDisplayNameUnique`, again before the
+   post-write propagation calls). Hoisted into a single `renameTo`
+   constant computed once at the top.
+
+3. **`TEMPLATES_CLONE` IPC** carried an `else` branch routing through
+   `suggestAppId({alwaysSuffix: !input.newAppId})` for the case where
+   the caller passes an explicit `newAppId` or `newName`. No caller
+   ever passes either — both renderer callsites send
+   `{templateId}` only. Dropped the dead branch, the unused
+   `suggestAppId` import, and the `newAppId?`/`newName?` optionals
+   from the IPC contract (preload + centraid-api.d.ts). The handler
+   is now a single straight-line call into `suggestCloneIdentity`.
+
+4. **`rewriteAutomationManifestNames`** used `fs.readdir(..., {
+   withFileTypes: true })` plus `e.isDirectory()` to skip
+   non-directory entries. But the subsequent `fs.readFile(<entry>/
+   automation.json)` already fails (and `continue`s) for non-dirs,
+   missing manifests, and anything else unreadable. Dropped the
+   Dirent dance — plain `readdir(...)` returning names.
+
+Net: −20 lines, no behavior change. 32 builder-harness tests still
+pass.
 
 ### Commit 7 — rename propagates to index.html title + automation.json
 

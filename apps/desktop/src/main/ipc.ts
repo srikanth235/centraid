@@ -579,110 +579,96 @@ export function registerIpcHandlers(): void {
     }));
   });
 
-  ipcMain.handle(
-    Channel.TEMPLATES_CLONE,
-    async (_e, input: { templateId: string; newAppId?: string; newName?: string }) => {
-      const settings = await loadSettings();
-      const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
-      const { cloneTemplate, suggestAppId, suggestCloneIdentity } =
-        await import('@centraid/builder-harness');
+  ipcMain.handle(Channel.TEMPLATES_CLONE, async (_e, input: { templateId: string }) => {
+    const settings = await loadSettings();
+    const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
+    const { cloneTemplate, suggestCloneIdentity } = await import('@centraid/builder-harness');
 
-      const cacheDir = templatesCacheDir();
-      const templates = await resolveTemplates({ cacheDir });
-      const tmpl = templates.find((t) => t.id === input.templateId);
-      if (!tmpl) {
-        throw new Error(`Unknown template "${input.templateId}".`);
-      }
+    const cacheDir = templatesCacheDir();
+    const templates = await resolveTemplates({ cacheDir });
+    const tmpl = templates.find((t) => t.id === input.templateId);
+    if (!tmpl) {
+      throw new Error(`Unknown template "${input.templateId}".`);
+    }
 
-      // Pick (id, name) together so both are unique:
-      // - Default clones: `suggestCloneIdentity` ratchets `N` upward until
-      //   the directory `<tmpl.id>-N` AND the display name `<tmpl.name> N`
-      //   are both free. The template's bare id is never consumed (clones
-      //   start at N=2), and `Hydrate 2` won't duplicate an earlier app
-      //   that the user renamed to "Hydrate 2".
-      // - Caller-specified `newAppId`: only id uniqueness is enforced via
-      //   `suggestAppId` (the caller chose intent); display name falls
-      //   through to `newName ?? tmpl.name`.
-      let newAppId: string;
-      let newName: string;
-      if (input.newAppId === undefined && input.newName === undefined) {
-        const picked = await suggestCloneIdentity(settings.appsDir, tmpl.id, tmpl.name);
-        newAppId = picked.id;
-        newName = picked.name;
-      } else {
-        newAppId = await suggestAppId(settings.appsDir, input.newAppId ?? tmpl.id, {
-          alwaysSuffix: !input.newAppId,
-        });
-        newName = input.newName ?? tmpl.name;
-      }
+    // Pick (id, name) together so both are unique. The first clone of
+    // `hydrate` lands on `hydrate` / "Hydrate"; subsequent clones bump
+    // to `hydrate-2` / "Hydrate 2", `-3` / " 3", etc. Display-name
+    // collisions against unrelated renamed apps are caught too — the
+    // pair advances in lockstep so the home shelf can never show two
+    // identically-titled tiles for new clones.
+    const { id: newAppId, name: newName } = await suggestCloneIdentity(
+      settings.appsDir,
+      tmpl.id,
+      tmpl.name,
+    );
 
-      const project = await cloneTemplate({
-        projectsDir: settings.appsDir,
-        newAppId,
-        // The resolver tells us which copy is newer (cache vs bundle); clone
-        // from that one so a remote update reaches users without a desktop
-        // release.
-        templateDir: templateSourceDir(tmpl.id, { cacheDir, source: tmpl.source }),
-        newName,
-        // Carry the template's description into the cloned project's
-        // `app.json` so the builder topbar + home tile show something
-        // meaningful out of the gate.
-        newDesc: tmpl.desc,
-      });
+    const project = await cloneTemplate({
+      projectsDir: settings.appsDir,
+      newAppId,
+      // The resolver tells us which copy is newer (cache vs bundle); clone
+      // from that one so a remote update reaches users without a desktop
+      // release.
+      templateDir: templateSourceDir(tmpl.id, { cacheDir, source: tmpl.source }),
+      newName,
+      // Carry the template's description into the cloned project's
+      // `app.json` so the builder topbar + home tile show something
+      // meaningful out of the gate.
+      newDesc: tmpl.desc,
+    });
 
-      // Automation templates may ship `{kind:'webhook',pending:true}`
-      // triggers — the template author can't know the secret in advance,
-      // so the clone path mints id + secret here, rewrites the manifest
-      // to its provisioned form, and returns the plaintext secret to the
-      // renderer to show once. App templates never have webhook triggers,
-      // so this is a no-op for them. The minted webhook secret needs the
-      // remote gateway base URL for the final `/_centraid-hook/<id>` URL.
-      const minted = await provisionAppPendingWebhooks(project.dir);
-      const webhooks = minted.map((m) => ({
-        automationId: m.automationId,
-        ownerApp: m.ownerApp,
-        webhookId: m.webhookId,
-        secret: m.secret,
-        url: `${settings.remoteGatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
-      }));
+    // Automation templates may ship `{kind:'webhook',pending:true}`
+    // triggers — the template author can't know the secret in advance,
+    // so the clone path mints id + secret here, rewrites the manifest
+    // to its provisioned form, and returns the plaintext secret to the
+    // renderer to show once. App templates never have webhook triggers,
+    // so this is a no-op for them. The minted webhook secret needs the
+    // remote gateway base URL for the final `/_centraid-hook/<id>` URL.
+    const minted = await provisionAppPendingWebhooks(project.dir);
+    const webhooks = minted.map((m) => ({
+      automationId: m.automationId,
+      ownerApp: m.ownerApp,
+      webhookId: m.webhookId,
+      secret: m.secret,
+      url: `${settings.remoteGatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
+    }));
 
-      // Register any automations the template shipped with the local
-      // host so cron triggers fire and webhook routes resolve without
-      // waiting for the next app start. Best-effort: failures are
-      // logged but don't fail the clone.
-      if (project.id.startsWith('auto.')) {
-        try {
-          const { rows } = await listAutomations(settings.appsDir);
-          for (const row of rows) {
-            if (row.ownerApp !== project.id) continue;
-            await localRuntimeAutomationHost(settings.appsDir).register(row);
-          }
-        } catch (err) {
-          console.warn(
-            `[templates:clone] host register failed for ${project.id}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
+    // Register any automations the template shipped with the local
+    // host so cron triggers fire and webhook routes resolve without
+    // waiting for the next app start. Best-effort: failures are
+    // logged but don't fail the clone.
+    if (project.id.startsWith('auto.')) {
+      try {
+        const { rows } = await listAutomations(settings.appsDir);
+        for (const row of rows) {
+          if (row.ownerApp !== project.id) continue;
+          await localRuntimeAutomationHost(settings.appsDir).register(row);
         }
+      } catch (err) {
+        console.warn(
+          `[templates:clone] host register failed for ${project.id}: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
       }
+    }
 
-      // Cloning only lays the project down on disk as a draft. The user
-      // edits/previews in the builder and explicitly clicks Publish to
-      // upload to the gateway (Channel.PUBLISH).
-      return {
-        project,
-        template: {
-          id: tmpl.id,
-          name: tmpl.name,
-          desc: tmpl.desc,
-          colorKey: tmpl.colorKey,
-          iconKey: tmpl.iconKey,
-          version: tmpl.version,
-          kind: tmpl.kind ?? (tmpl.id.startsWith('auto.') ? 'automation' : 'app'),
-        },
-        webhooks,
-      };
-    },
-  );
+    // Cloning only lays the project down on disk as a draft. The user
+    // edits/previews in the builder and explicitly clicks Publish to
+    // upload to the gateway (Channel.PUBLISH).
+    return {
+      project,
+      template: {
+        id: tmpl.id,
+        name: tmpl.name,
+        desc: tmpl.desc,
+        colorKey: tmpl.colorKey,
+        iconKey: tmpl.iconKey,
+        version: tmpl.version,
+        kind: tmpl.kind ?? (tmpl.id.startsWith('auto.') ? 'automation' : 'app'),
+      },
+      webhooks,
+    };
+  });
 
   // ----- Automations (issue #98) -----
   // An automation lives inside an app folder under `appsDir`

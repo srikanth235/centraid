@@ -148,17 +148,21 @@ export async function updateProjectMeta(
   } catch {
     /* fall through: write a fresh app.json */
   }
+  // Hoisted once so the rename-time validation, the app.json#name write,
+  // and the post-write propagation pass to subordinate files (index.html
+  // <title>, automations/<id>/automation.json#name) all use the same
+  // trimmed string. `undefined` when the caller didn't ask to rename.
+  const renameTo = patch.name === undefined ? undefined : patch.name.trim();
   if (patch.name !== undefined) {
-    const trimmed = patch.name.trim();
-    if (!trimmed) {
+    if (!renameTo) {
       throw new HarnessError('invalid_id', 'Project name cannot be empty.');
     }
     // Reject duplicates against any sibling project's display name
     // (case-insensitive, trimmed). Directory ids stay immutable; only the
     // user-visible `app.json#name` is constrained so two apps don't both
     // surface as "Hydrate" on the home shelf, sidebar, or palette.
-    await assertDisplayNameUnique(projectsDir, id, trimmed);
-    parsed.name = trimmed;
+    await assertDisplayNameUnique(projectsDir, id, renameTo);
+    parsed.name = renameTo;
   }
   if (patch.description !== undefined) {
     const trimmed = patch.description.trim();
@@ -174,10 +178,9 @@ export async function updateProjectMeta(
   // has no `index.html`), so the same call serves both kinds. The
   // rename path leaves `generated.{by,at}` on automation manifests
   // alone — only the clone path stamps it (manifest was just produced).
-  if (patch.name !== undefined) {
-    const trimmed = patch.name.trim();
-    await rewriteIndexHtmlTitle(dir, trimmed);
-    await rewriteAutomationManifestNames(dir, trimmed);
+  if (renameTo !== undefined) {
+    await rewriteIndexHtmlTitle(dir, renameTo);
+    await rewriteAutomationManifestNames(dir, renameTo);
   }
 }
 

@@ -457,15 +457,14 @@ interface CentraidApi {
   /** List bundled templates from `@centraid/app-templates`. */
   listTemplates(): Promise<CentraidTemplateMeta[]>;
   /**
-   * Clone a bundled template into the user's projects dir and publish it
-   * to the gateway in one round-trip. `newAppId` is optional — the main
-   * process auto-suffixes on collision (e.g. `hydrate` → `hydrate-2`).
+   * Clone a bundled template into the user's projects dir as a draft.
+   * The main process auto-picks a non-colliding `(id, name)` pair via
+   * `suggestCloneIdentity`: bare `<tmpl.id>` / `<tmpl.name>` on the
+   * first clone, then `<tmpl.id>-N` / `<tmpl.name> N` for subsequent
+   * clones. The user explicitly clicks Publish to upload to the
+   * gateway (see `publish`).
    */
-  cloneTemplate(input: {
-    templateId: string;
-    newAppId?: string;
-    newName?: string;
-  }): Promise<CentraidCloneTemplateResult>;
+  cloneTemplate(input: { templateId: string }): Promise<CentraidCloneTemplateResult>;
 
   /**
    * Start (or reset) the app-scoped agentic chat session for this window.

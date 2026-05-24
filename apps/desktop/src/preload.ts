@@ -158,7 +158,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
 
   // Templates
   listTemplates: () => ipcRenderer.invoke(Channel.TEMPLATES_LIST),
-  cloneTemplate: (input: { templateId: string; newAppId?: string; newName?: string }) =>
+  cloneTemplate: (input: { templateId: string }) =>
     ipcRenderer.invoke(Channel.TEMPLATES_CLONE, input),
 
   // App-scoped agentic chat

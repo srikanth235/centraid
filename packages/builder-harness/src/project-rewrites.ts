@@ -34,14 +34,12 @@ export async function rewriteIndexHtmlTitle(projectDir: string, newName: string)
   } catch {
     return; // project has no index.html (automation app) — nothing to rewrite.
   }
-  const escaped = escapeHtml(newName);
-  let replaced = false;
-  const next = raw.replace(/<title>[\s\S]*?<\/title>/i, () => {
-    if (replaced) return `<title>${escaped}</title>`;
-    replaced = true;
-    return `<title>${escaped}</title>`;
-  });
-  if (!replaced) return; // no <title> tag — leave the file untouched.
+  const re = /<title>[\s\S]*?<\/title>/i;
+  if (!re.test(raw)) return; // no <title> tag — leave the file untouched.
+  // Callback form so $-sequences in `newName` aren't interpreted as
+  // backreferences by `String.replace`. Regex has no /g so only the
+  // first <title> is rewritten.
+  const next = raw.replace(re, () => `<title>${escapeHtml(newName)}</title>`);
   await fs.writeFile(htmlPath, next);
 }
 
@@ -72,22 +70,23 @@ export async function rewriteAutomationManifestNames(
   opts: AutomationManifestRewriteOptions = {},
 ): Promise<void> {
   const autoRoot = path.join(projectDir, 'automations');
-  let entries: import('node:fs').Dirent[];
+  let names: string[];
   try {
-    entries = await fs.readdir(autoRoot, { withFileTypes: true });
+    names = await fs.readdir(autoRoot);
   } catch {
     return; // no automations/ subdir — nothing to do.
   }
   const nowIso = opts.stampGenerated ? new Date().toISOString() : null;
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
-    const manifestPath = path.join(autoRoot, e.name, 'automation.json');
+  for (const name of names) {
+    if (name.startsWith('.') || name.startsWith('_')) continue;
+    const manifestPath = path.join(autoRoot, name, 'automation.json');
+    // readFile naturally fails for non-directories and missing manifests,
+    // so we don't need a separate `isDirectory()` check via Dirent.
     let raw: string;
     try {
       raw = await fs.readFile(manifestPath, 'utf8');
     } catch {
-      continue; // not every subdir has a manifest (legacy / partial).
+      continue;
     }
     let parsed: Record<string, unknown>;
     try {
