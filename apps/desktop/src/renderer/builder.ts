@@ -1256,9 +1256,17 @@
       // --bg-l onto <html>). Preview iframe gets both the initial paint
       // (via #hash, which the inline live-settings bridge in each app's
       // index.html parses on load) and a postMessage on load so the bridge
-      // stays in sync — same protocol as the running-app view.
+      // stays in sync — same protocol as the running-app view. The
+      // shell's named theme is resolved to its 'light' | 'dark' kind so
+      // template CSS keyed on `[data-theme='dark']` keeps matching when
+      // the user picks a third-party preset (Monokai, Nord, …).
       const html = document.documentElement;
-      const theme = html.dataset.theme || 'dark';
+      const shellTheme = html.dataset.theme || 'dark';
+      const shellThemeRecord = window.CentraidTokens.themes as Record<
+        string,
+        { kind: 'light' | 'dark' } | undefined
+      >;
+      const theme = shellThemeRecord[shellTheme]?.kind ?? 'dark';
       const bgL = (html.style.getPropertyValue('--bg-l') || '5%').replace('%', '').trim();
       const sep = src.includes('#') ? '&' : '#';
       const themedSrc = `${src}${sep}theme=${theme}&bgL=${bgL}`;

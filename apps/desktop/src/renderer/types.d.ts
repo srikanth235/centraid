@@ -11,6 +11,7 @@ import type {
   ColorKey,
   Theme,
   ThemeName,
+  ThemePreset,
   TileVariant,
   TileFinish,
 } from '@centraid/design-tokens';
@@ -29,8 +30,10 @@ declare global {
     cssText: string;
     /** Light theme — kept as alias of `themes.light` for legacy call sites. */
     colors: Theme;
-    /** Both themes; flip via `<html data-theme="light|dark">`. */
+    /** Every registered theme; flip via `<html data-theme="<name>">`. */
     themes: Record<ThemeName, Theme>;
+    /** Ordered presets the Settings → Appearance picker renders. */
+    themePresets: ReadonlyArray<ThemePreset>;
     palette: Palette;
     icons: Record<IconName, readonly { d: string; fill?: 'currentColor' }[]>;
     apps: AppMetaResolved[];

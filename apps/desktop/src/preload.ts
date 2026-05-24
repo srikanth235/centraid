@@ -96,6 +96,10 @@ contextBridge.exposeInMainWorld('CentraidTokens', {
   radii: tokens.radii,
   spacing: tokens.spacing,
   themes: tokens.themes,
+  // Ordered list of theme presets the picker renders. Includes label +
+  // kind ('light' | 'dark'); the renderer derives swatch previews from
+  // `themes[name]` so this stays metadata-only.
+  themePresets: [...tokens.THEME_PRESETS],
   // `tileFinish` is pure — exposing the function lets the renderer compute
   // a tile's background/glyph/shadow without duplicating the variant rules
   // in CSS. Functions cross the contextBridge fine when wrapped this way.
