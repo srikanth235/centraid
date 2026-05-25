@@ -207,6 +207,14 @@ export class Runtime {
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
   private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
+  /**
+   * Per-runtime (and therefore per-gateway) window-lock map for the
+   * `(appId, windowId)` chat serialization. Was a module-level map in
+   * `chat-routes.ts` until issue #113 — moved here so two gateways that
+   * happen to share an `appId` (same template installed in two profiles)
+   * don't collide on the same lock key.
+   */
+  private readonly chatWindowLocks = new Map<string, Promise<void>>();
 
   constructor(opts: RuntimeOptions) {
     this.appsDir = opts.appsDir;
@@ -292,6 +300,7 @@ export class Runtime {
       chatStore: this.chatHistoryStore,
       chatRunnerSessionDir: this.chatRunnerSessionDir,
       appMeta: this.appMeta,
+      windowLocks: this.chatWindowLocks,
     };
   }
 

@@ -5337,6 +5337,53 @@ textarea {
   margin-top: 2px;
 }
 
+/* Profile avatar disc — used by the sidebar-head row and switcher popover
+   rows (issue #113). Color comes from the profile's `avatarColor`
+   (inline-styled background); initials read off the displayName. */
+.cd-gw-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  user-select: none;
+  /* Subtle shadow so the disc reads as a tile even when its color is
+     close to the background. */
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+}
+
+/* Color picker row in the add-profile forms. 8 swatches inline; selected
+   one gets a ring. */
+.cd-gw-pop-colors {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+.cd-gw-pop-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  transition: transform 90ms ease-out;
+}
+.cd-gw-pop-swatch:hover {
+  transform: scale(1.08);
+}
+.cd-gw-pop-swatch[data-selected='true'] {
+  box-shadow:
+    0 0 0 2px var(--bg-elev),
+    0 0 0 3.5px var(--ink);
+}
+
 /* Main area on Bold pages */
 .cd-main {
   grid-area: main;

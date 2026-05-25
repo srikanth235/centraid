@@ -44,6 +44,18 @@ export interface CentraidSettings {
   /** User-facing label for the active gateway (shown in the switcher). */
   activeGatewayLabel: string;
   /**
+   * Friendly display name for the active profile (issue #113). Always
+   * populated — falls back to `activeGatewayLabel` when the profile hasn't
+   * set an explicit `displayName`.
+   */
+  activeProfileDisplayName: string;
+  /**
+   * Avatar color for the active profile as `#RRGGBB` (issue #113). Always
+   * populated — defaults to a deterministic palette pick keyed by the
+   * gateway id.
+   */
+  activeProfileAvatarColor: string;
+  /**
    * Effective base URL for the active gateway. Local = the in-process
    * runtime's URL; remote = the active gateway's `profile.url`. Read-only.
    */
@@ -56,11 +68,22 @@ export interface CentraidSettings {
   authImportedAt?: string;
 }
 
-/** Lightweight profile describing one gateway (issue #109). */
+/** Lightweight profile describing one gateway (issue #109, metadata #113). */
 export interface CentraidGatewayProfile {
   id: string;
   kind: 'local' | 'remote';
   label: string;
+  /**
+   * Friendly name for the profile. Read-time defaulted to `label` when not
+   * explicitly set, so the field is always populated on receive.
+   */
+  displayName: string;
+  /**
+   * Avatar color as `#RRGGBB`. Read-time defaulted to a deterministic
+   * palette pick keyed by `id` when not explicitly set, so the field is
+   * always populated on receive.
+   */
+  avatarColor: string;
   /** Defined for remote gateways only. */
   url?: string;
   createdAt: string;
@@ -489,7 +512,13 @@ interface CentraidApi {
    * stored in keychain and is NOT echoed back. The plaintext crosses
    * the bridge exactly once on this call.
    */
-  addGateway(input: { label: string; url: string; token: string }): Promise<CentraidGatewayProfile>;
+  addGateway(input: {
+    label: string;
+    url: string;
+    token: string;
+    displayName?: string;
+    avatarColor?: string;
+  }): Promise<CentraidGatewayProfile>;
   /**
    * Add a new local gateway (workspace). UUID id is minted server-side.
    * The runtime for this gateway is not started until it is activated.
@@ -497,7 +526,11 @@ interface CentraidApi {
    * primordial `'local'` gateway is always present and is not created
    * via this call.
    */
-  addLocalGateway(input: { label: string }): Promise<CentraidGatewayProfile>;
+  addLocalGateway(input: {
+    label: string;
+    displayName?: string;
+    avatarColor?: string;
+  }): Promise<CentraidGatewayProfile>;
   /**
    * Remove a gateway. Refuses to remove the primordial `'local'`
    * gateway; any other local (added via `addLocalGateway`) or remote
@@ -507,6 +540,17 @@ interface CentraidApi {
   removeGateway(input: { id: string }): Promise<{ activeGatewayId: string }>;
   /** Rename a gateway's user-facing label. Id and paths never change. */
   renameGateway(input: { id: string; label: string }): Promise<CentraidGatewayProfile>;
+  /**
+   * Patch profile metadata (`displayName` and/or `avatarColor`). Pass empty
+   * string for `displayName` to reset to label-derived default; pass the
+   * field as `undefined` (omit) to leave it untouched. `avatarColor` must
+   * be a `#RRGGBB` string when provided.
+   */
+  updateProfileMetadata(input: {
+    id: string;
+    displayName?: string;
+    avatarColor?: string;
+  }): Promise<CentraidGatewayProfile>;
   /**
    * Switch the active gateway. The renderer should treat the response
    * as the new authoritative settings and drop gateway-scoped state
@@ -522,6 +566,8 @@ interface CentraidApi {
       activeGatewayId: string;
       activeGatewayKind: 'local' | 'remote';
       activeGatewayLabel: string;
+      activeProfileDisplayName: string;
+      activeProfileAvatarColor: string;
     }) => void,
   ): () => void;
 

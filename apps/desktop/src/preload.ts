@@ -44,6 +44,7 @@ const Channel = {
   GATEWAYS_ADD_LOCAL: 'centraid:gateways:add-local',
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
+  GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
 
@@ -188,13 +189,20 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // the bridge back — they're set when adding a gateway and live in
   // keychain thereafter.
   listGateways: () => ipcRenderer.invoke(Channel.GATEWAYS_LIST),
-  addGateway: (input: { label: string; url: string; token: string }) =>
-    ipcRenderer.invoke(Channel.GATEWAYS_ADD, input),
-  addLocalGateway: (input: { label: string }) =>
+  addGateway: (input: {
+    label: string;
+    url: string;
+    token: string;
+    displayName?: string;
+    avatarColor?: string;
+  }) => ipcRenderer.invoke(Channel.GATEWAYS_ADD, input),
+  addLocalGateway: (input: { label: string; displayName?: string; avatarColor?: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_ADD_LOCAL, input),
   removeGateway: (input: { id: string }) => ipcRenderer.invoke(Channel.GATEWAYS_REMOVE, input),
   renameGateway: (input: { id: string; label: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_RENAME, input),
+  updateProfileMetadata: (input: { id: string; displayName?: string; avatarColor?: string }) =>
+    ipcRenderer.invoke(Channel.GATEWAYS_UPDATE_METADATA, input),
   setActiveGateway: (input: { id: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_SET_ACTIVE, input),
   onGatewayChanged: (
@@ -202,6 +210,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
       activeGatewayId: string;
       activeGatewayKind: 'local' | 'remote';
       activeGatewayLabel: string;
+      activeProfileDisplayName: string;
+      activeProfileAvatarColor: string;
     }) => void,
   ) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
@@ -210,6 +220,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
           activeGatewayId: string;
           activeGatewayKind: 'local' | 'remote';
           activeGatewayLabel: string;
+          activeProfileDisplayName: string;
+          activeProfileAvatarColor: string;
         },
       );
     ipcRenderer.on(Channel.GATEWAY_CHANGED, handler);

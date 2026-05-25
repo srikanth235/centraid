@@ -55,6 +55,18 @@ export interface DesktopSettings extends HarnessConfig {
   activeGatewayKind: 'local' | 'remote';
   /** Derived — the active gateway's user-facing label. */
   activeGatewayLabel: string;
+  /**
+   * Derived — the active profile's friendly name. Per #113, profiles carry
+   * an optional `displayName` that defaults to `label` at read time, so this
+   * field is always populated (often equal to `activeGatewayLabel`).
+   */
+  activeProfileDisplayName: string;
+  /**
+   * Derived — the active profile's avatar color (`#RRGGBB`). Defaults to a
+   * deterministic palette pick keyed by gateway id when the profile hasn't
+   * explicitly set one.
+   */
+  activeProfileAvatarColor: string;
   /** UI prefs (unchanged from earlier shapes). */
   remoteTemplatesUrl?: string;
   chatModel?: string;
@@ -151,6 +163,9 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     activeGatewayId: resolved.profile.id,
     activeGatewayKind: resolved.profile.kind,
     activeGatewayLabel: resolved.profile.label,
+    // `readProfile` thread defaults — these are always populated.
+    activeProfileDisplayName: resolved.profile.displayName ?? resolved.profile.label,
+    activeProfileAvatarColor: resolved.profile.avatarColor ?? '#5B8DEF',
     workspaceDir: resolved.workspaceDir,
     appsDir: resolved.appsDir,
     gatewayUrl: resolved.url,

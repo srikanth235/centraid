@@ -152,6 +152,105 @@ test('runner error becomes an SSE error frame', async () => {
   assert.match(text, /"message":"model went poof"/);
 });
 
+test('windowLocks are per-runtime — two runtimes sharing appId+windowId do not cross-block (#113)', async () => {
+  // Cross-gateway isolation harness. Pre-#113 `windowLocks` was a
+  // module-level Map keyed by `${appId}::${windowId}` with no gateway
+  // scoping; two profiles installing the same template app would share
+  // a single lock and serialise across users. The fix moves the map to
+  // the Runtime instance — this test would have failed before #113.
+  //
+  // Setup: two runtimes A and B, each with their own apps dir + HTTP
+  // server. Both register the same `appId` ('demo') and both receive a
+  // POST with the same `windowId` ('w1'). A's runner blocks on a
+  // promise we control; B's runner resolves immediately. If the locks
+  // were module-shared, B would queue behind A and never complete.
+
+  // -- Setup runtime A: runner hangs on `releaseA`.
+  let releaseA!: () => void;
+  const aDone = new Promise<void>((resolve) => (releaseA = resolve));
+  const runnerA: ChatRunner = {
+    async run(input) {
+      input.onEvent({ type: 'assistant.start' });
+      await aDone;
+      input.onEvent({ type: 'final', text: 'a-final' });
+    },
+  };
+  const workspaceA = await fs.mkdtemp(
+    path.join(os.tmpdir(), `centraid-chat-iso-A-${crypto.randomUUID()}-`),
+  );
+  const runtimeA = new Runtime({ appsDir: workspaceA, chatRunner: runnerA });
+  const serverA = await startRuntimeHttpServer({ runtime: runtimeA });
+  await runtimeA.bootstrap();
+  await runtimeA.registry.ensureUploaded('demo');
+
+  // -- Setup runtime B: runner finishes instantly.
+  const runnerB: ChatRunner = {
+    async run(input) {
+      input.onEvent({ type: 'final', text: 'b-final' });
+    },
+  };
+  const workspaceB = await fs.mkdtemp(
+    path.join(os.tmpdir(), `centraid-chat-iso-B-${crypto.randomUUID()}-`),
+  );
+  const runtimeB = new Runtime({ appsDir: workspaceB, chatRunner: runnerB });
+  const serverB = await startRuntimeHttpServer({ runtime: runtimeB });
+  await runtimeB.bootstrap();
+  await runtimeB.registry.ensureUploaded('demo');
+
+  try {
+    // Fire A first — its runner hangs. Don't await the response.
+    const aResponsePromise = fetch(`${serverA.url}/centraid/demo/_chat`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serverA.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ windowId: 'w1', message: 'a' }),
+    }).then((r) => r.text());
+
+    // Give A's runner a tick to enter the lock + start streaming.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Now fire B with the SAME appId+windowId. If locks are
+    // per-runtime (the fix), this resolves on its own without waiting
+    // for A. If locks are module-shared (the bug), it queues behind A.
+    const bText = await Promise.race([
+      fetch(`${serverB.url}/centraid/demo/_chat`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${serverB.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ windowId: 'w1', message: 'b' }),
+      }).then((r) => r.text()),
+      new Promise<string>((_resolve, reject) =>
+        setTimeout(
+          () => reject(new Error('B timed out — windowLocks leaked across runtimes')),
+          2000,
+        ),
+      ),
+    ]);
+
+    assert.match(bText, /event: final/);
+    assert.match(bText, /"text":"b-final"/);
+
+    // Now release A and confirm it completes too.
+    releaseA();
+    const aText = await aResponsePromise;
+    assert.match(aText, /"text":"a-final"/);
+  } finally {
+    releaseA();
+    await Promise.all([
+      serverA.close().catch(() => undefined),
+      serverB.close().catch(() => undefined),
+    ]);
+    await Promise.all([
+      fs.rm(workspaceA, { recursive: true, force: true }).catch(() => undefined),
+      fs.rm(workspaceB, { recursive: true, force: true }).catch(() => undefined),
+    ]);
+  }
+});
+
 beforeEach(() => {
   // Ensure leftover state from a previous test doesn't bleed in.
   workspace = '';
