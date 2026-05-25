@@ -352,7 +352,15 @@
     apps: SidebarApp[];
     drafts: SidebarApp[];
     /** Active gateway summary — renders the sidebar-head switcher row. */
-    gateway?: { activeId: string; activeKind: 'local' | 'remote'; activeLabel: string };
+    gateway?: {
+      activeId: string;
+      activeKind: 'local' | 'remote';
+      activeLabel: string;
+      /** Friendly name for the active profile (issue #113). */
+      activeDisplayName: string;
+      /** Avatar color (`#RRGGBB`) for the active profile (issue #113). */
+      activeAvatarColor: string;
+    };
     onOpenGatewaySwitcher?: (anchor: MenuAnchor) => void;
     onHome: () => void;
     onNewApp: () => void;
@@ -447,6 +455,36 @@
     });
   }
 
+  // Profile avatar disc — colored circle with 1–2 initials. Used by the
+  // sidebar-head row and the switcher popover rows (issue #113).
+  function profileInitials(name: string): string {
+    const parts = name
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w.length > 0);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) {
+      const w = parts[0] ?? '';
+      return (w.charAt(0) + (w.charAt(1) || '')).toUpperCase();
+    }
+    return ((parts[0]?.charAt(0) ?? '') + (parts[1]?.charAt(0) ?? '')).toUpperCase();
+  }
+  function profileAvatar(displayName: string, avatarColor: string, size = 20): HTMLElement {
+    return el(
+      'span',
+      {
+        class: 'cd-gw-avatar',
+        style: {
+          background: avatarColor,
+          width: `${size}px`,
+          height: `${size}px`,
+        },
+        'aria-hidden': 'true',
+      },
+      profileInitials(displayName),
+    );
+  }
+
   // Section header — uppercase mono-caps label, format "Apps · N" with an
   // optional hover-revealed `+` action button (§G3 / RefinedSidebar).
   function sbSection(label: string, onAction?: () => void): HTMLElement {
@@ -478,17 +516,13 @@
     if (opts.gateway && opts.onOpenGatewaySwitcher) {
       const gw = opts.gateway;
       const openCb = opts.onOpenGatewaySwitcher;
-      const markGlyph = gw.activeKind === 'local' ? Glyph.gatewayLocal() : Glyph.gatewayRemote();
       const kindLabel = gw.activeKind === 'local' ? 'LOCAL' : 'REMOTE';
-      // The kind mark sits in a dedicated icon slot, sized like an app
-      // icon tile so it lines up with the rows below it. Tone matches
-      // the gateway kind — success-green for local (an embedded thing
-      // on your machine), accent for remote (an outbound connection).
-      const mark = el('span', {
-        class: 'cd-sb-gw-mark',
-        'data-kind': gw.activeKind,
-        trustedHtml: markGlyph,
-      });
+      // The profile avatar sits in the icon slot, sized like an app
+      // icon tile so it lines up with the rows below it. Color comes
+      // from the profile's avatarColor (issue #113); kind classification
+      // is preserved in the trailing pill so the user can still tell
+      // local from remote at a glance.
+      const avatar = profileAvatar(gw.activeDisplayName, gw.activeAvatarColor, 20);
       const kindPill = el(
         'span',
         { class: 'cd-status cd-sb-gw-kind', 'data-kind': gw.activeKind },
@@ -498,14 +532,14 @@
         class: 'cd-sb-item cd-sb-gw-row',
         type: 'button',
         'aria-haspopup': 'menu',
-        'aria-label': `Active gateway: ${gw.activeLabel}. Click to switch.`,
+        'aria-label': `Active profile: ${gw.activeDisplayName}. Click to switch.`,
         onClick: (e: Event) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           openCb({ kind: 'rect', rect: r });
         },
       });
-      row.append(mark);
-      row.append(el('span', { class: 'cd-sb-label' }, gw.activeLabel));
+      row.append(avatar);
+      row.append(el('span', { class: 'cd-sb-label' }, gw.activeDisplayName));
       row.append(kindPill);
       row.append(el('span', { class: 'cd-sb-meta', trustedHtml: Glyph.chevronDown(11) }));
       wrap.append(row);
@@ -645,14 +679,33 @@
   // session without losing context.
   type SwitcherOpts = {
     anchor: MenuAnchor;
-    profiles: Array<{ id: string; kind: 'local' | 'remote'; label: string; url?: string }>;
+    profiles: Array<{
+      id: string;
+      kind: 'local' | 'remote';
+      label: string;
+      /** Friendly name (issue #113). Always populated. */
+      displayName: string;
+      /** `#RRGGBB` avatar color (issue #113). Always populated. */
+      avatarColor: string;
+      url?: string;
+    }>;
     activeId: string;
     primordialLocalId: string;
     onActivate: (id: string) => Promise<void> | void;
     onRename: (id: string, nextLabel: string) => Promise<void> | void;
     onRemove: (id: string) => Promise<void> | void;
-    onAddLocal: (label: string) => Promise<void> | void;
-    onAddRemote: (input: { label: string; url: string; token: string }) => Promise<void> | void;
+    onAddLocal: (input: {
+      label: string;
+      displayName?: string;
+      avatarColor?: string;
+    }) => Promise<void> | void;
+    onAddRemote: (input: {
+      label: string;
+      url: string;
+      token: string;
+      displayName?: string;
+      avatarColor?: string;
+    }) => Promise<void> | void;
   };
 
   function openGatewaySwitcher(opts: SwitcherOpts): { close: () => void } {
@@ -701,7 +754,7 @@
         const addBtn = el('button', {
           class: 'cd-sb-section-btn cd-gw-pop-add',
           type: 'button',
-          'aria-label': kind === 'local' ? 'New local workspace' : 'Add remote gateway',
+          'aria-label': kind === 'local' ? 'Add local profile' : 'Add remote profile',
           trustedHtml: Glyph.plus(11),
           onClick: () => renderBody({ mode: kind === 'local' ? 'addLocal' : 'addRemote' }),
         });
@@ -713,7 +766,7 @@
         if (items.length === 0) {
           popover.append(
             el('div', { class: 'cd-gw-pop-empty' }, [
-              kind === 'local' ? 'No additional workspaces' : 'No remote gateways yet',
+              kind === 'local' ? 'No additional profiles' : 'No remote profiles yet',
             ]),
           );
           return;
@@ -726,12 +779,10 @@
       const renderProfileRow = (p: SwitcherOpts['profiles'][number]): HTMLElement => {
         const isActive = p.id === opts.activeId;
         const isPrimordial = p.id === opts.primordialLocalId;
-        const mark = el('span', {
-          class: 'cd-sb-gw-mark cd-gw-pop-mark',
-          'data-kind': p.kind,
-          trustedHtml: p.kind === 'local' ? Glyph.gatewayLocal() : Glyph.gatewayRemote(),
-        });
-        const label = el('span', { class: 'cd-sb-label cd-gw-pop-label' }, p.label);
+        // Avatar disc — same shape as the sidebar-head row, sized smaller
+        // to match the popover's tighter rhythm.
+        const mark = profileAvatar(p.displayName, p.avatarColor, 18);
+        const label = el('span', { class: 'cd-sb-label cd-gw-pop-label' }, p.displayName);
         const row = el('div', {
           class: 'cd-sb-item cd-gw-pop-row',
           'data-active': isActive ? 'true' : undefined,
@@ -777,12 +828,13 @@
           trustedHtml: Glyph.pencil(13),
           onClick: (e: Event) => {
             e.stopPropagation();
-            // Inline rename: replace the label span with an input.
-            // Save on Enter / blur; cancel on Escape.
+            // Inline rename: replace the displayName span with an input.
+            // Save on Enter / blur; cancel on Escape. Edits `displayName`
+            // (the user-visible name), not the technical `label`.
             const input = el('input', {
               class: 'input cd-gw-pop-rename',
               type: 'text',
-              value: p.label,
+              value: p.displayName,
             }) as HTMLInputElement;
             label.replaceWith(input);
             input.focus();
@@ -793,7 +845,7 @@
               if (committed) return;
               committed = true;
               const next = input.value.trim();
-              if (save && next && next !== p.label) {
+              if (save && next && next !== p.displayName) {
                 await opts.onRename(p.id, next);
                 // Caller will re-list and re-open with fresh data; for
                 // now just close and let the renderer drive.
@@ -828,8 +880,8 @@
               e.stopPropagation();
               const prompt =
                 p.kind === 'local'
-                  ? `Remove local workspace "${p.label}"? Its apps and history will be deleted.`
-                  : `Remove gateway "${p.label}"? Its workspace will be deleted.`;
+                  ? `Remove profile "${p.displayName}"? Its apps and history will be deleted.`
+                  : `Remove profile "${p.displayName}"? Its workspace will be deleted.`;
               if (!confirm(prompt)) return;
               void Promise.resolve(opts.onRemove(p.id)).then(close);
             },
@@ -854,25 +906,74 @@
       }
     };
 
+    // 8-swatch color picker matching the gateway-store palette (issue
+    // #113). Returns the swatch row + a getter for the picked color.
+    const AVATAR_PALETTE = [
+      '#5B8DEF',
+      '#7C5CFF',
+      '#E36AD2',
+      '#E5734A',
+      '#E0B53D',
+      '#4FB077',
+      '#3FB5C7',
+      '#B07A4A',
+    ];
+    const buildColorPicker = (initial: string): { node: HTMLElement; get: () => string } => {
+      let selected = initial;
+      const row = el('div', { class: 'cd-gw-pop-colors' });
+      const swatches: HTMLElement[] = [];
+      const apply = (): void => {
+        for (const sw of swatches) {
+          sw.dataset.selected = sw.dataset.color === selected ? 'true' : 'false';
+        }
+      };
+      for (const c of AVATAR_PALETTE) {
+        const sw = el('button', {
+          class: 'cd-gw-pop-swatch',
+          type: 'button',
+          'aria-label': `Color ${c}`,
+          'data-color': c,
+          style: { background: c },
+          onClick: (e: Event) => {
+            e.preventDefault();
+            selected = c;
+            apply();
+          },
+        });
+        swatches.push(sw);
+        row.append(sw);
+      }
+      apply();
+      return { node: row, get: () => selected };
+    };
+
     const addLocalForm = (): HTMLElement => {
       const wrap = el('div', { class: 'cd-gw-pop-form' });
       wrap.append(
         el('div', { class: 'cd-sb-section cd-gw-pop-section cd-gw-pop-section--form' }, [
-          el('span', {}, 'NEW LOCAL WORKSPACE'),
+          el('span', {}, 'NEW LOCAL PROFILE'),
         ]),
       );
       const name = el('input', {
         class: 'input cd-gw-pop-input',
         type: 'text',
-        placeholder: 'Workspace name',
+        placeholder: 'Profile name',
       }) as HTMLInputElement;
+      // Default to a palette pick keyed off a random seed so two adds in
+      // a row don't both start on the same swatch. Final value is read
+      // on submit so the user can change it freely.
+      const seed = Math.random().toString(36).slice(2, 10);
+      const initialColor =
+        AVATAR_PALETTE[Math.floor(Math.random() * AVATAR_PALETTE.length)] ?? AVATAR_PALETTE[0]!;
+      void seed;
+      const picker = buildColorPicker(initialColor);
       const submit = async (): Promise<void> => {
         const label = name.value.trim();
         if (!label) {
           name.focus();
           return;
         }
-        await opts.onAddLocal(label);
+        await opts.onAddLocal({ label, avatarColor: picker.get() });
         close();
       };
       name.addEventListener('keydown', (ev) => {
@@ -885,6 +986,7 @@
         }
       });
       wrap.append(name);
+      wrap.append(picker.node);
       wrap.append(
         el('div', { class: 'cd-gw-pop-form-actions' }, [
           el(
@@ -915,13 +1017,13 @@
       const wrap = el('div', { class: 'cd-gw-pop-form' });
       wrap.append(
         el('div', { class: 'cd-sb-section cd-gw-pop-section cd-gw-pop-section--form' }, [
-          el('span', {}, 'ADD REMOTE GATEWAY'),
+          el('span', {}, 'ADD REMOTE PROFILE'),
         ]),
       );
       const label = el('input', {
         class: 'input cd-gw-pop-input',
         type: 'text',
-        placeholder: 'Label (e.g. Centraid Cloud)',
+        placeholder: 'Profile name (e.g. Centraid Cloud)',
       }) as HTMLInputElement;
       const url = el('input', {
         class: 'input cd-gw-pop-input',
@@ -933,6 +1035,9 @@
         type: 'password',
         placeholder: 'Bearer token (optional)',
       }) as HTMLInputElement;
+      const initialColor =
+        AVATAR_PALETTE[Math.floor(Math.random() * AVATAR_PALETTE.length)] ?? AVATAR_PALETTE[0]!;
+      const picker = buildColorPicker(initialColor);
       const submit = async (): Promise<void> => {
         const l = label.value.trim();
         const u = url.value.trim();
@@ -940,7 +1045,12 @@
           (!l ? label : url).focus();
           return;
         }
-        await opts.onAddRemote({ label: l, url: u, token: token.value });
+        await opts.onAddRemote({
+          label: l,
+          url: u,
+          token: token.value,
+          avatarColor: picker.get(),
+        });
         close();
       };
       const onKeyForm = (ev: KeyboardEvent): void => {
@@ -956,6 +1066,7 @@
       url.addEventListener('keydown', onKeyForm);
       token.addEventListener('keydown', onKeyForm);
       wrap.append(label, url, token);
+      wrap.append(picker.node);
       wrap.append(
         el('div', { class: 'cd-gw-pop-form-actions' }, [
           el(

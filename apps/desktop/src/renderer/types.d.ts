@@ -251,6 +251,10 @@ declare global {
     activeId: string;
     activeKind: 'local' | 'remote';
     activeLabel: string;
+    /** Friendly name for the active profile (issue #113). */
+    activeDisplayName: string;
+    /** Avatar color (`#RRGGBB`) for the active profile (issue #113). */
+    activeAvatarColor: string;
   }
 
   interface ChromeBuildSidebarOpts {
@@ -299,6 +303,10 @@ declare global {
     id: string;
     kind: 'local' | 'remote';
     label: string;
+    /** Friendly name (issue #113). Always populated. */
+    displayName: string;
+    /** `#RRGGBB` avatar color (issue #113). Always populated. */
+    avatarColor: string;
     url?: string;
   }
 
@@ -310,10 +318,25 @@ declare global {
      *  button on that profile so the row reads as immutable. */
     primordialLocalId: string;
     onActivate: (id: string) => Promise<void> | void;
-    onRename: (id: string, nextLabel: string) => Promise<void> | void;
+    /**
+     * Rename — edits the user-visible `displayName`, not the technical
+     * `label` (which is the immutable creation-time string used as a
+     * fallback when displayName isn't set).
+     */
+    onRename: (id: string, nextDisplayName: string) => Promise<void> | void;
     onRemove: (id: string) => Promise<void> | void;
-    onAddLocal: (label: string) => Promise<void> | void;
-    onAddRemote: (input: { label: string; url: string; token: string }) => Promise<void> | void;
+    onAddLocal: (input: {
+      label: string;
+      displayName?: string;
+      avatarColor?: string;
+    }) => Promise<void> | void;
+    onAddRemote: (input: {
+      label: string;
+      url: string;
+      token: string;
+      displayName?: string;
+      avatarColor?: string;
+    }) => Promise<void> | void;
   }
 
   interface ChromeApi {

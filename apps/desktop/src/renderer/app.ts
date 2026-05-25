@@ -339,7 +339,13 @@
   // Refreshed on boot, on `onGatewayChanged`, and whenever the
   // switcher mutates state (add / rename / remove / activate).
   let currentGateway:
-    | { activeId: string; activeKind: 'local' | 'remote'; activeLabel: string }
+    | {
+        activeId: string;
+        activeKind: 'local' | 'remote';
+        activeLabel: string;
+        activeDisplayName: string;
+        activeAvatarColor: string;
+      }
     | undefined;
   function refreshRuntimeMode(): Promise<void> {
     return window.CentraidApi.getSettings()
@@ -349,6 +355,8 @@
           activeId: s.activeGatewayId,
           activeKind: s.activeGatewayKind,
           activeLabel: s.activeGatewayLabel,
+          activeDisplayName: s.activeProfileDisplayName,
+          activeAvatarColor: s.activeProfileAvatarColor,
         };
       })
       .catch(() => {
@@ -542,6 +550,8 @@
         id: p.id,
         kind: p.kind,
         label: p.label,
+        displayName: p.displayName,
+        avatarColor: p.avatarColor,
         ...(p.url !== undefined ? { url: p.url } : {}),
       })),
       activeId: settings.activeGatewayId,
@@ -553,20 +563,26 @@
         if (id === settings.activeGatewayId) return;
         try {
           await window.CentraidApi.setActiveGateway({ id });
-          showToast(`Switched to ${profiles.find((p) => p.id === id)?.label ?? id}`);
+          showToast(`Switched to ${profiles.find((p) => p.id === id)?.displayName ?? id}`);
           // The main process broadcasts onGatewayChanged after this
           // resolves, which triggers a refresh + re-render path.
         } catch (err) {
           showToast(`Switch failed: ${String(err)}`);
         }
       },
-      onRename: async (id, nextLabel) => {
+      onRename: async (id, nextDisplayName) => {
         try {
-          await window.CentraidApi.renameGateway({ id, label: nextLabel });
+          // Issue #113: the popover's "rename" input edits the
+          // user-visible `displayName`, not the technical `label`. Going
+          // through updateProfileMetadata keeps `label` stable while the
+          // user-facing identity changes. Renaming the active profile
+          // re-broadcasts gateway-changed via the IPC; the sidebar head
+          // row picks up the new name on the next render.
+          await window.CentraidApi.updateProfileMetadata({
+            id,
+            displayName: nextDisplayName,
+          });
           showToast('Renamed');
-          // Refresh the cached gateway label if the active one was
-          // renamed; sidebar will re-pick it up on the next render
-          // (which the broadcast will trigger).
           if (id === settings.activeGatewayId) {
             await refreshRuntimeMode();
             await reRenderShellForRoute();
@@ -578,15 +594,15 @@
       onRemove: async (id) => {
         try {
           await window.CentraidApi.removeGateway({ id });
-          showToast('Gateway removed');
+          showToast('Profile removed');
         } catch (err) {
           showToast(`Remove failed: ${String(err)}`);
         }
       },
-      onAddLocal: async (label) => {
+      onAddLocal: async (input) => {
         try {
-          const profile = await window.CentraidApi.addLocalGateway({ label });
-          showToast(`Local workspace "${profile.label}" created`);
+          const profile = await window.CentraidApi.addLocalGateway(input);
+          showToast(`Profile "${profile.displayName}" created`);
           // Don't auto-activate — the user might want to add several
           // workspaces and pick one explicitly. The popover closes
           // (the chrome.ts close() is called by the form submit), and
@@ -602,7 +618,7 @@
         }
         try {
           await window.CentraidApi.addGateway(input);
-          showToast(`Gateway "${input.label}" added`);
+          showToast(`Profile "${input.label}" added`);
         } catch (err) {
           showToast(`Add failed: ${String(err)}`);
         }
@@ -6004,8 +6020,8 @@
     void refreshKeyStatus();
     void refreshProviderStatus();
 
-    // Gateways panel — the full switcher lives in the sidebar head
-    // row (⌘⇧G or click the active gateway). This Settings entry is a
+    // Profiles panel — the full switcher lives in the sidebar head
+    // row (⌘⇧G or click the active profile). This Settings entry is a
     // tiny deep-link so the affordance is discoverable from the
     // Settings surface without forking the lifecycle UI in two places.
     const manageGatewaysBtn = el(
@@ -6020,15 +6036,15 @@
           void openGatewaySwitcher(anchor);
         },
       },
-      'Open gateway switcher',
+      'Open profile switcher',
     );
 
     pageHosts.runtime.append(
-      drawerGroup('Gateways', [
+      drawerGroup('Profiles', [
         el(
           'div',
           { class: 'settings-note' },
-          'The active gateway is shown at the top of the sidebar. Click it (or press ⌘⇧G) to switch, add a workspace, or connect a remote gateway.',
+          'The active profile is shown at the top of the sidebar. Click it (or press ⌘⇧G) to switch, add a local profile, or connect a remote gateway.',
         ),
         el('div', { class: 'sheet-actions' }, [manageGatewaysBtn]),
       ]),

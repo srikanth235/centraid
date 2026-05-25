@@ -35,11 +35,11 @@ without any code that touches the file in place.
 - [x] Read-time defaults so existing profiles round-trip
 - [x] `updateProfileMetadata` IPC + preload + API decl
 - [x] `addLocalGateway` / `addGateway` accept optional metadata
-- [ ] Sidebar-head row renders avatar disc + displayName
-- [ ] Switcher popover rows render avatar disc + displayName
-- [ ] Add-profile form has a color picker (8 swatches)
-- [ ] Inline rename edits `displayName`, not `label`
-- [ ] UX rename pass: gateway → profile in user-facing strings
+- [x] Sidebar-head row renders avatar disc + displayName
+- [x] Switcher popover rows render avatar disc + displayName
+- [x] Add-profile form has a color picker (8 swatches)
+- [x] Inline rename edits `displayName`, not `label`
+- [x] UX rename pass: gateway → profile in user-facing strings
 
 ## What changed
 
@@ -162,6 +162,82 @@ populate them); `addGateway` / `addLocalGateway` /
 `updateProfileMetadata` shapes added; `onGatewayChanged` payload
 shape updated.
 
+### Sidebar-head row renders avatar disc + displayName
+
+`apps/desktop/src/renderer/chrome.ts` — new `profileAvatar(displayName,
+avatarColor, size)` helper draws a colored disc with 1–2 initials
+from the display name. Replaces `Glyph.gatewayLocal()` /
+`Glyph.gatewayRemote()` in the sidebar-head row. Kind classification
+(local vs remote) is preserved in the trailing `kindPill` so the
+user still has a kind affordance — it just moves from icon to text.
+`SidebarOpts.gateway` extended with `activeDisplayName` +
+`activeAvatarColor`; the app.ts `currentGateway` cache reads them
+off `getSettings()`'s new derived fields.
+
+`apps/desktop/src/renderer/styles.css` — new `.cd-gw-avatar` rule:
+flex inline disc, inline-styled background from `avatarColor`,
+white-on-color initials at ~50% font size, subtle inset shadow so
+the disc reads as a tile even when the color is close to the
+background.
+
+### Switcher popover rows render avatar disc + displayName
+
+Same `profileAvatar` helper is reused in the popover at 18px (vs
+20px in the sidebar). Each row's label span renders
+`p.displayName`, not `p.label`. `SwitcherOpts.profiles[number]`
+grows `displayName` + `avatarColor`; app.ts maps both off
+`CentraidGatewayProfile`. Empty-state copy renames from
+"workspaces"/"remote gateways yet" to "profiles".
+
+### Add-profile form has a color picker (8 swatches)
+
+`buildColorPicker(initial)` factory shared between the add-local
+and add-remote forms — emits a row of 8 round swatches matching
+the gateway-store palette. Initial selection is randomised so two
+adds in a row don't both start on the same color. Selected swatch
+gets a 2px ring (drawn via `box-shadow`) and a slight scale on
+hover. The submit handler reads the current pick and threads it
+into the new `onAddLocal({ label, avatarColor })` /
+`onAddRemote({ label, url, token, avatarColor })` signatures.
+CSS: `.cd-gw-pop-colors` row + `.cd-gw-pop-swatch` disc.
+
+### Inline rename edits `displayName`, not `label`
+
+The switcher's inline rename input now displays + edits
+`p.displayName` (the user-visible name). `onRename` callback's
+parameter renamed `nextDisplayName`; app.ts wires it to
+`updateProfileMetadata({ id, displayName })` instead of
+`renameGateway({ id, label })`. The technical `label` is treated
+as a stable creation-time string post-create — users only ever
+see/edit `displayName`. `ChromeGatewaySwitcherOpts` in
+`types.d.ts` updated to match.
+
+### UX rename pass: gateway → profile in user-facing strings
+
+Code identifiers stay (`gatewayId`, `GatewayProfile`, `gateways:add`
+IPC, `cd-sb-gw-row` CSS class…). User-facing strings only:
+
+- Sidebar-head aria-label: "Active gateway:" → "Active profile:".
+- Switcher "+" aria-labels: "New local workspace" → "Add local
+  profile", "Add remote gateway" → "Add remote profile".
+- Form headers: "NEW LOCAL WORKSPACE" → "NEW LOCAL PROFILE", "ADD
+  REMOTE GATEWAY" → "ADD REMOTE PROFILE".
+- Placeholders: "Workspace name" / "Label (e.g. Centraid Cloud)" →
+  "Profile name" / "Profile name (e.g. Centraid Cloud)".
+- Empty state: "No additional workspaces" / "No remote gateways yet"
+  → "No additional profiles" / "No remote profiles yet".
+- Remove-confirm: "Remove local workspace …" / "Remove gateway …" →
+  "Remove profile …".
+- Toasts: "Local workspace X created" / "Gateway X added" / "Gateway
+  removed" / "Switched to <label>" → "Profile X created" / "Profile
+  X added" / "Profile removed" / "Switched to <displayName>".
+- Settings panel: `drawerGroup('Gateways', …)` → "Profiles"; button
+  "Open gateway switcher" → "Open profile switcher"; note copy
+  rewritten.
+- `gateway-store.ts` error message: "The primordial local gateway
+  cannot be removed." → "The default local profile cannot be
+  removed."
+
 ## Out of scope
 
 - Concurrent foreground local runtimes. Today: sequential
@@ -184,3 +260,8 @@ shape updated.
 - Reverted the windowLocks fix locally to confirm the test catches
   the regression: failed with "B timed out — windowLocks leaked
   across runtimes". Restored, all tests pass again.
+- `bun run --cwd apps/desktop typecheck` → clean across all three
+  commits in this series.
+- `bun run test` (turbo) → 6 packages pass; the 12 pre-existing
+  agent-runtime failures reproduce on `origin/main` and are
+  unrelated to #113.
