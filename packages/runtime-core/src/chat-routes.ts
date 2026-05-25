@@ -71,6 +71,14 @@ export interface ChatRouteContext {
    * committed version).
    */
   appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
+  /**
+   * Per-runtime window-lock map. The `Runtime` instance owns one of these
+   * and threads it in here so the `(appId, windowId)` serialization map is
+   * scoped to one gateway. A module-level map would silently collide across
+   * gateways that share an appId — two profiles can both install the same
+   * template and end up with the same id.
+   */
+  windowLocks: Map<string, Promise<void>>;
 }
 
 export type ParsedChatRoute = { kind: 'post'; appId: string };
@@ -95,14 +103,18 @@ export function parseChatSubRoute(
   return undefined;
 }
 
-const windowLocks = new Map<string, Promise<void>>();
-
 /**
  * Serialize work on `(appId, windowId)` so a second POST queues behind the
  * first. The route handler awaits the previous tail before scheduling its
  * own. The lock entry is cleared lazily once the current task settles.
+ *
+ * The lock map is per-runtime — held on the `Runtime` instance and threaded
+ * through `ChatRouteContext`. A module-level map would collide across
+ * gateways that share an `appId` (two profiles can install the same
+ * template). See issue #113.
  */
 async function withWindowLock<T>(
+  windowLocks: Map<string, Promise<void>>,
   appId: string,
   windowId: string,
   fn: () => Promise<T>,
@@ -353,7 +365,7 @@ async function handlePostTurn(
     ...(prevAdapterKind ? { prevAdapterKind } : {}),
   };
 
-  await withWindowLock(entry.id, windowId, async () => {
+  await withWindowLock(ctx.windowLocks, entry.id, windowId, async () => {
     let runResult: { adapterSessionId?: string; adapterKind?: string } | undefined;
     try {
       const out = await ctx.runner!.run(input);

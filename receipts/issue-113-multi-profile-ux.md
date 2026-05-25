@@ -1,0 +1,128 @@
+# issue-113 — Multi-profile UX: per-profile display name + avatar, cross-singleton audit, isolation harness
+
+GitHub issue: [#113](https://github.com/srikanth235/centraid/issues/113)
+
+Follow-up to #111+#112. Those issues shipped multi-local-gateway
+plumbing (1:1:1 mapping between desktop profile.json, gateway tree,
+and the gateway DB's `users` row) and a sidebar-head switcher. #113
+finishes the multi-profile framing: profiles gain user-visible
+metadata (`displayName`, `avatarColor`), the switcher renders an
+avatar disc instead of a kind glyph, user-facing strings rename from
+"gateway" to "profile", a cross-singleton audit covers the rest of
+`runtime-core` for the same shape of bug that #111 caught in the
+analytics-provider cache, and an isolation test harness locks the
+audit in.
+
+The audit found one definite leak: `chat-routes.ts` held a
+module-level `windowLocks` Map keyed by `${appId}::${windowId}` with
+no gateway scoping. Two profiles installing the same template app
+would have collided on the same lock and serialised across users.
+The map is now owned by the `Runtime` instance and threaded through
+`ChatRouteContext`, which makes the scoping per-gateway by
+construction.
+
+v0 simplification per the user's note: no profile.json migration —
+fields default at read time (`displayName ??= label`, `avatarColor ??=`
+deterministic palette pick by id) so existing profiles round-trip
+without any code that touches the file in place.
+
+## Checklist
+
+- [x] Cross-singleton audit of `runtime-core` + `openclaw-plugin`
+- [x] Fix `windowLocks` cross-gateway leak in `chat-routes.ts`
+- [x] Cross-runtime isolation test harness — would fail before #113
+- [ ] `displayName` + `avatarColor` fields on `GatewayProfile`
+- [ ] Read-time defaults so existing profiles round-trip
+- [ ] `updateProfileMetadata` IPC + preload + API decl
+- [ ] `addLocalGateway` / `addGateway` accept optional metadata
+- [ ] Sidebar-head row renders avatar disc + displayName
+- [ ] Switcher popover rows render avatar disc + displayName
+- [ ] Add-profile form has a color picker (8 swatches)
+- [ ] Inline rename edits `displayName`, not `label`
+- [ ] UX rename pass: gateway → profile in user-facing strings
+
+## What changed
+
+### Cross-singleton audit of `runtime-core` + `openclaw-plugin`
+
+Swept `packages/runtime-core/src/` and `packages/openclaw-plugin/src/`
+for module-level state that survives a gateway switch. Categories
+checked: caches (`Map<string, …>` at module scope), prepared-statement
+holders, change buses, codex-home env mutations, in-memory registries.
+
+Findings:
+
+- **Leak:** `chat-routes.ts:98` — `const windowLocks = new Map<…>()`
+  at module scope. Keyed by `${appId}::${windowId}` with no gateway
+  scoping. Two profiles installing the same template app
+  (same `appId`) would share a single lock and serialise chat
+  turns across profiles. Fixed (see below).
+- **Safe (immutable constants):** `automation-manifest-output.ts`
+  (`ALLOWED_PROP_TYPES`), `run-query.ts` (`READ_KEYWORDS`),
+  `security.ts` (`STATIC_EXT_ALLOWLIST`, `RESERVED_FILENAMES`,
+  `RESERVED_DIRS`), `upload.ts` (`UPLOAD_EXT_ALLOWLIST`,
+  `FORBIDDEN_FILES`) — all `const … = new Set([…])` with no gateway
+  state.
+- **Safe (validator cache):** `manifest.ts:185, 199` — `let sharedAjv`
+  / `let manifestValidator`. The Ajv validator caches compiled
+  schemas, which are gateway-agnostic.
+- **Safe (per-instance):** `change-bus.ts:67` listeners,
+  `chat-history.ts:135` per-app cache, `registry.ts:16` cache,
+  `user-store.ts:47-48` lazy db handle, `upload-lock.ts` closure
+  via `runtime.ts:225` constructor — all instance-level on
+  `Runtime` / `Registry` / `ChatHistoryStore` / `UserStore` /
+  `ChangeBus`, which are constructed once per gateway.
+- **Safe (gateway-keyed):** `automations-host.ts` worker map keyed
+  by `(gatewayId, automationId)`, `gateway-store.ts:83`
+  `localRuntimeInfo` closure keyed by gatewayId.
+
+Only the chat-routes leak warranted a fix.
+
+### Fix `windowLocks` cross-gateway leak in `chat-routes.ts`
+
+`packages/runtime-core/src/chat-routes.ts` — drop the module-level
+`windowLocks` Map; `withWindowLock` now takes the map as a
+parameter. `ChatRouteContext` grows a `windowLocks: Map<…>` field
+that the call site reads (`handlePostTurn` passes `ctx.windowLocks`).
+
+`packages/runtime-core/src/runtime.ts` — `Runtime` owns
+`private readonly chatWindowLocks: Map<string, Promise<void>>` and
+threads it into `chatRouteContext()`. Per-instance = per-gateway by
+construction.
+
+### Cross-runtime isolation test harness — would fail before #113
+
+`packages/runtime-core/src/chat-routes.test.ts` — new test:
+*"windowLocks are per-runtime — two runtimes sharing appId+windowId
+do not cross-block (#113)"*. Spins up two `Runtime`s, A and B, each
+with their own HTTP server and apps dir. A's chat runner hangs on a
+controlled promise; B's resolves instantly. Both register the same
+`appId` ('demo') and receive a POST with the same `windowId` ('w1').
+B's response is awaited with a 2s timeout — pre-#113 the module-level
+map would queue B behind A and the timeout fires; post-#113 the
+locks are per-runtime and B completes immediately. Verified by
+temporarily reverting the fix on this branch — the test failed with
+exactly the expected error message.
+
+## Out of scope
+
+- Concurrent foreground local runtimes. Today: sequential
+  (`shutdownAllLocalRuntimesExcept` runs on switch). Automations
+  keep firing via the OS scheduler regardless — that's enough for v0.
+- Crash isolation via child-process-per-runtime.
+- `display_name` column on the gateway DB's `users` table. v0 keeps
+  displayName in `profile.json` only — no migration, runtime never
+  needs the name.
+- profile.json migration. v0, read-time defaults handle the existing
+  shape transparently.
+- Sharing apps across profiles. Each profile has its own apps tree;
+  installing the same template into two profiles produces two
+  unrelated copies.
+
+## Verification
+
+- `bun run --cwd packages/runtime-core test` → 330/330 pass (the new
+  isolation test is #35).
+- Reverted the windowLocks fix locally to confirm the test catches
+  the regression: failed with "B timed out — windowLocks leaked
+  across runtimes". Restored, all tests pass again.
