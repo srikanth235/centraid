@@ -66,6 +66,12 @@ export interface CentraidSettings {
   chatModel?: string;
   /** ISO timestamp of the last Claude Code / Codex credential import. */
   authImportedAt?: string;
+  /**
+   * ISO timestamp the user finished first-run onboarding. Absent on a
+   * fresh install — the renderer gates on this to show the welcome /
+   * profile-setup view before mounting home.
+   */
+  onboardingCompletedAt?: string;
 }
 
 /** Lightweight profile describing one gateway (issue #109, metadata #113). */
@@ -551,6 +557,16 @@ interface CentraidApi {
     displayName?: string;
     avatarColor?: string;
   }): Promise<CentraidGatewayProfile>;
+  /**
+   * Rotate a remote gateway's keychain-stored bearer token. The
+   * plaintext crosses the bridge exactly once on this call (mirroring
+   * `addGateway`) and never returns. Pass an empty string to clear.
+   * No-op for the primordial local gateway (its token is minted per
+   * launch by the in-process runtime). When the rotated profile is
+   * the active one the main process drops its HTTP-client auth caches
+   * before resolving so subsequent IPCs see the new token.
+   */
+  updateGatewayToken(input: { id: string; token: string }): Promise<{ ok: true }>;
   /**
    * Switch the active gateway. The renderer should treat the response
    * as the new authoritative settings and drop gateway-scoped state

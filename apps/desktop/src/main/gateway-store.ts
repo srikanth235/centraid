@@ -141,13 +141,27 @@ export function setLocalRuntimeInfoProvider(
   localRuntimeInfo = fn;
 }
 
-/** Default label written into a freshly-created local profile. */
-const DEFAULT_LOCAL_LABEL = 'My computer';
+/**
+ * Technical fallback label for the auto-created local profile. Not
+ * user-facing in normal flow — the renderer gates first launch behind
+ * an onboarding view that asks the user to pick their own
+ * `displayName`. This label only surfaces if onboarding is somehow
+ * bypassed; keeping it terse + neutral so even that degenerate case
+ * reads as "system default", not a presumed name.
+ */
+const DEFAULT_LOCAL_LABEL = 'Local';
 
 /**
  * Ensure the `gateways/local/` dir and its `profile.json` exist. Safe
  * to call on every boot — no-op when already present. Returns the
  * persisted profile.
+ *
+ * Crucially, the auto-created profile carries NO `displayName` — the
+ * field stays unset on disk so the renderer can detect "user has not
+ * personalized this profile yet" and route to onboarding. `readProfile`
+ * still threads a default displayName at read time (falls back to
+ * `label`) so callers always see a populated string, but the on-disk
+ * absence is the signal the onboarding flow keys on.
  */
 export async function ensureLocalGateway(): Promise<GatewayProfile> {
   const dir = gatewayDir(LOCAL_GATEWAY_ID);
@@ -169,10 +183,12 @@ export async function ensureLocalGateway(): Promise<GatewayProfile> {
 /**
  * Read a profile from disk. Undefined when the file doesn't exist.
  *
- * Read-time defaults: `displayName` falls back to `label`, `avatarColor`
- * falls back to a deterministic palette pick from the id. v0 doesn't
- * migrate older profile.json files — we just thread defaults so callers
- * always see populated fields.
+ * Read-time defaults: `displayName` falls back to `label` (handles the
+ * primordial-local case where `ensureLocalGateway` writes the profile
+ * without a displayName so the onboarding flow can detect "user has
+ * not personalized this yet"), and `avatarColor` falls back to a
+ * deterministic palette pick from the id. Callers always see
+ * populated fields.
  */
 async function readProfile(id: string): Promise<GatewayProfile | undefined> {
   try {

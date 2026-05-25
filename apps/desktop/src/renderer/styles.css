@@ -5106,66 +5106,18 @@ textarea {
 }
 
 /* ── Sidebar-head gateway switcher ─────────────────────────────────
-   The active-gateway row sits above "Build new" because gateway is
-   the meta-context every other entry operates under. It reuses the
-   `cd-sb-item` shape so it doesn't introduce a foreign affordance —
-   only the kind mark, the trailing kind pill, and the chevron-down
-   meta distinguish it from a page row. A hairline divider below it
-   separates gateway-scope from page-scope (Build new / Search /
-   Pages / Apps / …). */
-.cd-sb-gw-row {
-  /* Mute the hover-active feedback a touch — this is a context
-     selector, not a navigation destination; subtle reads as "you're
-     here" rather than "click me". */
-}
+   v2 (Notion/Linear-inspired): the head row is just `[avatar] Name ▾`.
+   No mono-caps LOCAL/REMOTE pill — the kind moves into the popover's
+   secondary line per row instead of competing with the displayName
+   at the top of the sidebar. A hairline divider below it separates
+   gateway-scope from page-scope (Build new / Search / Pages / …). */
 .cd-sb-gw-row .cd-sb-meta {
   /* The chevron-down meta uses currentColor — same `--ink-4` as a
      keyboard shortcut chip — so the row reads as a control, not an
      active row. */
   display: inline-flex;
   align-items: center;
-}
-.cd-sb-gw-mark {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  display: inline-grid;
-  place-items: center;
-  /* Same tile dimensions as `.cd-sb-app-icon` so the row's first
-     column lines up with the app rows below. The mark itself paints
-     in the kind's signal color; the tile background is a low-opacity
-     wash of that same color so the mark reads against a tinted chip
-     rather than a plain neutral square. */
-  background: color-mix(in srgb, var(--gw-mark-color, var(--ink-3)) 14%, transparent);
-  color: var(--gw-mark-color, var(--ink-3));
-  box-shadow: inset 0 0 0 0.5px
-    color-mix(in srgb, var(--gw-mark-color, var(--ink-3)) 26%, transparent);
-}
-.cd-sb-gw-mark[data-kind='local'] {
-  --gw-mark-color: var(--success);
-}
-.cd-sb-gw-mark[data-kind='remote'] {
-  --gw-mark-color: var(--accent);
-}
-.cd-sb-gw-mark svg {
-  width: 11px;
-  height: 11px;
-}
-.cd-sb-gw-kind {
-  /* The trailing kind tag stays its intrinsic width and uses the
-     same color family as the mark — local rows wear success-green
-     and remote rows wear accent. Reads at a glance from the
-     periphery; doesn't need full attention to identify the kind. */
-  flex: 0 0 auto;
-  font-size: 9px;
-  letter-spacing: 0.12em;
-}
-.cd-sb-gw-kind[data-kind='local'] {
-  color: var(--success);
-}
-.cd-sb-gw-kind[data-kind='remote'] {
-  color: var(--accent);
+  color: var(--ink-4);
 }
 .cd-sb-divider {
   height: 1px;
@@ -5173,21 +5125,17 @@ textarea {
   background: var(--line);
 }
 
-/* ── Gateway-switcher popover ───────────────────────────────────────
-   Anchored to the sidebar-head row, sized to read as a vertical
-   extension of the sidebar (260–360px wide). Uses the sidebar
-   vocabulary deliberately: `cd-sb-item` rows, `cd-sb-section`
-   headers, `cd-status` active pill. The only popover-specific
-   primitives are the elevation envelope, the hover-revealed action
-   cluster, and the inline add-form. */
+/* ── Gateway-switcher popover (v2 — Notion/Linear) ─────────────────
+   Anchored to the sidebar-head row, fixed 320px width so the
+   secondary line + action chips fit at common displayName lengths.
+   Flat profile list (no LOCAL/REMOTE section headers), per-row ⋯
+   menu that inline-expands into Rename / Color / Token / Remove,
+   and a footer "+ Add profile" CTA that opens a kind-chooser view.
+*/
 .cd-gw-pop-backdrop {
   position: fixed;
   inset: 0;
   z-index: 998;
-  /* Slightly tinted so the popover stands out from the wall behind it
-     without darkening the whole UI. The sidebar context menus already
-     use a transparent backdrop; this is intentionally a touch more
-     present because the switcher is doing more than picking an item. */
   background: color-mix(in srgb, var(--bg-sunken) 28%, transparent);
 }
 .cd-gw-pop {
@@ -5196,89 +5144,36 @@ textarea {
   max-height: 78vh;
   overflow-y: auto;
   background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-  padding: 6px 6px 8px;
+  /* Hairline border + a deeper, layered shadow stack so the popover
+     reads as a deliberately floated surface, not a flat panel. The
+     inset top highlight is what gives the elevated edge a real "lit"
+     feel under the renderer's dark theme — same trick Linear uses on
+     its workspace popovers.
+
+     The shadows resolve to AA-contrast neutrals via `color-mix(..., var(--ink))`
+     so the theme keeps control of the ambient palette. */
+  border: 0.5px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 12px;
+  padding: 5px;
   box-shadow:
-    0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent),
-    0 10px 28px color-mix(in srgb, var(--ink) 18%, transparent),
-    0 4px 10px color-mix(in srgb, var(--ink) 10%, transparent);
-  /* The popover doesn't define its own type stack — it inherits from
-     the sidebar's design tokens. Keeps the kerning + line-heights in
-     lockstep with `cd-sb-item` rows visible behind the backdrop. */
+    inset 0 1px 0 color-mix(in srgb, white 5%, transparent),
+    0 1px 0 color-mix(in srgb, black 28%, transparent),
+    0 14px 36px color-mix(in srgb, black 38%, transparent),
+    0 4px 14px color-mix(in srgb, black 18%, transparent);
   font-family: inherit;
   color: var(--ink);
 }
-.cd-gw-pop-section {
-  /* Override the section-header default margin so the first header
-     hugs the popover top edge. Other rules from `.cd-sb-section` are
-     unchanged — same mono-caps treatment. */
-  margin-top: 6px;
+
+/* ── Sub-view header (back chevron + title). Shown in chooseKind /
+     addLocal / addRemote / rotateToken; the list view skips it so the
+     popover reads as a direct extension of the sidebar row. */
+.cd-gw-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 6px;
 }
-.cd-gw-pop-section:first-child {
-  margin-top: 2px;
-}
-.cd-gw-pop-section-actions {
-  /* Section `+` is always visible in the popover (not hover-only) —
-     the popover is itself a deliberate interaction, no need to hide
-     the affordance behind a hover. */
-  opacity: 1;
-}
-.cd-gw-pop-empty {
-  padding: 4px 12px 8px;
-  color: var(--ink-4);
-  font-size: 12px;
-  font-style: italic;
-}
-.cd-gw-pop-row {
-  position: relative;
-  cursor: pointer;
-}
-.cd-gw-pop-row[data-active='true'] .cd-gw-pop-label {
-  color: var(--ink);
-  font-weight: 550;
-}
-.cd-gw-pop-mark {
-  /* Same shape as the sidebar-head mark, no overrides needed beyond
-     reasserting the kind color so the rule cascades cleanly when the
-     row also carries `cd-sb-item` (which sets its own icon color). */
-}
-.cd-gw-pop-label {
-  /* `cd-sb-label` already does the truncation; this is here so future
-     popover-specific tweaks (e.g. wrapping the label on small popovers)
-     have a hook without touching the sidebar one. */
-}
-.cd-gw-pop-active {
-  margin-left: auto;
-  /* Active pill sits where the action cluster appears on hover. The
-     two are mutually exclusive in this layout — once the row is
-     active there are no per-row actions left to surface beyond
-     rename, and a click can't accidentally remove the active row. */
-}
-.cd-gw-pop-actions {
-  margin-left: auto;
-  display: inline-flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 90ms ease-out;
-}
-.cd-gw-pop-row[data-active='true'] .cd-gw-pop-actions {
-  /* On the active row, the ACTIVE pill takes the slot — we still want
-     rename to be reachable, so reveal the action cluster on hover and
-     have it overlap (with backing) on top of the pill. */
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: var(--bg-elev);
-  padding: 0 2px;
-  border-radius: 6px;
-}
-.cd-gw-pop-row:hover .cd-gw-pop-actions,
-.cd-gw-pop-row:focus-within .cd-gw-pop-actions {
-  opacity: 1;
-}
-.cd-gw-pop-iconbtn {
+.cd-gw-pop-back {
   width: 22px;
   height: 22px;
   border-radius: 5px;
@@ -5292,49 +5187,461 @@ textarea {
     background 90ms,
     color 90ms;
 }
-.cd-gw-pop-iconbtn:hover {
+.cd-gw-pop-back:hover {
   background: color-mix(in srgb, var(--ink) 9%, transparent);
   color: var(--ink);
 }
-.cd-gw-pop-iconbtn--danger:hover {
-  background: color-mix(in srgb, var(--danger, #c43c3c) 14%, transparent);
+.cd-gw-pop-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  letter-spacing: 0.005em;
+}
+
+/* ── Filter input (only when ≥4 profiles). */
+.cd-gw-pop-filter {
+  width: calc(100% - 8px);
+  margin: 2px 4px 4px;
+  height: 28px;
+  font-size: 12.5px;
+  padding: 2px 8px;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 0.5px solid var(--line);
+}
+.cd-gw-pop-filter:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.cd-gw-pop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cd-gw-pop-empty {
+  padding: 8px 12px;
+  color: var(--ink-4);
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+}
+
+/* ── Row wrapper (holds the row + its expanded action block). When a
+     row is expanded, the wrap takes a faint tinted background so the
+     row + menu read as one nested block visually distinct from
+     unexpanded rows above and below it. */
+.cd-gw-pop-rowwrap {
+  border-radius: 8px;
+  transition: background 120ms ease-out;
+}
+.cd-gw-pop-rowwrap:has(.cd-gw-pop-row[data-expanded='true']) {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+/* When the expanded row is also the active row, blend the active
+   accent-wash with the expansion tint so the two states don't fight
+   each other (otherwise the row background would visibly shift on
+   ⋯ click). */
+.cd-gw-pop-rowwrap:has(.cd-gw-pop-row[data-active='true'][data-expanded='true']) {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* ── Row — refined Notion/Linear hybrid. The active state is
+     carried by the avatar (ring + bg-tint on the row) instead of a
+     leading check column, which saves ~22px of width and keeps the
+     two identity signals integrated. Three layout slots remain:
+     avatar (28px wrap with ring affordance), text (1fr two-line),
+     trailing meta (⌘N hint + ⋯). */
+.cd-gw-pop-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+  font: inherit;
+  transition:
+    background 90ms ease-out,
+    box-shadow 90ms ease-out;
+}
+.cd-gw-pop-row:hover,
+.cd-gw-pop-row:focus-visible {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  outline: none;
+}
+.cd-gw-pop-row[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.cd-gw-pop-row[data-active='true']:hover,
+.cd-gw-pop-row[data-active='true']:focus-visible {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.cd-gw-pop-row[data-active='true'] .cd-gw-pop-name {
+  font-weight: 600;
+}
+
+/* Avatar wrap — adds a 2px accent ring on the active row with a 1px
+   inner gutter so the ring sits OFF the avatar's own color (otherwise
+   blue avatars on a blue accent ring would mush together). The ring
+   is drawn with box-shadow so the avatar's own dimensions don't
+   change, and the rest of the row's grid columns stay aligned. */
+.cd-gw-pop-avatar-wrap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  /* The wrap is 4px larger than the 24px avatar so the active ring
+     can sit in the resulting 2px gutter without touching the avatar's
+     own colored fill. Inset box-shadow paints inside the wrap → ring
+     lands right at the avatar's outer edge. */
+  transition: box-shadow 120ms ease-out;
+}
+.cd-gw-pop-avatar-wrap[data-active='true'] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.cd-gw-pop-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.cd-gw-pop-name {
+  font-size: 13px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: -0.005em;
+}
+.cd-gw-pop-sub {
+  font-size: 11px;
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+  letter-spacing: 0.01em;
+}
+
+/* ⌘N hint chip — kbd-style with a faint top highlight + bottom shadow
+   so it reads as a tiny physical key. SF-Mono fallback chain for the
+   ⌘ glyph (the system stack already handles the rest). */
+.cd-gw-pop-numhint {
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 4%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, black 10%, transparent);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  transition: opacity 90ms ease-out;
+}
+.cd-gw-pop-row:hover .cd-gw-pop-numhint,
+.cd-gw-pop-row:focus-within .cd-gw-pop-numhint,
+.cd-gw-pop-row[data-active='true'] .cd-gw-pop-numhint {
+  opacity: 1;
+}
+
+.cd-gw-pop-more {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  color: var(--ink-4);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  opacity: 0;
+  transition:
+    background 90ms,
+    color 90ms,
+    opacity 90ms;
+}
+.cd-gw-pop-row:hover .cd-gw-pop-more,
+.cd-gw-pop-row:focus-within .cd-gw-pop-more,
+.cd-gw-pop-row[data-expanded='true'] .cd-gw-pop-more {
+  opacity: 1;
+}
+.cd-gw-pop-more:hover {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}
+.cd-gw-pop-more[aria-expanded='true'] {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+/* ── Expanded action menu (Notion-style vertical list). Indented
+     under the avatar column so the expansion reads as a child of the
+     row above. A subtle accent rail on the left visually tethers the
+     menu items to the parent row without resorting to nested borders. */
+.cd-gw-pop-actionblock {
+  padding: 4px 8px 8px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+.cd-gw-pop-actionblock::before {
+  /* The left rail. Sits at the avatar-column centerline so it reads
+     as "this is the parent row's spine continuing downward." */
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 0;
+  bottom: 8px;
+  width: 1px;
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 1px;
+}
+.cd-gw-pop-actionmenu {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.cd-gw-pop-menuitem {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 90ms,
+    color 90ms;
+}
+.cd-gw-pop-menuitem:hover,
+.cd-gw-pop-menuitem:focus-visible {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+  outline: none;
+}
+.cd-gw-pop-menuitem[data-sub-active='true'] {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent);
+}
+.cd-gw-pop-menuitem--danger {
+  color: color-mix(in srgb, var(--danger, #c43c3c) 80%, var(--ink-2));
+}
+.cd-gw-pop-menuitem--danger:hover,
+.cd-gw-pop-menuitem--danger:focus-visible {
+  background: color-mix(in srgb, var(--danger, #c43c3c) 12%, transparent);
   color: var(--danger, #c43c3c);
 }
-.cd-gw-pop-rename {
-  /* The inline rename input replaces the label span in flow. Keep its
-     visual weight close to the surrounding label so the row doesn't
-     jump when the input mounts. */
-  height: 24px;
-  padding: 2px 6px;
-  font-size: 13px;
+.cd-gw-pop-menuitem-icon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--ink-3);
+}
+.cd-gw-pop-menuitem:hover .cd-gw-pop-menuitem-icon,
+.cd-gw-pop-menuitem:focus-visible .cd-gw-pop-menuitem-icon {
+  color: currentColor;
+}
+.cd-gw-pop-menuitem[data-sub-active='true'] .cd-gw-pop-menuitem-icon {
+  color: var(--accent);
+}
+.cd-gw-pop-menuitem--danger .cd-gw-pop-menuitem-icon {
+  color: color-mix(in srgb, var(--danger, #c43c3c) 60%, var(--ink-3));
+}
+.cd-gw-pop-actionmenu-rule {
+  height: 1px;
+  margin: 3px 6px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.cd-gw-pop-subbox {
+  /* Inline rename input / color picker, indented under the menu items
+     so it reads as the focused action's payload. Empty → hidden. */
+  padding: 4px 8px 2px;
+}
+.cd-gw-pop-subbox:empty {
+  display: none;
+}
+
+/* ── Divider between list and footer CTA. Hairline, with a tiny edge
+     gutter so it doesn't extend to the popover's rounded corners. */
+.cd-gw-pop-divider {
+  height: 1px;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  margin: 6px 6px;
+}
+
+/* ── Footer "+ Add profile" CTA. The icon tile picks up the accent on
+     hover so the row reads as a discrete primary action, not a fifth
+     profile row. Same horizontal padding rhythm as the rows above so
+     the left edge of the icon column lines up with each row's avatar. */
+.cd-gw-pop-add-cta {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
   font-weight: 500;
+  text-align: left;
+  letter-spacing: -0.005em;
+  transition:
+    background 90ms,
+    color 90ms;
+}
+.cd-gw-pop-add-cta:hover,
+.cd-gw-pop-add-cta:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  outline: none;
+}
+.cd-gw-pop-add-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--ink) 24%, transparent);
+  background: transparent;
+  color: var(--ink-3);
+  transition:
+    background 120ms,
+    border-color 120ms,
+    color 120ms;
+}
+.cd-gw-pop-add-cta:hover .cd-gw-pop-add-icon,
+.cd-gw-pop-add-cta:focus-visible .cd-gw-pop-add-icon {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+/* ── Kind chooser tiles (Local | Remote). */
+.cd-gw-pop-kindgrid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px;
+}
+.cd-gw-pop-kindtile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
   background: var(--bg);
-  border-radius: 5px;
-  flex: 1 1 auto;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+  transition:
+    background 90ms,
+    border-color 90ms;
+  font: inherit;
+}
+.cd-gw-pop-kindtile:hover,
+.cd-gw-pop-kindtile:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  outline: none;
+}
+.cd-gw-pop-kindtile-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.cd-gw-pop-kindtile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
 }
+.cd-gw-pop-kindtile-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cd-gw-pop-kindtile-sub {
+  font-size: 11.5px;
+  color: var(--ink-4);
+}
+
+/* ── Add / rotate-token form layout. */
 .cd-gw-pop-form {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 4px 8px 6px;
-  border-top: 0.5px solid var(--line);
+  padding: 4px 8px 8px;
+}
+.cd-gw-pop-form-label {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
   margin-top: 4px;
 }
-.cd-gw-pop-section--form {
-  margin-top: 4px;
-  padding: 0;
-  color: var(--accent);
+.cd-gw-pop-form-help {
+  font-size: 11.5px;
+  color: var(--ink-4);
+  line-height: 1.4;
+  padding: 0 2px;
 }
 .cd-gw-pop-input {
   height: 32px;
   font-size: 13px;
+  padding: 4px 8px;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 0.5px solid var(--line);
+  color: var(--ink);
+}
+.cd-gw-pop-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.cd-gw-pop-rename {
+  /* Inline-edit variant lives inside the action block; size matches
+     the other action chips so the row doesn't jump. */
+  height: 26px;
+  font-size: 12.5px;
 }
 .cd-gw-pop-form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 /* Profile avatar disc — used by the sidebar-head row and switcher popover
@@ -10476,4 +10783,393 @@ button.cd-au-run:hover .cd-au-run-go {
   .cd-au-ov-cols {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── First-run onboarding ───────────────────────────────────────────
+   A fullscreen welcome view that owns `#root` until the user
+   personalizes their profile. Sets a deliberate first-impression
+   tone — the rest of the chrome is dense utility, so this is the one
+   surface where editorial typography + atmospheric depth lead.
+
+   Three z-stacked layers:
+     1. `.cd-onb-stage-bg`  — deep radial gradient base (full-bleed).
+     2. `.cd-onb-stage-glow` — soft accent-tinted blob that follows
+        the user's chosen avatar color via `--onb-accent`. Positioned
+        behind the card so the color choice subtly stains the room.
+     3. `.cd-onb-card` — centered content surface.
+*/
+.cd-onb-view {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  /* Default accent before the user has nudged the swatch — matches
+     the script's initial random palette pick. Overridden inline. */
+  --onb-accent: #5b8def;
+  background: #07080d;
+  overflow: hidden;
+  isolation: isolate;
+  /* Geist is a clean grotesque; Space Grotesk is the display face for
+     the hero headline only. Both are loaded by index.html. */
+  font-family:
+    Geist,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  color: #e8eaf2;
+  animation: cd-onb-fade-in 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes cd-onb-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cd-onb-stage-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 50% 0%,
+      color-mix(in srgb, #1a1f33 80%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(16, 18, 28, 1), transparent 70%), #07080d;
+}
+
+.cd-onb-stage-glow {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  top: 8%;
+  left: 50%;
+  width: 720px;
+  height: 720px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--onb-accent) 28%, transparent),
+    transparent 65%
+  );
+  filter: blur(60px);
+  opacity: 0.7;
+  transition: background 380ms ease-out;
+}
+
+/* The card. Wide-margin, tall, on a dim translucent surface so the
+   stage's glow bleeds through subtly at the edges. */
+.cd-onb-card {
+  position: relative;
+  z-index: 2;
+  width: min(440px, 92vw);
+  padding: 36px 36px 32px;
+  border-radius: 18px;
+  background: color-mix(in srgb, #11131c 88%, transparent);
+  border: 0.5px solid color-mix(in srgb, white 8%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 6%, transparent),
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+  /* Subtle backdrop-blur if the renderer + theme support it. Safari +
+     Chromium both do; degrades cleanly when it doesn't. */
+  backdrop-filter: blur(8px) saturate(120%);
+  animation: cd-onb-card-rise 540ms cubic-bezier(0.22, 0.61, 0.36, 1) 120ms both;
+}
+
+@keyframes cd-onb-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.cd-onb-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: color-mix(in srgb, #b9bcd1 80%, transparent);
+}
+.cd-onb-eyebrow-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--onb-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--onb-accent) 24%, transparent);
+  transition: background 260ms;
+}
+
+.cd-onb-title {
+  font-family:
+    'Space Grotesk',
+    Geist,
+    -apple-system,
+    sans-serif;
+  font-size: 34px;
+  line-height: 1.04;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 14px 0 8px;
+  color: #f3f4fb;
+}
+.cd-onb-title em {
+  font-style: italic;
+  font-weight: 500;
+  background: linear-gradient(
+    100deg,
+    var(--onb-accent),
+    color-mix(in srgb, var(--onb-accent) 60%, white 40%)
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  /* The accent gradient on the italicized word picks up the user's
+     chosen color so the headline visibly shifts as they pick a
+     swatch — small detail, big delight on first use. */
+  transition: background 280ms ease-out;
+}
+
+.cd-onb-sub {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: color-mix(in srgb, #b9bcd1 78%, transparent);
+  margin: 0 0 24px;
+  max-width: 36ch;
+}
+
+/* Avatar preview — large, animated, sits between the headline and the
+   form. The wrap carries the ring; the disc has the color + initials. */
+.cd-onb-avatar-wrap {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  display: inline-grid;
+  place-items: center;
+  margin: 4px 0 22px;
+}
+.cd-onb-avatar-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* The ring is a single soft glow keyed to the accent — bigger and
+     softer than the popover ring because this is the hero element. */
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--onb-accent) 35%, transparent),
+    transparent 70%
+  );
+  filter: blur(8px);
+  opacity: 0.8;
+  transition: background 280ms;
+  animation: cd-onb-pulse 4200ms ease-in-out infinite;
+}
+@keyframes cd-onb-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+.cd-onb-avatar {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: white;
+  font-family: 'Space Grotesk', Geist, sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  user-select: none;
+  /* Inset bevel reads as "this is a 3D disc" — same trick the sidebar
+     avatar uses, scaled up for the bigger size. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.12),
+    0 4px 14px rgba(0, 0, 0, 0.3);
+  transition:
+    background 280ms,
+    transform 220ms ease-out;
+}
+.cd-onb-initials {
+  display: inline-block;
+}
+
+/* Form */
+.cd-onb-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-onb-field-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #b9bcd1 50%, transparent);
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+.cd-onb-field-label:first-child {
+  margin-top: 0;
+}
+
+.cd-onb-input {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: #f3f4fb;
+  background: color-mix(in srgb, white 4%, transparent);
+  border: 0.5px solid color-mix(in srgb, white 10%, transparent);
+  border-radius: 10px;
+  outline: none;
+  transition:
+    border-color 160ms,
+    background 160ms,
+    box-shadow 160ms;
+}
+.cd-onb-input::placeholder {
+  color: color-mix(in srgb, #b9bcd1 35%, transparent);
+  font-weight: 400;
+}
+.cd-onb-input:focus {
+  border-color: color-mix(in srgb, var(--onb-accent) 65%, transparent);
+  background: color-mix(in srgb, white 6%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--onb-accent) 18%, transparent);
+}
+
+/* Swatches row — 8 across at the popover's palette. Larger than the
+   per-row picker because this is a hero moment. */
+.cd-onb-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-bottom: 8px;
+}
+.cd-onb-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+  transition:
+    transform 140ms ease-out,
+    box-shadow 200ms ease-out;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.14);
+}
+.cd-onb-swatch:hover {
+  transform: scale(1.08);
+}
+.cd-onb-swatch:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 3px color-mix(in srgb, white 25%, transparent);
+}
+.cd-onb-swatch[data-selected='true'] {
+  /* The selected swatch wears a tight white halo, matching the avatar
+     ring's weight so the user sees the connection between swatch
+     pick and avatar update. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 2px #07080d,
+    0 0 0 3.5px #f3f4fb;
+}
+
+/* The CTA. Gets the accent color as background so it's the loudest
+   thing in the card; reads as a clear "press here next." */
+.cd-onb-cta {
+  margin-top: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 50px;
+  border: none;
+  border-radius: 12px;
+  background: var(--onb-accent);
+  color: white;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  /* Inner top highlight + outer drop shadow = "lit button" look that
+     the dark stage can support. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 8px 22px color-mix(in srgb, var(--onb-accent) 32%, transparent),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+  transition:
+    transform 120ms ease-out,
+    box-shadow 200ms,
+    filter 200ms,
+    background 280ms;
+}
+.cd-onb-cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 12px 28px color-mix(in srgb, var(--onb-accent) 38%, transparent),
+    0 4px 10px rgba(0, 0, 0, 0.35);
+}
+.cd-onb-cta:active:not(:disabled) {
+  transform: translateY(0);
+}
+.cd-onb-cta:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  filter: grayscale(0.25);
+}
+.cd-onb-cta-arrow {
+  display: inline-flex;
+  align-items: center;
+  transition: transform 200ms ease-out;
+}
+.cd-onb-cta:hover:not(:disabled) .cd-onb-cta-arrow {
+  transform: translateX(2px);
+}
+
+.cd-onb-error {
+  margin-top: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #c43c3c 18%, transparent);
+  border: 0.5px solid color-mix(in srgb, #c43c3c 50%, transparent);
+  color: #ffb8b8;
 }

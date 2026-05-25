@@ -17,6 +17,7 @@ import {
   listGateways,
   removeGateway,
   renameGateway,
+  updateGatewayToken,
   updateProfileMetadata,
   type GatewayProfile,
 } from './gateway-store.js';
@@ -134,6 +135,7 @@ export const Channel = {
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
   GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
+  GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
 
@@ -380,6 +382,26 @@ export function registerIpcHandlers(): void {
       const next = await loadSettings();
       broadcastGatewayChanged(next);
       return updated;
+    },
+  );
+
+  // Rotate the keychain-stored bearer token for a remote gateway.
+  // Plaintext crosses the bridge exactly once on this call (same shape
+  // as `add`) and is immediately persisted via gateway-secrets. Pass
+  // an empty string to clear. No-op for the local gateway (its token
+  // is minted per launch by the in-process runtime). When the rotated
+  // profile is the active one, drop HTTP-client auth caches so the
+  // next request re-reads the new token from the keychain.
+  ipcMain.handle(
+    Channel.GATEWAYS_UPDATE_TOKEN,
+    async (_e, input: { id: string; token: string }): Promise<{ ok: true }> => {
+      await updateGatewayToken(input.id, input.token);
+      const current = await loadSettings();
+      if (current.activeGatewayId === input.id) {
+        await invalidateGatewayCaches();
+        broadcastGatewayChanged(current);
+      }
+      return { ok: true };
     },
   );
 

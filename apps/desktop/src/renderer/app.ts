@@ -11,10 +11,9 @@
   // Canonical icon → palette-hue mapping, lifted from the Centraid Redesign
   // bold.jsx APPS fixture. Every app type has a fixed colour identity in
   // the design (Todos is always indigo, Habits always rose, etc.). Used
-  // when minting a new app, when hydrating drafts off disk, and to migrate
-  // existing userApps to their canonical hue. Sparkle is the default icon
-  // for drafts and freshly-prompted apps before an icon is inferred — it
-  // gets the violet sub-accent.
+  // when minting a new app and when hydrating drafts off disk. Sparkle is
+  // the default icon for drafts and freshly-prompted apps before an icon
+  // is inferred — it gets the violet sub-accent.
   const CANONICAL_ICON_COLOR_KEY: Record<string, ColorKeyType> = {
     Gift: 'violet',
     Habit: 'rose',
@@ -123,33 +122,6 @@
     bgL: 5,
   };
 
-  // Idempotent enforcement of the design's icon→colour contract and the
-  // `updatedAt` field. Runs on every load; becomes a no-op once every app
-  // already matches. Cheaper than a versioned migration and avoids carrying
-  // dead schema bumps around the codebase.
-  {
-    let touched = false;
-    const nowIso = new Date().toISOString();
-    for (const a of userApps) {
-      const canonical = colorForIcon(a.iconKey);
-      if (a.color !== canonical) {
-        a.color = canonical;
-        touched = true;
-      }
-      if (!a.updatedAt) {
-        a.updatedAt = nowIso;
-        touched = true;
-      }
-      // Backfill createdAt from updatedAt for apps that predate the field
-      // (§A3 NEW badge keys off it). New apps get a real stamp at creation.
-      if (!a.createdAt) {
-        a.createdAt = a.updatedAt;
-        touched = true;
-      }
-    }
-    if (touched) Store.set('home.userApps', userApps);
-  }
-
   function applyPrefs(): void {
     const html = document.documentElement;
     html.dataset.theme = prefs.theme;
@@ -211,17 +183,11 @@
 
   function broadcastSettingsToFrames(): void {
     const settings = buildIframeSettings();
-    // New canonical payload — full settings update.
     const settingsPayload = { type: 'centraid:settings', ...settings };
-    // Legacy payload — kept for any old `theme-bridge.js` still in the wild
-    // (older published apps that haven't been re-served since the bridge
-    // moved inline). New inline bridges accept both.
-    const legacyPayload = { type: 'centraid:theme', theme: iframeThemeKind(), bgL: prefs.bgL };
     const frames = document.querySelectorAll<HTMLIFrameElement>('iframe[data-centraid-app]');
     frames.forEach((f) => {
       try {
         f.contentWindow?.postMessage(settingsPayload, '*');
-        f.contentWindow?.postMessage(legacyPayload, '*');
       } catch {
         // cross-origin postMessage cannot throw, but contentWindow access can
       }
@@ -597,6 +563,34 @@
           showToast('Profile removed');
         } catch (err) {
           showToast(`Remove failed: ${String(err)}`);
+        }
+      },
+      onChangeColor: async (id, color) => {
+        // Inline picker commits on swatch click. updateProfileMetadata
+        // accepts the `#RRGGBB` form directly — the gateway-store
+        // validates it before writing so an invalid color throws
+        // here rather than silently degrading to the default.
+        try {
+          await window.CentraidApi.updateProfileMetadata({ id, avatarColor: color });
+          showToast('Color updated');
+          if (id === settings.activeGatewayId) {
+            await refreshRuntimeMode();
+            await reRenderShellForRoute();
+          }
+        } catch (err) {
+          showToast(`Color change failed: ${String(err)}`);
+        }
+      },
+      onRotateToken: async (id, token) => {
+        // Sensitive: the plaintext crosses the bridge once and goes
+        // straight to keychain. We don't echo the new value back to
+        // the renderer — the user just sees a toast acknowledging
+        // the rotation completed.
+        try {
+          await window.CentraidApi.updateGatewayToken({ id, token });
+          showToast(token ? 'Token rotated' : 'Token cleared');
+        } catch (err) {
+          showToast(`Token rotation failed: ${String(err)}`);
         }
       },
       onAddLocal: async (input) => {
@@ -3934,16 +3928,17 @@
   function addUserApp(input: {
     prompt?: string;
     name?: string;
-    projectId?: string;
+    /** Centraid project id — required. The builder only fires
+     *  `onAddToHome` after a successful publish, at which point the
+     *  project id is always defined. The home tile's id is this id, so
+     *  context-menu actions and `openApp` can address it directly. */
+    projectId: string;
     versionId?: string;
     color?: ColorHexType;
     iconKey?: IconNameType;
   }): UserAppMeta {
     const meta = inferAppMeta(input.prompt || '');
-    // If the builder gave us a centraid project id, the home tile uses it as
-    // the app id (so context-menu actions and openApp can address it directly).
-    // Older flows without a centraid project still get the legacy `usr_` id.
-    const id = input.projectId || 'usr_' + Math.random().toString(36).slice(2, 9);
+    const id = input.projectId;
 
     const existing = userApps.find((a) => a.id === id);
     if (existing) {
@@ -3968,7 +3963,7 @@
       id,
       name: input.name || meta.name,
       updatedAt: stampIso,
-      ...(input.projectId ? { centraidProjectId: input.projectId } : {}),
+      centraidProjectId: input.projectId,
     };
     userApps.push(newApp);
     persist();
@@ -3995,8 +3990,11 @@
     recordRoute({ id, kind: 'app' });
     // Published apps carry their project id on the UserAppMeta; drafts use
     // their tile id directly (tile id == project id for unpublished apps).
+    // Every code path in v0 produces a defined project id — addUserApp
+    // requires `projectId` and drafts use their own id — so the fallback
+    // chain never bottoms out on undefined.
     const ua = findUserApp(id);
-    const projectId = ua?.centraidProjectId ?? (isDraft(app) ? app.id : undefined);
+    const projectId = ua?.centraidProjectId ?? app.id;
     clear();
 
     // Main area: the running app fills the canvas inside a scrollable column.
@@ -4122,100 +4120,52 @@
     }
   }
 
-  function mountUserApp(
-    app: AppMetaResolvedType,
-    projectId: string | undefined,
-    container: HTMLElement,
-  ): void {
-    if (projectId) {
-      // Real centraid app — host its iframe served by the openclaw plugin.
-      // The frame fills the main pane edge-to-edge; the app supplies its
-      // own header and chrome.
-      container.classList.add('app-view-fullbleed');
-      const frameWrap = el('div', { class: 'app-view-frame' });
-      const frame = el('iframe', {
-        src: 'about:blank',
-        sandbox: 'allow-scripts allow-forms allow-same-origin',
-        referrerpolicy: 'no-referrer',
-      }) as HTMLIFrameElement;
-      // Tag so applyPrefs() can find every running app iframe and
-      // postMessage the latest theme on slider/toggle changes.
-      frame.dataset.centraidApp = '1';
-      frame.addEventListener('load', () => {
-        try {
-          frame.contentWindow?.postMessage(
-            { type: 'centraid:theme', theme: iframeThemeKind(), bgL: prefs.bgL },
-            '*',
-          );
-        } catch {
-          /* noop */
-        }
+  function mountUserApp(app: AppMetaResolvedType, projectId: string, container: HTMLElement): void {
+    // Every centraid app — published or draft — has a project id.
+    // We host its iframe served by the openclaw plugin; the frame fills
+    // the main pane edge-to-edge and the app supplies its own chrome.
+    container.classList.add('app-view-fullbleed');
+    const frameWrap = el('div', { class: 'app-view-frame' });
+    const frame = el('iframe', {
+      src: 'about:blank',
+      sandbox: 'allow-scripts allow-forms allow-same-origin',
+      referrerpolicy: 'no-referrer',
+    }) as HTMLIFrameElement;
+    // Tag so applyPrefs() can find every running app iframe and
+    // postMessage the latest theme on slider/toggle changes.
+    frame.dataset.centraidApp = '1';
+    frame.addEventListener('load', () => {
+      try {
+        frame.contentWindow?.postMessage(
+          { type: 'centraid:theme', theme: iframeThemeKind(), bgL: prefs.bgL },
+          '*',
+        );
+      } catch {
+        /* noop */
+      }
+    });
+    frameWrap.append(frame);
+    container.append(frameWrap);
+    void app; // suppress unused arg — frame paints from the project id alone
+
+    // Resolve the live URL and load it. We carry the global theme in
+    // BOTH the query string (so the runtime's settings injection bakes
+    // `data-theme` / `--bg-l` into the served `index.html` server-side)
+    // AND the hash (read by the inline live-settings bridge before paint,
+    // covering the builder-preview path that bypasses the runtime).
+    // Iframe theme is resolved to its light/dark kind — third-party
+    // shell themes don't ship template-side CSS, so apps stay in the
+    // Centraid look while the shell wears the named theme.
+    void window.CentraidApi.appLiveUrl({ id: projectId })
+      .then((r) => {
+        const qsep = r.url.includes('?') ? '&' : '?';
+        const themeQs = `theme=${iframeThemeKind()}&bgL=${prefs.bgL}`;
+        frame.src = `${r.url}${qsep}${themeQs}#${themeQs}`;
+      })
+      .catch(() => {
+        frameWrap.innerHTML =
+          '<div class="empty">Could not reach the gateway. Check Settings.</div>';
       });
-      frameWrap.append(frame);
-      container.append(frameWrap);
-
-      // Resolve the live URL and load it. We carry the global theme in
-      // BOTH the query string (so the runtime's settings injection bakes
-      // `data-theme` / `--bg-l` into the served `index.html` server-side)
-      // AND the hash (read by the inline live-settings bridge before paint,
-      // covering the builder-preview path that bypasses the runtime).
-      // Iframe theme is resolved to its light/dark kind — third-party
-      // shell themes don't ship template-side CSS, so apps stay in the
-      // Centraid look while the shell wears the named theme.
-      void window.CentraidApi.appLiveUrl({ id: projectId })
-        .then((r) => {
-          const qsep = r.url.includes('?') ? '&' : '?';
-          const themeQs = `theme=${iframeThemeKind()}&bgL=${prefs.bgL}`;
-          frame.src = `${r.url}${qsep}${themeQs}#${themeQs}`;
-        })
-        .catch(() => {
-          frameWrap.innerHTML =
-            '<div class="empty">Could not reach the gateway. Check Settings.</div>';
-        });
-      return;
-    }
-
-    // Legacy `usr_` apps — no centraid backing yet, keep the placeholder.
-    const stub = el('div', { style: { marginTop: '20px' } }, [
-      el('div', { class: 'home-section-title', style: { margin: '0 0 12px' } }, 'Mock preview'),
-      el('div', { class: 'card' }, [
-        el('div', { style: { alignItems: 'center', display: 'flex', gap: '12px' } }, [
-          el('div', {
-            trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 18 }) : '',
-            style: {
-              background: app.color,
-              borderRadius: '6px',
-              color: 'white',
-              display: 'grid',
-              height: '32px',
-              placeItems: 'center',
-              width: '32px',
-            },
-          }),
-          el('div', { class: 'flex-1' }, [
-            el('div', { style: { fontSize: '14px', fontWeight: '500' } }, 'This is a mocked app'),
-            el(
-              'div',
-              { style: { color: 'var(--ink-3)', fontSize: '12px', marginTop: '2px' } },
-              'No centraid project linked. Open the builder to scaffold one.',
-            ),
-          ]),
-        ]),
-        el('div', { style: { display: 'flex', gap: '8px', marginTop: '14px' } }, [
-          el('button', {
-            class: 'btn btn-primary',
-            trustedHtml: Icon.Sparkle({ size: 13 }) + '<span>Edit with Centraid</span>',
-            onClick: () => enterBuilder({ appContext: app }),
-          }),
-          el('button', {
-            class: 'btn btn-ghost',
-            trustedHtml: Icon.Trash({ size: 14 }) + '<span>Delete</span>',
-            onClick: () => void deleteApp(app),
-          }),
-        ]),
-      ]),
-    ]);
-    container.append(stub);
   }
 
   // ---------- Per-app settings popover ----------
@@ -6570,6 +6520,38 @@
         ? { kind: 'rect', rect: row.getBoundingClientRect() }
         : { kind: 'point', x: 24, y: 72 };
       void openGatewaySwitcher(anchor);
+      return;
+    }
+    // ⌘1…⌘9 jumps directly to the Nth profile (Linear-style
+    // workspace-shortcut pattern). Order matches the switcher's
+    // rendered order — local-first then remote-by-createdAt, same
+    // as `listGateways`. Without shift, plain digits stay free for
+    // text input; we explicitly skip when shift / alt are held so
+    // the system shortcuts (⌘⇧1, ⌘⌥1) keep firing. Bound at the
+    // document level so the user doesn't have to open the switcher
+    // first — feels native to anyone who has used Linear.
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9') {
+      // Skip when the user is typing into a real input — ⌘1 in a
+      // text field shouldn't punt them out of their workspace.
+      const t = e.target as HTMLElement | null;
+      const inEditable =
+        t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable === true;
+      if (inEditable) return;
+      const n = parseInt(e.key, 10) - 1;
+      void (async (): Promise<void> => {
+        const profiles = await window.CentraidApi.listGateways();
+        const target = profiles[n];
+        if (!target) return;
+        e.preventDefault();
+        const current = await window.CentraidApi.getSettings();
+        if (target.id === current.activeGatewayId) return;
+        try {
+          await window.CentraidApi.setActiveGateway({ id: target.id });
+          showToast(`Switched to ${target.displayName}`);
+        } catch (err) {
+          showToast(`Switch failed: ${String(err)}`);
+        }
+      })();
     }
   });
 
@@ -6580,7 +6562,47 @@
   // window ended up showing a stacked duplicate of the entire UI. The
   // settings IPC is a local file read, so awaiting it doesn't make the
   // first paint noticeably slower.
+  //
+  // First-run gate: when `onboardingCompletedAt` is absent we mount the
+  // welcome view instead of home. The view owns `root` until the user
+  // submits, then we run the normal boot sequence (refreshRuntimeMode +
+  // renderHome). The submit callback writes the user's chosen name +
+  // color to the primordial local profile and flips the persisted
+  // settings flag so future launches skip straight to home.
   void (async (): Promise<void> => {
+    const settings = await window.CentraidApi.getSettings();
+    if (!settings.onboardingCompletedAt) {
+      window.Onboarding.mount({
+        root,
+        onComplete: async ({ displayName, avatarColor }) => {
+          // Persist the user's identity onto the primordial local
+          // profile. updateProfileMetadata validates the color server-
+          // side (#RRGGBB) and trims the name; we let any throw bubble
+          // up to the onboarding view's error display.
+          await window.CentraidApi.updateProfileMetadata({
+            id: 'local',
+            displayName,
+            avatarColor,
+          });
+          // Mark onboarding done so a relaunch skips this view. We
+          // could also flip a Store key client-side, but persisting in
+          // main keeps the source of truth in one place — and means
+          // wiping settings.json (e.g. for QA) cleanly resets to the
+          // welcome flow.
+          await window.CentraidApi.saveSettings({
+            onboardingCompletedAt: new Date().toISOString(),
+          });
+          // The metadata update fires `GATEWAY_CHANGED` from main, but
+          // our `onGatewayChanged` handler bounces to home — so home
+          // renders with the freshly-named sidebar without us having to
+          // call renderHome() explicitly. We still nudge the runtime
+          // mode here so the very first home render has it primed.
+          await refreshRuntimeMode();
+          renderHome();
+        },
+      });
+      return;
+    }
     await refreshRuntimeMode();
     renderHome();
   })();

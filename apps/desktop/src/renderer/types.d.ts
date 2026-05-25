@@ -28,8 +28,6 @@ declare global {
   interface CentraidTokensBridge {
     /** Generated CSS — `:root` + theme + density blocks. Injected at boot. */
     cssText: string;
-    /** Light theme — kept as alias of `themes.light` for legacy call sites. */
-    colors: Theme;
     /** Every registered theme; flip via `<html data-theme="<name>">`. */
     themes: Record<ThemeName, Theme>;
     /** Ordered presets the Settings → Appearance picker renders. */
@@ -325,6 +323,13 @@ declare global {
      */
     onRename: (id: string, nextDisplayName: string) => Promise<void> | void;
     onRemove: (id: string) => Promise<void> | void;
+    /** Change the profile's avatar color (`#RRGGBB`). */
+    onChangeColor: (id: string, color: string) => Promise<void> | void;
+    /**
+     * Rotate the keychain-stored bearer token for a remote profile.
+     * Pass an empty string to clear. No-op for local profiles.
+     */
+    onRotateToken: (id: string, token: string) => Promise<void> | void;
     onAddLocal: (input: {
       label: string;
       displayName?: string;
@@ -380,6 +385,18 @@ declare global {
     Chrome: ChromeApi;
     openBuilder: (opts: BuilderOptions) => () => void;
     AppChat: { mount: (opts: AppChatMountOptions) => () => void };
+    /**
+     * First-run onboarding. Mounted by app.ts when settings.onboardingCompletedAt
+     * is absent. The host owns the root element and a completion callback that
+     * fires after the user's profile is saved.
+     */
+    Onboarding: {
+      mount: (opts: {
+        root: HTMLElement;
+        /** Resolves with the chosen displayName + avatarColor once the user submits. */
+        onComplete: (input: { displayName: string; avatarColor: string }) => Promise<void> | void;
+      }) => () => void;
+    };
   }
 
   // Convenience type aliases reachable inside renderer scripts.
