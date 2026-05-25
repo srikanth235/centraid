@@ -31,10 +31,10 @@ without any code that touches the file in place.
 - [x] Cross-singleton audit of `runtime-core` + `openclaw-plugin`
 - [x] Fix `windowLocks` cross-gateway leak in `chat-routes.ts`
 - [x] Cross-runtime isolation test harness — would fail before #113
-- [ ] `displayName` + `avatarColor` fields on `GatewayProfile`
-- [ ] Read-time defaults so existing profiles round-trip
-- [ ] `updateProfileMetadata` IPC + preload + API decl
-- [ ] `addLocalGateway` / `addGateway` accept optional metadata
+- [x] `displayName` + `avatarColor` fields on `GatewayProfile`
+- [x] Read-time defaults so existing profiles round-trip
+- [x] `updateProfileMetadata` IPC + preload + API decl
+- [x] `addLocalGateway` / `addGateway` accept optional metadata
 - [ ] Sidebar-head row renders avatar disc + displayName
 - [ ] Switcher popover rows render avatar disc + displayName
 - [ ] Add-profile form has a color picker (8 swatches)
@@ -103,6 +103,64 @@ map would queue B behind A and the timeout fires; post-#113 the
 locks are per-runtime and B completes immediately. Verified by
 temporarily reverting the fix on this branch — the test failed with
 exactly the expected error message.
+
+### `displayName` + `avatarColor` fields on `GatewayProfile`
+
+`apps/desktop/src/main/gateway-store.ts` — `GatewayProfile` interface
+grows two optional fields. New `AVATAR_PALETTE` (8 colors picked for
+AA contrast on the dark sidebar) plus `defaultAvatarColor(id)`
+(FNV-1a 32-bit hash → palette index, deterministic across launches
+so a profile that never sets a color always renders the same one).
+
+### Read-time defaults so existing profiles round-trip
+
+`readProfile` threads `displayName ??= label` and `avatarColor ??=
+defaultAvatarColor(id)` so callers always see populated fields. v0
+ships no migration — older profile.json files written by #109/#111
+parse transparently, just without persisted metadata until the user
+edits.
+
+### `addLocalGateway` / `addGateway` accept optional metadata
+
+Both factory functions now take optional `displayName` and
+`avatarColor` inputs. `displayName` falls back to `label` when blank
+or absent; `avatarColor` falls back to the deterministic palette
+pick when blank/invalid (`isValidAvatarColor` enforces `#RRGGBB`).
+`AddGatewayInput` interface extended; the local-add input grows the
+same shape.
+
+### `updateProfileMetadata` IPC + preload + API decl
+
+`apps/desktop/src/main/gateway-store.ts` exports
+`updateProfileMetadata(id, patch)` — patches `displayName` and/or
+`avatarColor` in place; rejects invalid colors with
+`'invalid_input'`; treats empty `displayName` as a reset to the
+label-derived default. The label itself is immutable post-creation
+through this path (renameGateway still covers explicit label
+changes for callers that want them).
+
+`apps/desktop/src/main/ipc.ts` — new `GATEWAYS_UPDATE_METADATA` IPC
+channel; handler calls `updateProfileMetadata` and broadcasts the
+gateway-changed event so the sidebar re-renders.
+`broadcastGatewayChanged` payload grows `activeProfileDisplayName`
++ `activeProfileAvatarColor` fields. The two `addGateway` and
+`addLocalGateway` handlers accept the new optional fields.
+
+`apps/desktop/src/main/settings.ts` — `DesktopSettings` interface
+grows `activeProfileDisplayName` + `activeProfileAvatarColor`,
+derived in `resolveEffective` from the active gateway's profile.
+
+`apps/desktop/src/preload.ts` — `updateProfileMetadata` bridge;
+`addLocalGateway` / `addGateway` accept the new optional fields;
+`onGatewayChanged` callback type carries the new payload fields.
+
+`apps/desktop/src/renderer/centraid-api.d.ts` —
+`CentraidSettings.activeProfileDisplayName` +
+`activeProfileAvatarColor`; `CentraidGatewayProfile.displayName` +
+`avatarColor` (typed non-optional because read-time defaults always
+populate them); `addGateway` / `addLocalGateway` /
+`updateProfileMetadata` shapes added; `onGatewayChanged` payload
+shape updated.
 
 ## Out of scope
 

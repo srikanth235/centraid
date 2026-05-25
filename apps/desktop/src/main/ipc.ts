@@ -17,6 +17,7 @@ import {
   listGateways,
   removeGateway,
   renameGateway,
+  updateProfileMetadata,
   type GatewayProfile,
 } from './gateway-store.js';
 import { PREVIEW_SCHEME } from './preview-protocol.js';
@@ -132,6 +133,7 @@ export const Channel = {
   GATEWAYS_ADD_LOCAL: 'centraid:gateways:add-local',
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
+  GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
 
@@ -249,6 +251,8 @@ export function registerIpcHandlers(): void {
         activeGatewayId: next.activeGatewayId,
         activeGatewayKind: next.activeGatewayKind,
         activeGatewayLabel: next.activeGatewayLabel,
+        activeProfileDisplayName: next.activeProfileDisplayName,
+        activeProfileAvatarColor: next.activeProfileAvatarColor,
       });
     }
   };
@@ -299,13 +303,42 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     Channel.GATEWAYS_ADD,
-    async (_e, input: { label: string; url: string; token: string }): Promise<GatewayProfile> =>
-      addGateway(input),
+    async (
+      _e,
+      input: {
+        label: string;
+        url: string;
+        token: string;
+        displayName?: string;
+        avatarColor?: string;
+      },
+    ): Promise<GatewayProfile> => addGateway(input),
   );
 
   ipcMain.handle(
     Channel.GATEWAYS_ADD_LOCAL,
-    async (_e, input: { label: string }): Promise<GatewayProfile> => addLocalGateway(input),
+    async (
+      _e,
+      input: { label: string; displayName?: string; avatarColor?: string },
+    ): Promise<GatewayProfile> => addLocalGateway(input),
+  );
+
+  ipcMain.handle(
+    Channel.GATEWAYS_UPDATE_METADATA,
+    async (
+      _e,
+      input: { id: string; displayName?: string; avatarColor?: string },
+    ): Promise<GatewayProfile> => {
+      const updated = await updateProfileMetadata(input.id, {
+        ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+        ...(input.avatarColor !== undefined ? { avatarColor: input.avatarColor } : {}),
+      });
+      // Metadata-only change — no URL/token flip — but the renderer's
+      // switcher cache wants to refresh, so emit on the bus.
+      const next = await loadSettings();
+      broadcastGatewayChanged(next);
+      return updated;
+    },
   );
 
   ipcMain.handle(

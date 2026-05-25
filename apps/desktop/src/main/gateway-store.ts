@@ -40,10 +40,62 @@ export interface GatewayProfile {
   readonly kind: GatewayKind;
   /** Display label shown in the switcher; mutable via renameGateway. */
   readonly label: string;
+  /**
+   * Optional friendly name distinct from the technical `label`. When unset,
+   * `readProfile` fills it from `label` so callers can always read a string.
+   * In v0 we keep both fields in case the UX later wants a "long name + short
+   * label" split — today the switcher renders this verbatim.
+   */
+  readonly displayName?: string;
+  /**
+   * Optional 7-character hex color (`#RRGGBB`) for the avatar disc rendered
+   * next to the profile in the switcher + sidebar-head row. When unset,
+   * `readProfile` defaults to a deterministic palette pick keyed by `id`,
+   * so two profiles never produce the same color on first read unless the
+   * user manually sets them that way.
+   */
+  readonly avatarColor?: string;
   /** Remote endpoint URL. Undefined for the local gateway. */
   readonly url?: string;
   /** ISO timestamp set on first write. */
   readonly createdAt: string;
+}
+
+/**
+ * 8-color avatar palette. Picked for AA contrast against the dark sidebar
+ * background and for being visually distinct from each other at 24×24px.
+ * The order matters — `defaultAvatarColor` hashes id into this array.
+ */
+const AVATAR_PALETTE: readonly string[] = [
+  '#5B8DEF', // blue
+  '#7C5CFF', // violet
+  '#E36AD2', // pink
+  '#E5734A', // orange
+  '#E0B53D', // amber
+  '#4FB077', // green
+  '#3FB5C7', // teal
+  '#B07A4A', // brown
+] as const;
+
+/**
+ * Deterministic palette pick from a profile id. Stable across launches —
+ * a user who never touches `avatarColor` always sees the same color for
+ * the same profile. Hash is FNV-1a 32-bit; cryptographic strength is not
+ * needed.
+ */
+export function defaultAvatarColor(id: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  const idx = (h >>> 0) % AVATAR_PALETTE.length;
+  return AVATAR_PALETTE[idx] as string;
+}
+
+/** Validate a user-supplied avatar color. Accepts `#RRGGBB` only. */
+function isValidAvatarColor(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
 /** Result of `resolveGateway` — profile + paths + effective URL/token. */
@@ -114,7 +166,14 @@ export async function ensureLocalGateway(): Promise<GatewayProfile> {
   return profile;
 }
 
-/** Read a profile from disk. Undefined when the file doesn't exist. */
+/**
+ * Read a profile from disk. Undefined when the file doesn't exist.
+ *
+ * Read-time defaults: `displayName` falls back to `label`, `avatarColor`
+ * falls back to a deterministic palette pick from the id. v0 doesn't
+ * migrate older profile.json files — we just thread defaults so callers
+ * always see populated fields.
+ */
 async function readProfile(id: string): Promise<GatewayProfile | undefined> {
   try {
     const raw = await fs.readFile(gatewayProfilePath(id), 'utf8');
@@ -124,10 +183,19 @@ async function readProfile(id: string): Promise<GatewayProfile | undefined> {
     if (parsed.kind !== 'local' && parsed.kind !== 'remote') return undefined;
     if (typeof parsed.label !== 'string' || parsed.label.length === 0) return undefined;
     if (typeof parsed.createdAt !== 'string') return undefined;
+    const displayName =
+      typeof parsed.displayName === 'string' && parsed.displayName.length > 0
+        ? parsed.displayName
+        : parsed.label;
+    const avatarColor = isValidAvatarColor(parsed.avatarColor)
+      ? parsed.avatarColor
+      : defaultAvatarColor(parsed.id);
     return {
       id: parsed.id,
       kind: parsed.kind,
       label: parsed.label,
+      displayName,
+      avatarColor,
       ...(typeof parsed.url === 'string' && parsed.url.length > 0 ? { url: parsed.url } : {}),
       createdAt: parsed.createdAt,
     };
@@ -176,6 +244,10 @@ export interface AddGatewayInput {
   url: string;
   /** Bearer token. Stored in keychain, never on disk. Empty = unauthenticated. */
   token: string;
+  /** Optional friendly name. Defaults to `label` at read time. */
+  displayName?: string;
+  /** Optional avatar color as `#RRGGBB`. Defaults to a deterministic palette pick. */
+  avatarColor?: string;
 }
 
 /**
@@ -198,10 +270,16 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
     throw new GatewayError('invalid_input', `Gateway URL "${url}" is not a valid URL.`);
   }
   const id = randomUUID();
+  const displayName = input.displayName?.trim() || label;
+  const avatarColor = isValidAvatarColor(input.avatarColor)
+    ? input.avatarColor
+    : defaultAvatarColor(id);
   const profile: GatewayProfile = {
     id,
     kind: 'remote',
     label,
+    displayName,
+    avatarColor,
     url,
     createdAt: new Date().toISOString(),
   };
@@ -225,15 +303,29 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
  * "create another local workspace" (isolated dev/scratch/per-project
  * locals). The primordial `'local'` gateway is still auto-created on
  * boot by `ensureLocalGateway`; this is purely additive.
+ *
+ * Profile metadata (`displayName`, `avatarColor`) is optional — read-time
+ * defaults fill them in when callers (like the Add Profile form) leave
+ * them blank.
  */
-export async function addLocalGateway(input: { label: string }): Promise<GatewayProfile> {
+export async function addLocalGateway(input: {
+  label: string;
+  displayName?: string;
+  avatarColor?: string;
+}): Promise<GatewayProfile> {
   const label = input.label.trim();
   if (!label) throw new GatewayError('invalid_input', 'Gateway label cannot be empty.');
   const id = randomUUID();
+  const displayName = input.displayName?.trim() || label;
+  const avatarColor = isValidAvatarColor(input.avatarColor)
+    ? input.avatarColor
+    : defaultAvatarColor(id);
   const profile: GatewayProfile = {
     id,
     kind: 'local',
     label,
+    displayName,
+    avatarColor,
     createdAt: new Date().toISOString(),
   };
   await fs.mkdir(gatewayDir(id), { recursive: true });
@@ -241,6 +333,37 @@ export async function addLocalGateway(input: { label: string }): Promise<Gateway
   await fs.mkdir(gatewayAppsDir(id), { recursive: true });
   await writeProfile(profile);
   return profile;
+}
+
+/**
+ * Patch `displayName` and/or `avatarColor` on an existing profile. Pass
+ * the empty string for `displayName` to reset it to `label`-derived
+ * default at next read; pass `undefined` to leave the field untouched.
+ * `avatarColor` accepts `#RRGGBB` or `undefined`.
+ */
+export async function updateProfileMetadata(
+  id: string,
+  patch: { displayName?: string; avatarColor?: string },
+): Promise<GatewayProfile> {
+  const current = await readProfile(id);
+  if (!current) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
+  const next: GatewayProfile = { ...current };
+  if (patch.displayName !== undefined) {
+    const trimmed = patch.displayName.trim();
+    // Persist explicitly even when equal to label — round-trips intent.
+    (next as { displayName: string }).displayName = trimmed.length > 0 ? trimmed : current.label;
+  }
+  if (patch.avatarColor !== undefined) {
+    if (!isValidAvatarColor(patch.avatarColor)) {
+      throw new GatewayError(
+        'invalid_input',
+        `Avatar color "${patch.avatarColor}" must match #RRGGBB.`,
+      );
+    }
+    (next as { avatarColor: string }).avatarColor = patch.avatarColor;
+  }
+  await writeProfile(next);
+  return next;
 }
 
 /**
@@ -253,10 +376,7 @@ export async function addLocalGateway(input: { label: string }): Promise<Gateway
  */
 export async function removeGateway(id: string): Promise<void> {
   if (id === LOCAL_GATEWAY_ID) {
-    throw new GatewayError(
-      'local_not_removable',
-      'The primordial local gateway cannot be removed.',
-    );
+    throw new GatewayError('local_not_removable', 'The default local profile cannot be removed.');
   }
   if (!ID_RE.test(id)) {
     throw new GatewayError('invalid_input', `Invalid gateway id "${id}".`);
