@@ -334,10 +334,22 @@
   // #109 this comes from `settings.activeGatewayKind`, not the old
   // top-level `runtimeMode` field.
   let currentRuntimeMode: 'local' | 'remote' | undefined;
+  // Compact summary of the active gateway — fed into `buildSidebar` so
+  // the head row renders without having to await an IPC every rebuild.
+  // Refreshed on boot, on `onGatewayChanged`, and whenever the
+  // switcher mutates state (add / rename / remove / activate).
+  let currentGateway:
+    | { activeId: string; activeKind: 'local' | 'remote'; activeLabel: string }
+    | undefined;
   function refreshRuntimeMode(): Promise<void> {
     return window.CentraidApi.getSettings()
       .then((s) => {
         currentRuntimeMode = s.activeGatewayKind;
+        currentGateway = {
+          activeId: s.activeGatewayId,
+          activeKind: s.activeGatewayKind,
+          activeLabel: s.activeGatewayLabel,
+        };
       })
       .catch(() => {
         /* ignore — badge stays hidden until the next save */
@@ -479,6 +491,12 @@
       activePage: active.page,
       apps,
       drafts: draftEntries,
+      ...(currentGateway
+        ? {
+            gateway: currentGateway,
+            onOpenGatewaySwitcher: (anchor) => void openGatewaySwitcher(anchor),
+          }
+        : {}),
       // Selecting a sidebar app always shows its app (Use) view — the
       // builder is reached from the top-bar Use/Build switch, not by
       // clicking the row. `openApp` still falls back to the builder for
@@ -501,6 +519,117 @@
       onAutomations: renderAutomations,
       onSettings: renderSettings,
     });
+  }
+
+  // ── Gateway switcher controller ─────────────────────────────────────
+  // Lists profiles, hands them to `window.Chrome.openGatewaySwitcher`,
+  // and wires the lifecycle IPCs back in. Activation / add / remove
+  // close the popover and refresh the sidebar (the head row's label
+  // and kind both flip with the active gateway, and removes drop a
+  // row from the list). Rename is reflected on next open without
+  // forcing the whole renderer to re-render. `anchor` is usually a
+  // DOMRect from the sidebar head-row, but the keyboard shortcut
+  // synthesizes a fixed anchor near the top-left so the popover lands
+  // where the row would.
+  async function openGatewaySwitcher(anchor: MenuAnchor): Promise<void> {
+    const [profiles, settings] = await Promise.all([
+      window.CentraidApi.listGateways(),
+      window.CentraidApi.getSettings(),
+    ]);
+    window.Chrome.openGatewaySwitcher({
+      anchor,
+      profiles: profiles.map((p) => ({
+        id: p.id,
+        kind: p.kind,
+        label: p.label,
+        ...(p.url !== undefined ? { url: p.url } : {}),
+      })),
+      activeId: settings.activeGatewayId,
+      // Primordial local id is always `'local'` (the always-present
+      // in-process workspace). Additional locals get UUIDs and can be
+      // removed; this id can only be renamed.
+      primordialLocalId: 'local',
+      onActivate: async (id) => {
+        if (id === settings.activeGatewayId) return;
+        try {
+          await window.CentraidApi.setActiveGateway({ id });
+          showToast(`Switched to ${profiles.find((p) => p.id === id)?.label ?? id}`);
+          // The main process broadcasts onGatewayChanged after this
+          // resolves, which triggers a refresh + re-render path.
+        } catch (err) {
+          showToast(`Switch failed: ${String(err)}`);
+        }
+      },
+      onRename: async (id, nextLabel) => {
+        try {
+          await window.CentraidApi.renameGateway({ id, label: nextLabel });
+          showToast('Renamed');
+          // Refresh the cached gateway label if the active one was
+          // renamed; sidebar will re-pick it up on the next render
+          // (which the broadcast will trigger).
+          if (id === settings.activeGatewayId) {
+            await refreshRuntimeMode();
+            await reRenderShellForRoute();
+          }
+        } catch (err) {
+          showToast(`Rename failed: ${String(err)}`);
+        }
+      },
+      onRemove: async (id) => {
+        try {
+          await window.CentraidApi.removeGateway({ id });
+          showToast('Gateway removed');
+        } catch (err) {
+          showToast(`Remove failed: ${String(err)}`);
+        }
+      },
+      onAddLocal: async (label) => {
+        try {
+          const profile = await window.CentraidApi.addLocalGateway({ label });
+          showToast(`Local workspace "${profile.label}" created`);
+          // Don't auto-activate — the user might want to add several
+          // workspaces and pick one explicitly. The popover closes
+          // (the chrome.ts close() is called by the form submit), and
+          // the user can re-open it to switch.
+        } catch (err) {
+          showToast(`Create failed: ${String(err)}`);
+        }
+      },
+      onAddRemote: async (input) => {
+        if (!input.label || !input.url) {
+          showToast('Label and URL are required');
+          return;
+        }
+        try {
+          await window.CentraidApi.addGateway(input);
+          showToast(`Gateway "${input.label}" added`);
+        } catch (err) {
+          showToast(`Add failed: ${String(err)}`);
+        }
+      },
+    });
+  }
+
+  // Re-render the current shell route after a label/state change that
+  // doesn't trigger the broader gateway-changed re-mount. Falls back
+  // to a home render if there is no current navigable route. Used by
+  // inline rename (the active gateway's label change has to be
+  // reflected in the sidebar head row).
+  function reRenderShellForRoute(): Promise<void> {
+    const route = navStack[navIndex];
+    if (!route) {
+      renderHome();
+      return Promise.resolve();
+    }
+    if (route.kind === 'home') renderHome();
+    else if (route.kind === 'settings') renderSettings();
+    else if (route.kind === 'insights') renderInsights();
+    else if (route.kind === 'discover') renderDiscover();
+    else if (route.kind === 'starred') renderStarred();
+    else if (route.kind === 'automations') renderAutomations();
+    // Other route kinds (builder, app-view, …) own their own sidebar
+    // rebuild via the existing nav apply path — no extra work here.
+    return Promise.resolve();
   }
 
   function persist(): void {
@@ -5875,193 +6004,35 @@
     void refreshKeyStatus();
     void refreshProviderStatus();
 
-    // Gateways panel — list every profile, switch the active one,
-    // add/rename/remove remote gateways. The local gateway is special:
-    // always present, cannot be removed, label can be edited.
-    const gatewaysListHost = el('div', {
-      style: { display: 'flex', flexDirection: 'column', gap: '8px' },
-    });
-
-    const newGatewayLabel = el('input', {
-      class: 'input',
-      type: 'text',
-      placeholder: 'Centraid Cloud',
-    }) as HTMLInputElement;
-    const newGatewayUrl = el('input', {
-      class: 'input',
-      type: 'text',
-      placeholder: 'https://gateway.example.com',
-    }) as HTMLInputElement;
-    const newGatewayToken = el('input', {
-      class: 'input',
-      type: 'password',
-      placeholder: 'paste your gateway bearer token',
-    }) as HTMLInputElement;
-
-    const renderGatewaysList = async (): Promise<void> => {
-      gatewaysListHost.replaceChildren();
-      const [gateways, settings] = await Promise.all([
-        window.CentraidApi.listGateways(),
-        window.CentraidApi.getSettings(),
-      ]);
-      for (const g of gateways) {
-        const isActive = g.id === settings.activeGatewayId;
-        const labelInput = el('input', {
-          class: 'input',
-          type: 'text',
-          value: g.label,
-        }) as HTMLInputElement;
-        const renameBtn = el(
-          'button',
-          {
-            class: 'btn btn-soft',
-            onClick: async () => {
-              const nextLabel = labelInput.value.trim();
-              if (!nextLabel || nextLabel === g.label) return;
-              try {
-                await window.CentraidApi.renameGateway({ id: g.id, label: nextLabel });
-                showToast('Gateway renamed');
-                await renderGatewaysList();
-              } catch (err) {
-                showToast(`Rename failed: ${String(err)}`);
-              }
-            },
-          },
-          'Rename',
-        );
-        const activateBtn = el(
-          'button',
-          {
-            class: 'btn btn-primary',
-            onClick: async () => {
-              try {
-                await window.CentraidApi.setActiveGateway({ id: g.id });
-                showToast(`Switched to ${g.label}`);
-                renderSettings();
-              } catch (err) {
-                showToast(`Switch failed: ${String(err)}`);
-              }
-            },
-          },
-          isActive ? 'Active' : 'Switch',
-        );
-        if (isActive) activateBtn.setAttribute('disabled', '');
-        const removeBtn =
-          g.id === 'local'
-            ? null
-            : el(
-                'button',
-                {
-                  class: 'btn btn-soft',
-                  onClick: async () => {
-                    if (!confirm(`Remove gateway "${g.label}"? Its workspace will be deleted.`)) {
-                      return;
-                    }
-                    try {
-                      await window.CentraidApi.removeGateway({ id: g.id });
-                      showToast('Gateway removed');
-                      renderSettings();
-                    } catch (err) {
-                      showToast(`Remove failed: ${String(err)}`);
-                    }
-                  },
-                },
-                'Remove',
-              );
-
-        gatewaysListHost.append(
-          el(
-            'div',
-            {
-              style: {
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-                padding: '10px',
-                border: '0.5px solid var(--line)',
-                borderRadius: '8px',
-                background: 'var(--bg-elev)',
-              },
-            },
-            [
-              el(
-                'div',
-                {
-                  style: { display: 'flex', alignItems: 'center', gap: '8px' },
-                },
-                [
-                  labelInput,
-                  el(
-                    'span',
-                    {
-                      class: 'settings-hint',
-                      style: { fontSize: '11px' },
-                    },
-                    g.kind === 'local' ? 'local · in-process' : (g.url ?? 'remote'),
-                  ),
-                ],
-              ),
-              el(
-                'div',
-                {
-                  style: { display: 'flex', gap: '6px' },
-                },
-                [activateBtn, renameBtn, ...(removeBtn ? [removeBtn] : [])],
-              ),
-            ],
-          ),
-        );
-      }
-    };
-
-    const addBtn = el(
+    // Gateways panel — the full switcher lives in the sidebar head
+    // row (⌘⇧G or click the active gateway). This Settings entry is a
+    // tiny deep-link so the affordance is discoverable from the
+    // Settings surface without forking the lifecycle UI in two places.
+    const manageGatewaysBtn = el(
       'button',
       {
         class: 'btn btn-primary',
-        onClick: async () => {
-          const label = newGatewayLabel.value.trim();
-          const url = newGatewayUrl.value.trim();
-          const token = newGatewayToken.value;
-          if (!label || !url) {
-            showToast('Label and URL are required');
-            return;
-          }
-          try {
-            await window.CentraidApi.addGateway({ label, url, token });
-            newGatewayLabel.value = '';
-            newGatewayUrl.value = '';
-            newGatewayToken.value = '';
-            showToast('Gateway added');
-            await renderGatewaysList();
-          } catch (err) {
-            showToast(`Add failed: ${String(err)}`);
-          }
+        onClick: () => {
+          const row = document.querySelector<HTMLElement>('.cd-sb-gw-row');
+          const anchor: MenuAnchor = row
+            ? { kind: 'rect', rect: row.getBoundingClientRect() }
+            : { kind: 'point', x: 24, y: 72 };
+          void openGatewaySwitcher(anchor);
         },
       },
-      'Add gateway',
+      'Open gateway switcher',
     );
 
     pageHosts.runtime.append(
-      drawerGroup('Active gateway', [
+      drawerGroup('Gateways', [
         el(
           'div',
           { class: 'settings-note' },
-          'Switch which gateway the home shelf and builder are targeting. Each gateway has its own workspace; the local gateway is always available.',
+          'The active gateway is shown at the top of the sidebar. Click it (or press ⌘⇧G) to switch, add a workspace, or connect a remote gateway.',
         ),
-        gatewaysListHost,
-      ]),
-      drawerGroup('Add remote gateway', [
-        labeled('Label', 'How this gateway shows up in the switcher.', newGatewayLabel),
-        labeled('URL', 'Base URL of the remote gateway.', newGatewayUrl),
-        labeled(
-          'Bearer token',
-          'Stored in the OS keychain; never written to disk. Leave empty for loopback no-auth.',
-          newGatewayToken,
-        ),
-        el('div', { class: 'sheet-actions' }, [addBtn]),
+        el('div', { class: 'sheet-actions' }, [manageGatewaysBtn]),
       ]),
     );
-    void renderGatewaysList();
     pageHosts.sync.append(
       drawerGroup('Sync', [
         el('div', { class: 'settings-note' }, 'Project sync and backup settings will live here.'),
@@ -6569,6 +6540,20 @@
     if ((e.metaKey || e.ctrlKey) && e.key === ']') {
       e.preventDefault();
       goForward();
+      return;
+    }
+    // ⌘⇧G opens the gateway switcher. Anchored near the sidebar head
+    // row's screen position so the popover appears where the click
+    // affordance lives. Fallback to a fixed top-left anchor if the
+    // row hasn't mounted yet (e.g. sidebar collapsed) — keeps the
+    // shortcut working without the user having to expand the sidebar.
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+      e.preventDefault();
+      const row = document.querySelector<HTMLElement>('.cd-sb-gw-row');
+      const anchor: MenuAnchor = row
+        ? { kind: 'rect', rect: row.getBoundingClientRect() }
+        : { kind: 'point', x: 24, y: 72 };
+      void openGatewaySwitcher(anchor);
     }
   });
 

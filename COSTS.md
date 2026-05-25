@@ -405,3 +405,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-63a239dc-2b6-1779709974 | claude-code | 63a239dc-2b6b-405d-9b78-883f7587f9b6 | #111 | claude-opus-4-7 | 3 | 9108 | 701938 | 9791 | 18902 | 0.6527 | feat(desktop): support multiple local gateways (#111) |
 | claude-code-63a239dc-2b6-1779710009 | claude-code | 63a239dc-2b6b-405d-9b78-883f7587f9b6 | #111 | claude-opus-4-7 | 3 | 3399 | 721583 | 1514 | 4916 | 0.4199 | feat(desktop): sidebar-head gateway switcher chrome primitives (#111) |
 | claude-code-63a239dc-2b6-1779710036 | claude-code | 63a239dc-2b6b-405d-9b78-883f7587f9b6 | #111 | claude-opus-4-7 | 2 | 3952 | 483904 | 2798 | 6752 | 0.3366 | feat(desktop): sidebar-head gateway switcher chrome primitives (#111) |
+| claude-code-63a239dc-2b6-1779710058 | claude-code | 63a239dc-2b6b-405d-9b78-883f7587f9b6 | #111 | claude-opus-4-7 | 1 | 1897 | 243928 | 890 | 2788 | 0.1561 | feat(desktop): wire gateway switcher in renderer (#111) |
