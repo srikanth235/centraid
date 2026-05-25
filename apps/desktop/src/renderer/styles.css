@@ -5105,6 +5105,238 @@ textarea {
   box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
 }
 
+/* ── Sidebar-head gateway switcher ─────────────────────────────────
+   The active-gateway row sits above "Build new" because gateway is
+   the meta-context every other entry operates under. It reuses the
+   `cd-sb-item` shape so it doesn't introduce a foreign affordance —
+   only the kind mark, the trailing kind pill, and the chevron-down
+   meta distinguish it from a page row. A hairline divider below it
+   separates gateway-scope from page-scope (Build new / Search /
+   Pages / Apps / …). */
+.cd-sb-gw-row {
+  /* Mute the hover-active feedback a touch — this is a context
+     selector, not a navigation destination; subtle reads as "you're
+     here" rather than "click me". */
+}
+.cd-sb-gw-row .cd-sb-meta {
+  /* The chevron-down meta uses currentColor — same `--ink-4` as a
+     keyboard shortcut chip — so the row reads as a control, not an
+     active row. */
+  display: inline-flex;
+  align-items: center;
+}
+.cd-sb-gw-mark {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: inline-grid;
+  place-items: center;
+  /* Same tile dimensions as `.cd-sb-app-icon` so the row's first
+     column lines up with the app rows below. The mark itself paints
+     in the kind's signal color; the tile background is a low-opacity
+     wash of that same color so the mark reads against a tinted chip
+     rather than a plain neutral square. */
+  background: color-mix(in srgb, var(--gw-mark-color, var(--ink-3)) 14%, transparent);
+  color: var(--gw-mark-color, var(--ink-3));
+  box-shadow: inset 0 0 0 0.5px
+    color-mix(in srgb, var(--gw-mark-color, var(--ink-3)) 26%, transparent);
+}
+.cd-sb-gw-mark[data-kind='local'] {
+  --gw-mark-color: var(--success);
+}
+.cd-sb-gw-mark[data-kind='remote'] {
+  --gw-mark-color: var(--accent);
+}
+.cd-sb-gw-mark svg {
+  width: 11px;
+  height: 11px;
+}
+.cd-sb-gw-kind {
+  /* The trailing kind tag stays its intrinsic width and uses the
+     same color family as the mark — local rows wear success-green
+     and remote rows wear accent. Reads at a glance from the
+     periphery; doesn't need full attention to identify the kind. */
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+.cd-sb-gw-kind[data-kind='local'] {
+  color: var(--success);
+}
+.cd-sb-gw-kind[data-kind='remote'] {
+  color: var(--accent);
+}
+.cd-sb-divider {
+  height: 1px;
+  margin: 6px 10px 4px;
+  background: var(--line);
+}
+
+/* ── Gateway-switcher popover ───────────────────────────────────────
+   Anchored to the sidebar-head row, sized to read as a vertical
+   extension of the sidebar (260–360px wide). Uses the sidebar
+   vocabulary deliberately: `cd-sb-item` rows, `cd-sb-section`
+   headers, `cd-status` active pill. The only popover-specific
+   primitives are the elevation envelope, the hover-revealed action
+   cluster, and the inline add-form. */
+.cd-gw-pop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+  /* Slightly tinted so the popover stands out from the wall behind it
+     without darkening the whole UI. The sidebar context menus already
+     use a transparent backdrop; this is intentionally a touch more
+     present because the switcher is doing more than picking an item. */
+  background: color-mix(in srgb, var(--bg-sunken) 28%, transparent);
+}
+.cd-gw-pop {
+  position: fixed;
+  z-index: 999;
+  max-height: 78vh;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 6px 8px;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent),
+    0 10px 28px color-mix(in srgb, var(--ink) 18%, transparent),
+    0 4px 10px color-mix(in srgb, var(--ink) 10%, transparent);
+  /* The popover doesn't define its own type stack — it inherits from
+     the sidebar's design tokens. Keeps the kerning + line-heights in
+     lockstep with `cd-sb-item` rows visible behind the backdrop. */
+  font-family: inherit;
+  color: var(--ink);
+}
+.cd-gw-pop-section {
+  /* Override the section-header default margin so the first header
+     hugs the popover top edge. Other rules from `.cd-sb-section` are
+     unchanged — same mono-caps treatment. */
+  margin-top: 6px;
+}
+.cd-gw-pop-section:first-child {
+  margin-top: 2px;
+}
+.cd-gw-pop-section-actions {
+  /* Section `+` is always visible in the popover (not hover-only) —
+     the popover is itself a deliberate interaction, no need to hide
+     the affordance behind a hover. */
+  opacity: 1;
+}
+.cd-gw-pop-empty {
+  padding: 4px 12px 8px;
+  color: var(--ink-4);
+  font-size: 12px;
+  font-style: italic;
+}
+.cd-gw-pop-row {
+  position: relative;
+  cursor: pointer;
+}
+.cd-gw-pop-row[data-active='true'] .cd-gw-pop-label {
+  color: var(--ink);
+  font-weight: 550;
+}
+.cd-gw-pop-mark {
+  /* Same shape as the sidebar-head mark, no overrides needed beyond
+     reasserting the kind color so the rule cascades cleanly when the
+     row also carries `cd-sb-item` (which sets its own icon color). */
+}
+.cd-gw-pop-label {
+  /* `cd-sb-label` already does the truncation; this is here so future
+     popover-specific tweaks (e.g. wrapping the label on small popovers)
+     have a hook without touching the sidebar one. */
+}
+.cd-gw-pop-active {
+  margin-left: auto;
+  /* Active pill sits where the action cluster appears on hover. The
+     two are mutually exclusive in this layout — once the row is
+     active there are no per-row actions left to surface beyond
+     rename, and a click can't accidentally remove the active row. */
+}
+.cd-gw-pop-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+.cd-gw-pop-row[data-active='true'] .cd-gw-pop-actions {
+  /* On the active row, the ACTIVE pill takes the slot — we still want
+     rename to be reachable, so reveal the action cluster on hover and
+     have it overlap (with backing) on top of the pill. */
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-elev);
+  padding: 0 2px;
+  border-radius: 6px;
+}
+.cd-gw-pop-row:hover .cd-gw-pop-actions,
+.cd-gw-pop-row:focus-within .cd-gw-pop-actions {
+  opacity: 1;
+}
+.cd-gw-pop-iconbtn {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  transition:
+    background 90ms,
+    color 90ms;
+}
+.cd-gw-pop-iconbtn:hover {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+}
+.cd-gw-pop-iconbtn--danger:hover {
+  background: color-mix(in srgb, var(--danger, #c43c3c) 14%, transparent);
+  color: var(--danger, #c43c3c);
+}
+.cd-gw-pop-rename {
+  /* The inline rename input replaces the label span in flow. Keep its
+     visual weight close to the surrounding label so the row doesn't
+     jump when the input mounts. */
+  height: 24px;
+  padding: 2px 6px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--bg);
+  border-radius: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cd-gw-pop-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 8px 6px;
+  border-top: 0.5px solid var(--line);
+  margin-top: 4px;
+}
+.cd-gw-pop-section--form {
+  margin-top: 4px;
+  padding: 0;
+  color: var(--accent);
+}
+.cd-gw-pop-input {
+  height: 32px;
+  font-size: 13px;
+}
+.cd-gw-pop-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+
 /* Main area on Bold pages */
 .cd-main {
   grid-area: main;

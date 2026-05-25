@@ -140,7 +140,7 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
   // need workspaceDir/appsDir don't deadlock waiting for it.
   if (resolved.profile.kind === 'local' && !resolved.url) {
     const { ensureLocalRuntime } = await import('./local-runtime.js');
-    const handle = await ensureLocalRuntime();
+    const handle = await ensureLocalRuntime(resolved.profile.id);
     resolved = {
       ...resolved,
       url: handle.url,

@@ -240,3 +240,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-ad3b8f7e598-1779638082-1 | ad3b8f7e-5983-4271-823a-27a69854d219 |  | correction | classifier | Asked to scale back/condense the v0 implementation |  |
 | steer-ad3b8f7e598-1779638082-2 | ad3b8f7e-5983-4271-823a-27a69854d219 |  | correction | classifier | Rejected backtracking multi-gateway; cut backwards-compat code instead |  |
 | steer-ad3b8f7e598-1779640277-1 | ad3b8f7e-5983-4271-823a-27a69854d219 | #109 | correction | classifier | user prefers per-gateway scoping over the shared-paths revert | feat(desktop): multi-gateway with per-gateway state under userData (#109) |
+| steer-63a239dc2b6-1779709707-1 | 63a239dc-2b6b-405d-9b78-883f7587f9b6 |  | interrupt | structural |  | feat(desktop): support multiple local gateways |

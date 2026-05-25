@@ -12,6 +12,7 @@ import {
 } from './settings.js';
 import {
   addGateway,
+  addLocalGateway,
   GatewayError,
   listGateways,
   removeGateway,
@@ -122,10 +123,13 @@ export const Channel = {
   /** Status read for the auto-publish queue (renderer toast / debug). */
   PUBLISH_STATUS: 'centraid:publish:status',
 
-  // Gateway lifecycle (issue #109). The local gateway is special-cased
-  // (always present, can't be removed). Remote gateways get UUID ids.
+  // Gateway lifecycle (issue #109). The primordial local gateway
+  // ('local') is special-cased (always present, can't be removed).
+  // Remote gateways and additional local gateways (workspaces) get
+  // UUID ids and can be renamed/removed freely.
   GATEWAYS_LIST: 'centraid:gateways:list',
   GATEWAYS_ADD: 'centraid:gateways:add',
+  GATEWAYS_ADD_LOCAL: 'centraid:gateways:add-local',
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
@@ -300,6 +304,11 @@ export function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(
+    Channel.GATEWAYS_ADD_LOCAL,
+    async (_e, input: { label: string }): Promise<GatewayProfile> => addLocalGateway(input),
+  );
+
+  ipcMain.handle(
     Channel.GATEWAYS_REMOVE,
     async (_e, input: { id: string }): Promise<{ activeGatewayId: string }> => {
       try {
@@ -349,6 +358,16 @@ export function registerIpcHandlers(): void {
       // the old session handle still mapping to old paths.
       await disposeAllSessionsForGatewaySwap();
       const next = await setActiveGatewayId(input.id);
+      // Tear down HTTP servers for any local gateways that aren't the
+      // new active one. OS-scheduled automations are unaffected — they
+      // shell the CLI against per-gateway DB paths and don't depend on
+      // the runtime being up. For multi-local installs this keeps just
+      // one in-process server alive at a time; for the common
+      // local-then-remote case it shuts the local server down entirely.
+      const { shutdownAllLocalRuntimesExcept } = await import('./local-runtime.js');
+      await shutdownAllLocalRuntimesExcept(
+        next.activeGatewayKind === 'local' ? next.activeGatewayId : undefined,
+      );
       await invalidateGatewayCaches();
       broadcastGatewayChanged(next);
       return next;
@@ -559,7 +578,7 @@ export function registerIpcHandlers(): void {
         projectDir,
         runnerPrefs,
         sessionMode: input.sessionMode,
-        codexHomeBaseDir: localRuntimeCodexHomeBaseDir(),
+        codexHomeBaseDir: localRuntimeCodexHomeBaseDir(settings.activeGatewayId),
         ...(isAutomation
           ? { projectKind: 'automation' as const }
           : { liveSchema: { config: settings, appId: input.projectId } }),
@@ -857,7 +876,9 @@ export function registerIpcHandlers(): void {
         const { rows } = await listAutomations(settings.appsDir);
         for (const row of rows) {
           if (row.ownerApp !== project.id) continue;
-          await localRuntimeAutomationHost(settings.appsDir).register(row);
+          await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).register(
+            row,
+          );
         }
       } catch (err) {
         console.warn(
@@ -889,13 +910,18 @@ export function registerIpcHandlers(): void {
   // handle. An automation's full run ledger is its app's per-app
   // `runtime.sqlite`; the central `centraid-analytics.sqlite` holds one
   // summary row per run and is what the Executions feed + Insights read.
-  const getAnalyticsProvider = (() => {
-    let provider: DatabaseProvider | undefined;
-    return (): DatabaseProvider => {
-      if (!provider) provider = makeAnalyticsDbProvider(localRuntimeAnalyticsDb());
-      return provider;
-    };
-  })();
+  // Cache one provider per gateway id — switching gateways changes the
+  // active analytics DB path, and the old provider points at the
+  // previous file. A per-id Map keeps every gateway's provider warm
+  // across switches without re-opening on every call.
+  const analyticsProviders = new Map<string, DatabaseProvider>();
+  const getAnalyticsProvider = (gatewayId: string): DatabaseProvider => {
+    const existing = analyticsProviders.get(gatewayId);
+    if (existing) return existing;
+    const provider = makeAnalyticsDbProvider(localRuntimeAnalyticsDb(gatewayId));
+    analyticsProviders.set(gatewayId, provider);
+    return provider;
+  };
   /**
    * Run-ledger store for one run id — every run's full ledger is its
    * app's `runtime.sqlite`. An automation runId is `<appId>/<id>:...`
@@ -905,18 +931,24 @@ export function registerIpcHandlers(): void {
    * undefined when the run can't be located.
    */
   const runsStoreForRunId = async (runId: string): Promise<AutomationRunsStore | undefined> => {
+    const settings = await loadSettings();
     const slash = runId.indexOf('/');
     if (slash > 0) {
-      const { appsDir } = await loadSettings();
       return new AutomationRunsStore(
-        makeRuntimeDbProvider(path.join(appsDir, runId.slice(0, slash), 'runtime.sqlite')),
+        makeRuntimeDbProvider(path.join(settings.appsDir, runId.slice(0, slash), 'runtime.sqlite')),
       );
     }
-    const summary = new AnalyticsStore(getAnalyticsProvider()).getSummary(runId);
+    const summary = new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).getSummary(
+      runId,
+    );
     if (!summary?.appId) return undefined;
     return new AutomationRunsStore(
       makeRuntimeDbProvider(
-        path.join(await localRuntimeAppsDir(), summary.appId, 'runtime.sqlite'),
+        path.join(
+          await localRuntimeAppsDir(settings.activeGatewayId),
+          summary.appId,
+          'runtime.sqlite',
+        ),
       ),
     );
   };
@@ -1054,7 +1086,7 @@ export function registerIpcHandlers(): void {
       const row = rows.find((r) => r.ownerApp === input.id);
       if (!row) throw new Error(`automation app ${input.id}: scaffolded but not found on disk`);
       try {
-        await localRuntimeAutomationHost(settings.appsDir).register(row);
+        await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).register(row);
       } catch (err) {
         console.warn(
           `[automations] host register failed for ${input.id}: ` +
@@ -1079,7 +1111,7 @@ export function registerIpcHandlers(): void {
         automationRef: input.automationId,
         runId,
         appsDir: settings.appsDir,
-        analytics: new AnalyticsStore(getAnalyticsProvider()),
+        analytics: new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)),
         runner: prefs.kind,
         // "Run now" is a manual fire — tag it so the executions log
         // distinguishes it from the OS-scheduler trigger.
@@ -1132,7 +1164,9 @@ export function registerIpcHandlers(): void {
       const row = await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId);
       if (row) {
         try {
-          await localRuntimeAutomationHost(settings.appsDir).register(row);
+          await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).register(
+            row,
+          );
         } catch (err) {
           console.warn(
             `[automations] host register failed for ${input.automationId}: ` +
@@ -1152,7 +1186,9 @@ export function registerIpcHandlers(): void {
     // bootstrap reconcile drops the orphaned `appsDir` version.
     const settings = await loadSettings();
     try {
-      await localRuntimeAutomationHost(settings.appsDir).unregister(input.automationId);
+      await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).unregister(
+        input.automationId,
+      );
     } catch (err) {
       console.warn(
         `[automations] host unregister failed for ${input.automationId}: ` +
@@ -1193,7 +1229,9 @@ export function registerIpcHandlers(): void {
     }
     // Drop the automation's central run summaries. Its full ledger
     // (the app's `runtime.sqlite`) goes with the deleted folder.
-    new AnalyticsStore(getAnalyticsProvider()).deleteByRef(input.automationId);
+    new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).deleteByRef(
+      input.automationId,
+    );
     return { ok: true };
   });
 
@@ -1202,7 +1240,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUNS,
     async (_e, input: { automationId?: string; limit?: number }): Promise<AutomationRunRow[]> => {
-      const analytics = new AnalyticsStore(getAnalyticsProvider());
+      const settings = await loadSettings();
+      const analytics = new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId));
       const summaries = analytics.listSummaries({
         ...(input.automationId ? { automationRef: input.automationId } : {}),
         limit: input.limit ?? 50,
@@ -1239,9 +1278,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_PIN_RUN,
     async (_e, input: { runId: string; pinned: boolean }): Promise<{ ok: true }> => {
+      const settings = await loadSettings();
       const store = await runsStoreForRunId(input.runId);
       store?.setPinned(input.runId, input.pinned);
-      new AnalyticsStore(getAnalyticsProvider()).setPinned(input.runId, input.pinned);
+      new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).setPinned(
+        input.runId,
+        input.pinned,
+      );
       return { ok: true };
     },
   );
@@ -1251,7 +1294,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.INSIGHTS_SUMMARY,
     async (_e, input?: { windowDays?: number }): Promise<InsightsSummary> => {
-      const store = new InsightsStore(getAnalyticsProvider());
+      const settings = await loadSettings();
+      const store = new InsightsStore(getAnalyticsProvider(settings.activeGatewayId));
       return store.summary(input?.windowDays !== undefined ? { windowDays: input.windowDays } : {});
     },
   );

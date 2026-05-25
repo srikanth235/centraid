@@ -41,6 +41,7 @@ const Channel = {
   // Gateways (issue #109)
   GATEWAYS_LIST: 'centraid:gateways:list',
   GATEWAYS_ADD: 'centraid:gateways:add',
+  GATEWAYS_ADD_LOCAL: 'centraid:gateways:add-local',
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
@@ -189,6 +190,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   listGateways: () => ipcRenderer.invoke(Channel.GATEWAYS_LIST),
   addGateway: (input: { label: string; url: string; token: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_ADD, input),
+  addLocalGateway: (input: { label: string }) =>
+    ipcRenderer.invoke(Channel.GATEWAYS_ADD_LOCAL, input),
   removeGateway: (input: { id: string }) => ipcRenderer.invoke(Channel.GATEWAYS_REMOVE, input),
   renameGateway: (input: { id: string; label: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_RENAME, input),
