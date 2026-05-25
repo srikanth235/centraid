@@ -45,6 +45,7 @@ const Channel = {
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
   GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
+  GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
 
@@ -98,9 +99,6 @@ const tokensCss = tokens.toCss();
 
 contextBridge.exposeInMainWorld('CentraidTokens', {
   apps: [...tokens.apps],
-  colors: tokens.colors,
-  // `themes` is the new canonical surface; `colors` (light) stays exposed
-  // for the existing call sites until they migrate.
   cssText: tokensCss,
   fonts: tokens.fonts,
   icons: tokens.icons,
@@ -203,6 +201,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.GATEWAYS_RENAME, input),
   updateProfileMetadata: (input: { id: string; displayName?: string; avatarColor?: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_UPDATE_METADATA, input),
+  updateGatewayToken: (input: { id: string; token: string }) =>
+    ipcRenderer.invoke(Channel.GATEWAYS_UPDATE_TOKEN, input),
   setActiveGateway: (input: { id: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_SET_ACTIVE, input),
   onGatewayChanged: (

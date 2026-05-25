@@ -37,6 +37,19 @@ export interface PersistedSettings {
    * as the trigger to run the importer once.
    */
   authImportedAt?: string;
+  /**
+   * ISO timestamp the user finished the first-run onboarding (set their
+   * own profile name + avatar color). Absent on a fresh install — the
+   * renderer reads this as the gate for showing the onboarding view
+   * instead of going straight to home. Once written it's permanent;
+   * a returning user always lands on home.
+   *
+   * We intentionally key on settings (not on the profile's `displayName`)
+   * because the profile is auto-created on boot for backend reasons
+   * (workspace dir, in-process runtime resolution), and we don't want
+   * the auto-created placeholder to ever read as "user has personalized".
+   */
+  onboardingCompletedAt?: string;
 }
 
 export interface DesktopSettings extends HarnessConfig {
@@ -71,6 +84,12 @@ export interface DesktopSettings extends HarnessConfig {
   remoteTemplatesUrl?: string;
   chatModel?: string;
   authImportedAt?: string;
+  /**
+   * ISO timestamp the user finished first-run onboarding. Absent on a
+   * fresh install — the renderer gates on this to show onboarding
+   * before home.
+   */
+  onboardingCompletedAt?: string;
 }
 
 const FILE_NAME = 'centraid-settings.json';
@@ -87,11 +106,9 @@ function persistedDefaults(): PersistedSettings {
 
 /**
  * Type-narrow a raw `settings.json` blob into `PersistedSettings`.
- * Unknown fields are silently dropped. v0 is greenfield — no legacy
- * shape support; users upgrading from a pre-#109 build get a fresh
- * settings file with `activeGatewayId: 'local'` and lose their
- * previously configured remote-gateway URL/token (which they re-enter
- * from the Settings → Runtime panel).
+ * Unknown fields are silently dropped — defensive parsing for malformed
+ * writes, not migration. Centraid is v0; there's no prior on-disk
+ * shape to support.
  */
 function narrow(raw: Record<string, unknown>): PersistedSettings {
   const base = persistedDefaults();
@@ -104,6 +121,9 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
       : {}),
     ...(typeof raw.chatModel === 'string' ? { chatModel: raw.chatModel } : {}),
     ...(typeof raw.authImportedAt === 'string' ? { authImportedAt: raw.authImportedAt } : {}),
+    ...(typeof raw.onboardingCompletedAt === 'string'
+      ? { onboardingCompletedAt: raw.onboardingCompletedAt }
+      : {}),
   };
 }
 
@@ -173,6 +193,9 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
     ...(p.chatModel !== undefined ? { chatModel: p.chatModel } : {}),
     ...(p.authImportedAt !== undefined ? { authImportedAt: p.authImportedAt } : {}),
+    ...(p.onboardingCompletedAt !== undefined
+      ? { onboardingCompletedAt: p.onboardingCompletedAt }
+      : {}),
   };
 }
 
@@ -231,6 +254,11 @@ export async function saveSettings(patch: Partial<DesktopSettings>): Promise<Des
       ? { authImportedAt: patch.authImportedAt }
       : current.authImportedAt !== undefined
         ? { authImportedAt: current.authImportedAt }
+        : {}),
+    ...(patch.onboardingCompletedAt !== undefined
+      ? { onboardingCompletedAt: patch.onboardingCompletedAt }
+      : current.onboardingCompletedAt !== undefined
+        ? { onboardingCompletedAt: current.onboardingCompletedAt }
         : {}),
   };
   await writePersisted(next);

@@ -103,6 +103,22 @@
         '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14"/>',
         size,
       ),
+    // Key — used by the "Rotate token" action on remote profile rows.
+    // Pairs visually with the existing token field's password style; not
+    // in @centraid/design-tokens so kept inline alongside `trash` / `pencil`.
+    key: (size = 13): string =>
+      svg(
+        '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9"/><path d="M17 6l3 3M14 9l3 3"/>',
+        size,
+      ),
+    // Palette — used by the "Change color" action. A small artist's-palette
+    // shape so it reads as "swap the swatch" rather than "any visual edit".
+    palette: (size = 13): string =>
+      svg(
+        '<path d="M12 3a9 9 0 1 0 0 18c1.5 0 2.5-1 2.5-2.5 0-1-.5-1.5-.5-2.5s.7-2 2-2H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z"/><circle cx="7.5" cy="11" r="1" fill="currentColor"/><circle cx="9" cy="7" r="1" fill="currentColor"/><circle cx="14" cy="7" r="1" fill="currentColor"/><circle cx="17" cy="11" r="1" fill="currentColor"/>',
+        size,
+      ),
+    check: (size = 13): string => svg('<path d="M5 12l5 5L20 7"/>', size, 2),
   };
 
   // The Electron window uses `titleBarStyle: 'hiddenInset'` (see
@@ -516,22 +532,19 @@
     if (opts.gateway && opts.onOpenGatewaySwitcher) {
       const gw = opts.gateway;
       const openCb = opts.onOpenGatewaySwitcher;
-      const kindLabel = gw.activeKind === 'local' ? 'LOCAL' : 'REMOTE';
-      // The profile avatar sits in the icon slot, sized like an app
-      // icon tile so it lines up with the rows below it. Color comes
-      // from the profile's avatarColor (issue #113); kind classification
-      // is preserved in the trailing pill so the user can still tell
-      // local from remote at a glance.
+      // Notion/Linear pattern: the head row is just `[avatar] Name ▾`.
+      // The kind (local/remote) lives one level down — surfaced inside
+      // the popover's secondary line per profile — so the head row
+      // stays a clean identity affordance instead of a status billboard.
+      // Drop the mono-caps LOCAL/REMOTE pill (and the geometric kind
+      // mark next to it) we used in v1; one signal in the chrome, not
+      // two competing ones.
       const avatar = profileAvatar(gw.activeDisplayName, gw.activeAvatarColor, 20);
-      const kindPill = el(
-        'span',
-        { class: 'cd-status cd-sb-gw-kind', 'data-kind': gw.activeKind },
-        [kindLabel],
-      );
       const row = el('button', {
         class: 'cd-sb-item cd-sb-gw-row',
         type: 'button',
         'aria-haspopup': 'menu',
+        'data-gateway-kind': gw.activeKind,
         'aria-label': `Active profile: ${gw.activeDisplayName}. Click to switch.`,
         onClick: (e: Event) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -540,7 +553,6 @@
       });
       row.append(avatar);
       row.append(el('span', { class: 'cd-sb-label' }, gw.activeDisplayName));
-      row.append(kindPill);
       row.append(el('span', { class: 'cd-sb-meta', trustedHtml: Glyph.chevronDown(11) }));
       wrap.append(row);
       wrap.append(el('div', { class: 'cd-sb-divider', 'aria-hidden': 'true' }));
@@ -659,24 +671,30 @@
   }
 
   // ── Gateway switcher popover ───────────────────────────────────────
-  // Anchored to the sidebar-head row's bottom edge. Mirrors the sidebar
-  // vocabulary so it doesn't feel like a foreign UI mounted on top of
-  // the shell: section headers in mono-caps, profile rows shaped like
-  // `cd-sb-item`, kind marks reusing the head row's glyphs, the
-  // primary "new local workspace" entry styled like the sidebar's
-  // accent `Build new` row.
+  // Notion / Linear-inspired refresh. v1 grouped profiles under LOCAL /
+  // REMOTE section headers with hover-revealed pencil + trash icons and
+  // two separate `+` buttons. v2 collapses that into:
   //
-  // Three composable affordances:
-  //   • click a row to activate (no-op when already active)
-  //   • hover a row to reveal rename / remove buttons (right side)
-  //   • section-level `+` reveals an inline form (no nested modal):
-  //       local kind → single name field
-  //       remote kind → label / URL / token fields
+  //   • a single flat profile list (local first, then remote, matching
+  //     gateway-store's sort) — kind moves to a muted secondary line
+  //     under the displayName, not a competing top-line pill;
+  //   • a leading check-mark column for the active row (Notion-style)
+  //     instead of a trailing ACTIVE pill, freeing horizontal space and
+  //     letting the scan read top-to-bottom;
+  //   • a per-row `⋯` menu trigger (Rename · Change color · Rotate token
+  //     for remote · Remove) instead of hover-only icons — more
+  //     discoverable on keyboard / touch and stops the icons competing
+  //     with the row label;
+  //   • a single footer "+ Add profile" CTA opening a kind chooser
+  //     (Local | Remote) → form, so the list above stays stable instead
+  //     of being pushed down by an inline form per kind;
+  //   • a filter input at the top when there are ≥ 4 profiles, so the
+  //     switcher scales when a power user accumulates many gateways.
   //
-  // The popover owns its own backdrop; activating, adding, or
-  // removing closes it. Rename is handled inline (input replaces the
-  // label in place) so the user can rename multiple rows in one
-  // session without losing context.
+  // Keyboard inside the popover: `↑/↓` moves focus through rows, Enter
+  // activates the focused row, `/` jumps to filter (when shown), Esc
+  // closes, ⌘1…⌘9 from outside jumps directly to the Nth profile
+  // (wired in app.ts via the global keydown).
   type SwitcherOpts = {
     anchor: MenuAnchor;
     profiles: Array<{
@@ -694,6 +712,8 @@
     onActivate: (id: string) => Promise<void> | void;
     onRename: (id: string, nextLabel: string) => Promise<void> | void;
     onRemove: (id: string) => Promise<void> | void;
+    onChangeColor: (id: string, color: string) => Promise<void> | void;
+    onRotateToken: (id: string, token: string) => Promise<void> | void;
     onAddLocal: (input: {
       label: string;
       displayName?: string;
@@ -708,20 +728,57 @@
     }) => Promise<void> | void;
   };
 
+  /** Filter threshold — show search input only when the user has
+   *  accumulated enough profiles that scanning becomes the bottleneck. */
+  const SWITCHER_FILTER_MIN = 4;
+
   function openGatewaySwitcher(opts: SwitcherOpts): { close: () => void } {
     // Single-instance: a previous switcher always closes before the new
     // one mounts, even if the caller forgot to dismiss the old one.
     document.querySelectorAll('.cd-gw-pop, .cd-gw-pop-backdrop').forEach((n) => n.remove());
+
+    // 8-swatch palette matching gateway-store's AVATAR_PALETTE so a
+    // color picked here round-trips through `updateProfileMetadata`.
+    const AVATAR_PALETTE = [
+      '#5B8DEF',
+      '#7C5CFF',
+      '#E36AD2',
+      '#E5734A',
+      '#E0B53D',
+      '#4FB077',
+      '#3FB5C7',
+      '#B07A4A',
+    ];
+
+    type View =
+      | { mode: 'list'; filter: string; expanded?: string }
+      | { mode: 'chooseKind' }
+      | { mode: 'addLocal' }
+      | { mode: 'addRemote' }
+      | { mode: 'rotateToken'; profileId: string };
+
+    let view: View = { mode: 'list', filter: '' };
 
     const close = (): void => {
       backdrop.remove();
       popover.remove();
       document.removeEventListener('keydown', onKey);
     };
+
+    // Top-level keydown — Escape collapses any open sub-view first,
+    // then closes the popover. Esc on a focused input is preempted
+    // by the input's own keydown handler (so cancel-edit doesn't
+    // close the whole switcher).
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        close();
+        if (view.mode !== 'list') {
+          render({ mode: 'list', filter: '' });
+        } else if ((view as { expanded?: string }).expanded) {
+          render({ mode: 'list', filter: view.filter });
+        } else {
+          close();
+        }
       }
     };
 
@@ -737,188 +794,15 @@
 
     const popover = el('div', { class: 'cd-gw-pop', role: 'menu' });
 
-    // ── Body builder; re-rendered on inline form open/close ─────────
-    const renderBody = (state: { mode: 'list' | 'addLocal' | 'addRemote' }): void => {
-      popover.replaceChildren();
-
-      const groupKind = (kind: 'local' | 'remote'): void => {
-        const items = opts.profiles.filter((p) => p.kind === kind);
-        const header = el('div', { class: 'cd-sb-section cd-gw-pop-section' }, [
-          el('span', {}, kind === 'local' ? 'LOCAL' : 'REMOTE'),
-        ]);
-        // "+" on the section header reveals the inline add-form for
-        // this kind. Persistent (not hover-only) inside the popover —
-        // hover-only headers belong in the sidebar, but a popover row
-        // is already a deliberate interaction and the "+" deserves
-        // discoverability over restraint.
-        const addBtn = el('button', {
-          class: 'cd-sb-section-btn cd-gw-pop-add',
-          type: 'button',
-          'aria-label': kind === 'local' ? 'Add local profile' : 'Add remote profile',
-          trustedHtml: Glyph.plus(11),
-          onClick: () => renderBody({ mode: kind === 'local' ? 'addLocal' : 'addRemote' }),
-        });
-        header.append(
-          el('span', { class: 'cd-sb-section-actions cd-gw-pop-section-actions' }, [addBtn]),
-        );
-        popover.append(header);
-
-        if (items.length === 0) {
-          popover.append(
-            el('div', { class: 'cd-gw-pop-empty' }, [
-              kind === 'local' ? 'No additional profiles' : 'No remote profiles yet',
-            ]),
-          );
-          return;
-        }
-        for (const p of items) {
-          popover.append(renderProfileRow(p));
-        }
-      };
-
-      const renderProfileRow = (p: SwitcherOpts['profiles'][number]): HTMLElement => {
-        const isActive = p.id === opts.activeId;
-        const isPrimordial = p.id === opts.primordialLocalId;
-        // Avatar disc — same shape as the sidebar-head row, sized smaller
-        // to match the popover's tighter rhythm.
-        const mark = profileAvatar(p.displayName, p.avatarColor, 18);
-        const label = el('span', { class: 'cd-sb-label cd-gw-pop-label' }, p.displayName);
-        const row = el('div', {
-          class: 'cd-sb-item cd-gw-pop-row',
-          'data-active': isActive ? 'true' : undefined,
-          'data-primordial': isPrimordial ? 'true' : undefined,
-        });
-        // The activate hit-target is the row itself, minus the action
-        // buttons (which stopPropagation). Mirrors how `cd-sb-app-row`
-        // separates the row click from the `•••` more-button click.
-        row.addEventListener('click', () => {
-          if (isActive) {
-            close();
-            return;
-          }
-          close();
-          void opts.onActivate(p.id);
-        });
-
-        row.append(mark);
-        row.append(label);
-
-        // Active pill — mono-caps `cd-status`, replacing where the
-        // hover-revealed actions would otherwise sit. Visible always,
-        // not just on hover, so the user can scan the list and find
-        // the active one without moving the pointer.
-        if (isActive) {
-          row.append(
-            el('span', { class: 'cd-status cd-gw-pop-active', 'data-tone': 'live' }, [
-              el('span', { class: 'cd-status-dot' }),
-              'ACTIVE',
-            ]),
-          );
-        }
-
-        // Hover-revealed actions cluster (Rename / Remove). Primordial
-        // local hides Remove — the row reads as a fixed thing the user
-        // can rename but not delete.
-        const actions = el('span', { class: 'cd-gw-pop-actions' });
-        const renameBtn = el('button', {
-          class: 'cd-gw-pop-iconbtn',
-          type: 'button',
-          'aria-label': 'Rename',
-          title: 'Rename',
-          trustedHtml: Glyph.pencil(13),
-          onClick: (e: Event) => {
-            e.stopPropagation();
-            // Inline rename: replace the displayName span with an input.
-            // Save on Enter / blur; cancel on Escape. Edits `displayName`
-            // (the user-visible name), not the technical `label`.
-            const input = el('input', {
-              class: 'input cd-gw-pop-rename',
-              type: 'text',
-              value: p.displayName,
-            }) as HTMLInputElement;
-            label.replaceWith(input);
-            input.focus();
-            input.select();
-            actions.style.display = 'none';
-            let committed = false;
-            const commit = async (save: boolean): Promise<void> => {
-              if (committed) return;
-              committed = true;
-              const next = input.value.trim();
-              if (save && next && next !== p.displayName) {
-                await opts.onRename(p.id, next);
-                // Caller will re-list and re-open with fresh data; for
-                // now just close and let the renderer drive.
-                close();
-              } else {
-                // Restore the original label without a reload.
-                input.replaceWith(label);
-                actions.style.display = '';
-              }
-            };
-            input.addEventListener('keydown', (ev) => {
-              if (ev.key === 'Enter') {
-                ev.preventDefault();
-                void commit(true);
-              } else if (ev.key === 'Escape') {
-                ev.preventDefault();
-                void commit(false);
-              }
-            });
-            input.addEventListener('blur', () => void commit(true));
-          },
-        });
-        actions.append(renameBtn);
-        if (!isPrimordial) {
-          const removeBtn = el('button', {
-            class: 'cd-gw-pop-iconbtn cd-gw-pop-iconbtn--danger',
-            type: 'button',
-            'aria-label': 'Remove',
-            title: 'Remove',
-            trustedHtml: Glyph.trash(13),
-            onClick: (e: Event) => {
-              e.stopPropagation();
-              const prompt =
-                p.kind === 'local'
-                  ? `Remove profile "${p.displayName}"? Its apps and history will be deleted.`
-                  : `Remove profile "${p.displayName}"? Its workspace will be deleted.`;
-              if (!confirm(prompt)) return;
-              void Promise.resolve(opts.onRemove(p.id)).then(close);
-            },
-          });
-          actions.append(removeBtn);
-        }
-        row.append(actions);
-        return row;
-      };
-
-      groupKind('local');
-      groupKind('remote');
-
-      // Inline add-forms. They render at the bottom of the popover and
-      // fold the section list above them for focus — small viewports
-      // would otherwise need to scroll past every profile to reach the
-      // form. The cancel button restores the list view.
-      if (state.mode === 'addLocal') {
-        popover.append(addLocalForm());
-      } else if (state.mode === 'addRemote') {
-        popover.append(addRemoteForm());
-      }
-    };
-
-    // 8-swatch color picker matching the gateway-store palette (issue
-    // #113). Returns the swatch row + a getter for the picked color.
-    const AVATAR_PALETTE = [
-      '#5B8DEF',
-      '#7C5CFF',
-      '#E36AD2',
-      '#E5734A',
-      '#E0B53D',
-      '#4FB077',
-      '#3FB5C7',
-      '#B07A4A',
-    ];
-    const buildColorPicker = (initial: string): { node: HTMLElement; get: () => string } => {
+    // ── Reusable color picker (shared across add-forms and the
+    // per-row "Change color" expansion). Returns the row + a getter
+    // for the picked value. `onPick` fires immediately on swatch
+    // click — the per-row variant uses it to commit-on-pick, while
+    // the add-forms ignore it and read via `get()` on submit.
+    const buildColorPicker = (
+      initial: string,
+      onPick?: (c: string) => void,
+    ): { node: HTMLElement; get: () => string } => {
       let selected = initial;
       const row = el('div', { class: 'cd-gw-pop-colors' });
       const swatches: HTMLElement[] = [];
@@ -938,6 +822,7 @@
             e.preventDefault();
             selected = c;
             apply();
+            if (onPick) onPick(c);
           },
         });
         swatches.push(sw);
@@ -947,25 +832,451 @@
       return { node: row, get: () => selected };
     };
 
-    const addLocalForm = (): HTMLElement => {
-      const wrap = el('div', { class: 'cd-gw-pop-form' });
-      wrap.append(
-        el('div', { class: 'cd-sb-section cd-gw-pop-section cd-gw-pop-section--form' }, [
-          el('span', {}, 'NEW LOCAL PROFILE'),
+    // ── Header: title + back button when inside a sub-view ──────────
+    const renderHeader = (title: string, onBack: (() => void) | null): HTMLElement => {
+      const head = el('div', { class: 'cd-gw-pop-head' });
+      if (onBack) {
+        head.append(
+          el('button', {
+            class: 'cd-gw-pop-back',
+            type: 'button',
+            'aria-label': 'Back',
+            trustedHtml: Glyph.arrowLeft(14),
+            onClick: onBack,
+          }),
+        );
+      }
+      head.append(el('span', { class: 'cd-gw-pop-title' }, title));
+      return head;
+    };
+
+    // ── List view ───────────────────────────────────────────────────
+    const renderList = (state: { filter: string; expanded?: string }): void => {
+      popover.dataset.view = 'list';
+
+      // Optional filter — only shown when the user has accumulated
+      // enough profiles that scanning is noticeably slower than typing.
+      // Hidden by default keeps the popover quiet for the common
+      // 1–3 profile case.
+      let filterInput: HTMLInputElement | null = null;
+      if (opts.profiles.length >= SWITCHER_FILTER_MIN) {
+        filterInput = el('input', {
+          class: 'input cd-gw-pop-filter',
+          type: 'text',
+          placeholder: 'Filter profiles…',
+          value: state.filter,
+          'aria-label': 'Filter profiles',
+        }) as HTMLInputElement;
+        filterInput.addEventListener('input', () => {
+          renderList({
+            filter: filterInput!.value,
+            ...(state.expanded ? { expanded: state.expanded } : {}),
+          });
+          // Re-focus the input after re-render — preserve caret position.
+          const re = popover.querySelector<HTMLInputElement>('.cd-gw-pop-filter');
+          if (re) {
+            re.focus();
+            re.setSelectionRange(re.value.length, re.value.length);
+          }
+        });
+        filterInput.addEventListener('keydown', (ev) => {
+          if (ev.key === 'ArrowDown') {
+            ev.preventDefault();
+            const first = popover.querySelector<HTMLElement>('.cd-gw-pop-row');
+            first?.focus();
+          } else if (ev.key === 'Escape') {
+            ev.preventDefault();
+            if (filterInput!.value) {
+              filterInput!.value = '';
+              renderList({ filter: '' });
+            } else {
+              close();
+            }
+          }
+        });
+      }
+
+      const needle = state.filter.trim().toLowerCase();
+      const filtered = opts.profiles.filter((p) => {
+        if (!needle) return true;
+        return (
+          p.displayName.toLowerCase().includes(needle) ||
+          p.label.toLowerCase().includes(needle) ||
+          (p.url ?? '').toLowerCase().includes(needle)
+        );
+      });
+
+      // Build the row list. `data-index` lets ⌘1..⌘9 / arrow-nav land
+      // on the right element without re-scanning the DOM.
+      const list = el('div', { class: 'cd-gw-pop-list', role: 'listbox' });
+      filtered.forEach((p, i) => {
+        list.append(renderProfileRow(p, i, state));
+      });
+      if (filtered.length === 0) {
+        list.append(el('div', { class: 'cd-gw-pop-empty' }, ['No profiles match.']));
+      }
+
+      popover.replaceChildren();
+      if (filterInput) popover.append(filterInput);
+      popover.append(list);
+      popover.append(el('div', { class: 'cd-gw-pop-divider', 'aria-hidden': 'true' }));
+      popover.append(renderFooterAddCta());
+
+      // Focus the first row by default so ↑/↓ + Enter work immediately
+      // (Notion-style keyboard-first switcher). The filter input, when
+      // shown, claims focus instead so typing flows naturally.
+      queueMicrotask(() => {
+        if (filterInput) {
+          filterInput.focus();
+        } else {
+          popover.querySelector<HTMLElement>('.cd-gw-pop-row')?.focus();
+        }
+      });
+    };
+
+    const kindMeta = (p: SwitcherOpts['profiles'][number]): string => {
+      if (p.kind === 'local') {
+        return p.id === opts.primordialLocalId ? 'Local · Default workspace' : 'Local workspace';
+      }
+      // Remote rows show the host (no scheme/path) — same trick Notion
+      // uses for its workspace URLs. Falls back to "Remote gateway" if
+      // the URL can't be parsed (shouldn't happen post-add validation).
+      try {
+        const u = new URL(p.url ?? '');
+        return `Remote · ${u.host}`;
+      } catch {
+        return 'Remote gateway';
+      }
+    };
+
+    const renderProfileRow = (
+      p: SwitcherOpts['profiles'][number],
+      index: number,
+      state: { filter: string; expanded?: string },
+    ): HTMLElement => {
+      const isActive = p.id === opts.activeId;
+      const isPrimordial = p.id === opts.primordialLocalId;
+      const isExpanded = state.expanded === p.id;
+
+      // Outer wrapper holds both the row and (when expanded) the
+      // per-row action strip / inline sub-form. Keeps the row's
+      // border-radius clean when actions appear below it.
+      const wrap = el('div', { class: 'cd-gw-pop-rowwrap' });
+
+      const row = el('button', {
+        class: 'cd-gw-pop-row',
+        type: 'button',
+        role: 'option',
+        'data-active': isActive ? 'true' : undefined,
+        'data-primordial': isPrimordial ? 'true' : undefined,
+        'data-expanded': isExpanded ? 'true' : undefined,
+        'data-index': String(index),
+        'aria-selected': isActive ? 'true' : 'false',
+      });
+
+      // Active state lives on the avatar itself: a 2px accent-colored
+      // ring with a tight 1px gutter so it doesn't clash with the
+      // avatar's own background. This integrates two signals (identity
+      // + selection) into one column instead of a leading check + a
+      // 22px gutter that read as orphaned whenever the row's right side
+      // (number hint, ⋯) hadn't filled out yet. Bolder name + a faint
+      // accent-tinted row background complete the cue.
+      const avatarWrap = el(
+        'span',
+        {
+          class: 'cd-gw-pop-avatar-wrap',
+          'data-active': isActive ? 'true' : undefined,
+        },
+        [profileAvatar(p.displayName, p.avatarColor, 24)],
+      );
+
+      const text = el('span', { class: 'cd-gw-pop-text' }, [
+        el('span', { class: 'cd-gw-pop-name' }, p.displayName),
+        el('span', { class: 'cd-gw-pop-sub' }, kindMeta(p)),
+      ]);
+
+      // Number hint chip — ⌘1..⌘9. Only shown for the first nine
+      // profiles in the unfiltered order so the hint stays meaningful.
+      // Hidden during filter to avoid suggesting indices that won't
+      // match the visible list (filtered rows still activate via
+      // click / Enter, just not via the shortcut).
+      const numberHint =
+        !state.filter && index < 9
+          ? el('span', { class: 'cd-gw-pop-numhint' }, `⌘${index + 1}`)
+          : null;
+
+      const more = el('button', {
+        class: 'cd-gw-pop-more',
+        type: 'button',
+        'aria-label': 'Profile actions',
+        'aria-haspopup': 'menu',
+        'aria-expanded': isExpanded ? 'true' : 'false',
+        trustedHtml: window.Icon.MoreVert({ size: 14 }),
+        onClick: (e: Event) => {
+          e.stopPropagation();
+          renderList({
+            filter: state.filter,
+            ...(isExpanded ? {} : { expanded: p.id }),
+          });
+        },
+      });
+
+      row.append(avatarWrap, text);
+      if (numberHint) row.append(numberHint);
+      row.append(more);
+
+      row.addEventListener('click', () => {
+        if (isActive) {
+          close();
+          return;
+        }
+        close();
+        void opts.onActivate(p.id);
+      });
+
+      // Per-row keyboard nav. Up/Down within the rendered list,
+      // Enter activates, "/" jumps to filter input (when present).
+      row.addEventListener('keydown', (e) => {
+        const ke = e as KeyboardEvent;
+        if (ke.key === 'ArrowDown' || ke.key === 'ArrowUp') {
+          ke.preventDefault();
+          const rows = Array.from(popover.querySelectorAll<HTMLElement>('.cd-gw-pop-row'));
+          const i = rows.indexOf(row);
+          const next = ke.key === 'ArrowDown' ? i + 1 : i - 1;
+          if (next >= 0 && next < rows.length) rows[next]?.focus();
+          else if (ke.key === 'ArrowUp') {
+            popover.querySelector<HTMLElement>('.cd-gw-pop-filter')?.focus();
+          }
+        } else if (ke.key === '/') {
+          const f = popover.querySelector<HTMLElement>('.cd-gw-pop-filter');
+          if (f) {
+            ke.preventDefault();
+            f.focus();
+          }
+        }
+      });
+
+      wrap.append(row);
+
+      // Expanded sub-strip — Rename / Change color / Rotate token
+      // (remote only) / Remove. Notion / Linear surface these behind
+      // a `⋯` button per row; we render the resulting menu inline
+      // below the row to avoid a second floating popover stacked on
+      // top of this one. Click ⋯ again to collapse.
+      if (isExpanded) {
+        wrap.append(renderRowActions(p, isPrimordial, state));
+      }
+
+      return wrap;
+    };
+
+    const renderRowActions = (
+      p: SwitcherOpts['profiles'][number],
+      isPrimordial: boolean,
+      state: { filter: string; expanded?: string },
+    ): HTMLElement => {
+      // Vertical menu list — what Notion's workspace `⋯` actually
+      // renders. The v2 horizontal chip strip looked orphaned for
+      // primordial-local rows (just `[Rename]` + `[Color]` with empty
+      // space to the right) and competed with the row's own visual
+      // weight. A stacked menu fills the popover width predictably,
+      // keeps the icon column lined up with the row's avatar so the
+      // expansion reads as a continuation of the row, and lets Remove
+      // sit below a hairline separator so destructive actions don't
+      // visually mingle with the everyday ones.
+      const menu = el('div', { class: 'cd-gw-pop-actionmenu', role: 'menu' });
+
+      // Sub-form box for inline rename / color picker. Sits BELOW the
+      // menu items (still indented under the avatar column) so the
+      // user picks an action, then immediately sees the edit affordance
+      // appear in-place — no popover-takeover for these light edits.
+      const subbox = el('div', { class: 'cd-gw-pop-subbox' });
+
+      const setSub = (next: 'rename' | 'color' | null): void => {
+        subbox.replaceChildren();
+        // Update which menu item reads as "currently expanded" so the
+        // user has a clear cue about what they clicked.
+        menu.querySelectorAll<HTMLElement>('.cd-gw-pop-menuitem').forEach((mi) => {
+          mi.dataset.subActive = mi.dataset.sub === next ? 'true' : 'false';
+        });
+        if (next === 'rename') {
+          const input = el('input', {
+            class: 'input cd-gw-pop-input cd-gw-pop-rename',
+            type: 'text',
+            value: p.displayName,
+            'aria-label': 'New name',
+          }) as HTMLInputElement;
+          const commit = async (save: boolean): Promise<void> => {
+            const trimmed = input.value.trim();
+            if (save && trimmed && trimmed !== p.displayName) {
+              await opts.onRename(p.id, trimmed);
+              close();
+            } else {
+              setSub(null);
+            }
+          };
+          input.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') {
+              ev.preventDefault();
+              void commit(true);
+            } else if (ev.key === 'Escape') {
+              ev.preventDefault();
+              setSub(null);
+            }
+          });
+          subbox.append(input);
+          queueMicrotask(() => {
+            input.focus();
+            input.select();
+          });
+        } else if (next === 'color') {
+          // Commit-on-pick: clicking a swatch updates immediately.
+          // Matches Linear's accent picker. Popover closes after; the
+          // sidebar re-renders on the gateway-changed broadcast.
+          const picker = buildColorPicker(p.avatarColor, (c) => {
+            void Promise.resolve(opts.onChangeColor(p.id, c)).then(close);
+          });
+          subbox.append(picker.node);
+        }
+      };
+
+      const menuItem = (opts: {
+        label: string;
+        icon: string;
+        onClick: () => void;
+        danger?: boolean;
+        sub?: 'rename' | 'color';
+      }): HTMLElement =>
+        el(
+          'button',
+          {
+            class: `cd-gw-pop-menuitem${opts.danger ? ' cd-gw-pop-menuitem--danger' : ''}`,
+            type: 'button',
+            role: 'menuitem',
+            'data-sub': opts.sub,
+            'data-sub-active': 'false',
+            onClick: opts.onClick,
+          },
+          [
+            el('span', { class: 'cd-gw-pop-menuitem-icon', trustedHtml: opts.icon }),
+            el('span', { class: 'cd-gw-pop-menuitem-label' }, opts.label),
+          ],
+        );
+
+      menu.append(
+        menuItem({
+          label: 'Rename',
+          icon: Glyph.pencil(14),
+          sub: 'rename',
+          onClick: () => {
+            const item = menu.querySelector<HTMLElement>('[data-sub="rename"]');
+            setSub(item?.dataset.subActive === 'true' ? null : 'rename');
+          },
+        }),
+      );
+      menu.append(
+        menuItem({
+          label: 'Change color',
+          icon: Glyph.palette(14),
+          sub: 'color',
+          onClick: () => {
+            const item = menu.querySelector<HTMLElement>('[data-sub="color"]');
+            setSub(item?.dataset.subActive === 'true' ? null : 'color');
+          },
+        }),
+      );
+      if (p.kind === 'remote') {
+        menu.append(
+          menuItem({
+            label: 'Rotate token',
+            icon: Glyph.key(14),
+            onClick: () => render({ mode: 'rotateToken', profileId: p.id }),
+          }),
+        );
+      }
+      if (!isPrimordial) {
+        // Hairline rule before destructive — visual breath so a
+        // misaimed click doesn't land on Remove. Borrowed from
+        // macOS context-menu conventions.
+        menu.append(el('div', { class: 'cd-gw-pop-actionmenu-rule', 'aria-hidden': 'true' }));
+        menu.append(
+          menuItem({
+            label: 'Remove profile',
+            icon: Glyph.trash(14),
+            danger: true,
+            onClick: () => {
+              const msg =
+                p.kind === 'local'
+                  ? `Remove profile "${p.displayName}"? Its apps and history will be deleted.`
+                  : `Remove profile "${p.displayName}"? Its workspace will be deleted.`;
+              if (!confirm(msg)) return;
+              void Promise.resolve(opts.onRemove(p.id)).then(close);
+            },
+          }),
+        );
+      }
+
+      void state; // menu rebuilt on every render; no state needed here.
+      return el('div', { class: 'cd-gw-pop-actionblock' }, [menu, subbox]);
+    };
+
+    // ── Footer "+ Add profile" CTA ──────────────────────────────────
+    const renderFooterAddCta = (): HTMLElement => {
+      return el(
+        'button',
+        {
+          class: 'cd-gw-pop-add-cta',
+          type: 'button',
+          onClick: () => render({ mode: 'chooseKind' }),
+        },
+        [
+          el('span', { class: 'cd-gw-pop-add-icon', trustedHtml: Glyph.plus(13) }),
+          el('span', {}, 'Add profile'),
+        ],
+      );
+    };
+
+    // ── Kind chooser (footer CTA → this view) ───────────────────────
+    const renderChooseKind = (): void => {
+      popover.dataset.view = 'chooseKind';
+      popover.replaceChildren();
+      popover.append(renderHeader('Add profile', () => render({ mode: 'list', filter: '' })));
+      const tile = (title: string, sub: string, icon: string, onClick: () => void): HTMLElement =>
+        el('button', { class: 'cd-gw-pop-kindtile', type: 'button', onClick }, [
+          el('span', { class: 'cd-gw-pop-kindtile-icon', trustedHtml: icon }),
+          el('span', { class: 'cd-gw-pop-kindtile-text' }, [
+            el('span', { class: 'cd-gw-pop-kindtile-title' }, title),
+            el('span', { class: 'cd-gw-pop-kindtile-sub' }, sub),
+          ]),
+        ]);
+      popover.append(
+        el('div', { class: 'cd-gw-pop-kindgrid' }, [
+          tile(
+            'Local workspace',
+            'A new in-process workspace on this machine',
+            Glyph.folder(18),
+            () => render({ mode: 'addLocal' }),
+          ),
+          tile('Remote gateway', 'Connect to a hosted Centraid gateway', Glyph.plug(18), () =>
+            render({ mode: 'addRemote' }),
+          ),
         ]),
       );
+    };
+
+    // ── Add-local form ──────────────────────────────────────────────
+    const renderAddLocal = (): void => {
+      popover.dataset.view = 'addLocal';
+      popover.replaceChildren();
+      popover.append(renderHeader('New local workspace', () => render({ mode: 'chooseKind' })));
       const name = el('input', {
         class: 'input cd-gw-pop-input',
         type: 'text',
         placeholder: 'Profile name',
+        'aria-label': 'Profile name',
       }) as HTMLInputElement;
-      // Default to a palette pick keyed off a random seed so two adds in
-      // a row don't both start on the same swatch. Final value is read
-      // on submit so the user can change it freely.
-      const seed = Math.random().toString(36).slice(2, 10);
       const initialColor =
         AVATAR_PALETTE[Math.floor(Math.random() * AVATAR_PALETTE.length)] ?? AVATAR_PALETTE[0]!;
-      void seed;
       const picker = buildColorPicker(initialColor);
       const submit = async (): Promise<void> => {
         const label = name.value.trim();
@@ -982,58 +1293,57 @@
           void submit();
         } else if (ev.key === 'Escape') {
           ev.preventDefault();
-          renderBody({ mode: 'list' });
+          render({ mode: 'chooseKind' });
         }
       });
-      wrap.append(name);
-      wrap.append(picker.node);
-      wrap.append(
-        el('div', { class: 'cd-gw-pop-form-actions' }, [
-          el(
-            'button',
-            {
-              class: 'btn btn-soft',
-              type: 'button',
-              onClick: () => renderBody({ mode: 'list' }),
-            },
-            'Cancel',
-          ),
-          el(
-            'button',
-            {
-              class: 'btn btn-primary',
-              type: 'button',
-              onClick: () => void submit(),
-            },
-            'Create',
-          ),
+      popover.append(
+        el('div', { class: 'cd-gw-pop-form' }, [
+          name,
+          el('label', { class: 'cd-gw-pop-form-label' }, 'Avatar color'),
+          picker.node,
+          el('div', { class: 'cd-gw-pop-form-actions' }, [
+            el(
+              'button',
+              {
+                class: 'btn btn-soft',
+                type: 'button',
+                onClick: () => render({ mode: 'chooseKind' }),
+              },
+              'Cancel',
+            ),
+            el(
+              'button',
+              { class: 'btn btn-primary', type: 'button', onClick: () => void submit() },
+              'Create',
+            ),
+          ]),
         ]),
       );
       queueMicrotask(() => name.focus());
-      return wrap;
     };
 
-    const addRemoteForm = (): HTMLElement => {
-      const wrap = el('div', { class: 'cd-gw-pop-form' });
-      wrap.append(
-        el('div', { class: 'cd-sb-section cd-gw-pop-section cd-gw-pop-section--form' }, [
-          el('span', {}, 'ADD REMOTE PROFILE'),
-        ]),
-      );
+    // ── Add-remote form ─────────────────────────────────────────────
+    const renderAddRemote = (): void => {
+      popover.dataset.view = 'addRemote';
+      popover.replaceChildren();
+      popover.append(renderHeader('Connect remote gateway', () => render({ mode: 'chooseKind' })));
       const label = el('input', {
         class: 'input cd-gw-pop-input',
         type: 'text',
         placeholder: 'Profile name (e.g. Centraid Cloud)',
+        'aria-label': 'Profile name',
       }) as HTMLInputElement;
       const url = el('input', {
         class: 'input cd-gw-pop-input',
         type: 'text',
         placeholder: 'https://gateway.example.com',
+        'aria-label': 'Gateway URL',
       }) as HTMLInputElement;
       const token = el('input', {
         class: 'input cd-gw-pop-input',
         type: 'password',
         placeholder: 'Bearer token (optional)',
+        'aria-label': 'Bearer token',
       }) as HTMLInputElement;
       const initialColor =
         AVATAR_PALETTE[Math.floor(Math.random() * AVATAR_PALETTE.length)] ?? AVATAR_PALETTE[0]!;
@@ -1059,48 +1369,132 @@
           void submit();
         } else if (ev.key === 'Escape') {
           ev.preventDefault();
-          renderBody({ mode: 'list' });
+          render({ mode: 'chooseKind' });
         }
       };
       label.addEventListener('keydown', onKeyForm);
       url.addEventListener('keydown', onKeyForm);
       token.addEventListener('keydown', onKeyForm);
-      wrap.append(label, url, token);
-      wrap.append(picker.node);
-      wrap.append(
-        el('div', { class: 'cd-gw-pop-form-actions' }, [
-          el(
-            'button',
-            {
-              class: 'btn btn-soft',
-              type: 'button',
-              onClick: () => renderBody({ mode: 'list' }),
-            },
-            'Cancel',
-          ),
-          el(
-            'button',
-            {
-              class: 'btn btn-primary',
-              type: 'button',
-              onClick: () => void submit(),
-            },
-            'Add',
-          ),
+      popover.append(
+        el('div', { class: 'cd-gw-pop-form' }, [
+          label,
+          url,
+          token,
+          el('label', { class: 'cd-gw-pop-form-label' }, 'Avatar color'),
+          picker.node,
+          el('div', { class: 'cd-gw-pop-form-actions' }, [
+            el(
+              'button',
+              {
+                class: 'btn btn-soft',
+                type: 'button',
+                onClick: () => render({ mode: 'chooseKind' }),
+              },
+              'Cancel',
+            ),
+            el(
+              'button',
+              { class: 'btn btn-primary', type: 'button', onClick: () => void submit() },
+              'Add',
+            ),
+          ]),
         ]),
       );
       queueMicrotask(() => label.focus());
-      return wrap;
     };
 
-    renderBody({ mode: 'list' });
+    // ── Rotate-token form (remote only) ─────────────────────────────
+    // Security-sensitive: takes over the popover instead of inlining
+    // below the row so the user's attention isn't competing with
+    // other profile rows while they're pasting a bearer token.
+    const renderRotateToken = (profileId: string): void => {
+      const profile = opts.profiles.find((p) => p.id === profileId);
+      popover.dataset.view = 'rotateToken';
+      popover.replaceChildren();
+      popover.append(
+        renderHeader(`Rotate token · ${profile?.displayName ?? profileId}`, () =>
+          render({ mode: 'list', filter: '' }),
+        ),
+      );
+      const token = el('input', {
+        class: 'input cd-gw-pop-input',
+        type: 'password',
+        placeholder: 'New bearer token',
+        autocomplete: 'new-password',
+        'aria-label': 'New bearer token',
+      }) as HTMLInputElement;
+      const submit = async (): Promise<void> => {
+        // Empty token is allowed — clears the keychain entry, used
+        // when the user wants to unauthenticate a previously-bound
+        // remote. Confirm via the placeholder + soft button copy
+        // rather than a dialog.
+        await opts.onRotateToken(profileId, token.value);
+        close();
+      };
+      token.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          void submit();
+        } else if (ev.key === 'Escape') {
+          ev.preventDefault();
+          render({ mode: 'list', filter: '' });
+        }
+      });
+      popover.append(
+        el('div', { class: 'cd-gw-pop-form' }, [
+          el(
+            'div',
+            { class: 'cd-gw-pop-form-help' },
+            'The plaintext crosses the bridge once and is stored in the OS keychain. Leave empty to clear.',
+          ),
+          token,
+          el('div', { class: 'cd-gw-pop-form-actions' }, [
+            el(
+              'button',
+              {
+                class: 'btn btn-soft',
+                type: 'button',
+                onClick: () => render({ mode: 'list', filter: '' }),
+              },
+              'Cancel',
+            ),
+            el(
+              'button',
+              { class: 'btn btn-primary', type: 'button', onClick: () => void submit() },
+              'Save',
+            ),
+          ]),
+        ]),
+      );
+      queueMicrotask(() => token.focus());
+    };
+
+    // ── Render dispatcher ───────────────────────────────────────────
+    const render = (next: View): void => {
+      view = next;
+      if (next.mode === 'list') {
+        renderList({
+          filter: next.filter,
+          ...(next.expanded ? { expanded: next.expanded } : {}),
+        });
+      } else if (next.mode === 'chooseKind') {
+        renderChooseKind();
+      } else if (next.mode === 'addLocal') {
+        renderAddLocal();
+      } else if (next.mode === 'addRemote') {
+        renderAddRemote();
+      } else if (next.mode === 'rotateToken') {
+        renderRotateToken(next.profileId);
+      }
+    };
+
+    render({ mode: 'list', filter: '' });
     document.body.append(popover);
 
-    // Position: prefer below the anchor's bottom-left; flip up if it
-    // would clip. Width matches the anchor's clientWidth so the popover
-    // reads as a vertical extension of the sidebar row, not a floating
-    // tooltip.
-    const w = Math.max(260, Math.min(360, popover.offsetWidth));
+    // Position the popover. Width pinned to a Notion-style 320px so the
+    // secondary line and the row buttons all fit comfortably without
+    // wrapping at common displayName lengths.
+    const w = 320;
     popover.style.width = `${w}px`;
     let px: number;
     let py: number;
