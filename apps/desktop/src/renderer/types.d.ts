@@ -240,6 +240,19 @@ declare global {
 
   type SidebarPage = 'home' | 'insights' | 'discover' | 'starred' | 'automations' | 'settings';
 
+  /**
+   * Compact gateway summary for the sidebar-head switcher row. The
+   * row shows the active gateway's label + a geometric kind mark (filled
+   * for local, hollow for remote). Clicking the row invokes
+   * `onOpenGatewaySwitcher`, which the renderer wires to a popover
+   * anchored to the row's bottom edge.
+   */
+  interface ChromeSidebarGateway {
+    activeId: string;
+    activeKind: 'local' | 'remote';
+    activeLabel: string;
+  }
+
   interface ChromeBuildSidebarOpts {
     /** App id of the app/builder currently in focus — highlights its row. */
     activeId?: string;
@@ -247,6 +260,14 @@ declare global {
     activePage?: SidebarPage;
     apps: ChromeSidebarApp[];
     drafts: ChromeSidebarApp[];
+    /**
+     * Active gateway summary — rendered as the sidebar-head row above
+     * "Build new". Omit to skip the head row (test harnesses).
+     */
+    gateway?: ChromeSidebarGateway;
+    /** Invoked on click of the gateway head row. Anchored popover opens
+     *  the full switcher (kind-grouped list, add/rename/remove). */
+    onOpenGatewaySwitcher?: (anchor: MenuAnchor) => void;
     onHome: () => void;
     onNewApp: () => void;
     /** New-chat action wired to the Chats section `+`. Falls back to
@@ -268,6 +289,33 @@ declare global {
     onAppContext?: (id: string, anchor: MenuAnchor) => void;
   }
 
+  /**
+   * Profile shape passed into the gateway-switcher popover. Mirrors
+   * `CentraidGatewayProfile` from `centraid-api.d.ts` but redeclared
+   * here so chrome.ts (a separate IIFE) doesn't need to import from
+   * the Centraid API typings file.
+   */
+  interface ChromeGatewayProfile {
+    id: string;
+    kind: 'local' | 'remote';
+    label: string;
+    url?: string;
+  }
+
+  interface ChromeGatewaySwitcherOpts {
+    anchor: MenuAnchor;
+    profiles: ChromeGatewayProfile[];
+    activeId: string;
+    /** The primordial local id (`'local'`). Used to disable the Remove
+     *  button on that profile so the row reads as immutable. */
+    primordialLocalId: string;
+    onActivate: (id: string) => Promise<void> | void;
+    onRename: (id: string, nextLabel: string) => Promise<void> | void;
+    onRemove: (id: string) => Promise<void> | void;
+    onAddLocal: (label: string) => Promise<void> | void;
+    onAddRemote: (input: { label: string; url: string; token: string }) => Promise<void> | void;
+  }
+
   interface ChromeApi {
     buildWindow: (opts: ChromeBuildWindowOpts) => {
       root: HTMLElement;
@@ -275,6 +323,12 @@ declare global {
       setChatPaneOpen: (open: boolean) => void;
     };
     buildSidebar: (opts: ChromeBuildSidebarOpts) => HTMLElement;
+    /**
+     * Mount the gateway-switcher popover anchored to the sidebar-head
+     * row. Returns a `close()` handle so the renderer can dismiss
+     * programmatically (e.g. after activation completes elsewhere).
+     */
+    openGatewaySwitcher: (opts: ChromeGatewaySwitcherOpts) => { close: () => void };
     tbBtn: (opts: {
       icon: string;
       title?: string;

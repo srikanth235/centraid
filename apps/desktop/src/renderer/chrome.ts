@@ -88,6 +88,21 @@
         size,
         1.5,
       ),
+    // Geometric kind marks for the gateway switcher. Filled square ▣
+    // for local (a definite, embedded thing on the user's machine);
+    // hollow square ▢ for remote (a connected, external surface). The
+    // pair reads as a paired vocabulary the way `sidebarOpen`/`Closed`
+    // do — same hull, different interior — so the eye registers the
+    // change without re-parsing the icon.
+    gatewayLocal: (size = 11): string =>
+      `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>`,
+    gatewayRemote: (size = 11): string =>
+      `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="1.5"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/></svg>`,
+    trash: (size = 13): string =>
+      svg(
+        '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14"/>',
+        size,
+      ),
   };
 
   // The Electron window uses `titleBarStyle: 'hiddenInset'` (see
@@ -336,6 +351,9 @@
     activePage?: SidebarPage;
     apps: SidebarApp[];
     drafts: SidebarApp[];
+    /** Active gateway summary — renders the sidebar-head switcher row. */
+    gateway?: { activeId: string; activeKind: 'local' | 'remote'; activeLabel: string };
+    onOpenGatewaySwitcher?: (anchor: MenuAnchor) => void;
     onHome: () => void;
     onNewApp: () => void;
     /** New-chat action wired to the Chats section `+`. Falls back to
@@ -452,6 +470,48 @@
   function buildSidebar(opts: SidebarOpts): HTMLElement {
     const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', height: '100%' } });
 
+    // Sidebar-head gateway switcher. Renders ABOVE "Build new" because
+    // the gateway is the meta-context every other entry operates
+    // under (apps, automations, settings — all gateway-scoped). A
+    // hairline divider below separates the gateway-scope row from
+    // page-scope actions so the hierarchy reads at a glance.
+    if (opts.gateway && opts.onOpenGatewaySwitcher) {
+      const gw = opts.gateway;
+      const openCb = opts.onOpenGatewaySwitcher;
+      const markGlyph = gw.activeKind === 'local' ? Glyph.gatewayLocal() : Glyph.gatewayRemote();
+      const kindLabel = gw.activeKind === 'local' ? 'LOCAL' : 'REMOTE';
+      // The kind mark sits in a dedicated icon slot, sized like an app
+      // icon tile so it lines up with the rows below it. Tone matches
+      // the gateway kind — success-green for local (an embedded thing
+      // on your machine), accent for remote (an outbound connection).
+      const mark = el('span', {
+        class: 'cd-sb-gw-mark',
+        'data-kind': gw.activeKind,
+        trustedHtml: markGlyph,
+      });
+      const kindPill = el(
+        'span',
+        { class: 'cd-status cd-sb-gw-kind', 'data-kind': gw.activeKind },
+        [kindLabel],
+      );
+      const row = el('button', {
+        class: 'cd-sb-item cd-sb-gw-row',
+        type: 'button',
+        'aria-haspopup': 'menu',
+        'aria-label': `Active gateway: ${gw.activeLabel}. Click to switch.`,
+        onClick: (e: Event) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          openCb({ kind: 'rect', rect: r });
+        },
+      });
+      row.append(mark);
+      row.append(el('span', { class: 'cd-sb-label' }, gw.activeLabel));
+      row.append(kindPill);
+      row.append(el('span', { class: 'cd-sb-meta', trustedHtml: Glyph.chevronDown(11) }));
+      wrap.append(row);
+      wrap.append(el('div', { class: 'cd-sb-divider', 'aria-hidden': 'true' }));
+    }
+
     // Top — Build new (accent) + Search (opens the ⌘K palette).
     wrap.append(
       sbItem({
@@ -564,10 +624,399 @@
     return wrap;
   }
 
+  // ── Gateway switcher popover ───────────────────────────────────────
+  // Anchored to the sidebar-head row's bottom edge. Mirrors the sidebar
+  // vocabulary so it doesn't feel like a foreign UI mounted on top of
+  // the shell: section headers in mono-caps, profile rows shaped like
+  // `cd-sb-item`, kind marks reusing the head row's glyphs, the
+  // primary "new local workspace" entry styled like the sidebar's
+  // accent `Build new` row.
+  //
+  // Three composable affordances:
+  //   • click a row to activate (no-op when already active)
+  //   • hover a row to reveal rename / remove buttons (right side)
+  //   • section-level `+` reveals an inline form (no nested modal):
+  //       local kind → single name field
+  //       remote kind → label / URL / token fields
+  //
+  // The popover owns its own backdrop; activating, adding, or
+  // removing closes it. Rename is handled inline (input replaces the
+  // label in place) so the user can rename multiple rows in one
+  // session without losing context.
+  type SwitcherOpts = {
+    anchor: MenuAnchor;
+    profiles: Array<{ id: string; kind: 'local' | 'remote'; label: string; url?: string }>;
+    activeId: string;
+    primordialLocalId: string;
+    onActivate: (id: string) => Promise<void> | void;
+    onRename: (id: string, nextLabel: string) => Promise<void> | void;
+    onRemove: (id: string) => Promise<void> | void;
+    onAddLocal: (label: string) => Promise<void> | void;
+    onAddRemote: (input: { label: string; url: string; token: string }) => Promise<void> | void;
+  };
+
+  function openGatewaySwitcher(opts: SwitcherOpts): { close: () => void } {
+    // Single-instance: a previous switcher always closes before the new
+    // one mounts, even if the caller forgot to dismiss the old one.
+    document.querySelectorAll('.cd-gw-pop, .cd-gw-pop-backdrop').forEach((n) => n.remove());
+
+    const close = (): void => {
+      backdrop.remove();
+      popover.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      }
+    };
+
+    const backdrop = el('div', {
+      class: 'cd-gw-pop-backdrop',
+      onClick: close,
+      onContextmenu: (e: Event) => {
+        e.preventDefault();
+        close();
+      },
+    });
+    document.body.append(backdrop);
+
+    const popover = el('div', { class: 'cd-gw-pop', role: 'menu' });
+
+    // ── Body builder; re-rendered on inline form open/close ─────────
+    const renderBody = (state: { mode: 'list' | 'addLocal' | 'addRemote' }): void => {
+      popover.replaceChildren();
+
+      const groupKind = (kind: 'local' | 'remote'): void => {
+        const items = opts.profiles.filter((p) => p.kind === kind);
+        const header = el('div', { class: 'cd-sb-section cd-gw-pop-section' }, [
+          el('span', {}, kind === 'local' ? 'LOCAL' : 'REMOTE'),
+        ]);
+        // "+" on the section header reveals the inline add-form for
+        // this kind. Persistent (not hover-only) inside the popover —
+        // hover-only headers belong in the sidebar, but a popover row
+        // is already a deliberate interaction and the "+" deserves
+        // discoverability over restraint.
+        const addBtn = el('button', {
+          class: 'cd-sb-section-btn cd-gw-pop-add',
+          type: 'button',
+          'aria-label': kind === 'local' ? 'New local workspace' : 'Add remote gateway',
+          trustedHtml: Glyph.plus(11),
+          onClick: () => renderBody({ mode: kind === 'local' ? 'addLocal' : 'addRemote' }),
+        });
+        header.append(
+          el('span', { class: 'cd-sb-section-actions cd-gw-pop-section-actions' }, [addBtn]),
+        );
+        popover.append(header);
+
+        if (items.length === 0) {
+          popover.append(
+            el('div', { class: 'cd-gw-pop-empty' }, [
+              kind === 'local' ? 'No additional workspaces' : 'No remote gateways yet',
+            ]),
+          );
+          return;
+        }
+        for (const p of items) {
+          popover.append(renderProfileRow(p));
+        }
+      };
+
+      const renderProfileRow = (p: SwitcherOpts['profiles'][number]): HTMLElement => {
+        const isActive = p.id === opts.activeId;
+        const isPrimordial = p.id === opts.primordialLocalId;
+        const mark = el('span', {
+          class: 'cd-sb-gw-mark cd-gw-pop-mark',
+          'data-kind': p.kind,
+          trustedHtml: p.kind === 'local' ? Glyph.gatewayLocal() : Glyph.gatewayRemote(),
+        });
+        const label = el('span', { class: 'cd-sb-label cd-gw-pop-label' }, p.label);
+        const row = el('div', {
+          class: 'cd-sb-item cd-gw-pop-row',
+          'data-active': isActive ? 'true' : undefined,
+          'data-primordial': isPrimordial ? 'true' : undefined,
+        });
+        // The activate hit-target is the row itself, minus the action
+        // buttons (which stopPropagation). Mirrors how `cd-sb-app-row`
+        // separates the row click from the `•••` more-button click.
+        row.addEventListener('click', () => {
+          if (isActive) {
+            close();
+            return;
+          }
+          close();
+          void opts.onActivate(p.id);
+        });
+
+        row.append(mark);
+        row.append(label);
+
+        // Active pill — mono-caps `cd-status`, replacing where the
+        // hover-revealed actions would otherwise sit. Visible always,
+        // not just on hover, so the user can scan the list and find
+        // the active one without moving the pointer.
+        if (isActive) {
+          row.append(
+            el('span', { class: 'cd-status cd-gw-pop-active', 'data-tone': 'live' }, [
+              el('span', { class: 'cd-status-dot' }),
+              'ACTIVE',
+            ]),
+          );
+        }
+
+        // Hover-revealed actions cluster (Rename / Remove). Primordial
+        // local hides Remove — the row reads as a fixed thing the user
+        // can rename but not delete.
+        const actions = el('span', { class: 'cd-gw-pop-actions' });
+        const renameBtn = el('button', {
+          class: 'cd-gw-pop-iconbtn',
+          type: 'button',
+          'aria-label': 'Rename',
+          title: 'Rename',
+          trustedHtml: Glyph.pencil(13),
+          onClick: (e: Event) => {
+            e.stopPropagation();
+            // Inline rename: replace the label span with an input.
+            // Save on Enter / blur; cancel on Escape.
+            const input = el('input', {
+              class: 'input cd-gw-pop-rename',
+              type: 'text',
+              value: p.label,
+            }) as HTMLInputElement;
+            label.replaceWith(input);
+            input.focus();
+            input.select();
+            actions.style.display = 'none';
+            let committed = false;
+            const commit = async (save: boolean): Promise<void> => {
+              if (committed) return;
+              committed = true;
+              const next = input.value.trim();
+              if (save && next && next !== p.label) {
+                await opts.onRename(p.id, next);
+                // Caller will re-list and re-open with fresh data; for
+                // now just close and let the renderer drive.
+                close();
+              } else {
+                // Restore the original label without a reload.
+                input.replaceWith(label);
+                actions.style.display = '';
+              }
+            };
+            input.addEventListener('keydown', (ev) => {
+              if (ev.key === 'Enter') {
+                ev.preventDefault();
+                void commit(true);
+              } else if (ev.key === 'Escape') {
+                ev.preventDefault();
+                void commit(false);
+              }
+            });
+            input.addEventListener('blur', () => void commit(true));
+          },
+        });
+        actions.append(renameBtn);
+        if (!isPrimordial) {
+          const removeBtn = el('button', {
+            class: 'cd-gw-pop-iconbtn cd-gw-pop-iconbtn--danger',
+            type: 'button',
+            'aria-label': 'Remove',
+            title: 'Remove',
+            trustedHtml: Glyph.trash(13),
+            onClick: (e: Event) => {
+              e.stopPropagation();
+              const prompt =
+                p.kind === 'local'
+                  ? `Remove local workspace "${p.label}"? Its apps and history will be deleted.`
+                  : `Remove gateway "${p.label}"? Its workspace will be deleted.`;
+              if (!confirm(prompt)) return;
+              void Promise.resolve(opts.onRemove(p.id)).then(close);
+            },
+          });
+          actions.append(removeBtn);
+        }
+        row.append(actions);
+        return row;
+      };
+
+      groupKind('local');
+      groupKind('remote');
+
+      // Inline add-forms. They render at the bottom of the popover and
+      // fold the section list above them for focus — small viewports
+      // would otherwise need to scroll past every profile to reach the
+      // form. The cancel button restores the list view.
+      if (state.mode === 'addLocal') {
+        popover.append(addLocalForm());
+      } else if (state.mode === 'addRemote') {
+        popover.append(addRemoteForm());
+      }
+    };
+
+    const addLocalForm = (): HTMLElement => {
+      const wrap = el('div', { class: 'cd-gw-pop-form' });
+      wrap.append(
+        el('div', { class: 'cd-sb-section cd-gw-pop-section cd-gw-pop-section--form' }, [
+          el('span', {}, 'NEW LOCAL WORKSPACE'),
+        ]),
+      );
+      const name = el('input', {
+        class: 'input cd-gw-pop-input',
+        type: 'text',
+        placeholder: 'Workspace name',
+      }) as HTMLInputElement;
+      const submit = async (): Promise<void> => {
+        const label = name.value.trim();
+        if (!label) {
+          name.focus();
+          return;
+        }
+        await opts.onAddLocal(label);
+        close();
+      };
+      name.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          void submit();
+        } else if (ev.key === 'Escape') {
+          ev.preventDefault();
+          renderBody({ mode: 'list' });
+        }
+      });
+      wrap.append(name);
+      wrap.append(
+        el('div', { class: 'cd-gw-pop-form-actions' }, [
+          el(
+            'button',
+            {
+              class: 'btn btn-soft',
+              type: 'button',
+              onClick: () => renderBody({ mode: 'list' }),
+            },
+            'Cancel',
+          ),
+          el(
+            'button',
+            {
+              class: 'btn btn-primary',
+              type: 'button',
+              onClick: () => void submit(),
+            },
+            'Create',
+          ),
+        ]),
+      );
+      queueMicrotask(() => name.focus());
+      return wrap;
+    };
+
+    const addRemoteForm = (): HTMLElement => {
+      const wrap = el('div', { class: 'cd-gw-pop-form' });
+      wrap.append(
+        el('div', { class: 'cd-sb-section cd-gw-pop-section cd-gw-pop-section--form' }, [
+          el('span', {}, 'ADD REMOTE GATEWAY'),
+        ]),
+      );
+      const label = el('input', {
+        class: 'input cd-gw-pop-input',
+        type: 'text',
+        placeholder: 'Label (e.g. Centraid Cloud)',
+      }) as HTMLInputElement;
+      const url = el('input', {
+        class: 'input cd-gw-pop-input',
+        type: 'text',
+        placeholder: 'https://gateway.example.com',
+      }) as HTMLInputElement;
+      const token = el('input', {
+        class: 'input cd-gw-pop-input',
+        type: 'password',
+        placeholder: 'Bearer token (optional)',
+      }) as HTMLInputElement;
+      const submit = async (): Promise<void> => {
+        const l = label.value.trim();
+        const u = url.value.trim();
+        if (!l || !u) {
+          (!l ? label : url).focus();
+          return;
+        }
+        await opts.onAddRemote({ label: l, url: u, token: token.value });
+        close();
+      };
+      const onKeyForm = (ev: KeyboardEvent): void => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          void submit();
+        } else if (ev.key === 'Escape') {
+          ev.preventDefault();
+          renderBody({ mode: 'list' });
+        }
+      };
+      label.addEventListener('keydown', onKeyForm);
+      url.addEventListener('keydown', onKeyForm);
+      token.addEventListener('keydown', onKeyForm);
+      wrap.append(label, url, token);
+      wrap.append(
+        el('div', { class: 'cd-gw-pop-form-actions' }, [
+          el(
+            'button',
+            {
+              class: 'btn btn-soft',
+              type: 'button',
+              onClick: () => renderBody({ mode: 'list' }),
+            },
+            'Cancel',
+          ),
+          el(
+            'button',
+            {
+              class: 'btn btn-primary',
+              type: 'button',
+              onClick: () => void submit(),
+            },
+            'Add',
+          ),
+        ]),
+      );
+      queueMicrotask(() => label.focus());
+      return wrap;
+    };
+
+    renderBody({ mode: 'list' });
+    document.body.append(popover);
+
+    // Position: prefer below the anchor's bottom-left; flip up if it
+    // would clip. Width matches the anchor's clientWidth so the popover
+    // reads as a vertical extension of the sidebar row, not a floating
+    // tooltip.
+    const w = Math.max(260, Math.min(360, popover.offsetWidth));
+    popover.style.width = `${w}px`;
+    let px: number;
+    let py: number;
+    if (opts.anchor.kind === 'point') {
+      px = Math.min(opts.anchor.x, window.innerWidth - w - 8);
+      py = Math.min(opts.anchor.y, window.innerHeight - popover.offsetHeight - 8);
+    } else {
+      const r = opts.anchor.rect;
+      px = r.left;
+      py = r.bottom + 4;
+      if (px + w > window.innerWidth - 8) px = r.right - w;
+      if (py + popover.offsetHeight > window.innerHeight - 8) {
+        py = r.top - popover.offsetHeight - 4;
+      }
+    }
+    popover.style.left = `${Math.max(8, px)}px`;
+    popover.style.top = `${Math.max(8, py)}px`;
+
+    document.addEventListener('keydown', onKey);
+    return { close };
+  }
+
   // Expose for app.ts + builder.ts.
   window.Chrome = {
     buildWindow,
     buildSidebar,
+    openGatewaySwitcher,
     tbBtn,
     glyphs: Glyph,
   };
