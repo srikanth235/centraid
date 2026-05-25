@@ -74,14 +74,17 @@ class GatewayError extends Error {
 }
 
 /**
- * Lazy provider of the local in-process runtime's URL+token. Injected
- * by main.ts after `ensureLocalRuntime` returns; resolves to undefined
- * before the runtime has been started (e.g. during boot migration).
+ * Per-gateway provider of the local in-process runtime's URL+token.
+ * Registered once by `local-runtime.ts`; the closure reads the
+ * runtime's handle map at lookup time so a gateway that hasn't been
+ * activated yet returns undefined here (and `resolveGateway` returns
+ * an empty url/token, which callers in boot-time code paths tolerate).
  */
-let localRuntimeInfo: () => { url: string; token: string } | undefined = () => undefined;
+let localRuntimeInfo: (gatewayId: string) => { url: string; token: string } | undefined = () =>
+  undefined;
 
 export function setLocalRuntimeInfoProvider(
-  fn: () => { url: string; token: string } | undefined,
+  fn: (gatewayId: string) => { url: string; token: string } | undefined,
 ): void {
   localRuntimeInfo = fn;
 }
@@ -216,16 +219,50 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
 }
 
 /**
- * Wipe a remote gateway's directory and keychain entry. Refuses to
- * remove the local gateway. Idempotent — missing dir / token is fine.
+ * Mint a UUID and persist a NEW local gateway profile + its workspace +
+ * apps dirs. The in-process runtime for this gateway is NOT started —
+ * `ensureLocalRuntime(id)` starts on first activation. Used for
+ * "create another local workspace" (isolated dev/scratch/per-project
+ * locals). The primordial `'local'` gateway is still auto-created on
+ * boot by `ensureLocalGateway`; this is purely additive.
+ */
+export async function addLocalGateway(input: { label: string }): Promise<GatewayProfile> {
+  const label = input.label.trim();
+  if (!label) throw new GatewayError('invalid_input', 'Gateway label cannot be empty.');
+  const id = randomUUID();
+  const profile: GatewayProfile = {
+    id,
+    kind: 'local',
+    label,
+    createdAt: new Date().toISOString(),
+  };
+  await fs.mkdir(gatewayDir(id), { recursive: true });
+  await fs.mkdir(gatewayWorkspaceDir(id), { recursive: true });
+  await fs.mkdir(gatewayAppsDir(id), { recursive: true });
+  await writeProfile(profile);
+  return profile;
+}
+
+/**
+ * Wipe a gateway's directory and (for remote) its keychain entry.
+ * Refuses to remove the primordial `'local'` gateway — every install
+ * has one, and the active-gateway fallback path in settings depends on
+ * it always being there. Non-primordial local gateways (added via
+ * `addLocalGateway`) can be removed. Idempotent — missing dir / token
+ * is fine.
  */
 export async function removeGateway(id: string): Promise<void> {
   if (id === LOCAL_GATEWAY_ID) {
-    throw new GatewayError('local_not_removable', 'The local gateway cannot be removed.');
+    throw new GatewayError(
+      'local_not_removable',
+      'The primordial local gateway cannot be removed.',
+    );
   }
   if (!ID_RE.test(id)) {
     throw new GatewayError('invalid_input', `Invalid gateway id "${id}".`);
   }
+  // Best-effort token clear — local gateways have no keychain entry, so
+  // the call is a no-op for them.
   await clearGatewayToken(id);
   await fs.rm(gatewayDir(id), { recursive: true, force: true });
 }
@@ -262,7 +299,7 @@ export async function resolveGateway(id: string): Promise<ResolvedGateway | unde
   const profile = await readProfile(id);
   if (!profile) return undefined;
   if (profile.kind === 'local') {
-    const info = localRuntimeInfo();
+    const info = localRuntimeInfo(profile.id);
     return {
       profile,
       workspaceDir: gatewayWorkspaceDir(profile.id),
