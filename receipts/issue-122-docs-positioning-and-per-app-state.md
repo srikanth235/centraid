@@ -17,6 +17,7 @@ GitHub issue: [#122](https://github.com/srikanth235/centraid/issues/122)
 - [x] `bun run docs:build` builds all 37 pages clean; Pagefind indexes 36 pages, 2782 words
 - [x] Mermaid diagram `max-width: 100%` so wide diagrams stop overflowing the article column at `min-height × aspect-ratio`
 - [x] Mermaid fullscreen toggle saves/restores the inline `aspectRatio` so fullscreen actually fills the viewport instead of rendering as a thin band
+- [x] Docs publish (Cloudflare deploy job in `.github/workflows/docs.yml`) paused while iterating; build + smoke jobs still run on PRs
 
 ## What changed
 
@@ -43,6 +44,8 @@ GitHub issue: [#122](https://github.com/srikanth235/centraid/issues/122)
 **Mermaid diagram `max-width: 100%` so wide diagrams stop overflowing the article column at `min-height × aspect-ratio`.** The post-render JS at `scripts/docs-site/assets.mjs:64` sets `figure.style.aspectRatio = b.width + " / " + b.height` from the SVG's natural bbox. For the homepage flowchart that's `1189 / 158 ≈ 7.5`; combined with `.cd-mermaid { min-height: 180px }` and no `max-width`, the browser computed width as `min-height × aspect-ratio = 180 × 7.5 ≈ 1355px` — wider than the article column. Adding `max-width: 100%` to `.cd-mermaid` makes the parent column a hard cap; the aspect-ratio still applies inside the cap.
 
 **Mermaid fullscreen toggle saves/restores the inline `aspectRatio` so fullscreen actually fills the viewport instead of rendering as a thin band.** The `.cd-mermaid.is-fullscreen` CSS rule tries to reset with `aspect-ratio: auto`, but the inline style set at line 64 wins (inline beats stylesheet without `!important`). So fullscreen mode kept the wide-and-short ratio, with `position: fixed; inset: 16px` giving viewport-width and the aspect-ratio forcing `height = viewport_width ÷ 7.5 ≈ 170px`. Fixed by patching `toggleFullscreen` and the Escape handler to stash `figure.style.aspectRatio` on `figure.dataset.savedAspect` when entering fullscreen, clear it, then restore on exit. No `!important` smell, no CSS change needed.
+
+**Docs publish (Cloudflare deploy job in `.github/workflows/docs.yml`) paused while iterating; build + smoke jobs still run on PRs.** Prepended `false &&` to the deploy job's `if:` condition with a `PAUSED (#122)` comment pointing at the restore path (remove the prefix to re-enable). The build job that produces and smokes the static artifact is untouched, so PR validation continues to catch docs regressions; only the Cloudflare Workers deploy to `docs.centraid.dev` is suppressed.
 
 ## Out of scope
 
