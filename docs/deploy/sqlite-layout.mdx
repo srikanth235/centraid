@@ -1,0 +1,132 @@
+---
+summary: 'What lives on disk under the apps directory — registry, per-app data, version dirs, chat transcripts.'
+title: 'SQLite layout on disk'
+---
+
+# SQLite layout on disk
+
+The gateway's state is files. There's no central database; each app has its own SQLite, and the gateway-level metadata is plain JSON.
+
+## Top-level layout
+
+```
+<appsDir>/
+├── _registry.json
+└── <id>/                       ← one per registered app
+    ├── data.sqlite             ← the app's database (persistent across versions)
+    ├── current.json            ← { activeVersion, history }
+    ├── versions/
+    │   ├── v_<UTC ts>_<sha[:6]>/
+    │   └── v_…/
+    └── _chat/
+        ├── w<windowId>.jsonl   ← per-window chat transcript
+        └── index.json          ← chat mode + adapter session ids
+```
+
+Where `<appsDir>` is:
+
+- **Local desktop**: `~/.centraid/apps/` (default).
+- **Remote (OpenClaw plugin)**: `$OPENCLAW_STATE_DIR/centraid/` — typically `~/.openclaw/centraid/`.
+
+> **TODO(#120)** — confirm the local desktop's default. README of openclaw-plugin documents the remote default; the local desktop's is in `apps/desktop/src/main/`.
+
+## `_registry.json`
+
+The registry of currently-registered app ids. Schema:
+
+```json
+{
+  "apps": [
+    { "id": "hydrate", "registeredAt": "2026-05-08T14:30:00.000Z" },
+    { "id": "todos", "registeredAt": "2026-05-09T09:12:44.000Z" }
+  ]
+}
+```
+
+> **TODO(#120)** — confirm the exact schema. The README documents the _existence_ of `_registry.json` but not its full shape.
+
+The gateway writes this atomically on register/deregister.
+
+## `<id>/data.sqlite`
+
+The app's database. Lives at the app root — **not** inside a version directory. Code is versioned; data isn't.
+
+- Persists across `activate` flips.
+- Persists across version pruning.
+- The only way to "reset" an app's data is to delete this file (and let migrations re-run on next boot).
+
+The reserved-name guards mean `data.sqlite` is never served as a static file, never uploadable in a tarball, never readable from any HTTP path except through query/action handlers.
+
+## `<id>/current.json`
+
+The atomic pointer to the active version.
+
+```json
+{
+  "activeVersion": "v_2026-05-09T09-12-44-000Z_d4e5f6",
+  "history": [
+    { "versionId": "v_2026-05-08T14-30-00-000Z_a1b2c3", "activatedAt": "2026-05-08T14:30:01.000Z" },
+    { "versionId": "v_2026-05-09T09-12-44-000Z_d4e5f6", "activatedAt": "2026-05-09T09:12:45.000Z" }
+  ]
+}
+```
+
+> **TODO(#120)** — confirm whether `history[]` is a flat list of activations (an audit log) or a different shape. The README mentions `{ activeVersion, history }`; the inner shape needs verification.
+
+A `POST /centraid/_apps/<id>/activate` call rewrites this file. The gateway uses temp-file + rename for atomicity.
+
+## `<id>/versions/v_<ts>_<sha>/`
+
+Each upload extracts to a new directory under `versions/`. The directory name is `v_` + UTC ISO timestamp + first 6 chars of the content sha256.
+
+- **Immutable.** The gateway never modifies a version directory after extraction.
+- **Code-only.** No `data.sqlite`, no `_chat`, nothing app-state. Just what was in the uploaded tarball.
+- **Pruned.** Old versions above `versionRetention` (default 5; min 2) are deleted. The active version is always retained.
+
+Identical re-uploads collapse: if the sha matches an existing version, no new directory is created — `history[]` records the latest timestamp.
+
+## `<id>/_chat/`
+
+Per-window chat state.
+
+```
+_chat/
+├── w<windowId>.jsonl
+├── w<otherWindow>.jsonl
+└── index.json
+```
+
+- `w<windowId>.jsonl` — append-only transcript, one event per line.
+- `index.json` — per-window metadata: chat mode (`openclaw` / `codex` / `claude`), adapter session id, so the next turn can resume the conversation.
+
+> **TODO(#120)** — document the .jsonl event shape. From the README: "SSE stream of normalized events" describes the wire format; the .jsonl transcript almost certainly stores the same events. Confirm against `runtime-core/src/chat/`.
+
+## What's NOT here
+
+- **No gateway-level user table.** Centraid is single-tenant by design; OpenClaw provides identity at the gateway level when running remotely.
+- **No cross-app shared SQLite.** Each app's database is isolated. There is no "system" database.
+- **No log files.** Handler logs go through the gateway's logger; persistence is the gateway host's concern.
+
+## Backing up
+
+The whole `<appsDir>/` directory is the backup surface. `_registry.json` plus each app's `data.sqlite` and `current.json` are the only persistent state — `versions/` can be re-uploaded, `_chat/` can be cleared.
+
+```sh
+tar czf centraid-backup.tar.gz ~/.centraid/apps
+```
+
+> **TODO(#120)** — capture official backup guidance once the runtime stabilizes. For now this is the obvious move.
+
+## Resetting an app
+
+```sh
+# Stop the gateway (close desktop, or stop the OpenClaw process)
+rm <appsDir>/<id>/data.sqlite
+# Start the gateway — migrations re-run on next boot
+```
+
+## Where to go next
+
+- [Gateway](/concepts/gateway) — the conceptual model the layout implements.
+- [Local deploy](/deploy/local) and [Remote deploy](/deploy/openclaw-plugin) — where each layout lives.
+- [Apps](/concepts/apps) — the per-app shape.

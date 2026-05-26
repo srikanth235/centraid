@@ -1,0 +1,76 @@
+---
+summary: "Every app has a per-window chat surface backed by the gateway's agent layer. Same HTTP contract whether the backend is OpenClaw or codex / Claude SDK."
+title: 'Chat'
+---
+
+# Chat
+
+Every Centraid app gets an in-app chat for free. The surface is host-agnostic: the same HTTP/SSE contract is served on both the local desktop gateway and the remote OpenClaw plugin. The agent backend differs; the wire format does not.
+
+## The surface
+
+| Method   | Path                                         | Purpose                                            |
+| -------- | -------------------------------------------- | -------------------------------------------------- |
+| `POST`   | `/centraid/<id>/_chat`                       | Send a chat turn → SSE stream of normalized events |
+| `GET`    | `/centraid/<id>/_chat/windows`               | List per-window chat metadata                      |
+| `GET`    | `/centraid/<id>/_chat/windows/<wid>/history` | Replay one window's transcript                     |
+| `DELETE` | `/centraid/<id>/_chat/windows/<wid>`         | Clear one window                                   |
+
+The client side lives in [`@centraid/chat-harness`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/chat-harness). It's what both the desktop in-app chat panel and the mobile companion use.
+
+## Windows
+
+A "window" is a single conversation thread within an app. An app may have multiple. Each window has:
+
+- A `windowId` (`<wid>` in the URLs above).
+- A transcript stored at `<appsDir>/<id>/_chat/w<windowId>.jsonl`.
+- An entry in `<appsDir>/<id>/_chat/index.json` recording the chat **mode** and the adapter's session id, so the next turn can resume.
+
+The session key the agent sees is `centraid-chat:<appId>:w<windowId>`. The gateway parses this key in a `before_tool_call` hook to enforce that any `centraid_sql_*` invocation only touches the calling app's data — cross-app access is refused before the tool's `execute` runs.
+
+## The two backends
+
+The `_chat` routes live in `@centraid/runtime-core` and are served identically on both hosts. What differs is which agent backend the host wires in:
+
+### OpenClaw embedded agent (remote gateway)
+
+When the gateway runs as an OpenClaw plugin, an in-process `ChatRunner` calls `api.runtime.agent.runEmbeddedAgent`. Plugin-registered tools (`centraid_sql_describe`, `centraid_sql_read`, `centraid_sql_write`) dispatch server-side without leaving the gateway process.
+
+### Local agent runtime (desktop gateway)
+
+When the gateway is embedded in the desktop, the chat backend uses [`@centraid/agent-runtime`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/agent-runtime)'s `makeChatRunner`. That harness drives one of two engines:
+
+- **codex app-server** as a subprocess, or
+- **Claude Agent SDK** in-process.
+
+The agent shells out to the bundled `centraid` CLI for SQL access, so the path the agent takes to read/write data is the same shape as the agent tools on the remote side — just reached via CLI instead of in-process tool dispatch.
+
+See [Agent runtime](/concepts/agent-runtime) for the engine-selection rationale.
+
+## What the harness client sees
+
+Identical contract either way:
+
+- POST a turn, get an SSE stream of normalized events.
+- Events cover assistant tokens, tool calls, tool results, and lifecycle markers.
+- Resume support is automatic — the harness sends the window id; the gateway looks up the adapter session and feeds it back into the engine.
+
+> **TODO(#120)** — list the exact normalized event types. The README references "normalized events" but I haven't read `runtime-core/src/chat/events.ts` (or wherever the event schema lives) to enumerate them.
+
+## Why the chat surface is per-app, not per-user
+
+A per-app chat keeps the agent's tool surface narrow: it can describe, read, and write _this app's_ data, and nothing else. The session-key trick (`centraid-chat:<appId>:w<windowId>`) enforces it at the gateway, not in the agent's prompt — so even a misbehaving model can't cross apps.
+
+If you want a single "everything" chat that spans apps, you compose at the UI layer (open multiple windows), not by widening any individual app's tool grant.
+
+## What chat does _not_ do
+
+- **No multi-user shared transcripts.** Centraid is single-tenant in practice. Windows belong to the app, the app belongs to whoever owns the gateway.
+- **No streaming model output beyond SSE.** No WebSockets, no chunked HTTP/2 push. SSE is fine for the use case and lets the harness be `fetch`-only.
+- **No persistent agent memory beyond the transcript.** The per-window transcript is the memory. The agent re-reads it (via the resume hook) each turn.
+
+## Where to go next
+
+- [Agent runtime](/concepts/agent-runtime) — codex vs Claude SDK trade-offs.
+- [Reference → HTTP API](/reference/http-api) — chat endpoints in detail.
+- [Three-tool dispatcher](/reference/three-tool-dispatcher) — the tool surface chat agents reach for.

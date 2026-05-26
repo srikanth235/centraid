@@ -1,0 +1,23 @@
+# Cloudflare Pages headers
+# Fingerprinted assets (cache-bust via ?v= query) and per-page OG cards can cache forever.
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/pagefind/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/og/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/og-card.png
+  Cache-Control: public, max-age=86400
+
+# HTML pages — short cache, revalidate often
+/*
+  Cache-Control: public, max-age=300, s-maxage=300, stale-while-revalidate=60
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

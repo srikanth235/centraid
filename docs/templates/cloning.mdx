@@ -1,0 +1,59 @@
+---
+summary: 'How the desktop gallery turns a template into a running app — the clone-and-deploy flow.'
+title: 'Cloning a template'
+---
+
+# Cloning a template
+
+The desktop renders the contents of `packages/app-templates/index.json` as a gallery. Picking a template + clicking _Clone_ runs `cloneTemplate()` from [`@centraid/builder-harness`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/builder-harness), which copies the template's files into the user's projects directory under a new id and hands off to the existing publish pipeline.
+
+> **TODO(#120)** — confirm the exact UI affordance and the projects directory layout. Receipts `issue-105-template-naming-and-unified-clone.md`, `issue-53-notion-style-action-menus`, and `issue-51-copilot-chat-history.md` reference the flow. The verbatim steps below are inferred; capture the real click path once verified.
+
+## The flow
+
+1. **User clicks a tile in the gallery.** The desktop main process reads the chosen template's folder.
+2. **`cloneTemplate()` runs.** Files copy into `<projects>/<new-id>/`. A fresh id is generated to keep the gallery template untouched.
+3. **`current.json` is initialized.** A first version dir under `versions/v_…/` holds the cloned files; `current.json#activeVersion` points at it.
+4. **The gateway registers the new app.** Same path as a manual upload: registry entry created, `data.sqlite` initialized, migrations run.
+5. **The sidebar updates.** The new app appears immediately — there's a receipt ([`issue-51`](https://github.com/srikanthsrungarapu/centraid/blob/main/receipts/issue-51-copilot-chat-history.md)) tracking a fix that ensures cloned drafts show up in the builder sidebar without a refresh.
+
+## Versions and the template's own version
+
+Each gallery entry has a semver `version` field. Bump it when the template's source changes. Centraid uses this to:
+
+- Show which templates have updated since the user's last clone.
+- Drive any "update available" affordances in the gallery.
+
+> **TODO(#120)** — confirm whether the desktop actually tracks the template's version against cloned-app instances and offers updates. It's a likely product feature but I haven't seen the path in source.
+
+## What survives a clone
+
+A clone is `cp -r` plus a fresh `data.sqlite`. The user gets:
+
+- All template handlers (queries / actions / automations).
+- The template's migrations, which run on first boot to create the schema.
+- All static assets (`index.html`, `app.css`, `app.js`, `wall.css`, …).
+- The template's `app.json` — including `knobs[]`, which the user can tweak through the per-app settings popover.
+
+The user does **not** get:
+
+- The template's `index.json` gallery entry (that's gallery metadata, not part of the app).
+- Any data — `data.sqlite` is fresh.
+
+## Naming
+
+Cloning generates a new app id. The default pattern is `<template-id>-<suffix>`, e.g. cloning `hydrate` produces `hydrate-x7q3` or similar.
+
+> **TODO(#120)** — confirm the suffix scheme. From issue [#105](https://github.com/srikanthsrungarapu/centraid/issues/105) the naming was unified across surfaces; capture the canonical form.
+
+The user can rename via the per-app settings popover; the id is the durable handle, the name is human-visible.
+
+## Multiple clones
+
+Nothing stops you from cloning the same template twice. Each clone gets its own id, its own `data.sqlite`, its own version history. Useful for trying variations side-by-side.
+
+## Where to go next
+
+- [Templates index](/templates/index) — the gallery contents.
+- [Authoring a template](/templates/authoring) — adding a new one.
+- [App anatomy](/build/app-anatomy) — what the clone gives you to edit.

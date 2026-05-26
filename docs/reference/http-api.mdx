@@ -1,0 +1,138 @@
+---
+summary: 'Complete /centraid/* HTTP surface — registry, dispatcher, static, change stream, chat.'
+title: 'HTTP API'
+---
+
+# HTTP API
+
+Everything Centraid exposes lives under the `/centraid` prefix. Same surface on the local desktop gateway and the remote OpenClaw plugin.
+
+## Registry
+
+| Method   | Path                                        | Purpose                                                |
+| -------- | ------------------------------------------- | ------------------------------------------------------ |
+| `GET`    | `/centraid/_apps`                           | List registered apps                                   |
+| `DELETE` | `/centraid/_apps/<id>`                      | Deregister an app                                      |
+| `POST`   | `/centraid/_apps/<id>/upload`               | Upload a tar.gz of an app — auto-registers + activates |
+| `GET`    | `/centraid/_apps/<id>/versions`             | List versions with `active` flag                       |
+| `POST`   | `/centraid/_apps/<id>/activate`             | Atomic version flip — body `{ versionId }`             |
+| `DELETE` | `/centraid/_apps/<id>/versions/<versionId>` | Prune a single non-active version                      |
+
+### `POST /centraid/_apps/<id>/upload`
+
+Body: gzipped tarball, `Content-Type: application/gzip`. The gateway:
+
+1. Streams the body to a temp dir.
+2. Validates the archive (extension allowlist, no symlinks/hardlinks/devices, path-escape check).
+3. Extracts to `versions/v_<UTC ts>_<sha[:6]>/`.
+4. Atomically updates `current.json#activeVersion`.
+5. Prunes old versions above `versionRetention`.
+
+Caps:
+
+- 50 MiB total uncompressed
+- 5 MiB per file
+- 5 000 entries
+
+```sh
+# In the app folder:
+tar czf - --exclude data.sqlite --exclude current.json --exclude versions . | \
+  curl -X POST --data-binary @- \
+       -H "Content-Type: application/gzip" \
+       https://gw/centraid/_apps/my-app/upload
+```
+
+### `POST /centraid/_apps/<id>/activate`
+
+```json
+{ "versionId": "v_2026-05-08T14-30-00-000Z_a1b2c3" }
+```
+
+No extraction, no downtime, instant. Useful for rollback.
+
+## Three-tool dispatcher
+
+| Method | Path                                | Purpose                |
+| ------ | ----------------------------------- | ---------------------- |
+| `POST` | `/centraid/_tool/centraid_describe` | Manifest introspection |
+| `POST` | `/centraid/_tool/centraid_read`     | Invoke a query         |
+| `POST` | `/centraid/_tool/centraid_write`    | Invoke an action       |
+
+Full request/response shapes: [Three-tool dispatcher](/reference/three-tool-dispatcher).
+
+## Per-app surface
+
+| Method   | Path                                         | Purpose                                             |
+| -------- | -------------------------------------------- | --------------------------------------------------- |
+| `GET`    | `/centraid/<id>/`                            | Serves `index.html` from the active code dir        |
+| `GET`    | `/centraid/<id>/<file>`                      | Static asset (extension allowlist)                  |
+| `GET`    | `/centraid/<id>/_changes`                    | SSE stream of mutations (table-level invalidations) |
+| `POST`   | `/centraid/<id>/_chat`                       | Send a chat turn → SSE stream of normalized events  |
+| `GET`    | `/centraid/<id>/_chat/windows`               | List per-window chat metadata                       |
+| `GET`    | `/centraid/<id>/_chat/windows/<wid>/history` | Replay one window's transcript                      |
+| `DELETE` | `/centraid/<id>/_chat/windows/<wid>`         | Clear one window                                    |
+
+### Static-asset extension allowlist
+
+```
+.html .htm .css .js .mjs .json .svg .png .jpg .jpeg .webp .gif .ico
+.woff .woff2 .ttf .otf .map
+```
+
+Anything else returns `404`. Reserved names — `data.sqlite`, `_registry.json`, `app.json`, the `queries/` and `actions/` directories — are never served as static, even if uploaded.
+
+### `GET /centraid/<id>/_changes` — change stream
+
+Server-sent events. One `change` event per successful write, naming the table(s) touched.
+
+> **TODO(#120)** — document the exact wire format of `_changes` events: event name (`change`?), payload field (`{ tables: string[] }`?), heartbeat interval. Confirm against `runtime-core/src/changeBus.ts` or equivalent.
+
+### `POST /centraid/<id>/_chat` — chat turn
+
+Request body:
+
+```json
+{
+  "windowId": "<wid>",
+  "message": "user input",
+  "mode": "openclaw" | "codex" | "claude"
+}
+```
+
+> **TODO(#120)** — the request shape and mode tokens are inferred. Confirm against `runtime-core` chat routes and `@centraid/chat-harness`.
+
+Response: SSE stream of normalized events. Event types include assistant tokens, tool calls, tool results, and lifecycle markers.
+
+> **TODO(#120)** — enumerate the normalized event types — the README references them but doesn't list them.
+
+## Cross-cutting
+
+### Headers on every response
+
+- `Content-Security-Policy: default-src 'self'`
+- `X-Content-Type-Options: nosniff`
+
+### Body limit
+
+1 MiB on any endpoint that reads a body.
+
+### Reserved ids
+
+App ids starting with `_` are reserved (`_apps`, `_tool`, `_chat`, `_changes`). Attempts to register or upload an `_id` return `400`.
+
+## Configuration
+
+Two keys in the plugin's `configSchema`:
+
+| Key                | Default                                  | Notes                                                        |
+| ------------------ | ---------------------------------------- | ------------------------------------------------------------ |
+| `appsDir`          | `centraid` (under `$OPENCLAW_STATE_DIR`) | Apps directory. Absolute paths used as-is.                   |
+| `versionRetention` | `5`                                      | Max versions kept per app (active always retained; min `2`). |
+
+The registry persists at `<appsDir>/_registry.json`.
+
+## Where to go next
+
+- [Three-tool dispatcher](/reference/three-tool-dispatcher) — full request/response shapes.
+- [Error codes](/reference/error-codes) — envelope shape, code → HTTP status.
+- [Gateway](/concepts/gateway) — what the on-disk state looks like.

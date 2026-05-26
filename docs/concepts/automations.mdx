@@ -1,0 +1,90 @@
+---
+summary: 'Automations are Centraid apps that fire on a trigger — scheduled, webhook-driven, or manual — instead of waiting for a UI click. Each lives as a directory inside its owning app.'
+title: 'Automations'
+---
+
+# Automations
+
+An **automation** is an app-owned project that fires on a **trigger** instead of a UI click. The trigger is a cron schedule, an inbound webhook POST, or an explicit "Run now." When it fires, a JS handler runs in a worker thread with a curated `ctx` surface — tools, agent turns, KV state, prior runs, cross-automation invocation.
+
+## Where they live
+
+Every automation lives inside an app folder:
+
+```
+<appCodeDir>/automations/<id>/
+  automation.json    # manifest — source of truth
+  handler.js         # generated handler — what actually runs
+```
+
+The directory **is** the automation. There is no separate registration step; the manifest is the only thing the scheduler needs to register the trigger.
+
+## Two structural shapes, same runtime
+
+| Shape                        | Example                                             | Description                                                                                                                                  |
+| ---------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| UI app that owns automations | `hydrate/` with `automations/weekly-encouragement/` | A regular app with `index.html` + queries + actions, _and_ automations operating on its data.                                                |
+| Headless automation app      | `auto.briefing/`                                    | An app folder whose only purpose is automations — no `index.html`, empty `actions[]` / `queries[]`. Convention prefixes the id with `auto.`. |
+
+There is **no `kind: "automation"` flag** and **no `headless: true` field**. The `auto.` prefix is a hint to the desktop gallery, not a runtime permission boundary. Whether an app has a UI is determined by whether `index.html` exists.
+
+## Three trigger kinds
+
+`triggers` is an array on the manifest:
+
+| Kind                    | Shape                                     | Notes                                                                                                                                  |
+| ----------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `cron`                  | `{ kind: "cron", expr: "<5-field UTC>" }` | Standard cron, UTC, multiple per automation allowed.                                                                                   |
+| `webhook` (provisioned) | `{ kind: "webhook", id, secretHash }`     | Fires on POST to `/_centraid-hook/<id>` on a remote gateway. At most one webhook per automation. Desktop never registers the listener. |
+| `webhook` (pending)     | `{ kind: "webhook", pending: true }`      | The conversational builder's handoff form — a privileged server pass mints the route slug + secret.                                    |
+
+An empty `triggers: []` (or omitting the field) is legal — the automation fires only via "Run now" or `ctx.invoke` from another automation.
+
+## What the handler can do
+
+```js
+export default async ({ ctx, log, input }) => {
+  // ctx.tool(name, args)     — call an MCP tool (including centraid_read/write)
+  // ctx.agent({ prompt })    — one constrained model turn
+  // ctx.state.get/set/delete — cross-run KV in runtime.sqlite
+  // ctx.runs.last/list       — prior-run history
+  // ctx.invoke(handle, args) — fire another automation
+  return {
+    summary: 'short line for the run list',
+    output: {
+      /* … */
+    },
+  };
+};
+```
+
+Automations do **not** get the `db` proxy that queries and actions receive. To read or write data — including data in their own owning app — they go through `ctx.tool('centraid_read', …)` and `ctx.tool('centraid_write', …)`. An automation is a client of the [three-tool dispatcher](/reference/three-tool-dispatcher), same as a UI iframe.
+
+## Run audit
+
+Every fire writes to `<appDir>/runtime.sqlite`:
+
+- One `runs` row per fire — status, summary, output, the trigger origin, error if any.
+- One `run_nodes` row per `ctx.tool` / `ctx.agent` / `ctx.invoke` call — ordered, with timings and full request/response.
+
+`history.keep` on the manifest controls retention — `{count: N}`, `{days: N}`, `"all"`, or `"errors"`. Default is `{count: 100}`.
+
+## Why this shape
+
+A handful of decisions hold the design together:
+
+- **Disk-first.** The manifest is the source of truth. No SQLite definition table; toggling `enabled` is a file write. A scheduler that reads the directory has everything it needs.
+- **Handler is generated JS, not an agent loop.** The conversational builder turns intent into code once; the runtime runs that code. The `prompt` field is documentation, not execution.
+- **Webhook credentials are privileged.** The builder agent can declare intent (`pending: true`) but cannot mint the route slug or secret — those require crypto-random generation and one-shot user surfacing. A server pass provisions.
+- **Per-app run ledger.** `runtime.sqlite` is separate from `data.sqlite`, so automation churn doesn't pollute the app's user data.
+- **Three-tool dispatcher all the way down.** An automation reaches its parent app's data the same way any other client does. No shortcut, no separate API.
+
+## Where to go next
+
+- [Automations → Overview](/automations/index) — the full tab, top to bottom.
+- [Manifest reference](/automations/manifest) — every field of `automation.json`.
+- [Triggers](/automations/triggers) — cron, webhook, multi-trigger composition.
+- [Handler runtime](/automations/handler) — what `ctx.*` actually does.
+- [Webhooks](/automations/webhooks) — the provisioning handshake.
+- [Run history](/automations/run-history) — `runs`, `run_nodes`, retention.
+- [Conversational builder](/automations/conversational-builder) — how the agent scaffolds an automation.

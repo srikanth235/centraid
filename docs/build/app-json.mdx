@@ -1,0 +1,140 @@
+---
+summary: 'Every field in app.json: identity, tables, actions, queries, knobs.'
+title: 'app.json'
+---
+
+# `app.json`
+
+The manifest. One per app. Read by the gateway at upload time and by every agent that wants to discover what your app exposes.
+
+## Top-level shape
+
+```json
+{
+  "manifestVersion": 1,
+  "id": "hydrate",
+  "name": "Hydrate",
+  "description": "Track 8 cups a day.",
+  "version": "0.1.0",
+  "tables": [ ... ],
+  "actions": [ ... ],
+  "queries": [ ... ],
+  "knobs": [ ... ]
+}
+```
+
+| Field             | Type    | Notes                                                                                    |
+| ----------------- | ------- | ---------------------------------------------------------------------------------------- |
+| `manifestVersion` | integer | Currently `1`. Future-proofing knob.                                                     |
+| `id`              | string  | Must match the folder name and URL slug. Letters, digits, hyphens, dots; no leading `_`. |
+| `name`            | string  | Human-readable. Shown in the desktop sidebar and gallery.                                |
+| `description`     | string  | Used by the gallery card and by agents that introspect via `centraid_describe`.          |
+| `version`         | semver  | Bump on substantive changes. Used for retention pruning logic.                           |
+| `tables`          | array   | Declared shape. Authoritative schema lives in `migrations/`.                             |
+| `actions`         | array   | Each entry describes one handler in `actions/<name>.js`.                                 |
+| `queries`         | array   | Each entry describes one handler in `queries/<name>.js`.                                 |
+| `knobs`           | array   | User-facing settings the desktop renders. Optional.                                      |
+
+## `tables[]`
+
+Documents the schema your handlers expect. The gateway doesn't _create_ tables from this — that's `migrations/`. But agents reading the manifest use this to know what to ask about.
+
+```json
+{
+  "name": "hydrate_daily",
+  "columns": [
+    { "name": "date", "type": "TEXT" },
+    { "name": "cups", "type": "INTEGER" }
+  ]
+}
+```
+
+> **TODO(#120)** — verify whether the dispatcher cross-checks `tables[]` against the actual schema or treats it as documentation only. From the README it looks documentary; runtime-core may enforce more.
+
+## `actions[]` and `queries[]`
+
+**Each entry in these arrays is a tool definition.** This is the app's _tool catalog_ — the contract by which your UI, an AI agent, the CLI, and any other caller discover what your app can do. The implementation lives in `actions/<name>.js` or `queries/<name>.js`, but the definition here is what every caller sees first. See [Queries and actions](/concepts/queries-and-actions) for the framing.
+
+Same entry shape across both arrays. They differ only in semantics (read vs write) and which generic dispatcher routes calls to them (`centraid_read` for queries, `centraid_write` for actions).
+
+```json
+{
+  "name": "set-cups",
+  "description": "Set today's cup count (clamped 0..8).",
+  "confirmation": "none",
+  "input": {
+    "type": "object",
+    "properties": { "cups": { "type": "number", "minimum": 0, "maximum": 8 } },
+    "required": ["cups"],
+    "additionalProperties": false
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "date": { "type": "string" },
+      "cups": { "type": "number" },
+      "goal": { "type": "number" }
+    }
+  },
+  "writes": ["hydrate_daily"]
+}
+```
+
+| Field          | Type                         | Notes                                                                        |
+| -------------- | ---------------------------- | ---------------------------------------------------------------------------- |
+| `name`         | string                       | Maps to `actions/<name>.js` or `queries/<name>.js`.                          |
+| `description`  | string                       | Surfaced to agents in `centraid_describe`. Write it like a tool description. |
+| `confirmation` | `"none" \| "soft" \| "hard"` | Action only. Hints to the desktop whether to prompt the user before firing.  |
+| `input`        | JSON Schema (draft 2020-12)  | Validated by Ajv before the handler runs.                                    |
+| `output`       | JSON Schema                  | Documentation only — not validated at runtime today.                         |
+| `writes`       | string[]                     | Action only. Tables the handler mutates. Drives change-stream invalidations. |
+| `reads`        | string[]                     | Query only. Tables the handler reads. Documentation; not enforced.           |
+
+### About `confirmation`
+
+The desktop shell renders different confirmation UIs based on this hint:
+
+- `"none"` — fire immediately (default for safe, undoable actions).
+- `"soft"` — toast/banner confirmation (default for mostly-safe actions).
+- `"hard"` — modal confirmation (destructive or expensive actions).
+
+> **TODO(#120)** — confirm the exact set of confirmation tokens recognized. The Hydrate template uses `"none"`; other templates may use other values. Worth a sweep of `packages/app-templates/*/app.json`.
+
+## `knobs[]`
+
+User-facing settings. Render in the desktop's per-app settings popover.
+
+```json
+{
+  "key": "appFont",
+  "label": "Font",
+  "type": "segmented",
+  "default": "sans",
+  "options": [
+    { "value": "sans", "label": "Sans" },
+    { "value": "serif", "label": "Serif" },
+    { "value": "mono", "label": "Mono" }
+  ]
+}
+```
+
+Knob types observed in templates:
+
+| `type`      | Renders as                             | Notes                                        |
+| ----------- | -------------------------------------- | -------------------------------------------- |
+| `segmented` | A segmented control (one row of pills) | Best for 2–4 options.                        |
+| `swatch`    | A row of color swatches                | `value` is a hex color; `label` is the name. |
+
+> **TODO(#120)** — list every supported knob type. Hydrate uses `segmented` and `swatch`. The full set may include `toggle`, `slider`, `text` etc. — worth confirming against the renderer's knob component.
+
+Knob values arrive in your iframe through the `centraid:settings` postMessage. See [UI → receiving settings](/build/ui-and-changes#receiving-settings).
+
+## Reserved keys, future-proofing
+
+Anything not listed above is ignored by the current dispatcher but reserved for future use. Don't ship custom top-level fields in `app.json` — put extension data in your own files alongside.
+
+## Where to go next
+
+- [App anatomy](/build/app-anatomy) — the folder shape this manifest describes.
+- [Three-tool dispatcher](/reference/three-tool-dispatcher) — what consumes `input` schemas.
+- [Migrations](/build/migrations) — where the actual schema lives.

@@ -1,0 +1,156 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Centraid",
+  "description": "Personal app builder. Build, share, and run tiny SQLite-backed apps from a desktop shell, a mobile companion, or a remote gateway.",
+  "theme": "mint",
+  "icons": {
+    "library": "lucide"
+  },
+  "logo": {
+    "light": "/assets/centraid-mark.svg",
+    "dark": "/assets/centraid-mark.svg"
+  },
+  "fonts": {
+    "body": { "family": "Inter" },
+    "heading": { "family": "Inter" }
+  },
+  "favicon": "/assets/centraid-mark.svg",
+  "colors": {
+    "primary": "#5B6CFF",
+    "dark": "#5B6CFF",
+    "light": "#8B97FF"
+  },
+  "styling": {
+    "codeblocks": {
+      "theme": { "dark": "min-dark", "light": "min-light" }
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/srikanthsrungarapu/centraid",
+        "icon": "github"
+      }
+    ]
+  },
+  "redirects": [],
+  "navigation": {
+    "languages": [
+      {
+        "language": "en",
+        "tabs": [
+          {
+            "tab": "Get started",
+            "groups": [
+              {
+                "group": "Overview",
+                "pages": ["index"]
+              },
+              {
+                "group": "First steps",
+                "pages": ["getting-started", "quickstart"]
+              }
+            ]
+          },
+          {
+            "tab": "Concepts",
+            "groups": [
+              {
+                "group": "Architecture",
+                "pages": ["concepts/architecture", "concepts/gateway"]
+              },
+              {
+                "group": "Apps and handlers",
+                "pages": [
+                  "concepts/apps",
+                  "concepts/queries-and-actions",
+                  "concepts/change-stream",
+                  "concepts/automations"
+                ]
+              },
+              {
+                "group": "Chat and agents",
+                "pages": ["concepts/chat", "concepts/agent-runtime"]
+              }
+            ]
+          },
+          {
+            "tab": "Build apps",
+            "groups": [
+              {
+                "group": "Anatomy",
+                "pages": ["build/app-anatomy", "build/app-json"]
+              },
+              {
+                "group": "Handlers",
+                "pages": ["build/queries", "build/actions", "build/migrations"]
+              },
+              {
+                "group": "UI",
+                "pages": ["build/ui-and-changes"]
+              }
+            ]
+          },
+          {
+            "tab": "Automations",
+            "groups": [
+              {
+                "group": "Overview",
+                "pages": ["automations/index"]
+              },
+              {
+                "group": "Reference",
+                "pages": [
+                  "automations/manifest",
+                  "automations/triggers",
+                  "automations/handler",
+                  "automations/webhooks"
+                ]
+              },
+              {
+                "group": "Operating",
+                "pages": ["automations/run-history", "automations/conversational-builder"]
+              }
+            ]
+          },
+          {
+            "tab": "Templates",
+            "groups": [
+              {
+                "group": "Templates",
+                "pages": ["templates/index", "templates/cloning", "templates/authoring"]
+              }
+            ]
+          },
+          {
+            "tab": "Deploy",
+            "groups": [
+              {
+                "group": "Deploy",
+                "pages": ["deploy/local", "deploy/openclaw-plugin", "deploy/sqlite-layout"]
+              }
+            ]
+          },
+          {
+            "tab": "Reference",
+            "groups": [
+              {
+                "group": "API",
+                "pages": [
+                  "reference/three-tool-dispatcher",
+                  "reference/http-api",
+                  "reference/error-codes"
+                ]
+              },
+              {
+                "group": "Tools",
+                "pages": ["reference/cli", "reference/governance-directives"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

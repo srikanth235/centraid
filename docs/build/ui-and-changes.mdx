@@ -1,0 +1,144 @@
+---
+summary: "How an app's iframe subscribes to the change stream, receives theme + knob settings, and reaches the dispatcher."
+title: 'UI and changes'
+---
+
+# UI and changes
+
+An app's `index.html` loads inside an iframe at `/centraid/<id>/`. The iframe has three things to wire up: calling the dispatcher, subscribing to the change stream, and receiving theme + knob settings from the shell.
+
+## Calling the dispatcher
+
+The dispatcher lives at `/centraid/_tool/centraid_{describe,read,write}`. From inside the iframe, use absolute paths:
+
+```js
+const res = await fetch('/centraid/_tool/centraid_read', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    app: 'hydrate',
+    query: 'get-today',
+    input: {},
+  }),
+});
+const data = await res.json();
+```
+
+For writes:
+
+```js
+await fetch('/centraid/_tool/centraid_write', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    app: 'hydrate',
+    action: 'set-cups',
+    input: { cups: 5 },
+  }),
+});
+```
+
+Errors come back as `{ isError: true, error: { code, message, path? } }` envelopes. See [Reference → error codes](/reference/error-codes).
+
+## Subscribing to the change stream
+
+```js
+const es = new EventSource('/centraid/<id>/_changes');
+es.addEventListener('change', (e) => {
+  const { tables } = JSON.parse(e.data);
+  if (tables.includes('hydrate_daily')) refresh();
+});
+```
+
+> **TODO(#120)** — verify the event name and payload field names (`change` event with `{ tables }` body) against the runtime source. Pattern is right; exact names need confirmation.
+
+### A small cache invalidator
+
+Common pattern: keep a map of "tables a fragment depends on", invalidate on event, re-fetch:
+
+```js
+const dependsOn = {
+  '#counter': ['hydrate_daily'],
+  '#recap': ['hydrate_weekly_recaps'],
+};
+
+new EventSource('_changes').addEventListener('change', (e) => {
+  const changed = new Set(JSON.parse(e.data).tables);
+  for (const [sel, deps] of Object.entries(dependsOn)) {
+    if (deps.some((t) => changed.has(t))) refresh(sel);
+  }
+});
+```
+
+## Receiving settings {#receiving-settings}
+
+The desktop shell pushes theme and knob values into the iframe via `postMessage`. Two message types to handle:
+
+```js
+window.addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d) return;
+  if (d.type === 'centraid:settings') applySettings(d);
+  else if (d.type === 'centraid:theme') applyTheme(d.theme, d.bgL);
+});
+
+function applyTheme(theme, bgL) {
+  if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme;
+  if (bgL != null) document.documentElement.style.setProperty('--bg-l', bgL + '%');
+}
+
+function applySettings({ dataAttrs, cssVars }) {
+  if (dataAttrs)
+    for (const k in dataAttrs) document.documentElement.setAttribute('data-' + k, dataAttrs[k]);
+  if (cssVars)
+    for (const k in cssVars) document.documentElement.style.setProperty('--' + k, cssVars[k]);
+}
+```
+
+The initial values arrive **server-baked** — the runtime stamps `<html data-theme="…" style="--bg-l:…">` before serving `index.html`. The `postMessage` listener is for in-session changes (the user flipping a knob while the iframe is mounted).
+
+### Builder preview fallback
+
+When previewing an app in the builder (`centraid-preview://…`), the runtime doesn't bake — instead, settings arrive via URL hash params:
+
+```js
+const p = new URLSearchParams((location.hash || '').slice(1));
+applyTheme(p.get('theme'), p.get('bgL'));
+```
+
+The Hydrate template's `index.html` shows the full inline-script bridge — copy that pattern verbatim:
+
+```html
+<script>
+  (function () {
+    var h = document.documentElement;
+    // …apply URL hash settings…
+    // …listen for centraid:settings / centraid:theme…
+  })();
+</script>
+```
+
+See [`packages/app-templates/hydrate/index.html`](https://github.com/srikanthsrungarapu/secret/centraid/blob/main/packages/app-templates/hydrate/index.html) for the full bridge.
+
+## CSP
+
+Every response carries `Content-Security-Policy: default-src 'self'`. Your app can load scripts, styles, fonts, and images only from `/centraid/<id>/`. Inline scripts receive a CSP nonce stamped by the runtime — use it on any inline `<script>` you ship.
+
+> **TODO(#120)** — confirm the nonce delivery: the Hydrate template inlines a script with no visible nonce attribute, suggesting either CSP allows unsafe-inline for these paths, or the runtime injects the nonce server-side. Worth confirming so authors know how to ship inline JS safely.
+
+## Knobs flow
+
+When a user changes a knob in the desktop's per-app settings popover:
+
+1. Desktop writes the new value to its local settings store.
+2. Desktop posts `centraid:settings` to the iframe with `dataAttrs` / `cssVars` derived from the knob value.
+3. Your `applySettings` handler updates the DOM.
+4. Your CSS reads from the updated data attributes / CSS vars.
+
+The knob value is the _user-visible_ concept; what arrives in the iframe is the rendered set of attributes and CSS vars. Map knob keys to data attrs / vars in the shell, not in the iframe.
+
+## Where to go next
+
+- [App anatomy](/build/app-anatomy) — where the iframe loads from.
+- [Change stream](/concepts/change-stream) — the source of truth for invalidations.
+- [app.json → knobs](/build/app-json#knobs) — declaring user-facing settings.

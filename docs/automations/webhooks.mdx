@@ -1,0 +1,132 @@
+---
+summary: 'Webhook triggers fire automations on inbound HTTP POSTs. Remote gateway only. The builder declares pending; a privileged server pass mints the route slug and secret, persisting only the SHA-256 hash.'
+title: 'Webhooks'
+---
+
+# Webhooks
+
+A webhook trigger fires its automation on an inbound HTTP POST to `/_centraid-hook/<slug>`. Two properties shape everything about this surface:
+
+- **Remote-only.** The desktop is a gateway _client_, not an HTTP host. It preserves webhook entries in the manifest but never mounts a listener. Webhook fires happen only when the app is deployed to a remote gateway (`@centraid/openclaw-plugin`).
+- **Privileged provisioning.** The conversational builder agent can declare _intent_ (`{kind: "webhook", pending: true}`) but cannot mint the route slug or the shared secret — those require crypto-random generation and one-shot user surfacing. A server-side provisioning pass rewrites the pending trigger to its provisioned form.
+
+The implementation lives in [`packages/runtime-core/src/automation-webhook.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/runtime-core/src/automation-webhook.ts).
+
+## The provisioning handshake
+
+1. **User asks for a webhook.** Via the conversational builder: "Fire this automation when GitHub sends a push event."
+2. **Builder writes pending.** The agent rewrites the manifest:
+   ```json
+   { "triggers": [{ "kind": "webhook", "pending": true }] }
+   ```
+   `automation.json` is saved with the pending entry; `handler.js` is generated; `enabled: false` is set.
+3. **Provisioning pass runs.** The desktop's `provisionAppPendingWebhooks(appDir)` (and the gateway's equivalent on upload) scans the app's automations for pending webhooks. For each, it:
+   - Calls `generateWebhookId()` → 12 random bytes → 24-char hex slug.
+   - Calls `generateWebhookSecret()` → 24 random bytes → 48-char hex secret.
+   - Calls `hashWebhookSecret(secret)` → SHA-256 hex.
+   - Rewrites the trigger to provisioned form:
+     ```json
+     { "kind": "webhook", "id": "a1b2c3…", "secretHash": "5f4d…" }
+     ```
+   - Returns `{ webhookId, secret, automationId, ownerApp }` to the caller.
+4. **Plaintext shown once.** The desktop surfaces the plaintext `secret` and the full webhook URL (`https://<gateway-host>/_centraid-hook/<webhookId>`) in a one-time-reveal modal. The user copies it and configures the upstream system (GitHub webhook, Linear webhook, etc.).
+5. **Hash persists.** Only the SHA-256 hash lives in `automation.json`. The plaintext is never written to disk — re-generating it requires re-provisioning, which mints a new slug _and_ a new secret.
+
+That last property — `automation.json` is user-visible (synced across versions, possibly committed to git) — is why the manifest stores only a hash. A leaked manifest doesn't leak the secret.
+
+## The route
+
+| Aspect       | Value                                                            |
+| ------------ | ---------------------------------------------------------------- |
+| Mount prefix | `/_centraid-hook` (constant: `WEBHOOK_ROUTE_PREFIX`)             |
+| Full path    | `/_centraid-hook/<slug>`                                         |
+| Method       | `POST` only (others get `405`)                                   |
+| Slug grammar | `/^[A-Za-z0-9_-]+$/` (non-conforming requests get `404`)         |
+| Body cap     | 64 KiB. Exceeding returns `413`.                                 |
+| Body parsing | Parsed as JSON when valid; otherwise passed through as a string. |
+
+The route resolves the slug **globally** — webhook ids are unique across the gateway, so `listAutomations(appsDir)` scans every app's automations for a matching `webhookTriggerOf(triggers)?.id === slug`. First match wins.
+
+## Authentication
+
+Two accepted forms (the gateway checks both):
+
+```http
+POST /_centraid-hook/a1b2c3d4e5f6... HTTP/1.1
+Authorization: Bearer 5f4dcc3b5aa765d61d8327deb882cf99...
+Content-Type: application/json
+
+{"action": "opened", "pull_request": {…}}
+```
+
+```http
+POST /_centraid-hook/a1b2c3d4e5f6... HTTP/1.1
+x-openclaw-webhook-secret: 5f4dcc3b5aa765d61d8327deb882cf99...
+Content-Type: application/json
+
+{…}
+```
+
+The presented secret is SHA-256-hashed and **timing-safe-compared** against the manifest's `secretHash`. Mismatches return `401`.
+
+The `x-openclaw-webhook-secret` header exists because the route handler copies the stock openclaw `webhooks` plugin recipe — that's the header name openclaw uses. If you're integrating with a system that lets you choose, prefer `Authorization: Bearer` (more standard).
+
+## Rate limiting and concurrency
+
+| Guard               | Behavior                                       | Response on hit         |
+| ------------------- | ---------------------------------------------- | ----------------------- |
+| Per-slug rate limit | Fixed window: max **60 fires per 60 seconds**. | `429 Too Many Requests` |
+| Per-slug in-flight  | At most one run per webhook at a time.         | `409 Conflict`          |
+
+Both are in-process state on the gateway worker, scoped to a single route-handler closure. If your gateway runs multiple workers, the limits are per-worker — not a hard global cap. (Practically, a single worker handles thousands of webhooks; for high-volume integrations, design the upstream to absorb bursts.)
+
+## Response codes
+
+| Status                                                   | Meaning                                                                               |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `200 OK` (`{ok: true, runId}`)                           | Automation ran successfully.                                                          |
+| `200 OK` (`{ok: false, skipped: "automation disabled"}`) | Found the automation but `enabled: false`. The webhook isn't an error — it's a no-op. |
+| `401 Unauthorized`                                       | Missing or invalid secret.                                                            |
+| `404 Not Found`                                          | Unknown slug, or no automation has that webhook id.                                   |
+| `405 Method Not Allowed`                                 | Non-POST.                                                                             |
+| `409 Conflict`                                           | Another invocation for this slug is in-flight.                                        |
+| `413 Payload Too Large`                                  | Body exceeded 64 KiB.                                                                 |
+| `429 Too Many Requests`                                  | Rate-limit window exhausted.                                                          |
+| `500 Internal Server Error`                              | Handler threw, or the fire callback errored.                                          |
+
+## What the handler sees
+
+When the gateway resolves a webhook, it calls the host's `fire({ automationRef, body })` callback. The handler receives the parsed body as `input`:
+
+```js
+export default async ({ ctx, input, log }) => {
+  // For a GitHub webhook:
+  // input = { action: 'opened', pull_request: { number: 42, ... }, ... }
+  if (input.action !== 'opened') {
+    return { summary: 'ignored — not an opened PR' };
+  }
+  const pr = input.pull_request;
+  // ...
+};
+```
+
+A non-JSON body comes through as a string. An empty body comes through as `undefined`.
+
+## Desktop behavior
+
+The desktop scheduler host (`OsSchedulerHost`) deliberately **skips webhook triggers** at registration time. The manifest is preserved verbatim — if the user uploads the app to a remote gateway later, the webhook is already provisioned and ready. But locally, the only way to fire a webhook-triggered automation is the "Run now" button, which fires with empty `input`.
+
+This means the conversational builder can still ask the user "do you want this triggered by a GitHub webhook?" on the desktop — the provisioning pass mints the slug + secret, the desktop shows the secret to the user, but actual webhook fires happen only after the app moves to a gateway.
+
+## Rotating a secret
+
+There is no in-place rotation. To rotate: delete the provisioned trigger and write a fresh pending one; the next provisioning pass mints a new `(id, secret)` pair. The upstream system needs to be reconfigured because the route slug also changes.
+
+Future work might introduce a `rotate-secret` action that mints a new secret against the same slug; that doesn't exist today.
+
+## Where to go next
+
+- [Triggers](/automations/triggers) — the three trigger kinds in context.
+- [Manifest reference](/automations/manifest) — what fields `automation.json` declares.
+- [Conversational builder](/automations/conversational-builder) — the agent-side of the pending-webhook handoff.
+- [Deploy → OpenClaw plugin](/deploy/openclaw-plugin) — how the gateway wires the webhook route.

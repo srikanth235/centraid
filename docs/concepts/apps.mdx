@@ -1,0 +1,113 @@
+---
+summary: 'An app is a folder of HTML, CSS, JS, handlers, migrations, and a SQLite database — versioned code, persistent data.'
+title: 'Apps'
+---
+
+# Apps
+
+A Centraid app is a folder. That's it.
+
+```
+<appsDir>/<id>/
+  index.html
+  app.css, app.js, …          # static assets — see allowlist
+  data.sqlite                 # persistent, never served as a static file
+  queries/<name>.js           # dispatched by centraid_read
+  actions/<name>.js           # dispatched by centraid_write
+  migrations/<NNNN>_<name>.sql
+  automations/<id>/           # optional — each automation is a subdir
+    automation.json           #   manifest (triggers, prompt, requires, history)
+    handler.js                #   the JS the runtime runs when the trigger fires
+  app.json                    # the manifest
+```
+
+No app server framework. No build step required at runtime (you can author in TypeScript and ship compiled `.js` next to it, but the gateway loads `.js` only).
+
+## What an app _is_
+
+- **A unit of upload.** You package the folder as a tar.gz and `POST` it to `/centraid/_apps/<id>/upload`. The gateway treats each upload as an immutable version.
+- **A unit of data isolation.** Every app gets its own `data.sqlite`. Implementations get a scoped DB proxy — there is no path from one app's worker to another app's database.
+- **A unit of identity.** App ids are the gateway's primary key. They appear in URLs (`/centraid/<id>/...`), in tool calls (`{ app: "<id>", ... }`), and in the chat session key (`centraid-chat:<id>:w<windowId>`).
+- **A tool catalog.** An app's `queries[]` and `actions[]` arrays in `app.json` _are_ the app's tool surface — each entry is a tool with a name, description, input/output schemas, and side-effect annotations. Your UI, an AI agent, and the CLI all reach those tools through the same dispatcher.
+- **A unit of routing.** The runtime knows about apps by name and dispatches calls to the _active_ version of each one.
+
+## The manifest (`app.json`)
+
+`app.json` is the only required file. Everything else is optional, but a useful app has at least one query or action.
+
+```json
+{
+  "manifestVersion": 1,
+  "id": "hydrate",
+  "name": "Hydrate",
+  "description": "Track 8 cups a day.",
+  "version": "0.1.0",
+  "tables": [...],
+  "actions": [
+    {
+      "name": "set-cups",
+      "description": "Set today's cup count (clamped 0..8).",
+      "confirmation": "none",
+      "input": { "type": "object", "properties": {...}, "required": ["cups"] },
+      "output": { "type": "object", "properties": {...} },
+      "writes": ["hydrate_daily"]
+    }
+  ],
+  "queries": [
+    {
+      "name": "get-today",
+      "input": { "type": "object", "properties": {} },
+      "output": { "type": "object", "properties": {...} },
+      "reads": ["hydrate_daily"]
+    }
+  ],
+  "knobs": [...]
+}
+```
+
+Key fields:
+
+- `id` — must match the folder name and the URL slug.
+- `actions[]` / `queries[]` — each entry describes a handler. The dispatcher uses `input` (JSON Schema draft 2020-12) to validate calls before the handler runs; `reads`/`writes` document which tables the handler touches.
+- `tables[]` — declared shape. The actual schema lives in `migrations/`; `tables[]` is for tooling and agents.
+- `knobs[]` — user-facing settings the desktop shell renders. Each knob has a `key`, `label`, `type` (`segmented`, `swatch`, …), `default`, and per-type options.
+
+See [Build → app.json](/build/app-json) for the full schema.
+
+## Versions and `current.json`
+
+Code is versioned. Data isn't.
+
+```
+<appsDir>/<id>/
+  data.sqlite                 ← single instance, persists forever
+  current.json                ← { activeVersion: "v_…", history: [...] }
+  versions/
+    v_2026-05-08T14-30-00-000Z_a1b2c3/    ← immutable, code-only
+    v_2026-05-09T09-12-44-000Z_d4e5f6/
+```
+
+- `current.json#activeVersion` names the directory under `versions/` that serves traffic.
+- Switching versions is a single write to `current.json`. No downtime, no extraction, no restart.
+- Old versions are kept up to `versionRetention` (default 5). The active version is always retained.
+
+Why this split:
+
+- **Rollback is free.** A bad release is a one-line fix.
+- **Migrations run forward, code can go back.** You don't lose yesterday's data when you revert today's handlers (assuming your migrations were additive, which they should be).
+- **Pruning is safe.** Retention only deletes inactive `versions/v_…/` dirs; it never touches `data.sqlite`.
+
+## App ids — what's reserved
+
+Ids beginning with an underscore are reserved for the gateway's own routes (`_apps`, `_tool`, `_chat`, `_changes`). Trying to register `_anything` returns an error.
+
+## Lifecycle in one sentence
+
+Upload (`POST /centraid/_apps/<id>/upload`) → gateway extracts to a new `versions/v_…/` dir → flips `current.json#activeVersion` → that version's `index.html` is what `/centraid/<id>/` serves until the next upload or an explicit `activate` flip.
+
+## Where to go next
+
+- [Queries and actions](/concepts/queries-and-actions) — what handlers actually do.
+- [Change stream](/concepts/change-stream) — how the UI knows when data moved.
+- [Automations](/automations/index) — triggered work that lives alongside apps (or in headless `auto.*` apps).
+- [Build → App anatomy](/build/app-anatomy) — practical walkthrough.
