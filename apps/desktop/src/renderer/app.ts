@@ -4176,11 +4176,11 @@
   // every mini-app inherits the Centraid shell theme and the workspace
   // reads as one product. True per-app *aesthetics* (font, page width,
   // corner radius, etc.) live here. Each template declares its knobs in
-  // `<template>/app-knobs.json` (see `packages/app-templates`); the
-  // scaffolder copies that file into the cloned project; the runtime
-  // serves it as a static file. We fetch the cloned copy at panel-open
-  // so the controls match the app's CSS, not whatever the bundled
-  // template might have evolved to since the clone.
+  // `app.json#knobs[]` (see `packages/app-templates`); the scaffolder
+  // copies that manifest into the cloned project; the gateway serves it
+  // as a static file. We fetch the cloned copy at panel-open so the
+  // controls match the app's CSS, not whatever the bundled template
+  // might have evolved to since the clone.
   //
   // Values persist in the per-app `__centraid_settings` SQLite table via
   // `CentraidApi.appQuery` SQL writes. The runtime's settings-merge bakes
@@ -4301,14 +4301,16 @@
   async function fetchAppKnobsManifest(appId: string): Promise<AppKnobsManifest | null> {
     try {
       const live = await window.CentraidApi.appLiveUrl({ id: appId });
-      // `appLiveUrl` returns `${gateway}/centraid/<id>/`. The manifest is a
-      // static sibling of `index.html` inside the same project.
-      const url = `${live.url.replace(/\/?$/, '/')}app-knobs.json`;
+      // `appLiveUrl` returns `${gateway}/centraid/<id>/`. The app
+      // manifest sits next to `index.html` inside the same project;
+      // knobs live under its `knobs[]` array (folded in from the old
+      // `app-knobs.json` sidecar).
+      const url = `${live.url.replace(/\/?$/, '/')}app.json`;
       const res = await fetch(url);
       if (!res.ok) return null;
-      const parsed = (await res.json()) as AppKnobsManifest;
+      const parsed = (await res.json()) as { manifestVersion?: number; knobs?: AppKnob[] };
       if (!parsed || !Array.isArray(parsed.knobs)) return null;
-      return parsed;
+      return { version: parsed.manifestVersion ?? 1, knobs: parsed.knobs };
     } catch {
       return null;
     }
@@ -5177,7 +5179,7 @@
 
   // makeSegmented variant that lets the caller supply a separate label per
   // option (instead of reusing the value string). The template's
-  // app-knobs.json may want `{ value: "sans", label: "Sans" }` etc.
+  // `app.json#knobs[]` may want `{ value: "sans", label: "Sans" }` etc.
   function makeSegmentedLabeled(
     options: readonly string[],
     labels: Record<string, string>,

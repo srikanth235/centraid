@@ -17,16 +17,16 @@
  *
  *   - APP-LEVEL keys (any key shaped like `app<Capital>…`) are routed
  *     DYNAMICALLY. Each template declares which app knobs it honours in
- *     its `app-knobs.json`; the builder-harness can extend that list per
- *     app, so the runtime can't predict the universe of knob keys ahead
- *     of time. Routing is by name convention:
+ *     its `app.json#knobs[]`; the builder-harness can extend that list
+ *     per app, so the runtime can't predict the universe of knob keys
+ *     ahead of time. Routing is by name convention:
  *       - keys ending in `Color` or `Accent` → CSS var `--app-<kebab>`
  *       - everything else                    → data attr `data-app-<kebab>`
  *     Values are coerced to a non-empty string; everything else is dropped.
  *
  * Adding a new GLOBAL pref is a single edit to `KNOWN_KEYS`. Adding a new
- * per-app knob is a manifest edit in `<template>/app-knobs.json` plus the
- * matching CSS — no runtime change required.
+ * per-app knob is a manifest edit in `<template>/app.json#knobs[]` plus
+ * the matching CSS — no runtime change required.
  */
 
 import type { SettingsInject } from './static-server.js';

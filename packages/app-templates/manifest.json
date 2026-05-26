@@ -12,7 +12,6 @@
       "files": [
         "actions/set-cups.js",
         "actions/weekly-encouragement.js",
-        "app-knobs.json",
         "app.css",
         "app.js",
         "app.json",
@@ -124,7 +123,6 @@
         "actions/daily-digest.js",
         "actions/delete.js",
         "actions/toggle.js",
-        "app-knobs.json",
         "app.css",
         "app.js",
         "app.json",
@@ -235,7 +233,6 @@
         "actions/delete.js",
         "actions/save.js",
         "actions/weekly-recap.js",
-        "app-knobs.json",
         "app.css",
         "app.js",
         "app.json",

@@ -14,7 +14,7 @@
 //   - `prefers-reduced-motion` respected.
 //   - Mobile-first with one breakpoint at 720px.
 //   - Honors the four standard per-app knobs declared in the matching
-//     `app-knobs.json`: `appFont` / `appWidth` / `appRadius` via
+//     `app.json#knobs[]`: `appFont` / `appWidth` / `appRadius` via
 //     `:root[data-app-*]` selectors, and `appColor` consumed wherever
 //     the accent paints (primary button, focus rings, links, pressed
 //     circle) via `var(--app-color, var(--accent))`. Falls back to
@@ -179,7 +179,7 @@ button { font: inherit; cursor: pointer; }
 }
 
 /* ---------- App-level knobs ----------
-   Per-app aesthetic customizations declared in 'app-knobs.json' and
+   Per-app aesthetic customizations declared in 'app.json#knobs[]' and
    persisted in the '__centraid_settings' table. The runtime bakes
    '<html data-app-* style="--app-color: ...">' before serving and
    live-updates the same surface via postMessage. Defaults match the

@@ -49,17 +49,19 @@ for (const tmpl of src.templates) {
     console.warn(`[build-manifest] missing template dir for "${tmpl.id}", skipping`);
     continue;
   }
-  // Per-app knobs (font, width, radius…) live in `app-knobs.json` at the
-  // template root. Embed the parsed list in the manifest so the desktop
-  // doesn't need a second fetch — `resolveTemplates()` already reads
-  // manifest.json, so this rides along for free.
+  // Per-app knobs (font, width, radius…) are declared as `app.json#knobs`
+  // — folded in from the old `app-knobs.json` sidecar so there's a single
+  // app manifest. Embed the parsed list in the gallery manifest so the
+  // desktop doesn't need a second fetch — `resolveTemplates()` already
+  // reads manifest.json, so this rides along for free.
   let appKnobs;
   try {
-    const raw = await fs.readFile(path.join(dir, 'app-knobs.json'), 'utf8');
+    const raw = await fs.readFile(path.join(dir, 'app.json'), 'utf8');
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
   } catch {
-    /* template doesn't ship knobs — fine, popover just shows manage actions */
+    /* template has no app.json (auto.* automations) or no knobs — fine,
+       popover just shows manage actions */
   }
   // Default `kind` from the `auto.` prefix when not set explicitly. Lets
   // index.json stay lean — only carry `kind` when overriding the default.

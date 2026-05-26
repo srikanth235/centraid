@@ -88,6 +88,29 @@ export interface ManifestQueryEntry {
   readonly reads?: readonly string[];
 }
 
+/**
+ * One per-app aesthetic knob — declared in `app.json#knobs` and surfaced
+ * in the desktop's per-app settings popover. The runtime routes any
+ * `app*` key dynamically (see `settings-merge.ts`), so adding/removing
+ * a knob is purely a manifest edit + matching CSS in `app.css`.
+ */
+export interface ManifestKnobOption {
+  readonly value: string;
+  readonly label: string;
+}
+export interface ManifestKnob {
+  /** Camel-cased `app*` settings key (e.g. `appFont`, `appColor`). */
+  readonly key: string;
+  /** Display label shown in the popover row. */
+  readonly label: string;
+  /** Control type. `segmented` for discrete values, `swatch` for colour. */
+  readonly type: 'segmented' | 'swatch';
+  /** Value to assume when the per-app table has no row for this knob. */
+  readonly default: string;
+  /** Choices the user picks from. */
+  readonly options: readonly ManifestKnobOption[];
+}
+
 export interface Manifest {
   readonly manifestVersion: number;
   readonly id: string;
@@ -97,6 +120,8 @@ export interface Manifest {
   readonly tables?: readonly ManifestTable[];
   readonly actions: readonly ManifestActionEntry[];
   readonly queries: readonly ManifestQueryEntry[];
+  /** Per-app aesthetic knobs (font, width, radius, colour…). Optional. */
+  readonly knobs?: readonly ManifestKnob[];
 }
 
 // ----------------------------------------------------------------------------
@@ -163,6 +188,30 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
           input: { type: 'object' },
           output: { type: 'object' },
           reads: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    knobs: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['key', 'label', 'type', 'default', 'options'],
+        properties: {
+          key: { type: 'string', minLength: 1 },
+          label: { type: 'string', minLength: 1 },
+          type: { type: 'string', enum: ['segmented', 'swatch'] },
+          default: { type: 'string' },
+          options: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['value', 'label'],
+              properties: {
+                value: { type: 'string' },
+                label: { type: 'string' },
+              },
+            },
+          },
         },
       },
     },
@@ -332,6 +381,7 @@ export function validateManifest(raw: unknown): Manifest {
     ...(Array.isArray(r.tables) ? { tables: r.tables as ManifestTable[] } : {}),
     actions,
     queries,
+    ...(Array.isArray(r.knobs) ? { knobs: r.knobs as ManifestKnob[] } : {}),
   };
 }
 

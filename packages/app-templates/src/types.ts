@@ -5,7 +5,7 @@
 import type { ColorKey, IconName } from '@centraid/design-tokens';
 
 /**
- * One per-app aesthetic knob declared by a template's `app-knobs.json`.
+ * One per-app aesthetic knob declared by a template's `app.json#knobs[]`.
  * Drives a control in the desktop's per-app settings popover and a row in
  * the app's `__centraid_settings` table; the runtime bakes the resulting
  * value onto `<html data-app-<key-kebab>="<value>">` so the template's
@@ -43,7 +43,8 @@ export interface AppKnobsManifest {
  *
  * Two kinds share this shape:
  *   - `kind: 'app'` (default) — a full UI app like `hydrate` / `todos` /
- *     `journal`. Carries `index.html`, `app.css`, optional `app-knobs.json`.
+ *     `journal`. Carries `index.html`, `app.css`, and an `app.json`
+ *     manifest with optional `knobs[]`.
  *   - `kind: 'automation'` — an `auto.`-prefixed app folder with no UI
  *     assets; just `app.json` + `automations/<id>/{automation.json,handler.js}`.
  *     Automation templates carry extra display fields (`emoji`, `category`,
@@ -74,9 +75,9 @@ export interface TemplateMeta {
   files: string[];
   /**
    * Optional per-app aesthetic knobs (font, page width, corner radius…).
-   * Bundled by the build script when the template ships an
-   * `app-knobs.json`. Each entry maps onto a `KNOWN_KEYS` setting in the
-   * runtime; the desktop popover renders only the rows declared here.
+   * Bundled by the build script from the template's `app.json#knobs[]`.
+   * Each entry maps onto a `KNOWN_KEYS` setting in the runtime; the
+   * desktop popover renders only the rows declared here.
    */
   appKnobs?: AppKnob[];
   /**
