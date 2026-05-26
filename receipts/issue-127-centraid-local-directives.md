@@ -8,8 +8,9 @@ GitHub issue: [#127](https://github.com/srikanth235/centraid/issues/127)
 - [x] D2: `no-hardcoded-model-ids` - strict scope; grandfather model-pricing.ts and tests
 - [x] D3: `actions-declare-table-writes` - every `app.json#actions[]` entry has non-empty `writes:[]`
 - [x] D4: `gateway-core-mode-agnostic` - no gateway-mode branches in `packages/runtime-core/`
-- [ ] D5: `no-pre-release-migrations` - block migration scaffolds and back-compat shims
-- [ ] D6: `data-runtime-sqlite-separation` - handlers cannot open `runtime.sqlite`, gateway core cannot open `data.sqlite` outside the handler-runner
+- [x] D6: `data-runtime-sqlite-separation` - handlers cannot open `runtime.sqlite`, gateway core cannot open `data.sqlite` outside the handler-runner
+
+D5 (`no-pre-release-migrations`) dropped after investigation - see "Out of scope".
 
 ## What changed
 
@@ -25,6 +26,8 @@ The local pack already contains one directive - `query-handlers-read-only`. Thes
 
 **D4: `gateway-core-mode-agnostic` - no gateway-mode branches in `packages/runtime-core/`.** Forbid gateway-mode-discrimination identifiers (`gatewayMode`, `gatewayKind`, `isEmbeddedGateway`, `isOpenClawGateway`, `isLocalGateway`, `isRemoteGateway`, `deploymentMode`, `hostingMode`) in tracked source files under `packages/runtime-core/`. Mode-specific behavior belongs at the entrypoints: `apps/desktop/src/main/` for the embedded gateway, `packages/openclaw-plugin/src/` for the OpenClaw gateway. Patterns are narrow on purpose - the existing `kind: 'openclaw'` adapter discriminator in `runtime.ts` is about agent runtimes, not gateway mode, and stays valid. Rationale: the "same code, two modes" architecture property is what makes "local-first with optional remote" cheap rather than expensive. Once runtime-core starts checking which host it lives inside, dev and prod paths diverge and "works on my machine" becomes a class of bug again.
 
+**D6: `data-runtime-sqlite-separation` - handlers cannot open `runtime.sqlite`, gateway core cannot open `data.sqlite` outside the handler-runner.** Forbid any reference to `runtime.sqlite` in tracked `**/queries/*.js` and `**/actions/*.js` files. Handlers see only the app's `data.sqlite` via `ctx.db`; `runtime.sqlite` is gateway-owned (chat sessions, agent run ledger, automation state). The reverse direction - gateway core staying out of `data.sqlite` outside the handler-runner / three-tool dispatcher path - is harder to specify statically because there are multiple legitimate openers (the handler-runner, `centraid_sql_*` tools in `openclaw-plugin/src/lib/tools.ts`, schema introspection in `runtime-core/src/schema.ts`); an allowlist would be brittle. The directive ships the high-leverage half and leaves the other side to code review for now. Rationale: the two SQLite files have distinct owners; cross-writes from the handler side would mutate state the gateway treats as its own and the change-stream would never invalidate.
+
 ## Verification
 
 - **D1 smoke test passes locally.** `bash .governance/run.sh handler-uses-ctx-primitives` returns exit 0 against the tree at HEAD - no handler files currently import any forbidden SDK. The directive locks the property in before it is lost.
@@ -35,8 +38,12 @@ The local pack already contains one directive - `query-handlers-read-only`. Thes
 - **D3 fixture would fail.** Removing `writes:` from any action entry in a Centraid `app.json` triggers a violation citing the file and the action name.
 - **D4 smoke test passes locally.** `bash .governance/run.sh gateway-core-mode-agnostic` returns exit 0 - no current source file under `packages/runtime-core/src/` uses any of the forbidden gateway-mode identifiers. Confirms the architectural promise holds in the tree today; the directive locks it in for future commits.
 - **D4 fixture would fail.** Adding `if (gatewayMode === 'embedded') {` to any file under `packages/runtime-core/src/` triggers a violation citing the file, line, and identifier.
+- **D6 smoke test passes locally.** `bash .governance/run.sh data-runtime-sqlite-separation` returns exit 0 - no current handler file references `runtime.sqlite`. The 13 app-template handlers (across `hydrate`, `journal`, `todos`, and `auto.*`) are clean.
+- **D6 fixture would fail.** Adding `const dbPath = path.join(appsDir, 'runtime.sqlite');` (or any other reference to the string `runtime.sqlite`) to any `**/queries/*.js` or `**/actions/*.js` file triggers a violation citing the file and line.
 
 ## Out of scope
 
 - **Three other directive candidates from the design discussion** (`no-knob-side-files`, `three-tool-dispatcher-exclusive`, `atomic-current-json-writes`). Useful but lower leverage than these six; track separately if/when needed.
+- **Folded in: oxfmt italics auto-fix on 3 pre-existing docs/*.mdx files** (`docs/deploy/sqlite-layout.mdx`, `docs/getting-started.mdx`, `docs/index.mdx`). PR CI was failing on these - same pre-existing break introduced by commit `dad00ad` that #126's follow-up was planning to address. Folded here to unblock #127's PR rather than serialize through another PR; the change is 5 lines of pure `*x*` -> `_x_` italics rewrite (oxfmt convention), no content changes. The matching checkbox in `receipts/issue-126-oxfmt-governance-ignore-and-staged-filter.md` is now moot and should be re-marked when that follow-up lands.
+- **D5 `no-pre-release-migrations` dropped.** The original framing (block migration scaffolds and `schema_version` references) collided with a centraid first-class feature: each app has its own SQLite + its own migrations, `packages/runtime-core/src/migrate.ts` is the app-level migration runner, and `schemaVersion` is part of the public API surface in `apps/desktop/src/renderer/centraid-api.d.ts`. The original v0 memory ("no backward compatibility / migrations") referred to the centraid *platform* state (registry, profile config, etc.), not the app data feature - so the directive would need a narrow allowlist that is fragile to maintain. Filed when a real platform-state migration bad merge happens.
 - **Upstream bug in `agent-steering-accounting` (governance-kit/core 0.3.1):** the steering hook mangles non-ASCII UTF-8 bytes (em-dash, arrow) when writing STEERING.md rows but compares them to the un-mangled pending subject, blocking any commit whose subject contains those characters. Worked around in this issue by using ASCII-only subjects; should be filed upstream against Duaility/governance-kit.
