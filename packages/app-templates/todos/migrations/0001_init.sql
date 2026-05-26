@@ -6,3 +6,11 @@ CREATE TABLE IF NOT EXISTS todos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_todos_done_created ON todos(done, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS todo_digests (
+  day TEXT PRIMARY KEY,
+  open_count INTEGER NOT NULL,
+  done_count INTEGER NOT NULL,
+  summary TEXT NOT NULL,
+  generated_at INTEGER NOT NULL
+);
