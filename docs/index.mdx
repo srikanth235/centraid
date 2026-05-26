@@ -11,7 +11,7 @@ title: 'Centraid'
 
 OpenClaw is messaging-first — you talk to it from WhatsApp, Telegram, Slack, wherever you already chat. That's perfect for one-line jobs: "log my weight", "what's on my calendar?", "remind me at 7pm".
 
-Some things don't fit in a sentence. You want to *see* them — a month of expenses, your habit grid, last week's runs on a map, the photos from the trip. For those, a glance beats a paragraph and tapping beats typing.
+Some things don't fit in a sentence. You want to _see_ them — a month of expenses, your habit grid, last week's runs on a map, the photos from the trip. For those, a glance beats a paragraph and tapping beats typing.
 
 Centraid is the rich-UI layer for those. Same OpenClaw underneath — your connections, your agents, your data — with a screen wrapped around the apps that need one.
 
@@ -52,7 +52,7 @@ Start with what's in the box, clone a template, or ask for something new — the
 
 For builders and tinkerers — the technical structure that makes the rest possible.
 
-- **Apps as folders.** *Source tree:* `index.html` + `app.css` + `app.js` + `queries/*.js` + `actions/*.js` + `migrations/*.sql` + `automations/<id>/` + `app.json`. *Mounted tree* on the gateway adds `data.sqlite`, `runtime.sqlite`, `current.json`, and `versions/<v_id>/` snapshots of every uploaded build.
+- **Apps as folders.** _Source tree:_ `index.html` + `app.css` + `app.js` + `queries/*.js` + `actions/*.js` + `migrations/*.sql` + `automations/<id>/` + `app.json`. _Mounted tree_ on the gateway adds `data.sqlite`, `runtime.sqlite`, `current.json`, and `versions/<v_id>/` snapshots of every uploaded build.
 - **Apps expose tools.** Each query and action is a **tool** — declared in `app.json` with a name, description, input/output JSON Schemas, and side-effect annotations. Your UI, an AI agent, and the CLI all see the same tool catalog.
 - **Two SQLite files per app.** `data.sqlite` holds app-owned data (migrations apply here); `runtime.sqlite` holds the app's history of use — chat sessions, agent run ledger, automation state KV. Both persist across code versions. Tool implementations get a scoped DB proxy; nothing leaks across apps.
 - **Versioned code, atomic flip.** Each upload lands in `versions/v_<ts>_<sha>/` and a single `current.json#activeVersion` swap activates it. Old versions retained (default 5, minimum 2). The sqlites are untouched by version flips.

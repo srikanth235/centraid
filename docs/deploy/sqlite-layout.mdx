@@ -5,7 +5,7 @@ title: 'SQLite layout on disk'
 
 # SQLite layout on disk
 
-The gateway's state is files. Each app has its own SQLite pair (`data.sqlite` for handler-owned data, `runtime.sqlite` for chat + agent run history). Two small gateway-level SQLites sit *next to* the apps directory: `centraid-gateway.sqlite` (users + prefs) and `centraid-analytics.sqlite` (cross-app run rollup). The rest of the gateway-level metadata is plain JSON.
+The gateway's state is files. Each app has its own SQLite pair (`data.sqlite` for handler-owned data, `runtime.sqlite` for chat + agent run history). Two small gateway-level SQLites sit _next to_ the apps directory: `centraid-gateway.sqlite` (users + prefs) and `centraid-analytics.sqlite` (cross-app run rollup). The rest of the gateway-level metadata is plain JSON.
 
 ## Top-level layout
 
@@ -125,7 +125,7 @@ _chat/
 ## What's NOT here
 
 - **No per-app user table.** Identity lives in the gateway-level `centraid-gateway.sqlite#users`. On the OpenClaw plugin, the gateway can also import identity from OpenClaw.
-- **No cross-app handler database.** Each app's `data.sqlite` and `runtime.sqlite` are isolated; no handler ever opens another app's files. The gateway-level `centraid-analytics.sqlite` is a *rollup* (one summary row per run) — handlers can't write to it.
+- **No cross-app handler database.** Each app's `data.sqlite` and `runtime.sqlite` are isolated; no handler ever opens another app's files. The gateway-level `centraid-analytics.sqlite` is a _rollup_ (one summary row per run) — handlers can't write to it.
 - **No log files.** Handler logs go through the gateway's logger; persistence is the gateway host's concern.
 
 ## Backing up
