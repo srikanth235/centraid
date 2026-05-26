@@ -42,8 +42,13 @@ const CONTENT_TYPES: Record<string, string> = {
   '.map': 'application/json; charset=utf-8',
 };
 
-/** Files whose names are reserved and never served as static. */
-const RESERVED_FILENAMES = new Set(['data.sqlite', '_registry.json', 'app.json']);
+/** Files whose names are reserved and never served as static.
+ *
+ * `app.json` is intentionally *not* reserved — the desktop's per-app
+ * settings popover fetches it to read the manifest's `knobs` array
+ * (folded in from the old `app-knobs.json` sidecar). The manifest is the
+ * agent-facing tool contract; nothing in it is secret. */
+const RESERVED_FILENAMES = new Set(['data.sqlite', '_registry.json']);
 
 /** Directories whose contents are never served as static. */
 const RESERVED_DIRS = new Set(['queries', 'actions']);

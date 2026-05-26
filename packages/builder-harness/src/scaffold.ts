@@ -50,7 +50,12 @@ export async function scaffoldProject(
 
   // app.json is the *manifest* — source of truth for the three-tool
   // dispatcher (issue #107). New projects start with no actions/queries;
-  // the builder agent fills them in as it generates handlers.
+  // the builder agent fills them in as it generates handlers. The
+  // `knobs` array gives every from-scratch project the Notion-style
+  // settings popover for free; the runtime routes any `app*` key
+  // dynamically (see runtime-core/settings-merge.ts) so new knobs added
+  // here don't need a runtime change — just matching CSS rules in
+  // `app.css`.
   const appJson: Record<string, unknown> = {
     manifestVersion: 1,
     id,
@@ -59,6 +64,7 @@ export async function scaffoldProject(
     ...(opts.description?.trim() ? { description: opts.description.trim() } : {}),
     actions: [],
     queries: [],
+    knobs: DEFAULT_APP_KNOBS,
   };
   await fs.writeFile(path.join(dir, 'app.json'), JSON.stringify(appJson, null, 2) + '\n');
 
@@ -70,13 +76,6 @@ export async function scaffoldProject(
   await fs.writeFile(path.join(dir, 'tokens.css'), toCss());
   await fs.writeFile(path.join(dir, 'app.css'), DEFAULT_APP_CSS);
   await fs.writeFile(path.join(dir, 'app.js'), DEFAULT_APP_JS);
-  // Default per-app knob manifest. Gives every from-scratch project the
-  // Notion-style settings popover for free; the author can add or remove
-  // rows later by editing this file directly. The runtime routes any
-  // `app*` key dynamically (see runtime-core/settings-merge.ts) so new
-  // knobs added here don't need a runtime change — just matching CSS
-  // rules in `app.css`.
-  await fs.writeFile(path.join(dir, 'app-knobs.json'), DEFAULT_APP_KNOBS);
 
   // Canonical centraid subdirs. `automations/` holds one folder per
   // automation the app owns — `automations/<id>/automation.json` (the
@@ -345,68 +344,62 @@ const DEFAULT_APP_JS = `// Runs in the browser. Invoke handlers via the three-to
 // screen readers don't announce all three at once.
 `;
 
-// Default per-app knob manifest written into every new project. Surfaces
-// in the desktop's "App settings" gear popover: font, page width, corner
-// radius, and accent colour. The runtime routes any `app*` key
-// dynamically — `appFont`/`appWidth`/`appRadius` become `<html data-app-*>`
-// attributes and `appColor` becomes `--app-color` (consumed via
+// Default per-app knob list embedded in every new project's `app.json`
+// (under `knobs[]`). Surfaces in the desktop's "App settings" gear
+// popover: font, page width, corner radius, and accent colour. The
+// runtime routes any `app*` key dynamically —
+// `appFont`/`appWidth`/`appRadius` become `<html data-app-*>` attributes
+// and `appColor` becomes `--app-color` (consumed via
 // `var(--app-color, var(--accent))` in CSS). Authors can add/remove
-// knobs by editing this file plus the matching CSS in `app.css`.
-const DEFAULT_APP_KNOBS =
-  JSON.stringify(
-    {
-      version: 1,
-      knobs: [
-        {
-          key: 'appFont',
-          label: 'Font',
-          type: 'segmented',
-          default: 'sans',
-          options: [
-            { value: 'sans', label: 'Sans' },
-            { value: 'serif', label: 'Serif' },
-            { value: 'mono', label: 'Mono' },
-          ],
-        },
-        {
-          key: 'appWidth',
-          label: 'Width',
-          type: 'segmented',
-          default: 'narrow',
-          options: [
-            { value: 'narrow', label: 'Narrow' },
-            { value: 'wide', label: 'Wide' },
-          ],
-        },
-        {
-          key: 'appRadius',
-          label: 'Corners',
-          type: 'segmented',
-          default: 'rounded',
-          options: [
-            { value: 'sharp', label: 'Sharp' },
-            { value: 'rounded', label: 'Rounded' },
-            { value: 'pill', label: 'Pill' },
-          ],
-        },
-        {
-          key: 'appColor',
-          label: 'Color',
-          type: 'swatch',
-          default: '#4950F6',
-          options: [
-            { value: '#4950F6', label: 'Blue' },
-            { value: '#7C5BD9', label: 'Violet' },
-            { value: '#2EA098', label: 'Teal' },
-            { value: '#B47B3F', label: 'Ochre' },
-            { value: '#E55772', label: 'Rose' },
-          ],
-        },
-      ],
-    },
-    null,
-    2,
-  ) + '\n';
+// knobs by editing the `knobs[]` array in `app.json` plus the matching
+// CSS in `app.css`.
+const DEFAULT_APP_KNOBS: ReadonlyArray<Record<string, unknown>> = [
+  {
+    key: 'appFont',
+    label: 'Font',
+    type: 'segmented',
+    default: 'sans',
+    options: [
+      { value: 'sans', label: 'Sans' },
+      { value: 'serif', label: 'Serif' },
+      { value: 'mono', label: 'Mono' },
+    ],
+  },
+  {
+    key: 'appWidth',
+    label: 'Width',
+    type: 'segmented',
+    default: 'narrow',
+    options: [
+      { value: 'narrow', label: 'Narrow' },
+      { value: 'wide', label: 'Wide' },
+    ],
+  },
+  {
+    key: 'appRadius',
+    label: 'Corners',
+    type: 'segmented',
+    default: 'rounded',
+    options: [
+      { value: 'sharp', label: 'Sharp' },
+      { value: 'rounded', label: 'Rounded' },
+      { value: 'pill', label: 'Pill' },
+    ],
+  },
+  {
+    key: 'appColor',
+    label: 'Color',
+    type: 'swatch',
+    default: '#4950F6',
+    options: [
+      { value: '#4950F6', label: 'Blue' },
+      { value: '#7C5BD9', label: 'Violet' },
+      { value: '#2EA098', label: 'Teal' },
+      { value: '#B47B3F', label: 'Ochre' },
+      { value: '#E55772', label: 'Rose' },
+    ],
+  },
+];
 
 // Inline settings bridge — emitted inside a synchronous <script> in the
 // scaffolded index.html. Initial paint values come from the runtime, which
