@@ -1,0 +1,12 @@
+# handler-uses-ctx-primitives — handlers must use ctx.* primitives, not direct provider SDKs.
+category: Correctness
+recommended: true
+summary: |
+  Centraid handlers (queries/*.js and actions/*.js) must not import provider
+  SDKs directly (`@anthropic-ai/sdk`, `openai`, `groq-sdk`, etc.). Inference
+  and other gateway-managed capabilities flow through `ctx.infer.*` and
+  related primitives. Direct SDK use bypasses cost accounting, profile-based
+  model routing, and breaks the embedded↔OpenClaw gateway parity that
+  centraid's "same code, two modes" property depends on.
+surface: repo-state
+hook: pre-commit

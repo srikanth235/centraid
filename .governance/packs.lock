@@ -27,3 +27,4 @@ packs:
   source: local
   directives:
   - query-handlers-read-only
+  - handler-uses-ctx-primitives
