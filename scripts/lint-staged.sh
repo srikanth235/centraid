@@ -28,7 +28,7 @@ while IFS= read -r line; do
     [[ -n "$line" ]] && staged+=("$line")
 done < <(
     git diff --cached --name-only --diff-filter=ACMR \
-        | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|json|md)$' || true
+        | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|json|jsonc|md|mdx|yaml|yml)$' || true
 )
 
 if [[ ${#staged[@]} -eq 0 ]]; then
