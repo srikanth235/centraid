@@ -1,0 +1,94 @@
+---
+summary: 'Clone Hydrate, see your data round-trip through a query and an action — in five minutes.'
+title: 'Quickstart'
+---
+
+# Quickstart
+
+A working tour in five minutes. You'll clone the **Hydrate** template (a one-screen "8 cups a day" tracker), inspect its handlers, and watch the change stream refresh the UI when you push the button.
+
+## 1 — Launch the desktop shell
+
+```sh
+bun install
+bun run dev:desktop
+```
+
+The Electron window opens on the **Home** view, with the embedded local gateway already running in the main process.
+
+## 2 — Clone a template
+
+> **TODO(#120)** — describe the exact UI affordance. From the receipts (`issue-105-template-naming-and-unified-clone.md`, `issue-53-notion-style-action-menus`) the desktop has a template gallery with a clone action; I haven't read the renderer code to capture the precise click path. Insert "From Home → Templates → click _Hydrate_ → _Clone_" once verified.
+
+Clone produces an entry under the local gateway's apps directory (default `~/.centraid/apps/hydrate-<suffix>/`) with the template's files copied in and `current.json` pointing at the first version. Both the desktop sidebar and the gallery refresh; the new app is selectable.
+
+## 3 — Open the app
+
+Click the cloned app in the sidebar. The renderer mounts an iframe pointing at `/centraid/<id>/` — the gateway serves the app's `index.html` and you see the cup tracker.
+
+## 4 — See the round-trip
+
+The app has one query and one action. Lifted from [`packages/app-templates/hydrate/queries/get-today.js`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-templates/hydrate/queries/get-today.js):
+
+```js
+// queries/get-today.js
+export default async ({ db }) => {
+  const today = todayKey();
+  const row = await db.prepare('SELECT cups FROM hydrate_daily WHERE date = ?').get(today);
+  return { date: today, cups: row ? row.cups : 0, goal: 8 };
+};
+```
+
+And [`packages/app-templates/hydrate/actions/set-cups.js`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-templates/hydrate/actions/set-cups.js):
+
+```js
+// actions/set-cups.js
+export default async ({ body, db }) => {
+  const next = Math.max(0, Math.min(8, Number(body?.cups ?? 0)));
+  const today = todayKey();
+  await db
+    .prepare(
+      `INSERT INTO hydrate_daily (date, cups) VALUES (?, ?)
+       ON CONFLICT(date) DO UPDATE SET cups = excluded.cups`,
+    )
+    .run(today, next);
+  return { status: 200, body: { date: today, cups: next, goal: 8 } };
+};
+```
+
+When you press the cup button:
+
+1. The UI POSTs to `/centraid/_tool/centraid_write` with `{ app: "<id>", action: "set-cups", input: { cups: <n> } }`.
+2. The dispatcher validates `input` against the JSON Schema in `app.json` (Ajv, draft 2020-12).
+3. The handler runs, writes to `hydrate_daily`, returns the new state.
+4. The runtime emits a `hydrate_daily` invalidation on `/centraid/<id>/_changes`.
+5. The iframe's SSE subscription wakes up, re-runs `get-today`, the UI repaints.
+
+That round-trip is the whole product in one screen. Every other app you build is variations on it.
+
+## 5 — Inspect the database
+
+The data lives at `~/.centraid/apps/<id>/data.sqlite` (or wherever your gateway's `appsDir` resolves). Open it with any SQLite tool to confirm the row:
+
+```sh
+sqlite3 ~/.centraid/apps/<id>/data.sqlite 'SELECT * FROM hydrate_daily;'
+```
+
+> **TODO(#120)** — confirm the local gateway's default `appsDir`. The OpenClaw plugin defaults to `centraid` under `$OPENCLAW_STATE_DIR` (`~/.openclaw/centraid`). The desktop's embedded local gateway likely defaults to `~/.centraid/apps/` but I haven't read `apps/desktop/src/main/` to confirm.
+
+## What you just used
+
+- The **three-tool dispatcher** (`centraid_write`) — [reference](/reference/three-tool-dispatcher)
+- The **change stream** — [concept](/concepts/change-stream)
+- An app's **anatomy** — [build guide](/build/app-anatomy)
+
+## Next
+
+<Columns>
+  <Card title="Build your own app" href="/build/app-anatomy" icon="hammer">
+    Same shape as Hydrate, your domain.
+  </Card>
+  <Card title="Browse templates" href="/templates/index" icon="grid">
+    Todos, Journal, the automation pack.
+  </Card>
+</Columns>

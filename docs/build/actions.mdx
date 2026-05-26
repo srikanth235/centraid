@@ -1,0 +1,114 @@
+---
+summary: 'Writing action handlers — the write side. Includes the change-stream invalidation contract.'
+title: 'Actions'
+---
+
+# Actions
+
+An action is a **write tool** your app exposes — the only kind of tool allowed to mutate `data.sqlite`. The tool definition lives in `app.json` → `actions[]`; this page is about writing the **implementation** in `actions/<name>.js`. Callers reach the tool through the generic `centraid_write` dispatcher. See [Queries and actions](/concepts/queries-and-actions) for the framing.
+
+Each declared `writes: []` table gets a `change` event pushed to `/centraid/<id>/_changes` after the implementation returns successfully — that's how subscribed iframes learn to re-fetch.
+
+```js
+// actions/set-cups.js
+export default async ({ body, db, log }) => {
+  const next = Math.max(0, Math.min(8, Number(body?.cups ?? 0)));
+  const today = todayKey();
+  await db
+    .prepare(
+      `INSERT INTO hydrate_daily (date, cups) VALUES (?, ?)
+       ON CONFLICT(date) DO UPDATE SET cups = excluded.cups`,
+    )
+    .run(today, next);
+  return { status: 200, body: { date: today, cups: next, goal: 8 } };
+};
+```
+
+## The return shape
+
+An action returns:
+
+```ts
+{ status?: number; body: unknown }
+```
+
+- `status` — HTTP-ish status. The dispatcher uses this for the HTTP shim's response code; agents see it as part of the result envelope. Defaults to `200`.
+- `body` — your domain payload. Goes back to the caller verbatim.
+
+If you throw, the dispatcher catches and returns an `HANDLER_ERROR` MCP envelope (HTTP 500 via the shim). Don't try-catch just to swallow — let the dispatcher do its job.
+
+## Input arrives as `body`
+
+The action handler's first-arg destructure uses `body` (not `input` as queries do). The contents are the same — Ajv-validated `input` from the call — only the destructure name differs.
+
+```js
+export default async ({ body, db }) => {
+  // body is already shaped per app.json's actions[].input schema
+  const cups = body.cups;  // safe to use directly
+  ...
+};
+```
+
+## The change-bus contract
+
+`actions[].writes: []` in `app.json` is **load-bearing**. Each entry is a table name; after the handler returns successfully, the dispatcher emits a `change` event on `/centraid/<id>/_changes` for each of those tables.
+
+If you `writes: ["hydrate_daily"]` in the manifest but your handler also mutates `hydrate_weekly_recaps`, the recap table's subscribers will go stale. **The dispatcher can't see your SQL — it trusts the declaration.**
+
+The fix is to keep the declaration honest:
+
+```json
+{
+  "name": "weekly-encouragement",
+  "writes": ["hydrate_daily", "hydrate_weekly_recaps"]
+}
+```
+
+> **TODO(#120)** — confirm whether the dispatcher actually fires events for every entry in `writes:` or whether it observes the runtime mutations. The README mentions "session tracking" for actions; this could mean the gateway observes which tables were touched and emits accordingly. If that's the case, `writes:` is documentation-only and the _observed_ table list is what's emitted. Worth tracing in `runtime-core`.
+
+## Default timeout
+
+Action handlers default to **30s** (longer than queries because actions often do more work — multi-statement updates, external calls).
+
+## Multi-step actions
+
+For actions that do several writes or call several external services, structure the work as a sequence. Wrap risky steps to keep the function reaching `return` even if a step fails:
+
+```js
+export default async ({ body, db, log, ctx }) => {
+  try {
+    await db.prepare('INSERT INTO …').run(...);
+  } catch (err) {
+    log.warn(`step 1 failed: ${err.message}`);
+    // decide: swallow or rethrow
+  }
+  // step 2 …
+  return { status: 200, body: { ok: true } };
+};
+```
+
+Actions are not the same as automation handlers. An action is a tool — a single write invoked through `centraid_write` with `{body, db}`. An automation handler is a separate piece of code in `automations/<id>/handler.js` with a different signature (`{ctx, log, input}`) and a different ctx surface. See the [Automations](/automations/index) tab.
+
+## SQL transactions
+
+You can use SQLite transactions through the proxy:
+
+```js
+await db.prepare('BEGIN').run();
+try {
+  await db.prepare('INSERT INTO a …').run(...);
+  await db.prepare('UPDATE b …').run(...);
+  await db.prepare('COMMIT').run();
+} catch (err) {
+  await db.prepare('ROLLBACK').run();
+  throw err;
+}
+```
+
+> **TODO(#120)** — confirm transaction semantics through the proxy. The async round-trip means each call is a separate IPC; whether the proxy preserves transaction context across calls depends on connection pooling. Worth confirming before encouraging users to rely on it.
+
+## Where to go next
+
+- [Queries](/build/queries) — the read side.
+- [Change stream](/concepts/change-stream) — what `writes:` actually fires.
+- [Automations](/automations/index) — handlers that run on a trigger instead of a UI click. Different file (`handler.js`), different ctx (`ctx.tool`, `ctx.agent`, `ctx.state`, `ctx.runs`, `ctx.invoke`), different audit trail (`runtime.sqlite`).

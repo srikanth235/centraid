@@ -1,0 +1,115 @@
+---
+summary: 'Three trigger kinds — cron, webhook (provisioned), and webhook (pending). An automation can carry many cron triggers but at most one webhook. Empty array means manual-fire only.'
+title: 'Triggers'
+---
+
+# Triggers
+
+`triggers` is an **array** of discriminated-union entries. Each entry has a `kind` field that picks which shape to expect: `"cron"` or `"webhook"`. An automation with no triggers — `triggers: []` or `triggers` omitted entirely — is legal: it fires only via an explicit "Run now" or via `ctx.invoke` from another automation.
+
+```json
+{
+  "triggers": [
+    { "kind": "cron", "expr": "0 9 * * 1-5" },
+    { "kind": "cron", "expr": "0 17 * * 1-5" },
+    { "kind": "webhook", "id": "a1b2c3…", "secretHash": "5f4d…" }
+  ]
+}
+```
+
+## Cron triggers
+
+A `cron` trigger fires on a standard **5-field UTC cron expression**:
+
+```json
+{ "kind": "cron", "expr": "<minute> <hour> <day-of-month> <month> <day-of-week>" }
+```
+
+| Field  | Allowed                                                                  |
+| ------ | ------------------------------------------------------------------------ |
+| `kind` | `"cron"`                                                                 |
+| `expr` | A non-empty 5-field expression. Each field matches `[0-9*,\-/?A-Za-z]+`. |
+
+The validator (`isValidCronExpression`) accepts standard cron syntax — numbers, ranges (`1-5`), lists (`1,15`), steps (`*/5`), wildcards (`*`), and named days/months for the schedulers that support them. **It does not parse semantics**; an expression like `99 * * * *` passes the field-shape check but the underlying scheduler rejects it at registration time.
+
+**Time zone:** UTC. There is no time-zone field in the manifest. If you want "9am local," compute the UTC equivalent at scaffold time and bake it into the expression. The desktop and gateway both register cron in UTC.
+
+**Multiple cron triggers are fine.** Each is registered independently with the scheduler host. A "weekdays at 9am AND 5pm" automation declares two entries, not one.
+
+## Webhook triggers
+
+A `webhook` trigger fires when an HTTP POST arrives at `/_centraid-hook/<slug>` on a **remote gateway**. The desktop preserves the entry but never registers the route — it is a gateway client, not an HTTP host. See [Webhooks](/automations/webhooks) for the route handler, auth flow, and rate limits.
+
+### Provisioned shape
+
+```json
+{
+  "kind": "webhook",
+  "id": "a1b2c3d4e5f6...",
+  "secretHash": "5f4dcc3b5aa765d61d8327deb882cf99..."
+}
+```
+
+| Field        | Allowed                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `kind`       | `"webhook"`                                                                                                               |
+| `id`         | The route slug — matches `/^[A-Za-z0-9_-]+$/`. The runtime mints this from 12 random bytes (24-char hex).                 |
+| `secretHash` | SHA-256 hex of the shared secret. The plaintext secret is shown to the user **once** at provisioning and never persisted. |
+
+### Pending shape (builder handoff)
+
+```json
+{ "kind": "webhook", "pending": true }
+```
+
+When the user asks the conversational builder for a webhook trigger, the agent writes this shape — it cannot mint crypto-random credentials. The desktop's `provisionPendingWebhookAt` pass detects the pending entry on its next save, generates the `id` + secret, rewrites the trigger to its provisioned form, and surfaces the plaintext secret to the user once.
+
+The validator accepts this shape so the manifest round-trips through the builder workflow. See [Conversational builder](/automations/conversational-builder) for the full handshake.
+
+### At-most-one rule
+
+`triggers` may contain **at most one webhook entry** (whether pending or provisioned). The validator throws `invalid_trigger` if you declare two. If you need fan-in from multiple endpoints, the pattern is one automation per endpoint that calls a shared sibling via `ctx.invoke`.
+
+## Manual triggers — the empty array
+
+`triggers: []` is legal and means "fire only when explicitly invoked." Two valid invocation paths:
+
+1. **The "Run now" button** in the desktop's per-app Automations screen.
+2. **Cross-automation invocation** — another automation calls `ctx.invoke('<appId>/<id>', { input })` and this one fires as a child run.
+
+Useful for:
+
+- Sub-routines you want to share between scheduled automations.
+- Manual cleanup or report-generation tasks that shouldn't run on a clock.
+- Targets of `onFailure` — a "log and notify" automation that fires only when its sibling errors.
+
+## Legacy single-trigger shape
+
+Older manifests carry a single `trigger` object (singular) instead of `triggers` (plural):
+
+```json
+{ "trigger": { "kind": "cron", "expr": "0 9 * * 1-5" } }
+```
+
+This shape is **dual-read** by the validator: it wraps the single object into a one-element `triggers` array. The manifest is rewritten plural the next time it's saved (by the builder, by the toggle, or by a webhook provisioning pass). You do not need to migrate by hand.
+
+The Hydrate template's `weekly-encouragement.json` still ships in the legacy shape as a backward-compat test surface. New automations should use `triggers`.
+
+## What happens when a trigger fires
+
+Regardless of trigger kind, the firing path is the same:
+
+1. The host (desktop or gateway) resolves the automation by its handle.
+2. If `enabled: false`, the fire is skipped (with a `200 OK / skipped: 'automation disabled'` response for webhooks).
+3. A worker spawns, loads `handler.js`, and invokes the default export. For webhook fires, the parsed HTTP body is passed in as `input`. For cron and manual fires, `input` is empty.
+4. The handler runs. Tool calls, agent turns, and sub-invocations are recorded in `runtime.sqlite`.
+5. The returned `{ summary, output }` is persisted in the `runs` row.
+6. Retention is applied per `history.keep`.
+
+The `runs` row's `trigger_origin` column tags how the fire was triggered: `"cron"`, `"webhook"`, or `"manual"`. The desktop's run-list UI filters and groups on this.
+
+## Where to go next
+
+- [Webhooks](/automations/webhooks) — full route handler, auth, rate limit details.
+- [Handler runtime](/automations/handler) — what `handler.js` does when a trigger fires.
+- [Conversational builder](/automations/conversational-builder) — the pending-webhook handoff.

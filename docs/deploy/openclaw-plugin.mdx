@@ -1,0 +1,101 @@
+---
+summary: 'Run a Centraid gateway remotely as an OpenClaw plugin — reachable from any device, scheduled work always-on.'
+title: 'Remote deploy (OpenClaw plugin)'
+---
+
+# Remote deploy — OpenClaw plugin
+
+[`@centraid/openclaw-plugin`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/openclaw-plugin) mounts the Centraid gateway as a plugin on an existing OpenClaw instance. Same code as the local gateway; OpenClaw provides the HTTP front door, auth, and process supervision.
+
+This is the mode for "I want my apps reachable from my phone", "I want scheduled work to keep running", or "the family shares this gateway".
+
+## What you get from OpenClaw
+
+- A long-running HTTP gateway with TLS and auth.
+- Process supervision — the plugin host restarts if it crashes.
+- A standard plugin model so the same instance can host other extensions alongside Centraid.
+
+What Centraid provides:
+
+- The `/centraid` URL prefix and everything under it.
+- The apps directory at `$OPENCLAW_STATE_DIR/centraid/` (default `~/.openclaw/centraid/`).
+- The in-gateway agent tools (`centraid_sql_describe`, `centraid_sql_read`, `centraid_sql_write`) for the OpenClaw-side chat agent.
+
+## Install
+
+> **TODO(#120)** — capture the install command. OpenClaw plugins are typically installed via the OpenClaw CLI or by adding a config entry; the exact mechanism for `@centraid/openclaw-plugin` needs to be confirmed against the openclaw-plugin package's `openclaw.plugin.json` and OpenClaw's plugin docs.
+
+From the package's `scripts/`:
+
+```sh
+node packages/openclaw-plugin/scripts/setup-tools.mjs
+```
+
+This patches `~/.openclaw/openclaw.json` to add the three agent tools to the user's `tools.alsoAllow` array.
+
+## Configure
+
+Two keys in the plugin's `configSchema`:
+
+```json
+{
+  "appsDir": "centraid",
+  "versionRetention": 5
+}
+```
+
+| Key                | Default                                                                  | Notes                                                                       |
+| ------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `appsDir`          | `centraid` (resolved under `$OPENCLAW_STATE_DIR`, default `~/.openclaw`) | Where app folders live. Absolute paths used as-is.                          |
+| `versionRetention` | `5`                                                                      | Max versions kept per uploaded app. Active is always retained; minimum `2`. |
+
+## Upload an app
+
+```sh
+# In the app folder you want to publish:
+tar czf - --exclude data.sqlite --exclude current.json --exclude versions . | \
+  curl -X POST --data-binary @- \
+       -H "Content-Type: application/gzip" \
+       https://gw/centraid/_apps/my-app/upload
+```
+
+- First upload to a new id auto-registers it.
+- Each upload becomes an immutable version dir; `current.json#activeVersion` flips atomically once extraction succeeds.
+- Re-uploading identical content (same sha256) collapses to a single version dir; history records the latest timestamp.
+- After upload, retention pruning keeps the most recent N versions.
+
+## Roll back
+
+```sh
+curl https://gw/centraid/_apps/my-app/versions
+curl -X POST -d '{"versionId":"v_2026-05-08T14-30-00-000Z_a1b2c3"}' \
+     -H "Content-Type: application/json" \
+     https://gw/centraid/_apps/my-app/activate
+```
+
+`activate` is just a write to `current.json` — no extraction, no downtime, instant.
+
+## Auth
+
+> **TODO(#120)** — document the auth model. OpenClaw provides auth at the gateway level; calls to `/centraid/*` arrive already authenticated. Confirm whether per-app authz is supported and how to wire it.
+
+## Use it from the desktop
+
+The desktop app can be pointed at a remote gateway in addition to (or instead of) its embedded local one.
+
+> **TODO(#120)** — capture the desktop's remote-gateway config UI. From the steering ledger, "runtime decoupled and remotely hostable" was an explicit design choice; the desktop almost certainly has a remote-gateway URL setting.
+
+## What's _not_ in the remote path
+
+A few features of the local desktop don't apply:
+
+- **No builder.** Authoring a new app on the remote uses the upload + activate path; the conversational builder lives in the desktop today.
+- **No template gallery on the gateway.** Templates ship with the desktop app; you clone a template locally, then upload the clone to a remote gateway.
+
+> **TODO(#120)** — verify these are actually local-only. The builder + gallery were originally desktop-side per the receipts, but they may eventually surface on the remote.
+
+## Where to go next
+
+- [Local deploy](/deploy/local) — the simpler default.
+- [SQLite layout](/deploy/sqlite-layout) — what's on disk under the apps directory.
+- [HTTP API](/reference/http-api) — the full surface the plugin exposes.

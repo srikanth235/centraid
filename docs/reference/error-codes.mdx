@@ -1,0 +1,78 @@
+---
+summary: 'MCP-shaped error envelopes returned by the dispatcher, mapped to HTTP status codes via the shim.'
+title: 'Error codes'
+---
+
+# Error codes
+
+The dispatcher returns errors as **MCP-shaped envelopes** with `isError: true`. The HTTP shim maps the envelope's `code` to a 4xx/5xx status.
+
+## Envelope shape
+
+```json
+{
+  "isError": true,
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "input.cups must be a number",
+    "path": "/cups"
+  }
+}
+```
+
+| Field     | Always present           | Notes                                                 |
+| --------- | ------------------------ | ----------------------------------------------------- |
+| `code`    | yes                      | One of the codes below.                               |
+| `message` | yes                      | Human-readable explanation. Safe to surface to users. |
+| `path`    | only for `INVALID_INPUT` | JSON Pointer to the offending field in `input`.       |
+
+## Code table
+
+| Code                | Meaning                                                                      | HTTP shim status |
+| ------------------- | ---------------------------------------------------------------------------- | ---------------- |
+| `UNKNOWN_APP`       | `app` doesn't match any registered app                                       | `404`            |
+| `UNKNOWN_ACTION`    | `action` doesn't exist on that app                                           | `404`            |
+| `UNKNOWN_QUERY`     | `query` doesn't exist on that app                                            | `404`            |
+| `WRONG_KIND`        | Name exists, but kind doesn't match (e.g. action called via `centraid_read`) | `400`            |
+| `INVALID_INPUT`     | `input` failed JSON Schema validation. Envelope includes `path`              | `400`            |
+| `NO_ACTIVE_VERSION` | App registered but has no `current.json#activeVersion`                       | `503`            |
+| `INVALID_MANIFEST`  | The app's `app.json` is malformed                                            | `500`            |
+| `HANDLER_ERROR`     | Handler threw, timed out, or returned a malformed result                     | `500`            |
+
+## When you'll see each
+
+- **`UNKNOWN_APP`**: typo in `app` field, or the app was deregistered between describe and read/write.
+- **`UNKNOWN_ACTION` / `UNKNOWN_QUERY`**: typo in `action`/`query` field, or the handler was removed in the active version's `app.json`.
+- **`WRONG_KIND`**: called `centraid_read` with a name that's only declared as an action (or vice versa). The dispatcher knows the kind from `app.json`.
+- **`INVALID_INPUT`**: the most common one for clients. Ajv-derived; `path` tells you which field. The handler did **not** run.
+- **`NO_ACTIVE_VERSION`**: registry has the app, but `current.json` is missing or its `activeVersion` is invalid. Happens during failed uploads or manual `versions/` editing.
+- **`INVALID_MANIFEST`**: `app.json` is broken — probably caught at upload, but possible if the active version got corrupted.
+- **`HANDLER_ERROR`**: your handler threw, or the worker hit the timeout (`timeoutMs` config, default 10s query / 30s action), or the worker hit `resourceLimits`.
+
+## Catching from JavaScript
+
+```js
+const res = await fetch('/centraid/_tool/centraid_write', { ... });
+const env = await res.json();
+if (env.isError) {
+  switch (env.error.code) {
+    case 'INVALID_INPUT': showFieldError(env.error.path, env.error.message); break;
+    case 'NO_ACTIVE_VERSION': showAppOfflineState(); break;
+    default: showGenericError(env.error.message);
+  }
+  return;
+}
+useResult(env.data);
+```
+
+## From an OpenClaw agent
+
+The same `{ isError, error }` envelope shape, returned as the tool result. Agents typically read `error.message` directly into their reasoning.
+
+> **TODO(#120)** — confirm whether agent-side errors use the exact MCP envelope or a wrapper. README says "MCP-shaped"; the specific MCP variant matters for SDK-level parsing.
+
+## Where to go next
+
+- [Three-tool dispatcher](/reference/three-tool-dispatcher) — what produces these envelopes.
+- [HTTP API](/reference/http-api) — full surface.
+- [Build → app.json](/build/app-json) — where the validation schemas live.

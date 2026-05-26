@@ -1,0 +1,206 @@
+---
+summary: 'Every Centraid app is the same folder shape — index.html, app.json, queries/, actions/, migrations/. Walkthrough using the Hydrate template.'
+title: 'App anatomy'
+---
+
+# App anatomy
+
+A Centraid app is a folder with a fixed shape. The gateway recognizes the shape; nothing else needs to be configured.
+
+The folder holds two halves of one idea: a **tool catalog** declared in `app.json` (the `queries[]` and `actions[]` arrays), and **implementations** of those tools under `queries/` and `actions/`. The static files (`index.html`, CSS, JS) are the UI that calls into the tool catalog. See [Queries and actions](/concepts/queries-and-actions) for the framing.
+
+```
+my-app/
+├── app.json                  # manifest (required)
+├── index.html                # entry HTML (required if the app has a UI)
+├── app.css                   # optional, served as static
+├── app.js                    # optional, served as static
+├── wall.css                  # optional theme wall — see UI
+├── queries/
+│   └── <name>.js             # read-only handlers
+├── actions/
+│   └── <name>.js             # write handlers
+├── migrations/
+│   ├── 0001_init.sql         # schema bootstrap
+│   └── 0002_<name>.sql       # additive changes
+├── automations/              # optional — see Automations tab
+│   └── <id>/
+│       ├── automation.json   # manifest (triggers, prompt, requires, history)
+│       └── handler.js        # the JS the runtime invokes when the trigger fires
+├── package.json              # only if you author in TypeScript
+└── tsconfig.json             # only if you author in TypeScript
+```
+
+The runtime loads `.js` files only — TypeScript is an authoring convenience that compiles to `.js` in place. See [Queries](/build/queries#typescript) for the TS workflow.
+
+## Static asset allowlist
+
+The gateway serves any file whose extension matches:
+
+```
+.html .htm .css .js .mjs .json .svg .png .jpg .jpeg .webp .gif .ico
+.woff .woff2 .ttf .otf .map
+```
+
+Reserved names that are **never served as static** even if you ship them:
+
+- `data.sqlite` — the app's database, written by handlers only
+- `_registry.json` — gateway-owned
+- `current.json` — gateway-owned
+- `app.json` — read by tooling, not served
+- `queries/` and `actions/` directories — invoked, not served
+
+Anything outside the allowlist is refused on upload (HTTP 400).
+
+## Walkthrough: Hydrate
+
+The Hydrate template is the simplest non-trivial app — one table, one query, one action, one user knob, one UI screen. Use it as a reference shape.
+
+### `app.json` (excerpt)
+
+```json
+{
+  "manifestVersion": 1,
+  "id": "hydrate",
+  "name": "Hydrate",
+  "version": "0.1.0",
+  "tables": [
+    {
+      "name": "hydrate_daily",
+      "columns": [
+        { "name": "date", "type": "TEXT" },
+        { "name": "cups", "type": "INTEGER" }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "set-cups",
+      "input": {
+        "type": "object",
+        "properties": { "cups": { "type": "number" } },
+        "required": ["cups"]
+      },
+      "writes": ["hydrate_daily"]
+    }
+  ],
+  "queries": [
+    {
+      "name": "get-today",
+      "input": { "type": "object", "properties": {} },
+      "reads": ["hydrate_daily"]
+    }
+  ]
+}
+```
+
+### `migrations/0001_init.sql`
+
+```sql
+CREATE TABLE IF NOT EXISTS hydrate_daily (
+  date TEXT PRIMARY KEY,
+  cups INTEGER NOT NULL DEFAULT 0
+);
+```
+
+### `queries/get-today.js`
+
+```js
+export default async ({ db }) => {
+  const today = todayKey();
+  const row = await db.prepare('SELECT cups FROM hydrate_daily WHERE date = ?').get(today);
+  return { date: today, cups: row ? row.cups : 0, goal: 8 };
+};
+```
+
+### `actions/set-cups.js`
+
+```js
+export default async ({ body, db }) => {
+  const next = Math.max(0, Math.min(8, Number(body?.cups ?? 0)));
+  await db
+    .prepare(
+      `INSERT INTO hydrate_daily (date, cups) VALUES (?, ?)
+     ON CONFLICT(date) DO UPDATE SET cups = excluded.cups`,
+    )
+    .run(todayKey(), next);
+  return { status: 200, body: { date: todayKey(), cups: next, goal: 8 } };
+};
+```
+
+### `index.html` (excerpt)
+
+```html
+<div id="count">0<span> / 8</span></div>
+<button id="add">Log a cup</button>
+<script type="module" src="app.js"></script>
+```
+
+### `app.js`
+
+```js
+async function refresh() {
+  const res = await fetch('_tool/centraid_read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app: 'hydrate', query: 'get-today', input: {} }),
+  });
+  const { cups } = await res.json();
+  document.getElementById('count').firstChild.data = String(cups);
+}
+
+document.getElementById('add').addEventListener('click', async () => {
+  const cur = Number(document.getElementById('count').firstChild.data);
+  await fetch('_tool/centraid_write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app: 'hydrate', action: 'set-cups', input: { cups: cur + 1 } }),
+  });
+  // change stream will fire refresh() — see UI and changes
+});
+
+new EventSource('_changes').addEventListener('change', refresh);
+refresh();
+```
+
+> **TODO(#120)** — the `_tool/*` endpoint paths shown are relative; confirm they resolve correctly when the iframe is loaded from `/centraid/<id>/`. The dispatcher lives at `/centraid/_tool/...` (absolute); from inside `/centraid/<id>/` the relative `_tool/...` would resolve to `/centraid/<id>/_tool/...` which **may not be a route**. If so, the example needs `../_tool/...` or `/centraid/_tool/...`.
+
+## Knobs (user-facing settings)
+
+`app.json` can declare a `knobs[]` array — each entry renders as a user-facing control in the desktop shell's per-app settings popover:
+
+```json
+{
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        { "value": "sans", "label": "Sans" },
+        { "value": "serif", "label": "Serif" }
+      ]
+    },
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#4950F6",
+      "options": [
+        { "value": "#4950F6", "label": "Blue" },
+        { "value": "#7C5BD9", "label": "Violet" }
+      ]
+    }
+  ]
+}
+```
+
+The knob values arrive in the iframe via the `centraid:settings` postMessage event — see [UI and changes](/build/ui-and-changes#receiving-settings).
+
+## Where to go next
+
+- [app.json reference](/build/app-json) — every field, every type.
+- [Queries](/build/queries) and [Actions](/build/actions) — handler patterns.
+- [Migrations](/build/migrations) — schema lifecycle.
+- [UI and changes](/build/ui-and-changes) — subscribing to the change stream and reacting to settings.

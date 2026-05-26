@@ -1,0 +1,133 @@
+---
+summary: "Every automation fire writes a runs row and one run_nodes row per ctx.tool / ctx.agent / ctx.invoke call. The ledger lives in the parent app's runtime.sqlite. Retention is per-automation."
+title: 'Run history'
+---
+
+# Run history
+
+Every time an automation fires, the runtime writes an audit trail to **`runtime.sqlite`** in the parent app's directory. This is separate from `data.sqlite` (the app's user data) — a clean line so automation churn doesn't pollute the app's data store.
+
+```
+<appDir>/
+  data.sqlite           ← the app's user data (queries and actions touch this)
+  runtime.sqlite        ← the automation ledger (the runtime writes this)
+  versions/v_…/         ← code versions
+```
+
+## The schema
+
+Two tables drive the ledger:
+
+### `runs`
+
+One row per fire. Created when the trigger fires, updated when the handler returns (or throws).
+
+| Column                    | Meaning                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------- |
+| `run_id`                  | UUID. The handle for log lines, downstream-event refs, audit nodes.             |
+| `automation_id`           | Which automation this run belongs to (matches the on-disk directory name).      |
+| `app_id`                  | The owning app.                                                                 |
+| `status`                  | `"ok"` or `"error"`. `"running"` while in-flight.                               |
+| `trigger_origin`          | `"cron"`, `"webhook"`, `"manual"`, or `"invoke"` — how this fire was triggered. |
+| `started_at` / `ended_at` | Epoch ms.                                                                       |
+| `summary`                 | The handler's returned `summary` string.                                        |
+| `output_json`             | The handler's returned `output`, JSON-serialized.                               |
+| `error`                   | When status is `"error"`, the thrown message.                                   |
+| `input_json`              | The trigger's input — webhook body, invoke args, etc.                           |
+| `parent_run_id`           | Set when this run was fired via `ctx.invoke` from another run.                  |
+
+### `run_nodes`
+
+One row per `ctx.tool` / `ctx.agent` / `ctx.invoke` call, ordered within a run.
+
+| Column                    | Meaning                                                                 |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `run_id`                  | Foreign key into `runs`. CASCADE-deletes when the run is pruned.        |
+| `ordinal`                 | Position within the run. Monotonic per run.                             |
+| `batch_id`                | When multiple `ctx.tool` calls fire in parallel, they share a batch id. |
+| `kind`                    | `"tool"`, `"agent"`, or `"invoke"`.                                     |
+| `name`                    | Tool name, model name, or target automation handle.                     |
+| `args_json`               | What was sent.                                                          |
+| `result_json`             | What came back.                                                         |
+| `ok`                      | Boolean.                                                                |
+| `error`                   | When `ok` is false.                                                     |
+| `child_run_id`            | For `kind: "invoke"`, the child run's id.                               |
+| `started_at` / `ended_at` | Epoch ms.                                                               |
+
+`run_nodes` is what the desktop's "Trace" view renders — a tree per run showing every tool call, every agent turn, every sub-invocation, in order, with timings.
+
+## Retention
+
+`history.keep` on the manifest controls when old rows get pruned. Pruning runs **at end-of-run** on the automation that just finished — not on a global janitor — so it's lazy and bounded by how often the automation actually fires.
+
+| `history.keep` shape | Behavior                                                                         |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `{ "count": N }`     | Keep the newest N runs. Default: `{ count: 100 }`.                               |
+| `{ "days": N }`      | Drop runs whose `ended_at` is older than N days.                                 |
+| `"all"`              | Keep everything. No pruning.                                                     |
+| `"errors"`           | Keep only runs with `status: "error"`. Successful runs are pruned at end-of-run. |
+
+`run_nodes` rows cascade-delete with their parent `runs` row.
+
+**Practical guidance:**
+
+- Low-frequency automations (weekly): `{ count: 100 }` keeps two years of history at no cost.
+- High-frequency automations (every-15-minutes): `{ days: 30 }` keeps the audit useful while avoiding unbounded growth.
+- Production failure-debugging: `"errors"` keeps only the rows you actually want to look at.
+- The default (`{ count: 100 }`) is fine for almost everything; don't override unless you know you need to.
+
+## How to read a run
+
+### From the desktop
+
+The per-app Automations screen lists every automation in the app. Click in to see the run list. Click a run to see:
+
+- The trigger that fired it (cron expression, webhook slug, or "manual").
+- The `summary` line.
+- The full `input` and `output` JSON.
+- The trace — every `run_nodes` child, in order, with timings.
+- The log output (lines from `log.info` / `log.warn` / `log.error` inside the handler).
+
+### Programmatically, from another automation
+
+`ctx.runs.last()` and `ctx.runs.list()` query the same tables. See [Handler runtime → `ctx.runs`](/automations/handler#ctx-runs-prior-run-lookup).
+
+### Directly, via SQL
+
+If you have shell access to the gateway host (or you're running the desktop), you can open the SQLite file:
+
+```bash
+sqlite3 ~/.centraid/apps/auto.briefing/runtime.sqlite \
+  "SELECT run_id, status, started_at, summary FROM runs ORDER BY started_at DESC LIMIT 20;"
+```
+
+> **TODO(#120)** — verify the file lives at the app folder root in production. The path may be inside the active-version directory; confirm against the gateway's `runtime-store` implementation.
+
+## Per-run logs
+
+`log.info(msg, …extra)` calls inside the handler stream into a per-run log buffer. The buffer is persisted alongside the `runs` row and shown in the desktop's run view.
+
+Logs are **plain text + a structured extras object** per line. Use them generously — they're the only way to see what's happening inside a handler that doesn't fail outright. (A handler that completes successfully but does the wrong thing leaves no `run_nodes` trace of the bug; the log is.)
+
+## `parent_run_id` and invoke chains
+
+When a handler calls `ctx.invoke('<app>/<id>', { input })`:
+
+1. A `run_nodes` row with `kind: "invoke"` is recorded on the parent run.
+2. A new `runs` row is created for the child with `trigger_origin: "invoke"` and `parent_run_id` set to the parent's `run_id`.
+3. The child runs to completion (or failure) as its own audited run.
+4. The child's returned `output` is set as the `result_json` on the parent's invoke node.
+
+Chains can nest arbitrarily deep. The desktop's trace view follows `parent_run_id` to expand the chain inline.
+
+## `onFailure` runs separately
+
+When a handler throws and `onFailure` is set on the manifest, the sibling automation fires as its **own** run — with its own `runs` row and `trigger_origin: "manual"`. It's not a child of the failed run. The failure context is passed in as `input` to the sibling's handler.
+
+This is deliberate: the failure-handling automation should be auditable independently. You can look at the `onFailure` automation's run list and see every time it fired, what failure it was responding to (in its `input_json`), and what it did about it.
+
+## Where to go next
+
+- [Manifest reference](/automations/manifest#retention) — the four `history.keep` shapes.
+- [Handler runtime](/automations/handler) — what each `ctx.*` call records as a `run_node`.
+- [SQLite layout](/deploy/sqlite-layout) — where `runtime.sqlite` lives on disk.

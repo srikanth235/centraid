@@ -1,0 +1,191 @@
+---
+summary: 'The three generic tools — centraid_describe, centraid_read, centraid_write — that all handler calls flow through. Request shapes, validation, response envelopes.'
+title: 'Three-tool dispatcher'
+---
+
+# Three-tool dispatcher
+
+## What's actually being dispatched
+
+Each app's `queries[]` and `actions[]` arrays in `app.json` define **per-app tools** — `set-cups`, `get-today`, `add-todo`, `complete-todo`, and so on. Those are the tools an AI agent actually uses; those are what your UI calls.
+
+So why three generic tools and not "register every app's tools as agent tools"? Because every time a new app is uploaded, the catalog would grow, and every agent would need to learn it. The dispatcher inverts that:
+
+- **`centraid_describe`** — "list me every tool every app exposes, with full schema". Discovery.
+- **`centraid_read`** — "call query `<name>` on app `<id>` with `<input>`". Generic invocation.
+- **`centraid_write`** — same, for actions.
+
+From the agent's perspective, three tools is what it sees registered; the per-app catalog is what it actually reasons about, fetched via `centraid_describe`. The dispatcher is a _fan-out_ layer over the live tool catalog.
+
+The shape is identical whether you call these three as OpenClaw agent tools or as HTTP endpoints under `/centraid/_tool/`.
+
+| Tool                | HTTP                                     | Purpose                                        |
+| ------------------- | ---------------------------------------- | ---------------------------------------------- |
+| `centraid_describe` | `POST /centraid/_tool/centraid_describe` | Return the app manifest (or a filtered slice). |
+| `centraid_read`     | `POST /centraid/_tool/centraid_read`     | Invoke a query handler.                        |
+| `centraid_write`    | `POST /centraid/_tool/centraid_write`    | Invoke an action handler.                      |
+
+The contract was added in issue [#107](https://github.com/srikanthsrungarapu/centraid/issues/107). The receipt is [`receipts/issue-107-three-tool-dispatcher.md`](https://github.com/srikanthsrungarapu/centraid/blob/main/receipts/issue-107-three-tool-dispatcher.md).
+
+## `centraid_describe`
+
+Returns the registered app manifest, optionally filtered to a single action or query.
+
+### Request
+
+```json
+{
+  "app": "hydrate",
+  "action": "set-cups",
+  "query": "get-today"
+}
+```
+
+All three fields are optional:
+
+- No fields → list every registered app and a top-level summary.
+- `app` only → the full `app.json` for that app.
+- `app` + `action` → just the named action's manifest entry.
+- `app` + `query` → just the named query's manifest entry.
+
+### Response
+
+```json
+{
+  "isError": false,
+  "data": {
+    "app": "hydrate",
+    "name": "Hydrate",
+    "version": "0.1.0",
+    "actions": [ ... ],
+    "queries": [ ... ]
+  }
+}
+```
+
+> **TODO(#120)** — confirm the exact response envelope shape. README mentions "MCP-shaped" envelopes; whether successful results use `{ data }`, `{ result }`, or `{ content }` depends on the MCP variant used. Worth confirming.
+
+## `centraid_read`
+
+Invokes a query handler. The dispatcher validates `input` against the query's `input` JSON Schema (Ajv, draft 2020-12) **before** the handler runs.
+
+### Request
+
+```json
+{
+  "app": "hydrate",
+  "query": "get-today",
+  "input": {}
+}
+```
+
+| Field   | Required | Notes                                                                  |
+| ------- | -------- | ---------------------------------------------------------------------- |
+| `app`   | yes      | Registered app id.                                                     |
+| `query` | yes      | Name of an entry in the app's `queries[]` array.                       |
+| `input` | yes      | Validated against the query's `input` schema. Pass `{}` for no params. |
+
+### Response
+
+```json
+{
+  "isError": false,
+  "data": {
+    "date": "2026-05-26",
+    "cups": 5,
+    "goal": 8
+  }
+}
+```
+
+The handler's return value is passed through verbatim under `data`.
+
+### Errors
+
+| Code                | Meaning                                                    | HTTP shim status |
+| ------------------- | ---------------------------------------------------------- | ---------------- |
+| `UNKNOWN_APP`       | `app` doesn't match any registered app                     | 404              |
+| `UNKNOWN_QUERY`     | `query` doesn't exist on that app                          | 404              |
+| `WRONG_KIND`        | A name exists, but it's an action, not a query             | 400              |
+| `INVALID_INPUT`     | `input` failed schema validation. Envelope includes `path` | 400              |
+| `NO_ACTIVE_VERSION` | The app is registered but has no active version            | 503              |
+| `HANDLER_ERROR`     | Handler threw or timed out                                 | 500              |
+| `INVALID_MANIFEST`  | The app's `app.json` is malformed                          | 500              |
+
+See [Error codes](/reference/error-codes) for envelope shape.
+
+## `centraid_write`
+
+Invokes an action handler. Same validation; same dispatcher; the difference is that successful writes also push events on `/centraid/<id>/_changes` for every table in the action's `writes: []` declaration.
+
+### Request
+
+```json
+{
+  "app": "hydrate",
+  "action": "set-cups",
+  "input": { "cups": 5 }
+}
+```
+
+### Response
+
+```json
+{
+  "isError": false,
+  "data": {
+    "status": 200,
+    "body": { "date": "2026-05-26", "cups": 5, "goal": 8 }
+  }
+}
+```
+
+The action's return is `{ status?, body }`. The dispatcher passes both through. The HTTP shim uses `status` as the response code (default 200).
+
+### Side effects
+
+After a successful action, the dispatcher fires one `change` event per table in `writes: []` on `/centraid/<id>/_changes`. Subscribed iframes re-fetch the affected queries.
+
+If your action mutates tables not listed in `writes:`, subscribers won't know — see [Actions → the change-bus contract](/build/actions#the-change-bus-contract).
+
+## Calling from JavaScript
+
+From inside an app iframe:
+
+```js
+async function readQuery(app, query, input) {
+  const res = await fetch('/centraid/_tool/centraid_read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app, query, input }),
+  });
+  const env = await res.json();
+  if (env.isError) throw new Error(`${env.error.code}: ${env.error.message}`);
+  return env.data;
+}
+```
+
+## Calling from an OpenClaw agent
+
+On the remote gateway, the same three tools are registered with OpenClaw as agent tools (no HTTP needed):
+
+```json
+{
+  "tools": {
+    "profile": "coding",
+    "alsoAllow": ["centraid_describe", "centraid_read", "centraid_write"]
+  }
+}
+```
+
+> **TODO(#120)** — there's a separate set of `centraid_sql_*` agent tools (`describe`, `read`, `write`) — those are the SQL-level surface for in-gateway chat agents. The three-tool dispatcher (`centraid_describe`, `centraid_read`, `centraid_write`) is the handler-level surface. Document which agent paths use which, and when. The naming is close enough to confuse.
+
+## Manifest validation
+
+When an app is uploaded, the dispatcher loads `app.json` and validates it. A malformed manifest (missing `id`, invalid JSON Schema in `input`, etc.) causes the upload to fail with `INVALID_MANIFEST`.
+
+## Where to go next
+
+- [HTTP API](/reference/http-api) — full endpoint catalog beyond the three tools.
+- [Error codes](/reference/error-codes) — envelope shape, code → HTTP status table.
+- [Build → app.json](/build/app-json) — the manifest these tools introspect.

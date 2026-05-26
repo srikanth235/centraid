@@ -1,0 +1,135 @@
+---
+summary: "The conversational builder turns 'fire every Sunday and summarize the week' into automation.json + handler.js. A few guardrails are non-negotiable: never self-enable, never mint webhook secrets, never use the mock model."
+title: 'Conversational builder'
+---
+
+# Conversational builder
+
+The conversational builder is the path most automations are created through: a chat surface where the user describes what they want, and the builder agent scaffolds the `automations/<id>/` directory — both the manifest and the handler.
+
+The builder is the reason `prompt` lives on `automation.json` and `generated: {by, at}` is required. The manifest captures **what the user asked for**; `handler.js` captures **what the agent generated in response**. The pair round-trips through the builder: the next time the user says "now also do X," the agent re-reads both, plans a delta, and rewrites the handler.
+
+Background: issue [#98](https://github.com/srikanthsrungarapu/centraid/issues/98) introduced the unified folder model + the chat-driven scaffolder. Issue [#91](https://github.com/srikanthsrungarapu/centraid/issues/91) is the earlier "automations as first-class projects" reframe the builder is built on.
+
+## What the builder writes
+
+For "Every Sunday at 8pm, summarize last week's hydration log and write a kind line of encouragement":
+
+`automation.json`:
+
+```json
+{
+  "name": "Weekly encouragement",
+  "version": "0.1.0",
+  "description": "A short, kind line of encouragement every Sunday evening, based on the week's hydration log.",
+  "enabled": false,
+  "prompt": "Every Sunday at 8pm, look at the past week's hydration log and write one short, kind line of encouragement based on how it went.",
+  "triggers": [{ "kind": "cron", "expr": "0 20 * * 0" }],
+  "requires": {
+    "model": "anthropic/claude-3-5-sonnet"
+  },
+  "costEstimate": {
+    "model": "anthropic/claude-3-5-sonnet",
+    "tokensPerFire": 800
+  },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "builder-agent", "at": "2026-05-26T17:42:11.812Z" }
+}
+```
+
+`handler.js`:
+
+```js
+export default async ({ ctx, log }) => {
+  const week = await ctx.tool('centraid_read', {
+    app: 'hydrate',
+    query: 'list-since',
+    input: { since: Date.now() - 7 * 24 * 60 * 60 * 1000 },
+  });
+
+  if (!week.rows.length) {
+    return { summary: 'no entries this week, skipped' };
+  }
+
+  const text = await ctx.agent({
+    prompt: `One short, kind line of encouragement based on this week:\n${JSON.stringify(week.rows)}`,
+  });
+
+  await ctx.tool('centraid_write', {
+    app: 'hydrate',
+    action: 'save-encouragement',
+    input: { text, week_of: new Date().toISOString() },
+  });
+
+  log.info('encouragement saved');
+  return { summary: `wrote: ${text.slice(0, 50)}…` };
+};
+```
+
+The handler is plain JavaScript the user can edit. The agent's role is to scaffold an honest starting point, not to be the runtime — once it's written, `handler.js` is the source of truth and the agent re-reads it on the next iteration.
+
+## Non-negotiable constraints
+
+The builder agent is constrained — not by hand-wave, by validation. The runtime rejects manifests that violate these rules.
+
+### `enabled: false` at scaffold time
+
+The builder must write `enabled: false` on every freshly-scaffolded automation. A human turns it on. This is enforced by convention in the builder's system prompt, but the desktop UI also gates "first enable" behind an explicit click that surfaces the `costEstimate`.
+
+Why: an automation that fires the moment the agent finishes typing is a footgun. The user should see the manifest, look at the handler, and decide.
+
+### Never mint webhook credentials
+
+When the user asks for a webhook trigger, the builder writes the **pending** shape:
+
+```json
+{ "triggers": [{ "kind": "webhook", "pending": true }] }
+```
+
+It does **not** invent an `id` or a `secretHash`. Those require:
+
+- Crypto-random byte generation (an agent typing hex characters is not crypto-random).
+- One-shot user surfacing (the plaintext secret has to be shown exactly once and never persisted).
+
+The privileged server pass — `provisionPendingWebhookAt` — handles both. The builder's job is to declare intent; the runtime's job is to provision. See [Webhooks](/automations/webhooks#the-provisioning-handshake) for the full handshake.
+
+### Never use the mock model
+
+`requires.model = "centraid-mock/*"` would route `ctx.agent` calls back into the same mock provider the runtime tests use — an infinite-recursion footgun. The manifest validator throws `mock_model_disallowed` on any model id starting with `centraid-mock/`.
+
+The builder agent picks a real model based on the user's available providers. If no provider is configured, the builder asks before scaffolding.
+
+### Always declare `generated`
+
+The manifest validator requires `generated.by` + `generated.at`. The builder writes `"by": "builder-agent"`; template scaffolds write `"by": "centraid-template"`; hand-authored files declare `"by": "hand"`. The field is provenance, not security — but it lets the desktop's "Automations" gallery flag scaffolded vs. hand-written entries, and lets retention policies treat builder churn differently if needed.
+
+## How the builder handles iteration
+
+The user says: "Also CC me on Slack when you write the encouragement."
+
+The agent:
+
+1. **Re-reads `automation.json` + `handler.js`** in the existing directory.
+2. **Plans a delta** — needs a Slack tool call after the `centraid_write`, needs `requires.mcps: ["slack"]` on the manifest.
+3. **Rewrites both files** — manifest gets the new requirement, handler gets the new `ctx.tool('slack.post_message', …)` call.
+4. **Bumps `generated.at`** to the current ISO timestamp. `version` is bumped if the change is non-additive (signature change, breaking).
+5. **Leaves `enabled` alone.** If the automation was enabled before the edit, it stays enabled; the user already approved the original. If the change introduces a new credential requirement (a new MCP), the desktop UI flags the next fire to ask for re-authorization.
+
+The agent does not run a "build then test" loop in the user's chat. The handler is scaffolded statically — invoking it for real is a separate, audited action the user takes when they're ready.
+
+## What the user can hand-edit
+
+Anything. The builder is opinionated about its own output but doesn't lock the files. If the user opens `handler.js` in their editor and rewrites it, the next builder turn:
+
+- Re-reads the (now hand-edited) handler.
+- Plans the delta on top of the user's version.
+- Preserves the user's structure where reasonable, but may rewrite if the user's ask requires a different shape.
+- Bumps `generated.by` to `"builder-agent"` (overwriting `"hand"` if it was hand-edited) — that's a known limitation; provenance is per-write, not per-block.
+
+The `prompt` field on the manifest can also be hand-edited — but it's documentation, not execution. Changing the prompt does not change the handler. To get the handler regenerated from a new prompt, ask the builder.
+
+## Where to go next
+
+- [Manifest reference](/automations/manifest) — every field the builder writes and what's required of it.
+- [Handler runtime](/automations/handler) — what `ctx.*` calls the builder can generate.
+- [Webhooks](/automations/webhooks) — the pending-to-provisioned handshake the builder cannot complete on its own.

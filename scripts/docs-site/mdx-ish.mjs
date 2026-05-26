@@ -1,0 +1,496 @@
+import MarkdownIt from 'markdown-it';
+import anchor from 'markdown-it-anchor';
+import hljs from 'highlight.js/lib/core';
+import bash from 'highlight.js/lib/languages/bash';
+import css from 'highlight.js/lib/languages/css';
+import diff from 'highlight.js/lib/languages/diff';
+import dockerfile from 'highlight.js/lib/languages/dockerfile';
+import go from 'highlight.js/lib/languages/go';
+import http from 'highlight.js/lib/languages/http';
+import ini from 'highlight.js/lib/languages/ini';
+import java from 'highlight.js/lib/languages/java';
+import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
+import markdown from 'highlight.js/lib/languages/markdown';
+import powershell from 'highlight.js/lib/languages/powershell';
+import python from 'highlight.js/lib/languages/python';
+import rust from 'highlight.js/lib/languages/rust';
+import shell from 'highlight.js/lib/languages/shell';
+import sql from 'highlight.js/lib/languages/sql';
+import typescript from 'highlight.js/lib/languages/typescript';
+import xml from 'highlight.js/lib/languages/xml';
+import yaml from 'highlight.js/lib/languages/yaml';
+
+const markerPrefix = 'CENTRAID_DOCS_MARKER';
+const inlineMarkerPrefix = 'CENTRAID_DOCS_INLINE';
+const languages = {
+  bash,
+  css,
+  diff,
+  dockerfile,
+  go,
+  http,
+  ini,
+  java,
+  javascript,
+  json,
+  markdown,
+  powershell,
+  python,
+  rust,
+  shell,
+  sql,
+  typescript,
+  xml,
+  yaml,
+};
+for (const [name, language] of Object.entries(languages)) hljs.registerLanguage(name, language);
+const languageAliases = new Map([
+  ['sh', 'bash'],
+  ['zsh', 'bash'],
+  ['console', 'bash'],
+  ['terminal', 'bash'],
+  ['ps1', 'powershell'],
+  ['pwsh', 'powershell'],
+  ['js', 'javascript'],
+  ['jsx', 'javascript'],
+  ['mjs', 'javascript'],
+  ['cjs', 'javascript'],
+  ['ts', 'typescript'],
+  ['tsx', 'typescript'],
+  ['jsonc', 'json'],
+  ['json5', 'javascript'],
+  ['yml', 'yaml'],
+  ['html', 'xml'],
+  ['md', 'markdown'],
+  ['text', 'plaintext'],
+  ['txt', 'plaintext'],
+]);
+const knownBlocks = new Map([
+  ['AccordionGroup', ['accordion-group', '']],
+  ['Steps', ['steps', '']],
+  ['Tabs', ['tabs', '']],
+  ['CodeGroup', ['code-group', '']],
+  ['TileGroup', ['tile-group', '']],
+]);
+const callouts = new Map([
+  ['Note', 'Note'],
+  ['Warning', 'Warning'],
+  ['Tip', 'Tip'],
+  ['Info', 'Info'],
+  ['Check', 'Check'],
+  ['Say', 'Say'],
+  ['Banner', 'Banner'],
+  ['Update', 'Update'],
+]);
+
+export function createMarkdownRenderer() {
+  const md = new MarkdownIt({
+    html: true,
+    linkify: true,
+    typographer: false,
+    highlight: highlightCode,
+  }).use(anchor);
+  md.renderer.rules.fence = renderFence;
+  return md;
+}
+
+function renderFence(tokens, idx) {
+  const token = tokens[idx];
+  const { lang, label, lines, highlight, focus, wrap, expandable } = parseCodeInfo(token.info);
+  if (lang === 'mermaid') return mermaidHtml(token.content);
+  const highlighted = renderCodeLines(token.content, lang, { highlight, focus });
+  const className = lang ? ` class="language-${escapeAttr(lang)}"` : '';
+  const dataLabel = label || lang || 'Code';
+  const classes = [
+    'cd-code',
+    lines ? 'has-line-numbers' : '',
+    wrap ? 'is-wrapped' : '',
+    expandable ? 'is-expandable' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return `<figure class="${classes}" data-code-label="${escapeAttr(dataLabel)}"><figcaption><span class="cd-code-label">${escapeHtml(dataLabel)}</span><button type="button" data-code-copy data-copy-label="Copy code" aria-label="Copy code"><span class="cd-visually-hidden">Copy code</span></button></figcaption><pre><code${className}>${highlighted}</code></pre></figure>`;
+}
+
+function parseCodeInfo(rawInfo = '') {
+  const info = String(rawInfo).trim();
+  const base = {
+    lang: '',
+    label: '',
+    lines: false,
+    highlight: new Set(),
+    focus: new Set(),
+    wrap: false,
+    expandable: false,
+  };
+  if (!info) return base;
+  const parts = info.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
+  base.lang = normalizeLang(parts.shift() ?? '');
+  const labelParts = [];
+  for (const rawPart of parts) {
+    const part = rawPart.replace(/^["']|["']$/g, '');
+    if (['lines', 'lineNumbers', 'numbers'].includes(part)) {
+      base.lines = true;
+    } else if (part === 'wrap') {
+      base.wrap = true;
+    } else if (part === 'expand' || part === 'expandable') {
+      base.expandable = true;
+    } else if (/^\{[^}]+\}$/.test(part)) {
+      base.highlight = parseLineSet(part.slice(1, -1));
+    } else if (part.startsWith('highlight=')) {
+      base.highlight = parseLineSet(part.slice('highlight='.length));
+    } else if (part.startsWith('focus=')) {
+      base.focus = parseLineSet(part.slice('focus='.length));
+    } else if (
+      part.startsWith('title=') ||
+      part.startsWith('filename=') ||
+      part.startsWith('label=')
+    ) {
+      labelParts.push(part.replace(/^[^=]+=/, ''));
+    } else {
+      labelParts.push(part);
+    }
+  }
+  base.label = labelParts.join(' ').trim();
+  return base;
+}
+
+function parseLineSet(raw) {
+  const set = new Set();
+  for (const piece of String(raw)
+    .replace(/[[\]"]/g, '')
+    .split(',')) {
+    const trimmed = piece.trim();
+    if (!trimmed) continue;
+    const range = trimmed.match(/^(\d+)-(\d+)$/);
+    if (range) {
+      const start = Number(range[1]);
+      const end = Number(range[2]);
+      for (let i = Math.min(start, end); i <= Math.max(start, end); i++) set.add(i);
+    } else {
+      const line = Number(trimmed);
+      if (Number.isFinite(line) && line > 0) set.add(line);
+    }
+  }
+  return set;
+}
+
+function renderCodeLines(code, lang, options) {
+  const rawLines = String(code).replace(/\n$/, '').split('\n');
+  const focusActive = options.focus.size > 0;
+  return rawLines
+    .map((line, index) => {
+      const number = index + 1;
+      const classes = [
+        'code-line',
+        line.startsWith('+') ? 'is-added' : '',
+        line.startsWith('-') ? 'is-removed' : '',
+        options.highlight.has(number) ? 'is-highlighted' : '',
+        focusActive && !options.focus.has(number) ? 'is-dimmed' : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      const content = line ? highlightCode(line, lang) : ' ';
+      return `<span class="${classes}" data-line="${number}">${content}</span>`;
+    })
+    .join('');
+}
+
+function highlightCode(code, rawLang = '') {
+  const lang = normalizeLang(rawLang);
+  const language = languageAliases.get(lang) ?? lang;
+  if (!language || language === 'plaintext') return escapeHtml(code);
+  if (hljs.getLanguage(language)) {
+    return hljs.highlight(code, { language, ignoreIllegals: true }).value;
+  }
+  return escapeHtml(code);
+}
+
+function normalizeLang(rawLang) {
+  return (
+    String(rawLang)
+      .trim()
+      .split(/\s+/)[0]
+      ?.toLowerCase()
+      .replace(/^language-/, '') ?? ''
+  );
+}
+
+function mermaidHtml(source) {
+  const diagram = String(source).trim();
+  return `<figure class="cd-mermaid" data-mermaid="${escapeAttr(diagram)}"><pre><code>${escapeHtml(diagram)}</code></pre></figure>`;
+}
+
+export function renderMdxish(markdown, md) {
+  const prepared = preprocess(markdown);
+  return postprocess(md.render(prepared));
+}
+
+function preprocess(input) {
+  let out = input.replace(/\r\n/g, '\n');
+  out = out.replace(/^import\s+.+?;?\s*$/gm, '');
+  out = out.replace(/<br\s*\/?>/gi, '\n');
+  out = out.replace(
+    /<Mermaid\b[^>]*>([\s\S]*?)<\/Mermaid>/g,
+    (_, body) => `\n${marker('mermaidBlock', body)}\n`,
+  );
+
+  out = out.replace(/<Card\b([^>]*)\/>/g, (_, attrs) => `${marker('cardSelf', attrs)}\n`);
+  out = out.replace(/<Card\b([^>]*)>/g, (_, attrs) => `\n${marker('cardOpen', attrs)}\n`);
+  out = out.replace(/<\/Card>/g, `\n${marker('cardClose')}\n`);
+  out = out.replace(
+    /<CardGroup\b([^>]*)>/g,
+    (_, attrs) => `\n${marker('blockOpen', cardGridClass(attrs))}\n`,
+  );
+  out = out.replace(/<\/CardGroup>/g, `\n${marker('blockClose', 'card-grid')}\n`);
+  out = out.replace(
+    /<Columns\b([^>]*)>/g,
+    (_, attrs) => `\n${marker('blockOpen', cardGridClass(attrs))}\n`,
+  );
+  out = out.replace(/<\/Columns>/g, `\n${marker('blockClose', 'card-grid')}\n`);
+
+  out = out.replace(/<Step\b([^>]*)>/g, (_, attrs) => `\n${marker('stepOpen', attrs)}\n`);
+  out = out.replace(/<\/Step>/g, `\n${marker('stepClose')}\n`);
+  out = out.replace(/<Tab\b([^>]*)>/g, (_, attrs) => `\n${marker('tabOpen', attrs)}\n`);
+  out = out.replace(/<\/Tab>/g, `\n${marker('tabClose')}\n`);
+  out = out.replace(/<Accordion\b([^>]*)>/g, (_, attrs) => `\n${marker('accordionOpen', attrs)}\n`);
+  out = out.replace(/<\/Accordion>/g, `\n${marker('accordionClose')}\n`);
+  out = out.replace(
+    /<Expandable\b([^>]*)>/g,
+    (_, attrs) => `\n${marker('accordionOpen', attrs)}\n`,
+  );
+  out = out.replace(/<\/Expandable>/g, `\n${marker('accordionClose')}\n`);
+  out = out.replace(/<Frame\b([^>]*)>/g, (_, attrs) => `\n${marker('frameOpen', attrs)}\n`);
+  out = out.replace(/<\/Frame>/g, `\n${marker('frameClose')}\n`);
+  out = out.replace(/<Panel\b([^>]*)>/g, (_, attrs) => `\n${marker('panelOpen', attrs)}\n`);
+  out = out.replace(/<\/Panel>/g, `\n${marker('panelClose')}\n`);
+  out = out.replace(/<Prompt\b([^>]*)>/g, (_, attrs) => `\n${marker('promptOpen', attrs)}\n`);
+  out = out.replace(/<\/Prompt>/g, `\n${marker('promptClose')}\n`);
+  out = out.replace(/<ParamField\b([^>]*)>/g, (_, attrs) => `\n${marker('paramOpen', attrs)}\n`);
+  out = out.replace(/<\/ParamField>/g, `\n${marker('paramClose')}\n`);
+  out = out.replace(
+    /<(?:Field|Property|ResponseField)\b([^>]*)>/g,
+    (_, attrs) => `\n${marker('paramOpen', attrs)}\n`,
+  );
+  out = out.replace(/<\/(?:Field|Property|ResponseField)>/g, `\n${marker('paramClose')}\n`);
+  out = out.replace(/<Tile\b([^>]*)\/>/g, (_, attrs) => `${marker('tileSelf', attrs)}\n`);
+  out = out.replace(/<Tile\b([^>]*)>/g, (_, attrs) => `\n${marker('tileOpen', attrs)}\n`);
+  out = out.replace(/<\/Tile>/g, `\n${marker('tileClose')}\n`);
+  out = out.replace(/<Badge\b([^>]*)\/>/g, (_, attrs) => inlineMarker('badgeSelf', attrs));
+  out = out.replace(/<Badge\b([^>]*)>/g, (_, attrs) => inlineMarker('badgeOpen', attrs));
+  out = out.replace(/<\/Badge>/g, inlineMarker('badgeClose'));
+  out = out.replace(/<Tooltip\b([^>]*)>/g, (_, attrs) => inlineMarker('tooltipOpen', attrs));
+  out = out.replace(/<\/Tooltip>/g, inlineMarker('tooltipClose'));
+
+  for (const [name, [kind]] of knownBlocks) {
+    out = out.replace(new RegExp(`<${name}\\b[^>]*>`, 'g'), `\n${marker('blockOpen', kind)}\n`);
+    out = out.replace(new RegExp(`</${name}>`, 'g'), `\n${marker('blockClose', kind)}\n`);
+  }
+  for (const [name, label] of callouts) {
+    out = out.replace(new RegExp(`<${name}\\b[^>]*>`, 'g'), `\n${marker('calloutOpen', label)}\n`);
+    out = out.replace(new RegExp(`</${name}>`, 'g'), `\n${marker('calloutClose')}\n`);
+  }
+
+  out = out.replace(/<([A-Z][A-Za-z0-9_.-]*)([^>]*)>/g, (_, name, attrs) =>
+    escapeHtml(`<${name}${attrs}>`),
+  );
+  out = out.replace(/<\/([A-Z][A-Za-z0-9_.-]*)>/g, (_, name) => escapeHtml(`</${name}>`));
+  return dedentComponentChildren(out);
+}
+
+function postprocess(html) {
+  return html
+    .replace(new RegExp(`<p>${markerPrefix}:([^<]+)</p>`, 'g'), (_, payload) =>
+      expandMarker(payload),
+    )
+    .replace(
+      new RegExp(`${inlineMarkerPrefix}:([A-Za-z0-9]+):([A-Za-z0-9_-]*):`, 'g'),
+      (_, kind, encoded) => expandInlineMarker(`${kind}:${encoded}`),
+    );
+}
+
+function marker(kind, payload = '') {
+  return `${markerPrefix}:${kind}:${Buffer.from(payload, 'utf8').toString('base64url')}`;
+}
+
+function inlineMarker(kind, payload = '') {
+  return `${inlineMarkerPrefix}:${kind}:${Buffer.from(payload, 'utf8').toString('base64url')}:`;
+}
+
+function expandMarker(payload) {
+  const [kind, encoded = ''] = payload.split(':');
+  const value = Buffer.from(encoded, 'base64url').toString('utf8');
+  if (kind === 'blockOpen') return `<div class="cd-${escapeAttr(value)}">`;
+  if (kind === 'blockClose') return '</div>';
+  if (kind === 'calloutOpen')
+    return `<aside class="cd-callout cd-callout-${slug(value)}"><strong>${escapeHtml(value)}</strong>`;
+  if (kind === 'calloutClose') return '</aside>';
+  if (kind === 'cardSelf') return cardHtml(value, true);
+  if (kind === 'cardOpen') return cardHtml(value, false);
+  if (kind === 'cardClose') return '</div></a>';
+  if (kind === 'stepOpen')
+    return `<li class="cd-step"><h3>${escapeHtml(parseAttrs(value).title ?? 'Step')}</h3>`;
+  if (kind === 'stepClose') return '</li>';
+  if (kind === 'tabOpen')
+    return `<section class="cd-tab"><h3>${escapeHtml(parseAttrs(value).title ?? 'Tab')}</h3>`;
+  if (kind === 'tabClose') return '</section>';
+  if (kind === 'accordionOpen')
+    return `<details class="cd-accordion"><summary>${escapeHtml(parseAttrs(value).title ?? 'Details')}</summary>`;
+  if (kind === 'accordionClose') return '</details>';
+  if (kind === 'panelOpen') {
+    const attrs = parseAttrs(value);
+    const title = attrs.title ? `<strong>${escapeHtml(attrs.title)}</strong>` : '';
+    return `<section class="cd-panel">${title}`;
+  }
+  if (kind === 'panelClose') return '</section>';
+  if (kind === 'promptOpen') {
+    const attrs = parseAttrs(value);
+    const title = attrs.title ?? 'Prompt';
+    return `<section class="cd-prompt"><header><strong>${escapeHtml(title)}</strong><button type="button" data-prompt-copy aria-label="Copy prompt">Copy</button></header>`;
+  }
+  if (kind === 'promptClose') return '</section>';
+  if (kind === 'mermaidBlock') return mermaidHtml(value);
+  if (kind === 'frameOpen') {
+    const caption = parseAttrs(value).caption;
+    return `<figure class="cd-frame">${caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ''}`;
+  }
+  if (kind === 'frameClose') return '</figure>';
+  if (kind === 'paramOpen') {
+    const attrs = parseAttrs(value);
+    const required =
+      attrs.required !== undefined ? `<span class="cd-param-required">required</span>` : '';
+    const type = attrs.type ? `<span class="cd-param-type">${escapeHtml(attrs.type)}</span>` : '';
+    const defaultValue = attrs.default
+      ? `<span class="cd-param-default">default: ${escapeHtml(attrs.default)}</span>`
+      : '';
+    return `<section class="cd-param"><header><code>${escapeHtml(attrs.path ?? attrs.name ?? 'param')}</code>${type}${defaultValue}${required}</header>`;
+  }
+  if (kind === 'paramClose') return '</section>';
+  if (kind === 'tileSelf') return tileHtml(value, true);
+  if (kind === 'tileOpen') return tileHtml(value, false);
+  if (kind === 'tileClose') return '</div></a>';
+  return '';
+}
+
+function expandInlineMarker(payload) {
+  const [kind, encoded = ''] = payload.split(':');
+  const value = Buffer.from(encoded, 'base64url').toString('utf8');
+  if (kind === 'tooltipOpen') {
+    const attrs = parseAttrs(value);
+    const tip = attrs.tip ?? attrs.title ?? '';
+    return `<span class="cd-tooltip" tabindex="0"${tip ? ` data-tip="${escapeAttr(tip)}"` : ''}>`;
+  }
+  if (kind === 'tooltipClose') return '</span>';
+  if (kind === 'badgeSelf') {
+    const attrs = parseAttrs(value);
+    return `<span class="cd-badge cd-badge-${slug(attrs.color ?? attrs.variant ?? 'default')}">${escapeHtml(attrs.text ?? attrs.label ?? attrs.children ?? 'Badge')}</span>`;
+  }
+  if (kind === 'badgeOpen') {
+    const attrs = parseAttrs(value);
+    return `<span class="cd-badge cd-badge-${slug(attrs.color ?? attrs.variant ?? 'default')}">`;
+  }
+  if (kind === 'badgeClose') return '</span>';
+  return '';
+}
+
+function cardHtml(rawAttrs, selfClosing) {
+  const attrs = parseAttrs(rawAttrs);
+  const href = attrs.href ?? '#';
+  const title = attrs.title ?? attrs.name ?? 'Open';
+  const icon = attrs.icon ? iconSvg(attrs.icon) : '';
+  const end = selfClosing ? '</div></a>' : '';
+  return `<a class="cd-card" href="${escapeAttr(href)}">${icon}<div><strong>${escapeHtml(title)}</strong>${end}`;
+}
+
+function tileHtml(rawAttrs, selfClosing) {
+  const attrs = parseAttrs(rawAttrs);
+  const href = attrs.href ?? '#';
+  const title = attrs.title ?? attrs.name ?? 'Open';
+  const icon = attrs.icon ? iconSvg(attrs.icon) : '';
+  const end = selfClosing ? '</div></a>' : '';
+  return `<a class="cd-tile" href="${escapeAttr(href)}">${icon}<div><strong>${escapeHtml(title)}</strong>${end}`;
+}
+
+function iconSvg(name) {
+  const paths = {
+    rocket: `<path d="M4.5 16.5c-1.1.9-1.7 2-1.9 3.5 1.5-.2 2.7-.8 3.5-1.9"/><path d="M9 15l-4-4 3-3c4-4 8-5 12-5-0 4-1 8-5 12l-3 3-3-3z"/><path d="M14 6l4 4"/><path d="M8 16l-2 4 4-2"/>`,
+    sparkles: `<path d="M12 3l1.4 4.2L17.5 9l-4.1 1.8L12 15l-1.4-4.2L6.5 9l4.1-1.8L12 3z"/><path d="M5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14z"/><path d="M19 13l.7 1.8L21.5 16l-1.8.7L19 18.5l-.7-1.8-1.8-.7 1.8-.7L19 13z"/>`,
+    'layout-dashboard': `<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>`,
+    terminal: `<path d="M4 17l5-5-5-5"/><path d="M12 19h8"/>`,
+    settings: `<path d="M12 8a4 4 0 100 8 4 4 0 000-8z"/><path d="M4 12h2m12 0h2M12 4v2m0 12v2M6.3 6.3l1.4 1.4m8.6 8.6l1.4 1.4m0-11.4l-1.4 1.4m-8.6 8.6l-1.4 1.4"/>`,
+    book: `<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M4 4.5A2.5 2.5 0 016.5 2H20v20H6.5A2.5 2.5 0 014 19.5z"/>`,
+    globe: `<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.3 2.5 3.5 5.5 3.5 9S14.3 18.5 12 21c-2.3-2.5-3.5-5.5-3.5-9S9.7 5.5 12 3z"/>`,
+    wrench: `<path d="M14.7 6.3a4 4 0 005 5L9.5 21 4 15.5 14.7 6.3z"/><path d="M6 18l-2 2"/>`,
+    gear: `<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.6V21h-4v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.6-1H3v-4h.1a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9l-.1-.1L7 4.2l.1.1a1.7 1.7 0 001.9.3 1.7 1.7 0 001-1.6V3h4v.1a1.7 1.7 0 001 1.6 1.7 1.7 0 001.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 00-.3 1.9 1.7 1.7 0 001.6 1h.1v4H21a1.7 1.7 0 00-1.6 1z"/>`,
+  };
+  const path =
+    paths[slug(name)] ??
+    `<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 12h8M12 8v8"/>`;
+  return `<svg class="cd-card-icon" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
+}
+
+function cardGridClass(rawAttrs) {
+  const attrs = parseAttrs(rawAttrs);
+  const cols = Math.max(1, Math.min(4, Number.parseInt(attrs.cols ?? '', 10) || 2));
+  return `card-grid cd-card-cols-${cols}`;
+}
+
+function dedentComponentChildren(markdown) {
+  let depth = 0;
+  return markdown
+    .split('\n')
+    .map((line) => {
+      const markerMatch = line.match(new RegExp(`^${markerPrefix}:([^:]+):`));
+      if (markerMatch) {
+        if (
+          markerMatch[1].endsWith('Close') ||
+          markerMatch[1] === 'blockClose' ||
+          markerMatch[1] === 'calloutClose'
+        ) {
+          depth = Math.max(0, depth - 1);
+        }
+        const markerLine = line;
+        if (
+          markerMatch[1].endsWith('Open') ||
+          markerMatch[1] === 'blockOpen' ||
+          markerMatch[1] === 'calloutOpen'
+        ) {
+          depth += 1;
+        }
+        return markerLine;
+      }
+      if (depth <= 0 || !line.startsWith(' ')) return line;
+      return line.replace(new RegExp(`^ {1,${depth * 2}}`), '');
+    })
+    .join('\n');
+}
+
+function parseAttrs(raw) {
+  const attrs = {};
+  for (const match of raw.matchAll(
+    /([A-Za-z0-9_-]+)(?:=(?:"([^"]*)"|'([^']*)'|\{([^}]*)\}|([^\s>]+)))?/g,
+  )) {
+    attrs[match[1]] = match[2] ?? match[3] ?? match[4] ?? match[5] ?? '';
+  }
+  return attrs;
+}
+
+function slug(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replaceAll("'", '&#39;');
+}

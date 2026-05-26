@@ -1,0 +1,80 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - scripts/docs-site/**
+      - .github/workflows/docs.yml
+      - wrangler.docs.toml
+      - package.json
+      - bun.lock
+  pull_request:
+    paths:
+      - docs/**
+      - scripts/docs-site/**
+      - .github/workflows/docs.yml
+      - wrangler.docs.toml
+      - package.json
+      - bun.lock
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOCS_SITE_CANONICAL_ORIGIN: https://docs.centraid.dev
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run docs:build
+      - run: bun run docs:smoke
+      # Persist the built site so the deploy job can pick it up without
+      # re-running the build (and re-shelling Pagefind, OG cards, etc.).
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: docs-site
+          path: dist/docs-site
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    # Only deploy off main. Skipped on PRs and feature branches.
+    # The job is also a no-op for forks (secrets aren't injected there) —
+    # wrangler-action surfaces a clear error rather than a silent skip,
+    # which is the right failure mode for a release path.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: docs-production
+    env:
+      DOCS_SITE_CANONICAL_ORIGIN: https://docs.centraid.dev
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      # Reuse the artifact from `build` — guarantees the bytes deployed
+      # are exactly what the smoke test green-lit.
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: docs-site
+          path: dist/docs-site
+      # Use the project's pinned wrangler (in devDependencies) instead of the
+      # cloudflare/wrangler-action so CI deploys are byte-identical to local
+      # `bun run docs:deploy`. Auth is via env vars wrangler reads natively.
+      - run: bun run docs:deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -1,0 +1,43 @@
+# Cloudflare Workers configuration for the Centraid documentation site.
+#
+# The site is statically generated into `dist/docs-site/` by `bun run docs:build`.
+# This config wires that output up to a Worker using the [assets] binding, so
+# Cloudflare's edge can serve the bytes directly while leaving room for the
+# Worker (`scripts/docs-site/worker.ts`) to add custom logic later — auth,
+# region-specific redirects, header overrides — without rewiring routes.
+#
+# Deploy commands:
+#   bun run docs:deploy:dry   — wrangler deploy --dry-run (validate config)
+#   bun run docs:deploy       — upload + activate the new version
+#
+# Structure mirrors the sibling clawgnition-web wrangler.toml so ops can
+# treat both sites identically. Deviations from that reference:
+#   - `not_found_handling = "404-page"` (this is a multi-page static site,
+#     not an SPA; we want CF to serve `/404.html` on misses rather than
+#     rewrite to the SPA entry).
+#   - Custom domain is `docs.centraid.dev`.
+
+name = "centraid-docs"
+compatibility_date = "2024-09-23"
+compatibility_flags = []
+main = "scripts/docs-site/worker.ts"
+
+[assets]
+directory = "./dist/docs-site"
+binding = "ASSETS"
+# Static site, not an SPA. CF serves `/404.html` for unknown paths when
+# present; falls back to a bare 404 status if the file isn't there yet.
+not_found_handling = "404-page"
+
+# Custom domain — managed under the centraid.dev zone in Cloudflare.
+# Wrangler provisions the DNS record + cert on first deploy.
+[[routes]]
+pattern = "docs.centraid.dev"
+custom_domain = true
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true

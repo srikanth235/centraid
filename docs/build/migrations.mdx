@@ -1,0 +1,74 @@
+---
+summary: "Schema migrations live in migrations/*.sql, run forward, are additive by convention. Code rolls back; data doesn't."
+title: 'Migrations'
+---
+
+# Migrations
+
+`migrations/<NNNN>_<name>.sql` is where your app's SQLite schema lives. Migrations run forward, are ordered by the numeric prefix, and are the authoritative source — the `tables[]` array in `app.json` is documentation only.
+
+## File naming
+
+```
+migrations/
+├── 0001_init.sql
+├── 0002_recaps.sql
+└── 0003_add_streak_column.sql
+```
+
+- Four-digit zero-padded ordinal.
+- Underscore.
+- Kebab-or-snake-case description.
+- `.sql` extension.
+
+> **TODO(#120)** — confirm whether the runtime enforces the strict `NNNN_*.sql` pattern, and whether the runtime also tracks which migrations have been applied (per-app migrations table?). Worth checking `runtime-core` migration runner code. The convention is the standard "ordered, never edited" shape; the actual mechanism may differ.
+
+## What goes in
+
+Idempotent DDL only. Use `IF NOT EXISTS` and `IF EXISTS` everywhere.
+
+```sql
+-- migrations/0001_init.sql
+CREATE TABLE IF NOT EXISTS hydrate_daily (
+  date TEXT PRIMARY KEY,
+  cups INTEGER NOT NULL DEFAULT 0
+);
+```
+
+```sql
+-- migrations/0002_recaps.sql
+CREATE TABLE IF NOT EXISTS hydrate_weekly_recaps (
+  week_ending TEXT PRIMARY KEY,
+  total_cups INTEGER NOT NULL,
+  goal_hits INTEGER NOT NULL,
+  encouragement TEXT NOT NULL,
+  generated_at INTEGER NOT NULL
+);
+```
+
+Both files lifted from the Hydrate template.
+
+## Rules of thumb
+
+- **Additive only.** Add tables, add columns, add indexes. Don't drop columns; don't rename tables. If you need to restructure, write a new table, migrate data in a one-shot action, and stop reading from the old one.
+- **No data mutations in migrations.** Migrations are schema, not seed data. If your app needs initial data, do it from a query or action that runs idempotently.
+- **No `PRAGMA`.** PRAGMAs that change behavior should live in the gateway's config, not your app.
+- **Never edit a migration after it ships.** New change → new file. The whole point of the ordinal sequence is "applied = settled".
+
+## Why "additive only"
+
+Centraid keeps `data.sqlite` persistent across code versions. A user can roll back from version 5 to version 3 with `POST /centraid/_apps/<id>/activate`. If migration 4 dropped a column that version 3 reads from, the rollback breaks the older code on the same data file. Keep migrations additive and rollbacks stay free.
+
+## When migrations run
+
+> **TODO(#120)** — document the exact lifecycle: do migrations run at upload time, at first read after a version flip, or on gateway start? `current.json` records `activeVersion` and `history`; whether the runtime tracks `appliedMigrations` separately matters here. Read `runtime-core/src/migrations/` (or wherever) to confirm.
+
+## Working with the schema from handlers
+
+Handlers don't run DDL. They read and (in the case of actions) DML against tables declared in the migrations. The `tables[]` array in `app.json` is for tooling — it tells `centraid_describe` what to advertise, and it tells the desktop's app builder what shape to expect — but the schema your code reaches for must exist in a migration first.
+
+## Where to go next
+
+- [App anatomy](/build/app-anatomy) — where migrations live in the folder.
+- [Actions](/build/actions) — the only place DML happens.
+- [SQLite layout](/deploy/sqlite-layout) — how `data.sqlite` is stored on disk.

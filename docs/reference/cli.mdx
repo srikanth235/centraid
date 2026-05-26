@@ -1,0 +1,47 @@
+---
+summary: 'The bundled centraid CLI — the path local agents take to reach the dispatcher.'
+title: 'centraid CLI'
+---
+
+# `centraid` CLI
+
+The `centraid` CLI is a thin shim over the dispatcher. It's bundled with the desktop and used by the local agent runtime (`@centraid/agent-runtime`) to give codex / Claude-SDK loops a way to call apps without managing HTTP themselves.
+
+You can also use it directly for scripting, debugging, and "I just want to poke an app from a shell" workflows.
+
+## Why a CLI exists
+
+The local agent runtime drives either codex app-server (subprocess) or Claude Agent SDK (in-process). Neither is OpenClaw — neither has Centraid's three-tool dispatcher registered as native agent tools. Rather than write engine-specific MCP/plugin bindings for each, the agent runtime gives the engine a single instruction: "to read or write app data, run `centraid <subcommand>`". The CLI shells back to the gateway via the same dispatcher endpoints the HTTP path uses.
+
+See [Agent runtime → why a CLI for SQL access](/concepts/agent-runtime#why-a-cli-for-sql-access).
+
+## Commands
+
+> **TODO(#120)** — the CLI subcommand surface is not fully documented in the package READMEs I've read. The receipt for issue [#71](https://github.com/srikanthsrungarapu/centraid/issues/71) is the introduction; later receipts (`issue-90-unified-runs-ledger`, `issue-108-workspace-storage-split`) reference operations. The list below is inferred from the dispatcher's three tools — confirm subcommand names against the CLI's `--help` output or `apps/desktop/src/main/cli/` (or wherever the CLI source lives in the repo).
+
+Plausible surface based on the three-tool dispatcher:
+
+| Command                                                        | Maps to                              | Purpose                             |
+| -------------------------------------------------------------- | ------------------------------------ | ----------------------------------- |
+| `centraid describe [--app <id>]`                               | `centraid_describe`                  | Print manifest or filtered slice.   |
+| `centraid read --app <id> --query <name> [--input '<json>']`   | `centraid_read`                      | Run a query and print its result.   |
+| `centraid write --app <id> --action <name> [--input '<json>']` | `centraid_write`                     | Run an action and print its result. |
+| `centraid apps list`                                           | `GET /centraid/_apps`                | List registered apps.               |
+| `centraid apps versions --app <id>`                            | `GET /centraid/_apps/<id>/versions`  | List versions.                      |
+| `centraid apps activate --app <id> --version <vid>`            | `POST /centraid/_apps/<id>/activate` | Atomic flip.                        |
+
+## Configuration
+
+The CLI needs to know which gateway to talk to. On the desktop, this is wired automatically to the embedded local gateway. Standalone use against a remote gateway needs an endpoint:
+
+> **TODO(#120)** — document the env var or config file the CLI reads (e.g. `CENTRAID_GATEWAY=https://gw.example.com`).
+
+## Auth
+
+> **TODO(#120)** — when the gateway is remote (OpenClaw plugin), it sits behind OpenClaw's auth. The CLI presumably passes through an OpenClaw token. Document the token source (env var? `~/.openclaw/openclaw.json`?).
+
+## Where to go next
+
+- [Agent runtime](/concepts/agent-runtime) — the loop that drives the CLI.
+- [Three-tool dispatcher](/reference/three-tool-dispatcher) — the underlying contract.
+- [HTTP API](/reference/http-api) — the alternative entry point.

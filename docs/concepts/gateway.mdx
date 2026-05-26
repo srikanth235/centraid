@@ -1,0 +1,94 @@
+---
+summary: 'What a Centraid gateway is, the two ways it can run, and the on-disk layout it manages.'
+title: 'Gateway'
+---
+
+# Gateway
+
+A **gateway** is the long-running process that mounts the `/centraid` URL prefix, owns the apps directory on disk, and dispatches handler calls. There is only one gateway implementation; it runs in two shapes.
+
+## Two shapes, one contract
+
+### Local gateway (embedded in desktop)
+
+When you launch the desktop app with `bun run dev:desktop`, the gateway runs inside the Electron main process. The renderer talks to it over IPC; app iframes load from it just like they would from a remote URL. No second process, no port to expose.
+
+This is the default mode for personal use. Your data never leaves the laptop.
+
+### Remote gateway (OpenClaw plugin)
+
+The same gateway code is packaged as [`@centraid/openclaw-plugin`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/openclaw-plugin) and mounts on an [OpenClaw](https://docs.openclaw.ai) instance. It claims the `/centraid` prefix on that gateway and exposes the same `/centraid/_apps/*`, `/centraid/_tool/*`, and `/centraid/<id>/*` routes.
+
+This is the mode you use when you want apps reachable from elsewhere — your phone, your team, a cron host — without standing up your own server stack. OpenClaw provides the HTTP front door, auth, and process supervision; the Centraid plugin provides the app runtime.
+
+### Why one implementation
+
+The legacy "path mode" — register an external folder live for development — was retired explicitly to keep the two modes behaving identically:
+
+> Every change goes through the upload + version-flip path. The local gateway behaves identically to the remote one.
+> — [`packages/openclaw-plugin/README.md`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/openclaw-plugin/README.md#app-layout-on-disk)
+
+This rules out a whole class of "works on my machine" bugs.
+
+## On-disk layout
+
+```
+<appsDir>/
+  _registry.json                 ← which app ids are registered
+  <id>/
+    data.sqlite                  ← persistent, never moved across versions
+    current.json                 ← { activeVersion, history }
+    versions/
+      v_<UTC ts>_<sha[:6]>/      ← immutable, code-only
+      v_…/
+    _chat/
+      w<windowId>.jsonl          ← per-window transcript
+      index.json                 ← mode + adapter session ids
+```
+
+- `data.sqlite` lives at the **app root**, not inside a version directory. Code is versioned; data isn't.
+- Each upload becomes a new immutable `versions/v_<ts>_<sha>/` directory. The active version is the one named in `current.json#activeVersion`.
+- Retention prunes old versions (default 5; configurable via `versionRetention` in plugin config; minimum 2). The active version is always retained.
+- Re-uploading identical content (same sha256) collapses to a single dir — history records the latest timestamp.
+
+The default `appsDir`:
+
+- **Remote (OpenClaw plugin)**: `centraid` resolved under `$OPENCLAW_STATE_DIR` (default `~/.openclaw`), so `~/.openclaw/centraid/`.
+- **Local (desktop)**: typically `~/.centraid/apps/`.
+
+> **TODO(#120)** — confirm the desktop local gateway's exact default `appsDir`. The OpenClaw plugin's default is documented in its README; the desktop's is in `apps/desktop/src/main/` which I haven't read.
+
+## Lifecycle of an app
+
+1. **Upload** — `POST /centraid/_apps/<id>/upload` with a tar.gz body. First upload to a new id auto-registers it.
+2. **Extract + flip** — the gateway unpacks into a new `versions/v_<ts>_<sha>/` dir, then atomically updates `current.json` to point at it.
+3. **Serve** — `GET /centraid/<id>/` resolves to `<active>/index.html`; subsequent asset requests resolve to files under the active version dir.
+4. **Roll back** — `POST /centraid/_apps/<id>/activate` with `{ versionId }` flips the pointer back. No extraction, no downtime.
+5. **Prune** — old version dirs above the retention count are deleted; the active version is exempt.
+
+See [Deploy → openclaw plugin](/deploy/openclaw-plugin) for the operational walkthrough.
+
+## What gets accepted in a tarball
+
+- **Allowed extensions**: `.html .htm .css .js .mjs .ts .json .md .txt .svg .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map`
+- **Refused** (returns 400): `data.sqlite` (it's not part of versioned code), `_registry.json`, `current.json`, anything outside the allowlist, symlinks, hardlinks, devices, paths that escape the archive root.
+- **Caps**: 50 MiB total, 5 MiB per file, 5 000 entries max.
+
+## Security model in one paragraph
+
+App handlers are **trusted local code**, authored by the same user running the gateway. Worker-thread isolation gives crash isolation, timeouts, and a controlled API surface — **not** a sandbox against hostile code. Defense-in-depth that's already in place: path-traversal guards on every static lookup, the extension allowlist on static serving, reserved filenames and directories (`data.sqlite`, `_registry.json`, `app.json`, `queries/`, `actions/`) that are never served, per-response `Content-Security-Policy: default-src 'self'` and `X-Content-Type-Options: nosniff`, worker `resourceLimits` capping memory, per-handler `timeoutMs` (default 10s query / 30s action), 1 MiB body cap. Hardening to "hostile code" level (`isolated-vm`, child-process + permission flags) is a future swap-in.
+
+## Configuration
+
+Two keys, both in the plugin's `configSchema`:
+
+| Key                | Default                                  | Notes                                                              |
+| ------------------ | ---------------------------------------- | ------------------------------------------------------------------ |
+| `appsDir`          | `centraid` (under `$OPENCLAW_STATE_DIR`) | Absolute paths used as-is.                                         |
+| `versionRetention` | `5`                                      | Max versions kept per app. Active is always retained. Minimum `2`. |
+
+## Where to go next
+
+- [Apps](/concepts/apps) — what's inside `<appsDir>/<id>/`.
+- [Queries and actions](/concepts/queries-and-actions) — the handler contract.
+- [Deploy](/deploy/openclaw-plugin) — how to put a gateway on an OpenClaw host.
