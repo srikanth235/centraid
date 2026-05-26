@@ -18,7 +18,6 @@
         "automations/weekly-encouragement.json",
         "index.html",
         "migrations/0001_init.sql",
-        "migrations/0002_recaps.sql",
         "package.json",
         "queries/get-today.js",
         "wall.css"
@@ -129,7 +128,6 @@
         "automations/daily-digest.json",
         "index.html",
         "migrations/0001_init.sql",
-        "migrations/0002_digests.sql",
         "package.json",
         "queries/list.js",
         "wall.css"
@@ -239,7 +237,6 @@
         "automations/weekly-recap.json",
         "index.html",
         "migrations/0001_init.sql",
-        "migrations/0002_recaps.sql",
         "package.json",
         "queries/get.js",
         "queries/list-dates.js",
