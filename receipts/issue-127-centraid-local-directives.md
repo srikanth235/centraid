@@ -7,7 +7,7 @@ GitHub issue: [#127](https://github.com/srikanth235/centraid/issues/127)
 - [x] D1: `handler-uses-ctx-primitives` - block direct provider-SDK imports in handler files
 - [x] D2: `no-hardcoded-model-ids` - strict scope; grandfather model-pricing.ts and tests
 - [x] D3: `actions-declare-table-writes` - every `app.json#actions[]` entry has non-empty `writes:[]`
-- [ ] D4: `gateway-core-mode-agnostic` - no gateway-mode branches in `packages/runtime-core/`
+- [x] D4: `gateway-core-mode-agnostic` - no gateway-mode branches in `packages/runtime-core/`
 - [ ] D5: `no-pre-release-migrations` - block migration scaffolds and back-compat shims
 - [ ] D6: `data-runtime-sqlite-separation` - handlers cannot open `runtime.sqlite`, gateway core cannot open `data.sqlite` outside the handler-runner
 
@@ -23,6 +23,8 @@ The local pack already contains one directive - `query-handlers-read-only`. Thes
 
 **D3: `actions-declare-table-writes` - every `app.json#actions[]` entry has non-empty `writes:[]`.** Every entry in a centraid `app.json#actions[]` array must include a `writes:` field whose value is an array of table names. Empty arrays are allowed (signals "no DB writes", e.g. a webhook-only action); missing or non-array values are rejected. The check filters to manifests with `manifestVersion` set, so Expo's `apps/mobile/app.json` (same filename, no manifestVersion) is correctly skipped. Rationale: same foot-gun shape as `query-handlers-read-only` - the change-stream SSE feed at `/centraid/<id>/_changes` uses each action's declared `writes:` tables to invalidate per-table query subscriptions. A missing field silently breaks invalidation, subscribed iframes never re-fetch, UI goes stale with no error.
 
+**D4: `gateway-core-mode-agnostic` - no gateway-mode branches in `packages/runtime-core/`.** Forbid gateway-mode-discrimination identifiers (`gatewayMode`, `gatewayKind`, `isEmbeddedGateway`, `isOpenClawGateway`, `isLocalGateway`, `isRemoteGateway`, `deploymentMode`, `hostingMode`) in tracked source files under `packages/runtime-core/`. Mode-specific behavior belongs at the entrypoints: `apps/desktop/src/main/` for the embedded gateway, `packages/openclaw-plugin/src/` for the OpenClaw gateway. Patterns are narrow on purpose - the existing `kind: 'openclaw'` adapter discriminator in `runtime.ts` is about agent runtimes, not gateway mode, and stays valid. Rationale: the "same code, two modes" architecture property is what makes "local-first with optional remote" cheap rather than expensive. Once runtime-core starts checking which host it lives inside, dev and prod paths diverge and "works on my machine" becomes a class of bug again.
+
 ## Verification
 
 - **D1 smoke test passes locally.** `bash .governance/run.sh handler-uses-ctx-primitives` returns exit 0 against the tree at HEAD - no handler files currently import any forbidden SDK. The directive locks the property in before it is lost.
@@ -31,6 +33,8 @@ The local pack already contains one directive - `query-handlers-read-only`. Thes
 - **D2 fixture would fail.** Adding `const model = 'claude-opus-4-7';` to any non-test file under `packages/` or `apps/` (other than `model-pricing.ts`) triggers a violation pointing to the file and line, with the model id surfaced in the message.
 - **D3 smoke test passes locally.** All 13 Centraid app manifests with non-empty `actions[]` arrays already declare `writes:` correctly: `hydrate` (1 action), `journal` (2 actions), `todos` (3 actions); the 10 `auto.*` apps have empty `actions[]` (automation-only).
 - **D3 fixture would fail.** Removing `writes:` from any action entry in a Centraid `app.json` triggers a violation citing the file and the action name.
+- **D4 smoke test passes locally.** `bash .governance/run.sh gateway-core-mode-agnostic` returns exit 0 - no current source file under `packages/runtime-core/src/` uses any of the forbidden gateway-mode identifiers. Confirms the architectural promise holds in the tree today; the directive locks it in for future commits.
+- **D4 fixture would fail.** Adding `if (gatewayMode === 'embedded') {` to any file under `packages/runtime-core/src/` triggers a violation citing the file, line, and identifier.
 
 ## Out of scope
 

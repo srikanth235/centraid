@@ -167,6 +167,13 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/actions-declare-table-writes/check.sh`
 - **Exceptions**: none. JSON has no comment syntax, and the check is file-level; the right opt-out for a no-DB-write action is the explicit empty array.
 
+### gateway-core-mode-agnostic
+
+- **Directive**: code under `packages/runtime-core/` may not branch on which gateway mode it is running under. Specifically, gateway-mode-discrimination identifiers (`gatewayMode`, `gatewayKind`, `gateway_mode`, `gateway_kind`, `isEmbeddedGateway`, `isOpenClawGateway`, `isLocalGateway`, `isRemoteGateway`, `deploymentMode`, `hostingMode`) are forbidden in tracked source files. Mode-specific behavior belongs at the entrypoints: `apps/desktop/src/main/` for the embedded gateway, `packages/openclaw-plugin/src/` for the OpenClaw gateway.
+- **Rationale**: the architecture's "same code, two modes" property is what makes "local-first with optional remote" cheap rather than expensive. Once `runtime-core` starts checking which host it lives inside, dev and prod paths diverge and "works on my machine" becomes a class of bug again. Centraid's docs frame this explicitly: "the split exists only at the chat backend and the reachable-from surface; the rest of the gateway is byte-identical." Encoding that promise as a check stops it from rotting silently the next time someone is tempted to add a one-liner branch.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/gateway-core-mode-agnostic/check.sh`
+- **Exceptions**: per-line waiver `// governance: allow-gateway-core-mode-agnostic <reason>` for the rare case where runtime-core genuinely needs to inspect its host (none today; the architecture promise is that no such case should exist).
+
 ## Amendment process
 
 1. Open a PR that modifies this file **and** the directive folder under `.governance/packs/<owner>/<repo>/directives/` in the same commit.
@@ -181,6 +188,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-05-26 — @srikanth235 — Add `handler-uses-ctx-primitives`: forbid direct provider-SDK imports in `queries/*.js`/`actions/*.js` so handlers stay portable and run-ledger cost accounting cannot be bypassed (#127).
 - 2026-05-26 — @srikanth235 — Add `no-hardcoded-model-ids`: forbid concrete provider model ids in production source so model selection moves with capability-tier indirection rather than code edits (#127).
 - 2026-05-26 — @srikanth235 — Add `actions-declare-table-writes`: every `app.json#actions[]` entry must declare a `writes:` array so change-stream invalidation cannot silently drop subscribers (#127).
+- 2026-05-26 — @srikanth235 — Add `gateway-core-mode-agnostic`: `packages/runtime-core/` may not branch on gateway mode so the "same code, two modes" architecture property holds (#127).
 
 ## Escape hatches
 

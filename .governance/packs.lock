@@ -30,3 +30,4 @@ packs:
   - handler-uses-ctx-primitives
   - no-hardcoded-model-ids
   - actions-declare-table-writes
+  - gateway-core-mode-agnostic
