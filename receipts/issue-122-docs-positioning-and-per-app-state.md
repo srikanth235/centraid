@@ -15,6 +15,8 @@ GitHub issue: [#122](https://github.com/srikanth235/centraid/issues/122)
 - [x] `build/migrations.mdx` precision fix
 - [x] Per-app state inventory verified against runtime-core sources
 - [x] `bun run docs:build` builds all 37 pages clean; Pagefind indexes 36 pages, 2782 words
+- [x] Mermaid diagram `max-width: 100%` so wide diagrams stop overflowing the article column at `min-height × aspect-ratio`
+- [x] Mermaid fullscreen toggle saves/restores the inline `aspectRatio` so fullscreen actually fills the viewport instead of rendering as a thin band
 
 ## What changed
 
@@ -38,9 +40,12 @@ GitHub issue: [#122](https://github.com/srikanth235/centraid/issues/122)
 
 **Per-app state inventory verified against runtime-core sources.** Cross-checked against `packages/runtime-core/src/{chat-history,gateway-db,version-store,manifest,automation-project,app-paths}.ts` and `packages/openclaw-plugin/src/index.ts`; specifics cited in the Verification section below.
 
+**Mermaid diagram `max-width: 100%` so wide diagrams stop overflowing the article column at `min-height × aspect-ratio`.** The post-render JS at `scripts/docs-site/assets.mjs:64` sets `figure.style.aspectRatio = b.width + " / " + b.height` from the SVG's natural bbox. For the homepage flowchart that's `1189 / 158 ≈ 7.5`; combined with `.cd-mermaid { min-height: 180px }` and no `max-width`, the browser computed width as `min-height × aspect-ratio = 180 × 7.5 ≈ 1355px` — wider than the article column. Adding `max-width: 100%` to `.cd-mermaid` makes the parent column a hard cap; the aspect-ratio still applies inside the cap.
+
+**Mermaid fullscreen toggle saves/restores the inline `aspectRatio` so fullscreen actually fills the viewport instead of rendering as a thin band.** The `.cd-mermaid.is-fullscreen` CSS rule tries to reset with `aspect-ratio: auto`, but the inline style set at line 64 wins (inline beats stylesheet without `!important`). So fullscreen mode kept the wide-and-short ratio, with `position: fixed; inset: 16px` giving viewport-width and the aspect-ratio forcing `height = viewport_width ÷ 7.5 ≈ 170px`. Fixed by patching `toggleFullscreen` and the Escape handler to stash `figure.style.aspectRatio` on `figure.dataset.savedAspect` when entering fullscreen, clear it, then restore on exit. No `!important` smell, no CSS change needed.
+
 ## Out of scope
 
-- Mermaid diagram width / fullscreen fixes — separate commit in this PR; non-content infra in `scripts/docs-site/assets.mjs`.
 - The ~46 inline `> **TODO(#120)** —` callouts seeded throughout the docs. Some of the verifications done for this issue (e.g., the gateway-level SQLite layout) implicitly resolve adjacent TODOs in `deploy/sqlite-layout.mdx`, but the TODO callouts themselves are left for the dedicated [#120](https://github.com/srikanth235/centraid/issues/120) sweep.
 - The `_chat/w<windowId>.jsonl` per-window transcript files described in `deploy/sqlite-layout.mdx` — both they and the new `runtime.sqlite#chat_sessions` table appear to coexist today (per-window JSONL transcripts referenced in `openclaw-plugin/README.md`; `chat_sessions` table verified in `runtime-core/src/chat-history.ts`). Documenting the relationship between the two stores is left as follow-up.
 
