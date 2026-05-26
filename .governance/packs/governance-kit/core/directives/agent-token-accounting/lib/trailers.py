@@ -1,51 +1,54 @@
 #!/usr/bin/env python3
 """Commit-trailer parsing for agent-token-accounting.
 
-Trailers stamped onto agent-authored commits:
+Each agent-authored commit carries a self-contained trailer block:
 
     Agent:        free-form runtime identifier
     Issue:        #N
     Session:      runtime session / thread id
-    Token-Input:  non-negative int  (= input_tokens + cache_creation_input_tokens)
-    Token-Output: non-negative int  (= output_tokens)
-    Token-Total:  non-negative int  (= Token-Input + Token-Output == row.new_work)
+    Token-Input:  non-negative int (= input_tokens + cache_creation_input_tokens)
+    Token-Output: non-negative int (= output_tokens)
+    Token-Total:  non-negative int (= Token-Input + Token-Output == row.new_work)
     Cost-Key:     <agent>-<session-short>-<epoch>
     Cost-USD:     4-decimal dollar figure (= ledger row's cost-usd cell).
                   Required on every agent commit — a truly unpriced model
                   blocks the commit upstream in the pre-commit hook rather
                   than slipping through as a blank.
 
-This module is the data-processing side of the directive script's Mode A /
-Mode B validators — bash feeds a commit message on stdin or a file path,
-Python returns a JSON blob with `trailers` and `violations`.
+GitHub squash-merge concatenates each sub-commit's body into the
+resulting commit message, so the body can contain N such blocks. We
+split on blank lines, treat each pure-trailer paragraph as one block,
+and validate the (trailer-block, COSTS.md-row) pair anchored by each
+block's `Cost-Key`. Parsing the whole body as one global last-wins bag
+— the historical approach — kept only the trailing sub-commit's
+trailers and silently skipped the rest, leaving every other sub-commit's
+COSTS.md row unverified.
 
 CLI:
 
-    python3 -m trailers validate <label> <cost_key_found_in_ledger? 0|1> \\
-                                 <ledger_input> <ledger_cache_create> \\
-                                 <ledger_cache_read> <ledger_output> \\
-                                 <ledger_total> <ledger_cost_usd> \\
-                                 [msg_file | -]
+    python3 trailers.py validate-blocks <label> <ledger_path> [msg_file|-]
 
-        <ledger_cost_usd> is either a 4-decimal string or "-" meaning the
-        row has no cost_usd (legacy row or unpriced model) — in that case
-        the Cost-USD trailer cross-check is skipped.
-
-        Stdin or file → commit message. Remaining args → the matching
-        ledger row's numeric columns (if cost_key_found_in_ledger == 1).
-        Prints one violation per line; exits 1 if any, 0 if clean.
-
-        When cost_key_found_in_ledger == 0, the ledger cross-check is
-        skipped and only the trailer-shape + math checks run. The bash
-        caller handles the "zero or multiple ledger rows" case separately.
+        Reads the commit message, parses every trailer block, and prints
+        one violation per line. Exits 1 if any, 0 if clean. The ledger
+        cross-check is done per-block — each `Cost-Key` in the body must
+        round-trip with exactly one row in COSTS.md, and the row's token
+        columns must agree with that block's trailers.
 """
 
 from __future__ import annotations
 
 import re
 import sys
-from dataclasses import dataclass
 from pathlib import Path
+
+
+# ledger.py sits next to this file; relative import works under
+# `python3 trailers.py …` because the parent dir is on sys.path.
+try:
+    from ledger import parse as parse_ledger  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from ledger import parse as parse_ledger  # type: ignore
 
 
 REQUIRED_TRAILERS = (
@@ -62,139 +65,194 @@ REQUIRED_TRAILERS = (
 _INT_RE = re.compile(r"^[0-9]+$")
 _COST_KEY_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _COST_USD_RE = re.compile(r"^\d+(?:\.\d+)?$")
+_TRAILER_RE = re.compile(r"^([A-Za-z][A-Za-z0-9-]*):[ \t]*(.*)$")
+_PARAGRAPH_RE = re.compile(r"\n[ \t]*\n")
 
 
-@dataclass
-class Trailers:
-    agent: str = ""
-    issue: str = ""
-    session: str = ""
-    token_input: str = ""
-    token_output: str = ""
-    token_total: str = ""
-    cost_key: str = ""
+def extract_trailer_blocks(msg: str) -> list[dict[str, str]]:
+    """Split `msg` into trailer-only paragraphs.
+
+    A paragraph qualifies as a trailer block when every non-blank line
+    matches `Key: value`. Within a block, last-wins for repeated keys
+    (matches git-interpret-trailers semantics for a single trailer
+    section). Paragraphs that mix trailers with prose are dropped, so
+    body text that happens to start with `Word:` doesn't masquerade
+    as a trailer block.
+
+    Necessary for squash-merge bodies: GitHub concatenates each
+    sub-commit's body into the resulting commit, so the trailer
+    section repeats N times. Parsing them as one global last-wins
+    bag drops every sub-commit's trailers except the last one's, and
+    only the last sub-commit's COSTS.md row gets cross-checked.
+    """
+    blocks: list[dict[str, str]] = []
+    for para in _PARAGRAPH_RE.split(msg):
+        lines = [ln for ln in para.splitlines() if ln.strip()]
+        if not lines:
+            continue
+        block: dict[str, str] = {}
+        all_trailer = True
+        for ln in lines:
+            m = _TRAILER_RE.match(ln)
+            if not m:
+                all_trailer = False
+                break
+            block[m.group(1)] = m.group(2).strip()
+        if all_trailer and block:
+            blocks.append(block)
+    return blocks
 
 
-def parse(msg: str) -> dict[str, str]:
-    """Return a dict of trailer key → value. Keys are preserved as-is
-    (case-sensitive). Only the *last* occurrence of a given key wins, matching
-    git-interpret-trailers semantics for repeated keys."""
-    out: dict[str, str] = {}
-    for line in msg.splitlines():
-        # A trailer is `Key: value` at the start of the line — but only in the
-        # final paragraph. We accept any occurrence here; the directive script
-        # already limits scope to commit message bodies.
-        m = re.match(r"^([A-Za-z][A-Za-z0-9-]*):[ \t]*(.*)$", line)
-        if m:
-            out[m.group(1)] = m.group(2).strip()
-    return out
-
-
-def validate(
+def validate_blocks(
     msg: str,
     label: str,
-    *,
-    ledger_row: tuple[int, int, int, int, int] | None = None,
-    ledger_cost_usd: float | None = None,
+    ledger_path: str | Path,
 ) -> list[str]:
-    """Validate trailer set on a commit message.
+    """Validate every per-Cost-Key trailer block in `msg`.
 
-    Args:
-        msg: the full commit message.
-        label: prefix for violation strings (e.g. "pending commit" or a SHA).
-        ledger_row: if provided, a 5-tuple of
-            (input, cache_create, cache_read, output, new_work) from the ledger
-            row whose cost-key matches this commit. Cross-checks trailers
-            against those numbers. None means "skip the cross-check" — the
-            bash caller uses this when the ledger row is missing or duplicated
-            (handled separately).
+    Squash-merge bodies stack one trailer block per sub-commit; each
+    Cost-Key in the body anchors its own (trailer, row) pair, and we
+    cross-check every pair rather than just the trailing one.
 
-    Returns a list of violation strings (empty if clean).
+    Caller is responsible for the "is this an in-scope commit?" gate —
+    by the time we get here, the commit already declared an Agent:
+    trailer somewhere in the body.
     """
-    trailers = parse(msg)
-    agent = trailers.get("Agent", "")
-    if not agent:
-        # Not an agent commit. Nothing to validate.
-        return []
+    blocks = extract_trailer_blocks(msg)
+    token_blocks = [b for b in blocks if "Cost-Key" in b]
 
     violations: list[str] = []
-
-    missing = [k for k in REQUIRED_TRAILERS if not trailers.get(k)]
-    if missing:
+    if not token_blocks:
         violations.append(
-            f"{label} — declares Agent: '{agent}' but is missing trailers: "
-            + " ".join(missing)
+            f"{label} — declares Agent: trailer but no token-accounting "
+            f"trailer block (8-trailer set ending in Cost-Key/Cost-USD) "
+            f"found in commit body"
         )
         return violations
 
-    t_input = trailers["Token-Input"]
-    t_output = trailers["Token-Output"]
-    t_total = trailers["Token-Total"]
-    cost_key = trailers["Cost-Key"]
+    ledger_path = Path(ledger_path)
+    rows = parse_ledger(ledger_path) if ledger_path.is_file() else []
+    by_cost_key: dict[str, list] = {}
+    for r in rows:
+        by_cost_key.setdefault(r.cost_key, []).append(r)
+
+    for block in token_blocks:
+        violations.extend(
+            _validate_block(block, label, by_cost_key, ledger_path)
+        )
+    return violations
+
+
+def _validate_block(
+    block: dict[str, str],
+    label: str,
+    by_cost_key: dict[str, list],
+    ledger_path: Path,
+) -> list[str]:
+    violations: list[str] = []
+    cost_key = block.get("Cost-Key", "")
+    sublabel = f"{label} [Cost-Key {cost_key!r}]" if cost_key else label
+
+    agent = block.get("Agent", "")
+    if not agent:
+        # A trailer block carrying Cost-Key without Agent is a stamping
+        # error: every block must be a self-contained accounting tuple.
+        violations.append(
+            f"{sublabel} — trailer block has Cost-Key but no Agent: trailer"
+        )
+        return violations
+
+    missing = [k for k in REQUIRED_TRAILERS if not block.get(k)]
+    if missing:
+        violations.append(
+            f"{sublabel} — declares Agent: '{agent}' but block is missing "
+            f"trailers: " + " ".join(missing)
+        )
+        return violations
+
+    t_input = block["Token-Input"]
+    t_output = block["Token-Output"]
+    t_total = block["Token-Total"]
 
     if not (_INT_RE.match(t_input) and _INT_RE.match(t_output) and _INT_RE.match(t_total)):
         violations.append(
-            f"{label} — Token-Input/Output/Total must be non-negative integers "
-            f"(got '{t_input}', '{t_output}', '{t_total}')"
+            f"{sublabel} — Token-Input/Output/Total must be non-negative "
+            f"integers (got '{t_input}', '{t_output}', '{t_total}')"
         )
         return violations
 
     if int(t_input) + int(t_output) != int(t_total):
         violations.append(
-            f"{label} — Token-Total ({t_total}) != Token-Input ({t_input}) + Token-Output ({t_output})"
+            f"{sublabel} — Token-Total ({t_total}) != Token-Input ({t_input}) "
+            f"+ Token-Output ({t_output})"
         )
 
     if not _COST_KEY_RE.match(cost_key):
         violations.append(
-            f"{label} — Cost-Key '{cost_key}' contains invalid characters "
+            f"{sublabel} — Cost-Key '{cost_key}' contains invalid characters "
             f"(allowed: A-Z a-z 0-9 . _ -)"
         )
 
-    # Cross-check against the ledger row when one was found.
-    if ledger_row is not None:
-        row_input, row_cache_create, row_cache_read, row_output, row_new_work = ledger_row
-        # Trailer Token-Input  = row.input + row.cache_create
-        # Trailer Token-Output = row.output
-        # Trailer Token-Total  = row.new_work  (both exclude cache_read)
-        expected_trailer_input = row_input + row_cache_create
-        expected_trailer_output = row_output
-        if int(t_input) != expected_trailer_input or int(t_output) != expected_trailer_output:
-            violations.append(
-                f"{label} — COSTS.md row for '{cost_key}' disagrees with commit trailers "
-                f"(trailer input/output: {t_input}/{t_output}, "
-                f"row input+cache_create / output: "
-                f"{row_input}+{row_cache_create}={expected_trailer_input} / {row_output})"
-            )
-        if int(t_total) != row_new_work:
-            violations.append(
-                f"{label} — Token-Total ({t_total}) != COSTS.md row new_work ({row_new_work}) "
-                f"for cost-key '{cost_key}'"
-            )
+    cost_trailer = block["Cost-USD"].strip()
+    cost_shape_ok = bool(_COST_USD_RE.match(cost_trailer))
+    if not cost_shape_ok:
+        violations.append(
+            f"{sublabel} — Cost-USD '{cost_trailer}' must be a non-negative "
+            f"decimal"
+        )
 
-    # Cost-USD is required (REQUIRED_TRAILERS check above already enforced
-    # presence). Validate shape and, when we have the matching ledger row,
-    # cross-check value. Divergence means someone hand-edited one side.
-    cost_trailer = trailers["Cost-USD"].strip()
-    if not _COST_USD_RE.match(cost_trailer):
-        violations.append(
-            f"{label} — Cost-USD '{cost_trailer}' must be a non-negative decimal"
-        )
-    elif ledger_cost_usd is not None and ledger_row is not None:
-        # Compare at 4dp — both sides are rounded to 4 decimals upstream.
-        if abs(float(cost_trailer) - ledger_cost_usd) > 5e-5:
+    # Look up matching ledger row.
+    hits = by_cost_key.get(cost_key, [])
+    if len(hits) != 1:
+        if not ledger_path.is_file():
             violations.append(
-                f"{label} — Cost-USD trailer ({cost_trailer}) disagrees with "
-                f"COSTS.md cost_usd ({ledger_cost_usd:.4f}) for cost-key '{cost_key}'"
+                f"{sublabel} — declares Agent: trailer but COSTS.md does not "
+                f"exist at repo root"
             )
-    elif ledger_row is not None and ledger_cost_usd is None:
-        # Ledger row exists but has empty cost_usd — that's only legal for
-        # legacy/grandfathered rows (empty model). A v3 commit claiming
-        # ownership of such a row is an authoring error, not a pass path.
+        else:
+            violations.append(
+                f"{sublabel} — Cost-Key '{cost_key}' should have exactly 1 "
+                f"row in COSTS.md, found {len(hits)}"
+            )
+        return violations
+
+    row = hits[0]
+    # Trailer Token-Input  = row.input + row.cache_create
+    # Trailer Token-Output = row.output
+    # Trailer Token-Total  = row.new_work  (both exclude cache_read)
+    expected_trailer_input = row.input + row.cache_create
+    expected_trailer_output = row.output
+    if int(t_input) != expected_trailer_input or int(t_output) != expected_trailer_output:
         violations.append(
-            f"{label} — Cost-USD trailer is '{cost_trailer}' but COSTS.md "
-            f"row '{cost_key}' has no cost_usd value (grandfathered row; "
-            f"new commits must point at a priced row)"
+            f"{sublabel} — COSTS.md row for '{cost_key}' disagrees with commit "
+            f"trailers (trailer input/output: {t_input}/{t_output}, "
+            f"row input+cache_create / output: "
+            f"{row.input}+{row.cache_create}={expected_trailer_input} / "
+            f"{row.output})"
         )
+    if int(t_total) != row.new_work:
+        violations.append(
+            f"{sublabel} — Token-Total ({t_total}) != COSTS.md row new_work "
+            f"({row.new_work}) for cost-key '{cost_key}'"
+        )
+
+    if cost_shape_ok:
+        if row.cost_usd is not None:
+            if abs(float(cost_trailer) - row.cost_usd) > 5e-5:
+                violations.append(
+                    f"{sublabel} — Cost-USD trailer ({cost_trailer}) "
+                    f"disagrees with COSTS.md cost_usd ({row.cost_usd:.4f}) "
+                    f"for cost-key '{cost_key}'"
+                )
+        else:
+            # Ledger row exists but has empty cost_usd — only legal for
+            # legacy/grandfathered rows (empty model). A v3 commit
+            # claiming ownership of such a row is an authoring error.
+            violations.append(
+                f"{sublabel} — Cost-USD trailer is '{cost_trailer}' but "
+                f"COSTS.md row '{cost_key}' has no cost_usd value "
+                f"(grandfathered row; new commits must point at a priced row)"
+            )
 
     return violations
 
@@ -208,33 +266,17 @@ def _read_msg(path_or_dash: str) -> str:
     return Path(path_or_dash).read_text()
 
 
-def _cmd_validate(argv: list[str]) -> int:
-    if len(argv) < 9:
+def _cmd_validate_blocks(argv: list[str]) -> int:
+    if len(argv) < 2 or len(argv) > 3:
         print(
-            "trailers validate: <label> <cost_key_found_in_ledger: 0|1> "
-            "<input> <cache_create> <cache_read> <output> <total> "
-            "<cost_usd|-> [msg_file | -]",
+            "trailers validate-blocks: <label> <ledger_path> [msg_file | -]",
             file=sys.stderr,
         )
         return 2
-    label = argv[0]
-    found = argv[1] == "1"
-    row_ints = [int(x) for x in argv[2:7]]
-    cost_arg = argv[7]
-    msg_src = argv[8] if len(argv) > 8 else "-"
+    label, ledger_path = argv[0], argv[1]
+    msg_src = argv[2] if len(argv) > 2 else "-"
     msg = _read_msg(msg_src)
-    ledger_row = tuple(row_ints) if found else None  # type: ignore[assignment]
-    ledger_cost_usd: float | None
-    if not found or cost_arg in ("", "-"):
-        ledger_cost_usd = None
-    else:
-        try:
-            ledger_cost_usd = float(cost_arg)
-        except ValueError:
-            ledger_cost_usd = None
-    violations = validate(  # type: ignore[arg-type]
-        msg, label, ledger_row=ledger_row, ledger_cost_usd=ledger_cost_usd,
-    )
+    violations = validate_blocks(msg, label, ledger_path)
     for v in violations:
         print(v)
     return 1 if violations else 0
@@ -245,8 +287,8 @@ def main(argv: list[str]) -> int:
         print(__doc__)
         return 0 if argv else 2
     cmd, rest = argv[0], argv[1:]
-    if cmd == "validate":
-        return _cmd_validate(rest)
+    if cmd == "validate-blocks":
+        return _cmd_validate_blocks(rest)
     print(f"trailers: unknown command {cmd!r}", file=sys.stderr)
     return 2
 

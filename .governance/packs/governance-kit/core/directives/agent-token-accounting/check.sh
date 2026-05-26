@@ -40,10 +40,20 @@
 #       Walks default-branch merge-base → HEAD and validates every non-merge,
 #       non-revert commit. Merge commits (>1 parent) and revert commits
 #       (subject starts with `Revert "`) are exempt. When the range is empty
-#       (HEAD already at base, no remote main, etc.) Mode B is a no-op —
-#       Mode A handles the pending commit, and re-flagging historical commits
-#       already in main is out of scope. Also validates COSTS.md shape
-#       independently, so post-squash repos still get ledger integrity.
+#       (`base..HEAD` is empty — typically on `main` itself after a
+#       squash-merge), Mode B validates HEAD's trailers on its own.
+#       Squash-merge commits land on `main` via GitHub's server and bypass
+#       the local commit-msg hook, so without this single-commit fallback
+#       the squashed commit's per-Cost-Key trailer blocks would go
+#       unchecked. Also validates COSTS.md shape independently, so
+#       post-squash repos still get ledger integrity.
+#
+# Per-block validation: the trailer set above repeats once per sub-commit
+# in a squash-merge body (one (Token-*, Cost-Key, Cost-USD) tuple per
+# folded sub-commit). lib/trailers.py splits the body into trailer-only
+# paragraphs and cross-checks every (block, COSTS.md row) pair anchored
+# by Cost-Key — last-wins parsing across the whole body would keep only
+# the trailing sub-commit's trailers and silently skip the rest.
 #
 # No self-bootstrap exemption: `governance init` is responsible for making
 # the install commit pass this directive on the first try (dry-run + inline
@@ -115,43 +125,18 @@ validate_commit_message() {
         return 0
     fi
 
-    # Extract Cost-Key so we can look it up in the ledger. Use the last
-    # occurrence (git trailer semantics) just like trailers.py does.
-    local cost_key
-    cost_key="$(printf '%s\n' "$msg" | awk -F': *' '/^Cost-Key:[[:space:]]/ {val=$2} END {print val}')"
-
-    # Look up the ledger row.
-    local found=0 row_input=0 row_cc=0 row_cr=0 row_output=0 row_new_work=0 row_cost_usd="-"
-    if [[ -n "$cost_key" && -f "$LEDGER" ]]; then
-        if row_output_line="$(python3 "$LIB/ledger.py" find-by-cost-key "$LEDGER" "$cost_key" 2>/dev/null)"; then
-            read -r row_input row_cc row_cr row_output row_new_work row_cost_usd <<<"$row_output_line"
-            found=1
-        fi
-    fi
-
-    # First-class ledger-presence violation is independent of the trailer shape.
-    if [[ "$found" == "0" ]]; then
-        if [[ ! -f "$LEDGER" ]]; then
-            violation "$label — declares Agent: trailer but COSTS.md does not exist at repo root"
-        else
-            local count
-            count="$(python3 "$LIB/ledger.py" find-by-cost-key "$LEDGER" "$cost_key" 2>&1 1>/dev/null | grep -oE 'found [0-9]+' | awk '{print $2}')"
-            violation "$label — Cost-Key '${cost_key:-<missing>}' should have exactly 1 row in COSTS.md, found ${count:-0}"
-        fi
-    fi
-
-    # Trailer shape + cross-check math (only when we have the row; otherwise
-    # trailers.py just skips the cross-check).
+    # Per-block validation: lib/trailers.py walks every trailer block in
+    # the body (one per sub-commit on a squash-merge), looks up each
+    # block's Cost-Key in COSTS.md, and cross-checks the row's columns
+    # against the block's Token-*/Cost-USD trailers. Each block is
+    # reported independently — a single squashed body can flag N rows.
     local v
     while IFS= read -r v; do
         [[ -z "$v" ]] && continue
         violation "$v"
     done < <(
-        printf '%s' "$msg" | python3 "$LIB/trailers.py" validate \
-            "$label" "$found" \
-            "$row_input" "$row_cc" "$row_cr" "$row_output" "$row_new_work" \
-            "$row_cost_usd" \
-            - 2>/dev/null || true
+        printf '%s' "$msg" | python3 "$LIB/trailers.py" validate-blocks \
+            "$label" "$LEDGER" - 2>/dev/null || true
     )
 }
 
@@ -205,11 +190,22 @@ is_exempt_commit() {
 }
 
 if [[ -z "$base" ]]; then
-    # No base ref found, or HEAD is at the base (no new work on this branch).
-    # Nothing to walk — Mode A (commit-msg hook) handles the pending commit.
-    # We deliberately do NOT fall back to validating HEAD here, because under
-    # mandatory semantics that would re-flag historical commits already in
-    # main, which are out of scope for this directive.
+    # No new work on this branch relative to the default — but on `main`
+    # itself, HEAD is the freshly-landed (often squash-merge) commit whose
+    # trailer blocks are the durable record. A squash-merge bypasses the
+    # local commit-msg hook (it runs on GitHub's server), so without this
+    # single-commit fallback its per-Cost-Key blocks go unchecked.
+    # Validate HEAD on its own so the per-block contract still applies
+    # post-merge. `--verify` is what distinguishes "HEAD resolves to a
+    # commit" from the empty-repo case (where `git rev-parse HEAD` prints
+    # the literal string "HEAD" on stdout and exits 128).
+    if git rev-parse --verify HEAD >/dev/null 2>&1; then
+        head_sha=$(git rev-parse HEAD)
+        if ! is_exempt_commit "$head_sha"; then
+            msg=$(git log -1 --format=%B "$head_sha")
+            validate_commit_message "$head_sha" <<<"$msg"
+        fi
+    fi
     directive_end
 fi
 

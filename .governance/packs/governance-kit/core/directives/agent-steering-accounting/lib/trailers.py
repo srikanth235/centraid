@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import re
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 # ledger.py sits next to this file; relative import works under
@@ -56,6 +57,60 @@ def extract_scalar_trailers(msg: str) -> dict[str, str]:
         m = _SCALAR_TRAILER_RE.match(line)
         if m:
             out[m.group(1)] = m.group(2).strip()
+    return out
+
+
+@dataclass
+class _Aggregated:
+    occurrences: int = 0
+    summed_int: int = 0
+    summed_breakdown: dict[str, int] = field(default_factory=dict)
+    bad_values: list[str] = field(default_factory=list)
+
+
+def extract_summed_trailers(
+    msg: str,
+    *,
+    count_keys: tuple[str, ...] = (),
+    breakdown_keys: tuple[str, ...] = (),
+) -> dict[str, _Aggregated]:
+    """Aggregate count and breakdown trailers across every occurrence in `msg`.
+
+    Squash-merge concatenates each sub-commit's body into the resulting commit,
+    so the same partition trailer can appear N times. For `Steer-Count` /
+    `Steer-Types` / `Steer-Tiers` the correct semantics is sum-across-
+    occurrences, not last-wins — anything else makes the squashed body
+    disagree with the cumulative STEERING.md diff by construction.
+
+    Returned dict only contains keys that appeared at least once. For each
+    key, `summed_int` accumulates count-style values, `summed_breakdown`
+    accumulates `key=N,...` partitions key-wise (with `none` treated as the
+    empty bag), and `bad_values` collects raw values that failed shape
+    validation so the caller can report them in the same format the
+    single-occurrence path used.
+    """
+    out: dict[str, _Aggregated] = {}
+    for line in msg.splitlines():
+        m = _SCALAR_TRAILER_RE.match(line)
+        if not m:
+            continue
+        k, raw = m.group(1), m.group(2).strip()
+        if k in count_keys:
+            agg = out.setdefault(k, _Aggregated())
+            agg.occurrences += 1
+            if raw.isdigit():
+                agg.summed_int += int(raw)
+            else:
+                agg.bad_values.append(raw)
+        elif k in breakdown_keys:
+            agg = out.setdefault(k, _Aggregated())
+            agg.occurrences += 1
+            parsed = _parse_breakdown(raw)
+            if parsed is None:
+                agg.bad_values.append(raw)
+            else:
+                for kk, vv in parsed.items():
+                    agg.summed_breakdown[kk] = agg.summed_breakdown.get(kk, 0) + vv
     return out
 
 
@@ -115,20 +170,22 @@ def validate(
     Mode B.
     """
     violations: list[str] = []
-    scalars = extract_scalar_trailers(msg)
-    has_count = "Steer-Count" in scalars
-    has_types = "Steer-Types" in scalars
-    has_tiers = "Steer-Tiers" in scalars
+    # Sum across occurrences instead of last-wins: GitHub squash-merge
+    # concatenates each sub-commit's body, so the trailer triple can appear
+    # N times in the resulting commit message. The cumulative STEERING.md
+    # diff is the union of all sub-commits' added rows, so the only
+    # arithmetically consistent reading of the trailer triple is the sum.
+    summed = extract_summed_trailers(
+        msg,
+        count_keys=("Steer-Count",),
+        breakdown_keys=("Steer-Types", "Steer-Tiers"),
+    )
 
     # Every in-scope commit — full summary triple required, even at N=0.
     missing = [
         name
-        for name, present in (
-            ("Steer-Count", has_count),
-            ("Steer-Types", has_types),
-            ("Steer-Tiers", has_tiers),
-        )
-        if not present
+        for name in ("Steer-Count", "Steer-Types", "Steer-Tiers")
+        if name not in summed
     ]
     if missing:
         violations.append(
@@ -136,24 +193,27 @@ def validate(
         )
         return violations
 
-    count_val = scalars["Steer-Count"]
-    if not count_val.isdigit():
+    count_agg = summed["Steer-Count"]
+    if count_agg.bad_values:
         violations.append(
-            f"{label} — Steer-Count {count_val!r} must be a non-negative integer"
+            f"{label} — Steer-Count {count_agg.bad_values[0]!r} must be a "
+            f"non-negative integer"
         )
         return violations
-    expected_count = int(count_val)
+    expected_count = count_agg.summed_int
 
-    types_parsed = _parse_breakdown(scalars["Steer-Types"])
-    tiers_parsed = _parse_breakdown(scalars["Steer-Tiers"])
-    if types_parsed is None:
+    types_agg = summed["Steer-Types"]
+    tiers_agg = summed["Steer-Tiers"]
+    types_parsed = None if types_agg.bad_values else types_agg.summed_breakdown
+    tiers_parsed = None if tiers_agg.bad_values else tiers_agg.summed_breakdown
+    if types_agg.bad_values:
         violations.append(
-            f"{label} — Steer-Types {scalars['Steer-Types']!r} is malformed "
+            f"{label} — Steer-Types {types_agg.bad_values[0]!r} is malformed "
             f"(expected `key=N,key=N` or `none`)"
         )
-    if tiers_parsed is None:
+    if tiers_agg.bad_values:
         violations.append(
-            f"{label} — Steer-Tiers {scalars['Steer-Tiers']!r} is malformed "
+            f"{label} — Steer-Tiers {tiers_agg.bad_values[0]!r} is malformed "
             f"(expected `key=N,key=N` or `none`)"
         )
 
@@ -192,13 +252,15 @@ def validate(
         actual_tiers = _tally(matched, "tier")
         if types_parsed is not None and types_parsed != actual_types:
             violations.append(
-                f"{label} — Steer-Types {scalars['Steer-Types']} disagrees with "
-                f"newly-added rows' types {_format_breakdown(actual_types)}"
+                f"{label} — Steer-Types {_format_breakdown(types_parsed)} "
+                f"disagrees with newly-added rows' types "
+                f"{_format_breakdown(actual_types)}"
             )
         if tiers_parsed is not None and tiers_parsed != actual_tiers:
             violations.append(
-                f"{label} — Steer-Tiers {scalars['Steer-Tiers']} disagrees with "
-                f"newly-added rows' tiers {_format_breakdown(actual_tiers)}"
+                f"{label} — Steer-Tiers {_format_breakdown(tiers_parsed)} "
+                f"disagrees with newly-added rows' tiers "
+                f"{_format_breakdown(actual_tiers)}"
             )
 
     if subject is not None:
