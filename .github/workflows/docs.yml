@@ -49,11 +49,13 @@ jobs:
           retention-days: 7
 
   deploy:
+    # PAUSED (#122): docs publish disabled. Re-enable by removing `false &&`
+    # from the condition below.
     # Only deploy off main. Skipped on PRs and feature branches.
     # The job is also a no-op for forks (secrets aren't injected there) —
     # wrangler-action surfaces a clear error rather than a silent skip,
     # which is the right failure mode for a release path.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: false && github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment: docs-production

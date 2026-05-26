@@ -1,24 +1,36 @@
 ---
-summary: 'An app is a folder of HTML, CSS, JS, handlers, migrations, and a SQLite database — versioned code, persistent data.'
+summary: 'An app is a folder of code, handlers, and migrations, plus per-app SQLite for data and history — versioned code, persistent state.'
 title: 'Apps'
 ---
 
 # Apps
 
-A Centraid app is a folder. That's it.
+A Centraid app is a folder of code, plus the data and history that accumulate as it's used.
+
+The **source tree** is what you author and upload:
 
 ```
-<appsDir>/<id>/
+my-app/
+  app.json                    # the manifest (required)
   index.html
   app.css, app.js, …          # static assets — see allowlist
-  data.sqlite                 # persistent, never served as a static file
   queries/<name>.js           # dispatched by centraid_read
   actions/<name>.js           # dispatched by centraid_write
   migrations/<NNNN>_<name>.sql
   automations/<id>/           # optional — each automation is a subdir
-    automation.json           #   manifest (triggers, prompt, requires, history)
+    automation.json           #   manifest (triggers, prompt, requires)
     handler.js                #   the JS the runtime runs when the trigger fires
-  app.json                    # the manifest
+```
+
+The **mounted tree** is what lives on the gateway — every upload lands in a new versioned snapshot beside the app's persistent state:
+
+```
+<appsDir>/<id>/
+  data.sqlite                 # app-owned data, never served as a static file
+  runtime.sqlite              # chat sessions, agent run ledger, automation state KV
+  current.json                # { activeVersion, history[] }
+  versions/
+    v_<ts>_<sha>/             # immutable snapshot of an uploaded source tree
 ```
 
 No app server framework. No build step required at runtime (you can author in TypeScript and ship compiled `.js` next to it, but the gateway loads `.js` only).
@@ -26,7 +38,7 @@ No app server framework. No build step required at runtime (you can author in Ty
 ## What an app _is_
 
 - **A unit of upload.** You package the folder as a tar.gz and `POST` it to `/centraid/_apps/<id>/upload`. The gateway treats each upload as an immutable version.
-- **A unit of data isolation.** Every app gets its own `data.sqlite`. Implementations get a scoped DB proxy — there is no path from one app's worker to another app's database.
+- **A unit of data isolation.** Every app gets its own `data.sqlite` (handler-owned data) and `runtime.sqlite` (chat sessions, agent run ledger, automation state). Implementations get a scoped DB proxy — there is no path from one app's worker to another app's databases.
 - **A unit of identity.** App ids are the gateway's primary key. They appear in URLs (`/centraid/<id>/...`), in tool calls (`{ app: "<id>", ... }`), and in the chat session key (`centraid-chat:<id>:w<windowId>`).
 - **A tool catalog.** An app's `queries[]` and `actions[]` arrays in `app.json` _are_ the app's tool surface — each entry is a tool with a name, description, input/output schemas, and side-effect annotations. Your UI, an AI agent, and the CLI all reach those tools through the same dispatcher.
 - **A unit of routing.** The runtime knows about apps by name and dispatches calls to the _active_ version of each one.
@@ -76,11 +88,12 @@ See [Build → app.json](/build/app-json) for the full schema.
 
 ## Versions and `current.json`
 
-Code is versioned. Data isn't.
+Code is versioned. Data and chat/automation history are not — they persist across every flip.
 
 ```
 <appsDir>/<id>/
-  data.sqlite                 ← single instance, persists forever
+  data.sqlite                 ← persists across version flips
+  runtime.sqlite              ← persists across version flips
   current.json                ← { activeVersion: "v_…", history: [...] }
   versions/
     v_2026-05-08T14-30-00-000Z_a1b2c3/    ← immutable, code-only
@@ -89,13 +102,13 @@ Code is versioned. Data isn't.
 
 - `current.json#activeVersion` names the directory under `versions/` that serves traffic.
 - Switching versions is a single write to `current.json`. No downtime, no extraction, no restart.
-- Old versions are kept up to `versionRetention` (default 5). The active version is always retained.
+- Old versions are kept up to `versionRetention` (default 5, minimum 2). The active version is always retained.
 
 Why this split:
 
 - **Rollback is free.** A bad release is a one-line fix.
-- **Migrations run forward, code can go back.** You don't lose yesterday's data when you revert today's handlers (assuming your migrations were additive, which they should be).
-- **Pruning is safe.** Retention only deletes inactive `versions/v_…/` dirs; it never touches `data.sqlite`.
+- **Migrations run forward, code can go back.** You don't lose yesterday's data when you revert today's handlers (assuming your migrations were additive, which they should be). Chat history and automation runs stick around too.
+- **Pruning is safe.** Retention only deletes inactive `versions/v_…/` dirs; it never touches `data.sqlite` or `runtime.sqlite`.
 
 ## App ids — what's reserved
 

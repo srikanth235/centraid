@@ -5,12 +5,14 @@ title: 'App anatomy'
 
 # App anatomy
 
-A Centraid app is a folder with a fixed shape. The gateway recognizes the shape; nothing else needs to be configured.
+A Centraid app has a fixed shape. The gateway recognizes it; nothing else needs to be configured.
 
-The folder holds two halves of one idea: a **tool catalog** declared in `app.json` (the `queries[]` and `actions[]` arrays), and **implementations** of those tools under `queries/` and `actions/`. The static files (`index.html`, CSS, JS) are the UI that calls into the tool catalog. See [Queries and actions](/concepts/queries-and-actions) for the framing.
+What you author is the **source tree** below — code, handlers, schema. When you upload it, the gateway lands the whole tree in an immutable version directory and keeps the app's persistent state (`data.sqlite`, `runtime.sqlite`, `current.json`) alongside it. See [Apps → Versions and `current.json`](/concepts/apps#versions-and-currentjson) for the mounted layout.
+
+The source tree holds two halves of one idea: a **tool catalog** declared in `app.json` (the `queries[]` and `actions[]` arrays), and **implementations** of those tools under `queries/` and `actions/`. The static files (`index.html`, CSS, JS) are the UI that calls into the tool catalog. See [Queries and actions](/concepts/queries-and-actions) for the framing.
 
 ```
-my-app/
+my-app/                       # source tree (what you author and upload)
 ├── app.json                  # manifest (required)
 ├── index.html                # entry HTML (required if the app has a UI)
 ├── app.css                   # optional, served as static
@@ -42,11 +44,13 @@ The gateway serves any file whose extension matches:
 .woff .woff2 .ttf .otf .map
 ```
 
-Reserved names that are **never served as static** even if you ship them:
+Reserved names that are **never served as static** even if you ship them (the publisher also excludes them on upload):
 
 - `data.sqlite` — the app's database, written by handlers only
-- `_registry.json` — gateway-owned
-- `current.json` — gateway-owned
+- `runtime.sqlite` — chat sessions, agent run ledger, automation state — gateway-owned
+- `current.json` — gateway-owned (version pointer)
+- `versions/` — gateway-owned (immutable code snapshots)
+- `_registry.json`, `_uploads/`, `_trash/` — gateway-owned
 - `app.json` — read by tooling, not served
 - `queries/` and `actions/` directories — invoked, not served
 

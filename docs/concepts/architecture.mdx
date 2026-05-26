@@ -51,7 +51,7 @@ flowchart TB
 ## The five concepts
 
 1. **Gateway** — the process that owns the apps directory, registry, dispatcher, and chat. Runs as the desktop's embedded local runtime _or_ as a remote OpenClaw plugin. Same code, same HTTP surface, same on-disk layout. [Read more →](/concepts/gateway)
-2. **App** — a versioned folder of HTML/CSS/JS + handlers + a persistent SQLite database. Uploaded as a tarball; activated by atomically flipping `current.json#activeVersion`. [Read more →](/concepts/apps)
+2. **App** — a versioned folder of HTML/CSS/JS + handlers, paired with two persistent SQLite files (`data.sqlite` for app data, `runtime.sqlite` for chat sessions + agent run ledger + automation state). Uploaded as a tarball; activated by atomically flipping `current.json#activeVersion`. [Read more →](/concepts/apps)
 3. **Queries and actions** — the **tools** an app exposes. Declared in `app.json` (`queries[]` and `actions[]`), implemented in `queries/*.js` and `actions/*.js`. Queries may only read; actions are the only place writes happen. The read/write split is enforced by a governance directive at commit time. [Read more →](/concepts/queries-and-actions)
 4. **Change stream** — every action records the tables it touched; the gateway pushes a table-level invalidation on `/centraid/<id>/_changes` (SSE). The app iframe subscribes and re-runs the affected queries. [Read more →](/concepts/change-stream)
 5. **Chat and agents** — every app has a `/centraid/<id>/_chat` surface, served identically on both gateway hosts. The runtime exposes the three tools to whichever agent backend the host wired up. [Read more →](/concepts/chat)
