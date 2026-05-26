@@ -1,0 +1,13 @@
+# data-runtime-sqlite-separation - handlers can only touch data.sqlite, never runtime.sqlite.
+category: Correctness
+recommended: true
+summary: |
+  Centraid handler files (queries/*.js, actions/*.js) may not reference
+  `runtime.sqlite` in any form. Handlers are scoped to the app's
+  data.sqlite via ctx.db; runtime.sqlite holds chat sessions, the agent
+  run ledger, and automation state - gateway-owned, never an app
+  concern. The reverse direction (gateway core staying out of
+  data.sqlite outside the handler-runner / three-tool dispatcher path)
+  is harder to enforce statically and is left to code review for now.
+surface: repo-state
+hook: pre-commit

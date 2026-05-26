@@ -174,6 +174,13 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/gateway-core-mode-agnostic/check.sh`
 - **Exceptions**: per-line waiver `// governance: allow-gateway-core-mode-agnostic <reason>` for the rare case where runtime-core genuinely needs to inspect its host (none today; the architecture promise is that no such case should exist).
 
+### data-runtime-sqlite-separation
+
+- **Directive**: centraid handler files (`**/queries/*.js`, `**/actions/*.js`) may not reference `runtime.sqlite` in any form (no path strings, no `path.join(..., 'runtime.sqlite')`, no `new Database('.../runtime.sqlite')`). Handlers see only the app's `data.sqlite` via the `ctx.db` proxy.
+- **Rationale**: each app has two SQLite files with distinct owners. `data.sqlite` is app-owned and is what `ctx.db` proxies onto. `runtime.sqlite` is gateway-owned and holds chat sessions, the agent run ledger, and automation state. A handler that opens or names `runtime.sqlite` is a layering violation: it reads/writes state the gateway treats as its own and the change-stream would never invalidate. The matching reverse direction - gateway core staying out of `data.sqlite` outside the handler-runner / three-tool dispatcher path - is harder to specify statically (there are multiple legitimate openers and an allowlist would be brittle). Left to code review for now; this directive enforces the easy half.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/data-runtime-sqlite-separation/check.sh`
+- **Exceptions**: per-line waiver `// governance: allow-data-runtime-sqlite-separation <reason>` on the offending line. No legitimate case is anticipated today.
+
 ## Amendment process
 
 1. Open a PR that modifies this file **and** the directive folder under `.governance/packs/<owner>/<repo>/directives/` in the same commit.
@@ -189,6 +196,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-05-26 — @srikanth235 — Add `no-hardcoded-model-ids`: forbid concrete provider model ids in production source so model selection moves with capability-tier indirection rather than code edits (#127).
 - 2026-05-26 — @srikanth235 — Add `actions-declare-table-writes`: every `app.json#actions[]` entry must declare a `writes:` array so change-stream invalidation cannot silently drop subscribers (#127).
 - 2026-05-26 — @srikanth235 — Add `gateway-core-mode-agnostic`: `packages/runtime-core/` may not branch on gateway mode so the "same code, two modes" architecture property holds (#127).
+- 2026-05-26 — @srikanth235 — Add `data-runtime-sqlite-separation`: handler files may not reference `runtime.sqlite` (gateway-owned chat/run/automation state); enforces the easy half of the data-vs-runtime SQLite ownership boundary (#127).
 
 ## Escape hatches
 
