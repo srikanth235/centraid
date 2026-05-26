@@ -1,0 +1,13 @@
+# agent-tool-names-fixed - the agent-facing tool surface is exactly six fixed names.
+category: Architecture
+recommended: true
+summary: |
+  The set of agent-facing centraid tools is fixed at exactly six names:
+  centraid_describe / centraid_read / centraid_write (three-tool
+  dispatcher per issue #107) plus centraid_sql_describe /
+  centraid_sql_read / centraid_sql_write (direct-SQL agent surface).
+  Any other 'centraid_*' string literal in source under packages/ or
+  apps/ is a new agent-facing tool, which bypasses the dispatcher and
+  the audit chain (token + steering trailers, run ledger).
+surface: repo-state
+hook: pre-commit

@@ -181,6 +181,13 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/data-runtime-sqlite-separation/check.sh`
 - **Exceptions**: per-line waiver `// governance: allow-data-runtime-sqlite-separation <reason>` on the offending line. No legitimate case is anticipated today.
 
+### agent-tool-names-fixed
+
+- **Directive**: the set of agent-facing centraid tool names in source under `packages/` and `apps/` is fixed at exactly six: `centraid_describe`, `centraid_read`, `centraid_write` (the three-tool dispatcher per issue #107, defined in `packages/runtime-core/src/dispatcher.ts`) plus `centraid_sql_describe`, `centraid_sql_read`, `centraid_sql_write` (the direct-SQL agent surface, wired in `packages/openclaw-plugin/src/lib/tools.ts` and re-registered per agent runtime under `packages/agent-runtime/`). Any quoted string literal matching `['"]centraid_<id>['"]` whose `<id>` is not one of those six is a new agent-facing tool and a violation. Documentation (`**/*.md`, `**/*.mdx`), tests, and build artifacts are excluded.
+- **Rationale**: the three-tool dispatcher is the architectural promise that the agent surface stays small and observable. Every existing tool routes through the dispatcher's `centraid{Write,Read,Describe}` or the bounded `centraid_sql_*` SQL surface, both of which are wired into the audit chain (token + steering trailers, the per-app run ledger, the `_changes` SSE). A new tool registered in an adapter bypasses all of that: token accounting doesn't know it ran, steering doesn't see its events, the change-bus doesn't invalidate behind it. Architecturally, "add a tool" means "add behavior to the dispatcher" - the agent-facing names are the contract, not the implementation site. Pinning the name set forces the deliberation: a new entry point must amend this directive's allowlist, which is a reviewable diff, not a drive-by edit in an adapter.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/agent-tool-names-fixed/check.sh`
+- **Exceptions**: per-line waiver `// governance: allow-agent-tool-names-fixed <reason>` for the rare case where a `centraid_<id>` literal is not a tool registration (e.g. a session-key prefix string). Adding a *real* new tool requires amending the allowlist in `check.sh` in the same PR that adds the behavior - not a waiver.
+
 ## Amendment process
 
 1. Open a PR that modifies this file **and** the directive folder under `.governance/packs/<owner>/<repo>/directives/` in the same commit.
@@ -197,6 +204,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-05-26 — @srikanth235 — Add `actions-declare-table-writes`: every `app.json#actions[]` entry must declare a `writes:` array so change-stream invalidation cannot silently drop subscribers (#127).
 - 2026-05-26 — @srikanth235 — Add `gateway-core-mode-agnostic`: `packages/runtime-core/` may not branch on gateway mode so the "same code, two modes" architecture property holds (#127).
 - 2026-05-26 — @srikanth235 — Add `data-runtime-sqlite-separation`: handler files may not reference `runtime.sqlite` (gateway-owned chat/run/automation state); enforces the easy half of the data-vs-runtime SQLite ownership boundary (#127).
+- 2026-05-27 — @srikanth235 — Add `agent-tool-names-fixed`: the agent-facing centraid tool name set is fixed at exactly six (three dispatcher + three SQL-direct); a seventh tool requires amending the allowlist, not a drive-by adapter edit (#127).
 
 ## Escape hatches
 
