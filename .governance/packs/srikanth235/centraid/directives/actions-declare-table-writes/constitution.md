@@ -1,0 +1,6 @@
+### actions-declare-table-writes
+
+- **Directive**: every entry in a centraid `app.json#actions[]` array must include a `writes:` field whose value is an array of table names. Empty arrays (`writes: []`) are allowed and signal "this action performs no database writes" (e.g. a webhook-only action). Missing or non-array `writes` is rejected. Applies to all tracked `**/app.json` files whose top-level `manifestVersion` is set (distinguishing Centraid manifests from `apps/mobile/app.json`, which is an Expo config).
+- **Rationale**: same foot-gun shape as [[query-handlers-read-only]]. The change-stream SSE feed at `/centraid/<id>/_changes` uses each action's declared `writes:` tables to invalidate per-table query subscriptions. A missing or wrong `writes` field is silently broken: the mutation succeeds, the bus stays quiet, subscribed iframes never re-fetch, UI goes stale with no error. Making the declaration mandatory turns "I forgot to list the table" into a commit-time failure instead of a runtime mystery.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/actions-declare-table-writes/check.sh`
+- **Exceptions**: none. JSON has no comment syntax, and the check is file-level; the right opt-out for a no-DB-write action is the explicit empty array.

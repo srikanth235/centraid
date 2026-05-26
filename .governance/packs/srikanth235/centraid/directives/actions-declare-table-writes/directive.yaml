@@ -1,0 +1,12 @@
+# actions-declare-table-writes - every app.json action must declare the tables it writes to.
+category: Correctness
+recommended: true
+summary: |
+  Every entry in app.json#actions[] must include a `writes:` field that is
+  an array of table names (empty array allowed for actions that perform
+  no DB writes, e.g. webhook-only actions). The change-stream SSE feed at
+  /centraid/<id>/_changes uses this metadata to invalidate per-table
+  query subscriptions. A missing or non-array `writes` field silently
+  breaks invalidation - subscribed iframes never re-fetch.
+surface: repo-state
+hook: pre-commit

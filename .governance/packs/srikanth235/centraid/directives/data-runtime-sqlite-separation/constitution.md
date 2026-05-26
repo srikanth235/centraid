@@ -1,0 +1,6 @@
+### data-runtime-sqlite-separation
+
+- **Directive**: centraid handler files (`**/queries/*.js`, `**/actions/*.js`) may not reference `runtime.sqlite` in any form (no path strings, no `path.join(..., 'runtime.sqlite')`, no `new Database('.../runtime.sqlite')`). Handlers see only the app's `data.sqlite` via the `ctx.db` proxy.
+- **Rationale**: each app has two SQLite files with distinct owners. `data.sqlite` is app-owned and is what `ctx.db` proxies onto. `runtime.sqlite` is gateway-owned and holds chat sessions, the agent run ledger, and automation state. A handler that opens or names `runtime.sqlite` is a layering violation: it reads/writes state the gateway treats as its own and the change-stream would never invalidate. The matching reverse direction - gateway core staying out of `data.sqlite` outside the handler-runner / three-tool dispatcher path - is harder to specify statically (there are multiple legitimate openers and an allowlist would be brittle). Left to code review for now; this directive enforces the easy half.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/data-runtime-sqlite-separation/check.sh`
+- **Exceptions**: per-line waiver `// governance: allow-data-runtime-sqlite-separation <reason>` on the offending line. No legitimate case is anticipated today.
