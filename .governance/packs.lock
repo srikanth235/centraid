@@ -29,3 +29,4 @@ packs:
   - query-handlers-read-only
   - handler-uses-ctx-primitives
   - no-hardcoded-model-ids
+  - actions-declare-table-writes
