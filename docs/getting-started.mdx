@@ -1,9 +1,26 @@
 ---
-summary: 'Install Centraid, run the desktop shell, and understand the two ways a gateway can run.'
+summary: 'Install Centraid, run the desktop shell, and meet the two AI helpers that come with it — one uses your apps, one builds new ones.'
 title: 'Getting started'
 ---
 
 # Getting started
+
+> **Your apps. Your data. Your devices.**
+
+**Centraid turns your [OpenClaw](/deploy/openclaw-plugin) into a personal app store.** Tiny, single-purpose apps that live on your own server and show up on your devices.
+
+OpenClaw is messaging-first — you talk to it from WhatsApp, Telegram, Slack, wherever you already chat. That's perfect for one-line jobs: "log my weight", "what's on my calendar?", "remind me at 7pm".
+
+Some things don't fit in a sentence. You want to *see* them — a month of expenses, your habit grid, last week's runs on a map, the photos from the trip. For those, a glance beats a paragraph and tapping beats typing.
+
+Centraid is the rich-UI layer for those. Same OpenClaw underneath — your connections, your agents, your data — with a screen wrapped around the apps that need one.
+
+Two AI helpers come built in:
+
+- **One uses your apps for you** — ask in plain language, it works the buttons.
+- **One makes apps just for you** — describe a new app or a change to an existing one, and it ships it. No code needed.
+
+Under the hood, both helpers use the same buttons you do — so anything you can do in the UI, the AI can do too, and the other way around. The rest of this page is the developer setup; if you just want to try it, [start at the Quickstart](/quickstart).
 
 Centraid ships as a monorepo. The desktop app embeds a local gateway out of the box — no separate server to run. The same gateway code can also be mounted on an OpenClaw instance to host apps remotely; the two modes share one upload-and-version-flip contract.
 

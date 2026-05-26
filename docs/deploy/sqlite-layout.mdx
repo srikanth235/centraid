@@ -5,28 +5,32 @@ title: 'SQLite layout on disk'
 
 # SQLite layout on disk
 
-The gateway's state is files. There's no central database; each app has its own SQLite, and the gateway-level metadata is plain JSON.
+The gateway's state is files. Each app has its own SQLite pair (`data.sqlite` for handler-owned data, `runtime.sqlite` for chat + agent run history). Two small gateway-level SQLites sit *next to* the apps directory: `centraid-gateway.sqlite` (users + prefs) and `centraid-analytics.sqlite` (cross-app run rollup). The rest of the gateway-level metadata is plain JSON.
 
 ## Top-level layout
 
 ```
-<appsDir>/
-├── _registry.json
-└── <id>/                       ← one per registered app
-    ├── data.sqlite             ← the app's database (persistent across versions)
-    ├── current.json            ← { activeVersion, history }
-    ├── versions/
-    │   ├── v_<UTC ts>_<sha[:6]>/
-    │   └── v_…/
-    └── _chat/
-        ├── w<windowId>.jsonl   ← per-window chat transcript
-        └── index.json          ← chat mode + adapter session ids
+<gatewayRoot>/
+├── centraid-gateway.sqlite         ← users, user_prefs
+├── centraid-analytics.sqlite       ← cross-app run_summary rollup
+└── <appsDir>/
+    ├── _registry.json
+    └── <id>/                       ← one per registered app
+        ├── data.sqlite             ← app-owned data (persistent across versions)
+        ├── runtime.sqlite          ← chat sessions, agent run ledger, automation state (persistent across versions)
+        ├── current.json            ← { activeVersion, history }
+        ├── versions/
+        │   ├── v_<UTC ts>_<sha[:6]>/
+        │   └── v_…/
+        └── _chat/
+            ├── w<windowId>.jsonl   ← per-window chat transcript
+            └── index.json          ← chat mode + adapter session ids
 ```
 
-Where `<appsDir>` is:
+Where `<gatewayRoot>` is `path.dirname(appsDir)`, and `<appsDir>` is:
 
-- **Local desktop**: `~/.centraid/apps/` (default).
-- **Remote (OpenClaw plugin)**: `$OPENCLAW_STATE_DIR/centraid/` — typically `~/.openclaw/centraid/`.
+- **Local desktop**: `~/.centraid/apps/` (default) — gateway-level dbs at `~/.centraid/`.
+- **Remote (OpenClaw plugin)**: `$OPENCLAW_STATE_DIR/centraid/apps/` — typically `~/.openclaw/centraid/apps/`; gateway-level dbs at `~/.openclaw/centraid/`.
 
 > **TODO(#120)** — confirm the local desktop's default. README of openclaw-plugin documents the remote default; the local desktop's is in `apps/desktop/src/main/`.
 
@@ -49,13 +53,30 @@ The gateway writes this atomically on register/deregister.
 
 ## `<id>/data.sqlite`
 
-The app's database. Lives at the app root — **not** inside a version directory. Code is versioned; data isn't.
+The app's handler-owned database. Lives at the app root — **not** inside a version directory. Code is versioned; data isn't.
 
 - Persists across `activate` flips.
 - Persists across version pruning.
 - The only way to "reset" an app's data is to delete this file (and let migrations re-run on next boot).
 
 The reserved-name guards mean `data.sqlite` is never served as a static file, never uploadable in a tarball, never readable from any HTTP path except through query/action handlers.
+
+## `<id>/runtime.sqlite`
+
+The app's history-of-use database. Also lives at the app root, also persists across version flips. Separate from `data.sqlite` so handler-owned data and runtime-owned history can evolve independently. Holds:
+
+- `chat_sessions` — conversation containers (user, title, mode, adapter session id, turn count, timestamps).
+- `runs` / `run_nodes` — unified agent run ledger across kinds (chat turns, automation fires, sub-runs). `parent_run_id` links sub-runs across apps.
+- `automation_state` — per-automation KV (`(automation_id, key) → JSON`).
+
+Centraid never serves this file; only the runtime reads/writes it.
+
+## Gateway-level SQLites (`<gatewayRoot>/centraid-*.sqlite`)
+
+Two small files sit beside `<appsDir>/`, owned by the runtime, never per-app:
+
+- **`centraid-gateway.sqlite`** — `users` and `user_prefs` tables. Schema is multi-user-ready; on the desktop it's single-user today. On the OpenClaw plugin, identity comes from OpenClaw — see below.
+- **`centraid-analytics.sqlite`** — a denormalized `run_summary` table with one row per run (every kind, every app). Each insert into a per-app `runtime.sqlite#runs` mirrors a summary row here so cross-app audit / activity queries don't have to fan out across every app's runtime db.
 
 ## `<id>/current.json`
 
@@ -80,7 +101,7 @@ A `POST /centraid/_apps/<id>/activate` call rewrites this file. The gateway uses
 Each upload extracts to a new directory under `versions/`. The directory name is `v_` + UTC ISO timestamp + first 6 chars of the content sha256.
 
 - **Immutable.** The gateway never modifies a version directory after extraction.
-- **Code-only.** No `data.sqlite`, no `_chat`, nothing app-state. Just what was in the uploaded tarball.
+- **Code-only.** No `data.sqlite`, no `runtime.sqlite`, no `_chat`, nothing app-state. Just what was in the uploaded tarball.
 - **Pruned.** Old versions above `versionRetention` (default 5; min 2) are deleted. The active version is always retained.
 
 Identical re-uploads collapse: if the sha matches an existing version, no new directory is created — `history[]` records the latest timestamp.
@@ -103,16 +124,16 @@ _chat/
 
 ## What's NOT here
 
-- **No gateway-level user table.** Centraid is single-tenant by design; OpenClaw provides identity at the gateway level when running remotely.
-- **No cross-app shared SQLite.** Each app's database is isolated. There is no "system" database.
+- **No per-app user table.** Identity lives in the gateway-level `centraid-gateway.sqlite#users`. On the OpenClaw plugin, the gateway can also import identity from OpenClaw.
+- **No cross-app handler database.** Each app's `data.sqlite` and `runtime.sqlite` are isolated; no handler ever opens another app's files. The gateway-level `centraid-analytics.sqlite` is a *rollup* (one summary row per run) — handlers can't write to it.
 - **No log files.** Handler logs go through the gateway's logger; persistence is the gateway host's concern.
 
 ## Backing up
 
-The whole `<appsDir>/` directory is the backup surface. `_registry.json` plus each app's `data.sqlite` and `current.json` are the only persistent state — `versions/` can be re-uploaded, `_chat/` can be cleared.
+The whole `<gatewayRoot>/` directory is the backup surface — both gateway-level SQLites plus the apps directory. `versions/` can be re-uploaded and `_chat/` can be cleared, but the SQLite files and `current.json` are the only state you can't reconstruct.
 
 ```sh
-tar czf centraid-backup.tar.gz ~/.centraid/apps
+tar czf centraid-backup.tar.gz ~/.centraid
 ```
 
 > **TODO(#120)** — capture official backup guidance once the runtime stabilizes. For now this is the obvious move.
@@ -121,7 +142,8 @@ tar czf centraid-backup.tar.gz ~/.centraid/apps
 
 ```sh
 # Stop the gateway (close desktop, or stop the OpenClaw process)
-rm <appsDir>/<id>/data.sqlite
+rm <appsDir>/<id>/data.sqlite     # clear handler-owned data
+rm <appsDir>/<id>/runtime.sqlite  # clear chat history + run ledger
 # Start the gateway — migrations re-run on next boot
 ```
 

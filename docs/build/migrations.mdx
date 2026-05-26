@@ -5,7 +5,7 @@ title: 'Migrations'
 
 # Migrations
 
-`migrations/<NNNN>_<name>.sql` is where your app's SQLite schema lives. Migrations run forward, are ordered by the numeric prefix, and are the authoritative source — the `tables[]` array in `app.json` is documentation only.
+`migrations/<NNNN>_<name>.sql` is where your app's `data.sqlite` schema lives. Migrations run forward, are ordered by the numeric prefix, and are the authoritative source — the `tables[]` array in `app.json` is documentation only. (`runtime.sqlite` is gateway-managed; you don't write migrations for it.)
 
 ## File naming
 
