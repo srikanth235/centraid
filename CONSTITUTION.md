@@ -153,6 +153,13 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/handler-uses-ctx-primitives/check.sh`
 - **Exceptions**: per-line waiver `// governance: allow-handler-uses-ctx-primitives <reason>` for the rare opt-in case (e.g. an action that legitimately needs to call a provider directly during a controlled experiment).
 
+### no-hardcoded-model-ids
+
+- **Directive**: production source under `packages/` and `apps/` must not reference concrete provider model ids (`claude-opus-4-7`, `claude-sonnet-4-6`, `gpt-5`, `o1-mini`, `gemini-2.0-flash`, etc.) inside string literals. Model selection flows through capability tiers resolved at runtime. The single allowlisted file is `packages/runtime-core/src/model-pricing.ts` (the price table is by definition a model-id-to-price map). Test files (`**/*.test.{ts,tsx}`, `**/*.spec.{ts,tsx}`) are excluded since they exercise the pricing and storage layers and need real ids.
+- **Rationale**: provider-agnostic inference. The model lineup churns - Anthropic, OpenAI, Google, and Meta ship new flagship models every few months and retire old ones on a similar cadence. Code that references `claude-sonnet-4-5` directly is a maintenance liability the moment the next minor version ships. Capability tiers (`tier:fast`, `tier:smart`) abstract that churn behind a runtime resolver and let model selection move with operator preferences and per-profile routing without code edits.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/no-hardcoded-model-ids/check.sh`
+- **Exceptions**: per-line waiver `// governance: allow-no-hardcoded-model-ids <reason>` for the rare opt-in case (e.g. a controlled experiment that pins a specific model intentionally).
+
 ## Amendment process
 
 1. Open a PR that modifies this file **and** the directive folder under `.governance/packs/<owner>/<repo>/directives/` in the same commit.
@@ -165,6 +172,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-05-12 — @srikanth235 — Initial constitution bootstrapped via governance-kit with `governance-kit/core` (standard preset + no-orphan-todos; workflows-hardened deferred).
 - 2026-05-15 — @srikanth235 — Add `query-handlers-read-only`: forbid `stmt.run()` and `db.exec()` inside `queries/*.js` so writes are never invisible to the `/_changes` SSE feed.
 - 2026-05-26 — @srikanth235 — Add `handler-uses-ctx-primitives`: forbid direct provider-SDK imports in `queries/*.js`/`actions/*.js` so handlers stay portable and run-ledger cost accounting cannot be bypassed (#127).
+- 2026-05-26 — @srikanth235 — Add `no-hardcoded-model-ids`: forbid concrete provider model ids in production source so model selection moves with capability-tier indirection rather than code edits (#127).
 
 ## Escape hatches
 

@@ -28,3 +28,4 @@ packs:
   directives:
   - query-handlers-read-only
   - handler-uses-ctx-primitives
+  - no-hardcoded-model-ids
