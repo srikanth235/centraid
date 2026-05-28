@@ -39,8 +39,6 @@ export interface ChatSessionMeta {
   /** Owner of the session — the gateway-side user UUID from `UserStore`. */
   userId: string;
   title: string;
-  /** Sticky chat mode: `full` (agent + SQL tools) or `data` (SQL only). */
-  mode: 'full' | 'data';
   /** Runner kind that owns `adapterSessionId` (codex | claude-code | openclaw). */
   adapterKind: string | null;
   /** Opaque per-runner resume handle; `null` until the first turn lands. */
@@ -177,21 +175,20 @@ export class ChatHistoryStore {
   }
 
   /**
-   * Create a fresh chat session in `appId`. `mode` is the sticky chat
-   * mode; `title` is optionally pre-derived by the caller from the first
-   * user message. The new row starts with turn_count 0 and NULL adapters.
+   * Create a fresh chat session in `appId`. `title` is optionally
+   * pre-derived by the caller from the first user message. The new row
+   * starts with turn_count 0 and NULL adapters.
    */
-  createSession(appId: string, mode: 'full' | 'data', title: string = ''): ChatSessionMeta {
+  createSession(appId: string, title: string = ''): ChatSessionMeta {
     const { stmts } = this.appChat(appId);
     const userId = this.currentUserId();
     const now = Date.now();
     const id = randomUUID();
-    stmts.insertSession.run(id, userId, title, mode, now, now);
+    stmts.insertSession.run(id, userId, title, now, now);
     return {
       id,
       userId,
       title,
-      mode,
       adapterKind: null,
       adapterSessionId: null,
       turnCount: 0,

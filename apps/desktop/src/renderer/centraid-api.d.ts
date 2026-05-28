@@ -134,8 +134,6 @@ export interface CentraidChatSessionMeta {
   /** App the chat was opened from; `null` for chats started from the shell. */
   originAppId: string | null;
   title: string;
-  /** Sticky chat mode. */
-  mode: 'full' | 'data';
   /** Runner kind that owns `adapterSessionId`. */
   adapterKind: string | null;
   /** Opaque per-runner resume handle. */
@@ -1052,7 +1050,6 @@ declare global {
     id: string;
     originAppId: string | null;
     title: string;
-    mode: 'full' | 'data';
     adapterKind: string | null;
     adapterSessionId: string | null;
     turnCount: number;

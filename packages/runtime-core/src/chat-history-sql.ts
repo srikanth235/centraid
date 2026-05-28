@@ -14,7 +14,6 @@ export interface SessionRow {
   id: string;
   user_id: string;
   title: string;
-  mode: string;
   adapter_kind: string | null;
   adapter_session_id: string | null;
   turn_count: number;
@@ -28,7 +27,6 @@ export function mapSessionRow(r: SessionRow): ChatSessionMeta {
     id: r.id,
     userId: r.user_id,
     title: r.title,
-    mode: r.mode === 'data' ? 'data' : 'full',
     adapterKind: r.adapter_kind ?? null,
     adapterSessionId: r.adapter_session_id ?? null,
     turnCount: Number(r.turn_count),
@@ -40,7 +38,7 @@ export function mapSessionRow(r: SessionRow): ChatSessionMeta {
 
 // `msg_count` reconstructs the transcript length without materializing it:
 // one user message per run + one node per run_node.
-const SESSION_COLS = `s.id, s.user_id, s.title, s.mode,
+const SESSION_COLS = `s.id, s.user_id, s.title,
         s.adapter_kind, s.adapter_session_id, s.turn_count,
         s.created_at, s.updated_at,
         ((SELECT COUNT(*) FROM runs r WHERE r.chat_session_id = s.id)
@@ -73,9 +71,9 @@ export function prepareChatStatements(db: DatabaseSync): ChatStatements {
     ),
     insertSession: db.prepare(
       `INSERT INTO chat_sessions
-         (id, user_id, title, mode,
+         (id, user_id, title,
           adapter_kind, adapter_session_id, turn_count, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NULL, NULL, 0, ?, ?)`,
+       VALUES (?, ?, ?, NULL, NULL, 0, ?, ?)`,
     ),
     getSession: db.prepare(
       `SELECT ${SESSION_COLS}

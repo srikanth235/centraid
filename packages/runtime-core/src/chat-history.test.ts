@@ -75,7 +75,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('createSession + listSessions round-trips', () => {
-    const s = store.createSession(APP, 'full', '');
+    const s = store.createSession(APP, '');
     const list = store.listSessions(APP);
     assert.equal(list.length, 1);
     assert.equal(list[0]!.id, s.id);
@@ -84,17 +84,17 @@ describe('ChatHistoryStore', () => {
   });
 
   it('listSessions returns every session for the user in this app', () => {
-    store.createSession(APP, 'full', 'one');
-    store.createSession(APP, 'data', 'two');
+    store.createSession(APP, 'one');
+    store.createSession(APP, 'two');
     assert.equal(store.listSessions(APP).length, 2);
   });
 
   it('rejects an invalid app id', () => {
-    assert.throws(() => store.createSession('../escape', 'full'), /invalid app id/i);
+    assert.throws(() => store.createSession('../escape'), /invalid app id/i);
   });
 
   it('recordTurn folds a turn into a run and getSession reconstructs it', () => {
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     const r = store.recordTurn(APP, turn(s.id, 'first', 'reply'));
     assert.ok(r?.runId);
     const loaded = store.getSession(APP, s.id);
@@ -108,7 +108,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('recordTurn preserves order across multiple turns', () => {
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, 'q1', 'a1', 1_000));
     store.recordTurn(APP, turn(s.id, 'q2', 'a2', 2_000));
     const loaded = store.getSession(APP, s.id);
@@ -117,7 +117,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('recordTurn reconstructs tool nodes interleaved before the assistant reply', () => {
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     const t = 5_000;
     store.recordTurn(APP, {
       chatSessionId: s.id,
@@ -153,7 +153,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('recordTurn marks a failed tool node as state=error', () => {
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     const t = 6_000;
     store.recordTurn(APP, {
       chatSessionId: s.id,
@@ -178,7 +178,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('recordTurn folds a turn error as an error ai message', () => {
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     const t = 7_000;
     store.recordTurn(APP, {
       chatSessionId: s.id,
@@ -196,13 +196,13 @@ describe('ChatHistoryStore', () => {
   });
 
   it('recordTurn derives the title from the first user message if empty', () => {
-    const s = store.createSession(APP, 'full', '');
+    const s = store.createSession(APP, '');
     store.recordTurn(APP, turn(s.id, 'Add a daily standup', 'ok'));
     assert.equal(store.listSessions(APP)[0]!.title, 'Add a daily standup');
   });
 
   it('recordTurn does not overwrite a non-empty title', () => {
-    const s = store.createSession(APP, 'full', 'Pinned name');
+    const s = store.createSession(APP, 'Pinned name');
     store.recordTurn(APP, turn(s.id, 'something', 'ok'));
     assert.equal(store.getSessionMeta(APP, s.id)?.title, 'Pinned name');
   });
@@ -212,14 +212,14 @@ describe('ChatHistoryStore', () => {
   });
 
   it('messageCount counts the reconstructed transcript length', () => {
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, 'q', 'a'));
     assert.equal(store.listSessions(APP)[0]!.messageCount, 2);
     assert.equal(store.getSessionMeta(APP, s.id)?.messageCount, 2);
   });
 
   it('renameSession updates title and bumps updatedAt', () => {
-    const s = store.createSession(APP, 'full', 'old');
+    const s = store.createSession(APP, 'old');
     const updated = store.renameSession(APP, s.id, 'new');
     assert.equal(updated?.title, 'new');
     assert.ok((updated?.updatedAt ?? 0) >= s.updatedAt);
@@ -230,29 +230,28 @@ describe('ChatHistoryStore', () => {
   });
 
   it('deleteSession cascades to the session runs', () => {
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, 'doomed', 'x'));
     assert.equal(store.deleteSession(APP, s.id), true);
     assert.equal(store.getSession(APP, s.id), undefined);
   });
 
   it('listSessions orders by updatedAt desc', async () => {
-    const a = store.createSession(APP, 'full', 'A');
+    const a = store.createSession(APP, 'A');
     await new Promise((resolve) => setTimeout(resolve, 4));
-    const b = store.createSession(APP, 'full', 'B');
+    const b = store.createSession(APP, 'B');
     const list = store.listSessions(APP);
     assert.equal(list[0]!.id, b.id);
     assert.equal(list[1]!.id, a.id);
   });
 
-  it('createSession honors the data mode and round-trips', () => {
-    const s = store.createSession(APP, 'data', 'shell chat');
-    assert.equal(s.mode, 'data');
-    assert.equal(store.getSession(APP, s.id)?.mode, 'data');
+  it('createSession persists and round-trips the row', () => {
+    const s = store.createSession(APP, 'shell chat');
+    assert.equal(store.getSession(APP, s.id)?.title, 'shell chat');
   });
 
   it('noteTurn bumps turn_count and persists the adapter columns', () => {
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     assert.equal(s.turnCount, 0);
     assert.equal(s.adapterKind, null);
 
@@ -279,7 +278,7 @@ describe('ChatHistoryStore', () => {
   });
 
   it('getSessionMeta returns meta without the transcript', () => {
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, 'hi', 'yo'));
     const meta = store.getSessionMeta(APP, s.id);
     assert.equal(meta?.id, s.id);
@@ -291,9 +290,9 @@ describe('ChatHistoryStore', () => {
 describe('ChatHistoryStore per-app scoping', () => {
   it('isolates sessions and lookups per app', () => {
     const store = new ChatHistoryStore(freshAppsDir('todos', 'habits'), stubUserIdProvider);
-    const t = store.createSession('todos', 'full', 'todos-1');
-    store.createSession('habits', 'full', 'habits-1');
-    store.createSession('habits', 'full', 'habits-2');
+    const t = store.createSession('todos', 'todos-1');
+    store.createSession('habits', 'habits-1');
+    store.createSession('habits', 'habits-2');
     assert.deepEqual(
       store.listSessions('todos').map((s) => s.title),
       ['todos-1'],
@@ -317,16 +316,16 @@ describe('ChatHistoryStore per-user scoping', () => {
 
   it('createSession stamps the current user id on the row', () => {
     const store = newStore(() => 'alice');
-    const s = store.createSession(APP, 'full');
+    const s = store.createSession(APP);
     assert.equal(s.userId, 'alice');
     assert.equal(store.getSession(APP, s.id)?.userId, 'alice');
   });
 
   it("listSessions does not return another user's sessions", () => {
     const { alice, bob } = pair();
-    alice.createSession(APP, 'full', 'alice-1');
-    alice.createSession(APP, 'full', 'alice-2');
-    bob.createSession(APP, 'full', 'bob-1');
+    alice.createSession(APP, 'alice-1');
+    alice.createSession(APP, 'alice-2');
+    bob.createSession(APP, 'bob-1');
 
     const aliceList = alice.listSessions(APP);
     assert.equal(aliceList.length, 2);
@@ -339,20 +338,20 @@ describe('ChatHistoryStore per-user scoping', () => {
 
   it("getSession returns undefined for another user's session id", () => {
     const { alice, bob } = pair();
-    const aliceSession = alice.createSession(APP, 'full');
+    const aliceSession = alice.createSession(APP);
     assert.equal(bob.getSession(APP, aliceSession.id), undefined);
   });
 
   it("recordTurn refuses to write into another user's session", () => {
     const { alice, bob } = pair();
-    const aliceSession = alice.createSession(APP, 'full');
+    const aliceSession = alice.createSession(APP);
     assert.equal(bob.recordTurn(APP, turn(aliceSession.id, 'hi', 'x')), undefined);
     assert.equal(alice.getSession(APP, aliceSession.id)?.messages.length, 0);
   });
 
   it("renameSession + deleteSession can't touch another user's session", () => {
     const { alice, bob } = pair();
-    const aliceSession = alice.createSession(APP, 'full', 'mine');
+    const aliceSession = alice.createSession(APP, 'mine');
     assert.equal(bob.renameSession(APP, aliceSession.id, 'stolen'), undefined);
     assert.equal(bob.deleteSession(APP, aliceSession.id), false);
     assert.equal(alice.getSession(APP, aliceSession.id)?.title, 'mine');
@@ -363,7 +362,7 @@ describe('ChatHistoryStore data persistence', () => {
   it("a second ChatHistoryStore on the same app sees the first one's writes", () => {
     const appsDir = freshAppsDir();
     const first = new ChatHistoryStore(appsDir, stubUserIdProvider);
-    const s = first.createSession(APP, 'full', 'kept');
+    const s = first.createSession(APP, 'kept');
     first.recordTurn(APP, turn(s.id, 'hello', 'world'));
 
     const second = new ChatHistoryStore(appsDir, stubUserIdProvider);
@@ -439,16 +438,15 @@ describe('makeChatHistoryRouteHandler', () => {
     handler = makeChatHistoryRouteHandler(() => store);
   });
 
-  it('POST sessions creates a full-mode session by default', async () => {
+  it('POST sessions creates a session', async () => {
     const res = await call(handler, 'POST', BASE, {});
     assert.equal(res.status, 200);
-    assert.equal((res.body as { mode: string }).mode, 'full');
+    assert.equal((res.body as { id: string }).id.length > 0, true);
   });
 
-  it('POST sessions honors the data mode + title', async () => {
-    const res = await call(handler, 'POST', BASE, { mode: 'data', title: 'named' });
+  it('POST sessions honors the title', async () => {
+    const res = await call(handler, 'POST', BASE, { title: 'named' });
     assert.equal(res.status, 200);
-    assert.equal((res.body as { mode: string }).mode, 'data');
     assert.equal((res.body as { title: string }).title, 'named');
   });
 

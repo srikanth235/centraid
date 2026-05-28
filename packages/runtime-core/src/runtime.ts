@@ -296,6 +296,7 @@ export class Runtime {
   private chatRouteContext() {
     return {
       registry: this.registry,
+      versions: this.versions,
       runner: this.chatRunner,
       chatStore: this.chatHistoryStore,
       chatRunnerSessionDir: this.chatRunnerSessionDir,

@@ -21,14 +21,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import {
-  describeOp,
-  readOp,
-  writeOp,
-  SqlOpRefusal,
-  RunQueryError,
-  type ChatStreamEvent,
-} from '@centraid/runtime-core';
+import { type ChatStreamEvent } from '@centraid/runtime-core';
 import type { ToolContext } from './runtime.js';
 
 export interface ClaudeSdkInput {
@@ -48,9 +41,10 @@ export interface ClaudeSdkInput {
   extraPath?: string;
   /**
    * When provided, the SDK is configured with an in-process MCP server
-   * exposing `centraid_sql_describe`, `centraid_sql_read`, and
-   * `centraid_sql_write`. Writes call `emitChange` after a precise table-
-   * tracked SQLite session commit.
+   * exposing the three structured centraid tools (`centraid_describe`,
+   * `centraid_read`, `centraid_write`) that delegate to the shared
+   * runtime-core dispatcher. `_sql` lands as a built-in inside the
+   * dispatcher.
    */
   toolContext?: ToolContext;
   abortSignal: AbortSignal;
@@ -358,9 +352,10 @@ function readClaudeUsage(raw: unknown):
 }
 
 /**
- * Build the in-process MCP server that exposes the three centraid SQL
- * tools. Zod 4 is the project's pinned schema lib; the SDK accepts both
- * Zod 3 and Zod 4. Each handler returns a single `text` content block whose
+ * Build the in-process MCP server that exposes the three structured
+ * centraid tools. Zod 4 is the project's pinned schema lib; the SDK
+ * accepts both Zod 3 and Zod 4. Each handler delegates to the shared
+ * runtime-core dispatcher and returns a single `text` content block whose
  * payload is the JSON-stringified result (matching the codex shape) so the
  * model sees an identical surface across backends.
  */
@@ -379,60 +374,73 @@ async function buildCentraidMcpServer(
     content: [{ type: 'text' as const, text: msg }],
     isError: true,
   });
-  const toMsg = (err: unknown): string =>
-    err instanceof SqlOpRefusal
-      ? err.message
-      : err instanceof RunQueryError
-        ? `${err.code}: ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : String(err);
+
+  const fromDispatch = (
+    result: import('@centraid/runtime-core').ToolResult,
+  ): ReturnType<typeof okText> | ReturnType<typeof errText> => {
+    if (result.isError) {
+      const { code, message } = result.structuredContent;
+      return errText(`[${code}] ${message}`);
+    }
+    return okText(result.structuredContent);
+  };
 
   const describe = mod.tool(
-    'centraid_sql_describe',
-    "Return the live SQLite schema for this app (tables, columns, indexes, views) as JSON. Call this first when you don't know the schema. No arguments.",
-    {},
-    async () => {
+    'centraid_describe',
+    "Return the app's manifest plus live SQLite schema, or a single declared handler entry. Call without arguments to see the full catalog; pass `action` or `query` to narrow. Use this before centraid_read/centraid_write to know what handlers exist and what input each accepts.",
+    {
+      action: z.string().optional().describe('Action name to narrow to.'),
+      query: z.string().optional().describe('Query name to narrow to.'),
+    },
+    async ({ action, query }) => {
       try {
-        return okText(describeOp({ dataFile: ctx.dataFile }));
+        return fromDispatch(
+          await ctx.dispatcher.describe({
+            app: ctx.appId,
+            ...(action ? { action } : {}),
+            ...(query ? { query } : {}),
+          }),
+        );
       } catch (err) {
-        return errText(toMsg(err));
+        return errText(err instanceof Error ? err.message : String(err));
       }
     },
   );
 
   const read = mod.tool(
-    'centraid_sql_read',
-    "Run one SELECT (or EXPLAIN) against this app's SQLite. Returns {columns, rows, totalRows, truncated, durationMs}. Rows are capped at 200 — use LIMIT to be explicit. DDL/PRAGMA/non-SELECT statements are refused.",
-    { sql: z.string().describe('A single SELECT or EXPLAIN statement.') },
-    async ({ sql }) => {
+    'centraid_read',
+    'Invoke a declared query, or the `_sql` built-in for an ad-hoc SELECT. For declared queries set `query` to the name in the manifest and `input` to its JSON Schema shape. For ad-hoc reads use `query: "_sql"` and `input: { sql: "<single SELECT or EXPLAIN>" }` — rows capped at 200; DDL/PRAGMA refused. Prefer declared queries when one fits the user\'s ask.',
+    {
+      query: z.string().describe('Declared query name, or "_sql".'),
+      input: z
+        .unknown()
+        .optional()
+        .describe('Input matching the query schema, or { sql } for _sql.'),
+    },
+    async ({ query, input }) => {
       try {
-        return okText(readOp({ dataFile: ctx.dataFile, sql }));
+        return fromDispatch(await ctx.dispatcher.read({ app: ctx.appId, query, input }));
       } catch (err) {
-        return errText(toMsg(err));
+        return errText(err instanceof Error ? err.message : String(err));
       }
     },
   );
 
   const write = mod.tool(
-    'centraid_sql_write',
-    "Run one INSERT / UPDATE / DELETE / REPLACE against this app's SQLite. Returns {rowsAffected, lastInsertRowid, durationMs}. DDL (CREATE/ALTER/DROP), PRAGMA, ATTACH/DETACH, VACUUM are refused. The runtime fires its change bus after the write so the running app's UI re-renders automatically.",
-    { sql: z.string().describe('A single INSERT/UPDATE/DELETE/REPLACE statement.') },
-    async ({ sql }, extra) => {
+    'centraid_write',
+    'Invoke a declared action, or the `_sql` built-in for an ad-hoc INSERT/UPDATE/DELETE/REPLACE. For declared actions set `action` to the name in the manifest and `input` to its JSON Schema shape. For ad-hoc writes use `action: "_sql"` and `input: { sql: "<single statement>" }` — DDL/PRAGMA refused. Prefer declared actions when one fits the user\'s ask. The runtime fires its change bus after a successful write so the app UI re-renders automatically.',
+    {
+      action: z.string().describe('Declared action name, or "_sql".'),
+      input: z
+        .unknown()
+        .optional()
+        .describe('Input matching the action schema, or { sql } for _sql.'),
+    },
+    async ({ action, input }) => {
       try {
-        const toolUseId =
-          extra && typeof extra === 'object' && 'toolUseId' in extra
-            ? String((extra as { toolUseId?: unknown }).toolUseId ?? '')
-            : '';
-        const payload = writeOp({
-          dataFile: ctx.dataFile,
-          sql,
-          onWrite: (tables) =>
-            ctx.emitChange({ tables, ...(toolUseId ? { toolCallId: toolUseId } : {}) }),
-        });
-        return okText(payload);
+        return fromDispatch(await ctx.dispatcher.write({ app: ctx.appId, action, input }));
       } catch (err) {
-        return errText(toMsg(err));
+        return errText(err instanceof Error ? err.message : String(err));
       }
     },
   );

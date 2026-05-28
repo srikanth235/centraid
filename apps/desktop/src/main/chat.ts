@@ -10,7 +10,7 @@ import {
   type ChatSessionMeta,
   type ChatSessionWithMessages,
 } from './chat-history-client.js';
-import { deriveTitle, type ChatMode, type ChatStreamEvent } from '@centraid/runtime-core';
+import { deriveTitle, type ChatStreamEvent } from '@centraid/runtime-core';
 
 /**
  * Per-app chat IPC. The desktop main process is now a thin proxy: every
@@ -60,15 +60,6 @@ interface ChatSession {
    * one on START if the chatSessionId is null (no history row yet).
    */
   windowId: string;
-  /**
-   * Chat mode for this window. `full` is the default — the user's agent
-   * reasons over the app with its full toolkit plus our SQL tools. `data`
-   * locks the run to centraid_sql_* only (plus per-adapter sandbox flags
-   * that runtime-core's runner applies). The mode is pinned on the
-   * `chat_sessions` row at create time and is sticky for the session's
-   * lifetime — the gateway reads it off the row, not the per-turn body.
-   */
-  mode: ChatMode;
   /**
    * Session title. Derived from the first user message on create and
    * carried in-memory so `SEND` can echo it back to the renderer without
@@ -233,7 +224,6 @@ async function runTurn(
       appId: session.appId,
       windowId: session.windowId,
       message: text,
-      mode: session.mode,
     });
     session.currentAbort = () => handle.abort();
     try {
@@ -273,7 +263,6 @@ export function registerChatIpcHandlers(): void {
         appId: string;
         appName: string;
         sessionId?: string | null;
-        mode?: ChatMode;
         /** Known title when resuming a persisted session — echoed back by SEND. */
         title?: string;
       },
@@ -289,7 +278,6 @@ export function registerChatIpcHandlers(): void {
         appName: input.appName,
         chatSessionId,
         windowId: mintWindowId(chatSessionId),
-        mode: input.mode === 'data' ? 'data' : 'full',
         title: input.title ?? '',
         currentAbort: null,
         turnId: null,
@@ -314,7 +302,7 @@ export function registerChatIpcHandlers(): void {
         // gateway no longer sees the transcript, so the client names the
         // conversation. The chat route also back-fills an empty title on
         // the first turn, so this stays correct if create races the turn.
-        const created = await historyCreate(session.appId, session.mode, deriveTitle(input.text));
+        const created = await historyCreate(session.appId, deriveTitle(input.text));
         session.chatSessionId = created.id;
         session.title = created.title;
         // Rebind the window id to the freshly-created chat session so

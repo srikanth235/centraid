@@ -220,9 +220,22 @@ export async function runCodexAppServerTurn(
       return;
     }
     if (method === 'item/tool/call' && input.toolContext) {
-      const outcome = handleCentraidToolCall(id, params, input.toolContext);
-      send(outcome.response);
-      for (const ev of outcome.events) emit(ev);
+      // Dispatcher calls are async (manifest IO, SQLite); fire-and-await
+      // off the synchronous event handler so the RPC loop stays responsive.
+      void (async () => {
+        try {
+          const outcome = await handleCentraidToolCall(id, params, input.toolContext!);
+          send(outcome.response);
+          for (const ev of outcome.events) emit(ev);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          send({
+            jsonrpc: '2.0',
+            id,
+            result: { success: false, contentItems: [{ type: 'inputText', text: msg }] },
+          });
+        }
+      })();
       return;
     }
     send({

@@ -123,6 +123,37 @@ describe('validateManifest', () => {
     }
   });
 
+  it('rejects an action whose name starts with the reserved "_" prefix', () => {
+    const m = baseManifest();
+    m.actions.push({
+      name: '_sql',
+      confirmation: 'none' as const,
+      input: { type: 'object' },
+    });
+    try {
+      validateManifest(m);
+      assert.fail('should have thrown');
+    } catch (err) {
+      assert.ok(err instanceof ManifestError);
+      assert.equal((err as ManifestError).code, 'reserved_handler_name');
+    }
+  });
+
+  it('rejects a query whose name starts with the reserved "_" prefix', () => {
+    const m = baseManifest();
+    m.queries.push({
+      name: '_sql',
+      input: { type: 'object' },
+    });
+    try {
+      validateManifest(m);
+      assert.fail('should have thrown');
+    } catch (err) {
+      assert.ok(err instanceof ManifestError);
+      assert.equal((err as ManifestError).code, 'reserved_handler_name');
+    }
+  });
+
   it('allows the same name in actions and queries', () => {
     const m = baseManifest();
     m.queries.push({

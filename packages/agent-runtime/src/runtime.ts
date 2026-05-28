@@ -18,32 +18,35 @@
  * see `codex-app-server.ts` for the toml materialization.
  */
 
-import type { ChatStreamEvent } from '@centraid/runtime-core';
+import type { ChatStreamEvent, Dispatcher } from '@centraid/runtime-core';
 import { runCodexAppServerTurn } from './codex-app-server.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 import type { RunnerPrefs } from './types.js';
 
 /**
- * Per-turn binding that lets adapters register the inline `centraid_sql_*`
- * tools and emit precise, provenanced change-bus events. Optional — when
+ * Per-turn binding that lets adapters register the three structured
+ * centraid tools (`centraid_describe`, `centraid_read`, `centraid_write`)
+ * and emit precise, provenanced change-bus events. Optional — when
  * absent (builder mode, tests), adapters fall back to no tool registration
  * and the legacy `centraid` CLI is the only SQL surface available.
  */
 export interface ToolContext {
-  /** Absolute path to the app's `data.sqlite` (the cwd's own data file). */
-  dataFile: string;
+  /**
+   * App id this turn is scoped to. Threaded through the structured tool
+   * dispatch so the tools auto-fill `app` and refuse cross-app calls.
+   */
+  appId: string;
+  /**
+   * Shared three-tool dispatcher. Tool calls route here; built-in `_sql`
+   * is handled inside the dispatcher against the app's own `data.sqlite`.
+   */
+  dispatcher: Dispatcher;
   /**
    * Stable id for this single `runAgentTurn` invocation. Stamped on every
    * `centraid:datachange` event produced by tool calls inside this turn so
    * the chat UI can correlate iframe refreshes back to the chat pill.
    */
   agentTurnId: string;
-  /**
-   * Forward a precise change to the host's `ChangeBus`. The adapter calls
-   * this after a successful `centraid_sql_write`. Emits no-op when `tables`
-   * is empty.
-   */
-  emitChange: (payload: { tables: string[]; toolCallId?: string }) => void;
 }
 
 export interface AgentTurnInput {
