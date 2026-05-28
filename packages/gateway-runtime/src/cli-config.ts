@@ -165,6 +165,15 @@ function validateProvider(value: unknown): DaemonProviderConfig {
     if (typeof value.apiKey !== 'string') {
       throw new DaemonConfigError('`provider.apiKey` must be a string when set');
     }
+    // The codex adapter only injects the stored key when `envKey` is set —
+    // `resolveProvider()` in serve.ts short-circuits otherwise. Accepting
+    // `apiKey` alone would silently persist the key to disk and still let
+    // every request go out unauthenticated; reject the config instead.
+    if (out.envKey === undefined) {
+      throw new DaemonConfigError(
+        '`provider.apiKey` requires `provider.envKey` to also be set — the runtime injects the stored key into that env var name',
+      );
+    }
     out.apiKey = value.apiKey;
   }
   return out;

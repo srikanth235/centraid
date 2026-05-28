@@ -57,6 +57,9 @@ export function buildPrefsPatch(config: DaemonConfig): Record<string, unknown> {
 }
 
 export function seedRunnerPrefs(userStore: UserStore, config: DaemonConfig): void {
-  if (!config.runner && !config.provider) return;
+  // Always apply the patch, even when both blocks are absent — that's
+  // the case where the operator removed a previously seeded provider
+  // and expects the next boot to clear it. `buildPrefsPatch` defaults
+  // every known key to `null`, so an empty config wipes prior state.
   userStore.setPrefs(buildPrefsPatch(config));
 }

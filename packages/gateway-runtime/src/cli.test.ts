@@ -7,7 +7,8 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import url from 'node:url';
 import { validateConfig, DaemonConfigError } from './cli-config.ts';
-import { buildPrefsPatch } from './cli-runner-prefs.ts';
+import { buildPrefsPatch, seedRunnerPrefs } from './cli-runner-prefs.ts';
+import type { UserStore } from '@centraid/runtime-core';
 import { daemonLayoutFor } from './cli-paths.ts';
 import { readOrMintToken, readPersistedToken } from './cli-token.ts';
 import { makeFileSecretsProvider, writeProviderApiKey } from './cli-secrets.ts';
@@ -54,6 +55,20 @@ test('validateConfig accepts a minimal config and a fully populated one', () => 
   assert.equal(full.provider?.id, 'p');
 });
 
+test('validateConfig rejects provider.apiKey without provider.envKey', () => {
+  // apiKey without envKey would silently persist the key to disk while
+  // resolveProvider() inside serve() skips the key lookup — every
+  // request would go out unauthenticated.
+  assert.throws(
+    () =>
+      validateConfig({
+        dataDir: '/tmp/x',
+        provider: { id: 'p', baseUrl: 'http://x', apiKey: 'sk-x' },
+      }),
+    /requires `provider.envKey`/,
+  );
+});
+
 test('buildPrefsPatch clears every runner key when no runner/provider is configured', () => {
   const patch = buildPrefsPatch({ dataDir: '/x' });
   // No runner / provider → every key must clear to null so a removed
@@ -72,6 +87,26 @@ test('buildPrefsPatch sets only the keys the config carries', () => {
   assert.equal(patch['agent.runner.provider.id'], 'p');
   assert.equal(patch['agent.runner.provider.baseUrl'], 'http://x');
   assert.equal(patch['agent.runner.provider.name'], null);
+});
+
+test('seedRunnerPrefs calls setPrefs even on empty config so a removed provider is cleared', () => {
+  // Regression: the early `if (!runner && !provider) return` previously
+  // skipped setPrefs entirely when both blocks were absent, leaving a
+  // previously seeded `agent.runner.provider.*` row stale across reboots.
+  const patches: Array<Record<string, unknown>> = [];
+  const fakeStore = {
+    setPrefs(p: Record<string, unknown>) {
+      patches.push(p);
+      return p;
+    },
+  } as unknown as UserStore;
+  seedRunnerPrefs(fakeStore, { dataDir: '/x' });
+  assert.equal(
+    patches.length,
+    1,
+    'setPrefs must be called even when config has no runner/provider',
+  );
+  for (const v of Object.values(patches[0]!)) assert.equal(v, null);
 });
 
 test('daemonLayoutFor resolves relative paths to absolute', () => {
