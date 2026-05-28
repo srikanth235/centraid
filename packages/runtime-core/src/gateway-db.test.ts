@@ -164,9 +164,9 @@ describe('openRuntimeDb (per-app chat_sessions + run ledger)', () => {
     try {
       const now = Date.now();
       db.prepare(
-        `INSERT INTO chat_sessions (id, user_id, title, mode, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).run('s1', 'u1', 'hi', 'full', now, now);
+        `INSERT INTO chat_sessions (id, user_id, title, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run('s1', 'u1', 'hi', now, now);
       db.prepare(
         `INSERT INTO runs (id, kind, chat_session_id, trigger, started_at)
          VALUES (?, 'chat', ?, 'interactive', ?)`,

@@ -85,9 +85,8 @@ export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
           return true;
         }
         if (method === 'POST') {
-          const body = (await readJsonBody(req)) as { mode?: string; title?: string } | undefined;
-          const mode = body?.mode === 'data' ? 'data' : 'full';
-          sendJson(res, 200, store.createSession(appId, mode, body?.title ?? ''));
+          const body = (await readJsonBody(req)) as { title?: string } | undefined;
+          sendJson(res, 200, store.createSession(appId, body?.title ?? ''));
           return true;
         }
         sendError(res, 405, 'method not allowed');

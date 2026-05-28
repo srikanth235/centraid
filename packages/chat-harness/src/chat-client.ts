@@ -11,7 +11,7 @@
  * comment lines and are ignored.
  */
 
-import type { ChatMode, ChatStreamEvent } from '@centraid/runtime-core';
+import type { ChatStreamEvent } from '@centraid/runtime-core';
 import type { ChatHarnessConfig } from './types.js';
 
 export interface OpenChatStreamOptions {
@@ -20,8 +20,6 @@ export interface OpenChatStreamOptions {
   /** Stable id per chat pane. The runtime pins one window to one transcript. */
   windowId: string;
   message: string;
-  /** Defaults to `full`. Once a window is established its mode is sticky. */
-  mode?: ChatMode;
   model?: string;
   thinking?: string;
   /** Optional idempotency key. Plumbed through to the runner. */
@@ -70,7 +68,6 @@ export async function openChatStream(opts: OpenChatStreamOptions): Promise<ChatS
     body: JSON.stringify({
       windowId: opts.windowId,
       message: opts.message,
-      ...(opts.mode ? { mode: opts.mode } : {}),
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.thinking ? { thinking: opts.thinking } : {}),
       ...(opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),

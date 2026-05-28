@@ -1,12 +1,15 @@
 /*
  * Centraid agent tools.
  *
- * Two tools that let the OpenClaw agent reach into a centraid app's data:
- *   - `centraid_sql_describe`: returns tables + columns for one app.
- *   - `centraid_sql_read`: runs a single SELECT against one app's data.sqlite.
+ * Three structured tools that let the OpenClaw agent address a centraid
+ * app's declared surface plus the runtime's `_sql` escape hatch:
+ *   - `centraid_describe`: app manifest + live schema (or a single
+ *     handler entry).
+ *   - `centraid_read`: invoke a declared query, or `_sql` for a SELECT.
+ *   - `centraid_write`: invoke a declared action, or `_sql` for a write.
  *
- * Scoping: each tool takes an `appId` parameter. A `before_tool_call` hook
- * cross-checks that `appId` against the session key — the chat client connects
+ * Scoping: each tool takes an `app` parameter. A `before_tool_call` hook
+ * cross-checks that `app` against the session key — the chat client connects
  * with `sessionKey = "centraid-chat:<appId>"`, so the gateway refuses any
  * cross-app read attempt before the tool runs.
  *
@@ -17,16 +20,9 @@
  * the logger if you need to instrument flow for debugging.
  */
 
-import path from 'node:path';
 import { Type } from '@sinclair/typebox';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
-import {
-  type Runtime,
-  readAppSchema,
-  runQuery,
-  RunQueryError,
-  type ToolResult,
-} from '@centraid/runtime-core';
+import { type Runtime, type ToolResult } from '@centraid/runtime-core';
 
 export const SESSION_PREFIX = 'centraid-chat:';
 
@@ -47,47 +43,6 @@ export function appIdFromSessionKey(sessionKey: string | undefined): string | un
   return colon === -1 ? rest : rest.slice(0, colon);
 }
 
-/**
- * Returns true only when `sql` is a read-only statement (SELECT or EXPLAIN)
- * and contains no write/DDL/PRAGMA verbs as standalone words. Exported for
- * tests; used inside `centraid_sql_read.execute`.
- */
-export function isSelectOnly(sql: string): boolean {
-  const stripped = sql
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/--[^\n]*/g, ' ')
-    .trim();
-  if (!stripped) return false;
-  const first = stripped.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase();
-  if (first !== 'SELECT' && first !== 'EXPLAIN') return false;
-  return !/\b(insert|update|delete|drop|alter|create|replace|attach|detach|vacuum|reindex|pragma)\b/i.test(
-    stripped,
-  );
-}
-
-/**
- * Returns true when `sql` is a row-mutating DML statement (INSERT/UPDATE/
- * DELETE/REPLACE) and contains no DDL/PRAGMA/ATTACH verbs. We intentionally
- * keep DDL out of the write path so the model cannot reshape the schema —
- * migrations are the app author's responsibility.
- */
-export function isWriteDml(sql: string): boolean {
-  const stripped = sql
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/--[^\n]*/g, ' ')
-    .trim();
-  if (!stripped) return false;
-  const first = stripped.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase();
-  if (first !== 'INSERT' && first !== 'UPDATE' && first !== 'DELETE' && first !== 'REPLACE') {
-    return false;
-  }
-  return !/\b(drop|alter|create|attach|detach|vacuum|reindex|pragma)\b/i.test(stripped);
-}
-
-interface ToolCtx {
-  sessionKey?: string;
-}
-
 function readSessionKey(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const ctx = value as { sessionKey?: unknown; ctx?: { sessionKey?: unknown } };
@@ -97,7 +52,7 @@ function readSessionKey(value: unknown): string | undefined {
 }
 
 export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime): void {
-  const { registry, changeBus, dispatcher } = runtime;
+  const { registry, dispatcher } = runtime;
 
   const textResult = (text: string, details: Record<string, unknown> = {}) => ({
     content: [{ type: 'text' as const, text }],
@@ -131,157 +86,6 @@ export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime):
     await registry.load();
     return registry;
   };
-
-  // ------- centraid_sql_describe -------
-  api.registerTool({
-    name: 'centraid_sql_describe',
-    label: 'Centraid: get app schema',
-    description:
-      'Return the tables, columns, indexes, and views of a centraid app’s SQLite database. Use this before issuing centraid_sql_read to know what to query.',
-    parameters: Type.Object({
-      appId: Type.String({
-        description: 'Centraid app id. Must match the active chat’s scope.',
-      }),
-    }),
-    async execute(_id: string, rawParams: unknown, _signal?: AbortSignal, _onUpdate?: unknown) {
-      const params = (rawParams ?? {}) as { appId?: string } & ToolCtx;
-      const appId = params.appId;
-      if (!appId) throw new Error('appId is required.');
-      const reg = await ensureRegistry();
-      const entry = reg.get(appId);
-      if (!entry) throw new Error(`app "${appId}" is not registered.`);
-      const schema = readAppSchema(path.join(entry.path, 'data.sqlite'));
-      const compact = {
-        tables: schema.tables.map((t) => ({
-          name: t.name,
-          columns: t.columns.map((c) => ({
-            name: c.name,
-            type: c.type,
-            notnull: c.notnull,
-            pk: c.pk,
-          })),
-        })),
-        views: schema.views.map((v) => v.name),
-        indexes: schema.indexes.map((i) => ({ name: i.name, table: i.tbl_name })),
-      };
-      return textResult(JSON.stringify(compact), compact);
-    },
-  });
-
-  // ------- centraid_sql_read -------
-  api.registerTool({
-    name: 'centraid_sql_read',
-    label: 'Centraid: run SELECT',
-    description:
-      'Run a single SELECT statement against a centraid app’s SQLite database and return the rows. Reads only; writes/DDL are refused.',
-    parameters: Type.Object({
-      appId: Type.String({
-        description: 'Centraid app id. Must match the active chat’s scope.',
-      }),
-      sql: Type.String({
-        description: 'A single SELECT (or EXPLAIN) statement. No semicolons mid-statement.',
-      }),
-    }),
-    async execute(_id: string, rawParams: unknown, _signal?: AbortSignal, _onUpdate?: unknown) {
-      const params = (rawParams ?? {}) as { appId?: string; sql?: string };
-      const appId = params.appId;
-      const sql = params.sql;
-      if (!appId || !sql) throw new Error('both appId and sql are required.');
-      if (!isSelectOnly(sql)) throw new Error('only SELECT statements are allowed.');
-      const reg = await ensureRegistry();
-      const entry = reg.get(appId);
-      if (!entry) throw new Error(`app "${appId}" is not registered.`);
-      try {
-        const result = runQuery(path.join(entry.path, 'data.sqlite'), sql);
-        if (result.kind !== 'rows') {
-          throw new Error('query produced a write result, not rows.');
-        }
-        const trimmed = result.rows.slice(0, 50);
-        const payload = {
-          columns: result.columns,
-          rows: trimmed,
-          totalRows: result.rows.length,
-          truncated: result.rows.length > trimmed.length,
-          durationMs: result.durationMs,
-        };
-        return textResult(JSON.stringify(payload), payload);
-      } catch (err) {
-        const msg =
-          err instanceof RunQueryError
-            ? `${err.code}: ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : String(err);
-        throw new Error(`SQL error: ${msg}`, { cause: err });
-      }
-    },
-  });
-
-  // ------- centraid_sql_write -------
-  // Row-mutating DML against a single centraid app. Returns a small JSON
-  // payload describing the side effects (rowsAffected, lastInsertRowid). The
-  // scope guard below enforces the same app-id check that protects the read
-  // tool, so the model cannot mutate another app's data.
-  api.registerTool({
-    name: 'centraid_sql_write',
-    label: 'Centraid: run INSERT/UPDATE/DELETE',
-    description:
-      'Run a single INSERT, UPDATE, DELETE, or REPLACE statement against a centraid app’s SQLite database. Returns rowsAffected and lastInsertRowid. DDL (CREATE/ALTER/DROP) and PRAGMA are not allowed — use centraid_sql_describe first to learn the existing tables and columns.',
-    parameters: Type.Object({
-      appId: Type.String({
-        description: 'Centraid app id. Must match the active chat’s scope.',
-      }),
-      sql: Type.String({
-        description:
-          'A single INSERT/UPDATE/DELETE/REPLACE statement. No semicolons mid-statement, no DDL.',
-      }),
-    }),
-    async execute(_id: string, rawParams: unknown, _signal?: AbortSignal, _onUpdate?: unknown) {
-      const params = (rawParams ?? {}) as { appId?: string; sql?: string };
-      const appId = params.appId;
-      const sql = params.sql;
-      if (!appId || !sql) throw new Error('both appId and sql are required.');
-      if (!isWriteDml(sql)) {
-        throw new Error(
-          'only INSERT/UPDATE/DELETE/REPLACE are allowed; DDL and PRAGMA are refused.',
-        );
-      }
-      const reg = await ensureRegistry();
-      const entry = reg.get(appId);
-      if (!entry) throw new Error(`app "${appId}" is not registered.`);
-      try {
-        const result = runQuery(path.join(entry.path, 'data.sqlite'), sql, {
-          // Fire the runtime's change bus so app iframes subscribed via
-          // /centraid/<id>/_changes re-fetch after this write — same as
-          // the HTTP query route path does.
-          onWrite: (tables) => {
-            if (tables.length === 0) return;
-            changeBus.emit({ appId, tables, ts: Date.now(), source: 'agent' });
-          },
-        });
-        if (result.kind !== 'exec') {
-          throw new Error('statement produced rows, not an exec result.');
-        }
-        const payload = {
-          rowsAffected: result.rowsAffected,
-          lastInsertRowid:
-            typeof result.lastInsertRowid === 'bigint'
-              ? result.lastInsertRowid.toString()
-              : result.lastInsertRowid,
-          durationMs: result.durationMs,
-        };
-        return textResult(JSON.stringify(payload), payload);
-      } catch (err) {
-        const msg =
-          err instanceof RunQueryError
-            ? `${err.code}: ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : String(err);
-        throw new Error(`SQL error: ${msg}`, { cause: err });
-      }
-    },
-  });
 
   // ------- centraid_describe -------
   // Manifest-driven introspection: returns the app manifest (or a
@@ -397,20 +201,13 @@ export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime):
 
   // ------- Scope guard -------
   // The chat client always opens its session as `centraid-chat:<appId>[:<...>]`.
-  // Enforce: if a tool call goes to a centraid_* tool, the params.appId must
+  // Enforce: if a tool call goes to a centraid_* tool, the params.app must
   // match the session's app, regardless of what the model tries to do.
   //
   // Hook signature is `(event, ctx)`. The session key lives on `ctx`.
   api.on('before_tool_call', async (event, ctx) => {
     const name = event.toolName;
-    if (
-      name !== 'centraid_sql_read' &&
-      name !== 'centraid_sql_write' &&
-      name !== 'centraid_sql_describe' &&
-      name !== 'centraid_write' &&
-      name !== 'centraid_read' &&
-      name !== 'centraid_describe'
-    )
+    if (name !== 'centraid_write' && name !== 'centraid_read' && name !== 'centraid_describe')
       return;
     // centraid_describe with no `app` is the only legal cross-app
     // call — "list all registered apps". Skip the scope guard for it.
@@ -430,26 +227,16 @@ export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime):
           'centraid_* tools require a session opened with sessionKey "centraid-chat:<appId>".',
       };
     }
-    // Centraid tools use two different field names for the app id:
-    //   - centraid_sql_*  → `appId`
-    //   - centraid_{write,read,describe} → `app`
-    // Read whichever is present and enforce against both.
-    const params = (event.params ?? {}) as { appId?: string; app?: string };
-    const claimed = params.appId ?? params.app;
+    const params = (event.params ?? {}) as { app?: string };
+    const claimed = params.app;
     if (claimed && claimed !== scopedApp) {
       return {
         block: true,
         blockReason: `Refused: tool tried to address app "${claimed}" but the chat is scoped to "${scopedApp}".`,
       };
     }
-    // Auto-fill the appropriate field if the model forgot it.
     if (!claimed) {
-      const isSqlTool =
-        name === 'centraid_sql_read' ||
-        name === 'centraid_sql_write' ||
-        name === 'centraid_sql_describe';
-      const fillKey = isSqlTool ? 'appId' : 'app';
-      return { params: { ...event.params, [fillKey]: scopedApp } };
+      return { params: { ...event.params, app: scopedApp } };
     }
     return undefined;
   });

@@ -9,15 +9,13 @@
  *     `api.runtime.agent.runEmbeddedAgent`. OpenClaw owns the loop and
  *     dispatches plugin-registered tools server-side.
  *   - `@centraid/agent-runtime`'s `makeChatRunner` — drives codex
- *     app-server / Claude SDK locally, with the agent shelling out to
- *     the bundled `centraid` CLI for SQL access.
+ *     app-server / Claude SDK locally with the three structured tools
+ *     declared inline (`centraid_describe` / `centraid_read` / `centraid_write`).
  *
  * Either way, the route handler in runtime-core never implements a model
  * loop itself; it just translates the runner's `ChatStreamEvent`s into SSE
  * frames and pipes them back to the harness client.
  */
-
-export type ChatMode = 'full' | 'data';
 
 /**
  * Normalized stream events both adapters emit. The route handler translates
@@ -93,7 +91,6 @@ export interface ChatRunInput {
    * transcript lives in the gateway DB.
    */
   sessionFile: string;
-  mode: ChatMode;
   message: string;
   /**
    * App-context prompt the runtime-core builds (app name, description,

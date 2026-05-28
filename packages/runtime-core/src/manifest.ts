@@ -36,7 +36,21 @@ export type ManifestValidationCode =
   | 'missing_field'
   | 'invalid_field'
   | 'invalid_handler_entry'
-  | 'duplicate_handler';
+  | 'duplicate_handler'
+  | 'reserved_handler_name';
+
+/**
+ * Names starting with `_` are reserved for built-in handlers dispatched
+ * by the runtime (e.g. `_sql`). App authors cannot declare an action or
+ * query with such a name — `validateManifest` refuses it explicitly so
+ * the conflict surfaces at load time rather than as a silent shadowing
+ * at call time.
+ */
+export const RESERVED_HANDLER_PREFIX = '_';
+
+export function isReservedHandlerName(name: string): boolean {
+  return name.startsWith(RESERVED_HANDLER_PREFIX);
+}
 
 export class ManifestError extends Error {
   readonly code: ManifestValidationCode;
@@ -351,6 +365,13 @@ export function validateManifest(raw: unknown): Manifest {
 
   const seenActions = new Set<string>();
   for (const a of actions) {
+    if (isReservedHandlerName(a.name)) {
+      throw new ManifestError(
+        'reserved_handler_name',
+        `action name "${a.name}" is reserved; names starting with "${RESERVED_HANDLER_PREFIX}" are dispatched to built-in handlers`,
+        `actions[name=${a.name}]`,
+      );
+    }
     if (seenActions.has(a.name)) {
       throw new ManifestError(
         'duplicate_handler',
@@ -362,6 +383,13 @@ export function validateManifest(raw: unknown): Manifest {
   }
   const seenQueries = new Set<string>();
   for (const q of queries) {
+    if (isReservedHandlerName(q.name)) {
+      throw new ManifestError(
+        'reserved_handler_name',
+        `query name "${q.name}" is reserved; names starting with "${RESERVED_HANDLER_PREFIX}" are dispatched to built-in handlers`,
+        `queries[name=${q.name}]`,
+      );
+    }
     if (seenQueries.has(q.name)) {
       throw new ManifestError(
         'duplicate_handler',

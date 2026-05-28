@@ -43,20 +43,11 @@ export function makeOpenClawChatRunner(api: OpenClawPluginApi): ChatRunner {
       const sessionId = sessionKey;
       const runId = `centraid:${input.appId}:${input.windowId}:${Date.now().toString(36)}`;
 
-      // For data mode we keep the chat off the user's canonical workspace —
-      // an empty plugin-owned scratch dir. For full mode we still hand
-      // OpenClaw a plugin-owned dir AND set isCanonicalWorkspace=false so
-      // bootstrap files don't load; the user's agent persona still drives
-      // tool-policy resolution because agentId is unset (defaults to main).
-      const workspaceDir =
-        input.mode === 'data'
-          ? path.join(os.homedir(), '.openclaw', 'centraid', '_chat-workspace')
-          : path.join(os.homedir(), '.openclaw', 'centraid', '_chat-workspace-full');
-
-      const toolsAllow =
-        input.mode === 'data'
-          ? ['centraid_sql_describe', 'centraid_sql_read', 'centraid_sql_write']
-          : undefined;
+      // Plugin-owned scratch dir plus `isCanonicalWorkspace=false` so
+      // OpenClaw skips AGENTS.md / SOUL.md / USER.md loading; the user's
+      // agent persona still drives tool-policy resolution because agentId
+      // is unset (defaults to main).
+      const workspaceDir = path.join(os.homedir(), '.openclaw', 'centraid', '_chat-workspace');
 
       // Synthesize tool.start events from the generic agent-event stream.
       // OpenClaw doesn't expose a typed `onToolStart` callback, so we
@@ -78,13 +69,11 @@ export function makeOpenClawChatRunner(api: OpenClawPluginApi): ChatRunner {
           isCanonicalWorkspace: false,
           prompt: input.message,
           extraSystemPrompt: input.extraSystemPrompt,
-          ...(toolsAllow ? { toolsAllow } : {}),
-          disableMessageTool: input.mode === 'data',
           ...(input.model ? { model: input.model } : {}),
           ...(input.thinking
             ? { thinkLevel: input.thinking as 'low' | 'medium' | 'high' | 'off' }
             : {}),
-          promptMode: input.mode === 'data' ? 'minimal' : 'full',
+          promptMode: 'full',
           trigger: 'user',
           abortSignal: input.abortSignal,
           timeoutMs: DEFAULT_TIMEOUT_MS,

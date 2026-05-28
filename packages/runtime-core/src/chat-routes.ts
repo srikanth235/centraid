@@ -26,11 +26,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { sendError, readBody, MAX_BODY_BYTES } from './http-utils.js';
 import { readAppSchema } from './schema.js';
 import { buildExtraPrompt } from './build-extra-prompt.js';
-import type { ChatMode, ChatRunInput, ChatRunner, ChatStreamEvent } from './chat-runner.js';
+import type { ChatRunInput, ChatRunner, ChatStreamEvent } from './chat-runner.js';
 import type { ChatHistoryStore, ChatTurnNode } from './chat-history.js';
 import type { Registry } from './registry.js';
-import { appDataDir } from './app-paths.js';
+import { appDataDir, appCodeDir } from './app-paths.js';
 import type { RegistryEntry } from './types.js';
+import { APP_MANIFEST_FILE, parseManifest, type Manifest } from './manifest.js';
+import type { VersionStore } from './version-store.js';
 
 /**
  * Validate a window/session id. Reject anything that could escape a
@@ -51,6 +53,12 @@ export function isValidWindowId(id: string): boolean {
  */
 export interface ChatRouteContext {
   registry: Registry;
+  /**
+   * Version store, used to resolve the active code dir for an app so the
+   * chat route can read the manifest and splice the declared handler
+   * catalog into the system prompt.
+   */
+  versions: VersionStore;
   runner?: ChatRunner;
   /**
    * Optional central chat store. When set, the route reads the session's
@@ -140,7 +148,6 @@ async function withWindowLock<T>(
 interface PostBody {
   windowId?: string;
   message?: string;
-  mode?: ChatMode;
   model?: string;
   thinking?: string;
   idempotencyKey?: string;
@@ -204,9 +211,10 @@ async function handlePostTurn(
     return;
   }
 
-  // Resolve sticky mode + runner-resume handles from the central session
-  // row when a chat store is wired. Without it, fall back to the body mode.
-  let mode: ChatMode = body.mode === 'data' ? 'data' : 'full';
+  // Resolve runner-resume handles from the central session row when a
+  // chat store is wired. The chat surface is now one mode — the agent
+  // always has the three structured tools plus the `_sql` built-in — so
+  // there is no per-session mode toggle to read.
   let prevAdapterSessionId: string | undefined;
   let prevAdapterKind: string | undefined;
   if (ctx.chatStore) {
@@ -215,19 +223,19 @@ async function handlePostTurn(
       sendError(res, 404, 'not_found', 'No such chat session.');
       return;
     }
-    mode = session.mode;
     prevAdapterSessionId = session.adapterSessionId ?? undefined;
     prevAdapterKind = session.adapterKind ?? undefined;
   }
 
   const appMeta = ctx.appMeta ? await ctx.appMeta(entry).catch(() => ({}) as never) : undefined;
   const schema = safeReadSchema(entry);
+  const manifest = await safeReadManifest(entry, ctx.versions);
   const extraSystemPrompt = buildExtraPrompt({
     appId: entry.id,
-    appName: appMeta?.name,
-    appDescription: appMeta?.description,
-    mode,
+    ...(appMeta?.name ? { appName: appMeta.name } : {}),
+    ...(appMeta?.description ? { appDescription: appMeta.description } : {}),
     schema,
+    ...(manifest ? { manifest } : {}),
   });
 
   // Start the SSE stream up-front so the harness sees `connected` even if
@@ -239,7 +247,7 @@ async function handlePostTurn(
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
-  res.write(`: chat ${entry.id} window ${windowId} mode ${mode}\n\n`);
+  res.write(`: chat ${entry.id} window ${windowId}\n\n`);
   const heartbeat = setInterval(() => {
     if (!res.writableEnded) res.write(`: ping\n\n`);
   }, 30_000);
@@ -353,7 +361,6 @@ async function handlePostTurn(
     dataDir: appDataDir(entry),
     windowId,
     sessionFile,
-    mode,
     message,
     extraSystemPrompt,
     abortSignal: abortController.signal,
@@ -456,5 +463,27 @@ function safeReadSchema(entry: RegistryEntry): ReturnType<typeof readAppSchema> 
     return readAppSchema(path.join(entry.path, 'data.sqlite'));
   } catch {
     return { schemaVersion: 0, tables: [], indexes: [], views: [] };
+  }
+}
+
+/**
+ * Read the app's manifest from disk, returning `undefined` when the app
+ * has no committed version or the file is unreadable. The system prompt
+ * still works without it — agents are steered to `_sql` — but with the
+ * manifest the prompt includes the declared catalog so the agent reaches
+ * for the right handler.
+ */
+async function safeReadManifest(
+  entry: RegistryEntry,
+  versions: VersionStore,
+): Promise<Manifest | undefined> {
+  try {
+    const active = await versions.getActiveVersion(entry.path);
+    if (!active) return undefined;
+    const codeDir = appCodeDir(entry, active);
+    const text = await fs.readFile(path.join(codeDir, APP_MANIFEST_FILE), 'utf8');
+    return parseManifest(text);
+  } catch {
+    return undefined;
   }
 }

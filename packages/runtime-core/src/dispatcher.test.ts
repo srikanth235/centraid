@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Registry } from './registry.js';
 import { VersionStore } from './version-store.js';
 import { Dispatcher, isToolName, statusForToolError } from './dispatcher.js';
+import { runQuery } from './run-query.js';
 
 const writeJson = (file: string, data: unknown) =>
   fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
@@ -115,12 +116,16 @@ describe('Dispatcher', () => {
     assert.equal(body.apps[0]!.id, 'todos');
   });
 
-  it('describe with {app} returns the full manifest', async () => {
+  it('describe with {app} returns the full manifest plus live schema', async () => {
     const out = await dispatcher.describe({ app: 'todos' });
     assert.equal(out.isError, false);
-    const body = out.structuredContent as { name: string; actions: Array<{ name: string }> };
-    assert.equal(body.name, 'Todos');
-    assert.equal(body.actions[0]!.name, 'add');
+    const body = out.structuredContent as {
+      manifest: { name: string; actions: Array<{ name: string }> };
+      schema: { tables: unknown[] };
+    };
+    assert.equal(body.manifest.name, 'Todos');
+    assert.equal(body.manifest.actions[0]!.name, 'add');
+    assert.ok(Array.isArray(body.schema.tables));
   });
 
   it('describe with {app, action} returns the handler entry wrapped', async () => {
@@ -210,6 +215,83 @@ describe('Dispatcher', () => {
     if (out.isError) {
       assert.equal(out.structuredContent.code, 'UNKNOWN_APP');
     }
+  });
+
+  it('_sql query runs a SELECT and returns rows', async () => {
+    // Seed the app's data.sqlite directly — the worker-thread handler
+    // path isn't available to unit tests (no built `.js` worker bundle).
+    const entry = registry.get('todos')!;
+    runQuery(
+      path.join(entry.path, 'data.sqlite'),
+      'CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY, text TEXT)',
+    );
+    runQuery(path.join(entry.path, 'data.sqlite'), "INSERT INTO todos (text) VALUES ('hello')");
+    const out = await dispatcher.read({
+      app: 'todos',
+      query: '_sql',
+      input: { sql: 'SELECT id, text FROM todos' },
+    });
+    assert.equal(out.isError, false, JSON.stringify(out.structuredContent));
+    const body = out.structuredContent as { columns: string[]; rows: unknown[] };
+    assert.deepEqual(body.columns, ['id', 'text']);
+    assert.equal(body.rows.length >= 1, true);
+  });
+
+  it('_sql query refuses INSERT', async () => {
+    const out = await dispatcher.read({
+      app: 'todos',
+      query: '_sql',
+      input: { sql: "INSERT INTO todos(text) VALUES ('x')" },
+    });
+    assert.equal(out.isError, true);
+    if (out.isError) {
+      assert.equal(out.structuredContent.code, 'INVALID_INPUT');
+    }
+  });
+
+  it('_sql action runs an INSERT and returns rowsAffected', async () => {
+    const entry = registry.get('todos')!;
+    runQuery(
+      path.join(entry.path, 'data.sqlite'),
+      'CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY, text TEXT)',
+    );
+    const out = await dispatcher.write({
+      app: 'todos',
+      action: '_sql',
+      input: { sql: "INSERT INTO todos(text) VALUES ('via-sql')" },
+    });
+    assert.equal(out.isError, false, JSON.stringify(out.structuredContent));
+    const body = out.structuredContent as { rowsAffected: number };
+    assert.equal(body.rowsAffected, 1);
+  });
+
+  it('_sql action refuses DDL', async () => {
+    const out = await dispatcher.write({
+      app: 'todos',
+      action: '_sql',
+      input: { sql: 'CREATE TABLE evil (id INTEGER)' },
+    });
+    assert.equal(out.isError, true);
+    if (out.isError) {
+      assert.equal(out.structuredContent.code, 'INVALID_INPUT');
+    }
+  });
+
+  it('_sql without { sql } returns INVALID_INPUT', async () => {
+    const out = await dispatcher.read({ app: 'todos', query: '_sql', input: {} });
+    assert.equal(out.isError, true);
+    if (out.isError) {
+      assert.equal(out.structuredContent.code, 'INVALID_INPUT');
+    }
+  });
+
+  it('_unknown built-in returns UNKNOWN_QUERY / UNKNOWN_ACTION', async () => {
+    const r = await dispatcher.read({ app: 'todos', query: '_nope' });
+    assert.equal(r.isError, true);
+    if (r.isError) assert.equal(r.structuredContent.code, 'UNKNOWN_QUERY');
+    const w = await dispatcher.write({ app: 'todos', action: '_nope' });
+    assert.equal(w.isError, true);
+    if (w.isError) assert.equal(w.structuredContent.code, 'UNKNOWN_ACTION');
   });
 });
 

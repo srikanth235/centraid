@@ -25,4 +25,4 @@ export type { ChatHarnessConfig } from './types.js';
 
 // Re-export the runtime-core chat types so callers don't have to depend
 // on runtime-core directly to consume the streaming event union.
-export type { ChatMode, ChatStreamEvent, RunnerStatus } from '@centraid/runtime-core';
+export type { ChatStreamEvent, RunnerStatus } from '@centraid/runtime-core';

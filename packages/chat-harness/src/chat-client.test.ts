@@ -101,7 +101,7 @@ test('throws ChatHarnessError on non-2xx response', async () => {
   );
 });
 
-test('forwards mode parameter in the POST body', async () => {
+test('forwards model parameter in the POST body', async () => {
   let parsedBody: Record<string, unknown> | undefined;
   await startServer((req, res) => {
     let body = '';
@@ -118,12 +118,10 @@ test('forwards mode parameter in the POST body', async () => {
     appId: 'demo',
     windowId: 'w1',
     message: 'hi',
-    mode: 'data',
     model: 'claude-opus-4-7',
   });
   for await (const _ev of handle.events) {
     // drain
   }
-  assert.equal(parsedBody?.mode, 'data');
   assert.equal(parsedBody?.model, 'claude-opus-4-7');
 });

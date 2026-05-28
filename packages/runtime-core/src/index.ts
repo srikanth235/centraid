@@ -22,13 +22,7 @@ export {
 // (`POST /centraid/<id>/_chat`) is dispatched by `Runtime.handle` when
 // `RuntimeOptions.chatRunner` is set. The transcript itself lives in the
 // central gateway SQLite (`ChatHistoryStore`), not a per-app folder.
-export type {
-  ChatRunner,
-  ChatRunInput,
-  ChatRunResult,
-  ChatStreamEvent,
-  ChatMode,
-} from './chat-runner.js';
+export type { ChatRunner, ChatRunInput, ChatRunResult, ChatStreamEvent } from './chat-runner.js';
 export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prompt.js';
 
 export {
@@ -101,7 +95,9 @@ export {
   APP_MANIFEST_FILE,
   MANIFEST_VERSION,
   MANIFEST_JSON_SCHEMA,
+  RESERVED_HANDLER_PREFIX,
   ManifestError,
+  isReservedHandlerName,
   parseManifest as parseAppManifest,
   validateManifest as validateAppManifest,
   compileSchema,

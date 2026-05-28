@@ -125,7 +125,6 @@ export const RUNTIME_MIGRATIONS: readonly string[] = [
       id                 TEXT PRIMARY KEY,
       user_id            TEXT NOT NULL,
       title              TEXT NOT NULL DEFAULT '',
-      mode               TEXT NOT NULL DEFAULT 'full',
       adapter_kind       TEXT,
       adapter_session_id TEXT,
       turn_count         INTEGER NOT NULL DEFAULT 0,

@@ -1,29 +1,21 @@
 /*
- * Codex-side wiring for the three first-class `centraid_sql_*` tools.
+ * Codex-side wiring for the three first-class centraid tools.
  *
  * Split out of `codex-app-server.ts` to keep that file focused on the
  * generic JSON-RPC drive loop. This module owns two narrow things:
  *
  *   1. The `dynamicTools` array we declare on `thread/start`.
- *   2. The synchronous `item/tool/call` dispatch that executes one of
- *      the three ops against the active app's SQLite and replies with
- *      the documented `DynamicToolCallResponse` shape.
+ *   2. The synchronous `item/tool/call` dispatch that delegates to the
+ *      shared runtime-core `Dispatcher`. The dispatcher resolves declared
+ *      handlers from the app's manifest and routes `_sql` to its built-in.
  *
  * Schema reference: `codex-rs/app-server-protocol/src/protocol/v2/{thread,item}.rs`.
  */
-
-import {
-  describeOp,
-  readOp,
-  writeOp,
-  SqlOpRefusal,
-  RunQueryError,
-  type ChatStreamEvent,
-} from '@centraid/runtime-core';
+import type { ChatStreamEvent } from '@centraid/runtime-core';
 import type { ToolContext } from './runtime.js';
 
 /**
- * Codex `dynamicTools` spec for the three first-class centraid SQL tools.
+ * Codex `dynamicTools` spec for the three structured centraid tools.
  * Schemas mirror the documented surface; codex's `DynamicToolSpec.inputSchema`
  * accepts standard JSON Schema.
  */
@@ -34,36 +26,42 @@ export function centraidDynamicToolSpecs(): Array<{
 }> {
   return [
     {
-      name: 'centraid_sql_describe',
+      name: 'centraid_describe',
       description:
-        "Return the live SQLite schema for this app (tables, columns, indexes, views) as JSON. Call this first when you don't know the schema. No arguments.",
-      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    },
-    {
-      name: 'centraid_sql_read',
-      description:
-        "Run one SELECT (or EXPLAIN) against this app's SQLite. Returns {columns, rows, totalRows, truncated, durationMs}. Rows are capped at 200 — use LIMIT to be explicit. DDL/PRAGMA/non-SELECT statements are refused.",
+        "Return the app's manifest plus live SQLite schema, or a single declared handler entry. Call without arguments to see the full catalog; pass `action` or `query` to narrow. Use this before centraid_read/centraid_write to know what handlers exist and what input each accepts.",
       inputSchema: {
         type: 'object',
-        required: ['sql'],
         properties: {
-          sql: { type: 'string', description: 'A single SELECT or EXPLAIN statement.' },
+          action: { type: 'string', description: 'Action name to narrow to.' },
+          query: { type: 'string', description: 'Query name to narrow to.' },
         },
         additionalProperties: false,
       },
     },
     {
-      name: 'centraid_sql_write',
+      name: 'centraid_read',
       description:
-        "Run one INSERT / UPDATE / DELETE / REPLACE against this app's SQLite. Returns {rowsAffected, lastInsertRowid, durationMs}. DDL (CREATE/ALTER/DROP), PRAGMA, ATTACH/DETACH, VACUUM are refused. The runtime fires its change bus after the write so the running app's UI re-renders automatically.",
+        'Invoke a declared query, or the `_sql` built-in for an ad-hoc SELECT. For declared queries set `query` to the name in the manifest and `input` to its JSON Schema shape. For ad-hoc reads use `query: "_sql"` and `input: { sql: "<single SELECT or EXPLAIN>" }` — rows are capped at 200, use LIMIT for fewer; DDL/PRAGMA refused. Prefer declared queries when one fits the user\'s ask.',
       inputSchema: {
         type: 'object',
-        required: ['sql'],
+        required: ['query'],
         properties: {
-          sql: {
-            type: 'string',
-            description: 'A single INSERT/UPDATE/DELETE/REPLACE statement.',
-          },
+          query: { type: 'string', description: 'Declared query name, or "_sql".' },
+          input: { description: 'Input matching the query schema, or { sql } for _sql.' },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'centraid_write',
+      description:
+        'Invoke a declared action, or the `_sql` built-in for an ad-hoc INSERT/UPDATE/DELETE/REPLACE. For declared actions set `action` to the name in the manifest and `input` to its JSON Schema shape. For ad-hoc writes use `action: "_sql"` and `input: { sql: "<single statement>" }` — DDL/PRAGMA refused. Prefer declared actions when one fits the user\'s ask. The runtime fires its change bus after a successful write so the app UI re-renders automatically.',
+      inputSchema: {
+        type: 'object',
+        required: ['action'],
+        properties: {
+          action: { type: 'string', description: 'Declared action name, or "_sql".' },
+          input: { description: 'Input matching the action schema, or { sql } for _sql.' },
         },
         additionalProperties: false,
       },
@@ -85,48 +83,84 @@ export interface DynamicToolCallOutcome {
 /**
  * Synchronously run one `item/tool/call` server request. Reads the
  * documented `DynamicToolCallParams { tool, callId, arguments }` shape
- * out of the codex payload, dispatches to the shared ops, and returns
- * both the RPC reply and the `tool.start` / `tool.result` events the
- * driver should emit.
+ * out of the codex payload, dispatches to the shared three-tool
+ * dispatcher, and returns both the RPC reply and the `tool.start` /
+ * `tool.result` events the driver should emit.
  *
  * Errors map to `success: false` with the message in `contentItems[0]`;
  * we never throw out of here so the JSON-RPC loop stays responsive.
  */
-export function handleCentraidToolCall(
+export async function handleCentraidToolCall(
   id: number,
   params: unknown,
   ctx: ToolContext,
-): DynamicToolCallOutcome {
+): Promise<DynamicToolCallOutcome> {
   const p = (params ?? {}) as {
     tool?: string;
     callId?: string;
     arguments?: Record<string, unknown>;
   };
   const toolName = String(p.tool ?? '');
-  const args = (p.arguments ?? {}) as { sql?: string };
+  const args = (p.arguments ?? {}) as {
+    action?: string;
+    query?: string;
+    input?: unknown;
+  };
   const callId = typeof p.callId === 'string' ? p.callId : `tool-${id}`;
 
   const events: ChatStreamEvent[] = [
-    { type: 'tool.start', toolCallId: callId, toolName, args, sql: args.sql },
+    { type: 'tool.start', toolCallId: callId, toolName, args, ...sqlOf(args) },
   ];
 
   try {
-    let payload: unknown;
-    if (toolName === 'centraid_sql_describe') {
-      payload = describeOp({ dataFile: ctx.dataFile });
-    } else if (toolName === 'centraid_sql_read') {
-      if (typeof args.sql !== 'string') throw new Error('sql argument required');
-      payload = readOp({ dataFile: ctx.dataFile, sql: args.sql });
-    } else if (toolName === 'centraid_sql_write') {
-      if (typeof args.sql !== 'string') throw new Error('sql argument required');
-      payload = writeOp({
-        dataFile: ctx.dataFile,
-        sql: args.sql,
-        onWrite: (tables) => ctx.emitChange({ tables, toolCallId: callId }),
+    let result;
+    if (toolName === 'centraid_describe') {
+      result = await ctx.dispatcher.describe({
+        app: ctx.appId,
+        ...(typeof args.action === 'string' ? { action: args.action } : {}),
+        ...(typeof args.query === 'string' ? { query: args.query } : {}),
+      });
+    } else if (toolName === 'centraid_read') {
+      if (typeof args.query !== 'string') throw new Error('query argument required');
+      result = await ctx.dispatcher.read({
+        app: ctx.appId,
+        query: args.query,
+        input: args.input,
+      });
+    } else if (toolName === 'centraid_write') {
+      if (typeof args.action !== 'string') throw new Error('action argument required');
+      result = await ctx.dispatcher.write({
+        app: ctx.appId,
+        action: args.action,
+        input: args.input,
       });
     } else {
       throw new Error(`unknown tool "${toolName}"`);
     }
+    if (result.isError) {
+      const { code, message } = result.structuredContent;
+      const msg = `[${code}] ${message}`;
+      events.push({
+        type: 'tool.result',
+        toolCallId: callId,
+        toolName,
+        ok: false,
+        result: null,
+        errorText: msg,
+      });
+      return {
+        response: {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            success: false,
+            contentItems: [{ type: 'inputText', text: msg }],
+          },
+        },
+        events,
+      };
+    }
+    const payload = result.structuredContent;
     events.push({
       type: 'tool.result',
       toolCallId: callId,
@@ -146,14 +180,7 @@ export function handleCentraidToolCall(
       events,
     };
   } catch (err) {
-    const msg =
-      err instanceof SqlOpRefusal
-        ? err.message
-        : err instanceof RunQueryError
-          ? `${err.code}: ${err.message}`
-          : err instanceof Error
-            ? err.message
-            : String(err);
+    const msg = err instanceof Error ? err.message : String(err);
     events.push({
       type: 'tool.result',
       toolCallId: callId,
@@ -174,4 +201,12 @@ export function handleCentraidToolCall(
       events,
     };
   }
+}
+
+/** Surface the SQL string on a tool.start event when the agent used `_sql`. */
+function sqlOf(args: { action?: string; query?: string; input?: unknown }): { sql?: string } {
+  if (args.action !== '_sql' && args.query !== '_sql') return {};
+  if (!args.input || typeof args.input !== 'object') return {};
+  const sql = (args.input as { sql?: unknown }).sql;
+  return typeof sql === 'string' ? { sql } : {};
 }

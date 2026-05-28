@@ -197,16 +197,16 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<RuntimeHttp
         ...(provider ? { provider } : {}),
       };
     };
-    // We need the runtime to construct the change emitter, but the chat
+    // We need the runtime to construct the dispatcher, but the chat
     // runner needs to be passed to the runtime constructor. Use a holder
     // that the chat-adapter resolves at call time so the cycle is broken.
     let runtimeRef: Runtime | undefined;
     const chatRunner = makeChatRunner({
       prefsLoader,
-      getChangeEmitter: (appId) => {
+      getDispatcher: () => {
         const rt = runtimeRef;
-        if (!rt) return () => undefined;
-        return rt.agentEmitForApp(appId);
+        if (!rt) throw new Error('chat runner invoked before runtime was constructed');
+        return rt.dispatcher;
       },
       codexHomeBaseDir: localRuntimeCodexHomeBaseDir(gatewayId),
     });

@@ -209,7 +209,7 @@ Call this once at startup, after \`refresh()\` (or your initial-load function) i
 What fires the bus:
 
 - App handlers under \`actions/\` that INSERT/UPDATE/DELETE — \`source: "handler"\`.
-- The data-chat agent (\`centraid_sql_write\`) — \`source: "agent"\`. Carries a stable \`agentTurnId\` for the whole chat turn and a per-tool-call \`toolCallId\` matching the tool pill the user is looking at.
+- The chat agent (\`centraid_write\` invoking a declared action or the \`_sql\` built-in) — \`source: "agent"\`. Carries a stable \`agentTurnId\` for the whole chat turn and a per-tool-call \`toolCallId\` matching the tool pill the user is looking at.
 - External SQL panels (cloud-style query editor) — \`source: "external"\`.
 
 Practical patterns:

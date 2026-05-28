@@ -18,8 +18,6 @@ import { loadSettings } from './settings.js';
 export interface ChatSessionMeta {
   id: string;
   title: string;
-  /** Sticky chat mode. */
-  mode: 'full' | 'data';
   /** Runner kind that owns `adapterSessionId`. */
   adapterKind: string | null;
   /** Opaque per-runner resume handle. */
@@ -103,12 +101,8 @@ export async function historyList(appId: string): Promise<ChatSessionMeta[]> {
   return out.sessions ?? [];
 }
 
-export async function historyCreate(
-  appId: string,
-  mode: 'full' | 'data',
-  title = '',
-): Promise<ChatSessionMeta> {
-  return call<ChatSessionMeta>('POST', sessionsPath(appId), { mode, title });
+export async function historyCreate(appId: string, title = ''): Promise<ChatSessionMeta> {
+  return call<ChatSessionMeta>('POST', sessionsPath(appId), { title });
 }
 
 export async function historyLoad(appId: string, id: string): Promise<ChatSessionWithMessages> {

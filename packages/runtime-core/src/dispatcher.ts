@@ -1,23 +1,14 @@
 /**
- * Three-tool invocation dispatcher (issue #107).
+ * Three-tool invocation dispatcher (issue #107). `centraid_{write,read,
+ * describe}` replace the per-handler HTTP routes; every non-chat caller
+ * (UI buttons, webhooks, automations) flows through here. Reads
+ * `app.json`, validates `input` against the declared JSON Schema with
+ * Ajv, then hands off to the `handler-runner` worker — or to a built-in
+ * (`dispatcher-builtins.ts`) when the handler name starts with `_`.
  *
- * Replaces the per-handler HTTP routes `/_run` and `/_data/<query>` with
- * exactly three generic tool entry points:
- *
- *   - `centraidWrite({ app, action, input })`  — invokes an action.
- *   - `centraidRead({ app, query, input })`    — invokes a query.
- *   - `centraidDescribe({ app?, action?, query? })` — returns manifest metadata.
- *
- * Every non-chat caller (browser UI button clicks, webhooks, automations)
- * flows through these tools — no per-handler routes, no filesystem-scan
- * dispatch. The dispatcher reads `app.json` from the app's code dir,
- * validates `input` against the declared JSON Schema via Ajv, then hands
- * off to the existing `handler-runner` worker.
- *
- * Errors are returned as MCP-shaped envelopes: `{ isError: true, content,
- * structuredContent }`. `structuredContent` carries `{ code, message,
- * path }` for callers that prefer parsed data (the HTTP shim maps `code`
- * to a 4xx/5xx status; the chat surface forwards the text block).
+ * Errors are MCP-shaped: `{ isError, content, structuredContent }`. The
+ * HTTP shim maps `structuredContent.code` to a 4xx/5xx status; the chat
+ * surface forwards the text block.
  */
 
 import { promises as fs } from 'node:fs';
@@ -30,6 +21,7 @@ import {
   compileSchema,
   findAction,
   findQuery,
+  isReservedHandlerName,
   parseManifest,
   type Manifest,
   type ManifestActionEntry,
@@ -39,13 +31,10 @@ import { appCodeDir, appDataDir } from './app-paths.js';
 import type { RegistryEntry } from './types.js';
 import type { VersionStore } from './version-store.js';
 import type { ValidateFunction } from 'ajv';
+import { readAppSchema, type AppSchema } from './schema.js';
+import { runBuiltinRead, runBuiltinWrite } from './dispatcher-builtins.js';
 
-// ----------------------------------------------------------------------------
-// Result envelopes — MCP-shaped so the OpenClaw plugin can return them
-// straight back to the agent runtime, and the HTTP shim can translate the
-// shape to a 4xx/5xx status.
-// ----------------------------------------------------------------------------
-
+// Result envelopes — MCP-shaped (see header comment).
 export type ToolErrorCode =
   | 'UNKNOWN_APP'
   | 'UNKNOWN_ACTION'
@@ -254,7 +243,13 @@ export class Dispatcher {
     }
 
     if (action === undefined && query === undefined) {
-      return successResult(manifest);
+      // Whole-app describe: include the live schema alongside the manifest
+      // so an agent matching a user utterance against the catalog has
+      // everything it needs in one round-trip. The `_sql` escape hatch
+      // depends on this — agents reach for it when no declared handler
+      // fits, and they need the table layout to write SELECT/UPDATE/etc.
+      const schema = safeReadSchema(entry);
+      return successResult({ manifest, schema });
     }
     if (action !== undefined) {
       const a = findAction(manifest, action);
@@ -290,6 +285,9 @@ export class Dispatcher {
     const entry = this.registry.get(appId);
     if (!entry) {
       return errorResult('UNKNOWN_APP', `app "${appId}" is not registered`);
+    }
+    if (isReservedHandlerName(actionName)) {
+      return runBuiltinWrite(entry, actionName, handlerInput, this.builtinHelpers());
     }
     const codeDir = await this.resolveCodeDir(entry);
     if (!codeDir) {
@@ -359,6 +357,9 @@ export class Dispatcher {
     if (!entry) {
       return errorResult('UNKNOWN_APP', `app "${appId}" is not registered`);
     }
+    if (isReservedHandlerName(queryName)) {
+      return runBuiltinRead(entry, queryName, handlerInput, this.builtinHelpers());
+    }
     const codeDir = await this.resolveCodeDir(entry);
     if (!codeDir) {
       return errorResult('NO_ACTIVE_VERSION', `app "${appId}" has no active version`);
@@ -403,6 +404,15 @@ export class Dispatcher {
     return successResult(outcome.value ?? null);
   }
 
+  /** Helper bundle the built-in handlers use to envelope their results. */
+  private builtinHelpers() {
+    return {
+      errorResult,
+      successResult,
+      ...(this.onWriteFor ? { onWriteFor: this.onWriteFor } : {}),
+    };
+  }
+
   // --------- shared validation ---------
 
   private validateInput(
@@ -445,6 +455,14 @@ function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {
     'INVALID_MANIFEST',
     `app "${appId}" manifest: ${err instanceof Error ? err.message : String(err)}`,
   );
+}
+
+function safeReadSchema(entry: RegistryEntry): AppSchema {
+  try {
+    return readAppSchema(path.join(appDataDir(entry), 'data.sqlite'));
+  } catch {
+    return { schemaVersion: 0, tables: [], indexes: [], views: [] };
+  }
 }
 
 // ----------------------------------------------------------------------------
