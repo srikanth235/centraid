@@ -42,6 +42,9 @@ export function readTableRows(
   const offset = Math.max(0, Math.floor(opts.offset ?? 0));
 
   const db = new DatabaseSync(dataDbFile);
+  // Wait for the writer's snapshot to release rather than failing
+  // immediately on a busy DB (multi-client gateway case).
+  db.exec('PRAGMA busy_timeout = 30000');
   try {
     const exists = db
       .prepare(

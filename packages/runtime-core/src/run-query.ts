@@ -73,6 +73,9 @@ export function runQuery(
   const db = new DatabaseSync(dataDbFile);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
+  // Back off rather than fail immediately under multi-client write
+  // contention (standalone daemon case).
+  db.exec('PRAGMA busy_timeout = 30000');
 
   // Wrap writes in a session so we can enumerate touched tables for the
   // change-notification feed. Reads skip the wrap — they can't produce

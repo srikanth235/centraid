@@ -302,9 +302,14 @@ function migrate(db: DatabaseSync, migrations: readonly string[], label: string)
  */
 function openDb(dbPath: string, migrations: readonly string[], label: string): DatabaseSync {
   const db = new DatabaseSync(dbPath);
+  // busy_timeout: wait up to 30s for a lock instead of failing
+  // immediately. Multi-client gateway (standalone daemon) makes this
+  // load-bearing; the Electron embed sees only one client so the gap
+  // was previously latent.
   db.exec(`
     PRAGMA journal_mode=WAL;
     PRAGMA foreign_keys=ON;
+    PRAGMA busy_timeout=30000;
   `);
   migrate(db, migrations, label);
   return db;

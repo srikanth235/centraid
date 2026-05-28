@@ -50,6 +50,9 @@ export interface AppSchemaView {
  */
 export function readAppSchema(dataDbFile: string): AppSchema {
   const db = new DatabaseSync(dataDbFile);
+  // Readers also benefit from busy_timeout: a concurrent writer holding
+  // the snapshot can race a fresh reader's snapshot acquisition.
+  db.exec('PRAGMA busy_timeout = 30000');
   try {
     const userVersionRow = db.prepare('PRAGMA user_version').get() as
       | { user_version: number }
