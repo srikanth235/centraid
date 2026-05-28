@@ -22,6 +22,7 @@
     "@centraid/builder-harness": "workspace:*",
     "@centraid/chat-harness": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
+    "@centraid/gateway-runtime": "workspace:*",
     "@centraid/runtime-core": "workspace:*",
     "ws": "^8.18.0"
   },
