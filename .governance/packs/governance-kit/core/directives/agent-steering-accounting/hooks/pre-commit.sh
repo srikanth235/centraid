@@ -104,6 +104,13 @@ parent_argv_string() {
     local pid="$1"
     if [[ -r "/proc/$pid/cmdline" ]]; then
         tr '\0' ' ' < "/proc/$pid/cmdline"
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+        # macOS `ps -o args=` cat-v-escapes bytes >= 0x80 under LC_ALL=C
+        # (the locale git hooks usually run with), which mangles UTF-8 in
+        # the commit subject before it ever reaches the regex. Read raw
+        # argv bytes via sysctl(KERN_PROCARGS2) so non-ASCII subjects
+        # survive intact. See issue #140.
+        python3 "$LIB/argv.py" "$pid" 2>/dev/null | tr '\0' ' '
     else
         ps -ww -p "$pid" -o args= 2>/dev/null
     fi
