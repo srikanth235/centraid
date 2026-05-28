@@ -21,9 +21,10 @@
 # Otherwise the commit is treated as a human commit and this script no-ops.
 #
 # Issue anchor inference reads the parent git process's argv via
-# /proc/$PPID/cmdline (Linux) or `ps -ww -p $PPID -o args=` (macOS) to find a
-# `(#N)` in the -m / --message subject. Set AGENT_ISSUE='#N' explicitly to
-# skip inference (useful for editor-mode commits where argv has no -m).
+# /proc/$PPID/cmdline (Linux) or sysctl(KERN_PROCARGS2) via lib/argv.py (macOS)
+# to find a `(#N)` in the -m / --message subject. Set AGENT_ISSUE='#N'
+# explicitly to skip inference (useful for editor-mode commits where argv has
+# no -m).
 #
 # All COSTS.md parsing / summing / appending goes through
 # sibling lib/ledger.py — bash here only handles git plumbing,
@@ -75,6 +76,12 @@ parent_argv_string() {
     local pid="$1"
     if [[ -r "/proc/$pid/cmdline" ]]; then
         tr '\0' ' ' < "/proc/$pid/cmdline"
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+        # macOS `ps -o args=` cat-v-escapes bytes >= 0x80 under LC_ALL=C
+        # (the locale git hooks usually run with), mangling UTF-8 in the
+        # commit subject. Read raw argv bytes via sysctl(KERN_PROCARGS2).
+        # See issue #140.
+        python3 "$LIB/argv.py" "$pid" 2>/dev/null | tr '\0' ' '
     else
         ps -ww -p "$pid" -o args= 2>/dev/null
     fi
