@@ -30,6 +30,7 @@
         "@centraid/builder-harness": "workspace:*",
         "@centraid/chat-harness": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
+        "@centraid/gateway-runtime": "workspace:*",
         "@centraid/runtime-core": "workspace:*",
         "ws": "^8.18.0",
       },
@@ -141,6 +142,25 @@
       "version": "0.1.0",
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/gateway-runtime": {
+      "name": "@centraid/gateway-runtime",
+      "version": "0.1.0",
+      "bin": {
+        "centraid-gateway": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@centraid/agent-runtime": "workspace:*",
+        "@centraid/runtime-core": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "@types/tar": "^6.1.13",
+        "tar": "^7.4.3",
+        "tsx": "^4.20.3",
         "typescript": "catalog:",
       },
     },
@@ -498,6 +518,8 @@
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
+
+    "@centraid/gateway-runtime": ["@centraid/gateway-runtime@workspace:packages/gateway-runtime"],
 
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
 
