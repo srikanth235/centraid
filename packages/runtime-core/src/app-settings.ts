@@ -61,6 +61,7 @@ export function readAppSettings(dataDbFile: string): Record<string, unknown> {
   let db: DatabaseSync | undefined;
   try {
     db = new DatabaseSync(dataDbFile, { readOnly: true });
+    db.exec('PRAGMA busy_timeout = 30000');
     const tableRow = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`)
       .get(APP_SETTINGS_TABLE);
@@ -99,6 +100,7 @@ export function readAppSetting(dataDbFile: string, key: string): unknown | undef
   let db: DatabaseSync | undefined;
   try {
     db = new DatabaseSync(dataDbFile, { readOnly: true });
+    db.exec('PRAGMA busy_timeout = 30000');
     const tableRow = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`)
       .get(APP_SETTINGS_TABLE);
@@ -137,6 +139,7 @@ export function writeAppSetting(dataDbFile: string, key: string, value: unknown)
   let db: DatabaseSync | undefined;
   try {
     db = new DatabaseSync(dataDbFile);
+    db.exec('PRAGMA busy_timeout = 30000');
     db.exec(
       `CREATE TABLE IF NOT EXISTS ${APP_SETTINGS_TABLE} (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
     );
@@ -162,6 +165,7 @@ export function deleteAppSetting(dataDbFile: string, key: string): void {
   let db: DatabaseSync | undefined;
   try {
     db = new DatabaseSync(dataDbFile);
+    db.exec('PRAGMA busy_timeout = 30000');
     const tableRow = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`)
       .get(APP_SETTINGS_TABLE);

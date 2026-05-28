@@ -43,6 +43,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const db = new DatabaseSync(dbFile);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
+  // Wait up to 30s for a write lock instead of failing immediately with
+  // SQLITE_BUSY — necessary once multiple HTTP clients reach the same
+  // gateway concurrently (standalone daemon case).
+  db.exec('PRAGMA busy_timeout = 30000');
 
   // Wrap the connection in a session so we can enumerate touched tables
   // for the change-notification feed at the end of the turn. Query
