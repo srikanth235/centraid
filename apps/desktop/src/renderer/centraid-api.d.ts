@@ -569,8 +569,9 @@ interface CentraidApi {
     }) => void,
   ): () => void;
 
-  /** List bundled templates from `@centraid/app-templates`. */
-  listTemplates(): Promise<CentraidTemplateMeta[]>;
+  // listTemplates moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot — the gateway
+  // owns the catalog and serves it at `GET /centraid/_templates`.
   /**
    * Clone a bundled template into the user's projects dir as a draft.
    * The main process auto-picks a non-colliding `(id, name)` pair via

@@ -57,6 +57,7 @@ import {
 import { AppsStore } from '@centraid/apps-store';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
 import { makeAutomationsRouteHandler } from './automations-routes.js';
+import { makeTemplatesRouteHandler } from './templates-routes.js';
 import type { GatewayPaths } from './paths.js';
 import type { SecretsProvider } from './secrets.js';
 import { parseProviderPrefs } from './provider-prefs.js';
@@ -302,10 +303,23 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   //
   // Code (automation manifests) resolves from the git-store materialized
   // `main`; data (run ledgers + analytics) from the stable `appsDir`.
+  // Template catalog (issue #141): the gateway owns it now, so the
+  // renderer reads `GET /centraid/_templates` directly. Mounted regardless
+  // of the code backend — templates are bundle/cache-resolved, independent
+  // of the git store.
+  const extraHandlers: Array<
+    (
+      req: import('node:http').IncomingMessage,
+      res: import('node:http').ServerResponse,
+    ) => Promise<boolean>
+  > = [
+    makeTemplatesRouteHandler(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
+  ];
+
   if (appsStore) {
     const store = appsStore;
     const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
-    serverOptions.extraHandlers = [
+    extraHandlers.push(
       makeAppsStoreRouteHandler(store, {
         onAppLive: async (appId) => {
           await runtime.registry.ensureUploaded(appId);
@@ -347,8 +361,9 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
           );
         },
       }),
-    ];
+    );
   }
+  serverOptions.extraHandlers = extraHandlers;
   const server = await startRuntimeHttpServer(serverOptions);
   await runtime.bootstrap();
 

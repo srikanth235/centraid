@@ -41,7 +41,6 @@ const Channel = {
   GATEWAY_CHANGED: 'centraid:gateways:changed',
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
-  TEMPLATES_LIST: 'centraid:templates:list',
   TEMPLATES_CLONE: 'centraid:templates:clone',
 
   CHAT_START: 'centraid:chat:start',
@@ -201,8 +200,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     return () => ipcRenderer.off(Channel.GATEWAY_CHANGED, handler);
   },
 
-  // Templates
-  listTemplates: () => ipcRenderer.invoke(Channel.TEMPLATES_LIST),
+  // Templates (listTemplates moved to the renderer's direct HTTP client —
+  // the gateway owns the catalog at `GET /centraid/_templates`)
   cloneTemplate: (input: { templateId: string }) =>
     ipcRenderer.invoke(Channel.TEMPLATES_CLONE, input),
 

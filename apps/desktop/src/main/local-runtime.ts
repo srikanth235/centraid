@@ -21,6 +21,7 @@ import {
   gatewayIdentityDb,
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
+import { templatesCacheDir } from './settings.js';
 import type { AutomationHost } from '@centraid/runtime-core';
 
 /**
@@ -156,6 +157,10 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
         analyticsDb: localRuntimeAnalyticsDb(gatewayId),
         chatRunnerSessionDir: gatewayChatRunnerSessionsDir(gatewayId),
         codexHomeBaseDir: localRuntimeCodexHomeBaseDir(gatewayId),
+        // Gateway owns the template catalog now (issue #141): the
+        // `GET /centraid/_templates` route resolves bundle-or-cache from
+        // this per-gateway cache dir, matching the old desktop IPC.
+        templatesCacheDir: templatesCacheDir(gatewayId),
       },
       secrets,
       // Issue #137: the local gateway owns app code as a git store too,

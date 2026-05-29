@@ -34,6 +34,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Renderer token bridge + app read surface over direct HTTP
 - [x] Renderer data plane over direct HTTP — versions, user prefs, automation reads, insights
 - [x] Draft preview served through the gateway runtime
+- [x] Gateway owns the template catalog (GET /centraid/_templates)
 
 ## What changed
 
@@ -310,6 +311,24 @@ desktop renderer's iframe still points at the live preview; pointing it at
 the `_draft` URL lands with the renderer-visible sessions in the
 gateway-owned create + unified-chat phases.
 
+**Gateway owns the template catalog (GET /centraid/_templates).** First slice
+of moving the deterministic builder into the gateway: the bundled
+`@centraid/app-templates` catalog is now resolved gateway-side and served at
+`GET /centraid/_templates`, so the renderer reads it directly instead of
+through a desktop IPC. `gateway-runtime` gains an `@centraid/app-templates`
+dependency and a `makeTemplatesRouteHandler` (mounted in `extraHandlers`
+regardless of the code backend — templates are bundle/cache-resolved,
+independent of the git store); `GatewayPaths` gains an optional
+`templatesCacheDir` so a remote-pulled template can shadow the bundled copy
+(the desktop's `local-runtime` passes its per-gateway cache dir, matching the
+old IPC's `templatesCacheDir(gatewayId)`). The route returns the same
+6-field display projection the desktop IPC did (`files`/`source` stripped).
+The renderer's `listTemplates` moves to `gateway-client.ts`; its IPC handler,
+preload method, channel, and `CentraidApi` typing are deleted.
+`TEMPLATES_CLONE` stays on IPC for now — it scaffolds + provisions webhooks +
+opens a session + publishes, and that orchestration moves to the gateway in
+the next slice.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -385,6 +404,13 @@ gateway-owned create + unified-chat phases.
   `router.test.ts` adds 6 `parseWithDraft` cases (prefix peeling for
   index/static/tool, query-string preservation, pass-through, empty-session
   guard).
+- Gateway owns the template catalog: full `turbo run build typecheck lint
+  test` green across all 28 tasks. New `templates-routes.test.ts`
+  (gateway-runtime) boots `serve()` and asserts `GET /centraid/_templates`
+  401s without a bearer and, when authed, returns a non-empty catalog where
+  every row carries the 6 display fields and neither `files` nor `source`.
+  `@centraid/desktop` typechecks + builds with `listTemplates` on the
+  renderer client and the IPC handler/preload/channel removed.
 
 ## Out of scope
 

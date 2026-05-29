@@ -155,7 +155,6 @@ export const Channel = {
   // the single point where it crosses to the renderer.
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
-  TEMPLATES_LIST: 'centraid:templates:list',
   TEMPLATES_CLONE: 'centraid:templates:clone',
 
   AUTH_STATUS: 'centraid:auth:status',
@@ -818,24 +817,12 @@ export function registerIpcHandlers(): void {
   // APP_LOGS / APPS_DEREGISTER moved there too.
 
   // ----- Templates -----
-  ipcMain.handle(Channel.TEMPLATES_LIST, async () => {
-    const settings = await loadSettings();
-    const { resolveTemplates } = await import('@centraid/app-templates');
-    // Strip `files` + `source` from the wire response — the renderer only
-    // needs the display metadata, and the lists can be sizable. Cache
-    // is per-gateway (#109) so we resolve against the active one.
-    const resolved = await resolveTemplates({
-      cacheDir: templatesCacheDir(settings.activeGatewayId),
-    });
-    return resolved.map((t) => ({
-      id: t.id,
-      name: t.name,
-      desc: t.desc,
-      colorKey: t.colorKey,
-      iconKey: t.iconKey,
-      version: t.version,
-    }));
-  });
+  // TEMPLATES_LIST moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot — the gateway
+  // owns the catalog and serves it at `GET /centraid/_templates`, resolving
+  // bundle-or-cache from its per-gateway templates cache dir. TEMPLATES_CLONE
+  // stays on IPC for now (it scaffolds + provisions webhooks + opens a
+  // session + publishes; that orchestration moves to the gateway next).
 
   ipcMain.handle(Channel.TEMPLATES_CLONE, async (_e, input: { templateId: string }) => {
     const settings = await loadSettings();

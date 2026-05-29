@@ -10,6 +10,7 @@ import {
   appLiveUrl,
   deregisterApp,
   listProjects,
+  listTemplates,
   getUserPrefs,
   saveUserPrefs,
   listAutomations,
@@ -3747,7 +3748,7 @@ import {
    */
   async function loadAvailableTemplates(): Promise<TemplateEntry[]> {
     try {
-      const all = (await window.CentraidApi.listTemplates()) as TemplateEntry[];
+      const all = (await listTemplates()) as TemplateEntry[];
       // Home Templates tab + Discover gallery surface app templates only.
       // Automation templates have their own surface (renderAutomationTemplates)
       // because they need the richer card layout (emoji, category, trigger
@@ -3764,7 +3765,7 @@ import {
    */
   async function loadAutomationTemplates(): Promise<TemplateEntry[]> {
     try {
-      const all = (await window.CentraidApi.listTemplates()) as TemplateEntry[];
+      const all = (await listTemplates()) as TemplateEntry[];
       return all.filter(isAutomationTemplate);
     } catch {
       return [];

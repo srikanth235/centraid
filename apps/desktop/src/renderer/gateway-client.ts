@@ -213,6 +213,32 @@ export async function listProjects(): Promise<AppMetaEntry[]> {
   return out ?? [];
 }
 
+/** Display metadata for one bundled template (the `GET /centraid/_templates` row). */
+export interface TemplateMetaEntry {
+  id: string;
+  name: string;
+  desc: string;
+  colorKey: string;
+  iconKey: string;
+  version: string;
+}
+
+/**
+ * Bundled template catalog, resolved gateway-side (bundle-or-cache). Only
+ * display metadata crosses the wire — the renderer casts this to its own
+ * `TemplateEntry`. The clone path still reads template files gateway-side,
+ * so `files`/`source` never reach the renderer.
+ */
+export async function listTemplates(): Promise<TemplateMetaEntry[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_templates`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<TemplateMetaEntry[]>(res, 'list templates');
+  return out ?? [];
+}
+
 // ---- Versions (git-store tag history) ----
 
 /** Raw tag-driven version entry from the git store, newest-first. */

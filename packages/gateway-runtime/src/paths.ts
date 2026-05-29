@@ -45,4 +45,12 @@ export interface GatewayPaths {
    * user's real `~/.codex` stays untouched.
    */
   codexHomeBaseDir: string;
+
+  /**
+   * Optional per-gateway template cache dir (issue #141). When set, the
+   * `GET /centraid/_templates` route resolves bundle-or-cache, letting a
+   * newer template pulled from a remote URL shadow the bundled copy. Omit
+   * for bundle-only resolution (the standalone daemon / tests).
+   */
+  templatesCacheDir?: string;
 }
