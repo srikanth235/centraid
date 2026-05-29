@@ -17,14 +17,10 @@ import {
   updateProfileMetadata,
   type GatewayProfile,
 } from './gateway-store.js';
-import { PREVIEW_SCHEME } from './preview-protocol.js';
 import { refreshAuthInjector } from './auth-injector.js';
 import { resetChatHistoryAuthCache } from './chat-history-client.js';
 import { fetchUserPrefs, resetUserPrefsAuthCache } from './user-prefs-client.js';
-import {
-  resetAppsStoreAuthCache,
-  listGitVersions as appsStoreListGitVersions,
-} from './apps-store-client.js';
+import { resetAppsStoreAuthCache } from './apps-store-client.js';
 import { ensureProjectSessionDir, resetProjectSessions } from './project-sessions.js';
 import {
   importAvailableCreds,
@@ -57,10 +53,10 @@ export const Channel = {
   SETTINGS_SAVE: 'centraid:settings:save',
 
   // Project create/files/write/delete/update-meta + publish moved to the
-  // renderer's direct HTTP client (renderer/gateway-client.ts). Only the
-  // local-only reveal-in-Finder + preview URL stay on IPC.
+  // renderer's direct HTTP client (renderer/gateway-client.ts). The preview
+  // iframe now points at the gateway draft URL (Phase 4), so only the
+  // local-only reveal-in-Finder stays on IPC.
   PROJECTS_OPEN: 'centraid:projects:open',
-  PROJECTS_PREVIEW_URL: 'centraid:projects:preview-url',
 
   // The in-process AGENT_* builder retired with the unified chat (issue
   // #141, Phase 3): the builder now streams the gateway's `/centraid/<id>/_chat`
@@ -396,8 +392,9 @@ export function registerIpcHandlers(): void {
   // (same `desktop-<id>` id the local agent uses, so they share one draft)
   // and the gateway owns scaffold/clone/meta/publish. PROJECTS_OPEN stays on
   // IPC — a deliberately LOCAL-ONLY reveal-in-Finder that needs the on-disk
-  // session worktree; PROJECTS_PREVIEW_URL stays until the preview iframe
-  // moves to the gateway draft URL.
+  // session worktree. The preview iframe now points at the gateway draft URL
+  // (`/centraid/_draft/<sessionId>/<id>/`, resolved renderer-side via
+  // `draftPreviewUrl`), so no PROJECTS_PREVIEW_URL handler is needed.
 
   ipcMain.handle(Channel.PROJECTS_OPEN, async (_e, input: { id: string }) => {
     // Reveal-in-Finder: opens the on-disk session worktree. One of the two
@@ -414,23 +411,6 @@ export function registerIpcHandlers(): void {
   // HTTP client (renderer/gateway-client.ts): delete is a `DELETE /_apps/<id>`
   // + session close; meta is a `POST /_apps/<id>/meta` the gateway stages +
   // publishes.
-
-  // Preview URL for the iframe. The preview always serves the active
-  // gateway version (issue #137: published on `main`), so the URL is
-  // only "available" once an initial publish has landed at least one
-  // version tag — the preview protocol returns 404 until then.
-  ipcMain.handle(
-    Channel.PROJECTS_PREVIEW_URL,
-    async (_e, input: { id: string }): Promise<{ url: string; available: boolean }> => {
-      const available = await appsStoreListGitVersions(input.id)
-        .then((list) => list.length > 0)
-        .catch(() => false);
-      // Cache-bust per request — the iframe URL is stable but the
-      // active version under the hood changes after each publish.
-      const url = `${PREVIEW_SCHEME}://${encodeURIComponent(input.id)}/index.html?t=${Date.now()}`;
-      return { url, available };
-    },
-  );
 
   // Snapshot of the auto-publish queue for project `id`. Cheap; safe to
   // poll from the renderer if a toast wants the latest error string.

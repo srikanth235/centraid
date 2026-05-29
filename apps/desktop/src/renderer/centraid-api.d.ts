@@ -315,15 +315,10 @@ interface CentraidApi {
 
   // Project list/create/files/write/delete/update-meta + publish moved to the
   // renderer's direct HTTP client (renderer/gateway-client.ts) under the
-  // thin-client pivot. Only the local-only reveal-in-Finder + preview URL
-  // stay on IPC.
+  // thin-client pivot. The preview iframe points at the gateway draft URL
+  // (Phase 4: renderer-side `draftPreviewUrl`), so only the local-only
+  // reveal-in-Finder stays on IPC.
   openProjectFolder(input: { id: string }): Promise<{ ok: true }>;
-  /**
-   * URL the builder iframe can load to preview a project's local files
-   * before publish. `available` is false when the project has no
-   * `index.html` yet — the renderer should show an empty state in that case.
-   */
-  previewUrl(input: { id: string }): Promise<{ url: string; available: boolean }>;
 
   // The in-process AGENT_* builder retired with the unified chat (issue
   // #141, Phase 3): the builder streams `/centraid/<id>/_chat` SSE directly

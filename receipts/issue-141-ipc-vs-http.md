@@ -40,6 +40,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Gateway runs the unified chat turn in the app's draft worktree with the union of tools
 - [x] Data-chat panel streams the gateway _chat SSE directly; desktop chat IPC deleted
 - [x] Builder chat streams the gateway _chat SSE; in-process AGENT_* path + agent-session.ts deleted
+- [x] Builder preview iframe points at the gateway _draft URL; centraid-preview:// protocol + PROJECTS_PREVIEW_URL deleted
 
 ## What changed
 
@@ -490,8 +491,52 @@ exports stay. `project-sessions.ts` is retained — `PROJECTS_OPEN`
 is now unused by the desktop (its only consumer, `chat.ts`, is gone); dropping
 the dep is a Phase 5 item.
 
+**Builder preview iframe points at the gateway _draft URL; centraid-preview://
+protocol + PROJECTS_PREVIEW_URL deleted.** Completes Phase 4: the builder's
+preview pane now reflects the **staged draft worktree** served through the
+gateway runtime (the `draftCodeDir`/`_draft` machinery from the earlier
+gateway-side slice), so chat- and file-driven edits are visible *before* the
+explicit Publish flips them live — honoring #137's "serve through the
+runtime/store, never a local path shortcut" invariant. A new renderer-side
+`draftPreviewUrl(appId)` (`gateway-client-editing.ts`) ensures the app's
+`desktop-<appId>` editing session, GET-probes
+`/centraid/_draft/<sessionId>/<appId>/` for an `available` flag (so the
+"building" skeleton stays up until the draft has an `index.html`), and returns
+that URL with a cache-buster. `builder.ts`'s `resolvePreviewSrc` drops the
+old two-tier logic (gateway live URL when published, else the
+`centraid-preview://` local-files fallback) and always points the iframe at
+the draft — after Publish the draft equals live anyway — surfacing a "Draft ·
+staged" badge and a "Draft preview" URL pill. The iframe authenticates exactly
+like the prior live-URL iframe: the main-process auth-injector stamps the
+Bearer header onto every gateway-origin request (top navigation + subresources),
+so no token rides in the URL. With the iframe on a real HTTP origin, the
+desktop's local preview machinery is deleted: `main/preview-protocol.ts` (the
+whole `centraid-preview://` custom protocol), its `registerSchemesAsPrivileged`
++ `registerPreviewProtocol()` wiring and the now-unused `protocol` import in
+`main.ts`, the `PROJECTS_PREVIEW_URL` IPC handler + `Channel` constant + the
+now-dead `listGitVersions`/`PREVIEW_SCHEME` `ipc.ts` imports, the `previewUrl`
+preload method, and the `previewUrl` `CentraidApi` typing. Create/clone keep
+`publish: true` deliberately — the registry (`GET /centraid/_apps`) lists apps
+on `main`, so an app must publish a baseline version once to exist on the home
+grid (its "git init"); from then on edits stage in the draft and Publish flips
+each subsequent version. So "auto-publish" is the one-time baseline only, not
+per-edit.
+
 ## Verification
 
+- Builder preview iframe points at the gateway _draft URL; centraid-preview://
+  protocol + PROJECTS_PREVIEW_URL deleted: full `turbo run build typecheck lint
+  test` green across all 28 tasks. The gateway-side draft serving these URLs hit
+  is already covered by `draft-preview-over-http.test.ts` (static + staged
+  handler + unknown-session 503) and `router.test.ts`'s `parseWithDraft` cases,
+  so the renderer `draftPreviewUrl` is a wire shim over a tested route with no
+  new server behavior to retest (the desktop package ships no renderer unit
+  harness — renderer is browser-loaded `<script type="module">`). `@centraid/
+  desktop` typechecks + builds with the new `draftPreviewUrl` client method and
+  the iframe repointed; `oxlint` confirms the deleted `preview-protocol.ts`,
+  `PROJECTS_PREVIEW_URL` handler/channel, `previewUrl` preload method + typing,
+  and the now-dead `PREVIEW_SCHEME` / `listGitVersions` / `protocol` imports
+  left nothing dangling.
 - `@centraid/builder-harness` typecheck + lint clean;
   `scaffold-files.test.ts` adds 15 cases (52 package tests pass).
 - `@centraid/runtime-core` typecheck + lint clean;

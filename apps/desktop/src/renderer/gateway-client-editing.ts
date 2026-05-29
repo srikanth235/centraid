@@ -7,9 +7,15 @@
  * The draft-editing surface (sessions / files / publish) and the
  * deterministic lifecycle (create / clone / meta / automation CRUD) the
  * gateway now owns. The renderer states intent; the gateway scaffolds,
- * mints webhooks, stages into a session worktree, and publishes. We pass
- * `publish: true` to preserve "new app is live immediately" until the
- * preview iframe points at the draft URL.
+ * mints webhooks, stages into a session worktree, and publishes.
+ *
+ * Create/clone pass `publish: true` to land a *baseline* version on `main`
+ * (the app's "git init"): the registry (`GET /centraid/_apps`) lists apps
+ * on `main`, so an app must publish once to exist on the home grid. From
+ * then on, chat- and file-driven edits stage in the `desktop-<id>` draft
+ * worktree — the builder preview reads that draft via `draftPreviewUrl`
+ * (Phase 4) and an explicit Publish flips the next version live. So
+ * "auto-publish" is the one-time baseline only, not per-edit.
  */
 
 import {
@@ -18,6 +24,7 @@ import {
   authHeaders,
   doFetch,
   enc,
+  href,
   readJson,
 } from './gateway-client-core.js';
 
@@ -95,6 +102,45 @@ export async function dropAppSession(appId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(token),
   }).catch(() => undefined);
+}
+
+/**
+ * Draft-preview URL for an app's editing session, served through the
+ * gateway runtime (issue #141, Phase 4). The staged worktree is previewed
+ * faithfully (static assets + handlers) under
+ * `/centraid/_draft/<sessionId>/<appId>/` so the builder iframe reflects
+ * chat/file edits *before* an explicit Publish flips them live — honoring
+ * #137's "everything serves through the store, never a local path shortcut"
+ * invariant. The iframe authenticates the same way the live-URL iframe
+ * does: the main-process auth-injector stamps the Bearer header onto every
+ * gateway-origin request (top navigation + subresources).
+ *
+ * Returns `available` so the builder can keep showing its "building"
+ * skeleton until the draft actually has an index.html (fresh apps mid-
+ * generation have an open session but no page yet → the draft index 404s).
+ * The returned `url` carries a cache-buster so re-resolving after a save
+ * forces the iframe to re-navigate.
+ */
+export async function draftPreviewUrl(appId: string): Promise<{ url: string; available: boolean }> {
+  const sessionId = await ensureAppSession(appId);
+  const { baseUrl, token } = await auth();
+  const draftPath = `/centraid/_draft/${enc(sessionId)}/${enc(appId)}/`;
+  let available = false;
+  try {
+    const res = await doFetch(baseUrl, draftPath, {
+      method: 'GET',
+      headers: authHeaders(token),
+    });
+    available = res.ok;
+    await res.text().catch(() => undefined); // drain so the socket frees
+  } catch {
+    available = false;
+  }
+  // Stable path + per-resolve cache-buster (the iframe src must change to
+  // re-navigate after a staged edit). `parseWithDraft` preserves the query
+  // string and the inner app-index route ignores unknown params.
+  const url = href(baseUrl, `${draftPath}?t=${Date.now()}`);
+  return { url, available };
 }
 
 /** Read the app's draft files from its editing session. */

@@ -11,7 +11,7 @@
 //   Topbar:    [back][project] [history-btn][sidebar-btn] {Preview|Code} [device|URL|↗|⟳] [Share][primary]
 //   Chat pane: swaps between live chat (chatView='chat') and version history
 //              (chatView='history'). Sidebar-btn collapses the whole pane.
-//   Right pane: Preview (iframe → live gateway URL or local centraid-preview://)
+//   Right pane: Preview (iframe → gateway draft URL: /centraid/_draft/<sid>/<id>/)
 //               or Code (project files, syntax-highlighted).
 
 import {
@@ -28,6 +28,7 @@ import {
   listAutomationRuns,
   readProjectFiles,
   writeProjectFile,
+  draftPreviewUrl,
   publish,
   createProject,
   updateProjectMeta,
@@ -882,14 +883,13 @@ import {
     }
 
     // Trim noisy URL prefixes for display while preserving the full URL on
-    // hover (set as title attr by the caller). centraid-preview:// gets
-    // shortened to "/<id>/<file>".
+    // hover (set as title attr by the caller). The gateway draft-preview URL
+    // (`…/centraid/_draft/<sessionId>/<id>/`) is collapsed to a friendly
+    // "Draft preview" label rather than the long internal path.
     function formatPreviewUrl(src: string): string {
       try {
         const u = new URL(src);
-        if (u.protocol === 'centraid-preview:') {
-          return (u.pathname || '/').replace(/^\/+/, '/');
-        }
+        if (u.pathname.includes('/_draft/')) return 'Draft preview';
         return u.host + (u.pathname === '/' ? '' : u.pathname);
       } catch {
         return src;
@@ -1323,25 +1323,21 @@ import {
       return frame;
     }
 
-    async function resolvePreviewSrc(): Promise<
-      { src: string; kind: 'live' | 'local' } | undefined
-    > {
+    async function resolvePreviewSrc(): Promise<{ src: string; kind: 'draft' } | undefined> {
       if (!projectId) return undefined;
-      // Prefer the gateway-served live URL once we know there's a real
-      // active version on the gateway (set by bootstrap or handlePublish).
-      // We do NOT call appLiveUrl as a probe here — it always succeeds and
-      // would falsely point the iframe at a gateway that might not have
-      // the app or might not even be running.
-      if (liveUrl && lastPublishedVersionId) {
-        return { src: liveUrl, kind: 'live' };
-      }
-      // Local-files fallback: serve <projectsDir>/<id>/index.html via the
-      // centraid-preview:// custom protocol registered by the main process.
+      // The builder always previews the *draft* worktree (issue #141,
+      // Phase 4): the gateway serves the open `desktop-<id>` session under
+      // `/centraid/_draft/<sessionId>/<id>/`, so staged chat/file edits show
+      // here before an explicit Publish flips them live. The draft is the
+      // editing surface, so we never point this iframe at the published live
+      // URL — after Publish the draft == live anyway. `available` is false
+      // until the draft has an index.html (fresh app mid-generation), which
+      // keeps the building skeleton up until the first page is staged.
       try {
-        const r = await Api().previewUrl({ id: projectId });
-        if (r.available) return { src: r.url, kind: 'local' };
+        const r = await draftPreviewUrl(projectId);
+        if (r.available) return { src: r.url, kind: 'draft' };
       } catch {
-        /* swallow — show empty state below */
+        /* swallow — show building skeleton below */
       }
       return undefined;
     }
@@ -1396,7 +1392,7 @@ import {
         previewUrlPill.removeAttribute('title');
       } else {
         previewUrlText.textContent = formatPreviewUrl(resolved.src);
-        previewUrlDot.dataset.state = resolved.kind === 'live' ? 'live' : 'local';
+        previewUrlDot.dataset.state = 'local';
         previewUrlPill.setAttribute('title', resolved.src);
       }
 
@@ -1427,14 +1423,12 @@ import {
       stage.append(card);
       rightPaneContent.append(stage);
 
-      // Floating "Live · synced" badge — ambient confidence signal that
-      // the iframe content reflects the persisted project. Only appears
-      // for the gateway-served live URL (not the local-files fallback).
-      if (resolved.kind === 'live') {
-        const badge = el('div', { class: 'preview-live-badge' });
-        badge.innerHTML = '<span class="preview-live-dot"></span>Live · synced';
-        rightPaneContent.append(badge);
-      }
+      // Floating "Draft · staged" badge — ambient signal that the iframe
+      // reflects the staged draft worktree (served through the gateway),
+      // not the published version. An explicit Publish flips it live.
+      const badge = el('div', { class: 'preview-live-badge' });
+      badge.innerHTML = '<span class="preview-live-dot"></span>Draft · staged';
+      rightPaneContent.append(badge);
     }
 
     // §B5 — editable code workspace. Buffers, open tabs, the active file,

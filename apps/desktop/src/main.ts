@@ -1,10 +1,9 @@
-import { app, BrowserWindow, nativeImage, protocol, shell } from 'electron';
+import { app, BrowserWindow, nativeImage, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installAuthInjector } from './main/auth-injector.js';
 import { importAvailableCreds } from './main/auth-import.js';
 import { registerIpcHandlers } from './main/ipc.js';
-import { PREVIEW_SCHEME, registerPreviewProtocol } from './main/preview-protocol.js';
 import { loadSettings, saveSettings, templatesCacheDir } from './main/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,22 +13,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds will pick up the .icns via electron-builder config.
 const ICON_PATH = path.join(__dirname, '..', 'icon.png');
 
-// Custom scheme that serves an unpublished project's local files into the
-// builder's preview iframe. Must be marked privileged BEFORE `app.whenReady`
-// for module scripts and `fetch` to behave like a real origin inside the
-// iframe (matches what the gateway provides for published apps).
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: PREVIEW_SCHEME,
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      stream: true,
-      corsEnabled: true,
-    },
-  },
-]);
+// The builder preview iframe is served by the gateway itself (issue #141,
+// Phase 4): it points at `/centraid/_draft/<sessionId>/<id>/`, a real HTTP
+// origin the main-process auth-injector authenticates. No custom local
+// scheme is needed anymore — the old `centraid-preview://` path-mode
+// protocol was retired so local == remote serving.
 
 function canOpenExternal(url: string): boolean {
   try {
@@ -76,7 +64,6 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
   }
-  registerPreviewProtocol();
   void installAuthInjector();
   registerIpcHandlers();
   createWindow();
