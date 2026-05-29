@@ -33,6 +33,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] CORS on the local gateway for renderer-direct HTTP
 - [x] Renderer token bridge + app read surface over direct HTTP
 - [x] Renderer data plane over direct HTTP — versions, user prefs, automation reads, insights
+- [x] Draft preview served through the gateway runtime
 
 ## What changed
 
@@ -282,6 +283,33 @@ the renderer client too, and `SETTINGS_GET` now strips `gatewayToken` from
 its payload — the token reaches the renderer only through `getGatewayAuth()`,
 and nothing reads it off `getSettings()`.
 
+**Draft preview served through the gateway runtime.** Reordered ahead of the
+gateway-owned create/clone work (a newly staged app must be previewable
+before the "explicit Publish" flips it live, and per #137 a draft must be
+served *through the runtime/store*, never a local path shortcut). The
+runtime gains an optional `draftCodeDir(appId, sessionId)` resolver: a
+request under `/centraid/_draft/<sessionId>/<appId>/…` serves the open
+session worktree's code — static **and** handlers — against the app's live
+`data.sqlite`, with the live `/centraid/<appId>/…` path untouched.
+Mechanics: `router.ts` gains `parseWithDraft`, which peels the `_draft/
+<sessionId>` prefix and re-parses the inner route (query string preserved);
+`runtime.handle` threads the session id into the code-dependent cases
+(`app-index`, `app-static`, `app-schema`, and `tool-invoke` →
+`dispatchTool`), preferring the draft dir over `resolveCodeDir`; the
+`Dispatcher`'s `read`/`write`/`describe` take an optional per-call
+`overrideCodeDir` so a draft runs its staged handlers without registering a
+second app; and `static-server`'s injected bridge becomes draft-aware — it
+pins the real `appId` (the path's first segment is `_draft`, which the live
+`location.pathname` sniff would mis-read) and routes tool calls through
+`/centraid/_draft/<sessionId>/_tool/`. `_changes` stays relative and
+resolves to the draft route's app-changes (drafts share the live change
+bus). The gateway wires `draftCodeDir` to `appsStore.snapshotSessionAppDir`,
+returning `undefined` for an unknown/closed session (→ 503), so the live
+backend is wholly unaffected when no draft resolver is configured. The
+desktop renderer's iframe still points at the live preview; pointing it at
+the `_draft` URL lands with the renderer-visible sessions in the
+gateway-owned create + unified-chat phases.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -346,6 +374,17 @@ and nothing reads it off `getSettings()`.
   `automations-routes.test.ts` (C4) and the git-store version/rollback +
   `/_centraid-user` route tests, so the renderer methods are wire shims with
   no new server behavior to retest.
+- Draft preview served through the gateway runtime: full `turbo run build
+  typecheck lint test` green across all 28 tasks. New
+  `draft-preview-over-http.test.ts` (gateway-runtime) seeds + publishes an
+  app, opens a session, overwrites its `index.html` + query handler, and
+  asserts the live path still serves the published static + handler while
+  `/centraid/_draft/<sid>/app/` serves the staged HTML (carrying the
+  draft-pinned tool URL) and `/centraid/_draft/<sid>/_tool/centraid_read`
+  runs the staged handler against the same data; an unknown session 503s.
+  `router.test.ts` adds 6 `parseWithDraft` cases (prefix peeling for
+  index/static/tool, query-string preservation, pass-through, empty-session
+  guard).
 
 ## Out of scope
 

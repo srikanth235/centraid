@@ -146,6 +146,21 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   const codeDirOverride = appsStore
     ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
     : undefined;
+  // Draft preview (issue #141): resolve an app's code dir to its OPEN
+  // session worktree (`worktrees/sessions/<id>/apps/<app>/`) so the
+  // runtime can serve the staged draft — static + handlers — before it's
+  // published. Data still binds to the registry entry's dir, so the draft
+  // reads/writes the live `data.sqlite`. Returns `undefined` for an
+  // unknown/closed session (→ 503), so the live path is unaffected.
+  const draftCodeDir = appsStore
+    ? async (appId: string, sessionId: string): Promise<string | undefined> => {
+        try {
+          return await appsStore!.snapshotSessionAppDir(sessionId, appId);
+        } catch {
+          return undefined;
+        }
+      }
+    : undefined;
 
   // OS-scheduler reconcile (issue #141). Automation *code* lives under
   // the git-store materialized `main` (`active-main/apps`), or `appsDir`
@@ -271,6 +286,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     },
     logger,
     ...(codeDirOverride ? { codeDirOverride } : {}),
+    ...(draftCodeDir ? { draftCodeDir } : {}),
   });
 
   runtimeRef = runtime;

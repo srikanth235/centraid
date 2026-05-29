@@ -149,11 +149,9 @@ export class Dispatcher {
 
   // --------- resolution helpers ---------
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    // Git-store backend (#137): override is the sole authority. Else
+    // Git-store backend (#137): override is the sole authority. Else the
     // legacy tarball backend resolves the active-version dir.
-    if (this.codeDirOverride) {
-      return this.codeDirOverride(entry.id);
-    }
+    if (this.codeDirOverride) return this.codeDirOverride(entry.id);
     const active = await this.versions.getActiveVersion(entry.path);
     if (!active) return undefined;
     return appCodeDir(entry, active);
@@ -201,7 +199,9 @@ export class Dispatcher {
 
   // --------- describe ---------
 
-  async describe(input: CentraidDescribeInput): Promise<ToolResult> {
+  // `overrideCodeDir` (read/write/describe): the draft-preview path (#141)
+  // runs a session worktree's handlers against the app's live data.
+  async describe(input: CentraidDescribeInput, overrideCodeDir?: string): Promise<ToolResult> {
     const { app, action, query } = input;
     if (app === undefined) {
       // No filter — return all apps.
@@ -233,7 +233,7 @@ export class Dispatcher {
     if (!entry) {
       return errorResult('UNKNOWN_APP', `app "${app}" is not registered`);
     }
-    const codeDir = await this.resolveCodeDir(entry);
+    const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
       return errorResult('NO_ACTIVE_VERSION', `app "${app}" has no active version`);
     }
@@ -279,7 +279,7 @@ export class Dispatcher {
 
   // --------- write (action) ---------
 
-  async write(input: CentraidWriteInput): Promise<ToolResult> {
+  async write(input: CentraidWriteInput, overrideCodeDir?: string): Promise<ToolResult> {
     const { app: appId, action: actionName, input: handlerInput } = input;
     if (!appId || !actionName) {
       return errorResult('INVALID_INPUT', 'centraid_write requires { app, action }');
@@ -291,7 +291,7 @@ export class Dispatcher {
     if (isReservedHandlerName(actionName)) {
       return runBuiltinWrite(entry, actionName, handlerInput, this.builtinHelpers());
     }
-    const codeDir = await this.resolveCodeDir(entry);
+    const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
       return errorResult('NO_ACTIVE_VERSION', `app "${appId}" has no active version`);
     }
@@ -350,7 +350,7 @@ export class Dispatcher {
 
   // --------- read (query) ---------
 
-  async read(input: CentraidReadInput): Promise<ToolResult> {
+  async read(input: CentraidReadInput, overrideCodeDir?: string): Promise<ToolResult> {
     const { app: appId, query: queryName, input: handlerInput } = input;
     if (!appId || !queryName) {
       return errorResult('INVALID_INPUT', 'centraid_read requires { app, query }');
@@ -362,7 +362,7 @@ export class Dispatcher {
     if (isReservedHandlerName(queryName)) {
       return runBuiltinRead(entry, queryName, handlerInput, this.builtinHelpers());
     }
-    const codeDir = await this.resolveCodeDir(entry);
+    const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
       return errorResult('NO_ACTIVE_VERSION', `app "${appId}" has no active version`);
     }
