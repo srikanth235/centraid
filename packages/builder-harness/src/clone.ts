@@ -2,7 +2,13 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
-import { rewriteAutomationManifestNames, rewriteIndexHtmlTitle } from './project-rewrites.js';
+import {
+  applyManifestName,
+  rewriteAutomationManifestNames,
+  rewriteIndexHtmlTitle,
+  rewriteTitleInHtml,
+} from './project-rewrites.js';
+import type { ScaffoldFile } from './scaffold-files.js';
 import { isDisplayNameTaken, validateAppId } from './scaffold.js';
 
 /**
@@ -200,6 +206,102 @@ export function suggestCloneIdentityFrom(
     'already_exists',
     `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`,
   );
+}
+
+export interface CloneTemplateFilesOptions {
+  /** Id for the new app. Validated against the standard rules. */
+  newAppId: string;
+  /** The template's files (the desktop reads its bundled catalog locally). */
+  templateFiles: ScaffoldFile[];
+  /** Optional display name; defaults to the template's `app.json#name`. */
+  newName?: string;
+  /** Optional one-line description; defaults to the template's. */
+  newDesc?: string;
+}
+
+/**
+ * Filesystem-free variant of {@link cloneTemplate} for the git-store/HTTP
+ * path (issue #141). Takes the template's file map and returns the full
+ * rewritten file map for the new app — same rewrites as the disk path:
+ *   - `app.json` → fresh `id`, `name`, `version` "0.1.0", carried/overridden `description`
+ *   - `package.json#name` → `centraid-app-<id>` (only if it followed the convention)
+ *   - `index.html` `<title>` → new name
+ *   - `automations/<id>/automation.json#name` + re-stamped `generated`
+ * Seeds `automations/README.md` when the template ships no automations.
+ */
+export function cloneTemplateFiles(opts: CloneTemplateFilesOptions): ScaffoldFile[] {
+  validateAppId(opts.newAppId);
+  const out = opts.templateFiles.map((f) => ({ ...f }));
+  const byPath = new Map(out.map((f, i) => [f.path, i] as const));
+
+  const set = (p: string, content: string): void => {
+    const idx = byPath.get(p);
+    if (idx === undefined) {
+      byPath.set(p, out.length);
+      out.push({ path: p, content });
+    } else {
+      out[idx] = { path: p, content };
+    }
+  };
+
+  // app.json — fresh id/version, name + description applied.
+  const appJsonIdx = byPath.get('app.json');
+  let parsedAppJson: Record<string, unknown> = {};
+  if (appJsonIdx !== undefined) {
+    try {
+      parsedAppJson = JSON.parse(out[appJsonIdx]!.content) as Record<string, unknown>;
+    } catch {
+      parsedAppJson = {};
+    }
+  }
+  const nextName =
+    opts.newName ?? (typeof parsedAppJson.name === 'string' ? parsedAppJson.name : 'Untitled');
+  const nextAppJson: Record<string, unknown> = {
+    ...parsedAppJson,
+    id: opts.newAppId,
+    name: nextName,
+    version: '0.1.0',
+  };
+  const descSource =
+    opts.newDesc ??
+    (typeof parsedAppJson.description === 'string' ? parsedAppJson.description : '');
+  const descTrimmed = descSource.trim();
+  if (descTrimmed) nextAppJson.description = descTrimmed;
+  else delete nextAppJson.description;
+  set('app.json', JSON.stringify(nextAppJson, null, 2) + '\n');
+
+  // package.json — only rewrite the convention-following name.
+  const pkgIdx = byPath.get('package.json');
+  if (pkgIdx !== undefined) {
+    try {
+      const pkg = JSON.parse(out[pkgIdx]!.content) as { name?: unknown } & Record<string, unknown>;
+      if (typeof pkg.name === 'string' && pkg.name.startsWith('centraid-app-')) {
+        pkg.name = `centraid-app-${opts.newAppId}`;
+        set('package.json', JSON.stringify(pkg, null, 2) + '\n');
+      }
+    } catch {
+      /* unparseable — leave alone */
+    }
+  }
+
+  if (opts.newName) {
+    const htmlIdx = byPath.get('index.html');
+    if (htmlIdx !== undefined) {
+      set('index.html', rewriteTitleInHtml(out[htmlIdx]!.content, opts.newName));
+    }
+    for (const f of out) {
+      if (!/^automations\/[^/]+\/automation\.json$/.test(f.path)) continue;
+      const next = applyManifestName(f.content, opts.newName, { stampGenerated: true });
+      if (next !== null) set(f.path, next);
+    }
+  }
+
+  // Seed an automations brief when the template ships none.
+  const hasAutomation = out.some((f) => /^automations\/[^/]+\/automation\.json$/.test(f.path));
+  if (!hasAutomation && !byPath.has('automations/README.md')) {
+    set('automations/README.md', AUTOMATIONS_README);
+  }
+  return out;
 }
 
 async function copyDir(src: string, dest: string): Promise<void> {

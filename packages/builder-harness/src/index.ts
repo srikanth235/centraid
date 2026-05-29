@@ -35,8 +35,22 @@ export {
   validateAppId,
 } from './scaffold.js';
 
+// Filesystem-free scaffolders for the git-store/HTTP path (issue #141):
+// these emit a `{path, content}[]` file map the desktop PUTs into a
+// session and publishes — no local workspace dir required.
+export {
+  scaffoldProjectFiles,
+  updateProjectMetaFiles,
+  appPackageJson,
+  type ScaffoldFile,
+  type ScaffoldProjectOpts,
+} from './scaffold-files.js';
+
 export {
   scaffoldAutomationProject,
+  scaffoldAutomationProjectFiles,
+  setAutomationEnabledInFiles,
+  deleteAutomationFromFiles,
   validateAutomationId,
   validateAutomationAppId,
   AUTOMATION_APP_PREFIX,
@@ -45,10 +59,12 @@ export {
 
 export {
   cloneTemplate,
+  cloneTemplateFiles,
   suggestAppId,
   suggestCloneIdentity,
   suggestCloneIdentityFrom,
   type CloneTemplateOptions,
+  type CloneTemplateFilesOptions,
 } from './clone.js';
 
 export { publishProject } from './publish.js';
