@@ -27,8 +27,6 @@ const Channel = {
   AGENT_EVENT: 'centraid:agent:event',
 
   PUBLISH: 'centraid:publish',
-  VERSIONS_LIST: 'centraid:versions:list',
-  VERSIONS_ACTIVATE: 'centraid:versions:activate',
   PUBLISH_STATUS: 'centraid:publish:status',
   PUBLISH_EVENT: 'centraid:publish:event',
 
@@ -60,30 +58,19 @@ const Channel = {
   AUTH_STATUS: 'centraid:auth:status',
   AUTH_RESYNC: 'centraid:auth:resync',
 
-  USER_ID_GET: 'centraid:user:id',
-  USER_PREFS_GET: 'centraid:user:prefs:get',
-  USER_PREFS_SAVE: 'centraid:user:prefs:save',
-
   PROVIDER_API_KEY_SET: 'centraid:agent:provider:setApiKey',
   PROVIDER_API_KEY_HAS: 'centraid:agent:provider:hasApiKey',
   PROVIDER_API_KEY_CLEAR: 'centraid:agent:provider:clearApiKey',
 
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 
-  // Automations (issue #91). Automations are first-class projects on
-  // disk under `automationsDir`; these channels read/write that project
-  // tree and the unified run ledger.
-  AUTOMATIONS_LIST: 'centraid:automations:list',
-  AUTOMATIONS_READ: 'centraid:automations:read',
+  // Automations (issue #91). Only the create/enable/delete mutators stay on
+  // IPC (scaffold + editing session + publish orchestration); the read/run/
+  // analytics surface + insights moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot.
   AUTOMATIONS_CREATE: 'centraid:automations:create',
-  AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
   AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
   AUTOMATIONS_DELETE: 'centraid:automations:delete',
-  AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
-  AUTOMATIONS_READ_RUN: 'centraid:automations:read-run',
-  AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
-  AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
-  INSIGHTS_SUMMARY: 'centraid:insights:summary',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -146,15 +133,12 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     return () => ipcRenderer.off(Channel.AGENT_EVENT, handler);
   },
 
-  // Publish + versions
+  // Publish
   publish: (input: { id: string; skipBuild?: boolean }) =>
     ipcRenderer.invoke(Channel.PUBLISH, input),
-  listVersions: (input: { id: string }) => ipcRenderer.invoke(Channel.VERSIONS_LIST, input),
-  activateVersion: (input: { id: string; versionId: string }) =>
-    ipcRenderer.invoke(Channel.VERSIONS_ACTIVATE, input),
   // App read surface (live URL / schema / table rows / SQL / logs /
-  // deregister) moved to the renderer's direct HTTP client
-  // (renderer/gateway-client.ts) under the thin-client pivot.
+  // deregister) + version list/activate moved to the renderer's direct HTTP
+  // client (renderer/gateway-client.ts) under the thin-client pivot.
   // Auto-publish queue (issue #108) — workspaces upload to the gateway
   // on every save. Renderer can poll a snapshot of the status, or
   // subscribe to per-event broadcasts to toast failures inline.
@@ -253,13 +237,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   authStatus: () => ipcRenderer.invoke(Channel.AUTH_STATUS),
   authResync: () => ipcRenderer.invoke(Channel.AUTH_RESYNC),
 
-  // Gateway-side user identity + global prefs (centraid-user.sqlite). The
-  // renderer treats the gateway as source of truth and keeps the local
-  // Store value as a fast-paint cache only.
-  getUserId: () => ipcRenderer.invoke(Channel.USER_ID_GET),
-  getUserPrefs: () => ipcRenderer.invoke(Channel.USER_PREFS_GET),
-  saveUserPrefs: (patch: Record<string, unknown>) =>
-    ipcRenderer.invoke(Channel.USER_PREFS_SAVE, patch),
+  // Gateway-side user identity + global prefs (centraid-user.sqlite) moved
+  // to the renderer's direct HTTP client (renderer/gateway-client.ts) under
+  // the thin-client pivot — pure `/_centraid-user` reads/writes.
 
   // Custom OpenAI-compatible provider — API key persisted via Electron
   // safeStorage in the main process. Renderer can write, check presence,
@@ -274,10 +254,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // settings panel opens or the user clicks "Test connection".
   getRunnerStatus: () => ipcRenderer.invoke(Channel.RUNNER_STATUS_GET),
 
-  // Automations (issue #91) — first-class projects on disk.
-  listAutomations: () => ipcRenderer.invoke(Channel.AUTOMATIONS_LIST),
-  readAutomation: (input: { automationId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_READ, input),
+  // Automations (issue #91) — create/enable/delete mutators. The read/run/
+  // analytics surface + insights moved to the renderer's direct HTTP client.
   createAutomation: (input: {
     id: string;
     name?: string;
@@ -290,23 +268,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     onFailure?: string;
     enabled?: boolean;
   }) => ipcRenderer.invoke(Channel.AUTOMATIONS_CREATE, input),
-  runAutomationNow: (input: { automationId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_RUN_NOW, input),
   setAutomationEnabled: (input: { automationId: string; enabled: boolean }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_SET_ENABLED, input),
   deleteAutomation: (input: { automationId: string }) =>
     ipcRenderer.invoke(Channel.AUTOMATIONS_DELETE, input),
-  // Run ledger reads. Returns the rows newest-first.
-  listAutomationRuns: (input: { automationId?: string; limit?: number }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUNS, input),
-  readAutomationRun: (input: { runId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_READ_RUN, input),
-  listAutomationRunNodes: (input: { runId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUN_NODES, input),
-  pinAutomationRun: (input: { runId: string; pinned: boolean }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_PIN_RUN, input),
-
-  // Insights (issue #90) — analytics over the unified run ledger.
-  getInsightsSummary: (input?: { windowDays?: number }) =>
-    ipcRenderer.invoke(Channel.INSIGHTS_SUMMARY, input ?? {}),
 });

@@ -70,19 +70,11 @@ async function call<T>(method: string, sub: string, body?: unknown): Promise<T> 
   return parsed as T;
 }
 
-export async function fetchUserId(): Promise<string> {
-  const out = await call<{ id: string }>('GET', '/id');
-  return out.id;
-}
-
+// The renderer now reads user id + prefs and writes prefs directly over
+// HTTP (renderer/gateway-client.ts) under the thin-client pivot. Only the
+// main process's internal prefs read for the runner-preflight loader
+// (`loadRunnerPrefs` in ipc.ts) still goes through here.
 export async function fetchUserPrefs(): Promise<Record<string, unknown>> {
   const out = await call<{ prefs: Record<string, unknown> }>('GET', '/prefs');
-  return out.prefs ?? {};
-}
-
-export async function saveUserPrefs(
-  patch: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  const out = await call<{ prefs: Record<string, unknown> }>('PUT', '/prefs', { patch });
   return out.prefs ?? {};
 }

@@ -32,6 +32,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] IPC-vs-HTTP concept doc + token audit
 - [x] CORS on the local gateway for renderer-direct HTTP
 - [x] Renderer token bridge + app read surface over direct HTTP
+- [x] Renderer data plane over direct HTTP — versions, user prefs, automation reads, insights
 
 ## What changed
 
@@ -252,6 +253,31 @@ the functions instead of reaching through `window.CentraidApi`. These were
 pure proxies over `@centraid/builder-harness`'s gateway-client with no
 main-side state, so nothing else changes.
 
+**Renderer data plane over direct HTTP — versions, user prefs, automation
+reads, insights.** Extends `renderer/gateway-client.ts` with the rest of the
+read/run data plane and deletes the matching IPC. Migrated: version history
+(`listVersions` — including the git-store active-tag → `current` +
+`activeVersion` shaping the old handler did — and `activateVersion`'s
+forward-only rollback); the `/_centraid-user` surface (`getUserId`,
+`getUserPrefs`, `saveUserPrefs`); and the automation read/run/analytics
+surface (`listAutomations`, `readAutomation`, `runAutomationNow`,
+`listAutomationRuns`, `readAutomationRun`, `listAutomationRunNodes`,
+`pinAutomationRun`, `getInsightsSummary`). Their IPC handlers + preload
+methods + channel constants are deleted, the `CentraidApi` typings are
+trimmed, and the `app.ts` / `builder.ts` call sites import the functions
+directly. The automation **create / enable / delete** mutators stay on IPC
+for now — they orchestrate scaffold + editing session + publish, which moves
+to the gateway in a later phase. One behavior dropped deliberately:
+`saveUserPrefs` no longer pokes the main-side preflight cache
+(`noteRunnerPrefsChanged`); the cache already keys on the runner prefs that
+matter (kind / binPath / provider id+baseUrl+envKey) so a meaningful change
+re-probes on its own, and the runner-status panel (`getRunnerStatus`)
+force-invalidates before every read regardless. Dead client functions in
+`main/apps-store-client.ts` (rollback + the automation run/insights proxies)
+and `main/user-prefs-client.ts` (`fetchUserId`, `saveUserPrefs`) are removed;
+both modules stay because the create-path + the runner-preflight loader still
+use `listAutomationsHttp` / `listGitVersions` / `fetchUserPrefs`.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -305,6 +331,17 @@ main-side state, so nothing else changes.
   scripts load as `<script type="module">`, so the import resolves), and
   `oxlint` confirms the removed IPC handlers / preload methods left no
   dangling imports.
+- Renderer data plane over direct HTTP — versions, user prefs, automation
+  reads, insights: full `turbo run build typecheck lint test` green across
+  all 28 tasks. `@centraid/desktop` typechecks + builds with the expanded
+  `renderer/gateway-client.ts`; `oxlint` confirms the removed handlers,
+  preload methods, channel constants, and the now-dead `apps-store-client` /
+  `user-prefs-client` exports left no dangling imports (the trimmed
+  runtime-core type imports in `apps-store-client.ts` resolve clean). The
+  gateway routes these client methods call are already covered by
+  `automations-routes.test.ts` (C4) and the git-store version/rollback +
+  `/_centraid-user` route tests, so the renderer methods are wire shims with
+  no new server behavior to retest.
 
 ## Out of scope
 

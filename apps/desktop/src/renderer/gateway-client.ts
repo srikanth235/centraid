@@ -12,8 +12,10 @@
  *
  * This module ports the pure `fetch` methods that previously lived in
  * `main/*-client.ts` + `@centraid/builder-harness`'s `gateway-client`.
- * It grows one method-group per phase; this slice covers the app read
- * surface (schema / table-rows / query / logs / deregister / live URL).
+ * It grows one method-group per phase; so far it covers the app read
+ * surface (schema / table-rows / query / logs / deregister / live URL),
+ * version history (list / activate), the `/_centraid-user` identity + prefs
+ * surface, and the automation read/run/analytics + insights surface.
  */
 
 /** Auth resolved from main: normalized base URL + optional bearer token. */
@@ -183,4 +185,240 @@ export async function deregisterApp(input: { id: string }): Promise<{ id: string
     headers: authHeaders(token),
   });
   return readJson<{ id: string }>(res, 'deregister');
+}
+
+// ---- Versions (git-store tag history) ----
+
+/** Raw tag-driven version entry from the git store, newest-first. */
+interface GitVersion {
+  tag: string;
+  version: number;
+  sha: string;
+  uploadedAt: string;
+  /** `true` iff this tag's subtree matches the one currently on main. */
+  active: boolean;
+}
+
+/**
+ * Version history for the app, shaped for the renderer's version list.
+ * Mirrors the old VERSIONS_LIST IPC handler: the git store marks the
+ * active tag explicitly (`active: true` on the entry whose subtree
+ * matches main — after a rollback that's NOT necessarily the newest
+ * tag), which becomes `current` per-row + the top-level `activeVersion`.
+ */
+export async function listVersions(input: {
+  id: string;
+}): Promise<{ activeVersion?: string; versions: CentraidVersionRecord[] }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/git-versions`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  // The app may have no tags yet (never published) — the gateway 404s
+  // until the first publish lands a tag; treat that as an empty list.
+  if (res.status === 404) {
+    await res.body?.cancel().catch(() => {});
+    return { versions: [] };
+  }
+  const out = await readJson<{ versions: GitVersion[] }>(res, 'list versions');
+  const list = out.versions ?? [];
+  if (list.length === 0) return { versions: [] };
+  const activeEntry = list.find((v) => v.active);
+  const versions: CentraidVersionRecord[] = list.map((v) => ({
+    versionId: v.tag,
+    sha256: v.sha,
+    declaredVersion: String(v.version),
+    uploadedAt: v.uploadedAt,
+    bytes: 0,
+    files: 0,
+    ...(v.active ? { current: true } : {}),
+  }));
+  return {
+    versions,
+    ...(activeEntry ? { activeVersion: activeEntry.tag } : {}),
+  };
+}
+
+/**
+ * Roll the app back to an existing version tag (forward-only overlay).
+ * `versionId` is the version tag returned by `listVersions`; we report
+ * it back as the new active version.
+ */
+export async function activateVersion(input: {
+  id: string;
+  versionId: string;
+}): Promise<{ activeVersion: string }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/rollback`, {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ versionTag: input.versionId }),
+  });
+  await readJson<{ id: string; sha: string }>(res, 'activate version');
+  return { activeVersion: input.versionId };
+}
+
+// ---- User identity + global prefs (`/_centraid-user`) ----
+
+/** Stable user UUID, generated gateway-side on first read. */
+export async function getUserId(): Promise<string> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/_centraid-user/id`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ id: string }>(res, 'fetch user id');
+  return out.id;
+}
+
+/** Snapshot of every gateway-side global preference. */
+export async function getUserPrefs(): Promise<Record<string, unknown>> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/_centraid-user/prefs`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ prefs: Record<string, unknown> }>(res, 'fetch user prefs');
+  return out.prefs ?? {};
+}
+
+/**
+ * Merge `patch` into the gateway-side prefs store; returns the full map.
+ *
+ * The old IPC handler also called `noteRunnerPrefsChanged()` to drop the
+ * main process's in-memory preflight cache. That's no longer needed from
+ * here: the preflight cache keys on the runner prefs that matter
+ * (kind / binPath / provider id+baseUrl+envKey), so a change to any of
+ * them re-probes automatically; and the runner-status panel
+ * (`getRunnerStatus`) force-invalidates before every read regardless.
+ */
+export async function saveUserPrefs(
+  patch: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/_centraid-user/prefs`, {
+    method: 'PUT',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ patch }),
+  });
+  const out = await readJson<{ prefs: Record<string, unknown> }>(res, 'save user prefs');
+  return out.prefs ?? {};
+}
+
+// ---- Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ----
+// Read/run/analytics proxies. Code (manifests) resolves gateway-side from
+// the materialized `main`; run ledgers + analytics from the gateway's data
+// dir. A run-now fires on the gateway host with ITS runner + provider key.
+
+/** Every automation on `main`, sorted by name. */
+export async function listAutomations(): Promise<CentraidAutomationRow[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_automations`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ rows: CentraidAutomationRow[] }>(res, 'list automations');
+  return out.rows ?? [];
+}
+
+/** One automation by its `<appId>/<id>` ref, or `null` when absent/invalid. */
+export async function readAutomation(input: {
+  automationId: string;
+}): Promise<CentraidAutomationRow | null> {
+  // Mirror the old handler's `parseAutomationRef` guard: a valid ref is
+  // `<appId>/<id>`, so anything without a slash can't resolve.
+  if (!input.automationId.includes('/')) return null;
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_automations/read?ref=${enc(input.automationId)}`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ row: CentraidAutomationRow | null }>(res, 'read automation').catch(
+    () => ({ row: null }),
+  );
+  return out.row ?? null;
+}
+
+/** Fire an automation now on the gateway host; returns the minted run id. */
+export async function runAutomationNow(input: {
+  automationId: string;
+}): Promise<CentraidAutomationRunResult> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/run-now?ref=${enc(input.automationId)}`,
+    { method: 'POST', headers: authHeaders(token) },
+  );
+  return readJson<CentraidAutomationRunResult>(res, 'run automation');
+}
+
+/** Central run-summary feed, newest-first. Omit `automationId` for the global feed. */
+export async function listAutomationRuns(input: {
+  automationId?: string;
+  limit?: number;
+}): Promise<CentraidAutomationRunRecord[]> {
+  const { baseUrl, token } = await auth();
+  const params = new URLSearchParams();
+  if (input.automationId) params.set('ref', input.automationId);
+  params.set('limit', String(input.limit ?? 50));
+  const res = await doFetch(baseUrl, `/centraid/_automations/runs?${params.toString()}`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ runs: CentraidAutomationRunRecord[] }>(res, 'list runs');
+  return out.runs ?? [];
+}
+
+/** One run's full record from its app's ledger, or `null` when unknown. */
+export async function readAutomationRun(input: {
+  runId: string;
+}): Promise<CentraidAutomationRunRecord | null> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_automations/run?runId=${enc(input.runId)}`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ run: CentraidAutomationRunRecord | null }>(res, 'read run');
+  return out.run ?? null;
+}
+
+/** The run's node timeline from its app's ledger. */
+export async function listAutomationRunNodes(input: {
+  runId: string;
+}): Promise<CentraidAutomationRunNode[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_automations/run/nodes?runId=${enc(input.runId)}`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ nodes: CentraidAutomationRunNode[] }>(res, 'run nodes');
+  return out.nodes ?? [];
+}
+
+/** Pin / unpin a run as a replay fixture (ledger + central summary). */
+export async function pinAutomationRun(input: {
+  runId: string;
+  pinned: boolean;
+}): Promise<{ ok: true }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_automations/run/pin?runId=${enc(input.runId)}`, {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ pinned: input.pinned }),
+  });
+  await readJson(res, 'pin run');
+  return { ok: true };
+}
+
+/** The Insights screen's analytics payload over the central run ledger. */
+export async function getInsightsSummary(input?: {
+  windowDays?: number;
+}): Promise<CentraidInsightsSummary> {
+  const { baseUrl, token } = await auth();
+  const qs = input?.windowDays !== undefined ? `?windowDays=${enc(String(input.windowDays))}` : '';
+  const res = await doFetch(baseUrl, `/centraid/_insights/summary${qs}`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  return readJson<CentraidInsightsSummary>(res, 'insights summary');
 }

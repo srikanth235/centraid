@@ -23,31 +23,18 @@ import {
 import { PREVIEW_SCHEME } from './preview-protocol.js';
 import { refreshAuthInjector } from './auth-injector.js';
 import { resetChatHistoryAuthCache } from './chat-history-client.js';
-import {
-  fetchUserId,
-  fetchUserPrefs,
-  saveUserPrefs,
-  resetUserPrefsAuthCache,
-} from './user-prefs-client.js';
+import { fetchUserPrefs, resetUserPrefsAuthCache } from './user-prefs-client.js';
 import {
   deleteApp as appsStoreDeleteApp,
   listAppsWithMeta as appsStoreListAppsWithMeta,
   publishApp as appsStorePublishApp,
   readDraftFiles as appsStoreReadDraftFiles,
   resetAppsStoreAuthCache,
-  rollbackApp as appsStoreRollbackApp,
   listGitVersions as appsStoreListGitVersions,
   writeDraftFile as appsStoreWriteDraftFile,
   writeDraftFiles as appsStoreWriteDraftFiles,
   deleteDraftFiles as appsStoreDeleteDraftFiles,
   listAutomationsHttp,
-  readAutomationHttp,
-  runAutomationNow,
-  listAutomationRunsHttp,
-  readAutomationRunHttp,
-  listAutomationRunNodesHttp,
-  pinAutomationRunHttp,
-  insightsSummaryHttp,
 } from './apps-store-client.js';
 import {
   dropProjectSession,
@@ -77,11 +64,8 @@ import {
   WEBHOOK_ROUTE_PREFIX,
   type ProvisionedWebhook,
   type AutomationRow,
-  type AutomationRunNodeRow,
-  type AutomationRunRow,
   type AutomationTrigger,
   type AutomationHistoryKeep,
-  type InsightsSummary,
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
@@ -145,11 +129,10 @@ export const Channel = {
   AGENT_EVENT: 'centraid:agent:event',
 
   PUBLISH: 'centraid:publish',
-  VERSIONS_LIST: 'centraid:versions:list',
-  VERSIONS_ACTIVATE: 'centraid:versions:activate',
   // APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY / APP_LOGS /
-  // APPS_DEREGISTER are gone — the renderer calls these gateway routes
-  // directly (thin-client pivot; see renderer/gateway-client.ts).
+  // APPS_DEREGISTER / VERSIONS_LIST / VERSIONS_ACTIVATE are gone — the
+  // renderer calls these gateway routes directly (thin-client pivot; see
+  // renderer/gateway-client.ts).
 
   /** Status read for the auto-publish queue (renderer toast / debug). */
   PUBLISH_STATUS: 'centraid:publish:status',
@@ -179,12 +162,9 @@ export const Channel = {
   AUTH_STATUS: 'centraid:auth:status',
   AUTH_RESYNC: 'centraid:auth:resync',
 
-  // Gateway-side user identity + global preferences (theme, density, accent…).
-  // These read/write the centraid-user.sqlite that the runtime exposes at
-  // `/_centraid-user/*` — same file regardless of local vs. remote gateway.
-  USER_ID_GET: 'centraid:user:id',
-  USER_PREFS_GET: 'centraid:user:prefs:get',
-  USER_PREFS_SAVE: 'centraid:user:prefs:save',
+  // Gateway-side user identity + global preferences (theme, density, accent…)
+  // moved to the renderer's direct HTTP client (renderer/gateway-client.ts)
+  // under the thin-client pivot — pure `/_centraid-user/*` reads/writes.
 
   // Provider secret (custom OpenAI-compatible endpoint API key, stored
   // via Electron `safeStorage` outside the gateway DB). The plaintext
@@ -198,25 +178,15 @@ export const Channel = {
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 
   // Automations (issue #98) — desktop UI surface over the automations
-  // owned by app folders under `appsDir`. Manual run-now fires the
-  // local handler runtime in-process.
-  AUTOMATIONS_LIST: 'centraid:automations:list',
-  AUTOMATIONS_READ: 'centraid:automations:read',
+  // owned by app folders under `appsDir`. Only the create/enable/delete
+  // mutators stay on IPC (they orchestrate scaffold + session + publish);
+  // the read/run/analytics surface (list/read/run-now/list-runs/read-run/
+  // list-run-nodes/pin-run) + INSIGHTS_SUMMARY moved to the renderer's
+  // direct HTTP client (renderer/gateway-client.ts) under the thin-client
+  // pivot — they were pure gateway proxies.
   AUTOMATIONS_CREATE: 'centraid:automations:create',
-  AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
   AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
   AUTOMATIONS_DELETE: 'centraid:automations:delete',
-  // Run audit + node timeline (issue #80 / #90). Read-only views over
-  // the unified `runs` / `run_nodes` ledger.
-  AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
-  AUTOMATIONS_READ_RUN: 'centraid:automations:read-run',
-  AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
-  // Pin / unpin a run as a replay fixture (issue #80 follow-up).
-  AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
-
-  // Insights (issue #90) — read-only analytics over the unified run
-  // ledger. One channel returns the whole screen's payload.
-  INSIGHTS_SUMMARY: 'centraid:insights:summary',
 } as const;
 
 /**
@@ -469,18 +439,13 @@ export function registerIpcHandlers(): void {
   );
 
   // ----- User identity + prefs (gateway-backed) -----
-  ipcMain.handle(Channel.USER_ID_GET, async () => fetchUserId());
-  ipcMain.handle(Channel.USER_PREFS_GET, async () => fetchUserPrefs());
-  ipcMain.handle(Channel.USER_PREFS_SAVE, async (_e, patch: Record<string, unknown>) => {
-    const next = await saveUserPrefs(patch);
-    // A change to any `agent.runner.*` key (kind, provider config) makes
-    // the cached preflight stale. Invalidating unconditionally is cheap —
-    // the next status read just re-probes once.
-    if (Object.keys(patch).some((k) => k.startsWith('agent.runner.'))) {
-      noteRunnerPrefsChanged();
-    }
-    return next;
-  });
+  // USER_ID_GET / USER_PREFS_GET / USER_PREFS_SAVE moved to the renderer's
+  // direct HTTP client (renderer/gateway-client.ts) under the thin-client
+  // pivot. The preflight-cache drop that rode prefs-save is no longer needed
+  // here: the cache keys on the runner prefs that matter and the
+  // runner-status read (RUNNER_STATUS_GET) force-invalidates before probing.
+  // The main process still reads prefs internally via `fetchUserPrefs` in
+  // `loadRunnerPrefs` below.
 
   // ----- Provider secret (custom OpenAI-compatible endpoint API key) -----
   // The plaintext lives only in the main process — renderer can set, query
@@ -839,48 +804,11 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  ipcMain.handle(Channel.VERSIONS_LIST, async (_e, input: { id: string }) => {
-    const list = await appsStoreListGitVersions(input.id).catch(() => []);
-    if (list.length === 0) return { versions: [] };
-    // The git store marks the active tag explicitly (`active: true` on
-    // the entry whose `apps/<appId>/` subtree matches main). After a
-    // forward publish, that's the newest tag; after a rollback overlay,
-    // it's the older tag whose subtree was re-laid — NOT necessarily
-    // list[0]. The renderer reads `activeVersion` to set the live URL
-    // on app reopen, so the shape mirrors the legacy `listVersions`.
-    const activeEntry = list.find((v) => v.active);
-    const versions = list.map((v) => ({
-      versionId: v.tag,
-      sha256: v.sha,
-      declaredVersion: String(v.version),
-      uploadedAt: v.uploadedAt,
-      bytes: 0,
-      files: 0,
-      ...(v.active ? { current: true } : {}),
-    }));
-    return {
-      versions,
-      ...(activeEntry ? { activeVersion: activeEntry.tag } : {}),
-    };
-  });
-
-  ipcMain.handle(
-    Channel.VERSIONS_ACTIVATE,
-    async (_e, input: { id: string; versionId: string }) => {
-      // `versionId` from the renderer is the version tag (e.g.
-      // `<appId>/v3`) — same shape we returned from VERSIONS_LIST.
-      // Rollback overlays that tag's subtree on main as a fresh commit;
-      // we report the requested tag back as the active version.
-      await appsStoreRollbackApp(input.id, input.versionId);
-      return { activeVersion: input.versionId };
-    },
-  );
-
-  // APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY / APP_LOGS /
-  // APPS_DEREGISTER moved to the renderer's direct HTTP client
-  // (`renderer/gateway-client.ts`) under the thin-client pivot — they were
-  // pure proxies over `@centraid/builder-harness`'s gateway-client with no
-  // main-side state, so the renderer now calls the gateway directly.
+  // VERSIONS_LIST / VERSIONS_ACTIVATE moved to the renderer's direct HTTP
+  // client (`renderer/gateway-client.ts`) under the thin-client pivot —
+  // pure git-store tag reads + a forward-only rollback POST, no main-side
+  // state. APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY /
+  // APP_LOGS / APPS_DEREGISTER moved there too.
 
   // ----- Templates -----
   ipcMain.handle(Channel.TEMPLATES_LIST, async () => {
@@ -1001,29 +929,12 @@ export function registerIpcHandlers(): void {
   // ----- Automations (issue #98) -----
   // An automation lives inside an app folder under `appsDir`. An
   // `automationId` IPC argument is the automation's `<appId>/<id>`
-  // handle, and a runId is `<appId>/<id>:<ts>:<rand>`. Every read/run/
-  // analytics op below is a thin proxy over the gateway's
-  // `/centraid/_automations` + `/centraid/_insights` routes (issue #141),
-  // so they work against local AND remote gateways. The gateway owns the
-  // materialized `main` (code), the per-app `runtime.sqlite` ledgers, and
-  // the central analytics DB.
-
-  ipcMain.handle(Channel.AUTOMATIONS_LIST, async (): Promise<AutomationRow[]> => {
-    // Automations are CODE on `main`; the gateway reads them off its
-    // materialized tree and returns them over HTTP (issue #141) so this
-    // works for local AND remote gateways.
-    const { rows } = await listAutomationsHttp();
-    return rows;
-  });
-
-  ipcMain.handle(
-    Channel.AUTOMATIONS_READ,
-    async (_e, input: { automationId: string }): Promise<AutomationRow | null> => {
-      const ref = parseAutomationRef(input.automationId);
-      if (!ref) return null;
-      return readAutomationHttp(input.automationId).catch(() => null);
-    },
-  );
+  // handle. Only the create/enable/delete mutators stay on IPC — they
+  // orchestrate scaffold + editing session + publish. The read/run/
+  // analytics surface moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot. The gateway
+  // owns the materialized `main` (code), the per-app `runtime.sqlite`
+  // ledgers, and the central analytics DB.
 
   ipcMain.handle(
     Channel.AUTOMATIONS_CREATE,
@@ -1123,16 +1034,9 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  ipcMain.handle(
-    Channel.AUTOMATIONS_RUN_NOW,
-    async (_e, input: { automationId: string }): Promise<{ runId: string }> => {
-      // Fire on the gateway host (issue #141): the gateway mints the run
-      // id, fires fire-and-forget with ITS runner + provider key, and
-      // returns the id the renderer polls. For a remote gateway the run
-      // executes there, not on this desktop.
-      return runAutomationNow(input.automationId);
-    },
-  );
+  // AUTOMATIONS_RUN_NOW moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) — a pure run-now POST to the gateway,
+  // which fires with ITS runner + provider key and returns the run id.
 
   ipcMain.handle(
     Channel.AUTOMATIONS_SET_ENABLED,
@@ -1222,57 +1126,11 @@ export function registerIpcHandlers(): void {
     return { ok: true };
   });
 
-  // Run feed — central run summaries. `automationId` is optional: omit
-  // it for the global Executions feed, pass it to scope to one handle.
-  ipcMain.handle(
-    Channel.AUTOMATIONS_LIST_RUNS,
-    async (_e, input: { automationId?: string; limit?: number }): Promise<AutomationRunRow[]> => {
-      // The gateway filters to automation fires (not chat turns) and maps
-      // to the feed shape (issue #141), so this is a thin proxy.
-      return listAutomationRunsHttp(input.automationId, input.limit ?? 50);
-    },
-  );
-
-  // Single run — the full record from the run's own ledger. Unlike the
-  // central summary `listRuns` returns, this carries `inputJson` /
-  // `outputJson`, so the run viewer can show the run's actual output.
-  ipcMain.handle(
-    Channel.AUTOMATIONS_READ_RUN,
-    async (_e, input: { runId: string }): Promise<AutomationRunRow | null> => {
-      return readAutomationRunHttp(input.runId);
-    },
-  );
-
-  // Run detail — the node timeline lives in the run's full ledger: the
-  // owning app's `runtime.sqlite` (automation and chat alike).
-  ipcMain.handle(
-    Channel.AUTOMATIONS_LIST_RUN_NODES,
-    async (_e, input: { runId: string }): Promise<AutomationRunNodeRow[]> => {
-      return listAutomationRunNodesHttp(input.runId);
-    },
-  );
-
-  // Pin / unpin a run as a replay fixture — flip it in the run's own
-  // ledger and mirror the flag into the central summary so the feed and
-  // Insights stay consistent.
-  ipcMain.handle(
-    Channel.AUTOMATIONS_PIN_RUN,
-    async (_e, input: { runId: string; pinned: boolean }): Promise<{ ok: true }> => {
-      // The gateway flips the flag in both the run's ledger and the central
-      // summary (issue #141), keeping the feed + Insights consistent.
-      await pinAutomationRunHttp(input.runId, input.pinned);
-      return { ok: true };
-    },
-  );
-
-  // Insights — the whole screen's analytics payload in one read over the
-  // central `run_summary` ledger (chat turns + automation fires).
-  ipcMain.handle(
-    Channel.INSIGHTS_SUMMARY,
-    async (_e, input?: { windowDays?: number }): Promise<InsightsSummary> => {
-      return insightsSummaryHttp(input?.windowDays);
-    },
-  );
+  // The run feed / single-run / node-timeline / pin-run reads and
+  // INSIGHTS_SUMMARY moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot — they were
+  // pure proxies over the gateway's `/centraid/_automations` +
+  // `/centraid/_insights` routes with no main-side state.
 }
 
 /**

@@ -5,7 +5,21 @@
 // so they're one tap away from being cloned & deployed.
 // governance: allow-repo-hygiene file-size-limit shell-entry-point pending split into route modules
 
-import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
+import {
+  appQuery,
+  appLiveUrl,
+  deregisterApp,
+  getUserPrefs,
+  saveUserPrefs,
+  listAutomations,
+  readAutomation,
+  runAutomationNow,
+  listAutomationRuns,
+  readAutomationRun,
+  listAutomationRunNodes,
+  pinAutomationRun,
+  getInsightsSummary,
+} from './gateway-client.js';
 
 (function () {
   const root = document.querySelector('#root') as HTMLElement;
@@ -204,7 +218,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
   // perfectly good fallback when the gateway is unreachable.
   void (async () => {
     try {
-      const remote = await window.CentraidApi.getUserPrefs();
+      const remote = await getUserPrefs();
       const recognised = pickAppearance(remote);
       if (Object.keys(recognised).length > 0) {
         prefs = { ...prefs, ...recognised, bgL: 5 };
@@ -284,7 +298,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
     // see the previous gateway value (and reapply it if it diverges).
     const remotePatch = toRemoteShape(patch);
     if (Object.keys(remotePatch).length > 0) {
-      void window.CentraidApi.saveUserPrefs(remotePatch).catch(() => undefined);
+      void saveUserPrefs(remotePatch).catch(() => undefined);
     }
   }
 
@@ -1324,7 +1338,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
 
     let summary: CentraidInsightsSummary;
     try {
-      summary = await window.CentraidApi.getInsightsSummary();
+      summary = await getInsightsSummary();
     } catch (err) {
       if (!document.contains(bodyHost)) return;
       bodyHost.replaceChildren(
@@ -1597,10 +1611,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
       let rows: CentraidAutomationRow[] = [];
       let entries: AutomationFeedEntry[] = [];
       try {
-        [rows, entries] = await Promise.all([
-          window.CentraidApi.listAutomations(),
-          collectAutomationRuns(),
-        ]);
+        [rows, entries] = await Promise.all([listAutomations(), collectAutomationRuns()]);
       } catch (err) {
         if (document.contains(scroll)) {
           scroll.replaceChildren(
@@ -2042,8 +2053,8 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
       let runs: CentraidAutomationRunRecord[] = [];
       try {
         [row, runs] = await Promise.all([
-          window.CentraidApi.readAutomation({ automationId }),
-          window.CentraidApi.listAutomationRuns({ automationId, limit: 40 }),
+          readAutomation({ automationId }),
+          listAutomationRuns({ automationId, limit: 40 }),
         ]);
       } catch (err) {
         if (document.contains(scroll)) {
@@ -2113,7 +2124,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
       runBtn.querySelector('span')!.textContent = 'Starting…';
       void (async () => {
         try {
-          const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          const { runId } = await runAutomationNow({ automationId: row.ref });
           // Hand off to the run viewer, which streams the run live.
           renderRunView(row.ref, runId);
         } catch (err) {
@@ -2404,9 +2415,9 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
       let nodes: CentraidAutomationRunNode[] = [];
       try {
         [row, run, nodes] = await Promise.all([
-          window.CentraidApi.readAutomation({ automationId }),
-          window.CentraidApi.readAutomationRun({ runId }),
-          window.CentraidApi.listAutomationRunNodes({ runId }),
+          readAutomation({ automationId }),
+          readAutomationRun({ runId }),
+          listAutomationRunNodes({ runId }),
         ]);
       } catch (err) {
         if (!stopped && document.contains(scroll)) {
@@ -2473,7 +2484,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
       runAgain.disabled = true;
       void (async () => {
         try {
-          const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          const { runId } = await runAutomationNow({ automationId: row.ref });
           renderRunView(row.ref, runId);
         } catch (err) {
           runAgain.disabled = false;
@@ -2710,10 +2721,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
     let autos: CentraidAutomationRow[] = [];
     let runs: CentraidAutomationRunRecord[] = [];
     try {
-      [autos, runs] = await Promise.all([
-        window.CentraidApi.listAutomations(),
-        window.CentraidApi.listAutomationRuns({ limit: 100 }),
-      ]);
+      [autos, runs] = await Promise.all([listAutomations(), listAutomationRuns({ limit: 100 })]);
     } catch {
       return [];
     }
@@ -4448,7 +4456,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
     );
     panes.automations.append(automationsHost);
     if (appId) {
-      void window.CentraidApi.listAutomations().then((all) => {
+      void listAutomations().then((all) => {
         if (!document.contains(panel)) return;
         const rows = all.filter((r) => r.manifest.apps?.includes(appId));
         if (rows.length === 0) return;
@@ -4805,7 +4813,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
   async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
     const deadline = Date.now() + 6 * 60 * 1000;
     while (Date.now() < deadline) {
-      const rec = await window.CentraidApi.readAutomationRun({ runId });
+      const rec = await readAutomationRun({ runId });
       if (rec && rec.endedAt !== undefined) return rec;
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
@@ -4820,7 +4828,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
     try {
       // run-now fires in the background and returns the run id; poll the
       // ledger for the finished record to report the card's outcome.
-      const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+      const { runId } = await runAutomationNow({ automationId: row.ref });
       const rec = await waitForAutomationRun(runId);
       automationRunState.set(stateKey, {
         kind: 'done',
@@ -4850,7 +4858,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
     host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'Loading…'));
     let runs: CentraidAutomationRunRecord[];
     try {
-      runs = await window.CentraidApi.listAutomationRuns({ automationId, limit: 25 });
+      runs = await listAutomationRuns({ automationId, limit: 25 });
     } catch (err) {
       host.replaceChildren(
         el(
@@ -4878,7 +4886,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
     host: HTMLElement,
   ): Promise<void> {
     try {
-      await window.CentraidApi.pinAutomationRun({ runId: run.runId, pinned: !run.pinned });
+      await pinAutomationRun({ runId: run.runId, pinned: !run.pinned });
     } catch (err) {
       showToast(`Could not update pin: ${err instanceof Error ? err.message : String(err)}`);
       return;
@@ -4950,7 +4958,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
     host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'Loading nodes…'));
     let nodes: CentraidAutomationRunNode[];
     try {
-      nodes = await window.CentraidApi.listAutomationRunNodes({ runId });
+      nodes = await listAutomationRunNodes({ runId });
     } catch (err) {
       host.replaceChildren(
         el(
@@ -5061,7 +5069,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
     host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'Loading child run…'));
     let nodes: CentraidAutomationRunNode[];
     try {
-      nodes = await window.CentraidApi.listAutomationRunNodes({ runId });
+      nodes = await listAutomationRunNodes({ runId });
     } catch (err) {
       host.replaceChildren(
         el(
@@ -5734,9 +5742,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
       },
     };
 
-    const userPrefsSnapshot = await window.CentraidApi.getUserPrefs().catch(
-      () => ({}) as Record<string, unknown>,
-    );
+    const userPrefsSnapshot = await getUserPrefs().catch(() => ({}) as Record<string, unknown>);
     const readPref = (k: string): string =>
       typeof userPrefsSnapshot[k] === 'string' ? (userPrefsSnapshot[k] as string) : '';
     const initialWire = readPref('agent.runner.provider.wireApi');
@@ -5849,12 +5855,10 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
           // the Claude Agent SDK speaks Anthropic wire format and ignores
           // `RunnerPrefs.provider`. If the user is on a different runner, flip
           // them to Codex so saving doesn't silently no-op.
-          const livePrefs = await window.CentraidApi.getUserPrefs().catch(
-            () => ({}) as Record<string, unknown>,
-          );
+          const livePrefs = await getUserPrefs().catch(() => ({}) as Record<string, unknown>);
           const currentKind = livePrefs['agent.runner.kind'];
           const switchingKind = currentKind !== 'codex';
-          await window.CentraidApi.saveUserPrefs({
+          await saveUserPrefs({
             'agent.runner.provider.id': trim(providerIdInput.value),
             'agent.runner.provider.name': trim(providerNameInput.value),
             'agent.runner.provider.baseUrl': trim(baseUrlInput.value),
@@ -5905,7 +5909,7 @@ import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
       onClick: async () => {
         clearProviderBtn.setAttribute('disabled', '');
         try {
-          await window.CentraidApi.saveUserPrefs({
+          await saveUserPrefs({
             'agent.runner.provider.id': null,
             'agent.runner.provider.name': null,
             'agent.runner.provider.baseUrl': null,

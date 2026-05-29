@@ -11,7 +11,19 @@
 //   Right pane: Preview (iframe → live gateway URL or local centraid-preview://)
 //               or Code (project files, syntax-highlighted).
 
-import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gateway-client.js';
+import {
+  appSchema,
+  appTableRows,
+  appQuery,
+  appLogs,
+  appLiveUrl,
+  listVersions,
+  activateVersion,
+  listAutomations,
+  runAutomationNow,
+  readAutomationRun,
+  listAutomationRuns,
+} from './gateway-client.js';
 
 (function () {
   // A single tool invocation. Multiple of these are consolidated into a
@@ -2242,7 +2254,7 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
         if (!force && versionsCache !== undefined && versionsCache !== 'error') return;
         versionsCache = 'pending';
         try {
-          versionsCache = await Api().listVersions({ id: projectId });
+          versionsCache = await listVersions({ id: projectId });
         } catch {
           // The gateway returns 404/409 before the first publish; treat all
           // failures as "no versions yet" rather than surfacing the raw error.
@@ -3244,7 +3256,7 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
           // Automations are user-owned projects; this panel shows the
           // ones associated with the app being built (issue #91).
           const pid = projectId;
-          const all = await Api().listAutomations();
+          const all = await listAutomations();
           automationsCache = all.filter((r) => r.manifest.apps?.includes(pid));
           automationsError = undefined;
         } catch (err) {
@@ -3279,7 +3291,7 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
         try {
           // run-now fires in the background and returns the run id; poll
           // the ledger for the finished record to report the outcome.
-          const { runId } = await Api().runAutomationNow({ automationId: row.ref });
+          const { runId } = await runAutomationNow({ automationId: row.ref });
           const rec = await waitForAutomationRun(runId);
           automationRunState.set(row.name, {
             kind: 'done',
@@ -3305,7 +3317,7 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
       async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
         const deadline = Date.now() + 6 * 60 * 1000;
         while (Date.now() < deadline) {
-          const rec = await Api().readAutomationRun({ runId });
+          const rec = await readAutomationRun({ runId });
           if (rec && rec.endedAt !== undefined) return rec;
           await new Promise((resolve) => setTimeout(resolve, 1500));
         }
@@ -3342,9 +3354,9 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
         return;
       }
 
-      let result: Awaited<ReturnType<Window['CentraidApi']['listVersions']>>;
+      let result: Awaited<ReturnType<typeof listVersions>>;
       try {
-        result = await Api().listVersions({ id: projectId });
+        result = await listVersions({ id: projectId });
       } catch (err) {
         list.innerHTML = `<div class="empty">No versions yet. Publish to create the first one.</div>`;
         // Fall back to empty list — gateway returns 404/409 if app isn't yet uploaded.
@@ -3393,7 +3405,7 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
                         class: 'btn btn-soft tiny-btn',
                         onClick: async () => {
                           try {
-                            await Api().activateVersion({
+                            await activateVersion({
                               id: projectId!,
                               versionId: v.versionId,
                             });
@@ -3789,7 +3801,7 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
         // `listVersions` actually contacts the gateway and 404s when the app
         // isn't there, so it's the honest probe.
         try {
-          const versions = await Api().listVersions({ id: projectId });
+          const versions = await listVersions({ id: projectId });
           if (versions.activeVersion) {
             const r = await appLiveUrl({ id: projectId });
             liveUrl = r.url;
@@ -3900,7 +3912,7 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
       try {
         // The builder opens an automation app by its folder id; resolve
         // the single automation it owns to get the `<appId>/<id>` handle.
-        const all = await Api().listAutomations();
+        const all = await listAutomations();
         const row = all.find((r) => r.ownerApp === projectId);
         if (row) automationRow = row;
       } catch {
@@ -3950,11 +3962,11 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
       try {
         // run-now fires in the background and returns the run id; poll
         // the ledger for the finished record to surface the outcome.
-        const { runId } = await Api().runAutomationNow({ automationId: ref });
+        const { runId } = await runAutomationNow({ automationId: ref });
         const deadline = Date.now() + 6 * 60 * 1000;
         let rec: CentraidAutomationRunRecord | null = null;
         while (Date.now() < deadline) {
-          rec = await Api().readAutomationRun({ runId });
+          rec = await readAutomationRun({ runId });
           if (rec && rec.endedAt !== undefined) break;
           await new Promise((resolve) => setTimeout(resolve, 1500));
         }
@@ -4174,8 +4186,7 @@ import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gatewa
       rightPaneContent.append(wrap);
 
       if (!projectId || !automationRow) return;
-      void Api()
-        .listAutomationRuns({ automationId: automationRow.ref, limit: 20 })
+      void listAutomationRuns({ automationId: automationRow.ref, limit: 20 })
         .then((runs) => {
           list.innerHTML = '';
           if (runs.length === 0) {

@@ -459,13 +459,10 @@ interface CentraidApi {
   onAgentEvent(cb: (msg: { projectId: string; event: CentraidAgentEvent }) => void): () => void;
 
   publish(input: { id: string; skipBuild?: boolean }): Promise<CentraidPublishResult>;
-  listVersions(input: {
-    id: string;
-  }): Promise<{ activeVersion?: string; versions: CentraidVersionRecord[] }>;
-  activateVersion(input: { id: string; versionId: string }): Promise<{ activeVersion: string }>;
   // appLiveUrl / appSchema / appTableRows / appQuery / appLogs /
-  // deregisterApp moved to the renderer's direct HTTP client
-  // (renderer/gateway-client.ts) under the thin-client pivot.
+  // deregisterApp / listVersions / activateVersion moved to the renderer's
+  // direct HTTP client (renderer/gateway-client.ts) under the thin-client
+  // pivot — pure git-store reads with no main-side state.
 
   /**
    * Snapshot of the auto-publish queue (issue #108). Every workspace
@@ -636,22 +633,11 @@ interface CentraidApi {
   /** Re-probe the on-disk credential locations and return a fresh snapshot. */
   authResync(): Promise<CentraidAuthImportResult>;
 
-  /**
-   * Stable user identity, generated on the gateway side on first read.
-   * Persists with the gateway's centraid-user.sqlite — the same UUID survives
-   * Electron reinstalls and travels with whichever gateway you point at.
-   */
-  getUserId(): Promise<string>;
-  /**
-   * Snapshot of every gateway-side global preference (theme, density, accent,
-   * …). Empty object on first launch.
-   */
-  getUserPrefs(): Promise<Record<string, unknown>>;
-  /**
-   * Merge `patch` into the gateway-side prefs store. `null`/`undefined` values
-   * delete the corresponding key. Returns the full prefs map after the write.
-   */
-  saveUserPrefs(patch: Record<string, unknown>): Promise<Record<string, unknown>>;
+  // getUserId / getUserPrefs / saveUserPrefs moved to the renderer's direct
+  // HTTP client (renderer/gateway-client.ts) under the thin-client pivot —
+  // pure `/_centraid-user` reads/writes. The main-side preflight-cache drop
+  // that rode `saveUserPrefs` is no longer needed (the cache keys on the
+  // runner prefs that matter, and the runner-status read force-invalidates).
 
   /**
    * Persist the API key for the custom OpenAI-compatible provider via
@@ -679,10 +665,14 @@ interface CentraidApi {
   // folder under `appsDir`; these read/write that project tree and the
   // unified run ledger. An `automationId` argument is the automation's
   // `<appId>/<id>` handle (the `ref` field of `CentraidAutomationRow`).
-  /** Every automation across all app folders, sorted by name. */
-  listAutomations(): Promise<CentraidAutomationRow[]>;
-  /** Read one automation by its `<appId>/<id>` handle, or `null`. */
-  readAutomation(input: { automationId: string }): Promise<CentraidAutomationRow | null>;
+  //
+  // The read/run/analytics surface (listAutomations / readAutomation /
+  // runAutomationNow / listAutomationRuns / readAutomationRun /
+  // listAutomationRunNodes / pinAutomationRun / getInsightsSummary) moved
+  // to the renderer's direct HTTP client (renderer/gateway-client.ts) under
+  // the thin-client pivot — pure gateway proxies. The create/enable/delete
+  // mutators stay on IPC for now (scaffold + session + publish orchestration
+  // moves to the gateway in a later phase).
   /**
    * Scaffold a new automation project and register its triggers. When a
    * webhook trigger is requested the result carries the one-time
@@ -707,33 +697,8 @@ interface CentraidApi {
     row: CentraidAutomationRow;
     webhook?: { id: string; secret: string; url: string };
   }>;
-  /** Fire an automation now (a manual-trigger run). */
-  runAutomationNow(input: { automationId: string }): Promise<CentraidAutomationRunResult>;
   setAutomationEnabled(input: { automationId: string; enabled: boolean }): Promise<{ ok: true }>;
   deleteAutomation(input: { automationId: string }): Promise<{ ok: true }>;
-  /**
-   * Run records from the unified ledger. Omit `automationId` for the
-   * global Executions feed; pass it to scope to one automation.
-   */
-  listAutomationRuns(input: {
-    automationId?: string;
-    limit?: number;
-  }): Promise<CentraidAutomationRunRecord[]>;
-  /**
-   * One run's full record from its own ledger — unlike the summary rows
-   * `listAutomationRuns` returns, this carries `inputJson` / `outputJson`.
-   */
-  readAutomationRun(input: { runId: string }): Promise<CentraidAutomationRunRecord | null>;
-  listAutomationRunNodes(input: { runId: string }): Promise<CentraidAutomationRunNode[]>;
-  /** Pin / unpin a run as a replay fixture. */
-  pinAutomationRun(input: { runId: string; pinned: boolean }): Promise<{ ok: true }>;
-
-  /**
-   * Insights (issue #90) — the whole analytics screen's payload in one
-   * read over the unified run ledger (chat turns + automation fires +
-   * builder runs). `windowDays` defaults to 30.
-   */
-  getInsightsSummary(input?: { windowDays?: number }): Promise<CentraidInsightsSummary>;
 }
 
 /** KPI tiles for the Insights screen. */
