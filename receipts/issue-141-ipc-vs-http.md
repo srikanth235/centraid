@@ -26,7 +26,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Automation + insights HTTP routes
 - [x] Reconcile OS scheduler on publish/delete/rollback
 - [x] Desktop scaffold/clone/meta over HTTP
-- [ ] Desktop automation CRUD over HTTP
+- [x] Desktop automation CRUD over HTTP
 - [ ] Desktop automation read/run/analytics over HTTP
 - [ ] PROJECTS_OPEN + AGENT_* gated as the only local-only handlers
 - [ ] IPC-vs-HTTP concept doc + token audit
@@ -116,6 +116,32 @@ single-file PUT, and `httpProjectInfo` synthesizes the `ProjectInfo`
 return (no local dir to stat — the canonical metadata flows back through
 `listProjects()`).
 
+**Desktop automation CRUD over HTTP.** The three automation-mutation IPC
+handlers move off the local worktree onto the git-store HTTP surface, and
+the desktop stops touching the OS scheduler directly:
+- `AUTOMATIONS_CREATE` builds the file map with
+  `scaffoldAutomationProjectFiles`, rejects an id already on `main`, mints
+  webhook secrets desktop-side (hash only published), then session-PUT +
+  publish. (The created `row` is still read back from the local
+  materialized tree until C8 moves automation reads over HTTP.)
+- `AUTOMATIONS_SET_ENABLED` reads the app's draft over HTTP, flips the flag
+  via `setAutomationEnabledInFiles`, writes back only the changed manifest,
+  and publishes.
+- `AUTOMATIONS_DELETE`'s app-owned branch reads the draft, computes the
+  removed paths with `deleteAutomationFromFiles`, DELETEs them through the
+  session file-delete route (new `deleteDraftFiles` client helper), and
+  republishes; the whole-automation-app branch already used the HTTP app
+  delete.
+All four direct `localRuntimeAutomationHost(...).register/unregister` calls
+(create, set-enabled, delete, and the template-clone post-publish block)
+are removed — the local gateway's `serve()` is wired with
+`schedulerHostFactory`, so its `onAppLive`/`onAppDeleted` reconcile the
+scheduler on publish/delete (C5); a remote gateway reconciles its own.
+Drops the now-unused `ensureProjectSessionAppsParent`,
+`localRuntimeAutomationHost`, `APP_AUTOMATIONS_SUBDIR`,
+`readAutomationProjectAt`, `setAutomationEnabledAt`, `deleteAutomationAt`
+imports from `ipc.ts`.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -138,6 +164,12 @@ return (no local dir to stat — the canonical metadata flows back through
   `kind: 'automation'`, and a provisioned webhook (hashed secret, no
   plaintext, no `pending`). The component pieces (file-map scaffolders,
   webhook provisioning, session PUT/publish) keep their own unit coverage.
+- Desktop automation CRUD: full suite green; new
+  `automation-lifecycle-over-http.test.ts` (gateway-runtime) drives the
+  toggle + app-owned-delete wire paths end to end against a real gateway —
+  toggling `enabled` republishes the manifest, and deleting the subdir via
+  the file-DELETE route + republish removes the automation while the owning
+  app survives on `main`.
 
 ## Out of scope
 

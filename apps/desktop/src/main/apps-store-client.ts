@@ -142,6 +142,39 @@ export async function writeDraftFiles(
   }
 }
 
+/** Delete a single draft file from a session worktree (issue #141). */
+export async function deleteDraftFile(
+  sessionId: string,
+  appId: string,
+  relPath: string,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const rel = relPath
+    .split('/')
+    .map((s) => encodeURIComponent(s))
+    .join('/');
+  const res = await fetch(
+    `${baseUrl}/centraid/_apps/${encodeURIComponent(appId)}/files/${rel}?sessionId=${encodeURIComponent(sessionId)}`,
+    { method: 'DELETE', headers: headers(token) },
+  );
+  await parse(res, 'delete-file');
+}
+
+/**
+ * Delete a batch of draft files from a session worktree (issue #141).
+ * Sequential DELETEs over the single-file route — used by the HTTP
+ * app-owned-automation delete path so it works against a remote gateway.
+ */
+export async function deleteDraftFiles(
+  sessionId: string,
+  appId: string,
+  relPaths: ReadonlyArray<string>,
+): Promise<void> {
+  for (const rel of relPaths) {
+    await deleteDraftFile(sessionId, appId, rel);
+  }
+}
+
 export interface PublishResult {
   id: string;
   versionTag: string;

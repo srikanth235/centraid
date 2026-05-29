@@ -40,11 +40,11 @@ import {
   listGitVersions as appsStoreListGitVersions,
   writeDraftFile as appsStoreWriteDraftFile,
   writeDraftFiles as appsStoreWriteDraftFiles,
+  deleteDraftFiles as appsStoreDeleteDraftFiles,
 } from './apps-store-client.js';
 import {
   dropProjectSession,
   ensureProjectSession,
-  ensureProjectSessionAppsParent,
   ensureProjectSessionDir,
   resetProjectSessions,
 } from './project-sessions.js';
@@ -56,7 +56,6 @@ import {
 } from './auth-import.js';
 import {
   localRuntimeActiveCodeAppsDir,
-  localRuntimeAutomationHost,
   localRuntimeCodexHomeBaseDir,
   localRuntimeAppsDir,
   localRuntimeAnalyticsDb,
@@ -71,14 +70,10 @@ import {
 } from '@centraid/agent-runtime';
 import {
   AnalyticsStore,
-  APP_AUTOMATIONS_SUBDIR,
   AutomationRunsStore,
   InsightsStore,
   listAutomations,
   readAppOwnedAutomation,
-  readAutomationProjectAt,
-  setAutomationEnabledAt,
-  deleteAutomationAt,
   parseAutomationRef,
   makeAnalyticsDbProvider,
   makeRuntimeDbProvider,
@@ -1016,27 +1011,12 @@ export function registerIpcHandlers(): void {
       );
     });
 
-    // Register any automations the template shipped with the OS
-    // scheduler so cron triggers fire and webhook routes resolve without
-    // waiting for the next runtime start. Best-effort. Code resolves from
-    // the git-store `active-main` — the same tree the scheduler bakes.
-    // Only automation apps (`kind: 'automation'`) host automations.
-    if (tmpl.kind === 'automation') {
-      try {
-        const { rows } = await listAutomations(
-          localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
-        );
-        for (const row of rows) {
-          if (row.ownerApp !== newAppId) continue;
-          await localRuntimeAutomationHost(settings.activeGatewayId).register(row);
-        }
-      } catch (err) {
-        console.warn(
-          `[templates:clone] host register failed for ${newAppId}: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
-    }
+    // The publish above drives OS-scheduler registration: the gateway's
+    // `onAppLive` reconciles the scheduler against the freshly materialized
+    // `main` (issue #141, C5), so an automation template's cron triggers +
+    // webhook routes resolve without the desktop registering them. The
+    // local gateway runs `serve()` in-process with that reconcile wired;
+    // a remote gateway reconciles its own scheduler.
 
     return {
       project: httpProjectInfo(newAppId, {
@@ -1193,7 +1173,16 @@ export function registerIpcHandlers(): void {
       webhook?: { id: string; secret: string; url: string };
     }> => {
       const settings = await loadSettings();
-      const { scaffoldAutomationProject } = await import('@centraid/builder-harness');
+      const { scaffoldAutomationProjectFiles, HarnessError } =
+        await import('@centraid/builder-harness');
+
+      // Reject a collision with an app already on `main` so a create never
+      // clobbers an existing app's draft (the FS scaffolder guarded this
+      // via a dir-exists check; the git-store path checks the list).
+      const existingApps = await appsStoreListAppsWithMeta();
+      if (existingApps.some((a) => a.id === input.id)) {
+        throw new HarnessError('already_exists', `Automation app "${input.id}" already exists.`);
+      }
 
       // Mint webhook secrets server-side: the plaintext is returned once
       // here, the manifest persists only its hash.
@@ -1213,12 +1202,11 @@ export function registerIpcHandlers(): void {
       });
 
       // `input.id` is the automation app's folder id (a plain slug; the
-      // app marks itself `kind: 'automation'` in its `app.json`).
-      // Scaffold into the app's editing-session worktree, then publish
-      // it onto `main` so the materialized tree the OS scheduler reads
-      // has the new automation's code.
-      const parent = await ensureProjectSessionAppsParent(input.id);
-      await scaffoldAutomationProject(parent, input.id, {
+      // app marks itself `kind: 'automation'` in its `app.json`). Build the
+      // file map and push it into the app's editing session over HTTP (no
+      // local worktree path → works against a remote gateway), then
+      // publish onto `main`.
+      const files = scaffoldAutomationProjectFiles(input.id, {
         ...(input.name ? { name: input.name } : {}),
         ...(input.description ? { description: input.description } : {}),
         ...(input.prompt ? { prompt: input.prompt } : {}),
@@ -1229,9 +1217,11 @@ export function registerIpcHandlers(): void {
         ...(input.onFailure ? { onFailure: input.onFailure } : {}),
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       });
-      // Publish synchronously so the OS-scheduler registration below
-      // reads the new manifest from the git-store materialized `main`.
       const sessionId = await ensureProjectSession(input.id);
+      await appsStoreWriteDraftFiles(sessionId, input.id, files);
+      // Publish synchronously so the materialized `main` carries the new
+      // automation. The gateway reconciles the OS scheduler on publish
+      // (issue #141, C5) — the desktop no longer registers it directly.
       await appsStorePublishApp(sessionId, input.id, `scaffold automation ${input.id}`).catch(
         (err: unknown) => {
           console.warn(
@@ -1240,19 +1230,14 @@ export function registerIpcHandlers(): void {
           );
         },
       );
+      // Read the published row back for the renderer. Local read until C8
+      // moves automation reads over HTTP (a remote gateway has no local
+      // materialized tree, so this returns empty there for now).
       const { rows } = await listAutomations(
         localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
       );
       const row = rows.find((r) => r.ownerApp === input.id);
       if (!row) throw new Error(`automation app ${input.id}: scaffolded but not found on main`);
-      try {
-        await localRuntimeAutomationHost(settings.activeGatewayId).register(row);
-      } catch (err) {
-        console.warn(
-          `[automations] host register failed for ${input.id}: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
       return { row, ...(webhook ? { webhook } : {}) };
     },
   );
@@ -1293,21 +1278,21 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_SET_ENABLED,
     async (_e, input: { automationId: string; enabled: boolean }) => {
-      // `manifest.enabled` is the source of truth — toggling rewrites
-      // the automation.json in the app's editing-session worktree, then
-      // publishes onto `main` so the OS scheduler reads the new value
-      // from the fresh materialized tree (issue #137).
-      const settings = await loadSettings();
+      // `manifest.enabled` is the source of truth — toggling rewrites the
+      // automation.json in the app's editing session over HTTP, then
+      // publishes onto `main`. The gateway reconciles the OS scheduler on
+      // publish (issue #141, C5), so the new enabled state takes effect
+      // without the desktop touching the scheduler. No local worktree path
+      // → works against a remote gateway.
       const ref = parseAutomationRef(input.automationId);
       if (!ref) return { ok: true };
-      const appDir = await ensureProjectSessionDir(ref.appId);
-      const sessionAutoDir = path.join(appDir, APP_AUTOMATIONS_SUBDIR, ref.automationId);
-      const current = await readAutomationProjectAt(sessionAutoDir, ref.appId);
-      if (!current) return { ok: true };
-      await setAutomationEnabledAt(sessionAutoDir, ref.appId, input.enabled);
-      // Synchronous publish so the host register below sees the updated
-      // manifest on `main`.
+      const { setAutomationEnabledInFiles } = await import('@centraid/builder-harness');
       const sessionId = await ensureProjectSession(ref.appId);
+      const current = await appsStoreReadDraftFiles(sessionId, ref.appId);
+      const changed = setAutomationEnabledInFiles(current, ref.automationId, input.enabled);
+      // Empty → automation absent or already at the requested state.
+      if (changed.length === 0) return { ok: true };
+      await appsStoreWriteDraftFiles(sessionId, ref.appId, changed);
       await appsStorePublishApp(sessionId, ref.appId, `toggle ${ref.automationId}`).catch(
         (err: unknown) => {
           console.warn(
@@ -1316,40 +1301,18 @@ export function registerIpcHandlers(): void {
           );
         },
       );
-      const row = await readAppOwnedAutomation(
-        localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
-        ref.appId,
-        ref.automationId,
-      );
-      if (row) {
-        try {
-          await localRuntimeAutomationHost(settings.activeGatewayId).register(row);
-        } catch (err) {
-          console.warn(
-            `[automations] host register failed for ${input.automationId}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-        }
-      }
       return { ok: true };
     },
   );
 
   ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { automationId: string }) => {
-    // Delete is best-effort: tear down the OS scheduler entry, then drop
-    // the automation's code from `main` (issue #137). A whole automation
-    // app (`app.json#kind: 'automation'`) is removed entirely via the HTTP
-    // delete; an app-owned automation just loses its `automations/<id>/`
-    // subdir, published as a fresh commit.
+    // Delete is best-effort. A whole automation app (`kind: 'automation'`)
+    // is removed entirely via the HTTP app-delete; an app-owned automation
+    // loses just its `automations/<id>/` subdir, published as a fresh
+    // commit. Either way the gateway reconciles the OS scheduler on
+    // delete/publish (issue #141, C5), so the desktop no longer unregisters
+    // the scheduler entry itself.
     const settings = await loadSettings();
-    try {
-      await localRuntimeAutomationHost(settings.activeGatewayId).unregister(input.automationId);
-    } catch (err) {
-      console.warn(
-        `[automations] host unregister failed for ${input.automationId}: ` +
-          (err instanceof Error ? err.message : String(err)),
-      );
-    }
     const ref = parseAutomationRef(input.automationId);
     if (ref) {
       // Distinguish a whole automation app (`kind: 'automation'` — the app
@@ -1371,16 +1334,15 @@ export function registerIpcHandlers(): void {
           );
         });
       } else {
-        // App-owned automation — drop its subdir in the session worktree,
-        // then publish so `main` no longer lists it.
-        const appDir = await ensureProjectSessionDir(ref.appId);
-        const sessionAutoDir = path.join(appDir, APP_AUTOMATIONS_SUBDIR, ref.automationId);
-        const exists = await readAutomationProjectAt(sessionAutoDir, ref.appId).catch(
-          () => undefined,
-        );
-        if (exists) {
-          await deleteAutomationAt(sessionAutoDir);
-          const sessionId = await ensureProjectSession(ref.appId);
+        // App-owned automation — drop its `automations/<id>/` subdir in the
+        // editing session over HTTP, then publish so `main` no longer lists
+        // it. No local worktree path → works against a remote gateway.
+        const { deleteAutomationFromFiles } = await import('@centraid/builder-harness');
+        const sessionId = await ensureProjectSession(ref.appId);
+        const currentFiles = await appsStoreReadDraftFiles(sessionId, ref.appId);
+        const { removed } = deleteAutomationFromFiles(currentFiles, ref.automationId);
+        if (removed.length > 0) {
+          await appsStoreDeleteDraftFiles(sessionId, ref.appId, removed);
           await appsStorePublishApp(
             sessionId,
             ref.appId,
