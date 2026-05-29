@@ -9,6 +9,7 @@ import {
   appQuery,
   appLiveUrl,
   deregisterApp,
+  listProjects,
   getUserPrefs,
   saveUserPrefs,
   listAutomations,
@@ -758,7 +759,7 @@ import {
   // app-only.
   async function hydrateDrafts(): Promise<void> {
     try {
-      const projs = await window.CentraidApi.listProjects();
+      const projs = await listProjects();
       const knownIds = new Set(getApps().map((a) => a.id));
       drafts = projs
         .filter((p) => p.kind !== 'automation')

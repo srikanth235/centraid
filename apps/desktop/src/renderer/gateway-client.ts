@@ -187,6 +187,32 @@ export async function deregisterApp(input: { id: string }): Promise<{ id: string
   return readJson<{ id: string }>(res, 'deregister');
 }
 
+/** Apps on `main` + their display metadata (the `GET /centraid/_apps` row). */
+export interface AppMetaEntry {
+  id: string;
+  name?: string;
+  description?: string;
+  kind?: 'app' | 'automation';
+  hasIndex: boolean;
+}
+
+/**
+ * Apps published on `main`, with the metadata the home shelf reads. The
+ * git store is the source of truth post-#137 — there's no local worktree
+ * to stat — so this returns the registry-backed metadata row, not the
+ * legacy `CentraidProjectInfo` (the renderer only reads id/name/desc/kind/
+ * hasIndex off it).
+ */
+export async function listProjects(): Promise<AppMetaEntry[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_apps`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<AppMetaEntry[]>(res, 'list apps');
+  return out ?? [];
+}
+
 // ---- Versions (git-store tag history) ----
 
 /** Raw tag-driven version entry from the git store, newest-first. */

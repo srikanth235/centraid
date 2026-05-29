@@ -400,7 +400,9 @@ interface CentraidApi {
   getSettings(): Promise<CentraidSettings>;
   saveSettings(patch: Partial<CentraidSettings>): Promise<CentraidSettings>;
 
-  listProjects(): Promise<CentraidProjectInfo[]>;
+  // listProjects moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot — a pure
+  // `GET /centraid/_apps` registry read.
   createProject(input: {
     id: string;
     name?: string;

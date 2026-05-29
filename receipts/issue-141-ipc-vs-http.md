@@ -276,7 +276,11 @@ force-invalidates before every read regardless. Dead client functions in
 `main/apps-store-client.ts` (rollback + the automation run/insights proxies)
 and `main/user-prefs-client.ts` (`fetchUserId`, `saveUserPrefs`) are removed;
 both modules stay because the create-path + the runner-preflight loader still
-use `listAutomationsHttp` / `listGitVersions` / `fetchUserPrefs`.
+use `listAutomationsHttp` / `listGitVersions` / `fetchUserPrefs`. The app
+shelf's `listProjects` (a pure `GET /centraid/_apps` registry read) moves to
+the renderer client too, and `SETTINGS_GET` now strips `gatewayToken` from
+its payload — the token reaches the renderer only through `getGatewayAuth()`,
+and nothing reads it off `getSettings()`.
 
 ## Verification
 

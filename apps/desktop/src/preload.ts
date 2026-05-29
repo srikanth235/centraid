@@ -12,7 +12,6 @@ const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
 
-  PROJECTS_LIST: 'centraid:projects:list',
   PROJECTS_CREATE: 'centraid:projects:create',
   PROJECTS_FILES: 'centraid:projects:files',
   PROJECTS_WRITE_FILE: 'centraid:projects:write-file',
@@ -105,8 +104,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   saveSettings: (patch: Record<string, unknown>) =>
     ipcRenderer.invoke(Channel.SETTINGS_SAVE, patch),
 
-  // Projects
-  listProjects: () => ipcRenderer.invoke(Channel.PROJECTS_LIST),
+  // Projects (listProjects moved to the renderer's direct HTTP client —
+  // a pure `GET /centraid/_apps` registry read)
   createProject: (input: { id: string; name?: string; version?: string }) =>
     ipcRenderer.invoke(Channel.PROJECTS_CREATE, input),
   readProjectFiles: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_FILES, input),

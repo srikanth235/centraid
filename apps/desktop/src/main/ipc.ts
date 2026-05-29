@@ -114,7 +114,6 @@ export const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
 
-  PROJECTS_LIST: 'centraid:projects:list',
   PROJECTS_CREATE: 'centraid:projects:create',
   PROJECTS_FILES: 'centraid:projects:files',
   PROJECTS_WRITE_FILE: 'centraid:projects:write-file',
@@ -295,7 +294,14 @@ export function registerIpcHandlers(): void {
   };
 
   // ----- Settings -----
-  ipcMain.handle(Channel.SETTINGS_GET, async () => loadSettings());
+  // The bearer token reaches the renderer only through `getGatewayAuth()`
+  // (the single bridge crossing post thin-client pivot), so the broad
+  // settings payload no longer carries `gatewayToken` — nothing in the
+  // renderer reads it off `getSettings()`.
+  ipcMain.handle(Channel.SETTINGS_GET, async () => {
+    const { gatewayToken: _gatewayToken, ...rest } = await loadSettings();
+    return rest;
+  });
   ipcMain.handle(Channel.SETTINGS_SAVE, async (_e, patch: Partial<DesktopSettings>) => {
     const next = await saveSettings(patch);
     // Settings can no longer flip gateway URL/token directly (those
@@ -504,9 +510,10 @@ export function registerIpcHandlers(): void {
   //   - mutates the session worktree directly (filesystem ops on the
   //     materialized session dir — local for the local gateway),
   //   - publishes the session — explicit, no debounce.
-  ipcMain.handle(Channel.PROJECTS_LIST, async () => {
-    return appsStoreListAppsWithMeta();
-  });
+  // PROJECTS_LIST moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) — a pure `GET /centraid/_apps` registry
+  // read. `appsStoreListAppsWithMeta` stays imported; the create/clone/meta
+  // handlers below still use it for collision checks.
 
   ipcMain.handle(
     Channel.PROJECTS_CREATE,
