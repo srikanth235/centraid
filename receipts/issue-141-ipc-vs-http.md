@@ -41,6 +41,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Data-chat panel streams the gateway _chat SSE directly; desktop chat IPC deleted
 - [x] Builder chat streams the gateway _chat SSE; in-process AGENT_* path + agent-session.ts deleted
 - [x] Builder preview iframe points at the gateway _draft URL; centraid-preview:// protocol + PROJECTS_PREVIEW_URL deleted
+- [x] Drop the desktop builder-harness/chat-harness/app-templates deps; relocate template refresh to the gateway; rewrite the thin-client/unified-chat docs
 
 ## What changed
 
@@ -522,8 +523,57 @@ grid (its "git init"); from then on edits stage in the draft and Publish flips
 each subsequent version. So "auto-publish" is the one-time baseline only, not
 per-edit.
 
+**Drop the desktop builder-harness/chat-harness/app-templates deps; relocate
+template refresh to the gateway; rewrite the thin-client/unified-chat docs.**
+Phase 5 strips the desktop main process to its Electron-native core now that
+the gateway owns the builder. Three `@centraid/*` workspace deps leave
+`apps/desktop/package.json`: `chat-harness` (its only consumer, `main/chat.ts`,
+was deleted in Phase 3), `builder-harness` (its last desktop reference was a
+single `HarnessConfig` type import in `main/settings.ts` — the two fields
+`gatewayUrl`/`gatewayToken` are inlined into `DesktopSettings` so the dep can
+go), and `app-templates`. The last was still live for one thing: the desktop's
+startup remote-template fetch (`fetchRemoteTemplates` in `main.ts`'s
+`backgroundFetchTemplates`). That refresh **moves into the gateway**, completing
+"the gateway owns the template catalog": `GatewayPaths` and
+`TemplatesRouteOptions` gain an optional `remoteTemplatesUrl`, and
+`makeTemplatesRouteHandler` fires a one-time best-effort `fetchRemoteTemplates`
+into its cache dir on construction (non-throwing — offline/404/bad-manifest
+leave the cache intact); `serve()` threads it through and the desktop's
+`local-runtime.ts` passes `settings.remoteTemplatesUrl` down. `main.ts` deletes
+`backgroundFetchTemplates`, its call site, and the `app-templates` +
+`templatesCacheDir` imports. `@centraid/agent-runtime` stays — `local-runtime`
++ `ipc.ts`'s `runPreflight` still use it. The three concept docs are rewritten
+to the thin-client + unified-chat model: `docs/concepts/ipc-vs-http.mdx` is
+reframed around "HTTP is the primary channel, the renderer calls the gateway
+directly with a Bearer token, the gateway owns the builder (lifecycle +
+templates + webhook minting + unified chat)", documents the **only** remaining
+local-only IPC op (`PROJECTS_OPEN`; `AGENT_*` retired with the unified chat),
+and reframes the token audit around the **Bearer-in-renderer posture** (first-
+party shell top frame, app code in cross-origin iframes, Bearer not cookie so
+`ACAO: *` leaks nothing, token delivered only via `getGatewayAuth` + stamped
+onto iframe subresource requests by the auth-injector); `gateway.mdx` gains a
+"gateway owns the builder" section and corrects "renderer talks over IPC" →
+"directly over HTTP"; `architecture.mdx` updates the intro + the chat concept
+to one-surface-both-jobs. The same stale "renderer connects over IPC" line is
+fixed in `getting-started.mdx` + `deploy/local.mdx`.
+
 ## Verification
 
+- Drop the desktop builder-harness/chat-harness/app-templates deps; relocate
+  template refresh to the gateway; rewrite the thin-client/unified-chat docs:
+  full `turbo run build typecheck lint test` green across all tasks after a
+  `bun install` pruned the three deps. `@centraid/gateway-runtime` typecheck +
+  lint clean; `templates-routes.test.ts` adds 2 cases — constructing the
+  handler with `remoteTemplatesUrl` + `cacheDir` (and an injected `fetchImpl`)
+  fires a remote fetch on construction, and omitting the URL fires none (53
+  package tests pass). `@centraid/desktop` typechecks + builds with the inlined
+  `DesktopSettings` fields and the relocated fetch; `oxlint` confirms the
+  removed `backgroundFetchTemplates` + `HarnessConfig`/`app-templates`/
+  `templatesCacheDir` imports left nothing dangling, and grep confirms no live
+  `@centraid/builder-harness` / `@centraid/chat-harness` / `@centraid/app-
+  templates` import remains in `apps/desktop/src` (only comments). The doc
+  rewrites keep every internal link resolving (`no-broken-internal-doc-links`
+  green).
 - Builder preview iframe points at the gateway _draft URL; centraid-preview://
   protocol + PROJECTS_PREVIEW_URL deleted: full `turbo run build typecheck lint
   test` green across all 28 tasks. The gateway-side draft serving these URLs hit

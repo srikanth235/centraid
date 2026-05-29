@@ -45,7 +45,7 @@ bun install
 bun run dev:desktop
 ```
 
-This invokes `turbo run dev --filter=@centraid/desktop`. The Electron shell launches with the local gateway embedded in the main process; the renderer connects to it over IPC. App iframes load from the in-process gateway at `/centraid/<id>/`.
+This invokes `turbo run dev --filter=@centraid/desktop`. The Electron shell launches with the local gateway embedded in the main process; the renderer connects to it directly over HTTP with a Bearer token (the desktop is a [thin client](/concepts/ipc-vs-http)). App iframes load from the in-process gateway at `/centraid/<id>/`.
 
 ## Run the mobile companion
 

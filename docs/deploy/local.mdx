@@ -5,7 +5,7 @@ title: 'Local deploy (desktop)'
 
 # Local deploy (desktop)
 
-The default. When you launch the desktop app with `bun run dev:desktop`, the Centraid gateway runs **inside the Electron main process**. The renderer talks to it over IPC; app iframes load from the in-process gateway as if it were a remote URL.
+The default. When you launch the desktop app with `bun run dev:desktop`, the Centraid gateway runs **inside the Electron main process**. The renderer talks to it directly over HTTP with a Bearer token (the desktop is a [thin client](/concepts/ipc-vs-http)); app iframes load from the in-process gateway as if it were a remote URL.
 
 Nothing else to install. Nothing else to start.
 

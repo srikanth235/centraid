@@ -21,7 +21,7 @@ import {
   gatewayIdentityDb,
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
-import { templatesCacheDir } from './settings.js';
+import { loadSettings, templatesCacheDir } from './settings.js';
 import type { AutomationHost } from '@centraid/runtime-core';
 
 /**
@@ -66,7 +66,9 @@ function ensureInfoProviderRegistered(): void {
 
 /**
  * Local gateway storage directory — `<userData>/gateways/<id>/apps/`.
- * The home shelf + preview protocol + dispatcher all read from here.
+ * The home shelf, the draft/published serving, and the dispatcher all read
+ * from here (the old `centraid-preview://` protocol was retired in #141
+ * Phase 4 in favor of gateway draft serving).
  */
 export async function localRuntimeAppsDir(gatewayId: string): Promise<string> {
   return gatewayAppsDir(gatewayId);
@@ -150,6 +152,13 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
     const secrets: SecretsProvider = {
       getProviderApiKey: () => getProviderApiKey(gatewayId),
     };
+    // The gateway owns the template catalog AND its remote refresh now
+    // (issue #141, Phase 5), so pass the optional remote manifest URL down
+    // — the templates route fires a one-time best-effort fetch into the
+    // cache on startup. This is the last thing the desktop main process did
+    // with `@centraid/app-templates`; with it relocated, the desktop drops
+    // the dependency entirely.
+    const settings = await loadSettings();
     const handle = await serve({
       paths: {
         appsDir,
@@ -161,6 +170,7 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
         // `GET /centraid/_templates` route resolves bundle-or-cache from
         // this per-gateway cache dir, matching the old desktop IPC.
         templatesCacheDir: templatesCacheDir(gatewayId),
+        ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
       },
       secrets,
       // Issue #137: the local gateway owns app code as a git store too,

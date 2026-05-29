@@ -5,7 +5,7 @@ title: 'Architecture'
 
 # Architecture
 
-Centraid is one product wearing two shapes: a desktop shell with the gateway embedded in-process, and the same gateway code running remotely as an OpenClaw plugin. Apps are folders. Data is SQLite. AI access goes through three generic tools.
+Centraid is one product wearing two shapes: a desktop shell with the gateway embedded in-process, and the same gateway code running remotely as an OpenClaw plugin. The desktop is a **thin client** — its renderer talks to the gateway directly over HTTP with a Bearer token, and the gateway owns the whole builder (lifecycle, templates, webhook minting, and the AI chat), so local and remote behave identically. Apps are folders. Data is SQLite. AI access goes through three generic tools.
 
 ## The big picture
 
@@ -54,7 +54,7 @@ flowchart TB
 2. **App** — a versioned folder of HTML/CSS/JS + handlers, paired with two persistent SQLite files (`data.sqlite` for app data, `runtime.sqlite` for chat sessions + agent run ledger + automation state). Uploaded as a tarball; activated by atomically flipping `current.json#activeVersion`. [Read more →](/concepts/apps)
 3. **Queries and actions** — the **tools** an app exposes. Declared in `app.json` (`queries[]` and `actions[]`), implemented in `queries/*.js` and `actions/*.js`. Queries may only read; actions are the only place writes happen. The read/write split is enforced by a governance directive at commit time. [Read more →](/concepts/queries-and-actions)
 4. **Change stream** — every action records the tables it touched; the gateway pushes a table-level invalidation on `/centraid/<id>/_changes` (SSE). The app iframe subscribes and re-runs the affected queries. [Read more →](/concepts/change-stream)
-5. **Chat and agents** — every app has a `/centraid/<id>/_chat` surface, served identically on both gateway hosts. The runtime exposes the three tools to whichever agent backend the host wired up. [Read more →](/concepts/chat)
+5. **Chat and agents** — every app has one `/centraid/<id>/_chat` surface that does **both jobs**: editing the app's code and operating its data. The gateway runs the turn in the app's draft worktree with the union of the agent backend's native file tools and the three-tool `centraid_*` dispatcher, so a single chat can rewrite a handler _and_ answer a data question. Code edits stage in the draft (previewable before Publish); Publish is the explicit flip. Served identically on both gateway hosts. [Read more →](/concepts/chat)
 
 ## What runs where
 

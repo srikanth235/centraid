@@ -11,7 +11,7 @@ A **gateway** is the long-running process that mounts the `/centraid` URL prefix
 
 ### Local gateway (embedded in desktop)
 
-When you launch the desktop app with `bun run dev:desktop`, the gateway runs inside the Electron main process. The renderer talks to it over IPC; app iframes load from it just like they would from a remote URL. No second process, no port to expose.
+When you launch the desktop app with `bun run dev:desktop`, the gateway runs inside the Electron main process. The renderer talks to it **directly over HTTP** with a Bearer token (the desktop is a [thin client](/concepts/ipc-vs-http)) — the same authenticated `fetch` it would issue against a remote gateway, just aimed at loopback; app iframes load from it just like they would from a remote URL. No second process, no port to expose.
 
 This is the default mode for personal use. Your data never leaves the laptop.
 
@@ -29,6 +29,16 @@ The legacy "path mode" — register an external folder live for development — 
 > — [`packages/openclaw-plugin/README.md`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/openclaw-plugin/README.md#app-layout-on-disk)
 
 This rules out a whole class of "works on my machine" bugs.
+
+## The gateway owns the builder
+
+The gateway is not just a runtime for published apps — it owns the whole authoring loop, so local and remote behave identically there too:
+
+- **Deterministic lifecycle** — scaffolding a blank app, cloning a template, renaming, and automation CRUD are HTTP endpoints. The desktop states intent; the gateway scaffolds the file map, stages it into a git-store session worktree, mints webhook secrets, and (on explicit publish) flips the live version.
+- **Template catalog** — `GET /centraid/_templates` resolves bundle-or-cache, and the gateway refreshes the cache from a remote manifest URL itself.
+- **Unified AI chat** — one `POST /centraid/<id>/_chat` runs the turn in the app's draft worktree with the union of the agent's native file tools and the `centraid_*` data dispatcher, so a single chat both edits the app's code and operates its data. Edits **stage** in the draft (previewable at `/centraid/_draft/<sessionId>/<id>/`); Publish is the explicit flip.
+
+See [IPC vs HTTP](/concepts/ipc-vs-http) for how the thin desktop client reaches all of this and what little stays on Electron IPC.
 
 ## On-disk layout
 

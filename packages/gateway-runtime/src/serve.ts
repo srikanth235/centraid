@@ -333,7 +333,10 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
       res: import('node:http').ServerResponse,
     ) => Promise<boolean>
   > = [
-    makeTemplatesRouteHandler(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
+    makeTemplatesRouteHandler({
+      ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
+      ...(paths.remoteTemplatesUrl ? { remoteTemplatesUrl: paths.remoteTemplatesUrl } : {}),
+    }),
   ];
 
   if (appsStore) {

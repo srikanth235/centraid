@@ -1,7 +1,6 @@
 import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { HarnessConfig } from '@centraid/builder-harness';
 import { gatewayTemplatesCacheDir, LOCAL_GATEWAY_ID } from './gateway-paths.js';
 import { ensureLocalGateway, listGateways, resolveGateway } from './gateway-store.js';
 
@@ -54,7 +53,17 @@ export interface PersistedSettings {
   onboardingCompletedAt?: string;
 }
 
-export interface DesktopSettings extends HarnessConfig {
+export interface DesktopSettings {
+  /** OpenClaw gateway base URL — e.g. http://127.0.0.1:18789. (Formerly
+   * inherited from `@centraid/builder-harness`'s `HarnessConfig`; inlined
+   * here in #141 Phase 5 so the desktop drops that dependency.) */
+  gatewayUrl: string;
+  /**
+   * Bearer token sent as `Authorization: Bearer <token>` to the gateway.
+   * Empty string disables the header (works only against loopback gateways
+   * configured with `auth.mode: "none"`).
+   */
+  gatewayToken?: string;
   /** Persisted — the gateway the renderer is currently pointing at. */
   activeGatewayId: string;
   /** Derived — `<userData>/gateways/<active>/apps/` (per-app data storage). */

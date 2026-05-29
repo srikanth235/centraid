@@ -13,6 +13,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from './serve.ts';
+import { makeTemplatesRouteHandler } from './templates-routes.ts';
 import type { GatewayPaths } from './paths.ts';
 import type { SecretsProvider } from './secrets.ts';
 
@@ -67,4 +68,41 @@ test('GET /centraid/_templates returns stripped bundled metadata behind auth', a
     assert.ok(!('files' in t), 'files should be stripped from the wire response');
     assert.ok(!('source' in t), 'source should be stripped from the wire response');
   }
+});
+
+// Issue #141, Phase 5: the gateway owns the remote template *refresh* too —
+// the fetch the desktop main process used to run before it dropped
+// `@centraid/app-templates`. Constructing the handler with both a cache dir
+// and a remote URL kicks a one-time best-effort fetch; without the URL it
+// stays quiet.
+test('handler refreshes the cache from the remote URL on construction', async () => {
+  const calls: string[] = [];
+  const fetchImpl = (async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    return new Response(null, { status: 404 }); // manifest miss → fetch bails, never throws
+  }) as typeof fetch;
+
+  makeTemplatesRouteHandler({
+    cacheDir: path.join(dataDir, 'tmpl-cache'),
+    remoteTemplatesUrl: 'https://templates.example.test',
+    fetchImpl,
+  });
+  // Fire-and-forget — let the microtask/IO turn run.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(
+    calls.some((u) => u.startsWith('https://templates.example.test')),
+    `expected a remote fetch on construction; saw ${JSON.stringify(calls)}`,
+  );
+});
+
+test('handler does not fetch when no remote URL is configured', async () => {
+  const calls: string[] = [];
+  const fetchImpl = (async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+
+  makeTemplatesRouteHandler({ cacheDir: path.join(dataDir, 'tmpl-cache'), fetchImpl });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(calls.length, 0, 'no remote URL → no fetch');
 });
