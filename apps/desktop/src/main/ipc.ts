@@ -2,7 +2,6 @@
 import { ipcMain, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { randomUUID } from 'node:crypto';
 import {
   loadSettings,
   saveSettings,
@@ -41,6 +40,14 @@ import {
   writeDraftFile as appsStoreWriteDraftFile,
   writeDraftFiles as appsStoreWriteDraftFiles,
   deleteDraftFiles as appsStoreDeleteDraftFiles,
+  listAutomationsHttp,
+  readAutomationHttp,
+  runAutomationNow,
+  listAutomationRunsHttp,
+  readAutomationRunHttp,
+  listAutomationRunNodesHttp,
+  pinAutomationRunHttp,
+  insightsSummaryHttp,
 } from './apps-store-client.js';
 import {
   dropProjectSession,
@@ -55,28 +62,13 @@ import {
   type AuthStatus,
 } from './auth-import.js';
 import {
-  localRuntimeActiveCodeAppsDir,
   localRuntimeCodexHomeBaseDir,
-  localRuntimeAppsDir,
-  localRuntimeAnalyticsDb,
   noteRunnerPrefsChanged,
   resolveProviderPrefs,
 } from './local-runtime.js';
+import { runPreflight, type OpenAICompatProvider, type RunnerPrefs } from '@centraid/agent-runtime';
 import {
-  runPreflight,
-  runAutomationLocal,
-  type OpenAICompatProvider,
-  type RunnerPrefs,
-} from '@centraid/agent-runtime';
-import {
-  AnalyticsStore,
-  AutomationRunsStore,
-  InsightsStore,
-  listAutomations,
-  readAppOwnedAutomation,
   parseAutomationRef,
-  makeAnalyticsDbProvider,
-  makeRuntimeDbProvider,
   generateWebhookId,
   generateWebhookSecret,
   hashWebhookSecret,
@@ -88,12 +80,8 @@ import {
   type AutomationRunNodeRow,
   type AutomationRunRow,
   type AutomationTrigger,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
   type AutomationHistoryKeep,
-  type DatabaseProvider,
   type InsightsSummary,
-  type RunSummary,
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
@@ -1038,106 +1026,29 @@ export function registerIpcHandlers(): void {
   });
 
   // ----- Automations (issue #98) -----
-  // An automation lives inside an app folder under `appsDir`
-  // (`listAutomations` scans every app's active version). An
+  // An automation lives inside an app folder under `appsDir`. An
   // `automationId` IPC argument is the automation's `<appId>/<id>`
-  // handle. An automation's full run ledger is its app's per-app
-  // `runtime.sqlite`; the central `centraid-analytics.sqlite` holds one
-  // summary row per run and is what the Executions feed + Insights read.
-  // Cache one provider per gateway id — switching gateways changes the
-  // active analytics DB path, and the old provider points at the
-  // previous file. A per-id Map keeps every gateway's provider warm
-  // across switches without re-opening on every call.
-  const analyticsProviders = new Map<string, DatabaseProvider>();
-  const getAnalyticsProvider = (gatewayId: string): DatabaseProvider => {
-    const existing = analyticsProviders.get(gatewayId);
-    if (existing) return existing;
-    const provider = makeAnalyticsDbProvider(localRuntimeAnalyticsDb(gatewayId));
-    analyticsProviders.set(gatewayId, provider);
-    return provider;
-  };
-  /**
-   * Run-ledger store for one run id — every run's full ledger is its
-   * app's `runtime.sqlite`. An automation runId is `<appId>/<id>:...`
-   * (the app id is inline, under the projects `appsDir`); a chat runId
-   * is a bare UUID, so its owning app comes from the central run summary
-   * and the file is under the embedded runtime's apps dir. Returns
-   * undefined when the run can't be located.
-   */
-  const runsStoreForRunId = async (runId: string): Promise<AutomationRunsStore | undefined> => {
-    const settings = await loadSettings();
-    const slash = runId.indexOf('/');
-    if (slash > 0) {
-      return new AutomationRunsStore(
-        makeRuntimeDbProvider(path.join(settings.appsDir, runId.slice(0, slash), 'runtime.sqlite')),
-      );
-    }
-    const summary = new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).getSummary(
-      runId,
-    );
-    if (!summary?.appId) return undefined;
-    return new AutomationRunsStore(
-      makeRuntimeDbProvider(
-        path.join(
-          await localRuntimeAppsDir(settings.activeGatewayId),
-          summary.appId,
-          'runtime.sqlite',
-        ),
-      ),
-    );
-  };
-  /** Map a central run summary into the `AutomationRunRow` feed shape. */
-  const summaryToRunRow = (s: RunSummary): AutomationRunRow => ({
-    runId: s.runId,
-    kind: s.kind,
-    ...(s.automationRef !== undefined ? { automationId: s.automationRef } : {}),
-    triggerKind: s.trigger as AutomationTriggerKind,
-    ...(s.triggerOrigin !== undefined
-      ? { triggerOrigin: s.triggerOrigin as AutomationTriggerOrigin }
-      : {}),
-    ...(s.appId !== undefined ? { appId: s.appId } : {}),
-    ...(s.note !== undefined ? { note: s.note } : {}),
-    ...(s.retryOf !== undefined ? { retryOf: s.retryOf } : {}),
-    startedAt: s.startedAt,
-    ...(s.endedAt !== undefined ? { endedAt: s.endedAt } : {}),
-    ok: s.ok,
-    ...(s.error !== undefined ? { error: s.error } : {}),
-    ...(s.summary !== undefined ? { summary: s.summary } : {}),
-    pinned: s.pinned ?? false,
-    ...(s.totalInputTokens !== undefined ? { totalInputTokens: s.totalInputTokens } : {}),
-    ...(s.totalOutputTokens !== undefined ? { totalOutputTokens: s.totalOutputTokens } : {}),
-    ...(s.totalCacheReadTokens !== undefined
-      ? { totalCacheReadTokens: s.totalCacheReadTokens }
-      : {}),
-    ...(s.totalCacheWriteTokens !== undefined
-      ? { totalCacheWriteTokens: s.totalCacheWriteTokens }
-      : {}),
-    ...(s.totalCostUsd !== undefined ? { totalCostUsd: s.totalCostUsd } : {}),
-    ...(s.stepCount !== undefined ? { stepCount: s.stepCount } : {}),
-    ...(s.toolCount !== undefined ? { toolCount: s.toolCount } : {}),
-  });
+  // handle, and a runId is `<appId>/<id>:<ts>:<rand>`. Every read/run/
+  // analytics op below is a thin proxy over the gateway's
+  // `/centraid/_automations` + `/centraid/_insights` routes (issue #141),
+  // so they work against local AND remote gateways. The gateway owns the
+  // materialized `main` (code), the per-app `runtime.sqlite` ledgers, and
+  // the central analytics DB.
 
   ipcMain.handle(Channel.AUTOMATIONS_LIST, async (): Promise<AutomationRow[]> => {
-    // Automations are CODE — read them from the git-store materialized
-    // `main` (issue #137). For a remote active gateway there's no local
-    // git store, so the dir is absent and `listAutomations` returns [].
-    const settings = await loadSettings();
-    const { rows } = await listAutomations(localRuntimeActiveCodeAppsDir(settings.activeGatewayId));
+    // Automations are CODE on `main`; the gateway reads them off its
+    // materialized tree and returns them over HTTP (issue #141) so this
+    // works for local AND remote gateways.
+    const { rows } = await listAutomationsHttp();
     return rows;
   });
 
   ipcMain.handle(
     Channel.AUTOMATIONS_READ,
     async (_e, input: { automationId: string }): Promise<AutomationRow | null> => {
-      const settings = await loadSettings();
       const ref = parseAutomationRef(input.automationId);
       if (!ref) return null;
-      const row = await readAppOwnedAutomation(
-        localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
-        ref.appId,
-        ref.automationId,
-      ).catch(() => undefined);
-      return row ?? null;
+      return readAutomationHttp(input.automationId).catch(() => null);
     },
   );
 
@@ -1230,12 +1141,9 @@ export function registerIpcHandlers(): void {
           );
         },
       );
-      // Read the published row back for the renderer. Local read until C8
-      // moves automation reads over HTTP (a remote gateway has no local
-      // materialized tree, so this returns empty there for now).
-      const { rows } = await listAutomations(
-        localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
-      );
+      // Read the published row back for the renderer over HTTP (works for
+      // local + remote) — the created automation is the one this app owns.
+      const { rows } = await listAutomationsHttp();
       const row = rows.find((r) => r.ownerApp === input.id);
       if (!row) throw new Error(`automation app ${input.id}: scaffolded but not found on main`);
       return { row, ...(webhook ? { webhook } : {}) };
@@ -1245,33 +1153,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_RUN_NOW,
     async (_e, input: { automationId: string }): Promise<{ runId: string }> => {
-      const settings = await loadSettings();
-      const prefs = await loadRunnerPrefs();
-      // The renderer opens the run viewer on this id and polls the
-      // ledger for live progress, so the run id is minted here and the
-      // fire runs in the background — a handler failure surfaces as a
-      // failed run row, not a rejected invoke.
-      const runId = `${input.automationId}:${Date.now()}:${randomUUID().slice(0, 8)}`;
-      void runAutomationLocal({
-        automationRef: input.automationId,
-        runId,
-        // Data (run ledger) → gateway apps dir; code (manifest +
-        // handler) → git-store materialized `main` (issue #137).
-        appsDir: settings.appsDir,
-        codeAppsDir: localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
-        analytics: new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)),
-        runner: prefs.kind,
-        // "Run now" is a manual fire — tag it so the executions log
-        // distinguishes it from the OS-scheduler trigger.
-        triggerKind: 'manual',
-        triggerOrigin: 'manual',
-      }).catch((err: unknown) => {
-        console.error(
-          `[automations] run-now ${input.automationId} threw: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      });
-      return { runId };
+      // Fire on the gateway host (issue #141): the gateway mints the run
+      // id, fires fire-and-forget with ITS runner + provider key, and
+      // returns the id the renderer polls. For a remote gateway the run
+      // executes there, not on this desktop.
+      return runAutomationNow(input.automationId);
     },
   );
 
@@ -1312,7 +1198,6 @@ export function registerIpcHandlers(): void {
     // commit. Either way the gateway reconciles the OS scheduler on
     // delete/publish (issue #141, C5), so the desktop no longer unregisters
     // the scheduler entry itself.
-    const settings = await loadSettings();
     const ref = parseAutomationRef(input.automationId);
     if (ref) {
       // Distinguish a whole automation app (`kind: 'automation'` — the app
@@ -1356,12 +1241,11 @@ export function registerIpcHandlers(): void {
         }
       }
     }
-    // Drop the automation's central run summaries. Its full ledger
-    // (the app's `runtime.sqlite`) stays under the data dir until the
-    // app's data dir is reaped.
-    new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).deleteByRef(
-      input.automationId,
-    );
+    // The automation's central run summaries + per-app ledger are left in
+    // place; there's no HTTP route to purge analytics, and the desktop no
+    // longer owns a local AnalyticsStore (issue #141). The history stays in
+    // the central ledger (a record of past fires) until the app's data dir
+    // is reaped gateway-side.
     return { ok: true };
   });
 
@@ -1370,14 +1254,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUNS,
     async (_e, input: { automationId?: string; limit?: number }): Promise<AutomationRunRow[]> => {
-      const settings = await loadSettings();
-      const analytics = new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId));
-      const summaries = analytics.listSummaries({
-        ...(input.automationId ? { automationRef: input.automationId } : {}),
-        limit: input.limit ?? 50,
-      });
-      // The Automations screen only wants automation fires, not chat.
-      return summaries.filter((s) => s.kind === 'automation').map(summaryToRunRow);
+      // The gateway filters to automation fires (not chat turns) and maps
+      // to the feed shape (issue #141), so this is a thin proxy.
+      return listAutomationRunsHttp(input.automationId, input.limit ?? 50);
     },
   );
 
@@ -1387,8 +1266,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_READ_RUN,
     async (_e, input: { runId: string }): Promise<AutomationRunRow | null> => {
-      const store = await runsStoreForRunId(input.runId);
-      return store?.getRun(input.runId) ?? null;
+      return readAutomationRunHttp(input.runId);
     },
   );
 
@@ -1397,8 +1275,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_LIST_RUN_NODES,
     async (_e, input: { runId: string }): Promise<AutomationRunNodeRow[]> => {
-      const store = await runsStoreForRunId(input.runId);
-      return store ? store.listNodes(input.runId) : [];
+      return listAutomationRunNodesHttp(input.runId);
     },
   );
 
@@ -1408,13 +1285,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.AUTOMATIONS_PIN_RUN,
     async (_e, input: { runId: string; pinned: boolean }): Promise<{ ok: true }> => {
-      const settings = await loadSettings();
-      const store = await runsStoreForRunId(input.runId);
-      store?.setPinned(input.runId, input.pinned);
-      new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).setPinned(
-        input.runId,
-        input.pinned,
-      );
+      // The gateway flips the flag in both the run's ledger and the central
+      // summary (issue #141), keeping the feed + Insights consistent.
+      await pinAutomationRunHttp(input.runId, input.pinned);
       return { ok: true };
     },
   );
@@ -1424,9 +1297,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.INSIGHTS_SUMMARY,
     async (_e, input?: { windowDays?: number }): Promise<InsightsSummary> => {
-      const settings = await loadSettings();
-      const store = new InsightsStore(getAnalyticsProvider(settings.activeGatewayId));
-      return store.summary(input?.windowDays !== undefined ? { windowDays: input.windowDays } : {});
+      return insightsSummaryHttp(input?.windowDays);
     },
   );
 }

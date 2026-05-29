@@ -27,7 +27,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Reconcile OS scheduler on publish/delete/rollback
 - [x] Desktop scaffold/clone/meta over HTTP
 - [x] Desktop automation CRUD over HTTP
-- [ ] Desktop automation read/run/analytics over HTTP
+- [x] Desktop automation read/run/analytics over HTTP
 - [ ] PROJECTS_OPEN + AGENT_* gated as the only local-only handlers
 - [ ] IPC-vs-HTTP concept doc + token audit
 
@@ -142,6 +142,32 @@ Drops the now-unused `ensureProjectSessionAppsParent`,
 `readAutomationProjectAt`, `setAutomationEnabledAt`, `deleteAutomationAt`
 imports from `ipc.ts`.
 
+**Desktop automation read/run/analytics over HTTP.** The eight read/run/
+analytics IPC handlers that hit local SQLite + the materialized tree
+become thin proxies over the gateway's `/centraid/_automations` +
+`/centraid/_insights` routes (added in C4), so the Automations + Insights
+screens work against a remote gateway:
+`AUTOMATIONS_LIST/READ/RUN_NOW/LIST_RUNS/READ_RUN/LIST_RUN_NODES/PIN_RUN`
+and `INSIGHTS_SUMMARY`, plus the `AUTOMATIONS_CREATE` row read-back. New
+client methods live in `apps-store-client.ts` (`listAutomationsHttp`,
+`readAutomationHttp`, `runAutomationNow`, `listAutomationRunsHttp`,
+`readAutomationRunHttp`, `listAutomationRunNodesHttp`,
+`pinAutomationRunHttp`, `insightsSummaryHttp`) over the same active-gateway
+auth as the git-store surface. Deletes the local `AnalyticsStore` /
+`AutomationRunsStore` / `InsightsStore` / `runAutomationLocal` /
+`runsStoreForRunId` / `summaryToRunRow` / per-gateway analytics-provider
+machinery from `ipc.ts` and the imports that fed it.
+
+Two consequences worth noting:
+- **Run-now executes on the gateway host** with *its* runner + provider
+  key — a remote fire does not use the desktop's key (the route mints the
+  run id and fires fire-and-forget; the renderer polls it as before).
+- **Delete no longer purges analytics.** There's no HTTP route to delete
+  run summaries and the desktop no longer owns an `AnalyticsStore`, so a
+  deleted automation's run history stays in the central ledger until the
+  app's data dir is reaped gateway-side. (The three now-dead
+  `localRuntime*` data-dir exports are flagged for a follow-up cleanup.)
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -170,6 +196,11 @@ imports from `ipc.ts`.
   toggling `enabled` republishes the manifest, and deleting the subdir via
   the file-DELETE route + republish removes the automation while the owning
   app survives on `main`.
+- Desktop automation read/run/analytics: full suite green; the gateway
+  routes the new client methods proxy are covered by
+  `automations-routes.test.ts` (C4), so the desktop handlers are one-line
+  proxies with no behavior of their own to retest. `oxlint` confirms the
+  removed local machinery left no dangling imports in `ipc.ts`.
 
 ## Out of scope
 

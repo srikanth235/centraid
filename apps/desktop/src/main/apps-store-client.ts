@@ -13,6 +13,13 @@
  */
 
 import { loadSettings } from './settings.js';
+import type {
+  AutomationRow,
+  AutomationRunRow,
+  AutomationRunNodeRow,
+  InsightsSummary,
+  ListAutomationProjectsResult,
+} from '@centraid/runtime-core';
 
 interface AuthCache {
   baseUrl: string;
@@ -258,4 +265,103 @@ export async function listGitVersions(appId: string): Promise<GitVersion[]> {
   });
   const out = await parse<{ versions: GitVersion[] }>(res, 'git-versions');
   return out.versions ?? [];
+}
+
+// ---- Automation runtime ops (issue #141) ----
+// Proxy the gateway's `/centraid/_automations` + `/centraid/_insights`
+// routes over the same active gateway + cached auth as the git-store
+// surface above, so the desktop reads/runs automations + analytics against
+// local AND remote gateways. Code (manifests) resolves gateway-side from
+// the materialized `main`; run ledgers + analytics from the gateway's data
+// dir. A run-now fires on the gateway host with ITS runner config — the
+// desktop's provider key is not used for a remote fire.
+
+/** All automations on `main` plus per-app read errors. */
+export async function listAutomationsHttp(): Promise<ListAutomationProjectsResult> {
+  const { baseUrl, token } = await auth();
+  const res = await fetch(`${baseUrl}/centraid/_automations`, { headers: headers(token) });
+  return parse(res, 'list-automations');
+}
+
+/** One automation by its `<appId>/<id>` ref, or null when absent. */
+export async function readAutomationHttp(ref: string): Promise<AutomationRow | null> {
+  const { baseUrl, token } = await auth();
+  const res = await fetch(`${baseUrl}/centraid/_automations/read?ref=${encodeURIComponent(ref)}`, {
+    headers: headers(token),
+  });
+  const out = await parse<{ row: AutomationRow | null }>(res, 'read-automation');
+  return out.row ?? null;
+}
+
+/** Fire an automation now on the gateway host; returns the minted run id. */
+export async function runAutomationNow(ref: string): Promise<{ runId: string }> {
+  const { baseUrl, token } = await auth();
+  const res = await fetch(
+    `${baseUrl}/centraid/_automations/run-now?ref=${encodeURIComponent(ref)}`,
+    { method: 'POST', headers: headers(token) },
+  );
+  return parse(res, 'run-now');
+}
+
+/** Central run-summary feed, newest-first. `ref` scopes to one automation. */
+export async function listAutomationRunsHttp(
+  ref: string | undefined,
+  limit: number,
+): Promise<AutomationRunRow[]> {
+  const { baseUrl, token } = await auth();
+  const qs = new URLSearchParams();
+  if (ref) qs.set('ref', ref);
+  qs.set('limit', String(limit));
+  const res = await fetch(`${baseUrl}/centraid/_automations/runs?${qs.toString()}`, {
+    headers: headers(token),
+  });
+  const out = await parse<{ runs: AutomationRunRow[] }>(res, 'list-runs');
+  return out.runs ?? [];
+}
+
+/** One run's full record from its app's ledger, or null when unknown. */
+export async function readAutomationRunHttp(runId: string): Promise<AutomationRunRow | null> {
+  const { baseUrl, token } = await auth();
+  const res = await fetch(
+    `${baseUrl}/centraid/_automations/run?runId=${encodeURIComponent(runId)}`,
+    { headers: headers(token) },
+  );
+  const out = await parse<{ run: AutomationRunRow | null }>(res, 'read-run');
+  return out.run ?? null;
+}
+
+/** The run's node timeline from its app's ledger. */
+export async function listAutomationRunNodesHttp(runId: string): Promise<AutomationRunNodeRow[]> {
+  const { baseUrl, token } = await auth();
+  const res = await fetch(
+    `${baseUrl}/centraid/_automations/run/nodes?runId=${encodeURIComponent(runId)}`,
+    { headers: headers(token) },
+  );
+  const out = await parse<{ nodes: AutomationRunNodeRow[] }>(res, 'run-nodes');
+  return out.nodes ?? [];
+}
+
+/** Pin / unpin a run as a replay fixture (ledger + central summary). */
+export async function pinAutomationRunHttp(runId: string, pinned: boolean): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await fetch(
+    `${baseUrl}/centraid/_automations/run/pin?runId=${encodeURIComponent(runId)}`,
+    {
+      method: 'POST',
+      headers: headers(token, 'application/json'),
+      body: JSON.stringify({ pinned }),
+    },
+  );
+  await parse(res, 'pin-run');
+}
+
+/** The Insights screen's analytics payload over the central run ledger. */
+export async function insightsSummaryHttp(windowDays?: number): Promise<InsightsSummary> {
+  const { baseUrl, token } = await auth();
+  const qs =
+    windowDays !== undefined ? `?windowDays=${encodeURIComponent(String(windowDays))}` : '';
+  const res = await fetch(`${baseUrl}/centraid/_insights/summary${qs}`, {
+    headers: headers(token),
+  });
+  return parse(res, 'insights-summary');
 }
