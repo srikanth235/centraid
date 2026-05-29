@@ -22,6 +22,13 @@ will touch.
   - [x] AppsStore class
   - [x] Unit tests
   - [x] Workspace checks green
+- [x] Slice 5 — GitHub export/import
+  - [x] Export push and import clone
+  - [x] listApps and bareRepoDir surface
+- [x] Slice 2 — gateway wiring + runtime read-path swap
+  - [x] Code-dir resolver seam
+  - [x] Gateway constructs the apps-store
+  - [x] Git-store serve integration test
 
 ## What changed
 
@@ -139,6 +146,66 @@ exercises the public surface, and `rm -rf`s on teardown. Coverage:
 - `listVersions` returns tags newest-first and includes the rolled-
   back-from tag (it stayed reachable).
 - `resolveActiveAppDir` returns undefined for an app never published.
+
+### Slice 5 — GitHub export/import
+
+**Export push and import clone.** New `src/remote.ts`.
+`exportToRemote(bareDir, remoteUrl)` (re)points a remote (`origin`
+by default; idempotent via `get-url` probe → `set-url` or `add`) and
+pushes `refs/heads/main` + `refs/tags/*` — the production trunk plus
+every `<app>/v<n>` version tag. Session branches are deliberately
+left behind (ephemeral local state). `importFromRemote(root,
+remoteUrl)` does a `git clone --bare` into `<root>/apps.git`, after
+which `new AppsStore({ root }).init()` materializes `main` and the
+runtime serves immediately. Import refuses if `apps.git` already
+exists — it targets a fresh gateway, not a merge.
+
+**listApps and bareRepoDir surface.** `AppsStore.listApps()` walks
+`refs/heads/main:apps` via `ls-tree` and returns the app ids on the
+trunk — the git-native replacement for the `_registry.json` walk
+(an app "exists" iff it has a subtree on `main`). `bareRepoDir`
+getter exposes the bare repo path for `remote.ts` and tests.
+
+`src/remote.test.ts` covers: `listApps` (empty, then sorted ids
+after publishes); export-then-import round-trip through a bare
+"GitHub" remote (main content + version tags travel, imported store
+serves the latest publish); export idempotence across re-runs; and
+import refusing a non-empty root.
+
+### Slice 2 — gateway wiring + runtime read-path swap
+
+**Code-dir resolver seam.** `runtime-core`'s `Dispatcher` and
+`Runtime` gain an optional `codeDirOverride(appId) =>
+Promise<string | undefined>`. When set, it fully replaces the legacy
+`versions.getActiveVersion` + `appCodeDir(entry.path, ...)` lookup in
+both `resolveCodeDir` methods — every handler dispatch + static serve
++ `app-schema` route now reads from whatever dir the override
+returns. When unset, resolution is unchanged, so OpenClaw and any
+pre-#137 setup keep working against `<appsDir>/<id>/versions/
+<active>/`. The `app-schema` route additionally gates on code-dir
+presence (via `resolveCodeDir`) instead of `getActiveVersion`, so the
+git backend — which has no `current.json` — still answers. `data.sqlite`
+stays at the registry's per-app dir (`entry.path`, under `appsDir`),
+keeping app *data* cleanly separated from app *code* (git).
+
+**Gateway constructs the apps-store.** `serve()` takes an optional
+`appsStoreRoot`. When given, it constructs + `init()`s an `AppsStore`
+there, passes `codeDirOverride = (id) => appsStore.resolveActiveAppDir(id)`
+into the `Runtime`, and after `bootstrap()` syncs every app on `main`
+(`appsStore.listApps()`) into the registry via `ensureUploaded` so
+`registry.get(id)` resolves and each app's data dir exists. The live
+`AppsStore` is exposed on the serve handle (`handle.appsStore`) for
+the publish endpoint + export/import to drive. `@centraid/apps-store`
+is now a dependency of `@centraid/gateway-runtime`.
+
+**Git-store serve integration test.** `serve-git-store.test.ts` seeds
+an app through the AppsStore (open session → write app.json + index.html
++ a `ping` query handler → publish), boots `serve()` with
+`appsStoreRoot`, and proves the running gateway serves it end-to-end:
+registry lists the app, `GET /centraid/<id>/` static-serves
+index.html from `worktrees/main/<sha>/`, and `centraid_read` runs the
+query handler out of the worktree. A second test confirms the handle
+has no `appsStore` when `appsStoreRoot` is omitted (legacy backend).
 
 ## Out of scope
 

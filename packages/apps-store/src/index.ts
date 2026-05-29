@@ -11,3 +11,10 @@ export {
   type VersionEntry,
 } from './types.js';
 export { GitError } from './git.js';
+export {
+  exportToRemote,
+  importFromRemote,
+  type ExportOptions,
+  type ExportResult,
+  type ImportResult,
+} from './remote.js';

@@ -5,10 +5,8 @@
  * `app.json`, validates `input` against the declared JSON Schema with
  * Ajv, then hands off to the `handler-runner` worker — or to a built-in
  * (`dispatcher-builtins.ts`) when the handler name starts with `_`.
- *
- * Errors are MCP-shaped: `{ isError, content, structuredContent }`. The
- * HTTP shim maps `structuredContent.code` to a 4xx/5xx status; the chat
- * surface forwards the text block.
+ * Errors are MCP-shaped: `{ isError, content, structuredContent }`; the
+ * HTTP shim maps `structuredContent.code` to a 4xx/5xx status.
  */
 
 import { promises as fs } from 'node:fs';
@@ -118,6 +116,12 @@ export interface DispatcherOptions {
    * the per-app `/centraid/<id>/_changes` SSE stream.
    */
   readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
+  /**
+   * Optional code-dir resolver (issue #137). When set it replaces the
+   * legacy `versions.getActiveVersion` + `appCodeDir` lookup with the
+   * gateway's apps-store worktree dir; unset = legacy resolution.
+   */
+  readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
 }
 
 /**
@@ -138,17 +142,19 @@ export class Dispatcher {
   private readonly registry: Registry;
   private readonly versions: VersionStore;
   private readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
+  private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
   private readonly manifestCache = new Map<string, ManifestCacheEntry>();
 
   constructor(opts: DispatcherOptions) {
     this.registry = opts.registry;
     this.versions = opts.versions;
     if (opts.onWriteFor) this.onWriteFor = opts.onWriteFor;
+    if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
   }
 
   // --------- resolution helpers ---------
-
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
+    if (this.codeDirOverride) return this.codeDirOverride(entry.id);
     const active = await this.versions.getActiveVersion(entry.path);
     if (!active) return undefined;
     return appCodeDir(entry, active);
@@ -190,11 +196,8 @@ export class Dispatcher {
 
   /** Throw away the cache for one app — call when a version is activated. */
   invalidate(codeDir?: string): void {
-    if (codeDir === undefined) {
-      this.manifestCache.clear();
-      return;
-    }
-    this.manifestCache.delete(codeDir);
+    if (codeDir === undefined) this.manifestCache.clear();
+    else this.manifestCache.delete(codeDir);
   }
 
   // --------- describe ---------

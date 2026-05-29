@@ -99,6 +99,16 @@ export interface RuntimeOptions {
    * instead of failing per-turn when the CLI is missing or unauthenticated.
    */
   runnerStatus?: () => Promise<RunnerStatus>;
+  /**
+   * Optional code-dir resolver (issue #137). When provided, the runtime
+   * serves handlers + static files from whatever dir this returns for an
+   * app id — the gateway injects an apps-store-backed resolver pointing
+   * at the live git worktree (`worktrees/main/<sha>/apps/<id>/`) instead
+   * of the legacy `<appsDir>/<id>/versions/<active>/`. `entry.path` (the
+   * registry's per-app dir) is still where `data.sqlite` lives, so this
+   * cleanly separates code (git) from data (stable per-app dir).
+   */
+  codeDirOverride?: (appId: string) => Promise<string | undefined>;
 }
 
 /**
@@ -206,6 +216,7 @@ export class Runtime {
   private readonly appsDir: string;
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
+  private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
   private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
   /**
    * Per-runtime (and therefore per-gateway) window-lock map for the
@@ -230,11 +241,13 @@ export class Runtime {
       opts.chatRunnerSessionDir ?? path.join(os.tmpdir(), 'centraid-chat-runner-sessions');
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
+    if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
     this.withAppUploadLock = makeAppUploadLocks();
     this.dispatcher = new Dispatcher({
       registry: this.registry,
       versions: this.versions,
       onWriteFor: (appId) => this.emitForApp(appId, 'handler'),
+      ...(this.codeDirOverride ? { codeDirOverride: this.codeDirOverride } : {}),
     });
   }
 
@@ -319,6 +332,7 @@ export class Runtime {
   }
 
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
+    if (this.codeDirOverride) return this.codeDirOverride(entry.id);
     const active = await this.versions.getActiveVersion(entry.path);
     if (!active) return undefined;
     return appCodeDir(entry, active);
@@ -495,8 +509,11 @@ export class Runtime {
             sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          const active = await this.versions.getActiveVersion(entry.path);
-          if (!active) {
+          // Gate on code-dir presence rather than current.json so the
+          // git-store backend (no current.json) works too. data.sqlite
+          // still lives at the registry's per-app dir (entry.path).
+          const codeDir = await this.resolveCodeDir(entry);
+          if (!codeDir) {
             sendError(res, 503, 'no_active_version', 'App has no active version yet.');
             return;
           }

@@ -1,41 +1,26 @@
-// Gateway-owned git store for centraid app code.
+// Gateway-owned git store for centraid app code. See the package
+// README + receipt #137 for the full design narrative.
 //
-// On-disk layout under `root` (the per-gateway dir the host passes
-// in — `<userData>/gateways/<id>/` for the Electron embed,
-// `<dataDir>/` for the standalone daemon):
+// Layout under `root` (per-gateway dir): `apps.git/` (bare repo,
+// pushed to GitHub), `worktrees/main/<sha>/` (read-only
+// materialization the runtime reads from, swapped on publish),
+// `worktrees/sessions/<id>/` (per-session mutable editing).
 //
-//   <root>/
-//     apps.git/                    ← bare repo. The thing pushed to GitHub.
-//     worktrees/
-//       main/<sha>/                ← read-only materialization the runtime reads from.
-//       sessions/<id>/             ← per-session mutable editing.
+// Refs: `main` (production trunk, single source of truth),
+// `sessions/<id>` (ephemeral agent work), tag `<appId>/v<n>`
+// (immutable forward-publish marker, monotonic per app).
 //
-// Ref model inside `apps.git/`:
-//   refs/heads/main                ← production trunk. Single source of truth for what's live.
-//   refs/heads/sessions/<id>       ← per-session agent work, ephemeral.
-//   refs/tags/<appId>/v<n>         ← immutable forward-publish markers, monotonic per app.
+// `main` is production. Sessions branch off it, the agent commits +
+// tags a publish, the publish ff-merges back to main. Rollback is a
+// *new* forward commit overlaying an older subtree, never a reset —
+// `git log main` stays the chronological audit of everything live.
 //
-// Mental model: `main` is production. Sessions branch off it, the
-// agent commits + tags a publish, the publish ff-merges back to
-// main. Rollback is a *new* forward commit on main that overlays an
-// older subtree, never a `reset` — `git log main` stays the true
-// chronological audit of everything live.
-//
-// Concurrency model: a single `AppsStore` instance serializes
-// publishes through one per-store mutex (matches the issue's
-// "Concurrent publish" decision). Different `AppsStore` instances
-// (different gateways) run independently. The mutex covers
-// commit-tag-rebase-ff-merge-materialize as one critical section so
-// the bare repo's `main` advances atomically.
-//
-// Materialization is atomic by swap: each publish writes a fresh
-// `worktrees/main/<sha-new>/`, flips an in-memory pointer the
-// runtime reads through, then removes the previous materialization.
-// Fresh-path-per-publish rotates `require()` cache lines naturally
-// (the runtime keys its handler cache on absolute path), so no
-// manual invalidation is needed downstream. v0 evicts the previous
-// dir synchronously after the flip; the refcount / drain story
-// belongs in the runtime-wiring slice (see receipt #137).
+// A single AppsStore serializes publish + rollback through one
+// per-store mutex (commit-tag-rebase-ff-merge-materialize is one
+// critical section). Each publish materializes a fresh
+// `worktrees/main/<sha>/`, flips an in-memory pointer, then removes
+// the previous dir — fresh-path-per-publish rotates require() cache
+// lines naturally (the runtime keys its handler cache on path).
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -77,19 +62,11 @@ export class AppsStore {
   }
 
   /**
-   * Bootstrap the store. Idempotent: a second call against an
-   * existing layout reuses the bare repo, replants `main` if it
-   * went missing, and reattaches the active-main pointer.
-   *
-   *   1. mkdir layout
-   *   2. `git init --bare apps.git` (skip if `HEAD` is already there)
-   *   3. ensure `refs/heads/main` exists — if not, plant an empty
-   *      initial commit so worktrees have a base to branch from
-   *   4. `git worktree prune` to drop any stale entries from a dirty
-   *      shutdown
-   *   5. materialize `worktrees/main/<sha>/` if it doesn't already
-   *      exist on disk + as a registered worktree
-   *   6. cache `activeMainDir`
+   * Bootstrap the store. Idempotent: mkdir layout → `git init --bare`
+   * (skip if HEAD present) → plant an empty initial `main` commit if
+   * the ref is missing → `worktree prune` stale entries → materialize
+   * `worktrees/main/<sha>/` → cache `activeMainDir`. A second call
+   * against an existing layout reuses everything.
    */
   async init(): Promise<void> {
     await fs.mkdir(this.root, { recursive: true });
@@ -136,6 +113,26 @@ export class AppsStore {
     return this.activeMainDir;
   }
 
+  /** Absolute path to the bare repo — for export/import + tests. */
+  get bareRepoDir(): string {
+    return this.bareDir;
+  }
+
+  /** Every app id on `main` (the `apps/<id>/` subtrees). Replaces `_registry.json`. */
+  async listApps(): Promise<string[]> {
+    this.assertInitialized();
+    const out = await runRaw(['ls-tree', '--name-only', 'refs/heads/main:apps'], {
+      cwd: this.bareDir,
+      allowNonZero: true,
+    });
+    if (out.code !== 0) return []; // no `apps/` dir yet → no apps
+    return out.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && SAFE_ID_RE.test(line))
+      .sort();
+  }
+
   /**
    * Resolve an app's active code dir, or `undefined` if the app has
    * never been published (the app dir wouldn't exist in main's tree
@@ -161,11 +158,7 @@ export class AppsStore {
     return dir;
   }
 
-  /**
-   * Open a new editing session: branches `sessions/<id>` off the
-   * current `main` and materializes a mutable worktree the agent +
-   * preview tab read/write through.
-   */
+  /** Branch `sessions/<id>` off `main` + materialize a mutable worktree the agent edits. */
   async openSession(sessionId: string): Promise<SessionHandle> {
     assertSafeId(sessionId, 'invalid_session_id');
     this.assertInitialized();
@@ -183,11 +176,7 @@ export class AppsStore {
     return { id: sessionId, branch, worktreePath };
   }
 
-  /**
-   * Tear down a session: remove its worktree and delete its branch.
-   * Idempotent — vanished sessions are silently treated as already
-   * closed so callers can call this on shutdown without checking.
-   */
+  /** Remove a session's worktree + branch. Idempotent (safe on a vanished session). */
   async closeSession(sessionId: string): Promise<void> {
     assertSafeId(sessionId, 'invalid_session_id');
     this.assertInitialized();

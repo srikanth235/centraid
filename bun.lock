@@ -163,6 +163,7 @@
       },
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
+        "@centraid/apps-store": "workspace:*",
         "@centraid/runtime-core": "workspace:*",
       },
       "devDependencies": {

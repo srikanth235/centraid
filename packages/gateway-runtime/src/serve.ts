@@ -51,6 +51,7 @@ import {
   type OpenAICompatProvider,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
+import { AppsStore } from '@centraid/apps-store';
 import type { GatewayPaths } from './paths.js';
 import type { SecretsProvider } from './secrets.js';
 import { parseProviderPrefs } from './provider-prefs.js';
@@ -86,6 +87,16 @@ export interface ServeOptions {
    * to disambiguate multiple gateways in one process.
    */
   logTag?: string;
+  /**
+   * When provided, the gateway owns app *code* as a git store rooted
+   * here (issue #137): `<appsStoreRoot>/apps.git` + `worktrees/`. The
+   * runtime then serves handlers + static from the live `main`
+   * worktree instead of `<appsDir>/<id>/versions/<active>/`. App
+   * *data* (`data.sqlite`) still lives under `paths.appsDir`, so the
+   * two stores stay cleanly separated. Omit for the legacy
+   * tarball-upload backend (OpenClaw, pre-#137 setups).
+   */
+  appsStoreRoot?: string;
 }
 
 export interface GatewayServeHandle {
@@ -101,6 +112,12 @@ export interface GatewayServeHandle {
   userStore: UserStore;
   analyticsStore: AnalyticsStore;
   chatHistoryStore: ChatHistoryStore;
+  /**
+   * The git-store backend, when `appsStoreRoot` was supplied. Callers
+   * (the publish endpoint, export/import, the desktop's file IPC) drive
+   * sessions + publishes through this. `undefined` on the legacy backend.
+   */
+  appsStore?: AppsStore;
 }
 
 export async function serve(options: ServeOptions): Promise<GatewayServeHandle> {
@@ -108,6 +125,19 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   const logger = options.logger ?? defaultLogger(options.logTag);
 
   await fs.mkdir(paths.appsDir, { recursive: true });
+
+  // Git-store backend (issue #137). When a root is given, the gateway
+  // owns app code as a bare git repo + worktrees; the runtime serves
+  // handlers from the live `main` worktree. Constructed + initialized
+  // here so the code-dir override is available at Runtime construction.
+  let appsStore: AppsStore | undefined;
+  if (options.appsStoreRoot !== undefined) {
+    appsStore = new AppsStore({ root: options.appsStoreRoot });
+    await appsStore.init();
+  }
+  const codeDirOverride = appsStore
+    ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
+    : undefined;
 
   // Gateway identity DB + the central analytics DB. Each store wraps a
   // lazy provider that opens its file on first use. Chat sessions + chat
@@ -185,6 +215,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
       return runPreflight(prefs);
     },
     logger,
+    ...(codeDirOverride ? { codeDirOverride } : {}),
   });
 
   runtimeRef = runtime;
@@ -195,6 +226,16 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   if (options.token !== undefined) serverOptions.token = options.token;
   const server = await startRuntimeHttpServer(serverOptions);
   await runtime.bootstrap();
+
+  // Git-store sync: every app present on `main` gets a registry entry
+  // so `registry.get(id)` resolves and its data dir (`<appsDir>/<id>/`,
+  // where data.sqlite lives) exists. Code is served from the worktree
+  // via the override; this only bookkeeps existence + the data dir.
+  if (appsStore) {
+    for (const appId of await appsStore.listApps()) {
+      await runtime.registry.ensureUploaded(appId);
+    }
+  }
 
   // Startup reconcile (opt-in): catch up the OS scheduler on anything
   // that changed while the runtime was down. Fire-and-forget so a slow
@@ -229,6 +270,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     userStore,
     analyticsStore,
     chatHistoryStore,
+    ...(appsStore ? { appsStore } : {}),
   } satisfies GatewayServeHandle;
 }
 
