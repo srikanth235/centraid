@@ -66,6 +66,49 @@ test('init creates the layout and is idempotent', async () => {
   }
 });
 
+test('active-main symlink stays pinned across publish + rollback', async () => {
+  const root = await makeTempRoot();
+  try {
+    const store = new AppsStore({ root });
+    await store.init();
+
+    // The stable link path never changes and resolves to the live main
+    // worktree after init.
+    const link = store.getActiveMainLink();
+    assert.equal(link, path.join(root, 'active-main'));
+    assert.equal(await fs.realpath(link), await fs.realpath(store.getActiveMainDir()!));
+
+    // Publish rotates the materialized main dir; the link follows it so
+    // an external reader that baked `<link>/apps` once stays correct.
+    const s1 = await store.openSession('s1');
+    await seedApp(s1.worktreePath, 'todo', 'one');
+    const r1 = await store.publish({ sessionId: 's1', appId: 'todo', message: 'v1' });
+    await store.closeSession('s1');
+    assert.equal(await fs.realpath(link), await fs.realpath(r1.materializedMainDir));
+    // Reading code through the stable link resolves the published app.
+    const viaLink = JSON.parse(
+      await fs.readFile(path.join(link, 'apps', 'todo', 'app.json'), 'utf8'),
+    ) as { marker: string };
+    assert.equal(viaLink.marker, 'one');
+
+    const s2 = await store.openSession('s2');
+    await seedApp(s2.worktreePath, 'todo', 'two');
+    const r2 = await store.publish({ sessionId: 's2', appId: 'todo', message: 'v2' });
+    await store.closeSession('s2');
+    assert.equal(await fs.realpath(link), await fs.realpath(r2.materializedMainDir));
+
+    // Rollback repoints the link again — and never leaves it dangling.
+    const rb = await store.rollback({ appId: 'todo', versionTag: 'todo/v1' });
+    assert.equal(await fs.realpath(link), await fs.realpath(rb.materializedMainDir));
+    const afterRollback = JSON.parse(
+      await fs.readFile(path.join(link, 'apps', 'todo', 'app.json'), 'utf8'),
+    ) as { marker: string };
+    assert.equal(afterRollback.marker, 'one');
+  } finally {
+    await rmTempRoot(root);
+  }
+});
+
 test('openSession creates a worktree branched off main; multiple sessions coexist', async () => {
   const root = await makeTempRoot();
   try {

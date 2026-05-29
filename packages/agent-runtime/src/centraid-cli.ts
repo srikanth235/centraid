@@ -184,12 +184,18 @@ function parseRunAutomationArgs(args: string[]): ParsedRunAutomation {
 async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never> {
   // This is the OS-scheduler-spawned path — no in-process gateway
   // handle. The automation's full run ledger lands in its app's
-  // `runtime.sqlite` (resolved from `appsDir`); the run summary
+  // `runtime.sqlite` (resolved from `appsDir`, the *data* tree); the
+  // automation's code (manifest + handler) resolves from
+  // `CENTRAID_APPS_CODE_DIR` (issue #137: the git-store materialized
+  // `main`, distinct from the data tree). The run summary
   // write-throughs to the central analytics DB the desktop reads. The
-  // OS scheduler bakes `CENTRAID_APPS_DIR` + `CENTRAID_ANALYTICS_DB`
-  // into the launchd plist / systemd unit / Task Scheduler artifact;
-  // both fall back to a `<cwd>`-relative path for a bare CLI run.
+  // OS scheduler bakes `CENTRAID_APPS_DIR` + `CENTRAID_APPS_CODE_DIR` +
+  // `CENTRAID_ANALYTICS_DB` into the launchd plist / systemd unit / Task
+  // Scheduler artifact; each falls back to a `<cwd>`-relative path for a
+  // bare CLI run. When `CENTRAID_APPS_CODE_DIR` is unset, code and data
+  // share `appsDir` (legacy/flat layout).
   const appsDir = process.env.CENTRAID_APPS_DIR ?? path.join(process.cwd(), 'apps');
+  const codeAppsDir = process.env.CENTRAID_APPS_CODE_DIR ?? appsDir;
   const analyticsDbPath =
     process.env.CENTRAID_ANALYTICS_DB ?? path.join(process.cwd(), 'centraid-analytics.sqlite');
   const analytics = new AnalyticsStore(makeAnalyticsDbProvider(analyticsDbPath));
@@ -197,6 +203,7 @@ async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never>
     const { outcome, record } = await runAutomationLocal({
       automationRef: parsed.automationRef,
       appsDir,
+      codeAppsDir,
       runner: parsed.runner,
       analytics,
       ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),

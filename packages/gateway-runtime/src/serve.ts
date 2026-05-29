@@ -33,6 +33,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import {
   AnalyticsStore,
   ChatHistoryStore,
@@ -76,10 +77,13 @@ export interface ServeOptions {
    * When provided, `serve()` kicks off a fire-and-forget OS-scheduler
    * reconcile on boot — catches up the host scheduler with any
    * automations toggled while the runtime was down. The factory is
-   * invoked once with the resolved `appsDir`. Omit for tests and the
-   * daemon's v0 PoC (no scheduler).
+   * invoked once with the resolved code + data dirs: `codeAppsDir` is
+   * where automation manifests/handlers live (the git-store `active-main`
+   * symlink when `appsStoreRoot` is set, else `paths.appsDir`), and
+   * `dataAppsDir` is `paths.appsDir` (run ledgers). Omit for tests and
+   * the daemon's v0 PoC (no scheduler).
    */
-  schedulerHostFactory?: (appsDir: string) => AutomationHost;
+  schedulerHostFactory?: (dirs: { codeAppsDir: string; dataAppsDir: string }) => AutomationHost;
   /** Logger forwarded to `Runtime`. Defaults to a `console.*` wrapper. */
   logger?: RuntimeLogger;
   /**
@@ -258,10 +262,18 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // that changed while the runtime was down. Fire-and-forget so a slow
   // scheduler shell-out doesn't block start. The Electron embed always
   // passes a factory; the daemon v0 PoC omits it.
+  //
+  // Automation *code* lives under the git-store materialized `main`
+  // (issue #137) — scan + bake the stable `active-main/apps` path so
+  // the OS scheduler resolves manifests there, not under the data tree.
+  // Without a git store, code and data share `paths.appsDir`.
   if (schedulerHostFactory) {
+    const codeAppsDir = appsStore
+      ? path.join(appsStore.getActiveMainLink(), 'apps')
+      : paths.appsDir;
     void (async () => {
-      const { rows } = await listAutomations(paths.appsDir);
-      return schedulerHostFactory(paths.appsDir).reconcile(rows);
+      const { rows } = await listAutomations(codeAppsDir);
+      return schedulerHostFactory({ codeAppsDir, dataAppsDir: paths.appsDir }).reconcile(rows);
     })()
       .then((diff) => {
         if (diff.added.length || diff.updated.length || diff.removed.length) {

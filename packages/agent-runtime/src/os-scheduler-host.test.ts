@@ -77,6 +77,46 @@ describe('OsSchedulerHost', () => {
     assert.match(plist, /<string>svc\/auto-1<\/string>/);
   });
 
+  it('bakes CENTRAID_APPS_CODE_DIR (defaulting to appsDir when unset)', async () => {
+    const ctx = setup();
+    await ctx.host.register(row());
+    const plist = await fs.readFile(
+      path.join(ctx.artifactRoot, 'com.centraid.svc_sauto-1.plist'),
+      'utf8',
+    );
+    // No codeAppsDir given → code dir falls back to the data appsDir.
+    assert.match(plist, /<key>CENTRAID_APPS_DIR<\/key>\s*<string>\/persistent\/apps<\/string>/);
+    assert.match(
+      plist,
+      /<key>CENTRAID_APPS_CODE_DIR<\/key>\s*<string>\/persistent\/apps<\/string>/,
+    );
+  });
+
+  it('bakes a distinct CENTRAID_APPS_CODE_DIR when code + data trees differ', async () => {
+    const artifactRoot = mkdtempSync(path.join(tmpdir(), 'centraid-os-host-'));
+    const execShell: ExecShell = async () => ({ exitCode: 0, stdout: '', stderr: '' });
+    const host = new OsSchedulerHost({
+      workdir: '/persistent/apps',
+      centraidBin: '/usr/local/bin/centraid',
+      analyticsDbPath: '/persistent/centraid-analytics.sqlite',
+      appsDir: '/persistent/apps',
+      // Git-store backend (issue #137): code lives under active-main.
+      codeAppsDir: '/persistent/code-store/active-main/apps',
+      runner: 'codex',
+      os: { execShell, platform: 'darwin', artifactRoot },
+    });
+    await host.register(row());
+    const plist = await fs.readFile(
+      path.join(artifactRoot, 'com.centraid.svc_sauto-1.plist'),
+      'utf8',
+    );
+    assert.match(plist, /<key>CENTRAID_APPS_DIR<\/key>\s*<string>\/persistent\/apps<\/string>/);
+    assert.match(
+      plist,
+      /<key>CENTRAID_APPS_CODE_DIR<\/key>\s*<string>\/persistent\/code-store\/active-main\/apps<\/string>/,
+    );
+  });
+
   it('register with enabled=false unregisters instead', async () => {
     const ctx = setup();
     await ctx.host.register(row()); // first install

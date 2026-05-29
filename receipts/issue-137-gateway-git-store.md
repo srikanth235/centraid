@@ -46,6 +46,12 @@ will touch.
   - [x] PROJECTS_* IPC cut over
   - [x] AGENT_START writes directly into the session worktree
   - [x] publish-on-save.ts retired
+- [x] Slice 4c — templates + automations off workspaceDir (full cutover)
+  - [x] AppsStore stable `active-main` symlink (`getActiveMainLink`)
+  - [x] Code/data split in run-automation (CLI + host `codeAppsDir`)
+  - [x] serve() scans + bakes the stable code path
+  - [x] TEMPLATES_CLONE + AUTOMATIONS_* IPC cut over
+  - [x] codeDir fallback removed; workspaceDir deleted
 
 ## What changed
 
@@ -443,40 +449,62 @@ stubs remain in `ipc.ts` for renderer API stability — they always
 report `inFlight: false` and never fire, since publishes are
 synchronous through `PUBLISH`.
 
-### Out of scope for this PR — automation flows
+### Slice 4c — templates + automations off workspaceDir (full cutover)
 
-What's still on `workspaceDir` + `publishProject` after slice 4b:
-`TEMPLATES_CLONE`, `AUTOMATIONS_CREATE`, `AUTOMATIONS_SET_ENABLED`,
-`AUTOMATIONS_DELETE`. Same with the read paths
-`AUTOMATIONS_LIST`/`AUTOMATIONS_READ` (walk `settings.appsDir`).
+Slice 4c finishes the job: `TEMPLATES_CLONE`, `AUTOMATIONS_CREATE`,
+`AUTOMATIONS_SET_ENABLED`, `AUTOMATIONS_DELETE`, and the read paths
+`AUTOMATIONS_LIST`/`AUTOMATIONS_READ`/`AUTOMATIONS_RUN_NOW` all move
+to the git store. `workspaceDir` and the `publishProject` tarball path
+are gone from the desktop entirely, and the `Dispatcher`/`Runtime`
+codeDir fallback is removed.
 
-The blocker is the OS scheduler. `localRuntimeAutomationHost(gatewayId,
-appsDir)` constructs cron/launchd entries that shell `centraid-cli
-automation run <ref> --apps-dir <appsDir>` at fire time. For the
-git-store backend, the live appsDir is `<codeStore>/worktrees/main/
-<sha>/apps/` — and `<sha>` rotates on every publish, breaking baked-in
-cron entries. Cutover paths considered:
+**AppsStore stable `active-main` symlink (`getActiveMainLink`).**
+`OsSchedulerHost` bakes `CENTRAID_APPS_DIR` into every cron/launchd
+entry at register time, but the git-store materialized main rotates
+its `worktrees/main/<sha>/` path on every publish — a baked path goes
+stale. AppsStore now maintains a stable `<codeStoreDir>/active-main`
+symlink, repointed atomically (write-temp-then-rename, before the old
+worktree is evicted, so a reader never sees a dangling link) on every
+`init` / publish / rollback / delete. `getActiveMainLink()` exposes the
+path; external processes bake `<active-main>/apps` once and survive
+every swap.
 
-1. AppsStore maintains a stable `<codeStoreDir>/active-main` symlink
-   the OS scheduler uses; AppsStore re-points it atomically on each
-   publish. Simple on macOS/Linux; Windows symlinks need elevated
-   perms.
-2. Re-register every automation after every publish via an
-   `onPublish` callback on the apps-store route module. No symlinks;
-   one window between materialization swap and re-register where a
-   firing cron entry would 404.
-3. Move automation execution into the gateway runtime (HTTP `POST
-   /centraid/_automations/<ref>/run`); OS scheduler entries become
-   bearer-auth'd curl calls that don't carry a path at all.
+**Code/data split in run-automation (CLI + host `codeAppsDir`).** A fire needs two
+trees: the automation's *code* (manifest + handler, in the git store)
+and its *data* (`runtime.sqlite` run ledger, under the stable
+`<appsDir>/<id>/`). `runAutomationLocal` + the `centraid run-automation`
+CLI + `OsSchedulerHost` all gained a `codeAppsDir` (env
+`CENTRAID_APPS_CODE_DIR`) distinct from the data `appsDir` — code
+resolves from `active-main/apps`, the ledger stays on the data tree
+that survives swaps. `codeAppsDir` defaults to `appsDir` so the
+legacy/flat layout (OpenClaw) is unaffected.
 
-Option 3 is the cleanest long-term but the largest. Option 1 is the
-v0-shaped fix and is the planned follow-up.
+**serve() scans + bakes the stable code path.** The startup
+OS-scheduler reconcile lists automations from `active-main/apps` (not
+`paths.appsDir`), and the `schedulerHostFactory` now receives
+`{ codeAppsDir, dataAppsDir }`. The desktop's `localRuntimeAutomationHost`
+derives both from the gateway id (`active-main/apps` for code,
+`gatewayAppsDir` for data), so the cached host and every IPC caller
+agree on the two trees.
 
-While automations stay on the legacy path, the `Dispatcher`/`Runtime`
-codeDir fallback (slice 4 fixup commit) stays in place — it's the
-mechanism that lets the legacy automation code paths still resolve via
-`<appsDir>/<id>/versions/<active>/`. Once the OS scheduler follow-up
-lands, the fallback dies with it and `current.json` is fully retired.
+**TEMPLATES_CLONE + AUTOMATIONS_* IPC cut over.** `TEMPLATES_CLONE` computes a
+unique `(id, name)` from `listAppsWithMeta()` via the new
+`suggestCloneIdentityFrom` (no filesystem scan), clones into the
+session worktree, provisions pending webhooks, then `publishApp`s.
+`AUTOMATIONS_CREATE`/`SET_ENABLED`/`DELETE` scaffold/edit/delete inside
+the session worktree and publish; `AUTOMATIONS_LIST`/`READ` read from
+`active-main/apps`; `RUN_NOW` passes both dirs. A whole-app
+(`auto.`-prefixed) delete uses the HTTP `deleteApp`; an app-owned
+automation delete drops its `automations/<id>/` subdir and publishes.
+
+**codeDir fallback removed; workspaceDir deleted.** With the whole desktop on the store, the
+`Dispatcher`/`Runtime` resolver no longer falls through to legacy
+`current.json` when the override returns undefined — when a git-store
+override is present it is the *sole* authority (an app it can't resolve
+is simply not live). The legacy active-version branch survives only for
+backends with *no* override at all (OpenClaw / pre-#137). `workspaceDir`
++ `gatewayWorkspaceDir` are deleted from desktop settings + paths, and
+`current.json` is fully retired for desktop.
 
 ## Out of scope
 

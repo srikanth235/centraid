@@ -169,6 +169,39 @@ export async function suggestCloneIdentity(
   );
 }
 
+/**
+ * Filesystem-free variant of {@link suggestCloneIdentity} for the
+ * git-store backend (issue #137): the desktop no longer has a local
+ * workspace dir to scan, so the caller hands in the already-published
+ * apps (id + optional display name, e.g. from `listAppsWithMeta()`).
+ * Same bare-first-then-`-N` advancement and 1000-attempt cap. Id and
+ * display-name collisions are checked case-insensitively against the
+ * supplied set; both advance in lockstep so the home shelf never shows
+ * two identically-titled tiles for fresh clones.
+ */
+export function suggestCloneIdentityFrom(
+  existing: ReadonlyArray<{ id: string; name?: string }>,
+  preferredId: string,
+  preferredName: string,
+): { id: string; name: string } {
+  validateAppId(preferredId);
+  const takenIds = new Set(existing.map((a) => a.id));
+  const takenNames = new Set(
+    existing.map((a) => (a.name ?? a.id).trim().toLowerCase()).filter((n) => n.length > 0),
+  );
+  for (let n = 1; n <= 1000; n++) {
+    const id = n === 1 ? preferredId : `${preferredId}-${n}`;
+    if (takenIds.has(id)) continue;
+    const name = n === 1 ? preferredName : `${preferredName} ${n}`;
+    if (takenNames.has(name.trim().toLowerCase())) continue;
+    return { id, name };
+  }
+  throw new HarnessError(
+    'already_exists',
+    `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`,
+  );
+}
+
 async function copyDir(src: string, dest: string): Promise<void> {
   await fs.mkdir(dest, { recursive: true });
   const entries = await fs.readdir(src, { withFileTypes: true });

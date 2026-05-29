@@ -54,6 +54,7 @@ import {
   type AuthStatus,
 } from './auth-import.js';
 import {
+  localRuntimeActiveCodeAppsDir,
   localRuntimeAutomationHost,
   localRuntimeCodexHomeBaseDir,
   localRuntimeAppsDir,
@@ -596,32 +597,20 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  // Preview URL for the iframe. After #108 the preview always serves
-  // the active gateway version (not the workspace), so the URL is only
-  // "available" once an initial publish has succeeded — the preview
-  // protocol returns 404 until then. Two backends mean two probes:
-  //   - Legacy: `<appsDir>/<id>/current.json` exists.
-  //   - Git store (#137): the gateway lists at least one tag.
-  // Either is enough — the dispatcher's codeDir resolver tries git
-  // store first then falls back to legacy.
+  // Preview URL for the iframe. The preview always serves the active
+  // gateway version (issue #137: published on `main`), so the URL is
+  // only "available" once an initial publish has landed at least one
+  // version tag — the preview protocol returns 404 until then.
   ipcMain.handle(
     Channel.PROJECTS_PREVIEW_URL,
     async (_e, input: { id: string }): Promise<{ url: string; available: boolean }> => {
-      const settings = await loadSettings();
-      const currentJsonPath = path.join(settings.appsDir, input.id, 'current.json');
-      const legacyAvailable = await fs
-        .stat(currentJsonPath)
-        .then((s) => s.isFile())
+      const available = await appsStoreListGitVersions(input.id)
+        .then((list) => list.length > 0)
         .catch(() => false);
-      const gitAvailable = legacyAvailable
-        ? false
-        : await appsStoreListGitVersions(input.id)
-            .then((list) => list.length > 0)
-            .catch(() => false);
       // Cache-bust per request — the iframe URL is stable but the
       // active version under the hood changes after each publish.
       const url = `${PREVIEW_SCHEME}://${encodeURIComponent(input.id)}/index.html?t=${Date.now()}`;
-      return { url, available: legacyAvailable || gitAvailable };
+      return { url, available };
     },
   );
 
@@ -910,7 +899,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.TEMPLATES_CLONE, async (_e, input: { templateId: string }) => {
     const settings = await loadSettings();
     const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
-    const { cloneTemplate, suggestCloneIdentity } = await import('@centraid/builder-harness');
+    const { cloneTemplate, suggestCloneIdentityFrom } = await import('@centraid/builder-harness');
 
     const cacheDir = templatesCacheDir(settings.activeGatewayId);
     const templates = await resolveTemplates({ cacheDir });
@@ -925,15 +914,17 @@ export function registerIpcHandlers(): void {
     // collisions against unrelated renamed apps are caught too — the
     // pair advances in lockstep so the home shelf can never show two
     // identically-titled tiles for new clones. Uniqueness is computed
-    // against the workspace (where the user actually has the apps).
-    const { id: newAppId, name: newName } = await suggestCloneIdentity(
-      settings.workspaceDir,
-      tmpl.id,
-      tmpl.name,
-    );
+    // against the apps already on `main` (issue #137), not a local
+    // workspace — the desktop no longer has one.
+    const existing = await appsStoreListAppsWithMeta();
+    const { id: newAppId, name: newName } = suggestCloneIdentityFrom(existing, tmpl.id, tmpl.name);
 
+    // Clone into the new app's editing-session worktree, then publish it
+    // onto `main` over HTTP. `parent` is the session's `apps/` dir; the
+    // clone writes `<newAppId>/...` underneath it.
+    const parent = await ensureProjectSessionAppsParent(newAppId);
     const project = await cloneTemplate({
-      projectsDir: settings.workspaceDir,
+      projectsDir: parent,
       newAppId,
       // The resolver tells us which copy is newer (cache vs bundle); clone
       // from that one so a remote update reaches users without a desktop
@@ -951,9 +942,8 @@ export function registerIpcHandlers(): void {
     // so the clone path mints id + secret here, rewrites the manifest
     // to its provisioned form, and returns the plaintext secret to the
     // renderer to show once. App templates never have webhook triggers,
-    // so this is a no-op for them. URL points at the active gateway —
-    // the secret is hashed into the manifest and the plaintext is shown
-    // once here.
+    // so this is a no-op for them. Runs BEFORE publish so the minted
+    // manifest lands on `main`. URL points at the active gateway.
     const minted = await provisionAppPendingWebhooks(project.dir);
     const webhooks = minted.map((m) => ({
       automationId: m.automationId,
@@ -963,39 +953,35 @@ export function registerIpcHandlers(): void {
       url: `${settings.gatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
     }));
 
-    // Publish the freshly cloned workspace to the gateway so the iframe
-    // can preview it immediately and — for automation templates — so
-    // the OS scheduler has an active version to fire from. Synchronous
-    // (not via the debouncer) because automation registration below
-    // needs `appsDir/<id>/versions/<active>/` to exist on disk first.
-    try {
-      const { publishProject } = await import('@centraid/builder-harness');
-      await publishProject(project.dir, project.id, settings, { skipBuild: true });
-    } catch (err) {
+    // Publish the freshly cloned app to the gateway so the iframe can
+    // preview it immediately and — for automation templates — so the
+    // git-store materialized `main` has an active version the OS
+    // scheduler resolves code from. Best-effort: a publish failure is
+    // logged but doesn't fail the clone.
+    const sessionId = await ensureProjectSession(newAppId);
+    await appsStorePublishApp(sessionId, newAppId, `clone ${tmpl.id}`).catch((err: unknown) => {
       console.warn(
-        `[templates:clone] initial publish failed for ${project.id}: ` +
+        `[templates:clone] initial publish failed for ${newAppId}: ` +
           (err instanceof Error ? err.message : String(err)),
       );
-    }
+    });
 
-    // Register any automations the template shipped with the local
-    // host so cron triggers fire and webhook routes resolve without
-    // waiting for the next app start. Best-effort: failures are
-    // logged but don't fail the clone. Scans `appsDir` because that's
-    // the storage layer the OS scheduler will fire from — same dir the
-    // publish above just populated.
-    if (project.id.startsWith('auto.')) {
+    // Register any automations the template shipped with the OS
+    // scheduler so cron triggers fire and webhook routes resolve without
+    // waiting for the next runtime start. Best-effort. Code resolves from
+    // the git-store `active-main` — the same tree the scheduler bakes.
+    if (newAppId.startsWith('auto.')) {
       try {
-        const { rows } = await listAutomations(settings.appsDir);
+        const { rows } = await listAutomations(
+          localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
+        );
         for (const row of rows) {
-          if (row.ownerApp !== project.id) continue;
-          await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).register(
-            row,
-          );
+          if (row.ownerApp !== newAppId) continue;
+          await localRuntimeAutomationHost(settings.activeGatewayId).register(row);
         }
       } catch (err) {
         console.warn(
-          `[templates:clone] host register failed for ${project.id}: ` +
+          `[templates:clone] host register failed for ${newAppId}: ` +
             (err instanceof Error ? err.message : String(err)),
         );
       }
@@ -1097,8 +1083,11 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(Channel.AUTOMATIONS_LIST, async (): Promise<AutomationRow[]> => {
+    // Automations are CODE — read them from the git-store materialized
+    // `main` (issue #137). For a remote active gateway there's no local
+    // git store, so the dir is absent and `listAutomations` returns [].
     const settings = await loadSettings();
-    const { rows } = await listAutomations(settings.appsDir);
+    const { rows } = await listAutomations(localRuntimeActiveCodeAppsDir(settings.activeGatewayId));
     return rows;
   });
 
@@ -1108,9 +1097,11 @@ export function registerIpcHandlers(): void {
       const settings = await loadSettings();
       const ref = parseAutomationRef(input.automationId);
       if (!ref) return null;
-      const row = await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId).catch(
-        () => undefined,
-      );
+      const row = await readAppOwnedAutomation(
+        localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
+        ref.appId,
+        ref.automationId,
+      ).catch(() => undefined);
       return row ?? null;
     },
   );
@@ -1167,10 +1158,11 @@ export function registerIpcHandlers(): void {
       });
 
       // `input.id` is the `auto.`-prefixed automation app folder id.
-      // Scaffold goes into the workspace; the immediate publish below
-      // populates `appsDir/<id>/versions/<active>/` so the OS scheduler
-      // (which fires from the versioned dir) has something to read.
-      await scaffoldAutomationProject(settings.workspaceDir, input.id, {
+      // Scaffold into the app's editing-session worktree, then publish
+      // it onto `main` so the materialized tree the OS scheduler reads
+      // has the new automation's code.
+      const parent = await ensureProjectSessionAppsParent(input.id);
+      await scaffoldAutomationProject(parent, input.id, {
         ...(input.name ? { name: input.name } : {}),
         ...(input.description ? { description: input.description } : {}),
         ...(input.prompt ? { prompt: input.prompt } : {}),
@@ -1181,25 +1173,24 @@ export function registerIpcHandlers(): void {
         ...(input.onFailure ? { onFailure: input.onFailure } : {}),
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       });
-      // Publish the new automation immediately (no debounce) so the
-      // OS-scheduler registration that follows has a versioned manifest
-      // on disk to point at.
-      try {
-        const { publishProject } = await import('@centraid/builder-harness');
-        await publishProject(path.join(settings.workspaceDir, input.id), input.id, settings, {
-          skipBuild: true,
-        });
-      } catch (err) {
-        console.warn(
-          `[automations] initial publish failed for ${input.id}: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
-      const { rows } = await listAutomations(settings.appsDir);
+      // Publish synchronously so the OS-scheduler registration below
+      // reads the new manifest from the git-store materialized `main`.
+      const sessionId = await ensureProjectSession(input.id);
+      await appsStorePublishApp(sessionId, input.id, `scaffold automation ${input.id}`).catch(
+        (err: unknown) => {
+          console.warn(
+            `[automations] initial publish failed for ${input.id}: ` +
+              (err instanceof Error ? err.message : String(err)),
+          );
+        },
+      );
+      const { rows } = await listAutomations(
+        localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
+      );
       const row = rows.find((r) => r.ownerApp === input.id);
-      if (!row) throw new Error(`automation app ${input.id}: scaffolded but not found on disk`);
+      if (!row) throw new Error(`automation app ${input.id}: scaffolded but not found on main`);
       try {
-        await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).register(row);
+        await localRuntimeAutomationHost(settings.activeGatewayId).register(row);
       } catch (err) {
         console.warn(
           `[automations] host register failed for ${input.id}: ` +
@@ -1223,7 +1214,10 @@ export function registerIpcHandlers(): void {
       void runAutomationLocal({
         automationRef: input.automationId,
         runId,
+        // Data (run ledger) → gateway apps dir; code (manifest +
+        // handler) → git-store materialized `main` (issue #137).
         appsDir: settings.appsDir,
+        codeAppsDir: localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
         analytics: new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)),
         runner: prefs.kind,
         // "Run now" is a manual fire — tag it so the executions log
@@ -1244,42 +1238,36 @@ export function registerIpcHandlers(): void {
     Channel.AUTOMATIONS_SET_ENABLED,
     async (_e, input: { automationId: string; enabled: boolean }) => {
       // `manifest.enabled` is the source of truth — toggling rewrites
-      // the WORKSPACE `automation.json`, then publishes so the OS
-      // scheduler reads the new value from the fresh active version.
-      // Pre-#108 this mutated the active version dir in place; with
-      // the workspace/storage split that would diverge the workspace
-      // from what the gateway runs.
+      // the automation.json in the app's editing-session worktree, then
+      // publishes onto `main` so the OS scheduler reads the new value
+      // from the fresh materialized tree (issue #137).
       const settings = await loadSettings();
       const ref = parseAutomationRef(input.automationId);
       if (!ref) return { ok: true };
-      const workspaceAutoDir = path.join(
-        settings.workspaceDir,
+      const appDir = await ensureProjectSessionDir(ref.appId);
+      const sessionAutoDir = path.join(appDir, APP_AUTOMATIONS_SUBDIR, ref.automationId);
+      const current = await readAutomationProjectAt(sessionAutoDir, ref.appId);
+      if (!current) return { ok: true };
+      await setAutomationEnabledAt(sessionAutoDir, ref.appId, input.enabled);
+      // Synchronous publish so the host register below sees the updated
+      // manifest on `main`.
+      const sessionId = await ensureProjectSession(ref.appId);
+      await appsStorePublishApp(sessionId, ref.appId, `toggle ${ref.automationId}`).catch(
+        (err: unknown) => {
+          console.warn(
+            `[automations] publish failed for ${input.automationId}: ` +
+              (err instanceof Error ? err.message : String(err)),
+          );
+        },
+      );
+      const row = await readAppOwnedAutomation(
+        localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
         ref.appId,
-        APP_AUTOMATIONS_SUBDIR,
         ref.automationId,
       );
-      const current = await readAutomationProjectAt(workspaceAutoDir, ref.appId);
-      if (!current) return { ok: true };
-      await setAutomationEnabledAt(workspaceAutoDir, ref.appId, input.enabled);
-      // Synchronous publish (not via debounce) so the host register
-      // below sees the updated manifest in `appsDir`.
-      try {
-        const { publishProject } = await import('@centraid/builder-harness');
-        await publishProject(path.join(settings.workspaceDir, ref.appId), ref.appId, settings, {
-          skipBuild: true,
-        });
-      } catch (err) {
-        console.warn(
-          `[automations] publish failed for ${input.automationId}: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
-      const row = await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId);
       if (row) {
         try {
-          await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).register(
-            row,
-          );
+          await localRuntimeAutomationHost(settings.activeGatewayId).register(row);
         } catch (err) {
           console.warn(
             `[automations] host register failed for ${input.automationId}: ` +
@@ -1292,16 +1280,14 @@ export function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { automationId: string }) => {
-    // Delete is best-effort: tear down the OS scheduler entry, drop the
-    // workspace source, then publish so the gateway storage catches up.
-    // For an `auto.`-prefixed automation app (whole-app automation),
-    // delete the workspace entry and forget the publish queue; the next
-    // bootstrap reconcile drops the orphaned `appsDir` version.
+    // Delete is best-effort: tear down the OS scheduler entry, then drop
+    // the automation's code from `main` (issue #137). A whole-app
+    // automation (`auto.`-prefixed) is removed entirely via the HTTP
+    // delete; an app-owned automation just loses its `automations/<id>/`
+    // subdir, published as a fresh commit.
     const settings = await loadSettings();
     try {
-      await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).unregister(
-        input.automationId,
-      );
+      await localRuntimeAutomationHost(settings.activeGatewayId).unregister(input.automationId);
     } catch (err) {
       console.warn(
         `[automations] host unregister failed for ${input.automationId}: ` +
@@ -1311,36 +1297,43 @@ export function registerIpcHandlers(): void {
     const ref = parseAutomationRef(input.automationId);
     if (ref) {
       if (ref.appId.startsWith('auto.')) {
-        // Whole automation app — drop the workspace; the explicit
-        // deregisterApp call from the renderer (or a later cleanup)
-        // will purge `appsDir/<id>/`.
-        await deleteAutomationAt(path.join(settings.workspaceDir, ref.appId));
-      } else {
-        // App-owned automation — just drop its workspace subdir, then
-        // publish so the gateway version no longer lists it.
-        const wsAutoDir = path.join(
-          settings.workspaceDir,
-          ref.appId,
-          APP_AUTOMATIONS_SUBDIR,
-          ref.automationId,
-        );
-        const exists = await readAutomationProjectAt(wsAutoDir, ref.appId).catch(() => undefined);
-        if (exists) await deleteAutomationAt(wsAutoDir);
-        try {
-          const { publishProject } = await import('@centraid/builder-harness');
-          await publishProject(path.join(settings.workspaceDir, ref.appId), ref.appId, settings, {
-            skipBuild: true,
-          });
-        } catch (err) {
+        // Whole automation app — drop the editing session, then remove
+        // the app from `main` (forward commit + tag reap; registry
+        // deregister fires gateway-side via onAppDeleted).
+        await dropProjectSession(ref.appId);
+        await appsStoreDeleteApp(ref.appId).catch((err: unknown) => {
           console.warn(
-            `[automations] publish after delete failed for ${input.automationId}: ` +
+            `[automations] delete app failed for ${ref.appId}: ` +
               (err instanceof Error ? err.message : String(err)),
           );
+        });
+      } else {
+        // App-owned automation — drop its subdir in the session worktree,
+        // then publish so `main` no longer lists it.
+        const appDir = await ensureProjectSessionDir(ref.appId);
+        const sessionAutoDir = path.join(appDir, APP_AUTOMATIONS_SUBDIR, ref.automationId);
+        const exists = await readAutomationProjectAt(sessionAutoDir, ref.appId).catch(
+          () => undefined,
+        );
+        if (exists) {
+          await deleteAutomationAt(sessionAutoDir);
+          const sessionId = await ensureProjectSession(ref.appId);
+          await appsStorePublishApp(
+            sessionId,
+            ref.appId,
+            `delete automation ${ref.automationId}`,
+          ).catch((err: unknown) => {
+            console.warn(
+              `[automations] publish after delete failed for ${input.automationId}: ` +
+                (err instanceof Error ? err.message : String(err)),
+            );
+          });
         }
       }
     }
     // Drop the automation's central run summaries. Its full ledger
-    // (the app's `runtime.sqlite`) goes with the deleted folder.
+    // (the app's `runtime.sqlite`) stays under the data dir until the
+    // app's data dir is reaped.
     new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).deleteByRef(
       input.automationId,
     );

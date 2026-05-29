@@ -28,7 +28,6 @@ import {
   gatewayAppsDir,
   gatewayDir,
   gatewayProfilePath,
-  gatewayWorkspaceDir,
   gatewaysRoot,
 } from './gateway-paths.js';
 import { clearGatewayToken, getGatewayToken, setGatewayToken } from './gateway-secrets.js';
@@ -101,7 +100,6 @@ function isValidAvatarColor(value: unknown): value is string {
 /** Result of `resolveGateway` — profile + paths + effective URL/token. */
 export interface ResolvedGateway {
   readonly profile: GatewayProfile;
-  readonly workspaceDir: string;
   readonly appsDir: string;
   /** For local: the in-process runtime's URL. For remote: profile.url. */
   readonly url: string;
@@ -166,7 +164,6 @@ const DEFAULT_LOCAL_LABEL = 'Local';
 export async function ensureLocalGateway(): Promise<GatewayProfile> {
   const dir = gatewayDir(LOCAL_GATEWAY_ID);
   await fs.mkdir(dir, { recursive: true });
-  await fs.mkdir(gatewayWorkspaceDir(LOCAL_GATEWAY_ID), { recursive: true });
   await fs.mkdir(gatewayAppsDir(LOCAL_GATEWAY_ID), { recursive: true });
   const existing = await readProfile(LOCAL_GATEWAY_ID);
   if (existing) return existing;
@@ -300,7 +297,6 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
     createdAt: new Date().toISOString(),
   };
   await fs.mkdir(gatewayDir(id), { recursive: true });
-  await fs.mkdir(gatewayWorkspaceDir(id), { recursive: true });
   // appsDir intentionally not created for remote — the directory is
   // unused (the gateway owns its own storage). Path helpers still
   // return the resolved path so handlers don't need kind-specific
@@ -345,7 +341,6 @@ export async function addLocalGateway(input: {
     createdAt: new Date().toISOString(),
   };
   await fs.mkdir(gatewayDir(id), { recursive: true });
-  await fs.mkdir(gatewayWorkspaceDir(id), { recursive: true });
   await fs.mkdir(gatewayAppsDir(id), { recursive: true });
   await writeProfile(profile);
   return profile;
@@ -438,7 +433,6 @@ export async function resolveGateway(id: string): Promise<ResolvedGateway | unde
     const info = localRuntimeInfo(profile.id);
     return {
       profile,
-      workspaceDir: gatewayWorkspaceDir(profile.id),
       appsDir: gatewayAppsDir(profile.id),
       url: info?.url ?? '',
       token: info?.token ?? '',
@@ -447,7 +441,6 @@ export async function resolveGateway(id: string): Promise<ResolvedGateway | unde
   const token = (await getGatewayToken(profile.id)) ?? '';
   return {
     profile,
-    workspaceDir: gatewayWorkspaceDir(profile.id),
     appsDir: gatewayAppsDir(profile.id),
     url: profile.url ?? '',
     token,

@@ -47,6 +47,7 @@ export {
   cloneTemplate,
   suggestAppId,
   suggestCloneIdentity,
+  suggestCloneIdentityFrom,
   type CloneTemplateOptions,
 } from './clone.js';
 

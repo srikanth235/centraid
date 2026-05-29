@@ -113,9 +113,10 @@ export interface DispatcherOptions {
   /** Write-notification callback per app — feeds the `_changes` SSE stream. */
   readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
   /**
-   * Optional code-dir resolver (issue #137). Tried FIRST; on undefined,
-   * falls back to legacy `versions.getActiveVersion` + `appCodeDir` so
-   * non-cutover flows (chat-agent, template clone, automations) resolve.
+   * Optional code-dir resolver (issue #137). When set, it is the SOLE
+   * authority (git store owns all code; an app it can't resolve is not
+   * live — no `current.json` fallback). When absent, the legacy tarball
+   * backend resolves via `versions.getActiveVersion` + `appCodeDir`.
    */
   readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
 }
@@ -148,10 +149,10 @@ export class Dispatcher {
 
   // --------- resolution helpers ---------
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    // Git store wins when it has the app; else legacy active-version.
+    // Git-store backend (#137): override is the sole authority. Else
+    // legacy tarball backend resolves the active-version dir.
     if (this.codeDirOverride) {
-      const fromStore = await this.codeDirOverride(entry.id);
-      if (fromStore) return fromStore;
+      return this.codeDirOverride(entry.id);
     }
     const active = await this.versions.getActiveVersion(entry.path);
     if (!active) return undefined;

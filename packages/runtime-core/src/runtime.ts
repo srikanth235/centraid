@@ -332,14 +332,13 @@ export class Runtime {
   }
 
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    // Mirrors `Dispatcher.resolveCodeDir`: git store wins when it
-    // owns the app; else fall back to legacy active-version resolution
-    // so flows that still write `current.json` (chat-agent, template
-    // clone, automation scaffold) keep serving out of `<appsDir>/<id>/
-    // versions/<active>/`.
+    // Mirrors `Dispatcher.resolveCodeDir`: when the git-store override
+    // is set it is the sole authority (issue #137) — an app it can't
+    // resolve is not live, no legacy `current.json` fallback. The
+    // override is absent only for the legacy tarball backend (OpenClaw /
+    // pre-#137), which resolves the active-version dir instead.
     if (this.codeDirOverride) {
-      const fromStore = await this.codeDirOverride(entry.id);
-      if (fromStore) return fromStore;
+      return this.codeDirOverride(entry.id);
     }
     const active = await this.versions.getActiveVersion(entry.path);
     if (!active) return undefined;

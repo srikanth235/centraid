@@ -40,12 +40,16 @@ const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 /** Conservative slug check — same shape as runtime-core's app id rule. */
 const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 
+/** Stable symlink name (under the store root) pointing at the live main worktree. */
+const ACTIVE_MAIN_LINK = 'active-main';
+
 export class AppsStore {
   private readonly root: string;
   private readonly bareDir: string;
   private readonly worktreesDir: string;
   private readonly mainWorktreesDir: string;
   private readonly sessionWorktreesDir: string;
+  private readonly activeMainLink: string;
   private activeMainDir: string | undefined;
   private publishChain: Promise<unknown> = Promise.resolve();
   private initialized = false;
@@ -56,6 +60,7 @@ export class AppsStore {
     this.worktreesDir = path.join(options.root, 'worktrees');
     this.mainWorktreesDir = path.join(this.worktreesDir, 'main');
     this.sessionWorktreesDir = path.join(this.worktreesDir, 'sessions');
+    this.activeMainLink = path.join(options.root, ACTIVE_MAIN_LINK);
   }
 
   /**
@@ -92,12 +97,26 @@ export class AppsStore {
     await run(['worktree', 'prune'], { cwd: this.bareDir });
     const mainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
     this.activeMainDir = await this.ensureMainMaterialization(mainSha);
+    await this.updateActiveMainLink(this.activeMainDir);
     this.initialized = true;
   }
 
   /** Active main worktree path; runtime reads handlers from `<this>/apps/<id>/`. */
   getActiveMainDir(): string | undefined {
     return this.activeMainDir;
+  }
+
+  /**
+   * Stable path to the `active-main` symlink (`<root>/active-main`),
+   * repointed atomically at the live main worktree on every publish /
+   * rollback / delete. Unlike `getActiveMainDir()` — which rotates per
+   * sha — this path never changes, so external processes that must bake
+   * a path once (the OS scheduler's `centraid run-automation`, which
+   * resolves automation code under `<this>/apps/<id>/`) stay correct
+   * across version swaps. The symlink exists after `init()`.
+   */
+  getActiveMainLink(): string {
+    return this.activeMainLink;
   }
 
   /** Bare repo path — for export/import + tests. */
@@ -531,13 +550,17 @@ export class AppsStore {
   }
 
   /**
-   * Flip the active-main pointer to `newDir`, then evict the prior
-   * materialization. The eviction is synchronous in v0; refcount /
-   * drain semantics belong in the runtime-wiring slice.
+   * Flip the active-main pointer to `newDir`, repoint the stable
+   * `active-main` symlink, then evict the prior materialization. The
+   * symlink is repointed BEFORE the old dir is removed so a reader
+   * resolving the stable path never observes a dangling link. The
+   * eviction is synchronous in v0; refcount / drain semantics belong
+   * in the runtime-wiring slice.
    */
   private async swapActiveMain(newDir: string): Promise<void> {
     const previous = this.activeMainDir;
     this.activeMainDir = newDir;
+    await this.updateActiveMainLink(newDir);
     if (previous && previous !== newDir) {
       await runRaw(['worktree', 'remove', '--force', previous], {
         cwd: this.bareDir,
@@ -546,6 +569,20 @@ export class AppsStore {
       await run(['worktree', 'prune'], { cwd: this.bareDir });
       await fs.rm(previous, { recursive: true, force: true });
     }
+  }
+
+  /**
+   * Atomically point `<root>/active-main` at `targetDir`. The target is
+   * stored relative to the store root so the whole store can be moved
+   * wholesale (export/import) without breaking the link. Replacement is
+   * via write-temp-then-rename so concurrent readers see either the old
+   * or the new target, never a half-written link.
+   */
+  private async updateActiveMainLink(targetDir: string): Promise<void> {
+    const rel = path.relative(this.root, targetDir);
+    const tmp = `${this.activeMainLink}.tmp-${crypto.randomBytes(6).toString('hex')}`;
+    await fs.symlink(rel, tmp);
+    await fs.rename(tmp, this.activeMainLink);
   }
 
   private sessionWorktreePath(sessionId: string): string {
