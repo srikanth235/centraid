@@ -466,3 +466,6 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-491b397d-0ca-1779977892 | claude-code | 491b397d-0cac-44b5-bd31-99297f3f0679 | #135 | claude-opus-4-7 | 6 | 9782 | 532358 | 6302 | 16090 | 0.4849 | chore(governance): update governance-kit/core pack to v0.3.2 (#135)Re-pin govern |
 | claude-code-491b397d-0ca-1779977911 | claude-code | 491b397d-0cac-44b5-bd31-99297f3f0679 | #135 | claude-opus-4-7 | 1 | 902 | 93885 | 159 | 1062 | 0.0566 | chore(governance): update governance-kit/core pack to v0.3.2 (#135) --allow-empt |
 | claude-code-491b397d-0ca-1779977956 | claude-code | 491b397d-0cac-44b5-bd31-99297f3f0679 | #135 | claude-opus-4-7 | 4 | 5148 | 381156 | 4572 | 9724 | 0.3371 | chore(governance): update governance-kit/core pack to v0.3.2 (#135)Re-pin govern |
+| claude-code-ba7345b0-dab-1780052584 | claude-code | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 | #139 | claude-opus-4-8 | 60117 | 889704 | 64138168 | 472774 | 1422595 | 49.7497 |  |
+| claude-code-ba7345b0-dab-1780052698 | claude-code | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 | #139 | claude-opus-4-8 | 155 | 41524 | 1205958 | 20207 | 61886 | 1.3685 |  |
+| claude-code-ba7345b0-dab-1780052833 | claude-code | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 | #139 | claude-opus-4-8 | 419 | 28988 | 1742639 | 18596 | 48003 | 1.5195 |  |

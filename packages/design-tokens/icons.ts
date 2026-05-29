@@ -128,6 +128,30 @@ const ICON_DATA = {
     { d: 'M12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z', fill: 'currentColor' },
   ],
   Battery: [{ d: 'M2 7h18v10H2z' }, { d: 'M4 9h10v6H4z', fill: 'currentColor' }, { d: 'M22 11v2' }],
+  // Profile / space switcher glyphs (issue: profiles feature).
+  User: [{ d: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' }, { d: 'M4.5 20.5a7.5 7.5 0 0 1 15 0' }],
+  Users: [
+    { d: 'M9 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z' },
+    { d: 'M2.5 20.5a6.5 6.5 0 0 1 13 0' },
+    { d: 'M16.5 4.8a3.5 3.5 0 0 1 0 6.9M22 20.5a6.5 6.5 0 0 0-4.2-6.1' },
+  ],
+  SwitchVert: [{ d: 'M8 4v16M8 20l-3-3M8 4l3 3M16 20V4M16 4l3 3M16 20l-3-3' }],
+  Home: [{ d: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7h-6v7H5a2 2 0 0 1-2-2z' }],
+  Book: [{ d: 'M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z' }, { d: 'M4 17a2 2 0 0 1 2-2h13' }],
+  Music: [
+    { d: 'M9 18V5l11-2v13' },
+    { d: 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z' },
+    { d: 'M17 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6z' },
+  ],
+  Gym: [{ d: 'M6 9v6M3 11v2M18 9v6M21 11v2M6 12h12' }],
+  Calendar: [
+    { d: 'M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z' },
+    { d: 'M3 10h18M8 3v4M16 3v4' },
+  ],
+  Camera: [
+    { d: 'M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z' },
+    { d: 'M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
+  ],
 } as const;
 
 export type IconName = keyof typeof ICON_DATA;

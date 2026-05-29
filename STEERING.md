@@ -275,3 +275,9 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-78890d42381-1779815081-1 | 78890d42-3812-4535-8ab5-08e98dbf99e8 | #127 | interrupt | structural |  | feat(governance): add handler-uses-ctx-primitives - block direct provider SDKs … |
 | steer-78890d42381-1779815081-2 | 78890d42-3812-4535-8ab5-08e98dbf99e8 | #127 | correction | classifier | user clarified intent; rejected agent's interpretation of the question | feat(governance): add handler-uses-ctx-primitives - block direct provider SDKs … |
 | steer-e9fb5b6f335-1779818383-1 | e9fb5b6f-3351-4708-95db-05ffe0340a21 | #129 | correction | classifier | pushed back on multiple migrations; wants them folded into one for v0 | refactor(app-templates): fold 0002 migrations into 0001_init (#129) |
+| steer-ba7345b0dab-1780052504-1 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
+| steer-ba7345b0dab-1780052504-2 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | asked to delete existing switcher before reimplementing |  |
+| steer-ba7345b0dab-1780052504-3 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
+| steer-ba7345b0dab-1780052504-4 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | told to pause work due to dev server errors |  |
+| steer-ba7345b0dab-1780052504-5 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
+| steer-ba7345b0dab-1780052504-6 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | narrowed scope to just verifying desktop runs |  |
