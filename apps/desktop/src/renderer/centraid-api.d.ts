@@ -115,22 +115,9 @@ export interface CentraidAuthImportResult {
   status: CentraidAuthStatus;
 }
 
-export interface CentraidChatModel {
-  id: string;
-  name: string;
-  provider: string;
-}
-
-type ChatEventBase = { appId: string; turnId: number };
-export type CentraidChatEvent =
-  | (ChatEventBase & { kind: 'thinking' })
-  | (ChatEventBase & { kind: 'assistant-delta'; delta: string })
-  | (ChatEventBase & { kind: 'tool-call'; toolName: string; toolArgs?: unknown; sql?: string })
-  | (ChatEventBase & { kind: 'tool-result'; toolName: string; toolResult?: unknown })
-  | (ChatEventBase & { kind: 'tool-error'; toolName?: string; text: string })
-  | (ChatEventBase & { kind: 'final'; text: string })
-  | (ChatEventBase & { kind: 'error'; text: string })
-  | (ChatEventBase & { kind: 'aborted' });
+// The renderer-side chat event union is the gateway's native `ChatStreamEvent`
+// (see `renderer/gateway-client-chat.ts`) now that the chat panel streams the
+// turn directly — no IPC-translated `CentraidChatEvent` / model-list shape.
 
 /**
  * One persisted chat session — the session id is also the chat window id.
@@ -166,10 +153,6 @@ export type CentraidChatHistoryMessage =
       result?: unknown;
       errorText?: string;
     };
-
-export interface CentraidChatSessionWithMessages extends CentraidChatSessionMeta {
-  messages: Array<{ idx: number; payload: CentraidChatHistoryMessage; createdAt: number }>;
-}
 
 export interface CentraidVersionRecord {
   versionId: string;
@@ -546,54 +529,10 @@ interface CentraidApi {
   // owns the catalog (`GET /centraid/_templates`) + clone orchestration
   // (`POST /centraid/_apps/_clone`).
 
-  /**
-   * Start (or reset) the app-scoped agentic chat session for this window.
-   * Pass `sessionId` to resume a persisted chat from history; omit it for a
-   * fresh conversation (the row is lazy-created on first `chatSend`).
-   */
-  chatStart(input: {
-    appId: string;
-    appName: string;
-    sessionId?: string | null;
-    /** Known title when resuming a persisted session; echoed back by `chatSend`. */
-    title?: string;
-  }): Promise<{ ok: true; sessionId: string | null }>;
-  /**
-   * Send one user turn. Progress + result arrive via `onChatEvent` with the
-   * matching `turnId`. The renderer assigns `turnId` (monotonic per session).
-   *
-   * Returns the persisted chat sessionId plus the session's canonical
-   * `title` — which the server auto-derives from the first user message.
-   * The renderer should treat `title` as authoritative (don't compute one
-   * client-side) so the header label and the history list stay in sync.
-   */
-  chatSend(input: {
-    appId: string;
-    text: string;
-    turnId: number;
-    model?: string;
-  }): Promise<{ ok: true; sessionId: string; title: string }>;
-  /** Cancel the in-flight infer for this app, if any. */
-  chatAbort(input: { appId: string }): Promise<{ ok: true }>;
-  /** Models surfaced by `openclaw infer model list --json`. Empty on failure. */
-  listChatModels(): Promise<CentraidChatModel[]>;
-  onChatEvent(cb: (event: CentraidChatEvent) => void): () => void;
-
-  /** List persisted chat sessions for an app, newest first. */
-  chatHistoryList(input: { appId: string }): Promise<{ sessions: CentraidChatSessionMeta[] }>;
-  /** Load one persisted chat session's metadata + ordered message log. */
-  chatHistoryLoad(input: {
-    appId: string;
-    sessionId: string;
-  }): Promise<CentraidChatSessionWithMessages>;
-  /** Permanently delete one chat session and its messages. */
-  chatHistoryDelete(input: { appId: string; sessionId: string }): Promise<{ ok: boolean }>;
-  /** Rename a chat session (overrides the auto-generated title). */
-  chatHistoryRename(input: {
-    appId: string;
-    sessionId: string;
-    title: string;
-  }): Promise<CentraidChatSessionMeta>;
+  // App chat (turn streaming + history) moved to the renderer's direct HTTP
+  // client (`renderer/gateway-client-chat.ts`) under the unified-chat pivot
+  // (issue #141, Phase 3): the panel streams `/centraid/<appId>/_chat` SSE
+  // itself and reads/writes history over `/_centraid-chat` — no IPC.
 
   /** Snapshot of which coding-agent credentials are present on this machine. */
   authStatus(): Promise<CentraidAuthStatus>;
@@ -922,21 +861,6 @@ declare global {
     source: 'query' | 'action';
     handler: string;
   }
-  interface CentraidChatModel {
-    id: string;
-    name: string;
-    provider: string;
-  }
-  type _ChatEventBaseG = { appId: string; turnId: number };
-  type CentraidChatEvent =
-    | (_ChatEventBaseG & { kind: 'thinking' })
-    | (_ChatEventBaseG & { kind: 'assistant-delta'; delta: string })
-    | (_ChatEventBaseG & { kind: 'tool-call'; toolName: string; toolArgs?: unknown; sql?: string })
-    | (_ChatEventBaseG & { kind: 'tool-result'; toolName: string; toolResult?: unknown })
-    | (_ChatEventBaseG & { kind: 'tool-error'; toolName?: string; text: string })
-    | (_ChatEventBaseG & { kind: 'final'; text: string })
-    | (_ChatEventBaseG & { kind: 'error'; text: string })
-    | (_ChatEventBaseG & { kind: 'aborted' });
   interface CentraidChatSessionMeta {
     id: string;
     originAppId: string | null;
@@ -961,9 +885,6 @@ declare global {
         result?: unknown;
         errorText?: string;
       };
-  interface CentraidChatSessionWithMessages extends CentraidChatSessionMeta {
-    messages: Array<{ idx: number; payload: CentraidChatHistoryMessage; createdAt: number }>;
-  }
   // Mirror of the module-level automation types so screens can
   // reference them by bare name without imports (issue #91).
   interface CentraidAutomationManifest {

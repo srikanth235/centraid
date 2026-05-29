@@ -406,3 +406,8 @@ export async function getInsightsSummary(input?: {
 // (split out for the repo file-size limit). Re-exported here so call sites
 // keep importing everything from `./gateway-client.js`.
 export * from './gateway-client-editing.js';
+
+// The unified chat transport (SSE turn streaming + chat-history surface)
+// lives in `gateway-client-chat.ts` (issue #141, Phase 3). Re-exported here
+// so the chat panel imports it from the same barrel.
+export * from './gateway-client-chat.js';

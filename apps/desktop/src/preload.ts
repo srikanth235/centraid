@@ -39,16 +39,6 @@ const Channel = {
   GATEWAY_CHANGED: 'centraid:gateways:changed',
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
-  CHAT_START: 'centraid:chat:start',
-  CHAT_SEND: 'centraid:chat:send',
-  CHAT_ABORT: 'centraid:chat:abort',
-  CHAT_EVENT: 'centraid:chat:event',
-  CHAT_MODELS: 'centraid:chat:models',
-  CHAT_HISTORY_LIST: 'centraid:chat:history:list',
-  CHAT_HISTORY_LOAD: 'centraid:chat:history:load',
-  CHAT_HISTORY_DELETE: 'centraid:chat:history:delete',
-  CHAT_HISTORY_RENAME: 'centraid:chat:history:rename',
-
   AUTH_STATUS: 'centraid:auth:status',
   AUTH_RESYNC: 'centraid:auth:resync',
 
@@ -185,31 +175,10 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // the gateway owns the catalog (`GET /centraid/_templates`) + clone
   // (`POST /centraid/_apps/_clone`).
 
-  // App-scoped agentic chat
-  chatStart: (input: {
-    appId: string;
-    appName: string;
-    sessionId?: string | null;
-    title?: string;
-  }) => ipcRenderer.invoke(Channel.CHAT_START, input),
-  chatSend: (input: { appId: string; text: string; turnId: number; model?: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_SEND, input),
-  chatAbort: (input: { appId: string }) => ipcRenderer.invoke(Channel.CHAT_ABORT, input),
-  listChatModels: () => ipcRenderer.invoke(Channel.CHAT_MODELS),
-  onChatEvent: (cb: (msg: unknown) => void) => {
-    const handler = (_e: IpcRendererEvent, msg: unknown): void => cb(msg);
-    ipcRenderer.on(Channel.CHAT_EVENT, handler);
-    return () => ipcRenderer.off(Channel.CHAT_EVENT, handler);
-  },
-  // App chat history (persisted on the gateway)
-  chatHistoryList: (input: { appId: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_HISTORY_LIST, input),
-  chatHistoryLoad: (input: { appId: string; sessionId: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_HISTORY_LOAD, input),
-  chatHistoryDelete: (input: { appId: string; sessionId: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_HISTORY_DELETE, input),
-  chatHistoryRename: (input: { appId: string; sessionId: string; title: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_HISTORY_RENAME, input),
+  // App chat (turn streaming + history) moved to the renderer's direct HTTP
+  // client (`renderer/gateway-client-chat.ts`): the panel streams
+  // `/centraid/<appId>/_chat` SSE itself and reads/writes history over the
+  // gateway's `/_centraid-chat` surface — no main-process relay.
 
   // Credential import (Claude Code / Codex → pi auth.json)
   authStatus: () => ipcRenderer.invoke(Channel.AUTH_STATUS),

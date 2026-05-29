@@ -38,6 +38,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Gateway owns the app lifecycle (create/clone/meta/automation CRUD over HTTP)
 - [x] Renderer owns app editing sessions + lifecycle over direct HTTP; desktop IPC handlers deleted
 - [x] Gateway runs the unified chat turn in the app's draft worktree with the union of tools
+- [x] Data-chat panel streams the gateway _chat SSE directly; desktop chat IPC deleted
 
 ## What changed
 
@@ -422,6 +423,37 @@ This slice is gateway-side only; the renderer SSE cutover + deletion of the
 desktop `chat.ts` / `AGENT_*` / `agent-session.ts` / `project-sessions.ts`
 is the next slice.
 
+**Data-chat panel streams the gateway _chat SSE directly; desktop chat IPC
+deleted.** First renderer slice of the unified-chat merge: the in-app data
+chat (`renderer/app-chat.ts`) no longer relays through the desktop main
+process. A new dependency-free `renderer/gateway-client-chat.ts` (re-exported
+from the `gateway-client.ts` barrel) adds `streamChat` — a `fetch` +
+`ReadableStream` reader that POSTs `/centraid/<appId>/_chat` and parses the
+SSE frames into the gateway's native `ChatStreamEvent` union (fetch streaming,
+not `EventSource`, because we need a POST body + the Bearer header) — plus the
+chat-history surface (`listChatSessions` / `createChatSession` /
+`loadChatSession` / `renameChatSession` / `deleteChatSession`) over the
+gateway's `/_centraid-chat/apps/<appId>/sessions…` routes. `app-chat.ts` now
+consumes `ChatStreamEvent` directly (no IPC-translated `CentraidChatEvent`):
+it creates the session row lazily on first send (the id IS the window id the
+turn streams to), drives the turn through `streamChat` with an
+`AbortController` for Stop, targets tool results by the real `toolCallId` (no
+more client-minted ids), and surfaces the post-turn `webhooks` event's minted
+secret once as an assistant message. Because the gateway-side runner (previous
+slice) runs the turn in the app's draft worktree with the union of tools, the
+same panel now both tweaks the app's code and operates its data — one chat
+surface, both jobs. Deleted: `apps/desktop/src/main/chat.ts` (the whole
+`centraid:chat:*` relay), its `registerChatIpcHandlers` / `disposeWindowChatSessions`
+call sites in `main.ts` + `ipc.ts`, the `CHAT_*` preload channels + chat
+methods, and the `chatStart` / `chatSend` / `chatAbort` / `listChatModels` /
+`onChatEvent` / `chatHistory*` `CentraidApi` typings + the now-orphaned
+`CentraidChatEvent` / `CentraidChatModel` / `CentraidChatSessionWithMessages`
+types (the persisted `CentraidChatSessionMeta` / `CentraidChatHistoryMessage`
+shapes stay — the panel still reads history). The settings model picker's
+`listChatModels()` call (always empty — the model is gateway-owned) is
+inlined to an empty list. The builder's `AGENT_*` surface is untouched in this
+slice; its cutover + the agent-machinery deletion is next.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -539,6 +571,16 @@ is the next slice.
   URL while the staged manifest keeps only the hash (no plaintext, no
   `pending`); a third asserts an unconfigured runner emits `error` + rejects.
   `@centraid/gateway-runtime` typecheck + lint clean (51 package tests pass).
+- Data-chat panel streams the gateway _chat SSE directly; desktop chat IPC
+  deleted: full `turbo run build typecheck lint test` green across all 28
+  tasks. `@centraid/desktop` typechecks + builds with `app-chat.ts` rewired
+  onto `streamChat` + the `/_centraid-chat` history client and `main/chat.ts`
+  removed; `oxlint` confirms the deleted `CHAT_*` channels, preload methods,
+  `CentraidApi` typings, and orphaned chat event/model types left nothing
+  dangling. The gateway endpoints the transport calls are covered by the
+  unified-chat-runner test (turn streaming) + the runtime-core chat-history
+  route tests (sessions list/create/load/rename/delete), so the renderer
+  transport is a wire shim with no new server behavior to retest.
 
 ## Out of scope
 

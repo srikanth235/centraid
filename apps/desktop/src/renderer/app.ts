@@ -5493,7 +5493,10 @@ import {
       chatModelSelect.append(seed);
     }
     async function loadChatModels(): Promise<void> {
-      const models = await window.CentraidApi.listChatModels().catch(() => []);
+      // The chat model is gateway-owned (the runner picks it from the
+      // gateway's runner prefs), so there's no per-app model list to fetch —
+      // the dropdown keeps its "Gateway default" entry + the persisted seed.
+      const models: Array<{ id: string; name: string; provider: string }> = [];
       // Replace existing options but keep the leading "Gateway default" entry.
       while (chatModelSelect.children.length > 1) {
         chatModelSelect.lastChild?.remove();

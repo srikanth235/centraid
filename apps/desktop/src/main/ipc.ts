@@ -52,7 +52,6 @@ import {
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
-import { disposeWindowChatSessions } from './chat.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -239,7 +238,6 @@ export function registerIpcHandlers(): void {
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) continue;
       await disposeWindowSession(win.id);
-      disposeWindowChatSessions(win.id);
     }
   };
 
