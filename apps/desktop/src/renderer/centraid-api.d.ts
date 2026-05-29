@@ -463,38 +463,9 @@ interface CentraidApi {
     id: string;
   }): Promise<{ activeVersion?: string; versions: CentraidVersionRecord[] }>;
   activateVersion(input: { id: string; versionId: string }): Promise<{ activeVersion: string }>;
-  appLiveUrl(input: { id: string }): Promise<{ url: string }>;
-  /**
-   * Live schema for the Cloud → Database panel. `undefined` when the gateway
-   * has nothing for this app yet (unregistered, or never published).
-   */
-  appSchema(input: { id: string }): Promise<CentraidAppSchema | undefined>;
-  /**
-   * One page of rows from a table or view. The gateway caps `limit` at 200
-   * server-side; defaults to 50. Throws if the table doesn't exist.
-   */
-  appTableRows(input: {
-    id: string;
-    table: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<CentraidAppTableRows>;
-  /**
-   * Run a single SQL statement against the app's `data.sqlite`. Multi-
-   * statement input is rejected by the gateway.
-   */
-  appQuery(input: { id: string; sql: string }): Promise<CentraidRunQueryResult>;
-  /**
-   * Newest-first tail of persistent handler logs. `sinceTs` is the
-   * polling-friendly anchor; pass the highest `ts` you've seen.
-   */
-  appLogs(input: {
-    id: string;
-    limit?: number;
-    sinceTs?: number;
-    level?: CentraidLogLevel;
-  }): Promise<{ entries: CentraidLogEntry[] }>;
-  deregisterApp(input: { id: string }): Promise<{ id: string }>;
+  // appLiveUrl / appSchema / appTableRows / appQuery / appLogs /
+  // deregisterApp moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot.
 
   /**
    * Snapshot of the auto-publish queue (issue #108). Every workspace
@@ -578,6 +549,13 @@ interface CentraidApi {
    * (project list, agent session, iframe).
    */
   setActiveGateway(input: { id: string }): Promise<CentraidSettings>;
+  /**
+   * Active gateway's HTTP base URL + bearer token for the renderer's
+   * direct data-plane client (`renderer/gateway-client.ts`). The token
+   * lives in keychain-backed settings on main; this is the only path it
+   * crosses to the renderer. Re-fetched on every gateway switch.
+   */
+  getGatewayAuth(): Promise<{ baseUrl: string; token?: string }>;
   /**
    * Subscribe to active-gateway changes (any cause — add/remove/rename
    * of the active one, or explicit switch). Returns the unsubscribe.

@@ -147,12 +147,9 @@ export const Channel = {
   PUBLISH: 'centraid:publish',
   VERSIONS_LIST: 'centraid:versions:list',
   VERSIONS_ACTIVATE: 'centraid:versions:activate',
-  APP_LIVE_URL: 'centraid:app:live-url',
-  APP_SCHEMA: 'centraid:app:schema',
-  APP_TABLE_ROWS: 'centraid:app:table-rows',
-  APP_QUERY: 'centraid:app:query',
-  APP_LOGS: 'centraid:app:logs',
-  APPS_DEREGISTER: 'centraid:apps:deregister',
+  // APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY / APP_LOGS /
+  // APPS_DEREGISTER are gone — the renderer calls these gateway routes
+  // directly (thin-client pivot; see renderer/gateway-client.ts).
 
   /** Status read for the auto-publish queue (renderer toast / debug). */
   PUBLISH_STATUS: 'centraid:publish:status',
@@ -170,6 +167,11 @@ export const Channel = {
   GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
+  // Thin-client: hands the renderer the active gateway's HTTP base URL +
+  // bearer token so it can call the runtime/data plane directly. Main
+  // still owns where the token lives (keychain-backed settings); this is
+  // the single point where it crosses to the renderer.
+  GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
   TEMPLATES_LIST: 'centraid:templates:list',
   TEMPLATES_CLONE: 'centraid:templates:clone',
@@ -822,6 +824,21 @@ export function registerIpcHandlers(): void {
     };
   });
 
+  // Thin-client token bridge: resolve the active gateway's base URL +
+  // bearer token for the renderer's direct HTTP client. The token lives
+  // in keychain-backed settings; this is the only path it crosses to the
+  // renderer, and it's re-fetched whenever the active gateway flips.
+  ipcMain.handle(
+    Channel.GATEWAY_AUTH_GET,
+    async (): Promise<{ baseUrl: string; token?: string }> => {
+      const settings = await loadSettings();
+      return {
+        baseUrl: settings.gatewayUrl.replace(/\/+$/, ''),
+        token: settings.gatewayToken || undefined,
+      };
+    },
+  );
+
   ipcMain.handle(Channel.VERSIONS_LIST, async (_e, input: { id: string }) => {
     const list = await appsStoreListGitVersions(input.id).catch(() => []);
     if (list.length === 0) return { versions: [] };
@@ -859,65 +876,11 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  ipcMain.handle(Channel.APP_LIVE_URL, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { appLiveUrl } = await import('@centraid/builder-harness');
-    return { url: appLiveUrl(settings, input.id) };
-  });
-
-  // Live schema for the Cloud → Database panel. Returns `undefined` when
-  // the gateway has nothing for this app yet (404 / 503 / 409 from the
-  // schema endpoint — see fetchAppSchema for the exact semantics).
-  ipcMain.handle(Channel.APP_SCHEMA, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { fetchAppSchema } = await import('@centraid/builder-harness');
-    return fetchAppSchema(settings, input.id);
-  });
-
-  // Cloud → Database row browser. Pulls one page of rows (default 50,
-  // capped at 200 server-side) from the named table.
-  ipcMain.handle(
-    Channel.APP_TABLE_ROWS,
-    async (_e, input: { id: string; table: string; limit?: number; offset?: number }) => {
-      const settings = await loadSettings();
-      const { fetchAppTableRows } = await import('@centraid/builder-harness');
-      return fetchAppTableRows(settings, input.id, input.table, {
-        limit: input.limit,
-        offset: input.offset,
-      });
-    },
-  );
-
-  // Cloud → SQL editor. Single-statement; gateway distinguishes
-  // SELECT-style ({ kind: 'rows' }) from DML/DDL ({ kind: 'exec' }).
-  ipcMain.handle(Channel.APP_QUERY, async (_e, input: { id: string; sql: string }) => {
-    const settings = await loadSettings();
-    const { runAppQuery } = await import('@centraid/builder-harness');
-    return runAppQuery(settings, input.id, input.sql);
-  });
-
-  // Cloud → Logs. Newest-first tail with optional `sinceTs` for polling.
-  ipcMain.handle(
-    Channel.APP_LOGS,
-    async (
-      _e,
-      input: { id: string; limit?: number; sinceTs?: number; level?: 'info' | 'warn' | 'error' },
-    ) => {
-      const settings = await loadSettings();
-      const { fetchAppLogs } = await import('@centraid/builder-harness');
-      return fetchAppLogs(settings, input.id, {
-        limit: input.limit,
-        sinceTs: input.sinceTs,
-        level: input.level,
-      });
-    },
-  );
-
-  ipcMain.handle(Channel.APPS_DEREGISTER, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { deregisterApp } = await import('@centraid/builder-harness');
-    return deregisterApp(settings, input.id);
-  });
+  // APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY / APP_LOGS /
+  // APPS_DEREGISTER moved to the renderer's direct HTTP client
+  // (`renderer/gateway-client.ts`) under the thin-client pivot — they were
+  // pure proxies over `@centraid/builder-harness`'s gateway-client with no
+  // main-side state, so the renderer now calls the gateway directly.
 
   // ----- Templates -----
   ipcMain.handle(Channel.TEMPLATES_LIST, async () => {

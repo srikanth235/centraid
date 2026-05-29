@@ -11,6 +11,8 @@
 //   Right pane: Preview (iframe → live gateway URL or local centraid-preview://)
 //               or Code (project files, syntax-highlighted).
 
+import { appSchema, appTableRows, appQuery, appLogs, appLiveUrl } from './gateway-client.js';
+
 (function () {
   // A single tool invocation. Multiple of these are consolidated into a
   // toolGroup chat bubble (see below).
@@ -2224,7 +2226,7 @@
         schemaCache = 'pending';
         schemaError = undefined;
         try {
-          schemaCache = await Api().appSchema({ id: projectId });
+          schemaCache = await appSchema({ id: projectId });
         } catch (err) {
           schemaCache = 'error';
           schemaError = err instanceof Error ? err.message : String(err);
@@ -2680,7 +2682,7 @@
           rowsCache.set(tableName, { kind: 'pending' });
           paint();
           try {
-            const r = await Api().appTableRows({
+            const r = await appTableRows({
               id: projectId,
               table: tableName,
               limit: ROWS_PAGE_SIZE,
@@ -2925,7 +2927,7 @@
           drawStage(); // re-paint with disabled button + cleared output
 
           try {
-            const r = await Api().appQuery({ id: projectId!, sql });
+            const r = await appQuery({ id: projectId!, sql });
             sqlResult = r;
           } catch (err) {
             sqlError = err instanceof Error ? err.message : String(err);
@@ -3079,7 +3081,7 @@
           }
         }
         try {
-          const r = await Api().appLogs({ id: projectId, limit: 200 });
+          const r = await appLogs({ id: projectId, limit: 200 });
           logsCache = r.entries;
           logsError = undefined;
         } catch (err) {
@@ -3789,7 +3791,7 @@
         try {
           const versions = await Api().listVersions({ id: projectId });
           if (versions.activeVersion) {
-            const r = await Api().appLiveUrl({ id: projectId });
+            const r = await appLiveUrl({ id: projectId });
             liveUrl = r.url;
             lastPublishedVersionId = versions.activeVersion;
             // Hydrate the header status: total version count drives the
@@ -4221,7 +4223,7 @@
       try {
         const result = await Api().publish({ id: projectId });
         lastPublishedVersionId = result.versionId;
-        liveUrl = (await Api().appLiveUrl({ id: projectId })).url;
+        liveUrl = (await appLiveUrl({ id: projectId })).url;
         // Bump the header status: every publish increments the version
         // count and resets the relative edit time to "just now".
         appVersionCount += 1;

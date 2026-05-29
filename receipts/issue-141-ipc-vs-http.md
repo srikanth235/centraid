@@ -31,6 +31,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] PROJECTS_OPEN + AGENT_* gated as the only local-only handlers
 - [x] IPC-vs-HTTP concept doc + token audit
 - [x] CORS on the local gateway for renderer-direct HTTP
+- [x] Renderer token bridge + app read surface over direct HTTP
 
 ## What changed
 
@@ -234,6 +235,23 @@ covers the `file://` origin; no custom `app://` scheme is needed. An
 OPTIONS preflight is answered with 204 *before* the Bearer check (preflight
 carries no token). Remote/OpenClaw front-door CORS is a tracked follow-up.
 
+**Renderer token bridge + app read surface over direct HTTP.** Establishes
+the thin-client foundation and migrates the first method group off IPC.
+Main exposes a single new `GATEWAY_AUTH_GET` channel
+(`getGatewayAuth(): { baseUrl, token }`, resolved from keychain-backed
+settings) — the one point the bearer token crosses to the renderer. New
+`apps/desktop/src/renderer/gateway-client.ts` caches that auth, refreshes
+it on `onGatewayChanged`, and issues `fetch` calls directly against the
+active gateway (local loopback or remote URL). The app read surface —
+`appLiveUrl` / `appSchema` / `appTableRows` / `appQuery` / `appLogs` /
+`deregisterApp` — moves there verbatim (same input shapes, same
+404/503→`undefined` schema semantics, a `GatewayClientError` mirroring
+`HarnessError` codes); their IPC handlers + preload methods + channel
+constants are deleted, and the `app.ts` / `builder.ts` call sites import
+the functions instead of reaching through `window.CentraidApi`. These were
+pure proxies over `@centraid/builder-harness`'s gateway-client with no
+main-side state, so nothing else changes.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -280,6 +298,13 @@ carries no token). Remote/OpenClaw front-door CORS is a tracked follow-up.
   adds 4 cases — an OPTIONS preflight returns 204 with the CORS headers and
   no auth required, and both the 401 and a successful authed 200 carry
   `Access-Control-Allow-Origin: *` (348 package tests pass).
+- Renderer token bridge + app read surface over direct HTTP: full
+  `turbo run build typecheck lint test` green across all 28 tasks.
+  `@centraid/desktop` typechecks + builds with the new ESM
+  `renderer/gateway-client.ts` (package is `"type": "module"`, renderer
+  scripts load as `<script type="module">`, so the import resolves), and
+  `oxlint` confirms the removed IPC handlers / preload methods left no
+  dangling imports.
 
 ## Out of scope
 

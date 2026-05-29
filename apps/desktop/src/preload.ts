@@ -29,12 +29,6 @@ const Channel = {
   PUBLISH: 'centraid:publish',
   VERSIONS_LIST: 'centraid:versions:list',
   VERSIONS_ACTIVATE: 'centraid:versions:activate',
-  APP_LIVE_URL: 'centraid:app:live-url',
-  APP_SCHEMA: 'centraid:app:schema',
-  APP_TABLE_ROWS: 'centraid:app:table-rows',
-  APP_QUERY: 'centraid:app:query',
-  APP_LOGS: 'centraid:app:logs',
-  APPS_DEREGISTER: 'centraid:apps:deregister',
   PUBLISH_STATUS: 'centraid:publish:status',
   PUBLISH_EVENT: 'centraid:publish:event',
 
@@ -48,6 +42,7 @@ const Channel = {
   GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
+  GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
   TEMPLATES_LIST: 'centraid:templates:list',
   TEMPLATES_CLONE: 'centraid:templates:clone',
@@ -157,18 +152,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   listVersions: (input: { id: string }) => ipcRenderer.invoke(Channel.VERSIONS_LIST, input),
   activateVersion: (input: { id: string; versionId: string }) =>
     ipcRenderer.invoke(Channel.VERSIONS_ACTIVATE, input),
-  appLiveUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_LIVE_URL, input),
-  appSchema: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_SCHEMA, input),
-  appTableRows: (input: { id: string; table: string; limit?: number; offset?: number }) =>
-    ipcRenderer.invoke(Channel.APP_TABLE_ROWS, input),
-  appQuery: (input: { id: string; sql: string }) => ipcRenderer.invoke(Channel.APP_QUERY, input),
-  appLogs: (input: {
-    id: string;
-    limit?: number;
-    sinceTs?: number;
-    level?: 'info' | 'warn' | 'error';
-  }) => ipcRenderer.invoke(Channel.APP_LOGS, input),
-  deregisterApp: (input: { id: string }) => ipcRenderer.invoke(Channel.APPS_DEREGISTER, input),
+  // App read surface (live URL / schema / table rows / SQL / logs /
+  // deregister) moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot.
   // Auto-publish queue (issue #108) — workspaces upload to the gateway
   // on every save. Renderer can poll a snapshot of the status, or
   // subscribe to per-event broadcasts to toast failures inline.
@@ -205,6 +191,10 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.GATEWAYS_UPDATE_TOKEN, input),
   setActiveGateway: (input: { id: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_SET_ACTIVE, input),
+  // Active gateway's HTTP base URL + bearer token for the renderer's
+  // direct data-plane client. Token originates in keychain-backed
+  // settings (main); this is the single bridge crossing for it.
+  getGatewayAuth: () => ipcRenderer.invoke(Channel.GATEWAY_AUTH_GET),
   onGatewayChanged: (
     cb: (msg: {
       activeGatewayId: string;

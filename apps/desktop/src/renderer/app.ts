@@ -5,6 +5,8 @@
 // so they're one tap away from being cloned & deployed.
 // governance: allow-repo-hygiene file-size-limit shell-entry-point pending split into route modules
 
+import { appQuery, appLiveUrl, deregisterApp } from './gateway-client.js';
+
 (function () {
   const root = document.querySelector('#root') as HTMLElement;
 
@@ -3507,7 +3509,7 @@
     const ua = findUserApp(app.id);
     if (ua?.centraidProjectId) {
       try {
-        await window.CentraidApi.deregisterApp({ id: ua.centraidProjectId });
+        await deregisterApp({ id: ua.centraidProjectId });
       } catch (err) {
         const msg = String(err);
         if (!/404|not_found/i.test(msg)) {
@@ -4158,7 +4160,7 @@
     // Iframe theme is resolved to its light/dark kind — third-party
     // shell themes don't ship template-side CSS, so apps stay in the
     // Centraid look while the shell wears the named theme.
-    void window.CentraidApi.appLiveUrl({ id: projectId })
+    void appLiveUrl({ id: projectId })
       .then((r) => {
         const qsep = r.url.includes('?') ? '&' : '?';
         const themeQs = `theme=${iframeThemeKind()}&bgL=${prefs.bgL}`;
@@ -4238,7 +4240,7 @@
   }
 
   async function ensureAppSettingsTable(appId: string): Promise<void> {
-    await window.CentraidApi.appQuery({
+    await appQuery({
       id: appId,
       sql: 'CREATE TABLE IF NOT EXISTS __centraid_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
     });
@@ -4247,7 +4249,7 @@
   async function fetchAppKnobValues(appId: string): Promise<Record<string, string>> {
     try {
       await ensureAppSettingsTable(appId);
-      const result = await window.CentraidApi.appQuery({
+      const result = await appQuery({
         id: appId,
         sql: 'SELECT key, value FROM __centraid_settings',
       });
@@ -4273,7 +4275,7 @@
     const sql =
       `INSERT INTO __centraid_settings (key, value) VALUES (${sqlString(key)}, ${sqlString(JSON.stringify(value))}) ` +
       'ON CONFLICT(key) DO UPDATE SET value = excluded.value';
-    await window.CentraidApi.appQuery({ id: appId, sql });
+    await appQuery({ id: appId, sql });
   }
 
   // Settings key (camelCase, e.g. `appFont`) → kebab name shared by the
@@ -4302,7 +4304,7 @@
 
   async function fetchAppKnobsManifest(appId: string): Promise<AppKnobsManifest | null> {
     try {
-      const live = await window.CentraidApi.appLiveUrl({ id: appId });
+      const live = await appLiveUrl({ id: appId });
       // `appLiveUrl` returns `${gateway}/centraid/<id>/`. The app
       // manifest sits next to `index.html` inside the same project;
       // knobs live under its `knobs[]` array (folded in from the old
