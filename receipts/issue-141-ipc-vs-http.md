@@ -24,7 +24,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Webhook provisioning over a file map
 - [x] Session file-delete route + shared route-helpers
 - [x] Automation + insights HTTP routes
-- [ ] Reconcile OS scheduler on publish/delete/rollback
+- [x] Reconcile OS scheduler on publish/delete/rollback
 - [ ] Desktop scaffold/clone/meta over HTTP
 - [ ] Desktop automation CRUD over HTTP
 - [ ] Desktop automation read/run/analytics over HTTP
@@ -77,6 +77,18 @@ against local files/SQLite: `GET /centraid/_automations` (list),
 `main`; run ledgers + analytics from the stable `appsDir`. Refs/run ids
 ride query params to avoid slash-in-path parsing.
 
+**Reconcile OS scheduler on publish/delete/rollback.** `serve()`'s
+`onAppLive` / `onAppDeleted` previously only touched the registry, so a
+publish over HTTP never updated the OS scheduler (only a startup reconcile
+ran). Added a coalesced, fire-and-forget `reconcileScheduler()` that
+re-scans `active-main/apps` and reconciles the full desired set via the
+existing `schedulerHostFactory`; it now runs on publish, delete, and
+rollback (rollback already calls `onAppLive`) as well as at startup. This
+lets the desktop drop its direct scheduler register/unregister calls (next
+commit) and makes a remote gateway reconcile its own scheduler. Also fixed
+`@centraid/apps-store`'s `SAFE_ID_RE` to allow the `auto.` dot (rejecting
+`..`), without which automation-app publish through the git store failed.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -86,7 +98,10 @@ ride query params to avoid slash-in-path parsing.
 - `@centraid/gateway-runtime` typecheck + lint clean;
   `apps-store-routes.test.ts` adds the DELETE-file + path-escape cases;
   `automations-routes.test.ts` adds 8 cases (run-now invokes the stubbed
-  `runAutomation`; list/read/runs/run/insights shapes). 36 package tests pass.
+  `runAutomation`; list/read/runs/run/insights shapes);
+  `serve-scheduler-reconcile.test.ts` asserts a publish triggers a
+  reconcile carrying the scanned rows.
+- `@centraid/apps-store` adds an `auto.`-id publish + `..`-rejection case.
 
 ## Out of scope
 

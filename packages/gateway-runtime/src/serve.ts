@@ -147,6 +147,52 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
     : undefined;
 
+  // OS-scheduler reconcile (issue #141). Automation *code* lives under
+  // the git-store materialized `main` (`active-main/apps`), or `appsDir`
+  // for the flat/legacy layout. We re-scan + reconcile the whole desired
+  // set (idempotent) rather than register single rows, so a publish /
+  // delete / rollback over HTTP keeps the scheduler in sync for BOTH the
+  // local embedded gateway and a remote one. Fire-and-forget — a publish
+  // response must not block on a launchd/systemd shell-out — with a
+  // coalescing guard so concurrent publishes don't thrash the scheduler.
+  const schedulerCodeAppsDir = (): string =>
+    appsStore ? path.join(appsStore.getActiveMainLink(), 'apps') : paths.appsDir;
+  let reconcileInFlight = false;
+  let reconcileDirty = false;
+  const reconcileScheduler = (): void => {
+    if (!schedulerHostFactory) return;
+    if (reconcileInFlight) {
+      reconcileDirty = true;
+      return;
+    }
+    reconcileInFlight = true;
+    void (async () => {
+      do {
+        reconcileDirty = false;
+        const codeAppsDir = schedulerCodeAppsDir();
+        const { rows } = await listAutomations(codeAppsDir);
+        const diff = await schedulerHostFactory({
+          codeAppsDir,
+          dataAppsDir: paths.appsDir,
+        }).reconcile(rows);
+        if (diff.added.length || diff.updated.length || diff.removed.length) {
+          logger.info(
+            `OS scheduler reconcile — ` +
+              `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
+          );
+        }
+      } while (reconcileDirty);
+    })()
+      .catch((err) =>
+        logger.warn(
+          `OS scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err)),
+        ),
+      )
+      .finally(() => {
+        reconcileInFlight = false;
+      });
+  };
+
   // Gateway identity DB + the central analytics DB. Each store wraps a
   // lazy provider that opens its file on first use. Chat sessions + chat
   // runs live in each app's `runtime.sqlite` under `appsDir`, so
@@ -247,9 +293,13 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
       makeAppsStoreRouteHandler(store, {
         onAppLive: async (appId) => {
           await runtime.registry.ensureUploaded(appId);
+          // A publish/rollback may have added/removed/toggled an
+          // automation — resync the OS scheduler off the new `main`.
+          reconcileScheduler();
         },
         onAppDeleted: async (appId) => {
           await runtime.registry.deregister(appId);
+          reconcileScheduler();
         },
       }),
       // Automation runtime ops over HTTP (issue #141): list/read/run-now,
@@ -296,38 +346,11 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     }
   }
 
-  // Startup reconcile (opt-in): catch up the OS scheduler on anything
-  // that changed while the runtime was down. Fire-and-forget so a slow
-  // scheduler shell-out doesn't block start. The Electron embed always
-  // passes a factory; the daemon v0 PoC omits it.
-  //
-  // Automation *code* lives under the git-store materialized `main`
-  // (issue #137) — scan + bake the stable `active-main/apps` path so
-  // the OS scheduler resolves manifests there, not under the data tree.
-  // Without a git store, code and data share `paths.appsDir`.
-  if (schedulerHostFactory) {
-    const codeAppsDir = appsStore
-      ? path.join(appsStore.getActiveMainLink(), 'apps')
-      : paths.appsDir;
-    void (async () => {
-      const { rows } = await listAutomations(codeAppsDir);
-      return schedulerHostFactory({ codeAppsDir, dataAppsDir: paths.appsDir }).reconcile(rows);
-    })()
-      .then((diff) => {
-        if (diff.added.length || diff.updated.length || diff.removed.length) {
-          logger.info(
-            `OS scheduler startup reconcile — ` +
-              `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
-          );
-        }
-      })
-      .catch((err) =>
-        logger.warn(
-          `OS scheduler startup reconcile failed: ` +
-            (err instanceof Error ? err.message : String(err)),
-        ),
-      );
-  }
+  // Startup reconcile: catch up the OS scheduler on anything that
+  // changed while the runtime was down (it's also the backstop for any
+  // publish that landed while a local gateway was shut down). Uses the
+  // same coalesced, fire-and-forget reconcile the publish path triggers.
+  reconcileScheduler();
 
   return {
     url: server.url,

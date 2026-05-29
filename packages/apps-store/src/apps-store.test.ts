@@ -154,6 +154,34 @@ test('openSession twice for the same id throws session_exists', async () => {
   }
 });
 
+test('publishes an `auto.`-prefixed automation app id; rejects ".." ids (#141)', async () => {
+  const root = await makeTempRoot();
+  try {
+    const store = new AppsStore({ root });
+    await store.init();
+
+    // Dotted automation-app ids (issue #98) must round-trip through the
+    // store — sessions, publish, and listing.
+    const s = await store.openSession('desktop-auto.brief');
+    await seedApp(s.worktreePath, 'auto.brief', 'one');
+    const r = await store.publish({
+      sessionId: 'desktop-auto.brief',
+      appId: 'auto.brief',
+      message: 'v1',
+    });
+    assert.equal(r.versionTag, 'auto.brief/v1');
+    assert.deepEqual((await store.listApps()).sort(), ['auto.brief']);
+
+    // `..` is still rejected as path-unsafe.
+    await assert.rejects(
+      () => store.openSession('bad..id'),
+      (err: unknown) => err instanceof AppsStoreError && err.code === 'invalid_session_id',
+    );
+  } finally {
+    await rmTempRoot(root);
+  }
+});
+
 test('closeSession removes worktree + branch and is idempotent', async () => {
   const root = await makeTempRoot();
   try {

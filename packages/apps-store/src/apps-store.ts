@@ -37,8 +37,13 @@ import {
 /** Git's canonical empty tree sha. Used to plant the initial main commit. */
 const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
-/** Conservative slug check — same shape as runtime-core's app id rule. */
-const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+/**
+ * Conservative slug check — matches the canonical app id rule
+ * (builder-harness): leading alnum, then alnum / `_` / `-` / `.`. The dot
+ * carries the `auto.` automation-app prefix (issue #98); `..` is rejected
+ * separately in `assertSafeId` so an id can't traverse the tree.
+ */
+const SAFE_ID_RE = /^[a-z0-9][a-z0-9._-]*$/i;
 
 /** Stable symlink name (under the store root) pointing at the live main worktree. */
 const ACTIVE_MAIN_LINK = 'active-main';
@@ -613,10 +618,10 @@ function sessionBranchName(sessionId: string): string {
 }
 
 function assertSafeId(id: string, code: 'invalid_app_id' | 'invalid_session_id'): void {
-  if (!SAFE_ID_RE.test(id)) {
+  if (!SAFE_ID_RE.test(id) || id.includes('..')) {
     throw new AppsStoreError(
       code,
-      `"${id}" is not a valid id (allowed: ASCII letter or digit, then letters/digits/_/-).`,
+      `"${id}" is not a valid id (allowed: ASCII letter or digit, then letters/digits/_/-/., no "..").`,
     );
   }
 }
