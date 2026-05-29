@@ -29,6 +29,11 @@ will touch.
   - [x] Code-dir resolver seam
   - [x] Gateway constructs the apps-store
   - [x] Git-store serve integration test
+- [x] Slice 3 — publish endpoint replaces tarball upload
+  - [x] extraHandlers seam on the runtime HTTP server
+  - [x] Apps-store route module
+  - [x] Gateway-side manifest validation
+  - [x] Publish/session HTTP test
 
 ## What changed
 
@@ -206,6 +211,59 @@ registry lists the app, `GET /centraid/<id>/` static-serves
 index.html from `worktrees/main/<sha>/`, and `centraid_read` runs the
 query handler out of the worktree. A second test confirms the handle
 has no `appsStore` when `appsStoreRoot` is omitted (legacy backend).
+
+### Slice 3 — publish endpoint replaces tarball upload
+
+**extraHandlers seam on the runtime HTTP server.**
+`startRuntimeHttpServer` gains an optional `extraHandlers` array —
+host-supplied `(req, res) => Promise<boolean>` functions run after the
+bearer check, before `runtime.handle`, each returning `true` when it
+owned the request. This keeps the git-store HTTP surface out of
+`runtime-core` (shared with OpenClaw) while letting the gateway mount
+it on the same authenticated server.
+
+**Apps-store route module.** New `gateway-runtime/src/apps-store-routes.ts`
+exposes the editing + publish lifecycle under the `_apps` namespace,
+all driving the live `AppsStore`:
+
+- `POST /centraid/_apps/_sessions` (+ `GET` list, `DELETE /<id>`) —
+  session open/close/list.
+- `PUT /centraid/_apps/<appId>/files/<path>?sessionId=` — write a
+  draft file into the session worktree (path-traversal guarded,
+  editable-extension allowlist). `GET .../files?sessionId=` reads them
+  back. This replaces builder-harness's `writeProjectFile` /
+  `readProjectFiles` against the desktop workspace.
+- `POST /centraid/_apps/<appId>/publish` — `{ sessionId, message }` →
+  validate then `appsStore.publish`. Replaces the tarball
+  `POST .../upload`.
+- `POST /centraid/_apps/<appId>/rollback` — `{ versionTag }` →
+  `appsStore.rollback`.
+- `GET /centraid/_apps/<appId>/git-versions` — the tag-driven history
+  for the version UI.
+
+After publish/rollback the route fires `onAppLive(appId)`, which the
+gateway wires to `runtime.registry.ensureUploaded` so a brand-new app
+published mid-session is registered (data dir created, `registry.get`
+resolves) without a restart.
+
+**Gateway-side manifest validation.** `publish` validates the session
+worktree's `app.json` (parsed via `parseAppManifest`) and confirms
+every declared action/query has a matching handler file *before* the
+merge — the check that used to run client-side in
+`builder-harness/src/publish.ts`'s `assertManifestValid`, now
+gateway-side since the gateway owns the data. An invalid manifest
+returns `400 invalid_manifest` and never advances `main`.
+
+**Publish/session HTTP test.** `apps-store-routes.test.ts` drives a
+booted `serve({ appsStoreRoot })` over HTTP: open session → PUT draft
+files → publish v1 → serve it → second session → publish v2 → assert
+`git-versions` lists both → rollback to v1 → assert the served bytes
+revert. Two more tests cover the manifest-validation rejection path
+and `files` read-back.
+
+The legacy tarball path (`runtime-core`'s `app-upload` route,
+`ingestUpload`, `builder-harness/src/publish.ts`) is left in place for
+the OpenClaw backend; retiring it for the desktop happens in slice 4.
 
 ## Out of scope
 

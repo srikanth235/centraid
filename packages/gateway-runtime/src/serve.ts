@@ -52,6 +52,7 @@ import {
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
 import { AppsStore } from '@centraid/apps-store';
+import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
 import type { GatewayPaths } from './paths.js';
 import type { SecretsProvider } from './secrets.js';
 import { parseProviderPrefs } from './provider-prefs.js';
@@ -224,6 +225,19 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   if (options.host !== undefined) serverOptions.host = options.host;
   if (options.port !== undefined) serverOptions.port = options.port;
   if (options.token !== undefined) serverOptions.token = options.token;
+  // Mount the git-store publish/session/files surface ahead of the
+  // runtime's own routes when a store backend is active (issue #137).
+  // onAppLive registers a freshly-published app in the registry so its
+  // data dir exists + `registry.get` resolves on the first request.
+  if (appsStore) {
+    serverOptions.extraHandlers = [
+      makeAppsStoreRouteHandler(appsStore, {
+        onAppLive: async (appId) => {
+          await runtime.registry.ensureUploaded(appId);
+        },
+      }),
+    ];
+  }
   const server = await startRuntimeHttpServer(serverOptions);
   await runtime.bootstrap();
 

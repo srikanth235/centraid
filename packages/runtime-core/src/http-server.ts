@@ -30,6 +30,15 @@ export interface RuntimeHttpServerOptions {
    * pattern as `exposeUserStoreRoute`.
    */
   exposeChatHistoryRoute?: boolean;
+  /**
+   * Host-supplied route handlers run after auth but before
+   * `runtime.handle` (issue #137). Each returns `true` when it handled
+   * the request (response already sent), `false` to fall through.
+   * Tried in order. The gateway uses this to mount the apps-store
+   * publish/session surface without baking a git backend into
+   * `runtime-core` (which OpenClaw + standalone setups share).
+   */
+  extraHandlers?: Array<(req: IncomingMessage, res: ServerResponse) => Promise<boolean>>;
 }
 
 export interface RuntimeHttpServerHandle {
@@ -99,6 +108,10 @@ export async function startRuntimeHttpServer(
     }
     if (userStoreHandler && (req.url ?? '').startsWith(USER_STORE_PREFIX)) {
       const handled = await userStoreHandler(req, res);
+      if (handled) return;
+    }
+    for (const handler of opts.extraHandlers ?? []) {
+      const handled = await handler(req, res);
       if (handled) return;
     }
     await opts.runtime.handle(req, res);
