@@ -37,6 +37,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Gateway owns the template catalog (GET /centraid/_templates)
 - [x] Gateway owns the app lifecycle (create/clone/meta/automation CRUD over HTTP)
 - [x] Renderer owns app editing sessions + lifecycle over direct HTTP; desktop IPC handlers deleted
+- [x] Gateway runs the unified chat turn in the app's draft worktree with the union of tools
 
 ## What changed
 
@@ -388,6 +389,39 @@ cache + fetch/JSON helpers, dependency-free to avoid an import cycle),
 `gateway-client.ts` (the data-plane reads), and `gateway-client-editing.ts` (the
 session manager + editing + lifecycle).
 
+**Gateway runs the unified chat turn in the app's draft worktree with the
+union of tools.** First slice of the unified chat (the gateway-owned AI
+builder): one chat surface, both jobs. A new
+`packages/gateway-runtime/src/unified-chat-runner.ts`
+(`makeUnifiedChatRunner`) is a `ChatRunner` that — unlike the data-only
+`@centraid/agent-runtime` `makeChatRunner` it replaces in `serve()` whenever
+a git store is active — runs each turn in the app's OPEN draft session
+worktree (`worktrees/sessions/desktop-<appId>/apps/<appId>/`, opened
+409-tolerantly via the shared `ensureSession`, the SAME id the renderer's
+Code tab + the retiring local builder agent use) so the agent's native file
+edits stage in the draft. The turn gets the **union of tools**: the
+codex/claude adapter's native file/shell tools (workspace-write against
+`cwd`) PLUS the `centraid_*` dispatcher threaded via `toolContext` — so the
+same turn can author a migration and answer a data question. The system
+prompt is unified too: the chat route's data/schema preamble
+(`input.extraSystemPrompt`) is kept and the builder authoring blocks are
+folded in (`CENTRAID_APPEND_PROMPT` + UI grounding for an app,
+`AUTOMATION_APPEND_PROMPT` for an automation — read from the worktree
+`app.json#kind` — plus the cached `buildToolsGroundingBlock`, now exported
+from `@centraid/builder-harness`). Code edits stage (the preview iframe
+reflects the draft); the `centraid_*` tools hit the live `data.sqlite`
+(registry-resolved, independent of `cwd`); Publish stays the explicit flip.
+Webhook secrets are minted as a post-turn step (`provisionAppPendingWebhooks`
+on the worktree — the agent can't generate crypto-random credentials) and
+surfaced once via a new `webhooks` `ChatStreamEvent` carrying the
+`{automationId, ownerApp, webhookId, url, secret}` (absolute `_centraid-hook`
+URL built against the live server origin, published into the runner after
+`startRuntimeHttpServer` resolves). The runner takes injectable `runTurn` +
+`enumerateTools` seams so it tests hermetically without spawning a real CLI.
+This slice is gateway-side only; the renderer SSE cutover + deletion of the
+desktop `chat.ts` / `AGENT_*` / `agent-session.ts` / `project-sessions.ts`
+is the next slice.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -493,6 +527,18 @@ session manager + editing + lifecycle).
   tests, so the renderer methods are wire shims with no new server behavior to
   retest. Session sharing with the local agent is by construction (identical
   `desktop-<id>` session id).
+- Gateway runs the unified chat turn in the app's draft worktree with the
+  union of tools: full `turbo run build typecheck lint test` green across all
+  28 tasks. New `unified-chat-runner.test.ts` (gateway-runtime) injects a fake
+  `runTurn` against a real `AppsStore` and asserts the turn's `cwd` is the
+  `desktop-<appId>` worktree app dir, the `centraid_*` dispatcher + appId ride
+  in `toolContext`, the data preamble is preserved with the builder authoring
+  blocks folded in, and the adapter resume handle round-trips; a second case
+  has the fake turn author a pending-webhook automation and asserts exactly one
+  `webhooks` event surfaces a plaintext secret + an `http://…/_centraid-hook/`
+  URL while the staged manifest keeps only the hash (no plaintext, no
+  `pending`); a third asserts an unconfigured runner emits `error` + rejects.
+  `@centraid/gateway-runtime` typecheck + lint clean (51 package tests pass).
 
 ## Out of scope
 

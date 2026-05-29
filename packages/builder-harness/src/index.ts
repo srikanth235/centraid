@@ -111,6 +111,8 @@ export {
 
 export { buildUiGroundingBlocks } from './ui-grounding.js';
 
+export { buildToolsGroundingBlock } from './tools-grounding.js';
+
 export {
   type HarnessConfig,
   type ProjectInfo,

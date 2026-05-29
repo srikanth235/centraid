@@ -58,6 +58,7 @@ import { AppsStore } from '@centraid/apps-store';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
 import { makeAutomationsRouteHandler } from './automations-routes.js';
 import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
+import { makeUnifiedChatRunner } from './unified-chat-runner.js';
 import { makeTemplatesRouteHandler } from './templates-routes.js';
 import type { GatewayPaths } from './paths.js';
 import type { SecretsProvider } from './secrets.js';
@@ -258,15 +259,33 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // the Runtime is constructed *with* the chat runner. The runtimeRef
   // holder resolves at call time, after the assignment below.
   let runtimeRef: Runtime | undefined;
-  const chatRunner = makeChatRunner({
-    prefsLoader,
-    getDispatcher: () => {
-      const rt = runtimeRef;
-      if (!rt) throw new Error('chat runner invoked before runtime was constructed');
-      return rt.dispatcher;
-    },
-    codexHomeBaseDir: paths.codexHomeBaseDir,
-  });
+  const getDispatcher = (): Runtime['dispatcher'] => {
+    const rt = runtimeRef;
+    if (!rt) throw new Error('chat runner invoked before runtime was constructed');
+    return rt.dispatcher;
+  };
+  // The runner builds webhook URLs against the live server origin, known
+  // only after `startRuntimeHttpServer` resolves below — a turn only ever
+  // runs post-start, so this holder is populated by then.
+  let serverUrl = '';
+  // Unified chat (issue #141, Phase 3): when a git store backs app code,
+  // every chat turn runs in the app's draft worktree with the union of
+  // native file tools + the `centraid_*` dispatcher — one surface that both
+  // tweaks the app's code and operates its data. Without a store (no draft
+  // worktree to edit) we fall back to the data-only chat adapter.
+  const chatRunner = appsStore
+    ? makeUnifiedChatRunner({
+        store: appsStore,
+        prefsLoader,
+        getDispatcher,
+        publicBaseUrl: () => serverUrl,
+        codexHomeBaseDir: paths.codexHomeBaseDir,
+      })
+    : makeChatRunner({
+        prefsLoader,
+        getDispatcher,
+        codexHomeBaseDir: paths.codexHomeBaseDir,
+      });
 
   const runtime = new Runtime({
     appsDir: paths.appsDir,
@@ -379,6 +398,9 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   }
   serverOptions.extraHandlers = extraHandlers;
   const server = await startRuntimeHttpServer(serverOptions);
+  // Publish the live origin to the unified chat runner so post-turn webhook
+  // minting can build absolute `_centraid-hook` URLs.
+  serverUrl = server.url;
   await runtime.bootstrap();
 
   // Git-store sync: every app present on `main` gets a registry entry
