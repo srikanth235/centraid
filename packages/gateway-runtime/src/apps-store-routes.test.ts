@@ -188,3 +188,37 @@ test('files read returns the draft files written into a session', async () => {
   const paths = files.map((f) => f.path).sort();
   assert.deepEqual(paths, ['app.json', 'queries/ping.js']);
 });
+
+test('files DELETE removes a draft file from the session (#141)', async () => {
+  await openSession('s1');
+  await putFile('s1', 'app.json', MANIFEST);
+  await putFile('s1', 'automations/wake/automation.json', '{}\n');
+  await putFile('s1', 'automations/wake/handler.js', '// h\n');
+
+  const del = await fetch(
+    `${handle.url}/centraid/_apps/todo/files/automations/wake/handler.js?sessionId=s1`,
+    { method: 'DELETE', headers: auth() },
+  );
+  const delBody = (await del.json()) as { path: string; deleted: boolean };
+  assert.equal(del.status, 200, JSON.stringify(delBody));
+  assert.deepEqual(delBody, { path: 'automations/wake/handler.js', deleted: true });
+
+  const after = (await (
+    await fetch(`${handle.url}/centraid/_apps/todo/files?sessionId=s1`, { headers: auth() })
+  ).json()) as { files: Array<{ path: string }> };
+  assert.deepEqual(after.files.map((f) => f.path).sort(), [
+    'app.json',
+    'automations/wake/automation.json',
+  ]);
+});
+
+test('files DELETE rejects a path escaping the app dir (#141)', async () => {
+  await openSession('s1');
+  await putFile('s1', 'app.json', MANIFEST);
+  const del = await fetch(
+    `${handle.url}/centraid/_apps/todo/files/..%2F..%2Fsecret.txt?sessionId=s1`,
+    { method: 'DELETE', headers: auth() },
+  );
+  assert.equal(del.status, 400);
+  assert.equal(((await del.json()) as { error: string }).error, 'invalid_app_id');
+});

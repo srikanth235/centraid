@@ -36,6 +36,7 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ManifestError, parseAppManifest } from '@centraid/runtime-core';
 import { AppsStore, AppsStoreError } from '@centraid/apps-store';
+import { fileExists, readBody, readJson, sendJson } from './route-helpers.js';
 
 /** Text extensions a draft file write accepts — mirrors builder-harness. */
 const EDITABLE_EXT = new Set([
@@ -260,6 +261,27 @@ async function handleFiles(
     sendJson(res, 200, result);
     return true;
   }
+  if (method === 'DELETE') {
+    // /_apps/<appId>/files/<rel...> — remove a draft file from the
+    // session worktree (issue #141: app-owned-automation delete over HTTP).
+    const rel = segments
+      .slice(3)
+      .map((s) => decodeURIComponent(s))
+      .join('/');
+    const sessionId = url.searchParams.get('sessionId') ?? '';
+    if (!sessionId || !rel) {
+      sendJson(res, 400, { error: 'bad_request', message: 'files delete needs ?sessionId + path' });
+      return true;
+    }
+    const appDir = await store.snapshotSessionAppDir(sessionId, appId);
+    const abs = path.resolve(appDir, rel);
+    if (abs !== appDir && !abs.startsWith(appDir + path.sep)) {
+      throw new AppsStoreError('invalid_app_id', `Refusing to delete outside the app: ${rel}`);
+    }
+    await fs.rm(abs, { force: true });
+    sendJson(res, 200, { path: rel, deleted: true });
+    return true;
+  }
   return false;
 }
 
@@ -352,14 +374,7 @@ async function writeDraftFile(
   return { path: rel, size: content.byteLength };
 }
 
-// ---- tiny HTTP helpers (http-utils isn't exported from runtime-core) ----
-
-function sendJson(res: ServerResponse, status: number, body: unknown): true {
-  res.statusCode = status;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(body));
-  return true;
-}
+// ---- apps-store-specific error mapping (delegates to shared sendJson) ----
 
 function sendStoreError(res: ServerResponse, err: unknown): true {
   if (err instanceof AppsStoreError) {
@@ -375,34 +390,4 @@ function sendStoreError(res: ServerResponse, err: unknown): true {
     error: 'internal_error',
     message: err instanceof Error ? err.message : String(err),
   });
-}
-
-async function readBody(req: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of req) {
-    const buf = typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer);
-    total += buf.byteLength;
-    if (total > MAX_DRAFT_FILE_BYTES) throw new Error('request body too large');
-    chunks.push(buf);
-  }
-  return Buffer.concat(chunks);
-}
-
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  const raw = (await readBody(req)).toString('utf8');
-  if (!raw) return {};
-  const parsed = JSON.parse(raw) as unknown;
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('request body must be a JSON object');
-  }
-  return parsed as Record<string, unknown>;
-}
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    return (await fs.stat(p)).isFile();
-  } catch {
-    return false;
-  }
 }

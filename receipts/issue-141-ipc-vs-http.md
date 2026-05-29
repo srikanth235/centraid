@@ -22,7 +22,7 @@ v0 pre-release: no backward compatibility, no migrations.
 
 - [x] Builder-harness file-map scaffolders
 - [x] Webhook provisioning over a file map
-- [ ] Session file-delete route + shared route-helpers
+- [x] Session file-delete route + shared route-helpers
 - [ ] Automation + insights HTTP routes
 - [ ] Reconcile OS scheduler on publish/delete/rollback
 - [ ] Desktop scaffold/clone/meta over HTTP
@@ -56,12 +56,23 @@ desktop-side (crypto), rewrites each trigger to its provisioned
 `{kind,id,secretHash}` form, and returns the updated map plus the minted
 secrets to show once. Only the hash reaches the gateway.
 
+**Session file-delete route + shared route-helpers.** App-owned automation
+delete needs to remove files from a session worktree over HTTP, which the
+git-store surface couldn't do (it had GET/PUT files only). Added
+`DELETE /centraid/_apps/<appId>/files/<path>?sessionId=` to
+`apps-store-routes.ts` `handleFiles` (same path-escape guard as PUT), and
+extracted the shared `sendJson` / `readBody` / `readJson` / `fileExists`
+HTTP helpers into `packages/gateway-runtime/src/route-helpers.ts` so the
+new automations routes can reuse them.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
   `scaffold-files.test.ts` adds 15 cases (52 package tests pass).
 - `@centraid/runtime-core` typecheck + lint clean;
   `automation-webhook.test.ts` adds 3 cases (343 package tests pass).
+- `@centraid/gateway-runtime` typecheck + lint clean;
+  `apps-store-routes.test.ts` adds the DELETE-file + path-escape cases.
 
 ## Out of scope
 
