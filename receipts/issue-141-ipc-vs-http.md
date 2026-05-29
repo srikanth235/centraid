@@ -29,7 +29,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Desktop automation CRUD over HTTP
 - [x] Desktop automation read/run/analytics over HTTP
 - [x] PROJECTS_OPEN + AGENT_* gated as the only local-only handlers
-- [ ] IPC-vs-HTTP concept doc + token audit
+- [x] IPC-vs-HTTP concept doc + token audit
 
 ## What changed
 
@@ -187,6 +187,26 @@ makes that boundary explicit rather than incidental:
   `window.Centraid.getRuntimeMode() === 'remote'`, so a remote user never
   hits the backstop error for it.
 
+**IPC-vs-HTTP concept doc + token audit.** Adds
+`docs/concepts/ipc-vs-http.mdx` (Mintlify concept-doc style) capturing the
+principle (HTTP by default; IPC only for renderer↔main / token-hiding /
+Electron-native ops), the three buckets (A already-proxied, B
+Electron-native, C migrated in #141) with their final disposition, what
+stays local and why (PROJECTS_OPEN + AGENT_*), and the token-boundary
+audit. Registered in `docs.json` under the Architecture group and
+cross-linked from `architecture.mdx` + `gateway.mdx`.
+
+**Token audit.** Ran
+`grep -rn "gatewayToken|Bearer|Authorization" apps/desktop/src/renderer apps/desktop/src/preload*`.
+Result: no renderer/preload code authenticates a request with the gateway
+token. The matches are the settings **input form** where the user types a
+gateway token (handed to main over IPC to be stored), two UI placeholders,
+and a webhook-setup instruction string. The renderer's single direct
+network call is an unauthenticated `GET <live-url>/app.json` (public app
+manifest for knobs). Every bearer-authenticated gateway call lives in
+`apps/desktop/src/main/*` — the privileged token never crosses into
+renderer request code.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -223,6 +243,11 @@ makes that boundary explicit rather than incidental:
 - Local-only gating: full suite green; `ensureProjectSessionDir` has no
   callers left besides PROJECTS_OPEN + AGENT_START (grep-confirmed), and
   the removed `ensureProjectSessionAppsParent` has no references.
+- Docs + token audit: the new concept doc's internal links all resolve
+  (`no-broken-internal-doc-links` green) and it's registered in the nav;
+  the token-audit grep returns only the form-input / placeholder /
+  instruction matches described above — no renderer-side authenticated
+  fetch.
 
 ## Out of scope
 

@@ -58,7 +58,7 @@
             "groups": [
               {
                 "group": "Architecture",
-                "pages": ["concepts/architecture", "concepts/gateway"]
+                "pages": ["concepts/architecture", "concepts/gateway", "concepts/ipc-vs-http"]
               },
               {
                 "group": "Apps and handlers",

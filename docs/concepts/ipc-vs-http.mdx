@@ -1,0 +1,89 @@
+---
+summary: 'How the desktop splits work between Electron IPC (privileged control plane) and the gateway HTTP API (runtime/data plane), and why that split makes remote gateways work.'
+title: 'IPC vs HTTP'
+---
+
+# IPC vs HTTP
+
+The Centraid desktop talks to a gateway over **two channels**, and which one a given operation uses is a deliberate design decision, not an accident of history.
+
+- **Electron IPC** (`centraid:*` channels, renderer ↔ main) is the **privileged control plane**. It is the only place the gateway bearer token, OS keychain, provider API key, and Electron-native capabilities live. The renderer can ask main to do something; it never holds the credentials to do it directly.
+- **Gateway HTTP** (`/centraid/_apps/*`, `/centraid/_automations/*`, `/centraid/_insights/*`, …) is the **runtime / data plane**. Any non-renderer caller — the desktop main process, the mobile app, a cron host, a script — speaks the same wire protocol against the same routes.
+
+The guiding principle:
+
+> HTTP by default; IPC only for operations that are genuinely renderer↔main, token-hiding, or Electron-native.
+
+The payoff is that **every renderer→runtime operation works identically against a local or a remote gateway**, while the handful of genuinely-local operations stay on IPC and fail loudly (never silently) if pointed at a remote gateway.
+
+## Why it matters: remote gateways
+
+A [gateway](/concepts/gateway) runs in two shapes — embedded in the desktop (local) or as an OpenClaw plugin (remote). For a **remote** gateway the desktop has no filesystem access to the gateway's worktree or SQLite. So any handler that read or wrote those directly only worked locally and threw for remote.
+
+Issue #141 moved those handlers onto HTTP. The desktop main process became a thin client: it opens a git-store editing session, PUTs draft files, publishes, and reads runtime data — all over the same authenticated HTTP surface the gateway exposes, local or remote.
+
+## The three buckets
+
+Every IPC channel falls into one of three categories.
+
+### A — Already a thin HTTP proxy (remote-capable)
+
+Project lifecycle and app-data reads that route through the gateway's HTTP API via `apps-store-client.ts` / `user-prefs-client.ts` / the builder-harness gateway client: list/files/write/publish/delete projects, version history + activation, preview URL, app schema/query/logs, chat, user preferences, session open/close. No change — these were remote-capable already.
+
+### B — Genuinely Electron-native (stays IPC)
+
+Operations that can only run in the desktop main process, because they touch the OS or hold a secret:
+
+- Gateway profile CRUD (URL + bearer token stored via Electron `safeStorage`).
+- The provider API key (custom OpenAI-compatible endpoint), kept outside the gateway DB.
+- The desktop settings file and runner preflight.
+- Push events to the renderer.
+
+These stay on IPC by design. The token never crosses into renderer-side request code.
+
+### C — Migrated to HTTP (issue #141)
+
+The handlers that used to read/write the local worktree or local SQLite directly, now thin proxies over HTTP so they work against a remote gateway:
+
+| Operation                              | Route                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| Scaffold / clone / rename a project    | session PUT + `…/publish` (file maps built desktop-side)                    |
+| Create / enable / delete an automation | session PUT / `DELETE …/files/*` + `…/publish`                              |
+| List / read automations                | `GET /centraid/_automations`, `…/read`                                      |
+| Run an automation now                  | `POST /centraid/_automations/run-now`                                       |
+| Run feed / one run / nodes / pin       | `GET /centraid/_automations/runs`, `…/run`, `…/run/nodes`, `POST …/run/pin` |
+| Insights                               | `GET /centraid/_insights/summary`                                           |
+
+Two consequences of running automation ops on the gateway host:
+
+- **Run-now executes on the gateway**, with _its_ runner config and provider key — a remote fire does not use the desktop's key.
+- **The OS scheduler is reconciled gateway-side** on publish/delete, so the desktop no longer registers cron triggers itself; it just publishes.
+
+## What stays local, and why
+
+After the migration, exactly **two** desktop operations are deliberately local-only, because they are bound to the on-disk worktree that only the local gateway materializes:
+
+- **`PROJECTS_OPEN`** — reveal the app's worktree in Finder. A remote gateway has no local folder to open.
+- **`AGENT_*`** — the in-process codex/claude builder edits the on-disk worktree directly. Remote editing happens through the chat surface instead.
+
+Both are guarded by `assertActiveGatewayLocal(...)`, which throws a clear `requires the local gateway` error. The renderer hides the affordances (e.g. "Open project folder") when the active gateway is remote, so a remote user never reaches the backstop error.
+
+## Token boundary (audit)
+
+The privileged gateway token must never cross into renderer-side request code. A grep of the renderer + preload for `gatewayToken` / `Bearer` / `Authorization` returns only:
+
+- the settings **input form** where the user types a gateway's token (handed to main over IPC to be stored — never used renderer-side to authenticate a request),
+- UI placeholders and a webhook-setup instruction string.
+
+The single network call the renderer makes directly is an **unauthenticated** `GET <live-url>/app.json` (reading an app's public manifest for its knobs). Every bearer-authenticated gateway call lives in `apps/desktop/src/main/*`.
+
+```
+grep -rn "gatewayToken\|Bearer\|Authorization" \
+  apps/desktop/src/renderer apps/desktop/src/preload*
+```
+
+## Where to go next
+
+- [Gateway](/concepts/gateway) — the process on the other end of both channels.
+- [Architecture](/concepts/architecture) — how the gateway, apps, and dispatcher fit together.
+- [HTTP API](/reference/http-api) — the routes the data plane exposes.
