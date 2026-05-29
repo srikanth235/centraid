@@ -30,6 +30,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Desktop automation read/run/analytics over HTTP
 - [x] PROJECTS_OPEN + AGENT_* gated as the only local-only handlers
 - [x] IPC-vs-HTTP concept doc + token audit
+- [x] CORS on the local gateway for renderer-direct HTTP
 
 ## What changed
 
@@ -207,6 +208,32 @@ manifest for knobs). Every bearer-authenticated gateway call lives in
 `apps/desktop/src/main/*` — the privileged token never crosses into
 renderer request code.
 
+---
+
+### Thin-client follow-on — renderer talks HTTP directly; the gateway owns the builder
+
+The audit above settled the *boundary*; this follow-on acts on its
+conclusion. Rather than relay the runtime/data plane through the main
+process, the renderer now calls the gateway directly with a Bearer token
+(injected at startup), and the gateway becomes the owner of the full
+builder — deterministic lifecycle, template catalog, webhook minting, and
+the AI agent — so local and remote behave identically and the IPC surface
+shrinks to genuinely Electron-native ops. Landed in phases; this section
+grows per phase.
+
+**CORS on the local gateway for renderer-direct HTTP.** A renderer that
+calls the gateway directly is cross-origin (and sends `Origin: null` from a
+`file://` page), so the local embedded server must answer CORS. Added
+`setCorsHeaders` to `packages/runtime-core/src/http-server.ts`, called at
+the top of `route()` so every response — including the 401 and the SSE
+streams (Node merges `setHeader` values into a later `writeHead`, so the
+chat-routes / changes-sse writers inherit them unchanged) — carries
+`Access-Control-Allow-Origin: *`. Because auth is a Bearer header (never a
+cookie) there are no ambient credentials to leak, so `*` is safe and also
+covers the `file://` origin; no custom `app://` scheme is needed. An
+OPTIONS preflight is answered with 204 *before* the Bearer check (preflight
+carries no token). Remote/OpenClaw front-door CORS is a tracked follow-up.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -248,6 +275,11 @@ renderer request code.
   the token-audit grep returns only the form-input / placeholder /
   instruction matches described above — no renderer-side authenticated
   fetch.
+- CORS on the local gateway for renderer-direct HTTP:
+  `@centraid/runtime-core` typecheck + lint clean; `http-server.test.ts`
+  adds 4 cases — an OPTIONS preflight returns 204 with the CORS headers and
+  no auth required, and both the 401 and a successful authed 200 carry
+  `Access-Control-Allow-Origin: *` (348 package tests pass).
 
 ## Out of scope
 

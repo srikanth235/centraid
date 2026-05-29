@@ -54,6 +54,28 @@ const CHAT_HISTORY_PREFIX = '/_centraid-chat';
 const USER_STORE_PREFIX = '/_centraid-user';
 
 /**
+ * Permissive CORS for the desktop renderer (issue: thin-client). The
+ * renderer calls the gateway HTTP API directly with `Authorization:
+ * Bearer <token>`; because auth is a Bearer header (never a cookie) it
+ * is safe to allow any origin — there are no ambient credentials to
+ * leak, and `*` also covers the `Origin: null` a `file://` renderer
+ * sends. Set on EVERY response (including the 401 and the SSE streams):
+ * we call this at the top of `route()` before any handler runs, and
+ * Node merges `setHeader` values into a later `writeHead`, so the SSE
+ * writers in chat-routes/changes-sse inherit these without change.
+ *
+ * Remote gateways front by OpenClaw must emit their own CORS — this
+ * only governs the local embedded server.
+ */
+function setCorsHeaders(res: ServerResponse): void {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
+
+/**
  * Spawn an HTTP server in front of a `Runtime`, suitable for use as the
  * in-process embedded runtime inside the Electron desktop app.
  *
@@ -95,6 +117,14 @@ export async function startRuntimeHttpServer(
   });
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    setCorsHeaders(res);
+    // Preflight carries no Authorization header — answer it before the
+    // Bearer check, or the browser never sends the real request.
+    if ((req.method ?? '').toUpperCase() === 'OPTIONS') {
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
     const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
     if (!raw || !timingSafeEqual(raw, token)) {
       res.statusCode = 401;

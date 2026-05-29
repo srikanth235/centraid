@@ -318,3 +318,9 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-1e487d5ad58-1780063376-11 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
 | steer-1e487d5ad58-1780063376-12 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | correction | classifier | use existing worktree and batch commits, no separate branch |  |
 | steer-1e487d5ad58-1780063376-13 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780072261-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | challenged thin HTTP proxy layer, wants direct HTTP invocation |  |
+| steer-1e487d5ad58-1780072261-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | rejects IPC abstraction; wants renderer to talk to gateway directly over HTTP |  |
+| steer-1e487d5ad58-1780072261-3 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780072261-4 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | questions builder harness running locally; thinks gateway should own it |  |
+| steer-1e487d5ad58-1780072261-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780072261-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | wants builder chat and app chat unified into one chat surface |  |
