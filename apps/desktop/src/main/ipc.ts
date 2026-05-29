@@ -31,6 +31,19 @@ import {
   resetUserPrefsAuthCache,
 } from './user-prefs-client.js';
 import {
+  publishApp as appsStorePublishApp,
+  readDraftFiles as appsStoreReadDraftFiles,
+  resetAppsStoreAuthCache,
+  rollbackApp as appsStoreRollbackApp,
+  listGitVersions as appsStoreListGitVersions,
+  writeDraftFile as appsStoreWriteDraftFile,
+} from './apps-store-client.js';
+import {
+  dropProjectSession,
+  ensureProjectSession,
+  resetProjectSessions,
+} from './project-sessions.js';
+import {
   importAvailableCreds,
   readAuthStatus,
   type AuthImportResult,
@@ -266,6 +279,11 @@ export function registerIpcHandlers(): void {
   const invalidateGatewayCaches = async (): Promise<void> => {
     resetChatHistoryAuthCache();
     resetUserPrefsAuthCache();
+    resetAppsStoreAuthCache();
+    // Per-app editing sessions are per-gateway (the worktrees live in
+    // the previous gateway's git store); forget them so the next edit
+    // opens a fresh session on the new active gateway.
+    resetProjectSessions();
     await refreshAuthInjector();
   };
 
@@ -521,22 +539,49 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  ipcMain.handle(Channel.PROJECTS_FILES, async (_e, input: { id: string }) => {
+  // Issue #137 — Code tab reads draft files out of the gateway's git
+  // session worktree (HTTP). Seed: if the gateway's session worktree is
+  // empty for this app but a workspaceDir copy exists (a freshly
+  // scaffolded or agent-written app that hasn't been promoted yet),
+  // mirror those files into the session as the starting draft so the
+  // editor opens to what the user saw before the cutover. Idempotent —
+  // once the session has files, this is a no-op.
+  const seedSessionFromWorkspaceIfEmpty = async (
+    sessionId: string,
+    appId: string,
+  ): Promise<void> => {
+    const existing = await appsStoreReadDraftFiles(sessionId, appId).catch(() => []);
+    if (existing.length > 0) return;
     const settings = await loadSettings();
     const { readProjectFiles } = await import('@centraid/builder-harness');
-    const dir = path.join(settings.workspaceDir, input.id);
-    return readProjectFiles(dir);
+    const dir = path.join(settings.workspaceDir, appId);
+    const wsFiles = await readProjectFiles(dir).catch(
+      () =>
+        [] as Array<{
+          path: string;
+          content: string;
+        }>,
+    );
+    for (const f of wsFiles) {
+      await appsStoreWriteDraftFile(sessionId, appId, f.path, f.content).catch(() => undefined);
+    }
+  };
+
+  ipcMain.handle(Channel.PROJECTS_FILES, async (_e, input: { id: string }) => {
+    const sessionId = await ensureProjectSession(input.id);
+    await seedSessionFromWorkspaceIfEmpty(sessionId, input.id);
+    return appsStoreReadDraftFiles(sessionId, input.id);
   });
 
   ipcMain.handle(
     Channel.PROJECTS_WRITE_FILE,
     async (_e, input: { id: string; path: string; content: string }) => {
-      const settings = await loadSettings();
-      const { writeProjectFile } = await import('@centraid/builder-harness');
-      const dir = path.join(settings.workspaceDir, input.id);
-      const result = await writeProjectFile(dir, input.path, input.content);
-      requestPublish(input.id);
-      return result;
+      // Explicit-publish model (issue #137): writes land in the session
+      // worktree only; nothing reaches `main` until the user clicks
+      // Publish. The legacy `requestPublish` debounce is gone.
+      const sessionId = await ensureProjectSession(input.id);
+      await seedSessionFromWorkspaceIfEmpty(sessionId, input.id);
+      return appsStoreWriteDraftFile(sessionId, input.id, input.path, input.content);
     },
   );
 
@@ -554,6 +599,10 @@ export function registerIpcHandlers(): void {
     // stale request doesn't re-create the gateway version after the
     // renderer separately calls deregisterApp.
     forgetPublish(input.id);
+    // Also drop the editing-session worktree for this app (issue #137)
+    // so the gateway doesn't accumulate orphaned worktrees after the
+    // user deletes a project. Best-effort.
+    await dropProjectSession(input.id);
     await deleteProject(settings.workspaceDir, input.id);
     return { ok: true };
   });
@@ -731,41 +780,59 @@ export function registerIpcHandlers(): void {
     return { ok: true };
   });
 
-  // ----- Publish + versions -----
-  // The explicit Publish button stays — it's an "I want this published
-  // RIGHT NOW, with build" escape hatch over the auto-publish queue.
-  // It still bypasses the debouncer (immediate execution, blocking
-  // result) so the user gets a synchronous error if the upload fails.
+  // ----- Publish + versions (issue #137: git-store backend) -----
+  // Publish is the ONLY way edits reach `main` now. The renderer's
+  // explicit Publish button drives this; there is no auto-publish-on-
+  // save for the Code tab. `skipBuild` is accepted for back-compat but
+  // ignored — the git store doesn't bundle.
   ipcMain.handle(Channel.PUBLISH, async (_e, input: { id: string; skipBuild?: boolean }) => {
-    const settings = await loadSettings();
-    const { publishProject } = await import('@centraid/builder-harness');
-    const projectDir = path.join(settings.workspaceDir, input.id);
-    return publishProject(projectDir, input.id, settings, {
-      skipBuild: input.skipBuild,
-    });
+    void input.skipBuild;
+    const sessionId = await ensureProjectSession(input.id);
+    await seedSessionFromWorkspaceIfEmpty(sessionId, input.id);
+    const result = await appsStorePublishApp(sessionId, input.id, `publish ${input.id}`);
+    // Adapt to the renderer's existing CentraidPublishResult shape so
+    // builder.ts doesn't need to change. bytes/files retire — the git
+    // backend doesn't ship per-version aggregates. activated is always
+    // true (publish == merge into main).
+    return {
+      id: result.id,
+      versionId: result.versionTag,
+      sha256: result.sha,
+      activated: true,
+      files: 0,
+      bytes: 0,
+      migrationsApplied: [] as number[],
+    };
   });
 
   ipcMain.handle(Channel.VERSIONS_LIST, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { listVersions, HarnessError } = await import('@centraid/builder-harness');
-    try {
-      return await listVersions(settings, input.id);
-    } catch (err) {
-      // 404 = app not registered (never published). Collapse to an
-      // empty list rather than rejecting (which Electron logs noisily).
-      if (err instanceof HarnessError && err.code === 'not_found') {
-        return { versions: [] };
-      }
-      throw err;
-    }
+    const list = await appsStoreListGitVersions(input.id).catch(() => []);
+    if (list.length === 0) return { versions: [] };
+    // The active version is the highest tag — `git-versions` returns
+    // newest-first, so list[0] is current. (A rollback-by-overlay
+    // produces a fresh commit on main without a new tag; the most
+    // recent tag still reflects the active subtree.)
+    const versions = list.map((v, idx) => ({
+      versionId: v.tag,
+      sha256: v.sha,
+      declaredVersion: String(v.version),
+      uploadedAt: v.uploadedAt,
+      bytes: 0,
+      files: 0,
+      ...(idx === 0 ? { current: true } : {}),
+    }));
+    return { versions };
   });
 
   ipcMain.handle(
     Channel.VERSIONS_ACTIVATE,
     async (_e, input: { id: string; versionId: string }) => {
-      const settings = await loadSettings();
-      const { activateVersion } = await import('@centraid/builder-harness');
-      return activateVersion(settings, input.id, input.versionId);
+      // `versionId` from the renderer is the version tag (e.g.
+      // `<appId>/v3`) — same shape we returned from VERSIONS_LIST.
+      // Rollback overlays that tag's subtree on main as a fresh commit;
+      // we report the requested tag back as the active version.
+      await appsStoreRollbackApp(input.id, input.versionId);
+      return { activeVersion: input.versionId };
     },
   );
 

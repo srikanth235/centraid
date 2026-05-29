@@ -76,6 +76,18 @@ export function gatewayAppsDir(id: string): string {
 }
 
 /**
+ * Per-gateway git-store root (issue #137). Holds `apps.git/` (the bare
+ * repo owning all app *code*, exported to GitHub) plus `worktrees/`
+ * (session + materialized-main checkouts). App *data* stays under
+ * `gatewayAppsDir(id)` so version swaps never touch user data. Passed
+ * to `serve({ appsStoreRoot })`; the local gateway then owns drafts as
+ * a git store exactly like the standalone daemon.
+ */
+export function gatewayCodeStoreDir(id: string): string {
+  return path.join(gatewayDir(id), 'code-store');
+}
+
+/**
  * Gateway-side identity SQLite — users + per-user prefs (theme,
  * density, runner choice, …). The in-process local gateway is the
  * only consumer; remote gateways read identity from their server.

@@ -278,3 +278,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-1e487d5ad58-1779993205-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(apps-store): gateway-owned git store foundation (#137) |
 | steer-1e487d5ad58-1779993205-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | rename 'serving' to 'main' in implementation and issue | feat(apps-store): gateway-owned git store foundation (#137) |
 | steer-1e487d5ad58-1780048580-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(apps-store): export/import + wire git store into the runtime (#137)Two sli… |
+| steer-1e487d5ad58-1780050570-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(desktop): Code tab edits/publish go through the git-store gateway (#137)Cu… |

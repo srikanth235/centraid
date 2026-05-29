@@ -34,6 +34,12 @@ will touch.
   - [x] Apps-store route module
   - [x] Gateway-side manifest validation
   - [x] Publish/session HTTP test
+- [x] Slice 4 — desktop Code tab cutover
+  - [x] Apps-store HTTP client + per-project session manager
+  - [x] Code tab reads/writes through the gateway session
+  - [x] Explicit Publish replaces auto-publish-on-save for the Code tab
+  - [x] Versions UI reads from git tags
+  - [x] Gateway-swap drops cached sessions
 
 ## What changed
 
@@ -265,6 +271,74 @@ The legacy tarball path (`runtime-core`'s `app-upload` route,
 `ingestUpload`, `builder-harness/src/publish.ts`) is left in place for
 the OpenClaw backend; retiring it for the desktop happens in slice 4.
 
+### Slice 4 — desktop Code tab cutover
+
+**Apps-store HTTP client + per-project session manager.** New
+`apps/desktop/src/main/apps-store-client.ts` is the desktop's HTTP
+client for the gateway's `_apps` surface — same thin-client + cached-
+auth shape as `user-prefs-client.ts`, methods `openSession`,
+`closeSession`, `readDraftFiles`, `writeDraftFile`, `publishApp`,
+`rollbackApp`, `listGitVersions`. New `apps/desktop/src/main/project-
+sessions.ts` is a tiny in-memory cache that lazily opens one editing
+session per app id (`desktop-<appId>`) and reuses it across reads,
+writes, and Publish, so reopening the Code tab returns the same in-
+progress draft worktree. The cache drops on gateway swap
+(`resetProjectSessions`) and on project delete (`dropProjectSession`).
+
+**Code tab reads/writes through the gateway session.** The
+`PROJECTS_FILES` and `PROJECTS_WRITE_FILE` IPC handlers no longer touch
+`settings.workspaceDir`; they route through the HTTP client against
+the per-app session. For the transition window, when the session
+worktree is empty AND a workspaceDir copy exists (a freshly scaffolded
+or agent-written app that hasn't been promoted yet), the handler seeds
+the session from that workspace copy before responding — idempotent;
+once the session has files, the seed is a no-op. The Local gateway's
+URL+token come from the existing local-runtime wiring
+(`ensureLocalRuntime` → `setLocalRuntimeInfoProvider` →
+`resolveGateway` → `settings.gatewayUrl`/`gatewayToken`), so the
+desktop's HTTP requests land on the in-process runtime exactly like
+the remote-gateway case.
+
+**Explicit Publish replaces auto-publish-on-save for the Code tab.**
+`PROJECTS_WRITE_FILE` no longer fires `requestPublish` after each
+write. Edits land in the session worktree only; nothing reaches `main`
+until the user clicks Publish. The `PUBLISH` IPC handler drives
+`appsStore.publish(sessionId, appId, message)` over HTTP and adapts
+the result `{ versionTag, sha }` into the existing
+`CentraidPublishResult` the renderer expects (`versionId = versionTag`,
+`sha256 = sha`, `activated = true`). The legacy `skipBuild` flag is
+accepted for back-compat but ignored — the git backend doesn't bundle.
+`publish-on-save.ts` itself stays for the chat-agent flow (which still
+syncs workspace writes to the legacy `appsDir` between turns); the
+Code tab cutover is independent.
+
+**Versions UI reads from git tags.** `VERSIONS_LIST` calls
+`listGitVersions(appId)` over HTTP and maps `{ tag, version, sha,
+uploadedAt }` into the renderer's `CentraidVersionRecord` shape
+(`versionId = tag`, `declaredVersion = String(version)`,
+`uploadedAt`, `current = true` on the newest tag).
+`VERSIONS_ACTIVATE` calls `rollbackApp(appId, versionTag)` over HTTP,
+where `versionTag` is the same `versionId` the renderer received from
+`listVersions` — no renderer-side shape change. Rollback overlays the
+tagged subtree on `main` as a fresh commit; the response reports the
+requested tag as the new active version.
+
+**Gateway-swap drops cached sessions.** `invalidateGatewayCaches`
+already drops the chat-history, user-prefs, and apps-store auth caches
+on every gateway-changing IPC path (settings save with a token rotate,
+gateway add, gateway remove, gateway switch). It now also calls
+`resetProjectSessions` so the per-app session cache — which holds
+session ids for worktrees in the *previous* gateway's git store —
+empties; the next edit opens a fresh session on the new active
+gateway.
+
+The non-Code-tab flows (project list / create / delete metadata, the
+chat-agent scaffold + auto-publish, automation create / set-enabled /
+delete, template clone) continue to use `workspaceDir` + the legacy
+`publishProject` for now — they're independent code paths that
+predate the git store and don't block the Code-tab cutover. Folding
+them onto the git store is a follow-up.
+
 ## Out of scope
 
 This PR ships the abstraction without wiring it into the existing
@@ -309,4 +383,9 @@ Workspace checks green:
 - `bun run check` (oxfmt + oxlint) — clean.
 - `bun run build` — every package builds, including the new
   `@centraid/apps-store`.
-- `cd packages/apps-store && bun run test` — all 17 tests pass.
+- `cd packages/apps-store && bun run test` — all 21 tests pass
+  (Slice 5 added the export/import round-trip suite).
+- `bun run test` — every workspace test suite passes after the desktop
+  Code-tab cutover (Slice 4): 26 gateway-runtime tests including the
+  three apps-store HTTP route tests, the runtime-core suite, the
+  apps-store git suites, and the legacy desktop suites.

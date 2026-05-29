@@ -17,6 +17,7 @@ import {
   gatewayAppsDir,
   gatewayChatRunnerSessionsDir,
   gatewayCodexHomeBaseDir,
+  gatewayCodeStoreDir,
   gatewayIdentityDb,
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
@@ -137,6 +138,10 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
         codexHomeBaseDir: localRuntimeCodexHomeBaseDir(gatewayId),
       },
       secrets,
+      // Issue #137: the local gateway owns app code as a git store too,
+      // so drafts survive restarts and the publish/session HTTP surface
+      // is identical to the standalone daemon.
+      appsStoreRoot: gatewayCodeStoreDir(gatewayId),
       schedulerHostFactory: (dir) => localRuntimeAutomationHost(gatewayId, dir),
       logTag: `local-runtime:${gatewayId}`,
     });
