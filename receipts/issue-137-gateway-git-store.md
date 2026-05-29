@@ -339,6 +339,54 @@ delete, template clone) continue to use `workspaceDir` + the legacy
 predate the git store and don't block the Code-tab cutover. Folding
 them onto the git store is a follow-up.
 
+### Slice 4 follow-up — review fixups
+
+Three blocking issues from PR review, fixed in-place on the slice 4
+commit:
+
+**Fallback codeDir resolver instead of git-store-only.** The
+`codeDirOverride` was an unconditional replacement: when the gateway
+ran with `appsStoreRoot` set, the dispatcher + runtime stopped
+consulting `current.json` entirely, which broke the desktop flows
+that still publish through the legacy tarball path
+(`PROJECTS_CREATE`'s immediate publish, `PROJECTS_UPDATE_META`, the
+chat-agent's `requestPublish` after each turn, template clone). Both
+`Dispatcher.resolveCodeDir` and `Runtime.resolveCodeDir` now ask the
+override first; if it returns `undefined` (app not in the git store
+yet) they fall back to the legacy `versions.getActiveVersion` +
+`appCodeDir` lookup. Cutover flows light up incrementally as each
+desktop path migrates onto the git store, without orphaning the ones
+that haven't.
+
+**Active-version signal on `git-versions`.** `VersionEntry` gains an
+`active: boolean` computed by comparing each tag's `apps/<appId>/`
+subtree sha against main's. Forward publish makes the newest tag
+active; rollback flips the active flag to the older tag whose
+subtree was re-laid (the newer tag stays in the list, replayable but
+`active: false`). The desktop's `VERSIONS_LIST` IPC now returns
+`{ activeVersion, versions }` matching the legacy `listVersions`
+shape, so the renderer's app-reopen path sets `liveUrl` correctly
+again. `PROJECTS_PREVIEW_URL` also probes git-versions as a second
+availability source, so a git-store-published app is "available" on
+first open without waiting for a legacy `current.json` to appear.
+
+**`snapshotSessionAppDir` rejects phantom sessions.** A stray PUT
+files request with an unknown sessionId previously created
+`worktrees/sessions/<id>/apps/<app>/` from scratch, after which
+`openSession(id)` would 409 with `session_exists` (the dir existed)
+and a subsequent `publish()` would `git add` in a plain dir and
+fail. The helper now requires a `.git` link file at the worktree
+root (the unforgeable marker of a registered worktree) and throws
+`session_missing` otherwise — `openSession()` is the only path that
+creates session dirs.
+
+Tests added: `apps-store.test.ts` asserts `active: true/false`
+across forward publish + rollback; the new
+`snapshotSessionAppDir refuses to create phantom dirs` test exercises
+the guard. `gateway-runtime/apps-store-routes.test.ts` asserts the
+`active` flag flips on the HTTP `git-versions` response after
+rollback.
+
 ## Out of scope
 
 This PR ships the abstraction without wiring it into the existing

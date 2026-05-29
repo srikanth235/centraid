@@ -165,6 +165,8 @@ export interface GitVersion {
   version: number;
   sha: string;
   uploadedAt: string;
+  /** `true` iff this tag's subtree matches the one currently on main. */
+  active: boolean;
 }
 
 /** Tag-driven version history for the app, newest-first. */

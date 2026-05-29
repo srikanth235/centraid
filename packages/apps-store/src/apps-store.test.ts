@@ -197,6 +197,11 @@ test('publish increments to v2 on the next publish of the same app', async () =>
       versions.map((v) => v.tag),
       ['todo/v2', 'todo/v1'],
     );
+    // The freshly published v2 is the active subtree on main.
+    assert.deepEqual(
+      versions.map((v) => v.active),
+      [true, false],
+    );
   } finally {
     await rmTempRoot(root);
   }
@@ -323,6 +328,12 @@ test('rollback overlays the old subtree onto main without minting a tag', async 
       tagsAfter.map((t) => t.tag),
       ['todo/v2', 'todo/v1'],
     );
+    // Active subtree flipped from v2 to v1 — the older tag is live
+    // again, the newer one is preserved but inactive.
+    assert.deepEqual(
+      tagsAfter.map((t) => t.active),
+      [false, true],
+    );
 
     // main log includes the rollback commit (chronological audit).
     const log = await run(['log', '--format=%s', 'refs/heads/main'], {
@@ -383,6 +394,33 @@ test('listVersions returns [] for an app with no tags', async () => {
     const store = new AppsStore({ root });
     await store.init();
     assert.deepEqual(await store.listVersions('ghost'), []);
+  } finally {
+    await rmTempRoot(root);
+  }
+});
+
+test('snapshotSessionAppDir refuses to create phantom dirs without a worktree', async () => {
+  // Guards against a stray PUT files arriving with a sessionId that
+  // was never openSession()'d, materializing
+  // `worktrees/sessions/<id>/apps/<app>/` from thin air. A later
+  // openSession would then 409 with `session_exists`, and a publish
+  // would `git add` in a plain directory and fail. Throwing
+  // `session_missing` here forces the caller to open a session first.
+  const root = await makeTempRoot();
+  try {
+    const store = new AppsStore({ root });
+    await store.init();
+    await assert.rejects(
+      () => store.snapshotSessionAppDir('phantom', 'todo'),
+      (err: unknown) => err instanceof AppsStoreError && err.code === 'session_missing',
+    );
+    // And no phantom dir was left behind.
+    const phantomDir = path.join(root, 'worktrees', 'sessions', 'phantom');
+    const exists = await fs
+      .stat(phantomDir)
+      .then(() => true)
+      .catch(() => false);
+    assert.equal(exists, false);
   } finally {
     await rmTempRoot(root);
   }

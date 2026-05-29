@@ -624,20 +624,29 @@ export function registerIpcHandlers(): void {
   // Preview URL for the iframe. After #108 the preview always serves
   // the active gateway version (not the workspace), so the URL is only
   // "available" once an initial publish has succeeded — the preview
-  // protocol returns 404 until then.
+  // protocol returns 404 until then. Two backends mean two probes:
+  //   - Legacy: `<appsDir>/<id>/current.json` exists.
+  //   - Git store (#137): the gateway lists at least one tag.
+  // Either is enough — the dispatcher's codeDir resolver tries git
+  // store first then falls back to legacy.
   ipcMain.handle(
     Channel.PROJECTS_PREVIEW_URL,
     async (_e, input: { id: string }): Promise<{ url: string; available: boolean }> => {
       const settings = await loadSettings();
       const currentJsonPath = path.join(settings.appsDir, input.id, 'current.json');
-      const available = await fs
+      const legacyAvailable = await fs
         .stat(currentJsonPath)
         .then((s) => s.isFile())
         .catch(() => false);
+      const gitAvailable = legacyAvailable
+        ? false
+        : await appsStoreListGitVersions(input.id)
+            .then((list) => list.length > 0)
+            .catch(() => false);
       // Cache-bust per request — the iframe URL is stable but the
       // active version under the hood changes after each publish.
       const url = `${PREVIEW_SCHEME}://${encodeURIComponent(input.id)}/index.html?t=${Date.now()}`;
-      return { url, available };
+      return { url, available: legacyAvailable || gitAvailable };
     },
   );
 
@@ -808,20 +817,26 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.VERSIONS_LIST, async (_e, input: { id: string }) => {
     const list = await appsStoreListGitVersions(input.id).catch(() => []);
     if (list.length === 0) return { versions: [] };
-    // The active version is the highest tag — `git-versions` returns
-    // newest-first, so list[0] is current. (A rollback-by-overlay
-    // produces a fresh commit on main without a new tag; the most
-    // recent tag still reflects the active subtree.)
-    const versions = list.map((v, idx) => ({
+    // The git store marks the active tag explicitly (`active: true` on
+    // the entry whose `apps/<appId>/` subtree matches main). After a
+    // forward publish, that's the newest tag; after a rollback overlay,
+    // it's the older tag whose subtree was re-laid — NOT necessarily
+    // list[0]. The renderer reads `activeVersion` to set the live URL
+    // on app reopen, so the shape mirrors the legacy `listVersions`.
+    const activeEntry = list.find((v) => v.active);
+    const versions = list.map((v) => ({
       versionId: v.tag,
       sha256: v.sha,
       declaredVersion: String(v.version),
       uploadedAt: v.uploadedAt,
       bytes: 0,
       files: 0,
-      ...(idx === 0 ? { current: true } : {}),
+      ...(v.active ? { current: true } : {}),
     }));
-    return { versions };
+    return {
+      versions,
+      ...(activeEntry ? { activeVersion: activeEntry.tag } : {}),
+    };
   });
 
   ipcMain.handle(

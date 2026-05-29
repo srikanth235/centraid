@@ -62,6 +62,14 @@ export interface VersionEntry {
   sha: string;
   /** ISO timestamp from the tagged commit's committer date. */
   uploadedAt: string;
+  /**
+   * `true` iff this tag's `apps/<appId>/` subtree matches the one
+   * currently on `main`. After a forward publish, the newest tag is
+   * active. After a rollback (forward-only overlay), the older tag
+   * whose tree was re-laid on `main` becomes active again — the newer
+   * tag stays in the list (reachable, replayable) but `active: false`.
+   */
+  active: boolean;
 }
 
 export type AppsStoreErrorCode =

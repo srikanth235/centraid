@@ -1,23 +1,19 @@
-// Gateway-owned git store for centraid app code. See the package
-// README + receipt #137 for the full design narrative.
+// Gateway-owned git store for centraid app code. Full design in
+// receipt #137; this header sketches the layout + invariants.
 //
-// Layout under `root` (per-gateway dir): `apps.git/` (bare repo,
-// pushed to GitHub), `worktrees/main/<sha>/` (read-only
-// materialization the runtime reads from, swapped on publish),
-// `worktrees/sessions/<id>/` (per-session mutable editing).
+// Layout: `apps.git/` (bare repo, pushed to GitHub),
+// `worktrees/main/<sha>/` (read-only materialization, swapped on
+// publish), `worktrees/sessions/<id>/` (mutable per-session editing).
 //
-// Refs: `main` (production trunk, single source of truth),
-// `sessions/<id>` (ephemeral agent work), tag `<appId>/v<n>`
-// (immutable forward-publish marker, monotonic per app).
+// Refs: `main` (trunk), `sessions/<id>` (ephemeral), tag
+// `<appId>/v<n>` (immutable forward marker, monotonic per app).
 //
-// `main` is production. Sessions branch off it, the agent commits +
-// tags a publish, the publish ff-merges back to main. Rollback is a
-// *new* forward commit overlaying an older subtree, never a reset —
-// `git log main` stays the chronological audit of everything live.
+// Sessions branch off main; publish ff-merges back + tags; rollback
+// is a *new* forward commit overlaying an older subtree — never a
+// reset, so `git log main` stays the audit of everything live.
 //
 // A single AppsStore serializes publish + rollback through one
-// per-store mutex (commit-tag-rebase-ff-merge-materialize is one
-// critical section). Each publish materializes a fresh
+// per-store mutex. Each publish materializes a fresh
 // `worktrees/main/<sha>/`, flips an in-memory pointer, then removes
 // the previous dir — fresh-path-per-publish rotates require() cache
 // lines naturally (the runtime keys its handler cache on path).
@@ -62,11 +58,10 @@ export class AppsStore {
   }
 
   /**
-   * Bootstrap the store. Idempotent: mkdir layout → `git init --bare`
-   * (skip if HEAD present) → plant an empty initial `main` commit if
-   * the ref is missing → `worktree prune` stale entries → materialize
-   * `worktrees/main/<sha>/` → cache `activeMainDir`. A second call
-   * against an existing layout reuses everything.
+   * Bootstrap the store. Idempotent: mkdir → `git init --bare` (skip
+   * if HEAD present) → plant empty initial `main` if ref missing →
+   * `worktree prune` stale entries → materialize `worktrees/main/<sha>/`
+   * → cache `activeMainDir`. Re-runs reuse everything.
    */
   async init(): Promise<void> {
     await fs.mkdir(this.root, { recursive: true });
@@ -76,17 +71,15 @@ export class AppsStore {
 
     if (!(await pathExists(path.join(this.bareDir, 'HEAD')))) {
       await fs.mkdir(this.bareDir, { recursive: true });
-      // `init --bare -b main` makes `main` the HEAD symref. Without
-      // `-b`, git picks the host's `init.defaultBranch` (often
-      // `master`), which would force every downstream call to chase
-      // a dynamic name.
+      // `-b main` pins HEAD; without it the host's `init.defaultBranch`
+      // (often `master`) wins and downstream calls chase a dynamic name.
       await run(['init', '--bare', '-b', 'main', this.bareDir], { cwd: this.root });
     }
 
     if (!(await revParse(this.bareDir, 'refs/heads/main'))) {
-      // Plant an empty initial commit so sessions have something to
-      // branch off. `commit-tree` against git's canonical empty tree
-      // sha keeps this purely metadata — no working tree needed.
+      // Empty initial commit so sessions have something to branch off.
+      // `commit-tree` against git's canonical empty-tree sha — no
+      // working tree needed.
       const initialSha = await run(
         ['commit-tree', EMPTY_TREE_SHA, '-m', 'centraid: init apps repo'],
         { cwd: this.bareDir },
@@ -94,38 +87,31 @@ export class AppsStore {
       await run(['update-ref', 'refs/heads/main', initialSha], { cwd: this.bareDir });
     }
 
-    // Drop any worktree metadata pointing at directories that no
-    // longer exist on disk (e.g. after a host crash).
+    // Drop worktree metadata pointing at vanished dirs (e.g. host crash).
     await run(['worktree', 'prune'], { cwd: this.bareDir });
-
     const mainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
     this.activeMainDir = await this.ensureMainMaterialization(mainSha);
-
     this.initialized = true;
   }
 
-  /**
-   * Path to the currently-active main worktree. The runtime reads
-   * handlers from `<this>/apps/<appId>/`. `undefined` until
-   * `init()` returns.
-   */
+  /** Active main worktree path; runtime reads handlers from `<this>/apps/<id>/`. */
   getActiveMainDir(): string | undefined {
     return this.activeMainDir;
   }
 
-  /** Absolute path to the bare repo — for export/import + tests. */
+  /** Bare repo path — for export/import + tests. */
   get bareRepoDir(): string {
     return this.bareDir;
   }
 
-  /** Every app id on `main` (the `apps/<id>/` subtrees). Replaces `_registry.json`. */
+  /** Every app id with an `apps/<id>/` subtree on main. Replaces `_registry.json`. */
   async listApps(): Promise<string[]> {
     this.assertInitialized();
     const out = await runRaw(['ls-tree', '--name-only', 'refs/heads/main:apps'], {
       cwd: this.bareDir,
       allowNonZero: true,
     });
-    if (out.code !== 0) return []; // no `apps/` dir yet → no apps
+    if (out.code !== 0) return []; // no `apps/` dir yet
     return out.stdout
       .split('\n')
       .map((line) => line.trim())
@@ -133,12 +119,7 @@ export class AppsStore {
       .sort();
   }
 
-  /**
-   * Resolve an app's active code dir, or `undefined` if the app has
-   * never been published (the app dir wouldn't exist in main's tree
-   * yet). This is the runtime's primary read entry point — the
-   * dispatcher uses it to find handlers per request.
-   */
+  /** App's active code dir, or undefined when never published. */
   async resolveActiveAppDir(appId: string): Promise<string | undefined> {
     assertSafeId(appId, 'invalid_app_id');
     this.assertInitialized();
@@ -148,12 +129,27 @@ export class AppsStore {
     return (await pathExists(appDir)) ? appDir : undefined;
   }
 
-  /** Absolute path to `<sessionDir>/apps/<appId>/`, mkdir'd if missing. */
+  /**
+   * Absolute path to `<sessionDir>/apps/<appId>/`, mkdir'd if missing.
+   * Refuses with `session_missing` when the session worktree isn't
+   * registered (no `.git` link file). Without this guard a stray
+   * `PUT files` could materialize `worktrees/sessions/<id>/apps/<app>/`
+   * from a typo'd id; `openSession(id)` would then 409 with
+   * `session_exists` and a later `publish()` would `git add` in a
+   * plain dir and fail.
+   */
   async snapshotSessionAppDir(sessionId: string, appId: string): Promise<string> {
     assertSafeId(sessionId, 'invalid_session_id');
     assertSafeId(appId, 'invalid_app_id');
     this.assertInitialized();
-    const dir = path.join(this.sessionWorktreePath(sessionId), 'apps', appId);
+    const worktreeRoot = this.sessionWorktreePath(sessionId);
+    if (!(await pathExists(path.join(worktreeRoot, '.git')))) {
+      throw new AppsStoreError(
+        'session_missing',
+        `Session "${sessionId}" has no worktree — open it first via openSession().`,
+      );
+    }
+    const dir = path.join(worktreeRoot, 'apps', appId);
     await fs.mkdir(dir, { recursive: true });
     return dir;
   }
@@ -241,8 +237,11 @@ export class AppsStore {
   }
 
   /**
-   * Versions of an app, newest-first. Walks `refs/tags/<appId>/v*`
-   * and pairs each with its tagged commit's sha + committer date.
+   * Versions of an app, newest-first. Walks `refs/tags/<appId>/v*`,
+   * pairs each with its tagged commit's sha + committer date, and
+   * marks the entry whose `apps/<appId>/` subtree matches main's as
+   * `active`. Forward publish → newest tag is active. Rollback
+   * overlay → the older tag re-laid on main becomes active again.
    */
   async listVersions(appId: string): Promise<VersionEntry[]> {
     assertSafeId(appId, 'invalid_app_id');
@@ -256,19 +255,30 @@ export class AppsStore {
       { cwd: this.bareDir },
     );
     if (!out) return [];
+    const mainAppTree = await this.treeSha(`refs/heads/main:apps/${appId}`);
     const rows: VersionEntry[] = [];
     for (const line of out.split('\n')) {
       const [tag, sha, uploadedAt] = line.split('\t');
       if (!tag || !sha || !uploadedAt) continue;
       const m = /\/v(\d+)$/.exec(tag);
       if (!m) continue;
-      const versionStr = m[1] ?? '';
-      const version = Number.parseInt(versionStr, 10);
+      const version = Number.parseInt(m[1] ?? '', 10);
       if (!Number.isFinite(version)) continue;
-      rows.push({ tag, version, sha, uploadedAt });
+      const tagAppTree = await this.treeSha(`${tag}:apps/${appId}`);
+      const active = mainAppTree !== undefined && tagAppTree === mainAppTree;
+      rows.push({ tag, version, sha, uploadedAt, active });
     }
     rows.sort((a, b) => b.version - a.version);
     return rows;
+  }
+
+  /** Resolve `<ref>:<path>` to its tree/blob sha, or undefined if absent. */
+  private async treeSha(refPath: string): Promise<string | undefined> {
+    const r = await runRaw(['rev-parse', refPath], {
+      cwd: this.bareDir,
+      allowNonZero: true,
+    });
+    return r.code === 0 ? r.stdout.trim() : undefined;
   }
 
   // ── internals ────────────────────────────────────────────────────

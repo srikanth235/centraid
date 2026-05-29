@@ -110,25 +110,19 @@ export interface CentraidDescribeInput {
 export interface DispatcherOptions {
   readonly registry: Registry;
   readonly versions: VersionStore;
-  /**
-   * Closure that returns a write-notification callback for an app. The
-   * runtime threads its `changeBus` through this so action handlers fire
-   * the per-app `/centraid/<id>/_changes` SSE stream.
-   */
+  /** Write-notification callback per app — feeds the `_changes` SSE stream. */
   readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
   /**
-   * Optional code-dir resolver (issue #137). When set it replaces the
-   * legacy `versions.getActiveVersion` + `appCodeDir` lookup with the
-   * gateway's apps-store worktree dir; unset = legacy resolution.
+   * Optional code-dir resolver (issue #137). Tried FIRST; on undefined,
+   * falls back to legacy `versions.getActiveVersion` + `appCodeDir` so
+   * non-cutover flows (chat-agent, template clone, automations) resolve.
    */
   readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
 }
 
 /**
- * Internal cache entry: a manifest plus its compiled per-handler input
- * validators, keyed by the absolute code dir. We re-key on every call
- * by hashing the codeDir + manifest mtime so a version swap or a
- * dev-watch rewrite invalidates immediately.
+ * Manifest + compiled per-handler validators, keyed by absolute code
+ * dir + mtime so a version swap or dev-watch rewrite invalidates.
  */
 interface ManifestCacheEntry {
   readonly codeDir: string;
@@ -154,7 +148,11 @@ export class Dispatcher {
 
   // --------- resolution helpers ---------
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    if (this.codeDirOverride) return this.codeDirOverride(entry.id);
+    // Git store wins when it has the app; else legacy active-version.
+    if (this.codeDirOverride) {
+      const fromStore = await this.codeDirOverride(entry.id);
+      if (fromStore) return fromStore;
+    }
     const active = await this.versions.getActiveVersion(entry.path);
     if (!active) return undefined;
     return appCodeDir(entry, active);

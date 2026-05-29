@@ -332,7 +332,15 @@ export class Runtime {
   }
 
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    if (this.codeDirOverride) return this.codeDirOverride(entry.id);
+    // Mirrors `Dispatcher.resolveCodeDir`: git store wins when it
+    // owns the app; else fall back to legacy active-version resolution
+    // so flows that still write `current.json` (chat-agent, template
+    // clone, automation scaffold) keep serving out of `<appsDir>/<id>/
+    // versions/<active>/`.
+    if (this.codeDirOverride) {
+      const fromStore = await this.codeDirOverride(entry.id);
+      if (fromStore) return fromStore;
+    }
     const active = await this.versions.getActiveVersion(entry.path);
     if (!active) return undefined;
     return appCodeDir(entry, active);

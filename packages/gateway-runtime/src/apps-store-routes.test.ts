@@ -124,16 +124,21 @@ test('session → write → publish → serve → rollback round-trip', async ()
     /v2/,
   );
 
-  // git-versions lists both, newest first.
+  // git-versions lists both, newest first; v2 is active.
   const versions = (await (
     await fetch(`${handle.url}/centraid/_apps/todo/git-versions`, { headers: auth() })
-  ).json()) as { versions: Array<{ tag: string }> };
+  ).json()) as { versions: Array<{ tag: string; active: boolean }> };
   assert.deepEqual(
     versions.versions.map((v) => v.tag),
     ['todo/v2', 'todo/v1'],
   );
+  assert.deepEqual(
+    versions.versions.map((v) => v.active),
+    [true, false],
+  );
 
-  // Rollback to v1 — index.html reverts, no new tag minted.
+  // Rollback to v1 — index.html reverts, no new tag minted, the
+  // active flag flips from v2 to v1 on the next git-versions read.
   const rb = await fetch(`${handle.url}/centraid/_apps/todo/rollback`, {
     method: 'POST',
     headers: { ...auth(), 'Content-Type': 'application/json' },
@@ -143,6 +148,13 @@ test('session → write → publish → serve → rollback round-trip', async ()
   assert.match(
     await (await fetch(`${handle.url}/centraid/todo/`, { headers: auth() })).text(),
     /v1/,
+  );
+  const after = (await (
+    await fetch(`${handle.url}/centraid/_apps/todo/git-versions`, { headers: auth() })
+  ).json()) as { versions: Array<{ tag: string; active: boolean }> };
+  assert.deepEqual(
+    after.versions.map((v) => v.active),
+    [false, true],
   );
 });
 
