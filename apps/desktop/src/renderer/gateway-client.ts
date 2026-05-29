@@ -12,93 +12,18 @@
  *
  * This module ports the pure `fetch` methods that previously lived in
  * `main/*-client.ts` + `@centraid/builder-harness`'s `gateway-client`.
- * It grows one method-group per phase; so far it covers the app read
- * surface (schema / table-rows / query / logs / deregister / live URL),
- * version history (list / activate), the `/_centraid-user` identity + prefs
- * surface, and the automation read/run/analytics + insights surface.
+ * It covers the app read surface (schema / table-rows / query / logs /
+ * deregister / live URL), version history (list / activate), the
+ * `/_centraid-user` identity + prefs surface, and the automation
+ * read/run/analytics + insights surface. The shared fetch infrastructure
+ * lives in `gateway-client-core.ts`; the app-editing + lifecycle surface
+ * in `gateway-client-editing.ts` — both re-exported here so call sites
+ * import everything from `./gateway-client.js`.
  */
 
-/** Auth resolved from main: normalized base URL + optional bearer token. */
-interface GatewayAuth {
-  baseUrl: string;
-  token?: string;
-}
+import { auth, authHeaders, doFetch, enc, href, readJson } from './gateway-client-core.js';
 
-let cachedAuth: Promise<GatewayAuth> | undefined;
-
-function auth(): Promise<GatewayAuth> {
-  if (!cachedAuth) cachedAuth = window.CentraidApi.getGatewayAuth();
-  return cachedAuth;
-}
-
-/** Drop the cached auth so the next call re-reads it from main. */
-export function resetGatewayAuthCache(): void {
-  cachedAuth = undefined;
-}
-
-// Self-invalidate when the active gateway flips — the URL + token change,
-// so the next request must re-resolve. Registered once at module load;
-// `window.CentraidApi` is always present before renderer scripts run.
-window.CentraidApi.onGatewayChanged(() => resetGatewayAuthCache());
-
-/** Error carrying a coarse `code` the UI can branch on, like HarnessError. */
-export class GatewayClientError extends Error {
-  code: string;
-  constructor(code: string, message: string) {
-    super(message);
-    this.name = 'GatewayClientError';
-    this.code = code;
-  }
-}
-
-function authHeaders(token: string | undefined, contentType?: string): Record<string, string> {
-  const h: Record<string, string> = {};
-  if (token) h.Authorization = `Bearer ${token}`;
-  if (contentType) h['Content-Type'] = contentType;
-  return h;
-}
-
-function href(baseUrl: string, pathname: string): string {
-  return new URL(pathname, `${baseUrl}/`).toString();
-}
-
-async function doFetch(baseUrl: string, pathname: string, init: RequestInit): Promise<Response> {
-  try {
-    return await fetch(href(baseUrl, pathname), init);
-  } catch (err) {
-    throw new GatewayClientError(
-      'gateway_unreachable',
-      `Could not reach gateway at ${baseUrl}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-}
-
-async function readJson<T>(res: Response, op: string): Promise<T> {
-  const text = await res.text();
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      throw new GatewayClientError(
-        'auth_required',
-        `${op}: gateway rejected request (HTTP ${res.status}). Check your gateway token in Settings.`,
-      );
-    }
-    if (res.status === 404)
-      throw new GatewayClientError('not_found', `${op}: ${text || res.statusText}`);
-    if (res.status === 409)
-      throw new GatewayClientError('conflict', `${op}: ${text || res.statusText}`);
-    throw new GatewayClientError(
-      'gateway_error',
-      `${op} failed (HTTP ${res.status}): ${text || res.statusText}`,
-    );
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new GatewayClientError('gateway_error', `${op} returned non-JSON: ${text.slice(0, 200)}`);
-  }
-}
-
-const enc = encodeURIComponent;
+export * from './gateway-client-core.js';
 
 /** URL the renderer loads in an app iframe. */
 export async function appLiveUrl(input: { id: string }): Promise<{ url: string }> {
@@ -474,3 +399,10 @@ export async function getInsightsSummary(input?: {
   });
   return readJson<CentraidInsightsSummary>(res, 'insights summary');
 }
+
+// ───────────────────────── editing + lifecycle ─────────────────────
+// The app-editing (sessions / files / publish) + lifecycle (create / clone
+// / meta / automation CRUD) surface lives in `gateway-client-editing.ts`
+// (split out for the repo file-size limit). Re-exported here so call sites
+// keep importing everything from `./gateway-client.js`.
+export * from './gateway-client-editing.js';

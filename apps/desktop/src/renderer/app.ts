@@ -21,6 +21,11 @@ import {
   listAutomationRunNodes,
   pinAutomationRun,
   getInsightsSummary,
+  createAutomation,
+  cloneTemplate as gwCloneTemplate,
+  setAutomationEnabled,
+  updateProjectMeta,
+  deleteProject,
 } from './gateway-client.js';
 
 (function () {
@@ -1816,7 +1821,7 @@ import {
     // is a plain slug — the kind, not the id, is the automation signal.
     const id = `automation-${Math.random().toString(36).slice(2, 8)}`;
     try {
-      await window.CentraidApi.createAutomation({
+      await createAutomation({
         id,
         name: 'New automation',
         enabled: false,
@@ -1960,7 +1965,7 @@ import {
   // the agent will tune the handler from the manifest's `prompt`.
   async function adoptTemplate(template: TemplateEntry): Promise<void> {
     try {
-      const result = await window.CentraidApi.cloneTemplate({ templateId: template.id });
+      const result = await gwCloneTemplate({ templateId: template.id });
       // Webhook secrets are returned exactly once. v1 surfaces a toast;
       // a follow-up can show a proper "copy this URL + secret" sheet.
       for (const w of result.webhooks ?? []) {
@@ -2172,7 +2177,7 @@ import {
       const next = toggleInput.checked;
       void (async () => {
         try {
-          await window.CentraidApi.setAutomationEnabled({ automationId: row.ref, enabled: next });
+          await setAutomationEnabled({ automationId: row.ref, enabled: next });
           renderAutomationView(row.ref);
         } catch (err) {
           toggleInput.checked = row.enabled;
@@ -3376,7 +3381,7 @@ import {
         return;
       }
       try {
-        await window.CentraidApi.updateProjectMeta({ id: app.id, name: nextName });
+        await updateProjectMeta({ id: app.id, name: nextName });
         if (!isDraft(app)) {
           syncUserAppMeta({ projectId: app.id, name: nextName });
         }
@@ -3504,7 +3509,7 @@ import {
 
     if (draft) {
       try {
-        await window.CentraidApi.deleteProject({ id: app.id });
+        await deleteProject({ id: app.id });
         showToast(`Deleted draft "${app.name}"`);
       } catch (err) {
         showToast(`Could not delete draft: ${String(err)}`);
@@ -3532,7 +3537,7 @@ import {
     // Disk cleanup is best-effort — the gateway side is already consistent.
     let diskWarn: string | null = null;
     try {
-      await window.CentraidApi.deleteProject({ id: app.id });
+      await deleteProject({ id: app.id });
     } catch (err) {
       diskWarn = String(err);
     }
@@ -3779,7 +3784,7 @@ import {
     const palette = window.CentraidTokens.palette as unknown as Record<string, ColorHexType>;
     const color: ColorHexType = palette[tmpl.colorKey] ?? ('#5847e0' as ColorHexType);
     try {
-      const result = await window.CentraidApi.cloneTemplate({ templateId: tmpl.id });
+      const result = await gwCloneTemplate({ templateId: tmpl.id });
       const draft: DraftAppMeta = {
         __draft: true,
         color,
@@ -4793,7 +4798,7 @@ import {
     const next = input.checked;
     card.dataset.enabled = String(next);
     try {
-      await window.CentraidApi.setAutomationEnabled({ automationId: row.ref, enabled: next });
+      await setAutomationEnabled({ automationId: row.ref, enabled: next });
       // The in-memory row stored by closure is now stale; reflect the
       // new state so a subsequent toggle reads the right "current."
       (row as { enabled: boolean }).enabled = next;
@@ -5258,7 +5263,7 @@ import {
     const next = input.trim().replace(/\s+/g, ' ');
     if (!next || next === app.name) return;
     try {
-      await window.CentraidApi.updateProjectMeta({ id: app.id, name: next });
+      await updateProjectMeta({ id: app.id, name: next });
       const ua = findUserApp(app.id);
       if (ua) {
         ua.name = next;

@@ -12,12 +12,11 @@ const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
 
-  PROJECTS_CREATE: 'centraid:projects:create',
-  PROJECTS_FILES: 'centraid:projects:files',
-  PROJECTS_WRITE_FILE: 'centraid:projects:write-file',
+  // Project create/files/write/delete/update-meta + publish + templates clone
+  // + automation create/enable/delete moved to the renderer's direct HTTP
+  // client (renderer/gateway-client.ts) under the thin-client pivot. Only the
+  // local-only reveal-in-Finder + preview URL stay on IPC.
   PROJECTS_OPEN: 'centraid:projects:open',
-  PROJECTS_DELETE: 'centraid:projects:delete',
-  PROJECTS_UPDATE_META: 'centraid:projects:update-meta',
   PROJECTS_PREVIEW_URL: 'centraid:projects:preview-url',
 
   AGENT_START: 'centraid:agent:start',
@@ -25,7 +24,6 @@ const Channel = {
   AGENT_STOP: 'centraid:agent:stop',
   AGENT_EVENT: 'centraid:agent:event',
 
-  PUBLISH: 'centraid:publish',
   PUBLISH_STATUS: 'centraid:publish:status',
   PUBLISH_EVENT: 'centraid:publish:event',
 
@@ -40,8 +38,6 @@ const Channel = {
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
-
-  TEMPLATES_CLONE: 'centraid:templates:clone',
 
   CHAT_START: 'centraid:chat:start',
   CHAT_SEND: 'centraid:chat:send',
@@ -61,14 +57,6 @@ const Channel = {
   PROVIDER_API_KEY_CLEAR: 'centraid:agent:provider:clearApiKey',
 
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
-
-  // Automations (issue #91). Only the create/enable/delete mutators stay on
-  // IPC (scaffold + editing session + publish orchestration); the read/run/
-  // analytics surface + insights moved to the renderer's direct HTTP client
-  // (renderer/gateway-client.ts) under the thin-client pivot.
-  AUTOMATIONS_CREATE: 'centraid:automations:create',
-  AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
-  AUTOMATIONS_DELETE: 'centraid:automations:delete',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -103,17 +91,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   saveSettings: (patch: Record<string, unknown>) =>
     ipcRenderer.invoke(Channel.SETTINGS_SAVE, patch),
 
-  // Projects (listProjects moved to the renderer's direct HTTP client —
-  // a pure `GET /centraid/_apps` registry read)
-  createProject: (input: { id: string; name?: string; version?: string }) =>
-    ipcRenderer.invoke(Channel.PROJECTS_CREATE, input),
-  readProjectFiles: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_FILES, input),
-  writeProjectFile: (input: { id: string; path: string; content: string }) =>
-    ipcRenderer.invoke(Channel.PROJECTS_WRITE_FILE, input),
+  // Projects: list/create/files/write/delete/update-meta moved to the
+  // renderer's direct HTTP client (renderer/gateway-client.ts) under the
+  // thin-client pivot. Only the local-only reveal-in-Finder + preview URL
+  // stay on IPC.
   openProjectFolder: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_OPEN, input),
-  deleteProject: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_DELETE, input),
-  updateProjectMeta: (input: { id: string; name?: string; description?: string }) =>
-    ipcRenderer.invoke(Channel.PROJECTS_UPDATE_META, input),
   previewUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_PREVIEW_URL, input),
 
   // Agent (one session per window)
@@ -131,9 +113,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     return () => ipcRenderer.off(Channel.AGENT_EVENT, handler);
   },
 
-  // Publish
-  publish: (input: { id: string; skipBuild?: boolean }) =>
-    ipcRenderer.invoke(Channel.PUBLISH, input),
+  // Publish moved to the renderer's direct HTTP client (it holds the
+  // editing session and POSTs `…/publish`).
   // App read surface (live URL / schema / table rows / SQL / logs /
   // deregister) + version list/activate moved to the renderer's direct HTTP
   // client (renderer/gateway-client.ts) under the thin-client pivot.
@@ -200,10 +181,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     return () => ipcRenderer.off(Channel.GATEWAY_CHANGED, handler);
   },
 
-  // Templates (listTemplates moved to the renderer's direct HTTP client —
-  // the gateway owns the catalog at `GET /centraid/_templates`)
-  cloneTemplate: (input: { templateId: string }) =>
-    ipcRenderer.invoke(Channel.TEMPLATES_CLONE, input),
+  // Templates: list + clone moved to the renderer's direct HTTP client —
+  // the gateway owns the catalog (`GET /centraid/_templates`) + clone
+  // (`POST /centraid/_apps/_clone`).
 
   // App-scoped agentic chat
   chatStart: (input: {
@@ -252,22 +232,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // settings panel opens or the user clicks "Test connection".
   getRunnerStatus: () => ipcRenderer.invoke(Channel.RUNNER_STATUS_GET),
 
-  // Automations (issue #91) — create/enable/delete mutators. The read/run/
-  // analytics surface + insights moved to the renderer's direct HTTP client.
-  createAutomation: (input: {
-    id: string;
-    name?: string;
-    description?: string;
-    prompt?: string;
-    triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
-    apps?: string[];
-    model?: string;
-    historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
-    onFailure?: string;
-    enabled?: boolean;
-  }) => ipcRenderer.invoke(Channel.AUTOMATIONS_CREATE, input),
-  setAutomationEnabled: (input: { automationId: string; enabled: boolean }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_SET_ENABLED, input),
-  deleteAutomation: (input: { automationId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_DELETE, input),
+  // Automations: create/enable/delete + the read/run/analytics surface +
+  // insights moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot — the gateway
+  // owns scaffold + webhook mint + stage + publish.
 });

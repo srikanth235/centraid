@@ -36,6 +36,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Draft preview served through the gateway runtime
 - [x] Gateway owns the template catalog (GET /centraid/_templates)
 - [x] Gateway owns the app lifecycle (create/clone/meta/automation CRUD over HTTP)
+- [x] Renderer owns app editing sessions + lifecycle over direct HTTP; desktop IPC handlers deleted
 
 ## What changed
 
@@ -358,6 +359,35 @@ the lifecycle publish path reuses the same gateway-side manifest validation.
 This slice is additive — the desktop's IPC handlers still run; the renderer
 cutover + handler/scaffold-dep deletion is the next slice.
 
+**Renderer owns app editing sessions + lifecycle over direct HTTP; desktop IPC
+handlers deleted.** The renderer's `gateway-client.ts` gains a per-app editing
+session manager (`ensureAppSession`/`dropAppSession`, cleared on gateway swap)
+keyed on the SAME `desktop-<appId>` id the main-process `project-sessions.ts`
+uses — so the renderer's Code-tab edits and the local-only builder agent share
+one draft worktree (whoever opens first wins; a 409 re-open is treated as
+success). On top of it the renderer gains the editing surface (`readProjectFiles`/
+`writeProjectFile`/`publish`) and the lifecycle surface (`createProject`/
+`cloneTemplate`/`updateProjectMeta`/`deleteProject`/`createAutomation`/
+`setAutomationEnabled`/`deleteAutomation`), each opening/reusing the session and
+calling the Phase-2 gateway endpoints with `publish: true` to preserve
+"new/edited app is live immediately" until the preview iframe moves to the draft
+URL. `app.ts` + `builder.ts` repoint every call from `window.CentraidApi.*` /
+`Api().*` to the imported client functions (the local `cloneTemplate` wrapper
+keeps its name; the gateway one is imported as `gwCloneTemplate`). The matching
+desktop IPC is deleted: the `PROJECTS_CREATE/FILES/WRITE_FILE/DELETE/UPDATE_META`,
+`PUBLISH`, `TEMPLATES_CLONE`, and `AUTOMATIONS_CREATE/SET_ENABLED/DELETE` handlers,
+their `Channel` constants, preload methods, and `CentraidApi` typings, plus the
+now-dead `ipc.ts` imports (`scaffold*`/webhook-mint, the apps-store draft-file
+helpers, `dropProjectSession`, `httpProjectInfo`). `PROJECTS_OPEN` (reveal-in-
+Finder) + `PROJECTS_PREVIEW_URL` stay on IPC (local-only / preview), and
+`project-sessions.ts` stays for the local-only `AGENT_*` + `PROJECTS_OPEN` — it
+retires with the agent in the unified-chat phase. To stay under the repo
+file-size limit the renderer client is split three ways (all re-exported from
+`gateway-client.ts` so call sites are unchanged): `gateway-client-core.ts` (auth
+cache + fetch/JSON helpers, dependency-free to avoid an import cycle),
+`gateway-client.ts` (the data-plane reads), and `gateway-client-editing.ts` (the
+session manager + editing + lifecycle).
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -452,6 +482,17 @@ cutover + handler/scaffold-dep deletion is the next slice.
   row read back from `main` and `kind: 'automation'`; and set-enabled →
   whole-app delete flows through publish, removing the app from `main`.
   `@centraid/gateway-runtime` typecheck + lint clean (48 package tests pass).
+- Renderer owns app editing sessions + lifecycle over direct HTTP; desktop IPC
+  handlers deleted: full `turbo run build typecheck lint test` green across all
+  28 tasks. `@centraid/desktop` typechecks + builds with the editing/lifecycle
+  methods on `renderer/gateway-client.ts`; `oxlint` confirms the removed IPC
+  handlers, `Channel` constants, preload methods, `CentraidApi` typings, and the
+  now-dead `ipc.ts` imports + `httpProjectInfo` helper left nothing dangling.
+  The gateway endpoints these methods call are covered by
+  `lifecycle-over-http.test.ts` + the apps-store session/files/publish route
+  tests, so the renderer methods are wire shims with no new server behavior to
+  retest. Session sharing with the local agent is by construction (identical
+  `desktop-<id>` session id).
 
 ## Out of scope
 

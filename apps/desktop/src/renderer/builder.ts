@@ -23,6 +23,13 @@ import {
   runAutomationNow,
   readAutomationRun,
   listAutomationRuns,
+  readProjectFiles,
+  writeProjectFile,
+  publish,
+  createProject,
+  updateProjectMeta,
+  setAutomationEnabled,
+  deleteAutomation,
 } from './gateway-client.js';
 
 (function () {
@@ -744,15 +751,13 @@ import {
       projNameEl.textContent = next;
       crumbProjName.textContent = isUpdateMode ? `Editing ${next}` : 'Builder';
       if (projectId) {
-        void Api()
-          .updateProjectMeta({ id: projectId, name: next })
-          .catch((err: unknown) => {
-            // Roll back if persistence fails so the UI stays truthful.
-            projName = previous;
-            projNameEl.textContent = previous;
-            crumbProjName.textContent = isUpdateMode ? `Editing ${previous}` : 'Builder';
-            showToast(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
-          });
+        void updateProjectMeta({ id: projectId, name: next }).catch((err: unknown) => {
+          // Roll back if persistence fails so the UI stays truthful.
+          projName = previous;
+          projNameEl.textContent = previous;
+          crumbProjName.textContent = isUpdateMode ? `Editing ${previous}` : 'Builder';
+          showToast(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
         if (onMetaChange) onMetaChange({ projectId, name: next });
       }
     }
@@ -1493,9 +1498,9 @@ import {
       }
       const pid = projectId;
 
-      let files: Awaited<ReturnType<Window['CentraidApi']['readProjectFiles']>> = [];
+      let files: Awaited<ReturnType<typeof readProjectFiles>> = [];
       try {
-        files = await Api().readProjectFiles({ id: pid });
+        files = await readProjectFiles({ id: pid });
       } catch (err) {
         workspace.innerHTML = `<div class="empty">Could not read files: ${escapeHtml(String(err))}</div>`;
         return;
@@ -1815,7 +1820,7 @@ import {
         const buf = codeBuffers.get(p);
         if (!buf || buf.current === buf.original) return;
         try {
-          await Api().writeProjectFile({ id: pid, path: p, content: buf.current });
+          await writeProjectFile({ id: pid, path: p, content: buf.current });
           buf.original = buf.current;
           showToast(`Saved ${basename(p)}`);
         } catch (err) {
@@ -3273,7 +3278,7 @@ import {
         if (!projectId) return;
         const next = checkbox.checked;
         try {
-          await Api().setAutomationEnabled({ automationId: row.ref, enabled: next });
+          await setAutomationEnabled({ automationId: row.ref, enabled: next });
           await refreshAutomations();
         } catch (err) {
           // Revert the toggle so the UI doesn't misrepresent persisted state.
@@ -3331,7 +3336,7 @@ import {
         );
         if (!ok) return;
         try {
-          await Api().deleteAutomation({ automationId: row.ref });
+          await deleteAutomation({ automationId: row.ref });
           automationRunState.delete(row.name);
           await refreshAutomations();
         } catch (err) {
@@ -3861,7 +3866,7 @@ import {
       pushMessage({ kind: 'divider', text: `Today · ${hhmm}` });
       pushMessage({ kind: 'status', text: 'Setting up project…', spinning: true });
       try {
-        await Api().createProject({ id, name: projName, version: '0.1.0' });
+        await createProject({ id, name: projName, version: '0.1.0' });
         projectId = id;
         // Subtitle holds the editable description, not a status — leave it
         // alone so the user's placeholder/value isn't clobbered.
@@ -3935,7 +3940,7 @@ import {
       primaryBtn.setAttribute('disabled', '');
       refreshSyncStatus();
       try {
-        await Api().setAutomationEnabled({ automationId: ref, enabled: next });
+        await setAutomationEnabled({ automationId: ref, enabled: next });
         showToast(next ? 'Automation enabled — schedule is live' : 'Automation disabled');
         await refreshAutomationRow();
       } catch (err) {
@@ -4232,7 +4237,7 @@ import {
       });
       primaryBtn.setAttribute('disabled', '');
       try {
-        const result = await Api().publish({ id: projectId });
+        const result = await publish({ id: projectId });
         lastPublishedVersionId = result.versionId;
         liveUrl = (await appLiveUrl({ id: projectId })).url;
         // Bump the header status: every publish increments the version

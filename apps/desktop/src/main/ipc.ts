@@ -6,7 +6,6 @@ import {
   loadSettings,
   saveSettings,
   setActiveGatewayId,
-  templatesCacheDir,
   type DesktopSettings,
 } from './settings.js';
 import {
@@ -25,19 +24,11 @@ import { refreshAuthInjector } from './auth-injector.js';
 import { resetChatHistoryAuthCache } from './chat-history-client.js';
 import { fetchUserPrefs, resetUserPrefsAuthCache } from './user-prefs-client.js';
 import {
-  deleteApp as appsStoreDeleteApp,
-  listAppsWithMeta as appsStoreListAppsWithMeta,
   publishApp as appsStorePublishApp,
-  readDraftFiles as appsStoreReadDraftFiles,
   resetAppsStoreAuthCache,
   listGitVersions as appsStoreListGitVersions,
-  writeDraftFile as appsStoreWriteDraftFile,
-  writeDraftFiles as appsStoreWriteDraftFiles,
-  deleteDraftFiles as appsStoreDeleteDraftFiles,
-  listAutomationsHttp,
 } from './apps-store-client.js';
 import {
-  dropProjectSession,
   ensureProjectSession,
   ensureProjectSessionDir,
   resetProjectSessions,
@@ -55,22 +46,13 @@ import {
 } from './local-runtime.js';
 import { runPreflight, type OpenAICompatProvider, type RunnerPrefs } from '@centraid/agent-runtime';
 import {
-  parseAutomationRef,
-  generateWebhookId,
-  generateWebhookSecret,
-  hashWebhookSecret,
   provisionAppPendingWebhooks,
-  provisionPendingWebhooksInFiles,
   WEBHOOK_ROUTE_PREFIX,
   type ProvisionedWebhook,
-  type AutomationRow,
-  type AutomationTrigger,
-  type AutomationHistoryKeep,
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
 import { disposeWindowChatSessions } from './chat.js';
-import type { ProjectInfo } from '@centraid/builder-harness';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -84,29 +66,6 @@ type PublishStatus = { inFlight: boolean; lastError?: string; lastPublishedAt?: 
 const getPublishStatus = (_id: string): PublishStatus => ({ inFlight: false });
 
 /**
- * Synthesize a `ProjectInfo` for the HTTP scaffold/clone path (issue
- * #141). The git store is the source of truth post-publish, so the
- * desktop no longer holds a local worktree to stat — `dir` is empty and
- * `built` is false. The renderer reads only `id` (+ optional
- * name/description/kind) off a create/clone return; the canonical
- * metadata flows back through `listProjects()` once the publish lands.
- */
-function httpProjectInfo(
-  id: string,
-  meta: { name?: string; description?: string; kind?: 'app' | 'automation' } = {},
-): ProjectInfo {
-  return {
-    id,
-    dir: '',
-    built: false,
-    modifiedAt: new Date().toISOString(),
-    ...(meta.name !== undefined ? { name: meta.name } : {}),
-    ...(meta.description !== undefined ? { description: meta.description } : {}),
-    ...(meta.kind !== undefined ? { kind: meta.kind } : {}),
-  };
-}
-
-/**
  * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
  * and the renderer-side typings in `renderer/centraid-api.d.ts`.
  */
@@ -114,12 +73,10 @@ export const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
 
-  PROJECTS_CREATE: 'centraid:projects:create',
-  PROJECTS_FILES: 'centraid:projects:files',
-  PROJECTS_WRITE_FILE: 'centraid:projects:write-file',
+  // Project create/files/write/delete/update-meta + publish moved to the
+  // renderer's direct HTTP client (renderer/gateway-client.ts). Only the
+  // local-only reveal-in-Finder + preview URL stay on IPC.
   PROJECTS_OPEN: 'centraid:projects:open',
-  PROJECTS_DELETE: 'centraid:projects:delete',
-  PROJECTS_UPDATE_META: 'centraid:projects:update-meta',
   PROJECTS_PREVIEW_URL: 'centraid:projects:preview-url',
 
   AGENT_START: 'centraid:agent:start',
@@ -127,11 +84,10 @@ export const Channel = {
   AGENT_STOP: 'centraid:agent:stop',
   AGENT_EVENT: 'centraid:agent:event',
 
-  PUBLISH: 'centraid:publish',
-  // APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY / APP_LOGS /
-  // APPS_DEREGISTER / VERSIONS_LIST / VERSIONS_ACTIVATE are gone — the
-  // renderer calls these gateway routes directly (thin-client pivot; see
-  // renderer/gateway-client.ts).
+  // PUBLISH + the app read surface (APP_LIVE_URL / APP_SCHEMA /
+  // APP_TABLE_ROWS / APP_QUERY / APP_LOGS / APPS_DEREGISTER / VERSIONS_LIST /
+  // VERSIONS_ACTIVATE) are gone — the renderer calls these gateway routes
+  // directly (thin-client pivot; see renderer/gateway-client.ts).
 
   /** Status read for the auto-publish queue (renderer toast / debug). */
   PUBLISH_STATUS: 'centraid:publish:status',
@@ -155,7 +111,8 @@ export const Channel = {
   // the single point where it crosses to the renderer.
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
-  TEMPLATES_CLONE: 'centraid:templates:clone',
+  // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
+  // client — the gateway owns the catalog + clone (`POST /_apps/_clone`).
 
   AUTH_STATUS: 'centraid:auth:status',
   AUTH_RESYNC: 'centraid:auth:resync',
@@ -175,16 +132,10 @@ export const Channel = {
   // runner (binary version + optional provider endpoint probe).
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 
-  // Automations (issue #98) — desktop UI surface over the automations
-  // owned by app folders under `appsDir`. Only the create/enable/delete
-  // mutators stay on IPC (they orchestrate scaffold + session + publish);
-  // the read/run/analytics surface (list/read/run-now/list-runs/read-run/
-  // list-run-nodes/pin-run) + INSIGHTS_SUMMARY moved to the renderer's
-  // direct HTTP client (renderer/gateway-client.ts) under the thin-client
-  // pivot — they were pure gateway proxies.
-  AUTOMATIONS_CREATE: 'centraid:automations:create',
-  AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
-  AUTOMATIONS_DELETE: 'centraid:automations:delete',
+  // Automations (issue #98): the full surface — create/enable/delete +
+  // read/run/analytics + INSIGHTS_SUMMARY — moved to the renderer's direct
+  // HTTP client (renderer/gateway-client.ts) under the thin-client pivot;
+  // the gateway owns scaffold + webhook mint + stage + publish.
 } as const;
 
 /**
@@ -500,61 +451,15 @@ export function registerIpcHandlers(): void {
     return result;
   });
 
-  // ----- Projects (issue #137: git-store backend) -----
-  // All project lifecycle (list/create/files/write/delete/update-meta)
-  // flows through the gateway's git store. No more `workspaceDir`:
-  // code lives in `apps.git` + materialized-main + per-session
-  // worktrees. Each handler:
-  //   - opens (or reuses) a session for the app id,
-  //   - mutates the session worktree directly (filesystem ops on the
-  //     materialized session dir — local for the local gateway),
-  //   - publishes the session — explicit, no debounce.
-  // PROJECTS_LIST moved to the renderer's direct HTTP client
-  // (renderer/gateway-client.ts) — a pure `GET /centraid/_apps` registry
-  // read. `appsStoreListAppsWithMeta` stays imported; the create/clone/meta
-  // handlers below still use it for collision checks.
-
-  ipcMain.handle(
-    Channel.PROJECTS_CREATE,
-    async (_e, input: { id: string; name?: string; version?: string }) => {
-      const { scaffoldProjectFiles, HarnessError } = await import('@centraid/builder-harness');
-      // Reject a collision with an app already on `main` so a create never
-      // clobbers an existing app's draft (the FS scaffolder used to guard
-      // this via a dir-exists check; the git-store path checks the list).
-      const existing = await appsStoreListAppsWithMeta();
-      if (existing.some((a) => a.id === input.id)) {
-        throw new HarnessError('already_exists', `Project "${input.id}" already exists.`);
-      }
-      // Build the canonical file map (validates the id) and push it into
-      // the app's editing session over HTTP — no local worktree path, so
-      // this works against a remote gateway too.
-      const files = scaffoldProjectFiles(input.id, {
-        ...(input.name !== undefined ? { name: input.name } : {}),
-        ...(input.version !== undefined ? { version: input.version } : {}),
-      });
-      const sessionId = await ensureProjectSession(input.id);
-      await appsStoreWriteDraftFiles(sessionId, input.id, files);
-      // Initial publish so the fresh app is browsable in the iframe
-      // without waiting for a first edit.
-      await appsStorePublishApp(sessionId, input.id, `scaffold ${input.id}`).catch(() => undefined);
-      return httpProjectInfo(input.id, input.name !== undefined ? { name: input.name } : {});
-    },
-  );
-
-  ipcMain.handle(Channel.PROJECTS_FILES, async (_e, input: { id: string }) => {
-    const sessionId = await ensureProjectSession(input.id);
-    return appsStoreReadDraftFiles(sessionId, input.id);
-  });
-
-  ipcMain.handle(
-    Channel.PROJECTS_WRITE_FILE,
-    async (_e, input: { id: string; path: string; content: string }) => {
-      // Explicit-publish model: writes land in the session worktree
-      // only; nothing reaches `main` until the user clicks Publish.
-      const sessionId = await ensureProjectSession(input.id);
-      return appsStoreWriteDraftFile(sessionId, input.id, input.path, input.content);
-    },
-  );
+  // ----- Projects (issue #137: git-store backend; #141: thin client) -----
+  // App lifecycle (create/files/write/delete/update-meta) + publish moved to
+  // the renderer's direct HTTP client (renderer/gateway-client.ts) under the
+  // thin-client pivot: the renderer opens its own editing session per app
+  // (same `desktop-<id>` id the local agent uses, so they share one draft)
+  // and the gateway owns scaffold/clone/meta/publish. PROJECTS_OPEN stays on
+  // IPC — a deliberately LOCAL-ONLY reveal-in-Finder that needs the on-disk
+  // session worktree; PROJECTS_PREVIEW_URL stays until the preview iframe
+  // moves to the gateway draft URL.
 
   ipcMain.handle(Channel.PROJECTS_OPEN, async (_e, input: { id: string }) => {
     // Reveal-in-Finder: opens the on-disk session worktree. One of the two
@@ -567,44 +472,10 @@ export function registerIpcHandlers(): void {
     return { ok: true };
   });
 
-  ipcMain.handle(Channel.PROJECTS_DELETE, async (_e, input: { id: string }) => {
-    // Drop the editing session first so its worktree doesn't fight
-    // with the main-side delete, then HTTP-delete the app entirely
-    // (forward commit + tag cleanup; registry deregister wired
-    // gateway-side via onAppDeleted).
-    await dropProjectSession(input.id);
-    await appsStoreDeleteApp(input.id).catch(() => undefined);
-    return { ok: true };
-  });
-
-  ipcMain.handle(
-    Channel.PROJECTS_UPDATE_META,
-    async (_e, input: { id: string; name?: string; description?: string }) => {
-      const { updateProjectMetaFiles } = await import('@centraid/builder-harness');
-      // Read the app's current draft over HTTP, apply the {name,desc} patch
-      // to the file map (rejects empty/duplicate names against the apps on
-      // `main`), and write back only the changed files. No local worktree
-      // path, so this works against a remote gateway.
-      const sessionId = await ensureProjectSession(input.id);
-      const [current, existing] = await Promise.all([
-        appsStoreReadDraftFiles(sessionId, input.id),
-        appsStoreListAppsWithMeta(),
-      ]);
-      const changed = updateProjectMetaFiles(
-        current,
-        input.id,
-        {
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.description !== undefined ? { description: input.description } : {}),
-        },
-        existing,
-      );
-      await appsStoreWriteDraftFiles(sessionId, input.id, changed);
-      // Meta edits ride the explicit-publish model too — the renderer
-      // triggers a Publish if it wants the change live.
-      return { ok: true };
-    },
-  );
+  // PROJECTS_DELETE + PROJECTS_UPDATE_META moved to the renderer's direct
+  // HTTP client (renderer/gateway-client.ts): delete is a `DELETE /_apps/<id>`
+  // + session close; meta is a `POST /_apps/<id>/meta` the gateway stages +
+  // publishes.
 
   // Preview URL for the iframe. The preview always serves the active
   // gateway version (issue #137: published on `main`), so the URL is
@@ -771,29 +642,11 @@ export function registerIpcHandlers(): void {
     return { ok: true };
   });
 
-  // ----- Publish + versions (issue #137: git-store backend) -----
-  // Publish is the ONLY way edits reach `main` now. The renderer's
-  // explicit Publish button drives this; there is no auto-publish-on-
-  // save for the Code tab. `skipBuild` is accepted for back-compat but
-  // ignored — the git store doesn't bundle.
-  ipcMain.handle(Channel.PUBLISH, async (_e, input: { id: string; skipBuild?: boolean }) => {
-    void input.skipBuild;
-    const sessionId = await ensureProjectSession(input.id);
-    const result = await appsStorePublishApp(sessionId, input.id, `publish ${input.id}`);
-    // Adapt to the renderer's existing CentraidPublishResult shape so
-    // builder.ts doesn't need to change. bytes/files retire — the git
-    // backend doesn't ship per-version aggregates. activated is always
-    // true (publish == merge into main).
-    return {
-      id: result.id,
-      versionId: result.versionTag,
-      sha256: result.sha,
-      activated: true,
-      files: 0,
-      bytes: 0,
-      migrationsApplied: [] as number[],
-    };
-  });
+  // ----- Publish + versions (issue #137; #141: thin client) -----
+  // PUBLISH moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts): the renderer holds the editing session and
+  // POSTs `…/publish` directly. VERSIONS_LIST / VERSIONS_ACTIVATE moved there
+  // too (pure git-store tag reads + a forward-only rollback POST).
 
   // Thin-client token bridge: resolve the active gateway's base URL +
   // bearer token for the renderer's direct HTTP client. The token lives
@@ -817,308 +670,19 @@ export function registerIpcHandlers(): void {
   // APP_LOGS / APPS_DEREGISTER moved there too.
 
   // ----- Templates -----
-  // TEMPLATES_LIST moved to the renderer's direct HTTP client
-  // (renderer/gateway-client.ts) under the thin-client pivot — the gateway
-  // owns the catalog and serves it at `GET /centraid/_templates`, resolving
-  // bundle-or-cache from its per-gateway templates cache dir. TEMPLATES_CLONE
-  // stays on IPC for now (it scaffolds + provisions webhooks + opens a
-  // session + publishes; that orchestration moves to the gateway next).
+  // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
+  // client (renderer/gateway-client.ts) under the thin-client pivot — the
+  // gateway owns the catalog (`GET /centraid/_templates`) and the clone
+  // orchestration (`POST /centraid/_apps/_clone`: scaffold + webhook mint +
+  // stage + publish). The remote gateway never needs the desktop catalog.
 
-  ipcMain.handle(Channel.TEMPLATES_CLONE, async (_e, input: { templateId: string }) => {
-    const settings = await loadSettings();
-    const { resolveTemplates, readTemplateFiles } = await import('@centraid/app-templates');
-    const { cloneTemplateFiles, suggestCloneIdentityFrom } =
-      await import('@centraid/builder-harness');
-
-    const cacheDir = templatesCacheDir(settings.activeGatewayId);
-    const templates = await resolveTemplates({ cacheDir });
-    const tmpl = templates.find((t) => t.id === input.templateId);
-    if (!tmpl) {
-      throw new Error(`Unknown template "${input.templateId}".`);
-    }
-
-    // Pick (id, name) together so both are unique. The first clone of
-    // `hydrate` lands on `hydrate` / "Hydrate"; subsequent clones bump
-    // to `hydrate-2` / "Hydrate 2", `-3` / " 3", etc. Display-name
-    // collisions against unrelated renamed apps are caught too — the
-    // pair advances in lockstep so the home shelf can never show two
-    // identically-titled tiles for new clones. Uniqueness is computed
-    // against the apps already on `main` (issue #137), not a local
-    // workspace — the desktop no longer has one.
-    const existing = await appsStoreListAppsWithMeta();
-    const { id: newAppId, name: newName } = suggestCloneIdentityFrom(existing, tmpl.id, tmpl.name);
-
-    // Read the template's files from the desktop-bundled catalog (the
-    // resolver picks cache-vs-bundle so a remote update reaches users
-    // without a desktop release), rewrite them in memory for the new
-    // id/name, and provision any pending webhook triggers — then push the
-    // result over HTTP. The remote gateway never needs the catalog.
-    const templateFiles = await readTemplateFiles(tmpl, { cacheDir });
-    const cloned = cloneTemplateFiles({
-      newAppId,
-      templateFiles,
-      newName,
-      // Carry the template's description into the cloned app's `app.json`
-      // so the builder topbar + home tile show something meaningful.
-      newDesc: tmpl.desc,
-    });
-
-    // Automation templates may ship `{kind:'webhook',pending:true}`
-    // triggers — the template author can't know the secret in advance,
-    // so the clone path mints id + secret here, rewrites the manifest to
-    // its provisioned form, and returns the plaintext secret to the
-    // renderer to show once. App templates never have webhook triggers,
-    // so this is a no-op for them. Secrets are minted desktop-side; only
-    // the hash is written into the manifest that lands on `main`. URL
-    // points at the active gateway.
-    const { files: provisioned, minted } = provisionPendingWebhooksInFiles(cloned, newAppId);
-    const webhooks = minted.map((m) => ({
-      automationId: m.automationId,
-      ownerApp: m.ownerApp,
-      webhookId: m.webhookId,
-      secret: m.secret,
-      url: `${settings.gatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
-    }));
-
-    // Push the cloned file map into the new app's editing session, then
-    // publish it onto `main` over HTTP so the iframe can preview it
-    // immediately and — for automation templates — so the materialized
-    // `main` the OS scheduler reads has an active version. Best-effort: a
-    // publish failure is logged but doesn't fail the clone.
-    const sessionId = await ensureProjectSession(newAppId);
-    await appsStoreWriteDraftFiles(sessionId, newAppId, provisioned);
-    await appsStorePublishApp(sessionId, newAppId, `clone ${tmpl.id}`).catch((err: unknown) => {
-      console.warn(
-        `[templates:clone] initial publish failed for ${newAppId}: ` +
-          (err instanceof Error ? err.message : String(err)),
-      );
-    });
-
-    // The publish above drives OS-scheduler registration: the gateway's
-    // `onAppLive` reconciles the scheduler against the freshly materialized
-    // `main` (issue #141, C5), so an automation template's cron triggers +
-    // webhook routes resolve without the desktop registering them. The
-    // local gateway runs `serve()` in-process with that reconcile wired;
-    // a remote gateway reconciles its own scheduler.
-
-    return {
-      project: httpProjectInfo(newAppId, {
-        name: newName,
-        ...(tmpl.desc !== undefined ? { description: tmpl.desc } : {}),
-        kind: tmpl.kind ?? 'app',
-      }),
-      template: {
-        id: tmpl.id,
-        name: tmpl.name,
-        desc: tmpl.desc,
-        colorKey: tmpl.colorKey,
-        iconKey: tmpl.iconKey,
-        version: tmpl.version,
-        kind: tmpl.kind ?? 'app',
-      },
-      webhooks,
-    };
-  });
-
-  // ----- Automations (issue #98) -----
-  // An automation lives inside an app folder under `appsDir`. An
-  // `automationId` IPC argument is the automation's `<appId>/<id>`
-  // handle. Only the create/enable/delete mutators stay on IPC — they
-  // orchestrate scaffold + editing session + publish. The read/run/
-  // analytics surface moved to the renderer's direct HTTP client
-  // (renderer/gateway-client.ts) under the thin-client pivot. The gateway
+  // ----- Automations (issue #98; #141: thin client) -----
+  // Automation create/enable/delete + the read/run/analytics surface moved
+  // to the renderer's direct HTTP client (renderer/gateway-client.ts): the
+  // gateway owns scaffold + webhook mint + stage + publish
+  // (`POST /centraid/_automations`, `…/set-enabled`, `DELETE …`). The gateway
   // owns the materialized `main` (code), the per-app `runtime.sqlite`
   // ledgers, and the central analytics DB.
-
-  ipcMain.handle(
-    Channel.AUTOMATIONS_CREATE,
-    async (
-      _e,
-      input: {
-        id: string;
-        name?: string;
-        description?: string;
-        prompt?: string;
-        /**
-         * Trigger list. A `webhook` entry carries no secret — the
-         * handler mints id + secret server-side. Omit the field to take
-         * the scaffold default (a daily cron); pass `[]` for a
-         * manual-only automation.
-         */
-        triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
-        apps?: string[];
-        model?: string;
-        historyKeep?: AutomationHistoryKeep;
-        onFailure?: string;
-        /**
-         * Initial enabled flag. The conversational builder passes
-         * `false` to scaffold a draft the user enables after review.
-         */
-        enabled?: boolean;
-      },
-    ): Promise<{
-      row: AutomationRow;
-      /** Present when a webhook trigger was created — shown to the user once. */
-      webhook?: { id: string; secret: string; url: string };
-    }> => {
-      const settings = await loadSettings();
-      const { scaffoldAutomationProjectFiles, HarnessError } =
-        await import('@centraid/builder-harness');
-
-      // Reject a collision with an app already on `main` so a create never
-      // clobbers an existing app's draft (the FS scaffolder guarded this
-      // via a dir-exists check; the git-store path checks the list).
-      const existingApps = await appsStoreListAppsWithMeta();
-      if (existingApps.some((a) => a.id === input.id)) {
-        throw new HarnessError('already_exists', `Automation app "${input.id}" already exists.`);
-      }
-
-      // Mint webhook secrets server-side: the plaintext is returned once
-      // here, the manifest persists only its hash.
-      let webhook: { id: string; secret: string; url: string } | undefined;
-      const triggers: AutomationTrigger[] | undefined = input.triggers?.map((t) => {
-        if (t.kind === 'webhook') {
-          const id = generateWebhookId();
-          const secret = generateWebhookSecret();
-          webhook = {
-            id,
-            secret,
-            url: `${settings.gatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${id}`,
-          };
-          return { kind: 'webhook', id, secretHash: hashWebhookSecret(secret) };
-        }
-        return { kind: 'cron', expr: t.expr };
-      });
-
-      // `input.id` is the automation app's folder id (a plain slug; the
-      // app marks itself `kind: 'automation'` in its `app.json`). Build the
-      // file map and push it into the app's editing session over HTTP (no
-      // local worktree path → works against a remote gateway), then
-      // publish onto `main`.
-      const files = scaffoldAutomationProjectFiles(input.id, {
-        ...(input.name ? { name: input.name } : {}),
-        ...(input.description ? { description: input.description } : {}),
-        ...(input.prompt ? { prompt: input.prompt } : {}),
-        ...(triggers !== undefined ? { triggers } : {}),
-        ...(input.apps ? { apps: input.apps } : {}),
-        ...(input.model ? { model: input.model } : {}),
-        ...(input.historyKeep ? { historyKeep: input.historyKeep } : {}),
-        ...(input.onFailure ? { onFailure: input.onFailure } : {}),
-        ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
-      });
-      const sessionId = await ensureProjectSession(input.id);
-      await appsStoreWriteDraftFiles(sessionId, input.id, files);
-      // Publish synchronously so the materialized `main` carries the new
-      // automation. The gateway reconciles the OS scheduler on publish
-      // (issue #141, C5) — the desktop no longer registers it directly.
-      await appsStorePublishApp(sessionId, input.id, `scaffold automation ${input.id}`).catch(
-        (err: unknown) => {
-          console.warn(
-            `[automations] initial publish failed for ${input.id}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-        },
-      );
-      // Read the published row back for the renderer over HTTP (works for
-      // local + remote) — the created automation is the one this app owns.
-      const { rows } = await listAutomationsHttp();
-      const row = rows.find((r) => r.ownerApp === input.id);
-      if (!row) throw new Error(`automation app ${input.id}: scaffolded but not found on main`);
-      return { row, ...(webhook ? { webhook } : {}) };
-    },
-  );
-
-  // AUTOMATIONS_RUN_NOW moved to the renderer's direct HTTP client
-  // (renderer/gateway-client.ts) — a pure run-now POST to the gateway,
-  // which fires with ITS runner + provider key and returns the run id.
-
-  ipcMain.handle(
-    Channel.AUTOMATIONS_SET_ENABLED,
-    async (_e, input: { automationId: string; enabled: boolean }) => {
-      // `manifest.enabled` is the source of truth — toggling rewrites the
-      // automation.json in the app's editing session over HTTP, then
-      // publishes onto `main`. The gateway reconciles the OS scheduler on
-      // publish (issue #141, C5), so the new enabled state takes effect
-      // without the desktop touching the scheduler. No local worktree path
-      // → works against a remote gateway.
-      const ref = parseAutomationRef(input.automationId);
-      if (!ref) return { ok: true };
-      const { setAutomationEnabledInFiles } = await import('@centraid/builder-harness');
-      const sessionId = await ensureProjectSession(ref.appId);
-      const current = await appsStoreReadDraftFiles(sessionId, ref.appId);
-      const changed = setAutomationEnabledInFiles(current, ref.automationId, input.enabled);
-      // Empty → automation absent or already at the requested state.
-      if (changed.length === 0) return { ok: true };
-      await appsStoreWriteDraftFiles(sessionId, ref.appId, changed);
-      await appsStorePublishApp(sessionId, ref.appId, `toggle ${ref.automationId}`).catch(
-        (err: unknown) => {
-          console.warn(
-            `[automations] publish failed for ${input.automationId}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-        },
-      );
-      return { ok: true };
-    },
-  );
-
-  ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { automationId: string }) => {
-    // Delete is best-effort. A whole automation app (`kind: 'automation'`)
-    // is removed entirely via the HTTP app-delete; an app-owned automation
-    // loses just its `automations/<id>/` subdir, published as a fresh
-    // commit. Either way the gateway reconciles the OS scheduler on
-    // delete/publish (issue #141, C5), so the desktop no longer unregisters
-    // the scheduler entry itself.
-    const ref = parseAutomationRef(input.automationId);
-    if (ref) {
-      // Distinguish a whole automation app (`kind: 'automation'` — the app
-      // exists only to host automations, so remove it wholesale) from an
-      // app-owned automation (a UI app's `automations/<id>/` subdir, removed
-      // in place). The kind is read from the app's `app.json` via the apps
-      // list rather than inferred from the id.
-      const apps = await appsStoreListAppsWithMeta().catch(() => []);
-      const appKind = apps.find((a) => a.id === ref.appId)?.kind;
-      if (appKind === 'automation') {
-        // Whole automation app — drop the editing session, then remove
-        // the app from `main` (forward commit + tag reap; registry
-        // deregister fires gateway-side via onAppDeleted).
-        await dropProjectSession(ref.appId);
-        await appsStoreDeleteApp(ref.appId).catch((err: unknown) => {
-          console.warn(
-            `[automations] delete app failed for ${ref.appId}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-        });
-      } else {
-        // App-owned automation — drop its `automations/<id>/` subdir in the
-        // editing session over HTTP, then publish so `main` no longer lists
-        // it. No local worktree path → works against a remote gateway.
-        const { deleteAutomationFromFiles } = await import('@centraid/builder-harness');
-        const sessionId = await ensureProjectSession(ref.appId);
-        const currentFiles = await appsStoreReadDraftFiles(sessionId, ref.appId);
-        const { removed } = deleteAutomationFromFiles(currentFiles, ref.automationId);
-        if (removed.length > 0) {
-          await appsStoreDeleteDraftFiles(sessionId, ref.appId, removed);
-          await appsStorePublishApp(
-            sessionId,
-            ref.appId,
-            `delete automation ${ref.automationId}`,
-          ).catch((err: unknown) => {
-            console.warn(
-              `[automations] publish after delete failed for ${input.automationId}: ` +
-                (err instanceof Error ? err.message : String(err)),
-            );
-          });
-        }
-      }
-    }
-    // The automation's central run summaries + per-app ledger are left in
-    // place; there's no HTTP route to purge analytics, and the desktop no
-    // longer owns a local AnalyticsStore (issue #141). The history stays in
-    // the central ledger (a record of past fires) until the app's data dir
-    // is reaped gateway-side.
-    return { ok: true };
-  });
 
   // The run feed / single-run / node-timeline / pin-run reads and
   // INSIGHTS_SUMMARY moved to the renderer's direct HTTP client

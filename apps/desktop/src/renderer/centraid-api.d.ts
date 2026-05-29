@@ -400,38 +400,11 @@ interface CentraidApi {
   getSettings(): Promise<CentraidSettings>;
   saveSettings(patch: Partial<CentraidSettings>): Promise<CentraidSettings>;
 
-  // listProjects moved to the renderer's direct HTTP client
-  // (renderer/gateway-client.ts) under the thin-client pivot — a pure
-  // `GET /centraid/_apps` registry read.
-  createProject(input: {
-    id: string;
-    name?: string;
-    version?: string;
-  }): Promise<CentraidProjectInfo>;
-  readProjectFiles(input: { id: string }): Promise<CentraidProjectFile[]>;
-  /**
-   * Overwrite a single text file inside the project folder (§B5 editable
-   * code workspace). The main process guards against path traversal and
-   * rejects non-text extensions. Returns the written path + byte size.
-   */
-  writeProjectFile(input: {
-    id: string;
-    path: string;
-    content: string;
-  }): Promise<{ path: string; size: number }>;
+  // Project list/create/files/write/delete/update-meta + publish moved to the
+  // renderer's direct HTTP client (renderer/gateway-client.ts) under the
+  // thin-client pivot. Only the local-only reveal-in-Finder + preview URL
+  // stay on IPC.
   openProjectFolder(input: { id: string }): Promise<{ ok: true }>;
-  deleteProject(input: { id: string }): Promise<{ ok: true }>;
-  /**
-   * Patch `<projectDir>/app.json` with new `name` and/or `description`.
-   * Either field is optional; provide only what should change. Empty
-   * `description` clears the field; empty `name` is rejected (name is
-   * mandatory).
-   */
-  updateProjectMeta(input: {
-    id: string;
-    name?: string;
-    description?: string;
-  }): Promise<{ ok: true }>;
   /**
    * URL the builder iframe can load to preview a project's local files
    * before publish. `available` is false when the project has no
@@ -460,11 +433,10 @@ interface CentraidApi {
   stopAgent(): Promise<{ ok: true }>;
   onAgentEvent(cb: (msg: { projectId: string; event: CentraidAgentEvent }) => void): () => void;
 
-  publish(input: { id: string; skipBuild?: boolean }): Promise<CentraidPublishResult>;
-  // appLiveUrl / appSchema / appTableRows / appQuery / appLogs /
-  // deregisterApp / listVersions / activateVersion moved to the renderer's
-  // direct HTTP client (renderer/gateway-client.ts) under the thin-client
-  // pivot — pure git-store reads with no main-side state.
+  // publish moved to the renderer's direct HTTP client. appLiveUrl /
+  // appSchema / appTableRows / appQuery / appLogs / deregisterApp /
+  // listVersions / activateVersion moved there too (pure git-store reads
+  // + the editing-session publish, no main-side state).
 
   /**
    * Snapshot of the auto-publish queue (issue #108). Every workspace
@@ -569,18 +541,10 @@ interface CentraidApi {
     }) => void,
   ): () => void;
 
-  // listTemplates moved to the renderer's direct HTTP client
+  // listTemplates + cloneTemplate moved to the renderer's direct HTTP client
   // (renderer/gateway-client.ts) under the thin-client pivot — the gateway
-  // owns the catalog and serves it at `GET /centraid/_templates`.
-  /**
-   * Clone a bundled template into the user's projects dir as a draft.
-   * The main process auto-picks a non-colliding `(id, name)` pair via
-   * `suggestCloneIdentity`: bare `<tmpl.id>` / `<tmpl.name>` on the
-   * first clone, then `<tmpl.id>-N` / `<tmpl.name> N` for subsequent
-   * clones. The user explicitly clicks Publish to upload to the
-   * gateway (see `publish`).
-   */
-  cloneTemplate(input: { templateId: string }): Promise<CentraidCloneTemplateResult>;
+  // owns the catalog (`GET /centraid/_templates`) + clone orchestration
+  // (`POST /centraid/_apps/_clone`).
 
   /**
    * Start (or reset) the app-scoped agentic chat session for this window.
@@ -669,39 +633,13 @@ interface CentraidApi {
   // unified run ledger. An `automationId` argument is the automation's
   // `<appId>/<id>` handle (the `ref` field of `CentraidAutomationRow`).
   //
-  // The read/run/analytics surface (listAutomations / readAutomation /
+  // The full automation surface — create/enable/delete mutators AND the
+  // read/run/analytics surface (listAutomations / readAutomation /
   // runAutomationNow / listAutomationRuns / readAutomationRun /
-  // listAutomationRunNodes / pinAutomationRun / getInsightsSummary) moved
+  // listAutomationRunNodes / pinAutomationRun / getInsightsSummary) — moved
   // to the renderer's direct HTTP client (renderer/gateway-client.ts) under
-  // the thin-client pivot — pure gateway proxies. The create/enable/delete
-  // mutators stay on IPC for now (scaffold + session + publish orchestration
-  // moves to the gateway in a later phase).
-  /**
-   * Scaffold a new automation project and register its triggers. When a
-   * webhook trigger is requested the result carries the one-time
-   * plaintext secret + URL — the manifest stores only the hash.
-   */
-  createAutomation(input: {
-    id: string;
-    name?: string;
-    description?: string;
-    prompt?: string;
-    triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
-    apps?: string[];
-    model?: string;
-    historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
-    onFailure?: string;
-    /**
-     * Initial enabled flag. The conversational builder passes `false`
-     * to scaffold a draft the user enables after reviewing it.
-     */
-    enabled?: boolean;
-  }): Promise<{
-    row: CentraidAutomationRow;
-    webhook?: { id: string; secret: string; url: string };
-  }>;
-  setAutomationEnabled(input: { automationId: string; enabled: boolean }): Promise<{ ok: true }>;
-  deleteAutomation(input: { automationId: string }): Promise<{ ok: true }>;
+  // the thin-client pivot: the gateway owns scaffold + webhook mint + stage +
+  // publish (`POST /centraid/_automations`, `…/set-enabled`, `DELETE …`).
 }
 
 /** KPI tiles for the Insights screen. */
