@@ -37,6 +37,12 @@ export interface ProjectInfo {
    * preview-ready as a static site.
    */
   hasIndex?: boolean;
+  /**
+   * App classification read from `app.json#kind`: `'automation'` marks a
+   * UI-less automation app (Automations page), `'app'` / undefined a normal
+   * UI app. Replaces the legacy `auto.` id-prefix convention.
+   */
+  kind?: 'app' | 'automation';
 }
 
 export interface PublishResult {

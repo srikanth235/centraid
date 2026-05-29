@@ -1,7 +1,8 @@
 {
   "manifestVersion": 1,
-  "id": "auto.briefing",
+  "id": "briefing",
   "name": "Briefing",
+  "kind": "automation",
   "description": "A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.",
   "version": "0.1.0",
   "actions": [],

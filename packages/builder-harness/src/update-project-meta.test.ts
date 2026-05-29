@@ -92,7 +92,7 @@ describe('updateProjectMeta', () => {
     // An automation-app-shaped project: app.json + an automation
     // manifest sitting under automations/<sub>/automation.json. Both
     // names start at "Briefing"; rename should sync both.
-    const appId = 'auto.briefing';
+    const appId = 'briefing';
     await fs.mkdir(path.join(dir, appId, 'automations', 'briefing'), { recursive: true });
     await fs.writeFile(
       path.join(dir, appId, 'app.json'),

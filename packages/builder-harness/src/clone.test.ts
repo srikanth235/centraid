@@ -225,14 +225,14 @@ describe('cloneTemplate index.html <title> rewrite', () => {
 
     await cloneTemplate({
       projectsDir,
-      newAppId: 'auto.briefing-2',
+      newAppId: 'briefing-2',
       templateDir,
       newName: 'Briefing 2',
     });
 
     const mf = JSON.parse(
       await fs.readFile(
-        path.join(projectsDir, 'auto.briefing-2', 'automations', 'briefing', 'automation.json'),
+        path.join(projectsDir, 'briefing-2', 'automations', 'briefing', 'automation.json'),
         'utf8',
       ),
     );

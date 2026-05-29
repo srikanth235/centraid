@@ -53,7 +53,6 @@ export {
   deleteAutomationFromFiles,
   validateAutomationId,
   validateAutomationAppId,
-  AUTOMATION_APP_PREFIX,
   type AutomationScaffoldOptions,
 } from './scaffold-automation.js';
 

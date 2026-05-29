@@ -330,7 +330,7 @@
       ]
     },
     {
-      "id": "auto.briefing",
+      "id": "briefing",
       "name": "Briefing",
       "desc": "A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.",
       "colorKey": "rose",
@@ -349,7 +349,7 @@
       ]
     },
     {
-      "id": "auto.evening-wrap-up",
+      "id": "evening-wrap-up",
       "name": "Evening wrap-up",
       "desc": "Reflects on what got done today and stages tomorrow’s top three so mornings start sharp.",
       "colorKey": "indigo",
@@ -368,7 +368,7 @@
       ]
     },
     {
-      "id": "auto.email-triage",
+      "id": "email-triage",
       "name": "Email triage",
       "desc": "Sorts your inbox by urgency and drafts replies for anything that genuinely needs one.",
       "colorKey": "rose",
@@ -387,7 +387,7 @@
       ]
     },
     {
-      "id": "auto.meeting-prep",
+      "id": "meeting-prep",
       "name": "Meeting prep",
       "desc": "Each weekday morning, gathers context, recent threads, and open questions for the day’s meetings.",
       "colorKey": "indigo",
@@ -406,7 +406,7 @@
       ]
     },
     {
-      "id": "auto.pr-review-digest",
+      "id": "pr-review-digest",
       "name": "PR review digest",
       "desc": "Surfaces open pull requests, who is blocked on whom, and what is ready to merge.",
       "colorKey": "slate",
@@ -425,7 +425,7 @@
       ]
     },
     {
-      "id": "auto.release-notes-drafter",
+      "id": "release-notes-drafter",
       "name": "Release notes drafter",
       "desc": "Drafts user-facing release notes the moment a pull request merges into main.",
       "colorKey": "slate",
@@ -444,7 +444,7 @@
       ]
     },
     {
-      "id": "auto.dependency-update-check",
+      "id": "dependency-update-check",
       "name": "Dependency update check",
       "desc": "Scans for outdated packages, security patches, and breaking changes before they bite.",
       "colorKey": "ochre",
@@ -463,7 +463,7 @@
       ]
     },
     {
-      "id": "auto.system-health-check",
+      "id": "system-health-check",
       "name": "System health check",
       "desc": "Watches infrastructure and services for errors, outages, and creeping performance issues.",
       "colorKey": "forest",
@@ -482,7 +482,7 @@
       ]
     },
     {
-      "id": "auto.issue-triage",
+      "id": "issue-triage",
       "name": "Issue triage",
       "desc": "Reviews incoming bugs and feature requests, labels them, and routes the urgent ones.",
       "colorKey": "indigo",
@@ -501,7 +501,7 @@
       ]
     },
     {
-      "id": "auto.flaky-test-tracker",
+      "id": "flaky-test-tracker",
       "name": "Flaky test tracker",
       "desc": "Finds tests that pass and fail intermittently across recent CI runs and ranks the worst.",
       "colorKey": "slate",

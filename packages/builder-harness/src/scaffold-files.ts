@@ -21,16 +21,17 @@ export interface ScaffoldFile {
   content: string;
 }
 
-// Dots are permitted so an automation app can carry the `auto.` prefix
-// (issue #98); a `..` sequence is still rejected as path-unsafe.
-const ID_RE = /^[a-z0-9][a-z0-9.-]{0,62}$/;
+// A plain filesystem-safe slug. Automation apps are marked by the
+// manifest's `kind` field, not a dotted `auto.` id prefix (issue #98), so
+// no dot is allowed — a tree-traversing `..` is impossible by construction.
+const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 /** Validate an app id against centraid's reserved-prefix and shape rules. */
 export function validateAppId(id: string): void {
-  if (id.startsWith('_') || id.includes('..') || !ID_RE.test(id)) {
+  if (id.startsWith('_') || !ID_RE.test(id)) {
     throw new HarnessError(
       'invalid_id',
-      `Invalid app id "${id}". Lowercase a-z / 0-9 / "-" / ".", 1-63 chars, no leading "_".`,
+      `Invalid app id "${id}". Lowercase a-z / 0-9 / "-", 1-63 chars, no leading "_".`,
     );
   }
 }

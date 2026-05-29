@@ -2,10 +2,10 @@
  * Scaffold a new automation app (issue #98 unified folder model).
  *
  * An automation is never standalone — it is one app folder under
- * `appsDir`, an *automation app*: an `auto.`-prefixed folder with an
- * `app.json` and exactly one automation under `automations/<id>/`. It
- * carries no UI assets. This module writes the minimal layout the
- * builder agent then fills in:
+ * `appsDir`, an *automation app*: a folder whose `app.json` declares
+ * `kind: 'automation'` and which holds exactly one automation under
+ * `automations/<id>/`. It carries no UI assets. This module writes the
+ * minimal layout the builder agent then fills in:
  *
  *   <appsDir>/<appId>/app.json                              — app metadata
  *   <appsDir>/<appId>/automations/<autoId>/automation.json  — the manifest
@@ -32,9 +32,6 @@ import {
 import type { ScaffoldFile } from './scaffold-files.js';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
-
-/** The name prefix that marks an app folder as an automation app. */
-export const AUTOMATION_APP_PREFIX = 'auto.';
 
 export interface AutomationScaffoldOptions {
   /** Display name. Defaults to the app id. */
@@ -69,18 +66,22 @@ export interface AutomationScaffoldOptions {
   enabled?: boolean;
   /**
    * Id of the single automation under `automations/`. Defaults to the
-   * app id with the `auto.` prefix stripped (or `main` when that is not
-   * a valid automation slug).
+   * app id itself (or `main` when the app id is not a valid automation
+   * slug).
    */
   automationId?: string;
 }
 
-/** Validate an automation app folder id — an `auto.`-prefixed app id. */
+/**
+ * Validate an automation app folder id. Automation apps are marked by the
+ * manifest's `kind: 'automation'` field (not a dotted `auto.` prefix), so
+ * this is just the plain app-id slug check.
+ */
 export function validateAutomationAppId(appId: string): void {
-  if (!appId.startsWith(AUTOMATION_APP_PREFIX) || !isValidAppId(appId)) {
+  if (!isValidAppId(appId)) {
     throw new HarnessError(
       'invalid_id',
-      `Invalid automation app id "${appId}". Expected an "${AUTOMATION_APP_PREFIX}"-prefixed app id.`,
+      `Invalid automation app id "${appId}". Use a filesystem-safe slug (letters / digits / "-" / "_").`,
     );
   }
 }
@@ -97,8 +98,7 @@ export function validateAutomationId(id: string): void {
 
 /** Derive the inner automation id from the app id. */
 function defaultAutomationId(appId: string): string {
-  const stripped = appId.slice(AUTOMATION_APP_PREFIX.length);
-  return isValidAutomationId(stripped) ? stripped : 'main';
+  return isValidAutomationId(appId) ? appId : 'main';
 }
 
 const DEFAULT_HANDLER = `/**
@@ -166,6 +166,9 @@ export function scaffoldAutomationProjectFiles(
     manifestVersion: 1,
     id: appId,
     name,
+    // Marks this as a UI-less automation app (replaces the legacy `auto.`
+    // id prefix) — the desktop surfaces it on the Automations page.
+    kind: 'automation',
     version: '0.1.0',
     actions: [],
     queries: [],
@@ -270,6 +273,7 @@ export async function scaffoldAutomationProject(
     built: true,
     modifiedAt: stat.mtime.toISOString(),
     name: appJson.name,
+    kind: 'automation',
     ...(typeof appJson.description === 'string' ? { description: appJson.description } : {}),
   };
 }

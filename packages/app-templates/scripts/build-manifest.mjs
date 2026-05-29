@@ -60,12 +60,12 @@ for (const tmpl of src.templates) {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
   } catch {
-    /* template has no app.json (auto.* automations) or no knobs — fine,
-       popover just shows manage actions */
+    /* template has no parseable app.json or no knobs — fine, the popover
+       just shows manage actions */
   }
-  // Default `kind` from the `auto.` prefix when not set explicitly. Lets
-  // index.json stay lean — only carry `kind` when overriding the default.
-  const kind = tmpl.kind ?? (tmpl.id.startsWith('auto.') ? 'automation' : 'app');
+  // `kind` is declared explicitly in index.json (`'automation'` for an
+  // automation app); a normal UI app omits it and defaults to `'app'`.
+  const kind = tmpl.kind ?? 'app';
   enriched.templates.push(appKnobs ? { ...tmpl, kind, files, appKnobs } : { ...tmpl, kind, files });
 }
 

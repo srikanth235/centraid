@@ -71,6 +71,7 @@ export async function listProjects(projectsDir: string): Promise<ProjectInfo[]> 
       modifiedAt: stat.mtime.toISOString(),
       name: meta.name,
       description: meta.description,
+      ...(meta.kind ? { kind: meta.kind } : {}),
       hasIndex,
     });
   }
@@ -178,17 +179,20 @@ async function assertDisplayNameUnique(
 }
 
 /** Best-effort read of `app.json#{name,description}`. Both may be undefined. */
-async function readAppMeta(projectDir: string): Promise<{ name?: string; description?: string }> {
+async function readAppMeta(
+  projectDir: string,
+): Promise<{ name?: string; description?: string; kind?: 'app' | 'automation' }> {
   try {
     const raw = await fs.readFile(path.join(projectDir, 'app.json'), 'utf8');
-    const parsed = JSON.parse(raw) as { name?: unknown; description?: unknown };
+    const parsed = JSON.parse(raw) as { name?: unknown; description?: unknown; kind?: unknown };
     const name =
       typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : undefined;
     const description =
       typeof parsed.description === 'string' && parsed.description.length > 0
         ? parsed.description
         : undefined;
-    return { name, description };
+    const kind = parsed.kind === 'automation' || parsed.kind === 'app' ? parsed.kind : undefined;
+    return { name, description, kind };
   } catch {
     return {};
   }

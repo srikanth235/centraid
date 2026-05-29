@@ -1,7 +1,8 @@
 {
   "manifestVersion": 1,
-  "id": "auto.pr-review-digest",
+  "id": "pr-review-digest",
   "name": "PR review digest",
+  "kind": "automation",
   "description": "Surfaces open pull requests, who is blocked on whom, and what is ready to merge.",
   "version": "0.1.0",
   "actions": [],

@@ -45,8 +45,8 @@ export interface AppKnobsManifest {
  *   - `kind: 'app'` (default) — a full UI app like `hydrate` / `todos` /
  *     `journal`. Carries `index.html`, `app.css`, and an `app.json`
  *     manifest with optional `knobs[]`.
- *   - `kind: 'automation'` — an `auto.`-prefixed app folder with no UI
- *     assets; just `app.json` + `automations/<id>/{automation.json,handler.js}`.
+ *   - `kind: 'automation'` — an app folder (`app.json#kind = "automation"`)
+ *     with no UI assets; just `app.json` + `automations/<id>/{automation.json,handler.js}`.
  *     Automation templates carry extra display fields (`emoji`, `category`,
  *     `triggerKind`, `triggerLabel`, `integrations`) the Automations
  *     gallery uses to render its richer cards.
@@ -81,9 +81,8 @@ export interface TemplateMeta {
    */
   appKnobs?: AppKnob[];
   /**
-   * 'app' (default) or 'automation'. Build script derives this from the
-   * `auto.` id prefix when omitted, but it can also be set explicitly in
-   * `index.json` for clarity.
+   * 'app' (default) or 'automation'. Declared explicitly in `index.json`
+   * for automation templates; omitted entries default to 'app'.
    */
   kind?: TemplateKind;
   // ----- automation-only display fields (kind === 'automation') -----
@@ -99,7 +98,7 @@ export interface TemplateMeta {
   integrations?: readonly string[];
 }
 
-/** App template = full UI app. Automation template = `auto.`-prefixed app folder, no UI assets. */
+/** App template = full UI app. Automation template = app folder with `kind: 'automation'`, no UI assets. */
 export type TemplateKind = 'app' | 'automation';
 
 /**

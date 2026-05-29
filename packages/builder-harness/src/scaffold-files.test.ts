@@ -160,9 +160,11 @@ describe('cloneTemplateFiles', () => {
 describe('scaffoldAutomationProjectFiles', () => {
   it('emits app.json + manifest + handler under the derived automation id', () => {
     const out = byPath(
-      scaffoldAutomationProjectFiles('auto.briefing', { name: 'Briefing', cronExpr: '0 8 * * *' }),
+      scaffoldAutomationProjectFiles('briefing', { name: 'Briefing', cronExpr: '0 8 * * *' }),
     );
     assert.ok(out.has('app.json'));
+    // The app.json marks itself an automation app via `kind` (not a dotted id).
+    assert.equal((JSON.parse(out.get('app.json')!) as { kind?: string }).kind, 'automation');
     assert.ok(out.has('automations/briefing/automation.json'));
     assert.ok(out.has('automations/briefing/handler.js'));
     const mf = JSON.parse(out.get('automations/briefing/automation.json')!) as {
@@ -173,14 +175,17 @@ describe('scaffoldAutomationProjectFiles', () => {
     assert.deepEqual(mf.triggers, [{ kind: 'cron', expr: '0 8 * * *' }]);
   });
 
-  it('rejects a non-auto-prefixed app id', () => {
-    assert.throws(() => scaffoldAutomationProjectFiles('briefing'), /Invalid automation app id/);
+  it('rejects a dotted / path-unsafe app id', () => {
+    assert.throws(
+      () => scaffoldAutomationProjectFiles('auto.briefing'),
+      /Invalid automation app id/,
+    );
   });
 });
 
 describe('setAutomationEnabledInFiles / deleteAutomationFromFiles', () => {
   const draft = (): ScaffoldFile[] =>
-    scaffoldAutomationProjectFiles('auto.briefing', { name: 'Briefing', enabled: true });
+    scaffoldAutomationProjectFiles('briefing', { name: 'Briefing', enabled: true });
 
   it('flips enabled and returns only the changed manifest', () => {
     const changed = setAutomationEnabledInFiles(draft(), 'briefing', false);

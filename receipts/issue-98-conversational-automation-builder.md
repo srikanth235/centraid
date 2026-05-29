@@ -35,7 +35,7 @@ Follow-up — the manifest `kind` field replaces the `auto.` app-id prefix
 whether an app is an automation app):
 
 - [x] Follow-up A — runtime-core + apps-store: kind field, plain-slug app ids
-- [ ] Follow-up B — builder-harness + app-templates: scaffold automation apps via kind
+- [x] Follow-up B — builder-harness + app-templates: scaffold automation apps via kind
 - [ ] Follow-up C — desktop: route automations on manifest kind, not id prefix
 
 Schedule/execute of app-owned automations was originally scoped as a
@@ -477,6 +477,28 @@ rather than data. This follow-up moves the signal into the manifest.
   returns it alongside `name` / `description` / `hasIndex`, so the desktop
   list can classify apps without inspecting the id.
 
+### Follow-up B — builder-harness + app-templates: scaffold automation apps via kind
+
+The scaffolders and the template catalog stop minting / requiring the
+`auto.` id prefix; they declare `kind` instead.
+
+- **builder-harness**: `scaffoldAutomationProjectFiles` writes
+  `kind: 'automation'` into the new app's `app.json` and accepts a plain
+  slug id; `validateAutomationAppId` is now just the slug check (no prefix
+  requirement), `defaultAutomationId` derives the inner id from the app id
+  directly, and `AUTOMATION_APP_PREFIX` is deleted. `validateAppId` /
+  `ID_RE` in `scaffold-files.ts` drop the dot (plain slug, no `..` guard).
+  `ProjectInfo` gains a `kind` field; the FS lister (`scaffold.ts`),
+  `cloneTemplate` (`clone.ts`), and the automation scaffolder populate it
+  from `app.json#kind`. The automation system prompt describes the app by
+  its `kind`, not a dotted folder name.
+- **app-templates**: the ten automation template directories are renamed
+  off the `auto.` prefix (`auto.briefing` → `briefing`, …), each one's
+  `app.json` now carries `kind: 'automation'` (so a clone is classified
+  correctly), and `index.json` ids match. `build-manifest.mjs` drops the
+  `auto.`-prefix `kind` inference — `kind` is declared explicitly in
+  `index.json` and defaults to `'app'`.
+
 ## Out of scope
 
 - Bidirectional form editing — the config pane is a read-only rendered
@@ -630,3 +652,14 @@ rather than data. This follow-up moves the signal into the manifest.
 - `@centraid/apps-store` build + test green (26 tests) — the former
   dotted-`auto.`-id case is rewritten to publish a plain-slug id and assert
   both a dotted id and `..` are rejected.
+
+### Follow-up B verification
+
+- `@centraid/builder-harness` build + test green (52 tests): the scaffold /
+  clone / update-meta / scaffold-files suites use plain-slug ids; the
+  automation-scaffold tests assert `app.json#kind === 'automation'` and that
+  a dotted id is now rejected (the prefix-required assertions are inverted).
+- `@centraid/app-templates` build green — `build-manifest.mjs` regenerates
+  `manifest.json` (13 templates) with no `auto.` ids and `kind: 'automation'`
+  on each automation entry; downstream `agent-runtime` / `openclaw-plugin`
+  rebuild clean.

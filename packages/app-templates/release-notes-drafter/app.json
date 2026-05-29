@@ -1,7 +1,8 @@
 {
   "manifestVersion": 1,
-  "id": "auto.release-notes-drafter",
+  "id": "release-notes-drafter",
   "name": "Release notes drafter",
+  "kind": "automation",
   "description": "Drafts user-facing release notes the moment a pull request merges into main.",
   "version": "0.1.0",
   "actions": [],
