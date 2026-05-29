@@ -154,25 +154,31 @@ test('openSession twice for the same id throws session_exists', async () => {
   }
 });
 
-test('publishes an `auto.`-prefixed automation app id; rejects ".." ids (#141)', async () => {
+test('publishes a plain-slug app id; rejects dotted and ".." ids (#98)', async () => {
   const root = await makeTempRoot();
   try {
     const store = new AppsStore({ root });
     await store.init();
 
-    // Dotted automation-app ids (issue #98) must round-trip through the
-    // store — sessions, publish, and listing.
-    const s = await store.openSession('desktop-auto.brief');
-    await seedApp(s.worktreePath, 'auto.brief', 'one');
+    // App ids are plain slugs again — automation apps are marked by the
+    // manifest `kind` field, not a dotted `auto.` prefix (issue #98). A
+    // slug id must round-trip through sessions, publish, and listing.
+    const s = await store.openSession('desktop-brief');
+    await seedApp(s.worktreePath, 'brief', 'one');
     const r = await store.publish({
-      sessionId: 'desktop-auto.brief',
-      appId: 'auto.brief',
+      sessionId: 'desktop-brief',
+      appId: 'brief',
       message: 'v1',
     });
-    assert.equal(r.versionTag, 'auto.brief/v1');
-    assert.deepEqual((await store.listApps()).sort(), ['auto.brief']);
+    assert.equal(r.versionTag, 'brief/v1');
+    assert.deepEqual((await store.listApps()).sort(), ['brief']);
 
-    // `..` is still rejected as path-unsafe.
+    // Dots are no longer part of the id grammar, so a dotted id is rejected
+    // (and a tree-traversing `..` is impossible by construction).
+    await assert.rejects(
+      () => store.openSession('auto.brief'),
+      (err: unknown) => err instanceof AppsStoreError && err.code === 'invalid_session_id',
+    );
     await assert.rejects(
       () => store.openSession('bad..id'),
       (err: unknown) => err instanceof AppsStoreError && err.code === 'invalid_session_id',

@@ -39,11 +39,12 @@ const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
 /**
  * Conservative slug check — matches the canonical app id rule
- * (builder-harness): leading alnum, then alnum / `_` / `-` / `.`. The dot
- * carries the `auto.` automation-app prefix (issue #98); `..` is rejected
- * separately in `assertSafeId` so an id can't traverse the tree.
+ * (builder-harness): leading alnum, then alnum / `_` / `-`. No dot, so a
+ * tree-traversing `..` is impossible by construction. Automation apps are
+ * now marked by the manifest's `kind` field, not a dotted `auto.` id
+ * prefix, so the id grammar is a plain slug again.
  */
-const SAFE_ID_RE = /^[a-z0-9][a-z0-9._-]*$/i;
+const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 
 /** Stable symlink name (under the store root) pointing at the live main worktree. */
 const ACTIVE_MAIN_LINK = 'active-main';
@@ -150,7 +151,13 @@ export class AppsStore {
    * legacy `listProjects(workspaceDir)` scan.
    */
   async listAppsWithMeta(): Promise<
-    Array<{ id: string; name?: string; description?: string; hasIndex: boolean }>
+    Array<{
+      id: string;
+      name?: string;
+      description?: string;
+      kind?: 'app' | 'automation';
+      hasIndex: boolean;
+    }>
   > {
     this.assertInitialized();
     const ids = await this.listApps();
@@ -168,6 +175,9 @@ export class AppsStore {
           ...(typeof manifest.name === 'string' ? { name: manifest.name } : {}),
           ...(typeof manifest.description === 'string'
             ? { description: manifest.description }
+            : {}),
+          ...(manifest.kind === 'automation' || manifest.kind === 'app'
+            ? { kind: manifest.kind as 'app' | 'automation' }
             : {}),
           hasIndex,
         };
@@ -618,10 +628,10 @@ function sessionBranchName(sessionId: string): string {
 }
 
 function assertSafeId(id: string, code: 'invalid_app_id' | 'invalid_session_id'): void {
-  if (!SAFE_ID_RE.test(id) || id.includes('..')) {
+  if (!SAFE_ID_RE.test(id)) {
     throw new AppsStoreError(
       code,
-      `"${id}" is not a valid id (allowed: ASCII letter or digit, then letters/digits/_/-/., no "..").`,
+      `"${id}" is not a valid id (allowed: ASCII letter or digit, then letters/digits/_/-).`,
     );
   }
 }

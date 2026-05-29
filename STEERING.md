@@ -295,3 +295,13 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-1e487d5ad58-1780059491-8 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
 | steer-1e487d5ad58-1780059491-9 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | use existing worktree and batch commits, no separate branch | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
 | steer-1e487d5ad58-1780060503-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | feat(gateway-runtime): automation + insights HTTP routes (#141)Add automations-… |
+| steer-1e487d5ad58-1780062021-1 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-2 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-3 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | rename 'serving' to 'main' in implementation and issue |  |
+| steer-1e487d5ad58-1780062021-4 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-5 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-6 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | pushed back on retaining legacy current.json in v0 pre-release |  |
+| steer-1e487d5ad58-1780062021-7 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | pushed back on leaving legacy code paths in PR; demanded their removal |  |
+| steer-1e487d5ad58-1780062021-8 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-9 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | rejected proposed fix; asked for a more elegant alternative |  |
+| steer-1e487d5ad58-1780062021-10 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | overrode assistant's recommended Option A in favor of Option C |  |

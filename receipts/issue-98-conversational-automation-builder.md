@@ -30,6 +30,14 @@ Chat moves to the per-app `runtime.sqlite` (app-scoped chat):
 - [x] Commit 13 — openclaw-plugin: wire the app-scoped chat store
 - [x] Commit 14 — desktop: thread appId through the chat-history IPC
 
+Follow-up — the manifest `kind` field replaces the `auto.` app-id prefix
+(the dotted prefix is gone; the manifest, not the folder id, decides
+whether an app is an automation app):
+
+- [x] Follow-up A — runtime-core + apps-store: kind field, plain-slug app ids
+- [ ] Follow-up B — builder-harness + app-templates: scaffold automation apps via kind
+- [ ] Follow-up C — desktop: route automations on manifest kind, not id prefix
+
 Schedule/execute of app-owned automations was originally scoped as a
 follow-up, but landed inside this PR across commits 5–10 — see those
 commit sections below. In short: the OS scheduler host + the `centraid
@@ -446,6 +454,29 @@ left it in #98 and chat was the last tenant.
   central summary's `appId` (chat run ids are bare UUIDs) under the
   runtime's apps dir; the activity-DB provider is removed.
 
+### Follow-up A — runtime-core + apps-store: kind field, plain-slug app ids
+
+The original #98 model encoded "this is an automation app" in the folder
+id as an `auto.` prefix — the *only* signal distinguishing a UI-less
+automation app from a normal app. That forced a dot into the app-id
+grammar everywhere (the `apps-store` `SAFE_ID_RE`, runtime-core's
+`isValidAppId`, builder-harness `validateAppId`) and a paired `..`
+traversal guard, and made the classification a string-parsing concern
+rather than data. This follow-up moves the signal into the manifest.
+
+- **runtime-core**: the `Manifest` interface + `MANIFEST_JSON_SCHEMA` gain
+  an optional `kind: 'app' | 'automation'` (default `'app'` when omitted);
+  `parseManifest` carries it through, and an unknown `kind` value is
+  rejected by the schema. `automation-ref.ts`'s `isValidAppId` drops the
+  dot from its grammar (`/^[A-Za-z0-9_-]+$/`, no `_` prefix) — a
+  tree-traversing `..` is now impossible by construction, so the explicit
+  `includes('..')` check is gone.
+- **apps-store**: `SAFE_ID_RE` reverts to a plain slug (`/^[a-z0-9][a-z0-9_-]*$/i`)
+  and `assertSafeId` drops its separate `..` guard (the grammar forbids the
+  dot). `listAppsWithMeta` now reads `kind` from each app's `app.json` and
+  returns it alongside `name` / `description` / `hasIndex`, so the desktop
+  list can classify apps without inspecting the id.
+
 ## Out of scope
 
 - Bidirectional form editing — the config pane is a read-only rendered
@@ -589,3 +620,13 @@ left it in #98 and chat was the last tenant.
   files therefore sit under the runtime's apps dir. Unifying the two
   (desktop publishing into its own local runtime) stays the tracked
   #98 follow-up.
+
+### Follow-up A verification
+
+- `@centraid/runtime-core` build + test green: `manifest.test.ts` adds the
+  `kind` round-trip (absent → undefined; `automation` carries through;
+  unknown value rejected); `automation-ref.test.ts` updated — `isValidAppId`
+  now accepts plain slugs and rejects the dotted `auto.standup-bot`.
+- `@centraid/apps-store` build + test green (26 tests) — the former
+  dotted-`auto.`-id case is rewritten to publish a plain-slug id and assert
+  both a dotted id and `..` are rejected.

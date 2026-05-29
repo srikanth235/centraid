@@ -24,25 +24,28 @@ describe('isValidAutomationId', () => {
 });
 
 describe('isValidAppId', () => {
-  it('accepts app folder ids including the auto. prefix', () => {
+  it('accepts plain-slug app folder ids', () => {
     assert.equal(isValidAppId('crm'), true);
-    assert.equal(isValidAppId('auto.standup-bot'), true);
+    assert.equal(isValidAppId('standup-bot'), true);
     assert.equal(isValidAppId('My_App-2'), true);
   });
 
-  it('rejects path-unsafe / plugin-internal ids', () => {
+  it('rejects dotted / path-unsafe / plugin-internal ids', () => {
     assert.equal(isValidAppId(''), false);
     assert.equal(isValidAppId('_internal'), false);
     assert.equal(isValidAppId('a/b'), false);
     assert.equal(isValidAppId('up..dir'), false);
+    // Dots are no longer part of the grammar — the legacy `auto.` prefix
+    // is gone; automation apps are marked by the manifest `kind` field.
+    assert.equal(isValidAppId('auto.standup-bot'), false);
   });
 });
 
 describe('automation refs', () => {
   it('formats and parses the canonical <appId>/<id> handle', () => {
-    assert.equal(formatAutomationRef('auto.standup-bot', 'job'), 'auto.standup-bot/job');
-    assert.deepEqual(parseAutomationRef('auto.standup-bot/job'), {
-      appId: 'auto.standup-bot',
+    assert.equal(formatAutomationRef('standup-bot', 'job'), 'standup-bot/job');
+    assert.deepEqual(parseAutomationRef('standup-bot/job'), {
+      appId: 'standup-bot',
       automationId: 'job',
     });
   });
@@ -56,9 +59,9 @@ describe('automation refs', () => {
   });
 
   it('isValidAutomationRef accepts both forms, rejects malformed', () => {
-    assert.equal(isValidAutomationRef('auto.x/job'), true);
+    assert.equal(isValidAutomationRef('standup/job'), true);
     assert.equal(isValidAutomationRef('job'), true);
     assert.equal(isValidAutomationRef('a/b/c'), false);
-    assert.equal(isValidAutomationRef('auto.x/has space'), false);
+    assert.equal(isValidAutomationRef('standup/has space'), false);
   });
 });
