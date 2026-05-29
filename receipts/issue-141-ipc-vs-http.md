@@ -39,6 +39,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Renderer owns app editing sessions + lifecycle over direct HTTP; desktop IPC handlers deleted
 - [x] Gateway runs the unified chat turn in the app's draft worktree with the union of tools
 - [x] Data-chat panel streams the gateway _chat SSE directly; desktop chat IPC deleted
+- [x] Builder chat streams the gateway _chat SSE; in-process AGENT_* path + agent-session.ts deleted
 
 ## What changed
 
@@ -454,6 +455,41 @@ shapes stay — the panel still reads history). The settings model picker's
 inlined to an empty list. The builder's `AGENT_*` surface is untouched in this
 slice; its cutover + the agent-machinery deletion is next.
 
+**Builder chat streams the gateway _chat SSE; in-process AGENT_* path +
+agent-session.ts deleted.** Completes the unified-chat merge: the builder's
+chat (`renderer/builder.ts`) now streams turns through the SAME `streamChat`
+transport + native `ChatStreamEvent` model as the app-view data chat — one
+chat surface, both jobs. The builder's `handleAgentEvent` (consuming the rich
+IPC `CentraidAgentEvent`) is replaced by a `handleStreamEvent(ChatStreamEvent)`
+that maps `assistant.delta`/`reasoning.delta` → the text/thinking bubbles,
+`tool.start`/`tool.result` → the consolidated tool groups (targeted by the
+real `toolCallId`, reloading the draft preview on a successful
+file-writing tool), `webhooks` → the minted-secret announcement, and
+`final`/`aborted`/`error` → turn settle. `startAgentSession` + the
+persisted-message `hydrateChatFromMessages` give way to `ensureChatWindow`
+(find-or-create a gateway chat session per project — `continue` reuses the
+newest so the gateway resumes the same adapter thread, `fresh` mints a new one
+for a first build); `sendUserPrompt` + the three `bootstrap` flows drive
+`streamChat` with an `AbortController` for Stop/unmount; the synchronous
+post-turn `publishApp` is gone (edits stage in the draft worktree — Publish is
+the explicit flip, per the stage-vs-publish model). With the renderer off the
+agent IPC, the in-process builder is deleted: the `centraid:agent:*` handlers +
+`AGENT_*` channels + the per-window `sessions` map + `disposeWindowSession` +
+`capturePreviewSnapshot` (and its now-dead `appsStorePublishApp` /
+`provisionAppPendingWebhooks` / `WEBHOOK_ROUTE_PREFIX` / `ProvisionedWebhook` /
+`ensureProjectSession`-via-prompt / `localRuntimeCodexHomeBaseDir` /
+`MintedWebhookInfo` wiring) in `ipc.ts`, the `startAgent`/`promptAgent`/
+`stopAgent`/`onAgentEvent` preload methods + channels, the matching
+`CentraidApi` typings + the `CentraidAgentEvent`/`CentraidAgentMessage`/
+`CentraidContentBlock` types, and `@centraid/builder-harness`'s
+`agent-session.ts` (`createCentraidAgentSession`) + its index exports. The
+gateway-side webhook minting (`provisionAppPendingWebhooks` is now called by
+the unified runner) and the builder authoring prompt + UI/tools grounding
+exports stay. `project-sessions.ts` is retained — `PROJECTS_OPEN`
+(reveal-in-Finder) still resolves the on-disk worktree through it. `chat-harness`
+is now unused by the desktop (its only consumer, `chat.ts`, is gone); dropping
+the dep is a Phase 5 item.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -581,6 +617,19 @@ slice; its cutover + the agent-machinery deletion is next.
   unified-chat-runner test (turn streaming) + the runtime-core chat-history
   route tests (sessions list/create/load/rename/delete), so the renderer
   transport is a wire shim with no new server behavior to retest.
+- Builder chat streams the gateway _chat SSE; in-process AGENT_* path +
+  agent-session.ts deleted: full `turbo run build typecheck lint test` green
+  across all 28 tasks. `@centraid/desktop` typechecks + builds with `builder.ts`
+  rewired onto `streamChat` + `ensureChatWindow` and the `centraid:agent:*`
+  handlers / channels / preload methods / `CentraidApi` typings removed;
+  `@centraid/builder-harness` typechecks + builds with `agent-session.ts`
+  deleted and its index exports dropped (the prompt + grounding exports the
+  gateway runner uses remain). `oxlint` confirms the removed handlers, the
+  `sessions`/`disposeWindowSession`/`capturePreviewSnapshot` machinery, the
+  now-dead `path`/`fs`/webhook-mint/publish imports, and the agent event/message
+  types left nothing dangling. The builder turn now hits the same
+  unified-chat-runner the data chat does (covered by `unified-chat-runner.test.ts`),
+  so there's no new server behavior to retest.
 
 ## Out of scope
 

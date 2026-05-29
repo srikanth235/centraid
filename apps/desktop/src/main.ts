@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installAuthInjector } from './main/auth-injector.js';
 import { importAvailableCreds } from './main/auth-import.js';
-import { disposeWindowSession, registerIpcHandlers } from './main/ipc.js';
+import { registerIpcHandlers } from './main/ipc.js';
 import { PREVIEW_SCHEME, registerPreviewProtocol } from './main/preview-protocol.js';
 import { loadSettings, saveSettings, templatesCacheDir } from './main/settings.js';
 
@@ -69,10 +69,6 @@ function createWindow(): void {
   win.webContents.on('console-message', (_event, level, message, line, source) => {
     const prefix = level >= 2 ? 'RENDERER-ERR' : 'RENDERER';
     process.stdout.write(`[${prefix}] ${message} (${source}:${line})\n`);
-  });
-
-  win.on('closed', () => {
-    void disposeWindowSession(win.id);
   });
 }
 

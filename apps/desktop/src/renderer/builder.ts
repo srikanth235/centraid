@@ -1,5 +1,8 @@
 // Builder mode — chat-driven app generation, wired live to:
-//   - the centraid agent (window.CentraidApi.startAgent / promptAgent / onAgentEvent)
+//   - the gateway's unified chat (streamChat → POST /centraid/<id>/_chat SSE):
+//     the turn runs server-side in the app's draft worktree with the union of
+//     tools, so the builder's "edit my app" chat and the app view's data chat
+//     are one surface on one transport (issue #141, Phase 3)
 //   - the project folder on disk (readProjectFiles for the Code tab)
 //   - the openclaw centraid plugin (publish, listVersions, activateVersion)
 // governance: allow-repo-hygiene file-size-limit builder-mode pending split into chat/preview/code modules
@@ -30,6 +33,10 @@ import {
   updateProjectMeta,
   setAutomationEnabled,
   deleteAutomation,
+  streamChat,
+  createChatSession,
+  listChatSessions,
+  type ChatStreamEvent,
 } from './gateway-client.js';
 
 (function () {
@@ -408,7 +415,12 @@ import {
     let generating = false;
     let publishing = false;
     let lastPublishedVersionId: string | undefined;
-    let unsubscribeAgent: (() => void) | null = null;
+    // The gateway chat session this builder streams turns to (its id IS the
+    // window id). Reused across turns so the gateway resumes the same adapter
+    // thread; lazily created on first turn. Null until then.
+    let chatWindowId: string | null = null;
+    // Abort handle for the in-flight chat turn (Stop / unmount).
+    let agentAbort: AbortController | null = null;
     let liveUrl: string | undefined;
     // Cloud → Logs polling handle. Hoisted out of renderCloud's closure so
     // that any code that tears down the right pane (renderRight, builder
@@ -3436,134 +3448,28 @@ import {
     }
 
     // ---------- Agent wiring ----------
-    async function startAgentSession(
-      id: string,
-      sessionMode: 'fresh' | 'continue' | 'in-memory',
-    ): Promise<{ messages: import('./centraid-api.js').CentraidAgentMessage[] }> {
-      // Subscribe BEFORE start so we don't miss the very first text deltas.
-      if (unsubscribeAgent) {
-        unsubscribeAgent();
-        unsubscribeAgent = null;
-      }
-      unsubscribeAgent = Api().onAgentEvent((msg) => {
-        if (msg.projectId !== id) return;
-        handleAgentEvent(msg.event);
-      });
-      const result = await Api().startAgent({ projectId: id, projectKind, sessionMode });
-      return { messages: result.messages };
-    }
-
-    // Convert the persisted AgentMessage[] (returned by startAgent for
-    // resumed sessions) into the renderer's ChatMsg[] so the chat pane
-    // shows the prior conversation when the user reopens a project.
+    // Resolve the gateway chat session this builder streams turns to. The
+    // turn runs server-side in the app's `desktop-<id>` draft worktree (the
+    // same worktree the Code tab edits), so the agent's file edits stage in
+    // the draft and the preview reflects it; Publish is the explicit flip.
     //
-    // Walk each assistant message's content array IN ORDER so thinking,
-    // text, and tool calls render in the same sequence the user saw live.
-    // Tool-result messages patch the matching tool row's state by id.
-    function hydrateChatFromMessages(
-      messages: import('./centraid-api.js').CentraidAgentMessage[],
-    ): ChatMsg[] {
-      const out: ChatMsg[] = [];
-      // toolCallId → index of the toolGroup that contains it. Lets a
-      // toolResult message later patch the matching call's state.
-      const groupIdxByCallId = new Map<string, number>();
-      const extractText = (
-        content: string | import('./centraid-api.js').CentraidContentBlock[],
-      ): string => {
-        if (typeof content === 'string') return content;
-        let s = '';
-        for (const c of content) {
-          if (c.type === 'text' && typeof (c as { text?: unknown }).text === 'string') {
-            s += (c as { text: string }).text;
-          }
+    // 'continue' reuses the project's most recent session so the gateway
+    // resumes the same adapter thread across builder reopens; 'fresh' always
+    // mints a new session (first build — don't append onto a stale thread).
+    async function ensureChatWindow(
+      id: string,
+      sessionMode: 'fresh' | 'continue',
+    ): Promise<string> {
+      if (chatWindowId) return chatWindowId;
+      if (sessionMode === 'continue') {
+        const sessions = await listChatSessions(id).catch(() => []);
+        if (sessions[0]) {
+          chatWindowId = sessions[0].id;
+          return chatWindowId;
         }
-        return s;
-      };
-
-      for (const m of messages) {
-        if (m.role === 'user') {
-          const text = extractText(
-            (m as { content: string | import('./centraid-api.js').CentraidContentBlock[] }).content,
-          );
-          if (text) out.push({ kind: 'user', text });
-          continue;
-        }
-        if (m.role === 'assistant') {
-          const content = (m as { content: import('./centraid-api.js').CentraidContentBlock[] })
-            .content;
-          let textBuf = '';
-          let thinkBuf = '';
-          const flushText = (): void => {
-            if (textBuf) {
-              out.push({ kind: 'ai', text: textBuf });
-              textBuf = '';
-            }
-          };
-          const flushThink = (): void => {
-            if (thinkBuf) {
-              out.push({ kind: 'thinking', text: thinkBuf });
-              thinkBuf = '';
-            }
-          };
-          for (const c of content) {
-            if (c.type === 'text' && typeof (c as { text?: unknown }).text === 'string') {
-              flushThink();
-              textBuf += (c as { text: string }).text;
-            } else if (
-              c.type === 'thinking' &&
-              typeof (c as { thinking?: unknown }).thinking === 'string'
-            ) {
-              flushText();
-              thinkBuf += (c as { thinking: string }).thinking;
-            } else if (c.type === 'toolCall') {
-              flushText();
-              flushThink();
-              const tc = c as { id: string; name: string; arguments: Record<string, unknown> };
-              const newCall: ToolCall = {
-                id: tc.id,
-                tool: tc.name,
-                summary: summarizeToolArgs(tc.name, tc.arguments),
-                state: 'ok',
-              };
-              const last = out[out.length - 1];
-              if (last && last.kind === 'toolGroup') {
-                // Same group as the previous adjacent tool call — append.
-                last.calls.push(newCall);
-                groupIdxByCallId.set(tc.id, out.length - 1);
-              } else {
-                // Historical groups start collapsed; the user already saw
-                // them once and this view is retrospective.
-                out.push({
-                  kind: 'toolGroup',
-                  id: tc.id,
-                  calls: [newCall],
-                  open: false,
-                });
-                groupIdxByCallId.set(tc.id, out.length - 1);
-              }
-            }
-          }
-          flushText();
-          flushThink();
-          continue;
-        }
-        if (m.role === 'toolResult') {
-          const tr = m as { toolCallId: string; isError: boolean };
-          const idx = groupIdxByCallId.get(tr.toolCallId);
-          if (idx !== undefined) {
-            const cur = out[idx];
-            if (cur && cur.kind === 'toolGroup') {
-              cur.calls = cur.calls.map((c) =>
-                c.id === tr.toolCallId ? { ...c, state: tr.isError ? 'error' : 'ok' } : c,
-              );
-            }
-          }
-          continue;
-        }
-        // bashExecution / custom / branchSummary / compactionSummary —
-        // skip silently. They're noise for the user-facing chat view.
       }
-      return out;
+      chatWindowId = (await createChatSession(id, projName)).id;
+      return chatWindowId;
     }
 
     // Stop streaming on the open thinking block (if any). New tool calls or
@@ -3586,63 +3492,71 @@ import {
       currentAiMsgIndex = -1;
     }
 
-    function handleAgentEvent(event: import('./centraid-api.js').CentraidAgentEvent): void {
+    // Settle a finished turn: close streaming bubbles + refresh the code/
+    // preview tab (the agent may have staged file writes in the draft).
+    function finishAgentTurn(): void {
+      generating = false;
+      closeAi();
+      closeThinking();
+      renderChat();
+      if (isAutomation) {
+        // The agent rewrote `automation.json` / `handler.js` — pull the
+        // fresh manifest so the config pane reflects what it wrote.
+        if (previewReloadPending) void refreshAutomationRow();
+      } else {
+        // Refresh code/preview tab if visible — agent may have written files.
+        if (tab === 'code') renderRight();
+        if (tab === 'preview' && previewReloadPending) renderRight();
+      }
+      previewReloadPending = false;
+    }
+
+    // Consume the gateway's native `ChatStreamEvent` union (issue #141,
+    // Phase 3 — no IPC translation). The builder + the app-view data chat
+    // now share this event model + the `streamChat` transport — one chat
+    // surface, both jobs. Tool calls carry a real `toolCallId`, so results
+    // target their group directly.
+    function handleStreamEvent(event: ChatStreamEvent): void {
       switch (event.type) {
-        case 'agent_start':
-        case 'turn_start':
-        case 'message_start':
+        case 'assistant.start':
           generating = true;
-          // Don't pre-create an empty AI bubble — codex turns may emit only
-          // reasoning + tool calls, leaving a stale "…" placeholder. We
-          // create the bubble lazily on the first text_delta instead.
+          // Bubble created lazily on the first delta — a turn may emit only
+          // reasoning + tool calls, which would leave a stale "…" placeholder.
           renderChat();
-          break;
-        case 'message_update': {
-          const ame = event.assistantMessageEvent as {
-            type: string;
-            delta?: unknown;
-          };
-          if (ame.type === 'text_delta' && typeof ame.delta === 'string') {
-            closeThinking();
-            if (currentAiMsgIndex < 0) {
-              currentAiMsgIndex = pushMessage({ kind: 'ai', text: ame.delta, streaming: true });
-            } else {
-              const cur = chat[currentAiMsgIndex];
-              if (cur && cur.kind === 'ai') {
-                updateMessage(currentAiMsgIndex, { text: cur.text + ame.delta, streaming: true });
-              }
+          return;
+        case 'assistant.delta':
+          closeThinking();
+          if (currentAiMsgIndex < 0) {
+            currentAiMsgIndex = pushMessage({ kind: 'ai', text: event.delta, streaming: true });
+          } else {
+            const cur = chat[currentAiMsgIndex];
+            if (cur && cur.kind === 'ai') {
+              updateMessage(currentAiMsgIndex, { text: cur.text + event.delta, streaming: true });
             }
-          } else if (ame.type === 'thinking_delta' && typeof ame.delta === 'string') {
-            if (currentThinkingMsgIndex < 0) {
-              currentThinkingMsgIndex = pushMessage({
-                kind: 'thinking',
-                text: ame.delta,
+          }
+          return;
+        case 'reasoning.delta':
+          if (currentThinkingMsgIndex < 0) {
+            currentThinkingMsgIndex = pushMessage({
+              kind: 'thinking',
+              text: event.delta,
+              streaming: true,
+            });
+          } else {
+            const cur = chat[currentThinkingMsgIndex];
+            if (cur && cur.kind === 'thinking') {
+              updateMessage(currentThinkingMsgIndex, {
+                text: cur.text + event.delta,
                 streaming: true,
               });
-            } else {
-              const cur = chat[currentThinkingMsgIndex];
-              if (cur && cur.kind === 'thinking') {
-                updateMessage(currentThinkingMsgIndex, {
-                  text: cur.text + ame.delta,
-                  streaming: true,
-                });
-              }
             }
-          } else if (ame.type === 'thinking_end' || ame.type === 'text_end') {
-            // Stream of this content block ended; close the matching bubble.
-            if (ame.type === 'thinking_end') closeThinking();
-            else closeAi();
           }
-          break;
-        }
-        case 'message_end': {
+          return;
+        case 'tool.start': {
+          // A tool call is the agent acting — close any in-flight reasoning
+          // and AI text so the next text starts a fresh bubble.
+          closeThinking();
           closeAi();
-          closeThinking();
-          break;
-        }
-        case 'tool_execution_start': {
-          // A tool call is the agent acting; any in-flight reasoning is done.
-          closeThinking();
           const newCall: ToolCall = {
             id: event.toolCallId,
             tool: event.toolName,
@@ -3651,17 +3565,14 @@ import {
           };
           const lastIdx = chat.length - 1;
           const last = chat[lastIdx];
-          // Consolidate adjacent tool calls into one bubble. AI text or
-          // thinking content between calls breaks the group, so a fresh one
-          // is created when the previous chat msg isn't a toolGroup.
+          // Consolidate adjacent tool calls into one bubble; AI text/thinking
+          // between calls breaks the group.
           if (last && last.kind === 'toolGroup') {
             const updated: ChatMsg = { ...last, calls: [...last.calls, newCall] };
             chat = chat.map((m, i) => (i === lastIdx ? updated : m));
             renderChat();
             pendingToolStarts.set(event.toolCallId, lastIdx);
           } else {
-            // New groups start expanded so the user sees what's running as
-            // it happens; they can collapse for retrospective compactness.
             const idx = pushMessage({
               kind: 'toolGroup',
               id: event.toolCallId,
@@ -3670,9 +3581,9 @@ import {
             });
             pendingToolStarts.set(event.toolCallId, idx);
           }
-          break;
+          return;
         }
-        case 'tool_execution_end': {
+        case 'tool.result': {
           const groupIdx = pendingToolStarts.get(event.toolCallId);
           pendingToolStarts.delete(event.toolCallId);
           if (groupIdx !== undefined) {
@@ -3680,39 +3591,37 @@ import {
             if (grp && grp.kind === 'toolGroup') {
               const calls = grp.calls.map((c) =>
                 c.id === event.toolCallId
-                  ? { ...c, state: event.isError ? ('error' as const) : ('ok' as const) }
+                  ? { ...c, state: event.ok ? ('ok' as const) : ('error' as const) }
                   : c,
               );
               chat = chat.map((m, i) => (i === groupIdx ? { ...grp, calls } : m));
               renderChat();
             }
           }
-          if (!event.isError && FILE_WRITING_TOOLS.has(event.toolName)) {
+          if (event.ok && FILE_WRITING_TOOLS.has(event.toolName)) {
             previewReloadPending = true;
-            // Successful file write counts as an edit — bump the header
+            // A successful file write counts as an edit — bump the header
             // relative-time so 'edited 14h ago' rolls to 'just now'.
             appLastEditedAt = Date.now();
           }
-          break;
+          return;
         }
-        case 'turn_end':
-        case 'agent_end':
+        case 'webhooks':
+          announceMintedWebhooks(event.minted);
+          return;
+        case 'final':
+        case 'aborted':
+          finishAgentTurn();
+          return;
+        case 'error':
           generating = false;
           closeAi();
           closeThinking();
+          pushMessage({ kind: 'status', text: `Agent error: ${event.message}` });
           renderChat();
-          if (isAutomation) {
-            // The agent rewrote `automation.json` / `handler.js` — pull the
-            // fresh manifest so the config pane reflects what it wrote.
-            if (previewReloadPending) void refreshAutomationRow();
-          } else {
-            // Refresh code/preview tab if visible — agent may have written files.
-            if (tab === 'code') renderRight();
-            if (tab === 'preview' && previewReloadPending) renderRight();
-          }
-          previewReloadPending = false;
-          break;
-        default:
+          return;
+        case 'phase':
+        case 'usage':
           break;
       }
     }
@@ -3746,11 +3655,24 @@ import {
       currentThinkingMsgIndex = -1;
       renderChat();
       try {
-        const { mintedWebhooks } = await Api().promptAgent({ text });
-        announceMintedWebhooks(mintedWebhooks);
+        const windowId = await ensureChatWindow(projectId, 'continue');
+        agentAbort = new AbortController();
+        await streamChat(
+          projectId,
+          { windowId, message: text },
+          handleStreamEvent,
+          agentAbort.signal,
+        );
+        // Stream ended; settle in case it closed without a terminal event.
+        if (generating) finishAgentTurn();
       } catch (err) {
+        if (agentAbort?.signal.aborted) {
+          finishAgentTurn();
+          return;
+        }
         generating = false;
         pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
+        renderChat();
       }
     }
 
@@ -3758,39 +3680,22 @@ import {
       if (isAutomation && projectId) {
         // The automation project is scaffolded as a draft before the
         // builder opens, so this is always a "reopen" — load the manifest
-        // snapshot, then resume (or start fresh, the harness falls back)
-        // the builder session.
+        // snapshot, then seed the intro. The gateway resumes the prior
+        // adapter thread via the reused chat session (ensureChatWindow).
         chat = [];
         renderChat();
         await refreshAutomationRow();
-        const { messages } = await startAgentSession(projectId, 'continue');
-        const hydrated = hydrateChatFromMessages(messages);
-        if (hydrated.length > 0) {
-          chat = chat.concat(hydrated);
-        } else {
-          chat = chat.concat([
-            {
-              kind: 'ai',
-              text:
-                'Let’s build your automation. Describe what it should do and ' +
-                'when it should run — for example, “every weekday morning, ' +
-                'summarize yesterday’s new GitHub issues.”',
-            },
-          ]);
-        }
+        chat = chat.concat([
+          {
+            kind: 'ai',
+            text:
+              'Let’s build your automation. Describe what it should do and ' +
+              'when it should run — for example, “every weekday morning, ' +
+              'summarize yesterday’s new GitHub issues.”',
+          },
+        ]);
         renderChat();
-        if (initialPrompt) {
-          pushMessage({ kind: 'user', text: initialPrompt });
-          generating = true;
-          renderChat();
-          try {
-            const { mintedWebhooks } = await Api().promptAgent({ text: initialPrompt });
-            announceMintedWebhooks(mintedWebhooks);
-          } catch (err) {
-            generating = false;
-            pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
-          }
-        }
+        if (initialPrompt) await sendUserPrompt(initialPrompt);
         return;
       }
 
@@ -3822,21 +3727,16 @@ import {
           /* gateway down, app unknown, or never published — local preview
              takes over via resolvePreviewSrc(). */
         }
-        // Resume the most recent persisted session for this project so the
-        // chat history survives builder reloads. Hydrate the chat pane from
-        // the messages pi already has on disk before any new turn streams in.
-        const { messages } = await startAgentSession(projectId, 'continue');
-        const hydrated = hydrateChatFromMessages(messages);
-        if (hydrated.length > 0) {
-          chat = chat.concat(hydrated);
-        } else {
-          chat = chat.concat([
-            {
-              kind: 'ai',
-              text: `Loaded "${projName}". Pick a direction below or describe the next change.`,
-            },
-          ]);
-        }
+        // Seed a fresh pane. The gateway resumes the project's prior adapter
+        // thread on the first turn via the reused chat session
+        // (ensureChatWindow → most recent session), so the agent keeps
+        // context even though the pane starts empty across reopens.
+        chat = chat.concat([
+          {
+            kind: 'ai',
+            text: `Loaded "${projName}". Pick a direction below or describe the next change.`,
+          },
+        ]);
         renderChat();
         // Subtitle slot now holds the editable `app.json#description`, so
         // we don't overwrite it here.
@@ -3854,7 +3754,7 @@ import {
         return;
       }
 
-      // Fresh build: scaffold + start agent + send first prompt.
+      // Fresh build: scaffold + open a fresh chat session + send first prompt.
       const id = generateProjectId(initialPrompt);
       // Date divider carries the conversation start time (refined proposal
       // RBChat — "Today · 14:22").
@@ -3876,25 +3776,15 @@ import {
       }
 
       try {
-        // First build → fresh persisted session (so the initial prompt isn't
-        // appended onto a stale transcript from a previous project at the
-        // same path).
-        await startAgentSession(id, 'fresh');
+        // First build → a FRESH chat session so the initial prompt isn't
+        // appended onto a stale thread from a prior project at the same id.
+        chatWindowId = (await createChatSession(id, projName)).id;
       } catch (err) {
-        pushMessage({ kind: 'status', text: `Agent failed to start: ${String(err)}` });
+        pushMessage({ kind: 'status', text: `Could not start chat: ${String(err)}` });
         return;
       }
 
-      pushMessage({ kind: 'user', text: initialPrompt });
-      generating = true;
-      renderChat();
-      try {
-        const { mintedWebhooks } = await Api().promptAgent({ text: initialPrompt });
-        announceMintedWebhooks(mintedWebhooks);
-      } catch (err) {
-        generating = false;
-        pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
-      }
+      await sendUserPrompt(initialPrompt);
     }
 
     // ---------- Automation builder ----------
@@ -4483,13 +4373,8 @@ import {
     // Cleanup
     return () => {
       document.removeEventListener('keydown', onChatToggleKey);
-      if (unsubscribeAgent) {
-        unsubscribeAgent();
-        unsubscribeAgent = null;
-      }
-      void Api()
-        .stopAgent()
-        .catch(() => undefined);
+      // Cancel any in-flight chat turn (the gateway aborts the streamed run).
+      agentAbort?.abort();
     };
   }
 

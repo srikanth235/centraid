@@ -1,7 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (agent, chat, projects, provider) once the surface stabilizes
 import { ipcMain, BrowserWindow, shell } from 'electron';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import {
   loadSettings,
   saveSettings,
@@ -24,33 +22,19 @@ import { refreshAuthInjector } from './auth-injector.js';
 import { resetChatHistoryAuthCache } from './chat-history-client.js';
 import { fetchUserPrefs, resetUserPrefsAuthCache } from './user-prefs-client.js';
 import {
-  publishApp as appsStorePublishApp,
   resetAppsStoreAuthCache,
   listGitVersions as appsStoreListGitVersions,
 } from './apps-store-client.js';
-import {
-  ensureProjectSession,
-  ensureProjectSessionDir,
-  resetProjectSessions,
-} from './project-sessions.js';
+import { ensureProjectSessionDir, resetProjectSessions } from './project-sessions.js';
 import {
   importAvailableCreds,
   readAuthStatus,
   type AuthImportResult,
   type AuthStatus,
 } from './auth-import.js';
-import {
-  localRuntimeCodexHomeBaseDir,
-  noteRunnerPrefsChanged,
-  resolveProviderPrefs,
-} from './local-runtime.js';
+import { noteRunnerPrefsChanged, resolveProviderPrefs } from './local-runtime.js';
 import { runPreflight, type OpenAICompatProvider, type RunnerPrefs } from '@centraid/agent-runtime';
-import {
-  provisionAppPendingWebhooks,
-  WEBHOOK_ROUTE_PREFIX,
-  type ProvisionedWebhook,
-  type RunnerStatus,
-} from '@centraid/runtime-core';
+import { type RunnerStatus } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
 
 /**
@@ -78,10 +62,9 @@ export const Channel = {
   PROJECTS_OPEN: 'centraid:projects:open',
   PROJECTS_PREVIEW_URL: 'centraid:projects:preview-url',
 
-  AGENT_START: 'centraid:agent:start',
-  AGENT_PROMPT: 'centraid:agent:prompt',
-  AGENT_STOP: 'centraid:agent:stop',
-  AGENT_EVENT: 'centraid:agent:event',
+  // The in-process AGENT_* builder retired with the unified chat (issue
+  // #141, Phase 3): the builder now streams the gateway's `/centraid/<id>/_chat`
+  // SSE directly, so the agent runs server-side in the draft worktree.
 
   // PUBLISH + the app read surface (APP_LIVE_URL / APP_SCHEMA /
   // APP_TABLE_ROWS / APP_QUERY / APP_LOGS / APPS_DEREGISTER / VERSIONS_LIST /
@@ -136,29 +119,6 @@ export const Channel = {
   // HTTP client (renderer/gateway-client.ts) under the thin-client pivot;
   // the gateway owns scaffold + webhook mint + stage + publish.
 } as const;
-
-/**
- * A webhook the post-turn provisioning pass minted for an automation
- * the builder agent authored. The plaintext `secret` crosses to the
- * renderer exactly once — it is shown to the user and never persisted
- * (the manifest keeps only the SHA-256 hash).
- */
-interface MintedWebhookInfo {
-  automationId: string;
-  ownerApp: string;
-  webhookId: string;
-  url: string;
-  secret: string;
-}
-
-interface AgentSessionHandle {
-  projectId: string;
-  projectDir: string;
-  prompt(text: string): Promise<{ mintedWebhooks: MintedWebhookInfo[] }>;
-  stop(): Promise<void>;
-}
-
-const sessions = new Map<number, AgentSessionHandle>();
 
 async function loadRunnerPrefs(): Promise<{
   kind: 'codex' | 'claude-code';
@@ -224,21 +184,6 @@ export function registerIpcHandlers(): void {
     // opens a fresh session on the new active gateway.
     resetProjectSessions();
     await refreshAuthInjector();
-  };
-
-  // Stop every live agent + chat session across every window when the
-  // active gateway changes. Those sessions were rooted in the previous
-  // gateway's workspace + identity DB; letting them keep running would
-  // mean the agent writing into gateway A's workspace + auto-publishing
-  // to gateway A's appsDir while the user thinks they're on gateway B.
-  // Disposing here is unconditional — the renderer's onGatewayChanged
-  // handler also bounces back to Home, so there's no live UI tied to
-  // these sessions at the moment they end.
-  const disposeAllSessionsForGatewaySwap = async (): Promise<void> => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.isDestroyed()) continue;
-      await disposeWindowSession(win.id);
-    }
   };
 
   // ----- Settings -----
@@ -327,7 +272,6 @@ export function registerIpcHandlers(): void {
       const current = await loadSettings();
       let next: DesktopSettings = current;
       if (current.activeGatewayId === input.id) {
-        await disposeAllSessionsForGatewaySwap();
         next = await setActiveGatewayId('local');
       }
       await invalidateGatewayCaches();
@@ -371,10 +315,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.GATEWAYS_SET_ACTIVE,
     async (_e, input: { id: string }): Promise<DesktopSettings> => {
-      // Stop sessions BEFORE flipping the pointer — otherwise an
-      // in-flight `prompt` could land its writes after the swap with
-      // the old session handle still mapping to old paths.
-      await disposeAllSessionsForGatewaySwap();
       const next = await setActiveGatewayId(input.id);
       // Tear down HTTP servers for any local gateways that aren't the
       // new active one. OS-scheduled automations are unaffected — they
@@ -499,147 +439,6 @@ export function registerIpcHandlers(): void {
     async (_e, input: { id: string }): Promise<PublishStatus> => getPublishStatus(input.id),
   );
 
-  // ----- Agent (per-window session) -----
-  ipcMain.handle(
-    Channel.AGENT_START,
-    async (
-      event,
-      input: {
-        projectId: string;
-        projectKind?: 'app' | 'automation';
-        sessionMode?: 'fresh' | 'continue' | 'in-memory';
-      },
-    ): Promise<{ ok: true; messages: unknown[] }> => {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (!win) throw new Error('no window for agent session');
-
-      const prior = sessions.get(win.id);
-      if (prior) await prior.stop().catch(() => {});
-
-      const settings = await loadSettings();
-      const { createCentraidAgentSession } = await import('@centraid/builder-harness');
-      // Issue #137: the agent writes directly into the git store's
-      // session worktree — its native Read/Write tools touch the same
-      // dir the gateway's apps-store-routes read from, and the
-      // synchronous post-turn `publishApp` drives the edits onto main.
-      // `projectKind` still picks the system prompt + gates the app-
-      // only live-schema injection / preview snapshot.
-      //
-      // The in-process codex/claude builder is the other deliberately
-      // LOCAL-ONLY surface (issue #141): it runs the binary against the
-      // on-disk worktree, which only the local gateway materializes.
-      // `ensureProjectSessionDir` throws a clear local-only error for a
-      // remote gateway — remote editing happens through the chat surface,
-      // not this builder.
-      const isAutomation = input.projectKind === 'automation';
-      const projectDir = await ensureProjectSessionDir(input.projectId);
-
-      const runnerPrefs = await loadRunnerPrefs();
-
-      const session = await createCentraidAgentSession({
-        projectDir,
-        runnerPrefs,
-        sessionMode: input.sessionMode,
-        codexHomeBaseDir: localRuntimeCodexHomeBaseDir(settings.activeGatewayId),
-        ...(isAutomation
-          ? { projectKind: 'automation' as const }
-          : { liveSchema: { config: settings, appId: input.projectId } }),
-      });
-
-      const unsubscribe = session.subscribe((evt) => {
-        if (win.isDestroyed()) return;
-        win.webContents.send(Channel.AGENT_EVENT, {
-          projectId: input.projectId,
-          event: evt,
-        });
-      });
-
-      // Mint id + secret for any pending webhook trigger the agent
-      // declared this turn (`{ kind: 'webhook', pending: true }`). The
-      // agent cannot generate crypto-random credentials; the builder
-      // can. Rewrites the manifest in place and returns the one-time
-      // secrets for the renderer to show. Best-effort — a provisioning
-      // failure must not fail the turn.
-      const provisionPendingWebhooks = async (): Promise<MintedWebhookInfo[]> => {
-        // Webhook URLs always point at the active gateway — local or
-        // remote — so the agent's manifest references match wherever
-        // the user actually publishes.
-        const gatewayBase = settings.gatewayUrl.replace(/\/+$/, '');
-        const toInfo = (w: ProvisionedWebhook): MintedWebhookInfo => ({
-          automationId: w.automationId,
-          ownerApp: w.ownerApp,
-          webhookId: w.webhookId,
-          url: `${gatewayBase}${WEBHOOK_ROUTE_PREFIX}/${w.webhookId}`,
-          secret: w.secret,
-        });
-        try {
-          // Both UI apps and automation apps are app folders that may own
-          // automations under `automations/` — scan the whole folder.
-          return (await provisionAppPendingWebhooks(projectDir)).map(toInfo);
-        } catch (err) {
-          console.warn(
-            `[automations] webhook provisioning failed for ${input.projectId}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-          return [];
-        }
-      };
-
-      sessions.set(win.id, {
-        projectId: input.projectId,
-        projectDir,
-        prompt: async (text: string) => {
-          // Refresh the preview snapshot the agent reads via its native
-          // `Read` tool / `centraid preview snapshot`. Best-effort —
-          // capture errors (preview tab not visible, no index.html yet)
-          // shouldn't block the turn; the snapshot subcommand will just
-          // report `exists: false` and the agent can adapt. Automations
-          // have no preview iframe, so there is nothing to snapshot.
-          if (!isAutomation) {
-            await capturePreviewSnapshot(win, projectDir).catch(() => undefined);
-          }
-          await session.prompt(text);
-          // Agent's writes landed in the session worktree directly.
-          // Publish synchronously so the iframe + OS scheduler see the
-          // new version once the turn settles. Best-effort: publish
-          // failures (no_changes for a chat-only turn, gateway down)
-          // shouldn't fail the prompt.
-          const sid = await ensureProjectSession(input.projectId);
-          await appsStorePublishApp(sid, input.projectId, `agent turn`).catch(() => undefined);
-          return { mintedWebhooks: await provisionPendingWebhooks() };
-        },
-        stop: async () => {
-          session.abort();
-          unsubscribe();
-          sessions.delete(win.id);
-        },
-      });
-
-      // The new runtime doesn't replay persisted message history — the
-      // backend (codex thread / Claude session) keeps the model-visible
-      // transcript across reloads via its own resume mechanism, while
-      // the renderer always starts with an empty chat pane.
-      return { ok: true, messages: [] };
-    },
-  );
-
-  ipcMain.handle(Channel.AGENT_PROMPT, async (event, input: { text: string }) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) throw new Error('no window for agent prompt');
-    const handle = sessions.get(win.id);
-    if (!handle) throw new Error('agent session not started for this window');
-    const { mintedWebhooks } = await handle.prompt(input.text);
-    return { ok: true, mintedWebhooks };
-  });
-
-  ipcMain.handle(Channel.AGENT_STOP, async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) return { ok: true };
-    const handle = sessions.get(win.id);
-    if (handle) await handle.stop();
-    return { ok: true };
-  });
-
   // ----- Publish + versions (issue #137; #141: thin client) -----
   // PUBLISH moved to the renderer's direct HTTP client
   // (renderer/gateway-client.ts): the renderer holds the editing session and
@@ -687,56 +486,4 @@ export function registerIpcHandlers(): void {
   // (renderer/gateway-client.ts) under the thin-client pivot — they were
   // pure proxies over the gateway's `/centraid/_automations` +
   // `/centraid/_insights` routes with no main-side state.
-}
-
-/**
- * Capture the preview iframe inside `win` and write it as a PNG to
- * `<projectDir>/.preview/snapshot.png`. The agent picks it up via its
- * native `Read` tool (or `centraid preview snapshot` for freshness
- * metadata).
- *
- * The renderer tags the preview iframe with `data-centraid-app="1"`;
- * we use `executeJavaScript` to read its bounding rect, then clip
- * `capturePage` to that region so the agent sees the app, not the
- * surrounding chrome. Failures (no preview tab open yet, no
- * `index.html` scaffolded) are reported via the snapshot file's
- * absence — the agent's `centraid preview snapshot` call returns
- * `{ exists: false }` and the agent adapts.
- */
-async function capturePreviewSnapshot(win: BrowserWindow, projectDir: string): Promise<void> {
-  if (win.isDestroyed()) return;
-  const dir = path.join(projectDir, '.preview');
-  const file = path.join(dir, 'snapshot.png');
-  // Drop any prior snapshot up front so a failed capture (hidden preview tab,
-  // missing iframe, capturePage throw) can't leave a stale image the agent
-  // then treats as fresh. Re-created below iff capture succeeds this turn.
-  await fs.rm(file, { force: true }).catch(() => undefined);
-
-  const rect = (await win.webContents.executeJavaScript(
-    `(() => {
-      const f = document.querySelector('iframe[data-centraid-app="1"]');
-      if (!f) return null;
-      const r = f.getBoundingClientRect();
-      if (r.width < 1 || r.height < 1) return null;
-      return { x: r.x, y: r.y, width: r.width, height: r.height };
-    })()`,
-  )) as { x: number; y: number; width: number; height: number } | null;
-
-  if (!rect) return;
-
-  const image = await win.webContents.capturePage({
-    x: Math.max(0, Math.round(rect.x)),
-    y: Math.max(0, Math.round(rect.y)),
-    width: Math.max(1, Math.round(rect.width)),
-    height: Math.max(1, Math.round(rect.height)),
-  });
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(file, image.toPNG());
-}
-
-/** Stop and forget the session associated with a closing window. */
-export async function disposeWindowSession(windowId: number): Promise<void> {
-  const handle = sessions.get(windowId);
-  if (handle) await handle.stop().catch(() => {});
-  sessions.delete(windowId);
 }

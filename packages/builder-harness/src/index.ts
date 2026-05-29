@@ -12,20 +12,17 @@
  * both share the same agent runtime.
  *
  * Public surface:
- *   - createCentraidAgentSession({ projectDir, runnerPrefs, ... }) → AgentSession
  *   - scaffoldProject(projectsDir, id, opts?) → ProjectInfo
  *   - listProjects(projectsDir) → ProjectInfo[]
  *   - publishProject(projectDir, id, config, opts?) → PublishResult
  *   - defaultHarnessConfig() / resolveHarnessConfig(overrides) → HarnessConfig
+ *
+ * The in-process builder agent session (`createCentraidAgentSession`) retired
+ * with the unified chat (issue #141, Phase 3) — the gateway now drives the
+ * builder turn server-side via `runAgentTurn` + the prompt/grounding exports
+ * below. The system prompt + UI/tools grounding stay; the session facade is
+ * gone.
  */
-
-export {
-  createCentraidAgentSession,
-  type CreateCentraidAgentSessionOptions,
-  type CentraidAgentEvent,
-  type CentraidSessionMode,
-  type AgentSession,
-} from './agent-session.js';
 
 export {
   scaffoldProject,

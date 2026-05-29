@@ -303,81 +303,11 @@ export interface CentraidCloneTemplateResult {
   webhooks: CentraidMintedWebhook[];
 }
 
-/**
- * Content-block shapes the renderer hydrates into the chat pane on
- * session resume. Other block types (e.g. images) pass through as
- * opaque objects and are ignored.
- */
-export type CentraidContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'thinking'; thinking: string }
-  | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> }
-  | { type: string; [k: string]: unknown };
-
-/**
- * Persisted-message shape covering the roles the renderer actually
- * displays. Bash-execution / custom / summary message types are passed
- * through as `{ role: string }` and skipped during hydration.
- */
-export type CentraidAgentMessage =
-  | { role: 'user'; content: string | CentraidContentBlock[]; timestamp?: number }
-  | {
-      role: 'assistant';
-      content: CentraidContentBlock[];
-      timestamp?: number;
-    }
-  | {
-      role: 'toolResult';
-      toolCallId: string;
-      toolName: string;
-      isError: boolean;
-      content?: unknown;
-      timestamp?: number;
-    }
-  | { role: string; [k: string]: unknown };
-
-/**
- * `AgentEvent` shape the renderer consumes (subset we care about).
- * Emitted by `@centraid/builder-harness`'s `createCentraidAgentSession`
- * via the main-process IPC channel; matches `CentraidAgentEvent` there.
- */
-export type CentraidAgentEvent =
-  | { type: 'agent_start' }
-  | { type: 'agent_end'; messages: unknown[] }
-  | { type: 'turn_start' }
-  | { type: 'turn_end'; message: unknown; toolResults: unknown[] }
-  | { type: 'message_start'; message: unknown }
-  | {
-      type: 'message_update';
-      message: unknown;
-      assistantMessageEvent:
-        | { type: 'text_delta'; delta: string }
-        | { type: 'text_end'; content?: string }
-        | { type: 'thinking_delta'; delta: string }
-        | { type: 'thinking_end'; content?: string }
-        | { type: string; [k: string]: unknown };
-    }
-  | { type: 'message_end'; message: unknown }
-  | {
-      type: 'tool_execution_start';
-      toolCallId: string;
-      toolName: string;
-      args: unknown;
-    }
-  | {
-      type: 'tool_execution_update';
-      toolCallId: string;
-      toolName: string;
-      args: unknown;
-      partialResult: unknown;
-    }
-  | {
-      type: 'tool_execution_end';
-      toolCallId: string;
-      toolName: string;
-      result: unknown;
-      isError: boolean;
-    };
+// The in-process builder agent's persisted-message + event types
+// (CentraidContentBlock / CentraidAgentMessage / CentraidAgentEvent) retired
+// with the unified chat (issue #141, Phase 3): the builder + the app-view
+// data chat now stream the gateway's native `ChatStreamEvent` directly (see
+// `renderer/gateway-client-chat.ts`).
 
 interface CentraidApi {
   getSettings(): Promise<CentraidSettings>;
@@ -395,26 +325,10 @@ interface CentraidApi {
    */
   previewUrl(input: { id: string }): Promise<{ url: string; available: boolean }>;
 
-  startAgent(input: {
-    projectId: string;
-    /**
-     * Whether the project is an app (default) or a first-class
-     * automation. Selects the project directory and system prompt.
-     */
-    projectKind?: 'app' | 'automation';
-    sessionMode?: 'fresh' | 'continue' | 'in-memory';
-  }): Promise<{ ok: true; messages: CentraidAgentMessage[] }>;
-  /**
-   * Send a turn to the agent. When the agent declared one or more
-   * pending webhook triggers this turn, the builder mints the route
-   * id + secret server-side and returns them in `mintedWebhooks` —
-   * the plaintext `secret` is shown to the user exactly once.
-   */
-  promptAgent(input: {
-    text: string;
-  }): Promise<{ ok: true; mintedWebhooks: CentraidMintedWebhook[] }>;
-  stopAgent(): Promise<{ ok: true }>;
-  onAgentEvent(cb: (msg: { projectId: string; event: CentraidAgentEvent }) => void): () => void;
+  // The in-process AGENT_* builder retired with the unified chat (issue
+  // #141, Phase 3): the builder streams `/centraid/<id>/_chat` SSE directly
+  // (renderer/gateway-client-chat.ts), so there are no startAgent /
+  // promptAgent / stopAgent / onAgentEvent IPC methods.
 
   // publish moved to the renderer's direct HTTP client. appLiveUrl /
   // appSchema / appTableRows / appQuery / appLogs / deregisterApp /

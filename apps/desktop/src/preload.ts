@@ -19,11 +19,6 @@ const Channel = {
   PROJECTS_OPEN: 'centraid:projects:open',
   PROJECTS_PREVIEW_URL: 'centraid:projects:preview-url',
 
-  AGENT_START: 'centraid:agent:start',
-  AGENT_PROMPT: 'centraid:agent:prompt',
-  AGENT_STOP: 'centraid:agent:stop',
-  AGENT_EVENT: 'centraid:agent:event',
-
   PUBLISH_STATUS: 'centraid:publish:status',
   PUBLISH_EVENT: 'centraid:publish:event',
 
@@ -88,20 +83,10 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   openProjectFolder: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_OPEN, input),
   previewUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_PREVIEW_URL, input),
 
-  // Agent (one session per window)
-  startAgent: (input: {
-    projectId: string;
-    projectKind?: 'app' | 'automation';
-    sessionMode?: 'fresh' | 'continue' | 'in-memory';
-  }) => ipcRenderer.invoke(Channel.AGENT_START, input),
-  promptAgent: (input: { text: string }) => ipcRenderer.invoke(Channel.AGENT_PROMPT, input),
-  stopAgent: () => ipcRenderer.invoke(Channel.AGENT_STOP),
-  onAgentEvent: (cb: (msg: { projectId: string; event: unknown }) => void) => {
-    const handler = (_e: IpcRendererEvent, msg: unknown) =>
-      cb(msg as { projectId: string; event: unknown });
-    ipcRenderer.on(Channel.AGENT_EVENT, handler);
-    return () => ipcRenderer.off(Channel.AGENT_EVENT, handler);
-  },
+  // The in-process AGENT_* builder retired with the unified chat (issue
+  // #141, Phase 3): the builder + the app-view data chat both stream the
+  // gateway's `/centraid/<id>/_chat` SSE directly via
+  // `renderer/gateway-client-chat.ts` — no main-process relay.
 
   // Publish moved to the renderer's direct HTTP client (it holds the
   // editing session and POSTs `…/publish`).
