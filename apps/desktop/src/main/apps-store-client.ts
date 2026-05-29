@@ -125,6 +125,23 @@ export async function writeDraftFile(
   return parse(res, 'write-file');
 }
 
+/**
+ * Write a batch of draft files into a session worktree (issue #141).
+ * Sequential PUTs over the single-file route — the scaffold/clone/meta
+ * flows produce a handful of files, so a dedicated batch route isn't
+ * worth it yet. Used by the HTTP scaffold/clone path so app creation
+ * works against a remote gateway (no local worktree write).
+ */
+export async function writeDraftFiles(
+  sessionId: string,
+  appId: string,
+  files: ReadonlyArray<DraftFile>,
+): Promise<void> {
+  for (const f of files) {
+    await writeDraftFile(sessionId, appId, f.path, f.content);
+  }
+}
+
 export interface PublishResult {
   id: string;
   versionTag: string;

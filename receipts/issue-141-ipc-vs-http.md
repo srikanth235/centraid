@@ -25,7 +25,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Session file-delete route + shared route-helpers
 - [x] Automation + insights HTTP routes
 - [x] Reconcile OS scheduler on publish/delete/rollback
-- [ ] Desktop scaffold/clone/meta over HTTP
+- [x] Desktop scaffold/clone/meta over HTTP
 - [ ] Desktop automation CRUD over HTTP
 - [ ] Desktop automation read/run/analytics over HTTP
 - [ ] PROJECTS_OPEN + AGENT_* gated as the only local-only handlers
@@ -88,6 +88,33 @@ lets the desktop drop its direct scheduler register/unregister calls (next
 commit) and makes a remote gateway reconcile its own scheduler. Also fixed
 `@centraid/apps-store`'s `SAFE_ID_RE` to allow the `auto.` dot (rejecting
 `..`), without which automation-app publish through the git store failed.
+(That dot allowance was later removed under issue #98 when the `auto.`
+prefix convention was replaced by `app.json#kind` — app ids are plain
+slugs again.)
+
+**Desktop scaffold/clone/meta over HTTP.** The three project-lifecycle IPC
+handlers that still computed a local worktree path now go entirely over
+the git-store HTTP surface, so they work against a remote gateway:
+- `PROJECTS_CREATE` builds the file map with `scaffoldProjectFiles`,
+  rejects an id already on `main`, then `ensureProjectSession` →
+  `writeDraftFiles` → `publishApp`.
+- `PROJECTS_UPDATE_META` reads the app's draft over HTTP, applies the
+  `{name,description}` patch with `updateProjectMetaFiles` (duplicate-name
+  guard checks the published apps list), and writes back only the changed
+  files.
+- `TEMPLATES_CLONE` reads the desktop-bundled template's files via a new
+  `readTemplateFiles` (`@centraid/app-templates`), rewrites them with
+  `cloneTemplateFiles`, provisions pending webhooks with
+  `provisionPendingWebhooksInFiles` (secret minted desktop-side, only the
+  hash published), then PUTs + publishes. The remote gateway never needs
+  the catalog.
+All three drop `ensureProjectSessionAppsParent`; the local-worktree
+helpers (`ensureProjectSessionDir`/`…AppsParent`) now survive only for the
+genuinely-local PROJECTS_OPEN + AGENT_* paths (gated in a later commit).
+A new `writeDraftFiles` batch helper (`apps-store-client.ts`) loops the
+single-file PUT, and `httpProjectInfo` synthesizes the `ProjectInfo`
+return (no local dir to stat — the canonical metadata flows back through
+`listProjects()`).
 
 ## Verification
 
@@ -102,6 +129,15 @@ commit) and makes a remote gateway reconcile its own scheduler. Also fixed
   `serve-scheduler-reconcile.test.ts` asserts a publish triggers a
   reconcile carrying the scanned rows.
 - `@centraid/apps-store` adds an `auto.`-id publish + `..`-rejection case.
+- Desktop scaffold/clone/meta: full `turbo run build typecheck lint test`
+  green across all 28 tasks; `@centraid/desktop` typechecks + builds with
+  the rewritten handlers. New `clone-over-http.test.ts` (gateway-runtime)
+  boots a real git-store gateway and drives the desktop's exact clone wire
+  path — `cloneTemplateFiles` → `provisionPendingWebhooksInFiles` → session
+  PUT → publish — asserting the app lands on `main` with a plain-slug id,
+  `kind: 'automation'`, and a provisioned webhook (hashed secret, no
+  plaintext, no `pending`). The component pieces (file-map scaffolders,
+  webhook provisioning, session PUT/publish) keep their own unit coverage.
 
 ## Out of scope
 

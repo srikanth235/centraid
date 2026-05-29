@@ -39,6 +39,7 @@ import {
   rollbackApp as appsStoreRollbackApp,
   listGitVersions as appsStoreListGitVersions,
   writeDraftFile as appsStoreWriteDraftFile,
+  writeDraftFiles as appsStoreWriteDraftFiles,
 } from './apps-store-client.js';
 import {
   dropProjectSession,
@@ -85,6 +86,7 @@ import {
   generateWebhookSecret,
   hashWebhookSecret,
   provisionAppPendingWebhooks,
+  provisionPendingWebhooksInFiles,
   WEBHOOK_ROUTE_PREFIX,
   type ProvisionedWebhook,
   type AutomationRow,
@@ -101,6 +103,7 @@ import {
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
 import { disposeWindowChatSessions } from './chat.js';
+import type { ProjectInfo } from '@centraid/builder-harness';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -112,6 +115,29 @@ import { disposeWindowChatSessions } from './chat.js';
  */
 type PublishStatus = { inFlight: boolean; lastError?: string; lastPublishedAt?: number };
 const getPublishStatus = (_id: string): PublishStatus => ({ inFlight: false });
+
+/**
+ * Synthesize a `ProjectInfo` for the HTTP scaffold/clone path (issue
+ * #141). The git store is the source of truth post-publish, so the
+ * desktop no longer holds a local worktree to stat — `dir` is empty and
+ * `built` is false. The renderer reads only `id` (+ optional
+ * name/description/kind) off a create/clone return; the canonical
+ * metadata flows back through `listProjects()` once the publish lands.
+ */
+function httpProjectInfo(
+  id: string,
+  meta: { name?: string; description?: string; kind?: 'app' | 'automation' } = {},
+): ProjectInfo {
+  return {
+    id,
+    dir: '',
+    built: false,
+    modifiedAt: new Date().toISOString(),
+    ...(meta.name !== undefined ? { name: meta.name } : {}),
+    ...(meta.description !== undefined ? { description: meta.description } : {}),
+    ...(meta.kind !== undefined ? { kind: meta.kind } : {}),
+  };
+}
 
 /**
  * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
@@ -535,17 +561,27 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.PROJECTS_CREATE,
     async (_e, input: { id: string; name?: string; version?: string }) => {
-      const { scaffoldProject } = await import('@centraid/builder-harness');
-      const parent = await ensureProjectSessionAppsParent(input.id);
-      const info = await scaffoldProject(parent, input.id, {
-        name: input.name,
-        version: input.version,
+      const { scaffoldProjectFiles, HarnessError } = await import('@centraid/builder-harness');
+      // Reject a collision with an app already on `main` so a create never
+      // clobbers an existing app's draft (the FS scaffolder used to guard
+      // this via a dir-exists check; the git-store path checks the list).
+      const existing = await appsStoreListAppsWithMeta();
+      if (existing.some((a) => a.id === input.id)) {
+        throw new HarnessError('already_exists', `Project "${input.id}" already exists.`);
+      }
+      // Build the canonical file map (validates the id) and push it into
+      // the app's editing session over HTTP — no local worktree path, so
+      // this works against a remote gateway too.
+      const files = scaffoldProjectFiles(input.id, {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.version !== undefined ? { version: input.version } : {}),
       });
+      const sessionId = await ensureProjectSession(input.id);
+      await appsStoreWriteDraftFiles(sessionId, input.id, files);
       // Initial publish so the fresh app is browsable in the iframe
       // without waiting for a first edit.
-      const sessionId = await ensureProjectSession(input.id);
       await appsStorePublishApp(sessionId, input.id, `scaffold ${input.id}`).catch(() => undefined);
-      return info;
+      return httpProjectInfo(input.id, input.name !== undefined ? { name: input.name } : {});
     },
   );
 
@@ -585,12 +621,26 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.PROJECTS_UPDATE_META,
     async (_e, input: { id: string; name?: string; description?: string }) => {
-      const { updateProjectMeta } = await import('@centraid/builder-harness');
-      const parent = await ensureProjectSessionAppsParent(input.id);
-      await updateProjectMeta(parent, input.id, {
-        name: input.name,
-        description: input.description,
-      });
+      const { updateProjectMetaFiles } = await import('@centraid/builder-harness');
+      // Read the app's current draft over HTTP, apply the {name,desc} patch
+      // to the file map (rejects empty/duplicate names against the apps on
+      // `main`), and write back only the changed files. No local worktree
+      // path, so this works against a remote gateway.
+      const sessionId = await ensureProjectSession(input.id);
+      const [current, existing] = await Promise.all([
+        appsStoreReadDraftFiles(sessionId, input.id),
+        appsStoreListAppsWithMeta(),
+      ]);
+      const changed = updateProjectMetaFiles(
+        current,
+        input.id,
+        {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.description !== undefined ? { description: input.description } : {}),
+        },
+        existing,
+      );
+      await appsStoreWriteDraftFiles(sessionId, input.id, changed);
       // Meta edits ride the explicit-publish model too — the renderer
       // triggers a Publish if it wants the change live.
       return { ok: true };
@@ -898,8 +948,9 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.TEMPLATES_CLONE, async (_e, input: { templateId: string }) => {
     const settings = await loadSettings();
-    const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
-    const { cloneTemplate, suggestCloneIdentityFrom } = await import('@centraid/builder-harness');
+    const { resolveTemplates, readTemplateFiles } = await import('@centraid/app-templates');
+    const { cloneTemplateFiles, suggestCloneIdentityFrom } =
+      await import('@centraid/builder-harness');
 
     const cacheDir = templatesCacheDir(settings.activeGatewayId);
     const templates = await resolveTemplates({ cacheDir });
@@ -919,32 +970,30 @@ export function registerIpcHandlers(): void {
     const existing = await appsStoreListAppsWithMeta();
     const { id: newAppId, name: newName } = suggestCloneIdentityFrom(existing, tmpl.id, tmpl.name);
 
-    // Clone into the new app's editing-session worktree, then publish it
-    // onto `main` over HTTP. `parent` is the session's `apps/` dir; the
-    // clone writes `<newAppId>/...` underneath it.
-    const parent = await ensureProjectSessionAppsParent(newAppId);
-    const project = await cloneTemplate({
-      projectsDir: parent,
+    // Read the template's files from the desktop-bundled catalog (the
+    // resolver picks cache-vs-bundle so a remote update reaches users
+    // without a desktop release), rewrite them in memory for the new
+    // id/name, and provision any pending webhook triggers — then push the
+    // result over HTTP. The remote gateway never needs the catalog.
+    const templateFiles = await readTemplateFiles(tmpl, { cacheDir });
+    const cloned = cloneTemplateFiles({
       newAppId,
-      // The resolver tells us which copy is newer (cache vs bundle); clone
-      // from that one so a remote update reaches users without a desktop
-      // release.
-      templateDir: templateSourceDir(tmpl.id, { cacheDir, source: tmpl.source }),
+      templateFiles,
       newName,
-      // Carry the template's description into the cloned project's
-      // `app.json` so the builder topbar + home tile show something
-      // meaningful out of the gate.
+      // Carry the template's description into the cloned app's `app.json`
+      // so the builder topbar + home tile show something meaningful.
       newDesc: tmpl.desc,
     });
 
     // Automation templates may ship `{kind:'webhook',pending:true}`
     // triggers — the template author can't know the secret in advance,
-    // so the clone path mints id + secret here, rewrites the manifest
-    // to its provisioned form, and returns the plaintext secret to the
+    // so the clone path mints id + secret here, rewrites the manifest to
+    // its provisioned form, and returns the plaintext secret to the
     // renderer to show once. App templates never have webhook triggers,
-    // so this is a no-op for them. Runs BEFORE publish so the minted
-    // manifest lands on `main`. URL points at the active gateway.
-    const minted = await provisionAppPendingWebhooks(project.dir);
+    // so this is a no-op for them. Secrets are minted desktop-side; only
+    // the hash is written into the manifest that lands on `main`. URL
+    // points at the active gateway.
+    const { files: provisioned, minted } = provisionPendingWebhooksInFiles(cloned, newAppId);
     const webhooks = minted.map((m) => ({
       automationId: m.automationId,
       ownerApp: m.ownerApp,
@@ -953,12 +1002,13 @@ export function registerIpcHandlers(): void {
       url: `${settings.gatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
     }));
 
-    // Publish the freshly cloned app to the gateway so the iframe can
-    // preview it immediately and — for automation templates — so the
-    // git-store materialized `main` has an active version the OS
-    // scheduler resolves code from. Best-effort: a publish failure is
-    // logged but doesn't fail the clone.
+    // Push the cloned file map into the new app's editing session, then
+    // publish it onto `main` over HTTP so the iframe can preview it
+    // immediately and — for automation templates — so the materialized
+    // `main` the OS scheduler reads has an active version. Best-effort: a
+    // publish failure is logged but doesn't fail the clone.
     const sessionId = await ensureProjectSession(newAppId);
+    await appsStoreWriteDraftFiles(sessionId, newAppId, provisioned);
     await appsStorePublishApp(sessionId, newAppId, `clone ${tmpl.id}`).catch((err: unknown) => {
       console.warn(
         `[templates:clone] initial publish failed for ${newAppId}: ` +
@@ -989,7 +1039,11 @@ export function registerIpcHandlers(): void {
     }
 
     return {
-      project,
+      project: httpProjectInfo(newAppId, {
+        name: newName,
+        ...(tmpl.desc !== undefined ? { description: tmpl.desc } : {}),
+        kind: tmpl.kind ?? 'app',
+      }),
       template: {
         id: tmpl.id,
         name: tmpl.name,
