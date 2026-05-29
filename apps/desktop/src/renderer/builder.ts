@@ -1946,8 +1946,15 @@
             nDirty === 0,
           ),
           menuItem('Revert this file', revertActive, !dirty),
-          menuItem('Open project folder', () => void Api().openProjectFolder({ id: pid })),
         );
+        // "Open project folder" reveals the on-disk worktree, which only
+        // the local gateway materializes (issue #141). Hide it for a
+        // remote gateway — there's no local folder to open.
+        if (window.Centraid?.getRuntimeMode() !== 'remote') {
+          menu.append(
+            menuItem('Open project folder', () => void Api().openProjectFolder({ id: pid })),
+          );
+        }
         overflow.addEventListener('click', (e) => {
           e.stopPropagation();
           const wasHidden = menu.hasAttribute('hidden');

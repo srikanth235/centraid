@@ -28,7 +28,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Desktop scaffold/clone/meta over HTTP
 - [x] Desktop automation CRUD over HTTP
 - [x] Desktop automation read/run/analytics over HTTP
-- [ ] PROJECTS_OPEN + AGENT_* gated as the only local-only handlers
+- [x] PROJECTS_OPEN + AGENT_* gated as the only local-only handlers
 - [ ] IPC-vs-HTTP concept doc + token audit
 
 ## What changed
@@ -168,6 +168,25 @@ Two consequences worth noting:
   app's data dir is reaped gateway-side. (The three now-dead
   `localRuntime*` data-dir exports are flagged for a follow-up cleanup.)
 
+**PROJECTS_OPEN + AGENT_* gated as the only local-only handlers.** With C6–C8
+moving scaffold / clone / meta / automation CRUD / read / run / analytics
+onto HTTP, the desktop's last filesystem-bound operations are exactly two:
+PROJECTS_OPEN (reveal the worktree in Finder) and AGENT_* (the in-process
+codex/claude builder that edits the on-disk worktree). Both legitimately
+require a local gateway (a remote one exposes no worktree). This commit
+makes that boundary explicit rather than incidental:
+- `project-sessions.ts` factors the local-gateway check into a named
+  `assertActiveGatewayLocal(action)` guard and tightens
+  `ensureProjectSessionDir`'s doc to state it now serves ONLY those two
+  flows. The now-unused `ensureProjectSessionAppsParent` (its scaffold/
+  clone callers moved to HTTP) is deleted.
+- The PROJECTS_OPEN + AGENT_START handlers carry comments declaring them
+  the deliberate local-only surface; the guard throws a clear
+  "requires the local gateway" error as the backstop.
+- The renderer hides the "Open project folder" affordance when
+  `window.Centraid.getRuntimeMode() === 'remote'`, so a remote user never
+  hits the backstop error for it.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -201,6 +220,9 @@ Two consequences worth noting:
   `automations-routes.test.ts` (C4), so the desktop handlers are one-line
   proxies with no behavior of their own to retest. `oxlint` confirms the
   removed local machinery left no dangling imports in `ipc.ts`.
+- Local-only gating: full suite green; `ensureProjectSessionDir` has no
+  callers left besides PROJECTS_OPEN + AGENT_START (grep-confirmed), and
+  the removed `ensureProjectSessionAppsParent` has no references.
 
 ## Out of scope
 

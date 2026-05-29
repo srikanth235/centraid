@@ -584,8 +584,11 @@ export function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(Channel.PROJECTS_OPEN, async (_e, input: { id: string }) => {
-    // Opens the session worktree on disk — the dir the agent + editor
-    // write through. Local-gateway only (the helper errors for remote).
+    // Reveal-in-Finder: opens the on-disk session worktree. One of the two
+    // deliberately LOCAL-ONLY handlers (issue #141) — a remote gateway
+    // exposes no worktree over the filesystem. The renderer hides this for
+    // remote; `ensureProjectSessionDir` (via `assertActiveGatewayLocal`) is
+    // the backstop and throws a clear error if it's ever reached remotely.
     const dir = await ensureProjectSessionDir(input.id);
     await shell.openPath(dir);
     return { ok: true };
@@ -679,6 +682,13 @@ export function registerIpcHandlers(): void {
       // synchronous post-turn `publishApp` drives the edits onto main.
       // `projectKind` still picks the system prompt + gates the app-
       // only live-schema injection / preview snapshot.
+      //
+      // The in-process codex/claude builder is the other deliberately
+      // LOCAL-ONLY surface (issue #141): it runs the binary against the
+      // on-disk worktree, which only the local gateway materializes.
+      // `ensureProjectSessionDir` throws a clear local-only error for a
+      // remote gateway — remote editing happens through the chat surface,
+      // not this builder.
       const isAutomation = input.projectKind === 'automation';
       const projectDir = await ensureProjectSessionDir(input.projectId);
 

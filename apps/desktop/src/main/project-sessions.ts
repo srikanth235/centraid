@@ -91,23 +91,38 @@ export function resetProjectSessions(): void {
 }
 
 /**
- * Absolute path to the LOCAL session worktree's `apps/<appId>/` dir
- * (opens the session if needed). Used by chat-agent + scaffold +
- * template-clone flows that hand a directory to a builder-harness
- * helper or to the codex/claude binary. Requires the active gateway
- * to be local — remote gateways don't expose their worktrees over the
- * filesystem.
- *
- * Caller must ensure the dir exists (most helpers do that as a side
- * effect of writing into it).
+ * Throw a clear error unless the active gateway is local. The desktop's
+ * remaining filesystem-bound operations (issue #141) — PROJECTS_OPEN
+ * (reveal-in-Finder) and AGENT_* (the in-process codex/claude builder
+ * that writes to the worktree) — only work against the local embedded
+ * gateway, which materializes session worktrees on disk. A remote gateway
+ * exposes no worktree over the filesystem, so the renderer hides these
+ * affordances for remote; this guard is the main-process backstop.
  */
-export async function ensureProjectSessionDir(appId: string): Promise<string> {
+export async function assertActiveGatewayLocal(action: string): Promise<void> {
   const settings = await loadSettings();
   if (settings.activeGatewayKind !== 'local') {
     throw new Error(
-      `editing app "${appId}" requires the local gateway (active is ${settings.activeGatewayKind})`,
+      `${action} requires the local gateway (active is ${settings.activeGatewayKind})`,
     );
   }
+}
+
+/**
+ * Absolute path to the LOCAL session worktree's `apps/<appId>/` dir
+ * (opens the session if needed). After issue #141 moved scaffold / clone /
+ * automation editing onto the HTTP file-map path, this serves ONLY the two
+ * deliberately local-only flows: PROJECTS_OPEN (reveal-in-Finder) and
+ * AGENT_* (the in-process builder hands this dir to the codex/claude
+ * binary). Requires the active gateway to be local — remote gateways don't
+ * expose their worktrees over the filesystem.
+ *
+ * Caller must ensure the dir exists (the agent creates it as a side effect
+ * of writing into it).
+ */
+export async function ensureProjectSessionDir(appId: string): Promise<string> {
+  await assertActiveGatewayLocal(`editing app "${appId}"`);
+  const settings = await loadSettings();
   const sessionId = await ensureProjectSession(appId);
   return path.join(
     gatewayCodeStoreDir(settings.activeGatewayId),
@@ -117,14 +132,4 @@ export async function ensureProjectSessionDir(appId: string): Promise<string> {
     'apps',
     appId,
   );
-}
-
-/**
- * Absolute path to the LOCAL session worktree's `apps/` parent dir
- * (the dir under which scaffolds create `<appId>/...`). Same gateway
- * constraint as `ensureProjectSessionDir`.
- */
-export async function ensureProjectSessionAppsParent(appId: string): Promise<string> {
-  const dir = await ensureProjectSessionDir(appId);
-  return path.dirname(dir);
 }
