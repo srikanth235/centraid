@@ -23,7 +23,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Builder-harness file-map scaffolders
 - [x] Webhook provisioning over a file map
 - [x] Session file-delete route + shared route-helpers
-- [ ] Automation + insights HTTP routes
+- [x] Automation + insights HTTP routes
 - [ ] Reconcile OS scheduler on publish/delete/rollback
 - [ ] Desktop scaffold/clone/meta over HTTP
 - [ ] Desktop automation CRUD over HTTP
@@ -65,6 +65,18 @@ extracted the shared `sendJson` / `readBody` / `readJson` / `fileExists`
 HTTP helpers into `packages/gateway-runtime/src/route-helpers.ts` so the
 new automations routes can reuse them.
 
+**Automation + insights HTTP routes.** New
+`packages/gateway-runtime/src/automations-routes.ts`
+(`makeAutomationsRouteHandler`) mounted as a second `extraHandlers` entry
+in `serve()`. Serves the automation runtime ops the desktop used to do
+against local files/SQLite: `GET /centraid/_automations` (list),
+`/read`, `POST /run-now` (fires on the gateway host via an injected
+`runAutomationLocal` closure with the gateway's own runner), the run feed
+`/runs` + per-run `/run`, `/run/nodes`, `/run/pin`, and
+`GET /centraid/_insights/summary`. Code resolves from the materialized
+`main`; run ledgers + analytics from the stable `appsDir`. Refs/run ids
+ride query params to avoid slash-in-path parsing.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -72,7 +84,9 @@ new automations routes can reuse them.
 - `@centraid/runtime-core` typecheck + lint clean;
   `automation-webhook.test.ts` adds 3 cases (343 package tests pass).
 - `@centraid/gateway-runtime` typecheck + lint clean;
-  `apps-store-routes.test.ts` adds the DELETE-file + path-escape cases.
+  `apps-store-routes.test.ts` adds the DELETE-file + path-escape cases;
+  `automations-routes.test.ts` adds 8 cases (run-now invokes the stubbed
+  `runAutomation`; list/read/runs/run/insights shapes). 36 package tests pass.
 
 ## Out of scope
 

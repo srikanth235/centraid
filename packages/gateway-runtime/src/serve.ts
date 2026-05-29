@@ -37,6 +37,7 @@ import path from 'node:path';
 import {
   AnalyticsStore,
   ChatHistoryStore,
+  InsightsStore,
   Runtime,
   UserStore,
   listAutomations,
@@ -48,12 +49,14 @@ import {
 } from '@centraid/runtime-core';
 import {
   makeChatRunner,
+  runAutomationLocal,
   runPreflight,
   type OpenAICompatProvider,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
 import { AppsStore } from '@centraid/apps-store';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
+import { makeAutomationsRouteHandler } from './automations-routes.js';
 import type { GatewayPaths } from './paths.js';
 import type { SecretsProvider } from './secrets.js';
 import { parseProviderPrefs } from './provider-prefs.js';
@@ -150,7 +153,8 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // `ChatHistoryStore` is constructed with `appsDir` and resolves the
   // file per app.
   const gatewayDbProvider = makeGatewayDbProvider(paths.identityDb);
-  const analyticsStore = new AnalyticsStore(makeAnalyticsDbProvider(paths.analyticsDb));
+  const analyticsProvider = makeAnalyticsDbProvider(paths.analyticsDb);
+  const analyticsStore = new AnalyticsStore(analyticsProvider);
   const userStore = new UserStore(gatewayDbProvider);
   const chatHistoryStore = new ChatHistoryStore(
     paths.appsDir,
@@ -233,14 +237,48 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // runtime's own routes when a store backend is active (issue #137).
   // onAppLive registers a freshly-published app in the registry so its
   // data dir exists + `registry.get` resolves on the first request.
+  //
+  // Code (automation manifests) resolves from the git-store materialized
+  // `main`; data (run ledgers + analytics) from the stable `appsDir`.
   if (appsStore) {
+    const store = appsStore;
+    const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
     serverOptions.extraHandlers = [
-      makeAppsStoreRouteHandler(appsStore, {
+      makeAppsStoreRouteHandler(store, {
         onAppLive: async (appId) => {
           await runtime.registry.ensureUploaded(appId);
         },
         onAppDeleted: async (appId) => {
           await runtime.registry.deregister(appId);
+        },
+      }),
+      // Automation runtime ops over HTTP (issue #141): list/read/run-now,
+      // the run feed + per-run detail, and insights. Run-now fires on
+      // THIS host with the gateway's own runner config.
+      makeAutomationsRouteHandler({
+        store,
+        dataAppsDir: paths.appsDir,
+        analytics: analyticsStore,
+        insights: new InsightsStore(analyticsProvider),
+        runAutomation: ({ automationRef, runId }) => {
+          void (async () => {
+            const prefs = await prefsLoader();
+            await runAutomationLocal({
+              automationRef,
+              runId,
+              appsDir: paths.appsDir,
+              codeAppsDir: codeAppsDir(),
+              analytics: analyticsStore,
+              runner: prefs?.kind ?? 'codex',
+              triggerKind: 'manual',
+              triggerOrigin: 'manual',
+            });
+          })().catch((err) =>
+            logger.warn(
+              `run-now ${automationRef} failed: ` +
+                (err instanceof Error ? err.message : String(err)),
+            ),
+          );
         },
       }),
     ];

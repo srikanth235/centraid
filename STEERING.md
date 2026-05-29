@@ -294,3 +294,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-1e487d5ad58-1780059491-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
 | steer-1e487d5ad58-1780059491-8 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
 | steer-1e487d5ad58-1780059491-9 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | use existing worktree and batch commits, no separate branch | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780060503-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | feat(gateway-runtime): automation + insights HTTP routes (#141)Add automations-… |
