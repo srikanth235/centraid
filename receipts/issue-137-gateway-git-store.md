@@ -40,6 +40,12 @@ will touch.
   - [x] Explicit Publish replaces auto-publish-on-save for the Code tab
   - [x] Versions UI reads from git tags
   - [x] Gateway-swap drops cached sessions
+- [x] Slice 4b — projects + agent flows off workspaceDir
+  - [x] AppsStore.deleteApp + listAppsWithMeta
+  - [x] Gateway routes for app list + delete
+  - [x] PROJECTS_* IPC cut over
+  - [x] AGENT_START writes directly into the session worktree
+  - [x] publish-on-save.ts retired
 
 ## What changed
 
@@ -386,6 +392,91 @@ across forward publish + rollback; the new
 the guard. `gateway-runtime/apps-store-routes.test.ts` asserts the
 `active` flag flips on the HTTP `git-versions` response after
 rollback.
+
+### Slice 4b — projects + agent flows off workspaceDir
+
+The slice-4 fallback resolver in `Dispatcher`/`Runtime` was a v0-
+inappropriate workaround — for a no-migration codebase the principled
+move is to delete the legacy path, not paper over it. Slice 4b
+eliminates the legacy path for everything except the automation
+flows (which still need an OS-scheduler appsDir rewire — tracked as a
+follow-up).
+
+**AppsStore.deleteApp + listAppsWithMeta.** `deleteApp` runs `git
+rm -r apps/<appId>` in a detached worktree, commits forward to main,
+reaps every `<appId>/v*` tag, then materializes — same forward-only
+audit model as publish/rollback. `listAppsWithMeta` walks main's
+`apps/` and reads each `app.json` from the materialized-main worktree,
+returning `[{id, name?, description?, hasIndex}]`. The desktop home
+shelf no longer scans a workspaceDir to render tiles.
+
+**Gateway routes for app list + delete.** `GET /centraid/_apps`
+shadows runtime-core's legacy registry-list with the same flat-array
+shape, extended with the new metadata. `DELETE /centraid/_apps/<id>`
+calls `deleteApp` + a new `onAppDeleted` callback (wired in serve.ts
+to `runtime.registry.deregister`).
+
+**PROJECTS_* IPC cut over.** `PROJECTS_LIST` calls the new HTTP
+list. `PROJECTS_CREATE` opens a session, scaffolds into the session
+worktree's `apps/<id>/`, and explicit-publishes (so the iframe has
+something to preview). `PROJECTS_FILES`/`WRITE_FILE` were already
+session-routed (slice 4); the workspace-seeding helper retires.
+`PROJECTS_DELETE` drops the session then HTTP-deletes the app.
+`PROJECTS_UPDATE_META` writes the new app.json into the session
+(user clicks Publish to land it). `PROJECTS_OPEN` opens the session
+worktree on disk (local-gateway only). The desktop's `workspaceDir`
+is no longer touched on any of these paths.
+
+**AGENT_START writes directly into the session worktree.** The chat
+agent's `projectDir` is now the session worktree's `apps/<id>/`. The
+agent's native Read/Write tools edit the same dir the gateway's
+apps-store-routes read from. The post-turn synchronous `publishApp`
+replaces the legacy `requestPublish` debounce — every agent turn ends
+with an explicit, ordered publish that drives the iframe + downstream
+listeners.
+
+**publish-on-save.ts retired.** With the Code tab on explicit Publish
+(slice 4) and the chat-agent on direct session writes + sync publish
+(slice 4b), nothing queues a debounced workspace→appsDir publish
+anymore. The file is deleted. `getPublishStatus`/`PUBLISH_EVENT_CHANNEL`
+stubs remain in `ipc.ts` for renderer API stability — they always
+report `inFlight: false` and never fire, since publishes are
+synchronous through `PUBLISH`.
+
+### Out of scope for this PR — automation flows
+
+What's still on `workspaceDir` + `publishProject` after slice 4b:
+`TEMPLATES_CLONE`, `AUTOMATIONS_CREATE`, `AUTOMATIONS_SET_ENABLED`,
+`AUTOMATIONS_DELETE`. Same with the read paths
+`AUTOMATIONS_LIST`/`AUTOMATIONS_READ` (walk `settings.appsDir`).
+
+The blocker is the OS scheduler. `localRuntimeAutomationHost(gatewayId,
+appsDir)` constructs cron/launchd entries that shell `centraid-cli
+automation run <ref> --apps-dir <appsDir>` at fire time. For the
+git-store backend, the live appsDir is `<codeStore>/worktrees/main/
+<sha>/apps/` — and `<sha>` rotates on every publish, breaking baked-in
+cron entries. Cutover paths considered:
+
+1. AppsStore maintains a stable `<codeStoreDir>/active-main` symlink
+   the OS scheduler uses; AppsStore re-points it atomically on each
+   publish. Simple on macOS/Linux; Windows symlinks need elevated
+   perms.
+2. Re-register every automation after every publish via an
+   `onPublish` callback on the apps-store route module. No symlinks;
+   one window between materialization swap and re-register where a
+   firing cron entry would 404.
+3. Move automation execution into the gateway runtime (HTTP `POST
+   /centraid/_automations/<ref>/run`); OS scheduler entries become
+   bearer-auth'd curl calls that don't carry a path at all.
+
+Option 3 is the cleanest long-term but the largest. Option 1 is the
+v0-shaped fix and is the planned follow-up.
+
+While automations stay on the legacy path, the `Dispatcher`/`Runtime`
+codeDir fallback (slice 4 fixup commit) stays in place — it's the
+mechanism that lets the legacy automation code paths still resolve via
+`<appsDir>/<id>/versions/<active>/`. Once the OS scheduler follow-up
+lands, the fallback dies with it and `current.json` is fully retired.
 
 ## Out of scope
 

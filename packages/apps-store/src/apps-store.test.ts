@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit unit tests for one module — splitting by topic would scatter the shared helpers
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
@@ -394,6 +395,56 @@ test('listVersions returns [] for an app with no tags', async () => {
     const store = new AppsStore({ root });
     await store.init();
     assert.deepEqual(await store.listVersions('ghost'), []);
+  } finally {
+    await rmTempRoot(root);
+  }
+});
+
+test('deleteApp removes the app from main and reaps its version tags', async () => {
+  const root = await makeTempRoot();
+  try {
+    const store = new AppsStore({ root });
+    await store.init();
+
+    const s1 = await store.openSession('s1');
+    await seedApp(s1.worktreePath, 'todo', 'first');
+    await store.publish({ sessionId: 's1', appId: 'todo', message: 'v1' });
+    await store.closeSession('s1');
+
+    // Before: app is live + has a tag.
+    assert.ok(await store.resolveActiveAppDir('todo'));
+    assert.deepEqual(
+      (await store.listVersions('todo')).map((v) => v.tag),
+      ['todo/v1'],
+    );
+
+    const out = await store.deleteApp('todo');
+    assert.equal(out.sha.length, 40);
+
+    // After: app gone from main, all tags reaped, listVersions empty.
+    assert.equal(await store.resolveActiveAppDir('todo'), undefined);
+    assert.deepEqual(await store.listVersions('todo'), []);
+    assert.deepEqual(await store.listApps(), []);
+
+    // The delete commit is on main as a forward audit entry.
+    const log = await run(['log', '--format=%s', 'refs/heads/main'], {
+      cwd: path.join(root, 'apps.git'),
+    });
+    assert.match(log, /delete: todo/);
+  } finally {
+    await rmTempRoot(root);
+  }
+});
+
+test('deleteApp throws no_changes for an app that was never on main', async () => {
+  const root = await makeTempRoot();
+  try {
+    const store = new AppsStore({ root });
+    await store.init();
+    await assert.rejects(
+      () => store.deleteApp('ghost'),
+      (err: unknown) => err instanceof AppsStoreError && err.code === 'no_changes',
+    );
   } finally {
     await rmTempRoot(root);
   }

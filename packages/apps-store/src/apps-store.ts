@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit publish/rollback/delete critical sections share private state — keeping them in one file preserves the per-store mutex invariant
 // Gateway-owned git store for centraid app code. Full design in
 // receipt #137; this header sketches the layout + invariants.
 //
@@ -117,6 +118,51 @@ export class AppsStore {
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && SAFE_ID_RE.test(line))
       .sort();
+  }
+
+  /**
+   * App ids on main plus their `app.json` metadata + `hasIndex` flag,
+   * read from the materialized-main worktree. Replaces the desktop's
+   * legacy `listProjects(workspaceDir)` scan.
+   */
+  async listAppsWithMeta(): Promise<
+    Array<{ id: string; name?: string; description?: string; hasIndex: boolean }>
+  > {
+    this.assertInitialized();
+    const ids = await this.listApps();
+    const mainDir = this.activeMainDir;
+    if (!mainDir || ids.length === 0) return [];
+    const rows = await Promise.all(
+      ids.map(async (id) => {
+        const appDir = path.join(mainDir, 'apps', id);
+        const manifest: Record<string, unknown> = await readJson(
+          path.join(appDir, 'app.json'),
+        ).catch(() => ({}));
+        const hasIndex = await pathExists(path.join(appDir, 'index.html'));
+        return {
+          id,
+          ...(typeof manifest.name === 'string' ? { name: manifest.name } : {}),
+          ...(typeof manifest.description === 'string'
+            ? { description: manifest.description }
+            : {}),
+          hasIndex,
+        };
+      }),
+    );
+    return rows;
+  }
+
+  /**
+   * Remove an app from `main` entirely — path-scoped `git rm -r
+   * apps/<appId>` on a detached worktree, commit on main, atomic
+   * `<appId>/v*` tag cleanup, materialize. Forward-only like publish;
+   * the deletion appears as a fresh commit so `git log main` keeps
+   * the audit. Serialized through the same publish mutex.
+   *
+   * Throws `no_changes` when the app wasn't on main.
+   */
+  deleteApp(appId: string): Promise<{ sha: string; materializedMainDir: string }> {
+    return this.serialize(() => this.deleteAppCritical(appId));
   }
 
   /** App's active code dir, or undefined when never published. */
@@ -406,6 +452,55 @@ export class AppsStore {
     }
   }
 
+  private async deleteAppCritical(
+    appId: string,
+  ): Promise<{ sha: string; materializedMainDir: string }> {
+    assertSafeId(appId, 'invalid_app_id');
+    this.assertInitialized();
+
+    const txId = `_delete-${crypto.randomBytes(6).toString('hex')}`;
+    const txDir = path.join(this.worktreesDir, txId);
+    await run(['worktree', 'add', '--detach', txDir, 'refs/heads/main'], {
+      cwd: this.bareDir,
+    });
+    try {
+      const appSubdir = `apps/${appId}`;
+      const rm = await runRaw(['rm', '-r', '--ignore-unmatch', '--', appSubdir], {
+        cwd: txDir,
+        allowNonZero: true,
+      });
+      if (rm.code !== 0) {
+        throw new AppsStoreError('no_changes', `App "${appId}" not on main — nothing to delete.`);
+      }
+      const diff = await runRaw(['diff', '--cached', '--quiet', '--', appSubdir], {
+        cwd: txDir,
+        allowNonZero: true,
+      });
+      if (diff.code === 0) {
+        throw new AppsStoreError('no_changes', `App "${appId}" not on main — nothing to delete.`);
+      }
+      await run(['commit', '-m', `delete: ${appId}`], { cwd: txDir });
+      const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
+      const oldMainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
+      await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], { cwd: this.bareDir });
+      // Drop the app's version tags too — listVersions(appId) should
+      // return [] post-delete. Best-effort per tag.
+      const versions = await this.listVersions(appId);
+      for (const v of versions) {
+        await runRaw(['tag', '-d', v.tag], { cwd: this.bareDir, allowNonZero: true });
+      }
+      const newMainDir = await this.ensureMainMaterialization(newSha);
+      await this.swapActiveMain(newMainDir);
+      return { sha: newSha, materializedMainDir: newMainDir };
+    } finally {
+      await runRaw(['worktree', 'remove', '--force', txDir], {
+        cwd: this.bareDir,
+        allowNonZero: true,
+      });
+      await run(['worktree', 'prune'], { cwd: this.bareDir });
+    }
+  }
+
   /**
    * Compute `<n>` for the next `<appId>/v<n>` tag — one greater
    * than the highest existing version, starting at 1.
@@ -496,4 +591,10 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function readJson(p: string): Promise<Record<string, unknown>> {
+  const text = await fs.readFile(p, 'utf8');
+  const parsed: unknown = JSON.parse(text);
+  return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
 }

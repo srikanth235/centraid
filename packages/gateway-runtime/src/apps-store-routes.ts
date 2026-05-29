@@ -9,6 +9,8 @@
 // Surface (all under the reserved `_apps` namespace, distinct verbs
 // from the legacy upload routes runtime-core still owns):
 //
+//   GET    /centraid/_apps                           list apps + metadata
+//          → { apps: [{id, name?, description?, hasIndex}] }
 //   POST   /centraid/_apps/_sessions                 open a session
 //          → { sessionId }
 //   DELETE /centraid/_apps/_sessions/<id>            close a session
@@ -22,6 +24,7 @@
 //   POST   /centraid/_apps/<appId>/rollback          forward-only rollback
 //          → { versionTag }
 //   GET    /centraid/_apps/<appId>/git-versions      tag-driven history
+//   DELETE /centraid/_apps/<appId>                   remove app from main
 //
 // Publish validates the manifest against the *session worktree* before
 // the merge — the validation that used to run client-side in
@@ -58,6 +61,11 @@ export interface AppsStoreRouteOptions {
    * gateway wires `runtime.registry.ensureUploaded`.
    */
   onAppLive?: (appId: string) => Promise<void>;
+  /**
+   * Called after a successful delete of an app so the host can drop
+   * it from the runtime's registry + tear down its data dir.
+   */
+  onAppDeleted?: (appId: string) => Promise<void>;
 }
 
 /**
@@ -78,15 +86,34 @@ export function makeAppsStoreRouteHandler(
     const method = (req.method ?? 'GET').toUpperCase();
 
     try {
+      // ---- collection-level: GET /_apps (list with metadata) ----
+      // Shadows runtime-core's legacy registry-list route and returns
+      // the same flat-array shape, extended with `name`, `description`,
+      // and `hasIndex` so the desktop home shelf doesn't need a
+      // workspaceDir scan to render tiles.
+      if (segments.length === 1 && method === 'GET') {
+        const apps = await store.listAppsWithMeta();
+        sendJson(res, 200, apps);
+        return true;
+      }
+
       // ---- session lifecycle: /_apps/_sessions[/<id>] ----
       if (segments[1] === '_sessions') {
         return await handleSessions(store, req, res, method, segments);
       }
 
-      // Everything else is /_apps/<appId>/<verb>...
+      // Everything else is /_apps/<appId>[/<verb>]
       const appId = decodeURIComponent(segments[1] ?? '');
       const verb = segments[2];
       if (!appId || appId.startsWith('_')) return false;
+
+      // ---- per-app collection-level: DELETE /_apps/<appId> ----
+      if (segments.length === 2 && method === 'DELETE') {
+        await store.deleteApp(appId);
+        if (opts.onAppDeleted) await opts.onAppDeleted(appId);
+        sendJson(res, 200, { id: appId, deleted: true });
+        return true;
+      }
 
       if (verb === 'publish' && method === 'POST') {
         return await handlePublish(store, req, res, appId, opts.onAppLive);

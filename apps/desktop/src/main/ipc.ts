@@ -31,6 +31,8 @@ import {
   resetUserPrefsAuthCache,
 } from './user-prefs-client.js';
 import {
+  deleteApp as appsStoreDeleteApp,
+  listAppsWithMeta as appsStoreListAppsWithMeta,
   publishApp as appsStorePublishApp,
   readDraftFiles as appsStoreReadDraftFiles,
   resetAppsStoreAuthCache,
@@ -41,6 +43,8 @@ import {
 import {
   dropProjectSession,
   ensureProjectSession,
+  ensureProjectSessionAppsParent,
+  ensureProjectSessionDir,
   resetProjectSessions,
 } from './project-sessions.js';
 import {
@@ -95,13 +99,18 @@ import {
   type RunnerStatus,
 } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
-import {
-  forgetPublish,
-  getPublishStatus,
-  requestPublish,
-  type PublishStatus,
-} from './publish-on-save.js';
 import { disposeWindowChatSessions } from './chat.js';
+
+/**
+ * Status read for the auto-publish queue (issue #137: there is no
+ * queue anymore — every publish is synchronous via PUBLISH IPC). Kept
+ * as a stable renderer surface so `builder.ts` doesn't need to change;
+ * always returns "not in flight". The `PUBLISH_EVENT` channel is
+ * similarly never fired post-#137 — the renderer's onPublishEvent
+ * subscription just stays quiet.
+ */
+type PublishStatus = { inFlight: boolean; lastError?: string; lastPublishedAt?: number };
+const getPublishStatus = (_id: string): PublishStatus => ({ inFlight: false });
 
 /**
  * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
@@ -509,114 +518,80 @@ export function registerIpcHandlers(): void {
     return result;
   });
 
-  // ----- Projects -----
-  // The desktop owns two sibling dirs (issue #108):
-  //   - `workspaceDir` — flat, editable. Project IPCs read/write here.
-  //   - `appsDir` — versioned gateway storage. Populated by uploads from
-  //     the workspace via `requestPublish`; the preview protocol and
-  //     dispatcher read from here.
-  // Every IPC that mutates the workspace pings `requestPublish(id)` so
-  // the gateway picks up the change on the next debounce tick.
+  // ----- Projects (issue #137: git-store backend) -----
+  // All project lifecycle (list/create/files/write/delete/update-meta)
+  // flows through the gateway's git store. No more `workspaceDir`:
+  // code lives in `apps.git` + materialized-main + per-session
+  // worktrees. Each handler:
+  //   - opens (or reuses) a session for the app id,
+  //   - mutates the session worktree directly (filesystem ops on the
+  //     materialized session dir — local for the local gateway),
+  //   - publishes the session — explicit, no debounce.
   ipcMain.handle(Channel.PROJECTS_LIST, async () => {
-    const settings = await loadSettings();
-    const { listProjects } = await import('@centraid/builder-harness');
-    return listProjects(settings.workspaceDir);
+    return appsStoreListAppsWithMeta();
   });
 
   ipcMain.handle(
     Channel.PROJECTS_CREATE,
     async (_e, input: { id: string; name?: string; version?: string }) => {
-      const settings = await loadSettings();
       const { scaffoldProject } = await import('@centraid/builder-harness');
-      const info = await scaffoldProject(settings.workspaceDir, input.id, {
+      const parent = await ensureProjectSessionAppsParent(input.id);
+      const info = await scaffoldProject(parent, input.id, {
         name: input.name,
         version: input.version,
       });
       // Initial publish so the fresh app is browsable in the iframe
-      // without waiting for a first edit (edge case #1 in the design).
-      requestPublish(input.id, { immediate: true });
+      // without waiting for a first edit.
+      const sessionId = await ensureProjectSession(input.id);
+      await appsStorePublishApp(sessionId, input.id, `scaffold ${input.id}`).catch(() => undefined);
       return info;
     },
   );
 
-  // Issue #137 — Code tab reads draft files out of the gateway's git
-  // session worktree (HTTP). Seed: if the gateway's session worktree is
-  // empty for this app but a workspaceDir copy exists (a freshly
-  // scaffolded or agent-written app that hasn't been promoted yet),
-  // mirror those files into the session as the starting draft so the
-  // editor opens to what the user saw before the cutover. Idempotent —
-  // once the session has files, this is a no-op.
-  const seedSessionFromWorkspaceIfEmpty = async (
-    sessionId: string,
-    appId: string,
-  ): Promise<void> => {
-    const existing = await appsStoreReadDraftFiles(sessionId, appId).catch(() => []);
-    if (existing.length > 0) return;
-    const settings = await loadSettings();
-    const { readProjectFiles } = await import('@centraid/builder-harness');
-    const dir = path.join(settings.workspaceDir, appId);
-    const wsFiles = await readProjectFiles(dir).catch(
-      () =>
-        [] as Array<{
-          path: string;
-          content: string;
-        }>,
-    );
-    for (const f of wsFiles) {
-      await appsStoreWriteDraftFile(sessionId, appId, f.path, f.content).catch(() => undefined);
-    }
-  };
-
   ipcMain.handle(Channel.PROJECTS_FILES, async (_e, input: { id: string }) => {
     const sessionId = await ensureProjectSession(input.id);
-    await seedSessionFromWorkspaceIfEmpty(sessionId, input.id);
     return appsStoreReadDraftFiles(sessionId, input.id);
   });
 
   ipcMain.handle(
     Channel.PROJECTS_WRITE_FILE,
     async (_e, input: { id: string; path: string; content: string }) => {
-      // Explicit-publish model (issue #137): writes land in the session
-      // worktree only; nothing reaches `main` until the user clicks
-      // Publish. The legacy `requestPublish` debounce is gone.
+      // Explicit-publish model: writes land in the session worktree
+      // only; nothing reaches `main` until the user clicks Publish.
       const sessionId = await ensureProjectSession(input.id);
-      await seedSessionFromWorkspaceIfEmpty(sessionId, input.id);
       return appsStoreWriteDraftFile(sessionId, input.id, input.path, input.content);
     },
   );
 
   ipcMain.handle(Channel.PROJECTS_OPEN, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const dir = path.join(settings.workspaceDir, input.id);
+    // Opens the session worktree on disk — the dir the agent + editor
+    // write through. Local-gateway only (the helper errors for remote).
+    const dir = await ensureProjectSessionDir(input.id);
     await shell.openPath(dir);
     return { ok: true };
   });
 
   ipcMain.handle(Channel.PROJECTS_DELETE, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { deleteProject } = await import('@centraid/builder-harness');
-    // Forget any queued publish before deleting the workspace so a
-    // stale request doesn't re-create the gateway version after the
-    // renderer separately calls deregisterApp.
-    forgetPublish(input.id);
-    // Also drop the editing-session worktree for this app (issue #137)
-    // so the gateway doesn't accumulate orphaned worktrees after the
-    // user deletes a project. Best-effort.
+    // Drop the editing session first so its worktree doesn't fight
+    // with the main-side delete, then HTTP-delete the app entirely
+    // (forward commit + tag cleanup; registry deregister wired
+    // gateway-side via onAppDeleted).
     await dropProjectSession(input.id);
-    await deleteProject(settings.workspaceDir, input.id);
+    await appsStoreDeleteApp(input.id).catch(() => undefined);
     return { ok: true };
   });
 
   ipcMain.handle(
     Channel.PROJECTS_UPDATE_META,
     async (_e, input: { id: string; name?: string; description?: string }) => {
-      const settings = await loadSettings();
       const { updateProjectMeta } = await import('@centraid/builder-harness');
-      await updateProjectMeta(settings.workspaceDir, input.id, {
+      const parent = await ensureProjectSessionAppsParent(input.id);
+      await updateProjectMeta(parent, input.id, {
         name: input.name,
         description: input.description,
       });
-      requestPublish(input.id);
+      // Meta edits ride the explicit-publish model too — the renderer
+      // triggers a Publish if it wants the change live.
       return { ok: true };
     },
   );
@@ -676,14 +651,14 @@ export function registerIpcHandlers(): void {
 
       const settings = await loadSettings();
       const { createCentraidAgentSession } = await import('@centraid/builder-harness');
-      // Every project — UI app or automation app — lives under
-      // `workspaceDir` (issue #108; previously `appsDir` per #98). The
-      // builder agent reads/writes the workspace; publish-on-save copies
-      // each turn's writes into the gateway's `appsDir`. `projectKind`
-      // still picks the system prompt and gates the app-only
-      // live-schema injection / preview snapshot.
+      // Issue #137: the agent writes directly into the git store's
+      // session worktree — its native Read/Write tools touch the same
+      // dir the gateway's apps-store-routes read from, and the
+      // synchronous post-turn `publishApp` drives the edits onto main.
+      // `projectKind` still picks the system prompt + gates the app-
+      // only live-schema injection / preview snapshot.
       const isAutomation = input.projectKind === 'automation';
-      const projectDir = path.join(settings.workspaceDir, input.projectId);
+      const projectDir = await ensureProjectSessionDir(input.projectId);
 
       const runnerPrefs = await loadRunnerPrefs();
 
@@ -750,11 +725,13 @@ export function registerIpcHandlers(): void {
             await capturePreviewSnapshot(win, projectDir).catch(() => undefined);
           }
           await session.prompt(text);
-          // Agents edit workspace files via their native Read/Write tools
-          // — those bypass our PROJECTS_WRITE_FILE handler, so we queue
-          // the publish here. Debounced like a normal save: the iframe
-          // picks up the new version after the agent's turn settles.
-          requestPublish(input.projectId);
+          // Agent's writes landed in the session worktree directly.
+          // Publish synchronously so the iframe + OS scheduler see the
+          // new version once the turn settles. Best-effort: publish
+          // failures (no_changes for a chat-only turn, gateway down)
+          // shouldn't fail the prompt.
+          const sid = await ensureProjectSession(input.projectId);
+          await appsStorePublishApp(sid, input.projectId, `agent turn`).catch(() => undefined);
           return { mintedWebhooks: await provisionPendingWebhooks() };
         },
         stop: async () => {
@@ -797,7 +774,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.PUBLISH, async (_e, input: { id: string; skipBuild?: boolean }) => {
     void input.skipBuild;
     const sessionId = await ensureProjectSession(input.id);
-    await seedSessionFromWorkspaceIfEmpty(sessionId, input.id);
     const result = await appsStorePublishApp(sessionId, input.id, `publish ${input.id}`);
     // Adapt to the renderer's existing CentraidPublishResult shape so
     // builder.ts doesn't need to change. bytes/files retire — the git
@@ -1338,7 +1314,6 @@ export function registerIpcHandlers(): void {
         // Whole automation app — drop the workspace; the explicit
         // deregisterApp call from the renderer (or a later cleanup)
         // will purge `appsDir/<id>/`.
-        forgetPublish(ref.appId);
         await deleteAutomationAt(path.join(settings.workspaceDir, ref.appId));
       } else {
         // App-owned automation — just drop its workspace subdir, then

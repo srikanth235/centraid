@@ -235,6 +235,9 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         onAppLive: async (appId) => {
           await runtime.registry.ensureUploaded(appId);
         },
+        onAppDeleted: async (appId) => {
+          await runtime.registry.deregister(appId);
+        },
       }),
     ];
   }

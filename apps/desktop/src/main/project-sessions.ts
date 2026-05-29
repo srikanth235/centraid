@@ -20,7 +20,10 @@
  * the new gateway.
  */
 
+import path from 'node:path';
 import { openSession, closeSession } from './apps-store-client.js';
+import { gatewayCodeStoreDir } from './gateway-paths.js';
+import { loadSettings } from './settings.js';
 
 /** appId → open session id (resolves once the open round-trip lands). */
 const sessions = new Map<string, Promise<string>>();
@@ -85,4 +88,43 @@ export async function dropProjectSession(appId: string): Promise<void> {
  */
 export function resetProjectSessions(): void {
   sessions.clear();
+}
+
+/**
+ * Absolute path to the LOCAL session worktree's `apps/<appId>/` dir
+ * (opens the session if needed). Used by chat-agent + scaffold +
+ * template-clone flows that hand a directory to a builder-harness
+ * helper or to the codex/claude binary. Requires the active gateway
+ * to be local — remote gateways don't expose their worktrees over the
+ * filesystem.
+ *
+ * Caller must ensure the dir exists (most helpers do that as a side
+ * effect of writing into it).
+ */
+export async function ensureProjectSessionDir(appId: string): Promise<string> {
+  const settings = await loadSettings();
+  if (settings.activeGatewayKind !== 'local') {
+    throw new Error(
+      `editing app "${appId}" requires the local gateway (active is ${settings.activeGatewayKind})`,
+    );
+  }
+  const sessionId = await ensureProjectSession(appId);
+  return path.join(
+    gatewayCodeStoreDir(settings.activeGatewayId),
+    'worktrees',
+    'sessions',
+    sessionId,
+    'apps',
+    appId,
+  );
+}
+
+/**
+ * Absolute path to the LOCAL session worktree's `apps/` parent dir
+ * (the dir under which scaffolds create `<appId>/...`). Same gateway
+ * constraint as `ensureProjectSessionDir`.
+ */
+export async function ensureProjectSessionAppsParent(appId: string): Promise<string> {
+  const dir = await ensureProjectSessionDir(appId);
+  return path.dirname(dir);
 }

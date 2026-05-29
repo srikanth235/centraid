@@ -160,6 +160,31 @@ export async function rollbackApp(
   return parse(res, 'rollback');
 }
 
+export interface AppMetaRow {
+  id: string;
+  name?: string;
+  description?: string;
+  hasIndex: boolean;
+}
+
+/** Apps on main + their metadata. Replaces legacy `listProjects(workspaceDir)`. */
+export async function listAppsWithMeta(): Promise<AppMetaRow[]> {
+  const { baseUrl, token } = await auth();
+  const res = await fetch(`${baseUrl}/centraid/_apps`, { headers: headers(token) });
+  const out = await parse<AppMetaRow[]>(res, 'list-apps');
+  return out ?? [];
+}
+
+/** Remove an app from main (forward commit, tags reaped). */
+export async function deleteApp(appId: string): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await fetch(`${baseUrl}/centraid/_apps/${encodeURIComponent(appId)}`, {
+    method: 'DELETE',
+    headers: headers(token),
+  });
+  await parse(res, 'delete-app');
+}
+
 export interface GitVersion {
   tag: string;
   version: number;
