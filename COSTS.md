@@ -491,3 +491,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-1e487d5a-d58-1780060862 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | claude-opus-4-8 | 36238 | 144220 | 38425240 | 93840 | 274298 | 22.6412 | feat(gateway-runtime): reconcile OS scheduler on publish/delete/rollback (#141)s |
 | claude-code-1e487d5a-d58-1780062098 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | claude-opus-4-8 | 1027633 | 122152706 | 265460614 | 27975829 | 151156168 | 1600.7186 |  |
 | claude-code-1e487d5a-d58-1780062766 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | claude-opus-4-8 | 41057 | 171571 | 25303771 | 74063 | 286691 | 15.7811 |  |
+| claude-code-80a85a77-557-1780063377 | claude-code | 80a85a77-5576-410b-aceb-04db55524dd7 | #98 | claude-opus-4-7 | 5 | 12404 | 14871 | 149 | 12558 | 0.0887 |  |

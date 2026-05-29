@@ -80,17 +80,17 @@ test('GET /centraid/_automations lists (empty store)', async () => {
 });
 
 test('GET /centraid/_automations/read?ref= returns null when absent', async () => {
-  const r = await call('GET', '/centraid/_automations/read?ref=auto.x/x');
+  const r = await call('GET', '/centraid/_automations/read?ref=appx/x');
   assert.equal(r.status, 200);
   assert.deepEqual(r.body, { row: null });
 });
 
 test('POST run-now mints a runId and invokes the injected runAutomation', async () => {
-  const r = await call('POST', '/centraid/_automations/run-now?ref=auto.brief/brief');
+  const r = await call('POST', '/centraid/_automations/run-now?ref=brief/brief');
   assert.equal(r.status, 202);
   const { runId } = r.body as { runId: string };
-  assert.match(runId, /^auto\.brief\/brief:\d+:[0-9a-f]{8}$/);
-  assert.deepEqual(fired, [{ automationRef: 'auto.brief/brief', runId }]);
+  assert.match(runId, /^brief\/brief:\d+:[0-9a-f]{8}$/);
+  assert.deepEqual(fired, [{ automationRef: 'brief/brief', runId }]);
 });
 
 test('POST run-now without ?ref= is a 400', async () => {
@@ -106,7 +106,7 @@ test('GET /centraid/_automations/runs returns an empty feed', async () => {
 });
 
 test('GET /centraid/_automations/run?runId= returns null for an unknown run', async () => {
-  const r = await call('GET', '/centraid/_automations/run?runId=auto.x/x:1:deadbeef');
+  const r = await call('GET', '/centraid/_automations/run?runId=appx/x:1:deadbeef');
   assert.equal(r.status, 200);
   assert.deepEqual(r.body, { run: null });
 });

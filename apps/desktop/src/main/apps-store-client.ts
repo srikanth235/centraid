@@ -164,6 +164,12 @@ export interface AppMetaRow {
   id: string;
   name?: string;
   description?: string;
+  /**
+   * App classification from `app.json#kind`: `'automation'` marks a UI-less
+   * automation app, `'app'` / undefined a normal UI app. Replaces the legacy
+   * `auto.` id-prefix convention as the automation signal.
+   */
+  kind?: 'app' | 'automation';
   hasIndex: boolean;
 }
 

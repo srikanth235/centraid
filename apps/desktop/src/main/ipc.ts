@@ -970,7 +970,8 @@ export function registerIpcHandlers(): void {
     // scheduler so cron triggers fire and webhook routes resolve without
     // waiting for the next runtime start. Best-effort. Code resolves from
     // the git-store `active-main` — the same tree the scheduler bakes.
-    if (newAppId.startsWith('auto.')) {
+    // Only automation apps (`kind: 'automation'`) host automations.
+    if (tmpl.kind === 'automation') {
       try {
         const { rows } = await listAutomations(
           localRuntimeActiveCodeAppsDir(settings.activeGatewayId),
@@ -996,7 +997,7 @@ export function registerIpcHandlers(): void {
         colorKey: tmpl.colorKey,
         iconKey: tmpl.iconKey,
         version: tmpl.version,
-        kind: tmpl.kind ?? (tmpl.id.startsWith('auto.') ? 'automation' : 'app'),
+        kind: tmpl.kind ?? 'app',
       },
       webhooks,
     };
@@ -1157,7 +1158,8 @@ export function registerIpcHandlers(): void {
         return { kind: 'cron', expr: t.expr };
       });
 
-      // `input.id` is the `auto.`-prefixed automation app folder id.
+      // `input.id` is the automation app's folder id (a plain slug; the
+      // app marks itself `kind: 'automation'` in its `app.json`).
       // Scaffold into the app's editing-session worktree, then publish
       // it onto `main` so the materialized tree the OS scheduler reads
       // has the new automation's code.
@@ -1281,8 +1283,8 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { automationId: string }) => {
     // Delete is best-effort: tear down the OS scheduler entry, then drop
-    // the automation's code from `main` (issue #137). A whole-app
-    // automation (`auto.`-prefixed) is removed entirely via the HTTP
+    // the automation's code from `main` (issue #137). A whole automation
+    // app (`app.json#kind: 'automation'`) is removed entirely via the HTTP
     // delete; an app-owned automation just loses its `automations/<id>/`
     // subdir, published as a fresh commit.
     const settings = await loadSettings();
@@ -1296,7 +1298,14 @@ export function registerIpcHandlers(): void {
     }
     const ref = parseAutomationRef(input.automationId);
     if (ref) {
-      if (ref.appId.startsWith('auto.')) {
+      // Distinguish a whole automation app (`kind: 'automation'` — the app
+      // exists only to host automations, so remove it wholesale) from an
+      // app-owned automation (a UI app's `automations/<id>/` subdir, removed
+      // in place). The kind is read from the app's `app.json` via the apps
+      // list rather than inferred from the id.
+      const apps = await appsStoreListAppsWithMeta().catch(() => []);
+      const appKind = apps.find((a) => a.id === ref.appId)?.kind;
+      if (appKind === 'automation') {
         // Whole automation app — drop the editing session, then remove
         // the app from `main` (forward commit + tag reap; registry
         // deregister fires gateway-side via onAppDeleted).

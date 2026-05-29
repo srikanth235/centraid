@@ -36,7 +36,7 @@ whether an app is an automation app):
 
 - [x] Follow-up A — runtime-core + apps-store: kind field, plain-slug app ids
 - [x] Follow-up B — builder-harness + app-templates: scaffold automation apps via kind
-- [ ] Follow-up C — desktop: route automations on manifest kind, not id prefix
+- [x] Follow-up C — desktop: route automations on manifest kind, not id prefix
 
 Schedule/execute of app-owned automations was originally scoped as a
 follow-up, but landed inside this PR across commits 5–10 — see those
@@ -499,6 +499,33 @@ The scaffolders and the template catalog stop minting / requiring the
   `auto.`-prefix `kind` inference — `kind` is declared explicitly in
   `index.json` and defaults to `'app'`.
 
+### Follow-up C — desktop: route automations on manifest kind, not id prefix
+
+The desktop's last three `auto.`-prefix decisions move to the `kind`
+signal that now rides the project/template metadata end-to-end.
+
+- **apps-store-client + api types**: `AppMetaRow` (`apps-store-client.ts`)
+  and `CentraidProjectInfo` (`centraid-api.d.ts`) gain `kind?: 'app' |
+  'automation'`, carrying the gateway's `app.json#kind` (added in
+  follow-up A) through the HTTP project list to the renderer.
+  `CentraidTemplateMeta`'s `kind` doc drops the derive-from-id-prefix
+  fallback (defaults to `'app'`).
+- **ipc.ts**: the TEMPLATES_CLONE post-publish automation-registration
+  guard is now `tmpl.kind === 'automation'` (was `newAppId.startsWith
+  ('auto.')`); the returned template `kind` is `tmpl.kind ?? 'app'` (no
+  id-prefix inference). AUTOMATIONS_DELETE distinguishes a whole
+  automation app from an app-owned automation by looking up the app's
+  `kind` in the apps list rather than testing for an `auto.` prefix.
+- **renderer (app.ts)**: `hydrateDrafts` filters automation apps out of
+  My apps with `p.kind !== 'automation'`; the conversational-builder
+  draft id is a plain `automation-<rand>` slug (the scaffolder stamps
+  `kind: 'automation'`); `isAutomationTemplate` is just `t.kind ===
+  'automation'`.
+- **test fixtures**: the gateway-runtime reconcile + automations-routes
+  tests used dotted `auto.brief` / `auto.x` ids that follow-up A's
+  validator now rejects — retargeted to plain slugs (`brief`, `appx`),
+  with the reconcile app.json declaring `kind: 'automation'`.
+
 ## Out of scope
 
 - Bidirectional form editing — the config pane is a read-only rendered
@@ -663,3 +690,17 @@ The scaffolders and the template catalog stop minting / requiring the
   `manifest.json` (13 templates) with no `auto.` ids and `kind: 'automation'`
   on each automation entry; downstream `agent-runtime` / `openclaw-plugin`
   rebuild clean.
+
+### Follow-up C verification
+
+- Full `turbo run build typecheck lint test` green across all 28 tasks
+  after the desktop edits — `@centraid/desktop` typecheck clean with the
+  new `kind` field on `AppMetaRow` / `CentraidProjectInfo`.
+- `@centraid/gateway-runtime` test green (37 + 8): the reconcile and
+  automations-routes tests, which had used dotted `auto.` ids that
+  follow-up A's validator now rejects (the publish PUT returned
+  `400 invalid_app_id`), were retargeted to plain slugs and pass.
+- A repo-wide sweep confirms no remaining `startsWith('auto.')` or
+  `auto.${…}` id construction in `apps/desktop/src`; the only surviving
+  `auto.` mentions are doc comments naming the retired convention and
+  opaque analytics/slug-codec string fixtures unrelated to the signal.

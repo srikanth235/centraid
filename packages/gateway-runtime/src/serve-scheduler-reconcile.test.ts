@@ -57,9 +57,10 @@ function auth(): Record<string, string> {
 
 const APP_JSON = JSON.stringify({
   manifestVersion: 1,
-  id: 'auto.brief',
+  id: 'brief',
   name: 'Brief',
   version: '0.1.0',
+  kind: 'automation',
   actions: [],
   queries: [],
 });
@@ -115,14 +116,14 @@ test('publishing an automation triggers a scheduler reconcile with the new rows'
     ['automations/brief/automation.json', AUTOMATION_JSON],
     ['automations/brief/handler.js', 'export default async () => ({ summary: "ok" });\n'],
   ] as const) {
-    const res = await fetch(`${handle.url}/centraid/_apps/auto.brief/files/${rel}?sessionId=s1`, {
+    const res = await fetch(`${handle.url}/centraid/_apps/brief/files/${rel}?sessionId=s1`, {
       method: 'PUT',
       headers: auth(),
       body: content,
     });
     assert.equal(res.status, 200, `put ${rel}: ${await res.text()}`);
   }
-  const pub = await fetch(`${handle.url}/centraid/_apps/auto.brief/publish`, {
+  const pub = await fetch(`${handle.url}/centraid/_apps/brief/publish`, {
     method: 'POST',
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: 's1', message: 'add brief' }),
@@ -135,6 +136,6 @@ test('publishing an automation triggers a scheduler reconcile with the new rows'
   assert.match(last.codeAppsDir, /active-main[/\\]apps$/);
   assert.deepEqual(
     last.rows.map((r) => r.ref),
-    ['auto.brief/brief'],
+    ['brief/brief'],
   );
 });

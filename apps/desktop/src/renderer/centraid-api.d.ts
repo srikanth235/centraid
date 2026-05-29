@@ -15,6 +15,13 @@ export interface CentraidProjectInfo {
   name?: string;
   /** One-line description from `app.json#description`, if present. */
   description?: string;
+  /**
+   * App classification from `app.json#kind`: `'automation'` marks a UI-less
+   * automation app (shown on the Automations surface, hidden from My apps);
+   * `'app'` / undefined a normal UI app. Replaces the legacy `auto.`
+   * id-prefix convention as the automation signal.
+   */
+  kind?: 'app' | 'automation';
   /** Whether the project root has an `index.html` (preview-ready). */
   hasIndex?: boolean;
 }
@@ -271,8 +278,8 @@ export interface CentraidTemplateMeta {
   version: string;
   /**
    * 'app' (default — full UI app like Hydrate / Todos) or 'automation'
-   * (an `auto.`-prefixed app folder with no UI, surfaced on the
-   * Automations gallery). Defaults to derive-from-id-prefix when absent.
+   * (an app folder marked `app.json#kind: 'automation'`, no UI, surfaced on
+   * the Automations gallery). Defaults to 'app' when absent.
    */
   kind?: 'app' | 'automation';
   // ----- automation-only display fields ('automation' kind) -----

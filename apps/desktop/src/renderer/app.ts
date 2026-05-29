@@ -737,7 +737,7 @@
 
   // Refresh `drafts` from disk. Drafts = projects on disk whose ids aren't
   // already in `userApps` (= already pinned to home, with full metadata).
-  // Automation apps (`auto.*` folder ids) live in the same `appsDir` but
+  // Automation apps (`kind: 'automation'`) live in the same `appsDir` but
   // belong to the Automations surface — skip them here so My apps stays
   // app-only.
   async function hydrateDrafts(): Promise<void> {
@@ -745,7 +745,7 @@
       const projs = await window.CentraidApi.listProjects();
       const knownIds = new Set(getApps().map((a) => a.id));
       drafts = projs
-        .filter((p) => !p.id.startsWith('auto.'))
+        .filter((p) => p.kind !== 'automation')
         .filter((p) => !knownIds.has(p.id))
         .map((p) => {
           // Drafts default to the Sparkle icon (no inference has run yet);
@@ -1796,9 +1796,10 @@
   // in `automation.json` + `handler.js`. The draft is created disabled —
   // the user enables it from the builder once it looks right.
   async function createAndOpenAutomationBuilder(): Promise<void> {
-    // An automation is an app folder — the `auto.` prefix marks it as an
-    // automation app (issue #98).
-    const id = `auto.${Math.random().toString(36).slice(2, 8)}`;
+    // An automation is an app folder; the scaffolder marks it as an
+    // automation app via `app.json#kind: 'automation'` (issue #98). The id
+    // is a plain slug — the kind, not the id, is the automation signal.
+    const id = `automation-${Math.random().toString(36).slice(2, 8)}`;
     try {
       await window.CentraidApi.createAutomation({
         id,
@@ -1833,7 +1834,8 @@
 
   // ───────────────────────── Templates gallery ─────────────────────
   // Automation templates are real filesystem templates under
-  // `@centraid/app-templates/auto.<slug>/`, picked up by the shared
+  // `@centraid/app-templates/<slug>/` (marked `kind: 'automation'`),
+  // picked up by the shared
   // `listTemplates` IPC. Adopting one routes through `cloneTemplate` —
   // the same IPC the home Templates shelf uses for app templates —
   // and lands the user in the conversational builder. (Originally the
@@ -1937,8 +1939,8 @@
   // Adopting an automation template goes through the same `cloneTemplate`
   // IPC as the home-shelf "Use template" button — one code path for both
   // kinds. The IPC handles suffix-aware id+name picking, copies the
-  // template's `auto.<slug>/automations/<slug>/{automation.json,handler.js}`
-  // into the user's appsDir as `auto.<slug>-N/`, and mints any pending
+  // template's `<slug>/automations/<slug>/{automation.json,handler.js}`
+  // into the user's appsDir as `<slug>-N/`, and mints any pending
   // webhook secrets. The user then lands in the automation builder where
   // the agent will tune the handler from the manifest's `prompt`.
   async function adoptTemplate(template: TemplateEntry): Promise<void> {
@@ -3719,9 +3721,9 @@
     integrations?: readonly string[];
   }
 
-  /** True when the template is an automation (auto.* id or explicit kind). */
+  /** True when the template is an automation app (`kind: 'automation'`). */
   function isAutomationTemplate(t: TemplateEntry): boolean {
-    return t.kind === 'automation' || t.id.startsWith('auto.');
+    return t.kind === 'automation';
   }
 
   /**
