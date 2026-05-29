@@ -57,6 +57,7 @@ import {
 import { AppsStore } from '@centraid/apps-store';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
 import { makeAutomationsRouteHandler } from './automations-routes.js';
+import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
 import { makeTemplatesRouteHandler } from './templates-routes.js';
 import type { GatewayPaths } from './paths.js';
 import type { SecretsProvider } from './secrets.js';
@@ -331,6 +332,19 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
           await runtime.registry.deregister(appId);
           reconcileScheduler();
         },
+      }),
+      // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
+      // scaffold / clone / update-meta / automation create+toggle+delete.
+      // Stages into a session worktree (the draft); `publish:true` merges
+      // onto `main` + reconciles the scheduler. Webhook secrets minted here.
+      makeLifecycleRouteHandler({
+        store,
+        codeAppsDir,
+        ...(paths.templatesCacheDir ? { templatesCacheDir: paths.templatesCacheDir } : {}),
+        ensureRegistered: async (appId) => {
+          await runtime.registry.ensureUploaded(appId);
+        },
+        reconcile: reconcileScheduler,
       }),
       // Automation runtime ops over HTTP (issue #141): list/read/run-now,
       // the run feed + per-run detail, and insights. Run-now fires on

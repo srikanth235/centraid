@@ -287,7 +287,7 @@ async function handleFiles(
 
 // ---- manifest validation (gateway-side, was builder-harness) ----
 
-async function validateManifestAt(appDir: string): Promise<string | undefined> {
+export async function validateManifestAt(appDir: string): Promise<string | undefined> {
   let raw: string;
   try {
     raw = await fs.readFile(path.join(appDir, 'app.json'), 'utf8');

@@ -35,6 +35,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Renderer data plane over direct HTTP — versions, user prefs, automation reads, insights
 - [x] Draft preview served through the gateway runtime
 - [x] Gateway owns the template catalog (GET /centraid/_templates)
+- [x] Gateway owns the app lifecycle (create/clone/meta/automation CRUD over HTTP)
 
 ## What changed
 
@@ -329,6 +330,34 @@ preload method, channel, and `CentraidApi` typing are deleted.
 opens a session + publishes, and that orchestration moves to the gateway in
 the next slice.
 
+**Gateway owns the app lifecycle (create/clone/meta/automation CRUD over
+HTTP).** The deterministic builder — scaffolding a blank app, cloning a
+template, editing name/description, and creating/toggling/deleting automations
+— moves off the desktop and into the gateway as a new `lifecycle-routes.ts`
+(`makeLifecycleRouteHandler`, mounted in `serve()`'s `extraHandlers`):
+`POST /centraid/_apps` (scaffold), `POST /centraid/_apps/_clone` (clone a
+bundled template), `POST /centraid/_apps/<id>/meta` (rename/describe),
+`POST /centraid/_automations` (scaffold an automation app),
+`POST /centraid/_automations/set-enabled?ref=` (toggle), and
+`DELETE /centraid/_automations?ref=` (remove). `gateway-runtime` gains an
+`@centraid/builder-harness` dependency so the gateway runs the same
+`scaffoldProjectFiles` / `cloneTemplateFiles` / `updateProjectMetaFiles` /
+`scaffold*`/`setAutomationEnabledInFiles` / `deleteAutomationFromFiles`
+scaffolders the desktop used, plus runtime-core webhook minting
+(`provisionPendingWebhooksInFiles` for clone, `generateWebhookId/Secret` +
+`hashWebhookSecret` for automation create) — the plaintext secret is returned
+once in the response, only the hash lands in the manifest. Every mutation
+**stages** into a git-store session worktree (the draft); a `publish` flag
+(default off, extending the explicit-publish model) validates the manifest and
+merges onto `main` + reconciles the OS scheduler. A staged-only create is
+registered via `runtime.registry.ensureUploaded` so its draft is immediately
+previewable through the `_draft` route without a `main` version. Shared
+`route-helpers` gains `readFileMap`/`writeFileMap` (a `{path,content}[]`
+worktree round-trip) and `apps-store-routes` exports `validateManifestAt` so
+the lifecycle publish path reuses the same gateway-side manifest validation.
+This slice is additive — the desktop's IPC handlers still run; the renderer
+cutover + handler/scaffold-dep deletion is the next slice.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
@@ -411,6 +440,18 @@ the next slice.
   every row carries the 6 display fields and neither `files` nor `source`.
   `@centraid/desktop` typechecks + builds with `listTemplates` on the
   renderer client and the IPC handler/preload/channel removed.
+- Gateway owns the app lifecycle (create/clone/meta/automation CRUD over
+  HTTP): full `turbo run build typecheck lint test` green across all 28 tasks.
+  New `lifecycle-over-http.test.ts` (gateway-runtime) boots a real git-store
+  gateway and drives the endpoints end to end — a stage-only `POST /_apps`
+  returns `{sessionId, staged:true}`, leaves the app off the `main` list, yet
+  serves its draft `app.json` through `/centraid/_draft/<sid>/<id>/`; a
+  `publish:true` create lands on `main` and shows in `GET /_apps`; a duplicate
+  id 409s `already_exists`; `…/meta` renames an app on `main`; an automation
+  create mints a webhook secret returned once (`/_centraid-hook/` URL) with the
+  row read back from `main` and `kind: 'automation'`; and set-enabled →
+  whole-app delete flows through publish, removing the app from `main`.
+  `@centraid/gateway-runtime` typecheck + lint clean (48 package tests pass).
 
 ## Out of scope
 
