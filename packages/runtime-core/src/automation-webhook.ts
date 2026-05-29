@@ -33,6 +33,7 @@ import {
 } from './automation-project.js';
 import {
   isPendingWebhookTrigger,
+  parseManifest,
   pendingWebhookTriggerOf,
   webhookTriggerOf,
   type AutomationTrigger,
@@ -148,6 +149,77 @@ export async function provisionAppPendingWebhooks(appDir: string): Promise<Provi
     if (minted) out.push(minted);
   }
   return out;
+}
+
+/** A single draft file in a git-store file map (issue #141). */
+export interface WebhookFileMapEntry {
+  path: string;
+  content: string;
+}
+
+/** A webhook minted while provisioning a file map. No `dir` — the app is edited over HTTP. */
+export interface ProvisionedWebhookInFiles {
+  /** The `automation.json` path within the file map. */
+  readonly path: string;
+  /** Automation id (the `automations/<id>/` segment). */
+  readonly automationId: string;
+  /** Owning app id. */
+  readonly ownerApp: string;
+  /** Minted webhook route slug. */
+  readonly webhookId: string;
+  /** Plaintext shared secret — shown once, never written to disk. */
+  readonly secret: string;
+}
+
+const AUTOMATION_MANIFEST_RE = /^automations\/([^/]+)\/automation\.json$/;
+
+/**
+ * Filesystem-free variant of {@link provisionAppPendingWebhooks} for the
+ * git-store/HTTP path (issue #141). Scans a draft file map for pending
+ * webhook triggers, mints id + secret for each, rewrites the trigger to
+ * its provisioned form, and returns the updated map plus the minted
+ * secrets (to be shown once). Secrets are minted here (crypto) and only
+ * their hash is written into the manifest, so the plaintext never reaches
+ * the gateway. Unparseable / invalid manifests are passed through
+ * untouched.
+ */
+export function provisionPendingWebhooksInFiles(
+  files: ReadonlyArray<WebhookFileMapEntry>,
+  ownerApp: string,
+): { files: WebhookFileMapEntry[]; minted: ProvisionedWebhookInFiles[] } {
+  const out: WebhookFileMapEntry[] = [];
+  const minted: ProvisionedWebhookInFiles[] = [];
+  for (const f of files) {
+    const m = AUTOMATION_MANIFEST_RE.exec(f.path);
+    if (!m) {
+      out.push(f);
+      continue;
+    }
+    let manifest;
+    try {
+      manifest = parseManifest(f.content);
+    } catch {
+      out.push(f); // invalid manifest — leave it for the publish-time validator.
+      continue;
+    }
+    if (!pendingWebhookTriggerOf(manifest.triggers)) {
+      out.push(f);
+      continue;
+    }
+    const webhookId = generateWebhookId();
+    const secret = generateWebhookSecret();
+    const provisioned: WebhookTrigger = {
+      kind: 'webhook',
+      id: webhookId,
+      secretHash: hashWebhookSecret(secret),
+    };
+    const triggers: AutomationTrigger[] = manifest.triggers.map((t) =>
+      isPendingWebhookTrigger(t) ? provisioned : t,
+    );
+    out.push({ path: f.path, content: JSON.stringify({ ...manifest, triggers }, null, 2) + '\n' });
+    minted.push({ path: f.path, automationId: m[1]!, ownerApp, webhookId, secret });
+  }
+  return { files: out, minted };
 }
 
 /** Result of the caller-supplied automation fire. */

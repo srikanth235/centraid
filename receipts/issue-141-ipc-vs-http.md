@@ -21,7 +21,7 @@ v0 pre-release: no backward compatibility, no migrations.
 ## Checklist
 
 - [x] Builder-harness file-map scaffolders
-- [ ] Webhook provisioning over a file map
+- [x] Webhook provisioning over a file map
 - [ ] Session file-delete route + shared route-helpers
 - [ ] Automation + insights HTTP routes
 - [ ] Reconcile OS scheduler on publish/delete/rollback
@@ -47,10 +47,21 @@ templates moved out of `scaffold.ts`); `cloneTemplateFiles`
 pure variants, and `project-rewrites.ts` exposes pure `rewriteTitleInHtml`
 / `applyManifestName` shared by both paths.
 
+**Webhook provisioning over a file map.** `provisionAppPendingWebhooks`
+read/rewrote `automation.json` on disk, so it couldn't run for a remote
+gateway. Added `provisionPendingWebhooksInFiles(files, ownerApp)` in
+`packages/runtime-core/src/automation-webhook.ts`: it scans a draft file
+map for pending webhook triggers, mints the route id + secret
+desktop-side (crypto), rewrites each trigger to its provisioned
+`{kind,id,secretHash}` form, and returns the updated map plus the minted
+secrets to show once. Only the hash reaches the gateway.
+
 ## Verification
 
 - `@centraid/builder-harness` typecheck + lint clean;
   `scaffold-files.test.ts` adds 15 cases (52 package tests pass).
+- `@centraid/runtime-core` typecheck + lint clean;
+  `automation-webhook.test.ts` adds 3 cases (343 package tests pass).
 
 ## Out of scope
 
