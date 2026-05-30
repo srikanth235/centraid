@@ -238,23 +238,6 @@ declare global {
 
   type SidebarPage = 'home' | 'insights' | 'discover' | 'starred' | 'automations' | 'settings';
 
-  /**
-   * Compact gateway summary for the sidebar-head switcher row. The
-   * row shows the active gateway's label + a geometric kind mark (filled
-   * for local, hollow for remote). Clicking the row invokes
-   * `onOpenGatewaySwitcher`, which the renderer wires to a popover
-   * anchored to the row's bottom edge.
-   */
-  interface ChromeSidebarGateway {
-    activeId: string;
-    activeKind: 'local' | 'remote';
-    activeLabel: string;
-    /** Friendly name for the active profile (issue #113). */
-    activeDisplayName: string;
-    /** Avatar color (`#RRGGBB`) for the active profile (issue #113). */
-    activeAvatarColor: string;
-  }
-
   interface ChromeBuildSidebarOpts {
     /** App id of the app/builder currently in focus — highlights its row. */
     activeId?: string;
@@ -263,13 +246,12 @@ declare global {
     apps: ChromeSidebarApp[];
     drafts: ChromeSidebarApp[];
     /**
-     * Active gateway summary — rendered as the sidebar-head row above
-     * "Build new". Omit to skip the head row (test harnesses).
+     * Arbitrary element rendered at the very top of the sidebar, above
+     * "Build new", followed by a hairline divider. Used to mount the
+     * profile switcher head row. Omit to skip the head slot (test
+     * harnesses).
      */
-    gateway?: ChromeSidebarGateway;
-    /** Invoked on click of the gateway head row. Anchored popover opens
-     *  the full switcher (kind-grouped list, add/rename/remove). */
-    onOpenGatewaySwitcher?: (anchor: MenuAnchor) => void;
+    headSlot?: HTMLElement;
     onHome: () => void;
     onNewApp: () => void;
     /** New-chat action wired to the Chats section `+`. Falls back to
@@ -292,56 +274,80 @@ declare global {
   }
 
   /**
-   * Profile shape passed into the gateway-switcher popover. Mirrors
-   * `CentraidGatewayProfile` from `centraid-api.d.ts` but redeclared
-   * here so chrome.ts (a separate IIFE) doesn't need to import from
-   * the Centraid API typings file.
+   * Renderer-facing profile record fed into the profile switcher's
+   * presentation layer (`window.Profiles`). A profile IS a gateway:
+   * `name`/`color`/`kind` come from the gateway backend (displayName /
+   * avatarColor / kind), while `icon`/`blurb` are Centraid-owned
+   * metadata persisted client-side via `window.Store`. `appsCount` is
+   * known only for the active profile (others omit it).
    */
-  interface ChromeGatewayProfile {
+  interface ProfileView {
     id: string;
+    name: string;
+    /** `#RRGGBB` avatar color (maps to gateway `avatarColor`). */
+    color: string;
+    icon: IconName;
+    blurb: string;
     kind: 'local' | 'remote';
-    label: string;
-    /** Friendly name (issue #113). Always populated. */
-    displayName: string;
-    /** `#RRGGBB` avatar color (issue #113). Always populated. */
-    avatarColor: string;
-    url?: string;
+    /** True for the primordial `'local'` gateway — cannot be deleted. */
+    primordial: boolean;
+    /** App count, when known (active profile only). */
+    appsCount?: number;
   }
 
-  interface ChromeGatewaySwitcherOpts {
-    anchor: MenuAnchor;
-    profiles: ChromeGatewayProfile[];
-    activeId: string;
-    /** The primordial local id (`'local'`). Used to disable the Remove
-     *  button on that profile so the row reads as immutable. */
-    primordialLocalId: string;
-    onActivate: (id: string) => Promise<void> | void;
-    /**
-     * Rename — edits the user-visible `displayName`, not the technical
-     * `label` (which is the immutable creation-time string used as a
-     * fallback when displayName isn't set).
-     */
-    onRename: (id: string, nextDisplayName: string) => Promise<void> | void;
-    onRemove: (id: string) => Promise<void> | void;
-    /** Change the profile's avatar color (`#RRGGBB`). */
-    onChangeColor: (id: string, color: string) => Promise<void> | void;
-    /**
-     * Rotate the keychain-stored bearer token for a remote profile.
-     * Pass an empty string to clear. No-op for local profiles.
-     */
-    onRotateToken: (id: string, token: string) => Promise<void> | void;
-    onAddLocal: (input: {
-      label: string;
-      displayName?: string;
-      avatarColor?: string;
-    }) => Promise<void> | void;
-    onAddRemote: (input: {
-      label: string;
-      url: string;
-      token: string;
-      displayName?: string;
-      avatarColor?: string;
-    }) => Promise<void> | void;
+  /**
+   * Profile switcher presentation API (apps/desktop/src/renderer/profiles.ts).
+   * Owns the avatar, sidebar-head switcher, dropdown, add/edit modal,
+   * delete dialog, toast, and the Settings manage body. All data + IPC
+   * wiring stays in app.ts, which feeds `ProfileView` records in and
+   * receives plain callbacks out.
+   */
+  interface ProfilesApi {
+    readonly PROFILE_COLORS: readonly string[];
+    readonly PROFILE_ICONS: readonly IconName[];
+    readonly DEFAULT_ICON: IconName;
+    /** Read the client-side icon/description metadata for a profile id. */
+    metaFor: (id: string) => { icon: IconName; blurb: string };
+    /** Persist icon/description metadata for a profile id. */
+    saveMeta: (id: string, patch: { icon?: IconName; blurb?: string }) => void;
+    /** Drop stored metadata for a removed profile. */
+    forgetMeta: (id: string) => void;
+    avatar: (profile: { icon: IconName; color: string }, size?: number) => HTMLElement;
+    buildSwitcherHeader: (opts: {
+      active: ProfileView;
+      open?: boolean;
+      onToggle: (anchor: DOMRect) => void;
+    }) => HTMLElement;
+    openDropdown: (opts: {
+      anchor: DOMRect;
+      profiles: ProfileView[];
+      activeId: string;
+      onSwitch: (id: string) => void;
+      onEdit: (p: ProfileView) => void;
+      onAdd: () => void;
+      onManage: () => void;
+    }) => { close: () => void };
+    openModal: (opts: {
+      mode: 'add' | 'edit';
+      initial: { name?: string; icon?: IconName; color?: string; blurb?: string };
+      onCommit: (data: { name: string; icon: IconName; color: string; blurb: string }) => void;
+      onCancel: () => void;
+      onDelete?: (() => void) | null;
+    }) => { close: () => void };
+    openDeleteDialog: (opts: {
+      profile: ProfileView;
+      onConfirm: () => void;
+      onCancel: () => void;
+    }) => { close: () => void };
+    toast: (opts: { msg: string; kind?: 'ok' | 'del' }) => void;
+    buildManageBody: (opts: {
+      profiles: ProfileView[];
+      activeId: string;
+      onSwitch: (id: string) => void;
+      onEdit: (p: ProfileView) => void;
+      onDelete: (p: ProfileView) => void;
+      onAdd: () => void;
+    }) => HTMLElement;
   }
 
   interface ChromeApi {
@@ -351,12 +357,6 @@ declare global {
       setChatPaneOpen: (open: boolean) => void;
     };
     buildSidebar: (opts: ChromeBuildSidebarOpts) => HTMLElement;
-    /**
-     * Mount the gateway-switcher popover anchored to the sidebar-head
-     * row. Returns a `close()` handle so the renderer can dismiss
-     * programmatically (e.g. after activation completes elsewhere).
-     */
-    openGatewaySwitcher: (opts: ChromeGatewaySwitcherOpts) => { close: () => void };
     tbBtn: (opts: {
       icon: string;
       title?: string;
@@ -383,6 +383,7 @@ declare global {
     DateUtil: CentraidDateUtil;
     Centraid: CentraidRoot;
     Chrome: ChromeApi;
+    Profiles: ProfilesApi;
     openBuilder: (opts: BuilderOptions) => () => void;
     AppChat: { mount: (opts: AppChatMountOptions) => () => void };
     /**
@@ -412,4 +413,5 @@ declare global {
   var Store: CentraidStore;
   var DateUtil: CentraidDateUtil;
   var Centraid: CentraidRoot;
+  var Profiles: ProfilesApi;
 }

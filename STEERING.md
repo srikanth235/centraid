@@ -346,3 +346,9 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-1e487d5ad58-1780084239-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | questions builder harness running locally; thinks gateway should own it |  |
 | steer-1e487d5ad58-1780084239-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
 | steer-1e487d5ad58-1780084239-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | wants builder chat and app chat unified into one chat surface |  |
+| steer-ba7345b0dab-1780052504-1 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
+| steer-ba7345b0dab-1780052504-2 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | asked to delete existing switcher before reimplementing |  |
+| steer-ba7345b0dab-1780052504-3 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
+| steer-ba7345b0dab-1780052504-4 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | told to pause work due to dev server errors |  |
+| steer-ba7345b0dab-1780052504-5 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
+| steer-ba7345b0dab-1780052504-6 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | narrowed scope to just verifying desktop runs |  |

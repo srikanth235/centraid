@@ -516,3 +516,6 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-1e487d5a-d58-1780083136 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | claude-opus-4-8 | 18888 | 19830 | 2464702 | 2440 | 41158 | 1.5117 |  |
 | claude-code-7c1affc2-4fd-1780084239 | claude-code | 7c1affc2-4fd9-4328-b6c4-2d21b2107b60 | #141 | claude-opus-4-7 | 5 | 14298 | 14871 | 171 | 14474 | 0.1011 |  |
 | claude-code-1e487d5a-d58-1780084892 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | claude-opus-4-8 | 695823 | 3888449 | 373431865 | 1710289 | 6294561 | 257.2551 |  |
+| claude-code-ba7345b0-dab-1780052584 | claude-code | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 | #139 | claude-opus-4-8 | 60117 | 889704 | 64138168 | 472774 | 1422595 | 49.7497 |  |
+| claude-code-ba7345b0-dab-1780052698 | claude-code | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 | #139 | claude-opus-4-8 | 155 | 41524 | 1205958 | 20207 | 61886 | 1.3685 |  |
+| claude-code-ba7345b0-dab-1780052833 | claude-code | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 | #139 | claude-opus-4-8 | 419 | 28988 | 1742639 | 18596 | 48003 | 1.5195 |  |
