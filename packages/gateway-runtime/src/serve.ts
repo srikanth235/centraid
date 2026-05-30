@@ -33,11 +33,14 @@
  */
 
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import {
   AnalyticsStore,
   ChatHistoryStore,
+  InsightsStore,
   Runtime,
   UserStore,
+  cleanupDeregisteredApp,
   listAutomations,
   makeGatewayDbProvider,
   makeAnalyticsDbProvider,
@@ -47,10 +50,17 @@ import {
 } from '@centraid/runtime-core';
 import {
   makeChatRunner,
+  runAutomationLocal,
   runPreflight,
   type OpenAICompatProvider,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
+import { AppsStore } from '@centraid/apps-store';
+import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
+import { makeAutomationsRouteHandler } from './automations-routes.js';
+import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
+import { makeUnifiedChatRunner } from './unified-chat-runner.js';
+import { makeTemplatesRouteHandler } from './templates-routes.js';
 import type { GatewayPaths } from './paths.js';
 import type { SecretsProvider } from './secrets.js';
 import { parseProviderPrefs } from './provider-prefs.js';
@@ -74,10 +84,13 @@ export interface ServeOptions {
    * When provided, `serve()` kicks off a fire-and-forget OS-scheduler
    * reconcile on boot — catches up the host scheduler with any
    * automations toggled while the runtime was down. The factory is
-   * invoked once with the resolved `appsDir`. Omit for tests and the
-   * daemon's v0 PoC (no scheduler).
+   * invoked once with the resolved code + data dirs: `codeAppsDir` is
+   * where automation manifests/handlers live (the git-store `active-main`
+   * symlink when `appsStoreRoot` is set, else `paths.appsDir`), and
+   * `dataAppsDir` is `paths.appsDir` (run ledgers). Omit for tests and
+   * the daemon's v0 PoC (no scheduler).
    */
-  schedulerHostFactory?: (appsDir: string) => AutomationHost;
+  schedulerHostFactory?: (dirs: { codeAppsDir: string; dataAppsDir: string }) => AutomationHost;
   /** Logger forwarded to `Runtime`. Defaults to a `console.*` wrapper. */
   logger?: RuntimeLogger;
   /**
@@ -86,6 +99,16 @@ export interface ServeOptions {
    * to disambiguate multiple gateways in one process.
    */
   logTag?: string;
+  /**
+   * When provided, the gateway owns app *code* as a git store rooted
+   * here (issue #137): `<appsStoreRoot>/apps.git` + `worktrees/`. The
+   * runtime then serves handlers + static from the live `main`
+   * worktree instead of `<appsDir>/<id>/versions/<active>/`. App
+   * *data* (`data.sqlite`) still lives under `paths.appsDir`, so the
+   * two stores stay cleanly separated. Omit for the legacy
+   * tarball-upload backend (OpenClaw, pre-#137 setups).
+   */
+  appsStoreRoot?: string;
 }
 
 export interface GatewayServeHandle {
@@ -101,6 +124,12 @@ export interface GatewayServeHandle {
   userStore: UserStore;
   analyticsStore: AnalyticsStore;
   chatHistoryStore: ChatHistoryStore;
+  /**
+   * The git-store backend, when `appsStoreRoot` was supplied. Callers
+   * (the publish endpoint, export/import, the desktop's file IPC) drive
+   * sessions + publishes through this. `undefined` on the legacy backend.
+   */
+  appsStore?: AppsStore;
 }
 
 export async function serve(options: ServeOptions): Promise<GatewayServeHandle> {
@@ -109,13 +138,88 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
 
   await fs.mkdir(paths.appsDir, { recursive: true });
 
+  // Git-store backend (issue #137). When a root is given, the gateway
+  // owns app code as a bare git repo + worktrees; the runtime serves
+  // handlers from the live `main` worktree. Constructed + initialized
+  // here so the code-dir override is available at Runtime construction.
+  let appsStore: AppsStore | undefined;
+  if (options.appsStoreRoot !== undefined) {
+    appsStore = new AppsStore({ root: options.appsStoreRoot });
+    await appsStore.init();
+  }
+  const codeDirOverride = appsStore
+    ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
+    : undefined;
+  // Draft preview (issue #141): resolve an app's code dir to its OPEN
+  // session worktree (`worktrees/sessions/<id>/apps/<app>/`) so the
+  // runtime can serve the staged draft — static + handlers — before it's
+  // published. Data still binds to the registry entry's dir, so the draft
+  // reads/writes the live `data.sqlite`. Returns `undefined` for an
+  // unknown/closed session (→ 503), so the live path is unaffected.
+  const draftCodeDir = appsStore
+    ? async (appId: string, sessionId: string): Promise<string | undefined> => {
+        try {
+          return await appsStore!.snapshotSessionAppDir(sessionId, appId);
+        } catch {
+          return undefined;
+        }
+      }
+    : undefined;
+
+  // OS-scheduler reconcile (issue #141). Automation *code* lives under
+  // the git-store materialized `main` (`active-main/apps`), or `appsDir`
+  // for the flat/legacy layout. We re-scan + reconcile the whole desired
+  // set (idempotent) rather than register single rows, so a publish /
+  // delete / rollback over HTTP keeps the scheduler in sync for BOTH the
+  // local embedded gateway and a remote one. Fire-and-forget — a publish
+  // response must not block on a launchd/systemd shell-out — with a
+  // coalescing guard so concurrent publishes don't thrash the scheduler.
+  const schedulerCodeAppsDir = (): string =>
+    appsStore ? path.join(appsStore.getActiveMainLink(), 'apps') : paths.appsDir;
+  let reconcileInFlight = false;
+  let reconcileDirty = false;
+  const reconcileScheduler = (): void => {
+    if (!schedulerHostFactory) return;
+    if (reconcileInFlight) {
+      reconcileDirty = true;
+      return;
+    }
+    reconcileInFlight = true;
+    void (async () => {
+      do {
+        reconcileDirty = false;
+        const codeAppsDir = schedulerCodeAppsDir();
+        const { rows } = await listAutomations(codeAppsDir);
+        const diff = await schedulerHostFactory({
+          codeAppsDir,
+          dataAppsDir: paths.appsDir,
+        }).reconcile(rows);
+        if (diff.added.length || diff.updated.length || diff.removed.length) {
+          logger.info(
+            `OS scheduler reconcile — ` +
+              `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
+          );
+        }
+      } while (reconcileDirty);
+    })()
+      .catch((err) =>
+        logger.warn(
+          `OS scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err)),
+        ),
+      )
+      .finally(() => {
+        reconcileInFlight = false;
+      });
+  };
+
   // Gateway identity DB + the central analytics DB. Each store wraps a
   // lazy provider that opens its file on first use. Chat sessions + chat
   // runs live in each app's `runtime.sqlite` under `appsDir`, so
   // `ChatHistoryStore` is constructed with `appsDir` and resolves the
   // file per app.
   const gatewayDbProvider = makeGatewayDbProvider(paths.identityDb);
-  const analyticsStore = new AnalyticsStore(makeAnalyticsDbProvider(paths.analyticsDb));
+  const analyticsProvider = makeAnalyticsDbProvider(paths.analyticsDb);
+  const analyticsStore = new AnalyticsStore(analyticsProvider);
   const userStore = new UserStore(gatewayDbProvider);
   const chatHistoryStore = new ChatHistoryStore(
     paths.appsDir,
@@ -156,15 +260,33 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // the Runtime is constructed *with* the chat runner. The runtimeRef
   // holder resolves at call time, after the assignment below.
   let runtimeRef: Runtime | undefined;
-  const chatRunner = makeChatRunner({
-    prefsLoader,
-    getDispatcher: () => {
-      const rt = runtimeRef;
-      if (!rt) throw new Error('chat runner invoked before runtime was constructed');
-      return rt.dispatcher;
-    },
-    codexHomeBaseDir: paths.codexHomeBaseDir,
-  });
+  const getDispatcher = (): Runtime['dispatcher'] => {
+    const rt = runtimeRef;
+    if (!rt) throw new Error('chat runner invoked before runtime was constructed');
+    return rt.dispatcher;
+  };
+  // The runner builds webhook URLs against the live server origin, known
+  // only after `startRuntimeHttpServer` resolves below — a turn only ever
+  // runs post-start, so this holder is populated by then.
+  let serverUrl = '';
+  // Unified chat (issue #141, Phase 3): when a git store backs app code,
+  // every chat turn runs in the app's draft worktree with the union of
+  // native file tools + the `centraid_*` dispatcher — one surface that both
+  // tweaks the app's code and operates its data. Without a store (no draft
+  // worktree to edit) we fall back to the data-only chat adapter.
+  const chatRunner = appsStore
+    ? makeUnifiedChatRunner({
+        store: appsStore,
+        prefsLoader,
+        getDispatcher,
+        publicBaseUrl: () => serverUrl,
+        codexHomeBaseDir: paths.codexHomeBaseDir,
+      })
+    : makeChatRunner({
+        prefsLoader,
+        getDispatcher,
+        codexHomeBaseDir: paths.codexHomeBaseDir,
+      });
 
   const runtime = new Runtime({
     appsDir: paths.appsDir,
@@ -185,6 +307,8 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
       return runPreflight(prefs);
     },
     logger,
+    ...(codeDirOverride ? { codeDirOverride } : {}),
+    ...(draftCodeDir ? { draftCodeDir } : {}),
   });
 
   runtimeRef = runtime;
@@ -193,33 +317,121 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   if (options.host !== undefined) serverOptions.host = options.host;
   if (options.port !== undefined) serverOptions.port = options.port;
   if (options.token !== undefined) serverOptions.token = options.token;
+  // Mount the git-store publish/session/files surface ahead of the
+  // runtime's own routes when a store backend is active (issue #137).
+  // onAppLive registers a freshly-published app in the registry so its
+  // data dir exists + `registry.get` resolves on the first request.
+  //
+  // Code (automation manifests) resolves from the git-store materialized
+  // `main`; data (run ledgers + analytics) from the stable `appsDir`.
+  // Template catalog (issue #141): the gateway owns it now, so the
+  // renderer reads `GET /centraid/_templates` directly. Mounted regardless
+  // of the code backend — templates are bundle/cache-resolved, independent
+  // of the git store.
+  const extraHandlers: Array<
+    (
+      req: import('node:http').IncomingMessage,
+      res: import('node:http').ServerResponse,
+    ) => Promise<boolean>
+  > = [
+    makeTemplatesRouteHandler({
+      ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
+      ...(paths.remoteTemplatesUrl ? { remoteTemplatesUrl: paths.remoteTemplatesUrl } : {}),
+    }),
+  ];
+
+  if (appsStore) {
+    const store = appsStore;
+    const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
+    // Drop an app from the registry AND delete its wrapper dir
+    // (`<appsDir>/<id>/` — data.sqlite + run ledgers). Mirrors the legacy
+    // `registry-deregister` route so deleting an app over the git-store
+    // surface doesn't strand per-app data that a recreated id would inherit.
+    // The code on `main` is already gone (`store.deleteApp`).
+    const deregisterAndCleanup = async (appId: string): Promise<void> => {
+      const removed = await runtime.registry.deregister(appId);
+      if (removed) await cleanupDeregisteredApp(paths.appsDir, removed, logger);
+    };
+    extraHandlers.push(
+      makeAppsStoreRouteHandler(store, {
+        onAppLive: async (appId) => {
+          await runtime.registry.ensureUploaded(appId);
+          // A publish/rollback may have added/removed/toggled an
+          // automation — resync the OS scheduler off the new `main`.
+          reconcileScheduler();
+        },
+        onAppDeleted: async (appId) => {
+          await deregisterAndCleanup(appId);
+          reconcileScheduler();
+        },
+      }),
+      // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
+      // scaffold / clone / update-meta / automation create+toggle+delete.
+      // Stages into a session worktree (the draft); `publish:true` merges
+      // onto `main` + reconciles the scheduler. Webhook secrets minted here.
+      makeLifecycleRouteHandler({
+        store,
+        codeAppsDir,
+        ...(paths.templatesCacheDir ? { templatesCacheDir: paths.templatesCacheDir } : {}),
+        ensureRegistered: async (appId) => {
+          await runtime.registry.ensureUploaded(appId);
+        },
+        deregister: deregisterAndCleanup,
+        reconcile: reconcileScheduler,
+      }),
+      // Automation runtime ops over HTTP (issue #141): list/read/run-now,
+      // the run feed + per-run detail, and insights. Run-now fires on
+      // THIS host with the gateway's own runner config.
+      makeAutomationsRouteHandler({
+        store,
+        dataAppsDir: paths.appsDir,
+        analytics: analyticsStore,
+        insights: new InsightsStore(analyticsProvider),
+        runAutomation: ({ automationRef, runId }) => {
+          void (async () => {
+            const prefs = await prefsLoader();
+            await runAutomationLocal({
+              automationRef,
+              runId,
+              appsDir: paths.appsDir,
+              codeAppsDir: codeAppsDir(),
+              analytics: analyticsStore,
+              runner: prefs?.kind ?? 'codex',
+              triggerKind: 'manual',
+              triggerOrigin: 'manual',
+            });
+          })().catch((err) =>
+            logger.warn(
+              `run-now ${automationRef} failed: ` +
+                (err instanceof Error ? err.message : String(err)),
+            ),
+          );
+        },
+      }),
+    );
+  }
+  serverOptions.extraHandlers = extraHandlers;
   const server = await startRuntimeHttpServer(serverOptions);
+  // Publish the live origin to the unified chat runner so post-turn webhook
+  // minting can build absolute `_centraid-hook` URLs.
+  serverUrl = server.url;
   await runtime.bootstrap();
 
-  // Startup reconcile (opt-in): catch up the OS scheduler on anything
-  // that changed while the runtime was down. Fire-and-forget so a slow
-  // scheduler shell-out doesn't block start. The Electron embed always
-  // passes a factory; the daemon v0 PoC omits it.
-  if (schedulerHostFactory) {
-    void (async () => {
-      const { rows } = await listAutomations(paths.appsDir);
-      return schedulerHostFactory(paths.appsDir).reconcile(rows);
-    })()
-      .then((diff) => {
-        if (diff.added.length || diff.updated.length || diff.removed.length) {
-          logger.info(
-            `OS scheduler startup reconcile — ` +
-              `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
-          );
-        }
-      })
-      .catch((err) =>
-        logger.warn(
-          `OS scheduler startup reconcile failed: ` +
-            (err instanceof Error ? err.message : String(err)),
-        ),
-      );
+  // Git-store sync: every app present on `main` gets a registry entry
+  // so `registry.get(id)` resolves and its data dir (`<appsDir>/<id>/`,
+  // where data.sqlite lives) exists. Code is served from the worktree
+  // via the override; this only bookkeeps existence + the data dir.
+  if (appsStore) {
+    for (const appId of await appsStore.listApps()) {
+      await runtime.registry.ensureUploaded(appId);
+    }
   }
+
+  // Startup reconcile: catch up the OS scheduler on anything that
+  // changed while the runtime was down (it's also the backstop for any
+  // publish that landed while a local gateway was shut down). Uses the
+  // same coalesced, fire-and-forget reconcile the publish path triggers.
+  reconcileScheduler();
 
   return {
     url: server.url,
@@ -229,6 +441,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     userStore,
     analyticsStore,
     chatHistoryStore,
+    ...(appsStore ? { appsStore } : {}),
   } satisfies GatewayServeHandle;
 }
 

@@ -51,8 +51,20 @@ export interface RunAutomationLocalOptions {
    * the fire completes. Defaults to `<ref>:<ts>:<uuid8>`.
    */
   runId?: string;
-  /** Directory holding the app folders. */
+  /**
+   * Directory holding the per-app *data* folders — each automation's
+   * run ledger is `<appsDir>/<appId>/runtime.sqlite`. Survives version
+   * swaps (it is never inside a git worktree).
+   */
   appsDir: string;
+  /**
+   * Directory holding the per-app *code* folders — automation manifests
+   * + handlers resolve from `<codeAppsDir>/<appId>/automations/<id>/`
+   * (issue #137: the gateway's git-store materialized `main`). Defaults
+   * to `appsDir` when omitted, for the legacy/flat layout where code and
+   * data share a tree.
+   */
+  codeAppsDir?: string;
   /**
    * Central analytics store. When set, the per-app run ledger
    * write-throughs each finished run's summary to it (issue #98).
@@ -112,13 +124,18 @@ export async function runAutomationLocal(
   const onLog = opts.onLog ?? (() => undefined);
   const runner: LocalRunnerKind = opts.runner ?? 'codex';
 
+  // Code (manifest + handler) resolves from `codeAppsDir`; data
+  // (runtime.sqlite) from `appsDir`. They diverge under the git-store
+  // backend (issue #137) and coincide in the flat/legacy layout.
+  const codeAppsDir = opts.codeAppsDir ?? opts.appsDir;
+
   const parsed = parseAutomationRef(opts.automationRef);
   if (!parsed) {
     throw new Error(`automation "${opts.automationRef}": not a valid <appId>/<id> handle`);
   }
-  const row = await readAppOwnedAutomation(opts.appsDir, parsed.appId, parsed.automationId);
+  const row = await readAppOwnedAutomation(codeAppsDir, parsed.appId, parsed.automationId);
   if (!row) {
-    throw new Error(`automation ${opts.automationRef}: not found under ${opts.appsDir}`);
+    throw new Error(`automation ${opts.automationRef}: not found under ${codeAppsDir}`);
   }
 
   // The automation's run ledger is its app's per-app `runtime.sqlite`
@@ -170,7 +187,7 @@ export async function runAutomationLocal(
     } else {
       const failTarget = parseAutomationRef(row.manifest.onFailure, parsed.appId);
       const next = failTarget
-        ? await readAppOwnedAutomation(opts.appsDir, failTarget.appId, failTarget.automationId)
+        ? await readAppOwnedAutomation(codeAppsDir, failTarget.appId, failTarget.automationId)
         : undefined;
       if (!next) {
         onLog('warn', `onFailure target "${row.manifest.onFailure}" not found for ${row.name}`);
@@ -179,6 +196,7 @@ export async function runAutomationLocal(
           await runAutomationLocal({
             automationRef: next.ref,
             appsDir: opts.appsDir,
+            ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
             ...(opts.analytics ? { analytics: opts.analytics } : {}),
             runner,
             ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),

@@ -275,9 +275,81 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-78890d42381-1779815081-1 | 78890d42-3812-4535-8ab5-08e98dbf99e8 | #127 | interrupt | structural |  | feat(governance): add handler-uses-ctx-primitives - block direct provider SDKs … |
 | steer-78890d42381-1779815081-2 | 78890d42-3812-4535-8ab5-08e98dbf99e8 | #127 | correction | classifier | user clarified intent; rejected agent's interpretation of the question | feat(governance): add handler-uses-ctx-primitives - block direct provider SDKs … |
 | steer-e9fb5b6f335-1779818383-1 | e9fb5b6f-3351-4708-95db-05ffe0340a21 | #129 | correction | classifier | pushed back on multiple migrations; wants them folded into one for v0 | refactor(app-templates): fold 0002 migrations into 0001_init (#129) |
+| steer-1e487d5ad58-1779993205-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(apps-store): gateway-owned git store foundation (#137) |
+| steer-1e487d5ad58-1779993205-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | rename 'serving' to 'main' in implementation and issue | feat(apps-store): gateway-owned git store foundation (#137) |
+| steer-1e487d5ad58-1780048580-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(apps-store): export/import + wire git store into the runtime (#137)Two sli… |
+| steer-1e487d5ad58-1780050570-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(desktop): Code tab edits/publish go through the git-store gateway (#137)Cu… |
 | steer-ba7345b0dab-1780052504-1 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
 | steer-ba7345b0dab-1780052504-2 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | asked to delete existing switcher before reimplementing |  |
 | steer-ba7345b0dab-1780052504-3 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
 | steer-ba7345b0dab-1780052504-4 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | told to pause work due to dev server errors |  |
 | steer-ba7345b0dab-1780052504-5 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
 | steer-ba7345b0dab-1780052504-6 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | narrowed scope to just verifying desktop runs |  |
+| steer-1e487d5ad58-1780053699-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | pushed back on retaining legacy current.json in v0 pre-release | feat(apps-store): projects + agent flows off workspaceDir (#137)Eliminates the … |
+| steer-1e487d5ad58-1780056231-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(apps-store): templates + automations off workspaceDir (#137)Finishes the d… |
+| steer-1e487d5ad58-1780056231-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | rename 'serving' to 'main' in implementation and issue | feat(apps-store): templates + automations off workspaceDir (#137)Finishes the d… |
+| steer-1e487d5ad58-1780056231-3 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(apps-store): templates + automations off workspaceDir (#137)Finishes the d… |
+| steer-1e487d5ad58-1780056231-4 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | pushed back on leaving legacy paths out of scope; wants them removed now | feat(apps-store): templates + automations off workspaceDir (#137)Finishes the d… |
+| steer-1e487d5ad58-1780056231-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(apps-store): templates + automations off workspaceDir (#137)Finishes the d… |
+| steer-1e487d5ad58-1780059491-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780059491-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | rename 'serving' to 'main' in implementation and issue | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780059491-3 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780059491-4 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780059491-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | pushed back on retaining legacy current.json in v0 pre-release | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780059491-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | cut unnecessary overhead since app has no real users | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780059491-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780059491-8 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780059491-9 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | use existing worktree and batch commits, no separate branch | refactor(builder-harness): emit scaffold/clone/automation as file maps (#141)Ad… |
+| steer-1e487d5ad58-1780060503-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  | feat(gateway-runtime): automation + insights HTTP routes (#141)Add automations-… |
+| steer-1e487d5ad58-1780062021-1 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-2 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-3 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | rename 'serving' to 'main' in implementation and issue |  |
+| steer-1e487d5ad58-1780062021-4 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-5 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-6 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | pushed back on retaining legacy current.json in v0 pre-release |  |
+| steer-1e487d5ad58-1780062021-7 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | pushed back on leaving legacy code paths in PR; demanded their removal |  |
+| steer-1e487d5ad58-1780062021-8 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780062021-9 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | rejected proposed fix; asked for a more elegant alternative |  |
+| steer-1e487d5ad58-1780062021-10 | 1e487d5a-d586-4046-aedc-95db8f008020 |  | correction | classifier | overrode assistant's recommended Option A in favor of Option C |  |
+| steer-1e487d5ad58-1780063376-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780063376-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780063376-3 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | correction | classifier | rename 'serving' to 'main' in implementation and issue |  |
+| steer-1e487d5ad58-1780063376-4 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780063376-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780063376-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | correction | classifier | pushed back on retaining legacy current.json in v0 pre-release |  |
+| steer-1e487d5ad58-1780063376-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | correction | classifier | pushed back on leaving legacy code paths in PR; demanded their removal |  |
+| steer-1e487d5ad58-1780063376-8 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780063376-9 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | correction | classifier | push to drop legacy fallback overhead since there are no real users |  |
+| steer-1e487d5ad58-1780063376-10 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780063376-11 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780063376-12 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | correction | classifier | use existing worktree and batch commits, no separate branch |  |
+| steer-1e487d5ad58-1780063376-13 | 1e487d5a-d586-4046-aedc-95db8f008020 | #98 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780072261-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | challenged thin HTTP proxy layer, wants direct HTTP invocation |  |
+| steer-1e487d5ad58-1780072261-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | rejects IPC abstraction; wants renderer to talk to gateway directly over HTTP |  |
+| steer-1e487d5ad58-1780072261-3 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780072261-4 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | questions builder harness running locally; thinks gateway should own it |  |
+| steer-1e487d5ad58-1780072261-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780072261-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | wants builder chat and app chat unified into one chat surface |  |
+| steer-1e487d5ad58-1780073900-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780077918-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780077918-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | challenged thin HTTP proxy layer, wants direct HTTP invocation |  |
+| steer-1e487d5ad58-1780077918-3 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | rejects IPC abstraction; wants renderer to talk to gateway directly over HTTP |  |
+| steer-1e487d5ad58-1780077918-4 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780077918-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | questions builder harness running locally; thinks gateway should own it |  |
+| steer-1e487d5ad58-1780077918-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780077918-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | wants builder chat and app chat unified into one chat surface |  |
+| steer-1e487d5ad58-1780081034-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780081034-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | challenged thin HTTP proxy layer, wants direct HTTP invocation |  |
+| steer-1e487d5ad58-1780081034-3 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | rejects IPC abstraction; wants renderer to talk to gateway directly over HTTP |  |
+| steer-1e487d5ad58-1780081034-4 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780081034-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | questions builder harness running locally; thinks gateway should own it |  |
+| steer-1e487d5ad58-1780081034-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780081034-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | wants builder chat and app chat unified into one chat surface |  |
+| steer-1e487d5ad58-1780084239-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780084239-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | challenged thin HTTP proxy layer, wants direct HTTP invocation |  |
+| steer-1e487d5ad58-1780084239-3 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | rejects IPC abstraction; wants renderer to talk to gateway directly over HTTP |  |
+| steer-1e487d5ad58-1780084239-4 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780084239-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | questions builder harness running locally; thinks gateway should own it |  |
+| steer-1e487d5ad58-1780084239-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780084239-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
+| steer-1e487d5ad58-1780161401-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | User flagged P1/P2 bugs in agent's recently-completed work |  |

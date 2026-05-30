@@ -47,3 +47,32 @@ test('returns 404 for unknown /centraid paths (with valid bearer)', async () => 
   });
   assert.equal(res.status, 404);
 });
+
+test('answers a CORS preflight (OPTIONS) with 204 and no auth required', async () => {
+  const res = await fetch(`${server.url}/centraid/_apps`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'null',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'authorization, content-type',
+    },
+  });
+  assert.equal(res.status, 204);
+  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+  assert.match(res.headers.get('access-control-allow-methods') ?? '', /POST/);
+  assert.match(res.headers.get('access-control-allow-headers') ?? '', /authorization/i);
+});
+
+test('sets CORS headers on the 401 so the renderer can read the rejection', async () => {
+  const res = await fetch(`${server.url}/centraid/_apps`);
+  assert.equal(res.status, 401);
+  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+});
+
+test('sets CORS headers on a successful authed response', async () => {
+  const res = await fetch(`${server.url}/centraid/_apps`, {
+    headers: { Authorization: `Bearer ${server.token}` },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+});

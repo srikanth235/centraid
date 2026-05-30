@@ -1,8 +1,8 @@
 # @centraid/builder-harness
 
-Pi-coding-agent customization for **the centraid app builder** — an agent that authors centraid apps in the `@centraid/openclaw-plugin` format, plus helpers desktop and mobile surfaces use to scaffold and publish those apps.
+A **gateway-side library** for the centraid app builder: the system prompt + UI/UX grounding the gateway feeds its agent turn, plus filesystem-free scaffold / clone / meta helpers that emit a `{path, content}[]` file map the gateway stages into a git-store session and publishes. Since the thin-client refactor (issue #141) this is consumed by `@centraid/gateway-runtime`, not by the desktop or mobile directly.
 
-> The in-app **data chat** (talking to a deployed app's SQLite over the chat panel) is a separate surface — see [`@centraid/chat-harness`](../chat-harness).
+> The in-app **data chat** is no longer a separate client package — the renderer streams the gateway `_chat` SSE directly (see `apps/desktop/src/renderer/gateway-client-chat.ts`).
 
 ## Surfaces
 

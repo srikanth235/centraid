@@ -1,0 +1,65 @@
+---
+summary: 'How the desktop splits work between the gateway HTTP API (its primary channel, spoken directly by the renderer with a Bearer token) and the shrunken Electron IPC surface (genuinely Electron-native ops only).'
+title: 'IPC vs HTTP'
+---
+
+# IPC vs HTTP
+
+The Centraid desktop is a **thin client**. The renderer talks to a gateway directly over **HTTP**, authenticated with a **Bearer token injected at startup**; Electron **IPC** has shrunk to the handful of operations that are genuinely renderer↔main, secret-holding, or OS-native.
+
+The guiding principle:
+
+> HTTP is the primary modus operandi. The renderer states intent to the gateway directly; the gateway owns the work. IPC is only for operations that can't be HTTP — token storage, OS keychain, reveal-in-Finder, the embedded gateway's own lifecycle.
+
+The payoff is twofold. **Local and remote become identical**: the renderer issues the same authenticated `fetch` whether the gateway is the embedded local one (on loopback) or a remote OpenClaw plugin (on its URL). And the desktop carries almost no application logic — the gateway owns the entire builder.
+
+## What the gateway owns
+
+Under the thin-client pivot the gateway is the single source of truth for everything that isn't OS-native:
+
+- **Deterministic lifecycle** — scaffold a blank app, clone a template, rename/describe, create/enable/delete automations. The renderer POSTs intent; the gateway scaffolds the file map, stages it into a git-store session worktree, and (on an explicit publish) merges it onto `main`.
+- **The template catalog _and its remote refresh_** — `GET /centraid/_templates` resolves the bundled catalog or a newer copy pulled from a remote manifest URL; the gateway fires that refresh itself on startup. The desktop no longer bundles `@centraid/app-templates` at all.
+- **Webhook minting** — secrets are generated gateway-side during create and during a chat turn, and surfaced once in the response (only the hash is persisted).
+- **The AI builder** — see [unified chat](#unified-chat) below.
+
+For a **local** gateway all of this still runs inside the Electron main process (the gateway is embedded there) — but as _gateway code behind HTTP_, not desktop code behind IPC. That is the whole trick: same code path, local or remote.
+
+## Unified chat
+
+"Builder chat" (edit my app's code) and "app chat" (operate my app's data) used to be two surfaces. They are now **one**: a single `POST /centraid/<id>/_chat`.
+
+The gateway runs the turn in the app's **draft session worktree** with the **union of tools** — the agent backend's native file/shell tools (workspace-write against the worktree) _plus_ the `centraid_*` data dispatcher. So one turn can rewrite a handler and answer a data question. Code edits **stage** in the draft (the [preview](#draft-preview) reflects the draft); an explicit **Publish** is the only thing that flips the live version.
+
+The renderer consumes the chat stream by `fetch`-ing the endpoint and reading the `ReadableStream` (not `EventSource`, which can't set a POST body or an `Authorization` header), parsing the SSE frames into the gateway's native `ChatStreamEvent` union.
+
+## Draft preview
+
+The builder's preview iframe points at `/centraid/_draft/<sessionId>/<id>/` — the gateway serves the **staged draft worktree** (static assets _and_ handlers, against the live data) through the runtime, so staged edits are visible before Publish. This is served _through the store_, never via a local path shortcut, so there is no "works on my machine" gap between the preview and what a published app would do.
+
+## What stays on IPC
+
+IPC is now a short list, all genuinely Electron-native or secret-holding:
+
+- **The token bridge** — a single `getGatewayAuth()` channel hands the renderer the active gateway's `{ baseUrl, token }` (re-pushed when the active gateway switches). This is the one point the bearer token crosses to the renderer; see the [token posture](#token-posture-in-the-renderer) below.
+- **Gateway profile CRUD + keychain** — the gateway URL + bearer token are stored via Electron `safeStorage`; the provider API key (for a custom OpenAI-compatible endpoint) is kept outside the gateway DB.
+- **The desktop settings file and runner preflight/status.**
+- **`PROJECTS_OPEN`** — reveal the app's worktree in Finder. Bound to the on-disk worktree only the local gateway materializes; a remote gateway has no folder to open. Guarded by `assertActiveGatewayLocal(...)`, which throws a clear `requires the local gateway` error, and the renderer hides the affordance for a remote gateway.
+- **Push events** to the renderer (gateway-switched, publish status).
+
+This is the _only_ deliberately local-only operation left. The in-process `AGENT_*` builder that used to edit the worktree directly was **retired** with the unified chat — remote and local now both build through `/centraid/<id>/_chat`.
+
+## Token posture in the renderer
+
+The thin-client model means the gateway bearer token lives in renderer memory by design. This is acceptable, and is documented rather than silently shipped:
+
+- The desktop **shell top frame is first-party** — it is the user's own application, not third-party web content. App code never runs in that frame; it runs in **cross-origin iframes** that load from the gateway origin and never see the shell's JS scope.
+- The token is a **Bearer header**, not a cookie — there are no _ambient_ credentials a malicious iframe could ride. That's also why the local gateway can answer `Access-Control-Allow-Origin: *` safely (and why it must, to serve the `file://` → `Origin: null` renderer): with no cookie, `*` exposes nothing a caller couldn't already do with a token it doesn't have.
+- The token reaches the renderer **only** through `getGatewayAuth()` and is refreshed on gateway switch — it is not smuggled inside broad payloads like `getSettings()`.
+
+App-iframe subresource requests to the gateway are authenticated by the main-process **auth-injector**, which stamps the `Authorization` header onto gateway-origin requests — so the token does not ride in iframe URLs.
+
+## Where to go next
+
+- [Gateway](/concepts/gateway) — the process on the other end of the HTTP channel.
+- [Architecture](/concepts/architecture) — how the gateway, apps, and dispatcher fit together.
+- [HTTP API](/reference/http-api) — the routes the data plane exposes.

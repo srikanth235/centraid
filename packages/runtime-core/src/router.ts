@@ -36,6 +36,32 @@ export type Route =
   | { kind: 'not-found' };
 
 const PREFIX = '/centraid';
+const DRAFT_PREFIX = '/centraid/_draft/';
+
+/**
+ * Parse a request URL, peeling off an optional draft-preview prefix
+ * (issue #141). A `/centraid/_draft/<sessionId>/<inner…>` URL is rewritten
+ * to its inner `/centraid/<inner…>` form (query string preserved) and
+ * parsed normally, with the session id returned alongside so the caller
+ * can serve the session worktree's code instead of the live version. A
+ * URL without the prefix parses exactly as before with no session id.
+ */
+export function parseWithDraft(
+  method: string,
+  rawUrl: string,
+): { route: Route; draftSessionId?: string } {
+  const url = new URL(rawUrl, 'http://localhost');
+  if (!url.pathname.startsWith(DRAFT_PREFIX)) {
+    return { route: parseRoute(method, rawUrl) };
+  }
+  const rest = url.pathname.slice(DRAFT_PREFIX.length);
+  const slash = rest.indexOf('/');
+  const draftSessionId = decodeURIComponent(slash === -1 ? rest : rest.slice(0, slash));
+  const innerPath = slash === -1 ? '' : rest.slice(slash); // leading '/<appId>/…' or ''
+  const innerUrl = `${PREFIX}${innerPath}${url.search}`;
+  if (!draftSessionId) return { route: { kind: 'not-found' } };
+  return { route: parseRoute(method, innerUrl), draftSessionId };
+}
 
 export function parseRoute(method: string, rawUrl: string): Route {
   const url = new URL(rawUrl, 'http://localhost');

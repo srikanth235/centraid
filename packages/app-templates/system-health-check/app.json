@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "system-health-check",
+  "name": "System health check",
+  "kind": "automation",
+  "description": "Watches infrastructure and services for errors, outages, and creeping performance issues.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

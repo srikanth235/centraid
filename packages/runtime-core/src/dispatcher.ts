@@ -5,10 +5,8 @@
  * `app.json`, validates `input` against the declared JSON Schema with
  * Ajv, then hands off to the `handler-runner` worker — or to a built-in
  * (`dispatcher-builtins.ts`) when the handler name starts with `_`.
- *
- * Errors are MCP-shaped: `{ isError, content, structuredContent }`. The
- * HTTP shim maps `structuredContent.code` to a 4xx/5xx status; the chat
- * surface forwards the text block.
+ * Errors are MCP-shaped: `{ isError, content, structuredContent }`; the
+ * HTTP shim maps `structuredContent.code` to a 4xx/5xx status.
  */
 
 import { promises as fs } from 'node:fs';
@@ -112,19 +110,20 @@ export interface CentraidDescribeInput {
 export interface DispatcherOptions {
   readonly registry: Registry;
   readonly versions: VersionStore;
-  /**
-   * Closure that returns a write-notification callback for an app. The
-   * runtime threads its `changeBus` through this so action handlers fire
-   * the per-app `/centraid/<id>/_changes` SSE stream.
-   */
+  /** Write-notification callback per app — feeds the `_changes` SSE stream. */
   readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
+  /**
+   * Optional code-dir resolver (issue #137). When set, it is the SOLE
+   * authority (git store owns all code; an app it can't resolve is not
+   * live — no `current.json` fallback). When absent, the legacy tarball
+   * backend resolves via `versions.getActiveVersion` + `appCodeDir`.
+   */
+  readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
 }
 
 /**
- * Internal cache entry: a manifest plus its compiled per-handler input
- * validators, keyed by the absolute code dir. We re-key on every call
- * by hashing the codeDir + manifest mtime so a version swap or a
- * dev-watch rewrite invalidates immediately.
+ * Manifest + compiled per-handler validators, keyed by absolute code
+ * dir + mtime so a version swap or dev-watch rewrite invalidates.
  */
 interface ManifestCacheEntry {
   readonly codeDir: string;
@@ -138,17 +137,21 @@ export class Dispatcher {
   private readonly registry: Registry;
   private readonly versions: VersionStore;
   private readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
+  private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
   private readonly manifestCache = new Map<string, ManifestCacheEntry>();
 
   constructor(opts: DispatcherOptions) {
     this.registry = opts.registry;
     this.versions = opts.versions;
     if (opts.onWriteFor) this.onWriteFor = opts.onWriteFor;
+    if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
   }
 
   // --------- resolution helpers ---------
-
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
+    // Git-store backend (#137): override is the sole authority. Else the
+    // legacy tarball backend resolves the active-version dir.
+    if (this.codeDirOverride) return this.codeDirOverride(entry.id);
     const active = await this.versions.getActiveVersion(entry.path);
     if (!active) return undefined;
     return appCodeDir(entry, active);
@@ -190,16 +193,15 @@ export class Dispatcher {
 
   /** Throw away the cache for one app — call when a version is activated. */
   invalidate(codeDir?: string): void {
-    if (codeDir === undefined) {
-      this.manifestCache.clear();
-      return;
-    }
-    this.manifestCache.delete(codeDir);
+    if (codeDir === undefined) this.manifestCache.clear();
+    else this.manifestCache.delete(codeDir);
   }
 
   // --------- describe ---------
 
-  async describe(input: CentraidDescribeInput): Promise<ToolResult> {
+  // `overrideCodeDir` (read/write/describe): the draft-preview path (#141)
+  // runs a session worktree's handlers against the app's live data.
+  async describe(input: CentraidDescribeInput, overrideCodeDir?: string): Promise<ToolResult> {
     const { app, action, query } = input;
     if (app === undefined) {
       // No filter — return all apps.
@@ -231,7 +233,7 @@ export class Dispatcher {
     if (!entry) {
       return errorResult('UNKNOWN_APP', `app "${app}" is not registered`);
     }
-    const codeDir = await this.resolveCodeDir(entry);
+    const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
       return errorResult('NO_ACTIVE_VERSION', `app "${app}" has no active version`);
     }
@@ -277,7 +279,7 @@ export class Dispatcher {
 
   // --------- write (action) ---------
 
-  async write(input: CentraidWriteInput): Promise<ToolResult> {
+  async write(input: CentraidWriteInput, overrideCodeDir?: string): Promise<ToolResult> {
     const { app: appId, action: actionName, input: handlerInput } = input;
     if (!appId || !actionName) {
       return errorResult('INVALID_INPUT', 'centraid_write requires { app, action }');
@@ -289,7 +291,7 @@ export class Dispatcher {
     if (isReservedHandlerName(actionName)) {
       return runBuiltinWrite(entry, actionName, handlerInput, this.builtinHelpers());
     }
-    const codeDir = await this.resolveCodeDir(entry);
+    const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
       return errorResult('NO_ACTIVE_VERSION', `app "${appId}" has no active version`);
     }
@@ -348,7 +350,7 @@ export class Dispatcher {
 
   // --------- read (query) ---------
 
-  async read(input: CentraidReadInput): Promise<ToolResult> {
+  async read(input: CentraidReadInput, overrideCodeDir?: string): Promise<ToolResult> {
     const { app: appId, query: queryName, input: handlerInput } = input;
     if (!appId || !queryName) {
       return errorResult('INVALID_INPUT', 'centraid_read requires { app, query }');
@@ -360,7 +362,7 @@ export class Dispatcher {
     if (isReservedHandlerName(queryName)) {
       return runBuiltinRead(entry, queryName, handlerInput, this.builtinHelpers());
     }
-    const codeDir = await this.resolveCodeDir(entry);
+    const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
       return errorResult('NO_ACTIVE_VERSION', `app "${appId}" has no active version`);
     }

@@ -9,7 +9,7 @@
       // which bakes <html data-theme="…" style="--bg-l:…"> server-side before
       // serving and stamps a CSP nonce on this script. This inline script
       // handles two extras:
-      //   1. Builder preview (centraid-preview://) bypasses the runtime, so
+      //   1. A builder preview without a server-side bake bypasses the runtime, so
       //      we read URL hash params as a fallback for the no-bake path.
       //   2. The shell can flip a pref while the iframe is mounted — the
       //      postMessage listener accepts both `centraid:settings` (full

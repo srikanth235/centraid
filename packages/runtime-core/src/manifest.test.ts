@@ -169,6 +169,20 @@ describe('validateManifest', () => {
     const out = validateManifest(m);
     assert.equal(out.tables, undefined);
   });
+
+  it('omits kind when absent and carries an automation kind through', () => {
+    // No `kind` → a normal UI app; the field is simply absent.
+    assert.equal(validateManifest(baseManifest()).kind, undefined);
+    // `kind: 'automation'` marks a UI-less automation app (replaces the
+    // legacy `auto.` id prefix) and round-trips through validation.
+    const auto = { ...baseManifest(), kind: 'automation' };
+    assert.equal(validateManifest(auto).kind, 'automation');
+  });
+
+  it('rejects an unknown kind value', () => {
+    const m = { ...baseManifest(), kind: 'widget' };
+    assert.throws(() => validateManifest(m), ManifestError);
+  });
 });
 
 describe('parseManifest', () => {

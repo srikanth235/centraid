@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { parseRoute } from './router.js';
+import { parseRoute, parseWithDraft } from './router.js';
 
 describe('parseRoute — tool-invoke shim (issue #107)', () => {
   it('parses POST /centraid/_tool/centraid_write', () => {
@@ -81,5 +81,47 @@ describe('parseRoute — unaffected routes still work', () => {
   it('parses index', () => {
     const r = parseRoute('GET', '/centraid/todos');
     assert.equal(r.kind, 'app-index');
+  });
+});
+
+describe('parseWithDraft — draft-preview prefix (issue #141)', () => {
+  it('passes a non-draft URL through unchanged with no session id', () => {
+    const { route, draftSessionId } = parseWithDraft('GET', '/centraid/todos/');
+    assert.equal(draftSessionId, undefined);
+    assert.equal(route.kind, 'app-index');
+  });
+
+  it('peels the draft prefix off an index request', () => {
+    const { route, draftSessionId } = parseWithDraft('GET', '/centraid/_draft/s1/todos/');
+    assert.equal(draftSessionId, 's1');
+    assert.equal(route.kind, 'app-index');
+    assert.equal((route as { appId: string }).appId, 'todos');
+  });
+
+  it('peels the draft prefix off a static asset request', () => {
+    const { route, draftSessionId } = parseWithDraft('GET', '/centraid/_draft/s1/todos/app.css');
+    assert.equal(draftSessionId, 's1');
+    assert.equal(route.kind, 'app-static');
+    assert.equal((route as { rel: string }).rel, 'app.css');
+  });
+
+  it('peels the draft prefix off a tool-invoke and preserves the inner shape', () => {
+    const { route, draftSessionId } = parseWithDraft(
+      'POST',
+      '/centraid/_draft/s1/_tool/centraid_read',
+    );
+    assert.equal(draftSessionId, 's1');
+    assert.equal(route.kind, 'tool-invoke');
+  });
+
+  it('preserves the query string when rewriting', () => {
+    const { route } = parseWithDraft('GET', '/centraid/_draft/s1/todos?theme=dark');
+    assert.equal(route.kind, 'app-index');
+    assert.deepEqual((route as { query: Record<string, string> }).query, { theme: 'dark' });
+  });
+
+  it('a draft prefix with no session id is not-found', () => {
+    const { route } = parseWithDraft('GET', '/centraid/_draft/');
+    assert.equal(route.kind, 'not-found');
   });
 });

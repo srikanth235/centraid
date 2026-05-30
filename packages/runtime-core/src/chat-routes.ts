@@ -29,10 +29,9 @@ import { buildExtraPrompt } from './build-extra-prompt.js';
 import type { ChatRunInput, ChatRunner, ChatStreamEvent } from './chat-runner.js';
 import type { ChatHistoryStore, ChatTurnNode } from './chat-history.js';
 import type { Registry } from './registry.js';
-import { appDataDir, appCodeDir } from './app-paths.js';
+import { appDataDir } from './app-paths.js';
 import type { RegistryEntry } from './types.js';
 import { APP_MANIFEST_FILE, parseManifest, type Manifest } from './manifest.js';
-import type { VersionStore } from './version-store.js';
 
 /**
  * Validate a window/session id. Reject anything that could escape a
@@ -54,11 +53,13 @@ export function isValidWindowId(id: string): boolean {
 export interface ChatRouteContext {
   registry: Registry;
   /**
-   * Version store, used to resolve the active code dir for an app so the
-   * chat route can read the manifest and splice the declared handler
-   * catalog into the system prompt.
+   * Resolve an app's live code dir, honoring the git-store override
+   * (issue #137): under the store backend there is no legacy `current.json`,
+   * so a version-based lookup always misses. The chat route reads the
+   * manifest from here to splice the declared handler catalog into the
+   * system prompt. Returns undefined when the app has no live code.
    */
-  versions: VersionStore;
+  resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>;
   runner?: ChatRunner;
   /**
    * Optional central chat store. When set, the route reads the session's
@@ -229,7 +230,7 @@ async function handlePostTurn(
 
   const appMeta = ctx.appMeta ? await ctx.appMeta(entry).catch(() => ({}) as never) : undefined;
   const schema = safeReadSchema(entry);
-  const manifest = await safeReadManifest(entry, ctx.versions);
+  const manifest = await safeReadManifest(entry, ctx.resolveCodeDir);
   const extraSystemPrompt = buildExtraPrompt({
     appId: entry.id,
     ...(appMeta?.name ? { appName: appMeta.name } : {}),
@@ -468,19 +469,23 @@ function safeReadSchema(entry: RegistryEntry): ReturnType<typeof readAppSchema> 
 
 /**
  * Read the app's manifest from disk, returning `undefined` when the app
- * has no committed version or the file is unreadable. The system prompt
- * still works without it — agents are steered to `_sql` — but with the
- * manifest the prompt includes the declared catalog so the agent reaches
- * for the right handler.
+ * has no live code dir or the file is unreadable. The system prompt still
+ * works without it — agents are steered to `_sql` — but with the manifest
+ * the prompt includes the declared catalog so the agent reaches for the
+ * right handler.
+ *
+ * Resolution goes through the runtime's code-dir resolver so it honors the
+ * git-store override (issue #137): the materialized `main` worktree under
+ * the store backend has no legacy `current.json`, so resolving by active
+ * version would always miss and silently drop the catalog.
  */
 async function safeReadManifest(
   entry: RegistryEntry,
-  versions: VersionStore,
+  resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>,
 ): Promise<Manifest | undefined> {
   try {
-    const active = await versions.getActiveVersion(entry.path);
-    if (!active) return undefined;
-    const codeDir = appCodeDir(entry, active);
+    const codeDir = await resolveCodeDir(entry);
+    if (!codeDir) return undefined;
     const text = await fs.readFile(path.join(codeDir, APP_MANIFEST_FILE), 'utf8');
     return parseManifest(text);
   } catch {

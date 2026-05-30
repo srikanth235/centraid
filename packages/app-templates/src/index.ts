@@ -100,6 +100,32 @@ export function templateSourceDir(
 }
 
 /**
+ * Read a template's files into an in-memory file map (issue #141). The
+ * desktop owns the bundled/cached catalog locally, so it reads a
+ * template's files here and pushes them to the gateway over HTTP
+ * (`cloneTemplateFiles` → session PUT → publish) — the remote gateway
+ * never needs the catalog. `files` is the manifest's enumerated relative
+ * paths; `source` selects bundle vs cache (same resolution as
+ * {@link templateSourceDir}). A file listed in the manifest but missing
+ * on disk is a build/catalog error and surfaces as a read rejection.
+ */
+export async function readTemplateFiles(
+  template: Pick<TemplateMeta, 'id' | 'files'> & { source?: TemplateSource },
+  opts: { cacheDir?: string } = {},
+): Promise<{ path: string; content: string }[]> {
+  const dir = templateSourceDir(template.id, {
+    ...(opts.cacheDir !== undefined ? { cacheDir: opts.cacheDir } : {}),
+    ...(template.source !== undefined ? { source: template.source } : {}),
+  });
+  return Promise.all(
+    template.files.map(async (rel) => ({
+      path: rel,
+      content: await fs.readFile(path.join(dir, rel), 'utf8'),
+    })),
+  );
+}
+
+/**
  * Fetch the remote manifest from `<remoteUrl>/manifest.json` and download any
  * template whose remote version is strictly greater than the cached or
  * bundled copy. Files are written atomically into `<cacheDir>/<id>/...` and

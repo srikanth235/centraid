@@ -27,6 +27,17 @@ export interface SettingsInject {
 export interface ServeStaticOptions {
   /** Settings to bake into the `<html>` element of `index.html`. */
   settingsInject?: SettingsInject;
+  /**
+   * Draft-preview context (issue #141). When set, the served page is a
+   * session worktree draft mounted under `/centraid/_draft/<sessionId>/
+   * <appId>/`, NOT the live `/centraid/<appId>/`. The injected bridge then
+   * pins `appId` explicitly (the path's first segment is `_draft`, so the
+   * usual `location.pathname` sniff would mis-read it) and routes its tool
+   * calls at `/centraid/_draft/<sessionId>/_tool/` so the draft's handlers
+   * run. The `_changes` subscription stays relative — it resolves to the
+   * draft route's app-changes, which proxies the same live change bus.
+   */
+  draft?: { appId: string; sessionId: string };
 }
 
 export async function serveStatic(
@@ -65,7 +76,15 @@ export async function serveStatic(
     // The injected script subscribes to `/centraid/<id>/_changes` SSE and
     // re-broadcasts each event into the page as `centraid:datachange` +
     // `window.centraid.onChange(cb)`. Templates opt in with one line.
-    html = injectChangeBridge(html);
+    html = injectChangeBridge(
+      html,
+      opts.draft
+        ? {
+            appId: opts.draft.appId,
+            toolUrl: `/centraid/_draft/${encodeURIComponent(opts.draft.sessionId)}/_tool/`,
+          }
+        : undefined,
+    );
     inlineScriptNonce = randomBytes(16).toString('base64');
     html = stampInlineScriptNonces(html, inlineScriptNonce);
     buf = Buffer.from(html, 'utf8');
@@ -109,16 +128,25 @@ export async function serveStatic(
 //    and `.describe(filter?)`. They derive the app id from
 //    `location.pathname` (`/centraid/<id>/...`) so the bridge is
 //    portable across apps without per-app code-gen.
-const CHANGE_BRIDGE_SCRIPT = `<script>(function(){var w=window;w.centraid=w.centraid||{};var listeners=new Set();w.centraid.onChange=function(cb){if(typeof cb!=='function')return function(){};listeners.add(cb);return function(){listeners.delete(cb);};};var m=/^\\/centraid\\/([^/]+)\\//.exec(w.location.pathname);var appId=m?decodeURIComponent(m[1]):null;w.centraid.appId=appId;var toolUrl='/centraid/_tool/';function callTool(name,body){return fetch(toolUrl+name,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(_){}if(!r.ok){var err=j&&j.message?j.message:('tool '+name+' failed: '+r.status);var e=new Error(err);e.code=j&&j.code;e.status=r.status;throw e;}return j;});});}w.centraid.write=function(opts){if(!opts||!opts.action)return Promise.reject(new Error('write requires {action}'));return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input});};w.centraid.read=function(opts){if(!opts||!opts.query)return Promise.reject(new Error('read requires {query}'));return callTool('centraid_read',{app:appId,query:opts.query,input:opts.input});};w.centraid.describe=function(filter){var body=Object.assign({},filter||{});if(!body.app&&appId)body.app=appId;return callTool('centraid_describe',body);};if(typeof EventSource!=='function')return;var es;function connect(){try{es=new EventSource('_changes');}catch(_){return;}es.addEventListener('change',function(ev){var d;try{d=JSON.parse(ev.data);}catch(_){d={tables:[],ts:Date.now()};}try{w.dispatchEvent(new CustomEvent('centraid:datachange',{detail:d}));}catch(_){}listeners.forEach(function(cb){try{cb(d);}catch(_){}});});es.addEventListener('error',function(){if(es&&es.readyState===2){setTimeout(function(){if(es&&es.readyState===2){try{es.close();}catch(_){}connect();}},5000);}});}connect();})();</script>`;
+function changeBridgeScript(draft?: { appId: string; toolUrl: string }): string {
+  // Live mode sniffs the app id from `/centraid/<id>/…` and posts tools at
+  // `/centraid/_tool/`. Draft mode pins both: the path's first segment is
+  // `_draft`, so the sniff would mis-read it, and tool calls must hit the
+  // draft shim so the session worktree's handlers run.
+  const idAndTool = draft
+    ? `var appId=${JSON.stringify(draft.appId)};w.centraid.appId=appId;var toolUrl=${JSON.stringify(draft.toolUrl)};`
+    : `var m=/^\\/centraid\\/([^/]+)\\//.exec(w.location.pathname);var appId=m?decodeURIComponent(m[1]):null;w.centraid.appId=appId;var toolUrl='/centraid/_tool/';`;
+  return `<script>(function(){var w=window;w.centraid=w.centraid||{};var listeners=new Set();w.centraid.onChange=function(cb){if(typeof cb!=='function')return function(){};listeners.add(cb);return function(){listeners.delete(cb);};};${idAndTool}function callTool(name,body){return fetch(toolUrl+name,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(_){}if(!r.ok){var err=j&&j.message?j.message:('tool '+name+' failed: '+r.status);var e=new Error(err);e.code=j&&j.code;e.status=r.status;throw e;}return j;});});}w.centraid.write=function(opts){if(!opts||!opts.action)return Promise.reject(new Error('write requires {action}'));return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input});};w.centraid.read=function(opts){if(!opts||!opts.query)return Promise.reject(new Error('read requires {query}'));return callTool('centraid_read',{app:appId,query:opts.query,input:opts.input});};w.centraid.describe=function(filter){var body=Object.assign({},filter||{});if(!body.app&&appId)body.app=appId;return callTool('centraid_describe',body);};if(typeof EventSource!=='function')return;var es;function connect(){try{es=new EventSource('_changes');}catch(_){return;}es.addEventListener('change',function(ev){var d;try{d=JSON.parse(ev.data);}catch(_){d={tables:[],ts:Date.now()};}try{w.dispatchEvent(new CustomEvent('centraid:datachange',{detail:d}));}catch(_){}listeners.forEach(function(cb){try{cb(d);}catch(_){}});});es.addEventListener('error',function(){if(es&&es.readyState===2){setTimeout(function(){if(es&&es.readyState===2){try{es.close();}catch(_){}connect();}},5000);}});}connect();})();</script>`;
+}
 
-function injectChangeBridge(html: string): string {
+function injectChangeBridge(html: string, draft?: { appId: string; toolUrl: string }): string {
   // Inject right after the opening <head>. If the document has no <head>
   // (rare in practice but legal HTML) the script falls through unchanged
   // — better to leave the doc intact than guess where to splice.
   const m = /<head\b[^>]*>/i.exec(html);
   if (!m) return html;
   const insertAt = m.index + m[0].length;
-  return html.slice(0, insertAt) + CHANGE_BRIDGE_SCRIPT + html.slice(insertAt);
+  return html.slice(0, insertAt) + changeBridgeScript(draft) + html.slice(insertAt);
 }
 
 /**

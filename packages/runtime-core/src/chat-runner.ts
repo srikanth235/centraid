@@ -50,6 +50,25 @@ export type ChatStreamEvent =
   | { type: 'error'; message: string }
   | { type: 'aborted' }
   /**
+   * Webhook secrets minted as a post-turn step (issue #141, Phase 3). When
+   * a unified-chat turn authors an automation with a pending webhook
+   * trigger, the gateway mints the route id + shared secret after the turn
+   * settles (the agent can't generate crypto-random credentials) and
+   * surfaces them here exactly once — the plaintext `secret` is never
+   * persisted, so the renderer must capture it from this event. Adapters
+   * that don't author code (data-only chat) never emit it.
+   */
+  | {
+      type: 'webhooks';
+      minted: Array<{
+        automationId: string;
+        ownerApp: string;
+        webhookId: string;
+        url: string;
+        secret: string;
+      }>;
+    }
+  /**
    * Per-turn token usage, emitted once when the runner reports the
    * turn's totals (codex `turn/completed`, Claude SDK `result`). The
    * chat route folds this into the turn's `kind='step'` run node so the

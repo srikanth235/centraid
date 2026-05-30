@@ -1,9 +1,0 @@
-{
-  "manifestVersion": 1,
-  "id": "auto.dependency-update-check",
-  "name": "Dependency update check",
-  "description": "Scans for outdated packages, security patches, and breaking changes before they bite.",
-  "version": "0.1.0",
-  "actions": [],
-  "queries": []
-}

@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "meeting-prep",
+  "name": "Meeting prep",
+  "kind": "automation",
+  "description": "Each weekday morning, gathers context, recent threads, and open questions for the day’s meetings.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

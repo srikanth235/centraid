@@ -11,7 +11,16 @@
     "packages/app-templates/hydrate/**",
     "packages/app-templates/journal/**",
     "packages/app-templates/todos/**",
-    "packages/app-templates/auto.*/**"
+    "packages/app-templates/briefing/**",
+    "packages/app-templates/dependency-update-check/**",
+    "packages/app-templates/email-triage/**",
+    "packages/app-templates/evening-wrap-up/**",
+    "packages/app-templates/flaky-test-tracker/**",
+    "packages/app-templates/issue-triage/**",
+    "packages/app-templates/meeting-prep/**",
+    "packages/app-templates/pr-review-digest/**",
+    "packages/app-templates/release-notes-drafter/**",
+    "packages/app-templates/system-health-check/**"
   ],
   "rules": {
     "arrow-body-style": "off",

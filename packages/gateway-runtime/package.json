@@ -21,6 +21,9 @@
   },
   "dependencies": {
     "@centraid/agent-runtime": "workspace:*",
+    "@centraid/app-templates": "workspace:*",
+    "@centraid/apps-store": "workspace:*",
+    "@centraid/builder-harness": "workspace:*",
     "@centraid/runtime-core": "workspace:*"
   },
   "devDependencies": {

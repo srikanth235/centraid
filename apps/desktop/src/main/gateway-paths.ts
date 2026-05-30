@@ -4,7 +4,7 @@
 // Issue #109. The desktop hosts one local gateway plus 0..N remote
 // gateways; each gets a dedicated subtree under
 // `<userData>/gateways/<id>/`. App ids are scoped to a gateway, so the
-// workspace and the versioned `apps/` storage are namespaced by gateway
+// git-store code + the `apps/` data storage are namespaced by gateway
 // id — `todos` on the local gateway is a different artifact from
 // `todos` on a Cloud account.
 //
@@ -22,8 +22,8 @@
 // Each gateway gets:
 //   - `profile.json`              — id, kind, label, url, createdAt
 //   - `token.bin`                 — encrypted bearer (gateway-secrets)
-//   - `workspace/<appId>/...`     — editable source files
-//   - `apps/<appId>/...`          — versioned storage (empty for remote)
+//   - `code-store/...`            — git store owning app code (#137)
+//   - `apps/<appId>/...`          — per-app data storage (empty for remote)
 //   - `identity.sqlite`           — users + prefs (local only)
 //   - `analytics.sqlite`          — run summaries (local only)
 //   - `chat-runner-sessions/`     — codex thread state for in-app chat
@@ -55,17 +55,11 @@ export function gatewayProfilePath(id: string): string {
 }
 
 /**
- * Per-gateway workspace — flat, editable source files the builder
- * reads/writes. Same shape regardless of gateway kind.
- */
-export function gatewayWorkspaceDir(id: string): string {
-  return path.join(gatewayDir(id), 'workspace');
-}
-
-/**
- * Per-gateway versioned storage. Populated by uploads from the
- * workspace; the dispatcher + iframe + OS scheduler read from
- * `<appsDir>/<appId>/versions/<active>/`.
+ * Per-gateway *data* storage — each app's `data.sqlite` + automation
+ * `runtime.sqlite` live at `<appsDir>/<appId>/`, outside any git
+ * worktree so they survive version swaps. Issue #137 moved app *code*
+ * into the git store (`gatewayCodeStoreDir`); this dir now holds only
+ * data, never code.
  *
  * For remote gateways this directory exists but stays empty — the
  * remote gateway owns its own storage server-side. Keeping the dir
@@ -73,6 +67,18 @@ export function gatewayWorkspaceDir(id: string): string {
  */
 export function gatewayAppsDir(id: string): string {
   return path.join(gatewayDir(id), 'apps');
+}
+
+/**
+ * Per-gateway git-store root (issue #137). Holds `apps.git/` (the bare
+ * repo owning all app *code*, exported to GitHub) plus `worktrees/`
+ * (session + materialized-main checkouts). App *data* stays under
+ * `gatewayAppsDir(id)` so version swaps never touch user data. Passed
+ * to `serve({ appsStoreRoot })`; the local gateway then owns drafts as
+ * a git store exactly like the standalone daemon.
+ */
+export function gatewayCodeStoreDir(id: string): string {
+  return path.join(gatewayDir(id), 'code-store');
 }
 
 /**

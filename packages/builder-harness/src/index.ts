@@ -8,24 +8,21 @@
  * desktop / mobile.
  *
  * The in-app *data chat* (talking to a deployed app's SQLite over the
- * chat panel) is a separate surface — see @centraid/chat-harness — but
- * both share the same agent runtime.
+ * chat panel) runs through the same gateway `_chat` turn as the builder
+ * now (issue #141); the renderer streams its SSE directly.
  *
  * Public surface:
- *   - createCentraidAgentSession({ projectDir, runnerPrefs, ... }) → AgentSession
  *   - scaffoldProject(projectsDir, id, opts?) → ProjectInfo
  *   - listProjects(projectsDir) → ProjectInfo[]
  *   - publishProject(projectDir, id, config, opts?) → PublishResult
  *   - defaultHarnessConfig() / resolveHarnessConfig(overrides) → HarnessConfig
+ *
+ * The in-process builder agent session (`createCentraidAgentSession`) retired
+ * with the unified chat (issue #141, Phase 3) — the gateway now drives the
+ * builder turn server-side via `runAgentTurn` + the prompt/grounding exports
+ * below. The system prompt + UI/tools grounding stay; the session facade is
+ * gone.
  */
-
-export {
-  createCentraidAgentSession,
-  type CreateCentraidAgentSessionOptions,
-  type CentraidAgentEvent,
-  type CentraidSessionMode,
-  type AgentSession,
-} from './agent-session.js';
 
 export {
   scaffoldProject,
@@ -35,19 +32,35 @@ export {
   validateAppId,
 } from './scaffold.js';
 
+// Filesystem-free scaffolders for the git-store/HTTP path (issue #141):
+// these emit a `{path, content}[]` file map the desktop PUTs into a
+// session and publishes — no local workspace dir required.
+export {
+  scaffoldProjectFiles,
+  updateProjectMetaFiles,
+  appPackageJson,
+  type ScaffoldFile,
+  type ScaffoldProjectOpts,
+} from './scaffold-files.js';
+
 export {
   scaffoldAutomationProject,
+  scaffoldAutomationProjectFiles,
+  setAutomationEnabledInFiles,
+  deleteAutomationFromFiles,
   validateAutomationId,
   validateAutomationAppId,
-  AUTOMATION_APP_PREFIX,
   type AutomationScaffoldOptions,
 } from './scaffold-automation.js';
 
 export {
   cloneTemplate,
+  cloneTemplateFiles,
   suggestAppId,
   suggestCloneIdentity,
+  suggestCloneIdentityFrom,
   type CloneTemplateOptions,
+  type CloneTemplateFilesOptions,
 } from './clone.js';
 
 export { publishProject } from './publish.js';
@@ -94,6 +107,8 @@ export {
 } from './system-prompt.js';
 
 export { buildUiGroundingBlocks } from './ui-grounding.js';
+
+export { buildToolsGroundingBlock } from './tools-grounding.js';
 
 export {
   type HarnessConfig,

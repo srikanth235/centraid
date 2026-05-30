@@ -19,6 +19,21 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 /**
+ * Pure string variant: replace the first `<title>...</title>` in an HTML
+ * string with `newName` (HTML-escaped). No `<title>` → returns the input
+ * unchanged. Shared by the filesystem path ({@link rewriteIndexHtmlTitle})
+ * and the git-store file-map path (issue #141).
+ */
+export function rewriteTitleInHtml(html: string, newName: string): string {
+  const re = /<title>[\s\S]*?<\/title>/i;
+  if (!re.test(html)) return html; // no <title> tag — leave the string untouched.
+  // Callback form so $-sequences in `newName` aren't interpreted as
+  // backreferences by `String.replace`. Regex has no /g so only the
+  // first <title> is rewritten.
+  return html.replace(re, () => `<title>${escapeHtml(newName)}</title>`);
+}
+
+/**
  * Replace the first `<title>...</title>` in `<projectDir>/index.html`
  * with `newName`. HTML-escapes the name so a user-chosen "Foo & Bar"
  * can't break the markup or smuggle a tag in.
@@ -34,13 +49,8 @@ export async function rewriteIndexHtmlTitle(projectDir: string, newName: string)
   } catch {
     return; // project has no index.html (automation app) — nothing to rewrite.
   }
-  const re = /<title>[\s\S]*?<\/title>/i;
-  if (!re.test(raw)) return; // no <title> tag — leave the file untouched.
-  // Callback form so $-sequences in `newName` aren't interpreted as
-  // backreferences by `String.replace`. Regex has no /g so only the
-  // first <title> is rewritten.
-  const next = raw.replace(re, () => `<title>${escapeHtml(newName)}</title>`);
-  await fs.writeFile(htmlPath, next);
+  const next = rewriteTitleInHtml(raw, newName);
+  if (next !== raw) await fs.writeFile(htmlPath, next);
 }
 
 export interface AutomationManifestRewriteOptions {
@@ -51,6 +61,30 @@ export interface AutomationManifestRewriteOptions {
    * template-authoring time. The rename path leaves `generated` alone.
    */
   stampGenerated?: boolean;
+}
+
+/**
+ * Pure string variant: rewrite `name` (and optionally re-stamp
+ * `generated`) in an `automation.json` string. Returns `null` when the
+ * input is unparseable so the caller can skip it. Shared by the
+ * filesystem walker and the git-store file-map path (issue #141).
+ */
+export function applyManifestName(
+  raw: string,
+  newName: string,
+  opts: AutomationManifestRewriteOptions = {},
+): string | null {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null; // unparseable — caller leaves it alone.
+  }
+  parsed.name = newName;
+  if (opts.stampGenerated) {
+    parsed.generated = { by: 'centraid-builder', at: new Date().toISOString() };
+  }
+  return JSON.stringify(parsed, null, 2) + '\n';
 }
 
 /**
@@ -76,7 +110,6 @@ export async function rewriteAutomationManifestNames(
   } catch {
     return; // no automations/ subdir — nothing to do.
   }
-  const nowIso = opts.stampGenerated ? new Date().toISOString() : null;
   for (const name of names) {
     if (name.startsWith('.') || name.startsWith('_')) continue;
     const manifestPath = path.join(autoRoot, name, 'automation.json');
@@ -88,15 +121,8 @@ export async function rewriteAutomationManifestNames(
     } catch {
       continue;
     }
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      continue; // unparseable — leave alone.
-    }
-    parsed.name = newName;
-    if (nowIso !== null) parsed.generated = { by: 'centraid-builder', at: nowIso };
-    await fs.writeFile(manifestPath, JSON.stringify(parsed, null, 2) + '\n');
+    const next = applyManifestName(raw, newName, opts);
+    if (next !== null) await fs.writeFile(manifestPath, next);
   }
 }
 

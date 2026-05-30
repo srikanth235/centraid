@@ -130,6 +130,15 @@ export interface Manifest {
   readonly id: string;
   readonly name: string;
   readonly version: string;
+  /**
+   * What surface the app belongs to. `'automation'` marks a UI-less app
+   * that exists only to host automations (it shows on the Automations
+   * page, not "My apps"); `'app'` — the default when omitted — is a normal
+   * UI app. This replaces the legacy `auto.`-id-prefix convention: the
+   * manifest, not the folder id, is the source of truth for "is this an
+   * automation app".
+   */
+  readonly kind?: 'app' | 'automation';
   readonly description?: string;
   readonly tables?: readonly ManifestTable[];
   readonly actions: readonly ManifestActionEntry[];
@@ -154,6 +163,7 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
     id: { type: 'string', minLength: 1 },
     name: { type: 'string', minLength: 1 },
     version: { type: 'string', minLength: 1 },
+    kind: { type: 'string', enum: ['app', 'automation'] },
     description: { type: 'string' },
     tables: {
       type: 'array',
@@ -405,6 +415,7 @@ export function validateManifest(raw: unknown): Manifest {
     id: r.id as string,
     name: r.name as string,
     version: r.version as string,
+    ...(r.kind === 'automation' || r.kind === 'app' ? { kind: r.kind } : {}),
     ...(typeof r.description === 'string' ? { description: r.description } : {}),
     ...(Array.isArray(r.tables) ? { tables: r.tables as ManifestTable[] } : {}),
     actions,

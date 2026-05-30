@@ -18,19 +18,14 @@
   },
   "dependencies": {
     "@centraid/agent-runtime": "workspace:*",
-    "@centraid/app-templates": "workspace:*",
-    "@centraid/builder-harness": "workspace:*",
-    "@centraid/chat-harness": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
     "@centraid/gateway-runtime": "workspace:*",
-    "@centraid/runtime-core": "workspace:*",
-    "ws": "^8.18.0"
+    "@centraid/runtime-core": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@playwright/test": "^1.60.0",
     "@types/node": "^22.0.0",
-    "@types/ws": "^8.18.0",
     "electron": "^37.0.0",
     "typescript": "catalog:"
   }

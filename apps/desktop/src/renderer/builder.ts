@@ -1,5 +1,8 @@
 // Builder mode — chat-driven app generation, wired live to:
-//   - the centraid agent (window.CentraidApi.startAgent / promptAgent / onAgentEvent)
+//   - the gateway's unified chat (streamChat → POST /centraid/<id>/_chat SSE):
+//     the turn runs server-side in the app's draft worktree with the union of
+//     tools, so the builder's "edit my app" chat and the app view's data chat
+//     are one surface on one transport (issue #141, Phase 3)
 //   - the project folder on disk (readProjectFiles for the Code tab)
 //   - the openclaw centraid plugin (publish, listVersions, activateVersion)
 // governance: allow-repo-hygiene file-size-limit builder-mode pending split into chat/preview/code modules
@@ -8,8 +11,34 @@
 //   Topbar:    [back][project] [history-btn][sidebar-btn] {Preview|Code} [device|URL|↗|⟳] [Share][primary]
 //   Chat pane: swaps between live chat (chatView='chat') and version history
 //              (chatView='history'). Sidebar-btn collapses the whole pane.
-//   Right pane: Preview (iframe → live gateway URL or local centraid-preview://)
+//   Right pane: Preview (iframe → gateway draft URL: /centraid/_draft/<sid>/<id>/)
 //               or Code (project files, syntax-highlighted).
+
+import {
+  appSchema,
+  appTableRows,
+  appQuery,
+  appLogs,
+  appLiveUrl,
+  listVersions,
+  activateVersion,
+  listAutomations,
+  runAutomationNow,
+  readAutomationRun,
+  listAutomationRuns,
+  readProjectFiles,
+  writeProjectFile,
+  draftPreviewUrl,
+  publish,
+  createProject,
+  updateProjectMeta,
+  setAutomationEnabled,
+  deleteAutomation,
+  streamChat,
+  createChatSession,
+  listChatSessions,
+  type ChatStreamEvent,
+} from './gateway-client.js';
 
 (function () {
   // A single tool invocation. Multiple of these are consolidated into a
@@ -387,7 +416,12 @@
     let generating = false;
     let publishing = false;
     let lastPublishedVersionId: string | undefined;
-    let unsubscribeAgent: (() => void) | null = null;
+    // The gateway chat session this builder streams turns to (its id IS the
+    // window id). Reused across turns so the gateway resumes the same adapter
+    // thread; lazily created on first turn. Null until then.
+    let chatWindowId: string | null = null;
+    // Abort handle for the in-flight chat turn (Stop / unmount).
+    let agentAbort: AbortController | null = null;
     let liveUrl: string | undefined;
     // Cloud → Logs polling handle. Hoisted out of renderCloud's closure so
     // that any code that tears down the right pane (renderRight, builder
@@ -730,15 +764,13 @@
       projNameEl.textContent = next;
       crumbProjName.textContent = isUpdateMode ? `Editing ${next}` : 'Builder';
       if (projectId) {
-        void Api()
-          .updateProjectMeta({ id: projectId, name: next })
-          .catch((err: unknown) => {
-            // Roll back if persistence fails so the UI stays truthful.
-            projName = previous;
-            projNameEl.textContent = previous;
-            crumbProjName.textContent = isUpdateMode ? `Editing ${previous}` : 'Builder';
-            showToast(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
-          });
+        void updateProjectMeta({ id: projectId, name: next }).catch((err: unknown) => {
+          // Roll back if persistence fails so the UI stays truthful.
+          projName = previous;
+          projNameEl.textContent = previous;
+          crumbProjName.textContent = isUpdateMode ? `Editing ${previous}` : 'Builder';
+          showToast(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
         if (onMetaChange) onMetaChange({ projectId, name: next });
       }
     }
@@ -851,14 +883,13 @@
     }
 
     // Trim noisy URL prefixes for display while preserving the full URL on
-    // hover (set as title attr by the caller). centraid-preview:// gets
-    // shortened to "/<id>/<file>".
+    // hover (set as title attr by the caller). The gateway draft-preview URL
+    // (`…/centraid/_draft/<sessionId>/<id>/`) is collapsed to a friendly
+    // "Draft preview" label rather than the long internal path.
     function formatPreviewUrl(src: string): string {
       try {
         const u = new URL(src);
-        if (u.protocol === 'centraid-preview:') {
-          return (u.pathname || '/').replace(/^\/+/, '/');
-        }
+        if (u.pathname.includes('/_draft/')) return 'Draft preview';
         return u.host + (u.pathname === '/' ? '' : u.pathname);
       } catch {
         return src;
@@ -1292,25 +1323,21 @@
       return frame;
     }
 
-    async function resolvePreviewSrc(): Promise<
-      { src: string; kind: 'live' | 'local' } | undefined
-    > {
+    async function resolvePreviewSrc(): Promise<{ src: string; kind: 'draft' } | undefined> {
       if (!projectId) return undefined;
-      // Prefer the gateway-served live URL once we know there's a real
-      // active version on the gateway (set by bootstrap or handlePublish).
-      // We do NOT call appLiveUrl as a probe here — it always succeeds and
-      // would falsely point the iframe at a gateway that might not have
-      // the app or might not even be running.
-      if (liveUrl && lastPublishedVersionId) {
-        return { src: liveUrl, kind: 'live' };
-      }
-      // Local-files fallback: serve <projectsDir>/<id>/index.html via the
-      // centraid-preview:// custom protocol registered by the main process.
+      // The builder always previews the *draft* worktree (issue #141,
+      // Phase 4): the gateway serves the open `desktop-<id>` session under
+      // `/centraid/_draft/<sessionId>/<id>/`, so staged chat/file edits show
+      // here before an explicit Publish flips them live. The draft is the
+      // editing surface, so we never point this iframe at the published live
+      // URL — after Publish the draft == live anyway. `available` is false
+      // until the draft has an index.html (fresh app mid-generation), which
+      // keeps the building skeleton up until the first page is staged.
       try {
-        const r = await Api().previewUrl({ id: projectId });
-        if (r.available) return { src: r.url, kind: 'local' };
+        const r = await draftPreviewUrl(projectId);
+        if (r.available) return { src: r.url, kind: 'draft' };
       } catch {
-        /* swallow — show empty state below */
+        /* swallow — show building skeleton below */
       }
       return undefined;
     }
@@ -1365,7 +1392,7 @@
         previewUrlPill.removeAttribute('title');
       } else {
         previewUrlText.textContent = formatPreviewUrl(resolved.src);
-        previewUrlDot.dataset.state = resolved.kind === 'live' ? 'live' : 'local';
+        previewUrlDot.dataset.state = 'local';
         previewUrlPill.setAttribute('title', resolved.src);
       }
 
@@ -1396,14 +1423,12 @@
       stage.append(card);
       rightPaneContent.append(stage);
 
-      // Floating "Live · synced" badge — ambient confidence signal that
-      // the iframe content reflects the persisted project. Only appears
-      // for the gateway-served live URL (not the local-files fallback).
-      if (resolved.kind === 'live') {
-        const badge = el('div', { class: 'preview-live-badge' });
-        badge.innerHTML = '<span class="preview-live-dot"></span>Live · synced';
-        rightPaneContent.append(badge);
-      }
+      // Floating "Draft · staged" badge — ambient signal that the iframe
+      // reflects the staged draft worktree (served through the gateway),
+      // not the published version. An explicit Publish flips it live.
+      const badge = el('div', { class: 'preview-live-badge' });
+      badge.innerHTML = '<span class="preview-live-dot"></span>Draft · staged';
+      rightPaneContent.append(badge);
     }
 
     // §B5 — editable code workspace. Buffers, open tabs, the active file,
@@ -1479,9 +1504,9 @@
       }
       const pid = projectId;
 
-      let files: Awaited<ReturnType<Window['CentraidApi']['readProjectFiles']>> = [];
+      let files: Awaited<ReturnType<typeof readProjectFiles>> = [];
       try {
-        files = await Api().readProjectFiles({ id: pid });
+        files = await readProjectFiles({ id: pid });
       } catch (err) {
         workspace.innerHTML = `<div class="empty">Could not read files: ${escapeHtml(String(err))}</div>`;
         return;
@@ -1801,7 +1826,7 @@
         const buf = codeBuffers.get(p);
         if (!buf || buf.current === buf.original) return;
         try {
-          await Api().writeProjectFile({ id: pid, path: p, content: buf.current });
+          await writeProjectFile({ id: pid, path: p, content: buf.current });
           buf.original = buf.current;
           showToast(`Saved ${basename(p)}`);
         } catch (err) {
@@ -1946,8 +1971,15 @@
             nDirty === 0,
           ),
           menuItem('Revert this file', revertActive, !dirty),
-          menuItem('Open project folder', () => void Api().openProjectFolder({ id: pid })),
         );
+        // "Open project folder" reveals the on-disk worktree, which only
+        // the local gateway materializes (issue #141). Hide it for a
+        // remote gateway — there's no local folder to open.
+        if (window.Centraid?.getRuntimeMode() !== 'remote') {
+          menu.append(
+            menuItem('Open project folder', () => void Api().openProjectFolder({ id: pid })),
+          );
+        }
         overflow.addEventListener('click', (e) => {
           e.stopPropagation();
           const wasHidden = menu.hasAttribute('hidden');
@@ -2217,7 +2249,7 @@
         schemaCache = 'pending';
         schemaError = undefined;
         try {
-          schemaCache = await Api().appSchema({ id: projectId });
+          schemaCache = await appSchema({ id: projectId });
         } catch (err) {
           schemaCache = 'error';
           schemaError = err instanceof Error ? err.message : String(err);
@@ -2233,7 +2265,7 @@
         if (!force && versionsCache !== undefined && versionsCache !== 'error') return;
         versionsCache = 'pending';
         try {
-          versionsCache = await Api().listVersions({ id: projectId });
+          versionsCache = await listVersions({ id: projectId });
         } catch {
           // The gateway returns 404/409 before the first publish; treat all
           // failures as "no versions yet" rather than surfacing the raw error.
@@ -2673,7 +2705,7 @@
           rowsCache.set(tableName, { kind: 'pending' });
           paint();
           try {
-            const r = await Api().appTableRows({
+            const r = await appTableRows({
               id: projectId,
               table: tableName,
               limit: ROWS_PAGE_SIZE,
@@ -2918,7 +2950,7 @@
           drawStage(); // re-paint with disabled button + cleared output
 
           try {
-            const r = await Api().appQuery({ id: projectId!, sql });
+            const r = await appQuery({ id: projectId!, sql });
             sqlResult = r;
           } catch (err) {
             sqlError = err instanceof Error ? err.message : String(err);
@@ -3072,7 +3104,7 @@
           }
         }
         try {
-          const r = await Api().appLogs({ id: projectId, limit: 200 });
+          const r = await appLogs({ id: projectId, limit: 200 });
           logsCache = r.entries;
           logsError = undefined;
         } catch (err) {
@@ -3235,7 +3267,7 @@
           // Automations are user-owned projects; this panel shows the
           // ones associated with the app being built (issue #91).
           const pid = projectId;
-          const all = await Api().listAutomations();
+          const all = await listAutomations();
           automationsCache = all.filter((r) => r.manifest.apps?.includes(pid));
           automationsError = undefined;
         } catch (err) {
@@ -3252,7 +3284,7 @@
         if (!projectId) return;
         const next = checkbox.checked;
         try {
-          await Api().setAutomationEnabled({ automationId: row.ref, enabled: next });
+          await setAutomationEnabled({ automationId: row.ref, enabled: next });
           await refreshAutomations();
         } catch (err) {
           // Revert the toggle so the UI doesn't misrepresent persisted state.
@@ -3270,7 +3302,7 @@
         try {
           // run-now fires in the background and returns the run id; poll
           // the ledger for the finished record to report the outcome.
-          const { runId } = await Api().runAutomationNow({ automationId: row.ref });
+          const { runId } = await runAutomationNow({ automationId: row.ref });
           const rec = await waitForAutomationRun(runId);
           automationRunState.set(row.name, {
             kind: 'done',
@@ -3296,7 +3328,7 @@
       async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
         const deadline = Date.now() + 6 * 60 * 1000;
         while (Date.now() < deadline) {
-          const rec = await Api().readAutomationRun({ runId });
+          const rec = await readAutomationRun({ runId });
           if (rec && rec.endedAt !== undefined) return rec;
           await new Promise((resolve) => setTimeout(resolve, 1500));
         }
@@ -3310,7 +3342,7 @@
         );
         if (!ok) return;
         try {
-          await Api().deleteAutomation({ automationId: row.ref });
+          await deleteAutomation({ automationId: row.ref });
           automationRunState.delete(row.name);
           await refreshAutomations();
         } catch (err) {
@@ -3333,9 +3365,9 @@
         return;
       }
 
-      let result: Awaited<ReturnType<Window['CentraidApi']['listVersions']>>;
+      let result: Awaited<ReturnType<typeof listVersions>>;
       try {
-        result = await Api().listVersions({ id: projectId });
+        result = await listVersions({ id: projectId });
       } catch (err) {
         list.innerHTML = `<div class="empty">No versions yet. Publish to create the first one.</div>`;
         // Fall back to empty list — gateway returns 404/409 if app isn't yet uploaded.
@@ -3384,7 +3416,7 @@
                         class: 'btn btn-soft tiny-btn',
                         onClick: async () => {
                           try {
-                            await Api().activateVersion({
+                            await activateVersion({
                               id: projectId!,
                               versionId: v.versionId,
                             });
@@ -3410,134 +3442,28 @@
     }
 
     // ---------- Agent wiring ----------
-    async function startAgentSession(
-      id: string,
-      sessionMode: 'fresh' | 'continue' | 'in-memory',
-    ): Promise<{ messages: import('./centraid-api.js').CentraidAgentMessage[] }> {
-      // Subscribe BEFORE start so we don't miss the very first text deltas.
-      if (unsubscribeAgent) {
-        unsubscribeAgent();
-        unsubscribeAgent = null;
-      }
-      unsubscribeAgent = Api().onAgentEvent((msg) => {
-        if (msg.projectId !== id) return;
-        handleAgentEvent(msg.event);
-      });
-      const result = await Api().startAgent({ projectId: id, projectKind, sessionMode });
-      return { messages: result.messages };
-    }
-
-    // Convert the persisted AgentMessage[] (returned by startAgent for
-    // resumed sessions) into the renderer's ChatMsg[] so the chat pane
-    // shows the prior conversation when the user reopens a project.
+    // Resolve the gateway chat session this builder streams turns to. The
+    // turn runs server-side in the app's `desktop-<id>` draft worktree (the
+    // same worktree the Code tab edits), so the agent's file edits stage in
+    // the draft and the preview reflects it; Publish is the explicit flip.
     //
-    // Walk each assistant message's content array IN ORDER so thinking,
-    // text, and tool calls render in the same sequence the user saw live.
-    // Tool-result messages patch the matching tool row's state by id.
-    function hydrateChatFromMessages(
-      messages: import('./centraid-api.js').CentraidAgentMessage[],
-    ): ChatMsg[] {
-      const out: ChatMsg[] = [];
-      // toolCallId → index of the toolGroup that contains it. Lets a
-      // toolResult message later patch the matching call's state.
-      const groupIdxByCallId = new Map<string, number>();
-      const extractText = (
-        content: string | import('./centraid-api.js').CentraidContentBlock[],
-      ): string => {
-        if (typeof content === 'string') return content;
-        let s = '';
-        for (const c of content) {
-          if (c.type === 'text' && typeof (c as { text?: unknown }).text === 'string') {
-            s += (c as { text: string }).text;
-          }
+    // 'continue' reuses the project's most recent session so the gateway
+    // resumes the same adapter thread across builder reopens; 'fresh' always
+    // mints a new session (first build — don't append onto a stale thread).
+    async function ensureChatWindow(
+      id: string,
+      sessionMode: 'fresh' | 'continue',
+    ): Promise<string> {
+      if (chatWindowId) return chatWindowId;
+      if (sessionMode === 'continue') {
+        const sessions = await listChatSessions(id).catch(() => []);
+        if (sessions[0]) {
+          chatWindowId = sessions[0].id;
+          return chatWindowId;
         }
-        return s;
-      };
-
-      for (const m of messages) {
-        if (m.role === 'user') {
-          const text = extractText(
-            (m as { content: string | import('./centraid-api.js').CentraidContentBlock[] }).content,
-          );
-          if (text) out.push({ kind: 'user', text });
-          continue;
-        }
-        if (m.role === 'assistant') {
-          const content = (m as { content: import('./centraid-api.js').CentraidContentBlock[] })
-            .content;
-          let textBuf = '';
-          let thinkBuf = '';
-          const flushText = (): void => {
-            if (textBuf) {
-              out.push({ kind: 'ai', text: textBuf });
-              textBuf = '';
-            }
-          };
-          const flushThink = (): void => {
-            if (thinkBuf) {
-              out.push({ kind: 'thinking', text: thinkBuf });
-              thinkBuf = '';
-            }
-          };
-          for (const c of content) {
-            if (c.type === 'text' && typeof (c as { text?: unknown }).text === 'string') {
-              flushThink();
-              textBuf += (c as { text: string }).text;
-            } else if (
-              c.type === 'thinking' &&
-              typeof (c as { thinking?: unknown }).thinking === 'string'
-            ) {
-              flushText();
-              thinkBuf += (c as { thinking: string }).thinking;
-            } else if (c.type === 'toolCall') {
-              flushText();
-              flushThink();
-              const tc = c as { id: string; name: string; arguments: Record<string, unknown> };
-              const newCall: ToolCall = {
-                id: tc.id,
-                tool: tc.name,
-                summary: summarizeToolArgs(tc.name, tc.arguments),
-                state: 'ok',
-              };
-              const last = out[out.length - 1];
-              if (last && last.kind === 'toolGroup') {
-                // Same group as the previous adjacent tool call — append.
-                last.calls.push(newCall);
-                groupIdxByCallId.set(tc.id, out.length - 1);
-              } else {
-                // Historical groups start collapsed; the user already saw
-                // them once and this view is retrospective.
-                out.push({
-                  kind: 'toolGroup',
-                  id: tc.id,
-                  calls: [newCall],
-                  open: false,
-                });
-                groupIdxByCallId.set(tc.id, out.length - 1);
-              }
-            }
-          }
-          flushText();
-          flushThink();
-          continue;
-        }
-        if (m.role === 'toolResult') {
-          const tr = m as { toolCallId: string; isError: boolean };
-          const idx = groupIdxByCallId.get(tr.toolCallId);
-          if (idx !== undefined) {
-            const cur = out[idx];
-            if (cur && cur.kind === 'toolGroup') {
-              cur.calls = cur.calls.map((c) =>
-                c.id === tr.toolCallId ? { ...c, state: tr.isError ? 'error' : 'ok' } : c,
-              );
-            }
-          }
-          continue;
-        }
-        // bashExecution / custom / branchSummary / compactionSummary —
-        // skip silently. They're noise for the user-facing chat view.
       }
-      return out;
+      chatWindowId = (await createChatSession(id, projName)).id;
+      return chatWindowId;
     }
 
     // Stop streaming on the open thinking block (if any). New tool calls or
@@ -3560,63 +3486,71 @@
       currentAiMsgIndex = -1;
     }
 
-    function handleAgentEvent(event: import('./centraid-api.js').CentraidAgentEvent): void {
+    // Settle a finished turn: close streaming bubbles + refresh the code/
+    // preview tab (the agent may have staged file writes in the draft).
+    function finishAgentTurn(): void {
+      generating = false;
+      closeAi();
+      closeThinking();
+      renderChat();
+      if (isAutomation) {
+        // The agent rewrote `automation.json` / `handler.js` — pull the
+        // fresh manifest so the config pane reflects what it wrote.
+        if (previewReloadPending) void refreshAutomationRow();
+      } else {
+        // Refresh code/preview tab if visible — agent may have written files.
+        if (tab === 'code') renderRight();
+        if (tab === 'preview' && previewReloadPending) renderRight();
+      }
+      previewReloadPending = false;
+    }
+
+    // Consume the gateway's native `ChatStreamEvent` union (issue #141,
+    // Phase 3 — no IPC translation). The builder + the app-view data chat
+    // now share this event model + the `streamChat` transport — one chat
+    // surface, both jobs. Tool calls carry a real `toolCallId`, so results
+    // target their group directly.
+    function handleStreamEvent(event: ChatStreamEvent): void {
       switch (event.type) {
-        case 'agent_start':
-        case 'turn_start':
-        case 'message_start':
+        case 'assistant.start':
           generating = true;
-          // Don't pre-create an empty AI bubble — codex turns may emit only
-          // reasoning + tool calls, leaving a stale "…" placeholder. We
-          // create the bubble lazily on the first text_delta instead.
+          // Bubble created lazily on the first delta — a turn may emit only
+          // reasoning + tool calls, which would leave a stale "…" placeholder.
           renderChat();
-          break;
-        case 'message_update': {
-          const ame = event.assistantMessageEvent as {
-            type: string;
-            delta?: unknown;
-          };
-          if (ame.type === 'text_delta' && typeof ame.delta === 'string') {
-            closeThinking();
-            if (currentAiMsgIndex < 0) {
-              currentAiMsgIndex = pushMessage({ kind: 'ai', text: ame.delta, streaming: true });
-            } else {
-              const cur = chat[currentAiMsgIndex];
-              if (cur && cur.kind === 'ai') {
-                updateMessage(currentAiMsgIndex, { text: cur.text + ame.delta, streaming: true });
-              }
+          return;
+        case 'assistant.delta':
+          closeThinking();
+          if (currentAiMsgIndex < 0) {
+            currentAiMsgIndex = pushMessage({ kind: 'ai', text: event.delta, streaming: true });
+          } else {
+            const cur = chat[currentAiMsgIndex];
+            if (cur && cur.kind === 'ai') {
+              updateMessage(currentAiMsgIndex, { text: cur.text + event.delta, streaming: true });
             }
-          } else if (ame.type === 'thinking_delta' && typeof ame.delta === 'string') {
-            if (currentThinkingMsgIndex < 0) {
-              currentThinkingMsgIndex = pushMessage({
-                kind: 'thinking',
-                text: ame.delta,
+          }
+          return;
+        case 'reasoning.delta':
+          if (currentThinkingMsgIndex < 0) {
+            currentThinkingMsgIndex = pushMessage({
+              kind: 'thinking',
+              text: event.delta,
+              streaming: true,
+            });
+          } else {
+            const cur = chat[currentThinkingMsgIndex];
+            if (cur && cur.kind === 'thinking') {
+              updateMessage(currentThinkingMsgIndex, {
+                text: cur.text + event.delta,
                 streaming: true,
               });
-            } else {
-              const cur = chat[currentThinkingMsgIndex];
-              if (cur && cur.kind === 'thinking') {
-                updateMessage(currentThinkingMsgIndex, {
-                  text: cur.text + ame.delta,
-                  streaming: true,
-                });
-              }
             }
-          } else if (ame.type === 'thinking_end' || ame.type === 'text_end') {
-            // Stream of this content block ended; close the matching bubble.
-            if (ame.type === 'thinking_end') closeThinking();
-            else closeAi();
           }
-          break;
-        }
-        case 'message_end': {
+          return;
+        case 'tool.start': {
+          // A tool call is the agent acting — close any in-flight reasoning
+          // and AI text so the next text starts a fresh bubble.
+          closeThinking();
           closeAi();
-          closeThinking();
-          break;
-        }
-        case 'tool_execution_start': {
-          // A tool call is the agent acting; any in-flight reasoning is done.
-          closeThinking();
           const newCall: ToolCall = {
             id: event.toolCallId,
             tool: event.toolName,
@@ -3625,17 +3559,14 @@
           };
           const lastIdx = chat.length - 1;
           const last = chat[lastIdx];
-          // Consolidate adjacent tool calls into one bubble. AI text or
-          // thinking content between calls breaks the group, so a fresh one
-          // is created when the previous chat msg isn't a toolGroup.
+          // Consolidate adjacent tool calls into one bubble; AI text/thinking
+          // between calls breaks the group.
           if (last && last.kind === 'toolGroup') {
             const updated: ChatMsg = { ...last, calls: [...last.calls, newCall] };
             chat = chat.map((m, i) => (i === lastIdx ? updated : m));
             renderChat();
             pendingToolStarts.set(event.toolCallId, lastIdx);
           } else {
-            // New groups start expanded so the user sees what's running as
-            // it happens; they can collapse for retrospective compactness.
             const idx = pushMessage({
               kind: 'toolGroup',
               id: event.toolCallId,
@@ -3644,9 +3575,9 @@
             });
             pendingToolStarts.set(event.toolCallId, idx);
           }
-          break;
+          return;
         }
-        case 'tool_execution_end': {
+        case 'tool.result': {
           const groupIdx = pendingToolStarts.get(event.toolCallId);
           pendingToolStarts.delete(event.toolCallId);
           if (groupIdx !== undefined) {
@@ -3654,39 +3585,37 @@
             if (grp && grp.kind === 'toolGroup') {
               const calls = grp.calls.map((c) =>
                 c.id === event.toolCallId
-                  ? { ...c, state: event.isError ? ('error' as const) : ('ok' as const) }
+                  ? { ...c, state: event.ok ? ('ok' as const) : ('error' as const) }
                   : c,
               );
               chat = chat.map((m, i) => (i === groupIdx ? { ...grp, calls } : m));
               renderChat();
             }
           }
-          if (!event.isError && FILE_WRITING_TOOLS.has(event.toolName)) {
+          if (event.ok && FILE_WRITING_TOOLS.has(event.toolName)) {
             previewReloadPending = true;
-            // Successful file write counts as an edit — bump the header
+            // A successful file write counts as an edit — bump the header
             // relative-time so 'edited 14h ago' rolls to 'just now'.
             appLastEditedAt = Date.now();
           }
-          break;
+          return;
         }
-        case 'turn_end':
-        case 'agent_end':
+        case 'webhooks':
+          announceMintedWebhooks(event.minted);
+          return;
+        case 'final':
+        case 'aborted':
+          finishAgentTurn();
+          return;
+        case 'error':
           generating = false;
           closeAi();
           closeThinking();
+          pushMessage({ kind: 'status', text: `Agent error: ${event.message}` });
           renderChat();
-          if (isAutomation) {
-            // The agent rewrote `automation.json` / `handler.js` — pull the
-            // fresh manifest so the config pane reflects what it wrote.
-            if (previewReloadPending) void refreshAutomationRow();
-          } else {
-            // Refresh code/preview tab if visible — agent may have written files.
-            if (tab === 'code') renderRight();
-            if (tab === 'preview' && previewReloadPending) renderRight();
-          }
-          previewReloadPending = false;
-          break;
-        default:
+          return;
+        case 'phase':
+        case 'usage':
           break;
       }
     }
@@ -3720,11 +3649,24 @@
       currentThinkingMsgIndex = -1;
       renderChat();
       try {
-        const { mintedWebhooks } = await Api().promptAgent({ text });
-        announceMintedWebhooks(mintedWebhooks);
+        const windowId = await ensureChatWindow(projectId, 'continue');
+        agentAbort = new AbortController();
+        await streamChat(
+          projectId,
+          { windowId, message: text },
+          handleStreamEvent,
+          agentAbort.signal,
+        );
+        // Stream ended; settle in case it closed without a terminal event.
+        if (generating) finishAgentTurn();
       } catch (err) {
+        if (agentAbort?.signal.aborted) {
+          finishAgentTurn();
+          return;
+        }
         generating = false;
         pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
+        renderChat();
       }
     }
 
@@ -3732,39 +3674,22 @@
       if (isAutomation && projectId) {
         // The automation project is scaffolded as a draft before the
         // builder opens, so this is always a "reopen" — load the manifest
-        // snapshot, then resume (or start fresh, the harness falls back)
-        // the builder session.
+        // snapshot, then seed the intro. The gateway resumes the prior
+        // adapter thread via the reused chat session (ensureChatWindow).
         chat = [];
         renderChat();
         await refreshAutomationRow();
-        const { messages } = await startAgentSession(projectId, 'continue');
-        const hydrated = hydrateChatFromMessages(messages);
-        if (hydrated.length > 0) {
-          chat = chat.concat(hydrated);
-        } else {
-          chat = chat.concat([
-            {
-              kind: 'ai',
-              text:
-                'Let’s build your automation. Describe what it should do and ' +
-                'when it should run — for example, “every weekday morning, ' +
-                'summarize yesterday’s new GitHub issues.”',
-            },
-          ]);
-        }
+        chat = chat.concat([
+          {
+            kind: 'ai',
+            text:
+              'Let’s build your automation. Describe what it should do and ' +
+              'when it should run — for example, “every weekday morning, ' +
+              'summarize yesterday’s new GitHub issues.”',
+          },
+        ]);
         renderChat();
-        if (initialPrompt) {
-          pushMessage({ kind: 'user', text: initialPrompt });
-          generating = true;
-          renderChat();
-          try {
-            const { mintedWebhooks } = await Api().promptAgent({ text: initialPrompt });
-            announceMintedWebhooks(mintedWebhooks);
-          } catch (err) {
-            generating = false;
-            pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
-          }
-        }
+        if (initialPrompt) await sendUserPrompt(initialPrompt);
         return;
       }
 
@@ -3780,9 +3705,9 @@
         // `listVersions` actually contacts the gateway and 404s when the app
         // isn't there, so it's the honest probe.
         try {
-          const versions = await Api().listVersions({ id: projectId });
+          const versions = await listVersions({ id: projectId });
           if (versions.activeVersion) {
-            const r = await Api().appLiveUrl({ id: projectId });
+            const r = await appLiveUrl({ id: projectId });
             liveUrl = r.url;
             lastPublishedVersionId = versions.activeVersion;
             // Hydrate the header status: total version count drives the
@@ -3796,21 +3721,16 @@
           /* gateway down, app unknown, or never published — local preview
              takes over via resolvePreviewSrc(). */
         }
-        // Resume the most recent persisted session for this project so the
-        // chat history survives builder reloads. Hydrate the chat pane from
-        // the messages pi already has on disk before any new turn streams in.
-        const { messages } = await startAgentSession(projectId, 'continue');
-        const hydrated = hydrateChatFromMessages(messages);
-        if (hydrated.length > 0) {
-          chat = chat.concat(hydrated);
-        } else {
-          chat = chat.concat([
-            {
-              kind: 'ai',
-              text: `Loaded "${projName}". Pick a direction below or describe the next change.`,
-            },
-          ]);
-        }
+        // Seed a fresh pane. The gateway resumes the project's prior adapter
+        // thread on the first turn via the reused chat session
+        // (ensureChatWindow → most recent session), so the agent keeps
+        // context even though the pane starts empty across reopens.
+        chat = chat.concat([
+          {
+            kind: 'ai',
+            text: `Loaded "${projName}". Pick a direction below or describe the next change.`,
+          },
+        ]);
         renderChat();
         // Subtitle slot now holds the editable `app.json#description`, so
         // we don't overwrite it here.
@@ -3828,7 +3748,7 @@
         return;
       }
 
-      // Fresh build: scaffold + start agent + send first prompt.
+      // Fresh build: scaffold + open a fresh chat session + send first prompt.
       const id = generateProjectId(initialPrompt);
       // Date divider carries the conversation start time (refined proposal
       // RBChat — "Today · 14:22").
@@ -3840,7 +3760,7 @@
       pushMessage({ kind: 'divider', text: `Today · ${hhmm}` });
       pushMessage({ kind: 'status', text: 'Setting up project…', spinning: true });
       try {
-        await Api().createProject({ id, name: projName, version: '0.1.0' });
+        await createProject({ id, name: projName, version: '0.1.0' });
         projectId = id;
         // Subtitle holds the editable description, not a status — leave it
         // alone so the user's placeholder/value isn't clobbered.
@@ -3850,25 +3770,15 @@
       }
 
       try {
-        // First build → fresh persisted session (so the initial prompt isn't
-        // appended onto a stale transcript from a previous project at the
-        // same path).
-        await startAgentSession(id, 'fresh');
+        // First build → a FRESH chat session so the initial prompt isn't
+        // appended onto a stale thread from a prior project at the same id.
+        chatWindowId = (await createChatSession(id, projName)).id;
       } catch (err) {
-        pushMessage({ kind: 'status', text: `Agent failed to start: ${String(err)}` });
+        pushMessage({ kind: 'status', text: `Could not start chat: ${String(err)}` });
         return;
       }
 
-      pushMessage({ kind: 'user', text: initialPrompt });
-      generating = true;
-      renderChat();
-      try {
-        const { mintedWebhooks } = await Api().promptAgent({ text: initialPrompt });
-        announceMintedWebhooks(mintedWebhooks);
-      } catch (err) {
-        generating = false;
-        pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
-      }
+      await sendUserPrompt(initialPrompt);
     }
 
     // ---------- Automation builder ----------
@@ -3891,7 +3801,7 @@
       try {
         // The builder opens an automation app by its folder id; resolve
         // the single automation it owns to get the `<appId>/<id>` handle.
-        const all = await Api().listAutomations();
+        const all = await listAutomations();
         const row = all.find((r) => r.ownerApp === projectId);
         if (row) automationRow = row;
       } catch {
@@ -3914,7 +3824,7 @@
       primaryBtn.setAttribute('disabled', '');
       refreshSyncStatus();
       try {
-        await Api().setAutomationEnabled({ automationId: ref, enabled: next });
+        await setAutomationEnabled({ automationId: ref, enabled: next });
         showToast(next ? 'Automation enabled — schedule is live' : 'Automation disabled');
         await refreshAutomationRow();
       } catch (err) {
@@ -3941,11 +3851,11 @@
       try {
         // run-now fires in the background and returns the run id; poll
         // the ledger for the finished record to surface the outcome.
-        const { runId } = await Api().runAutomationNow({ automationId: ref });
+        const { runId } = await runAutomationNow({ automationId: ref });
         const deadline = Date.now() + 6 * 60 * 1000;
         let rec: CentraidAutomationRunRecord | null = null;
         while (Date.now() < deadline) {
-          rec = await Api().readAutomationRun({ runId });
+          rec = await readAutomationRun({ runId });
           if (rec && rec.endedAt !== undefined) break;
           await new Promise((resolve) => setTimeout(resolve, 1500));
         }
@@ -4165,8 +4075,7 @@
       rightPaneContent.append(wrap);
 
       if (!projectId || !automationRow) return;
-      void Api()
-        .listAutomationRuns({ automationId: automationRow.ref, limit: 20 })
+      void listAutomationRuns({ automationId: automationRow.ref, limit: 20 })
         .then((runs) => {
           list.innerHTML = '';
           if (runs.length === 0) {
@@ -4212,9 +4121,9 @@
       });
       primaryBtn.setAttribute('disabled', '');
       try {
-        const result = await Api().publish({ id: projectId });
+        const result = await publish({ id: projectId });
         lastPublishedVersionId = result.versionId;
-        liveUrl = (await Api().appLiveUrl({ id: projectId })).url;
+        liveUrl = (await appLiveUrl({ id: projectId })).url;
         // Bump the header status: every publish increments the version
         // count and resets the relative edit time to "just now".
         appVersionCount += 1;
@@ -4458,13 +4367,8 @@
     // Cleanup
     return () => {
       document.removeEventListener('keydown', onChatToggleKey);
-      if (unsubscribeAgent) {
-        unsubscribeAgent();
-        unsubscribeAgent = null;
-      }
-      void Api()
-        .stopAgent()
-        .catch(() => undefined);
+      // Cancel any in-flight chat turn (the gateway aborts the streamed run).
+      agentAbort?.abort();
     };
   }
 

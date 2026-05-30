@@ -15,6 +15,13 @@ export interface CentraidProjectInfo {
   name?: string;
   /** One-line description from `app.json#description`, if present. */
   description?: string;
+  /**
+   * App classification from `app.json#kind`: `'automation'` marks a UI-less
+   * automation app (shown on the Automations surface, hidden from My apps);
+   * `'app'` / undefined a normal UI app. Replaces the legacy `auto.`
+   * id-prefix convention as the automation signal.
+   */
+  kind?: 'app' | 'automation';
   /** Whether the project root has an `index.html` (preview-ready). */
   hasIndex?: boolean;
 }
@@ -108,22 +115,9 @@ export interface CentraidAuthImportResult {
   status: CentraidAuthStatus;
 }
 
-export interface CentraidChatModel {
-  id: string;
-  name: string;
-  provider: string;
-}
-
-type ChatEventBase = { appId: string; turnId: number };
-export type CentraidChatEvent =
-  | (ChatEventBase & { kind: 'thinking' })
-  | (ChatEventBase & { kind: 'assistant-delta'; delta: string })
-  | (ChatEventBase & { kind: 'tool-call'; toolName: string; toolArgs?: unknown; sql?: string })
-  | (ChatEventBase & { kind: 'tool-result'; toolName: string; toolResult?: unknown })
-  | (ChatEventBase & { kind: 'tool-error'; toolName?: string; text: string })
-  | (ChatEventBase & { kind: 'final'; text: string })
-  | (ChatEventBase & { kind: 'error'; text: string })
-  | (ChatEventBase & { kind: 'aborted' });
+// The renderer-side chat event union is the gateway's native `ChatStreamEvent`
+// (see `renderer/gateway-client-chat.ts`) now that the chat panel streams the
+// turn directly — no IPC-translated `CentraidChatEvent` / model-list shape.
 
 /**
  * One persisted chat session — the session id is also the chat window id.
@@ -159,10 +153,6 @@ export type CentraidChatHistoryMessage =
       result?: unknown;
       errorText?: string;
     };
-
-export interface CentraidChatSessionWithMessages extends CentraidChatSessionMeta {
-  messages: Array<{ idx: number; payload: CentraidChatHistoryMessage; createdAt: number }>;
-}
 
 export interface CentraidVersionRecord {
   versionId: string;
@@ -271,8 +261,8 @@ export interface CentraidTemplateMeta {
   version: string;
   /**
    * 'app' (default — full UI app like Hydrate / Todos) or 'automation'
-   * (an `auto.`-prefixed app folder with no UI, surfaced on the
-   * Automations gallery). Defaults to derive-from-id-prefix when absent.
+   * (an app folder marked `app.json#kind: 'automation'`, no UI, surfaced on
+   * the Automations gallery). Defaults to 'app' when absent.
    */
   kind?: 'app' | 'automation';
   // ----- automation-only display fields ('automation' kind) -----
@@ -313,181 +303,32 @@ export interface CentraidCloneTemplateResult {
   webhooks: CentraidMintedWebhook[];
 }
 
-/**
- * Content-block shapes the renderer hydrates into the chat pane on
- * session resume. Other block types (e.g. images) pass through as
- * opaque objects and are ignored.
- */
-export type CentraidContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'thinking'; thinking: string }
-  | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> }
-  | { type: string; [k: string]: unknown };
-
-/**
- * Persisted-message shape covering the roles the renderer actually
- * displays. Bash-execution / custom / summary message types are passed
- * through as `{ role: string }` and skipped during hydration.
- */
-export type CentraidAgentMessage =
-  | { role: 'user'; content: string | CentraidContentBlock[]; timestamp?: number }
-  | {
-      role: 'assistant';
-      content: CentraidContentBlock[];
-      timestamp?: number;
-    }
-  | {
-      role: 'toolResult';
-      toolCallId: string;
-      toolName: string;
-      isError: boolean;
-      content?: unknown;
-      timestamp?: number;
-    }
-  | { role: string; [k: string]: unknown };
-
-/**
- * `AgentEvent` shape the renderer consumes (subset we care about).
- * Emitted by `@centraid/builder-harness`'s `createCentraidAgentSession`
- * via the main-process IPC channel; matches `CentraidAgentEvent` there.
- */
-export type CentraidAgentEvent =
-  | { type: 'agent_start' }
-  | { type: 'agent_end'; messages: unknown[] }
-  | { type: 'turn_start' }
-  | { type: 'turn_end'; message: unknown; toolResults: unknown[] }
-  | { type: 'message_start'; message: unknown }
-  | {
-      type: 'message_update';
-      message: unknown;
-      assistantMessageEvent:
-        | { type: 'text_delta'; delta: string }
-        | { type: 'text_end'; content?: string }
-        | { type: 'thinking_delta'; delta: string }
-        | { type: 'thinking_end'; content?: string }
-        | { type: string; [k: string]: unknown };
-    }
-  | { type: 'message_end'; message: unknown }
-  | {
-      type: 'tool_execution_start';
-      toolCallId: string;
-      toolName: string;
-      args: unknown;
-    }
-  | {
-      type: 'tool_execution_update';
-      toolCallId: string;
-      toolName: string;
-      args: unknown;
-      partialResult: unknown;
-    }
-  | {
-      type: 'tool_execution_end';
-      toolCallId: string;
-      toolName: string;
-      result: unknown;
-      isError: boolean;
-    };
+// The in-process builder agent's persisted-message + event types
+// (CentraidContentBlock / CentraidAgentMessage / CentraidAgentEvent) retired
+// with the unified chat (issue #141, Phase 3): the builder + the app-view
+// data chat now stream the gateway's native `ChatStreamEvent` directly (see
+// `renderer/gateway-client-chat.ts`).
 
 interface CentraidApi {
   getSettings(): Promise<CentraidSettings>;
   saveSettings(patch: Partial<CentraidSettings>): Promise<CentraidSettings>;
 
-  listProjects(): Promise<CentraidProjectInfo[]>;
-  createProject(input: {
-    id: string;
-    name?: string;
-    version?: string;
-  }): Promise<CentraidProjectInfo>;
-  readProjectFiles(input: { id: string }): Promise<CentraidProjectFile[]>;
-  /**
-   * Overwrite a single text file inside the project folder (§B5 editable
-   * code workspace). The main process guards against path traversal and
-   * rejects non-text extensions. Returns the written path + byte size.
-   */
-  writeProjectFile(input: {
-    id: string;
-    path: string;
-    content: string;
-  }): Promise<{ path: string; size: number }>;
+  // Project list/create/files/write/delete/update-meta + publish moved to the
+  // renderer's direct HTTP client (renderer/gateway-client.ts) under the
+  // thin-client pivot. The preview iframe points at the gateway draft URL
+  // (Phase 4: renderer-side `draftPreviewUrl`), so only the local-only
+  // reveal-in-Finder stays on IPC.
   openProjectFolder(input: { id: string }): Promise<{ ok: true }>;
-  deleteProject(input: { id: string }): Promise<{ ok: true }>;
-  /**
-   * Patch `<projectDir>/app.json` with new `name` and/or `description`.
-   * Either field is optional; provide only what should change. Empty
-   * `description` clears the field; empty `name` is rejected (name is
-   * mandatory).
-   */
-  updateProjectMeta(input: {
-    id: string;
-    name?: string;
-    description?: string;
-  }): Promise<{ ok: true }>;
-  /**
-   * URL the builder iframe can load to preview a project's local files
-   * before publish. `available` is false when the project has no
-   * `index.html` yet — the renderer should show an empty state in that case.
-   */
-  previewUrl(input: { id: string }): Promise<{ url: string; available: boolean }>;
 
-  startAgent(input: {
-    projectId: string;
-    /**
-     * Whether the project is an app (default) or a first-class
-     * automation. Selects the project directory and system prompt.
-     */
-    projectKind?: 'app' | 'automation';
-    sessionMode?: 'fresh' | 'continue' | 'in-memory';
-  }): Promise<{ ok: true; messages: CentraidAgentMessage[] }>;
-  /**
-   * Send a turn to the agent. When the agent declared one or more
-   * pending webhook triggers this turn, the builder mints the route
-   * id + secret server-side and returns them in `mintedWebhooks` —
-   * the plaintext `secret` is shown to the user exactly once.
-   */
-  promptAgent(input: {
-    text: string;
-  }): Promise<{ ok: true; mintedWebhooks: CentraidMintedWebhook[] }>;
-  stopAgent(): Promise<{ ok: true }>;
-  onAgentEvent(cb: (msg: { projectId: string; event: CentraidAgentEvent }) => void): () => void;
+  // The in-process AGENT_* builder retired with the unified chat (issue
+  // #141, Phase 3): the builder streams `/centraid/<id>/_chat` SSE directly
+  // (renderer/gateway-client-chat.ts), so there are no startAgent /
+  // promptAgent / stopAgent / onAgentEvent IPC methods.
 
-  publish(input: { id: string; skipBuild?: boolean }): Promise<CentraidPublishResult>;
-  listVersions(input: {
-    id: string;
-  }): Promise<{ activeVersion?: string; versions: CentraidVersionRecord[] }>;
-  activateVersion(input: { id: string; versionId: string }): Promise<{ activeVersion: string }>;
-  appLiveUrl(input: { id: string }): Promise<{ url: string }>;
-  /**
-   * Live schema for the Cloud → Database panel. `undefined` when the gateway
-   * has nothing for this app yet (unregistered, or never published).
-   */
-  appSchema(input: { id: string }): Promise<CentraidAppSchema | undefined>;
-  /**
-   * One page of rows from a table or view. The gateway caps `limit` at 200
-   * server-side; defaults to 50. Throws if the table doesn't exist.
-   */
-  appTableRows(input: {
-    id: string;
-    table: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<CentraidAppTableRows>;
-  /**
-   * Run a single SQL statement against the app's `data.sqlite`. Multi-
-   * statement input is rejected by the gateway.
-   */
-  appQuery(input: { id: string; sql: string }): Promise<CentraidRunQueryResult>;
-  /**
-   * Newest-first tail of persistent handler logs. `sinceTs` is the
-   * polling-friendly anchor; pass the highest `ts` you've seen.
-   */
-  appLogs(input: {
-    id: string;
-    limit?: number;
-    sinceTs?: number;
-    level?: CentraidLogLevel;
-  }): Promise<{ entries: CentraidLogEntry[] }>;
-  deregisterApp(input: { id: string }): Promise<{ id: string }>;
+  // publish moved to the renderer's direct HTTP client. appLiveUrl /
+  // appSchema / appTableRows / appQuery / appLogs / deregisterApp /
+  // listVersions / activateVersion moved there too (pure git-store reads
+  // + the editing-session publish, no main-side state).
 
   /**
    * Snapshot of the auto-publish queue (issue #108). Every workspace
@@ -572,6 +413,13 @@ interface CentraidApi {
    */
   setActiveGateway(input: { id: string }): Promise<CentraidSettings>;
   /**
+   * Active gateway's HTTP base URL + bearer token for the renderer's
+   * direct data-plane client (`renderer/gateway-client.ts`). The token
+   * lives in keychain-backed settings on main; this is the only path it
+   * crosses to the renderer. Re-fetched on every gateway switch.
+   */
+  getGatewayAuth(): Promise<{ baseUrl: string; token?: string }>;
+  /**
    * Subscribe to active-gateway changes (any cause — add/remove/rename
    * of the active one, or explicit switch). Returns the unsubscribe.
    */
@@ -585,88 +433,26 @@ interface CentraidApi {
     }) => void,
   ): () => void;
 
-  /** List bundled templates from `@centraid/app-templates`. */
-  listTemplates(): Promise<CentraidTemplateMeta[]>;
-  /**
-   * Clone a bundled template into the user's projects dir as a draft.
-   * The main process auto-picks a non-colliding `(id, name)` pair via
-   * `suggestCloneIdentity`: bare `<tmpl.id>` / `<tmpl.name>` on the
-   * first clone, then `<tmpl.id>-N` / `<tmpl.name> N` for subsequent
-   * clones. The user explicitly clicks Publish to upload to the
-   * gateway (see `publish`).
-   */
-  cloneTemplate(input: { templateId: string }): Promise<CentraidCloneTemplateResult>;
+  // listTemplates + cloneTemplate moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot — the gateway
+  // owns the catalog (`GET /centraid/_templates`) + clone orchestration
+  // (`POST /centraid/_apps/_clone`).
 
-  /**
-   * Start (or reset) the app-scoped agentic chat session for this window.
-   * Pass `sessionId` to resume a persisted chat from history; omit it for a
-   * fresh conversation (the row is lazy-created on first `chatSend`).
-   */
-  chatStart(input: {
-    appId: string;
-    appName: string;
-    sessionId?: string | null;
-    /** Known title when resuming a persisted session; echoed back by `chatSend`. */
-    title?: string;
-  }): Promise<{ ok: true; sessionId: string | null }>;
-  /**
-   * Send one user turn. Progress + result arrive via `onChatEvent` with the
-   * matching `turnId`. The renderer assigns `turnId` (monotonic per session).
-   *
-   * Returns the persisted chat sessionId plus the session's canonical
-   * `title` — which the server auto-derives from the first user message.
-   * The renderer should treat `title` as authoritative (don't compute one
-   * client-side) so the header label and the history list stay in sync.
-   */
-  chatSend(input: {
-    appId: string;
-    text: string;
-    turnId: number;
-    model?: string;
-  }): Promise<{ ok: true; sessionId: string; title: string }>;
-  /** Cancel the in-flight infer for this app, if any. */
-  chatAbort(input: { appId: string }): Promise<{ ok: true }>;
-  /** Models surfaced by `openclaw infer model list --json`. Empty on failure. */
-  listChatModels(): Promise<CentraidChatModel[]>;
-  onChatEvent(cb: (event: CentraidChatEvent) => void): () => void;
-
-  /** List persisted chat sessions for an app, newest first. */
-  chatHistoryList(input: { appId: string }): Promise<{ sessions: CentraidChatSessionMeta[] }>;
-  /** Load one persisted chat session's metadata + ordered message log. */
-  chatHistoryLoad(input: {
-    appId: string;
-    sessionId: string;
-  }): Promise<CentraidChatSessionWithMessages>;
-  /** Permanently delete one chat session and its messages. */
-  chatHistoryDelete(input: { appId: string; sessionId: string }): Promise<{ ok: boolean }>;
-  /** Rename a chat session (overrides the auto-generated title). */
-  chatHistoryRename(input: {
-    appId: string;
-    sessionId: string;
-    title: string;
-  }): Promise<CentraidChatSessionMeta>;
+  // App chat (turn streaming + history) moved to the renderer's direct HTTP
+  // client (`renderer/gateway-client-chat.ts`) under the unified-chat pivot
+  // (issue #141, Phase 3): the panel streams `/centraid/<appId>/_chat` SSE
+  // itself and reads/writes history over `/_centraid-chat` — no IPC.
 
   /** Snapshot of which coding-agent credentials are present on this machine. */
   authStatus(): Promise<CentraidAuthStatus>;
   /** Re-probe the on-disk credential locations and return a fresh snapshot. */
   authResync(): Promise<CentraidAuthImportResult>;
 
-  /**
-   * Stable user identity, generated on the gateway side on first read.
-   * Persists with the gateway's centraid-user.sqlite — the same UUID survives
-   * Electron reinstalls and travels with whichever gateway you point at.
-   */
-  getUserId(): Promise<string>;
-  /**
-   * Snapshot of every gateway-side global preference (theme, density, accent,
-   * …). Empty object on first launch.
-   */
-  getUserPrefs(): Promise<Record<string, unknown>>;
-  /**
-   * Merge `patch` into the gateway-side prefs store. `null`/`undefined` values
-   * delete the corresponding key. Returns the full prefs map after the write.
-   */
-  saveUserPrefs(patch: Record<string, unknown>): Promise<Record<string, unknown>>;
+  // getUserId / getUserPrefs / saveUserPrefs moved to the renderer's direct
+  // HTTP client (renderer/gateway-client.ts) under the thin-client pivot —
+  // pure `/_centraid-user` reads/writes. The main-side preflight-cache drop
+  // that rode `saveUserPrefs` is no longer needed (the cache keys on the
+  // runner prefs that matter, and the runner-status read force-invalidates).
 
   /**
    * Persist the API key for the custom OpenAI-compatible provider via
@@ -694,61 +480,14 @@ interface CentraidApi {
   // folder under `appsDir`; these read/write that project tree and the
   // unified run ledger. An `automationId` argument is the automation's
   // `<appId>/<id>` handle (the `ref` field of `CentraidAutomationRow`).
-  /** Every automation across all app folders, sorted by name. */
-  listAutomations(): Promise<CentraidAutomationRow[]>;
-  /** Read one automation by its `<appId>/<id>` handle, or `null`. */
-  readAutomation(input: { automationId: string }): Promise<CentraidAutomationRow | null>;
-  /**
-   * Scaffold a new automation project and register its triggers. When a
-   * webhook trigger is requested the result carries the one-time
-   * plaintext secret + URL — the manifest stores only the hash.
-   */
-  createAutomation(input: {
-    id: string;
-    name?: string;
-    description?: string;
-    prompt?: string;
-    triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
-    apps?: string[];
-    model?: string;
-    historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
-    onFailure?: string;
-    /**
-     * Initial enabled flag. The conversational builder passes `false`
-     * to scaffold a draft the user enables after reviewing it.
-     */
-    enabled?: boolean;
-  }): Promise<{
-    row: CentraidAutomationRow;
-    webhook?: { id: string; secret: string; url: string };
-  }>;
-  /** Fire an automation now (a manual-trigger run). */
-  runAutomationNow(input: { automationId: string }): Promise<CentraidAutomationRunResult>;
-  setAutomationEnabled(input: { automationId: string; enabled: boolean }): Promise<{ ok: true }>;
-  deleteAutomation(input: { automationId: string }): Promise<{ ok: true }>;
-  /**
-   * Run records from the unified ledger. Omit `automationId` for the
-   * global Executions feed; pass it to scope to one automation.
-   */
-  listAutomationRuns(input: {
-    automationId?: string;
-    limit?: number;
-  }): Promise<CentraidAutomationRunRecord[]>;
-  /**
-   * One run's full record from its own ledger — unlike the summary rows
-   * `listAutomationRuns` returns, this carries `inputJson` / `outputJson`.
-   */
-  readAutomationRun(input: { runId: string }): Promise<CentraidAutomationRunRecord | null>;
-  listAutomationRunNodes(input: { runId: string }): Promise<CentraidAutomationRunNode[]>;
-  /** Pin / unpin a run as a replay fixture. */
-  pinAutomationRun(input: { runId: string; pinned: boolean }): Promise<{ ok: true }>;
-
-  /**
-   * Insights (issue #90) — the whole analytics screen's payload in one
-   * read over the unified run ledger (chat turns + automation fires +
-   * builder runs). `windowDays` defaults to 30.
-   */
-  getInsightsSummary(input?: { windowDays?: number }): Promise<CentraidInsightsSummary>;
+  //
+  // The full automation surface — create/enable/delete mutators AND the
+  // read/run/analytics surface (listAutomations / readAutomation /
+  // runAutomationNow / listAutomationRuns / readAutomationRun /
+  // listAutomationRunNodes / pinAutomationRun / getInsightsSummary) — moved
+  // to the renderer's direct HTTP client (renderer/gateway-client.ts) under
+  // the thin-client pivot: the gateway owns scaffold + webhook mint + stage +
+  // publish (`POST /centraid/_automations`, `…/set-enabled`, `DELETE …`).
 }
 
 /** KPI tiles for the Insights screen. */
@@ -1031,21 +770,6 @@ declare global {
     source: 'query' | 'action';
     handler: string;
   }
-  interface CentraidChatModel {
-    id: string;
-    name: string;
-    provider: string;
-  }
-  type _ChatEventBaseG = { appId: string; turnId: number };
-  type CentraidChatEvent =
-    | (_ChatEventBaseG & { kind: 'thinking' })
-    | (_ChatEventBaseG & { kind: 'assistant-delta'; delta: string })
-    | (_ChatEventBaseG & { kind: 'tool-call'; toolName: string; toolArgs?: unknown; sql?: string })
-    | (_ChatEventBaseG & { kind: 'tool-result'; toolName: string; toolResult?: unknown })
-    | (_ChatEventBaseG & { kind: 'tool-error'; toolName?: string; text: string })
-    | (_ChatEventBaseG & { kind: 'final'; text: string })
-    | (_ChatEventBaseG & { kind: 'error'; text: string })
-    | (_ChatEventBaseG & { kind: 'aborted' });
   interface CentraidChatSessionMeta {
     id: string;
     originAppId: string | null;
@@ -1070,9 +794,6 @@ declare global {
         result?: unknown;
         errorText?: string;
       };
-  interface CentraidChatSessionWithMessages extends CentraidChatSessionMeta {
-    messages: Array<{ idx: number; payload: CentraidChatHistoryMessage; createdAt: number }>;
-  }
   // Mirror of the module-level automation types so screens can
   // reference them by bare name without imports (issue #91).
   interface CentraidAutomationManifest {

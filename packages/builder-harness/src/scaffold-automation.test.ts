@@ -22,21 +22,21 @@ describe('scaffoldAutomationProject', () => {
   });
 
   it('writes app.json + automations/<id>/{automation.json,handler.js}', async () => {
-    const info = await scaffoldAutomationProject(dir, 'auto.daily-digest', {
+    const info = await scaffoldAutomationProject(dir, 'daily-digest', {
       name: 'Daily digest',
       prompt: 'Summarize my PRs',
       cronExpr: '0 8 * * *',
       apps: ['todos'],
     });
-    assert.equal(info.id, 'auto.daily-digest');
+    assert.equal(info.id, 'daily-digest');
     assert.equal(info.name, 'Daily digest');
 
     const appJson = JSON.parse(
-      await fs.readFile(path.join(dir, 'auto.daily-digest', 'app.json'), 'utf8'),
+      await fs.readFile(path.join(dir, 'daily-digest', 'app.json'), 'utf8'),
     ) as { name: string };
     assert.equal(appJson.name, 'Daily digest');
 
-    const autoDir = path.join(dir, 'auto.daily-digest', 'automations', 'daily-digest');
+    const autoDir = path.join(dir, 'daily-digest', 'automations', 'daily-digest');
     const manifest = parseManifest(
       await fs.readFile(path.join(autoDir, 'automation.json'), 'utf8'),
     );
@@ -51,34 +51,36 @@ describe('scaffoldAutomationProject', () => {
   });
 
   it('derives the automation id from the app id, defaults a daily schedule', async () => {
-    await scaffoldAutomationProject(dir, 'auto.autox');
-    const autoDir = path.join(dir, 'auto.autox', 'automations', 'autox');
+    await scaffoldAutomationProject(dir, 'autox');
+    const autoDir = path.join(dir, 'autox', 'automations', 'autox');
     const manifest = parseManifest(
       await fs.readFile(path.join(autoDir, 'automation.json'), 'utf8'),
     );
-    assert.equal(manifest.name, 'auto.autox');
+    assert.equal(manifest.name, 'autox');
     assert.deepEqual(manifest.triggers, [{ kind: 'cron', expr: '0 9 * * *' }]);
   });
 
   it('honors an explicit automationId', async () => {
-    await scaffoldAutomationProject(dir, 'auto.bot', { automationId: 'job' });
-    const autoDir = path.join(dir, 'auto.bot', 'automations', 'job');
+    await scaffoldAutomationProject(dir, 'bot', { automationId: 'job' });
+    const autoDir = path.join(dir, 'bot', 'automations', 'job');
     assert.ok((await fs.stat(autoDir)).isDirectory());
   });
 
   it('rejects a duplicate app folder', async () => {
-    await scaffoldAutomationProject(dir, 'auto.dup');
-    await assert.rejects(() => scaffoldAutomationProject(dir, 'auto.dup'), HarnessError);
+    await scaffoldAutomationProject(dir, 'dup');
+    await assert.rejects(() => scaffoldAutomationProject(dir, 'dup'), HarnessError);
   });
 
-  it('rejects an app id without the auto. prefix', async () => {
-    await assert.rejects(() => scaffoldAutomationProject(dir, 'plain-app'), HarnessError);
+  it('rejects a dotted / path-unsafe app id', async () => {
+    await assert.rejects(() => scaffoldAutomationProject(dir, 'auto.x'), HarnessError);
   });
 
   it('validates ids', () => {
     assert.throws(() => validateAutomationId('has space'), HarnessError);
     assert.throws(() => validateAutomationId('_leading'), HarnessError);
-    assert.throws(() => validateAutomationAppId('no-prefix'), HarnessError);
-    validateAutomationAppId('auto.ok');
+    // Automation apps use a plain slug id now (kind marks them, not a
+    // dotted prefix) — a dotted id is rejected, a slug accepted.
+    assert.throws(() => validateAutomationAppId('auto.ok'), HarnessError);
+    validateAutomationAppId('standup-bot');
   });
 });

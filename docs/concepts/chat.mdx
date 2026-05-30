@@ -16,7 +16,7 @@ Every Centraid app gets an in-app chat for free. The surface is host-agnostic: t
 | `GET`    | `/centraid/<id>/_chat/windows/<wid>/history` | Replay one window's transcript                     |
 | `DELETE` | `/centraid/<id>/_chat/windows/<wid>`         | Clear one window                                   |
 
-The client side lives in [`@centraid/chat-harness`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/chat-harness). It's what both the desktop in-app chat panel and the mobile companion use.
+The desktop renderer streams these routes directly — `apps/desktop/src/renderer/gateway-client-chat.ts` posts the turn and reads the SSE with a `fetch` + `ReadableStream` reader. The mobile companion talks to the same routes over HTTP. There is no shared client package.
 
 ## Windows
 

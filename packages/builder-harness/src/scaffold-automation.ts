@@ -2,10 +2,10 @@
  * Scaffold a new automation app (issue #98 unified folder model).
  *
  * An automation is never standalone — it is one app folder under
- * `appsDir`, an *automation app*: an `auto.`-prefixed folder with an
- * `app.json` and exactly one automation under `automations/<id>/`. It
- * carries no UI assets. This module writes the minimal layout the
- * builder agent then fills in:
+ * `appsDir`, an *automation app*: a folder whose `app.json` declares
+ * `kind: 'automation'` and which holds exactly one automation under
+ * `automations/<id>/`. It carries no UI assets. This module writes the
+ * minimal layout the builder agent then fills in:
  *
  *   <appsDir>/<appId>/app.json                              — app metadata
  *   <appsDir>/<appId>/automations/<autoId>/automation.json  — the manifest
@@ -29,11 +29,9 @@ import {
   type AutomationTrigger,
   type AutomationHistoryKeep,
 } from '@centraid/runtime-core';
+import type { ScaffoldFile } from './scaffold-files.js';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
-
-/** The name prefix that marks an app folder as an automation app. */
-export const AUTOMATION_APP_PREFIX = 'auto.';
 
 export interface AutomationScaffoldOptions {
   /** Display name. Defaults to the app id. */
@@ -68,18 +66,22 @@ export interface AutomationScaffoldOptions {
   enabled?: boolean;
   /**
    * Id of the single automation under `automations/`. Defaults to the
-   * app id with the `auto.` prefix stripped (or `main` when that is not
-   * a valid automation slug).
+   * app id itself (or `main` when the app id is not a valid automation
+   * slug).
    */
   automationId?: string;
 }
 
-/** Validate an automation app folder id — an `auto.`-prefixed app id. */
+/**
+ * Validate an automation app folder id. Automation apps are marked by the
+ * manifest's `kind: 'automation'` field (not a dotted `auto.` prefix), so
+ * this is just the plain app-id slug check.
+ */
 export function validateAutomationAppId(appId: string): void {
-  if (!appId.startsWith(AUTOMATION_APP_PREFIX) || !isValidAppId(appId)) {
+  if (!isValidAppId(appId)) {
     throw new HarnessError(
       'invalid_id',
-      `Invalid automation app id "${appId}". Expected an "${AUTOMATION_APP_PREFIX}"-prefixed app id.`,
+      `Invalid automation app id "${appId}". Use a filesystem-safe slug (letters / digits / "-" / "_").`,
     );
   }
 }
@@ -96,8 +98,7 @@ export function validateAutomationId(id: string): void {
 
 /** Derive the inner automation id from the app id. */
 function defaultAutomationId(appId: string): string {
-  const stripped = appId.slice(AUTOMATION_APP_PREFIX.length);
-  return isValidAutomationId(stripped) ? stripped : 'main';
+  return isValidAutomationId(appId) ? appId : 'main';
 }
 
 const DEFAULT_HANDLER = `/**
@@ -144,8 +145,97 @@ function starterManifest(name: string, opts: AutomationScaffoldOptions): Automat
 }
 
 /**
+ * Filesystem-free variant (issue #141): build the file map for a new
+ * automation app — `app.json` plus a single automation under
+ * `automations/<autoId>/` (manifest + handler). The caller PUTs these
+ * into a git-store session and publishes.
+ */
+export function scaffoldAutomationProjectFiles(
+  appId: string,
+  opts: AutomationScaffoldOptions = {},
+): ScaffoldFile[] {
+  validateAutomationAppId(appId);
+  const automationId = opts.automationId ?? defaultAutomationId(appId);
+  validateAutomationId(automationId);
+
+  const name = opts.name?.trim() || appId;
+  // Manifest must satisfy the post-#107 schema (manifestVersion + id +
+  // actions[] + queries[]). An automation app has no user-facing
+  // actions/queries — the automation lives under `automations/<id>/`.
+  const appJson: Record<string, unknown> = {
+    manifestVersion: 1,
+    id: appId,
+    name,
+    // Marks this as a UI-less automation app (replaces the legacy `auto.`
+    // id prefix) — the desktop surfaces it on the Automations page.
+    kind: 'automation',
+    version: '0.1.0',
+    actions: [],
+    queries: [],
+  };
+  if (opts.description?.trim()) appJson.description = opts.description.trim();
+  const manifest = starterManifest(name, opts);
+  const base = `${APP_AUTOMATIONS_SUBDIR}/${automationId}`;
+  return [
+    { path: 'app.json', content: JSON.stringify(appJson, null, 2) + '\n' },
+    {
+      path: `${base}/${AUTOMATION_MANIFEST_FILE}`,
+      content: JSON.stringify(manifest, null, 2) + '\n',
+    },
+    { path: `${base}/${AUTOMATION_HANDLER_FILE}`, content: DEFAULT_HANDLER },
+  ];
+}
+
+/**
+ * Flip an automation's `enabled` toggle within a draft file map (issue
+ * #141). Returns the changed files (the one `automation.json`), or `[]`
+ * when the automation is absent or already at the requested state.
+ * Round-trips through `validateManifest` so we never write a manifest the
+ * runtime would reject.
+ */
+export function setAutomationEnabledInFiles(
+  current: ScaffoldFile[],
+  automationId: string,
+  enabled: boolean,
+): ScaffoldFile[] {
+  const target = `${APP_AUTOMATIONS_SUBDIR}/${automationId}/${AUTOMATION_MANIFEST_FILE}`;
+  const file = current.find((f) => f.path === target);
+  if (!file) return [];
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(file.content) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  if (parsed.enabled === enabled) return [];
+  const manifest = validateManifest({ ...parsed, enabled });
+  return [{ path: target, content: JSON.stringify(manifest, null, 2) + '\n' }];
+}
+
+/**
+ * Remove one automation from a draft file map (issue #141). Returns the
+ * surviving files plus the removed paths (everything under
+ * `automations/<automationId>/`) so the caller can DELETE them in the
+ * git-store session.
+ */
+export function deleteAutomationFromFiles(
+  current: ScaffoldFile[],
+  automationId: string,
+): { keep: ScaffoldFile[]; removed: string[] } {
+  const prefix = `${APP_AUTOMATIONS_SUBDIR}/${automationId}/`;
+  const keep: ScaffoldFile[] = [];
+  const removed: string[] = [];
+  for (const f of current) {
+    if (f.path.startsWith(prefix)) removed.push(f.path);
+    else keep.push(f);
+  }
+  return { keep, removed };
+}
+
+/**
  * Scaffold a new automation app folder under `<appsDir>/<appId>/` — an
  * `app.json` plus a single automation under `automations/<autoId>/`.
+ * Thin filesystem wrapper over {@link scaffoldAutomationProjectFiles}.
  * Throws `HarnessError` on a bad id or an app folder that already exists.
  */
 export async function scaffoldAutomationProject(
@@ -153,10 +243,7 @@ export async function scaffoldAutomationProject(
   appId: string,
   opts: AutomationScaffoldOptions = {},
 ): Promise<ProjectInfo> {
-  validateAutomationAppId(appId);
-  const automationId = opts.automationId ?? defaultAutomationId(appId);
-  validateAutomationId(automationId);
-
+  const files = scaffoldAutomationProjectFiles(appId, opts);
   const appDir = path.join(appsDir, appId);
   try {
     await fs.access(appDir);
@@ -169,40 +256,24 @@ export async function scaffoldAutomationProject(
     // ENOENT — the directory is free, proceed.
   }
 
-  const name = opts.name?.trim() || appId;
-  const autoDir = path.join(appDir, APP_AUTOMATIONS_SUBDIR, automationId);
-  await fs.mkdir(autoDir, { recursive: true });
+  for (const file of files) {
+    const dest = path.join(appDir, file.path);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.writeFile(dest, file.content);
+  }
 
-  // Manifest must satisfy the post-#107 schema (manifestVersion + id +
-  // actions[] + queries[]) so the publish-on-save loop introduced in
-  // #108 doesn't bounce the upload. An automation app has no
-  // user-facing actions/queries — the automation lives entirely under
-  // `automations/<id>/`.
-  const appJson: Record<string, unknown> = {
-    manifestVersion: 1,
-    id: appId,
-    name,
-    version: '0.1.0',
-    actions: [],
-    queries: [],
+  const appJson = JSON.parse(files.find((f) => f.path === 'app.json')!.content) as {
+    name?: string;
+    description?: string;
   };
-  if (opts.description?.trim()) appJson.description = opts.description.trim();
-  await fs.writeFile(path.join(appDir, 'app.json'), JSON.stringify(appJson, null, 2) + '\n');
-
-  const manifest = starterManifest(name, opts);
-  await fs.writeFile(
-    path.join(autoDir, AUTOMATION_MANIFEST_FILE),
-    JSON.stringify(manifest, null, 2) + '\n',
-  );
-  await fs.writeFile(path.join(autoDir, AUTOMATION_HANDLER_FILE), DEFAULT_HANDLER);
-
   const stat = await fs.stat(appDir);
   return {
     id: appId,
     dir: appDir,
     built: true,
     modifiedAt: stat.mtime.toISOString(),
-    name,
+    name: appJson.name,
+    kind: 'automation',
     ...(typeof appJson.description === 'string' ? { description: appJson.description } : {}),
   };
 }

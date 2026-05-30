@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "email-triage",
+  "name": "Email triage",
+  "kind": "automation",
+  "description": "Sorts your inbox by urgency and drafts replies for anything that genuinely needs one.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

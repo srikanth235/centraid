@@ -251,6 +251,78 @@ test('windowLocks are per-runtime — two runtimes sharing appId+windowId do not
   }
 });
 
+test('chat prompt resolves the manifest via the git-store code-dir override (#137)', async () => {
+  // Under the git-store backend there is no legacy `current.json`, so the
+  // manifest must resolve through `codeDirOverride` — a `getActiveVersion`
+  // lookup misses and silently drops the declared-handler catalog, steering
+  // the agent to `_sql`. Point the override at a code dir holding an app.json
+  // with declared handlers; the turn's system prompt must name them (and must
+  // NOT report the manifest unavailable).
+  let seenPrompt = '';
+  const runner: ChatRunner = {
+    async run(input) {
+      seenPrompt = input.extraSystemPrompt;
+      input.onEvent({ type: 'final', text: 'ok' });
+    },
+  };
+  workspace = await fs.mkdtemp(
+    path.join(os.tmpdir(), `centraid-chat-manifest-${crypto.randomUUID()}-`),
+  );
+  const codeDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), `centraid-chat-code-${crypto.randomUUID()}-`),
+  );
+  await fs.writeFile(
+    path.join(codeDir, 'app.json'),
+    JSON.stringify({
+      manifestVersion: 1,
+      id: 'demo',
+      name: 'Demo',
+      version: '0.1.0',
+      actions: [
+        {
+          name: 'addNote',
+          confirmation: 'none',
+          input: {
+            type: 'object',
+            properties: { text: { type: 'string', minLength: 1 } },
+            required: ['text'],
+            additionalProperties: false,
+          },
+        },
+      ],
+      queries: [
+        {
+          name: 'listNotes',
+          input: { type: 'object', properties: {}, additionalProperties: false },
+        },
+      ],
+    }),
+  );
+  runtime = new Runtime({
+    appsDir: workspace,
+    chatRunner: runner,
+    codeDirOverride: async () => codeDir,
+  });
+  server = await startRuntimeHttpServer({ runtime });
+  await runtime.bootstrap();
+  await runtime.registry.ensureUploaded('demo');
+
+  await fetch(`${server.url}/centraid/demo/_chat`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ windowId: 'w1', message: 'hi' }),
+  }).then((r) => r.text());
+
+  await fs.rm(codeDir, { recursive: true, force: true });
+  assert.match(seenPrompt, /addNote/, 'the declared action should appear in the catalog');
+  assert.match(seenPrompt, /listNotes/, 'the declared query should appear in the catalog');
+  assert.doesNotMatch(
+    seenPrompt,
+    /manifest unavailable/,
+    'the override-resolved manifest must populate the catalog (regression: #137 git-store)',
+  );
+});
+
 beforeEach(() => {
   // Ensure leftover state from a previous test doesn't bleed in.
   workspace = '';

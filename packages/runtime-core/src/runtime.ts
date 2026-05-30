@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Registry, RegistryError } from './registry.js';
 import { VersionStore, VersionStoreError } from './version-store.js';
 import { UploadError } from './upload.js';
-import { parseRoute } from './router.js';
+import { parseWithDraft } from './router.js';
 import {
   Dispatcher,
   isToolName,
@@ -99,6 +99,28 @@ export interface RuntimeOptions {
    * instead of failing per-turn when the CLI is missing or unauthenticated.
    */
   runnerStatus?: () => Promise<RunnerStatus>;
+  /**
+   * Optional code-dir resolver (issue #137). When provided, the runtime
+   * serves handlers + static files from whatever dir this returns for an
+   * app id — the gateway injects an apps-store-backed resolver pointing
+   * at the live git worktree (`worktrees/main/<sha>/apps/<id>/`) instead
+   * of the legacy `<appsDir>/<id>/versions/<active>/`. `entry.path` (the
+   * registry's per-app dir) is still where `data.sqlite` lives, so this
+   * cleanly separates code (git) from data (stable per-app dir).
+   */
+  codeDirOverride?: (appId: string) => Promise<string | undefined>;
+  /**
+   * Optional DRAFT code-dir resolver (issue #141, draft preview). When
+   * provided, requests under `/centraid/_draft/<sessionId>/<appId>/…` serve
+   * static files + run handlers from whatever dir this returns for
+   * `(appId, sessionId)` — the gateway injects an apps-store-backed
+   * resolver pointing at the session worktree's `apps/<id>/`. Data still
+   * binds to the registry entry's dir, so a draft reads/writes the same
+   * `data.sqlite` the published app uses. Returns `undefined` for an
+   * unknown session/app (→ 404/503), so the live serving path is wholly
+   * unaffected when no draft resolver is configured.
+   */
+  draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
 }
 
 /**
@@ -206,6 +228,8 @@ export class Runtime {
   private readonly appsDir: string;
   private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
+  private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
+  private readonly draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
   private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
   /**
    * Per-runtime (and therefore per-gateway) window-lock map for the
@@ -230,11 +254,14 @@ export class Runtime {
       opts.chatRunnerSessionDir ?? path.join(os.tmpdir(), 'centraid-chat-runner-sessions');
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
+    if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
+    if (opts.draftCodeDir) this.draftCodeDir = opts.draftCodeDir;
     this.withAppUploadLock = makeAppUploadLocks();
     this.dispatcher = new Dispatcher({
       registry: this.registry,
       versions: this.versions,
       onWriteFor: (appId) => this.emitForApp(appId, 'handler'),
+      ...(this.codeDirOverride ? { codeDirOverride: this.codeDirOverride } : {}),
     });
   }
 
@@ -296,7 +323,7 @@ export class Runtime {
   private chatRouteContext() {
     return {
       registry: this.registry,
-      versions: this.versions,
+      resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
       runner: this.chatRunner,
       chatStore: this.chatHistoryStore,
       chatRunnerSessionDir: this.chatRunnerSessionDir,
@@ -319,6 +346,14 @@ export class Runtime {
   }
 
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
+    // Mirrors `Dispatcher.resolveCodeDir`: when the git-store override
+    // is set it is the sole authority (issue #137) — an app it can't
+    // resolve is not live, no legacy `current.json` fallback. The
+    // override is absent only for the legacy tarball backend (OpenClaw /
+    // pre-#137), which resolves the active-version dir instead.
+    if (this.codeDirOverride) {
+      return this.codeDirOverride(entry.id);
+    }
     const active = await this.versions.getActiveVersion(entry.path);
     if (!active) return undefined;
     return appCodeDir(entry, active);
@@ -343,6 +378,7 @@ export class Runtime {
     req: IncomingMessage,
     res: ServerResponse,
     toolName: string,
+    draftSessionId?: string,
   ): Promise<void> {
     if (!isToolName(toolName)) {
       sendError(
@@ -374,7 +410,7 @@ export class Runtime {
       return;
     }
 
-    const result = await this.dispatchTool(toolName, body);
+    const result = await this.dispatchTool(toolName, body, draftSessionId);
     if (result.isError) {
       res.statusCode = statusForToolError(result.structuredContent.code);
       res.setHeader('Content-Type', 'application/json');
@@ -384,26 +420,47 @@ export class Runtime {
     sendJson(res, 200, result.structuredContent ?? null);
   }
 
-  private dispatchTool(toolName: ToolName, body: Record<string, unknown>): Promise<ToolResult> {
+  private async dispatchTool(
+    toolName: ToolName,
+    body: Record<string, unknown>,
+    draftSessionId?: string,
+  ): Promise<ToolResult> {
+    // Draft preview (issue #141): run the session worktree's handlers
+    // against the app's live data. The app id is in the body, so resolve
+    // the draft code dir here and pass it as the per-call override.
+    const appId = typeof body.app === 'string' ? body.app : '';
+    const overrideCodeDir =
+      draftSessionId && this.draftCodeDir && appId
+        ? await this.draftCodeDir(appId, draftSessionId)
+        : undefined;
     switch (toolName) {
       case 'centraid_write':
-        return this.dispatcher.write({
-          app: String(body.app ?? ''),
-          action: String(body.action ?? ''),
-          input: body.input,
-        });
+        return this.dispatcher.write(
+          {
+            app: String(body.app ?? ''),
+            action: String(body.action ?? ''),
+            input: body.input,
+          },
+          overrideCodeDir,
+        );
       case 'centraid_read':
-        return this.dispatcher.read({
-          app: String(body.app ?? ''),
-          query: String(body.query ?? ''),
-          input: body.input,
-        });
+        return this.dispatcher.read(
+          {
+            app: String(body.app ?? ''),
+            query: String(body.query ?? ''),
+            input: body.input,
+          },
+          overrideCodeDir,
+        );
       case 'centraid_describe':
-        return this.dispatcher.describe({
-          ...(typeof body.app === 'string' ? { app: body.app } : {}),
-          ...(typeof body.action === 'string' ? { action: body.action } : {}),
-          ...(typeof body.query === 'string' ? { query: body.query } : {}),
-        });
+        return this.dispatcher.describe(
+          {
+            ...(typeof body.app === 'string' ? { app: body.app } : {}),
+            ...(typeof body.action === 'string' ? { action: body.action } : {}),
+            ...(typeof body.query === 'string' ? { query: body.query } : {}),
+          },
+          overrideCodeDir,
+        );
     }
   }
 
@@ -413,7 +470,18 @@ export class Runtime {
    * runtime-core does not enforce its own auth.
    */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const route = parseRoute(req.method ?? 'GET', req.url ?? '/');
+    const { route, draftSessionId } = parseWithDraft(req.method ?? 'GET', req.url ?? '/');
+
+    // Draft preview (issue #141): a `/centraid/_draft/<sessionId>/…` request
+    // serves the session worktree's code (static + handlers) against the
+    // app's live data. Resolve the draft code dir once here; the
+    // code-dependent cases below prefer it over the live `resolveCodeDir`.
+    // A draft request with no resolver configured (or an unknown
+    // session/app) yields `undefined`, which those cases surface as
+    // 503/404 — the live path is never affected when `draftSessionId` is
+    // absent.
+    const draftCodeDirFor = async (appId: string): Promise<string | undefined> =>
+      draftSessionId && this.draftCodeDir ? this.draftCodeDir(appId, draftSessionId) : undefined;
 
     try {
       switch (route.kind) {
@@ -495,8 +563,14 @@ export class Runtime {
             sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          const active = await this.versions.getActiveVersion(entry.path);
-          if (!active) {
+          // Gate on code-dir presence rather than current.json so the
+          // git-store backend (no current.json) works too. data.sqlite
+          // still lives at the registry's per-app dir (entry.path) — a
+          // draft reads the live schema (drafts share the app's data).
+          const codeDir = draftSessionId
+            ? await draftCodeDirFor(entry.id)
+            : await this.resolveCodeDir(entry);
+          if (!codeDir) {
             sendError(res, 503, 'no_active_version', 'App has no active version yet.');
             return;
           }
@@ -539,11 +613,20 @@ export class Runtime {
             sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          const codeDir = await this.resolveCodeDir(entry);
+          const codeDir = draftSessionId
+            ? await draftCodeDirFor(entry.id)
+            : await this.resolveCodeDir(entry);
           if (!codeDir) {
             sendError(res, 503, 'no_active_version', 'App has no active version yet.');
             return;
           }
+          // In draft mode the served HTML's bridge must pin the app id +
+          // route tool calls through the draft shim (the path's first
+          // segment is `_draft`, so the live `location.pathname` sniff
+          // would mis-read it). Passed through to `serveStatic`.
+          const draftServe = draftSessionId
+            ? { draft: { appId: entry.id, sessionId: draftSessionId } }
+            : {};
           const rel = route.kind === 'app-index' ? 'index.html' : route.rel;
           if (route.kind === 'app-index') {
             // Merge global prefs (gateway-side store) with this app's own
@@ -555,15 +638,15 @@ export class Runtime {
             const appSettings = readAppSettings(dataDbFile);
             const queryOverrides = route.query as Record<string, unknown>;
             const settingsInject = buildSettingsInject([globalPrefs, appSettings, queryOverrides]);
-            await serveStatic(res, codeDir, rel, { settingsInject });
+            await serveStatic(res, codeDir, rel, { settingsInject, ...draftServe });
           } else {
-            await serveStatic(res, codeDir, rel);
+            await serveStatic(res, codeDir, rel, draftServe);
           }
           return;
         }
 
         case 'tool-invoke': {
-          await this.handleToolInvoke(req, res, route.toolName);
+          await this.handleToolInvoke(req, res, route.toolName, draftSessionId);
           return;
         }
 

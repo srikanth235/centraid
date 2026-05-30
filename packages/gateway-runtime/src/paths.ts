@@ -45,4 +45,23 @@ export interface GatewayPaths {
    * user's real `~/.codex` stays untouched.
    */
   codexHomeBaseDir: string;
+
+  /**
+   * Optional per-gateway template cache dir (issue #141). When set, the
+   * `GET /centraid/_templates` route resolves bundle-or-cache, letting a
+   * newer template pulled from a remote URL shadow the bundled copy. Omit
+   * for bundle-only resolution (the standalone daemon / tests).
+   */
+  templatesCacheDir?: string;
+
+  /**
+   * Optional remote template manifest URL (issue #141, Phase 5). When set
+   * alongside `templatesCacheDir`, the gateway refreshes the cache from this
+   * URL once on startup (best-effort, never throws) so newer remote
+   * templates shadow the bundle. The desktop used to run this fetch in its
+   * own main process before serving the catalog moved here; folding it into
+   * the gateway lets the desktop drop its `@centraid/app-templates`
+   * dependency entirely. Omit for bundle/cache-only resolution.
+   */
+  remoteTemplatesUrl?: string;
 }

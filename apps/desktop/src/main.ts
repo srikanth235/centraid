@@ -1,12 +1,10 @@
-import { app, BrowserWindow, nativeImage, protocol, shell } from 'electron';
+import { app, BrowserWindow, nativeImage, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installAuthInjector } from './main/auth-injector.js';
 import { importAvailableCreds } from './main/auth-import.js';
-import { registerChatIpcHandlers, disposeWindowChatSessions } from './main/chat.js';
-import { disposeWindowSession, registerIpcHandlers } from './main/ipc.js';
-import { PREVIEW_SCHEME, registerPreviewProtocol } from './main/preview-protocol.js';
-import { loadSettings, saveSettings, templatesCacheDir } from './main/settings.js';
+import { registerIpcHandlers } from './main/ipc.js';
+import { loadSettings, saveSettings } from './main/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -15,22 +13,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds will pick up the .icns via electron-builder config.
 const ICON_PATH = path.join(__dirname, '..', 'icon.png');
 
-// Custom scheme that serves an unpublished project's local files into the
-// builder's preview iframe. Must be marked privileged BEFORE `app.whenReady`
-// for module scripts and `fetch` to behave like a real origin inside the
-// iframe (matches what the gateway provides for published apps).
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: PREVIEW_SCHEME,
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      stream: true,
-      corsEnabled: true,
-    },
-  },
-]);
+// The builder preview iframe is served by the gateway itself (issue #141,
+// Phase 4): it points at `/centraid/_draft/<sessionId>/<id>/`, a real HTTP
+// origin the main-process auth-injector authenticates. No custom local
+// scheme is needed anymore — the old `centraid-preview://` path-mode
+// protocol was retired so local == remote serving.
 
 function canOpenExternal(url: string): boolean {
   try {
@@ -71,26 +58,20 @@ function createWindow(): void {
     const prefix = level >= 2 ? 'RENDERER-ERR' : 'RENDERER';
     process.stdout.write(`[${prefix}] ${message} (${source}:${line})\n`);
   });
-
-  win.on('closed', () => {
-    void disposeWindowSession(win.id);
-    disposeWindowChatSessions(win.id);
-  });
 }
 
 app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
   }
-  registerPreviewProtocol();
   void installAuthInjector();
   registerIpcHandlers();
-  registerChatIpcHandlers();
   createWindow();
-  // Kick off a background check for template updates. Fire-and-forget — the
-  // fetcher is silent on every failure (offline, 404, parse error, etc.) so
-  // the home grid keeps showing whatever's in cache + bundle regardless.
-  void backgroundFetchTemplates();
+  // Remote template refresh now runs inside the embedded gateway (issue
+  // #141, Phase 5): `local-runtime` passes the configured remote manifest
+  // URL into `serve()`, and the gateway's `/centraid/_templates` route
+  // fires a one-time best-effort fetch into its cache. The desktop main
+  // process no longer touches `@centraid/app-templates`.
   // First-launch credential probe. Reads Claude Code (macOS keychain) and
   // Codex (`~/.codex/auth.json`) to populate the Settings → AI providers
   // status card so the user can see which CLIs are already installed.
@@ -103,20 +84,6 @@ app.whenReady().then(() => {
     }
   });
 });
-
-async function backgroundFetchTemplates(): Promise<void> {
-  try {
-    const settings = await loadSettings();
-    if (!settings.remoteTemplatesUrl) return;
-    const { fetchRemoteTemplates } = await import('@centraid/app-templates');
-    await fetchRemoteTemplates({
-      cacheDir: templatesCacheDir(settings.activeGatewayId),
-      remoteUrl: settings.remoteTemplatesUrl,
-    });
-  } catch (err) {
-    console.error('[centraid] templates background fetch failed:', err);
-  }
-}
 
 async function firstLaunchAuthImport(): Promise<void> {
   try {

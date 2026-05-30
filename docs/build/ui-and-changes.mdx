@@ -99,7 +99,7 @@ The initial values arrive **server-baked** — the runtime stamps `<html data-th
 
 ### Builder preview fallback
 
-When previewing an app in the builder (`centraid-preview://…`), the runtime doesn't bake — instead, settings arrive via URL hash params:
+When previewing an app in the builder, the preview is served by the gateway at the app's `_draft` URL, so the runtime bakes the initial theme server-side exactly as it does for a published app. Older no-bake paths fall back to URL hash params:
 
 ```js
 const p = new URLSearchParams((location.hash || '').slice(1));

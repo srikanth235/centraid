@@ -1,7 +1,6 @@
 import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { HarnessConfig } from '@centraid/builder-harness';
 import { gatewayTemplatesCacheDir, LOCAL_GATEWAY_ID } from './gateway-paths.js';
 import { ensureLocalGateway, listGateways, resolveGateway } from './gateway-store.js';
 
@@ -18,7 +17,9 @@ import { ensureLocalGateway, listGateways, resolveGateway } from './gateway-stor
  *     serialized. Just the active gateway pointer + UI-level prefs.
  *   - **Effective form** (`DesktopSettings`, returned by `loadSettings`):
  *     the persisted fields, plus everything derived from the active
- *     gateway — `gatewayUrl`, `gatewayToken`, `workspaceDir`, `appsDir`.
+ *     gateway — `gatewayUrl`, `gatewayToken`, `appsDir`. App *code* now
+ *     lives in the gateway's git store (issue #137), so there is no
+ *     `workspaceDir`; `appsDir` holds only per-app data.
  *     Every IPC handler that needs to act against the active gateway
  *     reads the effective form; that's why the shape didn't shrink
  *     when `runtimeMode` / `remoteGateway*` left it.
@@ -52,12 +53,20 @@ export interface PersistedSettings {
   onboardingCompletedAt?: string;
 }
 
-export interface DesktopSettings extends HarnessConfig {
+export interface DesktopSettings {
+  /** OpenClaw gateway base URL — e.g. http://127.0.0.1:18789. (Formerly
+   * inherited from `@centraid/builder-harness`'s `HarnessConfig`; inlined
+   * here in #141 Phase 5 so the desktop drops that dependency.) */
+  gatewayUrl: string;
+  /**
+   * Bearer token sent as `Authorization: Bearer <token>` to the gateway.
+   * Empty string disables the header (works only against loopback gateways
+   * configured with `auth.mode: "none"`).
+   */
+  gatewayToken?: string;
   /** Persisted — the gateway the renderer is currently pointing at. */
   activeGatewayId: string;
-  /** Derived — `<userData>/gateways/<active>/workspace/`. */
-  workspaceDir: string;
-  /** Derived — `<userData>/gateways/<active>/apps/`. */
+  /** Derived — `<userData>/gateways/<active>/apps/` (per-app data storage). */
   appsDir: string;
   /**
    * Derived — kind of the active gateway. `'local'` means the
@@ -169,7 +178,7 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
   // For local gateways, the URL/token are minted by the in-process
   // runtime. If the runtime hasn't started yet we still return the
   // settings (with empty URL/token) so boot-time code paths that just
-  // need workspaceDir/appsDir don't deadlock waiting for it.
+  // need `appsDir` don't deadlock waiting for it.
   if (resolved.profile.kind === 'local' && !resolved.url) {
     const { ensureLocalRuntime } = await import('./local-runtime.js');
     const handle = await ensureLocalRuntime(resolved.profile.id);
@@ -186,7 +195,6 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     // `readProfile` thread defaults — these are always populated.
     activeProfileDisplayName: resolved.profile.displayName ?? resolved.profile.label,
     activeProfileAvatarColor: resolved.profile.avatarColor ?? '#5B8DEF',
-    workspaceDir: resolved.workspaceDir,
     appsDir: resolved.appsDir,
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
@@ -216,14 +224,13 @@ export async function loadPersistedSettings(): Promise<PersistedSettings> {
 
 /**
  * Patch the persisted settings. Connection state — gateway URL /
- * token / workspace dir — is NOT settable through here; those go
+ * token / appsDir — is NOT settable through here; those go
  * through the gateway-store IPCs (`gateways:add`, `gateways:rename`,
  * etc.). The patch is rejected for any of those fields with an error
  * loud enough to fail fast in tests.
  */
 export async function saveSettings(patch: Partial<DesktopSettings>): Promise<DesktopSettings> {
   const forbidden = [
-    'workspaceDir',
     'appsDir',
     'gatewayUrl',
     'gatewayToken',

@@ -1,34 +1,21 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { toCss } from '@centraid/design-tokens';
 import { rewriteAutomationManifestNames, rewriteIndexHtmlTitle } from './project-rewrites.js';
-import { AUTOMATIONS_README, DEFAULT_APP_CSS, README_TEMPLATE } from './scaffold-defaults.js';
+import { scaffoldProjectFiles, validateAppId } from './scaffold-files.js';
 import type { ProjectInfo } from './types.js';
 import { HarnessError } from './types.js';
 
-const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
-/** Templates ship inside @centraid/openclaw-plugin/templates. */
-const PLUGIN_TEMPLATES = path.resolve(HARNESS_DIR, '..', '..', 'openclaw-plugin', 'templates');
-
-// Dots are permitted so an automation app can carry the `auto.` prefix
-// (issue #98); a `..` sequence is still rejected as path-unsafe.
-const ID_RE = /^[a-z0-9][a-z0-9.-]{0,62}$/;
-
-/** Validate an app id against centraid's reserved-prefix and shape rules. */
-export function validateAppId(id: string): void {
-  if (id.startsWith('_') || id.includes('..') || !ID_RE.test(id)) {
-    throw new HarnessError(
-      'invalid_id',
-      `Invalid app id "${id}". Lowercase a-z / 0-9 / "-" / ".", 1-63 chars, no leading "_".`,
-    );
-  }
-}
+// `validateAppId` + the content templates now live in `scaffold-files.ts`
+// (the filesystem-free scaffolder used by the git-store/HTTP path, issue
+// #141). Re-exported here so existing importers (`clone.ts`, the CLI) are
+// unaffected.
+export { validateAppId } from './scaffold-files.js';
 
 /**
- * Scaffold a new project folder under `<projectsDir>/<id>/` with a minimal
- * centraid-format layout: index.html stub, package.json, tsconfig.json,
- * empty queries/actions dirs, and an app.json.
+ * Scaffold a new project folder under `<projectsDir>/<id>/` with the
+ * minimal centraid layout. Thin filesystem wrapper over
+ * {@link scaffoldProjectFiles}: writes the file map to disk and adds the
+ * empty canonical subdirs the map omits (git tracks files, not dirs).
  */
 export async function scaffoldProject(
   projectsDir: string,
@@ -42,55 +29,17 @@ export async function scaffoldProject(
   }
   await fs.mkdir(dir, { recursive: true });
 
-  // Copy the plugin's per-app package.json template. There is no tsconfig
-  // — handlers are .js with JSDoc, no compile step.
-  await copyPluginTemplate('app-package.json', path.join(dir, 'package.json'), (raw) =>
-    raw.replace('"name": "centraid-app-example"', `"name": "centraid-app-${id}"`),
-  );
-
-  // app.json is the *manifest* — source of truth for the three-tool
-  // dispatcher (issue #107). New projects start with no actions/queries;
-  // the builder agent fills them in as it generates handlers. The
-  // `knobs` array gives every from-scratch project the Notion-style
-  // settings popover for free; the runtime routes any `app*` key
-  // dynamically (see runtime-core/settings-merge.ts) so new knobs added
-  // here don't need a runtime change — just matching CSS rules in
-  // `app.css`.
-  const appJson: Record<string, unknown> = {
-    manifestVersion: 1,
-    id,
-    name: opts.name ?? id,
-    version: opts.version ?? '0.1.0',
-    ...(opts.description?.trim() ? { description: opts.description.trim() } : {}),
-    actions: [],
-    queries: [],
-    knobs: DEFAULT_APP_KNOBS,
-  };
-  await fs.writeFile(path.join(dir, 'app.json'), JSON.stringify(appJson, null, 2) + '\n');
-
-  await fs.writeFile(path.join(dir, 'index.html'), DEFAULT_INDEX_HTML(id, opts.name ?? id));
-  // tokens.css is a frozen snapshot of @centraid/design-tokens at
-  // scaffold time — apps stay self-contained. If the shell tokens
-  // evolve, re-running scaffold (or a future `centraid tokens sync`)
-  // regenerates it; in the meantime nothing in an authored app drifts.
-  await fs.writeFile(path.join(dir, 'tokens.css'), toCss());
-  await fs.writeFile(path.join(dir, 'app.css'), DEFAULT_APP_CSS);
-  await fs.writeFile(path.join(dir, 'app.js'), DEFAULT_APP_JS);
-
-  // Canonical centraid subdirs. `automations/` holds one folder per
-  // automation the app owns — `automations/<id>/automation.json` (the
-  // manifest) + `automations/<id>/handler.js` (the handler the scheduler
-  // fires); see runtime-core's `automation-manifest.ts`. Kept in sync
-  // with `clone.ts#CANONICAL_SUBDIRS` so cloned projects match fresh ones.
-  for (const sub of ['queries', 'actions', 'migrations', 'automations']) {
-    await fs.mkdir(path.join(dir, sub));
+  for (const file of scaffoldProjectFiles(id, opts)) {
+    const dest = path.join(dir, file.path);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.writeFile(dest, file.content);
   }
-  // Seed automations/ with a brief so empty-dir file viewers don't hide
-  // it and the agent has an in-folder pointer to the manifest shape.
-  await fs.writeFile(path.join(dir, 'automations', 'README.md'), AUTOMATIONS_README);
-
-  // README so the human/agent has a clear starting brief in-folder.
-  await fs.writeFile(path.join(dir, 'README.md'), README_TEMPLATE(id));
+  // Empty canonical subdirs the file map can't carry (queries/actions/
+  // migrations start empty; the builder agent fills them in). `automations/`
+  // already exists from its seeded README.
+  for (const sub of ['queries', 'actions', 'migrations']) {
+    await fs.mkdir(path.join(dir, sub), { recursive: true });
+  }
 
   const stat = await fs.stat(dir);
   return {
@@ -122,6 +71,7 @@ export async function listProjects(projectsDir: string): Promise<ProjectInfo[]> 
       modifiedAt: stat.mtime.toISOString(),
       name: meta.name,
       description: meta.description,
+      ...(meta.kind ? { kind: meta.kind } : {}),
       hasIndex,
     });
   }
@@ -229,17 +179,20 @@ async function assertDisplayNameUnique(
 }
 
 /** Best-effort read of `app.json#{name,description}`. Both may be undefined. */
-async function readAppMeta(projectDir: string): Promise<{ name?: string; description?: string }> {
+async function readAppMeta(
+  projectDir: string,
+): Promise<{ name?: string; description?: string; kind?: 'app' | 'automation' }> {
   try {
     const raw = await fs.readFile(path.join(projectDir, 'app.json'), 'utf8');
-    const parsed = JSON.parse(raw) as { name?: unknown; description?: unknown };
+    const parsed = JSON.parse(raw) as { name?: unknown; description?: unknown; kind?: unknown };
     const name =
       typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : undefined;
     const description =
       typeof parsed.description === 'string' && parsed.description.length > 0
         ? parsed.description
         : undefined;
-    return { name, description };
+    const kind = parsed.kind === 'automation' || parsed.kind === 'app' ? parsed.kind : undefined;
+    return { name, description, kind };
   } catch {
     return {};
   }
@@ -290,133 +243,4 @@ async function exists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-async function copyPluginTemplate(
-  name: string,
-  dest: string,
-  transform?: (raw: string) => string,
-): Promise<void> {
-  const src = path.join(PLUGIN_TEMPLATES, name);
-  const raw = await fs.readFile(src, 'utf8');
-  await fs.writeFile(dest, transform ? transform(raw) : raw);
-}
-
-// The scaffold's index.html wires the visual contract: an inline live-
-// settings bridge runs synchronously before paint, then tokens.css (the
-// design-tokens snapshot), then app.css (per-app styles built on top).
-// The runtime bakes initial theme/density/accent into <html …> before
-// serving, so the bridge only handles two extras: URL-hash fallback for
-// the builder preview path that bypasses the runtime, and postMessage
-// for live updates while the iframe is mounted in the shell.
-const DEFAULT_INDEX_HTML = (id: string, name: string): string => `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-    <title>${escapeHtml(name)}</title>
-    <script>${INLINE_SETTINGS_BRIDGE}</script>
-    <link rel="stylesheet" href="tokens.css" />
-    <link rel="stylesheet" href="app.css" />
-  </head>
-  <body>
-    <main>
-      <header class="head">
-        <h1>${escapeHtml(name)}</h1>
-        <p class="muted">App id: <code>${escapeHtml(id)}</code></p>
-      </header>
-      <section class="surface" aria-label="Get started">
-        <p>Edit <code>index.html</code>, add queries under <code>queries/</code>, and the agent will reshape this scaffold into your app.</p>
-      </section>
-    </main>
-    <script type="module" src="app.js"></script>
-  </body>
-</html>
-`;
-
-const DEFAULT_APP_JS = `// Runs in the browser. Invoke handlers via the three-tool surface
-// exposed on window.centraid:
-//   const rows = await window.centraid.read({ query: 'list-things' });
-//   await window.centraid.write({ action: 'add-thing', input: { name } });
-//
-// Remember the state triad: render Empty / Loading / Error views for
-// every async surface. Toggle elements via the \`hidden\` attribute so
-// screen readers don't announce all three at once.
-`;
-
-// Default per-app knob list embedded in every new project's `app.json`
-// (under `knobs[]`). Surfaces in the desktop's "App settings" gear
-// popover: font, page width, corner radius, and accent colour. The
-// runtime routes any `app*` key dynamically —
-// `appFont`/`appWidth`/`appRadius` become `<html data-app-*>` attributes
-// and `appColor` becomes `--app-color` (consumed via
-// `var(--app-color, var(--accent))` in CSS). Authors can add/remove
-// knobs by editing the `knobs[]` array in `app.json` plus the matching
-// CSS in `app.css`.
-const DEFAULT_APP_KNOBS: ReadonlyArray<Record<string, unknown>> = [
-  {
-    key: 'appFont',
-    label: 'Font',
-    type: 'segmented',
-    default: 'sans',
-    options: [
-      { value: 'sans', label: 'Sans' },
-      { value: 'serif', label: 'Serif' },
-      { value: 'mono', label: 'Mono' },
-    ],
-  },
-  {
-    key: 'appWidth',
-    label: 'Width',
-    type: 'segmented',
-    default: 'narrow',
-    options: [
-      { value: 'narrow', label: 'Narrow' },
-      { value: 'wide', label: 'Wide' },
-    ],
-  },
-  {
-    key: 'appRadius',
-    label: 'Corners',
-    type: 'segmented',
-    default: 'rounded',
-    options: [
-      { value: 'sharp', label: 'Sharp' },
-      { value: 'rounded', label: 'Rounded' },
-      { value: 'pill', label: 'Pill' },
-    ],
-  },
-  {
-    key: 'appColor',
-    label: 'Color',
-    type: 'swatch',
-    default: '#4950F6',
-    options: [
-      { value: '#4950F6', label: 'Blue' },
-      { value: '#7C5BD9', label: 'Violet' },
-      { value: '#2EA098', label: 'Teal' },
-      { value: '#B47B3F', label: 'Ochre' },
-      { value: '#E55772', label: 'Rose' },
-    ],
-  },
-];
-
-// Inline settings bridge — emitted inside a synchronous <script> in the
-// scaffolded index.html. Initial paint values come from the runtime, which
-// bakes <html data-theme="…" style="--bg-l:…"> before serving and stamps a
-// CSP nonce on this script. This bridge covers two extras:
-//   1. Builder preview (centraid-preview://) bypasses the runtime, so we
-//      read URL hash params as a fallback for the no-bake path.
-//   2. The shell can flip a pref while the iframe is mounted — the
-//      postMessage listener accepts both `centraid:settings` (full
-//      data-attrs + CSS vars) and the legacy `centraid:theme` shape.
-const INLINE_SETTINGS_BRIDGE = `(function(){var h=document.documentElement;function aT(t,b){if(t==='dark'||t==='light')h.dataset.theme=t;if(b!=null&&b!=='')h.style.setProperty('--bg-l',b+'%');}function aS(s){if(s.dataAttrs)for(var k in s.dataAttrs)h.setAttribute('data-'+k,s.dataAttrs[k]);if(s.cssVars)for(var k in s.cssVars)h.style.setProperty('--'+k,s.cssVars[k]);}try{var p=new URLSearchParams((location.hash||'').slice(1));aT(p.get('theme'),p.get('bgL'));}catch(_){}addEventListener('message',function(e){var d=e&&e.data;if(!d)return;if(d.type==='centraid:settings')aS(d);else if(d.type==='centraid:theme')aT(d.theme,d.bgL);});})();`;
-
-function escapeHtml(s: string): string {
-  return s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }

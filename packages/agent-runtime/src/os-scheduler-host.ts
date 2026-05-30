@@ -59,12 +59,21 @@ export interface OsSchedulerHostOptions {
    */
   analyticsDbPath: string;
   /**
-   * Directory holding the app folders (issue #98). Baked into the
-   * artifact as `CENTRAID_APPS_DIR` so the scheduled `centraid
-   * run-automation` resolves the automation off the same disk tree the
-   * desktop scaffolds into.
+   * Directory holding the per-app *data* folders (issue #98). Baked
+   * into the artifact as `CENTRAID_APPS_DIR` so the scheduled `centraid
+   * run-automation` write-throughs its run ledger (`runtime.sqlite`) to
+   * the same data tree the desktop reads. Stable across version swaps.
    */
   appsDir: string;
+  /**
+   * Directory holding the per-app *code* folders — automation manifests
+   * + handlers (issue #137). Baked as `CENTRAID_APPS_CODE_DIR` so the
+   * scheduled fire resolves the automation's code off the git-store
+   * materialized `main` (the gateway's stable `active-main` symlink),
+   * which is a different tree from the data dir. Defaults to `appsDir`
+   * when omitted (flat/legacy layout).
+   */
+  codeAppsDir?: string;
   /** Which CLI runner to drive (codex / claude-code). */
   runner: LocalRunnerKind;
   /** Options forwarded to os-scheduler (mostly tests: execShell + artifactRoot overrides). */
@@ -132,6 +141,7 @@ export class OsSchedulerHost implements AutomationHost {
       env: {
         CENTRAID_ANALYTICS_DB: this.opts.analyticsDbPath,
         CENTRAID_APPS_DIR: this.opts.appsDir,
+        CENTRAID_APPS_CODE_DIR: this.opts.codeAppsDir ?? this.opts.appsDir,
       },
     };
   }

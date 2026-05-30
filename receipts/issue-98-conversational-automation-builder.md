@@ -30,6 +30,14 @@ Chat moves to the per-app `runtime.sqlite` (app-scoped chat):
 - [x] Commit 13 — openclaw-plugin: wire the app-scoped chat store
 - [x] Commit 14 — desktop: thread appId through the chat-history IPC
 
+Follow-up — the manifest `kind` field replaces the `auto.` app-id prefix
+(the dotted prefix is gone; the manifest, not the folder id, decides
+whether an app is an automation app):
+
+- [x] Follow-up A — runtime-core + apps-store: kind field, plain-slug app ids
+- [x] Follow-up B — builder-harness + app-templates: scaffold automation apps via kind
+- [x] Follow-up C — desktop: route automations on manifest kind, not id prefix
+
 Schedule/execute of app-owned automations was originally scoped as a
 follow-up, but landed inside this PR across commits 5–10 — see those
 commit sections below. In short: the OS scheduler host + the `centraid
@@ -446,6 +454,78 @@ left it in #98 and chat was the last tenant.
   central summary's `appId` (chat run ids are bare UUIDs) under the
   runtime's apps dir; the activity-DB provider is removed.
 
+### Follow-up A — runtime-core + apps-store: kind field, plain-slug app ids
+
+The original #98 model encoded "this is an automation app" in the folder
+id as an `auto.` prefix — the *only* signal distinguishing a UI-less
+automation app from a normal app. That forced a dot into the app-id
+grammar everywhere (the `apps-store` `SAFE_ID_RE`, runtime-core's
+`isValidAppId`, builder-harness `validateAppId`) and a paired `..`
+traversal guard, and made the classification a string-parsing concern
+rather than data. This follow-up moves the signal into the manifest.
+
+- **runtime-core**: the `Manifest` interface + `MANIFEST_JSON_SCHEMA` gain
+  an optional `kind: 'app' | 'automation'` (default `'app'` when omitted);
+  `parseManifest` carries it through, and an unknown `kind` value is
+  rejected by the schema. `automation-ref.ts`'s `isValidAppId` drops the
+  dot from its grammar (`/^[A-Za-z0-9_-]+$/`, no `_` prefix) — a
+  tree-traversing `..` is now impossible by construction, so the explicit
+  `includes('..')` check is gone.
+- **apps-store**: `SAFE_ID_RE` reverts to a plain slug (`/^[a-z0-9][a-z0-9_-]*$/i`)
+  and `assertSafeId` drops its separate `..` guard (the grammar forbids the
+  dot). `listAppsWithMeta` now reads `kind` from each app's `app.json` and
+  returns it alongside `name` / `description` / `hasIndex`, so the desktop
+  list can classify apps without inspecting the id.
+
+### Follow-up B — builder-harness + app-templates: scaffold automation apps via kind
+
+The scaffolders and the template catalog stop minting / requiring the
+`auto.` id prefix; they declare `kind` instead.
+
+- **builder-harness**: `scaffoldAutomationProjectFiles` writes
+  `kind: 'automation'` into the new app's `app.json` and accepts a plain
+  slug id; `validateAutomationAppId` is now just the slug check (no prefix
+  requirement), `defaultAutomationId` derives the inner id from the app id
+  directly, and `AUTOMATION_APP_PREFIX` is deleted. `validateAppId` /
+  `ID_RE` in `scaffold-files.ts` drop the dot (plain slug, no `..` guard).
+  `ProjectInfo` gains a `kind` field; the FS lister (`scaffold.ts`),
+  `cloneTemplate` (`clone.ts`), and the automation scaffolder populate it
+  from `app.json#kind`. The automation system prompt describes the app by
+  its `kind`, not a dotted folder name.
+- **app-templates**: the ten automation template directories are renamed
+  off the `auto.` prefix (`auto.briefing` → `briefing`, …), each one's
+  `app.json` now carries `kind: 'automation'` (so a clone is classified
+  correctly), and `index.json` ids match. `build-manifest.mjs` drops the
+  `auto.`-prefix `kind` inference — `kind` is declared explicitly in
+  `index.json` and defaults to `'app'`.
+
+### Follow-up C — desktop: route automations on manifest kind, not id prefix
+
+The desktop's last three `auto.`-prefix decisions move to the `kind`
+signal that now rides the project/template metadata end-to-end.
+
+- **apps-store-client + api types**: `AppMetaRow` (`apps-store-client.ts`)
+  and `CentraidProjectInfo` (`centraid-api.d.ts`) gain `kind?: 'app' |
+  'automation'`, carrying the gateway's `app.json#kind` (added in
+  follow-up A) through the HTTP project list to the renderer.
+  `CentraidTemplateMeta`'s `kind` doc drops the derive-from-id-prefix
+  fallback (defaults to `'app'`).
+- **ipc.ts**: the TEMPLATES_CLONE post-publish automation-registration
+  guard is now `tmpl.kind === 'automation'` (was `newAppId.startsWith
+  ('auto.')`); the returned template `kind` is `tmpl.kind ?? 'app'` (no
+  id-prefix inference). AUTOMATIONS_DELETE distinguishes a whole
+  automation app from an app-owned automation by looking up the app's
+  `kind` in the apps list rather than testing for an `auto.` prefix.
+- **renderer (app.ts)**: `hydrateDrafts` filters automation apps out of
+  My apps with `p.kind !== 'automation'`; the conversational-builder
+  draft id is a plain `automation-<rand>` slug (the scaffolder stamps
+  `kind: 'automation'`); `isAutomationTemplate` is just `t.kind ===
+  'automation'`.
+- **test fixtures**: the gateway-runtime reconcile + automations-routes
+  tests used dotted `auto.brief` / `auto.x` ids that follow-up A's
+  validator now rejects — retargeted to plain slugs (`brief`, `appx`),
+  with the reconcile app.json declaring `kind: 'automation'`.
+
 ## Out of scope
 
 - Bidirectional form editing — the config pane is a read-only rendered
@@ -589,3 +669,38 @@ left it in #98 and chat was the last tenant.
   files therefore sit under the runtime's apps dir. Unifying the two
   (desktop publishing into its own local runtime) stays the tracked
   #98 follow-up.
+
+### Follow-up A verification
+
+- `@centraid/runtime-core` build + test green: `manifest.test.ts` adds the
+  `kind` round-trip (absent → undefined; `automation` carries through;
+  unknown value rejected); `automation-ref.test.ts` updated — `isValidAppId`
+  now accepts plain slugs and rejects the dotted `auto.standup-bot`.
+- `@centraid/apps-store` build + test green (26 tests) — the former
+  dotted-`auto.`-id case is rewritten to publish a plain-slug id and assert
+  both a dotted id and `..` are rejected.
+
+### Follow-up B verification
+
+- `@centraid/builder-harness` build + test green (52 tests): the scaffold /
+  clone / update-meta / scaffold-files suites use plain-slug ids; the
+  automation-scaffold tests assert `app.json#kind === 'automation'` and that
+  a dotted id is now rejected (the prefix-required assertions are inverted).
+- `@centraid/app-templates` build green — `build-manifest.mjs` regenerates
+  `manifest.json` (13 templates) with no `auto.` ids and `kind: 'automation'`
+  on each automation entry; downstream `agent-runtime` / `openclaw-plugin`
+  rebuild clean.
+
+### Follow-up C verification
+
+- Full `turbo run build typecheck lint test` green across all 28 tasks
+  after the desktop edits — `@centraid/desktop` typecheck clean with the
+  new `kind` field on `AppMetaRow` / `CentraidProjectInfo`.
+- `@centraid/gateway-runtime` test green (37 + 8): the reconcile and
+  automations-routes tests, which had used dotted `auto.` ids that
+  follow-up A's validator now rejects (the publish PUT returned
+  `400 invalid_app_id`), were retargeted to plain slugs and pass.
+- A repo-wide sweep confirms no remaining `startsWith('auto.')` or
+  `auto.${…}` id construction in `apps/desktop/src`; the only surviving
+  `auto.` mentions are doc comments naming the retired convention and
+  opaque analytics/slug-codec string fixtures unrelated to the signal.

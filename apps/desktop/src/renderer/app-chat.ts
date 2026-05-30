@@ -15,6 +15,24 @@
 // This module is loaded ahead of `app.js` and exposes `window.AppChat.mount`,
 // which the shell calls from `mountUserApp`. Keeping it standalone caps the
 // size of `app.ts` and makes the chat widget independently editable.
+//
+// Issue #141, Phase 3 — unified chat: the panel no longer relays through the
+// desktop main process (`main/chat.ts` + `centraid:chat:*` IPC). It streams
+// the turn straight from the gateway's `/centraid/<appId>/_chat` SSE and
+// consumes the native `ChatStreamEvent` union, and reads/writes chat history
+// over the gateway's `/_centraid-chat` surface directly. Because the
+// gateway-side runner runs the turn in the app's draft worktree with the
+// union of tools, the same panel both tweaks the app's code and operates its
+// data — one chat surface, both jobs.
+
+import {
+  streamChat,
+  createChatSession,
+  listChatSessions,
+  loadChatSession,
+  deleteChatSession,
+  type ChatStreamEvent,
+} from './gateway-client.js';
 
 (function () {
   type AppToolCall = {
@@ -41,11 +59,12 @@
   }): () => void {
     const { view, app, appId, el } = opts;
 
-    let started = false;
     let open = false;
     let nextTurnId = 1;
     let activeTurn: number | null = null;
-    let unsubscribe: (() => void) | null = null;
+    // The in-flight turn's abort handle — streamChat() cancels its fetch when
+    // this aborts (Stop button / new chat / panel teardown).
+    let abortController: AbortController | null = null;
     let chat: AppChatMsg[] = [];
     // Per-turn streaming state. `streamed` accumulates assistant deltas;
     // `hadContent` flips once we've shown any AI text or tool group, which
@@ -331,7 +350,7 @@
       trustedHtml:
         '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5"/></svg>',
       onClick: () => {
-        void window.CentraidApi.chatAbort({ appId });
+        abortController?.abort();
       },
     }) as HTMLButtonElement;
     // Composer card — the textarea sits above a toolbar row carrying a
@@ -367,7 +386,6 @@
       panel.setAttribute('aria-hidden', open ? 'false' : 'true');
       fab.classList.toggle('hidden', open);
       if (open) {
-        void ensureStarted();
         void loadRecentChats();
         setTimeout(() => input.focus(), 60);
       }
@@ -383,25 +401,6 @@
       }
     };
     document.addEventListener('keydown', onGlobalKey);
-
-    async function ensureStarted(): Promise<void> {
-      if (started) return;
-      started = true;
-      unsubscribe = window.CentraidApi.onChatEvent((event) => {
-        if (!event || event.appId !== appId) return;
-        handleEvent(event);
-      });
-      try {
-        await window.CentraidApi.chatStart({
-          appId,
-          appName: app.name,
-          sessionId: currentSessionId,
-        });
-      } catch (err) {
-        appendError(`Failed to start chat: ${String(err)}`);
-        started = false;
-      }
-    }
 
     function setView(next: 'chat' | 'history'): void {
       viewMode = next;
@@ -422,8 +421,7 @@
       historyLoading = true;
       renderHistory();
       try {
-        const res = await window.CentraidApi.chatHistoryList({ appId });
-        historySessions = res.sessions ?? [];
+        historySessions = await listChatSessions(appId);
       } catch (err) {
         historySessions = [];
         console.warn('chat history list failed', err);
@@ -433,64 +431,33 @@
       }
     }
 
-    /**
-     * Point the main-process ChatSession at a specific persisted chat (or
-     * null for a brand-new one). The chat-event IPC subscription set up by
-     * `ensureStarted()` stays alive for the panel's lifetime — calling
-     * chatStart directly here avoids stacking duplicate listeners every time
-     * the user switches chats. (Without this split, every assistant delta
-     * gets dispatched once per past switch, producing "HeyHey Sri Sri" output.)
-     */
-    async function switchSession(sessionId: string | null, title?: string): Promise<void> {
-      try {
-        await window.CentraidApi.chatStart({
-          appId,
-          appName: app.name,
-          sessionId,
-          ...(title !== undefined ? { title } : {}),
-        });
-      } catch (err) {
-        appendError(`Failed to switch chat: ${String(err)}`);
+    /** Cancel any in-flight turn so a session switch doesn't keep streaming
+     *  into a now-orphaned conversation. */
+    function abortActiveTurn(): void {
+      if (activeTurn !== null) {
+        abortController?.abort();
+        activeTurn = null;
+        setBusy(false);
       }
     }
 
     async function startNewChat(): Promise<void> {
-      // If there's an inflight turn, cancel it before we discard the messages
-      // so the gateway doesn't keep streaming into a now-orphaned conversation.
-      if (activeTurn !== null) {
-        try {
-          await window.CentraidApi.chatAbort({ appId });
-        } catch {
-          /* swallow */
-        }
-        activeTurn = null;
-        setBusy(false);
-      }
+      abortActiveTurn();
+      // A fresh chat gets its session row lazily on first send (submit()).
       currentSessionId = null;
       chat = [];
       turnState.clear();
-      lastToolIdByTurn.clear();
       setHeadContext(null);
-      await switchSession(null);
       setView('chat');
       renderChat();
       input.focus();
     }
 
     async function resumeSession(meta: CentraidChatSessionMeta): Promise<void> {
-      if (activeTurn !== null) {
-        try {
-          await window.CentraidApi.chatAbort({ appId });
-        } catch {
-          /* swallow */
-        }
-        activeTurn = null;
-        setBusy(false);
-      }
+      abortActiveTurn();
       currentSessionId = meta.id;
       chat = [];
       turnState.clear();
-      lastToolIdByTurn.clear();
       setHeadContext(meta.title || null);
       setView('chat');
       // Show a loading placeholder while we hydrate.
@@ -502,13 +469,12 @@
         ]),
       );
       try {
-        const loaded = await window.CentraidApi.chatHistoryLoad({ appId, sessionId: meta.id });
+        const loaded = await loadChatSession(appId, meta.id);
         chat = hydrateMessages(loaded.messages);
       } catch (err) {
         appendError(`Failed to load chat: ${String(err)}`);
         return;
       }
-      await switchSession(meta.id, meta.title);
       renderChat();
     }
 
@@ -640,7 +606,7 @@
 
     async function deleteSession(s: CentraidChatSessionMeta): Promise<void> {
       try {
-        await window.CentraidApi.chatHistoryDelete({ appId, sessionId: s.id });
+        await deleteChatSession(appId, s.id);
         historySessions = historySessions.filter((x) => x.id !== s.id);
         renderHistory();
         // If we just deleted the chat the user is currently viewing, reset
@@ -661,8 +627,7 @@
       if (recentLoaded) return;
       recentLoaded = true;
       try {
-        const res = await window.CentraidApi.chatHistoryList({ appId });
-        const sessions = (res.sessions ?? []).slice(0, 4);
+        const sessions = (await listChatSessions(appId)).slice(0, 4);
         if (sessions.length === 0) return;
         recentList.innerHTML = '';
         const now = Date.now();
@@ -959,111 +924,116 @@
       });
     }
 
-    // The gateway streams tool events without explicit ids — phases just
-    // arrive in order. We mint our own monotonic id per turn so the renderer
-    // can target the correct call when the matching `tool-result`/`tool-error`
-    // arrives.
-    const lastToolIdByTurn = new Map<number, string>();
-    let toolCounter = 0;
-    function mintToolId(turnId: number): string {
-      toolCounter += 1;
-      const id = `t${turnId}-${toolCounter}`;
-      lastToolIdByTurn.set(turnId, id);
-      return id;
+    /** Mark a turn done if it's still the active one (idempotent — fired by
+     *  the terminal stream event and again when streamChat() resolves). */
+    function finishTurn(turnId: number): void {
+      if (activeTurn === turnId) {
+        activeTurn = null;
+        setBusy(false);
+      }
     }
 
-    function handleEvent(event: CentraidChatEvent): void {
-      const state = ensureTurnState(event.turnId);
-      if (event.kind === 'thinking') {
-        // Just keeps the centered "Thinking…" status visible; nothing to
-        // patch on the chat array.
-        renderChat();
-        return;
+    /** Surface minted webhook secrets once, as an assistant message — the
+     *  plaintext secret is never persisted, so this is the only place to
+     *  capture it. */
+    function announceWebhooks(
+      minted: Array<{ automationId: string; url: string; secret: string }>,
+    ): void {
+      for (const w of minted) {
+        chat = chat.concat([
+          {
+            kind: 'ai',
+            text: `Webhook created for ${w.automationId}.\nURL: ${w.url}\nSecret (shown once — copy it now): ${w.secret}`,
+          },
+        ]);
       }
-      if (event.kind === 'assistant-delta') {
-        state.hadDelta = true;
-        state.hadContent = true;
-        state.streamed += event.delta;
-        if (state.aiIndex < 0) {
-          state.aiIndex = pushAi(state.streamed, true);
-        } else {
-          patchAi(state.aiIndex, { text: state.streamed, streaming: true });
-        }
-        renderChat();
-        return;
-      }
-      if (event.kind === 'tool-call') {
-        state.hadContent = true;
-        // Tool call after AI text starts a new group; the streaming AI msg
-        // is closed so subsequent deltas don't reattach to it (mirrors
-        // builder's closeAi() on tool_execution_start).
-        if (state.aiIndex >= 0) {
-          patchAi(state.aiIndex, { streaming: false });
-          state.aiIndex = -1;
-        }
-        const id = mintToolId(event.turnId);
-        appendOrStartToolCall({
-          id,
-          tool: event.toolName,
-          sql: event.sql,
-          args: event.toolArgs,
-          summary: summarizeToolArgs(event.toolName, event.sql, event.toolArgs),
-          state: 'running',
-        });
-        renderChat();
-        return;
-      }
-      if (event.kind === 'tool-result') {
-        const id = lastToolIdByTurn.get(event.turnId);
-        if (id) patchToolCall(id, { state: 'ok', result: event.toolResult });
-        renderChat();
-        return;
-      }
-      if (event.kind === 'tool-error') {
-        const id = lastToolIdByTurn.get(event.turnId);
-        if (id) patchToolCall(id, { state: 'error', errorText: event.text });
-        renderChat();
-        return;
-      }
-      if (event.kind === 'final') {
-        if (state.aiIndex >= 0) {
-          patchAi(state.aiIndex, { streaming: false });
-        } else if (event.text) {
-          state.aiIndex = pushAi(event.text, false);
+    }
+
+    /**
+     * Consume the gateway's native `ChatStreamEvent` union (issue #141,
+     * Phase 3 — no IPC translation layer). Tool calls now carry a real
+     * `toolCallId`, so the renderer targets results directly instead of
+     * minting its own ids.
+     */
+    function handleStreamEvent(turnId: number, event: ChatStreamEvent): void {
+      const state = ensureTurnState(turnId);
+      switch (event.type) {
+        case 'assistant.start':
+        case 'reasoning.delta':
+        case 'phase':
+        case 'usage':
+          return;
+        case 'assistant.delta':
+          state.hadDelta = true;
           state.hadContent = true;
-        }
-        if (activeTurn === event.turnId) activeTurn = null;
-        setBusy(false);
-        renderChat();
-        return;
-      }
-      if (event.kind === 'error') {
-        if (state.aiIndex >= 0) {
-          patchAi(state.aiIndex, {
-            streaming: false,
-            error: true,
-            text: event.text || 'Something went wrong.',
+          state.streamed += event.delta;
+          if (state.aiIndex < 0) state.aiIndex = pushAi(state.streamed, true);
+          else patchAi(state.aiIndex, { text: state.streamed, streaming: true });
+          renderChat();
+          return;
+        case 'tool.start':
+          state.hadContent = true;
+          // A tool call after streamed AI text closes the bubble so later
+          // deltas don't reattach to it.
+          if (state.aiIndex >= 0) {
+            patchAi(state.aiIndex, { streaming: false });
+            state.aiIndex = -1;
+          }
+          appendOrStartToolCall({
+            id: event.toolCallId,
+            tool: event.toolName,
+            sql: event.sql,
+            args: event.args,
+            summary: summarizeToolArgs(event.toolName, event.sql, event.args),
+            state: 'running',
           });
-        } else {
-          state.aiIndex = pushAi(event.text || 'Something went wrong.', false);
-          patchAi(state.aiIndex, { error: true });
-          state.hadContent = true;
+          renderChat();
+          return;
+        case 'tool.result':
+          patchToolCall(
+            event.toolCallId,
+            event.ok
+              ? { state: 'ok', result: event.result }
+              : { state: 'error', errorText: event.errorText ?? 'Tool failed.' },
+          );
+          renderChat();
+          return;
+        case 'webhooks':
+          announceWebhooks(event.minted);
+          renderChat();
+          return;
+        case 'final':
+          if (state.aiIndex >= 0) {
+            patchAi(state.aiIndex, { streaming: false });
+          } else if (event.text) {
+            state.aiIndex = pushAi(event.text, false);
+            state.hadContent = true;
+          }
+          finishTurn(turnId);
+          renderChat();
+          return;
+        case 'error': {
+          const msg = event.message || 'Something went wrong.';
+          if (state.aiIndex >= 0) {
+            patchAi(state.aiIndex, { streaming: false, error: true, text: msg });
+          } else {
+            state.aiIndex = pushAi(msg, false);
+            patchAi(state.aiIndex, { error: true });
+            state.hadContent = true;
+          }
+          finishTurn(turnId);
+          renderChat();
+          return;
         }
-        if (activeTurn === event.turnId) activeTurn = null;
-        setBusy(false);
-        renderChat();
-        return;
-      }
-      if (event.kind === 'aborted') {
-        if (state.aiIndex >= 0) {
-          patchAi(state.aiIndex, { streaming: false });
-        } else {
-          state.aiIndex = pushAi('(stopped)', false);
-          state.hadContent = true;
-        }
-        if (activeTurn === event.turnId) activeTurn = null;
-        setBusy(false);
-        renderChat();
+        case 'aborted':
+          if (state.aiIndex >= 0) {
+            patchAi(state.aiIndex, { streaming: false });
+          } else {
+            state.aiIndex = pushAi('(stopped)', false);
+            state.hadContent = true;
+          }
+          finishTurn(turnId);
+          renderChat();
       }
     }
 
@@ -1071,6 +1041,12 @@
       sendBtn.hidden = busy;
       stopBtn.hidden = !busy;
       sendBtn.disabled = busy;
+    }
+
+    /** First-message title: whitespace-collapsed + truncated (the store used
+     *  to derive this server-side; we do it client-side now). */
+    function deriveTitle(text: string): string {
+      return text.replace(/\s+/g, ' ').trim().slice(0, 60);
     }
 
     async function submit(): Promise<void> {
@@ -1085,22 +1061,34 @@
       chat = chat.concat([{ kind: 'user', text }]);
       ensureTurnState(turnId);
       renderChat();
-      await ensureStarted();
       try {
+        // Lazily create the session row on first send — its id IS the
+        // window id the gateway keys the turn (+ transcript) on.
+        if (!currentSessionId) {
+          const created = await createChatSession(appId, deriveTitle(text));
+          currentSessionId = created.id;
+          setHeadContext(created.title || null);
+        }
         const settings = await window.CentraidApi.getSettings();
-        const sendRes = await window.CentraidApi.chatSend({
+        abortController = new AbortController();
+        await streamChat(
           appId,
-          text,
-          turnId,
-          model: settings.chatModel,
-        });
-        // Server is the single source of truth for sessionId AND title —
-        // its `deriveTitle` collapses whitespace before truncating, so a
-        // client-side `slice(0, 60)` would diverge for whitespace-heavy
-        // first prompts. Take both straight from the response.
-        currentSessionId = sendRes.sessionId;
-        setHeadContext(sendRes.title || null);
+          {
+            windowId: currentSessionId,
+            message: text,
+            ...(settings.chatModel ? { model: settings.chatModel } : {}),
+          },
+          (evt) => handleStreamEvent(turnId, evt),
+          abortController.signal,
+        );
+        // Stream ended; finalize in case it closed without a terminal event.
+        finishTurn(turnId);
+        renderChat();
       } catch (err) {
+        if (abortController?.signal.aborted) {
+          handleStreamEvent(turnId, { type: 'aborted' });
+          return;
+        }
         const state = ensureTurnState(turnId);
         const msg = `Send failed: ${String(err)}`;
         if (state.aiIndex >= 0) {
@@ -1110,8 +1098,7 @@
           patchAi(state.aiIndex, { error: true });
           state.hadContent = true;
         }
-        activeTurn = null;
-        setBusy(false);
+        finishTurn(turnId);
         renderChat();
       }
     }
@@ -1130,8 +1117,7 @@
 
     return () => {
       try {
-        if (unsubscribe) unsubscribe();
-        if (activeTurn !== null) void window.CentraidApi.chatAbort({ appId });
+        if (activeTurn !== null) abortController?.abort();
       } catch {
         /* swallow */
       }

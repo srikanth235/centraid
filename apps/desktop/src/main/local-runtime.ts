@@ -17,9 +17,11 @@ import {
   gatewayAppsDir,
   gatewayChatRunnerSessionsDir,
   gatewayCodexHomeBaseDir,
+  gatewayCodeStoreDir,
   gatewayIdentityDb,
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
+import { loadSettings, templatesCacheDir } from './settings.js';
 import type { AutomationHost } from '@centraid/runtime-core';
 
 /**
@@ -64,7 +66,9 @@ function ensureInfoProviderRegistered(): void {
 
 /**
  * Local gateway storage directory — `<userData>/gateways/<id>/apps/`.
- * The home shelf + preview protocol + dispatcher all read from here.
+ * The home shelf, the draft/published serving, and the dispatcher all read
+ * from here (the old `centraid-preview://` protocol was retired in #141
+ * Phase 4 in favor of gateway draft serving).
  */
 export async function localRuntimeAppsDir(gatewayId: string): Promise<string> {
   return gatewayAppsDir(gatewayId);
@@ -94,23 +98,43 @@ export function localRuntimeAnalyticsDb(gatewayId: string): string {
 }
 
 /**
+ * Stable path to the gateway's git-store `active-main/apps` symlink
+ * target (issue #137) — where automation *code* (manifests + handlers)
+ * lives. The symlink is repointed atomically by the AppsStore on every
+ * publish/rollback/delete, so this path is safe to bake into OS
+ * scheduler artifacts once and survives version swaps.
+ */
+export function localRuntimeActiveCodeAppsDir(gatewayId: string): string {
+  return path.join(gatewayCodeStoreDir(gatewayId), 'active-main', 'apps');
+}
+
+/**
  * Per-gateway OS-scheduler-backed AutomationHost. Lazy: built on first
  * read so we don't shell out to the OS scheduler before anyone actually
  * toggled an automation.
+ *
+ * Both dirs are derived from `gatewayId` (issue #137): the scheduler
+ * fires `centraid run-automation`, which resolves the automation's CODE
+ * from `active-main/apps` (git store) and writes its run ledger DATA to
+ * `<appsDir>/<id>/runtime.sqlite`. The host is cached per gateway, so
+ * deriving both internally keeps every caller (the serve() factory + the
+ * register/unregister IPCs) pointed at the same two trees.
  *
  * `centraidBin` points at the bundled CLI script. We resolve via
  * `defaultCentraidCliDir` to stay agnostic to electron-builder
  * unpacking layout.
  */
 const automationHosts = new Map<string, AutomationHost>();
-export function localRuntimeAutomationHost(gatewayId: string, appsDir: string): AutomationHost {
+export function localRuntimeAutomationHost(gatewayId: string): AutomationHost {
   const existing = automationHosts.get(gatewayId);
   if (existing) return existing;
+  const dataAppsDir = gatewayAppsDir(gatewayId);
   const host = new OsSchedulerHost({
-    workdir: appsDir,
+    workdir: dataAppsDir,
     centraidBin: path.join(defaultCentraidCliDir(), 'centraid-cli.js'),
     analyticsDbPath: localRuntimeAnalyticsDb(gatewayId),
-    appsDir,
+    appsDir: dataAppsDir,
+    codeAppsDir: localRuntimeActiveCodeAppsDir(gatewayId),
     runner: 'codex',
   });
   automationHosts.set(gatewayId, host);
@@ -128,6 +152,13 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
     const secrets: SecretsProvider = {
       getProviderApiKey: () => getProviderApiKey(gatewayId),
     };
+    // The gateway owns the template catalog AND its remote refresh now
+    // (issue #141, Phase 5), so pass the optional remote manifest URL down
+    // — the templates route fires a one-time best-effort fetch into the
+    // cache on startup. This is the last thing the desktop main process did
+    // with `@centraid/app-templates`; with it relocated, the desktop drops
+    // the dependency entirely.
+    const settings = await loadSettings();
     const handle = await serve({
       paths: {
         appsDir,
@@ -135,9 +166,21 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
         analyticsDb: localRuntimeAnalyticsDb(gatewayId),
         chatRunnerSessionDir: gatewayChatRunnerSessionsDir(gatewayId),
         codexHomeBaseDir: localRuntimeCodexHomeBaseDir(gatewayId),
+        // Gateway owns the template catalog now (issue #141): the
+        // `GET /centraid/_templates` route resolves bundle-or-cache from
+        // this per-gateway cache dir, matching the old desktop IPC.
+        templatesCacheDir: templatesCacheDir(gatewayId),
+        ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
       },
       secrets,
-      schedulerHostFactory: (dir) => localRuntimeAutomationHost(gatewayId, dir),
+      // Issue #137: the local gateway owns app code as a git store too,
+      // so drafts survive restarts and the publish/session HTTP surface
+      // is identical to the standalone daemon.
+      appsStoreRoot: gatewayCodeStoreDir(gatewayId),
+      // Both code + data dirs are derived from `gatewayId` inside the
+      // host factory (issue #137), so the dirs serve() computes are
+      // advisory here — the cached host owns the canonical paths.
+      schedulerHostFactory: () => localRuntimeAutomationHost(gatewayId),
       logTag: `local-runtime:${gatewayId}`,
     });
     handles.set(gatewayId, handle);

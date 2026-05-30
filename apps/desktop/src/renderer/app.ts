@@ -5,6 +5,29 @@
 // so they're one tap away from being cloned & deployed.
 // governance: allow-repo-hygiene file-size-limit shell-entry-point pending split into route modules
 
+import {
+  appQuery,
+  appLiveUrl,
+  deregisterApp,
+  listProjects,
+  listTemplates,
+  getUserPrefs,
+  saveUserPrefs,
+  listAutomations,
+  readAutomation,
+  runAutomationNow,
+  listAutomationRuns,
+  readAutomationRun,
+  listAutomationRunNodes,
+  pinAutomationRun,
+  getInsightsSummary,
+  createAutomation,
+  cloneTemplate as gwCloneTemplate,
+  setAutomationEnabled,
+  updateProjectMeta,
+  deleteProject,
+} from './gateway-client.js';
+
 (function () {
   const root = document.querySelector('#root') as HTMLElement;
 
@@ -202,7 +225,7 @@
   // perfectly good fallback when the gateway is unreachable.
   void (async () => {
     try {
-      const remote = await window.CentraidApi.getUserPrefs();
+      const remote = await getUserPrefs();
       const recognised = pickAppearance(remote);
       if (Object.keys(recognised).length > 0) {
         prefs = { ...prefs, ...recognised, bgL: 5 };
@@ -282,7 +305,7 @@
     // see the previous gateway value (and reapply it if it diverges).
     const remotePatch = toRemoteShape(patch);
     if (Object.keys(remotePatch).length > 0) {
-      void window.CentraidApi.saveUserPrefs(remotePatch).catch(() => undefined);
+      void saveUserPrefs(remotePatch).catch(() => undefined);
     }
   }
 
@@ -819,15 +842,15 @@
 
   // Refresh `drafts` from disk. Drafts = projects on disk whose ids aren't
   // already in `userApps` (= already pinned to home, with full metadata).
-  // Automation apps (`auto.*` folder ids) live in the same `appsDir` but
+  // Automation apps (`kind: 'automation'`) live in the same `appsDir` but
   // belong to the Automations surface — skip them here so My apps stays
   // app-only.
   async function hydrateDrafts(): Promise<void> {
     try {
-      const projs = await window.CentraidApi.listProjects();
+      const projs = await listProjects();
       const knownIds = new Set(getApps().map((a) => a.id));
       drafts = projs
-        .filter((p) => !p.id.startsWith('auto.'))
+        .filter((p) => p.kind !== 'automation')
         .filter((p) => !knownIds.has(p.id))
         .map((p) => {
           // Drafts default to the Sparkle icon (no inference has run yet);
@@ -1409,7 +1432,7 @@
 
     let summary: CentraidInsightsSummary;
     try {
-      summary = await window.CentraidApi.getInsightsSummary();
+      summary = await getInsightsSummary();
     } catch (err) {
       if (!document.contains(bodyHost)) return;
       bodyHost.replaceChildren(
@@ -1683,10 +1706,7 @@
       let rows: CentraidAutomationRow[] = [];
       let entries: AutomationFeedEntry[] = [];
       try {
-        [rows, entries] = await Promise.all([
-          window.CentraidApi.listAutomations(),
-          collectAutomationRuns(),
-        ]);
+        [rows, entries] = await Promise.all([listAutomations(), collectAutomationRuns()]);
       } catch (err) {
         if (document.contains(scroll)) {
           scroll.replaceChildren(
@@ -1884,11 +1904,12 @@
   // in `automation.json` + `handler.js`. The draft is created disabled —
   // the user enables it from the builder once it looks right.
   async function createAndOpenAutomationBuilder(): Promise<void> {
-    // An automation is an app folder — the `auto.` prefix marks it as an
-    // automation app (issue #98).
-    const id = `auto.${Math.random().toString(36).slice(2, 8)}`;
+    // An automation is an app folder; the scaffolder marks it as an
+    // automation app via `app.json#kind: 'automation'` (issue #98). The id
+    // is a plain slug — the kind, not the id, is the automation signal.
+    const id = `automation-${Math.random().toString(36).slice(2, 8)}`;
     try {
-      await window.CentraidApi.createAutomation({
+      await createAutomation({
         id,
         name: 'New automation',
         enabled: false,
@@ -1921,7 +1942,8 @@
 
   // ───────────────────────── Templates gallery ─────────────────────
   // Automation templates are real filesystem templates under
-  // `@centraid/app-templates/auto.<slug>/`, picked up by the shared
+  // `@centraid/app-templates/<slug>/` (marked `kind: 'automation'`),
+  // picked up by the shared
   // `listTemplates` IPC. Adopting one routes through `cloneTemplate` —
   // the same IPC the home Templates shelf uses for app templates —
   // and lands the user in the conversational builder. (Originally the
@@ -2025,13 +2047,13 @@
   // Adopting an automation template goes through the same `cloneTemplate`
   // IPC as the home-shelf "Use template" button — one code path for both
   // kinds. The IPC handles suffix-aware id+name picking, copies the
-  // template's `auto.<slug>/automations/<slug>/{automation.json,handler.js}`
-  // into the user's appsDir as `auto.<slug>-N/`, and mints any pending
+  // template's `<slug>/automations/<slug>/{automation.json,handler.js}`
+  // into the user's appsDir as `<slug>-N/`, and mints any pending
   // webhook secrets. The user then lands in the automation builder where
   // the agent will tune the handler from the manifest's `prompt`.
   async function adoptTemplate(template: TemplateEntry): Promise<void> {
     try {
-      const result = await window.CentraidApi.cloneTemplate({ templateId: template.id });
+      const result = await gwCloneTemplate({ templateId: template.id });
       // Webhook secrets are returned exactly once. v1 surfaces a toast;
       // a follow-up can show a proper "copy this URL + secret" sheet.
       for (const w of result.webhooks ?? []) {
@@ -2126,8 +2148,8 @@
       let runs: CentraidAutomationRunRecord[] = [];
       try {
         [row, runs] = await Promise.all([
-          window.CentraidApi.readAutomation({ automationId }),
-          window.CentraidApi.listAutomationRuns({ automationId, limit: 40 }),
+          readAutomation({ automationId }),
+          listAutomationRuns({ automationId, limit: 40 }),
         ]);
       } catch (err) {
         if (document.contains(scroll)) {
@@ -2197,7 +2219,7 @@
       runBtn.querySelector('span')!.textContent = 'Starting…';
       void (async () => {
         try {
-          const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          const { runId } = await runAutomationNow({ automationId: row.ref });
           // Hand off to the run viewer, which streams the run live.
           renderRunView(row.ref, runId);
         } catch (err) {
@@ -2243,7 +2265,7 @@
       const next = toggleInput.checked;
       void (async () => {
         try {
-          await window.CentraidApi.setAutomationEnabled({ automationId: row.ref, enabled: next });
+          await setAutomationEnabled({ automationId: row.ref, enabled: next });
           renderAutomationView(row.ref);
         } catch (err) {
           toggleInput.checked = row.enabled;
@@ -2488,9 +2510,9 @@
       let nodes: CentraidAutomationRunNode[] = [];
       try {
         [row, run, nodes] = await Promise.all([
-          window.CentraidApi.readAutomation({ automationId }),
-          window.CentraidApi.readAutomationRun({ runId }),
-          window.CentraidApi.listAutomationRunNodes({ runId }),
+          readAutomation({ automationId }),
+          readAutomationRun({ runId }),
+          listAutomationRunNodes({ runId }),
         ]);
       } catch (err) {
         if (!stopped && document.contains(scroll)) {
@@ -2557,7 +2579,7 @@
       runAgain.disabled = true;
       void (async () => {
         try {
-          const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+          const { runId } = await runAutomationNow({ automationId: row.ref });
           renderRunView(row.ref, runId);
         } catch (err) {
           runAgain.disabled = false;
@@ -2794,10 +2816,7 @@
     let autos: CentraidAutomationRow[] = [];
     let runs: CentraidAutomationRunRecord[] = [];
     try {
-      [autos, runs] = await Promise.all([
-        window.CentraidApi.listAutomations(),
-        window.CentraidApi.listAutomationRuns({ limit: 100 }),
-      ]);
+      [autos, runs] = await Promise.all([listAutomations(), listAutomationRuns({ limit: 100 })]);
     } catch {
       return [];
     }
@@ -3450,7 +3469,7 @@
         return;
       }
       try {
-        await window.CentraidApi.updateProjectMeta({ id: app.id, name: nextName });
+        await updateProjectMeta({ id: app.id, name: nextName });
         if (!isDraft(app)) {
           syncUserAppMeta({ projectId: app.id, name: nextName });
         }
@@ -3578,7 +3597,7 @@
 
     if (draft) {
       try {
-        await window.CentraidApi.deleteProject({ id: app.id });
+        await deleteProject({ id: app.id });
         showToast(`Deleted draft "${app.name}"`);
       } catch (err) {
         showToast(`Could not delete draft: ${String(err)}`);
@@ -3593,7 +3612,7 @@
     const ua = findUserApp(app.id);
     if (ua?.centraidProjectId) {
       try {
-        await window.CentraidApi.deregisterApp({ id: ua.centraidProjectId });
+        await deregisterApp({ id: ua.centraidProjectId });
       } catch (err) {
         const msg = String(err);
         if (!/404|not_found/i.test(msg)) {
@@ -3606,7 +3625,7 @@
     // Disk cleanup is best-effort — the gateway side is already consistent.
     let diskWarn: string | null = null;
     try {
-      await window.CentraidApi.deleteProject({ id: app.id });
+      await deleteProject({ id: app.id });
     } catch (err) {
       diskWarn = String(err);
     }
@@ -3807,9 +3826,9 @@
     integrations?: readonly string[];
   }
 
-  /** True when the template is an automation (auto.* id or explicit kind). */
+  /** True when the template is an automation app (`kind: 'automation'`). */
   function isAutomationTemplate(t: TemplateEntry): boolean {
-    return t.kind === 'automation' || t.id.startsWith('auto.');
+    return t.kind === 'automation';
   }
 
   /**
@@ -3822,7 +3841,7 @@
    */
   async function loadAvailableTemplates(): Promise<TemplateEntry[]> {
     try {
-      const all = (await window.CentraidApi.listTemplates()) as TemplateEntry[];
+      const all = (await listTemplates()) as TemplateEntry[];
       // Home Templates tab + Discover gallery surface app templates only.
       // Automation templates have their own surface (renderAutomationTemplates)
       // because they need the richer card layout (emoji, category, trigger
@@ -3839,7 +3858,7 @@
    */
   async function loadAutomationTemplates(): Promise<TemplateEntry[]> {
     try {
-      const all = (await window.CentraidApi.listTemplates()) as TemplateEntry[];
+      const all = (await listTemplates()) as TemplateEntry[];
       return all.filter(isAutomationTemplate);
     } catch {
       return [];
@@ -3853,7 +3872,7 @@
     const palette = window.CentraidTokens.palette as unknown as Record<string, ColorHexType>;
     const color: ColorHexType = palette[tmpl.colorKey] ?? ('#5847e0' as ColorHexType);
     try {
-      const result = await window.CentraidApi.cloneTemplate({ templateId: tmpl.id });
+      const result = await gwCloneTemplate({ templateId: tmpl.id });
       const draft: DraftAppMeta = {
         __draft: true,
         color,
@@ -4244,7 +4263,7 @@
     // Iframe theme is resolved to its light/dark kind — third-party
     // shell themes don't ship template-side CSS, so apps stay in the
     // Centraid look while the shell wears the named theme.
-    void window.CentraidApi.appLiveUrl({ id: projectId })
+    void appLiveUrl({ id: projectId })
       .then((r) => {
         const qsep = r.url.includes('?') ? '&' : '?';
         const themeQs = `theme=${iframeThemeKind()}&bgL=${prefs.bgL}`;
@@ -4324,7 +4343,7 @@
   }
 
   async function ensureAppSettingsTable(appId: string): Promise<void> {
-    await window.CentraidApi.appQuery({
+    await appQuery({
       id: appId,
       sql: 'CREATE TABLE IF NOT EXISTS __centraid_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
     });
@@ -4333,7 +4352,7 @@
   async function fetchAppKnobValues(appId: string): Promise<Record<string, string>> {
     try {
       await ensureAppSettingsTable(appId);
-      const result = await window.CentraidApi.appQuery({
+      const result = await appQuery({
         id: appId,
         sql: 'SELECT key, value FROM __centraid_settings',
       });
@@ -4359,7 +4378,7 @@
     const sql =
       `INSERT INTO __centraid_settings (key, value) VALUES (${sqlString(key)}, ${sqlString(JSON.stringify(value))}) ` +
       'ON CONFLICT(key) DO UPDATE SET value = excluded.value';
-    await window.CentraidApi.appQuery({ id: appId, sql });
+    await appQuery({ id: appId, sql });
   }
 
   // Settings key (camelCase, e.g. `appFont`) → kebab name shared by the
@@ -4388,7 +4407,7 @@
 
   async function fetchAppKnobsManifest(appId: string): Promise<AppKnobsManifest | null> {
     try {
-      const live = await window.CentraidApi.appLiveUrl({ id: appId });
+      const live = await appLiveUrl({ id: appId });
       // `appLiveUrl` returns `${gateway}/centraid/<id>/`. The app
       // manifest sits next to `index.html` inside the same project;
       // knobs live under its `knobs[]` array (folded in from the old
@@ -4532,7 +4551,7 @@
     );
     panes.automations.append(automationsHost);
     if (appId) {
-      void window.CentraidApi.listAutomations().then((all) => {
+      void listAutomations().then((all) => {
         if (!document.contains(panel)) return;
         const rows = all.filter((r) => r.manifest.apps?.includes(appId));
         if (rows.length === 0) return;
@@ -4867,7 +4886,7 @@
     const next = input.checked;
     card.dataset.enabled = String(next);
     try {
-      await window.CentraidApi.setAutomationEnabled({ automationId: row.ref, enabled: next });
+      await setAutomationEnabled({ automationId: row.ref, enabled: next });
       // The in-memory row stored by closure is now stale; reflect the
       // new state so a subsequent toggle reads the right "current."
       (row as { enabled: boolean }).enabled = next;
@@ -4889,7 +4908,7 @@
   async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
     const deadline = Date.now() + 6 * 60 * 1000;
     while (Date.now() < deadline) {
-      const rec = await window.CentraidApi.readAutomationRun({ runId });
+      const rec = await readAutomationRun({ runId });
       if (rec && rec.endedAt !== undefined) return rec;
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
@@ -4904,7 +4923,7 @@
     try {
       // run-now fires in the background and returns the run id; poll the
       // ledger for the finished record to report the card's outcome.
-      const { runId } = await window.CentraidApi.runAutomationNow({ automationId: row.ref });
+      const { runId } = await runAutomationNow({ automationId: row.ref });
       const rec = await waitForAutomationRun(runId);
       automationRunState.set(stateKey, {
         kind: 'done',
@@ -4934,7 +4953,7 @@
     host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'Loading…'));
     let runs: CentraidAutomationRunRecord[];
     try {
-      runs = await window.CentraidApi.listAutomationRuns({ automationId, limit: 25 });
+      runs = await listAutomationRuns({ automationId, limit: 25 });
     } catch (err) {
       host.replaceChildren(
         el(
@@ -4962,7 +4981,7 @@
     host: HTMLElement,
   ): Promise<void> {
     try {
-      await window.CentraidApi.pinAutomationRun({ runId: run.runId, pinned: !run.pinned });
+      await pinAutomationRun({ runId: run.runId, pinned: !run.pinned });
     } catch (err) {
       showToast(`Could not update pin: ${err instanceof Error ? err.message : String(err)}`);
       return;
@@ -5034,7 +5053,7 @@
     host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'Loading nodes…'));
     let nodes: CentraidAutomationRunNode[];
     try {
-      nodes = await window.CentraidApi.listAutomationRunNodes({ runId });
+      nodes = await listAutomationRunNodes({ runId });
     } catch (err) {
       host.replaceChildren(
         el(
@@ -5145,7 +5164,7 @@
     host.replaceChildren(el('div', { class: 'cd-app-runs-empty' }, 'Loading child run…'));
     let nodes: CentraidAutomationRunNode[];
     try {
-      nodes = await window.CentraidApi.listAutomationRunNodes({ runId });
+      nodes = await listAutomationRunNodes({ runId });
     } catch (err) {
       host.replaceChildren(
         el(
@@ -5332,7 +5351,7 @@
     const next = input.trim().replace(/\s+/g, ' ');
     if (!next || next === app.name) return;
     try {
-      await window.CentraidApi.updateProjectMeta({ id: app.id, name: next });
+      await updateProjectMeta({ id: app.id, name: next });
       const ua = findUserApp(app.id);
       if (ua) {
         ua.name = next;
@@ -5571,7 +5590,10 @@
       chatModelSelect.append(seed);
     }
     async function loadChatModels(): Promise<void> {
-      const models = await window.CentraidApi.listChatModels().catch(() => []);
+      // The chat model is gateway-owned (the runner picks it from the
+      // gateway's runner prefs), so there's no per-app model list to fetch —
+      // the dropdown keeps its "Gateway default" entry + the persisted seed.
+      const models: Array<{ id: string; name: string; provider: string }> = [];
       // Replace existing options but keep the leading "Gateway default" entry.
       while (chatModelSelect.children.length > 1) {
         chatModelSelect.lastChild?.remove();
@@ -5827,9 +5849,7 @@
       },
     };
 
-    const userPrefsSnapshot = await window.CentraidApi.getUserPrefs().catch(
-      () => ({}) as Record<string, unknown>,
-    );
+    const userPrefsSnapshot = await getUserPrefs().catch(() => ({}) as Record<string, unknown>);
     const readPref = (k: string): string =>
       typeof userPrefsSnapshot[k] === 'string' ? (userPrefsSnapshot[k] as string) : '';
     const initialWire = readPref('agent.runner.provider.wireApi');
@@ -5942,12 +5962,10 @@
           // the Claude Agent SDK speaks Anthropic wire format and ignores
           // `RunnerPrefs.provider`. If the user is on a different runner, flip
           // them to Codex so saving doesn't silently no-op.
-          const livePrefs = await window.CentraidApi.getUserPrefs().catch(
-            () => ({}) as Record<string, unknown>,
-          );
+          const livePrefs = await getUserPrefs().catch(() => ({}) as Record<string, unknown>);
           const currentKind = livePrefs['agent.runner.kind'];
           const switchingKind = currentKind !== 'codex';
-          await window.CentraidApi.saveUserPrefs({
+          await saveUserPrefs({
             'agent.runner.provider.id': trim(providerIdInput.value),
             'agent.runner.provider.name': trim(providerNameInput.value),
             'agent.runner.provider.baseUrl': trim(baseUrlInput.value),
@@ -5998,7 +6016,7 @@
       onClick: async () => {
         clearProviderBtn.setAttribute('disabled', '');
         try {
-          await window.CentraidApi.saveUserPrefs({
+          await saveUserPrefs({
             'agent.runner.provider.id': null,
             'agent.runner.provider.name': null,
             'agent.runner.provider.baseUrl': null,

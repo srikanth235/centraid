@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { cloneTemplate, suggestAppId, suggestCloneIdentity } from './clone.js';
+import {
+  cloneTemplate,
+  suggestAppId,
+  suggestCloneIdentity,
+  suggestCloneIdentityFrom,
+} from './clone.js';
 import { scaffoldProject } from './scaffold.js';
 
 describe('suggestCloneIdentity', () => {
@@ -66,6 +71,45 @@ describe('suggestCloneIdentity', () => {
     // Bare name "Hydrate" collides with "HYDRATE" case-insensitively → bump.
     assert.equal(picked.id, 'hydrate-2');
     assert.equal(picked.name, 'Hydrate 2');
+  });
+});
+
+describe('suggestCloneIdentityFrom (git-store backend — no filesystem)', () => {
+  it('returns the bare (id, name) against an empty set', () => {
+    const picked = suggestCloneIdentityFrom([], 'hydrate', 'Hydrate');
+    assert.deepEqual(picked, { id: 'hydrate', name: 'Hydrate' });
+  });
+
+  it('bumps to (id-2, "Name 2") when the bare id is taken', () => {
+    const picked = suggestCloneIdentityFrom(
+      [{ id: 'hydrate', name: 'Hydrate' }],
+      'hydrate',
+      'Hydrate',
+    );
+    assert.deepEqual(picked, { id: 'hydrate-2', name: 'Hydrate 2' });
+  });
+
+  it('skips a display-name collision even when the id slot is free', () => {
+    const picked = suggestCloneIdentityFrom(
+      [
+        { id: 'hydrate', name: 'Hydrate' },
+        { id: 'something', name: 'Hydrate 2' },
+      ],
+      'hydrate',
+      'Hydrate',
+    );
+    assert.deepEqual(picked, { id: 'hydrate-3', name: 'Hydrate 3' });
+  });
+
+  it('does case-insensitive display-name comparison', () => {
+    const picked = suggestCloneIdentityFrom([{ id: 'x', name: 'HYDRATE' }], 'hydrate', 'Hydrate');
+    assert.deepEqual(picked, { id: 'hydrate-2', name: 'Hydrate 2' });
+  });
+
+  it('falls back to the id for apps with no display name', () => {
+    // An app published with no `name` still blocks its own id.
+    const picked = suggestCloneIdentityFrom([{ id: 'hydrate' }], 'hydrate', 'Hydrate');
+    assert.deepEqual(picked, { id: 'hydrate-2', name: 'Hydrate 2' });
   });
 });
 
@@ -181,14 +225,14 @@ describe('cloneTemplate index.html <title> rewrite', () => {
 
     await cloneTemplate({
       projectsDir,
-      newAppId: 'auto.briefing-2',
+      newAppId: 'briefing-2',
       templateDir,
       newName: 'Briefing 2',
     });
 
     const mf = JSON.parse(
       await fs.readFile(
-        path.join(projectsDir, 'auto.briefing-2', 'automations', 'briefing', 'automation.json'),
+        path.join(projectsDir, 'briefing-2', 'automations', 'briefing', 'automation.json'),
         'utf8',
       ),
     );

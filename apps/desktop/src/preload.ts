@@ -12,29 +12,13 @@ const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
 
-  PROJECTS_LIST: 'centraid:projects:list',
-  PROJECTS_CREATE: 'centraid:projects:create',
-  PROJECTS_FILES: 'centraid:projects:files',
-  PROJECTS_WRITE_FILE: 'centraid:projects:write-file',
+  // Project create/files/write/delete/update-meta + publish + templates clone
+  // + automation create/enable/delete moved to the renderer's direct HTTP
+  // client (renderer/gateway-client.ts) under the thin-client pivot. The
+  // preview iframe points at the gateway draft URL (Phase 4), so only the
+  // local-only reveal-in-Finder stays on IPC.
   PROJECTS_OPEN: 'centraid:projects:open',
-  PROJECTS_DELETE: 'centraid:projects:delete',
-  PROJECTS_UPDATE_META: 'centraid:projects:update-meta',
-  PROJECTS_PREVIEW_URL: 'centraid:projects:preview-url',
 
-  AGENT_START: 'centraid:agent:start',
-  AGENT_PROMPT: 'centraid:agent:prompt',
-  AGENT_STOP: 'centraid:agent:stop',
-  AGENT_EVENT: 'centraid:agent:event',
-
-  PUBLISH: 'centraid:publish',
-  VERSIONS_LIST: 'centraid:versions:list',
-  VERSIONS_ACTIVATE: 'centraid:versions:activate',
-  APP_LIVE_URL: 'centraid:app:live-url',
-  APP_SCHEMA: 'centraid:app:schema',
-  APP_TABLE_ROWS: 'centraid:app:table-rows',
-  APP_QUERY: 'centraid:app:query',
-  APP_LOGS: 'centraid:app:logs',
-  APPS_DEREGISTER: 'centraid:apps:deregister',
   PUBLISH_STATUS: 'centraid:publish:status',
   PUBLISH_EVENT: 'centraid:publish:event',
 
@@ -48,47 +32,16 @@ const Channel = {
   GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
-
-  TEMPLATES_LIST: 'centraid:templates:list',
-  TEMPLATES_CLONE: 'centraid:templates:clone',
-
-  CHAT_START: 'centraid:chat:start',
-  CHAT_SEND: 'centraid:chat:send',
-  CHAT_ABORT: 'centraid:chat:abort',
-  CHAT_EVENT: 'centraid:chat:event',
-  CHAT_MODELS: 'centraid:chat:models',
-  CHAT_HISTORY_LIST: 'centraid:chat:history:list',
-  CHAT_HISTORY_LOAD: 'centraid:chat:history:load',
-  CHAT_HISTORY_DELETE: 'centraid:chat:history:delete',
-  CHAT_HISTORY_RENAME: 'centraid:chat:history:rename',
+  GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
   AUTH_STATUS: 'centraid:auth:status',
   AUTH_RESYNC: 'centraid:auth:resync',
-
-  USER_ID_GET: 'centraid:user:id',
-  USER_PREFS_GET: 'centraid:user:prefs:get',
-  USER_PREFS_SAVE: 'centraid:user:prefs:save',
 
   PROVIDER_API_KEY_SET: 'centraid:agent:provider:setApiKey',
   PROVIDER_API_KEY_HAS: 'centraid:agent:provider:hasApiKey',
   PROVIDER_API_KEY_CLEAR: 'centraid:agent:provider:clearApiKey',
 
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
-
-  // Automations (issue #91). Automations are first-class projects on
-  // disk under `automationsDir`; these channels read/write that project
-  // tree and the unified run ledger.
-  AUTOMATIONS_LIST: 'centraid:automations:list',
-  AUTOMATIONS_READ: 'centraid:automations:read',
-  AUTOMATIONS_CREATE: 'centraid:automations:create',
-  AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
-  AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
-  AUTOMATIONS_DELETE: 'centraid:automations:delete',
-  AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
-  AUTOMATIONS_READ_RUN: 'centraid:automations:read-run',
-  AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
-  AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
-  INSIGHTS_SUMMARY: 'centraid:insights:summary',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -123,52 +76,22 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   saveSettings: (patch: Record<string, unknown>) =>
     ipcRenderer.invoke(Channel.SETTINGS_SAVE, patch),
 
-  // Projects
-  listProjects: () => ipcRenderer.invoke(Channel.PROJECTS_LIST),
-  createProject: (input: { id: string; name?: string; version?: string }) =>
-    ipcRenderer.invoke(Channel.PROJECTS_CREATE, input),
-  readProjectFiles: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_FILES, input),
-  writeProjectFile: (input: { id: string; path: string; content: string }) =>
-    ipcRenderer.invoke(Channel.PROJECTS_WRITE_FILE, input),
+  // Projects: list/create/files/write/delete/update-meta moved to the
+  // renderer's direct HTTP client (renderer/gateway-client.ts) under the
+  // thin-client pivot. The preview iframe points at the gateway draft URL
+  // (Phase 4), so only the local-only reveal-in-Finder stays on IPC.
   openProjectFolder: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_OPEN, input),
-  deleteProject: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_DELETE, input),
-  updateProjectMeta: (input: { id: string; name?: string; description?: string }) =>
-    ipcRenderer.invoke(Channel.PROJECTS_UPDATE_META, input),
-  previewUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_PREVIEW_URL, input),
 
-  // Agent (one session per window)
-  startAgent: (input: {
-    projectId: string;
-    projectKind?: 'app' | 'automation';
-    sessionMode?: 'fresh' | 'continue' | 'in-memory';
-  }) => ipcRenderer.invoke(Channel.AGENT_START, input),
-  promptAgent: (input: { text: string }) => ipcRenderer.invoke(Channel.AGENT_PROMPT, input),
-  stopAgent: () => ipcRenderer.invoke(Channel.AGENT_STOP),
-  onAgentEvent: (cb: (msg: { projectId: string; event: unknown }) => void) => {
-    const handler = (_e: IpcRendererEvent, msg: unknown) =>
-      cb(msg as { projectId: string; event: unknown });
-    ipcRenderer.on(Channel.AGENT_EVENT, handler);
-    return () => ipcRenderer.off(Channel.AGENT_EVENT, handler);
-  },
+  // The in-process AGENT_* builder retired with the unified chat (issue
+  // #141, Phase 3): the builder + the app-view data chat both stream the
+  // gateway's `/centraid/<id>/_chat` SSE directly via
+  // `renderer/gateway-client-chat.ts` — no main-process relay.
 
-  // Publish + versions
-  publish: (input: { id: string; skipBuild?: boolean }) =>
-    ipcRenderer.invoke(Channel.PUBLISH, input),
-  listVersions: (input: { id: string }) => ipcRenderer.invoke(Channel.VERSIONS_LIST, input),
-  activateVersion: (input: { id: string; versionId: string }) =>
-    ipcRenderer.invoke(Channel.VERSIONS_ACTIVATE, input),
-  appLiveUrl: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_LIVE_URL, input),
-  appSchema: (input: { id: string }) => ipcRenderer.invoke(Channel.APP_SCHEMA, input),
-  appTableRows: (input: { id: string; table: string; limit?: number; offset?: number }) =>
-    ipcRenderer.invoke(Channel.APP_TABLE_ROWS, input),
-  appQuery: (input: { id: string; sql: string }) => ipcRenderer.invoke(Channel.APP_QUERY, input),
-  appLogs: (input: {
-    id: string;
-    limit?: number;
-    sinceTs?: number;
-    level?: 'info' | 'warn' | 'error';
-  }) => ipcRenderer.invoke(Channel.APP_LOGS, input),
-  deregisterApp: (input: { id: string }) => ipcRenderer.invoke(Channel.APPS_DEREGISTER, input),
+  // Publish moved to the renderer's direct HTTP client (it holds the
+  // editing session and POSTs `…/publish`).
+  // App read surface (live URL / schema / table rows / SQL / logs /
+  // deregister) + version list/activate moved to the renderer's direct HTTP
+  // client (renderer/gateway-client.ts) under the thin-client pivot.
   // Auto-publish queue (issue #108) — workspaces upload to the gateway
   // on every save. Renderer can poll a snapshot of the status, or
   // subscribe to per-event broadcasts to toast failures inline.
@@ -205,6 +128,10 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.GATEWAYS_UPDATE_TOKEN, input),
   setActiveGateway: (input: { id: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_SET_ACTIVE, input),
+  // Active gateway's HTTP base URL + bearer token for the renderer's
+  // direct data-plane client. Token originates in keychain-backed
+  // settings (main); this is the single bridge crossing for it.
+  getGatewayAuth: () => ipcRenderer.invoke(Channel.GATEWAY_AUTH_GET),
   onGatewayChanged: (
     cb: (msg: {
       activeGatewayId: string;
@@ -228,48 +155,22 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     return () => ipcRenderer.off(Channel.GATEWAY_CHANGED, handler);
   },
 
-  // Templates
-  listTemplates: () => ipcRenderer.invoke(Channel.TEMPLATES_LIST),
-  cloneTemplate: (input: { templateId: string }) =>
-    ipcRenderer.invoke(Channel.TEMPLATES_CLONE, input),
+  // Templates: list + clone moved to the renderer's direct HTTP client —
+  // the gateway owns the catalog (`GET /centraid/_templates`) + clone
+  // (`POST /centraid/_apps/_clone`).
 
-  // App-scoped agentic chat
-  chatStart: (input: {
-    appId: string;
-    appName: string;
-    sessionId?: string | null;
-    title?: string;
-  }) => ipcRenderer.invoke(Channel.CHAT_START, input),
-  chatSend: (input: { appId: string; text: string; turnId: number; model?: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_SEND, input),
-  chatAbort: (input: { appId: string }) => ipcRenderer.invoke(Channel.CHAT_ABORT, input),
-  listChatModels: () => ipcRenderer.invoke(Channel.CHAT_MODELS),
-  onChatEvent: (cb: (msg: unknown) => void) => {
-    const handler = (_e: IpcRendererEvent, msg: unknown): void => cb(msg);
-    ipcRenderer.on(Channel.CHAT_EVENT, handler);
-    return () => ipcRenderer.off(Channel.CHAT_EVENT, handler);
-  },
-  // App chat history (persisted on the gateway)
-  chatHistoryList: (input: { appId: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_HISTORY_LIST, input),
-  chatHistoryLoad: (input: { appId: string; sessionId: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_HISTORY_LOAD, input),
-  chatHistoryDelete: (input: { appId: string; sessionId: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_HISTORY_DELETE, input),
-  chatHistoryRename: (input: { appId: string; sessionId: string; title: string }) =>
-    ipcRenderer.invoke(Channel.CHAT_HISTORY_RENAME, input),
+  // App chat (turn streaming + history) moved to the renderer's direct HTTP
+  // client (`renderer/gateway-client-chat.ts`): the panel streams
+  // `/centraid/<appId>/_chat` SSE itself and reads/writes history over the
+  // gateway's `/_centraid-chat` surface — no main-process relay.
 
   // Credential import (Claude Code / Codex → pi auth.json)
   authStatus: () => ipcRenderer.invoke(Channel.AUTH_STATUS),
   authResync: () => ipcRenderer.invoke(Channel.AUTH_RESYNC),
 
-  // Gateway-side user identity + global prefs (centraid-user.sqlite). The
-  // renderer treats the gateway as source of truth and keeps the local
-  // Store value as a fast-paint cache only.
-  getUserId: () => ipcRenderer.invoke(Channel.USER_ID_GET),
-  getUserPrefs: () => ipcRenderer.invoke(Channel.USER_PREFS_GET),
-  saveUserPrefs: (patch: Record<string, unknown>) =>
-    ipcRenderer.invoke(Channel.USER_PREFS_SAVE, patch),
+  // Gateway-side user identity + global prefs (centraid-user.sqlite) moved
+  // to the renderer's direct HTTP client (renderer/gateway-client.ts) under
+  // the thin-client pivot — pure `/_centraid-user` reads/writes.
 
   // Custom OpenAI-compatible provider — API key persisted via Electron
   // safeStorage in the main process. Renderer can write, check presence,
@@ -284,39 +185,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // settings panel opens or the user clicks "Test connection".
   getRunnerStatus: () => ipcRenderer.invoke(Channel.RUNNER_STATUS_GET),
 
-  // Automations (issue #91) — first-class projects on disk.
-  listAutomations: () => ipcRenderer.invoke(Channel.AUTOMATIONS_LIST),
-  readAutomation: (input: { automationId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_READ, input),
-  createAutomation: (input: {
-    id: string;
-    name?: string;
-    description?: string;
-    prompt?: string;
-    triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
-    apps?: string[];
-    model?: string;
-    historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
-    onFailure?: string;
-    enabled?: boolean;
-  }) => ipcRenderer.invoke(Channel.AUTOMATIONS_CREATE, input),
-  runAutomationNow: (input: { automationId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_RUN_NOW, input),
-  setAutomationEnabled: (input: { automationId: string; enabled: boolean }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_SET_ENABLED, input),
-  deleteAutomation: (input: { automationId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_DELETE, input),
-  // Run ledger reads. Returns the rows newest-first.
-  listAutomationRuns: (input: { automationId?: string; limit?: number }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUNS, input),
-  readAutomationRun: (input: { runId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_READ_RUN, input),
-  listAutomationRunNodes: (input: { runId: string }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_LIST_RUN_NODES, input),
-  pinAutomationRun: (input: { runId: string; pinned: boolean }) =>
-    ipcRenderer.invoke(Channel.AUTOMATIONS_PIN_RUN, input),
-
-  // Insights (issue #90) — analytics over the unified run ledger.
-  getInsightsSummary: (input?: { windowDays?: number }) =>
-    ipcRenderer.invoke(Channel.INSIGHTS_SUMMARY, input ?? {}),
+  // Automations: create/enable/delete + the read/run/analytics surface +
+  // insights moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot — the gateway
+  // owns scaffold + webhook mint + stage + publish.
 });

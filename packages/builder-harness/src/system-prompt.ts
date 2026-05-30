@@ -306,9 +306,9 @@ export function centraidAppendPrompt(): string {
 /**
  * The system prompt for an **automation** project.
  *
- * Issue #98: an automation is an *automation app* — one `auto.`-prefixed
- * app folder holding `app.json` and a single automation under
- * `automations/<id>/` (`automation.json` + `handler.js`). It carries no
+ * Issue #98: an automation is an *automation app* — an app folder whose
+ * `app.json` declares `kind: 'automation'`, holding `app.json` and a single
+ * automation under `automations/<id>/` (`automation.json` + `handler.js`). It carries no
  * UI: no `index.html`, no `queries/` / `actions/`, no migrations. The
  * builder drives one conversation that maintains the two automation
  * files; the user reviews the config and enables it.
@@ -320,7 +320,7 @@ You are working inside a centraid **automation app** — an app folder that runs
 ### Project layout (canonical)
 
 \`\`\`
-<project root>/                       # an automation app (auto.-prefixed folder)
+<project root>/                       # an automation app (app.json#kind = "automation")
   app.json                            # app metadata — leave as the scaffold wrote it
   automations/<id>/automation.json     # the manifest you maintain
   automations/<id>/handler.js          # the handler you maintain

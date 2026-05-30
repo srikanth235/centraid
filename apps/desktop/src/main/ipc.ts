@@ -1,13 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (agent, chat, projects, provider) once the surface stabilizes
 import { ipcMain, BrowserWindow, shell } from 'electron';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
-import { randomUUID } from 'node:crypto';
 import {
   loadSettings,
   saveSettings,
   setActiveGatewayId,
-  templatesCacheDir,
   type DesktopSettings,
 } from './settings.js';
 import {
@@ -21,74 +17,32 @@ import {
   updateProfileMetadata,
   type GatewayProfile,
 } from './gateway-store.js';
-import { PREVIEW_SCHEME } from './preview-protocol.js';
 import { refreshAuthInjector } from './auth-injector.js';
 import { resetChatHistoryAuthCache } from './chat-history-client.js';
-import {
-  fetchUserId,
-  fetchUserPrefs,
-  saveUserPrefs,
-  resetUserPrefsAuthCache,
-} from './user-prefs-client.js';
+import { fetchUserPrefs, resetUserPrefsAuthCache } from './user-prefs-client.js';
+import { resetAppsStoreAuthCache } from './apps-store-client.js';
+import { ensureProjectSessionDir, resetProjectSessions } from './project-sessions.js';
 import {
   importAvailableCreds,
   readAuthStatus,
   type AuthImportResult,
   type AuthStatus,
 } from './auth-import.js';
-import {
-  localRuntimeAutomationHost,
-  localRuntimeCodexHomeBaseDir,
-  localRuntimeAppsDir,
-  localRuntimeAnalyticsDb,
-  noteRunnerPrefsChanged,
-  resolveProviderPrefs,
-} from './local-runtime.js';
-import {
-  runPreflight,
-  runAutomationLocal,
-  type OpenAICompatProvider,
-  type RunnerPrefs,
-} from '@centraid/agent-runtime';
-import {
-  AnalyticsStore,
-  APP_AUTOMATIONS_SUBDIR,
-  AutomationRunsStore,
-  InsightsStore,
-  listAutomations,
-  readAppOwnedAutomation,
-  readAutomationProjectAt,
-  setAutomationEnabledAt,
-  deleteAutomationAt,
-  parseAutomationRef,
-  makeAnalyticsDbProvider,
-  makeRuntimeDbProvider,
-  generateWebhookId,
-  generateWebhookSecret,
-  hashWebhookSecret,
-  provisionAppPendingWebhooks,
-  WEBHOOK_ROUTE_PREFIX,
-  type ProvisionedWebhook,
-  type AutomationRow,
-  type AutomationRunNodeRow,
-  type AutomationRunRow,
-  type AutomationTrigger,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
-  type AutomationHistoryKeep,
-  type DatabaseProvider,
-  type InsightsSummary,
-  type RunSummary,
-  type RunnerStatus,
-} from '@centraid/runtime-core';
+import { noteRunnerPrefsChanged, resolveProviderPrefs } from './local-runtime.js';
+import { runPreflight, type OpenAICompatProvider, type RunnerPrefs } from '@centraid/agent-runtime';
+import { type RunnerStatus } from '@centraid/runtime-core';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
-import {
-  forgetPublish,
-  getPublishStatus,
-  requestPublish,
-  type PublishStatus,
-} from './publish-on-save.js';
-import { disposeWindowChatSessions } from './chat.js';
+
+/**
+ * Status read for the auto-publish queue (issue #137: there is no
+ * queue anymore — every publish is synchronous via PUBLISH IPC). Kept
+ * as a stable renderer surface so `builder.ts` doesn't need to change;
+ * always returns "not in flight". The `PUBLISH_EVENT` channel is
+ * similarly never fired post-#137 — the renderer's onPublishEvent
+ * subscription just stays quiet.
+ */
+type PublishStatus = { inFlight: boolean; lastError?: string; lastPublishedAt?: number };
+const getPublishStatus = (_id: string): PublishStatus => ({ inFlight: false });
 
 /**
  * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
@@ -98,29 +52,20 @@ export const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
 
-  PROJECTS_LIST: 'centraid:projects:list',
-  PROJECTS_CREATE: 'centraid:projects:create',
-  PROJECTS_FILES: 'centraid:projects:files',
-  PROJECTS_WRITE_FILE: 'centraid:projects:write-file',
+  // Project create/files/write/delete/update-meta + publish moved to the
+  // renderer's direct HTTP client (renderer/gateway-client.ts). The preview
+  // iframe now points at the gateway draft URL (Phase 4), so only the
+  // local-only reveal-in-Finder stays on IPC.
   PROJECTS_OPEN: 'centraid:projects:open',
-  PROJECTS_DELETE: 'centraid:projects:delete',
-  PROJECTS_UPDATE_META: 'centraid:projects:update-meta',
-  PROJECTS_PREVIEW_URL: 'centraid:projects:preview-url',
 
-  AGENT_START: 'centraid:agent:start',
-  AGENT_PROMPT: 'centraid:agent:prompt',
-  AGENT_STOP: 'centraid:agent:stop',
-  AGENT_EVENT: 'centraid:agent:event',
+  // The in-process AGENT_* builder retired with the unified chat (issue
+  // #141, Phase 3): the builder now streams the gateway's `/centraid/<id>/_chat`
+  // SSE directly, so the agent runs server-side in the draft worktree.
 
-  PUBLISH: 'centraid:publish',
-  VERSIONS_LIST: 'centraid:versions:list',
-  VERSIONS_ACTIVATE: 'centraid:versions:activate',
-  APP_LIVE_URL: 'centraid:app:live-url',
-  APP_SCHEMA: 'centraid:app:schema',
-  APP_TABLE_ROWS: 'centraid:app:table-rows',
-  APP_QUERY: 'centraid:app:query',
-  APP_LOGS: 'centraid:app:logs',
-  APPS_DEREGISTER: 'centraid:apps:deregister',
+  // PUBLISH + the app read surface (APP_LIVE_URL / APP_SCHEMA /
+  // APP_TABLE_ROWS / APP_QUERY / APP_LOGS / APPS_DEREGISTER / VERSIONS_LIST /
+  // VERSIONS_ACTIVATE) are gone — the renderer calls these gateway routes
+  // directly (thin-client pivot; see renderer/gateway-client.ts).
 
   /** Status read for the auto-publish queue (renderer toast / debug). */
   PUBLISH_STATUS: 'centraid:publish:status',
@@ -138,19 +83,21 @@ export const Channel = {
   GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
+  // Thin-client: hands the renderer the active gateway's HTTP base URL +
+  // bearer token so it can call the runtime/data plane directly. Main
+  // still owns where the token lives (keychain-backed settings); this is
+  // the single point where it crosses to the renderer.
+  GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
-  TEMPLATES_LIST: 'centraid:templates:list',
-  TEMPLATES_CLONE: 'centraid:templates:clone',
+  // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
+  // client — the gateway owns the catalog + clone (`POST /_apps/_clone`).
 
   AUTH_STATUS: 'centraid:auth:status',
   AUTH_RESYNC: 'centraid:auth:resync',
 
-  // Gateway-side user identity + global preferences (theme, density, accent…).
-  // These read/write the centraid-user.sqlite that the runtime exposes at
-  // `/_centraid-user/*` — same file regardless of local vs. remote gateway.
-  USER_ID_GET: 'centraid:user:id',
-  USER_PREFS_GET: 'centraid:user:prefs:get',
-  USER_PREFS_SAVE: 'centraid:user:prefs:save',
+  // Gateway-side user identity + global preferences (theme, density, accent…)
+  // moved to the renderer's direct HTTP client (renderer/gateway-client.ts)
+  // under the thin-client pivot — pure `/_centraid-user/*` reads/writes.
 
   // Provider secret (custom OpenAI-compatible endpoint API key, stored
   // via Electron `safeStorage` outside the gateway DB). The plaintext
@@ -163,50 +110,11 @@ export const Channel = {
   // runner (binary version + optional provider endpoint probe).
   RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 
-  // Automations (issue #98) — desktop UI surface over the automations
-  // owned by app folders under `appsDir`. Manual run-now fires the
-  // local handler runtime in-process.
-  AUTOMATIONS_LIST: 'centraid:automations:list',
-  AUTOMATIONS_READ: 'centraid:automations:read',
-  AUTOMATIONS_CREATE: 'centraid:automations:create',
-  AUTOMATIONS_RUN_NOW: 'centraid:automations:run-now',
-  AUTOMATIONS_SET_ENABLED: 'centraid:automations:set-enabled',
-  AUTOMATIONS_DELETE: 'centraid:automations:delete',
-  // Run audit + node timeline (issue #80 / #90). Read-only views over
-  // the unified `runs` / `run_nodes` ledger.
-  AUTOMATIONS_LIST_RUNS: 'centraid:automations:list-runs',
-  AUTOMATIONS_READ_RUN: 'centraid:automations:read-run',
-  AUTOMATIONS_LIST_RUN_NODES: 'centraid:automations:list-run-nodes',
-  // Pin / unpin a run as a replay fixture (issue #80 follow-up).
-  AUTOMATIONS_PIN_RUN: 'centraid:automations:pin-run',
-
-  // Insights (issue #90) — read-only analytics over the unified run
-  // ledger. One channel returns the whole screen's payload.
-  INSIGHTS_SUMMARY: 'centraid:insights:summary',
+  // Automations (issue #98): the full surface — create/enable/delete +
+  // read/run/analytics + INSIGHTS_SUMMARY — moved to the renderer's direct
+  // HTTP client (renderer/gateway-client.ts) under the thin-client pivot;
+  // the gateway owns scaffold + webhook mint + stage + publish.
 } as const;
-
-/**
- * A webhook the post-turn provisioning pass minted for an automation
- * the builder agent authored. The plaintext `secret` crosses to the
- * renderer exactly once — it is shown to the user and never persisted
- * (the manifest keeps only the SHA-256 hash).
- */
-interface MintedWebhookInfo {
-  automationId: string;
-  ownerApp: string;
-  webhookId: string;
-  url: string;
-  secret: string;
-}
-
-interface AgentSessionHandle {
-  projectId: string;
-  projectDir: string;
-  prompt(text: string): Promise<{ mintedWebhooks: MintedWebhookInfo[] }>;
-  stop(): Promise<void>;
-}
-
-const sessions = new Map<number, AgentSessionHandle>();
 
 async function loadRunnerPrefs(): Promise<{
   kind: 'codex' | 'claude-code';
@@ -266,27 +174,23 @@ export function registerIpcHandlers(): void {
   const invalidateGatewayCaches = async (): Promise<void> => {
     resetChatHistoryAuthCache();
     resetUserPrefsAuthCache();
+    resetAppsStoreAuthCache();
+    // Per-app editing sessions are per-gateway (the worktrees live in
+    // the previous gateway's git store); forget them so the next edit
+    // opens a fresh session on the new active gateway.
+    resetProjectSessions();
     await refreshAuthInjector();
   };
 
-  // Stop every live agent + chat session across every window when the
-  // active gateway changes. Those sessions were rooted in the previous
-  // gateway's workspace + identity DB; letting them keep running would
-  // mean the agent writing into gateway A's workspace + auto-publishing
-  // to gateway A's appsDir while the user thinks they're on gateway B.
-  // Disposing here is unconditional — the renderer's onGatewayChanged
-  // handler also bounces back to Home, so there's no live UI tied to
-  // these sessions at the moment they end.
-  const disposeAllSessionsForGatewaySwap = async (): Promise<void> => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.isDestroyed()) continue;
-      await disposeWindowSession(win.id);
-      disposeWindowChatSessions(win.id);
-    }
-  };
-
   // ----- Settings -----
-  ipcMain.handle(Channel.SETTINGS_GET, async () => loadSettings());
+  // The bearer token reaches the renderer only through `getGatewayAuth()`
+  // (the single bridge crossing post thin-client pivot), so the broad
+  // settings payload no longer carries `gatewayToken` — nothing in the
+  // renderer reads it off `getSettings()`.
+  ipcMain.handle(Channel.SETTINGS_GET, async () => {
+    const { gatewayToken: _gatewayToken, ...rest } = await loadSettings();
+    return rest;
+  });
   ipcMain.handle(Channel.SETTINGS_SAVE, async (_e, patch: Partial<DesktopSettings>) => {
     const next = await saveSettings(patch);
     // Settings can no longer flip gateway URL/token directly (those
@@ -364,7 +268,6 @@ export function registerIpcHandlers(): void {
       const current = await loadSettings();
       let next: DesktopSettings = current;
       if (current.activeGatewayId === input.id) {
-        await disposeAllSessionsForGatewaySwap();
         next = await setActiveGatewayId('local');
       }
       await invalidateGatewayCaches();
@@ -408,10 +311,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     Channel.GATEWAYS_SET_ACTIVE,
     async (_e, input: { id: string }): Promise<DesktopSettings> => {
-      // Stop sessions BEFORE flipping the pointer — otherwise an
-      // in-flight `prompt` could land its writes after the swap with
-      // the old session handle still mapping to old paths.
-      await disposeAllSessionsForGatewaySwap();
       const next = await setActiveGatewayId(input.id);
       // Tear down HTTP servers for any local gateways that aren't the
       // new active one. OS-scheduled automations are unaffected — they
@@ -430,18 +329,13 @@ export function registerIpcHandlers(): void {
   );
 
   // ----- User identity + prefs (gateway-backed) -----
-  ipcMain.handle(Channel.USER_ID_GET, async () => fetchUserId());
-  ipcMain.handle(Channel.USER_PREFS_GET, async () => fetchUserPrefs());
-  ipcMain.handle(Channel.USER_PREFS_SAVE, async (_e, patch: Record<string, unknown>) => {
-    const next = await saveUserPrefs(patch);
-    // A change to any `agent.runner.*` key (kind, provider config) makes
-    // the cached preflight stale. Invalidating unconditionally is cheap —
-    // the next status read just re-probes once.
-    if (Object.keys(patch).some((k) => k.startsWith('agent.runner.'))) {
-      noteRunnerPrefsChanged();
-    }
-    return next;
-  });
+  // USER_ID_GET / USER_PREFS_GET / USER_PREFS_SAVE moved to the renderer's
+  // direct HTTP client (renderer/gateway-client.ts) under the thin-client
+  // pivot. The preflight-cache drop that rode prefs-save is no longer needed
+  // here: the cache keys on the runner prefs that matter and the
+  // runner-status read (RUNNER_STATUS_GET) force-invalidates before probing.
+  // The main process still reads prefs internally via `fetchUserPrefs` in
+  // `loadRunnerPrefs` below.
 
   // ----- Provider secret (custom OpenAI-compatible endpoint API key) -----
   // The plaintext lives only in the main process — renderer can set, query
@@ -491,106 +385,32 @@ export function registerIpcHandlers(): void {
     return result;
   });
 
-  // ----- Projects -----
-  // The desktop owns two sibling dirs (issue #108):
-  //   - `workspaceDir` — flat, editable. Project IPCs read/write here.
-  //   - `appsDir` — versioned gateway storage. Populated by uploads from
-  //     the workspace via `requestPublish`; the preview protocol and
-  //     dispatcher read from here.
-  // Every IPC that mutates the workspace pings `requestPublish(id)` so
-  // the gateway picks up the change on the next debounce tick.
-  ipcMain.handle(Channel.PROJECTS_LIST, async () => {
-    const settings = await loadSettings();
-    const { listProjects } = await import('@centraid/builder-harness');
-    return listProjects(settings.workspaceDir);
-  });
-
-  ipcMain.handle(
-    Channel.PROJECTS_CREATE,
-    async (_e, input: { id: string; name?: string; version?: string }) => {
-      const settings = await loadSettings();
-      const { scaffoldProject } = await import('@centraid/builder-harness');
-      const info = await scaffoldProject(settings.workspaceDir, input.id, {
-        name: input.name,
-        version: input.version,
-      });
-      // Initial publish so the fresh app is browsable in the iframe
-      // without waiting for a first edit (edge case #1 in the design).
-      requestPublish(input.id, { immediate: true });
-      return info;
-    },
-  );
-
-  ipcMain.handle(Channel.PROJECTS_FILES, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { readProjectFiles } = await import('@centraid/builder-harness');
-    const dir = path.join(settings.workspaceDir, input.id);
-    return readProjectFiles(dir);
-  });
-
-  ipcMain.handle(
-    Channel.PROJECTS_WRITE_FILE,
-    async (_e, input: { id: string; path: string; content: string }) => {
-      const settings = await loadSettings();
-      const { writeProjectFile } = await import('@centraid/builder-harness');
-      const dir = path.join(settings.workspaceDir, input.id);
-      const result = await writeProjectFile(dir, input.path, input.content);
-      requestPublish(input.id);
-      return result;
-    },
-  );
+  // ----- Projects (issue #137: git-store backend; #141: thin client) -----
+  // App lifecycle (create/files/write/delete/update-meta) + publish moved to
+  // the renderer's direct HTTP client (renderer/gateway-client.ts) under the
+  // thin-client pivot: the renderer opens its own editing session per app
+  // (same `desktop-<id>` id the local agent uses, so they share one draft)
+  // and the gateway owns scaffold/clone/meta/publish. PROJECTS_OPEN stays on
+  // IPC — a deliberately LOCAL-ONLY reveal-in-Finder that needs the on-disk
+  // session worktree. The preview iframe now points at the gateway draft URL
+  // (`/centraid/_draft/<sessionId>/<id>/`, resolved renderer-side via
+  // `draftPreviewUrl`), so no PROJECTS_PREVIEW_URL handler is needed.
 
   ipcMain.handle(Channel.PROJECTS_OPEN, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const dir = path.join(settings.workspaceDir, input.id);
+    // Reveal-in-Finder: opens the on-disk session worktree. One of the two
+    // deliberately LOCAL-ONLY handlers (issue #141) — a remote gateway
+    // exposes no worktree over the filesystem. The renderer hides this for
+    // remote; `ensureProjectSessionDir` (via `assertActiveGatewayLocal`) is
+    // the backstop and throws a clear error if it's ever reached remotely.
+    const dir = await ensureProjectSessionDir(input.id);
     await shell.openPath(dir);
     return { ok: true };
   });
 
-  ipcMain.handle(Channel.PROJECTS_DELETE, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { deleteProject } = await import('@centraid/builder-harness');
-    // Forget any queued publish before deleting the workspace so a
-    // stale request doesn't re-create the gateway version after the
-    // renderer separately calls deregisterApp.
-    forgetPublish(input.id);
-    await deleteProject(settings.workspaceDir, input.id);
-    return { ok: true };
-  });
-
-  ipcMain.handle(
-    Channel.PROJECTS_UPDATE_META,
-    async (_e, input: { id: string; name?: string; description?: string }) => {
-      const settings = await loadSettings();
-      const { updateProjectMeta } = await import('@centraid/builder-harness');
-      await updateProjectMeta(settings.workspaceDir, input.id, {
-        name: input.name,
-        description: input.description,
-      });
-      requestPublish(input.id);
-      return { ok: true };
-    },
-  );
-
-  // Preview URL for the iframe. After #108 the preview always serves
-  // the active gateway version (not the workspace), so the URL is only
-  // "available" once an initial publish has succeeded — the preview
-  // protocol returns 404 until then.
-  ipcMain.handle(
-    Channel.PROJECTS_PREVIEW_URL,
-    async (_e, input: { id: string }): Promise<{ url: string; available: boolean }> => {
-      const settings = await loadSettings();
-      const currentJsonPath = path.join(settings.appsDir, input.id, 'current.json');
-      const available = await fs
-        .stat(currentJsonPath)
-        .then((s) => s.isFile())
-        .catch(() => false);
-      // Cache-bust per request — the iframe URL is stable but the
-      // active version under the hood changes after each publish.
-      const url = `${PREVIEW_SCHEME}://${encodeURIComponent(input.id)}/index.html?t=${Date.now()}`;
-      return { url, available };
-    },
-  );
+  // PROJECTS_DELETE + PROJECTS_UPDATE_META moved to the renderer's direct
+  // HTTP client (renderer/gateway-client.ts): delete is a `DELETE /_apps/<id>`
+  // + session close; meta is a `POST /_apps/<id>/meta` the gateway stages +
+  // publishes.
 
   // Snapshot of the auto-publish queue for project `id`. Cheap; safe to
   // poll from the renderer if a toast wants the latest error string.
@@ -599,811 +419,51 @@ export function registerIpcHandlers(): void {
     async (_e, input: { id: string }): Promise<PublishStatus> => getPublishStatus(input.id),
   );
 
-  // ----- Agent (per-window session) -----
+  // ----- Publish + versions (issue #137; #141: thin client) -----
+  // PUBLISH moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts): the renderer holds the editing session and
+  // POSTs `…/publish` directly. VERSIONS_LIST / VERSIONS_ACTIVATE moved there
+  // too (pure git-store tag reads + a forward-only rollback POST).
+
+  // Thin-client token bridge: resolve the active gateway's base URL +
+  // bearer token for the renderer's direct HTTP client. The token lives
+  // in keychain-backed settings; this is the only path it crosses to the
+  // renderer, and it's re-fetched whenever the active gateway flips.
   ipcMain.handle(
-    Channel.AGENT_START,
-    async (
-      event,
-      input: {
-        projectId: string;
-        projectKind?: 'app' | 'automation';
-        sessionMode?: 'fresh' | 'continue' | 'in-memory';
-      },
-    ): Promise<{ ok: true; messages: unknown[] }> => {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (!win) throw new Error('no window for agent session');
-
-      const prior = sessions.get(win.id);
-      if (prior) await prior.stop().catch(() => {});
-
+    Channel.GATEWAY_AUTH_GET,
+    async (): Promise<{ baseUrl: string; token?: string }> => {
       const settings = await loadSettings();
-      const { createCentraidAgentSession } = await import('@centraid/builder-harness');
-      // Every project — UI app or automation app — lives under
-      // `workspaceDir` (issue #108; previously `appsDir` per #98). The
-      // builder agent reads/writes the workspace; publish-on-save copies
-      // each turn's writes into the gateway's `appsDir`. `projectKind`
-      // still picks the system prompt and gates the app-only
-      // live-schema injection / preview snapshot.
-      const isAutomation = input.projectKind === 'automation';
-      const projectDir = path.join(settings.workspaceDir, input.projectId);
-
-      const runnerPrefs = await loadRunnerPrefs();
-
-      const session = await createCentraidAgentSession({
-        projectDir,
-        runnerPrefs,
-        sessionMode: input.sessionMode,
-        codexHomeBaseDir: localRuntimeCodexHomeBaseDir(settings.activeGatewayId),
-        ...(isAutomation
-          ? { projectKind: 'automation' as const }
-          : { liveSchema: { config: settings, appId: input.projectId } }),
-      });
-
-      const unsubscribe = session.subscribe((evt) => {
-        if (win.isDestroyed()) return;
-        win.webContents.send(Channel.AGENT_EVENT, {
-          projectId: input.projectId,
-          event: evt,
-        });
-      });
-
-      // Mint id + secret for any pending webhook trigger the agent
-      // declared this turn (`{ kind: 'webhook', pending: true }`). The
-      // agent cannot generate crypto-random credentials; the builder
-      // can. Rewrites the manifest in place and returns the one-time
-      // secrets for the renderer to show. Best-effort — a provisioning
-      // failure must not fail the turn.
-      const provisionPendingWebhooks = async (): Promise<MintedWebhookInfo[]> => {
-        // Webhook URLs always point at the active gateway — local or
-        // remote — so the agent's manifest references match wherever
-        // the user actually publishes.
-        const gatewayBase = settings.gatewayUrl.replace(/\/+$/, '');
-        const toInfo = (w: ProvisionedWebhook): MintedWebhookInfo => ({
-          automationId: w.automationId,
-          ownerApp: w.ownerApp,
-          webhookId: w.webhookId,
-          url: `${gatewayBase}${WEBHOOK_ROUTE_PREFIX}/${w.webhookId}`,
-          secret: w.secret,
-        });
-        try {
-          // Both UI apps and automation apps are app folders that may own
-          // automations under `automations/` — scan the whole folder.
-          return (await provisionAppPendingWebhooks(projectDir)).map(toInfo);
-        } catch (err) {
-          console.warn(
-            `[automations] webhook provisioning failed for ${input.projectId}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-          return [];
-        }
+      return {
+        baseUrl: settings.gatewayUrl.replace(/\/+$/, ''),
+        token: settings.gatewayToken || undefined,
       };
-
-      sessions.set(win.id, {
-        projectId: input.projectId,
-        projectDir,
-        prompt: async (text: string) => {
-          // Refresh the preview snapshot the agent reads via its native
-          // `Read` tool / `centraid preview snapshot`. Best-effort —
-          // capture errors (preview tab not visible, no index.html yet)
-          // shouldn't block the turn; the snapshot subcommand will just
-          // report `exists: false` and the agent can adapt. Automations
-          // have no preview iframe, so there is nothing to snapshot.
-          if (!isAutomation) {
-            await capturePreviewSnapshot(win, projectDir).catch(() => undefined);
-          }
-          await session.prompt(text);
-          // Agents edit workspace files via their native Read/Write tools
-          // — those bypass our PROJECTS_WRITE_FILE handler, so we queue
-          // the publish here. Debounced like a normal save: the iframe
-          // picks up the new version after the agent's turn settles.
-          requestPublish(input.projectId);
-          return { mintedWebhooks: await provisionPendingWebhooks() };
-        },
-        stop: async () => {
-          session.abort();
-          unsubscribe();
-          sessions.delete(win.id);
-        },
-      });
-
-      // The new runtime doesn't replay persisted message history — the
-      // backend (codex thread / Claude session) keeps the model-visible
-      // transcript across reloads via its own resume mechanism, while
-      // the renderer always starts with an empty chat pane.
-      return { ok: true, messages: [] };
     },
   );
 
-  ipcMain.handle(Channel.AGENT_PROMPT, async (event, input: { text: string }) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) throw new Error('no window for agent prompt');
-    const handle = sessions.get(win.id);
-    if (!handle) throw new Error('agent session not started for this window');
-    const { mintedWebhooks } = await handle.prompt(input.text);
-    return { ok: true, mintedWebhooks };
-  });
-
-  ipcMain.handle(Channel.AGENT_STOP, async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) return { ok: true };
-    const handle = sessions.get(win.id);
-    if (handle) await handle.stop();
-    return { ok: true };
-  });
-
-  // ----- Publish + versions -----
-  // The explicit Publish button stays — it's an "I want this published
-  // RIGHT NOW, with build" escape hatch over the auto-publish queue.
-  // It still bypasses the debouncer (immediate execution, blocking
-  // result) so the user gets a synchronous error if the upload fails.
-  ipcMain.handle(Channel.PUBLISH, async (_e, input: { id: string; skipBuild?: boolean }) => {
-    const settings = await loadSettings();
-    const { publishProject } = await import('@centraid/builder-harness');
-    const projectDir = path.join(settings.workspaceDir, input.id);
-    return publishProject(projectDir, input.id, settings, {
-      skipBuild: input.skipBuild,
-    });
-  });
-
-  ipcMain.handle(Channel.VERSIONS_LIST, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { listVersions, HarnessError } = await import('@centraid/builder-harness');
-    try {
-      return await listVersions(settings, input.id);
-    } catch (err) {
-      // 404 = app not registered (never published). Collapse to an
-      // empty list rather than rejecting (which Electron logs noisily).
-      if (err instanceof HarnessError && err.code === 'not_found') {
-        return { versions: [] };
-      }
-      throw err;
-    }
-  });
-
-  ipcMain.handle(
-    Channel.VERSIONS_ACTIVATE,
-    async (_e, input: { id: string; versionId: string }) => {
-      const settings = await loadSettings();
-      const { activateVersion } = await import('@centraid/builder-harness');
-      return activateVersion(settings, input.id, input.versionId);
-    },
-  );
-
-  ipcMain.handle(Channel.APP_LIVE_URL, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { appLiveUrl } = await import('@centraid/builder-harness');
-    return { url: appLiveUrl(settings, input.id) };
-  });
-
-  // Live schema for the Cloud → Database panel. Returns `undefined` when
-  // the gateway has nothing for this app yet (404 / 503 / 409 from the
-  // schema endpoint — see fetchAppSchema for the exact semantics).
-  ipcMain.handle(Channel.APP_SCHEMA, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { fetchAppSchema } = await import('@centraid/builder-harness');
-    return fetchAppSchema(settings, input.id);
-  });
-
-  // Cloud → Database row browser. Pulls one page of rows (default 50,
-  // capped at 200 server-side) from the named table.
-  ipcMain.handle(
-    Channel.APP_TABLE_ROWS,
-    async (_e, input: { id: string; table: string; limit?: number; offset?: number }) => {
-      const settings = await loadSettings();
-      const { fetchAppTableRows } = await import('@centraid/builder-harness');
-      return fetchAppTableRows(settings, input.id, input.table, {
-        limit: input.limit,
-        offset: input.offset,
-      });
-    },
-  );
-
-  // Cloud → SQL editor. Single-statement; gateway distinguishes
-  // SELECT-style ({ kind: 'rows' }) from DML/DDL ({ kind: 'exec' }).
-  ipcMain.handle(Channel.APP_QUERY, async (_e, input: { id: string; sql: string }) => {
-    const settings = await loadSettings();
-    const { runAppQuery } = await import('@centraid/builder-harness');
-    return runAppQuery(settings, input.id, input.sql);
-  });
-
-  // Cloud → Logs. Newest-first tail with optional `sinceTs` for polling.
-  ipcMain.handle(
-    Channel.APP_LOGS,
-    async (
-      _e,
-      input: { id: string; limit?: number; sinceTs?: number; level?: 'info' | 'warn' | 'error' },
-    ) => {
-      const settings = await loadSettings();
-      const { fetchAppLogs } = await import('@centraid/builder-harness');
-      return fetchAppLogs(settings, input.id, {
-        limit: input.limit,
-        sinceTs: input.sinceTs,
-        level: input.level,
-      });
-    },
-  );
-
-  ipcMain.handle(Channel.APPS_DEREGISTER, async (_e, input: { id: string }) => {
-    const settings = await loadSettings();
-    const { deregisterApp } = await import('@centraid/builder-harness');
-    return deregisterApp(settings, input.id);
-  });
+  // VERSIONS_LIST / VERSIONS_ACTIVATE moved to the renderer's direct HTTP
+  // client (`renderer/gateway-client.ts`) under the thin-client pivot —
+  // pure git-store tag reads + a forward-only rollback POST, no main-side
+  // state. APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY /
+  // APP_LOGS / APPS_DEREGISTER moved there too.
 
   // ----- Templates -----
-  ipcMain.handle(Channel.TEMPLATES_LIST, async () => {
-    const settings = await loadSettings();
-    const { resolveTemplates } = await import('@centraid/app-templates');
-    // Strip `files` + `source` from the wire response — the renderer only
-    // needs the display metadata, and the lists can be sizable. Cache
-    // is per-gateway (#109) so we resolve against the active one.
-    const resolved = await resolveTemplates({
-      cacheDir: templatesCacheDir(settings.activeGatewayId),
-    });
-    return resolved.map((t) => ({
-      id: t.id,
-      name: t.name,
-      desc: t.desc,
-      colorKey: t.colorKey,
-      iconKey: t.iconKey,
-      version: t.version,
-    }));
-  });
+  // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
+  // client (renderer/gateway-client.ts) under the thin-client pivot — the
+  // gateway owns the catalog (`GET /centraid/_templates`) and the clone
+  // orchestration (`POST /centraid/_apps/_clone`: scaffold + webhook mint +
+  // stage + publish). The remote gateway never needs the desktop catalog.
 
-  ipcMain.handle(Channel.TEMPLATES_CLONE, async (_e, input: { templateId: string }) => {
-    const settings = await loadSettings();
-    const { resolveTemplates, templateSourceDir } = await import('@centraid/app-templates');
-    const { cloneTemplate, suggestCloneIdentity } = await import('@centraid/builder-harness');
+  // ----- Automations (issue #98; #141: thin client) -----
+  // Automation create/enable/delete + the read/run/analytics surface moved
+  // to the renderer's direct HTTP client (renderer/gateway-client.ts): the
+  // gateway owns scaffold + webhook mint + stage + publish
+  // (`POST /centraid/_automations`, `…/set-enabled`, `DELETE …`). The gateway
+  // owns the materialized `main` (code), the per-app `runtime.sqlite`
+  // ledgers, and the central analytics DB.
 
-    const cacheDir = templatesCacheDir(settings.activeGatewayId);
-    const templates = await resolveTemplates({ cacheDir });
-    const tmpl = templates.find((t) => t.id === input.templateId);
-    if (!tmpl) {
-      throw new Error(`Unknown template "${input.templateId}".`);
-    }
-
-    // Pick (id, name) together so both are unique. The first clone of
-    // `hydrate` lands on `hydrate` / "Hydrate"; subsequent clones bump
-    // to `hydrate-2` / "Hydrate 2", `-3` / " 3", etc. Display-name
-    // collisions against unrelated renamed apps are caught too — the
-    // pair advances in lockstep so the home shelf can never show two
-    // identically-titled tiles for new clones. Uniqueness is computed
-    // against the workspace (where the user actually has the apps).
-    const { id: newAppId, name: newName } = await suggestCloneIdentity(
-      settings.workspaceDir,
-      tmpl.id,
-      tmpl.name,
-    );
-
-    const project = await cloneTemplate({
-      projectsDir: settings.workspaceDir,
-      newAppId,
-      // The resolver tells us which copy is newer (cache vs bundle); clone
-      // from that one so a remote update reaches users without a desktop
-      // release.
-      templateDir: templateSourceDir(tmpl.id, { cacheDir, source: tmpl.source }),
-      newName,
-      // Carry the template's description into the cloned project's
-      // `app.json` so the builder topbar + home tile show something
-      // meaningful out of the gate.
-      newDesc: tmpl.desc,
-    });
-
-    // Automation templates may ship `{kind:'webhook',pending:true}`
-    // triggers — the template author can't know the secret in advance,
-    // so the clone path mints id + secret here, rewrites the manifest
-    // to its provisioned form, and returns the plaintext secret to the
-    // renderer to show once. App templates never have webhook triggers,
-    // so this is a no-op for them. URL points at the active gateway —
-    // the secret is hashed into the manifest and the plaintext is shown
-    // once here.
-    const minted = await provisionAppPendingWebhooks(project.dir);
-    const webhooks = minted.map((m) => ({
-      automationId: m.automationId,
-      ownerApp: m.ownerApp,
-      webhookId: m.webhookId,
-      secret: m.secret,
-      url: `${settings.gatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${m.webhookId}`,
-    }));
-
-    // Publish the freshly cloned workspace to the gateway so the iframe
-    // can preview it immediately and — for automation templates — so
-    // the OS scheduler has an active version to fire from. Synchronous
-    // (not via the debouncer) because automation registration below
-    // needs `appsDir/<id>/versions/<active>/` to exist on disk first.
-    try {
-      const { publishProject } = await import('@centraid/builder-harness');
-      await publishProject(project.dir, project.id, settings, { skipBuild: true });
-    } catch (err) {
-      console.warn(
-        `[templates:clone] initial publish failed for ${project.id}: ` +
-          (err instanceof Error ? err.message : String(err)),
-      );
-    }
-
-    // Register any automations the template shipped with the local
-    // host so cron triggers fire and webhook routes resolve without
-    // waiting for the next app start. Best-effort: failures are
-    // logged but don't fail the clone. Scans `appsDir` because that's
-    // the storage layer the OS scheduler will fire from — same dir the
-    // publish above just populated.
-    if (project.id.startsWith('auto.')) {
-      try {
-        const { rows } = await listAutomations(settings.appsDir);
-        for (const row of rows) {
-          if (row.ownerApp !== project.id) continue;
-          await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).register(
-            row,
-          );
-        }
-      } catch (err) {
-        console.warn(
-          `[templates:clone] host register failed for ${project.id}: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
-    }
-
-    return {
-      project,
-      template: {
-        id: tmpl.id,
-        name: tmpl.name,
-        desc: tmpl.desc,
-        colorKey: tmpl.colorKey,
-        iconKey: tmpl.iconKey,
-        version: tmpl.version,
-        kind: tmpl.kind ?? (tmpl.id.startsWith('auto.') ? 'automation' : 'app'),
-      },
-      webhooks,
-    };
-  });
-
-  // ----- Automations (issue #98) -----
-  // An automation lives inside an app folder under `appsDir`
-  // (`listAutomations` scans every app's active version). An
-  // `automationId` IPC argument is the automation's `<appId>/<id>`
-  // handle. An automation's full run ledger is its app's per-app
-  // `runtime.sqlite`; the central `centraid-analytics.sqlite` holds one
-  // summary row per run and is what the Executions feed + Insights read.
-  // Cache one provider per gateway id — switching gateways changes the
-  // active analytics DB path, and the old provider points at the
-  // previous file. A per-id Map keeps every gateway's provider warm
-  // across switches without re-opening on every call.
-  const analyticsProviders = new Map<string, DatabaseProvider>();
-  const getAnalyticsProvider = (gatewayId: string): DatabaseProvider => {
-    const existing = analyticsProviders.get(gatewayId);
-    if (existing) return existing;
-    const provider = makeAnalyticsDbProvider(localRuntimeAnalyticsDb(gatewayId));
-    analyticsProviders.set(gatewayId, provider);
-    return provider;
-  };
-  /**
-   * Run-ledger store for one run id — every run's full ledger is its
-   * app's `runtime.sqlite`. An automation runId is `<appId>/<id>:...`
-   * (the app id is inline, under the projects `appsDir`); a chat runId
-   * is a bare UUID, so its owning app comes from the central run summary
-   * and the file is under the embedded runtime's apps dir. Returns
-   * undefined when the run can't be located.
-   */
-  const runsStoreForRunId = async (runId: string): Promise<AutomationRunsStore | undefined> => {
-    const settings = await loadSettings();
-    const slash = runId.indexOf('/');
-    if (slash > 0) {
-      return new AutomationRunsStore(
-        makeRuntimeDbProvider(path.join(settings.appsDir, runId.slice(0, slash), 'runtime.sqlite')),
-      );
-    }
-    const summary = new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).getSummary(
-      runId,
-    );
-    if (!summary?.appId) return undefined;
-    return new AutomationRunsStore(
-      makeRuntimeDbProvider(
-        path.join(
-          await localRuntimeAppsDir(settings.activeGatewayId),
-          summary.appId,
-          'runtime.sqlite',
-        ),
-      ),
-    );
-  };
-  /** Map a central run summary into the `AutomationRunRow` feed shape. */
-  const summaryToRunRow = (s: RunSummary): AutomationRunRow => ({
-    runId: s.runId,
-    kind: s.kind,
-    ...(s.automationRef !== undefined ? { automationId: s.automationRef } : {}),
-    triggerKind: s.trigger as AutomationTriggerKind,
-    ...(s.triggerOrigin !== undefined
-      ? { triggerOrigin: s.triggerOrigin as AutomationTriggerOrigin }
-      : {}),
-    ...(s.appId !== undefined ? { appId: s.appId } : {}),
-    ...(s.note !== undefined ? { note: s.note } : {}),
-    ...(s.retryOf !== undefined ? { retryOf: s.retryOf } : {}),
-    startedAt: s.startedAt,
-    ...(s.endedAt !== undefined ? { endedAt: s.endedAt } : {}),
-    ok: s.ok,
-    ...(s.error !== undefined ? { error: s.error } : {}),
-    ...(s.summary !== undefined ? { summary: s.summary } : {}),
-    pinned: s.pinned ?? false,
-    ...(s.totalInputTokens !== undefined ? { totalInputTokens: s.totalInputTokens } : {}),
-    ...(s.totalOutputTokens !== undefined ? { totalOutputTokens: s.totalOutputTokens } : {}),
-    ...(s.totalCacheReadTokens !== undefined
-      ? { totalCacheReadTokens: s.totalCacheReadTokens }
-      : {}),
-    ...(s.totalCacheWriteTokens !== undefined
-      ? { totalCacheWriteTokens: s.totalCacheWriteTokens }
-      : {}),
-    ...(s.totalCostUsd !== undefined ? { totalCostUsd: s.totalCostUsd } : {}),
-    ...(s.stepCount !== undefined ? { stepCount: s.stepCount } : {}),
-    ...(s.toolCount !== undefined ? { toolCount: s.toolCount } : {}),
-  });
-
-  ipcMain.handle(Channel.AUTOMATIONS_LIST, async (): Promise<AutomationRow[]> => {
-    const settings = await loadSettings();
-    const { rows } = await listAutomations(settings.appsDir);
-    return rows;
-  });
-
-  ipcMain.handle(
-    Channel.AUTOMATIONS_READ,
-    async (_e, input: { automationId: string }): Promise<AutomationRow | null> => {
-      const settings = await loadSettings();
-      const ref = parseAutomationRef(input.automationId);
-      if (!ref) return null;
-      const row = await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId).catch(
-        () => undefined,
-      );
-      return row ?? null;
-    },
-  );
-
-  ipcMain.handle(
-    Channel.AUTOMATIONS_CREATE,
-    async (
-      _e,
-      input: {
-        id: string;
-        name?: string;
-        description?: string;
-        prompt?: string;
-        /**
-         * Trigger list. A `webhook` entry carries no secret — the
-         * handler mints id + secret server-side. Omit the field to take
-         * the scaffold default (a daily cron); pass `[]` for a
-         * manual-only automation.
-         */
-        triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
-        apps?: string[];
-        model?: string;
-        historyKeep?: AutomationHistoryKeep;
-        onFailure?: string;
-        /**
-         * Initial enabled flag. The conversational builder passes
-         * `false` to scaffold a draft the user enables after review.
-         */
-        enabled?: boolean;
-      },
-    ): Promise<{
-      row: AutomationRow;
-      /** Present when a webhook trigger was created — shown to the user once. */
-      webhook?: { id: string; secret: string; url: string };
-    }> => {
-      const settings = await loadSettings();
-      const { scaffoldAutomationProject } = await import('@centraid/builder-harness');
-
-      // Mint webhook secrets server-side: the plaintext is returned once
-      // here, the manifest persists only its hash.
-      let webhook: { id: string; secret: string; url: string } | undefined;
-      const triggers: AutomationTrigger[] | undefined = input.triggers?.map((t) => {
-        if (t.kind === 'webhook') {
-          const id = generateWebhookId();
-          const secret = generateWebhookSecret();
-          webhook = {
-            id,
-            secret,
-            url: `${settings.gatewayUrl.replace(/\/+$/, '')}/_centraid-hook/${id}`,
-          };
-          return { kind: 'webhook', id, secretHash: hashWebhookSecret(secret) };
-        }
-        return { kind: 'cron', expr: t.expr };
-      });
-
-      // `input.id` is the `auto.`-prefixed automation app folder id.
-      // Scaffold goes into the workspace; the immediate publish below
-      // populates `appsDir/<id>/versions/<active>/` so the OS scheduler
-      // (which fires from the versioned dir) has something to read.
-      await scaffoldAutomationProject(settings.workspaceDir, input.id, {
-        ...(input.name ? { name: input.name } : {}),
-        ...(input.description ? { description: input.description } : {}),
-        ...(input.prompt ? { prompt: input.prompt } : {}),
-        ...(triggers !== undefined ? { triggers } : {}),
-        ...(input.apps ? { apps: input.apps } : {}),
-        ...(input.model ? { model: input.model } : {}),
-        ...(input.historyKeep ? { historyKeep: input.historyKeep } : {}),
-        ...(input.onFailure ? { onFailure: input.onFailure } : {}),
-        ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
-      });
-      // Publish the new automation immediately (no debounce) so the
-      // OS-scheduler registration that follows has a versioned manifest
-      // on disk to point at.
-      try {
-        const { publishProject } = await import('@centraid/builder-harness');
-        await publishProject(path.join(settings.workspaceDir, input.id), input.id, settings, {
-          skipBuild: true,
-        });
-      } catch (err) {
-        console.warn(
-          `[automations] initial publish failed for ${input.id}: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
-      const { rows } = await listAutomations(settings.appsDir);
-      const row = rows.find((r) => r.ownerApp === input.id);
-      if (!row) throw new Error(`automation app ${input.id}: scaffolded but not found on disk`);
-      try {
-        await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).register(row);
-      } catch (err) {
-        console.warn(
-          `[automations] host register failed for ${input.id}: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
-      return { row, ...(webhook ? { webhook } : {}) };
-    },
-  );
-
-  ipcMain.handle(
-    Channel.AUTOMATIONS_RUN_NOW,
-    async (_e, input: { automationId: string }): Promise<{ runId: string }> => {
-      const settings = await loadSettings();
-      const prefs = await loadRunnerPrefs();
-      // The renderer opens the run viewer on this id and polls the
-      // ledger for live progress, so the run id is minted here and the
-      // fire runs in the background — a handler failure surfaces as a
-      // failed run row, not a rejected invoke.
-      const runId = `${input.automationId}:${Date.now()}:${randomUUID().slice(0, 8)}`;
-      void runAutomationLocal({
-        automationRef: input.automationId,
-        runId,
-        appsDir: settings.appsDir,
-        analytics: new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)),
-        runner: prefs.kind,
-        // "Run now" is a manual fire — tag it so the executions log
-        // distinguishes it from the OS-scheduler trigger.
-        triggerKind: 'manual',
-        triggerOrigin: 'manual',
-      }).catch((err: unknown) => {
-        console.error(
-          `[automations] run-now ${input.automationId} threw: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      });
-      return { runId };
-    },
-  );
-
-  ipcMain.handle(
-    Channel.AUTOMATIONS_SET_ENABLED,
-    async (_e, input: { automationId: string; enabled: boolean }) => {
-      // `manifest.enabled` is the source of truth — toggling rewrites
-      // the WORKSPACE `automation.json`, then publishes so the OS
-      // scheduler reads the new value from the fresh active version.
-      // Pre-#108 this mutated the active version dir in place; with
-      // the workspace/storage split that would diverge the workspace
-      // from what the gateway runs.
-      const settings = await loadSettings();
-      const ref = parseAutomationRef(input.automationId);
-      if (!ref) return { ok: true };
-      const workspaceAutoDir = path.join(
-        settings.workspaceDir,
-        ref.appId,
-        APP_AUTOMATIONS_SUBDIR,
-        ref.automationId,
-      );
-      const current = await readAutomationProjectAt(workspaceAutoDir, ref.appId);
-      if (!current) return { ok: true };
-      await setAutomationEnabledAt(workspaceAutoDir, ref.appId, input.enabled);
-      // Synchronous publish (not via debounce) so the host register
-      // below sees the updated manifest in `appsDir`.
-      try {
-        const { publishProject } = await import('@centraid/builder-harness');
-        await publishProject(path.join(settings.workspaceDir, ref.appId), ref.appId, settings, {
-          skipBuild: true,
-        });
-      } catch (err) {
-        console.warn(
-          `[automations] publish failed for ${input.automationId}: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
-      const row = await readAppOwnedAutomation(settings.appsDir, ref.appId, ref.automationId);
-      if (row) {
-        try {
-          await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).register(
-            row,
-          );
-        } catch (err) {
-          console.warn(
-            `[automations] host register failed for ${input.automationId}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-        }
-      }
-      return { ok: true };
-    },
-  );
-
-  ipcMain.handle(Channel.AUTOMATIONS_DELETE, async (_e, input: { automationId: string }) => {
-    // Delete is best-effort: tear down the OS scheduler entry, drop the
-    // workspace source, then publish so the gateway storage catches up.
-    // For an `auto.`-prefixed automation app (whole-app automation),
-    // delete the workspace entry and forget the publish queue; the next
-    // bootstrap reconcile drops the orphaned `appsDir` version.
-    const settings = await loadSettings();
-    try {
-      await localRuntimeAutomationHost(settings.activeGatewayId, settings.appsDir).unregister(
-        input.automationId,
-      );
-    } catch (err) {
-      console.warn(
-        `[automations] host unregister failed for ${input.automationId}: ` +
-          (err instanceof Error ? err.message : String(err)),
-      );
-    }
-    const ref = parseAutomationRef(input.automationId);
-    if (ref) {
-      if (ref.appId.startsWith('auto.')) {
-        // Whole automation app — drop the workspace; the explicit
-        // deregisterApp call from the renderer (or a later cleanup)
-        // will purge `appsDir/<id>/`.
-        forgetPublish(ref.appId);
-        await deleteAutomationAt(path.join(settings.workspaceDir, ref.appId));
-      } else {
-        // App-owned automation — just drop its workspace subdir, then
-        // publish so the gateway version no longer lists it.
-        const wsAutoDir = path.join(
-          settings.workspaceDir,
-          ref.appId,
-          APP_AUTOMATIONS_SUBDIR,
-          ref.automationId,
-        );
-        const exists = await readAutomationProjectAt(wsAutoDir, ref.appId).catch(() => undefined);
-        if (exists) await deleteAutomationAt(wsAutoDir);
-        try {
-          const { publishProject } = await import('@centraid/builder-harness');
-          await publishProject(path.join(settings.workspaceDir, ref.appId), ref.appId, settings, {
-            skipBuild: true,
-          });
-        } catch (err) {
-          console.warn(
-            `[automations] publish after delete failed for ${input.automationId}: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-        }
-      }
-    }
-    // Drop the automation's central run summaries. Its full ledger
-    // (the app's `runtime.sqlite`) goes with the deleted folder.
-    new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).deleteByRef(
-      input.automationId,
-    );
-    return { ok: true };
-  });
-
-  // Run feed — central run summaries. `automationId` is optional: omit
-  // it for the global Executions feed, pass it to scope to one handle.
-  ipcMain.handle(
-    Channel.AUTOMATIONS_LIST_RUNS,
-    async (_e, input: { automationId?: string; limit?: number }): Promise<AutomationRunRow[]> => {
-      const settings = await loadSettings();
-      const analytics = new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId));
-      const summaries = analytics.listSummaries({
-        ...(input.automationId ? { automationRef: input.automationId } : {}),
-        limit: input.limit ?? 50,
-      });
-      // The Automations screen only wants automation fires, not chat.
-      return summaries.filter((s) => s.kind === 'automation').map(summaryToRunRow);
-    },
-  );
-
-  // Single run — the full record from the run's own ledger. Unlike the
-  // central summary `listRuns` returns, this carries `inputJson` /
-  // `outputJson`, so the run viewer can show the run's actual output.
-  ipcMain.handle(
-    Channel.AUTOMATIONS_READ_RUN,
-    async (_e, input: { runId: string }): Promise<AutomationRunRow | null> => {
-      const store = await runsStoreForRunId(input.runId);
-      return store?.getRun(input.runId) ?? null;
-    },
-  );
-
-  // Run detail — the node timeline lives in the run's full ledger: the
-  // owning app's `runtime.sqlite` (automation and chat alike).
-  ipcMain.handle(
-    Channel.AUTOMATIONS_LIST_RUN_NODES,
-    async (_e, input: { runId: string }): Promise<AutomationRunNodeRow[]> => {
-      const store = await runsStoreForRunId(input.runId);
-      return store ? store.listNodes(input.runId) : [];
-    },
-  );
-
-  // Pin / unpin a run as a replay fixture — flip it in the run's own
-  // ledger and mirror the flag into the central summary so the feed and
-  // Insights stay consistent.
-  ipcMain.handle(
-    Channel.AUTOMATIONS_PIN_RUN,
-    async (_e, input: { runId: string; pinned: boolean }): Promise<{ ok: true }> => {
-      const settings = await loadSettings();
-      const store = await runsStoreForRunId(input.runId);
-      store?.setPinned(input.runId, input.pinned);
-      new AnalyticsStore(getAnalyticsProvider(settings.activeGatewayId)).setPinned(
-        input.runId,
-        input.pinned,
-      );
-      return { ok: true };
-    },
-  );
-
-  // Insights — the whole screen's analytics payload in one read over the
-  // central `run_summary` ledger (chat turns + automation fires).
-  ipcMain.handle(
-    Channel.INSIGHTS_SUMMARY,
-    async (_e, input?: { windowDays?: number }): Promise<InsightsSummary> => {
-      const settings = await loadSettings();
-      const store = new InsightsStore(getAnalyticsProvider(settings.activeGatewayId));
-      return store.summary(input?.windowDays !== undefined ? { windowDays: input.windowDays } : {});
-    },
-  );
-}
-
-/**
- * Capture the preview iframe inside `win` and write it as a PNG to
- * `<projectDir>/.preview/snapshot.png`. The agent picks it up via its
- * native `Read` tool (or `centraid preview snapshot` for freshness
- * metadata).
- *
- * The renderer tags the preview iframe with `data-centraid-app="1"`;
- * we use `executeJavaScript` to read its bounding rect, then clip
- * `capturePage` to that region so the agent sees the app, not the
- * surrounding chrome. Failures (no preview tab open yet, no
- * `index.html` scaffolded) are reported via the snapshot file's
- * absence — the agent's `centraid preview snapshot` call returns
- * `{ exists: false }` and the agent adapts.
- */
-async function capturePreviewSnapshot(win: BrowserWindow, projectDir: string): Promise<void> {
-  if (win.isDestroyed()) return;
-  const dir = path.join(projectDir, '.preview');
-  const file = path.join(dir, 'snapshot.png');
-  // Drop any prior snapshot up front so a failed capture (hidden preview tab,
-  // missing iframe, capturePage throw) can't leave a stale image the agent
-  // then treats as fresh. Re-created below iff capture succeeds this turn.
-  await fs.rm(file, { force: true }).catch(() => undefined);
-
-  const rect = (await win.webContents.executeJavaScript(
-    `(() => {
-      const f = document.querySelector('iframe[data-centraid-app="1"]');
-      if (!f) return null;
-      const r = f.getBoundingClientRect();
-      if (r.width < 1 || r.height < 1) return null;
-      return { x: r.x, y: r.y, width: r.width, height: r.height };
-    })()`,
-  )) as { x: number; y: number; width: number; height: number } | null;
-
-  if (!rect) return;
-
-  const image = await win.webContents.capturePage({
-    x: Math.max(0, Math.round(rect.x)),
-    y: Math.max(0, Math.round(rect.y)),
-    width: Math.max(1, Math.round(rect.width)),
-    height: Math.max(1, Math.round(rect.height)),
-  });
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(file, image.toPNG());
-}
-
-/** Stop and forget the session associated with a closing window. */
-export async function disposeWindowSession(windowId: number): Promise<void> {
-  const handle = sessions.get(windowId);
-  if (handle) await handle.stop().catch(() => {});
-  sessions.delete(windowId);
+  // The run feed / single-run / node-timeline / pin-run reads and
+  // INSIGHTS_SUMMARY moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot — they were
+  // pure proxies over the gateway's `/centraid/_automations` +
+  // `/centraid/_insights` routes with no main-side state.
 }
