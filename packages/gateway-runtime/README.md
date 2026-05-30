@@ -1,6 +1,6 @@
 # @centraid/gateway-runtime
 
-Host-agnostic centraid gateway. Wires [`@centraid/runtime-core`](../runtime-core) +
+Host-agnostic centraid gateway. Wires [`@centraid/app-engine`](../app-engine) +
 [`@centraid/agent-runtime`](../agent-runtime) + stores + chat runner against
 injected paths and secrets, and starts an HTTP server in front of it.
 
@@ -109,7 +109,7 @@ the daemon ships intentionally narrow:
   install` + restart, by design.
 
 These build cleanly on top of the slice this package lands — no further
-`runtime-core` API changes are needed.
+`app-engine` API changes are needed.
 
 ## Tests
 

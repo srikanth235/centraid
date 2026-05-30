@@ -8,7 +8,7 @@
  *
  * The string-pref reader mirrors the previous helper in the desktop's
  * `local-runtime.ts`. Kept in-package (rather than reused from
- * runtime-core) because it's a tiny utility and the only consumer is
+ * app-engine) because it's a tiny utility and the only consumer is
  * `serve()`'s prefs loader.
  */
 

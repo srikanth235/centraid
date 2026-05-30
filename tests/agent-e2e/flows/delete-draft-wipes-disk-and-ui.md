@@ -1,7 +1,7 @@
 # Flow: Delete draft — disk + UI cleaned, persists across restart
 
 ## Goal
-Deleting a draft via the tile context menu must (a) remove the project
+Deleting a draft via the tile context menu must (a) remove the app
 directory from disk, (b) remove the draft tile from APPS, and (c) persist both
 across an Electron restart. Exercises the full tile-menu → confirm-modal →
 IPC delete chain.
@@ -11,17 +11,17 @@ templates are only consumed by *publish*, not clone. The flow asserts this
 explicitly so the assumption doesn't drift.
 
 ## Setup
-Fresh `userData` and `projectsDir`.
+Fresh `userData` and `appsDir`.
 
 ## Steps
 1. Click the Hydrate template → wait for builder → Back to home.
-2. Verify: 1 draft tile under APPS, Hydrate still under TEMPLATES, 1 project
+2. Verify: 1 draft tile under APPS, Hydrate still under TEMPLATES, 1 app
    directory on disk.
 3. Click the "More" button (`.tile-more-btn`) on the Hydrate draft.
 4. Click "Delete draft" in the context menu.
 5. Confirm in the modal.
 6. Wait for the draft tile to disappear.
-7. Verify: 0 drafts, 0 project dirs, Hydrate still under TEMPLATES.
+7. Verify: 0 drafts, 0 app dirs, Hydrate still under TEMPLATES.
 8. Restart Electron.
 9. Same verification as step 7.
 

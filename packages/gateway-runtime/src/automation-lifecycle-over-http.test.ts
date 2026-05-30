@@ -18,11 +18,11 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import {
-  scaffoldProjectFiles,
+  scaffoldAppFiles,
   setAutomationEnabledInFiles,
   deleteAutomationFromFiles,
   type ScaffoldFile,
-} from '@centraid/builder-harness';
+} from '@centraid/agent-harness';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 import type { SecretsProvider } from './secrets.ts';
@@ -54,7 +54,7 @@ function auth(): Record<string, string> {
 // `automations/digest/`. Built from the canonical scaffold so the app.json
 // is realistic; the automation manifest is appended manually.
 function uiAppWithAutomation(enabled: boolean): ScaffoldFile[] {
-  const base = scaffoldProjectFiles('notes', { name: 'Notes' }).filter(
+  const base = scaffoldAppFiles('notes', { name: 'Notes' }).filter(
     (f) => f.path !== 'automations/README.md',
   );
   return [

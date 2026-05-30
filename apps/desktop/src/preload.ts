@@ -12,12 +12,12 @@ const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
 
-  // Project create/files/write/delete/update-meta + publish + templates clone
+  // App create/files/write/delete/update-meta + publish + templates clone
   // + automation create/enable/delete moved to the renderer's direct HTTP
   // client (renderer/gateway-client.ts) under the thin-client pivot. The
   // preview iframe points at the gateway draft URL (Phase 4), so only the
   // local-only reveal-in-Finder stays on IPC.
-  PROJECTS_OPEN: 'centraid:projects:open',
+  APPS_OPEN: 'centraid:apps:open',
 
   PUBLISH_STATUS: 'centraid:publish:status',
   PUBLISH_EVENT: 'centraid:publish:event',
@@ -76,11 +76,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   saveSettings: (patch: Record<string, unknown>) =>
     ipcRenderer.invoke(Channel.SETTINGS_SAVE, patch),
 
-  // Projects: list/create/files/write/delete/update-meta moved to the
+  // Apps: list/create/files/write/delete/update-meta moved to the
   // renderer's direct HTTP client (renderer/gateway-client.ts) under the
   // thin-client pivot. The preview iframe points at the gateway draft URL
   // (Phase 4), so only the local-only reveal-in-Finder stays on IPC.
-  openProjectFolder: (input: { id: string }) => ipcRenderer.invoke(Channel.PROJECTS_OPEN, input),
+  openAppFolder: (input: { id: string }) => ipcRenderer.invoke(Channel.APPS_OPEN, input),
 
   // The in-process AGENT_* builder retired with the unified chat (issue
   // #141, Phase 3): the builder + the app-view data chat both stream the

@@ -5,7 +5,7 @@ title: 'Automations'
 
 # Automations
 
-An **automation** is an app-owned project that fires on a **trigger** instead of a UI click. The trigger is a cron schedule, an inbound webhook POST, or an explicit "Run now." When it fires, a JS handler runs in a worker thread with a curated `ctx` surface — tools, agent turns, KV state, prior runs, cross-automation invocation.
+An **automation** is an app-owned background job that fires on a **trigger** instead of a UI click. The trigger is a cron schedule, an inbound webhook POST, or an explicit "Run now." When it fires, a JS handler runs in a worker thread with a curated `ctx` surface — tools, agent turns, KV state, prior runs, cross-automation invocation.
 
 ## Where they live
 

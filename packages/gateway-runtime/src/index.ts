@@ -1,7 +1,7 @@
 /*
  * @centraid/gateway-runtime
  *
- * Host-agnostic centraid gateway. `serve()` wires `runtime-core` +
+ * Host-agnostic centraid gateway. `serve()` wires `app-engine` +
  * `agent-runtime` + stores + chat runner against injected paths and
  * secrets, and starts an HTTP server in front of it. Two callers ship
  * today:

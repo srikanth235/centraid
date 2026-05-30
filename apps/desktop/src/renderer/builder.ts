@@ -3,16 +3,16 @@
 //     the turn runs server-side in the app's draft worktree with the union of
 //     tools, so the builder's "edit my app" chat and the app view's data chat
 //     are one surface on one transport (issue #141, Phase 3)
-//   - the project folder on disk (readProjectFiles for the Code tab)
+//   - the app folder on disk (readAppFiles for the Code tab)
 //   - the openclaw centraid plugin (publish, listVersions, activateVersion)
 // governance: allow-repo-hygiene file-size-limit builder-mode pending split into chat/preview/code modules
 //
 // Layout (modeled on Lovable's IA):
-//   Topbar:    [back][project] [history-btn][sidebar-btn] {Preview|Code} [device|URL|↗|⟳] [Share][primary]
+//   Topbar:    [back][app] [history-btn][sidebar-btn] {Preview|Code} [device|URL|↗|⟳] [Share][primary]
 //   Chat pane: swaps between live chat (chatView='chat') and version history
 //              (chatView='history'). Sidebar-btn collapses the whole pane.
 //   Right pane: Preview (iframe → gateway draft URL: /centraid/_draft/<sid>/<id>/)
-//               or Code (project files, syntax-highlighted).
+//               or Code (app files, syntax-highlighted).
 
 import {
   appSchema,
@@ -26,12 +26,12 @@ import {
   runAutomationNow,
   readAutomationRun,
   listAutomationRuns,
-  readProjectFiles,
-  writeProjectFile,
+  readAppFiles,
+  writeAppFile,
   draftPreviewUrl,
   publish,
-  createProject,
-  updateProjectMeta,
+  createApp,
+  updateAppMeta,
   setAutomationEnabled,
   deleteAutomation,
   streamChat,
@@ -191,7 +191,7 @@ import {
       .slice(0, 40);
   }
 
-  function generateProjectId(seed: string): string {
+  function generateAppId(seed: string): string {
     const slug = slugify(seed) || 'app';
     const suffix = Math.random().toString(36).slice(2, 8);
     return `${slug}-${suffix}`;
@@ -388,13 +388,13 @@ import {
   function openBuilder(opts: BuilderOptions): () => void {
     const { root, el, onExit, initialPrompt, appContext, onAddToHome, onMetaChange } = opts;
 
-    const isUpdateMode = !!opts.projectId;
+    const isUpdateMode = !!opts.appId;
     const isNewBuild = !isUpdateMode && !!initialPrompt;
-    // Automations are first-class projects with their own builder mode:
+    // Automations are first-class apps with their own builder mode:
     // the right pane shows a read-only config view of `automation.json`
     // (which the chat agent fills) instead of an app preview iframe.
-    const projectKind: 'app' | 'automation' = opts.projectKind ?? 'app';
-    const isAutomation = projectKind === 'automation';
+    const appKind: 'app' | 'automation' = opts.appKind ?? 'app';
+    const isAutomation = appKind === 'automation';
     let projName = appContext?.name || (isNewBuild ? 'New app' : 'Untitled');
     // Description still rides on app.json — the inline editor was removed
     // when the subtitle slot became the read-only status row. The value
@@ -403,7 +403,7 @@ import {
     const projIcon: IconNameType = appContext?.iconKey || 'Sparkle';
 
     // ---------- State ----------
-    let projectId: string | undefined = opts.projectId;
+    let appId: string | undefined = opts.appId;
     let chat: ChatMsg[] = [];
     let tab: Tab = isAutomation ? 'config' : 'preview';
     // Latest `automation.json` snapshot, re-read after each agent turn so
@@ -438,7 +438,7 @@ import {
     let currentThinkingMsgIndex = -1; // index of the streaming thinking block
     let pendingToolStarts = new Map<string, number>(); // toolCallId → chat index
     // Set by tool_execution_end when the agent writes/edits a file in the
-    // project. Consumed by turn_end to refresh the preview iframe so the
+    // app. Consumed by turn_end to refresh the preview iframe so the
     // user sees their changes without manually reloading.
     let previewReloadPending = false;
     const FILE_WRITING_TOOLS = new Set(['write', 'edit', 'multi_edit']);
@@ -549,7 +549,7 @@ import {
       });
     }
 
-    // Titlebar app-icon tile — a gradient finish from the project color,
+    // Titlebar app-icon tile — a gradient finish from the app color,
     // matching how app icons are tiled on Home (renderAppCard) and in the
     // App-view brand chip. ~20px to sit inside the identity pill.
     const projIconEl = el('div', {
@@ -736,10 +736,10 @@ import {
     ]);
 
     // Inline-editable title + description. Edits persist to
-    // `app.json#{name,description}` via the updateProjectMeta IPC and also
+    // `app.json#{name,description}` via the updateAppMeta IPC and also
     // fire `onMetaChange` so the home pane can refresh its tile metadata
-    // without waiting for a re-publish. In new-build mode no project file
-    // exists yet, so we only update local state — `createProject` picks up
+    // without waiting for a re-publish. In new-build mode no app file
+    // exists yet, so we only update local state — `createApp` picks up
     // the latest values when the first prompt is sent.
     const projNameEl = el(
       'b',
@@ -763,15 +763,15 @@ import {
       projName = next;
       projNameEl.textContent = next;
       crumbProjName.textContent = isUpdateMode ? `Editing ${next}` : 'Builder';
-      if (projectId) {
-        void updateProjectMeta({ id: projectId, name: next }).catch((err: unknown) => {
+      if (appId) {
+        void updateAppMeta({ id: appId, name: next }).catch((err: unknown) => {
           // Roll back if persistence fails so the UI stays truthful.
           projName = previous;
           projNameEl.textContent = previous;
           crumbProjName.textContent = isUpdateMode ? `Editing ${previous}` : 'Builder';
           showToast(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
         });
-        if (onMetaChange) onMetaChange({ projectId, name: next });
+        if (onMetaChange) onMetaChange({ appId, name: next });
       }
     }
     projNameEl.addEventListener('blur', commitProjNameEdit);
@@ -835,12 +835,12 @@ import {
     }
 
     // In-pane builder header — lives at the top of the chat pane and owns
-    // the project-level affordances (icon, name, status, more menu, Publish).
-    // Project identity belongs to the chat pane (its conversation), not the
+    // the app-level affordances (icon, name, status, more menu, Publish).
+    // App identity belongs to the chat pane (its conversation), not the
     // global window chrome; the chrome row only carries view-context controls
     // (mode tabs, device pill).
     const moreBtn = el('button', {
-      'aria-label': 'More project actions',
+      'aria-label': 'More app actions',
       class: 'cd-tb-btn',
       title: 'More',
       // Wired in a future commit (Share, Rename, Edit description, etc.);
@@ -849,7 +849,7 @@ import {
     });
 
     // Titlebar identity lockup — a soft ink-washed pill carrying the
-    // gradient app-icon, the editable project name, and the status
+    // gradient app-icon, the editable app name, and the status
     // badge. Lands in `.cd-tl-nav` (via `titlebarLead`) so it hugs the
     // back/forward arrows, matching the refined proposal RefinedBuilder.
     // The chat pane no longer carries a header row of its own.
@@ -1136,7 +1136,7 @@ import {
 
       const send = (): void => {
         const text = ta.value.trim();
-        if (!text || generating || !projectId) return;
+        if (!text || generating || !appId) return;
         ta.value = '';
         void sendUserPrompt(text);
       };
@@ -1203,8 +1203,8 @@ import {
       inputWrap.append(wrap);
     }
 
-    // The chat pane has no header row of its own — project identity
-    // (icon + name + status) and the project actions live in the window
+    // The chat pane has no header row of its own — app identity
+    // (icon + name + status) and the app actions live in the window
     // titlebar (refined proposal RefinedBuilder). The chat pane is just a
     // body that swaps between live chat and version history.
     const chatBody = el('div', { class: 'chat-body' });
@@ -1324,7 +1324,7 @@ import {
     }
 
     async function resolvePreviewSrc(): Promise<{ src: string; kind: 'draft' } | undefined> {
-      if (!projectId) return undefined;
+      if (!appId) return undefined;
       // The builder always previews the *draft* worktree (issue #141,
       // Phase 4): the gateway serves the open `desktop-<id>` session under
       // `/centraid/_draft/<sessionId>/<id>/`, so staged chat/file edits show
@@ -1334,7 +1334,7 @@ import {
       // until the draft has an index.html (fresh app mid-generation), which
       // keeps the building skeleton up until the first page is staged.
       try {
-        const r = await draftPreviewUrl(projectId);
+        const r = await draftPreviewUrl(appId);
         if (r.available) return { src: r.url, kind: 'draft' };
       } catch {
         /* swallow — show building skeleton below */
@@ -1383,7 +1383,7 @@ import {
         rightPane.classList.add('has-phone');
       }
 
-      const resolved = projectId ? await resolvePreviewSrc() : undefined;
+      const resolved = appId ? await resolvePreviewSrc() : undefined;
 
       // §B3 — keep the toolbar URL pill in sync with the resolved source.
       if (!resolved) {
@@ -1448,7 +1448,7 @@ import {
     let codeDiffMode = false;
 
     // Unified line diff (LCS) — drives the Code view's Diff toggle. O(mn)
-    // is fine here: project files are capped at 256 KB by readProjectFiles.
+    // is fine here: app files are capped at 256 KB by readAppFiles.
     type DiffRow = { type: 'same' | 'add' | 'del'; text: string; aNum?: number; bNum?: number };
     function lineDiff(aStr: string, bStr: string): DiffRow[] {
       const a = aStr.split('\n');
@@ -1498,22 +1498,22 @@ import {
       codePane.append(workspace);
       rightPaneContent.append(codePane);
 
-      if (!projectId) {
-        workspace.innerHTML = '<div class="empty">No project yet.</div>';
+      if (!appId) {
+        workspace.innerHTML = '<div class="empty">No app yet.</div>';
         return;
       }
-      const pid = projectId;
+      const pid = appId;
 
-      let files: Awaited<ReturnType<typeof readProjectFiles>> = [];
+      let files: Awaited<ReturnType<typeof readAppFiles>> = [];
       try {
-        files = await readProjectFiles({ id: pid });
+        files = await readAppFiles({ id: pid });
       } catch (err) {
         workspace.innerHTML = `<div class="empty">Could not read files: ${escapeHtml(String(err))}</div>`;
         return;
       }
 
       if (files.length === 0) {
-        workspace.innerHTML = '<div class="empty">Empty project.</div>';
+        workspace.innerHTML = '<div class="empty">Empty app.</div>';
         return;
       }
 
@@ -1826,7 +1826,7 @@ import {
         const buf = codeBuffers.get(p);
         if (!buf || buf.current === buf.original) return;
         try {
-          await writeProjectFile({ id: pid, path: p, content: buf.current });
+          await writeAppFile({ id: pid, path: p, content: buf.current });
           buf.original = buf.current;
           showToast(`Saved ${basename(p)}`);
         } catch (err) {
@@ -1972,13 +1972,11 @@ import {
           ),
           menuItem('Revert this file', revertActive, !dirty),
         );
-        // "Open project folder" reveals the on-disk worktree, which only
+        // "Open app folder" reveals the on-disk worktree, which only
         // the local gateway materializes (issue #141). Hide it for a
         // remote gateway — there's no local folder to open.
         if (window.Centraid?.getRuntimeMode() !== 'remote') {
-          menu.append(
-            menuItem('Open project folder', () => void Api().openProjectFolder({ id: pid })),
-          );
+          menu.append(menuItem('Open app folder', () => void Api().openAppFolder({ id: pid })));
         }
         overflow.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -2241,7 +2239,7 @@ import {
       };
 
       async function ensureSchema(force = false): Promise<void> {
-        if (!projectId) {
+        if (!appId) {
           schemaCache = undefined;
           return;
         }
@@ -2249,7 +2247,7 @@ import {
         schemaCache = 'pending';
         schemaError = undefined;
         try {
-          schemaCache = await appSchema({ id: projectId });
+          schemaCache = await appSchema({ id: appId });
         } catch (err) {
           schemaCache = 'error';
           schemaError = err instanceof Error ? err.message : String(err);
@@ -2258,14 +2256,14 @@ import {
       }
 
       async function ensureVersions(force = false): Promise<void> {
-        if (!projectId) {
+        if (!appId) {
           versionsCache = undefined;
           return;
         }
         if (!force && versionsCache !== undefined && versionsCache !== 'error') return;
         versionsCache = 'pending';
         try {
-          versionsCache = await listVersions({ id: projectId });
+          versionsCache = await listVersions({ id: appId });
         } catch {
           // The gateway returns 404/409 before the first publish; treat all
           // failures as "no versions yet" rather than surfacing the raw error.
@@ -2352,9 +2350,9 @@ import {
       };
 
       function drawOverview(): void {
-        if (!projectId) {
+        if (!appId) {
           const empty = el('div', { class: 'cloud-empty' });
-          empty.textContent = 'No project yet.';
+          empty.textContent = 'No app yet.';
           stage.append(empty);
           return;
         }
@@ -2570,9 +2568,9 @@ import {
       }
 
       function drawDatabase(): void {
-        if (!projectId) {
+        if (!appId) {
           const empty = el('div', { class: 'cloud-empty' });
-          empty.textContent = 'No project yet.';
+          empty.textContent = 'No app yet.';
           stage.append(empty);
           return;
         }
@@ -2701,12 +2699,12 @@ import {
         const page = tablePage.get(tableName) ?? 0;
 
         const fetchRows = async (): Promise<void> => {
-          if (!projectId) return;
+          if (!appId) return;
           rowsCache.set(tableName, { kind: 'pending' });
           paint();
           try {
             const r = await appTableRows({
-              id: projectId,
+              id: appId,
               table: tableName,
               limit: ROWS_PAGE_SIZE,
               offset: page * ROWS_PAGE_SIZE,
@@ -2839,8 +2837,8 @@ import {
       // /TRUNCATE/INSERT without WHERE — anything non-read) get a confirm
       // dialog. Read-style statements run straight through.
       function drawSqlEditor(): void {
-        if (!projectId) {
-          stage.append(el('div', { class: 'cloud-empty' }, 'No project yet.'));
+        if (!appId) {
+          stage.append(el('div', { class: 'cloud-empty' }, 'No app yet.'));
           return;
         }
 
@@ -2950,7 +2948,7 @@ import {
           drawStage(); // re-paint with disabled button + cleared output
 
           try {
-            const r = await appQuery({ id: projectId!, sql });
+            const r = await appQuery({ id: appId!, sql });
             sqlResult = r;
           } catch (err) {
             sqlError = err instanceof Error ? err.message : String(err);
@@ -2972,8 +2970,8 @@ import {
       // poll while the section is active. Polling pauses when the user
       // navigates away (rail click in drawRail clears the handle).
       function drawLogs(): void {
-        if (!projectId) {
-          stage.append(el('div', { class: 'cloud-empty' }, 'No project yet.'));
+        if (!appId) {
+          stage.append(el('div', { class: 'cloud-empty' }, 'No app yet.'));
           return;
         }
 
@@ -3090,7 +3088,7 @@ import {
       }
 
       async function refreshLogs(): Promise<void> {
-        if (!projectId) return;
+        if (!appId) return;
         if (logsCache === 'pending') return;
         const prior = logsCache;
         logsCache = 'pending';
@@ -3104,7 +3102,7 @@ import {
           }
         }
         try {
-          const r = await appLogs({ id: projectId, limit: 200 });
+          const r = await appLogs({ id: appId, limit: 200 });
           logsCache = r.entries;
           logsError = undefined;
         } catch (err) {
@@ -3119,8 +3117,8 @@ import {
       }
 
       function drawAutomations(): void {
-        if (!projectId) {
-          stage.append(el('div', { class: 'cloud-empty' }, 'No project yet.'));
+        if (!appId) {
+          stage.append(el('div', { class: 'cloud-empty' }, 'No app yet.'));
           return;
         }
 
@@ -3145,7 +3143,7 @@ import {
 
         if (automationsCache.length === 0) {
           const e = el('div', { class: 'cloud-empty' });
-          e.innerHTML = `No automations yet.<br><span class="cloud-stat-sub">Ask the builder to "set up an automation that runs every…" or drop a manifest into the project's <code>automations/</code> folder, then republish to deploy.</span>`;
+          e.innerHTML = `No automations yet.<br><span class="cloud-stat-sub">Ask the builder to "set up an automation that runs every…" or drop a manifest into the app's <code>automations/</code> folder, then republish to deploy.</span>`;
           wrap.append(e);
           stage.append(wrap);
           return;
@@ -3200,11 +3198,7 @@ import {
         // Metadata strip: automation id · generated-by · model.
         const meta = el('div', { class: 'cloud-automation-meta' });
         meta.append(
-          el(
-            'span',
-            { class: 'cloud-automation-meta-item', title: 'Automation project id' },
-            row.id,
-          ),
+          el('span', { class: 'cloud-automation-meta-item', title: 'Automation app id' }, row.id),
         );
         if (row.manifest.requires.model) {
           meta.append(
@@ -3258,15 +3252,15 @@ import {
       }
 
       async function refreshAutomations(): Promise<void> {
-        if (!projectId) return;
+        if (!appId) return;
         if (automationsCache === 'pending') return;
         const prior = automationsCache;
         automationsCache = 'pending';
         if (prior === undefined && active === 'automations') drawStage();
         try {
-          // Automations are user-owned projects; this panel shows the
+          // Automations are user-owned apps; this panel shows the
           // ones associated with the app being built (issue #91).
-          const pid = projectId;
+          const pid = appId;
           const all = await listAutomations();
           automationsCache = all.filter((r) => r.manifest.apps?.includes(pid));
           automationsError = undefined;
@@ -3281,7 +3275,7 @@ import {
         row: CentraidAutomationRow,
         checkbox: HTMLInputElement,
       ): Promise<void> {
-        if (!projectId) return;
+        if (!appId) return;
         const next = checkbox.checked;
         try {
           await setAutomationEnabled({ automationId: row.ref, enabled: next });
@@ -3296,7 +3290,7 @@ import {
       }
 
       async function onRunAutomation(row: CentraidAutomationRow): Promise<void> {
-        if (!projectId) return;
+        if (!appId) return;
         automationRunState.set(row.name, { kind: 'running' });
         if (active === 'automations') drawStage();
         try {
@@ -3336,9 +3330,9 @@ import {
       }
 
       async function onDeleteAutomation(row: CentraidAutomationRow): Promise<void> {
-        if (!projectId) return;
+        if (!appId) return;
         const ok = confirm(
-          `Delete automation "${row.name}"?\n\nThis permanently removes the automation project directory and its run history.`,
+          `Delete automation "${row.name}"?\n\nThis permanently removes the automation app directory and its run history.`,
         );
         if (!ok) return;
         try {
@@ -3360,14 +3354,14 @@ import {
     // chat-pane History view (chatView === 'history'); kept generic so a
     // future right-pane history view could reuse it.
     async function renderHistoryInto(list: HTMLElement): Promise<void> {
-      if (!projectId) {
-        list.innerHTML = '<div class="empty">No project yet.</div>';
+      if (!appId) {
+        list.innerHTML = '<div class="empty">No app yet.</div>';
         return;
       }
 
       let result: Awaited<ReturnType<typeof listVersions>>;
       try {
-        result = await listVersions({ id: projectId });
+        result = await listVersions({ id: appId });
       } catch (err) {
         list.innerHTML = `<div class="empty">No versions yet. Publish to create the first one.</div>`;
         // Fall back to empty list — gateway returns 404/409 if app isn't yet uploaded.
@@ -3417,7 +3411,7 @@ import {
                         onClick: async () => {
                           try {
                             await activateVersion({
-                              id: projectId!,
+                              id: appId!,
                               versionId: v.versionId,
                             });
                             showToast(`Restored to ${shortVersionTitle(v)}`);
@@ -3447,7 +3441,7 @@ import {
     // same worktree the Code tab edits), so the agent's file edits stage in
     // the draft and the preview reflects it; Publish is the explicit flip.
     //
-    // 'continue' reuses the project's most recent session so the gateway
+    // 'continue' reuses the app's most recent session so the gateway
     // resumes the same adapter thread across builder reopens; 'fresh' always
     // mints a new session (first build — don't append onto a stale thread).
     async function ensureChatWindow(
@@ -3642,21 +3636,16 @@ import {
     }
 
     async function sendUserPrompt(text: string): Promise<void> {
-      if (!projectId) return;
+      if (!appId) return;
       pushMessage({ kind: 'user', text });
       generating = true;
       currentAiMsgIndex = -1;
       currentThinkingMsgIndex = -1;
       renderChat();
       try {
-        const windowId = await ensureChatWindow(projectId, 'continue');
+        const windowId = await ensureChatWindow(appId, 'continue');
         agentAbort = new AbortController();
-        await streamChat(
-          projectId,
-          { windowId, message: text },
-          handleStreamEvent,
-          agentAbort.signal,
-        );
+        await streamChat(appId, { windowId, message: text }, handleStreamEvent, agentAbort.signal);
         // Stream ended; settle in case it closed without a terminal event.
         if (generating) finishAgentTurn();
       } catch (err) {
@@ -3671,8 +3660,8 @@ import {
     }
 
     async function bootstrap(): Promise<void> {
-      if (isAutomation && projectId) {
-        // The automation project is scaffolded as a draft before the
+      if (isAutomation && appId) {
+        // The automation app is scaffolded as a draft before the
         // builder opens, so this is always a "reopen" — load the manifest
         // snapshot, then seed the intro. The gateway resumes the prior
         // adapter thread via the reused chat session (ensureChatWindow).
@@ -3693,21 +3682,21 @@ import {
         return;
       }
 
-      if (isUpdateMode && projectId) {
-        // No "Editing existing project" divider — the project context lives
+      if (isUpdateMode && appId) {
+        // No "Editing existing app" divider — the app context lives
         // in the header now (icon + name + version + sync state). Real chat
         // history loads below; nothing to seed.
         chat = [];
         renderChat();
-        // Probe whether this project is actually published on the gateway.
+        // Probe whether this app is actually published on the gateway.
         // `appLiveUrl` only builds a URL string — it never fails — so it
         // can't tell us whether the gateway has the app or is even running.
         // `listVersions` actually contacts the gateway and 404s when the app
         // isn't there, so it's the honest probe.
         try {
-          const versions = await listVersions({ id: projectId });
+          const versions = await listVersions({ id: appId });
           if (versions.activeVersion) {
-            const r = await appLiveUrl({ id: projectId });
+            const r = await appLiveUrl({ id: appId });
             liveUrl = r.url;
             lastPublishedVersionId = versions.activeVersion;
             // Hydrate the header status: total version count drives the
@@ -3721,7 +3710,7 @@ import {
           /* gateway down, app unknown, or never published — local preview
              takes over via resolvePreviewSrc(). */
         }
-        // Seed a fresh pane. The gateway resumes the project's prior adapter
+        // Seed a fresh pane. The gateway resumes the app's prior adapter
         // thread on the first turn via the reused chat session
         // (ensureChatWindow → most recent session), so the agent keeps
         // context even though the pane starts empty across reopens.
@@ -3749,7 +3738,7 @@ import {
       }
 
       // Fresh build: scaffold + open a fresh chat session + send first prompt.
-      const id = generateProjectId(initialPrompt);
+      const id = generateAppId(initialPrompt);
       // Date divider carries the conversation start time (refined proposal
       // RBChat — "Today · 14:22").
       const now = new Date();
@@ -3758,20 +3747,20 @@ import {
         '0',
       )}`;
       pushMessage({ kind: 'divider', text: `Today · ${hhmm}` });
-      pushMessage({ kind: 'status', text: 'Setting up project…', spinning: true });
+      pushMessage({ kind: 'status', text: 'Setting up app…', spinning: true });
       try {
-        await createProject({ id, name: projName, version: '0.1.0' });
-        projectId = id;
+        await createApp({ id, name: projName, version: '0.1.0' });
+        appId = id;
         // Subtitle holds the editable description, not a status — leave it
         // alone so the user's placeholder/value isn't clobbered.
       } catch (err) {
-        pushMessage({ kind: 'status', text: `Could not create project: ${String(err)}` });
+        pushMessage({ kind: 'status', text: `Could not create app: ${String(err)}` });
         return;
       }
 
       try {
         // First build → a FRESH chat session so the initial prompt isn't
-        // appended onto a stale thread from a prior project at the same id.
+        // appended onto a stale thread from a prior app at the same id.
         chatWindowId = (await createChatSession(id, projName)).id;
       } catch (err) {
         pushMessage({ kind: 'status', text: `Could not start chat: ${String(err)}` });
@@ -3797,12 +3786,12 @@ import {
     // Re-read `automation.json` and repaint the header + config pane.
     // Called on bootstrap and after every agent turn that touched files.
     async function refreshAutomationRow(): Promise<void> {
-      if (!projectId) return;
+      if (!appId) return;
       try {
         // The builder opens an automation app by its folder id; resolve
         // the single automation it owns to get the `<appId>/<id>` handle.
         const all = await listAutomations();
-        const row = all.find((r) => r.ownerApp === projectId);
+        const row = all.find((r) => r.ownerApp === appId);
         if (row) automationRow = row;
       } catch {
         /* keep the last good snapshot */
@@ -3817,7 +3806,7 @@ import {
     }
 
     async function handleToggleEnabled(): Promise<void> {
-      if (!projectId || automationBusy || !automationRow) return;
+      if (!appId || automationBusy || !automationRow) return;
       const ref = automationRow.ref;
       const next = !(automationRow.enabled === true);
       automationBusy = true;
@@ -3838,7 +3827,7 @@ import {
 
     // Test fire — run the handler once now, surfacing the outcome in chat.
     async function runAutomationOnce(): Promise<void> {
-      if (!projectId || automationBusy || !automationRow) return;
+      if (!appId || automationBusy || !automationRow) return;
       const ref = automationRow.ref;
       automationBusy = true;
       refreshSyncStatus();
@@ -4074,7 +4063,7 @@ import {
       );
       rightPaneContent.append(wrap);
 
-      if (!projectId || !automationRow) return;
+      if (!appId || !automationRow) return;
       void listAutomationRuns({ automationId: automationRow.ref, limit: 20 })
         .then((runs) => {
           list.innerHTML = '';
@@ -4107,8 +4096,8 @@ import {
 
     // ---------- Publish ----------
     async function handlePublish(): Promise<void> {
-      if (!projectId) {
-        showToast('No project to publish');
+      if (!appId) {
+        showToast('No app to publish');
         return;
       }
       if (publishing) return;
@@ -4121,9 +4110,9 @@ import {
       });
       primaryBtn.setAttribute('disabled', '');
       try {
-        const result = await publish({ id: projectId });
+        const result = await publish({ id: appId });
         lastPublishedVersionId = result.versionId;
-        liveUrl = (await appLiveUrl({ id: projectId })).url;
+        liveUrl = (await appLiveUrl({ id: appId })).url;
         // Bump the header status: every publish increments the version
         // count and resets the relative edit time to "just now".
         appVersionCount += 1;
@@ -4142,7 +4131,7 @@ import {
         if (onAddToHome) {
           onAddToHome({
             prompt: initialPrompt,
-            projectId,
+            appId,
             name: projName,
             versionId: result.versionId,
           });
@@ -4185,6 +4174,16 @@ import {
             : `Migration failed: ${msg}`;
           updateMessage(statusIdx, { kind: 'status', text: detail });
           showToast(file ? `Migration ${file} failed` : 'Migration failed');
+        } else if (/no_changes|no staged changes/i.test(msg)) {
+          // The draft is byte-identical to the live version — nothing to
+          // publish. Common right after a clone/scaffold (which already
+          // landed a baseline on `main`) when the user hits Publish before
+          // making any edits. This isn't a failure; surface it calmly.
+          updateMessage(statusIdx, {
+            kind: 'status',
+            text: 'Already up to date — no changes to publish since the last version.',
+          });
+          showToast('No changes to publish.');
         } else {
           updateMessage(statusIdx, { kind: 'status', text: `Publish failed: ${msg}` });
         }
@@ -4202,7 +4201,7 @@ import {
     // ---------- Mount ----------
     // The builder lives inside a cd-window grid (sidebar column + main
     // column). There's no more full-width cd-app-strip — the chat pane
-    // owns its own header (project meta + Publish), the right pane
+    // owns its own header (app meta + Publish), the right pane
     // owns its own toolbar (tabs + URL bar), and the window chrome
     // (cd-tl-main) carries just back/forward/sidebar — matching the
     // v2 mockup's per-pane layout.
@@ -4223,11 +4222,11 @@ import {
       status: 'new',
     }));
     const sidebar = window.Chrome.buildSidebar({
-      activeId: opts.projectId,
+      activeId: opts.appId,
       apps: sidebarApps,
       // Drafts come from the shell's hydrated cache (passed via
       // BuilderOptions). Older callers may omit them — default to empty.
-      // The currently-open project will appear here too when it's a draft,
+      // The currently-open app will appear here too when it's a draft,
       // and `activeId` highlights it just like the home sidebar does.
       drafts: opts.drafts ?? [],
       onAppClick: (id: string) => {
@@ -4314,7 +4313,7 @@ import {
       sidebar,
       sidebarOpen: builderSidebarOpen,
       // The app-identity lockup hugs the back/forward arrows (titlebarLead);
-      // the project actions — history, more, Publish — ride the trailing
+      // the app actions — history, more, Publish — ride the trailing
       // edge (titlebarRight). The chat pane no longer carries a header.
       // §B3 — the tabs + URL pill + device pill live in the right pane's
       // own toolbar (`rb-toolbar`), not the window chrome.

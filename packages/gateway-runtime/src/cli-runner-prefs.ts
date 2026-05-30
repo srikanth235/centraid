@@ -14,7 +14,7 @@
  * remains the source of truth.
  */
 
-import type { UserStore } from '@centraid/runtime-core';
+import type { UserStore } from '@centraid/app-engine';
 import type { DaemonConfig } from './cli-config.js';
 
 const RUNNER_KEYS = [

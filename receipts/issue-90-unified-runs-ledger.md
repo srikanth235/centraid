@@ -64,7 +64,7 @@ are unchanged; new ledger fields are additive and optional.
 
 ### Commit 2 — per-model token pricing
 
-Adds [`model-pricing.ts`](../packages/runtime-core/src/model-pricing.ts) —
+Adds [`model-pricing.ts`](../packages/app-engine/src/model-pricing.ts) —
 a USD-per-million-token price table (`priceForModel`) and a
 `costForUsage(model, usage)` converter the ledger uses to freeze
 `run_nodes.cost_usd` at write time. An unknown model returns `undefined`
@@ -152,7 +152,7 @@ analytics layer the Insights screen reads.
   freezes `cost_usd` via `costForUsage` — so chat turns now carry the
   same per-step token + cost accounting automation fires already had.
 - **`InsightsStore`.** New read-only store over the activity DB
-  ([`insights-store.ts`](../packages/runtime-core/src/insights-store.ts)).
+  ([`insights-store.ts`](../packages/app-engine/src/insights-store.ts)).
   `summary({ windowDays })` returns the whole screen in one read: KPIs
   (tokens / cost / forecast / generations / retries / apps-touched, plus
   a placeholder `quotaTokens` constant), a daily consumption series, a

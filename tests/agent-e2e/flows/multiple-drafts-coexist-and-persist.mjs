@@ -58,16 +58,16 @@ await runFlow('multiple-drafts-coexist-and-persist', async (ctx) => {
   }
   ctx.note('all three drafts present under APPS');
 
-  // ---- and on disk: three project directories ----
-  const projectsBefore = await fs.readdir(ctx.state.projectsDir);
-  if (projectsBefore.length !== 3) {
+  // ---- and on disk: three app directories ----
+  const appsBefore = await fs.readdir(ctx.state.appsDir);
+  if (appsBefore.length !== 3) {
     throw new Error(
-      `expected 3 project dirs on disk, found ${projectsBefore.length}: ${projectsBefore.join(', ')}`,
+      `expected 3 app dirs on disk, found ${appsBefore.length}: ${appsBefore.join(', ')}`,
     );
   }
-  ctx.note(`on disk: ${projectsBefore.sort().join(', ')}`);
+  ctx.note(`on disk: ${appsBefore.sort().join(', ')}`);
 
-  // ---- restart — drafts must rehydrate from projectsDir ----
+  // ---- restart — drafts must rehydrate from appsDir ----
   await ctx.restart();
   await ctx.shot('after-restart');
 

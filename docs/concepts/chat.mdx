@@ -30,7 +30,7 @@ The session key the agent sees is `centraid-chat:<appId>:w<windowId>`. The gatew
 
 ## The two backends
 
-The `_chat` routes live in `@centraid/runtime-core` and are served identically on both hosts. What differs is which agent backend the host wires in:
+The `_chat` routes live in `@centraid/app-engine` and are served identically on both hosts. What differs is which agent backend the host wires in:
 
 ### OpenClaw embedded agent (remote gateway)
 
@@ -55,7 +55,7 @@ Identical contract either way:
 - Events cover assistant tokens, tool calls, tool results, and lifecycle markers.
 - Resume support is automatic — the harness sends the window id; the gateway looks up the adapter session and feeds it back into the engine.
 
-> **TODO(#120)** — list the exact normalized event types. The README references "normalized events" but I haven't read `runtime-core/src/chat/events.ts` (or wherever the event schema lives) to enumerate them.
+> **TODO(#120)** — list the exact normalized event types. The README references "normalized events" but I haven't read `app-engine/src/chat/events.ts` (or wherever the event schema lives) to enumerate them.
 
 ## Why the chat surface is per-app, not per-user
 

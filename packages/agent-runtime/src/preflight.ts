@@ -12,7 +12,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import type { ProviderStatus, RunnerStatus } from '@centraid/runtime-core';
+import type { ProviderStatus, RunnerStatus } from '@centraid/app-engine';
 import type { OpenAICompatProvider, RunnerKind, RunnerPrefs } from './types.js';
 
 const VERSION_TIMEOUT_MS = 5_000;

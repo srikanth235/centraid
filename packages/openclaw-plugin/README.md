@@ -43,7 +43,7 @@ The dispatcher validates `input` against the JSON Schema declared in `app.json` 
 
 ### Chat surface (host-agnostic)
 
-The `_chat` routes live in `@centraid/runtime-core` and are served identically on both gateway hosts. The plugin/host owns initiation but never the model loop:
+The `_chat` routes live in `@centraid/app-engine` and are served identically on both gateway hosts. The plugin/host owns initiation but never the model loop:
 
 - **OpenClaw** injects an in-process `ChatRunner` that calls `api.runtime.agent.runEmbeddedAgent`. Plugin-registered tools (`centraid_sql_*`) dispatch server-side.
 - **Desktop embedded local runtime** uses `@centraid/agent-runtime`'s `makeChatRunner`, which drives codex app-server (subprocess) or the Claude Agent SDK (in-process). The agent shells out to the bundled `centraid` CLI for SQL access.

@@ -32,7 +32,7 @@
  *
  * Sandbox: we pin `sandbox: 'workspace-write'` and `approvalPolicy: 'never'`
  * so the agent can write files inside `cwd` without prompting. The
- * caller already scopes `cwd` to a per-app/per-project dir. Enum strings
+ * caller already scopes `cwd` to a per-app dir. Enum strings
  * are kebab-case per codex's `SandboxMode` serde definition — camelCase
  * (e.g. `workspaceWrite`) is rejected at `thread/start` with
  * `unknown variant`.
@@ -45,7 +45,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
-import type { ChatStreamEvent } from '@centraid/runtime-core';
+import type { ChatStreamEvent } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
 import type { OpenAICompatProvider } from './types.js';
 import { materializeCodexHome } from './codex-provider-config.js';

@@ -5,8 +5,8 @@
 // limit while sharing the stage-vs-publish fork and error mapping.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { HarnessError } from '@centraid/builder-harness';
-import type { AutomationHistoryKeep } from '@centraid/runtime-core';
+import { HarnessError } from '@centraid/agent-harness';
+import type { AutomationHistoryKeep } from '@centraid/app-engine';
 import { AppsStore, AppsStoreError } from '@centraid/apps-store';
 import { validateManifestAt } from './apps-store-routes.js';
 import { sendJson, writeFileMap, type FileMapEntry } from './route-helpers.js';
@@ -55,6 +55,35 @@ export async function ensureSession(store: AppsStore, sessionId: string): Promis
   }
 }
 
+/**
+ * Prepare the session a lifecycle mutation will stage into.
+ *
+ * `ephemeral` sessions are the caller-defaulted `lifecycle-<appId>` ones a
+ * one-shot create/clone/meta/automation mutation uses when the renderer
+ * didn't supply its own editing session. They must start *fresh off current
+ * `main`*: a previous one-shot may have left an orphan worktree branched off
+ * a stale `main` (e.g. a clone that published a baseline then the app was
+ * deleted), and reusing it would stage onto pre-delete state. We close any
+ * leftover (idempotent) and open a clean one; {@link stageAndMaybePublish}
+ * closes it again once the publish lands.
+ *
+ * Non-ephemeral sessions are the renderer's persistent `desktop-<appId>`
+ * editing sessions — reuse them in place via {@link ensureSession} and leave
+ * them open across the mutation.
+ */
+export async function prepareLifecycleSession(
+  store: AppsStore,
+  sessionId: string,
+  ephemeral: boolean,
+): Promise<void> {
+  if (!ephemeral) {
+    await ensureSession(store, sessionId);
+    return;
+  }
+  await store.closeSession(sessionId);
+  await store.openSession(sessionId);
+}
+
 /** A session id derived from the app id, when the caller didn't supply one. */
 export function defaultSessionId(appId: string): string {
   return `lifecycle-${appId}`;
@@ -84,6 +113,14 @@ export async function stageAndMaybePublish(
     files: ReadonlyArray<FileMapEntry>;
     publish: boolean;
     message: string;
+    /**
+     * When true, close the session after a successful publish — the session
+     * was a one-shot `lifecycle-<appId>` (see {@link prepareLifecycleSession}),
+     * not the renderer's persistent editing session, so leaving it open would
+     * orphan a worktree. No-op on the staged (`publish:false`) path: a staged
+     * draft must keep its session so it stays previewable.
+     */
+    ephemeralSession?: boolean;
   },
 ): Promise<void> {
   const appDir = await opts.store.snapshotSessionAppDir(input.sessionId, input.appId);
@@ -101,6 +138,7 @@ export async function stageAndMaybePublish(
   });
   await opts.ensureRegistered(input.appId);
   opts.reconcile();
+  if (input.ephemeralSession) await opts.store.closeSession(input.sessionId);
 }
 
 /** Map a lifecycle error to a status + JSON body. */

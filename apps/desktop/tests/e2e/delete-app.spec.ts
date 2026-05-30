@@ -9,7 +9,7 @@ import {
   launchApp,
   makeEnv,
   openTileMenu,
-  seedDraftProject,
+  seedDraftApp,
   seedPublishedApp,
   seedSettings,
   startMockGateway,
@@ -21,7 +21,7 @@ import {
  * End-to-end coverage for the app-deletion flow (the same five scenarios laid
  * out in the manual smoke-test plan). Each test owns:
  *
- *   - a fresh tmp workspace (userData + projectsDir)
+ *   - a fresh tmp workspace (userData + appsDir)
  *   - a fresh mock gateway on a random loopback port
  *   - its own Electron process
  *
@@ -44,9 +44,9 @@ test.afterEach(async () => {
 
 // ---------- Scenario A: draft delete (no gateway) ----------
 
-test('A — deleting a draft wipes the project dir and never touches the gateway', async () => {
+test('A — deleting a draft wipes the app dir and never touches the gateway', async () => {
   const draftId = 'draft-grocery-abc';
-  await seedDraftProject(env, { id: draftId, name: 'Grocery list' });
+  await seedDraftApp(env, { id: draftId, name: 'Grocery list' });
 
   const { app, page } = await launchApp(env);
   try {
@@ -58,8 +58,8 @@ test('A — deleting a draft wipes the project dir and never touches the gateway
     await expect(page.locator('.app-tile', { hasText: 'Grocery list' })).toHaveCount(0);
     await expect(page.locator('.global-toast')).toContainText('Deleted draft');
 
-    // Project dir is gone on disk.
-    await expect(fs.stat(path.join(env.projectsDir, draftId))).rejects.toThrow(/ENOENT/);
+    // App dir is gone on disk.
+    await expect(fs.stat(path.join(env.appsDir, draftId))).rejects.toThrow(/ENOENT/);
 
     // Gateway never received a DELETE — drafts are local-only.
     expect(gateway.calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
@@ -92,8 +92,8 @@ test('B — deleting a published app calls the gateway and removes local state',
     expect(deletes[0]!.pathname).toBe(`/centraid/_apps/${appId}`);
     expect(deletes[0]!.auth).toMatch(/^Bearer /);
 
-    // Local project dir is gone.
-    await expect(fs.stat(path.join(env.projectsDir, appId))).rejects.toThrow(/ENOENT/);
+    // Local app dir is gone.
+    await expect(fs.stat(path.join(env.appsDir, appId))).rejects.toThrow(/ENOENT/);
 
     // userApps in localStorage no longer contains the deleted app.
     const stored = await page.evaluate(
@@ -129,8 +129,8 @@ test('C — gateway offline: surfaces error, tile remains, no local cleanup', as
     // Tile is still on home — user can retry.
     await expect(page.locator('.app-tile', { hasText: 'Daily Habits' })).toBeVisible();
 
-    // Local project dir is untouched.
-    await expect(fs.stat(path.join(env.projectsDir, appId))).resolves.toBeTruthy();
+    // Local app dir is untouched.
+    await expect(fs.stat(path.join(env.appsDir, appId))).resolves.toBeTruthy();
 
     // userApps entry preserved.
     const stored = await page.evaluate(
@@ -164,7 +164,7 @@ test('D — 404 from gateway is treated as success (deregister is idempotent)', 
     await expect(page.locator('.app-tile', { hasText: 'Pomodoro' })).toHaveCount(0);
 
     // Local cleanup still ran.
-    await expect(fs.stat(path.join(env.projectsDir, appId))).rejects.toThrow(/ENOENT/);
+    await expect(fs.stat(path.join(env.appsDir, appId))).rejects.toThrow(/ENOENT/);
   } finally {
     await app.close();
   }

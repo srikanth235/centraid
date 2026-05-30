@@ -64,7 +64,7 @@ The fix is to keep the declaration honest:
 }
 ```
 
-> **TODO(#120)** — confirm whether the dispatcher actually fires events for every entry in `writes:` or whether it observes the runtime mutations. The README mentions "session tracking" for actions; this could mean the gateway observes which tables were touched and emits accordingly. If that's the case, `writes:` is documentation-only and the _observed_ table list is what's emitted. Worth tracing in `runtime-core`.
+> **TODO(#120)** — confirm whether the dispatcher actually fires events for every entry in `writes:` or whether it observes the runtime mutations. The README mentions "session tracking" for actions; this could mean the gateway observes which tables were touched and emits accordingly. If that's the case, `writes:` is documentation-only and the _observed_ table list is what's emitted. Worth tracing in `app-engine`.
 
 ## Default timeout
 

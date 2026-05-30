@@ -19,7 +19,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { AppsStore } from '@centraid/apps-store';
-import type { Dispatcher, ChatRunInput, ChatStreamEvent } from '@centraid/runtime-core';
+import type { Dispatcher, ChatRunInput, ChatStreamEvent } from '@centraid/app-engine';
 import type { AgentTurnInput, AgentTurnConfig, AgentTurnResult } from '@centraid/agent-runtime';
 import { makeUnifiedChatRunner } from './unified-chat-runner.ts';
 

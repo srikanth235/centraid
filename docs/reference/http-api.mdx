@@ -85,7 +85,7 @@ Anything else returns `404`. Reserved names — `data.sqlite`, `_registry.json`,
 
 Server-sent events. One `change` event per successful write, naming the table(s) touched.
 
-> **TODO(#120)** — document the exact wire format of `_changes` events: event name (`change`?), payload field (`{ tables: string[] }`?), heartbeat interval. Confirm against `runtime-core/src/changeBus.ts` or equivalent.
+> **TODO(#120)** — document the exact wire format of `_changes` events: event name (`change`?), payload field (`{ tables: string[] }`?), heartbeat interval. Confirm against `app-engine/src/changeBus.ts` or equivalent.
 
 ### `POST /centraid/<id>/_chat` — chat turn
 
@@ -99,7 +99,7 @@ Request body:
 }
 ```
 
-> **TODO(#120)** — the request shape and mode tokens are inferred. Confirm against `runtime-core` chat routes and the renderer's `gateway-client-chat.ts` SSE client.
+> **TODO(#120)** — the request shape and mode tokens are inferred. Confirm against `app-engine` chat routes and the renderer's `gateway-client-chat.ts` SSE client.
 
 Response: SSE stream of normalized events. Event types include assistant tokens, tool calls, tool results, and lifecycle markers.
 

@@ -1244,7 +1244,7 @@ textarea {
   flex-direction: column;
 }
 
-/* Builder titlebar identity lockup — the project icon + name + status
+/* Builder titlebar identity lockup — the app icon + name + status
    badge now ride in the window titlebar (cd-tl-nav), hugging the
    back/forward arrows. The chat pane carries no header of its own. */
 
@@ -3877,7 +3877,7 @@ textarea {
 /* Floating "Live · synced" badge — pinned to the bottom-centre of the
    preview content area when the iframe is showing the gateway-served
    live URL. Ambient confirmation that what's on screen reflects the
-   persisted, published project. */
+   persisted, published app. */
 .preview-live-badge {
   position: absolute;
   bottom: 18px;
@@ -4802,7 +4802,7 @@ textarea {
 .cd-tl-main .cd-tb-btn-wrap,
 .cd-tl-side .cd-tb-btn-wrap,
 .cd-tl-main .cd-btn,
-/* Project-name contenteditable inside the builder chrome must accept
+/* App-name contenteditable inside the builder chrome must accept
    clicks (otherwise the surrounding tl-main drag region eats them). */
 .cd-tl-main [contenteditable] {
   -webkit-app-region: no-drag;
@@ -6731,7 +6731,7 @@ textarea {
 }
 
 /* Builder titlebar identity lockup — a soft ink-washed pill carrying the
-   gradient app-icon, editable project name, and a compact status badge.
+   gradient app-icon, editable app name, and a compact status badge.
    Lives in cd-tl-nav, hugging the back/forward arrows (refined proposal
    RefinedBuilder). */
 .cd-tl-identity {

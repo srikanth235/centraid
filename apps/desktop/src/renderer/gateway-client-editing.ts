@@ -30,7 +30,7 @@ import {
 
 // One open editing session per app id, opened lazily and reused across
 // reads / writes / lifecycle mutations / publish. The id scheme matches
-// the main process's `project-sessions.ts` (`desktop-<appId>`) ON PURPOSE:
+// the main process's `app-sessions.ts` (`desktop-<appId>`) ON PURPOSE:
 // the local-only builder agent edits the same `desktop-<appId>` worktree,
 // so the renderer and the agent share one draft. Whoever opens the session
 // first wins; the other reuses it (a re-open of the same id 409s, which we
@@ -144,7 +144,7 @@ export async function draftPreviewUrl(appId: string): Promise<{ url: string; ava
 }
 
 /** Read the app's draft files from its editing session. */
-export async function readProjectFiles(input: {
+export async function readAppFiles(input: {
   id: string;
 }): Promise<{ path: string; content: string }[]> {
   const sessionId = await ensureAppSession(input.id);
@@ -159,7 +159,7 @@ export async function readProjectFiles(input: {
 }
 
 /** Overwrite a single text file in the app's draft session. */
-export async function writeProjectFile(input: {
+export async function writeAppFile(input: {
   id: string;
   path: string;
   content: string;
@@ -213,7 +213,7 @@ export async function publish(input: { id: string; skipBuild?: boolean }): Promi
 // ───────────────────────── lifecycle ─────────────────────
 
 /** Scaffold a fresh app (staged + published for immediate preview). */
-export async function createProject(input: {
+export async function createApp(input: {
   id: string;
   name?: string;
   version?: string;
@@ -226,9 +226,9 @@ export async function createProject(input: {
     body: JSON.stringify({ ...input, sessionId, publish: true }),
   });
   const out = await readJson<{
-    project: { id: string; name?: string; kind?: 'app' | 'automation' };
-  }>(res, 'create project');
-  return out.project;
+    app: { id: string; name?: string; kind?: 'app' | 'automation' };
+  }>(res, 'create app');
+  return out.app;
 }
 
 /** Template display metadata echoed back by the clone endpoint. */
@@ -244,7 +244,7 @@ interface ClonedTemplateMeta {
 
 /** Clone a bundled template into a fresh app; mints any webhook secrets. */
 export async function cloneTemplate(input: { templateId: string }): Promise<{
-  project: { id: string; name?: string; description?: string; kind?: 'app' | 'automation' };
+  app: { id: string; name?: string; description?: string; kind?: 'app' | 'automation' };
   template: ClonedTemplateMeta;
   webhooks: CentraidMintedWebhook[];
 }> {
@@ -255,15 +255,15 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
     body: JSON.stringify({ templateId: input.templateId, publish: true }),
   });
   const out = await readJson<{
-    project: { id: string; name?: string; description?: string; kind?: 'app' | 'automation' };
+    app: { id: string; name?: string; description?: string; kind?: 'app' | 'automation' };
     template: ClonedTemplateMeta;
     webhooks?: CentraidMintedWebhook[];
   }>(res, 'clone template');
-  return { project: out.project, template: out.template, webhooks: out.webhooks ?? [] };
+  return { app: out.app, template: out.template, webhooks: out.webhooks ?? [] };
 }
 
 /** Patch the app's `app.json` name/description in its draft, then publish. */
-export async function updateProjectMeta(input: {
+export async function updateAppMeta(input: {
   id: string;
   name?: string;
   description?: string;
@@ -285,7 +285,7 @@ export async function updateProjectMeta(input: {
 }
 
 /** Delete an app from `main`, then close its editing session. */
-export async function deleteProject(input: { id: string }): Promise<{ ok: true }> {
+export async function deleteApp(input: { id: string }): Promise<{ ok: true }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}`, {
     method: 'DELETE',
@@ -294,7 +294,7 @@ export async function deleteProject(input: { id: string }): Promise<{ ok: true }
   // Surface a gateway rejection (401/404/409/500) instead of reporting a
   // phantom success — and only drop the draft session once the delete is
   // confirmed, so a failed delete leaves the editing session intact.
-  await readJson(res, 'delete project');
+  await readJson(res, 'delete app');
   await dropAppSession(input.id);
   return { ok: true };
 }

@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import url from 'node:url';
 import { validateConfig, DaemonConfigError } from './cli-config.ts';
 import { buildPrefsPatch, seedRunnerPrefs } from './cli-runner-prefs.ts';
-import type { UserStore } from '@centraid/runtime-core';
+import type { UserStore } from '@centraid/app-engine';
 import { daemonLayoutFor } from './cli-paths.ts';
 import { readOrMintToken, readPersistedToken } from './cli-token.ts';
 import { makeFileSecretsProvider, writeProviderApiKey } from './cli-secrets.ts';

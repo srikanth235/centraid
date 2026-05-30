@@ -41,7 +41,7 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type RunSummary,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import type { AppsStore } from '@centraid/apps-store';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 

@@ -27,13 +27,13 @@ await runFlow('delete-draft-wipes-disk-and-ui', async (ctx) => {
   if ((await draft.count()) === 0) {
     throw new Error('Hydrate draft tile not present after clone');
   }
-  const beforeDelete = await fs.readdir(ctx.state.projectsDir);
+  const beforeDelete = await fs.readdir(ctx.state.appsDir);
   if (beforeDelete.length !== 1) {
     throw new Error(
-      `expected 1 project dir before delete, got ${beforeDelete.length}: ${beforeDelete.join(', ')}`,
+      `expected 1 app dir before delete, got ${beforeDelete.length}: ${beforeDelete.join(', ')}`,
     );
   }
-  ctx.note('cloned: 1 draft, 1 project dir on disk');
+  ctx.note('cloned: 1 draft, 1 app dir on disk');
 
   // ---- step 2 — open the tile context menu via the More button ----
   await draft.locator('.tile-more-btn').click();
@@ -52,9 +52,9 @@ await runFlow('delete-draft-wipes-disk-and-ui', async (ctx) => {
   await ctx.shot('after-delete');
 
   // ---- step 5 — disk + UI both clean; template never went anywhere ----
-  const afterDelete = await fs.readdir(ctx.state.projectsDir);
+  const afterDelete = await fs.readdir(ctx.state.appsDir);
   if (afterDelete.length !== 0) {
-    throw new Error(`project dir not removed on delete: still has ${afterDelete.join(', ')}`);
+    throw new Error(`app dir not removed on delete: still has ${afterDelete.join(', ')}`);
   }
   if ((await ctx.page.locator('.app-tile[data-draft="true"]').count()) !== 0) {
     throw new Error('a draft tile is still rendered after delete');
@@ -64,7 +64,7 @@ await runFlow('delete-draft-wipes-disk-and-ui', async (ctx) => {
       'Hydrate template tile is missing from TEMPLATES — should always be present unless published',
     );
   }
-  ctx.note('post-delete: 0 drafts, 0 project dirs, Hydrate still under TEMPLATES');
+  ctx.note('post-delete: 0 drafts, 0 app dirs, Hydrate still under TEMPLATES');
 
   // ---- step 6 — restart, state must still be clean ----
   await ctx.restart();

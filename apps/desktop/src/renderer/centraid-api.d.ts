@@ -2,16 +2,16 @@
 /**
  * Renderer-side typings for the IPC bridge exposed by `preload.ts` under
  * `window.CentraidApi`. The shapes here mirror the public types of
- * `@centraid/builder-harness` — kept independent so the renderer doesn't pull
+ * `@centraid/agent-harness` — kept independent so the renderer doesn't pull
  * the harness as a build-time dependency.
  */
 
-export interface CentraidProjectInfo {
+export interface CentraidAppInfo {
   id: string;
   dir: string;
   built: boolean;
   modifiedAt: string;
-  /** Name from the project's `app.json`, falling back to the id if missing. */
+  /** Name from the app's `app.json`, falling back to the id if missing. */
   name?: string;
   /** One-line description from `app.json#description`, if present. */
   description?: string;
@@ -22,7 +22,7 @@ export interface CentraidProjectInfo {
    * id-prefix convention as the automation signal.
    */
   kind?: 'app' | 'automation';
-  /** Whether the project root has an `index.html` (preview-ready). */
+  /** Whether the app root has an `index.html` (preview-ready). */
   hasIndex?: boolean;
 }
 
@@ -164,7 +164,7 @@ export interface CentraidVersionRecord {
   current?: boolean;
 }
 
-export interface CentraidProjectFile {
+export interface CentraidAppFile {
   path: string;
   content: string;
   size: number;
@@ -293,11 +293,11 @@ export interface CentraidMintedWebhook {
 }
 
 /**
- * Result of cloning a template — lays down the project on disk as a draft.
+ * Result of cloning a template — lays down the app on disk as a draft.
  * Publishing to the gateway is a separate explicit step (see `publish`).
  */
 export interface CentraidCloneTemplateResult {
-  project: CentraidProjectInfo;
+  app: CentraidAppInfo;
   template: CentraidTemplateMeta & { kind: 'app' | 'automation' };
   /** Empty array for app templates and automation templates with no webhook triggers. */
   webhooks: CentraidMintedWebhook[];
@@ -313,12 +313,12 @@ interface CentraidApi {
   getSettings(): Promise<CentraidSettings>;
   saveSettings(patch: Partial<CentraidSettings>): Promise<CentraidSettings>;
 
-  // Project list/create/files/write/delete/update-meta + publish moved to the
+  // App list/create/files/write/delete/update-meta + publish moved to the
   // renderer's direct HTTP client (renderer/gateway-client.ts) under the
   // thin-client pivot. The preview iframe points at the gateway draft URL
   // (Phase 4: renderer-side `draftPreviewUrl`), so only the local-only
   // reveal-in-Finder stays on IPC.
-  openProjectFolder(input: { id: string }): Promise<{ ok: true }>;
+  openAppFolder(input: { id: string }): Promise<{ ok: true }>;
 
   // The in-process AGENT_* builder retired with the unified chat (issue
   // #141, Phase 3): the builder streams `/centraid/<id>/_chat` SSE directly
@@ -367,7 +367,7 @@ interface CentraidApi {
   /**
    * Add a new local gateway (workspace). UUID id is minted server-side.
    * The runtime for this gateway is not started until it is activated.
-   * Used for isolated dev/scratch/per-project local workspaces; the
+   * Used for isolated dev/scratch/per-app local workspaces; the
    * primordial `'local'` gateway is always present and is not created
    * via this call.
    */
@@ -409,7 +409,7 @@ interface CentraidApi {
   /**
    * Switch the active gateway. The renderer should treat the response
    * as the new authoritative settings and drop gateway-scoped state
-   * (project list, agent session, iframe).
+   * (app list, agent session, iframe).
    */
   setActiveGateway(input: { id: string }): Promise<CentraidSettings>;
   /**
@@ -477,7 +477,7 @@ interface CentraidApi {
   getRunnerStatus(): Promise<CentraidRunnerStatus>;
 
   // Automations (issue #98). Every automation lives inside an app
-  // folder under `appsDir`; these read/write that project tree and the
+  // folder under `appsDir`; these read/write that app tree and the
   // unified run ledger. An `automationId` argument is the automation's
   // `<appId>/<id>` handle (the `ref` field of `CentraidAutomationRow`).
   //
@@ -557,7 +557,7 @@ export interface CentraidInsightsSummary {
 export interface CentraidAutomationRunRecord {
   runId: string;
   kind: 'automation' | 'chat' | 'build';
-  /** Set for `kind: 'automation'` — the automation project id. */
+  /** Set for `kind: 'automation'` — the automation app id. */
   automationId?: string;
   triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
@@ -611,7 +611,7 @@ export interface CentraidAutomationRunNode {
   childRunId?: string;
 }
 
-/** The `automation.json` project manifest. Mirrors runtime-core. */
+/** The `automation.json` app manifest. Mirrors app-engine. */
 export interface CentraidAutomationManifest {
   name: string;
   version: string;
@@ -631,11 +631,11 @@ export interface CentraidAutomationManifest {
   generated: { by: string; at: string };
 }
 
-/** Row shape returned by `listAutomations`. Mirrors `AutomationRow` from runtime-core. */
+/** Row shape returned by `listAutomations`. Mirrors `AutomationRow` from app-engine. */
 export interface CentraidAutomationRow {
   /** Automation id — the directory slug, unique within its owning app. */
   id: string;
-  /** Absolute path to the automation project directory. */
+  /** Absolute path to the automation app directory. */
   dir: string;
   name: string;
   triggers: Array<

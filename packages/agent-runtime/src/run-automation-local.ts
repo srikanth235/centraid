@@ -25,7 +25,7 @@ import {
   type AutomationHandlerOutcome,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import {
   defaultSpawnCli,
   type LocalRunnerKind,
@@ -115,7 +115,7 @@ export interface AutomationRunRecord {
 
 /**
  * Single automation fire. Returns the run record + the handler outcome.
- * A missing automation project throws; a handler failure surfaces in
+ * A missing automation app throws; a handler failure surfaces in
  * `outcome.ok === false`.
  */
 export async function runAutomationLocal(

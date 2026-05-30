@@ -133,19 +133,19 @@ async function ensureBuilt() {
 async function seedFresh(runDir) {
   const workspace = path.join(runDir, 'workspace');
   const userData = path.join(workspace, 'userData');
-  const projectsDir = path.join(workspace, 'projects');
+  const appsDir = path.join(workspace, 'apps');
   await fs.mkdir(userData, { recursive: true });
-  await fs.mkdir(projectsDir, { recursive: true });
+  await fs.mkdir(appsDir, { recursive: true });
   await fs.mkdir(path.join(runDir, 'screenshots'), { recursive: true });
-  // Only pin projectsDir — gatewayUrl/gatewayToken fall through to the main
+  // Only pin appsDir — gatewayUrl/gatewayToken fall through to the main
   // process defaults (http://127.0.0.1:18789 + $OPENCLAW_GATEWAY_TOKEN), so
   // flows run against the user's real local gateway.
   await fs.writeFile(
     path.join(userData, 'centraid-settings.json'),
-    JSON.stringify({ projectsDir, remoteTemplatesUrl: '' }, null, 2),
+    JSON.stringify({ appsDir, remoteTemplatesUrl: '' }, null, 2),
     { mode: 0o600 },
   );
-  return { workspace, userData, projectsDir };
+  return { workspace, userData, appsDir };
 }
 
 async function spawnElectron(userData, port) {

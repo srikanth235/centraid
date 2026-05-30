@@ -10,7 +10,7 @@ A webhook trigger fires its automation on an inbound HTTP POST to `/_centraid-ho
 - **Remote-only.** The desktop is a gateway _client_, not an HTTP host. It preserves webhook entries in the manifest but never mounts a listener. Webhook fires happen only when the app is deployed to a remote gateway (`@centraid/openclaw-plugin`).
 - **Privileged provisioning.** The conversational builder agent can declare _intent_ (`{kind: "webhook", pending: true}`) but cannot mint the route slug or the shared secret — those require crypto-random generation and one-shot user surfacing. A server-side provisioning pass rewrites the pending trigger to its provisioned form.
 
-The implementation lives in [`packages/runtime-core/src/automation-webhook.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/runtime-core/src/automation-webhook.ts).
+The implementation lives in [`packages/app-engine/src/automation-webhook.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-engine/src/automation-webhook.ts).
 
 ## The provisioning handshake
 

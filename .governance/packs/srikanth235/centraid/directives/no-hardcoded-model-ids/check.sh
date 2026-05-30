@@ -4,7 +4,7 @@
 # provider model id. Model lineups churn quickly; tier indirection
 # survives.
 #
-# Allowlist: packages/runtime-core/src/model-pricing.ts is the single
+# Allowlist: packages/app-engine/src/model-pricing.ts is the single
 # legitimate file that references concrete ids - it is a price table
 # keyed by model prefix. Test files (*.test.ts, *.spec.ts) need real ids
 # to test the pricing and storage layers, so they are excluded. Markdown
@@ -45,13 +45,13 @@ while IFS=: read -r file line_no match; do
     has_waiver "$file" "$line_no" "no-hardcoded-model-ids" && continue
     # Extract the matched model id from the line for the violation message.
     model_id=$(printf '%s' "$match" | grep -oE "$PATTERN" | head -1 | tr -d '"'"'")
-    violation "$file:$line_no - hardcoded model id '$model_id' (use capability-tier resolver; only packages/runtime-core/src/model-pricing.ts is allowlisted)"
+    violation "$file:$line_no - hardcoded model id '$model_id' (use capability-tier resolver; only packages/app-engine/src/model-pricing.ts is allowlisted)"
 done < <(git grep -nE "$PATTERN" -- \
     'packages/**/*.ts' 'packages/**/*.tsx' 'packages/**/*.js' 'packages/**/*.jsx' \
     'apps/**/*.ts' 'apps/**/*.tsx' 'apps/**/*.js' 'apps/**/*.jsx' \
     ':!**/*.test.ts' ':!**/*.test.tsx' ':!**/*.spec.ts' ':!**/*.spec.tsx' \
     ':!**/dist/**' ':!**/node_modules/**' \
-    ':!packages/runtime-core/src/model-pricing.ts' \
+    ':!packages/app-engine/src/model-pricing.ts' \
     2>/dev/null || true)
 
 directive_end
