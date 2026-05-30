@@ -88,6 +88,16 @@ export { readAppSchema } from './schema.js';
 export { Registry } from './registry.js';
 export { appDataDir, readActiveCodeDir } from './app-paths.js';
 
+// Wrapper-dir cleanup on app delete — removes `<appsDir>/<id>/` (data.sqlite
+// + run ledgers) after the registry entry is dropped. Hosts that delete apps
+// over their own surface (the gateway git-store DELETE) call this so a
+// deleted app's data doesn't linger and resurrect under a recreated id.
+export {
+  cleanupDeregisteredApp,
+  type CleanupOutcome,
+  type DeregisterLogger,
+} from './deregister-cleanup.js';
+
 // App manifest + three-tool dispatcher (issue #107). The dispatcher
 // replaces the per-handler HTTP routes; openclaw-plugin registers MCP
 // tools that delegate to `runtime.dispatcher.write/read/describe`.

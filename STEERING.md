@@ -346,3 +346,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-1e487d5ad58-1780084239-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | questions builder harness running locally; thinks gateway should own it |  |
 | steer-1e487d5ad58-1780084239-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
 | steer-1e487d5ad58-1780084239-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | wants builder chat and app chat unified into one chat surface |  |
+| steer-1e487d5ad58-1780161401-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | User flagged P1/P2 bugs in agent's recently-completed work |  |

@@ -190,6 +190,12 @@ test('automation set-enabled then delete flows through publish', async () => {
   );
   assert.equal(enable.status, 200);
 
+  // Seed the app's data dir so the delete has real per-app data to tear
+  // down (data.sqlite + run ledgers), not just the code on `main`.
+  const dataAppDir = path.join(dataDir, 'apps', 'digest');
+  await fs.mkdir(dataAppDir, { recursive: true });
+  await fs.writeFile(path.join(dataAppDir, 'data.sqlite'), 'rows');
+
   // Delete the whole automation app — it disappears from `main`.
   const del = await fetch(
     `${handle.url}/centraid/_automations?ref=${encodeURIComponent('digest/digest')}&publish=true`,
@@ -199,4 +205,37 @@ test('automation set-enabled then delete flows through publish', async () => {
   const delBody = (await del.json()) as { deletedApp?: boolean };
   assert.equal(delBody.deletedApp, true);
   assert.ok(!(await listApps()).some((a) => a.id === 'digest'), 'deleted automation app is gone');
+
+  // Finding A regression: the data dir is gone too — and NOT resurrected.
+  // The old code called `ensureRegistered` after `deleteApp`, re-creating
+  // the registry entry + data dir for the app just deleted; the fix
+  // deregisters + cleans the data dir instead.
+  await assert.rejects(
+    fs.stat(dataAppDir),
+    /ENOENT/,
+    'data dir must be removed, not resurrected by a stray re-register',
+  );
+});
+
+test('DELETE /_apps/<id> tears down the app data dir, not just the code', async () => {
+  await fetch(`${handle.url}/centraid/_apps`, {
+    method: 'POST',
+    headers: auth({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ id: 'shelf', name: 'Shelf', publish: true }),
+  });
+  // Seed the app's data dir (data.sqlite + ledgers live under appsDir).
+  const dataAppDir = path.join(dataDir, 'apps', 'shelf');
+  await fs.mkdir(dataAppDir, { recursive: true });
+  await fs.writeFile(path.join(dataAppDir, 'data.sqlite'), 'rows');
+
+  const del = await fetch(`${handle.url}/centraid/_apps/shelf`, {
+    method: 'DELETE',
+    headers: auth(),
+  });
+  assert.equal(del.status, 200);
+  assert.ok(!(await listApps()).some((a) => a.id === 'shelf'), 'deleted app is off main');
+
+  // Finding A regression: the wrapper dir under appsDir is removed, so a
+  // recreated `shelf` cannot inherit stale rows/history.
+  await assert.rejects(fs.stat(dataAppDir), /ENOENT/, 'app data dir must be cleaned on delete');
 });

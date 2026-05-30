@@ -24,6 +24,13 @@ export interface LifecycleRouteOptions {
    * so a staged app's draft is immediately previewable.
    */
   ensureRegistered: (appId: string) => Promise<void>;
+  /**
+   * Drop an app from the runtime registry AND delete its data dir
+   * (`<appsDir>/<id>/`) after the store removed its code — wires the
+   * gateway's deregister+cleanup path. Used when a whole automation app
+   * is deleted wholesale, so its data.sqlite + run ledgers don't linger.
+   */
+  deregister: (appId: string) => Promise<void>;
   /** Reconcile the OS scheduler after a publish changed the live set. */
   reconcile: () => void;
 }

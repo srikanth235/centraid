@@ -160,7 +160,10 @@ export async function handleAutomationDelete(
 
   if (appKind === 'automation') {
     await opts.store.deleteApp(ref.appId);
-    await opts.ensureRegistered(ref.appId).catch(() => undefined); // best-effort; entry may be gone
+    // The code is gone from `main`; drop the registry entry + delete the
+    // app's data dir too. This was previously a stray `ensureRegistered`,
+    // which RE-created the entry + data dir for the app we just deleted.
+    await opts.deregister(ref.appId);
     opts.reconcile();
     return sendJson(res, 200, { ok: true, deletedApp: true });
   }

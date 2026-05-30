@@ -52,6 +52,10 @@ will touch.
   - [x] serve() scans + bakes the stable code path
   - [x] TEMPLATES_CLONE + AUTOMATIONS_* IPC cut over
   - [x] codeDir fallback removed; workspaceDir deleted
+- [x] Review fixes (PR #138)
+  - [x] App delete tears down the per-app data dir, not just the git-store code
+  - [x] Whole automation-app delete deregisters and cleans data instead of re-registering it
+  - [x] Unified chat resolves the manifest catalog via the git-store code-dir override
 
 ## What changed
 
@@ -506,6 +510,45 @@ backends with *no* override at all (OpenClaw / pre-#137). `workspaceDir`
 + `gatewayWorkspaceDir` are deleted from desktop settings + paths, and
 `current.json` is fully retired for desktop.
 
+### Review fixes (PR #138)
+
+Three post-merge review findings on the combined PR:
+
+- App delete tears down the per-app data dir, not just the git-store code.
+- Whole automation-app delete deregisters and cleans data instead of re-registering it.
+- Unified chat resolves the manifest catalog via the git-store code-dir override.
+
+**App delete tears down the per-app data dir, not just the git-store
+code.** `DELETE /centraid/_apps/<id>`'s `onAppDeleted` callback previously
+only dropped the registry entry. `store.deleteApp` removes the code from
+`main`, but the app's data dir (`<appsDir>/<id>/`, holding `data.sqlite`
++ the run ledger) was left on disk, so recreating the same id resurrected
+stale data. serve.ts now runs the same deregister+cleanup the legacy
+`registry-deregister` route uses — `registry.deregister` then
+`cleanupDeregisteredApp(appsDir, removed, logger)`, newly exported from
+`@centraid/runtime-core` — through a shared `deregisterAndCleanup` helper
+wired into both the apps-store `onAppDeleted` and a new
+`LifecycleRouteOptions.deregister`. (This supersedes the slice-4b note
+above that wired `onAppDeleted` to a bare `registry.deregister`.)
+
+**Whole automation-app delete deregisters and cleans data instead of
+re-registering it.** `handleAutomationDelete`'s `kind: 'automation'`
+branch called `ensureRegistered(appId)` right after `deleteApp`, which
+RE-created the registry entry + data dir for the app it had just deleted.
+It now calls `opts.deregister(appId)` (deregister + data cleanup),
+matching the apps-store DELETE path.
+
+**Unified chat resolves the manifest catalog via the git-store code-dir
+override.** The chat route's `safeReadManifest` resolved code via
+`versions.getActiveVersion(entry.path)`, which returns undefined under the
+git-store backend (no legacy `current.json`) — so every chat turn rendered
+"manifest unavailable" and steered the agent at `_sql` even when the
+declared handlers were resolvable through the override. `ChatRouteContext`
+now carries a `resolveCodeDir` resolver (the runtime's override-aware
+`Runtime.resolveCodeDir`), and `safeReadManifest` reads the manifest from
+that dir, so the declared-handler catalog reaches the system prompt on the
+primary runtime path.
+
 ## Out of scope
 
 This PR ships the abstraction without wiring it into the existing
@@ -556,3 +599,16 @@ Workspace checks green:
   Code-tab cutover (Slice 4): 26 gateway-runtime tests including the
   three apps-store HTTP route tests, the runtime-core suite, the
   apps-store git suites, and the legacy desktop suites.
+
+Review fixes (PR #138) — green:
+
+- `bun run build && bun run typecheck && bun run lint && bun run test` —
+  all green across the workspace (18 typecheck tasks, 0 lint findings,
+  every test suite passing).
+- New gateway-runtime test `DELETE /_apps/<id> tears down the app data
+  dir, not just the code`, plus the extended automation-delete test that
+  asserts the data dir is removed and not resurrected by a stray
+  re-register.
+- New runtime-core test `chat prompt resolves the manifest via the
+  git-store code-dir override (#137)` asserts the declared catalog reaches
+  the prompt and "manifest unavailable" does not.

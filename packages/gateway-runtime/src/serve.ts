@@ -40,6 +40,7 @@ import {
   InsightsStore,
   Runtime,
   UserStore,
+  cleanupDeregisteredApp,
   listAutomations,
   makeGatewayDbProvider,
   makeAnalyticsDbProvider,
@@ -342,6 +343,15 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   if (appsStore) {
     const store = appsStore;
     const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
+    // Drop an app from the registry AND delete its wrapper dir
+    // (`<appsDir>/<id>/` — data.sqlite + run ledgers). Mirrors the legacy
+    // `registry-deregister` route so deleting an app over the git-store
+    // surface doesn't strand per-app data that a recreated id would inherit.
+    // The code on `main` is already gone (`store.deleteApp`).
+    const deregisterAndCleanup = async (appId: string): Promise<void> => {
+      const removed = await runtime.registry.deregister(appId);
+      if (removed) await cleanupDeregisteredApp(paths.appsDir, removed, logger);
+    };
     extraHandlers.push(
       makeAppsStoreRouteHandler(store, {
         onAppLive: async (appId) => {
@@ -351,7 +361,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
           reconcileScheduler();
         },
         onAppDeleted: async (appId) => {
-          await runtime.registry.deregister(appId);
+          await deregisterAndCleanup(appId);
           reconcileScheduler();
         },
       }),
@@ -366,6 +376,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         ensureRegistered: async (appId) => {
           await runtime.registry.ensureUploaded(appId);
         },
+        deregister: deregisterAndCleanup,
         reconcile: reconcileScheduler,
       }),
       // Automation runtime ops over HTTP (issue #141): list/read/run-now,
