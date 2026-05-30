@@ -24,4 +24,4 @@ The `version` field follows semver. Bump it when the template's source changes.
 
 ## Cloning at runtime
 
-The desktop main process imports `listTemplates()` to render the gallery, then calls `cloneTemplate()` from `@centraid/builder-harness` to copy a template into the user's projects dir under a new id. The existing publish pipeline takes over from there.
+The gateway owns the template catalog: it serves display metadata at `GET /centraid/_templates` (resolved from `listTemplates()`), and clones a chosen template into a draft git-store session over HTTP via `@centraid/gateway-runtime`'s lifecycle routes. The publish step flips the draft live.

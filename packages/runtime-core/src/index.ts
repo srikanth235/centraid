@@ -52,7 +52,7 @@ export type {
 } from './types.js';
 
 // Live-schema and cloud-panel payload shapes — consumed by builder-harness
-// and the chat-harness, and by the desktop cloud panel.
+// and the chat surface, and by the desktop cloud panel.
 export type {
   AppSchema,
   AppSchemaTable,

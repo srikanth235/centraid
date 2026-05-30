@@ -8,8 +8,8 @@
  * desktop / mobile.
  *
  * The in-app *data chat* (talking to a deployed app's SQLite over the
- * chat panel) is a separate surface — see @centraid/chat-harness — but
- * both share the same agent runtime.
+ * chat panel) runs through the same gateway `_chat` turn as the builder
+ * now (issue #141); the renderer streams its SSE directly.
  *
  * Public surface:
  *   - scaffoldProject(projectsDir, id, opts?) → ProjectInfo

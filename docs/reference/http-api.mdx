@@ -99,7 +99,7 @@ Request body:
 }
 ```
 
-> **TODO(#120)** — the request shape and mode tokens are inferred. Confirm against `runtime-core` chat routes and `@centraid/chat-harness`.
+> **TODO(#120)** — the request shape and mode tokens are inferred. Confirm against `runtime-core` chat routes and the renderer's `gateway-client-chat.ts` SSE client.
 
 Response: SSE stream of normalized events. Event types include assistant tokens, tool calls, tool results, and lifecycle markers.
 

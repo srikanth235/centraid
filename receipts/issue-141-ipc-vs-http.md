@@ -42,6 +42,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Builder chat streams the gateway _chat SSE; in-process AGENT_* path + agent-session.ts deleted
 - [x] Builder preview iframe points at the gateway _draft URL; centraid-preview:// protocol + PROJECTS_PREVIEW_URL deleted
 - [x] Drop the desktop builder-harness/chat-harness/app-templates deps; relocate template refresh to the gateway; rewrite the thin-client/unified-chat docs
+- [x] Remove post-thin-client vestigial code: orphaned chat-harness package, dead gateway-ws WS client + ws deps; correct stale chat-harness/centraid-preview references
 
 ## What changed
 
@@ -725,6 +726,19 @@ fixed in `getting-started.mdx` + `deploy/local.mdx`.
   types left nothing dangling. The builder turn now hits the same
   unified-chat-runner the data chat does (covered by `unified-chat-runner.test.ts`),
   so there's no new server behavior to retest.
+- Remove post-thin-client vestigial code: orphaned chat-harness package, dead gateway-ws WS
+  client + ws deps; correct stale chat-harness/centraid-preview references: deleted
+  `packages/chat-harness` (audited to zero importers — no package.json dep, no `import` site)
+  and `apps/desktop/src/main/gateway-ws.ts` (zero importers; the in-app chat moved to the
+  gateway `_chat` SSE in Phase 3), and dropped the now-unused `ws` + `@types/ws` desktop deps,
+  regenerating `bun.lock`. Fixed the dangling `@centraid/chat-harness` doc/README links
+  (concepts/chat, reference/http-api, openclaw-plugin + builder-harness READMEs, runtime-core
+  comments) and the dead `centraid-preview://` CSP `frame-src` token + the template/`ui-and-changes`
+  comments, and reframed the (still-live, gateway-consumed) `@centraid/builder-harness` +
+  `@centraid/app-templates` docs around gateway ownership. Full `turbo run build typecheck lint
+  test` green across all tasks (oxlint 0 warnings on 282 files; gateway-runtime 53 tests,
+  runtime-core + agent-runtime + apps-store suites all pass); post-change searches for
+  `chat-harness` / `gateway-ws` return only historical receipt mentions.
 
 ## Out of scope
 
@@ -736,3 +750,7 @@ Deferred to the agreed follow-up sequence:
 - Remote builds via the in-process codex/claude agent — `AGENT_*` stays
   local-only; remote gateways build through the chat surface.
 - A batch file-write route (the desktop currently loops single PUTs).
+- A deeper rewrite of the `@centraid/builder-harness` README surfaces table (it still lists the
+  retired `createCentraidAgentSession` + tarball `publishProject`) and the `docs/templates/cloning`
+  flow + `gateway.mdx` on-disk-layout section, which describe the legacy `current.json`/`versions`
+  VersionStore model — folded into the #137 legacy-layout doc pass.
