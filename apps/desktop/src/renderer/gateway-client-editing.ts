@@ -284,15 +284,18 @@ export async function updateProjectMeta(input: {
   return { ok: true };
 }
 
-/** Delete an app from `main` and close its editing session. */
+/** Delete an app from `main`, then close its editing session. */
 export async function deleteProject(input: { id: string }): Promise<{ ok: true }> {
-  await dropAppSession(input.id);
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}`, {
     method: 'DELETE',
     headers: authHeaders(token),
   });
-  await readJson(res, 'delete project').catch(() => undefined);
+  // Surface a gateway rejection (401/404/409/500) instead of reporting a
+  // phantom success — and only drop the draft session once the delete is
+  // confirmed, so a failed delete leaves the editing session intact.
+  await readJson(res, 'delete project');
+  await dropAppSession(input.id);
   return { ok: true };
 }
 
@@ -356,9 +359,8 @@ export async function deleteAutomation(input: { automationId: string }): Promise
     `/centraid/_automations?ref=${enc(input.automationId)}&publish=true`,
     { method: 'DELETE', headers: authHeaders(token) },
   );
-  const out = await readJson<{ deletedApp?: boolean }>(res, 'delete automation').catch(
-    () => ({}) as { deletedApp?: boolean },
-  );
+  // Surface a gateway rejection instead of reporting a phantom success.
+  const out = await readJson<{ deletedApp?: boolean }>(res, 'delete automation');
   // A whole-automation-app delete drops the app; forget its session too.
   if (out.deletedApp) await dropAppSession(appId);
   return { ok: true };

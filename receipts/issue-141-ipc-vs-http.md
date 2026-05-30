@@ -43,6 +43,7 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] Builder preview iframe points at the gateway _draft URL; centraid-preview:// protocol + PROJECTS_PREVIEW_URL deleted
 - [x] Drop the desktop builder-harness/chat-harness/app-templates deps; relocate template refresh to the gateway; rewrite the thin-client/unified-chat docs
 - [x] Remove post-thin-client vestigial code: orphaned chat-harness package, dead gateway-ws WS client + ws deps; correct stale chat-harness/centraid-preview references
+- [x] Renderer surfaces gateway delete failures instead of reporting a phantom success
 
 ## What changed
 
@@ -558,8 +559,29 @@ onto iframe subresource requests by the auth-injector); `gateway.mdx` gains a
 to one-surface-both-jobs. The same stale "renderer connects over IPC" line is
 fixed in `getting-started.mdx` + `deploy/local.mdx`.
 
+### Review fix (PR #138)
+
+- Renderer surfaces gateway delete failures instead of reporting a phantom success.
+
+`deleteProject` and `deleteAutomation` in
+`apps/desktop/src/renderer/gateway-client-editing.ts` wrapped their
+`readJson` call in `.catch(() => …)`, swallowing every non-2xx response — a
+401/404/409/500 from the gateway looked like success and the UI reported the
+app/automation as deleted when it wasn't. `deleteProject` also dropped the
+draft editing session *before* issuing the DELETE, so a failed delete
+discarded the in-progress draft. Both now let `readJson` throw on a gateway
+rejection (it already maps status → `GatewayClientError`), and
+`deleteProject` deletes first and only `dropAppSession` once the delete is
+confirmed.
+
 ## Verification
 
+- Renderer surfaces gateway delete failures instead of reporting a phantom
+  success: full `bun run build && bun run typecheck && bun run lint && bun run
+  test` green across the workspace. Removing the error-swallowing `.catch`
+  means a non-2xx DELETE now throws; the gateway-side delete tests confirm
+  those routes return real 4xx/5xx + JSON error bodies. No renderer fetch test
+  harness exists, so this path is covered by inspection plus the green gate.
 - Drop the desktop builder-harness/chat-harness/app-templates deps; relocate
   template refresh to the gateway; rewrite the thin-client/unified-chat docs:
   full `turbo run build typecheck lint test` green across all tasks after a
