@@ -4,7 +4,7 @@
  * scripts can poke at an app's `data.sqlite` from a shell. Agents now call
  * the same operations via in-process tool registrations (`centraid_sql_*`)
  * declared by the codex / claude adapters; both paths share the underlying
- * implementation in `@centraid/runtime-core`'s `sql-ops.ts`.
+ * implementation in `@centraid/app-engine`'s `sql-ops.ts`.
  *
  * AppId scoping: the CLI opens files relative to its cwd. There is no
  * `--workspace` flag — the caller must `cd` into the app's data dir.
@@ -36,7 +36,7 @@ import {
   writeOp,
   SqlOpRefusal,
   RunQueryError,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import { runAutomationLocal, type LocalRunnerKind } from './run-automation-local.js';
 
 function dataFile(): string {

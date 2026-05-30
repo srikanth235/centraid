@@ -8,8 +8,8 @@
  * server, the per-batch CLI subprocess spawn, and the `ctx.agent`
  * one-shot against the user's real provider.
  *
- * Issue #91: an automation is a standalone project — the CLI runs with
- * the project directory as cwd, and the dispatch context carries the
+ * Issue #91: an automation is a standalone app — the CLI runs with
+ * the app directory as cwd, and the dispatch context carries the
  * automation id (no owning app).
  */
 
@@ -23,7 +23,7 @@ import type {
   AutomationToolCall,
   AutomationToolDispatcher,
   AutomationToolResult,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
 import {
   defaultSpawnCli,
@@ -32,7 +32,7 @@ import {
 } from './run-automation-cli-spawn.js';
 
 export interface LiveDispatchOptions {
-  /** The automation project directory — also the CLI's cwd. */
+  /** The automation app directory — also the CLI's cwd. */
   workdir: string;
   /** Id of the automation being fired. */
   automationId: string;

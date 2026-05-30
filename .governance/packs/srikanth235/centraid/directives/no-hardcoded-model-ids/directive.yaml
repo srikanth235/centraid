@@ -6,7 +6,7 @@ summary: |
   provider model ids (claude-opus-4-7, claude-sonnet-4-6, gpt-5, o1-mini,
   gemini-2.0, etc.). Model selection flows through capability tiers
   resolved at runtime. The only allowlisted file is
-  packages/runtime-core/src/model-pricing.ts, which is by definition a
+  packages/app-engine/src/model-pricing.ts, which is by definition a
   model-id-to-price map and cannot be tier-based. Test files are also
   excluded since they need real ids to test the pricing/storage layers.
 surface: repo-state

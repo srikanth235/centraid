@@ -35,7 +35,7 @@
   }
 
   // ── Inline icons used by chrome that aren't in @centraid/design-tokens
-  // (sidebar glyph, project folder, plug icon, etc.). One source of truth so
+  // (sidebar glyph, app folder, plug icon, etc.). One source of truth so
   // they paint at the same stroke weight as the tokenised set.
   function svg(path: string, size = 15, strokeWidth = 1.7): string {
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
@@ -166,7 +166,7 @@
     onToggleSidebar: () => void;
     sidebar: HTMLElement;
     main: HTMLElement;
-    /** Right-edge chrome cluster — project identity, Publish, brand chip, etc. */
+    /** Right-edge chrome cluster — app identity, Publish, brand chip, etc. */
     titlebarRight?: HTMLElement | null;
     /** Center chrome cluster — view-context controls (mode tabs, device pill).
      *  Sits between the back/forward nav and the trailing flex spacer, so it

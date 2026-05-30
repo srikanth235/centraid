@@ -39,7 +39,7 @@ const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
 /**
  * Conservative slug check — matches the canonical app id rule
- * (builder-harness): leading alnum, then alnum / `_` / `-`. No dot, so a
+ * (agent-harness): leading alnum, then alnum / `_` / `-`. No dot, so a
  * tree-traversing `..` is impossible by construction. Automation apps are
  * now marked by the manifest's `kind` field, not a dotted `auto.` id
  * prefix, so the id grammar is a plain slug again.

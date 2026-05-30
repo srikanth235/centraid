@@ -47,7 +47,7 @@ import {
   startRuntimeHttpServer,
   type AutomationHost,
   type RuntimeLogger,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import {
   makeChatRunner,
   runAutomationLocal,

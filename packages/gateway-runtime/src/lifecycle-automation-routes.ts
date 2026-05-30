@@ -14,19 +14,19 @@ import {
   listAutomations,
   parseAutomationRef,
   type AutomationTrigger,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import {
   HarnessError,
   deleteAutomationFromFiles,
-  scaffoldAutomationProjectFiles,
+  scaffoldAutomationAppFiles,
   setAutomationEnabledInFiles,
   type ScaffoldFile,
-} from '@centraid/builder-harness';
+} from '@centraid/agent-harness';
 import { validateManifestAt } from './apps-store-routes.js';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
   defaultSessionId,
-  ensureSession,
+  prepareLifecycleSession,
   parseHistoryKeep,
   stageAndMaybePublish,
   webhookUrl,
@@ -44,8 +44,10 @@ export async function handleAutomationCreate(
   const id = typeof body.id === 'string' ? body.id : '';
   if (!id) return sendJson(res, 400, { error: 'bad_request', message: 'create needs { id }' });
   const publish = body.publish === true;
-  const sessionId =
-    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : defaultSessionId(id);
+  const explicitSession =
+    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+  const sessionId = explicitSession || defaultSessionId(id);
+  const ephemeralSession = !explicitSession;
 
   const existing = await opts.store.listAppsWithMeta();
   if (existing.some((a) => a.id === id)) {
@@ -68,7 +70,7 @@ export async function handleAutomationCreate(
     return { kind: 'cron', expr: typeof t.expr === 'string' ? t.expr : '0 9 * * *' };
   });
 
-  const files = scaffoldAutomationProjectFiles(id, {
+  const files = scaffoldAutomationAppFiles(id, {
     ...(typeof body.name === 'string' && body.name ? { name: body.name } : {}),
     ...(typeof body.description === 'string' && body.description
       ? { description: body.description }
@@ -83,13 +85,14 @@ export async function handleAutomationCreate(
     ...(typeof body.onFailure === 'string' && body.onFailure ? { onFailure: body.onFailure } : {}),
     ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
   });
-  await ensureSession(opts.store, sessionId);
+  await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   await stageAndMaybePublish(opts, {
     appId: id,
     sessionId,
     files,
     publish,
     message: `scaffold automation ${id}`,
+    ephemeralSession,
   });
 
   // Read the published row back for the renderer (only on `main`).
@@ -116,12 +119,12 @@ export async function handleAutomationSetEnabled(
     return sendJson(res, 400, { error: 'bad_request', message: 'set-enabled needs { enabled }' });
   }
   const publish = body.publish === true;
-  const sessionId =
-    typeof body.sessionId === 'string' && body.sessionId
-      ? body.sessionId
-      : defaultSessionId(ref.appId);
+  const explicitSession =
+    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+  const sessionId = explicitSession || defaultSessionId(ref.appId);
+  const ephemeralSession = !explicitSession;
 
-  await ensureSession(opts.store, sessionId);
+  await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   const appDir = await opts.store.snapshotSessionAppDir(sessionId, ref.appId);
   const current = await readFileMap(appDir);
   const changed = setAutomationEnabledInFiles(
@@ -136,7 +139,12 @@ export async function handleAutomationSetEnabled(
       files: changed,
       publish,
       message: `toggle ${ref.automationId}`,
+      ephemeralSession,
     });
+  } else if (ephemeralSession) {
+    // Nothing to publish, but a throwaway session may have been opened —
+    // close it so it doesn't orphan a worktree.
+    await opts.store.closeSession(sessionId);
   }
   return sendJson(res, 200, { ok: true, staged: !publish });
 }
@@ -168,12 +176,18 @@ export async function handleAutomationDelete(
     return sendJson(res, 200, { ok: true, deletedApp: true });
   }
 
+  // A subdir delete is a one-shot off `main` — use a fresh throwaway session
+  // (no renderer editing session is supplied here) and close it once done so
+  // it doesn't orphan a worktree.
   const sessionId = defaultSessionId(ref.appId);
-  await ensureSession(opts.store, sessionId);
+  await prepareLifecycleSession(opts.store, sessionId, true);
   const appDir = await opts.store.snapshotSessionAppDir(sessionId, ref.appId);
   const current = await readFileMap(appDir);
   const { removed } = deleteAutomationFromFiles(current as ScaffoldFile[], ref.automationId);
-  if (removed.length === 0) return sendJson(res, 200, { ok: true, staged: !publish });
+  if (removed.length === 0) {
+    await opts.store.closeSession(sessionId);
+    return sendJson(res, 200, { ok: true, staged: !publish });
+  }
 
   // The surviving files already live in the worktree; just drop the
   // removed `automations/<id>/` subdir, then optionally publish so `main`
@@ -189,6 +203,7 @@ export async function handleAutomationDelete(
     });
     await opts.ensureRegistered(ref.appId);
     opts.reconcile();
+    await opts.store.closeSession(sessionId);
   } else {
     await opts.ensureRegistered(ref.appId);
   }

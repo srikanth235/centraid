@@ -7,7 +7,7 @@ title: 'Handler runtime'
 
 `handler.js` is plain JavaScript — a single ES module that default-exports an async function. It runs in a Node worker thread spawned by the runtime, with no DOM, no `db` proxy, and no access to other apps' data. Everything an automation can do flows through `ctx`.
 
-The conventional filename is `handler.js`. The conventional location is `<appCodeDir>/automations/<id>/handler.js`. Both are constants in [`automation-manifest.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/runtime-core/src/automation-manifest.ts) (`AUTOMATION_HANDLER_FILE`, `AUTOMATION_MANIFEST_FILE`).
+The conventional filename is `handler.js`. The conventional location is `<appCodeDir>/automations/<id>/handler.js`. Both are constants in [`automation-manifest.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-engine/src/automation-manifest.ts) (`AUTOMATION_HANDLER_FILE`, `AUTOMATION_MANIFEST_FILE`).
 
 ## The contract
 

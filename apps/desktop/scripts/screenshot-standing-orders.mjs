@@ -34,9 +34,9 @@ async function main() {
   await fs.mkdir(OUT_DIR, { recursive: true });
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-shot-'));
   const userData = path.join(workspace, 'userData');
-  const projectsDir = path.join(workspace, 'projects');
+  const appsDir = path.join(workspace, 'apps');
   await fs.mkdir(userData, { recursive: true });
-  await fs.mkdir(projectsDir, { recursive: true });
+  await fs.mkdir(appsDir, { recursive: true });
 
   // Settings — gateway URL is bogus but the standing-orders panel only
   // reads from the local SQLite mirror so the popover renders without a
@@ -45,7 +45,7 @@ async function main() {
     path.join(userData, 'centraid-settings.json'),
     JSON.stringify(
       {
-        projectsDir,
+        appsDir,
         gatewayUrl: 'http://127.0.0.1:1',
         gatewayToken: crypto.randomBytes(8).toString('hex'),
         remoteTemplatesUrl: '',
@@ -64,11 +64,11 @@ async function main() {
   const dbFile = path.join(dbDir, 'centraid-gateway.sqlite');
   await seedAutomations(dbFile);
 
-  // Seed a project dir + the localStorage userApp entry that the home
+  // Seed an app dir + the localStorage userApp entry that the home
   // grid renders from. The renderer reads localStorage in-process; we
   // write it via page.evaluate after the window loads.
   const appId = 'journal';
-  await seedProjectDir(projectsDir, appId);
+  await seedAppDir(appsDir, appId);
 
   const app = await _electron.launch({
     args: [DESKTOP_ROOT, `--user-data-dir=${userData}`],
@@ -90,7 +90,7 @@ async function main() {
           iconKey: 'Book',
           color: '#7a5cff',
           colorKey: 'violet',
-          centraidProjectId: id,
+          centraidAppId: id,
         },
       ]),
     );
@@ -221,8 +221,8 @@ function seedAutomations(dbFile) {
   db.close();
 }
 
-async function seedProjectDir(projectsDir, id) {
-  const dir = path.join(projectsDir, id);
+async function seedAppDir(appsDir, id) {
+  const dir = path.join(appsDir, id);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
     path.join(dir, 'app.json'),

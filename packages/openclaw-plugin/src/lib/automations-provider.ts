@@ -12,9 +12,9 @@
  *   - StreamFn:
  *       1. Recovers the automation handle from the prompt sentinel
  *          `<<<centraid:<appId>/<automationId>>>>`.
- *       2. Loads the automation project (`automation.json` + `handler.js`)
+ *       2. Loads the automation app (`automation.json` + `handler.js`)
  *          from the owning app's active version under `appsDir`.
- *       3. Runs the handler via `runAutomationHandler` from runtime-core,
+ *       3. Runs the handler via `runAutomationHandler` from app-engine,
  *          wiring an `AutomationRunsStore` over the activity DB
  *          for the run audit + `ctx.state`.
  *          - toolDispatcher routes through `callGatewayTool` (full
@@ -34,7 +34,7 @@
  * this module just exports the ProviderPlugin descriptor as a factory.
  */
 
-import type { AnalyticsStore } from '@centraid/runtime-core';
+import type { AnalyticsStore } from '@centraid/app-engine';
 import { runOpenclawFire } from './openclaw-fire.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 // pi-ai types — open-import (matches openclaw's own pattern) so this

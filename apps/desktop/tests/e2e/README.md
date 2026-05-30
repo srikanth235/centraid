@@ -1,7 +1,7 @@
 # Desktop E2E
 
 Playwright suite that drives the real Electron app against a per-test mock
-gateway. Each test owns its own `userData` dir, `projectsDir`, and HTTP
+gateway. Each test owns its own `userData` dir, `appsDir`, and HTTP
 listener — state never leaks between tests.
 
 ## One-time setup
@@ -45,9 +45,9 @@ The fixtures in `fixtures.ts` give you the primitives:
   and a `calls` array you can assert on.
 - `seedSettings(env, gateway)` — writes `centraid-settings.json` so the main
   process picks up the test gateway on startup.
-- `seedPublishedApp(env, page, app)` — lays down a project dir + the matching
+- `seedPublishedApp(env, page, app)` — lays down an app dir + the matching
   `userApps` entry in `localStorage`.
-- `seedDraftProject(env, app)` — project dir only; `hydrateDrafts()` picks
+- `seedDraftApp(env, app)` — app dir only; `hydrateDrafts()` picks
   it up on home render.
 - `launchApp(env)` — launches Electron with the per-test `--user-data-dir`.
 

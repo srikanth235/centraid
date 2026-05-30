@@ -18,7 +18,7 @@
  * see `codex-app-server.ts` for the toml materialization.
  */
 
-import type { ChatStreamEvent, Dispatcher } from '@centraid/runtime-core';
+import type { ChatStreamEvent, Dispatcher } from '@centraid/app-engine';
 import { runCodexAppServerTurn } from './codex-app-server.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 import type { RunnerPrefs } from './types.js';
@@ -50,7 +50,7 @@ export interface ToolContext {
 }
 
 export interface AgentTurnInput {
-  /** Working directory the agent operates in (chat: app data dir; builder: project dir). */
+  /** Working directory the agent operates in (chat: app data dir; builder: app dir). */
   cwd: string;
   message: string;
   /** Backend-specific append point: codex `developerInstructions` / claude `systemPrompt.append`. */

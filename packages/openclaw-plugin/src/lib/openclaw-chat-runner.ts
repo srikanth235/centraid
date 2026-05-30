@@ -28,7 +28,7 @@
 import path from 'node:path';
 import os from 'node:os';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
-import type { ChatRunner, ChatRunInput, ChatStreamEvent } from '@centraid/runtime-core';
+import type { ChatRunner, ChatRunInput, ChatStreamEvent } from '@centraid/app-engine';
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 

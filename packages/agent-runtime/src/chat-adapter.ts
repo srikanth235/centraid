@@ -19,7 +19,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { ChatRunInput, ChatRunResult, ChatRunner, Dispatcher } from '@centraid/runtime-core';
+import type { ChatRunInput, ChatRunResult, ChatRunner, Dispatcher } from '@centraid/app-engine';
 import { runAgentTurn, type ToolContext } from './runtime.js';
 import type { RunnerPrefs } from './types.js';
 
@@ -28,7 +28,7 @@ export interface MakeChatRunnerOptions {
    *  the adapter picks up settings changes without a runtime restart. */
   prefsLoader: () => Promise<RunnerPrefs | undefined>;
   /**
-   * Resolve the shared runtime-core dispatcher. The chat adapter threads
+   * Resolve the shared app-engine dispatcher. The chat adapter threads
    * this into the per-turn `ToolContext` so the agent's three structured
    * tools dispatch through the same code path as HTTP callers. Hosts
    * typically return `runtime.dispatcher`. Called per turn so a host can
@@ -64,7 +64,7 @@ export function makeChatRunner(opts: MakeChatRunnerOptions): ChatRunner {
       const resumeId =
         input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
 
-      // The runtime-core extra-system-prompt already describes the three
+      // The app-engine extra-system-prompt already describes the three
       // structured tools + `_sql` built-in; pass it through verbatim.
       const extraSystemPrompt = input.extraSystemPrompt;
 

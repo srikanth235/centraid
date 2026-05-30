@@ -29,7 +29,7 @@ import {
   type AutomationHost,
   type AutomationReconcileResult,
   type AutomationRow,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import {
   list as listOsJobs,
   reconcile as reconcileOsJobs,

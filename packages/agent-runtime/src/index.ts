@@ -13,7 +13,7 @@
  * Where this package fits in the bigger picture:
  *
  *   - `runAgentTurn` is the mode-agnostic engine primitive. The builder
- *     (`@centraid/builder-harness`) calls it directly with its own cwd /
+ *     (`@centraid/agent-harness`) calls it directly with its own cwd /
  *     preamble / resume plumbing.
  *
  *   - `makeChatRunner` is the chat-side adapter (see ./chat-adapter.ts)

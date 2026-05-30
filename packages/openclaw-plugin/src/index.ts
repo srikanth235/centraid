@@ -1,17 +1,17 @@
 /*
  * @centraid/openclaw-plugin
  *
- * Thin OpenClaw shim over `@centraid/runtime-core`. Mounts the runtime's
+ * Thin OpenClaw shim over `@centraid/app-engine`. Mounts the runtime's
  * `/centraid` URL surface on the gateway. All app-handling logic — registry,
  * versioned uploads, sqlite-backed query/action handlers, the full
- * `/centraid/...` switch — lives in runtime-core. This file only:
+ * `/centraid/...` switch — lives in app-engine. This file only:
  *
  *   1. Resolves `pluginConfig` against the OpenClaw state dir
  *   2. Constructs a `Runtime`
  *   3. Forwards `gateway_start` to `runtime.bootstrap()`
  *   4. Mounts the runtime under `/centraid` via `api.registerHttpRoute`
  *
- * See `@centraid/runtime-core` for the engine and the public handler
+ * See `@centraid/app-engine` for the engine and the public handler
  * surface (`QueryHandler`, `ActionHandler`).
  */
 
@@ -29,16 +29,16 @@ import {
   AnalyticsStore,
   listAutomations,
   makeWebhookRouteHandler,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
 import { registerAutomationsProvider, setOpenClawConfig } from './lib/automations-provider.js';
 import { OpenclawAutomationHost } from './lib/automation-host.js';
 import { runOpenclawFire } from './lib/openclaw-fire.js';
 
-// Re-export the public handler & payload types from runtime-core so apps
+// Re-export the public handler & payload types from app-engine so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
-// continue to type-check. New code should import from `@centraid/runtime-core`
+// continue to type-check. New code should import from `@centraid/app-engine`
 // directly.
 export type {
   QueryHandler,
@@ -60,7 +60,7 @@ export type {
   LogLevel,
   AutomationManifest,
   AutomationManifestRequires,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 
 export default definePluginEntry({
   id: 'centraid',

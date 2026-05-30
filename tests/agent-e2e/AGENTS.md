@@ -4,7 +4,7 @@ Notes for any agent (or human) writing or running flows in this folder. Pair thi
 
 ## What this layer is for
 
-A loose, exploratory complement to scripted Playwright in [`apps/desktop/tests/e2e/`](../../apps/desktop/tests/e2e/). The harness ([`lib/harness.mjs`](lib/harness.mjs)) launches Electron with `--remote-debugging-port`, gives each run a fresh `userData` + `projectsDir`, and exposes a Playwright `Page` over CDP through `runFlow(slug, fn)`. The flow file is the recipe; the harness is the runner.
+A loose, exploratory complement to scripted Playwright in [`apps/desktop/tests/e2e/`](../../apps/desktop/tests/e2e/). The harness ([`lib/harness.mjs`](lib/harness.mjs)) launches Electron with `--remote-debugging-port`, gives each run a fresh `userData` + `appsDir`, and exposes a Playwright `Page` over CDP through `runFlow(slug, fn)`. The flow file is the recipe; the harness is the runner.
 
 The structural payoff over Playwright is **external CDP** and **`ctx.restart()`** — Electron outlives the runner, so an agent can attach mid-flow, take ad-hoc actions, and resume. That only matters when an agent is supervising. For pure invariants, prefer Playwright.
 
@@ -25,7 +25,7 @@ If a flow here stabilizes and becomes invariant-shaped, port it to Playwright an
 node tests/agent-e2e/flows/<slug>.mjs
 ```
 
-That does build (if needed), setup, exec, verdict, teardown. Verdict at `runs/<runId>/verdict.md`. On PASS the workspace is wiped; on FAIL it's kept under `runs/<runId>/workspace/` so you can inspect `userData`, `projects/`, etc.
+That does build (if needed), setup, exec, verdict, teardown. Verdict at `runs/<runId>/verdict.md`. On PASS the workspace is wiped; on FAIL it's kept under `runs/<runId>/workspace/` so you can inspect `userData`, `apps/`, etc.
 
 ## Authoring a flow
 
@@ -42,14 +42,14 @@ That does build (if needed), setup, exec, verdict, teardown. Verdict at `runs/<r
 - **Use `ctx.note(msg)` for observations the verdict should preserve.** Things like "found 3 drafts after restart" — short, factual.
 - **`ctx.shot('<n>-<intent>.png')` — descriptive name, not `step1.png`.** The screenshots are part of the audit trail.
 - **Read `ctx.page` fresh each step. Never destructure it.** `ctx.restart()` replaces the underlying Page.
-- **Verify on-disk state when it's the actual unit of truth.** For draft persistence, check `app.json` directly under `ctx.state.projectsDir` — don't only trust the rendered DOM.
+- **Verify on-disk state when it's the actual unit of truth.** For draft persistence, check `app.json` directly under `ctx.state.appsDir` — don't only trust the rendered DOM.
 - **Gateway defaults to your local one** (`http://127.0.0.1:18789`, token from `$OPENCLAW_GATEWAY_TOKEN`). If a flow needs a mock or pinned URL, write a per-flow `centraid-settings.json` into `ctx.state.userData` before connecting.
 
 ## When a flow fails
 
 1. Read `runs/<runId>/verdict.md` — it has the error and notes.
 2. Look at the last screenshot before the failure. The `.shot()` index in the filename tells you where the flow got to.
-3. The workspace is kept on FAIL. `ls runs/<runId>/workspace/projects/` shows what was on disk; `cat runs/<runId>/workspace/userData/centraid-settings.json` shows the seeded config.
+3. The workspace is kept on FAIL. `ls runs/<runId>/workspace/apps/` shows what was on disk; `cat runs/<runId>/workspace/userData/centraid-settings.json` shows the seeded config.
 4. The state.json still has the (now-dead) cdpUrl and pid. To get a live one for inspection: `node lib/harness.mjs setup` against a fresh run, manually replay the steps up to the failure point, then poke.
 5. When done, `node lib/harness.mjs teardown <runId>` to wipe the workspace.
 

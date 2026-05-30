@@ -18,7 +18,7 @@ node tests/agent-e2e/flows/clone-template-and-reopen.mjs
 That's the whole loop. The harness:
 
 1. Builds the desktop app if `dist/main.js` is missing.
-2. Creates a tmp `userData` + `projectsDir` under `runs/<flow>-<timestamp>/`.
+2. Creates a tmp `userData` + `appsDir` under `runs/<flow>-<timestamp>/`.
 3. Launches Electron with `--remote-debugging-port=<free>` and your real
    gateway settings (default `http://127.0.0.1:18789`, token from
    `$OPENCLAW_GATEWAY_TOKEN`). Override per-flow by writing your own

@@ -22,7 +22,7 @@ import type {
   AutomationHost,
   AutomationReconcileResult,
   AutomationRow,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
   desiredCronJobs,

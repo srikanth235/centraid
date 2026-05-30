@@ -18,9 +18,9 @@
   },
   "dependencies": {
     "@centraid/agent-runtime": "workspace:*",
+    "@centraid/app-engine": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
-    "@centraid/gateway-runtime": "workspace:*",
-    "@centraid/runtime-core": "workspace:*"
+    "@centraid/gateway-runtime": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

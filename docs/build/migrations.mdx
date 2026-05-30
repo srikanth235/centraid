@@ -21,7 +21,7 @@ migrations/
 - Kebab-or-snake-case description.
 - `.sql` extension.
 
-> **TODO(#120)** — confirm whether the runtime enforces the strict `NNNN_*.sql` pattern, and whether the runtime also tracks which migrations have been applied (per-app migrations table?). Worth checking `runtime-core` migration runner code. The convention is the standard "ordered, never edited" shape; the actual mechanism may differ.
+> **TODO(#120)** — confirm whether the runtime enforces the strict `NNNN_*.sql` pattern, and whether the runtime also tracks which migrations have been applied (per-app migrations table?). Worth checking `app-engine` migration runner code. The convention is the standard "ordered, never edited" shape; the actual mechanism may differ.
 
 ## What goes in
 
@@ -61,7 +61,7 @@ Centraid keeps `data.sqlite` persistent across code versions. A user can roll ba
 
 ## When migrations run
 
-> **TODO(#120)** — document the exact lifecycle: do migrations run at upload time, at first read after a version flip, or on gateway start? `current.json` records `activeVersion` and `history`; whether the runtime tracks `appliedMigrations` separately matters here. Read `runtime-core/src/migrations/` (or wherever) to confirm.
+> **TODO(#120)** — document the exact lifecycle: do migrations run at upload time, at first read after a version flip, or on gateway start? `current.json` records `activeVersion` and `history`; whether the runtime tracks `appliedMigrations` separately matters here. Read `app-engine/src/migrations/` (or wherever) to confirm.
 
 ## Working with the schema from handlers
 

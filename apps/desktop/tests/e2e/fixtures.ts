@@ -92,16 +92,16 @@ export async function startMockGateway(): Promise<MockGateway> {
 export interface TestEnv {
   workspace: string; // <tmp>/<test-id>
   userData: string; // electron --user-data-dir
-  projectsDir: string;
+  appsDir: string;
 }
 
 export async function makeEnv(): Promise<TestEnv> {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-e2e-'));
   const userData = path.join(workspace, 'userData');
-  const projectsDir = path.join(workspace, 'projects');
+  const appsDir = path.join(workspace, 'apps');
   await fs.mkdir(userData, { recursive: true });
-  await fs.mkdir(projectsDir, { recursive: true });
-  return { workspace, userData, projectsDir };
+  await fs.mkdir(appsDir, { recursive: true });
+  return { workspace, userData, appsDir };
 }
 
 export async function cleanupEnv(env: TestEnv): Promise<void> {
@@ -110,7 +110,7 @@ export async function cleanupEnv(env: TestEnv): Promise<void> {
 
 /**
  * Write <userData>/centraid-settings.json so the main process picks up our
- * mock gateway URL/token and the per-test projectsDir on startup. Mirrors
+ * mock gateway URL/token and the per-test appsDir on startup. Mirrors
  * `apps/desktop/src/main/settings.ts` shape exactly — drift here will fail
  * loadSettings() silently and fall back to defaults.
  */
@@ -123,7 +123,7 @@ export async function seedSettings(
     file,
     JSON.stringify(
       {
-        projectsDir: env.projectsDir,
+        appsDir: env.appsDir,
         gatewayUrl: gateway.url,
         gatewayToken: gateway.token,
         remoteTemplatesUrl: '', // disable remote template fetching
@@ -135,13 +135,13 @@ export async function seedSettings(
   );
 }
 
-/** Lay down a "published" project + matching localStorage userApp entry. */
+/** Lay down a "published" app + matching localStorage userApp entry. */
 export async function seedPublishedApp(
   env: TestEnv,
   page: Page,
   app: { id: string; name: string; desc?: string },
 ): Promise<void> {
-  await seedProjectDir(env, app);
+  await seedAppDir(env, app);
   await page.evaluate((a) => {
     const KEY = 'centraid.v1.home.userApps';
     const existing = JSON.parse(localStorage.getItem(KEY) ?? '[]') as Array<
@@ -154,32 +154,32 @@ export async function seedPublishedApp(
       iconKey: 'Todo',
       color: '#5847e0',
       colorKey: 'violet',
-      centraidProjectId: a.id,
+      centraidAppId: a.id,
     });
     localStorage.setItem(KEY, JSON.stringify(existing));
   }, app);
 }
 
-/** Lay down a draft project (no userApp entry — hydrateDrafts() will pick it up). */
-export async function seedDraftProject(
+/** Lay down a draft app (no userApp entry — hydrateDrafts() will pick it up). */
+export async function seedDraftApp(
   env: TestEnv,
   app: { id: string; name: string; desc?: string },
 ): Promise<void> {
-  await seedProjectDir(env, app);
+  await seedAppDir(env, app);
 }
 
-async function seedProjectDir(
+async function seedAppDir(
   env: TestEnv,
   app: { id: string; name: string; desc?: string },
 ): Promise<void> {
-  const dir = path.join(env.projectsDir, app.id);
+  const dir = path.join(env.appsDir, app.id);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
     path.join(dir, 'app.json'),
     JSON.stringify({ name: app.name, description: app.desc ?? '' }, null, 2),
   );
   // hasIndex: true makes the tile feel "complete" and matches a real published
-  // project. The renderer doesn't currently gate delete on this, but a future
+  // app. The renderer doesn't currently gate delete on this, but a future
   // change might — keeping it close to the real shape is cheap insurance.
   await fs.writeFile(path.join(dir, 'index.html'), '<!doctype html><title>seeded</title>');
 }
@@ -187,7 +187,7 @@ async function seedProjectDir(
 /**
  * Launch the Electron app with a per-test userData dir. Caller must have
  * already written `centraid-settings.json` into env.userData and seeded any
- * fixture projects on disk.
+ * fixture apps on disk.
  *
  * `main.js` is built from `src/main.ts`; the suite's package script should
  * run `npm run build` once before invoking playwright.

@@ -9,7 +9,7 @@ import {
   appQuery,
   appLiveUrl,
   deregisterApp,
-  listProjects,
+  listApps,
   listTemplates,
   getUserPrefs,
   saveUserPrefs,
@@ -24,8 +24,8 @@ import {
   createAutomation,
   cloneTemplate as gwCloneTemplate,
   setAutomationEnabled,
-  updateProjectMeta,
-  deleteProject,
+  updateAppMeta,
+  deleteApp,
 } from './gateway-client.js';
 
 (function () {
@@ -172,7 +172,7 @@ import {
   // re-render on every pref change; cleared on page teardown.
   let onAppearanceApplied: (() => void) | null = null;
 
-  // Project the renderer's typed prefs into the same `dataAttrs` / `cssVars`
+  // App the renderer's typed prefs into the same `dataAttrs` / `cssVars`
   // shape the runtime uses for server-side injection. The bridge inside each
   // app applies them as `<html data-…>` attrs and `--…` CSS vars — symmetric
   // with what the gateway bakes on first paint.
@@ -237,7 +237,7 @@ import {
     }
   })();
 
-  // Project an arbitrary remote prefs object onto the AppearancePrefs shape,
+  // App an arbitrary remote prefs object onto the AppearancePrefs shape,
   // dropping unknown keys and rejecting values that don't match the union
   // types. Mirrors the gateway-side `KNOWN_KEYS` list — if you add a new
   // pref there, add it here too.
@@ -467,7 +467,7 @@ import {
   }
 
   // Build the sidebar contents for the current home/app-view context. The
-  // builder builds its own (it knows which project is active).
+  // builder builds its own (it knows which app is active).
   function buildHomeSidebar(active: { page?: SidebarPage; appId?: string } = {}): HTMLElement {
     const apps: ChromeSidebarApp[] = userApps.map((a) => ({
       color: a.color,
@@ -730,9 +730,9 @@ import {
     Store.set('home.userApps', userApps);
   }
 
-  // Drafts: projects that exist on disk under <projectsDir>/<id>/ but were
-  // never "Add to home"-d. Hydrated from listProjects() on each home render
-  // so newly scaffolded projects show up without a manual refresh.
+  // Drafts: apps that exist on disk under <appsDir>/<id>/ but were
+  // never "Add to home"-d. Hydrated from listApps() on each home render
+  // so newly scaffolded apps show up without a manual refresh.
   let drafts: DraftAppMeta[] = [];
 
   function getApps(): AppMetaResolvedType[] {
@@ -840,14 +840,14 @@ import {
     toastTimer = setTimeout(() => toast.remove(), 2000);
   }
 
-  // Refresh `drafts` from disk. Drafts = projects on disk whose ids aren't
+  // Refresh `drafts` from disk. Drafts = apps on disk whose ids aren't
   // already in `userApps` (= already pinned to home, with full metadata).
   // Automation apps (`kind: 'automation'`) live in the same `appsDir` but
   // belong to the Automations surface — skip them here so My apps stays
   // app-only.
   async function hydrateDrafts(): Promise<void> {
     try {
-      const projs = await listProjects();
+      const projs = await listApps();
       const knownIds = new Set(getApps().map((a) => a.id));
       drafts = projs
         .filter((p) => p.kind !== 'automation')
@@ -1682,8 +1682,8 @@ import {
   }
 
   // One execution in the Automations "Executions" feed. Issue #91:
-  // automations are user-owned projects — a run is identified by its
-  // automation id; the display name is resolved from the project list.
+  // automations are user-owned apps — a run is identified by its
+  // automation id; the display name is resolved from the app list.
   interface AutomationFeedEntry {
     automationId: string;
     automationName: string;
@@ -1921,7 +1921,7 @@ import {
     enterAutomationBuilder({ automationId: id });
   }
 
-  // Open the conversational builder on an existing automation project.
+  // Open the conversational builder on an existing automation app.
   function enterAutomationBuilder(input: { automationId: string }): void {
     recordRoute({ kind: 'automation-builder', automationId: input.automationId });
     clear();
@@ -1934,8 +1934,8 @@ import {
         root,
         el,
         onExit: renderAutomations,
-        projectId: input.automationId,
-        projectKind: 'automation',
+        appId: input.automationId,
+        appKind: 'automation',
         ...chromeNav(),
       }) ?? null;
   }
@@ -2061,7 +2061,7 @@ import {
         // eslint-disable-next-line no-console
         console.info(`[clone] webhook secret for ${w.ownerApp}/${w.automationId}:`, w.secret);
       }
-      enterAutomationBuilder({ automationId: result.project.id });
+      enterAutomationBuilder({ automationId: result.app.id });
     } catch (err) {
       showToast(`Could not adopt template: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -2811,7 +2811,7 @@ import {
 
   // Collect the global automation-run ledger into one flat list. The
   // run record carries the automation id; the name is resolved from the
-  // project list (newest-first sorting is the caller's job).
+  // app list (newest-first sorting is the caller's job).
   async function collectAutomationRuns(): Promise<AutomationFeedEntry[]> {
     let autos: CentraidAutomationRow[] = [];
     let runs: CentraidAutomationRunRecord[] = [];
@@ -3370,7 +3370,7 @@ import {
   function openContextMenu(app: AppMetaResolvedType, anchor: MenuAnchor): void {
     captureTrigger();
     // Drafts have no published runtime, so "Open" and "Share" are hidden
-    // — only Edit (back to builder) and Delete (rm the project dir) make
+    // — only Edit (back to builder) and Delete (rm the app dir) make
     // sense. Published apps additionally get Share.
     const items: (CtxItem | 'sep')[] = isDraft(app)
       ? [
@@ -3420,7 +3420,7 @@ import {
     } else if (id === 'update') {
       enterBuilder({ appContext: app });
     } else if (id === 'delete') {
-      void deleteApp(app);
+      void handleDeleteApp(app);
     } else if (id === 'share') {
       openShareDialog(app);
     } else if (id === 'rename') {
@@ -3432,7 +3432,7 @@ import {
 
   async function revealApp(app: AppMetaResolvedType): Promise<void> {
     try {
-      await window.CentraidApi.openProjectFolder({ id: app.id });
+      await window.CentraidApi.openAppFolder({ id: app.id });
     } catch (err) {
       showToast(`Could not reveal folder: ${String(err)}`);
     }
@@ -3440,7 +3440,7 @@ import {
 
   /**
    * Flip the app card's name into a contenteditable inline editor (Notion
-   * style — no modal). Enter or blur commits via `updateProjectMeta`; Esc
+   * style — no modal). Enter or blur commits via `updateAppMeta`; Esc
    * cancels. Empty/identical names are treated as no-op cancels. On commit
    * the home re-renders so the meta timestamp and any title-derived state
    * (sidebar, drafts) stay consistent.
@@ -3469,9 +3469,9 @@ import {
         return;
       }
       try {
-        await updateProjectMeta({ id: app.id, name: nextName });
+        await updateAppMeta({ id: app.id, name: nextName });
         if (!isDraft(app)) {
-          syncUserAppMeta({ projectId: app.id, name: nextName });
+          syncUserAppMeta({ appId: app.id, name: nextName });
         }
         showToast(`Renamed to "${nextName}"`);
         renderHome();
@@ -3563,7 +3563,7 @@ import {
       el(
         'div',
         { class: 'cd-tmpl-preview-note' },
-        'Clones into your projects as a draft. Rename, edit, and publish from there — the original template stays in the catalog.',
+        'Clones into your apps as a draft. Rename, edit, and publish from there — the original template stays in the catalog.',
       ),
     );
 
@@ -3583,21 +3583,21 @@ import {
     setTimeout(() => useBtn.focus(), 30);
   }
 
-  async function deleteApp(app: AppMetaResolvedType): Promise<void> {
+  async function handleDeleteApp(app: AppMetaResolvedType): Promise<void> {
     const draft = isDraft(app);
     const ok = await openConfirm({
       confirmLabel: 'Delete',
       danger: true,
       message: draft
-        ? `Delete the draft "${app.name}"? Its project files will be removed from disk.`
-        : `Delete "${app.name}"? This removes it from the gateway and wipes its local project files. Data published to the gateway cannot be recovered.`,
+        ? `Delete the draft "${app.name}"? Its app files will be removed from disk.`
+        : `Delete "${app.name}"? This removes it from the gateway and wipes its local app files. Data published to the gateway cannot be recovered.`,
       title: draft ? 'Delete draft?' : 'Delete app?',
     });
     if (!ok) return;
 
     if (draft) {
       try {
-        await deleteProject({ id: app.id });
+        await deleteApp({ id: app.id });
         showToast(`Deleted draft "${app.name}"`);
       } catch (err) {
         showToast(`Could not delete draft: ${String(err)}`);
@@ -3610,9 +3610,9 @@ import {
     // than 404 (already gone), keep the tile so the user can retry rather than
     // silently leaking an orphan registration on the gateway.
     const ua = findUserApp(app.id);
-    if (ua?.centraidProjectId) {
+    if (ua?.centraidAppId) {
       try {
-        await deregisterApp({ id: ua.centraidProjectId });
+        await deregisterApp({ id: ua.centraidAppId });
       } catch (err) {
         const msg = String(err);
         if (!/404|not_found/i.test(msg)) {
@@ -3625,7 +3625,7 @@ import {
     // Disk cleanup is best-effort — the gateway side is already consistent.
     let diskWarn: string | null = null;
     try {
-      await deleteProject({ id: app.id });
+      await deleteApp({ id: app.id });
     } catch (err) {
       diskWarn = String(err);
     }
@@ -3866,7 +3866,7 @@ import {
   }
 
   // Clone a template to disk and drop the user straight into the builder.
-  // The new project surfaces as a DRAFT tile on next home render; the user
+  // The new app surfaces as a DRAFT tile on next home render; the user
   // explicitly clicks Publish to upload it to the gateway.
   async function cloneTemplate(tmpl: TemplateEntry): Promise<void> {
     const palette = window.CentraidTokens.palette as unknown as Record<string, ColorHexType>;
@@ -3877,16 +3877,16 @@ import {
         __draft: true,
         color,
         colorKey: tmpl.colorKey as DraftAppMeta['colorKey'],
-        desc: result.project.description || tmpl.desc,
+        desc: result.app.description || tmpl.desc,
         hasIndex: true,
         iconKey: tmpl.iconKey as IconNameType,
-        id: result.project.id,
+        id: result.app.id,
         // The IPC's `suggestCloneIdentity` picks a unique suffixed name
         // (e.g. "Hydrate 2") and writes it to `app.json#name` — read that
-        // back via `project.name` so the home tile shows the same string
+        // back via `app.name` so the home tile shows the same string
         // the builder topbar will. Fall back to the template's bare name
-        // only when project.name wasn't populated (older project shapes).
-        name: result.project.name ?? result.template.name,
+        // only when app.name wasn't populated (older app shapes).
+        name: result.app.name ?? result.template.name,
       };
       enterBuilder({ appContext: draft, focusName: true });
     } catch (err) {
@@ -3914,18 +3914,18 @@ import {
       return;
     }
     // If editing an existing user app that was published via centraid, pass the
-    // project id so the builder reattaches to that project on disk + gateway.
-    // Drafts are unpublished projects whose tile id == project id.
-    let projectId: string | undefined;
+    // app id so the builder reattaches to that app on disk + gateway.
+    // Drafts are unpublished apps whose tile id == app id.
+    let appId: string | undefined;
     if (opts.appContext) {
       if (isDraft(opts.appContext)) {
-        projectId = opts.appContext.id;
+        appId = opts.appContext.id;
       } else {
         const ua = findUserApp(opts.appContext.id);
-        projectId = ua?.centraidProjectId;
+        appId = ua?.centraidAppId;
       }
     }
-    // Sidebar drafts list — give the builder the same view of WIP projects
+    // Sidebar drafts list — give the builder the same view of WIP apps
     // the home sidebar shows, so users can swap between drafts without
     // having to bounce through Home. `drafts` is the shell's module-level
     // cache (refreshed by `hydrateDrafts()` on home render). It can lag
@@ -3956,7 +3956,7 @@ import {
         el,
         onExit: renderHome,
         ...routeOpts,
-        ...(projectId ? { projectId } : {}),
+        ...(appId ? { appId } : {}),
         ...(focusName ? { focusName: true } : {}),
         ...chromeNav(),
         drafts: builderDrafts,
@@ -3970,14 +3970,8 @@ import {
   // immediately on return. Drafts come back from disk via hydrateDrafts
   // (reads `app.json#{name,description}`), so we only need to touch
   // userApps here.
-  function syncUserAppMeta(input: {
-    projectId: string;
-    name?: string;
-    description?: string;
-  }): void {
-    const ua = userApps.find(
-      (a) => a.centraidProjectId === input.projectId || a.id === input.projectId,
-    );
+  function syncUserAppMeta(input: { appId: string; name?: string; description?: string }): void {
+    const ua = userApps.find((a) => a.centraidAppId === input.appId || a.id === input.appId);
     if (!ua) return;
     if (input.name !== undefined) ua.name = input.name;
     if (input.description !== undefined) ua.desc = input.description || 'Built with Centraid.';
@@ -4035,24 +4029,24 @@ import {
   function addUserApp(input: {
     prompt?: string;
     name?: string;
-    /** Centraid project id — required. The builder only fires
+    /** Centraid app id — required. The builder only fires
      *  `onAddToHome` after a successful publish, at which point the
-     *  project id is always defined. The home tile's id is this id, so
+     *  app id is always defined. The home tile's id is this id, so
      *  context-menu actions and `openApp` can address it directly. */
-    projectId: string;
+    appId: string;
     versionId?: string;
     color?: ColorHexType;
     iconKey?: IconNameType;
   }): UserAppMeta {
     const meta = inferAppMeta(input.prompt || '');
-    const id = input.projectId;
+    const id = input.appId;
 
     const existing = userApps.find((a) => a.id === id);
     if (existing) {
       // Republished — refresh metadata, keep tile in place.
       existing.name = input.name || existing.name;
       existing.desc = input.prompt && input.prompt.length <= 60 ? input.prompt : existing.desc;
-      existing.centraidProjectId = input.projectId ?? existing.centraidProjectId;
+      existing.centraidAppId = input.appId ?? existing.centraidAppId;
       existing.updatedAt = new Date().toISOString();
       persist();
       renderHome();
@@ -4070,7 +4064,7 @@ import {
       id,
       name: input.name || meta.name,
       updatedAt: stampIso,
-      centraidProjectId: input.projectId,
+      centraidAppId: input.appId,
     };
     userApps.push(newApp);
     persist();
@@ -4089,19 +4083,19 @@ import {
     // A draft with no built index.html has nothing to serve — route to the
     // builder so the click still does something. Drafts that *have* a build
     // mount in the app view just like published apps (their tile id is the
-    // project id — see `enterBuilder`'s projectId note).
+    // app id — see `enterBuilder`'s appId note).
     if (isDraft(app) && !app.hasIndex) {
       enterBuilder({ appContext: app });
       return;
     }
     recordRoute({ id, kind: 'app' });
-    // Published apps carry their project id on the UserAppMeta; drafts use
-    // their tile id directly (tile id == project id for unpublished apps).
-    // Every code path in v0 produces a defined project id — addUserApp
-    // requires `projectId` and drafts use their own id — so the fallback
+    // Published apps carry their app id on the UserAppMeta; drafts use
+    // their tile id directly (tile id == app id for unpublished apps).
+    // Every code path in v0 produces a defined app id — addUserApp
+    // requires `appId` and drafts use their own id — so the fallback
     // chain never bottoms out on undefined.
     const ua = findUserApp(id);
-    const projectId = ua?.centraidProjectId ?? app.id;
+    const appId = ua?.centraidAppId ?? app.id;
     clear();
 
     // Main area: the running app fills the canvas inside a scrollable column.
@@ -4151,7 +4145,7 @@ import {
       'aria-label': 'App settings',
       'aria-haspopup': 'dialog',
       trustedHtml: Icon.Settings ? Icon.Settings({ size: 15 }) : '',
-      onClick: () => toggleAppSettings(app, gearBtn, view, projectId),
+      onClick: () => toggleAppSettings(app, gearBtn, view, appId),
     });
     gearWrap.append(gearBtn);
     gearWrap.append(el('span', { class: 'cd-tooltip' }, 'App settings'));
@@ -4208,14 +4202,14 @@ import {
     root.append(shell);
 
     try {
-      mountUserApp(app, projectId, inner);
+      mountUserApp(app, appId, inner);
       // Per-app agentic chat: only wire it up for centraid-backed apps,
       // since the agent reads the app's data.sqlite via the gateway.
-      if (projectId) {
+      if (appId) {
         currentCleanup = window.AppChat.mount({
           view,
           app,
-          appId: projectId,
+          appId: appId,
           el,
         });
       } else {
@@ -4227,8 +4221,8 @@ import {
     }
   }
 
-  function mountUserApp(app: AppMetaResolvedType, projectId: string, container: HTMLElement): void {
-    // Every centraid app — published or draft — has a project id.
+  function mountUserApp(app: AppMetaResolvedType, appId: string, container: HTMLElement): void {
+    // Every centraid app — published or draft — has an app id.
     // We host its iframe served by the openclaw plugin; the frame fills
     // the main pane edge-to-edge and the app supplies its own chrome.
     container.classList.add('app-view-fullbleed');
@@ -4253,7 +4247,7 @@ import {
     });
     frameWrap.append(frame);
     container.append(frameWrap);
-    void app; // suppress unused arg — frame paints from the project id alone
+    void app; // suppress unused arg — frame paints from the app id alone
 
     // Resolve the live URL and load it. We carry the global theme in
     // BOTH the query string (so the runtime's settings injection bakes
@@ -4263,7 +4257,7 @@ import {
     // Iframe theme is resolved to its light/dark kind — third-party
     // shell themes don't ship template-side CSS, so apps stay in the
     // Centraid look while the shell wears the named theme.
-    void appLiveUrl({ id: projectId })
+    void appLiveUrl({ id: appId })
       .then((r) => {
         const qsep = r.url.includes('?') ? '&' : '?';
         const themeQs = `theme=${iframeThemeKind()}&bgL=${prefs.bgL}`;
@@ -4284,7 +4278,7 @@ import {
   // reads as one product. True per-app *aesthetics* (font, page width,
   // corner radius, etc.) live here. Each template declares its knobs in
   // `app.json#knobs[]` (see `packages/app-templates`); the scaffolder
-  // copies that manifest into the cloned project; the gateway serves it
+  // copies that manifest into the cloned app; the gateway serves it
   // as a static file. We fetch the cloned copy at panel-open so the
   // controls match the app's CSS, not whatever the bundled template
   // might have evolved to since the clone.
@@ -4383,7 +4377,7 @@ import {
 
   // Settings key (camelCase, e.g. `appFont`) → kebab name shared by the
   // data-attr and CSS-var paths. Mirrors `camelTailToKebab` in
-  // `runtime-core/src/settings-merge.ts` so the live update lands on the
+  // `app-engine/src/settings-merge.ts` so the live update lands on the
   // same target the runtime will bake on next reload.
   function appKnobKebab(key: string): string {
     // Strip the `app` prefix, lowercase first letter, kebab the rest.
@@ -4409,7 +4403,7 @@ import {
     try {
       const live = await appLiveUrl({ id: appId });
       // `appLiveUrl` returns `${gateway}/centraid/<id>/`. The app
-      // manifest sits next to `index.html` inside the same project;
+      // manifest sits next to `index.html` inside the same app;
       // knobs live under its `knobs[]` array (folded in from the old
       // `app-knobs.json` sidecar).
       const url = `${live.url.replace(/\/?$/, '/')}app.json`;
@@ -4542,7 +4536,7 @@ import {
     }
 
     // Automations (issue #91) — reverse lookup: automations are
-    // user-owned projects that declare which apps they touch via
+    // user-owned apps that declare which apps they touch via
     // `manifest.apps`, so this tab lists the automations associated
     // with this app.
     const automationsHost = el('div', { class: 'cd-app-settings-section-host' });
@@ -4591,7 +4585,7 @@ import {
         closeAppSettings();
         openShareDialog(app);
       }),
-      appSettingsMenuItem('Folder', 'Reveal in Finder', 'Open the project folder', () => {
+      appSettingsMenuItem('Folder', 'Reveal in Finder', 'Open the app folder', () => {
         closeAppSettings();
         void revealApp(app);
       }),
@@ -4615,7 +4609,7 @@ import {
       el(
         'span',
         { class: 'cd-app-settings-menu-sub' },
-        'Removes the project, its data, and its scheduled automations.',
+        'Removes the app, its data, and its scheduled automations.',
       ),
     ]);
     const deleteConfirm = el(
@@ -4632,7 +4626,7 @@ import {
         return;
       }
       closeAppSettings();
-      void deleteApp(app);
+      void handleDeleteApp(app);
     });
     dangerZone.append(deleteBtn);
     panes.manage.append(dangerZone);
@@ -5351,7 +5345,7 @@ import {
     const next = input.trim().replace(/\s+/g, ' ');
     if (!next || next === app.name) return;
     try {
-      await updateProjectMeta({ id: app.id, name: next });
+      await updateAppMeta({ id: app.id, name: next });
       const ua = findUserApp(app.id);
       if (ua) {
         ua.name = next;
@@ -5369,7 +5363,7 @@ import {
   // Rendered as a top-level page in the main panel (sibling of Home /
   // App view / Builder), not a drawer. Four groups:
   //  - Theme / Layout / App tiles: renderer prefs, apply live.
-  //  - Gateway: openclaw URL / token / projects dir (main-process prefs,
+  //  - Gateway: openclaw URL / token / apps dir (main-process prefs,
   //    needs explicit Save).
   function renderSettings(initialPage?: string): void {
     void renderSettingsAsync(initialPage);
@@ -5383,7 +5377,7 @@ import {
     const current = await window.CentraidApi.getSettings().catch(() => ({
       gatewayUrl: 'http://127.0.0.1:18789',
       gatewayToken: '',
-      projectsDir: '~/centraid-projects',
+      appsDir: '~/centraid-apps',
       runtimeMode: 'local' as const,
       remoteGatewayUrl: 'http://127.0.0.1:18789',
       remoteGatewayToken: '',
@@ -5565,7 +5559,7 @@ import {
     // ---- Runtime group ----
     // After #109 the runtime page is the Gateways panel. Gateway
     // selection + lifecycle (add / rename / remove) replaces the old
-    // "Local vs Remote toggle + URL/token/projectsDir form". Paths
+    // "Local vs Remote toggle + URL/token/appsDir form". Paths
     // are fixed under userData and are no longer user-configurable.
 
     const labeled = (label: string, hint: string, input: HTMLElement): HTMLElement =>
@@ -6110,7 +6104,7 @@ import {
     );
     pageHosts.sync.append(
       drawerGroup('Sync', [
-        el('div', { class: 'settings-note' }, 'Project sync and backup settings will live here.'),
+        el('div', { class: 'settings-note' }, 'App sync and backup settings will live here.'),
       ]),
     );
 
@@ -6724,11 +6718,11 @@ import {
 
   // Multi-gateway (#109): when the active gateway flips, every
   // gateway-scoped piece of renderer state goes stale at once — the
-  // home shelf's project list belongs to gateway A, the builder is
+  // home shelf's app list belongs to gateway A, the builder is
   // editing gateway A's workspace, the iframe is loading from gateway
   // A's appsDir, the agent session is rooted in gateway A. Drop all
   // of it by re-priming the badge and bouncing back to Home (which
-  // refetches the project list against the new active gateway). Main
+  // refetches the app list against the new active gateway). Main
   // already invalidates its HTTP-client caches before broadcasting,
   // so the next IPC after Home renders sees the new URL+token.
   window.CentraidApi.onGatewayChanged(() => {

@@ -142,7 +142,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 ### query-handlers-read-only
 
 - **Directive**: centraid query handlers (`*/queries/*.js`) must not mutate the database — no `stmt.run()`, no `db.exec()`. Use `actions/*.js` (dispatched via `centraid_write` / `POST /centraid/_tool/centraid_write`) for any writes.
-- **Rationale**: the runtime's handler-runner skips SQLite session tracking for `handlerKind === 'query'` as a perf optimization on the read path (`packages/runtime-core/src/handler-runner.ts`). Writes from a query handler succeed but are invisible to the change-notification SSE feed at `/centraid/<id>/_changes`, so subscribed iframes never re-fetch — UI goes silently stale with no error anywhere. Mutations must live where the bus actually observes them.
+- **Rationale**: the runtime's handler-runner skips SQLite session tracking for `handlerKind === 'query'` as a perf optimization on the read path (`packages/app-engine/src/handler-runner.ts`). Writes from a query handler succeed but are invisible to the change-notification SSE feed at `/centraid/<id>/_changes`, so subscribed iframes never re-fetch — UI goes silently stale with no error anywhere. Mutations must live where the bus actually observes them.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/query-handlers-read-only/check.sh`
 - **Exceptions**: per-line waiver `// governance: allow-query-handlers-read-only <reason>` for the rare opt-in case (e.g. lazy view materialization on first access).
 
@@ -155,7 +155,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 
 ### no-hardcoded-model-ids
 
-- **Directive**: production source under `packages/` and `apps/` must not reference concrete provider model ids (`claude-opus-4-7`, `claude-sonnet-4-6`, `gpt-5`, `o1-mini`, `gemini-2.0-flash`, etc.) inside string literals. Model selection flows through capability tiers resolved at runtime. The single allowlisted file is `packages/runtime-core/src/model-pricing.ts` (the price table is by definition a model-id-to-price map). Test files (`**/*.test.{ts,tsx}`, `**/*.spec.{ts,tsx}`) are excluded since they exercise the pricing and storage layers and need real ids.
+- **Directive**: production source under `packages/` and `apps/` must not reference concrete provider model ids (`claude-opus-4-7`, `claude-sonnet-4-6`, `gpt-5`, `o1-mini`, `gemini-2.0-flash`, etc.) inside string literals. Model selection flows through capability tiers resolved at runtime. The single allowlisted file is `packages/app-engine/src/model-pricing.ts` (the price table is by definition a model-id-to-price map). Test files (`**/*.test.{ts,tsx}`, `**/*.spec.{ts,tsx}`) are excluded since they exercise the pricing and storage layers and need real ids.
 - **Rationale**: provider-agnostic inference. The model lineup churns - Anthropic, OpenAI, Google, and Meta ship new flagship models every few months and retire old ones on a similar cadence. Code that references `claude-sonnet-4-5` directly is a maintenance liability the moment the next minor version ships. Capability tiers (`tier:fast`, `tier:smart`) abstract that churn behind a runtime resolver and let model selection move with operator preferences and per-profile routing without code edits.
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/no-hardcoded-model-ids/check.sh`
 - **Exceptions**: per-line waiver `// governance: allow-no-hardcoded-model-ids <reason>` for the rare opt-in case (e.g. a controlled experiment that pins a specific model intentionally).
@@ -167,12 +167,12 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/actions-declare-table-writes/check.sh`
 - **Exceptions**: none. JSON has no comment syntax, and the check is file-level; the right opt-out for a no-DB-write action is the explicit empty array.
 
-### gateway-core-mode-agnostic
+### gateway-engine-mode-agnostic
 
-- **Directive**: code under `packages/runtime-core/` may not branch on which gateway mode it is running under. Specifically, gateway-mode-discrimination identifiers (`gatewayMode`, `gatewayKind`, `gateway_mode`, `gateway_kind`, `isEmbeddedGateway`, `isOpenClawGateway`, `isLocalGateway`, `isRemoteGateway`, `deploymentMode`, `hostingMode`) are forbidden in tracked source files. Mode-specific behavior belongs at the entrypoints: `apps/desktop/src/main/` for the embedded gateway, `packages/openclaw-plugin/src/` for the OpenClaw gateway.
-- **Rationale**: the architecture's "same code, two modes" property is what makes "local-first with optional remote" cheap rather than expensive. Once `runtime-core` starts checking which host it lives inside, dev and prod paths diverge and "works on my machine" becomes a class of bug again. Centraid's docs frame this explicitly: "the split exists only at the chat backend and the reachable-from surface; the rest of the gateway is byte-identical." Encoding that promise as a check stops it from rotting silently the next time someone is tempted to add a one-liner branch.
-- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/gateway-core-mode-agnostic/check.sh`
-- **Exceptions**: per-line waiver `// governance: allow-gateway-core-mode-agnostic <reason>` for the rare case where runtime-core genuinely needs to inspect its host (none today; the architecture promise is that no such case should exist).
+- **Directive**: code under `packages/app-engine/` may not branch on which gateway mode it is running under. Specifically, gateway-mode-discrimination identifiers (`gatewayMode`, `gatewayKind`, `gateway_mode`, `gateway_kind`, `isEmbeddedGateway`, `isOpenClawGateway`, `isLocalGateway`, `isRemoteGateway`, `deploymentMode`, `hostingMode`) are forbidden in tracked source files. Mode-specific behavior belongs at the entrypoints: `apps/desktop/src/main/` for the embedded gateway, `packages/openclaw-plugin/src/` for the OpenClaw gateway.
+- **Rationale**: the architecture's "same code, two modes" property is what makes "local-first with optional remote" cheap rather than expensive. Once `app-engine` starts checking which host it lives inside, dev and prod paths diverge and "works on my machine" becomes a class of bug again. Centraid's docs frame this explicitly: "the split exists only at the chat backend and the reachable-from surface; the rest of the gateway is byte-identical." Encoding that promise as a check stops it from rotting silently the next time someone is tempted to add a one-liner branch.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/gateway-engine-mode-agnostic/check.sh`
+- **Exceptions**: per-line waiver `// governance: allow-gateway-engine-mode-agnostic <reason>` for the rare case where app-engine genuinely needs to inspect its host (none today; the architecture promise is that no such case should exist).
 
 ### data-runtime-sqlite-separation
 
@@ -195,7 +195,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-05-26 — @srikanth235 — Add `handler-uses-ctx-primitives`: forbid direct provider-SDK imports in `queries/*.js`/`actions/*.js` so handlers stay portable and run-ledger cost accounting cannot be bypassed (#127).
 - 2026-05-26 — @srikanth235 — Add `no-hardcoded-model-ids`: forbid concrete provider model ids in production source so model selection moves with capability-tier indirection rather than code edits (#127).
 - 2026-05-26 — @srikanth235 — Add `actions-declare-table-writes`: every `app.json#actions[]` entry must declare a `writes:` array so change-stream invalidation cannot silently drop subscribers (#127).
-- 2026-05-26 — @srikanth235 — Add `gateway-core-mode-agnostic`: `packages/runtime-core/` may not branch on gateway mode so the "same code, two modes" architecture property holds (#127).
+- 2026-05-26 — @srikanth235 — Add `gateway-engine-mode-agnostic`: `packages/app-engine/` may not branch on gateway mode so the "same code, two modes" architecture property holds (#127).
 - 2026-05-26 — @srikanth235 — Add `data-runtime-sqlite-separation`: handler files may not reference `runtime.sqlite` (gateway-owned chat/run/automation state); enforces the easy half of the data-vs-runtime SQLite ownership boundary (#127).
 
 ## Escape hatches

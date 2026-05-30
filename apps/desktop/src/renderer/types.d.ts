@@ -112,37 +112,37 @@ declare global {
     initialPrompt?: string;
     appContext?: AppMetaResolved;
     /**
-     * Centraid project id (folder name under <projectsDir>) when reopening an
+     * Centraid app id (folder name under <appsDir>) when reopening an
      * already-generated user app. Absent for fresh `initialPrompt` flows —
-     * the builder generates an id and scaffolds a project itself.
+     * the builder generates an id and scaffolds an app itself.
      */
-    projectId?: string;
+    appId?: string;
     /**
-     * Project kind. `'app'` (default) is the standard chat-driven app
+     * App kind. `'app'` (default) is the standard chat-driven app
      * builder; `'automation'` swaps the right pane for a read-only
      * automation config view + test-run pane. Automation mode always
-     * receives a pre-scaffolded draft via `projectId`.
+     * receives a pre-scaffolded draft via `appId`.
      */
-    projectKind?: 'app' | 'automation';
+    appKind?: 'app' | 'automation';
     /**
      * Called after a successful publish of a fresh build. Receives the centraid
-     * project id (used to look up the app on subsequent opens) plus the
+     * app id (used to look up the app on subsequent opens) plus the
      * suggested name/icon/color so the home screen can render a tile.
      */
     onAddToHome?: (input: {
       prompt?: string;
-      projectId: string;
+      appId: string;
       name?: string;
       versionId?: string;
     }) => void;
     /**
-     * Called when the user inline-edits the project title or description
+     * Called when the user inline-edits the app title or description
      * in the builder topbar. The home screen uses this to update its
      * in-memory userApps entry (and its persisted localStorage copy) so
      * the tile reflects the new metadata without waiting for a re-publish.
      * Either `name` or `description` (or both) will be present.
      */
-    onMetaChange?: (input: { projectId: string; name?: string; description?: string }) => void;
+    onMetaChange?: (input: { appId: string; name?: string; description?: string }) => void;
     canGoBack?: boolean;
     canGoForward?: boolean;
     onBack?: () => void;
@@ -155,7 +155,7 @@ declare global {
      */
     focusName?: boolean;
     /**
-     * Sidebar drafts list — the user's other in-progress projects on disk
+     * Sidebar drafts list — the user's other in-progress apps on disk
      * that the shell already knows about. Builder renders these under a
      * "Drafts" section so the user can switch between WIP apps without
      * exiting to home. Defaults to `[]` when omitted (older callers).
@@ -164,8 +164,8 @@ declare global {
   }
 
   interface UserAppMeta extends AppMetaResolved {
-    /** Centraid project id (uploaded-mode app on the gateway). */
-    centraidProjectId?: string;
+    /** Centraid app id (uploaded-mode app on the gateway). */
+    centraidAppId?: string;
     /**
      * Last-modified timestamp (ISO 8601). Stamped when the app is created,
      * republished, or its name/description edited inline from the builder.
@@ -182,14 +182,14 @@ declare global {
   }
 
   /**
-   * A project that exists on disk under `<projectsDir>/<id>/` but has not
+   * An app that exists on disk under `<appsDir>/<id>/` but has not
    * been published or pinned to home yet. Rendered with a "DRAFT" badge —
    * clicking the tile opens the builder in update mode.
    */
   interface DraftAppMeta extends AppMetaResolved {
     /** True for drafts. The home grid's tile/menu logic keys off this. */
     __draft: true;
-    /** Whether the project has an `index.html` (preview-ready). */
+    /** Whether the app has an `index.html` (preview-ready). */
     hasIndex: boolean;
   }
 
@@ -215,7 +215,7 @@ declare global {
     onToggleSidebar: () => void;
     sidebar: HTMLElement;
     main: HTMLElement;
-    /** Right-edge chrome cluster — project identity, Publish, brand chip, etc. */
+    /** Right-edge chrome cluster — app identity, Publish, brand chip, etc. */
     titlebarRight?: HTMLElement | null;
     /** Center chrome cluster — mode tabs, device pill, etc. Sits between
      *  the back/forward nav and the trailing flex spacer. */

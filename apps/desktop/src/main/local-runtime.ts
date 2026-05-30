@@ -21,8 +21,8 @@ import {
   gatewayIdentityDb,
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
-import { loadSettings, templatesCacheDir } from './settings.js';
-import type { AutomationHost } from '@centraid/runtime-core';
+import { loadPersistedSettings, templatesCacheDir } from './settings.js';
+import type { AutomationHost } from '@centraid/app-engine';
 
 /**
  * Electron-flavored wrapper around `@centraid/gateway-runtime`'s `serve()`.
@@ -158,7 +158,14 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
     // cache on startup. This is the last thing the desktop main process did
     // with `@centraid/app-templates`; with it relocated, the desktop drops
     // the dependency entirely.
-    const settings = await loadSettings();
+    // Read the *persisted* settings, not the resolved ones: `loadSettings()`
+    // resolves the active gateway, which for a local profile re-enters
+    // `ensureLocalRuntime(this gatewayId)`. During our own startup the handle
+    // isn't registered yet, so that re-entrant call hits the in-flight dedupe
+    // and awaits the very promise we're inside — a deadlock that hangs the
+    // first `getSettings()` and leaves the renderer on a blank screen. We only
+    // need `remoteTemplatesUrl` here, which the persisted settings already carry.
+    const settings = await loadPersistedSettings();
     const handle = await serve({
       paths: {
         appsDir,

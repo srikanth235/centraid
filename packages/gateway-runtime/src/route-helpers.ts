@@ -1,5 +1,5 @@
 // Tiny HTTP helpers shared by the gateway-runtime route modules
-// (apps-store-routes, automations-routes). runtime-core's http-utils
+// (apps-store-routes, automations-routes). app-engine's http-utils
 // isn't exported, and these are small + handler-shaped, so they live
 // here rather than reaching across packages.
 
@@ -16,7 +16,7 @@ export interface FileMapEntry {
   content: string;
 }
 
-/** Text extensions a draft read/write accepts — mirrors builder-harness. */
+/** Text extensions a draft read/write accepts — mirrors agent-harness. */
 const EDITABLE_EXT = new Set([
   '.ts',
   '.js',
@@ -55,8 +55,8 @@ export async function writeFileMap(
 /**
  * Read an app dir into a sorted `{path, content}[]` file map (text
  * files only, dotfiles skipped). The inverse of `writeFileMap`; the
- * lifecycle routes feed it to builder-harness's file-map editors
- * (`updateProjectMetaFiles`, `setAutomationEnabledInFiles`, …).
+ * lifecycle routes feed it to agent-harness's file-map editors
+ * (`updateAppMetaFiles`, `setAutomationEnabledInFiles`, …).
  */
 export async function readFileMap(appDir: string): Promise<FileMapEntry[]> {
   const out: FileMapEntry[] = [];

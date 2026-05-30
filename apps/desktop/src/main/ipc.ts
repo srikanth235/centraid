@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (agent, chat, projects, provider) once the surface stabilizes
+// governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (agent, chat, apps, provider) once the surface stabilizes
 import { ipcMain, BrowserWindow, shell } from 'electron';
 import {
   loadSettings,
@@ -21,7 +21,7 @@ import { refreshAuthInjector } from './auth-injector.js';
 import { resetChatHistoryAuthCache } from './chat-history-client.js';
 import { fetchUserPrefs, resetUserPrefsAuthCache } from './user-prefs-client.js';
 import { resetAppsStoreAuthCache } from './apps-store-client.js';
-import { ensureProjectSessionDir, resetProjectSessions } from './project-sessions.js';
+import { ensureAppSessionDir, resetAppSessions } from './app-sessions.js';
 import {
   importAvailableCreds,
   readAuthStatus,
@@ -30,7 +30,7 @@ import {
 } from './auth-import.js';
 import { noteRunnerPrefsChanged, resolveProviderPrefs } from './local-runtime.js';
 import { runPreflight, type OpenAICompatProvider, type RunnerPrefs } from '@centraid/agent-runtime';
-import { type RunnerStatus } from '@centraid/runtime-core';
+import { type RunnerStatus } from '@centraid/app-engine';
 import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
 
 /**
@@ -52,11 +52,11 @@ export const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
 
-  // Project create/files/write/delete/update-meta + publish moved to the
+  // App create/files/write/delete/update-meta + publish moved to the
   // renderer's direct HTTP client (renderer/gateway-client.ts). The preview
   // iframe now points at the gateway draft URL (Phase 4), so only the
   // local-only reveal-in-Finder stays on IPC.
-  PROJECTS_OPEN: 'centraid:projects:open',
+  APPS_OPEN: 'centraid:apps:open',
 
   // The in-process AGENT_* builder retired with the unified chat (issue
   // #141, Phase 3): the builder now streams the gateway's `/centraid/<id>/_chat`
@@ -178,7 +178,7 @@ export function registerIpcHandlers(): void {
     // Per-app editing sessions are per-gateway (the worktrees live in
     // the previous gateway's git store); forget them so the next edit
     // opens a fresh session on the new active gateway.
-    resetProjectSessions();
+    resetAppSessions();
     await refreshAuthInjector();
   };
 
@@ -385,34 +385,34 @@ export function registerIpcHandlers(): void {
     return result;
   });
 
-  // ----- Projects (issue #137: git-store backend; #141: thin client) -----
+  // ----- Apps (issue #137: git-store backend; #141: thin client) -----
   // App lifecycle (create/files/write/delete/update-meta) + publish moved to
   // the renderer's direct HTTP client (renderer/gateway-client.ts) under the
   // thin-client pivot: the renderer opens its own editing session per app
   // (same `desktop-<id>` id the local agent uses, so they share one draft)
-  // and the gateway owns scaffold/clone/meta/publish. PROJECTS_OPEN stays on
+  // and the gateway owns scaffold/clone/meta/publish. APPS_OPEN stays on
   // IPC — a deliberately LOCAL-ONLY reveal-in-Finder that needs the on-disk
   // session worktree. The preview iframe now points at the gateway draft URL
   // (`/centraid/_draft/<sessionId>/<id>/`, resolved renderer-side via
-  // `draftPreviewUrl`), so no PROJECTS_PREVIEW_URL handler is needed.
+  // `draftPreviewUrl`), so no APPS_PREVIEW_URL handler is needed.
 
-  ipcMain.handle(Channel.PROJECTS_OPEN, async (_e, input: { id: string }) => {
+  ipcMain.handle(Channel.APPS_OPEN, async (_e, input: { id: string }) => {
     // Reveal-in-Finder: opens the on-disk session worktree. One of the two
     // deliberately LOCAL-ONLY handlers (issue #141) — a remote gateway
     // exposes no worktree over the filesystem. The renderer hides this for
-    // remote; `ensureProjectSessionDir` (via `assertActiveGatewayLocal`) is
+    // remote; `ensureAppSessionDir` (via `assertActiveGatewayLocal`) is
     // the backstop and throws a clear error if it's ever reached remotely.
-    const dir = await ensureProjectSessionDir(input.id);
+    const dir = await ensureAppSessionDir(input.id);
     await shell.openPath(dir);
     return { ok: true };
   });
 
-  // PROJECTS_DELETE + PROJECTS_UPDATE_META moved to the renderer's direct
+  // APPS_DELETE + APPS_UPDATE_META moved to the renderer's direct
   // HTTP client (renderer/gateway-client.ts): delete is a `DELETE /_apps/<id>`
   // + session close; meta is a `POST /_apps/<id>/meta` the gateway stages +
   // publishes.
 
-  // Snapshot of the auto-publish queue for project `id`. Cheap; safe to
+  // Snapshot of the auto-publish queue for app `id`. Cheap; safe to
   // poll from the renderer if a toast wants the latest error string.
   ipcMain.handle(
     Channel.PUBLISH_STATUS,

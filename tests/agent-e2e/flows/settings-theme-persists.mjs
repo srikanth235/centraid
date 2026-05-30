@@ -5,7 +5,7 @@
 // Goal: switching theme to dark in Settings stores the pref in localStorage
 // (userData/Local Storage/leveldb/), and a full Electron restart should keep
 // the app in dark mode. This is a different persistence path than the
-// on-disk drafts flow — renderer prefs, not projectsDir.
+// on-disk drafts flow — renderer prefs, not appsDir.
 //
 // Run:  node tests/agent-e2e/flows/settings-theme-persists.mjs
 

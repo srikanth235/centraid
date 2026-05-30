@@ -1,11 +1,11 @@
 ---
-summary: "Automations are app-owned projects that fire on a trigger instead of a UI click. Each is a directory with a manifest and a generated handler. A 'standalone' automation is just an app with no UI."
+summary: "Automations are app-owned background jobs that fire on a trigger instead of a UI click. Each is a directory with a manifest and a generated handler. A 'standalone' automation is just an app with no UI."
 title: 'Overview'
 ---
 
 # Automations
 
-An **automation** is an app-owned project that fires on a **trigger** — a cron schedule, an inbound webhook, or a manual "Run now" — instead of waiting for a UI click. It lives on disk as a directory inside its owning app:
+An **automation** is an app-owned background job that fires on a **trigger** — a cron schedule, an inbound webhook, or a manual "Run now" — instead of waiting for a UI click. It lives on disk as a directory inside its owning app:
 
 ```
 <appCodeDir>/automations/<id>/

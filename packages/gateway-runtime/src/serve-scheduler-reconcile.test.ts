@@ -12,7 +12,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import type { AutomationHost, AutomationRow } from '@centraid/runtime-core';
+import type { AutomationHost, AutomationRow } from '@centraid/app-engine';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 import type { SecretsProvider } from './secrets.ts';

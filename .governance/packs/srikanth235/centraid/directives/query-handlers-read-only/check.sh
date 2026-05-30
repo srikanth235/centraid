@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Directive: query-handlers-read-only — centraid query handlers must not
 # mutate the database. The handler runner skips session tracking for
-# handlerKind === 'query' (see packages/runtime-core/src/handler-runner.ts),
+# handlerKind === 'query' (see packages/app-engine/src/handler-runner.ts),
 # so writes from a query handler succeed but are invisible to the change-
 # notification SSE feed at /centraid/<id>/_changes. App UIs go stale with
 # no error anywhere. Mutations belong in actions/*.js (POST /_run).
 #
 # Detection: any call to `stmt.run(` or `db.exec(` inside a tracked
-# `queries/*.js` file. In ScopedDb's API (packages/runtime-core/src/types.ts)
+# `queries/*.js` file. In ScopedDb's API (packages/app-engine/src/types.ts)
 # `.run()` is the write API — `.get()`/`.all()` are reads — and `db.exec()`
 # accepts arbitrary SQL including DML/DDL. Both patterns indicate the
 # handler is reaching past the read-only contract.

@@ -22,7 +22,7 @@
 
 import { Type } from '@sinclair/typebox';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
-import { type Runtime, type ToolResult } from '@centraid/runtime-core';
+import { type Runtime, type ToolResult } from '@centraid/app-engine';
 
 export const SESSION_PREFIX = 'centraid-chat:';
 
@@ -60,7 +60,7 @@ export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime):
   });
 
   /**
-   * Translate a runtime-core `ToolResult` into the OpenClaw tool-result
+   * Translate a app-engine `ToolResult` into the OpenClaw tool-result
    * shape. Successes pass `structuredContent` through as `details`;
    * errors throw so the gateway returns the MCP-shaped `isError` block
    * to the agent. (The agent runtime treats a thrown error and an

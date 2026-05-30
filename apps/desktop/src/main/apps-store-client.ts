@@ -13,7 +13,7 @@
  */
 
 import { loadSettings } from './settings.js';
-import type { ListAutomationProjectsResult } from '@centraid/runtime-core';
+import type { ListAutomationAppsResult } from '@centraid/app-engine';
 
 interface AuthCache {
   baseUrl: string;
@@ -210,7 +210,7 @@ export interface AppMetaRow {
   hasIndex: boolean;
 }
 
-/** Apps on main + their metadata. Replaces legacy `listProjects(workspaceDir)`. */
+/** Apps on main + their metadata. Replaces legacy `listApps(workspaceDir)`. */
 export async function listAppsWithMeta(): Promise<AppMetaRow[]> {
   const { baseUrl, token } = await auth();
   const res = await fetch(`${baseUrl}/centraid/_apps`, { headers: headers(token) });
@@ -254,7 +254,7 @@ export async function listGitVersions(appId: string): Promise<GitVersion[]> {
 // AUTOMATIONS_CREATE handler reads the published row back through it.
 
 /** All automations on `main` plus per-app read errors. */
-export async function listAutomationsHttp(): Promise<ListAutomationProjectsResult> {
+export async function listAutomationsHttp(): Promise<ListAutomationAppsResult> {
   const { baseUrl, token } = await auth();
   const res = await fetch(`${baseUrl}/centraid/_automations`, { headers: headers(token) });
   return parse(res, 'list-automations');

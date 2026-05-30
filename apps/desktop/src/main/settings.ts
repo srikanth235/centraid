@@ -55,7 +55,7 @@ export interface PersistedSettings {
 
 export interface DesktopSettings {
   /** OpenClaw gateway base URL — e.g. http://127.0.0.1:18789. (Formerly
-   * inherited from `@centraid/builder-harness`'s `HarnessConfig`; inlined
+   * inherited from `@centraid/agent-harness`'s `HarnessConfig`; inlined
    * here in #141 Phase 5 so the desktop drops that dependency.) */
   gatewayUrl: string;
   /**

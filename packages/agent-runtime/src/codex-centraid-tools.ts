@@ -6,12 +6,12 @@
  *
  *   1. The `dynamicTools` array we declare on `thread/start`.
  *   2. The synchronous `item/tool/call` dispatch that delegates to the
- *      shared runtime-core `Dispatcher`. The dispatcher resolves declared
+ *      shared app-engine `Dispatcher`. The dispatcher resolves declared
  *      handlers from the app's manifest and routes `_sql` to its built-in.
  *
  * Schema reference: `codex-rs/app-server-protocol/src/protocol/v2/{thread,item}.rs`.
  */
-import type { ChatStreamEvent } from '@centraid/runtime-core';
+import type { ChatStreamEvent } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
 
 /**

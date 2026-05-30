@@ -49,13 +49,13 @@ import {
   type Dispatcher,
   provisionAppPendingWebhooks,
   WEBHOOK_ROUTE_PREFIX,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import {
   CENTRAID_APPEND_PROMPT,
   AUTOMATION_APPEND_PROMPT,
   buildUiGroundingBlocks,
   buildToolsGroundingBlock,
-} from '@centraid/builder-harness';
+} from '@centraid/agent-harness';
 import { AppsStore } from '@centraid/apps-store';
 import { ensureSession } from './lifecycle-shared.js';
 
@@ -68,7 +68,7 @@ export interface UnifiedChatRunnerOptions {
   /** Per-turn runner prefs (kind + provider). Loaded fresh so settings
    *  changes apply without a restart — mirrors `makeChatRunner`. */
   prefsLoader: () => Promise<RunnerPrefs | undefined>;
-  /** Resolve the shared runtime-core dispatcher for the `centraid_*` tools.
+  /** Resolve the shared app-engine dispatcher for the `centraid_*` tools.
    *  Called per turn so the host can cycle-break on first use. */
   getDispatcher: () => Dispatcher;
   /** Parent dir for scoped `CODEX_HOME`s when a custom provider is set. */
@@ -97,7 +97,7 @@ function defaultSessionIdFor(appId: string): string {
  * the right authoring prompt (an automation has no front end → skip UI
  * grounding). Defaults to `'app'` when the file is missing/unreadable.
  */
-async function readProjectKind(appDir: string): Promise<'app' | 'automation'> {
+async function readAppKind(appDir: string): Promise<'app' | 'automation'> {
   try {
     const raw = await fs.readFile(path.join(appDir, 'app.json'), 'utf8');
     const parsed = JSON.parse(raw) as { kind?: unknown };
@@ -135,18 +135,18 @@ async function groundingToolsFor(
 /**
  * Compose the unified system prompt: the chat route's data/schema preamble
  * (`baseExtra`) first, then the builder authoring blocks. Mirrors the old
- * builder-harness `buildExtraSystemPrompt`, minus the live-schema block —
+ * agent-harness `buildExtraSystemPrompt`, minus the live-schema block —
  * `baseExtra` already carries the live schema for this app.
  */
 async function buildUnifiedExtraPrompt(
   enumerate: typeof enumerateHostTools,
   baseExtra: string,
-  projectKind: 'app' | 'automation',
+  appKind: 'app' | 'automation',
   prefs: RunnerPrefs,
   cwd: string,
 ): Promise<string> {
   const blocks: string[] = baseExtra ? [baseExtra] : [];
-  if (projectKind === 'automation') {
+  if (appKind === 'automation') {
     blocks.push(AUTOMATION_APPEND_PROMPT);
   } else {
     blocks.push(CENTRAID_APPEND_PROMPT, ...buildUiGroundingBlocks());
@@ -180,11 +180,11 @@ export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunne
       await ensureSession(opts.store, sessionId);
       const cwd = await opts.store.snapshotSessionAppDir(sessionId, input.appId);
 
-      const projectKind = await readProjectKind(cwd);
+      const appKind = await readAppKind(cwd);
       const extraSystemPrompt = await buildUnifiedExtraPrompt(
         enumerate,
         input.extraSystemPrompt,
-        projectKind,
+        appKind,
         prefs,
         cwd,
       );

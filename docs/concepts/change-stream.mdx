@@ -17,7 +17,7 @@ Open a connection, get a stream of table-level invalidations whenever an action 
 
 Each event names the table(s) that changed. The subscriber's job is to invalidate any local cache keyed on those tables and re-fetch.
 
-> **TODO(#120)** — capture the exact event payload shape (event name, JSON body, whether it's one event per table or one event with a table list). The README documents the surface but not the wire format; I'd need to read `packages/runtime-core/src/` for the exact serialization.
+> **TODO(#120)** — capture the exact event payload shape (event name, JSON body, whether it's one event per table or one event with a table list). The README documents the surface but not the wire format; I'd need to read `packages/app-engine/src/` for the exact serialization.
 
 ## Why table-level, not row-level
 
@@ -56,7 +56,7 @@ es.addEventListener('change', (e) => {
 });
 ```
 
-> **TODO(#120)** — verify the event name (`change` vs `message`) and field name (`tables` vs `tableNames`) against `runtime-core` source. Pattern is correct; field names are placeholder.
+> **TODO(#120)** — verify the event name (`change` vs `message`) and field name (`tables` vs `tableNames`) against `app-engine` source. Pattern is correct; field names are placeholder.
 
 The path is relative (`_changes`), so the subscription works whether the gateway is local or remote — the iframe loads from `/centraid/<id>/` so `_changes` resolves to `/centraid/<id>/_changes`.
 

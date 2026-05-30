@@ -21,7 +21,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { type ChatStreamEvent } from '@centraid/runtime-core';
+import { type ChatStreamEvent } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
 
 export interface ClaudeSdkInput {
@@ -43,7 +43,7 @@ export interface ClaudeSdkInput {
    * When provided, the SDK is configured with an in-process MCP server
    * exposing the three structured centraid tools (`centraid_describe`,
    * `centraid_read`, `centraid_write`) that delegate to the shared
-   * runtime-core dispatcher. `_sql` lands as a built-in inside the
+   * app-engine dispatcher. `_sql` lands as a built-in inside the
    * dispatcher.
    */
   toolContext?: ToolContext;
@@ -355,7 +355,7 @@ function readClaudeUsage(raw: unknown):
  * Build the in-process MCP server that exposes the three structured
  * centraid tools. Zod 4 is the project's pinned schema lib; the SDK
  * accepts both Zod 3 and Zod 4. Each handler delegates to the shared
- * runtime-core dispatcher and returns a single `text` content block whose
+ * app-engine dispatcher and returns a single `text` content block whose
  * payload is the JSON-stringified result (matching the codex shape) so the
  * model sees an identical surface across backends.
  */
@@ -376,7 +376,7 @@ async function buildCentraidMcpServer(
   });
 
   const fromDispatch = (
-    result: import('@centraid/runtime-core').ToolResult,
+    result: import('@centraid/app-engine').ToolResult,
   ): ReturnType<typeof okText> | ReturnType<typeof errText> => {
     if (result.isError) {
       const { code, message } = result.structuredContent;

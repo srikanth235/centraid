@@ -28,7 +28,7 @@ import {
 
 /**
  * The gateway's native chat stream event (mirrors
- * `@centraid/runtime-core`'s `ChatStreamEvent`). Kept as a local type so the
+ * `@centraid/app-engine`'s `ChatStreamEvent`). Kept as a local type so the
  * renderer doesn't import the Node package; the panel consumes this union
  * directly now that the turn isn't translated through IPC.
  */

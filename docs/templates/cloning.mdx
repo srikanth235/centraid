@@ -5,14 +5,14 @@ title: 'Cloning a template'
 
 # Cloning a template
 
-The desktop renders the contents of `packages/app-templates/index.json` as a gallery. Picking a template + clicking _Clone_ runs `cloneTemplate()` from [`@centraid/builder-harness`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/builder-harness), which copies the template's files into the user's projects directory under a new id and hands off to the existing publish pipeline.
+The desktop renders the contents of `packages/app-templates/index.json` as a gallery. Picking a template + clicking _Clone_ runs `cloneTemplate()` from [`@centraid/agent-harness`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/agent-harness), which copies the template's files into the user's apps directory under a new id and hands off to the existing publish pipeline.
 
-> **TODO(#120)** — confirm the exact UI affordance and the projects directory layout. Receipts `issue-105-template-naming-and-unified-clone.md`, `issue-53-notion-style-action-menus`, and `issue-51-copilot-chat-history.md` reference the flow. The verbatim steps below are inferred; capture the real click path once verified.
+> **TODO(#120)** — confirm the exact UI affordance and the apps directory layout. Receipts `issue-105-template-naming-and-unified-clone.md`, `issue-53-notion-style-action-menus`, and `issue-51-copilot-chat-history.md` reference the flow. The verbatim steps below are inferred; capture the real click path once verified.
 
 ## The flow
 
 1. **User clicks a tile in the gallery.** The desktop main process reads the chosen template's folder.
-2. **`cloneTemplate()` runs.** Files copy into `<projects>/<new-id>/`. A fresh id is generated to keep the gallery template untouched.
+2. **`cloneTemplate()` runs.** Files copy into `<apps>/<new-id>/`. A fresh id is generated to keep the gallery template untouched.
 3. **`current.json` is initialized.** A first version dir under `versions/v_…/` holds the cloned files; `current.json#activeVersion` points at it.
 4. **The gateway registers the new app.** Same path as a manual upload: registry entry created, `data.sqlite` initialized, migrations run.
 5. **The sidebar updates.** The new app appears immediately — there's a receipt ([`issue-51`](https://github.com/srikanthsrungarapu/centraid/blob/main/receipts/issue-51-copilot-chat-history.md)) tracking a fix that ensures cloned drafts show up in the builder sidebar without a refresh.

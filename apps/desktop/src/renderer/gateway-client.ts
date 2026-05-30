@@ -11,7 +11,7 @@
  * (the local server now emits CORS for the `file://` renderer origin).
  *
  * This module ports the pure `fetch` methods that previously lived in
- * `main/*-client.ts` + `@centraid/builder-harness`'s `gateway-client`.
+ * `main/*-client.ts` + `@centraid/agent-harness`'s `gateway-client`.
  * It covers the app read surface (schema / table-rows / query / logs /
  * deregister / live URL), version history (list / activate), the
  * `/_centraid-user` identity + prefs surface, and the automation
@@ -125,10 +125,10 @@ export interface AppMetaEntry {
  * Apps published on `main`, with the metadata the home shelf reads. The
  * git store is the source of truth post-#137 — there's no local worktree
  * to stat — so this returns the registry-backed metadata row, not the
- * legacy `CentraidProjectInfo` (the renderer only reads id/name/desc/kind/
+ * legacy `CentraidAppInfo` (the renderer only reads id/name/desc/kind/
  * hasIndex off it).
  */
-export async function listProjects(): Promise<AppMetaEntry[]> {
+export async function listApps(): Promise<AppMetaEntry[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps`, {
     method: 'GET',

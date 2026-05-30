@@ -33,7 +33,7 @@ import {
   type AutomationToolResult,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-} from '@centraid/runtime-core';
+} from '@centraid/app-engine';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
   prepareSimpleCompletionModelForAgent,

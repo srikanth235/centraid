@@ -1,13 +1,13 @@
 // HTTP surface for the gateway-owned git store (issue #137).
 //
-// These routes live in gateway-runtime, not runtime-core, because
-// they're specific to the AppsStore backend — runtime-core stays
+// These routes live in gateway-runtime, not app-engine, because
+// they're specific to the AppsStore backend — app-engine stays
 // backend-agnostic (OpenClaw + standalone share it). They're mounted
 // via `startRuntimeHttpServer`'s `extraHandlers` seam, after the
 // bearer check, before `runtime.handle`.
 //
 // Surface (all under the reserved `_apps` namespace, distinct verbs
-// from the legacy upload routes runtime-core still owns):
+// from the legacy upload routes app-engine still owns):
 //
 //   GET    /centraid/_apps                           list apps + metadata
 //          → { apps: [{id, name?, description?, hasIndex}] }
@@ -28,17 +28,17 @@
 //
 // Publish validates the manifest against the *session worktree* before
 // the merge — the validation that used to run client-side in
-// builder-harness's publish.ts now runs gateway-side, since the
+// agent-harness's publish.ts now runs gateway-side, since the
 // gateway owns the data.
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { ManifestError, parseAppManifest } from '@centraid/runtime-core';
+import { ManifestError, parseAppManifest } from '@centraid/app-engine';
 import { AppsStore, AppsStoreError } from '@centraid/apps-store';
 import { fileExists, readBody, readJson, sendJson } from './route-helpers.js';
 
-/** Text extensions a draft file write accepts — mirrors builder-harness. */
+/** Text extensions a draft file write accepts — mirrors agent-harness. */
 const EDITABLE_EXT = new Set([
   '.ts',
   '.js',
@@ -88,7 +88,7 @@ export function makeAppsStoreRouteHandler(
 
     try {
       // ---- collection-level: GET /_apps (list with metadata) ----
-      // Shadows runtime-core's legacy registry-list route and returns
+      // Shadows app-engine's legacy registry-list route and returns
       // the same flat-array shape, extended with `name`, `description`,
       // and `hasIndex` so the desktop home shelf doesn't need a
       // workspaceDir scan to render tiles.
@@ -110,9 +110,25 @@ export function makeAppsStoreRouteHandler(
 
       // ---- per-app collection-level: DELETE /_apps/<appId> ----
       if (segments.length === 2 && method === 'DELETE') {
-        await store.deleteApp(appId);
+        // Delete is idempotent. `store.deleteApp` throws `no_changes` when
+        // there's no code subtree on `main` to drop — which is the normal
+        // state for a never-published draft, and also what a redundant
+        // second DELETE of an already-removed app hits. Neither is a
+        // failure: we still run the registry/data-dir/session teardown
+        // below so a draft (or a re-delete) cleans up fully and reports
+        // success instead of surfacing a confusing `no_changes` error.
+        let codeRemoved = true;
+        try {
+          await store.deleteApp(appId);
+        } catch (err) {
+          if (err instanceof AppsStoreError && err.code === 'no_changes') {
+            codeRemoved = false;
+          } else {
+            throw err;
+          }
+        }
         if (opts.onAppDeleted) await opts.onAppDeleted(appId);
-        sendJson(res, 200, { id: appId, deleted: true });
+        sendJson(res, 200, { id: appId, deleted: true, codeRemoved });
         return true;
       }
 
@@ -186,7 +202,7 @@ async function handlePublish(
     return true;
   }
 
-  // Manifest validation moved gateway-side (was builder-harness's
+  // Manifest validation moved gateway-side (was agent-harness's
   // assertManifestValid). Validate the session worktree's app.json +
   // handler files BEFORE the merge so an invalid manifest fails the
   // publish instead of producing a dead live version.
@@ -285,7 +301,7 @@ async function handleFiles(
   return false;
 }
 
-// ---- manifest validation (gateway-side, was builder-harness) ----
+// ---- manifest validation (gateway-side, was agent-harness) ----
 
 export async function validateManifestAt(appDir: string): Promise<string | undefined> {
   let raw: string;

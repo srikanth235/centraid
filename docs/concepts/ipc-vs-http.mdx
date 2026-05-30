@@ -43,7 +43,7 @@ IPC is now a short list, all genuinely Electron-native or secret-holding:
 - **The token bridge** — a single `getGatewayAuth()` channel hands the renderer the active gateway's `{ baseUrl, token }` (re-pushed when the active gateway switches). This is the one point the bearer token crosses to the renderer; see the [token posture](#token-posture-in-the-renderer) below.
 - **Gateway profile CRUD + keychain** — the gateway URL + bearer token are stored via Electron `safeStorage`; the provider API key (for a custom OpenAI-compatible endpoint) is kept outside the gateway DB.
 - **The desktop settings file and runner preflight/status.**
-- **`PROJECTS_OPEN`** — reveal the app's worktree in Finder. Bound to the on-disk worktree only the local gateway materializes; a remote gateway has no folder to open. Guarded by `assertActiveGatewayLocal(...)`, which throws a clear `requires the local gateway` error, and the renderer hides the affordance for a remote gateway.
+- **`APPS_OPEN`** — reveal the app's worktree in Finder. Bound to the on-disk worktree only the local gateway materializes; a remote gateway has no folder to open. Guarded by `assertActiveGatewayLocal(...)`, which throws a clear `requires the local gateway` error, and the renderer hides the affordance for a remote gateway.
 - **Push events** to the renderer (gateway-switched, publish status).
 
 This is the _only_ deliberately local-only operation left. The in-process `AGENT_*` builder that used to edit the worktree directly was **retired** with the unified chat — remote and local now both build through `/centraid/<id>/_chat`.

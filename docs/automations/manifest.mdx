@@ -7,7 +7,7 @@ title: 'Manifest'
 
 `automation.json` lives at `<appCodeDir>/automations/<id>/automation.json`. It is the **source of truth** for the automation — toggling `enabled`, changing the schedule, or rewriting the prompt are all just edits to this file. There is no SQLite definition table; the scheduler and runtime read the manifest directly.
 
-The schema lives in [`packages/runtime-core/src/automation-manifest.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/runtime-core/src/automation-manifest.ts) — the validator that ships at runtime is the canonical source.
+The schema lives in [`packages/app-engine/src/automation-manifest.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-engine/src/automation-manifest.ts) — the validator that ships at runtime is the canonical source.
 
 ## A complete example
 

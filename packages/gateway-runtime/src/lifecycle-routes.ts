@@ -3,8 +3,8 @@
 // Phase 2 of the thin-client pivot: the deterministic builder lives in
 // the gateway, not the desktop. Scaffolding a blank app, cloning a
 // template, editing an app's name/description, and creating/toggling/
-// deleting automations were all desktop orchestration (builder-harness
-// scaffolders + runtime-core webhook minting, pushed up over IPC-relayed
+// deleting automations were all desktop orchestration (agent-harness
+// scaffolders + app-engine webhook minting, pushed up over IPC-relayed
 // session writes). They move here so the renderer states intent and the
 // gateway does the work — identical for a local or remote gateway.
 //
@@ -43,15 +43,15 @@
 // keep each module under the repo file-size limit.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { provisionPendingWebhooksInFiles } from '@centraid/runtime-core';
+import { provisionPendingWebhooksInFiles } from '@centraid/app-engine';
 import {
   HarnessError,
   cloneTemplateFiles,
-  scaffoldProjectFiles,
+  scaffoldAppFiles,
   suggestCloneIdentityFrom,
-  updateProjectMetaFiles,
+  updateAppMetaFiles,
   type ScaffoldFile,
-} from '@centraid/builder-harness';
+} from '@centraid/agent-harness';
 import { readTemplateFiles, resolveTemplates } from '@centraid/app-templates';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
@@ -61,7 +61,7 @@ import {
 } from './lifecycle-automation-routes.js';
 import {
   defaultSessionId,
-  ensureSession,
+  prepareLifecycleSession,
   sendLifecycleError,
   stageAndMaybePublish,
   webhookUrl,
@@ -127,32 +127,35 @@ async function handleCreate(
   const name = typeof body.name === 'string' ? body.name : undefined;
   const version = typeof body.version === 'string' ? body.version : undefined;
   const publish = body.publish === true;
-  const sessionId =
-    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : defaultSessionId(id);
+  const explicitSession =
+    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+  const sessionId = explicitSession || defaultSessionId(id);
+  const ephemeralSession = !explicitSession;
 
   // Reject a collision with an app already on `main` — a create must never
   // clobber an existing app's draft (the FS scaffolder guarded this with a
   // dir-exists check; the git-store path checks the list).
   const existing = await opts.store.listAppsWithMeta();
   if (existing.some((a) => a.id === id)) {
-    throw new HarnessError('already_exists', `Project "${id}" already exists.`);
+    throw new HarnessError('already_exists', `App "${id}" already exists.`);
   }
 
-  const files = scaffoldProjectFiles(id, {
+  const files = scaffoldAppFiles(id, {
     ...(name !== undefined ? { name } : {}),
     ...(version !== undefined ? { version } : {}),
   });
-  await ensureSession(opts.store, sessionId);
+  await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   await stageAndMaybePublish(opts, {
     appId: id,
     sessionId,
     files,
     publish,
     message: `scaffold ${id}`,
+    ephemeralSession,
   });
 
   return sendJson(res, 201, {
-    project: { id, ...(name !== undefined ? { name } : {}), kind: 'app' as const },
+    app: { id, ...(name !== undefined ? { name } : {}), kind: 'app' as const },
     sessionId,
     staged: !publish,
   });
@@ -201,21 +204,22 @@ async function handleClone(
     url: webhookUrl(req, m.webhookId),
   }));
 
-  const sessionId =
-    typeof body.sessionId === 'string' && body.sessionId
-      ? body.sessionId
-      : defaultSessionId(newAppId);
-  await ensureSession(opts.store, sessionId);
+  const explicitSession =
+    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+  const sessionId = explicitSession || defaultSessionId(newAppId);
+  const ephemeralSession = !explicitSession;
+  await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   await stageAndMaybePublish(opts, {
     appId: newAppId,
     sessionId,
     files: provisioned,
     publish,
     message: `clone ${tmpl.id}`,
+    ephemeralSession,
   });
 
   return sendJson(res, 201, {
-    project: {
+    app: {
       id: newAppId,
       name: newName,
       ...(tmpl.desc !== undefined ? { description: tmpl.desc } : {}),
@@ -249,16 +253,18 @@ async function handleMeta(
   const name = typeof body.name === 'string' ? body.name : undefined;
   const description = typeof body.description === 'string' ? body.description : undefined;
   const publish = body.publish === true;
-  const sessionId =
-    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : defaultSessionId(appId);
+  const explicitSession =
+    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+  const sessionId = explicitSession || defaultSessionId(appId);
+  const ephemeralSession = !explicitSession;
 
-  await ensureSession(opts.store, sessionId);
+  await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   const appDir = await opts.store.snapshotSessionAppDir(sessionId, appId);
   const [current, existing] = await Promise.all([
     readFileMap(appDir),
     opts.store.listAppsWithMeta(),
   ]);
-  const changed = updateProjectMetaFiles(
+  const changed = updateAppMetaFiles(
     current as ScaffoldFile[],
     appId,
     {
@@ -274,7 +280,12 @@ async function handleMeta(
       files: changed,
       publish,
       message: `update meta ${appId}`,
+      ephemeralSession,
     });
+  } else if (ephemeralSession) {
+    // No metadata change to publish, but we may have opened a fresh
+    // throwaway session above — close it so it doesn't orphan a worktree.
+    await opts.store.closeSession(sessionId);
   }
   return sendJson(res, 200, { ok: true, staged: !publish });
 }
