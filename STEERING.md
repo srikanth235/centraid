@@ -279,6 +279,12 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-1e487d5ad58-1779993205-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | rename 'serving' to 'main' in implementation and issue | feat(apps-store): gateway-owned git store foundation (#137) |
 | steer-1e487d5ad58-1780048580-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(apps-store): export/import + wire git store into the runtime (#137)Two sli… |
 | steer-1e487d5ad58-1780050570-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(desktop): Code tab edits/publish go through the git-store gateway (#137)Cu… |
+| steer-ba7345b0dab-1780052504-1 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
+| steer-ba7345b0dab-1780052504-2 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | asked to delete existing switcher before reimplementing |  |
+| steer-ba7345b0dab-1780052504-3 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
+| steer-ba7345b0dab-1780052504-4 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | told to pause work due to dev server errors |  |
+| steer-ba7345b0dab-1780052504-5 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | interrupt | structural |  |  |
+| steer-ba7345b0dab-1780052504-6 | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 |  | correction | classifier | narrowed scope to just verifying desktop runs |  |
 | steer-1e487d5ad58-1780053699-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | pushed back on retaining legacy current.json in v0 pre-release | feat(apps-store): projects + agent flows off workspaceDir (#137)Eliminates the … |
 | steer-1e487d5ad58-1780056231-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | interrupt | structural |  | feat(apps-store): templates + automations off workspaceDir (#137)Finishes the d… |
 | steer-1e487d5ad58-1780056231-2 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | rename 'serving' to 'main' in implementation and issue | feat(apps-store): templates + automations off workspaceDir (#137)Finishes the d… |
@@ -345,5 +351,5 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-1e487d5ad58-1780084239-4 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
 | steer-1e487d5ad58-1780084239-5 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | questions builder harness running locally; thinks gateway should own it |  |
 | steer-1e487d5ad58-1780084239-6 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
-| steer-1e487d5ad58-1780084239-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | correction | classifier | wants builder chat and app chat unified into one chat surface |  |
+| steer-1e487d5ad58-1780084239-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
 | steer-1e487d5ad58-1780161401-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | User flagged P1/P2 bugs in agent's recently-completed work |  |

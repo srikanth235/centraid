@@ -477,6 +477,9 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-8f9fbdc2-f81-1780051901 | claude-code | 8f9fbdc2-f819-41ab-b90c-dff8674d5298 | #137 | claude-opus-4-7 | 5 | 13362 | 14871 | 108 | 13475 | 0.0937 | fix(#137): codeDir fallback, active-version flag, no phantom sessionsAddress thr |
 | claude-code-1e487d5a-d58-1780052087 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | claude-opus-4-7 | 2779 | 333110 | 39663061 | 131504 | 467393 | 25.2150 | fix(#137): codeDir fallback, active-version flag, no phantom sessionsAddress thr |
 | claude-code-1e487d5a-d58-1780052108 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | claude-opus-4-7 | 2 | 2512 | 352462 | 1324 | 3838 | 0.2250 | fix(apps-store): codeDir fallback, active-version flag, no phantom sessions (#13 |
+| claude-code-ba7345b0-dab-1780052584 | claude-code | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 | #139 | claude-opus-4-8 | 60117 | 889704 | 64138168 | 472774 | 1422595 | 49.7497 |  |
+| claude-code-ba7345b0-dab-1780052698 | claude-code | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 | #139 | claude-opus-4-8 | 155 | 41524 | 1205958 | 20207 | 61886 | 1.3685 |  |
+| claude-code-ba7345b0-dab-1780052833 | claude-code | ba7345b0-dab9-4d9e-a96d-58cea14c3d23 | #139 | claude-opus-4-8 | 419 | 28988 | 1742639 | 18596 | 48003 | 1.5195 |  |
 | claude-code-e5c9f19a-019-1780053700 | claude-code | e5c9f19a-0192-4a9f-9a68-c939ca68a715 | #137 | claude-opus-4-7 | 5 | 12022 | 14871 | 89 | 12116 | 0.0848 | feat(apps-store): projects + agent flows off workspaceDir (#137)Eliminates the l |
 | claude-code-1e487d5a-d58-1780053729 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | claude-opus-4-7 | 206 | 202832 | 35707458 | 138549 | 341587 | 22.5862 | feat(apps-store): projects + agent flows off workspaceDir (#137)Eliminates the l |
 | claude-code-66e3ee45-032-1780056232 | claude-code | 66e3ee45-0325-4aba-b546-8b8f4419d657 | #137 | claude-opus-4-7 | 5 | 12060 | 14871 | 280 | 12345 | 0.0898 | feat(apps-store): templates + automations off workspaceDir (#137)Finishes the de |
@@ -520,3 +523,5 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-1e487d5a-d58-1780159474 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | claude-opus-4-8 | 403103 | 65595584 | 23296068 | 8646066 | 74644753 | 639.7876 |  |
 | claude-code-679a9442-442-1780161401 | claude-code | 679a9442-4429-45d2-a724-d6ab4ee01967 | #137 | claude-opus-4-7 | 5 | 12646 | 14871 | 111 | 12762 | 0.0893 |  |
 | claude-code-1e487d5a-d58-1780161427 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | claude-opus-4-8 | 227514 | 14050346 | 20564597 | 1216252 | 15494112 | 129.6408 |  |
+| claude-code-f90b337e-bf7-1780161768 | claude-code | f90b337e-bf72-48c3-980b-d42a24632db3 | #141 | claude-opus-4-7 | 5 | 10175 | 14871 | 24 | 10204 | 0.0717 |  |
+| claude-code-1e487d5a-d58-1780162131 | claude-code | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | claude-opus-4-8 | 46028 | 482070 | 19449675 | 169826 | 697924 | 17.2136 |  |
