@@ -5105,590 +5105,648 @@ textarea {
   box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
 }
 
-/* ── Sidebar-head gateway switcher ─────────────────────────────────
-   v2 (Notion/Linear-inspired): the head row is just `[avatar] Name ▾`.
-   No mono-caps LOCAL/REMOTE pill — the kind moves into the popover's
-   secondary line per row instead of competing with the displayName
-   at the top of the sidebar. A hairline divider below it separates
-   gateway-scope from page-scope (Build new / Search / Pages / …). */
-.cd-sb-gw-row .cd-sb-meta {
-  /* The chevron-down meta uses currentColor — same `--ink-4` as a
-     keyboard shortcut chip — so the row reads as a control, not an
-     active row. */
-  display: inline-flex;
-  align-items: center;
-  color: var(--ink-4);
+/* ── Profile ("space") switcher ────────────────────────────────────
+   Sidebar-head switcher row + dropdown, add/edit modal, delete dialog,
+   toast, and the Settings → Account → Profiles manage cards. Mirrors
+   handoff-ref/profiles.jsx. The avatar reuses the gradient app-tile
+   finish (built in profiles.ts via tokens.tileFinish). */
+
+@keyframes cd-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
-.cd-sb-divider {
-  height: 1px;
-  margin: 6px 10px 4px;
-  background: var(--line);
+@keyframes cd-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-/* ── Gateway-switcher popover (v2 — Notion/Linear) ─────────────────
-   Anchored to the sidebar-head row, fixed 320px width so the
-   secondary line + action chips fit at common displayName lengths.
-   Flat profile list (no LOCAL/REMOTE section headers), per-row ⋯
-   menu that inline-expands into Rename / Color / Token / Remove,
-   and a footer "+ Add profile" CTA that opens a kind-chooser view.
-*/
-.cd-gw-pop-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 998;
-  background: color-mix(in srgb, var(--bg-sunken) 28%, transparent);
-}
-.cd-gw-pop {
-  position: fixed;
-  z-index: 999;
-  max-height: 78vh;
-  overflow-y: auto;
-  background: var(--bg-elev);
-  /* Hairline border + a deeper, layered shadow stack so the popover
-     reads as a deliberately floated surface, not a flat panel. The
-     inset top highlight is what gives the elevated edge a real "lit"
-     feel under the renderer's dark theme — same trick Linear uses on
-     its workspace popovers.
-
-     The shadows resolve to AA-contrast neutrals via `color-mix(..., var(--ink))`
-     so the theme keeps control of the ambient palette. */
-  border: 0.5px solid color-mix(in srgb, var(--ink) 14%, transparent);
-  border-radius: 12px;
-  padding: 5px;
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 5%, transparent),
-    0 1px 0 color-mix(in srgb, black 28%, transparent),
-    0 14px 36px color-mix(in srgb, black 38%, transparent),
-    0 4px 14px color-mix(in srgb, black 18%, transparent);
-  font-family: inherit;
-  color: var(--ink);
-}
-
-/* ── Sub-view header (back chevron + title). Shown in chooseKind /
-     addLocal / addRemote / rotateToken; the list view skips it so the
-     popover reads as a direct extension of the sidebar row. */
-.cd-gw-pop-head {
+/* Head row */
+.cd-prof-head {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px 6px;
-}
-.cd-gw-pop-back {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  border: none;
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-  display: inline-grid;
-  place-items: center;
-  transition:
-    background 90ms,
-    color 90ms;
-}
-.cd-gw-pop-back:hover {
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
-  color: var(--ink);
-}
-.cd-gw-pop-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-2);
-  letter-spacing: 0.005em;
-}
-
-/* ── Filter input (only when ≥4 profiles). */
-.cd-gw-pop-filter {
-  width: calc(100% - 8px);
-  margin: 2px 4px 4px;
-  height: 28px;
-  font-size: 12.5px;
-  padding: 2px 8px;
-  background: var(--bg);
-  border-radius: 6px;
-  border: 0.5px solid var(--line);
-}
-.cd-gw-pop-filter:focus {
-  outline: none;
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
-}
-
-.cd-gw-pop-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.cd-gw-pop-empty {
-  padding: 8px 12px;
-  color: var(--ink-4);
-  font-size: 12px;
-  font-style: italic;
-  text-align: center;
-}
-
-/* ── Row wrapper (holds the row + its expanded action block). When a
-     row is expanded, the wrap takes a faint tinted background so the
-     row + menu read as one nested block visually distinct from
-     unexpanded rows above and below it. */
-.cd-gw-pop-rowwrap {
-  border-radius: 8px;
-  transition: background 120ms ease-out;
-}
-.cd-gw-pop-rowwrap:has(.cd-gw-pop-row[data-expanded='true']) {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-/* When the expanded row is also the active row, blend the active
-   accent-wash with the expansion tint so the two states don't fight
-   each other (otherwise the row background would visibly shift on
-   ⋯ click). */
-.cd-gw-pop-rowwrap:has(.cd-gw-pop-row[data-active='true'][data-expanded='true']) {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
-/* ── Row — refined Notion/Linear hybrid. The active state is
-     carried by the avatar (ring + bg-tint on the row) instead of a
-     leading check column, which saves ~22px of width and keeps the
-     two identity signals integrated. Three layout slots remain:
-     avatar (28px wrap with ring affordance), text (1fr two-line),
-     trailing meta (⌘N hint + ⋯). */
-.cd-gw-pop-row {
-  display: grid;
-  grid-template-columns: 28px 1fr auto auto;
   align-items: center;
   gap: 10px;
   width: 100%;
   padding: 7px 8px;
   border: none;
-  border-radius: 7px;
+  border-radius: 9px;
   background: transparent;
-  text-align: left;
   cursor: pointer;
-  color: var(--ink);
-  font: inherit;
-  transition:
-    background 90ms ease-out,
-    box-shadow 90ms ease-out;
+  text-align: left;
+  transition: background 120ms;
 }
-.cd-gw-pop-row:hover,
-.cd-gw-pop-row:focus-visible {
+.cd-prof-head:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.cd-prof-head[data-open='true'] {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.cd-prof-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.cd-prof-head-name {
+  display: block;
+  font: var(--t-title);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-prof-head-sub {
+  display: block;
+  margin-top: 1px;
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
+.cd-prof-head-chev {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--ink-4);
+}
+
+/* Dropdown */
+.cd-prof-pop-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: transparent;
+}
+.cd-prof-pop {
+  position: fixed;
+  z-index: 1101;
+  width: 256px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border-radius: 13px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 22px 60px -16px rgba(0, 0, 0, 0.5);
+  animation: cd-pop 140ms cubic-bezier(0.2, 0.7, 0.3, 1.4);
+}
+.cd-prof-pop-eyebrow {
+  font-size: 9.5px;
+  padding: 5px 9px 6px;
+}
+.cd-prof-pop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cd-prof-pop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  transition: background 100ms;
+}
+.cd-prof-pop-row:hover,
+.cd-prof-pop-row:focus-visible {
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   outline: none;
 }
-.cd-gw-pop-row[data-active='true'] {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
+.cd-prof-pop-row[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
-.cd-gw-pop-row[data-active='true']:hover,
-.cd-gw-pop-row[data-active='true']:focus-visible {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-}
-.cd-gw-pop-row[data-active='true'] .cd-gw-pop-name {
-  font-weight: 600;
-}
-
-/* Avatar wrap — adds a 2px accent ring on the active row with a 1px
-   inner gutter so the ring sits OFF the avatar's own color (otherwise
-   blue avatars on a blue accent ring would mush together). The ring
-   is drawn with box-shadow so the avatar's own dimensions don't
-   change, and the rest of the row's grid columns stay aligned. */
-.cd-gw-pop-avatar-wrap {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  /* The wrap is 4px larger than the 24px avatar so the active ring
-     can sit in the resulting 2px gutter without touching the avatar's
-     own colored fill. Inset box-shadow paints inside the wrap → ring
-     lands right at the avatar's outer edge. */
-  transition: box-shadow 120ms ease-out;
-}
-.cd-gw-pop-avatar-wrap[data-active='true'] {
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-
-.cd-gw-pop-text {
-  display: flex;
-  flex-direction: column;
+.cd-prof-pop-text {
+  flex: 1;
   min-width: 0;
-  line-height: 1.2;
 }
-.cd-gw-pop-name {
+.cd-prof-pop-name {
+  display: block;
+  font: var(--t-title);
   font-size: 13px;
+  font-weight: 600;
   color: var(--ink);
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  letter-spacing: -0.005em;
 }
-.cd-gw-pop-sub {
+.cd-prof-pop-sub {
+  display: block;
+  margin-top: 1px;
+  font: var(--t-small);
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: 2px;
-  letter-spacing: 0.01em;
 }
-
-/* ⌘N hint chip — kbd-style with a faint top highlight + bottom shadow
-   so it reads as a tiny physical key. SF-Mono fallback chain for the
-   ⌘ glyph (the system stack already handles the rest). */
-.cd-gw-pop-numhint {
-  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--ink-3);
-  letter-spacing: 0.02em;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 4%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, black 10%, transparent);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.7;
-  transition: opacity 90ms ease-out;
-}
-.cd-gw-pop-row:hover .cd-gw-pop-numhint,
-.cd-gw-pop-row:focus-within .cd-gw-pop-numhint,
-.cd-gw-pop-row[data-active='true'] .cd-gw-pop-numhint {
-  opacity: 1;
-}
-
-.cd-gw-pop-more {
+.cd-prof-pop-edit {
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
-  border: none;
-  background: transparent;
-  border-radius: 5px;
-  color: var(--ink-4);
-  cursor: pointer;
-  display: inline-grid;
-  place-items: center;
-  opacity: 0;
-  transition:
-    background 90ms,
-    color 90ms,
-    opacity 90ms;
-}
-.cd-gw-pop-row:hover .cd-gw-pop-more,
-.cd-gw-pop-row:focus-within .cd-gw-pop-more,
-.cd-gw-pop-row[data-expanded='true'] .cd-gw-pop-more {
-  opacity: 1;
-}
-.cd-gw-pop-more:hover {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
-  color: var(--ink);
-}
-.cd-gw-pop-more[aria-expanded='true'] {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-
-/* ── Expanded action menu (Notion-style vertical list). Indented
-     under the avatar column so the expansion reads as a child of the
-     row above. A subtle accent rail on the left visually tethers the
-     menu items to the parent row without resorting to nested borders. */
-.cd-gw-pop-actionblock {
-  padding: 4px 8px 8px 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  position: relative;
-}
-.cd-gw-pop-actionblock::before {
-  /* The left rail. Sits at the avatar-column centerline so it reads
-     as "this is the parent row's spine continuing downward." */
-  content: '';
-  position: absolute;
-  left: 17px;
-  top: 0;
-  bottom: 8px;
-  width: 1px;
-  background: color-mix(in srgb, var(--ink) 12%, transparent);
-  border-radius: 1px;
-}
-.cd-gw-pop-actionmenu {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-.cd-gw-pop-menuitem {
-  display: grid;
-  grid-template-columns: 22px 1fr;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 5px 8px;
-  border: none;
-  background: transparent;
   border-radius: 6px;
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 12.5px;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background 90ms,
-    color 90ms;
-}
-.cd-gw-pop-menuitem:hover,
-.cd-gw-pop-menuitem:focus-visible {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  color: var(--ink);
-  outline: none;
-}
-.cd-gw-pop-menuitem[data-sub-active='true'] {
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
-  color: var(--accent);
-}
-.cd-gw-pop-menuitem--danger {
-  color: color-mix(in srgb, var(--danger, #c43c3c) 80%, var(--ink-2));
-}
-.cd-gw-pop-menuitem--danger:hover,
-.cd-gw-pop-menuitem--danger:focus-visible {
-  background: color-mix(in srgb, var(--danger, #c43c3c) 12%, transparent);
-  color: var(--danger, #c43c3c);
-}
-.cd-gw-pop-menuitem-icon {
-  display: inline-grid;
+  border: none;
+  display: none;
   place-items: center;
-  color: var(--ink-3);
-}
-.cd-gw-pop-menuitem:hover .cd-gw-pop-menuitem-icon,
-.cd-gw-pop-menuitem:focus-visible .cd-gw-pop-menuitem-icon {
-  color: currentColor;
-}
-.cd-gw-pop-menuitem[data-sub-active='true'] .cd-gw-pop-menuitem-icon {
-  color: var(--accent);
-}
-.cd-gw-pop-menuitem--danger .cd-gw-pop-menuitem-icon {
-  color: color-mix(in srgb, var(--danger, #c43c3c) 60%, var(--ink-3));
-}
-.cd-gw-pop-actionmenu-rule {
-  height: 1px;
-  margin: 3px 6px;
+  cursor: pointer;
   background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink-2);
 }
-.cd-gw-pop-subbox {
-  /* Inline rename input / color picker, indented under the menu items
-     so it reads as the focused action's payload. Empty → hidden. */
-  padding: 4px 8px 2px;
+.cd-prof-pop-row:hover .cd-prof-pop-edit,
+.cd-prof-pop-row:focus-within .cd-prof-pop-edit {
+  display: grid;
 }
-.cd-gw-pop-subbox:empty {
+/* On hover/focus the edit button becomes the trailing slot, so the
+   check/spacer must collapse — otherwise the pencil is pushed left and
+   misaligns row-to-row. */
+.cd-prof-pop-row:hover .cd-prof-pop-check,
+.cd-prof-pop-row:focus-within .cd-prof-pop-check,
+.cd-prof-pop-row:hover .cd-prof-pop-spacer,
+.cd-prof-pop-row:focus-within .cd-prof-pop-spacer {
   display: none;
 }
-
-/* ── Divider between list and footer CTA. Hairline, with a tiny edge
-     gutter so it doesn't extend to the popover's rounded corners. */
-.cd-gw-pop-divider {
-  height: 1px;
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
-  margin: 6px 6px;
-}
-
-/* ── Footer "+ Add profile" CTA. The icon tile picks up the accent on
-     hover so the row reads as a discrete primary action, not a fifth
-     profile row. Same horizontal padding rhythm as the rows above so
-     the left edge of the icon column lines up with each row's avatar. */
-.cd-gw-pop-add-cta {
+/* Edit, check, and spacer share an identical 24px trailing box so the
+   trailing column lines up across every row in every state. */
+.cd-prof-pop-check {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
   display: grid;
-  grid-template-columns: 28px 1fr;
+  place-items: center;
+  color: var(--accent);
+}
+.cd-prof-pop-spacer {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.cd-prof-pop-divider {
+  height: 0.5px;
+  margin: 6px;
+  background: var(--line);
+}
+.cd-prof-pop-action {
+  display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
   padding: 7px 8px;
   border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--ink-2);
+  border-radius: 8px;
   cursor: pointer;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
+  background: transparent;
+  color: var(--ink);
   text-align: left;
-  letter-spacing: -0.005em;
-  transition:
-    background 90ms,
-    color 90ms;
+  font: var(--t-body);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 100ms;
 }
-.cd-gw-pop-add-cta:hover,
-.cd-gw-pop-add-cta:focus-visible {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
+.cd-prof-pop-action:hover,
+.cd-prof-pop-action:focus-visible {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
   outline: none;
 }
-.cd-gw-pop-add-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px dashed color-mix(in srgb, var(--ink) 24%, transparent);
-  background: transparent;
-  color: var(--ink-3);
-  transition:
-    background 120ms,
-    border-color 120ms,
-    color 120ms;
+.cd-prof-pop-action--muted {
+  color: var(--ink-2);
 }
-.cd-gw-pop-add-cta:hover .cd-gw-pop-add-icon,
-.cd-gw-pop-add-cta:focus-visible .cd-gw-pop-add-icon {
-  border-color: var(--accent);
-  border-style: solid;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
+.cd-prof-pop-action-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink-2);
 }
 
-/* ── Kind chooser tiles (Local | Remote). */
-.cd-gw-pop-kindgrid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px;
+/* Overlays — modal + dialog share the centered scrim shell */
+.cd-prof-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
 }
-.cd-gw-pop-kindtile {
+.cd-prof-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 9, 12, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: cd-fade 160ms ease-out;
+}
+
+/* Add / edit modal */
+.cd-prof-modal {
+  position: relative;
+  width: 468px;
+  max-width: 100%;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 18px;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.25),
+    0 32px 80px -20px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  animation: cd-pop 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.cd-prof-modal-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 18px 20px;
+  border-bottom: 0.5px solid var(--line);
+}
+.cd-prof-modal-head-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+.cd-prof-modal-title {
+  margin: 0;
+  flex: 1;
+  font: var(--t-h3);
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.cd-prof-modal-close {
+  width: 28px;
+  height: 28px;
+}
+.cd-prof-modal-body {
+  padding: 20px 20px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.cd-prof-modal-preview {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  border: 0.5px solid var(--line);
+}
+.cd-prof-modal-preview-text {
+  min-width: 0;
+}
+.cd-prof-modal-preview-name {
+  font: var(--t-title);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-prof-modal-preview-sub {
+  margin-top: 2px;
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.cd-prof-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  margin-top: 8px;
+  border-top: 0.5px solid var(--line);
+}
+.cd-prof-modal-delete {
+  font-size: 12.5px;
+  padding: 7px 12px;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+.cd-prof-modal-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font: var(--t-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cd-prof-modal-save[disabled] {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink-4);
+  cursor: not-allowed;
+}
+
+/* Form fields */
+.cd-prof-field {
+  display: block;
+}
+.cd-prof-field-label {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 7px;
+  font: var(--t-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.cd-prof-field-optional {
+  font: var(--t-small);
+  font-size: 11px;
+  color: var(--ink-4);
+  font-weight: 400;
+}
+.cd-prof-field-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
   border: 0.5px solid var(--line);
   border-radius: 8px;
-  background: var(--bg);
-  cursor: pointer;
-  text-align: left;
+  font: var(--t-body);
+  font-size: 13.5px;
   color: var(--ink);
-  transition:
-    background 90ms,
-    border-color 90ms;
-  font: inherit;
-}
-.cd-gw-pop-kindtile:hover,
-.cd-gw-pop-kindtile:focus-visible {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
   outline: none;
+  caret-color: var(--accent);
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
 }
-.cd-gw-pop-kindtile-icon {
-  display: inline-grid;
-  place-items: center;
+.cd-prof-field-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.cd-prof-icon-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cd-prof-icon-btn {
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  color: var(--ink-2);
+}
+.cd-prof-icon-btn[data-selected='true'] {
+  border: 1.5px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
-.cd-gw-pop-kindtile-text {
+.cd-prof-color-row {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-.cd-gw-pop-kindtile-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cd-gw-pop-kindtile-sub {
-  font-size: 11.5px;
-  color: var(--ink-4);
-}
-
-/* ── Add / rotate-token form layout. */
-.cd-gw-pop-form {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px 8px 8px;
-}
-.cd-gw-pop-form-label {
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  margin-top: 4px;
-}
-.cd-gw-pop-form-help {
-  font-size: 11.5px;
-  color: var(--ink-4);
-  line-height: 1.4;
-  padding: 0 2px;
-}
-.cd-gw-pop-input {
-  height: 32px;
-  font-size: 13px;
-  padding: 4px 8px;
-  background: var(--bg);
-  border-radius: 6px;
-  border: 0.5px solid var(--line);
-  color: var(--ink);
-}
-.cd-gw-pop-input:focus {
-  outline: none;
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
-}
-.cd-gw-pop-rename {
-  /* Inline-edit variant lives inside the action block; size matches
-     the other action chips so the row doesn't jump. */
-  height: 26px;
-  font-size: 12.5px;
-}
-.cd-gw-pop-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-/* Profile avatar disc — used by the sidebar-head row and switcher popover
-   rows (issue #113). Color comes from the profile's `avatarColor`
-   (inline-styled background); initials read off the displayName. */
-.cd-gw-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  user-select: none;
-  /* Subtle shadow so the disc reads as a tile even when its color is
-     close to the background. */
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.18);
-}
-
-/* Color picker row in the add-profile forms. 8 swatches inline; selected
-   one gets a ring. */
-.cd-gw-pop-colors {
-  display: flex;
-  gap: 6px;
-  padding: 2px 0;
   flex-wrap: wrap;
+  gap: 8px;
 }
-.cd-gw-pop-swatch {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: none;
+.cd-prof-color-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   cursor: pointer;
   padding: 0;
+  border: 0.5px solid var(--line);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+}
+.cd-prof-color-btn[data-selected='true'] {
+  border: 1.5px solid var(--ink);
+  box-shadow: inset 0 0 0 2px var(--bg-elev);
+}
+
+/* Delete dialog */
+.cd-prof-dialog {
   position: relative;
-  transition: transform 90ms ease-out;
-}
-.cd-gw-pop-swatch:hover {
-  transform: scale(1.08);
-}
-.cd-gw-pop-swatch[data-selected='true'] {
+  width: 392px;
+  max-width: 100%;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 16px;
   box-shadow:
-    0 0 0 2px var(--bg-elev),
-    0 0 0 3.5px var(--ink);
+    0 2px 4px rgba(0, 0, 0, 0.25),
+    0 32px 80px -20px rgba(0, 0, 0, 0.6);
+  padding: 22px 22px 18px;
+  animation: cd-pop 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.cd-prof-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cd-prof-dialog-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+.cd-prof-dialog-title {
+  margin: 0;
+  font: var(--t-h3);
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.cd-prof-dialog-body {
+  margin: 14px 0 0;
+  font: var(--t-body);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.cd-prof-dialog-body b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.cd-prof-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.cd-prof-dialog-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  font: var(--t-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Toast */
+.cd-prof-toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.45);
+  font: var(--t-body);
+  font-size: 12.5px;
+  color: var(--ink);
+  animation: cd-pop 200ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.cd-prof-toast-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--success) 22%, transparent);
+  color: var(--success);
+}
+.cd-prof-toast[data-kind='del'] .cd-prof-toast-icon {
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+  color: var(--danger);
+}
+
+/* Settings → Account → Profiles manage cards */
+.cd-prof-manage {
+  margin-top: 4px;
+}
+.cd-prof-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cd-prof-manage-add {
+  margin-top: 14px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px dashed color-mix(in srgb, var(--ink) 18%, transparent);
+  background: transparent;
+  color: var(--ink-2);
+  font: var(--t-body);
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+.cd-prof-manage-add:hover {
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.cd-prof-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  border: 0.5px solid var(--line);
+  transition: background 120ms;
+}
+.cd-prof-row[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.cd-prof-row-text {
+  flex: 1;
+  min-width: 0;
+}
+.cd-prof-row-titlerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cd-prof-row-name {
+  font: var(--t-title);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.cd-prof-row-badge {
+  padding: 1px 7px;
+  border-radius: 4px;
+  font: var(--t-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.cd-prof-row-sub {
+  margin-top: 2px;
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-prof-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  opacity: 0.6;
+  transition: opacity 120ms;
+}
+.cd-prof-row:hover .cd-prof-row-actions {
+  opacity: 1;
+}
+.cd-prof-row-switch {
+  font-size: 11.5px;
+  padding: 5px 10px;
+}
+.cd-prof-row-del {
+  color: var(--ink-3);
 }
 
 /* Main area on Bold pages */

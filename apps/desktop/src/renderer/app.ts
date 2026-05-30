@@ -488,12 +488,7 @@ import {
       activePage: active.page,
       apps,
       drafts: draftEntries,
-      ...(currentGateway
-        ? {
-            gateway: currentGateway,
-            onOpenGatewaySwitcher: (anchor) => void openGatewaySwitcher(anchor),
-          }
-        : {}),
+      ...(currentGateway ? { headSlot: buildProfileSwitcherHead() } : {}),
       // Selecting a sidebar app always shows its app (Use) view — the
       // builder is reached from the top-bar Use/Build switch, not by
       // clicking the row. `openApp` still falls back to the builder for
@@ -518,129 +513,195 @@ import {
     });
   }
 
-  // ── Gateway switcher controller ─────────────────────────────────────
-  // Lists profiles, hands them to `window.Chrome.openGatewaySwitcher`,
-  // and wires the lifecycle IPCs back in. Activation / add / remove
-  // close the popover and refresh the sidebar (the head row's label
-  // and kind both flip with the active gateway, and removes drop a
-  // row from the list). Rename is reflected on next open without
-  // forcing the whole renderer to re-render. `anchor` is usually a
-  // DOMRect from the sidebar head-row, but the keyboard shortcut
-  // synthesizes a fixed anchor near the top-left so the popover lands
-  // where the row would.
-  async function openGatewaySwitcher(anchor: MenuAnchor): Promise<void> {
+  // ── Profile switcher controller ─────────────────────────────────────
+  // A "profile" is a separate space (its own home grid of apps) — backed
+  // by a gateway: name ↔ displayName, color ↔ avatarColor, switch ↔
+  // setActiveGateway. Icon + description have no backend field, so they
+  // live client-side in window.Store (via window.Profiles.metaFor/saveMeta).
+  // Presentation lives in profiles.ts; this controller owns the data and
+  // the IPC wiring. Switch / add / delete that touch the ACTIVE profile
+  // re-render through the onGatewayChanged broadcast; edits or deletes of a
+  // non-active profile re-render the current route directly.
+  type GatewayProfile = Awaited<ReturnType<typeof window.CentraidApi.listGateways>>[number];
+
+  let profileModalCtl: { close: () => void } | null = null;
+  let profileDeleteCtl: { close: () => void } | null = null;
+
+  function activeAppsCount(): number {
+    return getAppsWithDrafts().length;
+  }
+
+  function toProfileView(p: GatewayProfile, activeId: string): ProfileView {
+    const meta = window.Profiles.metaFor(p.id);
+    const view: ProfileView = {
+      id: p.id,
+      name: p.displayName,
+      color: p.avatarColor,
+      icon: meta.icon,
+      blurb: meta.blurb,
+      kind: p.kind,
+      primordial: p.id === 'local',
+    };
+    if (p.id === activeId) view.appsCount = activeAppsCount();
+    return view;
+  }
+
+  // Build the sidebar-head switcher row from the cached active gateway.
+  function buildProfileSwitcherHead(): HTMLElement {
+    const gw = currentGateway;
+    const id = gw ? gw.activeId : 'local';
+    const meta = window.Profiles.metaFor(id);
+    const active: ProfileView = {
+      id,
+      name: gw ? gw.activeDisplayName : 'Local',
+      color: gw ? gw.activeAvatarColor : (window.Profiles.PROFILE_COLORS[0] ?? '#4E68DD'),
+      icon: meta.icon,
+      blurb: meta.blurb,
+      kind: gw ? gw.activeKind : 'local',
+      primordial: id === 'local',
+      appsCount: activeAppsCount(),
+    };
+    return window.Profiles.buildSwitcherHeader({
+      active,
+      onToggle: (rect) => void openProfileSwitcher(rect),
+    });
+  }
+
+  // Anchor rect for the dropdown when not opened from the head row itself
+  // (keyboard shortcut / Settings deep-link). Falls back to a fixed point
+  // near where the head row sits if the sidebar isn't mounted.
+  function profileHeadAnchor(): DOMRect {
+    const row = document.querySelector<HTMLElement>('.cd-prof-head');
+    return row ? row.getBoundingClientRect() : new DOMRect(12, 64, 200, 44);
+  }
+
+  async function openProfileSwitcher(anchor: DOMRect): Promise<void> {
     const [profiles, settings] = await Promise.all([
       window.CentraidApi.listGateways(),
       window.CentraidApi.getSettings(),
     ]);
-    window.Chrome.openGatewaySwitcher({
+    const activeId = settings.activeGatewayId;
+    window.Profiles.openDropdown({
       anchor,
-      profiles: profiles.map((p) => ({
-        id: p.id,
-        kind: p.kind,
-        label: p.label,
-        displayName: p.displayName,
-        avatarColor: p.avatarColor,
-        ...(p.url !== undefined ? { url: p.url } : {}),
-      })),
-      activeId: settings.activeGatewayId,
-      // Primordial local id is always `'local'` (the always-present
-      // in-process workspace). Additional locals get UUIDs and can be
-      // removed; this id can only be renamed.
-      primordialLocalId: 'local',
-      onActivate: async (id) => {
-        if (id === settings.activeGatewayId) return;
-        try {
-          await window.CentraidApi.setActiveGateway({ id });
-          showToast(`Switched to ${profiles.find((p) => p.id === id)?.displayName ?? id}`);
-          // The main process broadcasts onGatewayChanged after this
-          // resolves, which triggers a refresh + re-render path.
-        } catch (err) {
-          showToast(`Switch failed: ${String(err)}`);
-        }
-      },
-      onRename: async (id, nextDisplayName) => {
-        try {
-          // Issue #113: the popover's "rename" input edits the
-          // user-visible `displayName`, not the technical `label`. Going
-          // through updateProfileMetadata keeps `label` stable while the
-          // user-facing identity changes. Renaming the active profile
-          // re-broadcasts gateway-changed via the IPC; the sidebar head
-          // row picks up the new name on the next render.
-          await window.CentraidApi.updateProfileMetadata({
-            id,
-            displayName: nextDisplayName,
-          });
-          showToast('Renamed');
-          if (id === settings.activeGatewayId) {
-            await refreshRuntimeMode();
-            await reRenderShellForRoute();
-          }
-        } catch (err) {
-          showToast(`Rename failed: ${String(err)}`);
-        }
-      },
-      onRemove: async (id) => {
-        try {
-          await window.CentraidApi.removeGateway({ id });
-          showToast('Profile removed');
-        } catch (err) {
-          showToast(`Remove failed: ${String(err)}`);
-        }
-      },
-      onChangeColor: async (id, color) => {
-        // Inline picker commits on swatch click. updateProfileMetadata
-        // accepts the `#RRGGBB` form directly — the gateway-store
-        // validates it before writing so an invalid color throws
-        // here rather than silently degrading to the default.
-        try {
-          await window.CentraidApi.updateProfileMetadata({ id, avatarColor: color });
-          showToast('Color updated');
-          if (id === settings.activeGatewayId) {
-            await refreshRuntimeMode();
-            await reRenderShellForRoute();
-          }
-        } catch (err) {
-          showToast(`Color change failed: ${String(err)}`);
-        }
-      },
-      onRotateToken: async (id, token) => {
-        // Sensitive: the plaintext crosses the bridge once and goes
-        // straight to keychain. We don't echo the new value back to
-        // the renderer — the user just sees a toast acknowledging
-        // the rotation completed.
-        try {
-          await window.CentraidApi.updateGatewayToken({ id, token });
-          showToast(token ? 'Token rotated' : 'Token cleared');
-        } catch (err) {
-          showToast(`Token rotation failed: ${String(err)}`);
-        }
-      },
-      onAddLocal: async (input) => {
-        try {
-          const profile = await window.CentraidApi.addLocalGateway(input);
-          showToast(`Profile "${profile.displayName}" created`);
-          // Don't auto-activate — the user might want to add several
-          // workspaces and pick one explicitly. The popover closes
-          // (the chrome.ts close() is called by the form submit), and
-          // the user can re-open it to switch.
-        } catch (err) {
-          showToast(`Create failed: ${String(err)}`);
-        }
-      },
-      onAddRemote: async (input) => {
-        if (!input.label || !input.url) {
-          showToast('Label and URL are required');
-          return;
-        }
-        try {
-          await window.CentraidApi.addGateway(input);
-          showToast(`Profile "${input.label}" added`);
-        } catch (err) {
-          showToast(`Add failed: ${String(err)}`);
-        }
-      },
+      activeId,
+      profiles: profiles.map((p) => toProfileView(p, activeId)),
+      onSwitch: (id) => void switchProfile(id),
+      onEdit: (p) => openProfileModal('edit', p),
+      onAdd: () => openProfileModal('add'),
+      onManage: () => renderSettings('profiles'),
     });
+  }
+
+  async function switchProfile(id: string): Promise<void> {
+    if (currentGateway && id === currentGateway.activeId) return;
+    try {
+      const profiles = await window.CentraidApi.listGateways();
+      const name = profiles.find((p) => p.id === id)?.displayName ?? id;
+      await window.CentraidApi.setActiveGateway({ id });
+      // main broadcasts onGatewayChanged → refresh + bounce to home.
+      window.Profiles.toast({ msg: `Switched · ${name}`, kind: 'ok' });
+    } catch (err) {
+      window.Profiles.toast({ msg: `Switch failed: ${String(err)}`, kind: 'del' });
+    }
+  }
+
+  function randomProfileColor(): string {
+    const colors = window.Profiles.PROFILE_COLORS;
+    return colors[Math.floor(Math.random() * colors.length)] ?? colors[0] ?? '#4E68DD';
+  }
+
+  function openProfileModal(mode: 'add' | 'edit', profile?: ProfileView): void {
+    profileModalCtl?.close();
+    profileModalCtl = window.Profiles.openModal({
+      mode,
+      initial:
+        mode === 'edit' && profile
+          ? { name: profile.name, icon: profile.icon, color: profile.color, blurb: profile.blurb }
+          : { icon: window.Profiles.DEFAULT_ICON, color: randomProfileColor() },
+      onCancel: () => {
+        profileModalCtl?.close();
+        profileModalCtl = null;
+      },
+      onCommit: (data) => void commitProfile(mode, profile, data),
+      onDelete:
+        mode === 'edit' && profile && !profile.primordial
+          ? () => {
+              profileModalCtl?.close();
+              profileModalCtl = null;
+              requestDeleteProfile(profile);
+            }
+          : null,
+    });
+  }
+
+  async function commitProfile(
+    mode: 'add' | 'edit',
+    profile: ProfileView | undefined,
+    data: { name: string; icon: IconNameType; color: string; blurb: string },
+  ): Promise<void> {
+    try {
+      if (mode === 'add') {
+        const created = await window.CentraidApi.addLocalGateway({
+          label: data.name,
+          displayName: data.name,
+          avatarColor: data.color,
+        });
+        window.Profiles.saveMeta(created.id, { icon: data.icon, blurb: data.blurb });
+        profileModalCtl?.close();
+        profileModalCtl = null;
+        window.Profiles.toast({ msg: `Profile created · ${data.name}`, kind: 'ok' });
+        // Mirror the reference: a freshly created profile becomes active,
+        // re-scoping the home grid to the (empty) new space.
+        await window.CentraidApi.setActiveGateway({ id: created.id });
+      } else if (profile) {
+        await window.CentraidApi.updateProfileMetadata({
+          id: profile.id,
+          displayName: data.name,
+          avatarColor: data.color,
+        });
+        window.Profiles.saveMeta(profile.id, { icon: data.icon, blurb: data.blurb });
+        profileModalCtl?.close();
+        profileModalCtl = null;
+        window.Profiles.toast({ msg: `Saved · ${data.name}`, kind: 'ok' });
+        if (currentGateway && profile.id === currentGateway.activeId) {
+          await refreshRuntimeMode();
+        }
+        await reRenderShellForRoute();
+      }
+    } catch (err) {
+      window.Profiles.toast({ msg: `Save failed: ${String(err)}`, kind: 'del' });
+    }
+  }
+
+  function requestDeleteProfile(profile: ProfileView): void {
+    profileDeleteCtl?.close();
+    profileDeleteCtl = window.Profiles.openDeleteDialog({
+      profile,
+      onCancel: () => {
+        profileDeleteCtl?.close();
+        profileDeleteCtl = null;
+      },
+      onConfirm: () => void confirmDeleteProfile(profile),
+    });
+  }
+
+  async function confirmDeleteProfile(profile: ProfileView): Promise<void> {
+    try {
+      await window.CentraidApi.removeGateway({ id: profile.id });
+      window.Profiles.forgetMeta(profile.id);
+      profileDeleteCtl?.close();
+      profileDeleteCtl = null;
+      window.Profiles.toast({ msg: `Deleted · ${profile.name}`, kind: 'del' });
+      // removeGateway *always* emits GATEWAY_CHANGED from main (active or
+      // not — the list changed and caches must drop). The onGatewayChanged
+      // handler owns the refresh: it re-scopes to Home if the active space
+      // changed, or refreshes the current route in place otherwise (so a
+      // non-active delete from Settings updates the manage list without
+      // yanking the user off the page). Re-rendering here too would race
+      // that broadcast and stack two shells, so we deliberately don't.
+    } catch (err) {
+      window.Profiles.toast({ msg: `Delete failed: ${String(err)}`, kind: 'del' });
+    }
   }
 
   // Re-render the current shell route after a label/state change that
@@ -655,7 +716,7 @@ import {
       return Promise.resolve();
     }
     if (route.kind === 'home') renderHome();
-    else if (route.kind === 'settings') renderSettings();
+    else if (route.kind === 'settings') renderSettings(lastSettingsPage);
     else if (route.kind === 'insights') renderInsights();
     else if (route.kind === 'discover') renderDiscover();
     else if (route.kind === 'starred') renderStarred();
@@ -693,6 +754,26 @@ import {
 
   let currentCleanup: (() => void) | null = null;
 
+  // Render-generation guard. Async renders follow a clear() → await →
+  // append() shape; if a second render starts during the await, both
+  // clear root early and both append late, stacking two full UIs in the
+  // window (see the boot note on the first renderHome, and the
+  // delete-from-Settings path where a GATEWAY_CHANGED broadcast races the
+  // route refresh). Every clear() bumps `renderSeq`; an async render
+  // captures the value right after clearing and must re-check it via
+  // `isCurrentRender(seq)` before appending — a stale render skips its
+  // append and lets the latest one win.
+  let renderSeq = 0;
+  function isCurrentRender(seq: number): boolean {
+    return seq === renderSeq;
+  }
+
+  // The Settings inner-page the user last opened, so an in-place re-render
+  // of the Settings route (e.g. after deleting a non-active profile from
+  // the Profiles page) restores that page instead of snapping back to
+  // Appearance. Set by showSettingsPage; consumed by reRenderShellForRoute.
+  let lastSettingsPage: string | undefined;
+
   function clear(): void {
     if (typeof currentCleanup === 'function') {
       try {
@@ -707,6 +788,7 @@ import {
     closeAppSettings();
     closeCommandPalette();
     root.innerHTML = '';
+    renderSeq += 1;
   }
 
   function el(tag: string, attrs: ElAttrs = {}, children: ElChild | ElChild[] = []): HTMLElement {
@@ -845,8 +927,10 @@ import {
   async function renderHomeAsync(): Promise<void> {
     recordRoute({ kind: 'home' });
     clear();
+    const seq = renderSeq;
     await hydrateDrafts();
     const availableTemplates = await loadAvailableTemplates();
+    if (!isCurrentRender(seq)) return;
 
     // `has-wall` paints the device-wall crosshatch behind everything.
     const main = el('div', { class: 'has-wall' });
@@ -1179,7 +1263,10 @@ import {
     ]);
   }
 
-  function mountShellPage(page: SidebarPage, main: HTMLElement): void {
+  function mountShellPage(page: SidebarPage, main: HTMLElement, seq?: number): void {
+    // Async callers pass the render-seq captured after their clear(); bail
+    // if a newer render has since superseded this one (avoids stacking).
+    if (seq !== undefined && !isCurrentRender(seq)) return;
     const sidebar = buildHomeSidebar({ page });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
       ...chromeNav(),
@@ -1570,6 +1657,7 @@ import {
   async function renderDiscoverAsync(): Promise<void> {
     recordRoute({ kind: 'discover' });
     clear();
+    const seq = renderSeq;
     const availableTemplates = await loadAvailableTemplates();
     const { main, scroll } = pageScroll(
       'Discover',
@@ -1582,7 +1670,7 @@ import {
     } else {
       scroll.append(renderSimpleEmpty('No templates available yet.'));
     }
-    mountShellPage('discover', main);
+    mountShellPage('discover', main, seq);
   }
 
   function renderStarred(): void {
@@ -5283,13 +5371,14 @@ import {
   //  - Theme / Layout / App tiles: renderer prefs, apply live.
   //  - Gateway: openclaw URL / token / projects dir (main-process prefs,
   //    needs explicit Save).
-  function renderSettings(): void {
-    void renderSettingsAsync();
+  function renderSettings(initialPage?: string): void {
+    void renderSettingsAsync(initialPage);
   }
 
-  async function renderSettingsAsync(): Promise<void> {
+  async function renderSettingsAsync(initialPage?: string): Promise<void> {
     recordRoute({ kind: 'settings' });
     clear();
+    const seq = renderSeq;
 
     const current = await window.CentraidApi.getSettings().catch(() => ({
       gatewayUrl: 'http://127.0.0.1:18789',
@@ -5301,6 +5390,12 @@ import {
       chatModel: undefined as string | undefined,
     }));
 
+    // Profiles ("spaces") are backed by gateways — fetch the list so the
+    // Account → Profiles manage page can render the cards. Active id comes
+    // from the cached gateway summary (always primed before settings open).
+    const profileList = await window.CentraidApi.listGateways().catch(() => []);
+    const activeProfileId = currentGateway?.activeId ?? 'local';
+
     const main = el('div', { class: 'cd-settings-main' });
 
     // §C1 — break the Settings monolith into discrete inner-sidebar
@@ -5311,6 +5406,7 @@ import {
       | 'appearance'
       | 'layout'
       | 'workspace'
+      | 'profiles'
       | 'providers'
       | 'inference'
       | 'runtime'
@@ -5319,6 +5415,7 @@ import {
       appearance: el('div', { class: 'cd-settings-page' }),
       layout: el('div', { class: 'cd-settings-page' }),
       workspace: el('div', { class: 'cd-settings-page' }),
+      profiles: el('div', { class: 'cd-settings-page' }),
       providers: el('div', { class: 'cd-settings-page' }),
       inference: el('div', { class: 'cd-settings-page' }),
       runtime: el('div', { class: 'cd-settings-page' }),
@@ -5990,33 +6087,25 @@ import {
     void refreshKeyStatus();
     void refreshProviderStatus();
 
-    // Profiles panel — the full switcher lives in the sidebar head
-    // row (⌘⇧G or click the active profile). This Settings entry is a
-    // tiny deep-link so the affordance is discoverable from the
-    // Settings surface without forking the lifecycle UI in two places.
-    const manageGatewaysBtn = el(
-      'button',
-      {
-        class: 'btn btn-primary',
-        onClick: () => {
-          const row = document.querySelector<HTMLElement>('.cd-sb-gw-row');
-          const anchor: MenuAnchor = row
-            ? { kind: 'rect', rect: row.getBoundingClientRect() }
-            : { kind: 'point', x: 24, y: 72 };
-          void openGatewaySwitcher(anchor);
-        },
-      },
-      'Open profile switcher',
-    );
-
-    pageHosts.runtime.append(
+    // Profiles ("spaces") — full manage surface. Each profile is its own
+    // home grid of apps; switching re-scopes the shell. Lives under the
+    // Account group; the sidebar-head switcher (⌘⇧G or click the active
+    // profile) is the other entry point into the same actions.
+    pageHosts.profiles.append(
       drawerGroup('Profiles', [
         el(
           'div',
           { class: 'settings-note' },
-          'The active profile is shown at the top of the sidebar. Click it (or press ⌘⇧G) to switch, add a local profile, or connect a remote gateway.',
+          'Each profile is a separate space with its own apps. Switch from here or from the switcher at the top of the sidebar (⌘⇧G).',
         ),
-        el('div', { class: 'sheet-actions' }, [manageGatewaysBtn]),
+        window.Profiles.buildManageBody({
+          profiles: profileList.map((p) => toProfileView(p, activeProfileId)),
+          activeId: activeProfileId,
+          onSwitch: (id) => void switchProfile(id),
+          onEdit: (p) => openProfileModal('edit', p),
+          onDelete: (p) => requestDeleteProfile(p),
+          onAdd: () => openProfileModal('add'),
+        }),
       ]),
     );
     pageHosts.sync.append(
@@ -6058,6 +6147,14 @@ import {
         section: 'Workspace',
         icon: 'Folder',
         subtitle: 'Sidebar, navigation, and the in-app chat model.',
+      },
+      {
+        id: 'profiles',
+        label: 'Profiles',
+        section: 'Account',
+        icon: 'Users',
+        subtitle:
+          'Separate spaces — each with its own apps and chats. Switch, add, rename, recolor, or remove profiles.',
       },
       {
         id: 'providers',
@@ -6110,6 +6207,7 @@ import {
 
     const navButtons = new Map<SettingsPageId, HTMLElement>();
     const showSettingsPage = (id: SettingsPageId): void => {
+      lastSettingsPage = id;
       const def = settingsPages.find((p) => p.id === id);
       for (const [pid, btn] of navButtons) {
         btn.dataset.active = String(pid === id);
@@ -6162,7 +6260,11 @@ import {
 
     const settingsShell = el('div', { class: 'cd-settings-shell' }, [innerNav, contentArea]);
     main.append(settingsShell);
-    showSettingsPage('appearance');
+    const startPage: SettingsPageId = settingsPages.some((p) => p.id === initialPage)
+      ? (initialPage as SettingsPageId)
+      : 'appearance';
+    if (!isCurrentRender(seq)) return;
+    showSettingsPage(startPage);
 
     const sidebar = buildHomeSidebar({ page: 'settings' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
@@ -6528,18 +6630,11 @@ import {
       goForward();
       return;
     }
-    // ⌘⇧G opens the gateway switcher. Anchored near the sidebar head
-    // row's screen position so the popover appears where the click
-    // affordance lives. Fallback to a fixed top-left anchor if the
-    // row hasn't mounted yet (e.g. sidebar collapsed) — keeps the
-    // shortcut working without the user having to expand the sidebar.
+    // ⌘⇧G opens the profile switcher dropdown, anchored to the sidebar
+    // head row (or a fixed point near it when the sidebar is collapsed).
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'g' || e.key === 'G')) {
       e.preventDefault();
-      const row = document.querySelector<HTMLElement>('.cd-sb-gw-row');
-      const anchor: MenuAnchor = row
-        ? { kind: 'rect', rect: row.getBoundingClientRect() }
-        : { kind: 'point', x: 24, y: 72 };
-      void openGatewaySwitcher(anchor);
+      void openProfileSwitcher(profileHeadAnchor());
       return;
     }
     // ⌘1…⌘9 jumps directly to the Nth profile (Linear-style
@@ -6638,8 +6733,20 @@ import {
   // so the next IPC after Home renders sees the new URL+token.
   window.CentraidApi.onGatewayChanged(() => {
     void (async (): Promise<void> => {
+      const prevActiveId = currentGateway?.activeId;
       await refreshRuntimeMode();
-      applyRoute({ kind: 'home' });
+      // Re-scope to Home only when the *active* space actually flipped (a
+      // switch, or deleting the active profile and falling back to local).
+      // A broadcast that leaves the active space intact — renaming or
+      // deleting a non-active profile — should refresh the current route
+      // in place so the user isn't yanked off Settings; bouncing home
+      // there is both jarring and (racing a same-tick refresh) a way to
+      // stack two shells.
+      if (currentGateway?.activeId !== prevActiveId) {
+        applyRoute({ kind: 'home' });
+      } else {
+        void reRenderShellForRoute();
+      }
     })();
   });
 })();
