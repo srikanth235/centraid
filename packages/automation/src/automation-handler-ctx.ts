@@ -13,7 +13,7 @@ import type {
   AutomationToolDispatcher,
   AutomationToolResult,
 } from './automation-handler-runner.js';
-import type { AgentRunsStore } from './agent-runs-store.js';
+import type { AgentRunsStore } from '@centraid/app-engine';
 import { recordInvokeNode, recordToolNode, rowToRunRef } from './automation-handler-audit.js';
 
 export interface ToolCallWire {

@@ -6,7 +6,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError } from '@centraid/app-engine';
-import type { AutomationHistoryKeep } from '@centraid/app-engine';
+import type { AutomationHistoryKeep } from '@centraid/automation';
 import { AppsStore, AppsStoreError } from '@centraid/code-store';
 import { validateManifestAt } from './apps-store-routes.js';
 import { sendJson, writeFileMap, type FileMapEntry } from './route-helpers.js';

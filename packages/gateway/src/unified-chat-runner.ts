@@ -39,20 +39,14 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import {
-  runAgentTurn,
   enumerateHostTools,
   defaultCentraidCliDir,
   makeChatRunnerCore,
   type RunnerPrefs,
   type RunTurnFn,
 } from '@centraid/agent-runtime';
-import {
-  type ChatRunner,
-  type ChatStreamEvent,
-  type Dispatcher,
-  provisionAppPendingWebhooks,
-  WEBHOOK_ROUTE_PREFIX,
-} from '@centraid/app-engine';
+import { type ChatRunner, type ChatStreamEvent, type Dispatcher } from '@centraid/app-engine';
+import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
 import { AppsStore } from '@centraid/code-store';
 import { ensureSession } from './lifecycle-shared.js';

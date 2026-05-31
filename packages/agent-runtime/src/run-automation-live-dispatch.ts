@@ -23,7 +23,7 @@ import type {
   AutomationToolCall,
   AutomationToolDispatcher,
   AutomationToolResult,
-} from '@centraid/app-engine';
+} from '@centraid/automation';
 import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
 import {
   defaultSpawnCli,

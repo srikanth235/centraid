@@ -14,7 +14,7 @@ v0 pre-release: no backward compatibility, no migrations.
 ## Checklist
 
 - [x] Phase 1 — rename the agent-run ledger off the `automation-` prefix
-- [ ] Phase 2 — extract `@centraid/automation` (the domain)
+- [x] Phase 2 — extract `@centraid/automation` (the domain)
 - [ ] Phase 3 — in-process cron; delete the OS scheduler (n8n semantics)
 - [ ] Phase 4 — confirm execution placement in `agent-runtime`
 
@@ -42,6 +42,34 @@ a fake chat→automation edge.
 - `analytics-store` / `insights-store` keep their names, documented as
   shared run infra.
 
+### Phase 2 — extract `@centraid/automation` (the domain)
+
+New package `@centraid/automation`, depending on `@centraid/app-engine`.
+The automation footprint that app-engine was carrying for historical
+reasons moved out wholesale; app-engine keeps the per-app engine + the
+shared agent-run ledger.
+
+- Moved the 12 domain modules (`automation-manifest`(+`-output`/`-errors`),
+  `automation-app`, `automation-fire` — the spine + `OpenAutomationDispatch`,
+  `automation-host`, `automation-webhook`, `automation-handler-runner`/`-ctx`/
+  `-audit`, `scaffold-automation`, `automation-ref`) and the worker entry
+  `worker/automation-runner.ts` into `@centraid/automation`. Their imports of
+  app-engine core (ledger store, schema, gateway-db, log-store, app-paths,
+  scaffold-files/-types) repoint to `@centraid/app-engine`; intra-domain
+  imports stay relative.
+- Removed the domain re-exports from app-engine's barrel and proved
+  acyclicity: no app-engine *core* module imports the domain (only the barrel
+  did, for re-export). `@centraid/automation` never imports `agent-runtime`.
+- Repointed every consumer (`gateway`, `openclaw-plugin`, `agent-runtime`,
+  `desktop`) from the app-engine barrel to `@centraid/automation` for domain
+  symbols, splitting mixed import statements and adding the `workspace:*`
+  dependency. The automation-trigger taxonomy and the agent-run ledger stay
+  imported from `@centraid/app-engine`.
+- Moved the file-map scaffolder tests off app-engine's `scaffold-files.test.ts`
+  (app-engine can't depend on the domain) into the new package.
+- Incidental: dropped a pre-existing unused `runAgentTurn` import in the
+  gateway's `unified-chat-runner` that full-repo lint surfaced.
+
 ## Decision: gateway-owned in-process cron (n8n semantics)
 
 Scheduling adopts n8n's model: the always-on server owns cron triggers
@@ -66,3 +94,6 @@ downtime are silently skipped with no backfill.
 
 - Phase 1: `@centraid/app-engine` 405 tests pass; `gateway`, `openclaw-plugin`,
   `agent-runtime` typecheck clean.
+- Phase 2: `turbo run typecheck` green (19/19); `turbo run test` green
+  (app-engine 356, automation 49, gateway 62, agent-runtime 86, openclaw 6,
+  skills 6); `turbo run build` green; lint clean.

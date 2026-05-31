@@ -7,7 +7,7 @@
  * routing, `ctx.invoke`, and `onFailure` address it by (issue #98).
  */
 
-import { isValidAppId } from './app-paths.js';
+import { isValidAppId } from '@centraid/app-engine';
 
 /**
  * Validate an automation *id* (the directory slug under `automations/`).

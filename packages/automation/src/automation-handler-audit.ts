@@ -8,8 +8,12 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { AgentRunsStore, InsertNodeInput } from './agent-runs-store.js';
-import type { AgentRunRow, AutomationTriggerKind } from './agent-runs-schema.js';
+import type {
+  AgentRunsStore,
+  InsertNodeInput,
+  AgentRunRow,
+  AutomationTriggerKind,
+} from '@centraid/app-engine';
 import type { AutomationHistoryConfig } from './automation-manifest.js';
 
 const AUDIT_FIELD_BYTE_CAP = 64 * 1024; // 64 KB hard cap on args_json / output_json per node.

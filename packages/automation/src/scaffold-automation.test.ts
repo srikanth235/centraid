@@ -9,7 +9,7 @@ import {
   validateAutomationId,
   validateAutomationAppId,
 } from './scaffold-automation.js';
-import { AppScaffoldError } from './scaffold-types.js';
+import { AppScaffoldError } from '@centraid/app-engine';
 
 describe('scaffoldAutomationApp', () => {
   let dir: string;

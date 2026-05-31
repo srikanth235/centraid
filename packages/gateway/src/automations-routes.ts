@@ -33,15 +33,13 @@ import {
   AnalyticsStore,
   AgentRunsStore,
   InsightsStore,
-  listAutomations,
   makeRuntimeDbProvider,
-  parseAutomationRef,
-  readAppOwnedAutomation,
   type AgentRunRow,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type RunSummary,
 } from '@centraid/app-engine';
+import { listAutomations, parseAutomationRef, readAppOwnedAutomation } from '@centraid/automation';
 import type { AppsStore } from '@centraid/code-store';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { OsSchedulerHost } from './os-scheduler-host.js';
 import type { ExecShell } from './os-scheduler.js';
-import type { AutomationRow } from '@centraid/app-engine';
+import type { AutomationRow } from '@centraid/automation';
 
 interface ShellCall {
   command: string;

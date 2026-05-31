@@ -27,6 +27,7 @@
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
+        "@centraid/automation": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@centraid/gateway": "workspace:*",
       },
@@ -80,6 +81,7 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.143",
         "@centraid/app-engine": "workspace:*",
+        "@centraid/automation": "workspace:*",
         "zod": "^4.0.0",
       },
       "devDependencies": {
@@ -117,6 +119,19 @@
         "typescript": "catalog:",
       },
     },
+    "packages/automation": {
+      "name": "@centraid/automation",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/app-engine": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
+      },
+    },
     "packages/code-store": {
       "name": "@centraid/code-store",
       "version": "0.1.0",
@@ -145,6 +160,7 @@
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/app-templates": "workspace:*",
+        "@centraid/automation": "workspace:*",
         "@centraid/code-store": "workspace:*",
         "@centraid/skills": "workspace:*",
       },
@@ -162,6 +178,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/app-engine": "workspace:*",
+        "@centraid/automation": "workspace:*",
         "@mariozechner/pi-ai": "^0.73.0",
         "@sinclair/typebox": "^0.27.0",
       },
@@ -504,6 +521,8 @@
     "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
 
     "@centraid/app-templates": ["@centraid/app-templates@workspace:packages/app-templates"],
+
+    "@centraid/automation": ["@centraid/automation@workspace:packages/automation"],
 
     "@centraid/code-store": ["@centraid/code-store@workspace:packages/code-store"],
 

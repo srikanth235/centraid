@@ -19,21 +19,23 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
   AgentRunsStore,
+  makeRuntimeDbProvider,
+  type AnalyticsStore,
+  type AutomationTriggerKind,
+  type AutomationTriggerOrigin,
+} from '@centraid/app-engine';
+import {
   automationHandlerPath,
   formatAutomationRef,
-  makeRuntimeDbProvider,
   parseAutomationRef,
   readAppOwnedAutomation,
   runAutomationHandler,
-  type AnalyticsStore,
   type AutomationDispatchContext,
   type AutomationHandlerOutcome,
   type AutomationInvokeDispatcher,
   type AutomationToolCall,
   type AutomationToolResult,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
-} from '@centraid/app-engine';
+} from '@centraid/automation';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
   prepareSimpleCompletionModelForAgent,

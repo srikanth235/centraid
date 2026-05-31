@@ -23,11 +23,15 @@ import { Worker } from 'node:worker_threads';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { appendLogs, type LogEntry } from './log-store.js';
-import type { AgentRunsStore } from './agent-runs-store.js';
+import {
+  appendLogs,
+  type LogEntry,
+  type AgentRunsStore,
+  type AutomationTriggerKind,
+  type AutomationTriggerOrigin,
+} from '@centraid/app-engine';
 import type { AutomationHistoryConfig, AutomationOutputSchema } from './automation-manifest.js';
 import { validateOutputAgainstSchema } from './automation-manifest-output.js';
-import type { AutomationTriggerKind, AutomationTriggerOrigin } from './agent-runs-schema.js';
 import {
   applyRetention,
   extractReturnEnvelope,

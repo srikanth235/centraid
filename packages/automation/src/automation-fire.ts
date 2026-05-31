@@ -20,8 +20,13 @@
 
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { AgentRunsStore } from './agent-runs-store.js';
-import { makeRuntimeDbProvider } from './gateway-db.js';
+import {
+  AgentRunsStore,
+  makeRuntimeDbProvider,
+  type AnalyticsStore,
+  type AutomationTriggerKind,
+  type AutomationTriggerOrigin,
+} from '@centraid/app-engine';
 import { parseAutomationRef } from './automation-ref.js';
 import { automationHandlerPath, readAppOwnedAutomation } from './automation-app.js';
 import { runAutomationHandler } from './automation-handler-runner.js';
@@ -30,8 +35,6 @@ import type {
   AutomationHandlerOutcome,
   AutomationToolDispatcher,
 } from './automation-handler-runner.js';
-import type { AnalyticsStore } from './analytics-store.js';
-import type { AutomationTriggerKind, AutomationTriggerOrigin } from './agent-runs-schema.js';
 
 /**
  * The live dispatch surface a fire runs against. Provided by the host

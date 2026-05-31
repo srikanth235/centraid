@@ -41,13 +41,12 @@ import {
   Runtime,
   UserStore,
   cleanupDeregisteredApp,
-  listAutomations,
   makeGatewayDbProvider,
   makeAnalyticsDbProvider,
   startRuntimeHttpServer,
-  type AutomationHost,
   type RuntimeLogger,
 } from '@centraid/app-engine';
+import { listAutomations, type AutomationHost } from '@centraid/automation';
 import {
   makeChatRunner,
   runAutomationLocal,

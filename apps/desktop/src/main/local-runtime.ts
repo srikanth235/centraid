@@ -22,7 +22,7 @@ import {
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
 import { loadPersistedSettings, templatesCacheDir } from './settings.js';
-import type { AutomationHost } from '@centraid/app-engine';
+import type { AutomationHost } from '@centraid/automation';
 
 /**
  * Electron-flavored wrapper around `@centraid/gateway`'s `serve()`.
