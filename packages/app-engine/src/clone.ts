@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { AppInfo } from './types.js';
-import { HarnessError } from './types.js';
+import type { AppInfo } from './scaffold-types.js';
+import { AppScaffoldError } from './scaffold-types.js';
 import {
   applyManifestName,
   rewriteAutomationManifestNames,
@@ -41,7 +41,7 @@ export interface CloneTemplateOptions {
  *   - `package.json#name` → `centraid-app-<newAppId>` (only if it followed the
  *      `centraid-app-*` convention; foreign names are left alone)
  *
- * Throws `HarnessError`:
+ * Throws `AppScaffoldError`:
  *   - `invalid_id`     — `newAppId` fails the id regex
  *   - `already_exists` — destination dir already exists
  *   - `no_app`     — `templateDir` is missing or not a directory
@@ -51,14 +51,14 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<AppInfo
 
   const destDir = path.join(opts.appsDir, opts.newAppId);
   if (await pathExists(destDir)) {
-    throw new HarnessError(
+    throw new AppScaffoldError(
       'already_exists',
       `App "${opts.newAppId}" already exists at ${destDir}.`,
     );
   }
 
   if (!(await dirExists(opts.templateDir))) {
-    throw new HarnessError('no_app', `Template source not found: ${opts.templateDir}`);
+    throw new AppScaffoldError('no_app', `Template source not found: ${opts.templateDir}`);
   }
 
   await fs.mkdir(opts.appsDir, { recursive: true });
@@ -132,7 +132,7 @@ export async function suggestAppId(
     }
   }
   // Astronomically unlikely; surface as a clear error rather than loop forever.
-  throw new HarnessError(
+  throw new AppScaffoldError(
     'already_exists',
     `Could not find a free id starting from "${preferred}".`,
   );
@@ -170,7 +170,7 @@ export async function suggestCloneIdentity(
     if (await isDisplayNameTaken(appsDir, name)) continue;
     return { id, name };
   }
-  throw new HarnessError(
+  throw new AppScaffoldError(
     'already_exists',
     `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`,
   );
@@ -203,7 +203,7 @@ export function suggestCloneIdentityFrom(
     if (takenNames.has(name.trim().toLowerCase())) continue;
     return { id, name };
   }
-  throw new HarnessError(
+  throw new AppScaffoldError(
     'already_exists',
     `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`,
   );

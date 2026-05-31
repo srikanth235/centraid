@@ -1,11 +1,11 @@
 {
-  "name": "@centraid/agent-harness",
+  "name": "@centraid/skills",
   "version": "0.1.0",
   "private": true,
-  "description": "Drives the centraid app BUILDER: an agent session (codex app-server or Claude SDK via @centraid/agent-runtime) that authors apps in the @centraid/openclaw-plugin format, plus scaffold + publish + gateway HTTP helpers.",
+  "description": "Agent grounding for the centraid app builder, modeled as a skills/ directory of SKILL.md units (model-invocable progressive disclosure) plus the dynamic grounding renderers (live design tokens + host-tool list) that can't be static.",
   "files": [
     "dist",
-    "templates",
+    "skills",
     "README.md"
   ],
   "type": "module",
@@ -19,15 +19,11 @@
   },
   "dependencies": {
     "@centraid/agent-runtime": "workspace:*",
-    "@centraid/app-engine": "workspace:*",
-    "@centraid/design-tokens": "workspace:*",
-    "@centraid/openclaw-plugin": "workspace:*",
-    "tar": "^7.4.3"
+    "@centraid/design-tokens": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
-    "@types/tar": "^6.1.13",
     "tsx": "^4.20.3",
     "typescript": "catalog:"
   },

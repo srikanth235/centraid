@@ -2,8 +2,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { rewriteAutomationManifestNames, rewriteIndexHtmlTitle } from './app-rewrites.js';
 import { scaffoldAppFiles, validateAppId } from './scaffold-files.js';
-import type { AppInfo } from './types.js';
-import { HarnessError } from './types.js';
+import type { AppInfo } from './scaffold-types.js';
+import { AppScaffoldError } from './scaffold-types.js';
 
 // `validateAppId` + the content templates now live in `scaffold-files.ts`
 // (the filesystem-free scaffolder used by the git-store/HTTP path, issue
@@ -25,7 +25,7 @@ export async function scaffoldApp(
   validateAppId(id);
   const dir = path.join(appsDir, id);
   if (await exists(dir)) {
-    throw new HarnessError('already_exists', `App "${id}" already exists at ${dir}.`);
+    throw new AppScaffoldError('already_exists', `App "${id}" already exists at ${dir}.`);
   }
   await fs.mkdir(dir, { recursive: true });
 
@@ -111,7 +111,7 @@ export async function updateAppMeta(
   const renameTo = patch.name === undefined ? undefined : patch.name.trim();
   if (patch.name !== undefined) {
     if (!renameTo) {
-      throw new HarnessError('invalid_id', 'App name cannot be empty.');
+      throw new AppScaffoldError('invalid_id', 'App name cannot be empty.');
     }
     // Reject duplicates against any sibling app's display name
     // (case-insensitive, trimmed). Directory ids stay immutable; only the
@@ -164,7 +164,7 @@ export async function isDisplayNameTaken(
 }
 
 /**
- * Throw `HarnessError('already_exists')` when any sibling app under
+ * Throw `AppScaffoldError('already_exists')` when any sibling app under
  * `appsDir` (other than `selfId`) already uses `name` as its display
  * name. Comparison is case-insensitive and whitespace-trimmed.
  */
@@ -174,7 +174,7 @@ async function assertDisplayNameUnique(
   name: string,
 ): Promise<void> {
   if (await isDisplayNameTaken(appsDir, name, { excludeId: selfId })) {
-    throw new HarnessError('already_exists', `An app named "${name}" already exists.`);
+    throw new AppScaffoldError('already_exists', `An app named "${name}" already exists.`);
   }
 }
 
@@ -216,10 +216,10 @@ export async function deleteApp(appsDir: string, id: string): Promise<void> {
   const appsRoot = path.resolve(appsDir);
   const target = path.resolve(appsRoot, id);
   if (!target.startsWith(appsRoot + path.sep) && target !== appsRoot) {
-    throw new HarnessError('no_app', `Refusing to delete path outside apps dir: ${target}`);
+    throw new AppScaffoldError('no_app', `Refusing to delete path outside apps dir: ${target}`);
   }
   if (target === appsRoot) {
-    throw new HarnessError('no_app', `Refusing to delete the apps root.`);
+    throw new AppScaffoldError('no_app', `Refusing to delete the apps root.`);
   }
   await fs.rm(target, { recursive: true, force: true });
 }

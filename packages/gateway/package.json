@@ -20,11 +20,11 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/agent-harness": "workspace:*",
     "@centraid/agent-runtime": "workspace:*",
     "@centraid/app-engine": "workspace:*",
     "@centraid/app-templates": "workspace:*",
-    "@centraid/code-store": "workspace:*"
+    "@centraid/code-store": "workspace:*",
+    "@centraid/skills": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

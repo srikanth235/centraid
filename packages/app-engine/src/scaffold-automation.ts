@@ -18,20 +18,19 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { APP_AUTOMATIONS_SUBDIR } from './automation-app.js';
+import { isValidAppId, isValidAutomationId } from './automation-ref.js';
 import {
-  APP_AUTOMATIONS_SUBDIR,
   AUTOMATION_HANDLER_FILE,
   AUTOMATION_MANIFEST_FILE,
-  isValidAppId,
-  isValidAutomationId,
   validateManifest,
   type AutomationManifest,
   type AutomationTrigger,
   type AutomationHistoryKeep,
-} from '@centraid/app-engine';
+} from './automation-manifest.js';
 import type { ScaffoldFile } from './scaffold-files.js';
-import type { AppInfo } from './types.js';
-import { HarnessError } from './types.js';
+import type { AppInfo } from './scaffold-types.js';
+import { AppScaffoldError } from './scaffold-types.js';
 
 export interface AutomationScaffoldOptions {
   /** Display name. Defaults to the app id. */
@@ -79,7 +78,7 @@ export interface AutomationScaffoldOptions {
  */
 export function validateAutomationAppId(appId: string): void {
   if (!isValidAppId(appId)) {
-    throw new HarnessError(
+    throw new AppScaffoldError(
       'invalid_id',
       `Invalid automation app id "${appId}". Use a filesystem-safe slug (letters / digits / "-" / "_").`,
     );
@@ -89,7 +88,7 @@ export function validateAutomationAppId(appId: string): void {
 /** Validate an automation id (the directory slug under `automations/`). */
 export function validateAutomationId(id: string): void {
   if (id.startsWith('_') || !isValidAutomationId(id)) {
-    throw new HarnessError(
+    throw new AppScaffoldError(
       'invalid_id',
       `Invalid automation id "${id}". Use A-Z / a-z / 0-9 / "-" / "_", no leading "_".`,
     );
@@ -236,7 +235,7 @@ export function deleteAutomationFromFiles(
  * Scaffold a new automation app folder under `<appsDir>/<appId>/` — an
  * `app.json` plus a single automation under `automations/<autoId>/`.
  * Thin filesystem wrapper over {@link scaffoldAutomationAppFiles}.
- * Throws `HarnessError` on a bad id or an app folder that already exists.
+ * Throws `AppScaffoldError` on a bad id or an app folder that already exists.
  */
 export async function scaffoldAutomationApp(
   appsDir: string,
@@ -247,12 +246,12 @@ export async function scaffoldAutomationApp(
   const appDir = path.join(appsDir, appId);
   try {
     await fs.access(appDir);
-    throw new HarnessError(
+    throw new AppScaffoldError(
       'already_exists',
       `Automation app "${appId}" already exists at ${appDir}.`,
     );
   } catch (err) {
-    if (err instanceof HarnessError) throw err;
+    if (err instanceof AppScaffoldError) throw err;
     // ENOENT — the directory is free, proceed.
   }
 

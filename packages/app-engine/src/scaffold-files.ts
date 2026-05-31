@@ -13,7 +13,7 @@
 import { toCss } from '@centraid/design-tokens';
 import { rewriteTitleInHtml, applyManifestName } from './app-rewrites.js';
 import { AUTOMATIONS_README, DEFAULT_APP_CSS, README_TEMPLATE } from './scaffold-defaults.js';
-import { HarnessError } from './types.js';
+import { AppScaffoldError } from './scaffold-types.js';
 
 /** A single file in a scaffold/clone file map. `path` is app-relative, posix. */
 export interface ScaffoldFile {
@@ -29,7 +29,7 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 /** Validate an app id against centraid's reserved-prefix and shape rules. */
 export function validateAppId(id: string): void {
   if (id.startsWith('_') || !ID_RE.test(id)) {
-    throw new HarnessError(
+    throw new AppScaffoldError(
       'invalid_id',
       `Invalid app id "${id}". Lowercase a-z / 0-9 / "-", 1-63 chars, no leading "_".`,
     );
@@ -98,14 +98,14 @@ export function updateAppMetaFiles(
   const byPath = new Map(current.map((f) => [f.path, f.content]));
   const renameTo = patch.name === undefined ? undefined : patch.name.trim();
   if (patch.name !== undefined && !renameTo) {
-    throw new HarnessError('invalid_id', 'App name cannot be empty.');
+    throw new AppScaffoldError('invalid_id', 'App name cannot be empty.');
   }
   if (renameTo) {
     const taken = existingNames.some(
       (a) => a.id !== id && (a.name ?? '').trim().toLowerCase() === renameTo.toLowerCase(),
     );
     if (taken)
-      throw new HarnessError('already_exists', `An app named "${renameTo}" already exists.`);
+      throw new AppScaffoldError('already_exists', `An app named "${renameTo}" already exists.`);
   }
 
   let parsed: Record<string, unknown> = {};

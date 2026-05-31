@@ -14,14 +14,12 @@ import {
   listAutomations,
   parseAutomationRef,
   type AutomationTrigger,
-} from '@centraid/app-engine';
-import {
-  HarnessError,
+  AppScaffoldError,
   deleteAutomationFromFiles,
   scaffoldAutomationAppFiles,
   setAutomationEnabledInFiles,
   type ScaffoldFile,
-} from '@centraid/agent-harness';
+} from '@centraid/app-engine';
 import { validateManifestAt } from './apps-store-routes.js';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
@@ -51,7 +49,7 @@ export async function handleAutomationCreate(
 
   const existing = await opts.store.listAppsWithMeta();
   if (existing.some((a) => a.id === id)) {
-    throw new HarnessError('already_exists', `Automation app "${id}" already exists.`);
+    throw new AppScaffoldError('already_exists', `Automation app "${id}" already exists.`);
   }
 
   // Mint webhook secrets gateway-side: plaintext returned once, manifest
@@ -195,7 +193,7 @@ export async function handleAutomationDelete(
   await Promise.all(removed.map((rel) => fs.rm(nodePath.resolve(appDir, rel), { force: true })));
   if (publish) {
     const validationError = await validateManifestAt(appDir);
-    if (validationError) throw new HarnessError('invalid_manifest', validationError);
+    if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
     await opts.store.publish({
       sessionId,
       appId: ref.appId,

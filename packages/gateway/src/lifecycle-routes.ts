@@ -43,15 +43,15 @@
 // keep each module under the repo file-size limit.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { provisionPendingWebhooksInFiles } from '@centraid/app-engine';
 import {
-  HarnessError,
+  AppScaffoldError,
   cloneTemplateFiles,
+  provisionPendingWebhooksInFiles,
   scaffoldAppFiles,
   suggestCloneIdentityFrom,
   updateAppMetaFiles,
   type ScaffoldFile,
-} from '@centraid/agent-harness';
+} from '@centraid/app-engine';
 import { readTemplateFiles, resolveTemplates } from '@centraid/app-templates';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
@@ -137,7 +137,7 @@ async function handleCreate(
   // dir-exists check; the git-store path checks the list).
   const existing = await opts.store.listAppsWithMeta();
   if (existing.some((a) => a.id === id)) {
-    throw new HarnessError('already_exists', `App "${id}" already exists.`);
+    throw new AppScaffoldError('already_exists', `App "${id}" already exists.`);
   }
 
   const files = scaffoldAppFiles(id, {
@@ -178,7 +178,7 @@ async function handleClone(
   const cacheOpt = opts.templatesCacheDir ? { cacheDir: opts.templatesCacheDir } : {};
   const templates = await resolveTemplates(cacheOpt);
   const tmpl = templates.find((t) => t.id === templateId);
-  if (!tmpl) throw new HarnessError('not_found', `Unknown template "${templateId}".`);
+  if (!tmpl) throw new AppScaffoldError('not_found', `Unknown template "${templateId}".`);
 
   // Pick a unique (id, name) pair against the apps already on `main`, then
   // rewrite the template's files in memory for the new identity.

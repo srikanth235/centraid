@@ -6,15 +6,19 @@
  * curated icon set, copy-pasteable component primitives, and a short
  * checklist for the states/a11y floor every app should hit.
  *
- * Built dynamically at session start (see agent-session.ts) so a future
- * tokens change propagates without rebuilding the harness.
+ * Built dynamically per turn (from `@centraid/design-tokens`) so a future
+ * tokens change propagates without regenerating anything. This is the
+ * design-contract grounding that can't be a static `SKILL.md` — it is
+ * composed into the turn alongside the static authoring skills. Promoting it
+ * to a generated `centraid-ui-design/SKILL.md` snapshot is the natural next
+ * step once native skill discovery is wired on both backends.
  */
 
 import { icons, toCss } from '@centraid/design-tokens';
 
 /**
- * Returns the ordered list of prompt blocks to splice in below
- * `CENTRAID_APPEND_PROMPT`. Each block is a single string starting with
+ * Returns the ordered list of prompt blocks to splice in below the
+ * `authoring-centraid-apps` skill. Each block is a single string starting with
  * its `###` heading so it renders cleanly in the system prompt.
  */
 export function buildUiGroundingBlocks(): string[] {
@@ -33,10 +37,9 @@ export function buildUiGroundingBlocks(): string[] {
  * `var(--accent)`, `var(--ink)`, etc. — never hardcode colors, radii,
  * font sizes, or spacing values.
  *
- * The starter `app.css` written by `scaffoldApp()` already links
- * the same vars from a local snapshot, so this block is for the *agent*
- * (so it knows what's available); the runtime contract comes from the
- * scaffold and the theme bridge.
+ * The starter `app.css` written by the scaffolder already links the same vars
+ * from a local snapshot, so this block is for the *agent* (so it knows what's
+ * available); the runtime contract comes from the scaffold and the theme bridge.
  */
 function renderDesignTokensBlock(): string {
   const css = toCss();
@@ -73,7 +76,7 @@ function renderDesignTokensBlock(): string {
 function renderIconSetBlock(): string {
   // Surface the in-app icon set (not the app-tile glyphs — those are
   // shell-level and not useful inside an app's UI).
-  const inAppIcons: Array<keyof typeof icons> = [
+  const inAppIcons = [
     'Check',
     'Plus',
     'X',
@@ -94,7 +97,7 @@ function renderIconSetBlock(): string {
     'MoreHoriz',
     'Save',
     'Settings',
-  ];
+  ] as const;
 
   const entries = inAppIcons
     .filter((n) => icons[n])

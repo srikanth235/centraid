@@ -1,16 +1,17 @@
 /*
  * `### Available host tools` grounding block (issue #80 follow-up).
  *
- * Spliced into the builder system prompt at session start, below the
- * UI grounding blocks. It lists the tools the host runtime actually
- * exposes — each with its exact JSON input schema — so the agent writes
- * `ctx.tool(...)` calls (correct name *and* args), and `requires.tools`,
- * against reality rather than training-prior guesses.
+ * Appended to the builder system prompt below the UI grounding. It lists the
+ * tools the host runtime actually exposes — each with its exact JSON input
+ * schema — so the agent writes `ctx.tool(...)` calls (correct name *and* args),
+ * and `requires.tools`, against reality rather than training-prior guesses.
  *
- * A tool is a tool: this block does not distinguish native CLI builtins
- * from MCP-backed tools beyond a parenthetical tag, because the harness
- * doesn't care about the source. Built dynamically (see agent-session.ts)
- * from `enumerateHostTools()`; omitted entirely when enumeration is empty.
+ * A tool is a tool: this block does not distinguish native CLI builtins from
+ * MCP-backed tools beyond a parenthetical tag, because the runner doesn't care
+ * about the source. Built per turn from `enumerateHostTools()`; omitted entirely
+ * when enumeration is empty. This is dynamic grounding (it depends on the live
+ * runner kind + installed MCPs) so it ships as a render function, not a static
+ * `SKILL.md`.
  */
 
 import type { HostTool } from '@centraid/agent-runtime';

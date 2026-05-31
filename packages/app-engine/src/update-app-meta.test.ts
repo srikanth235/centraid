@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { scaffoldApp, updateAppMeta } from './scaffold.js';
-import { HarnessError } from './types.js';
+import { AppScaffoldError } from './scaffold-types.js';
 
 describe('updateAppMeta', () => {
   let dir: string;
@@ -30,7 +30,7 @@ describe('updateAppMeta', () => {
     await scaffoldApp(dir, 'hydrate-2', { name: 'Hydrate 2' });
     await assert.rejects(
       () => updateAppMeta(dir, 'hydrate-2', { name: 'Hydrate' }),
-      (err) => err instanceof HarnessError && err.code === 'already_exists',
+      (err) => err instanceof AppScaffoldError && err.code === 'already_exists',
     );
   });
 
@@ -39,7 +39,7 @@ describe('updateAppMeta', () => {
     await scaffoldApp(dir, 'hydrate-2', { name: 'Hydrate 2' });
     await assert.rejects(
       () => updateAppMeta(dir, 'hydrate-2', { name: '  HYDRATE  ' }),
-      (err) => err instanceof HarnessError && err.code === 'already_exists',
+      (err) => err instanceof AppScaffoldError && err.code === 'already_exists',
     );
   });
 
@@ -56,7 +56,7 @@ describe('updateAppMeta', () => {
     await scaffoldApp(dir, 'todos', { name: 'Todos' });
     await assert.rejects(
       () => updateAppMeta(dir, 'todos', { name: '   ' }),
-      (err) => err instanceof HarnessError && err.code === 'invalid_id',
+      (err) => err instanceof AppScaffoldError && err.code === 'invalid_id',
     );
   });
 

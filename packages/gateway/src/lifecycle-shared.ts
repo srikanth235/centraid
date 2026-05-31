@@ -5,7 +5,7 @@
 // limit while sharing the stage-vs-publish fork and error mapping.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { HarnessError } from '@centraid/agent-harness';
+import { AppScaffoldError } from '@centraid/app-engine';
 import type { AutomationHistoryKeep } from '@centraid/app-engine';
 import { AppsStore, AppsStoreError } from '@centraid/code-store';
 import { validateManifestAt } from './apps-store-routes.js';
@@ -130,7 +130,7 @@ export async function stageAndMaybePublish(
     return;
   }
   const validationError = await validateManifestAt(appDir);
-  if (validationError) throw new HarnessError('invalid_manifest', validationError);
+  if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
   await opts.store.publish({
     sessionId: input.sessionId,
     appId: input.appId,
@@ -143,7 +143,7 @@ export async function stageAndMaybePublish(
 
 /** Map a lifecycle error to a status + JSON body. */
 export function sendLifecycleError(res: ServerResponse, err: unknown): true {
-  if (err instanceof HarnessError) {
+  if (err instanceof AppScaffoldError) {
     const status = err.code === 'already_exists' ? 409 : err.code === 'not_found' ? 404 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }

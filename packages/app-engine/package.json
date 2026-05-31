@@ -17,6 +17,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@centraid/design-tokens": "workspace:*",
     "ajv": "^8.17.1",
     "tar": "^7.4.3"
   },

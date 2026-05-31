@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseManifest } from '@centraid/app-engine';
+import { parseManifest } from './automation-manifest.js';
 import {
   scaffoldAutomationApp,
   validateAutomationId,
   validateAutomationAppId,
 } from './scaffold-automation.js';
-import { HarnessError } from './types.js';
+import { AppScaffoldError } from './scaffold-types.js';
 
 describe('scaffoldAutomationApp', () => {
   let dir: string;
@@ -68,19 +68,19 @@ describe('scaffoldAutomationApp', () => {
 
   it('rejects a duplicate app folder', async () => {
     await scaffoldAutomationApp(dir, 'dup');
-    await assert.rejects(() => scaffoldAutomationApp(dir, 'dup'), HarnessError);
+    await assert.rejects(() => scaffoldAutomationApp(dir, 'dup'), AppScaffoldError);
   });
 
   it('rejects a dotted / path-unsafe app id', async () => {
-    await assert.rejects(() => scaffoldAutomationApp(dir, 'auto.x'), HarnessError);
+    await assert.rejects(() => scaffoldAutomationApp(dir, 'auto.x'), AppScaffoldError);
   });
 
   it('validates ids', () => {
-    assert.throws(() => validateAutomationId('has space'), HarnessError);
-    assert.throws(() => validateAutomationId('_leading'), HarnessError);
+    assert.throws(() => validateAutomationId('has space'), AppScaffoldError);
+    assert.throws(() => validateAutomationId('_leading'), AppScaffoldError);
     // Automation apps use a plain slug id now (kind marks them, not a
     // dotted prefix) — a dotted id is rejected, a slug accepted.
-    assert.throws(() => validateAutomationAppId('auto.ok'), HarnessError);
+    assert.throws(() => validateAutomationAppId('auto.ok'), AppScaffoldError);
     validateAutomationAppId('standup-bot');
   });
 });

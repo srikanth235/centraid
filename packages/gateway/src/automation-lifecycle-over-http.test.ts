@@ -22,7 +22,7 @@ import {
   setAutomationEnabledInFiles,
   deleteAutomationFromFiles,
   type ScaffoldFile,
-} from '@centraid/agent-harness';
+} from '@centraid/app-engine';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 import type { SecretsProvider } from './secrets.ts';

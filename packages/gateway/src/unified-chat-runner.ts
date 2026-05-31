@@ -50,12 +50,7 @@ import {
   provisionAppPendingWebhooks,
   WEBHOOK_ROUTE_PREFIX,
 } from '@centraid/app-engine';
-import {
-  CENTRAID_APPEND_PROMPT,
-  AUTOMATION_APPEND_PROMPT,
-  buildUiGroundingBlocks,
-  buildToolsGroundingBlock,
-} from '@centraid/agent-harness';
+import { composeSkills, buildUiGroundingBlocks, buildToolsGroundingBlock } from '@centraid/skills';
 import { AppsStore } from '@centraid/code-store';
 import { ensureSession } from './lifecycle-shared.js';
 
@@ -147,9 +142,9 @@ async function buildUnifiedExtraPrompt(
 ): Promise<string> {
   const blocks: string[] = baseExtra ? [baseExtra] : [];
   if (appKind === 'automation') {
-    blocks.push(AUTOMATION_APPEND_PROMPT);
+    blocks.push(composeSkills(['automation-authoring']));
   } else {
-    blocks.push(CENTRAID_APPEND_PROMPT, ...buildUiGroundingBlocks());
+    blocks.push(composeSkills(['authoring-centraid-apps']), ...buildUiGroundingBlocks());
   }
   const toolsBlock = buildToolsGroundingBlock(await groundingToolsFor(enumerate, prefs, cwd));
   if (toolsBlock) blocks.push(toolsBlock);
