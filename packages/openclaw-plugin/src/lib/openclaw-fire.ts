@@ -18,22 +18,24 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
-  AutomationRunsStore,
+  AgentRunsStore,
+  makeRuntimeDbProvider,
+  type AnalyticsStore,
+  type AutomationTriggerKind,
+  type AutomationTriggerOrigin,
+} from '@centraid/app-engine';
+import {
   automationHandlerPath,
   formatAutomationRef,
-  makeRuntimeDbProvider,
   parseAutomationRef,
   readAppOwnedAutomation,
   runAutomationHandler,
-  type AnalyticsStore,
   type AutomationDispatchContext,
   type AutomationHandlerOutcome,
   type AutomationInvokeDispatcher,
   type AutomationToolCall,
   type AutomationToolResult,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
-} from '@centraid/app-engine';
+} from '@centraid/automation';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
   prepareSimpleCompletionModelForAgent,
@@ -101,7 +103,7 @@ export async function runOpenclawFire(
   // The automation's run ledger is its app's per-app `runtime.sqlite`
   // (issue #98); `finishRun` write-throughs a summary to `analytics`.
   const runtimeDbPath = path.join(opts.appsDir, parsed.appId, 'runtime.sqlite');
-  const runsStore = new AutomationRunsStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
+  const runsStore = new AgentRunsStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
 
   const toolDispatcher = async (
     calls: readonly AutomationToolCall[],

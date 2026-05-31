@@ -31,17 +31,15 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AnalyticsStore,
-  AutomationRunsStore,
+  AgentRunsStore,
   InsightsStore,
-  listAutomations,
   makeRuntimeDbProvider,
-  parseAutomationRef,
-  readAppOwnedAutomation,
-  type AutomationRunRow,
+  type AgentRunRow,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type RunSummary,
 } from '@centraid/app-engine';
+import { listAutomations, parseAutomationRef, readAppOwnedAutomation } from '@centraid/automation';
 import type { AppsStore } from '@centraid/code-store';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 
@@ -62,8 +60,8 @@ export interface AutomationsRouteOptions {
   runAutomation: (input: { automationRef: string; runId: string }) => void;
 }
 
-/** Map a central run summary into the `AutomationRunRow` feed shape. */
-function summaryToRunRow(s: RunSummary): AutomationRunRow {
+/** Map a central run summary into the `AgentRunRow` feed shape. */
+function summaryToRunRow(s: RunSummary): AgentRunRow {
   return {
     runId: s.runId,
     kind: s.kind,
@@ -109,7 +107,7 @@ export function makeAutomationsRouteHandler(
   // app's `runtime.sqlite` under the stable data dir. Automation run ids
   // are `<appId>/<id>:...` (app id inline); a chat run id is a bare UUID,
   // so its owning app comes from the central run summary.
-  const runsStoreForRunId = (runId: string): AutomationRunsStore | undefined => {
+  const runsStoreForRunId = (runId: string): AgentRunsStore | undefined => {
     const slash = runId.indexOf('/');
     const appId = slash > 0 ? runId.slice(0, slash) : opts.analytics.getSummary(runId)?.appId;
     if (!appId) return undefined;
@@ -117,7 +115,7 @@ export function makeAutomationsRouteHandler(
     // No ledger file means the app/run is unknown here — return undefined
     // rather than letting sqlite throw on a missing parent dir.
     if (!existsSync(dbPath)) return undefined;
-    return new AutomationRunsStore(makeRuntimeDbProvider(dbPath));
+    return new AgentRunsStore(makeRuntimeDbProvider(dbPath));
   };
 
   return async (req, res) => {

@@ -109,36 +109,7 @@ export {
   type SpawnCliResult,
 } from './run-automation-local.js';
 
-// OS-level scheduler glue (launchd / systemd / Task Scheduler) for
-// the local path. Pure-function artifact generators (testable
-// without touching the real scheduler) plus register/unregister/list
-// that shell out via an injectable execShell.
-export {
-  register as registerOsJob,
-  unregister as unregisterOsJob,
-  list as listOsJobs,
-  reconcile as reconcileOsJobs,
-  jobLabel,
-  currentPlatform,
-  buildLaunchdPlist,
-  cronToLaunchdIntervals,
-  buildSystemdService,
-  buildSystemdTimer,
-  cronToSystemdOnCalendar,
-  cronToSchtasksArgs,
-  defaultExecShell,
-  UnsupportedOsSchedulerError,
-  type OsPlatform,
-  type OsSchedulerJobSpec,
-  type OsSchedulerJobInstalled,
-  type OsSchedulerListEntry,
-  type OsSchedulerOptions,
-  type OsSchedulerReconcileDesired,
-  type OsSchedulerReconcileResult,
-  type ExecShell,
-} from './os-scheduler.js';
-
-// AutomationHost adapter wrapping os-scheduler. The desktop wires
-// this into local-runtime so toggle/delete IPC calls reach the OS
-// scheduler through the same interface openclaw uses on the cloud.
-export { OsSchedulerHost, type OsSchedulerHostOptions } from './os-scheduler-host.js';
+// Scheduling lives in `@centraid/automation` now (issue #149): the gateway
+// owns an in-process cron `InProcessScheduler` and fires automations while it
+// runs. The OS scheduler (launchd / systemd / Task Scheduler) and its
+// `centraid run-automation` entry point are gone.

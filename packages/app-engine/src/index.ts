@@ -62,6 +62,7 @@ export type {
 } from './schema.js';
 export type { AppTableRows } from './table-rows.js';
 export type { RunQueryResult } from './run-query.js';
+export { appendLogs } from './log-store.js';
 export type { LogEntry, LogLevel } from './log-store.js';
 
 // Low-level helpers the openclaw plugin uses to expose SQL + schema as
@@ -86,7 +87,7 @@ export {
 } from './sql-ops.js';
 export { readAppSchema } from './schema.js';
 export { Registry } from './registry.js';
-export { appDataDir, readActiveCodeDir } from './app-paths.js';
+export { appDataDir, readActiveCodeDir, isValidAppId } from './app-paths.js';
 
 // Wrapper-dir cleanup on app delete — removes `<appsDir>/<id>/` (data.sqlite
 // + run ledgers) after the registry entry is dropped. Hosts that delete apps
@@ -191,7 +192,7 @@ export {
 } from './gateway-db.js';
 
 // Central analytics — push-based run summaries (issue #98, decision 4).
-// `AutomationRunsStore.finishRun` write-throughs one row per run;
+// `AgentRunsStore.finishRun` write-throughs one row per run;
 // `InsightsStore` reads them as the single Insights source.
 export { AnalyticsStore, type RunSummary, type ListSummariesOptions } from './analytics-store.js';
 
@@ -214,70 +215,26 @@ export {
 export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
 export type { SettingsInject } from './static-server.js';
 
-// Automation manifest schema + validator. The `automation.json`
-// manifest is the source of truth for an automation app — shared
-// between producers (`@centraid/agent-harness` writes manifests
-// during scaffolding / re-prompt) and consumers (the local automation
-// runner in `@centraid/agent-runtime`, the openclaw plugin's
-// reconciliation pass, and the desktop UI). See issue #91.
-export {
-  AutomationManifestError,
-  AUTOMATION_HANDLER_FILE,
-  AUTOMATION_MANIFEST_FILE,
-  isValidCronExpression,
-  isPendingWebhookTrigger,
-  parseManifest,
-  validateManifest,
-  validateOutputAgainstSchema,
-  cronTriggersOf,
-  webhookTriggerOf,
-  pendingWebhookTriggerOf,
-  type AutomationManifest,
-  type AutomationManifestRequires,
-  type AutomationCostEstimate,
-  type AutomationGeneratedMeta,
-  type AutomationManifestValidationCode,
-  type AutomationTrigger,
-  type CronTrigger,
-  type WebhookTrigger,
-  type PendingWebhookTrigger,
-  type AutomationOutputSchema,
-  type AutomationHistoryConfig,
-  type AutomationHistoryKeep,
-} from './automation-manifest.js';
-
-// Automation identity — the directory-slug grammar and the
-// `<appId>/<id>` handle that scheduler labels, webhook routing,
-// `ctx.invoke`, and `onFailure` address an automation by (issue #98).
-export {
-  isValidAutomationId,
-  isValidAppId,
-  isValidAutomationRef,
-  formatAutomationRef,
-  parseAutomationRef,
-  type AutomationRef,
-} from './automation-ref.js';
-
 // Unified agent-run ledger + ctx.state store. The three tables
 // (`runs`, `run_nodes`, `automation_state`) live in the activity DB;
 // the store is runtime-owned and never reachable from handler `db` or
 // the `centraid_sql_*` agent tools. See issues #80 and #90.
 export {
-  AutomationRunsStore,
+  AgentRunsStore,
   type InsertRunInput,
   type FinishRunInput,
   type InsertNodeInput,
   type ListRunsOptions,
-} from './automation-runs-store.js';
+} from './agent-runs-store.js';
 export type {
-  AutomationRunRow,
-  AutomationRunNodeRow,
+  AgentRunRow,
+  AgentRunNodeRow,
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationTriggerOrigin,
-  AutomationRunNodeKind,
+  AgentRunNodeKind,
   RunKind,
-} from './automation-runs-schema.js';
+} from './agent-runs-schema.js';
 
 // Per-model token pricing. `run_nodes.cost_usd` is frozen at write time
 // via `costForUsage`; an unknown model yields `undefined` so the ledger
@@ -297,80 +254,6 @@ export {
   type InsightsActivityRow,
 } from './insights-store.js';
 
-// Automation apps on disk (issue #98 unified model). An automation
-// always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
-// `listAutomations` scans every app's active version. The directory is
-// the source of truth (no SQLite definition table).
-export {
-  APP_AUTOMATIONS_SUBDIR,
-  automationManifestPath,
-  automationHandlerPath,
-  readAutomationAppAt,
-  readAppOwnedAutomation,
-  listAutomations,
-  writeAutomationManifestAt,
-  setAutomationEnabledAt,
-  deleteAutomationAt,
-  type AutomationRow,
-  type AutomationAppError,
-  type ListAutomationAppsResult,
-} from './automation-app.js';
-export type { AutomationHost, AutomationReconcileResult } from './automation-host.js';
-
-// Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
-// automation on an inbound HTTP POST; the gateway mounts the route
-// built by `makeWebhookRouteHandler`. Secret helpers are shared by the
-// desktop's create flow (hash at scaffold time) and the route (verify).
-export {
-  WEBHOOK_ROUTE_PREFIX,
-  generateWebhookId,
-  generateWebhookSecret,
-  hashWebhookSecret,
-  verifyWebhookSecret,
-  makeWebhookRouteHandler,
-  provisionPendingWebhookAt,
-  provisionAppPendingWebhooks,
-  provisionPendingWebhooksInFiles,
-  type ProvisionedWebhook,
-  type ProvisionedWebhookInFiles,
-  type WebhookFileMapEntry,
-  type WebhookFireFn,
-  type WebhookFireResult,
-  type WebhookRouteOptions,
-} from './automation-webhook.js';
-
-// Automation handler runtime (issue #91). A fire executes the app's
-// generated `handler.js` in a worker thread; the host supplies the
-// tool / agent / invoke dispatchers. `runAutomationHandler` owns the
-// ledger side — opening the `runs` row and recording the trace.
-export {
-  runAutomationHandler,
-  type RunAutomationHandlerOptions,
-  type AutomationHandlerOutcome,
-  type AutomationToolCall,
-  type AutomationToolResult,
-  type AutomationToolDispatcher,
-  type AutomationAgentCall,
-  type AutomationAgentDispatcher,
-  type AutomationInvokeResult,
-  type AutomationInvokeDispatcher,
-  type AutomationDispatchContext,
-} from './automation-handler-runner.js';
-export { truncateForAudit } from './automation-handler-audit.js';
-
-// The per-fire orchestration spine (issue #147, Concern 2): resolve the
-// automation, open its ledger, run the handler against a host-injected
-// dispatch surface, cascade `onFailure`. agent-runtime's `runAutomationLocal`
-// is a thin wrapper that injects a mock-LLM + CLI-spawn dispatch surface.
-export {
-  runAutomationFire,
-  type RunAutomationFireOptions,
-  type AutomationRunRecord,
-  type AutomationDispatchSurface,
-  type OpenAutomationDispatch,
-  type OpenAutomationDispatchArgs,
-} from './automation-fire.js';
-
 // App scaffolders + clone (moved here when @centraid/agent-harness was
 // dissolved, issue #145). The gateway lifecycle routes use the file-map
 // (`*Files`) variants; the disk wrappers back the CLI / local paths.
@@ -389,15 +272,6 @@ export {
   updateAppMeta,
   isDisplayNameTaken,
 } from './scaffold.js';
-export {
-  scaffoldAutomationApp,
-  scaffoldAutomationAppFiles,
-  setAutomationEnabledInFiles,
-  deleteAutomationFromFiles,
-  validateAutomationId,
-  validateAutomationAppId,
-  type AutomationScaffoldOptions,
-} from './scaffold-automation.js';
 export {
   cloneTemplate,
   cloneTemplateFiles,

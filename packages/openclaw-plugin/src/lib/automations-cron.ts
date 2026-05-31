@@ -23,7 +23,7 @@
  */
 
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
-import { cronTriggersOf, type AutomationRow } from '@centraid/app-engine';
+import { cronTriggersOf, type AutomationRow } from '@centraid/automation';
 import { CENTRAID_MOCK_MODEL_ID, CENTRAID_MOCK_PROVIDER_ID } from './automations-provider.js';
 
 /** Prefix every centraid-owned cron job's name so reconciliation can identify them. */

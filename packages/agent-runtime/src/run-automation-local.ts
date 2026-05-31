@@ -12,14 +12,16 @@
  */
 
 import {
-  runAutomationFire,
   type AnalyticsStore,
-  type AutomationHandlerOutcome,
-  type AutomationRunRecord,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type OpenAutomationDispatch,
 } from '@centraid/app-engine';
+import {
+  runAutomationFire,
+  type AutomationHandlerOutcome,
+  type AutomationRunRecord,
+  type OpenAutomationDispatch,
+} from '@centraid/automation';
 import {
   defaultSpawnCli,
   type LocalRunnerKind,

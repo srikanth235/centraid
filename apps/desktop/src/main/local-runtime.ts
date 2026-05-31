@@ -4,13 +4,7 @@ import {
   type GatewayServeHandle,
   type SecretsProvider,
 } from '@centraid/gateway';
-import {
-  defaultCentraidCliDir,
-  invalidatePreflightCache,
-  OsSchedulerHost,
-  type OpenAICompatProvider,
-} from '@centraid/agent-runtime';
-import path from 'node:path';
+import { invalidatePreflightCache, type OpenAICompatProvider } from '@centraid/agent-runtime';
 import { getProviderApiKey } from './provider-secrets.js';
 import {
   gatewayAnalyticsDb,
@@ -22,7 +16,6 @@ import {
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
 import { loadPersistedSettings, templatesCacheDir } from './settings.js';
-import type { AutomationHost } from '@centraid/app-engine';
 
 /**
  * Electron-flavored wrapper around `@centraid/gateway`'s `serve()`.
@@ -97,50 +90,6 @@ export function localRuntimeAnalyticsDb(gatewayId: string): string {
   return gatewayAnalyticsDb(gatewayId);
 }
 
-/**
- * Stable path to the gateway's git-store `active-main/apps` symlink
- * target (issue #137) — where automation *code* (manifests + handlers)
- * lives. The symlink is repointed atomically by the AppsStore on every
- * publish/rollback/delete, so this path is safe to bake into OS
- * scheduler artifacts once and survives version swaps.
- */
-export function localRuntimeActiveCodeAppsDir(gatewayId: string): string {
-  return path.join(gatewayCodeStoreDir(gatewayId), 'active-main', 'apps');
-}
-
-/**
- * Per-gateway OS-scheduler-backed AutomationHost. Lazy: built on first
- * read so we don't shell out to the OS scheduler before anyone actually
- * toggled an automation.
- *
- * Both dirs are derived from `gatewayId` (issue #137): the scheduler
- * fires `centraid run-automation`, which resolves the automation's CODE
- * from `active-main/apps` (git store) and writes its run ledger DATA to
- * `<appsDir>/<id>/runtime.sqlite`. The host is cached per gateway, so
- * deriving both internally keeps every caller (the serve() factory + the
- * register/unregister IPCs) pointed at the same two trees.
- *
- * `centraidBin` points at the bundled CLI script. We resolve via
- * `defaultCentraidCliDir` to stay agnostic to electron-builder
- * unpacking layout.
- */
-const automationHosts = new Map<string, AutomationHost>();
-export function localRuntimeAutomationHost(gatewayId: string): AutomationHost {
-  const existing = automationHosts.get(gatewayId);
-  if (existing) return existing;
-  const dataAppsDir = gatewayAppsDir(gatewayId);
-  const host = new OsSchedulerHost({
-    workdir: dataAppsDir,
-    centraidBin: path.join(defaultCentraidCliDir(), 'centraid-cli.js'),
-    analyticsDbPath: localRuntimeAnalyticsDb(gatewayId),
-    appsDir: dataAppsDir,
-    codeAppsDir: localRuntimeActiveCodeAppsDir(gatewayId),
-    runner: 'codex',
-  });
-  automationHosts.set(gatewayId, host);
-  return host;
-}
-
 export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServeHandle> {
   ensureInfoProviderRegistered();
   const ready = handles.get(gatewayId);
@@ -184,10 +133,10 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
       // so drafts survive restarts and the publish/session HTTP surface
       // is identical to the standalone daemon.
       appsStoreRoot: gatewayCodeStoreDir(gatewayId),
-      // Both code + data dirs are derived from `gatewayId` inside the
-      // host factory (issue #137), so the dirs serve() computes are
-      // advisory here — the cached host owns the canonical paths.
-      schedulerHostFactory: () => localRuntimeAutomationHost(gatewayId),
+      // Scheduling (issue #149): the gateway owns an in-process cron
+      // scheduler internally and fires automations while it runs — no OS
+      // scheduler, no `centraid run-automation` subprocess. Nothing to
+      // inject here.
       logTag: `local-runtime:${gatewayId}`,
     });
     handles.set(gatewayId, handle);

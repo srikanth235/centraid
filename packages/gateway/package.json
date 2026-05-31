@@ -23,6 +23,7 @@
     "@centraid/agent-runtime": "workspace:*",
     "@centraid/app-engine": "workspace:*",
     "@centraid/app-templates": "workspace:*",
+    "@centraid/automation": "workspace:*",
     "@centraid/code-store": "workspace:*",
     "@centraid/skills": "workspace:*"
   },

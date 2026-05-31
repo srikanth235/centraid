@@ -1,0 +1,159 @@
+/**
+ * `@centraid/automation` — the automation domain.
+ *
+ * One home for everything automation: the manifest format, the on-disk
+ * automation-app model, the globally-unique `<appId>/<id>` handle, the
+ * webhook ingress, the worker-thread handler runner, the per-fire
+ * orchestration spine (`runAutomationFire` + the `OpenAutomationDispatch`
+ * seam), the `AutomationHost` interface + in-process scheduler, and the
+ * automation-app scaffolders.
+ *
+ * Backend-agnostic by construction: execution (`openDispatch`) and
+ * scheduling (`fire`) are injected callbacks, so this package depends on
+ * `@centraid/app-engine` (the per-app engine + the shared agent-run
+ * ledger) but never on any agent backend. `agent-runtime` provides the
+ * local execution surface; `openclaw-plugin` the cloud host; `gateway`
+ * wires them.
+ */
+
+// Manifest — the source of truth for an automation app, shared between
+// producers (scaffolding / re-prompt) and consumers (the local automation
+// runner in `@centraid/agent-runtime`, the openclaw plugin's
+// reconciliation pass, and the desktop UI). See issue #91.
+export {
+  AutomationManifestError,
+  AUTOMATION_HANDLER_FILE,
+  AUTOMATION_MANIFEST_FILE,
+  isValidCronExpression,
+  isPendingWebhookTrigger,
+  parseManifest,
+  validateManifest,
+  validateOutputAgainstSchema,
+  cronTriggersOf,
+  webhookTriggerOf,
+  pendingWebhookTriggerOf,
+  type AutomationManifest,
+  type AutomationManifestRequires,
+  type AutomationCostEstimate,
+  type AutomationGeneratedMeta,
+  type AutomationManifestValidationCode,
+  type AutomationTrigger,
+  type CronTrigger,
+  type WebhookTrigger,
+  type PendingWebhookTrigger,
+  type AutomationOutputSchema,
+  type AutomationHistoryConfig,
+  type AutomationHistoryKeep,
+} from './automation-manifest.js';
+
+// Automation identity — the directory-slug grammar and the
+// `<appId>/<id>` handle that scheduler labels, webhook routing,
+// `ctx.invoke`, and `onFailure` address an automation by (issue #98).
+export {
+  isValidAutomationId,
+  isValidAutomationRef,
+  formatAutomationRef,
+  parseAutomationRef,
+  type AutomationRef,
+} from './automation-ref.js';
+
+// Automation apps on disk (issue #98 unified model). An automation
+// always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
+// `listAutomations` scans every app's active version. The directory is
+// the source of truth (no SQLite definition table).
+export {
+  APP_AUTOMATIONS_SUBDIR,
+  automationManifestPath,
+  automationHandlerPath,
+  readAutomationAppAt,
+  readAppOwnedAutomation,
+  listAutomations,
+  writeAutomationManifestAt,
+  setAutomationEnabledAt,
+  deleteAutomationAt,
+  type AutomationRow,
+  type AutomationAppError,
+  type ListAutomationAppsResult,
+} from './automation-app.js';
+
+// The host interface every "thing that fires automations on a schedule"
+// implements — the local in-process scheduler (gateway) and the cloud
+// openclaw cron host both satisfy it.
+export type { AutomationHost, AutomationReconcileResult } from './automation-host.js';
+
+// In-process cron scheduler (issue #149, n8n semantics): the gateway-owned
+// always-on minute timer that fires enabled cron automations while it runs.
+// No OS scheduler; missed minutes during downtime are skipped (no backfill).
+export {
+  InProcessScheduler,
+  type InProcessSchedulerOptions,
+  type LocalScheduler,
+} from './in-process-scheduler.js';
+export { cronMatches } from './cron-match.js';
+
+// Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
+// automation on an inbound HTTP POST; the gateway mounts the route
+// built by `makeWebhookRouteHandler`. Secret helpers are shared by the
+// desktop's create flow (hash at scaffold time) and the route (verify).
+export {
+  WEBHOOK_ROUTE_PREFIX,
+  generateWebhookId,
+  generateWebhookSecret,
+  hashWebhookSecret,
+  verifyWebhookSecret,
+  makeWebhookRouteHandler,
+  provisionPendingWebhookAt,
+  provisionAppPendingWebhooks,
+  provisionPendingWebhooksInFiles,
+  type ProvisionedWebhook,
+  type ProvisionedWebhookInFiles,
+  type WebhookFileMapEntry,
+  type WebhookFireFn,
+  type WebhookFireResult,
+  type WebhookRouteOptions,
+} from './automation-webhook.js';
+
+// Automation handler runtime (issue #91). A fire executes the app's
+// generated `handler.js` in a worker thread; the host supplies the
+// tool / agent / invoke dispatchers. `runAutomationHandler` owns the
+// ledger side — opening the `runs` row and recording the trace.
+export {
+  runAutomationHandler,
+  type RunAutomationHandlerOptions,
+  type AutomationHandlerOutcome,
+  type AutomationToolCall,
+  type AutomationToolResult,
+  type AutomationToolDispatcher,
+  type AutomationAgentCall,
+  type AutomationAgentDispatcher,
+  type AutomationInvokeResult,
+  type AutomationInvokeDispatcher,
+  type AutomationDispatchContext,
+} from './automation-handler-runner.js';
+export { truncateForAudit } from './automation-handler-audit.js';
+
+// The per-fire orchestration spine (issue #147, Concern 2): resolve the
+// automation, open its ledger, run the handler against a host-injected
+// dispatch surface, cascade `onFailure`. agent-runtime's `runAutomationLocal`
+// is a thin wrapper that injects a mock-LLM + CLI-spawn dispatch surface.
+export {
+  runAutomationFire,
+  type RunAutomationFireOptions,
+  type AutomationRunRecord,
+  type AutomationDispatchSurface,
+  type OpenAutomationDispatch,
+  type OpenAutomationDispatchArgs,
+} from './automation-fire.js';
+
+// Automation-app scaffolders. The gateway lifecycle routes use the
+// file-map (`*Files`) variants; the disk wrappers back the CLI / local
+// paths. (Core app scaffolders stay in `@centraid/app-engine`.)
+export {
+  scaffoldAutomationApp,
+  scaffoldAutomationAppFiles,
+  setAutomationEnabledInFiles,
+  deleteAutomationFromFiles,
+  validateAutomationId,
+  validateAutomationAppId,
+  type AutomationScaffoldOptions,
+} from './scaffold-automation.js';

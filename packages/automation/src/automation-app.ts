@@ -25,7 +25,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { readActiveCodeDir } from './app-paths.js';
+import { readActiveCodeDir } from '@centraid/app-engine';
 import {
   AUTOMATION_HANDLER_FILE,
   AUTOMATION_MANIFEST_FILE,

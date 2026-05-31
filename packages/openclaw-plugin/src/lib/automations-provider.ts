@@ -15,7 +15,7 @@
  *       2. Loads the automation app (`automation.json` + `handler.js`)
  *          from the owning app's active version under `appsDir`.
  *       3. Runs the handler via `runAutomationHandler` from app-engine,
- *          wiring an `AutomationRunsStore` over the activity DB
+ *          wiring an `AgentRunsStore` over the activity DB
  *          for the run audit + `ctx.state`.
  *          - toolDispatcher routes through `callGatewayTool` (full
  *            harness MCP routing + audit + before-tool hooks for free).

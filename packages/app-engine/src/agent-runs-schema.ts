@@ -4,12 +4,12 @@
  * Pure types — the table DDL lives in `gateway-db.ts` (ACTIVITY_MIGRATIONS:
  * `runs`, `run_nodes`, `automation_state`). These shapes are exported
  * separately so callers (the SQLite-backed store in
- * `automation-runs-store.ts` and the desktop UI) can import the row
+ * `agent-runs-store.ts` and the desktop UI) can import the row
  * types without pulling in the store implementation.
  *
  * A chat turn, an automation fire, and a builder iteration are all the
  * same object — an agent run. `RunKind` discriminates. `run_nodes` is
- * the ordered agentic trace; `AutomationRunNodeKind` discriminates a
+ * the ordered agentic trace; `AgentRunNodeKind` discriminates a
  * primary model-inference step from a tool / agent / invoke call.
  */
 
@@ -41,9 +41,9 @@ export type AutomationTriggerOrigin = 'cron' | 'webhook' | 'manual';
  * per-call token + cost accounting lives at this grain. `tool` / `agent`
  * / `invoke` are the per-call audit rows.
  */
-export type AutomationRunNodeKind = 'step' | 'tool' | 'agent' | 'invoke';
+export type AgentRunNodeKind = 'step' | 'tool' | 'agent' | 'invoke';
 
-export interface AutomationRunRow {
+export interface AgentRunRow {
   readonly runId: string;
   readonly kind: RunKind;
   /** UUID of the automation — set for `kind: 'automation'`. */
@@ -88,12 +88,12 @@ export interface AutomationRunRow {
   readonly toolCount?: number;
 }
 
-export interface AutomationRunNodeRow {
+export interface AgentRunNodeRow {
   readonly nodeId: string;
   readonly runId: string;
   readonly ordinal: number;
   readonly batchId?: number;
-  readonly kind: AutomationRunNodeKind;
+  readonly kind: AgentRunNodeKind;
   /** The tool name or `ctx.invoke` target. Absent for `kind: 'step'`. */
   readonly name?: string;
   readonly argsJson?: string;

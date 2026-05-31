@@ -22,9 +22,9 @@ import path from 'node:path';
 import { type DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { makeRuntimeDbProvider, type DatabaseProvider } from './gateway-db.js';
-import { AutomationRunsStore } from './automation-runs-store.js';
+import { AgentRunsStore } from './agent-runs-store.js';
 import type { AnalyticsStore } from './analytics-store.js';
-import { isValidAppId } from './automation-ref.js';
+import { isValidAppId } from './app-paths.js';
 import { costForUsage } from './model-pricing.js';
 import { mapSessionRow, prepareChatStatements, type ChatStatements } from './chat-history-sql.js';
 import {
@@ -120,7 +120,7 @@ export type UserIdProvider = () => string;
 interface AppChat {
   db: DatabaseSync;
   stmts: ChatStatements;
-  runs: AutomationRunsStore;
+  runs: AgentRunsStore;
 }
 
 export class ChatHistoryStore {
@@ -156,7 +156,7 @@ export class ChatHistoryStore {
     const entry: AppChat = {
       db,
       stmts: prepareChatStatements(db),
-      runs: new AutomationRunsStore(provider, this.analytics),
+      runs: new AgentRunsStore(provider, this.analytics),
     };
     this.perApp.set(appId, entry);
     return entry;

@@ -116,10 +116,10 @@ export class AppsStore {
    * Stable path to the `active-main` symlink (`<root>/active-main`),
    * repointed atomically at the live main worktree on every publish /
    * rollback / delete. Unlike `getActiveMainDir()` — which rotates per
-   * sha — this path never changes, so external processes that must bake
-   * a path once (the OS scheduler's `centraid run-automation`, which
-   * resolves automation code under `<this>/apps/<id>/`) stay correct
-   * across version swaps. The symlink exists after `init()`.
+   * sha — this path never changes, so callers that resolve a path once
+   * (e.g. the gateway's cron scheduler + run-now, which resolve automation
+   * code under `<this>/apps/<id>/`) stay correct across version swaps. The
+   * symlink exists after `init()`.
    */
   getActiveMainLink(): string {
     return this.activeMainLink;

@@ -28,16 +28,7 @@
 
 import path from 'node:path';
 import { statSync } from 'node:fs';
-import {
-  AnalyticsStore,
-  describeOp,
-  makeAnalyticsDbProvider,
-  readOp,
-  writeOp,
-  SqlOpRefusal,
-  RunQueryError,
-} from '@centraid/app-engine';
-import { runAutomationLocal, type LocalRunnerKind } from './run-automation-local.js';
+import { describeOp, readOp, writeOp, SqlOpRefusal, RunQueryError } from '@centraid/app-engine';
 
 function dataFile(): string {
   if (process.env.CENTRAID_DATA_FILE) return process.env.CENTRAID_DATA_FILE;
@@ -66,16 +57,9 @@ function usage(): never {
       '  centraid sql read "SELECT ..."',
       '  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."',
       '  centraid preview snapshot',
-      '  centraid run-automation <appId>/<automationId> [--runner codex|claude-code] [--timeout-ms <n>]',
       '',
       'The CLI operates relative to the current working directory.',
       'DDL (CREATE/ALTER/DROP) and PRAGMA are not allowed in `sql` subcommands.',
-      '',
-      '`run-automation` is the headless entry point invoked by host schedulers',
-      '(launchd / Task Scheduler / systemd timer). It resolves the automation',
-      "by its <appId>/<automationId> handle — reading the owning app's active",
-      'version under the apps dir — runs its handler, and writes a run record',
-      'to stdout as JSON. Exits 0 on success, non-zero on failure.',
       '',
     ].join('\n'),
   );
@@ -139,99 +123,9 @@ function commandWrite(sql: string): void {
   }
 }
 
-interface ParsedRunAutomation {
-  automationRef: string;
-  runner: LocalRunnerKind;
-  timeoutMs?: number;
-}
-
-function parseRunAutomationArgs(args: string[]): ParsedRunAutomation {
-  if (args.length < 1) {
-    process.stderr.write('centraid: `run-automation` requires <appId>/<automationId>\n');
-    process.exit(2);
-  }
-  const automationRef = args[0]!;
-  let runner: LocalRunnerKind = 'codex';
-  let timeoutMs: number | undefined;
-  for (let i = 1; i < args.length; i++) {
-    const flag = args[i];
-    if (flag === '--runner') {
-      const value = args[++i];
-      if (value !== 'codex' && value !== 'claude-code') {
-        process.stderr.write(
-          `centraid: --runner must be "codex" or "claude-code", got "${value}"\n`,
-        );
-        process.exit(2);
-      }
-      runner = value;
-    } else if (flag === '--timeout-ms') {
-      const value = Number(args[++i]);
-      if (!Number.isFinite(value) || value <= 0) {
-        process.stderr.write(
-          `centraid: --timeout-ms must be a positive number, got "${args[i]}"\n`,
-        );
-        process.exit(2);
-      }
-      timeoutMs = value;
-    } else {
-      process.stderr.write(`centraid: unknown flag "${flag}"\n`);
-      process.exit(2);
-    }
-  }
-  return { automationRef, runner, ...(timeoutMs !== undefined ? { timeoutMs } : {}) };
-}
-
-async function commandRunAutomation(parsed: ParsedRunAutomation): Promise<never> {
-  // This is the OS-scheduler-spawned path — no in-process gateway
-  // handle. The automation's full run ledger lands in its app's
-  // `runtime.sqlite` (resolved from `appsDir`, the *data* tree); the
-  // automation's code (manifest + handler) resolves from
-  // `CENTRAID_APPS_CODE_DIR` (issue #137: the git-store materialized
-  // `main`, distinct from the data tree). The run summary
-  // write-throughs to the central analytics DB the desktop reads. The
-  // OS scheduler bakes `CENTRAID_APPS_DIR` + `CENTRAID_APPS_CODE_DIR` +
-  // `CENTRAID_ANALYTICS_DB` into the launchd plist / systemd unit / Task
-  // Scheduler artifact; each falls back to a `<cwd>`-relative path for a
-  // bare CLI run. When `CENTRAID_APPS_CODE_DIR` is unset, code and data
-  // share `appsDir` (legacy/flat layout).
-  const appsDir = process.env.CENTRAID_APPS_DIR ?? path.join(process.cwd(), 'apps');
-  const codeAppsDir = process.env.CENTRAID_APPS_CODE_DIR ?? appsDir;
-  const analyticsDbPath =
-    process.env.CENTRAID_ANALYTICS_DB ?? path.join(process.cwd(), 'centraid-analytics.sqlite');
-  const analytics = new AnalyticsStore(makeAnalyticsDbProvider(analyticsDbPath));
-  try {
-    const { outcome, record } = await runAutomationLocal({
-      automationRef: parsed.automationRef,
-      appsDir,
-      codeAppsDir,
-      runner: parsed.runner,
-      analytics,
-      ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
-      onLog: (level, msg) => {
-        process.stderr.write(`[automation:${level}] ${msg}\n`);
-      },
-    });
-    // Run record is the structured stdout. Human-friendly summary on
-    // stderr so the OS scheduler's log shows the gist at a glance.
-    printJson(record);
-    process.stderr.write(
-      `centraid: automation ${record.automationName} ${record.ok ? 'ok' : 'FAILED'} ` +
-        `in ${record.durationMs}ms (${record.toolBatches} tool batches, ${record.agentCalls} agent calls)\n`,
-    );
-    process.exit(outcome.ok ? 0 : 1);
-  } catch (err) {
-    fail(err instanceof Error ? err.message : String(err));
-  }
-}
-
 function main(argv: string[]): void {
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') usage();
   const top = argv[0];
-  if (top === 'run-automation') {
-    const parsed = parseRunAutomationArgs(argv.slice(1));
-    void commandRunAutomation(parsed);
-    return;
-  }
   if (top === 'preview') {
     const sub = argv[1];
     if (sub !== 'snapshot') {

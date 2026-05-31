@@ -3,7 +3,7 @@
  *
  * Split out of `automation-handler-runner.ts` so the runner stays focused
  * on worker lifecycle + message routing. Each function here takes the
- * audit `AutomationRunsStore` (when present) and returns a reply that
+ * audit `AgentRunsStore` (when present) and returns a reply that
  * matches the worker's expected wire shape.
  */
 
@@ -13,7 +13,7 @@ import type {
   AutomationToolDispatcher,
   AutomationToolResult,
 } from './automation-handler-runner.js';
-import type { AutomationRunsStore } from './automation-runs-store.js';
+import type { AgentRunsStore } from '@centraid/app-engine';
 import { recordInvokeNode, recordToolNode, rowToRunRef } from './automation-handler-audit.js';
 
 export interface ToolCallWire {
@@ -22,7 +22,7 @@ export interface ToolCallWire {
 }
 
 export interface AuditState {
-  store: AutomationRunsStore;
+  store: AgentRunsStore;
   runId: string;
   automationId: string;
   ordinal: number;

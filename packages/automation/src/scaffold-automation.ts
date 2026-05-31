@@ -19,7 +19,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { APP_AUTOMATIONS_SUBDIR } from './automation-app.js';
-import { isValidAppId, isValidAutomationId } from './automation-ref.js';
+import { isValidAutomationId } from './automation-ref.js';
 import {
   AUTOMATION_HANDLER_FILE,
   AUTOMATION_MANIFEST_FILE,
@@ -28,9 +28,12 @@ import {
   type AutomationTrigger,
   type AutomationHistoryKeep,
 } from './automation-manifest.js';
-import type { ScaffoldFile } from './scaffold-files.js';
-import type { AppInfo } from './scaffold-types.js';
-import { AppScaffoldError } from './scaffold-types.js';
+import {
+  isValidAppId,
+  AppScaffoldError,
+  type ScaffoldFile,
+  type AppInfo,
+} from '@centraid/app-engine';
 
 export interface AutomationScaffoldOptions {
   /** Display name. Defaults to the app id. */

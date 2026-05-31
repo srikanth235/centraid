@@ -6,7 +6,7 @@
  * stay as the low-level wire layer (they speak `cron.add` /
  * `cron.update` / `cron.remove` / `cron.list` against the gateway
  * RPC), but every caller now goes through this `AutomationHost`
- * implementation — same shape the local desktop's `OsSchedulerHost`
+ * implementation — same shape the local gateway's in-process `InProcessScheduler`
  * implements. That way "user toggled / deleted an automation" hits
  * one interface regardless of which backend is wired up.
  *
@@ -22,7 +22,7 @@ import type {
   AutomationHost,
   AutomationReconcileResult,
   AutomationRow,
-} from '@centraid/app-engine';
+} from '@centraid/automation';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
   desiredCronJobs,
