@@ -20,12 +20,13 @@ import {
   setAutomationEnabledInFiles,
   type ScaffoldFile,
 } from '@centraid/app-engine';
-import { validateManifestAt } from './apps-store-routes.js';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
   defaultSessionId,
+  deleteAppAndReconcile,
   prepareLifecycleSession,
   parseHistoryKeep,
+  publishAndReconcile,
   stageAndMaybePublish,
   webhookUrl,
   type LifecycleRouteOptions,
@@ -165,12 +166,10 @@ export async function handleAutomationDelete(
   const appKind = apps.find((a) => a.id === ref.appId)?.kind;
 
   if (appKind === 'automation') {
-    await opts.store.deleteApp(ref.appId);
-    // The code is gone from `main`; drop the registry entry + delete the
-    // app's data dir too. This was previously a stray `ensureRegistered`,
-    // which RE-created the entry + data dir for the app we just deleted.
-    await opts.deregister(ref.appId);
-    opts.reconcile();
+    // Drop the code from `main`, deregister (removing the data dir + run
+    // ledgers — NOT a stray `ensureRegistered`, which would re-create them),
+    // and reconcile the scheduler. The sequence lives in lifecycle-shared.
+    await deleteAppAndReconcile(opts, ref.appId);
     return sendJson(res, 200, { ok: true, deletedApp: true });
   }
 
@@ -189,19 +188,17 @@ export async function handleAutomationDelete(
 
   // The surviving files already live in the worktree; just drop the
   // removed `automations/<id>/` subdir, then optionally publish so `main`
-  // no longer lists it.
+  // no longer lists it. The publish→reconcile→close sequence lives in
+  // lifecycle-shared so this route doesn't hand-orchestrate it.
   await Promise.all(removed.map((rel) => fs.rm(nodePath.resolve(appDir, rel), { force: true })));
   if (publish) {
-    const validationError = await validateManifestAt(appDir);
-    if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
-    await opts.store.publish({
-      sessionId,
+    await publishAndReconcile(opts, {
       appId: ref.appId,
+      sessionId,
+      appDir,
       message: `delete automation ${ref.automationId}`,
+      ephemeralSession: true,
     });
-    await opts.ensureRegistered(ref.appId);
-    opts.reconcile();
-    await opts.store.closeSession(sessionId);
   } else {
     await opts.ensureRegistered(ref.appId);
   }
