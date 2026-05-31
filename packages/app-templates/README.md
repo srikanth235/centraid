@@ -24,4 +24,4 @@ The `version` field follows semver. Bump it when the template's source changes.
 
 ## Cloning at runtime
 
-The gateway owns the template catalog: it serves display metadata at `GET /centraid/_templates` (resolved from `listTemplates()`), and clones a chosen template into a draft git-store session over HTTP via `@centraid/gateway-runtime`'s lifecycle routes. The publish step flips the draft live.
+The gateway owns the template catalog: it serves display metadata at `GET /centraid/_templates` (resolved from `listTemplates()`), and clones a chosen template into a draft git-store session over HTTP via `@centraid/gateway`'s lifecycle routes. The publish step flips the draft live.

@@ -357,3 +357,41 @@ export {
   type AutomationDispatchContext,
 } from './automation-handler-runner.js';
 export { truncateForAudit } from './automation-handler-audit.js';
+
+// App scaffolders + clone (moved here when @centraid/agent-harness was
+// dissolved, issue #145). The gateway lifecycle routes use the file-map
+// (`*Files`) variants; the disk wrappers back the CLI / local paths.
+export {
+  scaffoldAppFiles,
+  updateAppMetaFiles,
+  appPackageJson,
+  validateAppId,
+  type ScaffoldFile,
+  type ScaffoldAppOpts,
+} from './scaffold-files.js';
+export {
+  scaffoldApp,
+  listAppsOnDisk,
+  deleteApp,
+  updateAppMeta,
+  isDisplayNameTaken,
+} from './scaffold.js';
+export {
+  scaffoldAutomationApp,
+  scaffoldAutomationAppFiles,
+  setAutomationEnabledInFiles,
+  deleteAutomationFromFiles,
+  validateAutomationId,
+  validateAutomationAppId,
+  type AutomationScaffoldOptions,
+} from './scaffold-automation.js';
+export {
+  cloneTemplate,
+  cloneTemplateFiles,
+  suggestAppId,
+  suggestCloneIdentity,
+  suggestCloneIdentityFrom,
+  type CloneTemplateOptions,
+  type CloneTemplateFilesOptions,
+} from './clone.js';
+export { AppScaffoldError, type AppScaffoldErrorCode, type AppInfo } from './scaffold-types.js';

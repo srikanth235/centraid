@@ -1,8 +1,11 @@
 {
-  "name": "@centraid/app-engine",
+  "name": "@centraid/gateway",
   "version": "0.1.0",
   "private": true,
-  "description": "Centraid runtime engine — handler loader, sqlite-backed apps, versioned uploads, and the /centraid HTTP surface. Transport-agnostic; consumed by the OpenClaw plugin shim and by the desktop in-process runtime.",
+  "description": "Host-agnostic centraid gateway: wires app-engine + agent-runtime + stores + chat runner against injected paths and secrets. Consumed by the Electron desktop's in-process embed and the standalone `centraid-gateway` daemon.",
+  "bin": {
+    "centraid-gateway": "./dist/cli.js"
+  },
   "files": [
     "dist",
     "README.md"
@@ -17,14 +20,17 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/design-tokens": "workspace:*",
-    "ajv": "^8.17.1",
-    "tar": "^7.4.3"
+    "@centraid/agent-runtime": "workspace:*",
+    "@centraid/app-engine": "workspace:*",
+    "@centraid/app-templates": "workspace:*",
+    "@centraid/code-store": "workspace:*",
+    "@centraid/skills": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/tar": "^6.1.13",
+    "tar": "^7.4.3",
     "tsx": "^4.20.3",
     "typescript": "catalog:"
   },

@@ -1,8 +1,8 @@
 {
-  "name": "@centraid/app-engine",
+  "name": "@centraid/code-store",
   "version": "0.1.0",
   "private": true,
-  "description": "Centraid runtime engine — handler loader, sqlite-backed apps, versioned uploads, and the /centraid HTTP surface. Transport-agnostic; consumed by the OpenClaw plugin shim and by the desktop in-process runtime.",
+  "description": "Gateway-owned git store for centraid app code. Owns a bare repo + per-session worktrees for editing + one materialized-main worktree the runtime reads from. Publish = path-scoped commit + tag + ff-merge into main + atomic worktree swap. Rollback is forward-only.",
   "files": [
     "dist",
     "README.md"
@@ -16,15 +16,10 @@
     "test": "tsx --test \"src/**/*.test.ts\"",
     "clean": "rm -rf dist"
   },
-  "dependencies": {
-    "@centraid/design-tokens": "workspace:*",
-    "ajv": "^8.17.1",
-    "tar": "^7.4.3"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
-    "@types/tar": "^6.1.13",
     "tsx": "^4.20.3",
     "typescript": "catalog:"
   },

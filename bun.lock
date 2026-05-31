@@ -28,7 +28,7 @@
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
-        "@centraid/gateway-runtime": "workspace:*",
+        "@centraid/gateway": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -71,24 +71,6 @@
         "typescript": "catalog:",
       },
     },
-    "packages/agent-harness": {
-      "name": "@centraid/agent-harness",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/agent-runtime": "workspace:*",
-        "@centraid/app-engine": "workspace:*",
-        "@centraid/design-tokens": "workspace:*",
-        "@centraid/openclaw-plugin": "workspace:*",
-        "tar": "^7.4.3",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "@types/tar": "^6.1.13",
-        "tsx": "^4.20.3",
-        "typescript": "catalog:",
-      },
-    },
     "packages/agent-runtime": {
       "name": "@centraid/agent-runtime",
       "version": "0.1.0",
@@ -111,6 +93,7 @@
       "name": "@centraid/app-engine",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/design-tokens": "workspace:*",
         "ajv": "^8.17.1",
         "tar": "^7.4.3",
       },
@@ -134,8 +117,8 @@
         "typescript": "catalog:",
       },
     },
-    "packages/apps-store": {
-      "name": "@centraid/apps-store",
+    "packages/code-store": {
+      "name": "@centraid/code-store",
       "version": "0.1.0",
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -152,18 +135,18 @@
         "typescript": "catalog:",
       },
     },
-    "packages/gateway-runtime": {
-      "name": "@centraid/gateway-runtime",
+    "packages/gateway": {
+      "name": "@centraid/gateway",
       "version": "0.1.0",
       "bin": {
         "centraid-gateway": "./dist/cli.js",
       },
       "dependencies": {
-        "@centraid/agent-harness": "workspace:*",
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/app-templates": "workspace:*",
-        "@centraid/apps-store": "workspace:*",
+        "@centraid/code-store": "workspace:*",
+        "@centraid/skills": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -191,6 +174,20 @@
       },
       "peerDependencies": {
         "openclaw": ">=2026.3.24-beta.2",
+      },
+    },
+    "packages/skills": {
+      "name": "@centraid/skills",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/agent-runtime": "workspace:*",
+        "@centraid/design-tokens": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
       },
     },
     "packages/tsconfig": {
@@ -502,25 +499,25 @@
 
     "@braintree/sanitize-url": ["@braintree/sanitize-url@7.1.2", "", {}, "sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA=="],
 
-    "@centraid/agent-harness": ["@centraid/agent-harness@workspace:packages/agent-harness"],
-
     "@centraid/agent-runtime": ["@centraid/agent-runtime@workspace:packages/agent-runtime"],
 
     "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
 
     "@centraid/app-templates": ["@centraid/app-templates@workspace:packages/app-templates"],
 
-    "@centraid/apps-store": ["@centraid/apps-store@workspace:packages/apps-store"],
+    "@centraid/code-store": ["@centraid/code-store@workspace:packages/code-store"],
 
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
 
-    "@centraid/gateway-runtime": ["@centraid/gateway-runtime@workspace:packages/gateway-runtime"],
+    "@centraid/gateway": ["@centraid/gateway@workspace:packages/gateway"],
 
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
 
     "@centraid/openclaw-plugin": ["@centraid/openclaw-plugin@workspace:packages/openclaw-plugin"],
+
+    "@centraid/skills": ["@centraid/skills@workspace:packages/skills"],
 
     "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
 
