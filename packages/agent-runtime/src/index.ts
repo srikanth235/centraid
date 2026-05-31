@@ -32,6 +32,15 @@
 
 export { makeChatRunner, type MakeChatRunnerOptions } from './chat-adapter.js';
 
+// The shared per-turn chat spine. `makeChatRunner` (data) and the gateway's
+// `makeUnifiedChatRunner` (builder) are both thin configs over this.
+export {
+  makeChatRunnerCore,
+  type ChatRunnerCoreOptions,
+  type ChatTurnContext,
+  type RunTurnFn,
+} from './chat-runner-core.js';
+
 // Builder agent sessions still want the `centraid` CLI on PATH for the
 // `centraid preview snapshot` flow; expose the dist-dir resolver.
 export { defaultCentraidCliDir } from './centraid-cli-dir.js';

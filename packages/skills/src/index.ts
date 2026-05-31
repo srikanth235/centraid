@@ -20,3 +20,4 @@
 export { skillsDir, listSkills, composeSkills, parseSkillFile, type SkillMeta } from './compose.js';
 export { buildUiGroundingBlocks } from './ui-grounding.js';
 export { buildToolsGroundingBlock } from './dynamic.js';
+export { buildAuthoringExtraPrompt, type AuthoringExtraPromptInput } from './authoring-prompt.js';
