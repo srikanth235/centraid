@@ -358,6 +358,19 @@ export {
 } from './automation-handler-runner.js';
 export { truncateForAudit } from './automation-handler-audit.js';
 
+// The per-fire orchestration spine (issue #147, Concern 2): resolve the
+// automation, open its ledger, run the handler against a host-injected
+// dispatch surface, cascade `onFailure`. agent-runtime's `runAutomationLocal`
+// is a thin wrapper that injects a mock-LLM + CLI-spawn dispatch surface.
+export {
+  runAutomationFire,
+  type RunAutomationFireOptions,
+  type AutomationRunRecord,
+  type AutomationDispatchSurface,
+  type OpenAutomationDispatch,
+  type OpenAutomationDispatchArgs,
+} from './automation-fire.js';
+
 // App scaffolders + clone (moved here when @centraid/agent-harness was
 // dissolved, issue #145). The gateway lifecycle routes use the file-map
 // (`*Files`) variants; the disk wrappers back the CLI / local paths.

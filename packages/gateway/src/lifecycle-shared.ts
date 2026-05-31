@@ -101,6 +101,56 @@ export function parseHistoryKeep(raw: unknown): AutomationHistoryKeep | undefine
 }
 
 /**
+ * The "a publish landed on `main`" invariant, in one place: validate the
+ * worktree manifest, merge it onto `main`, register the now-live app, and
+ * reconcile the OS scheduler against the new live set. Optionally close a
+ * one-shot session afterward.
+ *
+ * Every lifecycle mutation that publishes funnels through here so no route
+ * hand-sequences `publish → ensureRegistered → reconcile` itself (issue #147,
+ * Concern 3) — the apps-store publish route already centralizes the same
+ * sequence via its `onAppLive` hook.
+ */
+export async function publishAndReconcile(
+  opts: LifecycleRouteOptions,
+  input: {
+    appId: string;
+    sessionId: string;
+    /** The session worktree's app dir (already mutated by the caller). */
+    appDir: string;
+    message: string;
+    /** Close the session after publishing — see {@link stageAndMaybePublish}. */
+    ephemeralSession?: boolean;
+  },
+): Promise<void> {
+  const validationError = await validateManifestAt(input.appDir);
+  if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
+  await opts.store.publish({
+    sessionId: input.sessionId,
+    appId: input.appId,
+    message: input.message,
+  });
+  await opts.ensureRegistered(input.appId);
+  opts.reconcile();
+  if (input.ephemeralSession) await opts.store.closeSession(input.sessionId);
+}
+
+/**
+ * Delete a whole app wholesale and reconcile: drop its code from `main`,
+ * deregister it (removing its data dir + run ledgers), then reconcile the
+ * scheduler so its triggers stop firing. The delete-side counterpart to
+ * {@link publishAndReconcile} — keeps `reconcile()` out of the route body.
+ */
+export async function deleteAppAndReconcile(
+  opts: LifecycleRouteOptions,
+  appId: string,
+): Promise<void> {
+  await opts.store.deleteApp(appId);
+  await opts.deregister(appId);
+  opts.reconcile();
+}
+
+/**
  * Stage a file map into a session, then either register the app (draft
  * only) or validate + publish onto `main`. Centralizes the stage/publish
  * fork shared by create / clone / automation-create.
@@ -129,16 +179,13 @@ export async function stageAndMaybePublish(
     await opts.ensureRegistered(input.appId);
     return;
   }
-  const validationError = await validateManifestAt(appDir);
-  if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
-  await opts.store.publish({
-    sessionId: input.sessionId,
+  await publishAndReconcile(opts, {
     appId: input.appId,
+    sessionId: input.sessionId,
+    appDir,
     message: input.message,
+    ...(input.ephemeralSession ? { ephemeralSession: input.ephemeralSession } : {}),
   });
-  await opts.ensureRegistered(input.appId);
-  opts.reconcile();
-  if (input.ephemeralSession) await opts.store.closeSession(input.sessionId);
 }
 
 /** Map a lifecycle error to a status + JSON body. */

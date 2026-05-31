@@ -15,7 +15,7 @@
  *     migration and answer a data question;
  *   - the unified system prompt: the data/schema preamble the chat route
  *     builds (`input.extraSystemPrompt`) followed by the builder authoring
- *     prompt + UI/tools grounding (folded in here).
+ *     prompt + UI/tools grounding (composed by `@centraid/skills`).
  *
  * Code edits STAGE in the draft (the preview iframe reflects the draft);
  * data tools hit the LIVE `data.sqlite` (registry-resolved, independent of
@@ -24,38 +24,40 @@
  * generate crypto-random credentials) and surfaced once via a `webhooks`
  * stream event.
  *
- * Replaces `@centraid/agent-runtime`'s `makeChatRunner` injection in
- * `serve.ts` whenever a git store is active (the local embedded gateway and
- * the standalone daemon both have one). Without a store there's no draft
- * worktree to edit, so the host falls back to the data-only `makeChatRunner`.
+ * Since issue #147 (Concern 1) this is a thin config over
+ * `makeChatRunnerCore` (agent-runtime): the shared per-turn spine lives
+ * there; this file supplies only the builder seams — draft-worktree cwd,
+ * the authoring prompt (delegated to `@centraid/skills`), and post-turn
+ * webhook minting.
+ *
+ * Replaces the data-only `makeChatRunner` injection in `serve.ts` whenever a
+ * git store is active (the local embedded gateway and the standalone daemon
+ * both have one). Without a store there's no draft worktree to edit, so the
+ * host falls back to the data-only `makeChatRunner`.
  */
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { randomUUID } from 'node:crypto';
 import {
   runAgentTurn,
   enumerateHostTools,
   defaultCentraidCliDir,
-  type AgentTurnInput,
+  makeChatRunnerCore,
   type RunnerPrefs,
-  type ToolContext,
-  type HostTool,
+  type RunTurnFn,
 } from '@centraid/agent-runtime';
 import {
-  type ChatRunInput,
-  type ChatRunResult,
   type ChatRunner,
+  type ChatStreamEvent,
   type Dispatcher,
   provisionAppPendingWebhooks,
   WEBHOOK_ROUTE_PREFIX,
 } from '@centraid/app-engine';
-import { composeSkills, buildUiGroundingBlocks, buildToolsGroundingBlock } from '@centraid/skills';
+import { buildAuthoringExtraPrompt } from '@centraid/skills';
 import { AppsStore } from '@centraid/code-store';
 import { ensureSession } from './lifecycle-shared.js';
 
-/** The thin turn-driver the runner depends on — `runAgentTurn` by default. */
-export type RunTurnFn = typeof runAgentTurn;
+export type { RunTurnFn };
 
 export interface UnifiedChatRunnerOptions {
   /** Git store backing app code; the draft worktree lives in its sessions. */
@@ -102,143 +104,67 @@ async function readAppKind(appDir: string): Promise<'app' | 'automation'> {
   }
 }
 
-// `enumerateHostTools` spawns the configured CLI to list its tools — too
-// costly to repeat every turn, and stable for a given runner kind within a
-// process. Cache the resolved tool list per kind (best-effort; a failure
-// caches nothing so the next turn retries).
-const toolsByKind = new Map<RunnerPrefs['kind'], readonly HostTool[]>();
-
-async function groundingToolsFor(
-  enumerate: typeof enumerateHostTools,
-  prefs: RunnerPrefs,
-  cwd: string,
-): Promise<readonly HostTool[]> {
-  const cached = toolsByKind.get(prefs.kind);
-  if (cached) return cached;
-  try {
-    const tools = await enumerate(prefs.kind, {
-      cwd,
-      ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
-    });
-    toolsByKind.set(prefs.kind, tools);
-    return tools;
-  } catch {
-    return [];
-  }
-}
-
 /**
- * Compose the unified system prompt: the chat route's data/schema preamble
- * (`baseExtra`) first, then the builder authoring blocks. Mirrors the old
- * agent-harness `buildExtraSystemPrompt`, minus the live-schema block —
- * `baseExtra` already carries the live schema for this app.
+ * Mint any webhook secrets the turn left pending and surface them once via a
+ * `webhooks` stream event. The agent can't generate crypto-random
+ * credentials, so an authored webhook trigger is staged `pending: true` and
+ * minted here. Best-effort — a minting hiccup never fails the turn (handled
+ * by the core's `onTurnComplete` try/catch).
  */
-async function buildUnifiedExtraPrompt(
-  enumerate: typeof enumerateHostTools,
-  baseExtra: string,
-  appKind: 'app' | 'automation',
-  prefs: RunnerPrefs,
+async function mintPendingWebhooks(
   cwd: string,
-): Promise<string> {
-  const blocks: string[] = baseExtra ? [baseExtra] : [];
-  if (appKind === 'automation') {
-    blocks.push(composeSkills(['automation-authoring']));
-  } else {
-    blocks.push(composeSkills(['authoring-centraid-apps']), ...buildUiGroundingBlocks());
-  }
-  const toolsBlock = buildToolsGroundingBlock(await groundingToolsFor(enumerate, prefs, cwd));
-  if (toolsBlock) blocks.push(toolsBlock);
-  return blocks.join('\n\n');
+  publicBaseUrl: () => string,
+  onEvent: (event: ChatStreamEvent) => void,
+): Promise<void> {
+  const minted = await provisionAppPendingWebhooks(cwd);
+  if (minted.length === 0) return;
+  const base = publicBaseUrl();
+  onEvent({
+    type: 'webhooks',
+    minted: minted.map((w) => ({
+      automationId: w.automationId,
+      ownerApp: w.ownerApp,
+      webhookId: w.webhookId,
+      url: `${base}${WEBHOOK_ROUTE_PREFIX}/${w.webhookId}`,
+      secret: w.secret,
+    })),
+  });
 }
 
 export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunner {
   const sessionIdFor = opts.sessionIdFor ?? defaultSessionIdFor;
-  const runTurn = opts.runTurn ?? runAgentTurn;
   const enumerate = opts.enumerateTools ?? enumerateHostTools;
   const extraPath = defaultCentraidCliDir();
 
-  return {
-    async run(input: ChatRunInput): Promise<ChatRunResult> {
-      const prefs = await opts.prefsLoader();
-      if (!prefs) {
-        input.onEvent({
-          type: 'error',
-          message:
-            'No coding agent configured. Open Settings → AI providers and pick Codex or Claude Code.',
-        });
-        throw new Error('no coding agent configured');
-      }
+  // Builder chat is the data-chat spine plus three seams: cwd = the app's
+  // shared draft worktree, the unified authoring prompt (grounding owned by
+  // `@centraid/skills`), and post-turn webhook minting.
+  return makeChatRunnerCore({
+    prefsLoader: opts.prefsLoader,
+    getDispatcher: opts.getDispatcher,
+    ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
+    ...(extraPath ? { extraPath } : {}),
+    ...(opts.runTurn ? { runTurn: opts.runTurn } : {}),
 
-      // Open (or reuse) the app's shared draft worktree, then run the turn
-      // there so native file edits stage in the draft.
+    // Open (or reuse) the app's shared draft worktree so native file edits
+    // stage in the draft, and run the turn from its app dir.
+    resolveCwd: async (input) => {
       const sessionId = sessionIdFor(input.appId);
       await ensureSession(opts.store, sessionId);
-      const cwd = await opts.store.snapshotSessionAppDir(sessionId, input.appId);
-
-      const appKind = await readAppKind(cwd);
-      const extraSystemPrompt = await buildUnifiedExtraPrompt(
-        enumerate,
-        input.extraSystemPrompt,
-        appKind,
-        prefs,
-        cwd,
-      );
-
-      // Union of tools: the adapter's native file/shell tools (workspace-write
-      // against `cwd`) plus the `centraid_*` dispatcher.
-      const toolContext: ToolContext = {
-        appId: input.appId,
-        dispatcher: opts.getDispatcher(),
-        agentTurnId: randomUUID(),
-      };
-
-      // Resume only when the prior turn used the same runner kind.
-      const resumeId =
-        input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
-
-      const turnInput: AgentTurnInput = {
-        cwd,
-        message: input.message,
-        extraSystemPrompt,
-        toolContext,
-        abortSignal: input.abortSignal,
-        onEvent: input.onEvent,
-        ...(extraPath ? { extraPath } : {}),
-        ...(input.model ? { model: input.model } : {}),
-        ...(resumeId ? { prevSessionId: resumeId } : {}),
-      };
-
-      const result = await runTurn(turnInput, {
-        prefs,
-        ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
-      });
-
-      // Post-turn webhook minting: if the agent authored an automation with
-      // a pending webhook trigger, mint the route id + secret now and surface
-      // it once. Best-effort — a minting hiccup never fails the turn.
-      try {
-        const minted = await provisionAppPendingWebhooks(cwd);
-        if (minted.length > 0) {
-          const base = opts.publicBaseUrl();
-          input.onEvent({
-            type: 'webhooks',
-            minted: minted.map((w) => ({
-              automationId: w.automationId,
-              ownerApp: w.ownerApp,
-              webhookId: w.webhookId,
-              url: `${base}${WEBHOOK_ROUTE_PREFIX}/${w.webhookId}`,
-              secret: w.secret,
-            })),
-          });
-        }
-      } catch {
-        /* minting is best-effort — the staged manifest can be re-provisioned */
-      }
-
-      return {
-        adapterKind: result.adapterKind,
-        ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
-      };
+      return opts.store.snapshotSessionAppDir(sessionId, input.appId);
     },
-  };
+
+    // Unified prompt: the route's data/schema preamble + the builder
+    // authoring grounding for the app kind.
+    buildExtraSystemPrompt: async ({ input, prefs, cwd }) =>
+      buildAuthoringExtraPrompt({
+        baseExtra: input.extraSystemPrompt,
+        appKind: await readAppKind(cwd),
+        prefs,
+        cwd,
+        enumerate,
+      }),
+
+    onTurnComplete: ({ input, cwd }) => mintPendingWebhooks(cwd, opts.publicBaseUrl, input.onEvent),
+  });
 }

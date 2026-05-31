@@ -1,26 +1,27 @@
 /*
  * Chat adapter — the per-app data chat layer on top of the engine.
  *
- * `runAgentTurn` is mode-agnostic. This file is the chat-side adapter
- * that wraps it into a `ChatRunner` the gateway's `/_chat` route can
- * inject: per-app cwd from `input.dataDir` (the resolved `appDataDir(entry)`
- * — `<appsDir>/<id>` for uploaded apps, the external folder for
- * path-registered ones), the three first-class `centraid_sql_*` tools
- * declared inline against the per-app `data.sqlite`, and the previous
- * adapter session id threaded through `input.prevAdapter*` (round-tripped
- * from the central `chat_sessions` row to resume the conversation).
+ * This is the data-only `ChatRunner`: the turn runs with cwd =
+ * `input.dataDir` (the resolved `appDataDir(entry)` — `<appsDir>/<id>` for
+ * uploaded apps, the external folder for path-registered ones), the three
+ * first-class `centraid_sql_*` tools declared inline against the per-app
+ * `data.sqlite`, and the route's app-context preamble passed through
+ * verbatim (it already describes those tools + the `_sql` built-in). No
+ * draft worktree, no authoring grounding, no post-turn side effects —
+ * those are the builder chat's job (`makeUnifiedChatRunner`).
  *
- * Builder-mode consumers call `runAgentTurn` directly — they own their
- * own cwd / preamble / resume-id plumbing and don't need this adapter.
+ * It is a thin config over `makeChatRunnerCore` (issue #147, Concern 1):
+ * the shared per-turn spine lives there; this file only supplies the
+ * data-chat seams (cwd = data dir, default prompt pass-through).
  *
- * Note: this is one of two `ChatRunner` implementations. The other lives
- * in `@centraid/openclaw-plugin` and drives an in-process openclaw agent.
- * The desktop's embedded runtime injects this one; openclaw injects its.
+ * Note: this is one of two in-process `ChatRunner` implementations. The
+ * other (`makeUnifiedChatRunner`, gateway) is also a config over the same
+ * core; a third lives in `@centraid/openclaw-plugin` and drives an
+ * in-process openclaw agent.
  */
 
-import { randomUUID } from 'node:crypto';
-import type { ChatRunInput, ChatRunResult, ChatRunner, Dispatcher } from '@centraid/app-engine';
-import { runAgentTurn, type ToolContext } from './runtime.js';
+import type { ChatRunner, Dispatcher } from '@centraid/app-engine';
+import { makeChatRunnerCore } from './chat-runner-core.js';
 import type { RunnerPrefs } from './types.js';
 
 export interface MakeChatRunnerOptions {
@@ -46,55 +47,13 @@ export interface MakeChatRunnerOptions {
 }
 
 export function makeChatRunner(opts: MakeChatRunnerOptions): ChatRunner {
-  return {
-    async run(input: ChatRunInput): Promise<ChatRunResult> {
-      const prefs = await opts.prefsLoader();
-      if (!prefs) {
-        input.onEvent({
-          type: 'error',
-          message:
-            'No coding agent configured. Open Settings → AI providers and pick Codex or Claude Code.',
-        });
-        throw new Error('no coding agent configured');
-      }
-
-      const cwd = input.dataDir;
-      // Resume only when the previous turn used the same runner kind — a
-      // mid-session runner switch starts a fresh conversation.
-      const resumeId =
-        input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
-
-      // The app-engine extra-system-prompt already describes the three
-      // structured tools + `_sql` built-in; pass it through verbatim.
-      const extraSystemPrompt = input.extraSystemPrompt;
-
-      const agentTurnId = randomUUID();
-      const toolContext: ToolContext = {
-        appId: input.appId,
-        dispatcher: opts.getDispatcher(),
-        agentTurnId,
-      };
-
-      const result = await runAgentTurn(
-        {
-          cwd,
-          message: input.message,
-          extraSystemPrompt,
-          ...(input.model ? { model: input.model } : {}),
-          ...(resumeId ? { prevSessionId: resumeId } : {}),
-          toolContext,
-          abortSignal: input.abortSignal,
-          onEvent: input.onEvent,
-        },
-        {
-          prefs,
-          ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
-        },
-      );
-      return {
-        adapterKind: result.adapterKind,
-        ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
-      };
-    },
-  };
+  return makeChatRunnerCore({
+    prefsLoader: opts.prefsLoader,
+    getDispatcher: opts.getDispatcher,
+    ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
+    // Data chat runs in the app's data dir; the route preamble is passed
+    // through unchanged (no authoring grounding) and there's no post-turn
+    // side effect, so those seams are left at their defaults.
+    resolveCwd: (input) => input.dataDir,
+  });
 }
