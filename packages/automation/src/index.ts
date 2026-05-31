@@ -81,6 +81,16 @@ export {
 // openclaw cron host both satisfy it.
 export type { AutomationHost, AutomationReconcileResult } from './automation-host.js';
 
+// In-process cron scheduler (issue #149, n8n semantics): the gateway-owned
+// always-on minute timer that fires enabled cron automations while it runs.
+// No OS scheduler; missed minutes during downtime are skipped (no backfill).
+export {
+  InProcessScheduler,
+  type InProcessSchedulerOptions,
+  type LocalScheduler,
+} from './in-process-scheduler.js';
+export { cronMatches } from './cron-match.js';
+
 // Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
 // automation on an inbound HTTP POST; the gateway mounts the route
 // built by `makeWebhookRouteHandler`. Secret helpers are shared by the

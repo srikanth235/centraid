@@ -7,19 +7,18 @@
  *     `cron.remove` gateway-tool calls. See
  *     `@centraid/openclaw-plugin/src/lib/automations-cron.ts`.
  *
- *   - local desktop (in-process gateway): registers OS-level scheduler
- *     entries (launchd plist / systemd timer / Task Scheduler task) so
- *     automations fire even when the desktop is closed. See
- *     `@centraid/agent-runtime/src/os-scheduler.ts`.
+ *   - local gateway (desktop embed + standalone daemon): the in-process
+ *     `InProcessScheduler` (issue #149) keeps an in-memory registry and a
+ *     single minute-boundary timer — no OS scheduler, no launchd/systemd.
+ *     It fires enabled cron automations only while the gateway runs (n8n
+ *     semantics, no backfill). See `./in-process-scheduler.ts`.
  *
- * The IPC handlers in the desktop (and any future CLI verbs that mutate
- * automation state) should call into this interface rather than poking
- * the `automations` table or the host's primitives directly.
+ * Callers that mutate automation state drive this interface (via
+ * `reconcile`) rather than poking the host's primitives directly.
  *
- * Model-B (issue #90): an automation is identified by its UUID `id`;
- * the host keys its entries by that UUID. Automations are user-owned
- * and globally scheduled — `reconcile` always receives the full desired
- * set, so there is no per-app scoping to get wrong.
+ * An automation is keyed by its globally-unique `<ownerApp>/<id>` ref.
+ * Automations are user-owned and globally scheduled — `reconcile` always
+ * receives the full desired set, so there is no per-app scoping to get wrong.
  *
  * Lifecycle contract:
  *   - `register` is idempotent. Calling it with the same row twice is a
@@ -28,9 +27,9 @@
  *   - `register` is also the toggle path. When `row.enabled` is false,
  *     the host's implementation decides whether to register a
  *     suppressed entry (openclaw's `enabled: false` cron job) or to
- *     unregister entirely (OS schedulers, which don't have a clean
- *     "registered but suppressed" state). Either is fine — callers
- *     just call `register(row)` and don't care.
+ *     unregister entirely (the in-process scheduler simply drops a
+ *     disabled row from its registry). Either is fine — callers just
+ *     call `register(row)` and don't care.
  *   - `unregister` is also idempotent. Tolerates "not found" — happens
  *     when the user removed the host entry by hand between centraid
  *     registration and teardown.
@@ -59,9 +58,9 @@ export interface AutomationHost {
 
   /**
    * List the centraid-owned host entries currently registered. The
-   * format is host-specific (cron job names for openclaw, launchd
-   * labels on macOS, etc.) — useful only for diagnostics and
-   * reconciliation.
+   * format is host-specific (automation refs for the in-process
+   * scheduler, cron job names for openclaw) — useful only for diagnostics
+   * and reconciliation.
    */
   list(): Promise<readonly string[]>;
 

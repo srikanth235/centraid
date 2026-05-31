@@ -283,9 +283,9 @@ automations/<id>/handler.js        # the handler the scheduler fires
 
 \`<id>\` is a short stable slug (\`daily-digest\`, \`evening-reminder\`). An
 app may own several automations — one folder each, distinct slugs. Reuse
-a slug to revise it; pick a new slug to add another. The host scheduler
-(launchd / Task Scheduler / systemd timer locally, openclaw cron
-remotely) fires \`centraid run-automation <appId>/<id>\` on schedule.
+a slug to revise it; pick a new slug to add another. The always-on
+gateway owns an in-process cron scheduler and fires each automation's
+handler on schedule while it is running.
 
 ## automation.json
 

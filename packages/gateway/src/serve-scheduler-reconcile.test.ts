@@ -1,9 +1,9 @@
 /*
- * Scheduler-on-publish reconcile (issue #141). A publish over HTTP must
- * resync the OS scheduler — `serve()` reconciles in onAppLive using the
- * injected `schedulerHostFactory`. Boots a real git-store gateway with a
- * stub host and asserts a publish triggers a reconcile carrying the
- * scanned automation rows.
+ * Scheduler-on-publish reconcile (issue #149). A publish over HTTP must
+ * resync the in-process cron scheduler — `serve()` reconciles in onAppLive
+ * against the gateway's persistent scheduler instance. Boots a real
+ * git-store gateway with an injected spy scheduler and asserts a publish
+ * triggers a reconcile carrying the scanned automation rows.
  */
 
 import { test, beforeEach, afterEach } from 'node:test';
@@ -12,14 +12,15 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import type { AutomationHost, AutomationRow } from '@centraid/automation';
+import type { AutomationRow, LocalScheduler } from '@centraid/automation';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 import type { SecretsProvider } from './secrets.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
-let reconcileCalls: Array<{ codeAppsDir: string; rows: readonly AutomationRow[] }>;
+let reconcileCalls: Array<{ rows: readonly AutomationRow[] }>;
+let started: number;
 
 const noSecrets: SecretsProvider = {
   async getProviderApiKey() {
@@ -37,7 +38,9 @@ function pathsUnder(dir: string): GatewayPaths {
   };
 }
 
-function stubHost(dirs: { codeAppsDir: string; dataAppsDir: string }): AutomationHost {
+// A spy `LocalScheduler` — records the rows each reconcile receives and
+// never arms a real timer, so the test stays deterministic.
+function stubScheduler(): LocalScheduler {
   return {
     async register() {},
     async unregister() {},
@@ -45,9 +48,13 @@ function stubHost(dirs: { codeAppsDir: string; dataAppsDir: string }): Automatio
       return [];
     },
     async reconcile(desired) {
-      reconcileCalls.push({ codeAppsDir: dirs.codeAppsDir, rows: desired });
+      reconcileCalls.push({ rows: desired });
       return { added: [], updated: [], removed: [] };
     },
+    start() {
+      started += 1;
+    },
+    async stop() {},
   };
 }
 
@@ -79,11 +86,12 @@ const AUTOMATION_JSON = JSON.stringify({
 beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-sched-${crypto.randomUUID()}-`));
   reconcileCalls = [];
+  started = 0;
   handle = await serve({
     paths: pathsUnder(dataDir),
     secrets: noSecrets,
     appsStoreRoot: path.join(dataDir, 'code'),
-    schedulerHostFactory: stubHost,
+    scheduler: stubScheduler(),
   });
 });
 
@@ -133,9 +141,10 @@ test('publishing an automation triggers a scheduler reconcile with the new rows'
   // The publish's onAppLive reconciled the scheduler with the new row.
   await waitFor(() => reconcileCalls.length > baseline);
   const last = reconcileCalls.at(-1)!;
-  assert.match(last.codeAppsDir, /active-main[/\\]apps$/);
   assert.deepEqual(
     last.rows.map((r) => r.ref),
     ['brief/brief'],
   );
+  // The gateway started its scheduler exactly once, on boot.
+  assert.equal(started, 1);
 });

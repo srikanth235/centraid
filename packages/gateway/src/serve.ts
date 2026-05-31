@@ -25,11 +25,11 @@
  *      `startRuntimeHttpServer`.
  *   7. Call `runtime.bootstrap()` to load the registry and recover any
  *      torn version metadata.
- *   8. Fire-and-forget OS-scheduler reconcile, if the caller passed a
- *      `schedulerHostFactory`.
+ *   8. Start the in-process cron scheduler and reconcile it with the
+ *      automations currently on disk (issue #149).
  *
- * Behavior matches the previous Electron path exactly. The only thing
- * the caller injects is paths + secrets + an optional scheduler factory.
+ * The only thing the caller injects is paths + secrets (+ an optional
+ * scheduler, for tests).
  */
 
 import { promises as fs } from 'node:fs';
@@ -45,8 +45,10 @@ import {
   makeAnalyticsDbProvider,
   startRuntimeHttpServer,
   type RuntimeLogger,
+  type AutomationTriggerKind,
+  type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
-import { listAutomations, type AutomationHost } from '@centraid/automation';
+import { listAutomations, InProcessScheduler, type LocalScheduler } from '@centraid/automation';
 import {
   makeChatRunner,
   runAutomationLocal,
@@ -80,16 +82,17 @@ export interface ServeOptions {
    */
   token?: string;
   /**
-   * When provided, `serve()` kicks off a fire-and-forget OS-scheduler
-   * reconcile on boot — catches up the host scheduler with any
-   * automations toggled while the runtime was down. The factory is
-   * invoked once with the resolved code + data dirs: `codeAppsDir` is
-   * where automation manifests/handlers live (the git-store `active-main`
-   * symlink when `appsStoreRoot` is set, else `paths.appsDir`), and
-   * `dataAppsDir` is `paths.appsDir` (run ledgers). Omit for tests and
-   * the daemon's v0 PoC (no scheduler).
+   * On boot, `serve()` starts the cron scheduler and reconciles it with the
+   * automations currently on disk.
+   *
+   * The scheduler (issue #149) is gateway-owned and in-process: while
+   * `serve()` runs, a single minute-boundary timer fires enabled cron
+   * automations through the same `runAutomationLocal` path as "run now".
+   * There is no OS scheduler; missed minutes during downtime are skipped
+   * (n8n semantics — no backfill). Defaults to a fresh `InProcessScheduler`;
+   * inject one (e.g. a spy) only for tests.
    */
-  schedulerHostFactory?: (dirs: { codeAppsDir: string; dataAppsDir: string }) => AutomationHost;
+  scheduler?: LocalScheduler;
   /** Logger forwarded to `Runtime`. Defaults to a `console.*` wrapper. */
   logger?: RuntimeLogger;
   /**
@@ -132,7 +135,7 @@ export interface GatewayServeHandle {
 }
 
 export async function serve(options: ServeOptions): Promise<GatewayServeHandle> {
-  const { paths, secrets, schedulerHostFactory } = options;
+  const { paths, secrets } = options;
   const logger = options.logger ?? defaultLogger(options.logTag);
 
   await fs.mkdir(paths.appsDir, { recursive: true });
@@ -165,20 +168,21 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
       }
     : undefined;
 
-  // OS-scheduler reconcile (issue #141). Automation *code* lives under
+  // Cron-scheduler reconcile (issue #149). Automation *code* lives under
   // the git-store materialized `main` (`active-main/apps`), or `appsDir`
   // for the flat/legacy layout. We re-scan + reconcile the whole desired
   // set (idempotent) rather than register single rows, so a publish /
-  // delete / rollback over HTTP keeps the scheduler in sync for BOTH the
-  // local embedded gateway and a remote one. Fire-and-forget — a publish
-  // response must not block on a launchd/systemd shell-out — with a
-  // coalescing guard so concurrent publishes don't thrash the scheduler.
+  // delete / rollback keeps the in-process cron scheduler in sync. Coalesced
+  // so concurrent publishes don't thrash it. `scheduler` is the single
+  // persistent instance, assigned once the fire surface is wired below.
   const schedulerCodeAppsDir = (): string =>
     appsStore ? path.join(appsStore.getActiveMainLink(), 'apps') : paths.appsDir;
+  let scheduler: LocalScheduler | undefined;
   let reconcileInFlight = false;
   let reconcileDirty = false;
   const reconcileScheduler = (): void => {
-    if (!schedulerHostFactory) return;
+    const sched = scheduler;
+    if (!sched) return;
     if (reconcileInFlight) {
       reconcileDirty = true;
       return;
@@ -187,15 +191,11 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     void (async () => {
       do {
         reconcileDirty = false;
-        const codeAppsDir = schedulerCodeAppsDir();
-        const { rows } = await listAutomations(codeAppsDir);
-        const diff = await schedulerHostFactory({
-          codeAppsDir,
-          dataAppsDir: paths.appsDir,
-        }).reconcile(rows);
+        const { rows } = await listAutomations(schedulerCodeAppsDir());
+        const diff = await sched.reconcile(rows);
         if (diff.added.length || diff.updated.length || diff.removed.length) {
           logger.info(
-            `OS scheduler reconcile — ` +
+            `scheduler reconcile — ` +
               `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
           );
         }
@@ -203,7 +203,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     })()
       .catch((err) =>
         logger.warn(
-          `OS scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err)),
+          `scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err)),
         ),
       )
       .finally(() => {
@@ -342,6 +342,49 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   if (appsStore) {
     const store = appsStore;
     const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
+    // The one fire path, shared by "run now" (manual) and the cron
+    // scheduler (scheduled). Both run on THIS host with the gateway's own
+    // runner pref, against the live `main` code + the stable data tree.
+    const fireAutomation = (
+      automationRef: string,
+      opts: {
+        runId?: string;
+        triggerKind: AutomationTriggerKind;
+        triggerOrigin: AutomationTriggerOrigin;
+      },
+    ): void => {
+      void (async () => {
+        const prefs = await prefsLoader();
+        await runAutomationLocal({
+          automationRef,
+          ...(opts.runId ? { runId: opts.runId } : {}),
+          appsDir: paths.appsDir,
+          codeAppsDir: codeAppsDir(),
+          analytics: analyticsStore,
+          runner: prefs?.kind ?? 'codex',
+          triggerKind: opts.triggerKind,
+          triggerOrigin: opts.triggerOrigin,
+        });
+      })().catch((err) =>
+        logger.warn(
+          `${opts.triggerKind} ${automationRef} failed: ` +
+            (err instanceof Error ? err.message : String(err)),
+        ),
+      );
+    };
+    // One persistent in-process cron scheduler for the gateway's lifetime
+    // (issue #149). `reconcileScheduler()` (boot + every publish/delete)
+    // settles its in-memory registry; it fires cron automations through the
+    // same `fireAutomation` path as run-now. Injectable for tests.
+    scheduler =
+      options.scheduler ??
+      new InProcessScheduler({
+        fire: (ref) => fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
+        onError: (err, ref) =>
+          logger.warn(
+            `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err)),
+          ),
+      });
     // Drop an app from the registry AND delete its wrapper dir
     // (`<appsDir>/<id>/` — data.sqlite + run ledgers). Mirrors the legacy
     // `registry-deregister` route so deleting an app over the git-store
@@ -356,7 +399,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         onAppLive: async (appId) => {
           await runtime.registry.ensureUploaded(appId);
           // A publish/rollback may have added/removed/toggled an
-          // automation — resync the OS scheduler off the new `main`.
+          // automation — resync the cron scheduler off the new `main`.
           reconcileScheduler();
         },
         onAppDeleted: async (appId) => {
@@ -386,26 +429,12 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         dataAppsDir: paths.appsDir,
         analytics: analyticsStore,
         insights: new InsightsStore(analyticsProvider),
-        runAutomation: ({ automationRef, runId }) => {
-          void (async () => {
-            const prefs = await prefsLoader();
-            await runAutomationLocal({
-              automationRef,
-              runId,
-              appsDir: paths.appsDir,
-              codeAppsDir: codeAppsDir(),
-              analytics: analyticsStore,
-              runner: prefs?.kind ?? 'codex',
-              triggerKind: 'manual',
-              triggerOrigin: 'manual',
-            });
-          })().catch((err) =>
-            logger.warn(
-              `run-now ${automationRef} failed: ` +
-                (err instanceof Error ? err.message : String(err)),
-            ),
-          );
-        },
+        runAutomation: ({ automationRef, runId }) =>
+          fireAutomation(automationRef, {
+            runId,
+            triggerKind: 'manual',
+            triggerOrigin: 'manual',
+          }),
       }),
     );
   }
@@ -426,16 +455,22 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     }
   }
 
-  // Startup reconcile: catch up the OS scheduler on anything that
-  // changed while the runtime was down (it's also the backstop for any
-  // publish that landed while a local gateway was shut down). Uses the
-  // same coalesced, fire-and-forget reconcile the publish path triggers.
+  // Start the in-process cron scheduler and settle it with whatever is on
+  // disk. Under n8n semantics the scheduler only fires while running, so
+  // anything toggled during downtime is picked up here but past missed
+  // fires are not backfilled (issue #149).
+  scheduler?.start();
   reconcileScheduler();
 
   return {
     url: server.url,
     token: server.token,
-    close: server.close,
+    // Stop the cron timer before the HTTP server so no fire is dispatched
+    // mid-teardown.
+    close: async () => {
+      await scheduler?.stop();
+      await server.close();
+    },
     runtime,
     userStore,
     analyticsStore,

@@ -51,12 +51,9 @@ export function appCodeDir(entry: RegistryEntry, activeVersion: string): string 
  * and dev-project layouts the centraid CLI is run inside.
  *
  * Used by callers that have the persistent root in hand but need the
- * code root (handlers + automation manifests live there). Two
- * concrete callers today:
- *   - the desktop's Run-now IPC (renderer triggers immediate fire)
- *   - the centraid CLI's `run-automation` subcommand (fires under the
- *     OS scheduler, whose `cwd` is frozen to the persistent root at
- *     register time and must not change across publishes)
+ * code root (handlers + automation manifests live there) — e.g. the
+ * gateway's automation fire path, which resolves an automation's code
+ * from the active version before running its handler.
  */
 export async function readActiveCodeDir(appDir: string): Promise<string> {
   try {

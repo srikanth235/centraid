@@ -15,8 +15,8 @@ v0 pre-release: no backward compatibility, no migrations.
 
 - [x] Phase 1 — rename the agent-run ledger off the `automation-` prefix
 - [x] Phase 2 — extract `@centraid/automation` (the domain)
-- [ ] Phase 3 — in-process cron; delete the OS scheduler (n8n semantics)
-- [ ] Phase 4 — confirm execution placement in `agent-runtime`
+- [x] Phase 3 — in-process cron; delete the OS scheduler (n8n semantics)
+- [x] Phase 4 — confirm execution placement in `agent-runtime`
 
 ## What changed
 
@@ -70,16 +70,52 @@ shared agent-run ledger.
 - Incidental: dropped a pre-existing unused `runAgentTurn` import in the
   gateway's `unified-chat-runner` that full-repo lint surfaced.
 
-## Decision: gateway-owned in-process cron (n8n semantics)
+### Phase 3 — in-process cron; delete the OS scheduler (n8n semantics)
 
-Scheduling adopts n8n's model: the always-on server owns cron triggers
-in-process; there is no OS-level scheduler. Scheduled automations fire
-**only while the gateway/app is running**, and missed fires during
-downtime are silently skipped with no backfill.
+Scheduling converges on one always-on owner per deployment.
+
+- Added `InProcessScheduler` (implements `AutomationHost` + `start`/`stop`)
+  and a pure `cronMatches` matcher to `@centraid/automation`. The scheduler
+  keeps an in-memory registry keyed by automation ref and a single
+  minute-boundary timer; on each tick it fires enabled cron automations whose
+  5-field expr matches the current minute. A `lastFiredMinute` guard means
+  each wall-clock minute runs at most once and minutes slept through are not
+  backfilled. Clock + fire effect are injected, so firing is unit-tested.
+- `gateway`: `serve()` now constructs **one** persistent `InProcessScheduler`
+  and wires its `fire(ref)` to the **same** `runAutomationLocal` closure as
+  "run now" (a shared `fireAutomation` helper; scheduled fires carry
+  `triggerKind: 'scheduled'` / `triggerOrigin: 'cron'` and respect the user's
+  runner pref). `reconcileScheduler()` drives that one instance on boot + every
+  publish/delete; `serve()` starts it on boot and `handle.close()` stops it
+  before the HTTP server. The `schedulerHostFactory` injection is replaced by
+  an optional `scheduler` (for test spies).
+- Deleted the OS scheduler entirely: `os-scheduler.ts` + `os-scheduler-host.ts`
+  (+ tests) and every launchd/systemd/Task-Scheduler export from
+  `agent-runtime`. Dropped the `centraid run-automation` subcommand (its only
+  caller was the OS scheduler); the CLI keeps `sql` + `preview snapshot`.
+- `desktop`: removed the `OsSchedulerHost` / `schedulerHostFactory` wiring
+  (and the now-dead path helpers) — the gateway owns scheduling internally.
+- Tests: rewrote `serve-scheduler-reconcile` to inject a spy scheduler; added
+  `cron-match` and `in-process-scheduler` unit tests (minute-match, reconcile
+  diff, fire-once-per-minute / no-backfill).
+- Updated the stale OS-scheduler docs (the scaffolded automations brief, the
+  `AutomationHost` interface, `app-paths`, `apps-store`) to describe the
+  in-process model.
 
 > ⚠️ This reverses the hard rule from #69 ("automations fire even when the
-> desktop is closed"). It is a deliberate, accepted trade for a single,
-> simpler owner. Captured in Phase 3 below.
+> desktop is closed"): scheduled automations now fire **only while the gateway
+> runs**, and missed fires during downtime are silently skipped — identical to
+> n8n's Schedule Trigger. A deliberate, accepted trade for one simpler owner.
+
+### Phase 4 — confirm execution placement in `agent-runtime`
+
+No code change beyond Phase 2's repointing. The headless executor
+(`run-automation-local`, `run-automation-cli-spawn`, `run-automation-live-dispatch`,
+`mock-llm-server`/`-writers`, `host-tools`, `centraid-cli`/`-dir`) stays in
+`agent-runtime` beside the interactive backends; `runAutomationLocal` implements
+`@centraid/automation`'s `OpenAutomationDispatch`, importing the fire spine and
+dispatch types from `@centraid/automation`. The WIP `@centraid/automation-runtime`
+extraction was never created — this branch started from a clean `main`.
 
 ## Out of scope
 
@@ -97,3 +133,7 @@ downtime are silently skipped with no backfill.
 - Phase 2: `turbo run typecheck` green (19/19); `turbo run test` green
   (app-engine 356, automation 49, gateway 62, agent-runtime 86, openclaw 6,
   skills 6); `turbo run build` green; lint clean.
+- Phase 3/4: `turbo run typecheck` green (19/19); `turbo run test` green
+  (automation 59 incl. cron-match + scheduler unit tests, agent-runtime 59
+  after the OS-scheduler test deletion, gateway 62); `turbo run build` green;
+  lint clean.
