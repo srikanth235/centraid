@@ -3,7 +3,7 @@ import {
   serve,
   type GatewayServeHandle,
   type SecretsProvider,
-} from '@centraid/gateway-runtime';
+} from '@centraid/gateway';
 import {
   defaultCentraidCliDir,
   invalidatePreflightCache,
@@ -25,7 +25,7 @@ import { loadPersistedSettings, templatesCacheDir } from './settings.js';
 import type { AutomationHost } from '@centraid/app-engine';
 
 /**
- * Electron-flavored wrapper around `@centraid/gateway-runtime`'s `serve()`.
+ * Electron-flavored wrapper around `@centraid/gateway`'s `serve()`.
  *
  * The desktop hosts one runtime per local gateway and uses the same
  * orchestration the standalone daemon does — `serve()` owns the
@@ -236,7 +236,7 @@ export function noteRunnerPrefsChanged(): void {
 /**
  * Re-export `parseProviderPrefs` so [ipc.ts](apps/desktop/src/main/ipc.ts)
  * keeps its existing import surface (parsing has no Electron deps and
- * lives in `@centraid/gateway-runtime`).
+ * lives in `@centraid/gateway`).
  */
 export { parseProviderPrefs };
 
@@ -247,7 +247,7 @@ export { parseProviderPrefs };
  *
  * The runtime's own per-turn prefs loader (inside `serve()`) goes
  * through the injected `SecretsProvider` instead — same end shape, just
- * a different code path so the gateway-runtime package stays free of
+ * a different code path so the gateway package stays free of
  * Electron deps.
  */
 export async function resolveProviderPrefs(

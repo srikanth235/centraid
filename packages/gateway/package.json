@@ -1,5 +1,5 @@
 {
-  "name": "@centraid/gateway-runtime",
+  "name": "@centraid/gateway",
   "version": "0.1.0",
   "private": true,
   "description": "Host-agnostic centraid gateway: wires app-engine + agent-runtime + stores + chat runner against injected paths and secrets. Consumed by the Electron desktop's in-process embed and the standalone `centraid-gateway` daemon.",
@@ -24,7 +24,7 @@
     "@centraid/agent-runtime": "workspace:*",
     "@centraid/app-engine": "workspace:*",
     "@centraid/app-templates": "workspace:*",
-    "@centraid/apps-store": "workspace:*"
+    "@centraid/code-store": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

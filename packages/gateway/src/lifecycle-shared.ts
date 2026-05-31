@@ -7,7 +7,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HarnessError } from '@centraid/agent-harness';
 import type { AutomationHistoryKeep } from '@centraid/app-engine';
-import { AppsStore, AppsStoreError } from '@centraid/apps-store';
+import { AppsStore, AppsStoreError } from '@centraid/code-store';
 import { validateManifestAt } from './apps-store-routes.js';
 import { sendJson, writeFileMap, type FileMapEntry } from './route-helpers.js';
 

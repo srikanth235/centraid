@@ -28,7 +28,7 @@
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
-        "@centraid/gateway-runtime": "workspace:*",
+        "@centraid/gateway": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -134,8 +134,8 @@
         "typescript": "catalog:",
       },
     },
-    "packages/apps-store": {
-      "name": "@centraid/apps-store",
+    "packages/code-store": {
+      "name": "@centraid/code-store",
       "version": "0.1.0",
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -152,8 +152,8 @@
         "typescript": "catalog:",
       },
     },
-    "packages/gateway-runtime": {
-      "name": "@centraid/gateway-runtime",
+    "packages/gateway": {
+      "name": "@centraid/gateway",
       "version": "0.1.0",
       "bin": {
         "centraid-gateway": "./dist/cli.js",
@@ -163,7 +163,7 @@
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/app-templates": "workspace:*",
-        "@centraid/apps-store": "workspace:*",
+        "@centraid/code-store": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -510,13 +510,13 @@
 
     "@centraid/app-templates": ["@centraid/app-templates@workspace:packages/app-templates"],
 
-    "@centraid/apps-store": ["@centraid/apps-store@workspace:packages/apps-store"],
+    "@centraid/code-store": ["@centraid/code-store@workspace:packages/code-store"],
 
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
 
-    "@centraid/gateway-runtime": ["@centraid/gateway-runtime@workspace:packages/gateway-runtime"],
+    "@centraid/gateway": ["@centraid/gateway@workspace:packages/gateway"],
 
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
 

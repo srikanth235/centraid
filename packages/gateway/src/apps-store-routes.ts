@@ -35,7 +35,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ManifestError, parseAppManifest } from '@centraid/app-engine';
-import { AppsStore, AppsStoreError } from '@centraid/apps-store';
+import { AppsStore, AppsStoreError } from '@centraid/code-store';
 import { fileExists, readBody, readJson, sendJson } from './route-helpers.js';
 
 /** Text extensions a draft file write accepts — mirrors agent-harness. */

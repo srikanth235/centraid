@@ -56,7 +56,7 @@ import {
   buildUiGroundingBlocks,
   buildToolsGroundingBlock,
 } from '@centraid/agent-harness';
-import { AppsStore } from '@centraid/apps-store';
+import { AppsStore } from '@centraid/code-store';
 import { ensureSession } from './lifecycle-shared.js';
 
 /** The thin turn-driver the runner depends on — `runAgentTurn` by default. */

@@ -354,3 +354,11 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-1e487d5ad58-1780084239-7 | 1e487d5a-d586-4046-aedc-95db8f008020 | #141 | interrupt | structural |  |  |
 | steer-1e487d5ad58-1780161401-1 | 1e487d5a-d586-4046-aedc-95db8f008020 | #137 | correction | classifier | User flagged P1/P2 bugs in agent's recently-completed work |  |
 | steer-dcb6deb60e3-1780168063-1 | dcb6deb6-0e31-4d28-b44e-08138bffb363 |  | interrupt | structural |  |  |
+| steer-60445571254-1780172635-1 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 |  | correction | classifier | pushed back on confusing/mixed modular framing in the explanation |  |
+| steer-60445571254-1780172635-2 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 |  | correction | classifier | pushed back on confusing/mixed modular framing |  |
+| steer-60445571254-1780172635-3 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 |  | interrupt | structural |  |  |
+| steer-60445571254-1780172635-4 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 |  | interrupt | structural |  |  |
+| steer-60445571254-1780214668-1 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 | #145 | interrupt | structural |  | refactor: rename apps-store→code-store and gateway-runtime→gateway (#145) -m Pa… |
+| steer-60445571254-1780224200-1 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 | #145 | interrupt | structural |  | refactor: rename apps-store→code-store and gateway-runtime→gateway (#145) -m Tw… |
+| steer-60445571254-1780224200-2 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 | #145 | correction | classifier | rejected harness naming; wants skills directory remodel instead | refactor: rename apps-store→code-store and gateway-runtime→gateway (#145) -m Tw… |
+| steer-e32821ecd08-1780224283-1 | e32821ec-d08c-41cb-97c2-a8fb31dc5385 | #145 | interrupt | structural |  | refactor: rename apps-store→code-store and gateway-runtime→gateway (#145) -m Tw… |

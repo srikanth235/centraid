@@ -55,7 +55,7 @@ import {
   type OpenAICompatProvider,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
-import { AppsStore } from '@centraid/apps-store';
+import { AppsStore } from '@centraid/code-store';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
 import { makeAutomationsRouteHandler } from './automations-routes.js';
 import { makeLifecycleRouteHandler } from './lifecycle-routes.js';

@@ -1,5 +1,5 @@
 {
-  "name": "@centraid/apps-store",
+  "name": "@centraid/code-store",
   "version": "0.1.0",
   "private": true,
   "description": "Gateway-owned git store for centraid app code. Owns a bare repo + per-session worktrees for editing + one materialized-main worktree the runtime reads from. Publish = path-scoped commit + tag + ff-merge into main + atomic worktree swap. Rollback is forward-only.",

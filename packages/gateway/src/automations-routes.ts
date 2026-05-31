@@ -42,7 +42,7 @@ import {
   type AutomationTriggerOrigin,
   type RunSummary,
 } from '@centraid/app-engine';
-import type { AppsStore } from '@centraid/apps-store';
+import type { AppsStore } from '@centraid/code-store';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 
 export interface AutomationsRouteOptions {

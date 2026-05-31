@@ -3,7 +3,7 @@
 Transport-agnostic engine for centraid apps. Owns the registry,
 versioned uploads, sqlite-backed handler runner, and the full
 `/centraid/*` URL surface exposed through `Runtime.handle(req, res)`.
-Consumed by [`@centraid/gateway-runtime`](../gateway-runtime) (Electron
+Consumed by [`@centraid/gateway`](../gateway) (Electron
 embed + standalone daemon) and [`@centraid/openclaw-plugin`](../openclaw-plugin)
 (OpenClaw gateway shim).
 

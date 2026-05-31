@@ -1,4 +1,4 @@
-# @centraid/gateway-runtime
+# @centraid/gateway
 
 Host-agnostic centraid gateway. Wires [`@centraid/app-engine`](../app-engine) +
 [`@centraid/agent-runtime`](../agent-runtime) + stores + chat runner against
@@ -18,7 +18,7 @@ clients reach it through their existing remote-gateway flow.
 ## `serve()` — library entry
 
 ```ts
-import { serve } from '@centraid/gateway-runtime';
+import { serve } from '@centraid/gateway';
 
 const handle = await serve({
   paths: {

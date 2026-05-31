@@ -2,7 +2,7 @@
 //
 // Split out so `apps-store.ts` stays focused on the class
 // implementation. Consumers should still import from the package
-// root (`@centraid/apps-store`) — this file is an internal split,
+// root (`@centraid/code-store`) — this file is an internal split,
 // not an alternate entry point.
 
 export interface AppsStoreOptions {

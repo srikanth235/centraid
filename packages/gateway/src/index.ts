@@ -1,5 +1,5 @@
 /*
- * @centraid/gateway-runtime
+ * @centraid/gateway
  *
  * Host-agnostic centraid gateway. `serve()` wires `app-engine` +
  * `agent-runtime` + stores + chat runner against injected paths and
