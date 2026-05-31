@@ -86,7 +86,7 @@ export {
 } from './sql-ops.js';
 export { readAppSchema } from './schema.js';
 export { Registry } from './registry.js';
-export { appDataDir, readActiveCodeDir } from './app-paths.js';
+export { appDataDir, readActiveCodeDir, isValidAppId } from './app-paths.js';
 
 // Wrapper-dir cleanup on app delete — removes `<appsDir>/<id>/` (data.sqlite
 // + run ledgers) after the registry entry is dropped. Hosts that delete apps
@@ -191,7 +191,7 @@ export {
 } from './gateway-db.js';
 
 // Central analytics — push-based run summaries (issue #98, decision 4).
-// `AutomationRunsStore.finishRun` write-throughs one row per run;
+// `AgentRunsStore.finishRun` write-throughs one row per run;
 // `InsightsStore` reads them as the single Insights source.
 export { AnalyticsStore, type RunSummary, type ListSummariesOptions } from './analytics-store.js';
 
@@ -251,7 +251,6 @@ export {
 // `ctx.invoke`, and `onFailure` address an automation by (issue #98).
 export {
   isValidAutomationId,
-  isValidAppId,
   isValidAutomationRef,
   formatAutomationRef,
   parseAutomationRef,
@@ -263,21 +262,21 @@ export {
 // the store is runtime-owned and never reachable from handler `db` or
 // the `centraid_sql_*` agent tools. See issues #80 and #90.
 export {
-  AutomationRunsStore,
+  AgentRunsStore,
   type InsertRunInput,
   type FinishRunInput,
   type InsertNodeInput,
   type ListRunsOptions,
-} from './automation-runs-store.js';
+} from './agent-runs-store.js';
 export type {
-  AutomationRunRow,
-  AutomationRunNodeRow,
+  AgentRunRow,
+  AgentRunNodeRow,
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationTriggerOrigin,
-  AutomationRunNodeKind,
+  AgentRunNodeKind,
   RunKind,
-} from './automation-runs-schema.js';
+} from './agent-runs-schema.js';
 
 // Per-model token pricing. `run_nodes.cost_usd` is frozen at write time
 // via `costForUsage`; an unknown model yields `undefined` so the ledger

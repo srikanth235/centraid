@@ -7,25 +7,14 @@
  * routing, `ctx.invoke`, and `onFailure` address it by (issue #98).
  */
 
+import { isValidAppId } from './app-paths.js';
+
 /**
  * Validate an automation *id* (the directory slug under `automations/`).
  * Filesystem-safe; unique within its owning app.
  */
 export function isValidAutomationId(id: string): boolean {
   if (typeof id !== 'string' || id.length === 0) return false;
-  return /^[A-Za-z0-9_-]+$/.test(id);
-}
-
-/**
- * Validate an app folder id. A filesystem-safe slug — alnum / `-` / `_`,
- * no path separators, no dots, and no `_`-prefixed (plugin-internal) ids.
- * Automation apps are no longer distinguished by a dotted `auto.` prefix
- * (that is now the manifest's `kind` field), so the id grammar is a plain
- * slug again and `..` is impossible by construction.
- */
-export function isValidAppId(id: string): boolean {
-  if (typeof id !== 'string' || id.length === 0) return false;
-  if (id.startsWith('_')) return false;
   return /^[A-Za-z0-9_-]+$/.test(id);
 }
 

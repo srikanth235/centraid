@@ -4,7 +4,7 @@
  *
  * Resolving an automation, opening its run ledger, running the generated
  * `handler.js`, and cascading `onFailure` only ever touch app-engine
- * primitives (`parseAutomationRef`, `AutomationRunsStore`,
+ * primitives (`parseAutomationRef`, `AgentRunsStore`,
  * `runAutomationHandler`). That spine used to live in
  * `agent-runtime/run-automation-local.ts`; the only thing it genuinely
  * needed from agent-runtime was the live `ctx.tool` / `ctx.agent` dispatch
@@ -20,7 +20,7 @@
 
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { AutomationRunsStore } from './automation-runs-store.js';
+import { AgentRunsStore } from './agent-runs-store.js';
 import { makeRuntimeDbProvider } from './gateway-db.js';
 import { parseAutomationRef } from './automation-ref.js';
 import { automationHandlerPath, readAppOwnedAutomation } from './automation-app.js';
@@ -31,7 +31,7 @@ import type {
   AutomationToolDispatcher,
 } from './automation-handler-runner.js';
 import type { AnalyticsStore } from './analytics-store.js';
-import type { AutomationTriggerKind, AutomationTriggerOrigin } from './automation-runs-schema.js';
+import type { AutomationTriggerKind, AutomationTriggerOrigin } from './agent-runs-schema.js';
 
 /**
  * The live dispatch surface a fire runs against. Provided by the host
@@ -155,7 +155,7 @@ export async function runAutomationFire(
   // The automation's run ledger is its app's per-app `runtime.sqlite` (issue
   // #98); `finishRun` write-throughs a summary to `analytics`.
   const runtimeDbPath = path.join(opts.appsDir, parsed.appId, 'runtime.sqlite');
-  const runsStore = new AutomationRunsStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
+  const runsStore = new AgentRunsStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
   const runId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;

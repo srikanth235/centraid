@@ -15,7 +15,7 @@
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
 import type { DatabaseProvider } from './gateway-db.js';
-import type { RunKind } from './automation-runs-schema.js';
+import type { RunKind } from './agent-runs-schema.js';
 
 /** One run's analytics summary — the write-through payload + read shape. */
 export interface RunSummary {

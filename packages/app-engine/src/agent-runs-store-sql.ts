@@ -1,7 +1,7 @@
 /*
- * Prepared-statement block + raw-row mappers for `AutomationRunsStore`.
+ * Prepared-statement block + raw-row mappers for `AgentRunsStore`.
  *
- * Split out of `automation-runs-store.ts` to keep that file under the
+ * Split out of `agent-runs-store.ts` to keep that file under the
  * repo's 500-line cap. The SQL targets the activity DB's unified ledger
  * tables (`runs`, `run_nodes`, `automation_state` — see `gateway-db.ts`
  * ACTIVITY_MIGRATIONS).
@@ -14,14 +14,14 @@
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
 import type {
-  AutomationRunRow,
-  AutomationRunNodeRow,
+  AgentRunRow,
+  AgentRunNodeRow,
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationTriggerOrigin,
-  AutomationRunNodeKind,
+  AgentRunNodeKind,
   RunKind,
-} from './automation-runs-schema.js';
+} from './agent-runs-schema.js';
 
 export interface RawRun {
   id: string;
@@ -108,7 +108,7 @@ export interface PreparedStatements {
   dominantModel: StatementSync;
 }
 
-export function runFromRaw(raw: RawRun): AutomationRunRow {
+export function runFromRaw(raw: RawRun): AgentRunRow {
   return {
     runId: raw.id,
     kind: raw.kind as RunKind,
@@ -144,13 +144,13 @@ export function runFromRaw(raw: RawRun): AutomationRunRow {
   };
 }
 
-export function nodeFromRaw(raw: RawNode): AutomationRunNodeRow {
+export function nodeFromRaw(raw: RawNode): AgentRunNodeRow {
   return {
     nodeId: raw.id,
     runId: raw.run_id,
     ordinal: raw.ordinal,
     ...(raw.batch_id !== null ? { batchId: raw.batch_id } : {}),
-    kind: raw.kind as AutomationRunNodeKind,
+    kind: raw.kind as AgentRunNodeKind,
     ...(raw.name !== null ? { name: raw.name } : {}),
     ...(raw.args_json !== null ? { argsJson: raw.args_json } : {}),
     ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),

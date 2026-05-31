@@ -1,5 +1,5 @@
 /*
- * AutomationRunsStore — agent-run ledger + automation KV.
+ * AgentRunsStore — agent-run ledger + automation KV.
  *
  * The three tables — `runs`, `run_nodes`, `automation_state` — are the
  * `RUNTIME_MIGRATIONS` / `ACTIVITY_MIGRATIONS` shape in `gateway-db.ts`.
@@ -22,22 +22,22 @@
  * When an `AnalyticsStore` is supplied, `finishRun` write-throughs a
  * one-row summary to the central analytics DB.
  *
- * Row types live in `automation-runs-schema.ts`; the prepared-statement
- * block + raw-row mappers live in `automation-runs-store-sql.ts`.
+ * Row types live in `agent-runs-schema.ts`; the prepared-statement
+ * block + raw-row mappers live in `agent-runs-store-sql.ts`.
  */
 
 import { type DatabaseSync } from 'node:sqlite';
 import type { DatabaseProvider } from './gateway-db.js';
 import type { AnalyticsStore } from './analytics-store.js';
 import type {
-  AutomationRunRow,
-  AutomationRunNodeRow,
+  AgentRunRow,
+  AgentRunNodeRow,
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationTriggerOrigin,
-  AutomationRunNodeKind,
+  AgentRunNodeKind,
   RunKind,
-} from './automation-runs-schema.js';
+} from './agent-runs-schema.js';
 import {
   prepare,
   runFromRaw,
@@ -47,7 +47,7 @@ import {
   type RawRun,
   type RawNode,
   type RawState,
-} from './automation-runs-store-sql.js';
+} from './agent-runs-store-sql.js';
 
 export interface InsertRunInput {
   readonly runId: string;
@@ -81,7 +81,7 @@ export interface InsertNodeInput {
   readonly runId: string;
   readonly ordinal: number;
   readonly batchId?: number;
-  readonly kind: AutomationRunNodeKind;
+  readonly kind: AgentRunNodeKind;
   /** The tool name or sub-run target. Omitted for `kind: 'step'`. */
   readonly name?: string;
   readonly argsJson?: string;
@@ -120,7 +120,7 @@ export interface ListRunsOptions {
  * / `ChatHistoryStore` / `AutomationStore` use). The connection is
  * opened lazily by the provider on first method call.
  */
-export class AutomationRunsStore {
+export class AgentRunsStore {
   private readonly provider: DatabaseProvider;
   private readonly analytics: AnalyticsStore | undefined;
   private db: DatabaseSync | undefined;
@@ -230,13 +230,13 @@ export class AutomationRunsStore {
     }
   }
 
-  getRun(runId: string): AutomationRunRow | undefined {
+  getRun(runId: string): AgentRunRow | undefined {
     const { stmts } = this.ensureReady();
     const raw = stmts.getRun.get(runId) as RawRun | undefined;
     return raw ? runFromRaw(raw) : undefined;
   }
 
-  listRuns(opts: ListRunsOptions = {}): AutomationRunRow[] {
+  listRuns(opts: ListRunsOptions = {}): AgentRunRow[] {
     const { stmts } = this.ensureReady();
     const limit = opts.limit ?? 50;
     const since = opts.since ?? null;
@@ -259,13 +259,13 @@ export class AutomationRunsStore {
   }
 
   /** Every run for a chat session, oldest first — the conversation's turns. */
-  listChatRuns(chatSessionId: string): AutomationRunRow[] {
+  listChatRuns(chatSessionId: string): AgentRunRow[] {
     const { stmts } = this.ensureReady();
     const rows = stmts.listRunsByChatSession.all(chatSessionId) as unknown as RawRun[];
     return rows.map(runFromRaw);
   }
 
-  lastRun(automationId: string, status?: 'ok' | 'error'): AutomationRunRow | undefined {
+  lastRun(automationId: string, status?: 'ok' | 'error'): AgentRunRow | undefined {
     const { stmts } = this.ensureReady();
     const okFilter = status === undefined ? null : status === 'ok' ? 1 : 0;
     const raw = stmts.lastRunByAutomation.get(automationId, okFilter, okFilter) as
@@ -285,14 +285,14 @@ export class AutomationRunsStore {
   }
 
   /** Most recent pinned run for an automation, or undefined when none is pinned. */
-  pinnedRun(automationId: string): AutomationRunRow | undefined {
+  pinnedRun(automationId: string): AgentRunRow | undefined {
     const { stmts } = this.ensureReady();
     const raw = stmts.pinnedRunByAutomation.get(automationId) as RawRun | undefined;
     return raw ? runFromRaw(raw) : undefined;
   }
 
   /** Child runs spawned as sub-runs of the given parent, oldest first. */
-  listChildRuns(parentRunId: string): AutomationRunRow[] {
+  listChildRuns(parentRunId: string): AgentRunRow[] {
     const { stmts } = this.ensureReady();
     const rows = stmts.listChildRunsByParent.all(parentRunId) as unknown as RawRun[];
     return rows.map(runFromRaw);
@@ -326,7 +326,7 @@ export class AutomationRunsStore {
     );
   }
 
-  listNodes(runId: string): AutomationRunNodeRow[] {
+  listNodes(runId: string): AgentRunNodeRow[] {
     const { stmts } = this.ensureReady();
     const rows = stmts.listNodesByRun.all(runId) as unknown as RawNode[];
     return rows.map(nodeFromRaw);

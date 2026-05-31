@@ -371,3 +371,9 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-60445571254-1780226473-6 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 | #145 | interrupt | structural |  | refactor: dissolve agent-harness into @centraid/skills + app-engine (#145) -m @… |
 | steer-60445571254-1780226473-7 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 | #145 | interrupt | structural |  | refactor: dissolve agent-harness into @centraid/skills + app-engine (#145) -m @… |
 | steer-60445571254-1780226473-8 | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 | #145 | correction | classifier | rejected harness naming; wants skills directory remodel instead | refactor: dissolve agent-harness into @centraid/skills + app-engine (#145) -m @… |
+| steer-6d42478319f-1780247510-1 | 6d424783-19f7-4130-b80c-0f4594267275 |  | correction | classifier | told agent to pause and study n8n's cron model before proposing |  |
+| steer-6d42478319f-1780247510-2 | 6d424783-19f7-4130-b80c-0f4594267275 |  | correction | classifier | reopened the package placement question agent had set aside |  |
+| steer-6d42478319f-1780247510-3 | 6d424783-19f7-4130-b80c-0f4594267275 |  | correction | classifier | rejected local-specific name; demanded generic naming for future executors |  |
+| steer-6d42478319f-1780247510-4 | 6d424783-19f7-4130-b80c-0f4594267275 |  | interrupt | structural |  |  |
+| steer-6d42478319f-1780247510-5 | 6d424783-19f7-4130-b80c-0f4594267275 |  | correction | classifier | challenged plan by surfacing existing agent-runtime package overlap |  |
+| steer-6d42478319f-1780247510-6 | 6d424783-19f7-4130-b80c-0f4594267275 |  | correction | classifier | told agent to step back and rethink automation placement in app-engine |  |

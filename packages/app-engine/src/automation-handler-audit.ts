@@ -4,12 +4,12 @@
  * Split out of `automation-handler-runner.ts` so the runner stays
  * focused on worker/message orchestration. Everything here is
  * pure-ish — the only side-effect surface is the supplied
- * `AutomationRunsStore` reference.
+ * `AgentRunsStore` reference.
  */
 
 import { randomUUID } from 'node:crypto';
-import type { AutomationRunsStore, InsertNodeInput } from './automation-runs-store.js';
-import type { AutomationRunRow, AutomationTriggerKind } from './automation-runs-schema.js';
+import type { AgentRunsStore, InsertNodeInput } from './agent-runs-store.js';
+import type { AgentRunRow, AutomationTriggerKind } from './agent-runs-schema.js';
 import type { AutomationHistoryConfig } from './automation-manifest.js';
 
 const AUDIT_FIELD_BYTE_CAP = 64 * 1024; // 64 KB hard cap on args_json / output_json per node.
@@ -45,7 +45,7 @@ export interface RunRef {
   output?: unknown;
 }
 
-export function rowToRunRef(row: AutomationRunRow): RunRef {
+export function rowToRunRef(row: AgentRunRow): RunRef {
   const ref: RunRef = {
     runId: row.runId,
     automationId: row.automationId ?? '',
@@ -74,7 +74,7 @@ export function rowToRunRef(row: AutomationRunRow): RunRef {
 }
 
 export function applyRetention(
-  store: AutomationRunsStore,
+  store: AgentRunsStore,
   automationId: string,
   history: AutomationHistoryConfig | undefined,
 ): void {
@@ -120,7 +120,7 @@ export function makeNodeId(runId: string, ordinal: number): string {
 }
 
 export interface RecordToolNodeArgs {
-  store: AutomationRunsStore;
+  store: AgentRunsStore;
   runId: string;
   ordinal: number;
   batchId?: number;
@@ -159,7 +159,7 @@ export function recordToolNode(args: RecordToolNodeArgs): void {
 }
 
 export interface RecordAgentNodeArgs {
-  store: AutomationRunsStore;
+  store: AgentRunsStore;
   runId: string;
   ordinal: number;
   prompt: string;
@@ -195,7 +195,7 @@ export function recordAgentNode(args: RecordAgentNodeArgs): void {
 }
 
 export interface RecordInvokeNodeArgs {
-  store: AutomationRunsStore;
+  store: AgentRunsStore;
   runId: string;
   ordinal: number;
   /** The `ctx.invoke` target — `"name"` intra-app or `"appId/name"` cross-app. */

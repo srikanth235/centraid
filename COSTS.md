@@ -532,3 +532,7 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-60445571-254-1780224387 | claude-code | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 | #145 | claude-opus-4-8 | 795286 | 34094838 | 23834147 | 4609733 | 39499857 | 344.2296 | refactor: rename apps-store→code-store and gateway-runtime→gateway (#145) -m Two |
 | claude-code-60445571-254-1780226250 | claude-code | 60445571-2544-4e2d-9d7d-70dc32a8aaa4 | #145 | claude-opus-4-8 | 501294 | 365775766 | 17292555 | 27111940 | 393389000 | 2975.0498 | refactor: dissolve agent-harness into @centraid/skills + app-engine (#145) -m @c |
 | claude-code-22523356-a9a-1780226474 | claude-code | 22523356-a9a0-4c9c-ad51-72eef3367c76 | #145 | claude-opus-4-7 | 5 | 11351 | 14871 | 108 | 11464 | 0.0811 | refactor: dissolve agent-harness into @centraid/skills + app-engine (#145) -m @c |
+| claude-code-6d424783-19f-1780247547 | claude-code | 6d424783-19f7-4130-b80c-0f4594267275 | #149 | claude-opus-4-8 | 60257 | 1205382 | 34485066 | 420682 | 1686321 | 35.5945 |  |
+| claude-code-6d424783-19f-1780247601 | claude-code | 6d424783-19f7-4130-b80c-0f4594267275 | #149 | claude-opus-4-8 | 869 | 16534 | 1222069 | 6767 | 24170 | 0.8879 |  |
+| claude-code-6d424783-19f-1780247630 | claude-code | 6d424783-19f7-4130-b80c-0f4594267275 | #149 | claude-opus-4-8 | 8 | 4336 | 508903 | 2040 | 6384 | 0.3326 |  |
+| claude-code-6d424783-19f-1780247666 | claude-code | 6d424783-19f7-4130-b80c-0f4594267275 | #149 | claude-opus-4-8 | 291 | 4861 | 516209 | 3384 | 8536 | 0.3745 |  |

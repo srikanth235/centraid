@@ -4,17 +4,17 @@ import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
 import { makeRuntimeDbProvider } from './gateway-db.js';
-import { AutomationRunsStore } from './automation-runs-store.js';
+import { AgentRunsStore } from './agent-runs-store.js';
 
-function newStore(): AutomationRunsStore {
+function newStore(): AgentRunsStore {
   // A temp runtime.sqlite — the provider runs the migrations on first use,
   // creating the chat_sessions / runs / run_nodes / automation_state tables.
   const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
   const provider = makeRuntimeDbProvider(path.join(dir, 'runtime.sqlite'));
-  return new AutomationRunsStore(provider);
+  return new AgentRunsStore(provider);
 }
 
-describe('AutomationRunsStore', () => {
+describe('AgentRunsStore', () => {
   it('round-trips a run row including parentRunId, inputJson, summary, outputJson', () => {
     const store = newStore();
     store.insertRun({
@@ -122,10 +122,10 @@ describe('AutomationRunsStore', () => {
   it('automation_state get/set round-trips across store reopens', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
     const provider = makeRuntimeDbProvider(path.join(dir, 'runtime.sqlite'));
-    const s1 = new AutomationRunsStore(provider);
+    const s1 = new AgentRunsStore(provider);
     s1.stateSet('auto-foo', 'cursor', JSON.stringify({ since: 42 }), 1000);
     s1.close();
-    const s2 = new AutomationRunsStore(provider);
+    const s2 = new AgentRunsStore(provider);
     const entry = s2.stateGet('auto-foo', 'cursor');
     assert.equal(entry?.valueJson, JSON.stringify({ since: 42 }));
     assert.equal(entry?.updatedAt, 1000);

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { makeRuntimeDbProvider, makeAnalyticsDbProvider } from './gateway-db.js';
 import { AnalyticsStore } from './analytics-store.js';
-import { AutomationRunsStore } from './automation-runs-store.js';
+import { AgentRunsStore } from './agent-runs-store.js';
 import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
 
 /**
@@ -14,13 +14,13 @@ import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
  * `AnalyticsStore` — write-throughs each finished run's summary to the
  * central analytics DB. `insights` reads only that central DB.
  */
-function setup(): { runs: AutomationRunsStore; insights: InsightsStore } {
+function setup(): { runs: AgentRunsStore; insights: InsightsStore } {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-insights-'));
   const ledger = makeRuntimeDbProvider(join(dir, 'runtime.sqlite'));
   const analyticsProvider = makeAnalyticsDbProvider(join(dir, 'analytics.sqlite'));
   const analytics = new AnalyticsStore(analyticsProvider);
   return {
-    runs: new AutomationRunsStore(ledger, analytics),
+    runs: new AgentRunsStore(ledger, analytics),
     insights: new InsightsStore(analyticsProvider),
   };
 }
@@ -29,7 +29,7 @@ function setup(): { runs: AutomationRunsStore; insights: InsightsStore } {
  *  automation run, `automationRef` is its `<appId>/<id>` handle — the
  *  write-through derives the owning app id from it. Returns the run id. */
 function seedRun(
-  runs: AutomationRunsStore,
+  runs: AgentRunsStore,
   opts: {
     kind: 'automation' | 'chat' | 'build';
     automationRef?: string;
