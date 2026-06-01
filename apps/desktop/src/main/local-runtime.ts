@@ -28,17 +28,16 @@ import { loadPersistedSettings, templatesCacheDir } from './settings.js';
  *   - per-gateway lifecycle (the `handles` map + `starting` dedupe)
  *   - safeStorage-backed secrets
  *   - Electron-derived paths (via `gateway-paths.ts`)
- *   - OS-scheduler factory the desktop installs
  *
  * Auth: a per-launch random bearer token is minted by `serve()`. The
  * token is handed back to the renderer as the effective `gatewayToken`
  * so the renderer's HTTP client uses it on every request — same wire
  * format as remote OpenClaw mode.
  *
- * Switching the active local gateway tears down its HTTP server, but
- * automations registered with the OS scheduler keep firing — they
- * shell the CLI against the per-gateway DB paths baked into each
- * scheduler entry.
+ * Switching the active local gateway tears down its HTTP server, which
+ * also stops that gateway's in-process cron scheduler (issue #149/#150):
+ * the gateway owns scheduling internally now, so its automations only
+ * fire while the gateway runs — no OS scheduler, no backfill.
  */
 
 const handles = new Map<string, GatewayServeHandle>();
@@ -150,9 +149,10 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
 
 /**
  * Stop the in-process HTTP runtime for a specific local gateway.
- * Idempotent; safe to call for unknown ids. Automations registered with
- * the OS scheduler keep firing — they don't depend on the runtime
- * being up.
+ * Idempotent; safe to call for unknown ids. The gateway owns an
+ * in-process cron scheduler (issue #149/#150), so closing the runtime
+ * also stops that gateway's automations from firing — they only run
+ * while the gateway is up.
  */
 export async function shutdownLocalRuntime(gatewayId: string): Promise<void> {
   const h = handles.get(gatewayId);

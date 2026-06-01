@@ -87,9 +87,9 @@ export interface RuntimeOptions {
   /**
    * Optional reader for per-app metadata (name, description). The chat
    * route uses it to populate the `extraSystemPrompt` it hands to the
-   * runner. Both hosts wire `@centraid/agent-harness`'s app.json
-   * reader through. Defaults to "no metadata" — chat still works, just
-   * with the bare app-id as the display name.
+   * runner. Both hosts wire a host-injected app.json reader through.
+   * Defaults to "no metadata" — chat still works, just with the bare
+   * app-id as the display name.
    */
   appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /**

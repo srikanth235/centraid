@@ -106,8 +106,8 @@ export interface ChatRunInput {
    * Absolute path to a runner-owned scratch session file (under the central
    * `chatRunnerSessionDir`, named `<windowId>.jsonl`). The runner is free to
    * use this for its own session-resume mechanism (e.g. the OpenClaw runner
-   * writes a pi session file here). It is NOT the chat transcript — the
-   * transcript lives in the gateway DB.
+   * hands it to `runEmbeddedAgent` as its session-resume file). It is NOT the
+   * chat transcript — the transcript lives in the gateway DB.
    */
   sessionFile: string;
   message: string;

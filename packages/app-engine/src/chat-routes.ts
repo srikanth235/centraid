@@ -63,9 +63,9 @@ export interface ChatRouteContext {
   runner?: ChatRunner;
   /**
    * Optional central chat store. When set, the route reads the session's
-   * sticky mode + runner-resume handles from it and records turn completion
-   * back into it. When unset, the route still works — mode comes from the
-   * POST body and no resume handle is threaded.
+   * runner-resume handle from it and records turn completion back into it.
+   * When unset, the route still works — no resume handle is threaded, so
+   * each turn starts the adapter fresh.
    */
   chatStore?: ChatHistoryStore;
   /**
@@ -352,8 +352,9 @@ async function handlePostTurn(
   req.on('error', onClientClose);
 
   // Runner-owned scratch file in the central scratch dir. Make sure the
-  // parent dir exists before any runner writes — the OpenClaw runner writes
-  // a pi session file at this path and silently no-ops if the dir is missing.
+  // parent dir exists before any runner writes — the OpenClaw runner hands
+  // this path to `runEmbeddedAgent` as its session file and silently no-ops
+  // if the parent dir is missing.
   const sessionFile = path.join(ctx.chatRunnerSessionDir, `${windowId}.jsonl`);
   await fs.mkdir(ctx.chatRunnerSessionDir, { recursive: true }).catch(() => undefined);
 

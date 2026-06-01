@@ -30,8 +30,8 @@
 // and the app is only *registered* (`ensureRegistered` → data dir +
 // registry entry) so its draft is previewable through the runtime. When
 // `publish` is true the session is validated + merged onto `main` and
-// the OS scheduler is reconciled — the renderer passes this for now to
-// preserve "new app is immediately live", and drops it once the preview
+// the in-process cron scheduler is reconciled — the renderer passes this
+// for now to preserve "new app is immediately live", and drops it once the preview
 // iframe points at the draft URL. Either way the orchestration is the
 // gateway's.
 //

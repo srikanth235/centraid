@@ -63,7 +63,7 @@ export default definePluginEntry({
   id: 'centraid',
   name: 'Centraid',
   description:
-    'Mounts /centraid on the gateway. Apps may be registered by path or uploaded as versioned tar.gz archives; each app has static assets, a persistent sqlite database, and JS handlers for queries / actions.',
+    'Mounts /centraid on the gateway. Apps are uploaded as versioned tar.gz archives; each app has static assets, a persistent sqlite database, and JS handlers for queries / actions.',
 
   register(api: OpenClawPluginApi) {
     const pluginConfig = (api.pluginConfig ?? {}) as {
@@ -99,10 +99,10 @@ export default definePluginEntry({
 
     // Chat-history store — app-scoped (issue #98): every chat session +
     // turn lives in its app's `runtime.sqlite`, resolved from `appsDir`.
-    // The `/centraid/<id>/_chat` POST route reads sticky mode +
-    // runner-resume handles from it and records each turn as a `runs`
-    // row. Constructed before the runtime so it can be handed to the
-    // Runtime and also mounted on the `/_centraid-chat` HTTP surface.
+    // The `/centraid/<id>/_chat` POST route reads the runner-resume handle
+    // from it and records each turn as a `runs` row. Constructed before the
+    // runtime so it can be handed to the Runtime and also mounted on the
+    // `/_centraid-chat` HTTP surface.
     const chatHistoryStore = new ChatHistoryStore(
       appsDir,
       () => userStore.getUserId(),
