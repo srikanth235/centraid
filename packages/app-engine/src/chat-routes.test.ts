@@ -42,7 +42,7 @@ test('POST /_chat returns 503 when no runner is configured', async () => {
       Authorization: `Bearer ${server.token}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ windowId: 'w1', message: 'hi' }),
+    body: JSON.stringify({ chatSessionId: 'w1', message: 'hi' }),
   });
   assert.equal(res.status, 503);
   const body = (await res.json()) as { error: string };
@@ -76,7 +76,7 @@ test('POST /_chat drives the runner and streams events', async () => {
       Authorization: `Bearer ${server.token}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ windowId: 'w1', message: 'hello' }),
+    body: JSON.stringify({ chatSessionId: 'w1', message: 'hello' }),
   });
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/);
@@ -102,13 +102,13 @@ test('POST /_chat passes the runner-owned session file under the scratch dir', a
   await fetch(`${server.url}/centraid/demo/_chat`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ windowId: 'w1', message: 'hello' }),
+    body: JSON.stringify({ chatSessionId: 'w1', message: 'hello' }),
   }).then((r) => r.text());
   assert.equal(path.basename(seenSessionFile), 'w1.jsonl');
   assert.equal(path.dirname(seenSessionFile), runtime.chatRunnerSessionDir);
 });
 
-test('POST /_chat with invalid windowId returns 400', async () => {
+test('POST /_chat with invalid chatSessionId returns 400', async () => {
   const runner: ChatRunner = { run: async () => undefined };
   await bootstrap({ runner });
   await registerApp('demo');
@@ -118,7 +118,7 @@ test('POST /_chat with invalid windowId returns 400', async () => {
       Authorization: `Bearer ${server.token}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ windowId: '../escape', message: 'hello' }),
+    body: JSON.stringify({ chatSessionId: '../escape', message: 'hello' }),
   });
   assert.equal(res.status, 400);
 });
@@ -145,23 +145,23 @@ test('runner error becomes an SSE error frame', async () => {
   const res = await fetch(`${server.url}/centraid/demo/_chat`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ windowId: 'w1', message: 'hello' }),
+    body: JSON.stringify({ chatSessionId: 'w1', message: 'hello' }),
   });
   const text = await res.text();
   assert.match(text, /event: error/);
   assert.match(text, /"message":"model went poof"/);
 });
 
-test('windowLocks are per-runtime — two runtimes sharing appId+windowId do not cross-block (#113)', async () => {
-  // Cross-gateway isolation harness. Pre-#113 `windowLocks` was a
-  // module-level Map keyed by `${appId}::${windowId}` with no gateway
+test('chatSessionLocks are per-runtime — two runtimes sharing appId+chatSessionId do not cross-block (#113)', async () => {
+  // Cross-gateway isolation harness. Pre-#113 `chatSessionLocks` was a
+  // module-level Map keyed by `${appId}::${chatSessionId}` with no gateway
   // scoping; two profiles installing the same template app would share
   // a single lock and serialise across users. The fix moves the map to
   // the Runtime instance — this test would have failed before #113.
   //
   // Setup: two runtimes A and B, each with their own apps dir + HTTP
   // server. Both register the same `appId` ('demo') and both receive a
-  // POST with the same `windowId` ('w1'). A's runner blocks on a
+  // POST with the same `chatSessionId` ('w1'). A's runner blocks on a
   // promise we control; B's runner resolves immediately. If the locks
   // were module-shared, B would queue behind A and never complete.
 
@@ -205,13 +205,13 @@ test('windowLocks are per-runtime — two runtimes sharing appId+windowId do not
         Authorization: `Bearer ${serverA.token}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ windowId: 'w1', message: 'a' }),
+      body: JSON.stringify({ chatSessionId: 'w1', message: 'a' }),
     }).then((r) => r.text());
 
     // Give A's runner a tick to enter the lock + start streaming.
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // Now fire B with the SAME appId+windowId. If locks are
+    // Now fire B with the SAME appId+chatSessionId. If locks are
     // per-runtime (the fix), this resolves on its own without waiting
     // for A. If locks are module-shared (the bug), it queues behind A.
     const bText = await Promise.race([
@@ -221,11 +221,11 @@ test('windowLocks are per-runtime — two runtimes sharing appId+windowId do not
           Authorization: `Bearer ${serverB.token}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ windowId: 'w1', message: 'b' }),
+        body: JSON.stringify({ chatSessionId: 'w1', message: 'b' }),
       }).then((r) => r.text()),
       new Promise<string>((_resolve, reject) =>
         setTimeout(
-          () => reject(new Error('B timed out — windowLocks leaked across runtimes')),
+          () => reject(new Error('B timed out — chatSessionLocks leaked across runtimes')),
           2000,
         ),
       ),
@@ -310,7 +310,7 @@ test('chat prompt resolves the manifest via the git-store code-dir override (#13
   await fetch(`${server.url}/centraid/demo/_chat`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ windowId: 'w1', message: 'hi' }),
+    body: JSON.stringify({ chatSessionId: 'w1', message: 'hi' }),
   }).then((r) => r.text());
 
   await fs.rm(codeDir, { recursive: true, force: true });

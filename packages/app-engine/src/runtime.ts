@@ -80,7 +80,7 @@ export interface RuntimeOptions {
   chatRunner?: ChatRunner;
   /**
    * Central scratch base dir for runner-owned chat session files. The
-   * `POST /centraid/<id>/_chat` route passes `<dir>/<windowId>.jsonl` as
+   * `POST /centraid/<id>/_chat` route passes `<dir>/<chatSessionId>.jsonl` as
    * `ChatRunInput.sessionFile`. Defaults to an OS-tmpdir path when omitted.
    */
   chatRunnerSessionDir?: string;
@@ -232,13 +232,13 @@ export class Runtime {
   private readonly draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
   private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
   /**
-   * Per-runtime (and therefore per-gateway) window-lock map for the
-   * `(appId, windowId)` chat serialization. Was a module-level map in
+   * Per-runtime (and therefore per-gateway) chat-session lock map for the
+   * `(appId, chatSessionId)` chat serialization. Was a module-level map in
    * `chat-routes.ts` until issue #113 — moved here so two gateways that
    * happen to share an `appId` (same template installed in two profiles)
    * don't collide on the same lock key.
    */
-  private readonly chatWindowLocks = new Map<string, Promise<void>>();
+  private readonly chatSessionLocks = new Map<string, Promise<void>>();
 
   constructor(opts: RuntimeOptions) {
     this.appsDir = opts.appsDir;
@@ -328,7 +328,7 @@ export class Runtime {
       chatStore: this.chatHistoryStore,
       chatRunnerSessionDir: this.chatRunnerSessionDir,
       appMeta: this.appMeta,
-      windowLocks: this.chatWindowLocks,
+      chatSessionLocks: this.chatSessionLocks,
     };
   }
 

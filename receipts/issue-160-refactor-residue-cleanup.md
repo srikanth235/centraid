@@ -17,7 +17,7 @@ v0 pre-release: no backward compatibility, no migrations.
 
 - [x] **PR 1 — comment/doc accuracy (zero behavior change):** 1b, 1c, 1d,
       1e, and the stale "pi session" comments.
-- [ ] **PR 2 — `windowId` → `chatSessionId` rename (1a).** Mechanical,
+- [x] **PR 2 — `windowId` → `chatSessionId` rename (1a).** Mechanical,
       contract-wide.
 - [ ] **PR 3 — codex MCP-server preservation (3a).** Mirror the `-c`
       override fix into `codex-app-server.ts` + `host-tools.ts`.

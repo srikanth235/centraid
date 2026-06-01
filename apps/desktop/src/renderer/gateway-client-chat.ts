@@ -70,8 +70,8 @@ export type ChatStreamEvent =
     };
 
 export interface StreamChatInput {
-  /** The chat session id — IS the window id the gateway keys the turn on. */
-  windowId: string;
+  /** The chat session id the gateway keys the turn on. */
+  chatSessionId: string;
   message: string;
   model?: string;
   thinking?: string;
@@ -94,7 +94,7 @@ export async function streamChat(
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
-      windowId: input.windowId,
+      chatSessionId: input.chatSessionId,
       message: input.message,
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
@@ -166,7 +166,7 @@ export async function listChatSessions(appId: string): Promise<CentraidChatSessi
   return out.sessions ?? [];
 }
 
-/** Create a fresh chat session row (the window id the turn streams to). */
+/** Create a fresh chat session row (the chat session id the turn streams to). */
 export async function createChatSession(
   appId: string,
   title = '',

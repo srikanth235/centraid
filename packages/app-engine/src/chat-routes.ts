@@ -3,19 +3,19 @@
  *
  *   POST    /centraid/<appId>/_chat                        ← send turn (SSE stream)
  *
- * Surface A is now POST-only. A chat session IS the chat window — the
- * `windowId` in the POST body is the `chat_sessions` row id in the central
- * gateway SQLite. The desktop persists the transcript itself via Surface B
- * (`/_centraid-chat`); this route only drives the model turn and records
- * turn completion + the runner-resume handle against the session row.
+ * Surface A is now POST-only. The `chatSessionId` in the POST body is the
+ * `chat_sessions` row id in the central gateway SQLite. The desktop persists
+ * the transcript itself via Surface B (`/_centraid-chat`); this route only
+ * drives the model turn and records turn completion + the runner-resume
+ * handle against the session row.
  *
  * The runtime delegates to a host-injected `ChatRunner`. When no runner is
  * configured, the chat route 503s with a clear error — that is the M1
  * stub behavior the issue calls out.
  *
  * Concurrency: each session has at most one in-flight turn at a time. A
- * second POST against the same windowId is queued behind the first by a
- * per-window async lock. Within a single process this is the only correctness
+ * second POST against the same chatSessionId is queued behind the first by a
+ * per-session async lock. Within a single process this is the only correctness
  * gate; we don't try to coordinate across processes because the chat surface
  * is owned by one runtime per appsDir.
  */
@@ -34,12 +34,12 @@ import type { RegistryEntry } from './types.js';
 import { APP_MANIFEST_FILE, parseManifest, type Manifest } from './manifest.js';
 
 /**
- * Validate a window/session id. Reject anything that could escape a
+ * Validate a chat-session id. Reject anything that could escape a
  * directory (the runner scratch dir uses the id verbatim as a filename) or
- * exceed a sane length. Window ids are caller-supplied — the renderer mints
- * a stable id per chat pane (it's the chat session UUID).
+ * exceed a sane length. Chat-session ids are caller-supplied — the renderer
+ * mints a stable id per chat pane (it's the chat session UUID).
  */
-export function isValidWindowId(id: string): boolean {
+export function isValidChatSessionId(id: string): boolean {
   if (!id || id.length > 128) return false;
   if (id === 'index.json') return false;
   if (id.startsWith('.')) return false;
@@ -70,7 +70,7 @@ export interface ChatRouteContext {
   chatStore?: ChatHistoryStore;
   /**
    * Central scratch base dir for runner-owned session files. The route
-   * passes `<chatRunnerSessionDir>/<windowId>.jsonl` as `ChatRunInput.sessionFile`.
+   * passes `<chatRunnerSessionDir>/<chatSessionId>.jsonl` as `ChatRunInput.sessionFile`.
    */
   chatRunnerSessionDir: string;
   /**
@@ -81,13 +81,13 @@ export interface ChatRouteContext {
    */
   appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /**
-   * Per-runtime window-lock map. The `Runtime` instance owns one of these
-   * and threads it in here so the `(appId, windowId)` serialization map is
-   * scoped to one gateway. A module-level map would silently collide across
-   * gateways that share an appId — two profiles can both install the same
-   * template and end up with the same id.
+   * Per-runtime chat-session lock map. The `Runtime` instance owns one of
+   * these and threads it in here so the `(appId, chatSessionId)` serialization
+   * map is scoped to one gateway. A module-level map would silently collide
+   * across gateways that share an appId — two profiles can both install the
+   * same template and end up with the same id.
    */
-  windowLocks: Map<string, Promise<void>>;
+  chatSessionLocks: Map<string, Promise<void>>;
 }
 
 export type ParsedChatRoute = { kind: 'post'; appId: string };
@@ -113,7 +113,7 @@ export function parseChatSubRoute(
 }
 
 /**
- * Serialize work on `(appId, windowId)` so a second POST queues behind the
+ * Serialize work on `(appId, chatSessionId)` so a second POST queues behind the
  * first. The route handler awaits the previous tail before scheduling its
  * own. The lock entry is cleared lazily once the current task settles.
  *
@@ -122,32 +122,32 @@ export function parseChatSubRoute(
  * gateways that share an `appId` (two profiles can install the same
  * template). See issue #113.
  */
-async function withWindowLock<T>(
-  windowLocks: Map<string, Promise<void>>,
+async function withChatSessionLock<T>(
+  chatSessionLocks: Map<string, Promise<void>>,
   appId: string,
-  windowId: string,
+  chatSessionId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const key = `${appId}::${windowId}`;
-  const previous = windowLocks.get(key) ?? Promise.resolve();
+  const key = `${appId}::${chatSessionId}`;
+  const previous = chatSessionLocks.get(key) ?? Promise.resolve();
   let release!: () => void;
   const next = new Promise<void>((resolve) => (release = resolve));
   // The map holds the *chained* tail (previous → next) so newer callers
   // await everything ahead of them. Keep a reference to that exact promise
   // so the cleanup branch can identify "nobody else queued after me".
   const chained = previous.then(() => next);
-  windowLocks.set(key, chained);
+  chatSessionLocks.set(key, chained);
   await previous;
   try {
     return await fn();
   } finally {
     release();
-    if (windowLocks.get(key) === chained) windowLocks.delete(key);
+    if (chatSessionLocks.get(key) === chained) chatSessionLocks.delete(key);
   }
 }
 
 interface PostBody {
-  windowId?: string;
+  chatSessionId?: string;
   message?: string;
   model?: string;
   thinking?: string;
@@ -201,14 +201,14 @@ async function handlePostTurn(
     return;
   }
 
-  const windowId = body.windowId;
+  const chatSessionId = body.chatSessionId;
   const message = body.message;
-  if (!windowId || !message) {
-    sendError(res, 400, 'bad_request', 'Body must include { windowId, message }.');
+  if (!chatSessionId || !message) {
+    sendError(res, 400, 'bad_request', 'Body must include { chatSessionId, message }.');
     return;
   }
-  if (!isValidWindowId(windowId)) {
-    sendError(res, 400, 'bad_request', 'Invalid windowId.');
+  if (!isValidChatSessionId(chatSessionId)) {
+    sendError(res, 400, 'bad_request', 'Invalid chatSessionId.');
     return;
   }
 
@@ -219,7 +219,7 @@ async function handlePostTurn(
   let prevAdapterSessionId: string | undefined;
   let prevAdapterKind: string | undefined;
   if (ctx.chatStore) {
-    const session = ctx.chatStore.getSessionMeta(entry.id, windowId);
+    const session = ctx.chatStore.getSessionMeta(entry.id, chatSessionId);
     if (!session) {
       sendError(res, 404, 'not_found', 'No such chat session.');
       return;
@@ -248,7 +248,7 @@ async function handlePostTurn(
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
-  res.write(`: chat ${entry.id} window ${windowId}\n\n`);
+  res.write(`: chat ${entry.id} session ${chatSessionId}\n\n`);
   const heartbeat = setInterval(() => {
     if (!res.writableEnded) res.write(`: ping\n\n`);
   }, 30_000);
@@ -355,13 +355,13 @@ async function handlePostTurn(
   // parent dir exists before any runner writes — the OpenClaw runner hands
   // this path to `runEmbeddedAgent` as its session file and silently no-ops
   // if the parent dir is missing.
-  const sessionFile = path.join(ctx.chatRunnerSessionDir, `${windowId}.jsonl`);
+  const sessionFile = path.join(ctx.chatRunnerSessionDir, `${chatSessionId}.jsonl`);
   await fs.mkdir(ctx.chatRunnerSessionDir, { recursive: true }).catch(() => undefined);
 
   const input: ChatRunInput = {
     appId: entry.id,
     dataDir: appDataDir(entry),
-    windowId,
+    chatSessionId,
     sessionFile,
     message,
     extraSystemPrompt,
@@ -374,7 +374,7 @@ async function handlePostTurn(
     ...(prevAdapterKind ? { prevAdapterKind } : {}),
   };
 
-  await withWindowLock(ctx.windowLocks, entry.id, windowId, async () => {
+  await withChatSessionLock(ctx.chatSessionLocks, entry.id, chatSessionId, async () => {
     let runResult: { adapterSessionId?: string; adapterKind?: string } | undefined;
     try {
       const out = await ctx.runner!.run(input);
@@ -416,7 +416,7 @@ async function handlePostTurn(
             });
           }
           ctx.chatStore.recordTurn(entry.id, {
-            chatSessionId: windowId,
+            chatSessionId: chatSessionId,
             userMessage: message,
             startedAt: turnStartedAt,
             endedAt,
@@ -435,7 +435,7 @@ async function handlePostTurn(
         try {
           ctx.chatStore.noteTurn(
             entry.id,
-            windowId,
+            chatSessionId,
             runResult?.adapterKind
               ? {
                   kind: runResult.adapterKind,
