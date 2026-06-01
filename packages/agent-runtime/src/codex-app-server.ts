@@ -13,11 +13,16 @@
  * stable thread/resume mechanism. The cost is the JSON-RPC protocol —
  * which is why this file exists.
  *
- * Config: `codex app-server` does NOT honor `-c key=value` (that flag
- * is parsed by the root `codex` CLI and only forwarded to opt-in
- * subcommands; app-server isn't one). Per-invocation config (cwd,
- * developerInstructions, sandbox, approvalPolicy, model) is passed
- * directly inside `thread/start` params instead.
+ * Config: per-invocation config (cwd, developerInstructions, sandbox,
+ * approvalPolicy, model) is passed directly inside `thread/start` params
+ * — it's inherently per-turn, so the RPC is the natural home for it.
+ * Provider routing, by contrast, still goes through a scoped `CODEX_HOME`
+ * here (see `materializeCodexHome`). Note: codex-cli 0.128.0 DOES honor
+ * `-c key=value` on `app-server` (contrary to older codex versions), so
+ * provider routing could move to `codexProviderOverrideArgs` to preserve
+ * the user's `[mcp_servers.*]` — same fix applied to `ctx.tool` in
+ * `run-automation-cli-spawn.ts`. Tracked as a follow-up in issue #158
+ * (needs validation against a live custom-provider chat turn).
  *
  * Auth: codex reads `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`).
  * The user is expected to run `codex login` once before this runs.
