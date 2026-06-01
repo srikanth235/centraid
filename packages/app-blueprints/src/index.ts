@@ -1,18 +1,27 @@
 /*
- * @centraid/app-templates
+ * @centraid/app-blueprints
  *
- * Bundled, pre-built Centraid apps that the desktop gallery offers as
+ * How a new centraid app comes into being. Two kinds of blueprint, one home:
+ *
+ *   1. Blank scaffold — `scaffoldApp` / `scaffoldAppFiles` stamp out an empty
+ *      app from `scaffold-defaults`.
+ *   2. Template clone — `cloneTemplate` / `cloneTemplateFiles` copy one of the
+ *      bundled gallery templates into a fresh app.
+ *
+ * The gallery half: bundled, pre-built Centraid apps the desktop offers as
  * "clone and deploy" starting points. Each template folder sits directly at
- * the package root (`hydrate/`, `journal/`, `todos/`) and is a fully-formed
+ * the package root (`hydrate/`, `journal/`, `todos/`, …) and is a fully-formed
  * app (HTML/CSS/JS + queries/ + actions/ + migrations/) — identical in shape
- * to an app the user authors themselves.
- *
- * Two layers stack on top of the bundle:
+ * to an app the user authors themselves. Two layers stack on top of the bundle:
  *   - A user-data cache that can hold newer copies pulled from a remote URL.
  *   - A resolver that picks bundle-or-cache per template, preferring the
  *     higher semver version.
  *
- * Public surface:
+ * Depends only on `@centraid/design-tokens` — no engine, no store. Consumed by
+ * `@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the
+ * `ScaffoldFile` contract for automation scaffolding).
+ *
+ * Gallery surface:
  *   - appTemplatesDir: string                                       — bundled dir
  *   - listTemplates(): Promise<TemplateMeta[]>                   — bundled manifest
  *   - resolveTemplates({ cacheDir? }): Promise<ResolvedTemplate[]>
@@ -271,3 +280,35 @@ async function writeManifestAtomic(dir: string, manifest: TemplateManifest): Pro
   await fs.writeFile(tmp, JSON.stringify(manifest, null, 2) + '\n');
   await fs.rename(tmp, dest);
 }
+
+// ---------------------------------------------------------------------------
+// App scaffolders + clone (moved out of @centraid/app-engine in #151; both
+// "how a new app comes into being" — a blank scaffold and a cloned template
+// are both blueprints you instantiate). The gateway lifecycle routes use the
+// file-map (`*Files`) variants; the disk wrappers back the CLI / local paths.
+// ---------------------------------------------------------------------------
+export {
+  scaffoldAppFiles,
+  updateAppMetaFiles,
+  appPackageJson,
+  validateAppId,
+  type ScaffoldFile,
+  type ScaffoldAppOpts,
+} from './scaffold-files.js';
+export {
+  scaffoldApp,
+  listAppsOnDisk,
+  deleteApp,
+  updateAppMeta,
+  isDisplayNameTaken,
+} from './scaffold.js';
+export {
+  cloneTemplate,
+  cloneTemplateFiles,
+  suggestAppId,
+  suggestCloneIdentity,
+  suggestCloneIdentityFrom,
+  type CloneTemplateOptions,
+  type CloneTemplateFilesOptions,
+} from './clone.js';
+export { AppScaffoldError, type AppScaffoldErrorCode, type AppInfo } from './scaffold-types.js';

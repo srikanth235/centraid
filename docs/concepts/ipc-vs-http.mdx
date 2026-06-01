@@ -18,7 +18,7 @@ The payoff is twofold. **Local and remote become identical**: the renderer issue
 Under the thin-client pivot the gateway is the single source of truth for everything that isn't OS-native:
 
 - **Deterministic lifecycle** — scaffold a blank app, clone a template, rename/describe, create/enable/delete automations. The renderer POSTs intent; the gateway scaffolds the file map, stages it into a git-store session worktree, and (on an explicit publish) merges it onto `main`.
-- **The template catalog _and its remote refresh_** — `GET /centraid/_templates` resolves the bundled catalog or a newer copy pulled from a remote manifest URL; the gateway fires that refresh itself on startup. The desktop no longer bundles `@centraid/app-templates` at all.
+- **The template catalog _and its remote refresh_** — `GET /centraid/_templates` resolves the bundled catalog or a newer copy pulled from a remote manifest URL; the gateway fires that refresh itself on startup. The desktop no longer bundles `@centraid/app-blueprints` at all.
 - **Webhook minting** — secrets are generated gateway-side during create and during a chat turn, and surfaced once in the response (only the hash is persisted).
 - **The AI builder** — see [unified chat](#unified-chat) below.
 

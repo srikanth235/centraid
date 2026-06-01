@@ -23,7 +23,7 @@ import { type DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { makeRuntimeDbProvider, type DatabaseProvider } from './gateway-db.js';
 import { AgentRunsStore } from './agent-runs-store.js';
-import type { AnalyticsStore } from './analytics-store.js';
+import type { RunSummarySink } from './run-summary-sink.js';
 import { isValidAppId } from './app-paths.js';
 import { costForUsage } from './model-pricing.js';
 import { mapSessionRow, prepareChatStatements, type ChatStatements } from './chat-history-sql.js';
@@ -126,7 +126,7 @@ interface AppChat {
 export class ChatHistoryStore {
   private readonly appsDir: string;
   private readonly userIdProvider: UserIdProvider;
-  private readonly analytics: AnalyticsStore | undefined;
+  private readonly analytics: RunSummarySink | undefined;
   // One entry per app whose chat has been touched this process. Each is
   // opened lazily — see `UserStore` for the worker-subprocess rationale
   // behind the lazy pattern across gateway-state stores.
@@ -134,7 +134,7 @@ export class ChatHistoryStore {
 
   /** `analytics`, when set, threads into each app's runs store so a chat
    *  turn's `finishRun` write-throughs a summary (issue #98). */
-  constructor(appsDir: string, userIdProvider: UserIdProvider, analytics?: AnalyticsStore) {
+  constructor(appsDir: string, userIdProvider: UserIdProvider, analytics?: RunSummarySink) {
     this.appsDir = appsDir;
     this.userIdProvider = userIdProvider;
     this.analytics = analytics;

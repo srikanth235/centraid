@@ -1,8 +1,8 @@
 {
-  "name": "@centraid/app-templates",
+  "name": "@centraid/app-blueprints",
   "version": "0.1.0",
   "private": true,
-  "description": "Bundled app templates for centraid — pre-built Centraid apps users can clone and deploy from the gallery.",
+  "description": "How a new centraid app comes into being: blank-app scaffolders, template clone, and the bundled template gallery (pre-built apps + remote-fetch resolver) the desktop offers as clone-and-deploy starting points.",
   "files": [
     "dist",
     "hydrate",
@@ -19,6 +19,7 @@
     "build:manifest": "node scripts/build-manifest.mjs",
     "build": "bun run build:manifest && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
+    "tsx": "^4.20.3",
     "typescript": "catalog:"
   },
   "engines": {

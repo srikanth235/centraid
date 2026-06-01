@@ -46,13 +46,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AppScaffoldError,
   cloneTemplateFiles,
+  readTemplateFiles,
+  resolveTemplates,
   scaffoldAppFiles,
   suggestCloneIdentityFrom,
   updateAppMetaFiles,
   type ScaffoldFile,
-} from '@centraid/app-engine';
+} from '@centraid/app-blueprints';
 import { provisionPendingWebhooksInFiles } from '@centraid/automation';
-import { readTemplateFiles, resolveTemplates } from '@centraid/app-templates';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
   handleAutomationCreate,

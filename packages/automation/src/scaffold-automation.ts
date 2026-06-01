@@ -28,12 +28,8 @@ import {
   type AutomationTrigger,
   type AutomationHistoryKeep,
 } from './automation-manifest.js';
-import {
-  isValidAppId,
-  AppScaffoldError,
-  type ScaffoldFile,
-  type AppInfo,
-} from '@centraid/app-engine';
+import { isValidAppId } from '@centraid/app-engine';
+import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/app-blueprints';
 
 export interface AutomationScaffoldOptions {
   /** Display name. Defaults to the app id. */

@@ -249,7 +249,7 @@ export interface CentraidLogEntry {
 
 /**
  * A bundled template, as surfaced by the desktop's templates IPC. Mirrors
- * `TemplateMeta` from `@centraid/app-templates` — duplicated here so the
+ * `TemplateMeta` from `@centraid/app-blueprints` — duplicated here so the
  * renderer typings stay independent of the templates package at build time.
  */
 export interface CentraidTemplateMeta {

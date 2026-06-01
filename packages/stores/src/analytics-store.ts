@@ -14,38 +14,7 @@
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { DatabaseProvider } from './gateway-db.js';
-import type { RunKind } from './agent-runs-schema.js';
-
-/** One run's analytics summary — the write-through payload + read shape. */
-export interface RunSummary {
-  readonly runId: string;
-  readonly kind: RunKind;
-  /** `<appId>/<id>` handle — set for `kind: 'automation'`. */
-  readonly automationRef?: string;
-  /** Owning app id — set for automation and build runs. */
-  readonly appId?: string;
-  readonly trigger: string;
-  readonly triggerOrigin?: string;
-  readonly ok: boolean;
-  /** Replay-fixture pin — kept in sync with the per-app ledger. */
-  readonly pinned?: boolean;
-  readonly summary?: string;
-  readonly note?: string;
-  readonly error?: string;
-  readonly retryOf?: string;
-  /** Dominant model of the run (the one with the most tokens), if any. */
-  readonly model?: string;
-  readonly startedAt: number;
-  readonly endedAt?: number;
-  readonly totalInputTokens?: number;
-  readonly totalOutputTokens?: number;
-  readonly totalCacheReadTokens?: number;
-  readonly totalCacheWriteTokens?: number;
-  readonly totalCostUsd?: number;
-  readonly stepCount?: number;
-  readonly toolCount?: number;
-}
+import type { DatabaseProvider, RunKind, RunSummary, RunSummarySink } from '@centraid/app-engine';
 
 export interface ListSummariesOptions {
   /** Scope to one automation handle. */
@@ -122,7 +91,7 @@ interface PreparedStatements {
  * Store over the central `run_summary` table. Construct with the
  * analytics `DatabaseProvider` (`makeAnalyticsDbProvider`).
  */
-export class AnalyticsStore {
+export class AnalyticsStore implements RunSummarySink {
   private readonly provider: DatabaseProvider;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;

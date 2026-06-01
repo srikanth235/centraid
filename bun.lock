@@ -82,7 +82,21 @@
         "@anthropic-ai/claude-agent-sdk": "^0.3.143",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
+        "@centraid/stores": "workspace:*",
         "zod": "^4.0.0",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/app-blueprints": {
+      "name": "@centraid/app-blueprints",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/design-tokens": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -95,7 +109,6 @@
       "name": "@centraid/app-engine",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/design-tokens": "workspace:*",
         "ajv": "^8.17.1",
         "tar": "^7.4.3",
       },
@@ -107,23 +120,13 @@
         "typescript": "catalog:",
       },
     },
-    "packages/app-templates": {
-      "name": "@centraid/app-templates",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/design-tokens": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "typescript": "catalog:",
-      },
-    },
     "packages/automation": {
       "name": "@centraid/automation",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
+        "@centraid/stores": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -158,11 +161,12 @@
       },
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
+        "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/app-templates": "workspace:*",
         "@centraid/automation": "workspace:*",
         "@centraid/code-store": "workspace:*",
         "@centraid/skills": "workspace:*",
+        "@centraid/stores": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -179,6 +183,7 @@
       "dependencies": {
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
+        "@centraid/stores": "workspace:*",
         "@mariozechner/pi-ai": "^0.73.0",
         "@sinclair/typebox": "^0.27.0",
       },
@@ -199,6 +204,19 @@
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/stores": {
+      "name": "@centraid/stores",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/app-engine": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -518,9 +536,9 @@
 
     "@centraid/agent-runtime": ["@centraid/agent-runtime@workspace:packages/agent-runtime"],
 
-    "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
+    "@centraid/app-blueprints": ["@centraid/app-blueprints@workspace:packages/app-blueprints"],
 
-    "@centraid/app-templates": ["@centraid/app-templates@workspace:packages/app-templates"],
+    "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
 
     "@centraid/automation": ["@centraid/automation@workspace:packages/automation"],
 
@@ -537,6 +555,8 @@
     "@centraid/openclaw-plugin": ["@centraid/openclaw-plugin@workspace:packages/openclaw-plugin"],
 
     "@centraid/skills": ["@centraid/skills@workspace:packages/skills"],
+
+    "@centraid/stores": ["@centraid/stores@workspace:packages/stores"],
 
     "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
 
