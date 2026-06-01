@@ -23,6 +23,8 @@
 //          → { sessionId, message }
 //   POST   /centraid/_apps/<appId>/rollback          forward-only rollback
 //          → { versionTag }
+//   POST   /centraid/_apps/<appId>/reset-data        re-seed draft data
+//          → { sessionId } — VACUUM live + replay pending migrations (#144)
 //   GET    /centraid/_apps/<appId>/git-versions      tag-driven history
 //   DELETE /centraid/_apps/<appId>                   remove app from main
 //
@@ -38,6 +40,7 @@ import { ManifestError, MigrationError, parseAppManifest } from '@centraid/app-e
 import { WorktreeStore, WorktreeStoreError } from '@centraid/worktree-store';
 import { fileExists, readBody, readJson, sendJson } from './route-helpers.js';
 import { runPublishMigrations } from './publish-migrations.js';
+import { seedDraftData } from './draft-data.js';
 
 /** Text extensions a draft file write accepts — mirrors agent-harness. */
 const EDITABLE_EXT = new Set([
@@ -145,6 +148,9 @@ export function makeAppsStoreRouteHandler(
       }
       if (verb === 'rollback' && method === 'POST') {
         return await handleRollback(store, req, res, appId, opts.onAppLive);
+      }
+      if (verb === 'reset-data' && method === 'POST') {
+        return await handleResetData(store, req, res, appId, opts.liveDataFile);
       }
       if (verb === 'git-versions' && method === 'GET') {
         const versions = await store.listVersions(appId);
@@ -274,6 +280,56 @@ async function handleRollback(
   const result = await store.rollback({ appId, versionTag });
   await onAppLive?.(appId);
   sendJson(res, 200, { id: appId, sha: result.sha, rolledBackTo: versionTag });
+  return true;
+}
+
+/**
+ * Re-seed a draft session's branched `data.sqlite` from a fresh prod snapshot
+ * + replay its pending migrations (issue #144). Doubles as a dress rehearsal
+ * of the publish migration against real prod data: a migration incompatible
+ * with live rows fails here and the SQL error surfaces inline (422), letting
+ * the author hit it in preview before publishing.
+ */
+async function handleResetData(
+  store: WorktreeStore,
+  req: IncomingMessage,
+  res: ServerResponse,
+  appId: string,
+  liveDataFile?: (appId: string) => string,
+): Promise<boolean> {
+  const body = await readJson(req);
+  const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+  if (!sessionId) {
+    sendJson(res, 400, { error: 'bad_request', message: 'reset-data needs { sessionId }' });
+    return true;
+  }
+  if (!liveDataFile) {
+    sendJson(res, 400, { error: 'bad_request', message: 'reset-data needs a live data backend' });
+    return true;
+  }
+  // Throws `session_missing` (→ 404) via the outer handler when the worktree
+  // isn't open.
+  const worktreeAppDir = await store.snapshotSessionAppDir(sessionId, appId);
+  try {
+    const out = await seedDraftData({
+      liveDataFile: liveDataFile(appId),
+      worktreeAppDir,
+      force: true,
+    });
+    sendJson(res, 200, { id: appId, seeded: out.seeded, migrationsApplied: out.migrationsApplied });
+  } catch (err) {
+    if (err instanceof MigrationError) {
+      const status = err.code === 'sql_failed' ? 422 : 400;
+      sendJson(res, status, {
+        error: err.code,
+        message: err.message,
+        file: err.file,
+        sqlError: err.sqlError,
+      });
+      return true;
+    }
+    throw err;
+  }
   return true;
 }
 

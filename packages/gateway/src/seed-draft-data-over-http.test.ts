@@ -160,3 +160,75 @@ test('first draft access seeds from prod + replays the draft pending migration',
   };
   assert.equal(liveCount.rows[0]!.n, 1, 'live untouched by the draft write');
 });
+
+/** Publish a baseline `notes` app (migration 0001 → live row). */
+async function publishBaseline(): Promise<void> {
+  const store = handle.appsStore!;
+  await store.openSession('seed');
+  await writeWorktreeFiles('seed', {
+    'app.json': MANIFEST,
+    'index.html': '<!doctype html>notes',
+    'migrations/0001_init.sql': MIGRATION_0001,
+  });
+  const pub = await fetch(`${handle.url}/centraid/_apps/notes/publish`, {
+    method: 'POST',
+    headers: { ...auth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: 'seed', message: 'v1' }),
+  });
+  assert.equal(pub.status, 201, `publish: ${await pub.text()}`);
+  await store.closeSession('seed');
+}
+
+async function resetData(sessionId: string): Promise<Response> {
+  return fetch(`${handle.url}/centraid/_apps/notes/reset-data`, {
+    method: 'POST',
+    headers: { ...auth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+}
+
+test('reset-data re-seeds the draft from a fresh prod snapshot', async () => {
+  await publishBaseline();
+  await handle.appsStore!.openSession('d1');
+
+  // Seed (first access) then mutate the draft.
+  await draftSql('d1', 'SELECT 1');
+  await fetch(`${handle.url}/centraid/_draft/d1/_tool/centraid_write`, {
+    method: 'POST',
+    headers: { ...auth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      app: 'notes',
+      action: '_sql',
+      input: { sql: "INSERT INTO notes (body) VALUES ('scratch')" },
+    }),
+  });
+  const before = (await (await draftSql('d1', 'SELECT COUNT(*) AS n FROM notes')).json()) as {
+    rows: Array<{ n: number }>;
+  };
+  assert.equal(before.rows[0]!.n, 2, 'draft mutated to 2 rows');
+
+  // Reset wipes the scratch row — back to the single prod-seeded row.
+  const reset = await resetData('d1');
+  const body = (await reset.json()) as { seeded: boolean };
+  assert.equal(reset.status, 200, `reset: ${JSON.stringify(body)}`);
+  assert.equal(body.seeded, true);
+  const after = (await (await draftSql('d1', 'SELECT body FROM notes')).json()) as {
+    rows: Array<{ body: string }>;
+  };
+  assert.deepEqual(after.rows, [{ body: 'from-prod' }]);
+});
+
+test('reset-data surfaces an incompatible pending migration inline (422)', async () => {
+  await publishBaseline();
+  await handle.appsStore!.openSession('d2');
+  // A NOT-NULL column with no default fails against the prod-seeded row.
+  await writeWorktreeFiles('d2', {
+    'migrations/0002_bad.sql': 'ALTER TABLE notes ADD COLUMN title TEXT NOT NULL;\n',
+  });
+
+  const reset = await resetData('d2');
+  const body = (await reset.json()) as { error: string; file: string };
+  assert.equal(reset.status, 422, `expected 422, got ${reset.status}: ${JSON.stringify(body)}`);
+  assert.equal(body.error, 'sql_failed');
+  assert.equal(body.file, '0002_bad.sql');
+});

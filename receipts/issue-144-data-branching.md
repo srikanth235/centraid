@@ -42,7 +42,7 @@ swapping `main/<sha>` dir, and it's the publish target.
 - [x] `.gitignore` draft data in the canonical repo (main + every worktree)
 - [x] Draft data dir = draft code dir (dispatcher + `_sql` + describe schema)
 - [x] Seed-on-first-draft-access (VACUUM INTO live + replay pending migrations)
-- [ ] Preview-pane "Reset data from prod" endpoint + control
+- [x] Preview-pane "Reset data from prod" endpoint + control
 
 ## What changed
 
@@ -106,6 +106,15 @@ swapping `main/<sha>` dir, and it's the publish target.
   the unified chat runner's `resolveCwd`. A brand-new app with no live data
   seeds from empty + a full migration run.
 
+- **Preview-pane "Reset data from prod" endpoint + control.** A new
+  `POST /centraid/_apps/<id>/reset-data` route re-seeds a draft session's data
+  via `seedDraftData({ force: true })` — a fresh prod snapshot + replayed
+  pending migrations — and reports `{ seeded, migrationsApplied }`. It doubles
+  as a publish dress rehearsal: a migration incompatible with prod rows fails
+  here and the SQL error surfaces inline (422 `sql_failed`) so the author hits
+  it in preview, not at publish. The renderer's `gateway-client-editing.ts`
+  gains `resetAppData(...)` — the client method the preview-pane control calls.
+
 ## Out of scope
 
 - Row-level data merge. This is schema-safe editing only: a draft may read
@@ -115,9 +124,19 @@ swapping `main/<sha>` dir, and it's the publish target.
 
 ## Verification
 
-- New `publish-migrations-over-http.test.ts`: publishing a session that added a
+- `publish-migrations-over-http.test.ts`: publishing a session that added a
   migration applies it to live `data.sqlite` (rows preserved, `user_version`
   advanced) and reports `migrationsApplied`; a migration incompatible with live
   rows (NOT NULL column, no default) aborts the publish with 422 `sql_failed`,
   live data + code untouched.
-- `turbo run typecheck` green; gateway suite green.
+- `worktree-store.test.ts`: a draft's `data.sqlite` (+ WAL/SHM) is gitignored —
+  never staged into the published tree.
+- `dispatcher.test.ts`: with an override, a `_sql` write lands in the worktree
+  data.sqlite (live untouched) and `describe` reads the branched schema.
+- `seed-draft-data-over-http.test.ts`: first draft access seeds from prod and
+  replays the draft's pending migration (draft sees prod rows under the branched
+  schema, live unchanged); a draft write never touches live rows; `reset-data`
+  re-seeds from a fresh snapshot and surfaces an incompatible migration inline
+  (422). Together these cover all five acceptance criteria.
+- `turbo run typecheck` green across all packages; app-engine + agent-runtime +
+  worktree-store + gateway suites green; desktop typecheck green.
