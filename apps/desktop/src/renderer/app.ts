@@ -2437,7 +2437,7 @@ import {
 
   // One node of a run rendered as a thread step — an expandable row
   // carrying the tool/agent name, duration, and (on open) its payload.
-  function renderThreadStep(node: CentraidAutomationRunNode): HTMLElement {
+  function renderThreadStep(node: CentraidAutomationRunNode, liveText?: string): HTMLElement {
     const step = el('div', { class: 'cd-au-step', 'data-ok': String(node.ok) });
     const body = el('div', { class: 'cd-au-step-body', hidden: 'true' });
     const head = el('button', {
@@ -2485,6 +2485,12 @@ import {
       }
     });
     step.append(head, body);
+    // Phase 2 (issue #158): while an agent node is in flight, show its
+    // streaming text live (the `node.delta` token deltas accumulated by the
+    // viewer). The collapsed body shows the final output once it lands.
+    if (liveText && node.endedAt === undefined) {
+      step.append(el('pre', { class: 'cd-au-step-pre cd-au-step-stream' }, liveText));
+    }
     return step;
   }
 
@@ -2511,6 +2517,8 @@ import {
     let row: CentraidAutomationRow | null = null;
     let run: CentraidAutomationRunRecord | null = null;
     const nodesByOrdinal = new Map<number, CentraidAutomationRunNode>();
+    // Accumulated streaming text per node ordinal (Phase 2 `node.delta`).
+    const liveTextByOrdinal = new Map<number, string>();
 
     const sortedNodes = (): CentraidAutomationRunNode[] =>
       [...nodesByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal);
@@ -2519,7 +2527,7 @@ import {
       if (stopped || !document.contains(scroll) || !row || !run) return;
       // Keep scroll position so a live update doesn't yank the page.
       const prevTop = scroll.scrollTop;
-      scroll.replaceChildren(buildRunView(row, run, sortedNodes()));
+      scroll.replaceChildren(buildRunView(row, run, sortedNodes(), liveTextByOrdinal));
       scroll.scrollTop = prevTop;
     };
 
@@ -2580,8 +2588,19 @@ import {
           }
           rerender();
         })();
+      } else if (ev.type === 'node.delta') {
+        // Phase 2: accumulate the agent turn's streamed assistant text so the
+        // in-flight node card shows tokens as they arrive.
+        const inner = ev.event as { type?: string; delta?: string };
+        if (inner?.type === 'assistant.delta' && typeof inner.delta === 'string') {
+          liveTextByOrdinal.set(
+            ev.ordinal,
+            (liveTextByOrdinal.get(ev.ordinal) ?? '') + inner.delta,
+          );
+          rerender();
+        }
       }
-      // run.start / node.delta: nothing to render in Phase 1.
+      // run.start: nothing to render.
     };
 
     void (async () => {
@@ -2645,6 +2664,7 @@ import {
     row: CentraidAutomationRow,
     run: CentraidAutomationRunRecord,
     nodes: readonly CentraidAutomationRunNode[],
+    liveText?: Map<number, string>,
   ): HTMLElement {
     const wrap = el('div', { class: 'cd-au-rv' });
     const trigger = runTriggerLabel(run);
@@ -2770,7 +2790,8 @@ import {
       const okCount = nodes.filter((n) => n.ok).length;
       const failed = okCount < nodes.length;
       const stepsWrap = el('div', { class: 'cd-au-work-steps' });
-      for (const node of nodes) stepsWrap.append(renderThreadStep(node));
+      for (const node of nodes)
+        stepsWrap.append(renderThreadStep(node, liveText?.get(node.ordinal)));
       const workGroup = el('div', { class: 'cd-au-work' });
       if (failed || inFlight) workGroup.classList.add('cd-au-work--open');
       const workSum = el('button', {

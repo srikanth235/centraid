@@ -24,8 +24,10 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] **2 — Streaming Phase 1**: live node lifecycle (runner-agnostic
       foundation; durable timeline, late-join, parallel lanes). Backend
       (components 1+2+3) + desktop SSE subscription (component 5) landed.
-- [ ] **3 — Streaming Phase 2**: per-runner `ctx.agent` token parity
-      (claude SDK → codex app-server → openclaw ACP)
+- [~] **3 — Streaming Phase 2**: per-runner `ctx.agent` token parity.
+      claude (SDK) landed — backend + token persistence + desktop live
+      render. codex (app-server) and openclaw (ACP) remain (need live-CLI
+      validation + provider-config threading for codex).
 - [ ] **4 — Streaming Phase 3**: mock per-call tool timing
 
 ## What changed
@@ -98,10 +100,38 @@ bounded ledger poll if the stream can't be established (older gateway).
 `loadNodesInto` (historical runs panel) stays a one-shot read — finished
 runs don't stream.
 
+### 3 — Streaming Phase 2: `ctx.agent` token parity (claude)
+
+Per the issue's "one runner at a time" plan, claude first. `ctx.agent` for
+the claude runner now routes through the **Claude SDK chat adapter**
+(`runClaudeSdkTurn`) — the same adapter chat uses — instead of a
+collect-on-exit `claude -p` spawn.
+
+- **agent-runtime** — the live-dispatch agent dispatcher's claude branch
+  calls `runClaudeSdkTurn` with `permissionMode: 'bypassPermissions'`
+  (preserving the old non-interactive behavior), forwards each
+  `ChatStreamEvent` to `call.onEvent`, accumulates the final text, and
+  coerces it exactly as before (return contract unchanged). codex/openclaw
+  stay on the collect-on-exit path. Added an optional `permissionMode`
+  passthrough to `ClaudeSdkInput` (additive; chat leaves it unset).
+- **automation** — `AutomationAgentCall` gains an `onEvent` sink; the
+  handler runner forwards it, wraps each event as a `node.delta` on the
+  agent node, and captures the adapter's `usage` event to persist the
+  token/model rollup via `closeRunNode` → `closeNode` (so `runs.total_*`
+  is accurate for `ctx.agent`).
+- **desktop** — the run viewer accumulates `node.delta` assistant text per
+  node ordinal and renders it live in the in-flight agent card; the final
+  output replaces it on `node.end`.
+
+Test: a stubbed streaming dispatcher proves `node.delta` forwarding (agent
+ordinal) + usage persisted onto the node and rolled up on the run.
+
 ## Out of scope (so far)
 
-- **Streaming Phases 2–3** (`ctx.agent` token parity, mock per-call tool
-  timing) — follow-up commits.
+- **Phase 2 for codex + openclaw** — route their `ctx.agent` through the
+  app-server / ACP adapters. Deferred: needs live-CLI validation, and codex
+  needs provider-config threading into the automation fire path.
+- **Streaming Phase 3** (mock per-call tool timing) — follow-up commit.
 - Moving the chat custom-provider codex path off `materializeCodexHome`
   onto `-c` overrides — noted in the `codex-app-server.ts` comment, needs
   a live custom-provider chat turn to validate before flipping.

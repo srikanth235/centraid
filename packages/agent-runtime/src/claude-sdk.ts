@@ -47,6 +47,14 @@ export interface ClaudeSdkInput {
    * dispatcher.
    */
   toolContext?: ToolContext;
+  /**
+   * SDK permission mode (`options.permissionMode`). Chat leaves this unset
+   * (SDK default). Automation `ctx.agent` passes `'bypassPermissions'` to
+   * preserve the non-interactive behavior of the old `claude -p
+   * --permission-mode bypassPermissions` spawn — a detached turn must never
+   * block on an approval prompt.
+   */
+  permissionMode?: string;
   abortSignal: AbortSignal;
   onEvent: (event: ChatStreamEvent) => void;
 }
@@ -109,6 +117,7 @@ export async function runClaudeSdkTurn(
       };
     }
     if (input.model) options.model = input.model;
+    if (input.permissionMode) options.permissionMode = input.permissionMode;
     if (input.prevSessionId) options.resume = input.prevSessionId;
     if (input.extraPath) {
       const current = process.env.PATH ?? '';

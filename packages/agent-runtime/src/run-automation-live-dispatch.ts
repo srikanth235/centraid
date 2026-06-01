@@ -25,6 +25,7 @@ import type {
   AutomationToolResult,
 } from '@centraid/automation';
 import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
+import { runClaudeSdkTurn } from './claude-sdk.js';
 import {
   defaultSpawnCli,
   type LocalRunnerKind,
@@ -244,17 +245,31 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     };
 
     if (opts.runner === 'claude-code') {
-      const result = await collectProcess(
-        spawn(
-          'claude',
-          ['-p', call.prompt, '--output-format', 'text', '--permission-mode', 'bypassPermissions'],
-          spawnOpts,
-        ),
-      );
-      if (!result.ok) {
-        throw new Error(`ctx.agent CLI failed: ${result.stderr.slice(0, 2000)}`);
+      // Phase 2 (issue #158): route ctx.agent through the Claude SDK chat
+      // adapter — the same one chat uses — instead of a collect-on-exit
+      // `claude -p` spawn. The turn now streams token-level ChatStreamEvents
+      // (forwarded to the run bus as node.delta via `call.onEvent`). The
+      // return contract is unchanged: accumulate the final text and coerce
+      // it exactly as before. `bypassPermissions` preserves the old
+      // non-interactive behavior (a detached turn must not block on a prompt).
+      let finalText = '';
+      let errorMessage: string | undefined;
+      await runClaudeSdkTurn({
+        cwd: opts.workdir,
+        message: call.prompt,
+        extraSystemPrompt: '',
+        permissionMode: 'bypassPermissions',
+        abortSignal: ctx.abortSignal,
+        onEvent: (ev) => {
+          if (ev.type === 'final') finalText = ev.text;
+          else if (ev.type === 'error') errorMessage = ev.message;
+          call.onEvent?.(ev);
+        },
+      });
+      if (errorMessage && !finalText) {
+        throw new Error(`ctx.agent (claude) failed: ${errorMessage}`);
       }
-      return coerceAgentAnswer(result.stdout, call.json);
+      return coerceAgentAnswer(finalText, call.json);
     }
 
     // codex exec — non-interactive, no approval prompts, runnable

@@ -29,6 +29,7 @@ import {
   type AgentRunsStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
+  type ChatStreamEvent,
   type RunStreamEvent,
 } from '@centraid/app-engine';
 import type { AutomationHistoryConfig, AutomationOutputSchema } from './automation-manifest.js';
@@ -83,6 +84,13 @@ export type AutomationToolDispatcher = (
 export interface AutomationAgentCall {
   readonly prompt: string;
   readonly json?: unknown;
+  /**
+   * Token-stream sink (issue #158, Phase 2). When a runner routes
+   * `ctx.agent` through its streaming chat adapter, each `ChatStreamEvent`
+   * is forwarded here; the runner wraps it as a `node.delta` on the owning
+   * agent node. Absent for runners still on the collect-on-exit path.
+   */
+  readonly onEvent?: (ev: ChatStreamEvent) => void;
 }
 
 export type AutomationAgentDispatcher = (
@@ -318,8 +326,41 @@ export async function runAutomationHandler(
           args: { prompt: msg.prompt },
           started,
         });
+        // When the runner streams (Phase 2), forward each chat event as a
+        // `node.delta` on this agent node, and remember the last `usage`
+        // event so `closeRunNode` can persist the token/model rollup.
+        let lastUsage: Extract<ChatStreamEvent, { type: 'usage' }> | undefined;
+        const onEvent = (ev: ChatStreamEvent): void => {
+          if (ev.type === 'usage') lastUsage = ev;
+          try {
+            emit({ type: 'node.delta', ordinal, event: ev });
+          } catch {
+            /* swallow */
+          }
+        };
+        const usageFields = (): {
+          model?: string;
+          provider?: string;
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+        } => ({
+          ...(lastUsage?.model !== undefined ? { model: lastUsage.model } : {}),
+          ...(lastUsage?.provider !== undefined ? { provider: lastUsage.provider } : {}),
+          ...(lastUsage?.inputTokens !== undefined ? { inputTokens: lastUsage.inputTokens } : {}),
+          ...(lastUsage?.outputTokens !== undefined
+            ? { outputTokens: lastUsage.outputTokens }
+            : {}),
+          ...(lastUsage?.cacheReadTokens !== undefined
+            ? { cacheReadTokens: lastUsage.cacheReadTokens }
+            : {}),
+          ...(lastUsage?.cacheWriteTokens !== undefined
+            ? { cacheWriteTokens: lastUsage.cacheWriteTokens }
+            : {}),
+        });
         void opts
-          .agentDispatcher({ prompt: msg.prompt, json: msg.json }, dispatchCtx)
+          .agentDispatcher({ prompt: msg.prompt, json: msg.json, onEvent }, dispatchCtx)
           .then((result) => {
             closeRunNode({
               store: audit.store,
@@ -330,6 +371,7 @@ export async function runAutomationHandler(
               result,
               started,
               ended: Date.now(),
+              ...usageFields(),
             });
             send({ type: 'agent-reply', id: msg.id, ok: true, result });
           })
@@ -344,6 +386,7 @@ export async function runAutomationHandler(
               error: errorMsg,
               started,
               ended: Date.now(),
+              ...usageFields(),
             });
             send({ type: 'agent-reply', id: msg.id, ok: false, error: errorMsg });
           });

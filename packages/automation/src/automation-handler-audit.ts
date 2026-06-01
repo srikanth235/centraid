@@ -196,6 +196,16 @@ export interface CloseRunNodeArgs {
   childRunId?: string;
   started: number;
   ended: number;
+  /**
+   * Token/model rollup for an `agent` node (issue #158, Phase 2). Learned at
+   * end-of-turn from the chat adapter's `usage` event; feeds `runs.total_*`.
+   */
+  model?: string;
+  provider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }
 
 /**
@@ -217,6 +227,12 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
       ...(args.childRunId !== undefined ? { childRunId: args.childRunId } : {}),
       endedAt: args.ended,
       durationMs,
+      ...(args.model !== undefined ? { model: args.model } : {}),
+      ...(args.provider !== undefined ? { provider: args.provider } : {}),
+      ...(args.inputTokens !== undefined ? { inputTokens: args.inputTokens } : {}),
+      ...(args.outputTokens !== undefined ? { outputTokens: args.outputTokens } : {}),
+      ...(args.cacheReadTokens !== undefined ? { cacheReadTokens: args.cacheReadTokens } : {}),
+      ...(args.cacheWriteTokens !== undefined ? { cacheWriteTokens: args.cacheWriteTokens } : {}),
     });
   } catch {
     /* swallow */

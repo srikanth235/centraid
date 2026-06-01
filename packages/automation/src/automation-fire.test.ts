@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { RunStreamEvent } from '@centraid/app-engine';
+import { AgentRunsStore, makeRuntimeDbProvider, type RunStreamEvent } from '@centraid/app-engine';
 import {
   runAutomationFire,
   type AutomationDispatchSurface,
@@ -160,6 +160,70 @@ describe('runAutomationFire', () => {
     const agentStart = lifecycle[2] as Extract<RunStreamEvent, { type: 'node.start' }>;
     assert.equal(agentStart.name, 'agent');
     assert.deepEqual(agentStart.args, { prompt: 'summarize' });
+  });
+
+  it('streams ctx.agent token deltas as node.delta and persists the usage rollup', async () => {
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'ask',
+      manifest({ name: 'Ask' }),
+      `export default async ({ ctx }) => {
+         const answer = await ctx.agent({ prompt: 'hi' });
+         return { output: answer };
+       };`,
+    );
+    const events: RunStreamEvent[] = [];
+    // A stub agent dispatcher that behaves like a streaming chat adapter:
+    // forward token deltas + a usage event through `call.onEvent`, then
+    // return the final answer.
+    const dispatch = (): Promise<AutomationDispatchSurface> =>
+      Promise.resolve({
+        toolDispatcher: async () => [],
+        agentDispatcher: async (call) => {
+          call.onEvent?.({ type: 'assistant.delta', delta: 'hel' });
+          call.onEvent?.({ type: 'assistant.delta', delta: 'lo' });
+          call.onEvent?.({
+            type: 'usage',
+            model: 'a-capable-model',
+            provider: 'prov',
+            inputTokens: 12,
+            outputTokens: 3,
+          });
+          call.onEvent?.({ type: 'final', text: 'hello' });
+          return 'hello';
+        },
+        async close() {},
+      });
+
+    const { outcome, record } = await runAutomationFire(
+      { automationRef: 'notes/ask', appsDir, onRunEvent: (ev) => events.push(ev) },
+      { openDispatch: dispatch },
+    );
+    assert.equal(outcome.ok, true);
+
+    // Token deltas surfaced as node.delta on the agent node (ordinal 0).
+    const deltas = events.filter((e) => e.type === 'node.delta');
+    assert.ok(deltas.length >= 3, 'forwarded the chat stream events');
+    assert.ok(deltas.every((d) => (d as { ordinal: number }).ordinal === 0));
+    const deltaTypes = deltas.map((d) => ((d as { event: { type: string } }).event ?? {}).type);
+    assert.ok(deltaTypes.includes('assistant.delta'));
+    assert.ok(deltaTypes.includes('usage'));
+
+    // The usage event was persisted onto the agent node's ledger row, so the
+    // run's token rollup is accurate.
+    const store = new AgentRunsStore(
+      makeRuntimeDbProvider(path.join(appsDir, 'notes', 'runtime.sqlite')),
+    );
+    const agentNode = store.listNodes(record.runId).find((n) => n.kind === 'agent');
+    assert.ok(agentNode, 'an agent node was recorded');
+    assert.equal(agentNode.model, 'a-capable-model');
+    assert.equal(agentNode.inputTokens, 12);
+    assert.equal(agentNode.outputTokens, 3);
+    const run = store.getRun(record.runId);
+    assert.equal(run?.totalInputTokens, 12);
+    assert.equal(run?.totalOutputTokens, 3);
+    store.close();
   });
 
   it('cascades onFailure through the SAME injected dispatch surface', async () => {
