@@ -29,13 +29,16 @@ import {
   type AgentRunsStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
+  type RunStreamEvent,
 } from '@centraid/app-engine';
 import type { AutomationHistoryConfig, AutomationOutputSchema } from './automation-manifest.js';
 import { validateOutputAgainstSchema } from './automation-manifest-output.js';
 import {
   applyRetention,
+  closeRunNode,
   extractReturnEnvelope,
-  recordAgentNode,
+  noopRunEventSink,
+  openRunNode,
   truncateForAudit,
   type HandlerReturnEnvelope,
 } from './automation-handler-audit.js';
@@ -122,6 +125,13 @@ export interface RunAutomationHandlerOptions {
   invokeDispatcher?: AutomationInvokeDispatcher;
   /** Activity-DB-backed run-audit store for audit + ctx.state + ctx.runs. */
   runsStore: AgentRunsStore;
+  /**
+   * Live run-stream sink (issue #158). Receives `run.start` / `node.start` /
+   * `node.end` / `run.end` as the run unfolds, alongside `onLog`. Wired by
+   * the host to its `runId`-keyed bus; omit for a non-streamed fire (the
+   * durable ledger still records everything).
+   */
+  onRunEvent?: (ev: RunStreamEvent) => void;
   triggerKind?: AutomationTriggerKind;
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
   triggerOrigin?: AutomationTriggerOrigin;
@@ -183,12 +193,14 @@ export async function runAutomationHandler(
   let toolBatches = 0;
   let agentCalls = 0;
 
+  const emit = opts.onRunEvent ?? noopRunEventSink;
   const audit: AuditState = {
     store: opts.runsStore,
     runId: opts.runId,
     automationId: opts.automationId,
     ordinal: 0,
     nextBatchId: 1,
+    emit,
   };
 
   audit.store.insertRun({
@@ -201,6 +213,13 @@ export async function runAutomationHandler(
     ...(opts.input !== undefined ? { inputJson: truncateForAudit(opts.input) ?? '' } : {}),
     startedAt: Date.now(),
   });
+  // `run.start` opens the live stream; a viewer that joins later replays it
+  // from the ledger instead. Guarded — a wedged sink must not fail the run.
+  try {
+    emit({ type: 'run.start', runId: audit.runId });
+  } catch {
+    /* swallow */
+  }
 
   const worker = new Worker(WORKER_FILE, {
     workerData: {
@@ -245,6 +264,15 @@ export async function runAutomationHandler(
           ? { outputJson: truncateForAudit(outcome.output) ?? '' }
           : {}),
       });
+      try {
+        emit({
+          type: 'run.end',
+          ok: outcome.ok,
+          ...(outcome.error ? { error: outcome.error } : {}),
+        });
+      } catch {
+        /* swallow */
+      }
       applyRetention(audit.store, audit.automationId, opts.history);
       abortController.abort();
       worker.removeAllListeners();
@@ -280,14 +308,24 @@ export async function runAutomationHandler(
         agentCalls++;
         const ordinal = nextOrdinal(audit);
         const started = Date.now();
+        const nodeId = openRunNode({
+          store: audit.store,
+          emit,
+          runId: audit.runId,
+          ordinal,
+          kind: 'agent',
+          name: 'agent',
+          args: { prompt: msg.prompt },
+          started,
+        });
         void opts
           .agentDispatcher({ prompt: msg.prompt, json: msg.json }, dispatchCtx)
           .then((result) => {
-            recordAgentNode({
+            closeRunNode({
               store: audit.store,
-              runId: audit.runId,
+              emit,
+              nodeId,
               ordinal,
-              prompt: msg.prompt,
               ok: true,
               result,
               started,
@@ -297,11 +335,11 @@ export async function runAutomationHandler(
           })
           .catch((err: unknown) => {
             const errorMsg = err instanceof Error ? err.message : String(err);
-            recordAgentNode({
+            closeRunNode({
               store: audit.store,
-              runId: audit.runId,
+              emit,
+              nodeId,
               ordinal,
-              prompt: msg.prompt,
               ok: false,
               error: errorMsg,
               started,

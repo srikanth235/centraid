@@ -224,8 +224,11 @@ export {
   type InsertRunInput,
   type FinishRunInput,
   type InsertNodeInput,
+  type OpenNodeInput,
+  type CloseNodeInput,
   type ListRunsOptions,
 } from './agent-runs-store.js';
+export type { RunStreamEvent } from './run-stream-event.js';
 export type {
   AgentRunRow,
   AgentRunNodeRow,

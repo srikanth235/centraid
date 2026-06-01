@@ -29,6 +29,7 @@
  * paths + secrets (+ an optional scheduler, for tests).
  */
 
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -56,6 +57,8 @@ import { WorktreeStore } from '@centraid/worktree-store';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
 import { makeDraftCodeDirResolver } from './draft-data.js';
 import { makeAutomationsRouteHandler } from './automations-routes.js';
+import { RunEventBus } from './run-event-bus.js';
+import { defaultLogger } from './default-logger.js';
 import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
 import { makeUnifiedChatRunner } from './unified-chat-runner.js';
 import { makeTemplatesRouteHandler } from './templates-routes.js';
@@ -331,6 +334,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   if (appsStore) {
     const store = appsStore;
     const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
+    // In-process bus for live run streaming (issue #158): a fire publishes via
+    // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
+    const runEventBus = new RunEventBus();
     // The one fire path, shared by "run now" (manual) and the cron
     // scheduler (scheduled). Both run on THIS host with the gateway's own
     // runner pref, against the live `main` code + the stable data tree.
@@ -342,17 +348,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         triggerOrigin: AutomationTriggerOrigin;
       },
     ): void => {
+      // Mint the runId here so every fire (cron included) has a bus channel.
+      const runId =
+        opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
       void (async () => {
         const prefs = await prefsLoader();
         await runAutomationLocal({
           automationRef,
-          ...(opts.runId ? { runId: opts.runId } : {}),
+          runId,
           appsDir: paths.appsDir,
           codeAppsDir: codeAppsDir(),
           analytics: analyticsStore,
           runner: prefs?.kind ?? 'codex',
           triggerKind: opts.triggerKind,
           triggerOrigin: opts.triggerOrigin,
+          onRunEvent: (ev) => runEventBus.publish(runId, ev),
         });
       })().catch((err) =>
         logger.warn(
@@ -426,6 +436,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             triggerKind: 'manual',
             triggerOrigin: 'manual',
           }),
+        subscribeRunEvents: (runId, listener) => runEventBus.subscribe(runId, listener),
       }),
     );
   }
@@ -486,13 +497,4 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     start,
     stop,
   } satisfies BuiltGateway;
-}
-
-function defaultLogger(tag?: string): RuntimeLogger {
-  const prefix = tag ? `[${tag}] ` : '';
-  return {
-    info: (m) => console.info(`${prefix}${m}`),
-    warn: (m) => console.warn(`${prefix}${m}`),
-    error: (m) => console.error(`${prefix}${m}`),
-  };
 }

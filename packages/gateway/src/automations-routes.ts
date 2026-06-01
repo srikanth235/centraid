@@ -32,9 +32,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AgentRunsStore,
   makeRuntimeDbProvider,
+  type AgentRunNodeRow,
   type AgentRunRow,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
+  type RunStreamEvent,
   type RunSummary,
 } from '@centraid/app-engine';
 import { AnalyticsStore, InsightsStore } from '@centraid/analytics';
@@ -57,6 +59,47 @@ export interface AutomationsRouteOptions {
    * stub it. The runId is minted by the route and passed in.
    */
   runAutomation: (input: { automationRef: string; runId: string }) => void;
+  /**
+   * Subscribe to a run's live `RunStreamEvent`s (issue #158). Wired to the
+   * gateway's `RunEventBus`. Returns an unsubscribe. Omitted in hosts that
+   * don't stream — the SSE endpoint then replays the ledger and closes.
+   */
+  subscribeRunEvents?: (runId: string, listener: (ev: RunStreamEvent) => void) => () => void;
+}
+
+/** Parse a stored `*_json` ledger column back to a value; raw string on failure. */
+function safeParseJson(json: string): unknown {
+  try {
+    return JSON.parse(json) as unknown;
+  } catch {
+    return json;
+  }
+}
+
+/**
+ * Reconstruct a durable ledger node as live-stream events for SSE replay: a
+ * `node.start`, plus a `node.end` when the node has finished (in-flight nodes
+ * — `endedAt` NULL — replay as start-only and finish live off the bus).
+ */
+function replayNodeEvents(node: AgentRunNodeRow): RunStreamEvent[] {
+  const start: RunStreamEvent = {
+    type: 'node.start',
+    ordinal: node.ordinal,
+    ...(node.batchId !== undefined ? { batchId: node.batchId } : {}),
+    kind: node.kind,
+    ...(node.name !== undefined ? { name: node.name } : {}),
+    ...(node.argsJson !== undefined ? { args: safeParseJson(node.argsJson) } : {}),
+  };
+  if (node.endedAt === undefined) return [start];
+  const end: RunStreamEvent = {
+    type: 'node.end',
+    ordinal: node.ordinal,
+    ok: node.ok,
+    ...(node.outputJson !== undefined ? { result: safeParseJson(node.outputJson) } : {}),
+    ...(node.error !== undefined ? { error: node.error } : {}),
+    durationMs: node.durationMs ?? 0,
+  };
+  return [start, end];
 }
 
 /** Map a central run summary into the `AgentRunRow` feed shape. */
@@ -115,6 +158,89 @@ export function makeAutomationsRouteHandler(
     // rather than letting sqlite throw on a missing parent dir.
     if (!existsSync(dbPath)) return undefined;
     return new AgentRunsStore(makeRuntimeDbProvider(dbPath));
+  };
+
+  // SSE: stream one run end-to-end (issue #158, ledger-tail hybrid). Subscribe
+  // to the bus first (so events during replay aren't lost), replay the durable
+  // ledger snapshot, then drain buffered + live events until `run.end`.
+  const streamRunEvents = (req: IncomingMessage, res: ServerResponse, runId: string): boolean => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write(`: run ${runId}\n\n`);
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) res.write(`: ping\n\n`);
+    }, 30_000);
+    heartbeat.unref?.();
+
+    let closed = false;
+    let unsub = (): void => undefined;
+    const cleanup = (): void => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      unsub();
+      if (!res.writableEnded) res.end();
+    };
+    req.on('close', cleanup);
+    res.on('error', cleanup);
+
+    const write = (ev: RunStreamEvent): void => {
+      if (res.writableEnded) return;
+      res.write(`event: ${ev.type}\n`);
+      res.write(`data: ${JSON.stringify(ev)}\n\n`);
+    };
+
+    // Buffer live events that land during replay; drain once the snapshot is
+    // written. The client dedupes by ordinal, so a replay/live overlap on the
+    // same node is harmless.
+    const queue: RunStreamEvent[] = [];
+    let replayed = false;
+    const drain = (): void => {
+      while (queue.length > 0) {
+        const ev = queue.shift()!;
+        write(ev);
+        if (ev.type === 'run.end') {
+          cleanup();
+          return;
+        }
+      }
+    };
+    unsub =
+      opts.subscribeRunEvents?.(runId, (ev) => {
+        queue.push(ev);
+        if (replayed) drain();
+      }) ?? ((): void => undefined);
+
+    const store = runsStoreForRunId(runId);
+    const run = store?.getRun(runId);
+    write({ type: 'run.start', runId });
+    const nodes = store ? store.listNodes(runId) : [];
+    for (const node of nodes) for (const ev of replayNodeEvents(node)) write(ev);
+
+    // Run already finished (background fire / late join) — emit terminal + close.
+    if (run && run.endedAt !== undefined) {
+      write({
+        type: 'run.end',
+        ok: run.ok,
+        ...(run.error !== undefined ? { error: run.error } : {}),
+      });
+      cleanup();
+      return true;
+    }
+    // No live transport wired and the run is still open: replay-only, then
+    // close so the client can fall back to polling rather than hang.
+    if (!opts.subscribeRunEvents) {
+      cleanup();
+      return true;
+    }
+
+    replayed = true;
+    drain();
+    return true;
   };
 
   return async (req, res) => {
@@ -184,6 +310,14 @@ export function makeAutomationsRouteHandler(
         const runId = url.searchParams.get('runId') ?? '';
         const store = runsStoreForRunId(runId);
         return sendJson(res, 200, { nodes: store ? store.listNodes(runId) : [] });
+      }
+
+      if (sub === 'run/events' && method === 'GET') {
+        const runId = url.searchParams.get('runId') ?? '';
+        if (!runId) {
+          return sendJson(res, 400, { error: 'bad_request', message: 'run/events needs ?runId=' });
+        }
+        return streamRunEvents(req, res, runId);
       }
 
       if (sub === 'run/pin' && method === 'POST') {

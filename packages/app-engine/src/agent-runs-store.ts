@@ -105,6 +105,42 @@ export interface InsertNodeInput {
   readonly childRunId?: string;
 }
 
+/**
+ * Insert a durable "running" `run_nodes` row (issue #158, ledger-tail
+ * hybrid). The companion `closeNode` settles it on completion. While open,
+ * `ended_at`/`duration_ms` are NULL — the in-flight marker the run viewer
+ * reads — and `ok` is provisionally true.
+ */
+export interface OpenNodeInput {
+  readonly nodeId: string;
+  readonly runId: string;
+  readonly ordinal: number;
+  readonly batchId?: number;
+  readonly kind: AgentRunNodeKind;
+  readonly name?: string;
+  readonly argsJson?: string;
+  readonly appId?: string;
+  readonly startedAt: number;
+}
+
+/** Settle a node opened by `openNode`: outcome + the token/model rollup. */
+export interface CloseNodeInput {
+  readonly nodeId: string;
+  readonly ok: boolean;
+  readonly outputJson?: string;
+  readonly error?: string;
+  readonly childRunId?: string;
+  readonly endedAt: number;
+  readonly durationMs: number;
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly cacheReadTokens?: number;
+  readonly cacheWriteTokens?: number;
+  readonly model?: string;
+  readonly provider?: string;
+  readonly costUsd?: number;
+}
+
 export interface ListRunsOptions {
   /** When set, scope to one automation's runs. */
   readonly automationId?: string;
@@ -324,6 +360,43 @@ export class AgentRunsStore {
       input.endedAt,
       input.durationMs,
     );
+  }
+
+  /** Insert a durable "running" node row (ended_at NULL). See `OpenNodeInput`. */
+  openNode(input: OpenNodeInput): void {
+    const { stmts } = this.ensureReady();
+    stmts.openNode.run(
+      input.nodeId,
+      input.runId,
+      input.ordinal,
+      input.batchId ?? null,
+      input.kind,
+      input.appId ?? null,
+      input.name ?? null,
+      input.argsJson ?? null,
+      input.startedAt,
+    );
+  }
+
+  /** Settle a node opened by `openNode`. See `CloseNodeInput`. */
+  closeNode(input: CloseNodeInput): void {
+    const { stmts } = this.ensureReady();
+    stmts.closeNode.run({
+      ok: input.ok ? 1 : 0,
+      outputJson: input.outputJson ?? null,
+      error: input.error ?? null,
+      childRunId: input.childRunId ?? null,
+      inputTokens: input.inputTokens ?? null,
+      outputTokens: input.outputTokens ?? null,
+      cacheReadTokens: input.cacheReadTokens ?? null,
+      cacheWriteTokens: input.cacheWriteTokens ?? null,
+      model: input.model ?? null,
+      provider: input.provider ?? null,
+      costUsd: input.costUsd ?? null,
+      endedAt: input.endedAt,
+      durationMs: input.durationMs,
+      nodeId: input.nodeId,
+    });
   }
 
   listNodes(runId: string): AgentRunNodeRow[] {

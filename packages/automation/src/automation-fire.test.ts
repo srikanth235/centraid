@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { RunStreamEvent } from '@centraid/app-engine';
 import {
   runAutomationFire,
   type AutomationDispatchSurface,
@@ -99,6 +100,66 @@ describe('runAutomationFire', () => {
     assert.deepEqual(opened[0]!.toolsAllow, ['mailer']);
     assert.match(opened[0]!.workdir, /notes[/\\]automations[/\\]digest$/);
     assert.equal(closes.n, 1, 'dispatch surface always torn down');
+  });
+
+  it('emits a live run-stream: run.start → node lifecycle per ctx call → run.end', async () => {
+    // A handler that drives one ctx.tool then one ctx.agent. The stub
+    // dispatch returns fixed results so the node lifecycle is deterministic.
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'flow',
+      manifest({ name: 'Flow' }),
+      `export default async ({ ctx }) => {
+         await ctx.tool('mailer', { to: 'x' });
+         await ctx.agent({ prompt: 'summarize' });
+         return { ok: true };
+       };`,
+    );
+    const events: RunStreamEvent[] = [];
+    const dispatch = (args: OpenAutomationDispatchArgs): Promise<AutomationDispatchSurface> => {
+      void args;
+      return Promise.resolve({
+        toolDispatcher: async () => [{ ok: true, result: { sent: true } }],
+        agentDispatcher: async () => 'a summary',
+        async close() {},
+      });
+    };
+
+    const { outcome } = await runAutomationFire(
+      { automationRef: 'notes/flow', appsDir, onRunEvent: (ev) => events.push(ev) },
+      { openDispatch: dispatch },
+    );
+    assert.equal(outcome.ok, true);
+
+    // run.start first, run.end last.
+    assert.equal(events.at(0)?.type, 'run.start');
+    assert.equal(events.at(-1)?.type, 'run.end');
+    const end = events.at(-1) as Extract<RunStreamEvent, { type: 'run.end' }>;
+    assert.equal(end.ok, true);
+
+    // Every node opened (start) before it closed (end), in dispatch order:
+    // tool (ordinal 0) then agent (ordinal 1).
+    const lifecycle = events.filter((e) => e.type === 'node.start' || e.type === 'node.end');
+    assert.deepEqual(
+      lifecycle.map((e) => [
+        e.type,
+        (e as { ordinal: number }).ordinal,
+        (e as { kind?: string }).kind,
+      ]),
+      [
+        ['node.start', 0, 'tool'],
+        ['node.end', 0, undefined],
+        ['node.start', 1, 'agent'],
+        ['node.end', 1, undefined],
+      ],
+    );
+    const toolStart = lifecycle[0] as Extract<RunStreamEvent, { type: 'node.start' }>;
+    assert.equal(toolStart.name, 'mailer');
+    assert.deepEqual(toolStart.args, { to: 'x' });
+    const agentStart = lifecycle[2] as Extract<RunStreamEvent, { type: 'node.start' }>;
+    assert.equal(agentStart.name, 'agent');
+    assert.deepEqual(agentStart.args, { prompt: 'summarize' });
   });
 
   it('cascades onFailure through the SAME injected dispatch surface', async () => {
