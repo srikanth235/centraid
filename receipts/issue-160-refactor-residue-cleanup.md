@@ -21,7 +21,7 @@ v0 pre-release: no backward compatibility, no migrations.
       contract-wide.
 - [x] **PR 3 — codex MCP-server preservation (3a).** Mirror the `-c`
       override fix into `codex-app-server.ts` + `host-tools.ts`.
-- [ ] **Decision — rollback migrations (3b).** Documented rollback as
+- [x] **Decision — rollback migrations (3b).** Documented rollback as
       code-only (the lower-risk option); a re-publish heals the schema.
 - [ ] **Gateway session-scheme de-leak (Theme 2, `desktop-<appId>`).**
       `sessionIdFor` defaults host-neutral in the gateway core; the desktop

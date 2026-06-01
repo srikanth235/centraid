@@ -326,6 +326,11 @@ export class WorktreeStore {
    * tagged). `git log main` therefore stays a chronological audit
    * including rollbacks; tag-version numbers stay monotonic.
    *
+   * CODE-ONLY by design: unlike `publish` (which runs `input.migrate`
+   * against live data), rollback has no migrate hook — it swaps code
+   * but leaves the live `data.sqlite` schema forward. See `RollbackInput`
+   * and `rollbackCritical` for the rationale (#160 / #144).
+   *
    * Also serialized through the per-store mutex.
    */
   rollback(input: RollbackInput): Promise<RollbackResult> {
@@ -504,6 +509,16 @@ export class WorktreeStore {
       }
       const subject = `rollback: ${appId} -> ${versionTag}`;
       await run(['commit', '-m', subject], { cwd: txDir });
+      // No migrate hook here, deliberately (the asymmetry with
+      // `publishCritical`'s `input.migrate` is by design — #160 / #144).
+      // Rollback is CODE-ONLY: it relays an older `apps/<appId>/` tree onto
+      // `main` but does NOT migrate live `data.sqlite`. centraid migrations
+      // are forward-only, so there is no down-migration to apply; the live
+      // schema stays at its current (forward) version, ahead of the
+      // rolled-back code. The mismatch is healed by a re-publish (which
+      // re-runs the forward migration). Rollback is the rarer operation, so
+      // we accept the transient code-behind-schema window rather than build
+      // a down-migration path the app authors never write.
       const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
       const oldMainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
       await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], { cwd: this.bareDir });
