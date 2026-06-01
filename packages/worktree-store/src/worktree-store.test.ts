@@ -619,3 +619,45 @@ test('app ids are validated', async () => {
     await rmTempRoot(root);
   }
 });
+
+test('draft data.sqlite is gitignored — never staged by publish (#144)', async () => {
+  const root = await makeTempRoot();
+  try {
+    const store = new WorktreeStore({ root });
+    await store.init();
+    const bare = path.join(root, 'apps.git');
+
+    // The draft-data `.gitignore` is on `main` with all three patterns.
+    const ignore = await run(['show', 'refs/heads/main:.gitignore'], { cwd: bare });
+    assert.match(ignore, /^data\.sqlite$/m);
+    assert.match(ignore, /^data\.sqlite-wal$/m);
+    assert.match(ignore, /^data\.sqlite-shm$/m);
+
+    // A session branched off main inherits it.
+    const handle = await store.openSession('s1');
+    const sessionIgnore = await fs.readFile(path.join(handle.worktreePath, '.gitignore'), 'utf8');
+    assert.match(sessionIgnore, /data\.sqlite/);
+
+    // Stage real code plus a draft data.sqlite (+ WAL/SHM sidecars), publish.
+    await seedApp(handle.worktreePath, 'todo', 'v1');
+    const appDir = path.join(handle.worktreePath, 'apps', 'todo');
+    await fs.writeFile(path.join(appDir, 'data.sqlite'), 'draft-rows');
+    await fs.writeFile(path.join(appDir, 'data.sqlite-wal'), 'wal');
+    await fs.writeFile(path.join(appDir, 'data.sqlite-shm'), 'shm');
+    await store.publish({ sessionId: 's1', appId: 'todo', message: 'first' });
+
+    // The published main subtree carries the code but none of the data files.
+    const tree = await run(['ls-tree', '-r', '--name-only', 'refs/heads/main:apps/todo'], {
+      cwd: bare,
+    });
+    const names = tree.split('\n').filter(Boolean);
+    assert.ok(names.includes('app.json'), `expected app.json, got: ${tree}`);
+    assert.ok(names.includes('actions/noop.js'), `expected actions/noop.js, got: ${tree}`);
+    assert.ok(
+      !names.some((n) => n.startsWith('data.sqlite')),
+      `draft data leaked into the published tree: ${tree}`,
+    );
+  } finally {
+    await rmTempRoot(root);
+  }
+});

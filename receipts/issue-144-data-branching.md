@@ -39,7 +39,7 @@ swapping `main/<sha>` dir, and it's the publish target.
 
 - [x] Fix migrations-on-publish in the git-store backend
 - [x] Rename `@centraid/code-store` → `@centraid/worktree-store`
-- [ ] `.gitignore` draft data in the canonical repo (main + every worktree)
+- [x] `.gitignore` draft data in the canonical repo (main + every worktree)
 - [ ] Draft data dir = draft code dir (dispatcher + `_sql` + describe schema)
 - [ ] Seed-on-first-draft-access (VACUUM INTO live + replay pending migrations)
 - [ ] Preview-pane "Reset data from prod" endpoint + control
@@ -72,6 +72,14 @@ swapping `main/<sha>` dir, and it's the publish target.
   HTTP-namespace handler keeps its `apps-store-routes`/`makeAppsStoreRouteHandler`
   names (they describe the `/centraid/_apps` URL surface, not the store class).
   No behavior change.
+
+- **`.gitignore` draft data in the canonical repo (main + every worktree).**
+  `WorktreeStore.init()` plants a repo-level `.gitignore` (`data.sqlite`,
+  `data.sqlite-wal`, `data.sqlite-shm`) on `main` via a forward commit
+  (`ensureGitignore`, idempotent, transient-worktree like rollback/delete).
+  Session worktrees branch off `main` and inherit it, so publish's path-scoped
+  `git add apps/<id>` skips a draft's branched data without any per-file
+  handling. The basename patterns match at any depth (`apps/<id>/data.sqlite`).
 
 ## Out of scope
 

@@ -40,6 +40,17 @@ import {
 const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
 /**
+ * Repo-level `.gitignore` planted on `main` at init (issue #144). A draft's
+ * branched `data.sqlite` (+ WAL/SHM sidecars) lives *inside* the session
+ * worktree, next to the code the agent edits — so it must never be staged by
+ * publish. Committing the ignore to `main` makes every session worktree
+ * (which branches off `main`) inherit it, so publish's path-scoped
+ * `git add apps/<id>` skips the draft data without any per-file dance. The
+ * basename patterns match at any depth (`apps/<id>/data.sqlite`).
+ */
+const DRAFT_DATA_GITIGNORE = ['data.sqlite', 'data.sqlite-wal', 'data.sqlite-shm', ''].join('\n');
+
+/**
  * Conservative slug check — matches the canonical app id rule
  * (agent-harness): leading alnum, then alnum / `_` / `-`. No dot, so a
  * tree-traversing `..` is impossible by construction. Automation apps are
@@ -103,6 +114,9 @@ export class WorktreeStore {
 
     // Drop worktree metadata pointing at vanished dirs (e.g. host crash).
     await run(['worktree', 'prune'], { cwd: this.bareDir });
+    // Plant the draft-data `.gitignore` on `main` (idempotent) BEFORE
+    // materializing, so the live worktree + every session inherit it.
+    await this.ensureGitignore();
     const mainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
     this.activeMainDir = await this.ensureMainMaterialization(mainSha);
     await this.updateActiveMainLink(this.activeMainDir);
@@ -552,6 +566,35 @@ export class WorktreeStore {
     if (versions.length === 0) return 1;
     const highest = versions[0]?.version ?? 0;
     return highest + 1;
+  }
+
+  /**
+   * Commit the draft-data `.gitignore` to `main` if it isn't already
+   * there (issue #144). Idempotent: a no-op once the blob is on `main`, so
+   * every `init()` (including re-boots of an existing store) can call it.
+   * Uses a transient detached worktree — bare repos can't `checkout` —
+   * mirroring `rollback`/`delete`, and advances `main` by a forward commit
+   * so the audit log stays linear.
+   */
+  private async ensureGitignore(): Promise<void> {
+    if (await this.treeSha('refs/heads/main:.gitignore')) return;
+    const txId = `_gitignore-${crypto.randomBytes(6).toString('hex')}`;
+    const txDir = path.join(this.worktreesDir, txId);
+    await run(['worktree', 'add', '--detach', txDir, 'refs/heads/main'], { cwd: this.bareDir });
+    try {
+      await fs.writeFile(path.join(txDir, '.gitignore'), DRAFT_DATA_GITIGNORE);
+      await run(['add', '--', '.gitignore'], { cwd: txDir });
+      await run(['commit', '-m', 'centraid: gitignore draft data.sqlite'], { cwd: txDir });
+      const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
+      const oldMainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
+      await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], { cwd: this.bareDir });
+    } finally {
+      await runRaw(['worktree', 'remove', '--force', txDir], {
+        cwd: this.bareDir,
+        allowNonZero: true,
+      });
+      await run(['worktree', 'prune'], { cwd: this.bareDir });
+    }
   }
 
   /**
