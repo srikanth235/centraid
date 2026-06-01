@@ -378,3 +378,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-6d42478319f-1780247510-5 | 6d424783-19f7-4130-b80c-0f4594267275 |  | correction | classifier | challenged plan by surfacing existing agent-runtime package overlap |  |
 | steer-6d42478319f-1780247510-6 | 6d424783-19f7-4130-b80c-0f4594267275 |  | correction | classifier | told agent to step back and rethink automation placement in app-engine |  |
 | steer-bd21524ccc9-1780298610-1 | bd21524c-cc92-40e6-aa8a-9dddbf193469 |  | correction | classifier | pushed back on creating new package; suggested renaming existing app-templates instead |  |
+| steer-84bfff67f97-1780331281-1 | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | correction | classifier | user insists all checklist items be completed, not deferred |  |

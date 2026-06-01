@@ -21,9 +21,9 @@ v0 pre-release: no backward compatibility, no migrations.
 
 - [x] **1 — codex `ctx.tool` `-c` MCP fix** (priority prerequisite; small,
       unblocks the MCP value prop)
-- [~] **2 — Streaming Phase 1**: live node lifecycle (runner-agnostic
+- [x] **2 — Streaming Phase 1**: live node lifecycle (runner-agnostic
       foundation; durable timeline, late-join, parallel lanes). Backend
-      (components 1+2+3) landed; desktop subscription (component 5) next.
+      (components 1+2+3) + desktop SSE subscription (component 5) landed.
 - [ ] **3 — Streaming Phase 2**: per-runner `ctx.agent` token parity
       (claude SDK → codex app-server → openclaw ACP)
 - [ ] **4 — Streaming Phase 3**: mock per-call tool timing
@@ -86,11 +86,20 @@ worker IPC); the transport is a plain in-process emitter feeding SSE.
 
 No token deltas yet — `ctx.agent` shows start→end (Phase 2 adds tokens).
 
+#### Component 5 — desktop SSE subscription
+
+The run viewer no longer polls every 1.5s. New `streamAutomationRun()`
+client (SSE consumer, same fetch+ReadableStream pattern as `streamChat`).
+`renderRunView` keeps a local node model keyed by ordinal and re-renders on
+each `node.start`/`node.end`; on `run.end` it refetches the authoritative
+run record + persisted nodes. `waitForAutomationRun` (standing-order panel,
+no viewer) now resolves off the stream's `run.end`. Both fall back to a
+bounded ledger poll if the stream can't be established (older gateway).
+`loadNodesInto` (historical runs panel) stays a one-shot read — finished
+runs don't stream.
+
 ## Out of scope (so far)
 
-- **Phase 1 component 5** (desktop SSE subscription replacing the 1.5s
-  poll) — lands next on this branch. The backend streams today; the
-  desktop still polls (unchanged, still works), so this is purely additive.
 - **Streaming Phases 2–3** (`ctx.agent` token parity, mock per-call tool
   timing) — follow-up commits.
 - Moving the chat custom-provider codex path off `materializeCodexHome`

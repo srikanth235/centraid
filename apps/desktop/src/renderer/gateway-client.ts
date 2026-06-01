@@ -372,6 +372,87 @@ export async function listAutomationRunNodes(input: {
   return out.nodes ?? [];
 }
 
+/**
+ * Live run-stream event (issue #158), mirroring `@centraid/app-engine`'s
+ * `RunStreamEvent`. `node.delta` carries chat-parity token events (Phase 2);
+ * Phase 1 only emits the durable lifecycle events.
+ */
+export type RunStreamEvent =
+  | { type: 'run.start'; runId: string }
+  | {
+      type: 'node.start';
+      ordinal: number;
+      batchId?: number;
+      kind: CentraidAutomationRunNode['kind'];
+      name?: string;
+      args?: unknown;
+    }
+  | { type: 'node.delta'; ordinal: number; event: unknown }
+  | {
+      type: 'node.end';
+      ordinal: number;
+      ok: boolean;
+      result?: unknown;
+      error?: string;
+      durationMs: number;
+    }
+  | { type: 'run.end'; ok: boolean; error?: string };
+
+/**
+ * Subscribe to a run's live events over SSE
+ * (`GET /centraid/_automations/run/events?runId=`). The gateway replays the
+ * durable ledger snapshot, then streams live until `run.end`. `onEvent` fires
+ * per parsed event; the promise resolves when the stream closes. Pass an
+ * `AbortSignal` to detach (panel teardown). An abort resolves quietly; other
+ * transport failures reject so the caller can fall back to a one-shot read.
+ */
+export async function streamAutomationRun(
+  runId: string,
+  onEvent: (ev: RunStreamEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  try {
+    const res = await doFetch(baseUrl, `/centraid/_automations/run/events?runId=${enc(runId)}`, {
+      method: 'GET',
+      headers: authHeaders(token),
+      signal,
+    });
+    if (!res.ok || !res.body) {
+      throw new Error(`run events stream failed (HTTP ${res.status})`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const frame = buf.slice(0, sep);
+        buf = buf.slice(sep + 2);
+        const data = frame
+          .split('\n')
+          .filter((l) => l.startsWith('data:'))
+          .map((l) => l.slice('data:'.length).trimStart())
+          .join('\n');
+        if (!data) continue;
+        try {
+          const evt = JSON.parse(data) as { type?: string };
+          if (evt && typeof evt.type === 'string') onEvent(evt as RunStreamEvent);
+        } catch {
+          /* skip a malformed frame rather than abort the stream */
+        }
+      }
+    }
+  } catch (err) {
+    // A caller-initiated abort is a normal teardown, not a failure.
+    if (signal.aborted) return;
+    throw err;
+  }
+}
+
 /** Pin / unpin a run as a replay fixture (ledger + central summary). */
 export async function pinAutomationRun(input: {
   runId: string;
