@@ -83,13 +83,15 @@ This makes chat, the builder's tool grounding, and automations consistent: a
 user on a custom OpenAI-compatible provider keeps their MCP tools across all
 three surfaces.
 
-After this fix `materializeCodexHome` has no production callers (kept as a
-tested utility / documented alternative strategy), and the `codexHomeBaseDir`
-paths chain (`GatewayPaths.codexHomeBaseDir` → agent-runtime configs) is
-**vestigial** — no longer consulted. Fully removing it would touch the
-`GatewayPaths` contract and ~13 gateway test fixtures, so it's left as a
-follow-up rather than expanding 3a's blast radius; the leaf field is doc'd as
-vestigial in `codex-app-server.ts`.
+The `-c` switch made the whole materialize-CODEX_HOME strategy dead, so it
+was removed in a follow-up commit: `materializeCodexHome` + `buildProviderToml`
++ `sanitizeProviderId` (and their tests) are gone from `codex-provider-config.ts`
+(now purely `codexProviderOverrideArgs`), and the entire vestigial
+`codexHomeBaseDir` paths chain is deleted — `GatewayPaths.codexHomeBaseDir`,
+the agent-runtime config fields (`AgentTurnConfig`, `chat-runner-core`,
+`chat-adapter`, `CodexAppServerConfig`), the gateway/cli/desktop path helpers
+(`gatewayCodexHomeBaseDir`, `localRuntimeCodexHomeBaseDir`), and the ~13
+gateway test fixtures that set it.
 
 ### 3b — rollback skips migrations while publish runs them (asymmetry from #144)
 

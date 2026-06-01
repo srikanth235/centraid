@@ -293,14 +293,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         prefsLoader,
         getDispatcher,
         publicBaseUrl: () => serverUrl,
-        codexHomeBaseDir: paths.codexHomeBaseDir,
         liveDataFile,
         ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
       })
     : makeChatRunner({
         prefsLoader,
         getDispatcher,
-        codexHomeBaseDir: paths.codexHomeBaseDir,
       });
 
   const runtime = new Runtime({

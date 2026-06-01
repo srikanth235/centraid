@@ -12,7 +12,6 @@
  *     identity.sqlite       — users + per-user prefs
  *     analytics.sqlite      — one summary row per run
  *     chat-runner-sessions/ — codex thread state for in-app chat
- *     codex-home/           — provider-scoped CODEX_HOME bases
  *     token.bin             — persistent bearer token (mode 0o600)
  *     provider-key.bin      — OpenAI-compat provider API key (mode 0o600)
  */
@@ -34,7 +33,6 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     identityDb: path.join(abs, 'identity.sqlite'),
     analyticsDb: path.join(abs, 'analytics.sqlite'),
     chatRunnerSessionDir: path.join(abs, 'chat-runner-sessions'),
-    codexHomeBaseDir: path.join(abs, 'codex-home'),
     tokenFile: path.join(abs, 'token.bin'),
     providerKeyFile: path.join(abs, 'provider-key.bin'),
   };

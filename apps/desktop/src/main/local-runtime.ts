@@ -10,7 +10,6 @@ import {
   gatewayAnalyticsDb,
   gatewayAppsDir,
   gatewayChatRunnerSessionsDir,
-  gatewayCodexHomeBaseDir,
   gatewayCodeStoreDir,
   gatewayIdentityDb,
 } from './gateway-paths.js';
@@ -68,15 +67,6 @@ export async function localRuntimeAppsDir(gatewayId: string): Promise<string> {
 }
 
 /**
- * Parent directory under which provider-scoped `CODEX_HOME`s are
- * materialized when the user has configured a custom OpenAI-compatible
- * provider on the codex runner.
- */
-export function localRuntimeCodexHomeBaseDir(gatewayId: string): string {
-  return gatewayCodexHomeBaseDir(gatewayId);
-}
-
-/**
  * Identity SQLite for the given local gateway (users + prefs).
  */
 export function localRuntimeGatewayDb(gatewayId: string): string {
@@ -121,7 +111,6 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
         identityDb: localRuntimeGatewayDb(gatewayId),
         analyticsDb: localRuntimeAnalyticsDb(gatewayId),
         chatRunnerSessionDir: gatewayChatRunnerSessionsDir(gatewayId),
-        codexHomeBaseDir: localRuntimeCodexHomeBaseDir(gatewayId),
         // Gateway owns the template catalog now (issue #141): the
         // `GET /centraid/_templates` route resolves bundle-or-cache from
         // this per-gateway cache dir, matching the old desktop IPC.

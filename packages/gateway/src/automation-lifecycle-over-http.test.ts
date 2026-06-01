@@ -38,7 +38,6 @@ function pathsUnder(dir: string): GatewayPaths {
     identityDb: path.join(dir, 'identity.sqlite'),
     analyticsDb: path.join(dir, 'analytics.sqlite'),
     chatRunnerSessionDir: path.join(dir, 'chat-runner-sessions'),
-    codexHomeBaseDir: path.join(dir, 'codex-home'),
   };
 }
 

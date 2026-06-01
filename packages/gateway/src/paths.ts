@@ -39,14 +39,6 @@ export interface GatewayPaths {
   chatRunnerSessionDir: string;
 
   /**
-   * Parent dir for provider-scoped `CODEX_HOME`s. When the user has
-   * configured a custom OpenAI-compatible provider on the codex runner,
-   * the adapter materializes a per-provider `CODEX_HOME` here so the
-   * user's real `~/.codex` stays untouched.
-   */
-  codexHomeBaseDir: string;
-
-  /**
    * Optional per-gateway template cache dir (issue #141). When set, the
    * `GET /centraid/_templates` route resolves bundle-or-cache, letting a
    * newer template pulled from a remote URL shadow the bundled copy. Omit

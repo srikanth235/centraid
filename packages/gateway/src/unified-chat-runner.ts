@@ -68,8 +68,6 @@ export interface UnifiedChatRunnerOptions {
   /** Resolve the shared app-engine dispatcher for the `centraid_*` tools.
    *  Called per turn so the host can cycle-break on first use. */
   getDispatcher: () => Dispatcher;
-  /** Parent dir for scoped `CODEX_HOME`s when a custom provider is set. */
-  codexHomeBaseDir?: string;
   /** Resolve the public base URL (`http://host:port`) used to build webhook
    *  URLs after minting. A thunk because the ephemeral port is only known
    *  after the server starts — and a turn only ever runs post-start. */
@@ -153,7 +151,6 @@ export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunne
   return makeChatRunnerCore({
     prefsLoader: opts.prefsLoader,
     getDispatcher: opts.getDispatcher,
-    ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
     ...(extraPath ? { extraPath } : {}),
     ...(opts.runTurn ? { runTurn: opts.runTurn } : {}),
 

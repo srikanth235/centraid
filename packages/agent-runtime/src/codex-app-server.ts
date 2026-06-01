@@ -95,14 +95,6 @@ export interface CodexAppServerConfig {
    * real `~/.codex` so their `[mcp_servers.*]` + auth survive.
    */
   provider?: OpenAICompatProvider;
-  /**
-   * Vestigial: previously the parent dir for provider-scoped CODEX_HOMEs
-   * materialized via `materializeCodexHome`. Provider routing now uses
-   * `-c` overrides on the real `~/.codex` (no redirect), so this is no
-   * longer consulted. Retained until the wider `codexHomeBaseDir` paths
-   * chain is removed (see issue #160 receipt).
-   */
-  codexHomeBaseDir?: string;
 }
 
 export interface CodexAppServerResult {
