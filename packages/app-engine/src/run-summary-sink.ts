@@ -1,8 +1,8 @@
 /*
  * The seam between the agent-run ledger (app-engine) and central analytics
- * (`@centraid/stores`). The ledger builds one `RunSummary` per finished run
+ * (`@centraid/analytics`). The ledger builds one `RunSummary` per finished run
  * and pushes it through a `RunSummarySink`; the concrete sink — `AnalyticsStore`
- * in `@centraid/stores` — is injected by the host (#151).
+ * in `@centraid/analytics` — is injected by the host (#151).
  *
  * Keeping the interface here (not importing `AnalyticsStore`) is what keeps
  * app-engine free of its own reporting consumer: app-engine emits, stores

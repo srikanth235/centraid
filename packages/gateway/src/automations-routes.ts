@@ -37,7 +37,7 @@ import {
   type AutomationTriggerOrigin,
   type RunSummary,
 } from '@centraid/app-engine';
-import { AnalyticsStore, InsightsStore } from '@centraid/stores';
+import { AnalyticsStore, InsightsStore } from '@centraid/analytics';
 import { listAutomations, parseAutomationRef, readAppOwnedAutomation } from '@centraid/automation';
 import type { AppsStore } from '@centraid/code-store';
 import { readJson, sendError, sendJson } from './route-helpers.js';

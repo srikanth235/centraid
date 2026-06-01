@@ -1,8 +1,8 @@
 /*
- * @centraid/stores
+ * @centraid/analytics
  *
- * Gateway-scoped stores that are neither the per-app engine nor the per-app
- * run ledger — they live beside app-engine, not inside it (#151):
+ * Centraid's Insights domain — neither the per-app engine nor the per-app run
+ * ledger, so it lives beside app-engine, not inside it (#151):
  *
  *   - AnalyticsStore — push-based central run summaries. Implements
  *     app-engine's `RunSummarySink`, so `AgentRunsStore.finishRun` can
@@ -10,12 +10,14 @@
  *     package. Backed by the central `centraid-analytics.sqlite`.
  *   - InsightsStore — read-only aggregation over those summaries; the single
  *     source for the desktop Insights screen.
+ *   - The `centraid-analytics.sqlite` migration ladder + provider
+ *     (`analytics-db.ts`) — this package owns its schema, built through
+ *     app-engine's shared `makeMigratedDbProvider` so it opens with the same
+ *     WAL/pragma/migrate seam as every other centraid SQLite file.
  *
  * One-way dependency: this package depends on `@centraid/app-engine` (for the
- * `DatabaseProvider` seam and the `RunSummary` / `RunSummarySink` contract);
- * app-engine never depends back. The analytics DB ladder + provider stay in
- * app-engine's `gateway-db` (the single WAL/pragma/migrate seam for every
- * centraid SQLite file); a host opens the provider there and injects it here.
+ * `DatabaseProvider` seam, the `RunSummary` / `RunSummarySink` contract, and
+ * the shared SQLite-open helper); app-engine never depends back.
  *
  * `UserStore` (identity) deliberately stays in app-engine — app-engine's own
  * HTTP surface (`http-server`/`runtime`) mounts its route, so moving it would
@@ -23,6 +25,7 @@
  */
 
 export { AnalyticsStore, type ListSummariesOptions } from './analytics-store.js';
+export { openAnalyticsDb, makeAnalyticsDbProvider, ANALYTICS_MIGRATIONS } from './analytics-db.js';
 export {
   InsightsStore,
   INSIGHTS_QUOTA_TOKENS,

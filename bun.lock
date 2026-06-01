@@ -80,10 +80,23 @@
       },
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.143",
+        "@centraid/analytics": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
-        "@centraid/stores": "workspace:*",
         "zod": "^4.0.0",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/analytics": {
+      "name": "@centraid/analytics",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/app-engine": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -124,9 +137,9 @@
       "name": "@centraid/automation",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/analytics": "workspace:*",
         "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/stores": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -161,12 +174,12 @@
       },
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
+        "@centraid/analytics": "workspace:*",
         "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
         "@centraid/code-store": "workspace:*",
         "@centraid/skills": "workspace:*",
-        "@centraid/stores": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -181,9 +194,9 @@
       "name": "@centraid/openclaw-plugin",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/analytics": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
-        "@centraid/stores": "workspace:*",
         "@mariozechner/pi-ai": "^0.73.0",
         "@sinclair/typebox": "^0.27.0",
       },
@@ -204,19 +217,6 @@
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "tsx": "^4.20.3",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/stores": {
-      "name": "@centraid/stores",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/app-engine": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -536,6 +536,8 @@
 
     "@centraid/agent-runtime": ["@centraid/agent-runtime@workspace:packages/agent-runtime"],
 
+    "@centraid/analytics": ["@centraid/analytics@workspace:packages/analytics"],
+
     "@centraid/app-blueprints": ["@centraid/app-blueprints@workspace:packages/app-blueprints"],
 
     "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
@@ -555,8 +557,6 @@
     "@centraid/openclaw-plugin": ["@centraid/openclaw-plugin@workspace:packages/openclaw-plugin"],
 
     "@centraid/skills": ["@centraid/skills@workspace:packages/skills"],
-
-    "@centraid/stores": ["@centraid/stores@workspace:packages/stores"],
 
     "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
 

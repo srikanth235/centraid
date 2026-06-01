@@ -4,11 +4,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import {
-  makeRuntimeDbProvider,
-  makeAnalyticsDbProvider,
-  AgentRunsStore,
-} from '@centraid/app-engine';
+import { makeRuntimeDbProvider, AgentRunsStore } from '@centraid/app-engine';
+import { makeAnalyticsDbProvider } from './analytics-db.js';
 import { AnalyticsStore } from './analytics-store.js';
 import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
 

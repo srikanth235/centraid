@@ -40,13 +40,12 @@ import {
   UserStore,
   cleanupDeregisteredApp,
   makeGatewayDbProvider,
-  makeAnalyticsDbProvider,
   startRuntimeHttpServer,
   type RuntimeLogger,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
-import { AnalyticsStore, InsightsStore } from '@centraid/stores';
+import { AnalyticsStore, InsightsStore, makeAnalyticsDbProvider } from '@centraid/analytics';
 import { listAutomations, InProcessScheduler, type LocalScheduler } from '@centraid/automation';
 import {
   makeChatRunner,
