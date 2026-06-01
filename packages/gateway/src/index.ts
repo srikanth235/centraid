@@ -18,6 +18,12 @@
  * their existing remote-gateway flow.
  */
 
+export {
+  buildGateway,
+  type BuildGatewayOptions,
+  type BuiltGateway,
+  type RouteHandler,
+} from './build-gateway.js';
 export { serve, type ServeOptions, type GatewayServeHandle } from './serve.js';
 export type { GatewayPaths } from './paths.js';
 export type { SecretsProvider } from './secrets.js';

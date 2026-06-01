@@ -13,6 +13,7 @@
  */
 
 import type { OpenAICompatProvider } from '@centraid/agent-runtime';
+import type { SecretsProvider } from './secrets.js';
 
 export function parseProviderPrefs(
   prefs: Record<string, unknown>,
@@ -37,4 +38,21 @@ export function parseProviderPrefs(
 function readStringPref(prefs: Record<string, unknown>, key: string): string | undefined {
   const v = prefs[key];
   return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
+/**
+ * Parse the provider prefs, then splice in the API key from the injected
+ * `SecretsProvider` (skipped when the provider declares no `envKey`).
+ * Returns the full `OpenAICompatProvider` the chat runner / automation
+ * runner expect, or `undefined` when no provider is configured.
+ */
+export async function resolveProvider(
+  prefs: Record<string, unknown>,
+  secrets: SecretsProvider,
+): Promise<OpenAICompatProvider | undefined> {
+  const base = parseProviderPrefs(prefs);
+  if (!base) return undefined;
+  if (!base.envKey) return base;
+  const apiKey = await secrets.getProviderApiKey();
+  return apiKey ? { ...base, apiKey } : base;
 }
