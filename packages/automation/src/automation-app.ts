@@ -10,22 +10,19 @@
  *   <appCodeDir>/automations/<id>/automation.json  — the manifest
  *   <appCodeDir>/automations/<id>/handler.js       — the handler
  *
- * `<appCodeDir>` is an app's *active version* directory. `listAutomations`
- * resolves it per app via `readActiveCodeDir` — that returns
- * `<appDir>/versions/<active>/` for an uploaded/versioned app and falls
- * back to `<appDir>` itself for a flat, editable desktop app. The
- * same scan therefore covers both the gateway (versioned) and the
- * desktop builder (flat draft).
+ * `appsDir` here is an app-CODE root: `<appsDir>/<id>/automations/...`.
+ * Callers pass the live git-store `main` worktree's `apps/` dir (the
+ * gateway's cron scheduler / run-now, the OpenClaw fire path); the
+ * draft builder passes its session worktree's `apps/` dir. Code lives in
+ * the worktree (issue #137); the per-app DATA dir is resolved separately.
  *
  * An automation's globally-unique handle is `<appId>/<id>` — see
- * `formatAutomationRef`. Scaffolding a fresh app lives in
- * `@centraid/agent-harness`; this module lists, reads, and mutates
- * manifests of apps that already exist.
+ * `formatAutomationRef`. This module lists, reads, and mutates manifests
+ * of apps that already exist.
  */
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { readActiveCodeDir } from '@centraid/app-engine';
 import {
   AUTOMATION_HANDLER_FILE,
   AUTOMATION_MANIFEST_FILE,
@@ -150,7 +147,7 @@ export async function readAppOwnedAutomation(
   automationId: string,
 ): Promise<AutomationRow | undefined> {
   if (!isValidAutomationId(automationId)) return undefined;
-  const codeDir = await readActiveCodeDir(path.join(appsDir, appId));
+  const codeDir = path.join(appsDir, appId);
   return readAutomationAppAt(path.join(codeDir, APP_AUTOMATIONS_SUBDIR, automationId), appId);
 }
 
@@ -174,7 +171,7 @@ export async function listAutomations(appsDir: string): Promise<ListAutomationAp
   for (const app of appEntries) {
     if (!app.isDirectory()) continue;
     if (app.name.startsWith('.') || app.name.startsWith('_')) continue;
-    const codeDir = await readActiveCodeDir(path.join(appsDir, app.name));
+    const codeDir = path.join(appsDir, app.name);
     const autoRoot = path.join(codeDir, APP_AUTOMATIONS_SUBDIR);
     let autoEntries: import('node:fs').Dirent[];
     try {

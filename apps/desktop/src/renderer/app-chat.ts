@@ -1062,8 +1062,8 @@ import {
       ensureTurnState(turnId);
       renderChat();
       try {
-        // Lazily create the session row on first send — its id IS the
-        // window id the gateway keys the turn (+ transcript) on.
+        // Lazily create the session row on first send — its id is the
+        // chat session id the gateway keys the turn (+ transcript) on.
         if (!currentSessionId) {
           const created = await createChatSession(appId, deriveTitle(text));
           currentSessionId = created.id;
@@ -1074,7 +1074,7 @@ import {
         await streamChat(
           appId,
           {
-            windowId: currentSessionId,
+            chatSessionId: currentSessionId,
             message: text,
             ...(settings.chatModel ? { model: settings.chatModel } : {}),
           },

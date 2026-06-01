@@ -254,7 +254,7 @@ export class ChatHistoryStore {
   }
 
   /** Session meta only (no transcript). Cheap — the `_chat` POST route
-   *  uses this to read sticky mode + runner-resume handles per turn. */
+   *  uses this to read the runner-resume handle per turn. */
   getSessionMeta(appId: string, id: string): ChatSessionMeta | undefined {
     const { stmts } = this.appChat(appId);
     const row = stmts.getSession.get(id, this.currentUserId()) as unknown;

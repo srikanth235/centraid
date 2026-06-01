@@ -36,21 +36,12 @@ export interface MakeChatRunnerOptions {
    * cycle-break on first use (see local-runtime).
    */
   getDispatcher: () => Dispatcher;
-  /**
-   * Parent dir under which scoped `CODEX_HOME`s are materialized when the
-   * user has configured a custom OpenAI-compatible provider on a codex
-   * runner. Hosts should point this at a stable userData-relative path
-   * so codex thread state persists across launches. Ignored when no
-   * provider is configured.
-   */
-  codexHomeBaseDir?: string;
 }
 
 export function makeChatRunner(opts: MakeChatRunnerOptions): ChatRunner {
   return makeChatRunnerCore({
     prefsLoader: opts.prefsLoader,
     getDispatcher: opts.getDispatcher,
-    ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
     // Data chat runs in the app's data dir; the route preamble is passed
     // through unchanged (no authoring grounding) and there's no post-turn
     // side effect, so those seams are left at their defaults.

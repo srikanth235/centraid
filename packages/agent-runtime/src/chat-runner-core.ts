@@ -53,12 +53,6 @@ export interface ChatRunnerCoreOptions {
    */
   getDispatcher: () => Dispatcher;
   /**
-   * Parent dir under which scoped `CODEX_HOME`s are materialized when the
-   * user has configured a custom OpenAI-compatible provider on a codex
-   * runner. Ignored when no provider is configured.
-   */
-  codexHomeBaseDir?: string;
-  /**
    * Resolve the working dir for the turn. Data chat returns `input.dataDir`;
    * builder chat opens (or reuses) the app's draft session worktree and
    * returns its app dir.
@@ -143,10 +137,7 @@ export function makeChatRunnerCore(opts: ChatRunnerCoreOptions): ChatRunner {
         ...(resumeId ? { prevSessionId: resumeId } : {}),
       };
 
-      const result = await runTurn(turnInput, {
-        prefs,
-        ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
-      });
+      const result = await runTurn(turnInput, { prefs });
 
       if (opts.onTurnComplete) {
         try {

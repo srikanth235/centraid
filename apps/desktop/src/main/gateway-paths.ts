@@ -27,7 +27,6 @@
 //   - `identity.sqlite`           — users + prefs (local only)
 //   - `analytics.sqlite`          — run summaries (local only)
 //   - `chat-runner-sessions/`     — codex thread state for in-app chat
-//   - `codex-home/`               — provider-scoped CODEX_HOME bases
 //   - `templates-cache/`          — downloaded remote-template tarballs
 
 import { app } from 'electron';
@@ -111,19 +110,6 @@ export function gatewayAnalyticsDb(id: string): string {
  */
 export function gatewayChatRunnerSessionsDir(id: string): string {
   return path.join(gatewayDir(id), 'chat-runner-sessions');
-}
-
-/**
- * Parent dir for provider-scoped `CODEX_HOME`s. When the user has
- * configured a custom OpenAI-compatible provider, the builder + chat
- * codex spawns get `CODEX_HOME=<this dir>/codex-homes/<provider-id>/`
- * pointing at a centraid-generated config.toml (the user's real
- * `~/.codex` is left untouched). Per-gateway because codex stores
- * thread state under `CODEX_HOME`, and a thread tied to "app X on
- * gateway A" is a different conversation from "app X on gateway B".
- */
-export function gatewayCodexHomeBaseDir(id: string): string {
-  return path.join(gatewayDir(id), 'codex-home');
 }
 
 /**

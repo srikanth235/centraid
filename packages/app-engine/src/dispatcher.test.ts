@@ -5,7 +5,6 @@ import { DatabaseSync } from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
 import { Registry } from './registry.js';
-import { VersionStore } from './version-store.js';
 import { Dispatcher, isToolName, statusForToolError } from './dispatcher.js';
 import { runQuery } from './run-query.js';
 
@@ -15,22 +14,17 @@ const writeJson = (file: string, data: unknown) =>
 const writeFile = (file: string, body: string) => fs.writeFile(file, body, 'utf8');
 
 /**
- * Build an uploaded-mode app on disk with a single committed version.
+ * Build an app's CODE on disk under a git-store-style code root: the
+ * dispatcher resolves it via `codeDirOverride` (issue #137). DATA lives
+ * separately, under the registry's per-app dir.
  *
- * Layout produced (matches what `VersionStore.commit` writes after an
- * upload):
- *
- *   <appsDir>/<id>/
- *     current.json                          ← { activeVersion: 'v_test_1', history: [...] }
- *     versions/v_test_1/
- *       app.json
- *       actions/<...>.js
- *       queries/<...>.js
+ *   <codeRoot>/<id>/
+ *     app.json
+ *     actions/<...>.js
+ *     queries/<...>.js
  */
-async function makeTodoApp(appsDir: string, appId = 'todos'): Promise<void> {
-  const appRoot = path.join(appsDir, appId);
-  const versionId = 'v_test_1';
-  const versionDir = path.join(appRoot, 'versions', versionId);
+async function makeTodoApp(codeRoot: string, appId = 'todos'): Promise<void> {
+  const versionDir = path.join(codeRoot, appId);
   await fs.mkdir(path.join(versionDir, 'actions'), { recursive: true });
   await fs.mkdir(path.join(versionDir, 'queries'), { recursive: true });
 
@@ -74,39 +68,30 @@ async function makeTodoApp(appsDir: string, appId = 'todos'): Promise<void> {
        return await db.prepare('SELECT id, text FROM todos ORDER BY id').all();
      };\n`,
   );
-
-  await writeJson(path.join(appRoot, 'current.json'), {
-    activeVersion: versionId,
-    history: [
-      {
-        versionId,
-        sha256: 'x'.repeat(64),
-        uploadedAt: new Date().toISOString(),
-        bytes: 0,
-        files: 3,
-      },
-    ],
-  });
 }
 
 describe('Dispatcher', () => {
   let workDir: string;
+  let codeRoot: string;
   let registry: Registry;
-  let versions: VersionStore;
   let dispatcher: Dispatcher;
 
   before(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-'));
-    await makeTodoApp(workDir, 'todos');
+    codeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-code-'));
+    await makeTodoApp(codeRoot, 'todos');
     registry = new Registry(workDir);
     await registry.load();
     await registry.ensureUploaded('todos');
-    versions = new VersionStore();
-    dispatcher = new Dispatcher({ registry, versions });
+    dispatcher = new Dispatcher({
+      registry,
+      codeDirOverride: async (appId) => path.join(codeRoot, appId),
+    });
   });
 
   after(async () => {
     await fs.rm(workDir, { recursive: true, force: true });
+    await fs.rm(codeRoot, { recursive: true, force: true });
   });
 
   it('describe with no filter returns a list of apps', async () => {
@@ -301,37 +286,31 @@ describe('manifest validation surfaces as INVALID_MANIFEST', () => {
   let registry: Registry;
   let dispatcher: Dispatcher;
 
+  let codeRoot: string;
+
   before(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-bad-'));
-    const versionId = 'v_bad_1';
-    const versionDir = path.join(workDir, 'broken', 'versions', versionId);
-    await fs.mkdir(versionDir, { recursive: true });
-    await writeJson(path.join(versionDir, 'app.json'), {
+    codeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-bad-code-'));
+    const codeDir = path.join(codeRoot, 'broken');
+    await fs.mkdir(codeDir, { recursive: true });
+    await writeJson(path.join(codeDir, 'app.json'), {
       // Missing manifestVersion + actions/queries
       id: 'broken',
       name: 'Broken',
       version: '0.1.0',
     });
-    await writeJson(path.join(workDir, 'broken', 'current.json'), {
-      activeVersion: versionId,
-      history: [
-        {
-          versionId,
-          sha256: 'x'.repeat(64),
-          uploadedAt: new Date().toISOString(),
-          bytes: 0,
-          files: 1,
-        },
-      ],
-    });
     registry = new Registry(workDir);
     await registry.load();
     await registry.ensureUploaded('broken');
-    dispatcher = new Dispatcher({ registry, versions: new VersionStore() });
+    dispatcher = new Dispatcher({
+      registry,
+      codeDirOverride: async (appId) => path.join(codeRoot, appId),
+    });
   });
 
   after(async () => {
     await fs.rm(workDir, { recursive: true, force: true });
+    await fs.rm(codeRoot, { recursive: true, force: true });
   });
 
   it('write surfaces INVALID_MANIFEST', async () => {
@@ -374,17 +353,22 @@ describe('tool naming helpers', () => {
 // `data.sqlite`, never the app's live rows.
 describe('Dispatcher draft data dir = code dir (#144)', () => {
   let workDir: string;
+  let codeRoot: string;
   let registry: Registry;
   let dispatcher: Dispatcher;
   let draftDir: string;
 
   before(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatch-draft-'));
-    await makeTodoApp(workDir, 'todos');
+    codeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatch-draft-code-'));
+    await makeTodoApp(codeRoot, 'todos');
     registry = new Registry(workDir);
     await registry.load();
     await registry.ensureUploaded('todos');
-    dispatcher = new Dispatcher({ registry, versions: new VersionStore() });
+    dispatcher = new Dispatcher({
+      registry,
+      codeDirOverride: async (appId) => path.join(codeRoot, appId),
+    });
 
     // Draft worktree dir: a valid code dir (app.json) holding its own
     // branched data.sqlite. Both live and draft start with a `notes` table
@@ -408,6 +392,7 @@ describe('Dispatcher draft data dir = code dir (#144)', () => {
 
   after(async () => {
     await fs.rm(workDir, { recursive: true, force: true });
+    await fs.rm(codeRoot, { recursive: true, force: true });
   });
 
   it('a draft _sql write lands in the worktree data.sqlite, never live', async () => {

@@ -35,7 +35,7 @@ function baseInput(
   return {
     appId: 'notes',
     dataDir: path.join(root, 'data', 'notes'),
-    windowId: 'win-1',
+    chatSessionId: 'win-1',
     sessionFile: path.join(root, 'sessions', 'win-1.jsonl'),
     message: 'add a webhook automation',
     extraSystemPrompt: 'BASE_DATA_PREAMBLE',
@@ -75,8 +75,8 @@ test('runs the turn in the draft worktree with the union of tools + builder prom
 
   const result = await runner.run(baseInput({}, (e) => events.push(e)));
 
-  // cwd is the app's draft worktree app dir under the `desktop-<appId>` session.
-  const expectedCwd = await store.snapshotSessionAppDir('desktop-notes', 'notes');
+  // cwd is the app's draft worktree app dir under the host-neutral `chat-<appId>` default session.
+  const expectedCwd = await store.snapshotSessionAppDir('chat-notes', 'notes');
   assert.equal(captured?.input.cwd, expectedCwd);
 
   // Union of tools: the `centraid_*` dispatcher is threaded for this app.
@@ -153,7 +153,7 @@ test('mints a pending webhook authored during the turn and surfaces it once', as
   assert.match(minted.url, /^http:\/\/127\.0\.0\.1:9999\/_centraid-hook\//);
 
   // The staged manifest no longer carries the plaintext secret — only a hash.
-  const appDir = await store.snapshotSessionAppDir('desktop-notes', 'notes');
+  const appDir = await store.snapshotSessionAppDir('chat-notes', 'notes');
   const raw = await fs.readFile(
     path.join(appDir, 'automations', 'notify', 'automation.json'),
     'utf8',

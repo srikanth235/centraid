@@ -28,7 +28,15 @@ import { loadSettings } from './settings.js';
 /** appId → open session id (resolves once the open round-trip lands). */
 const sessions = new Map<string, Promise<string>>();
 
-function sessionIdFor(appId: string): string {
+/**
+ * The desktop's per-app draft-session id scheme. Shared with the gateway's
+ * unified chat runner (injected via `serve({ sessionIdFor })`) so the
+ * renderer Code tab, the local builder, and gateway chat all edit ONE
+ * `desktop-<appId>` worktree. The renderer keeps its own copy of this
+ * scheme (`gateway-client-editing.ts`) on purpose — it runs in a separate
+ * process and can't import main-process modules.
+ */
+export function desktopSessionIdFor(appId: string): string {
   return `desktop-${appId}`;
 }
 
@@ -47,7 +55,7 @@ export async function ensureAppSession(appId: string): Promise<string> {
       sessions.delete(appId);
     }
   }
-  const wanted = sessionIdFor(appId);
+  const wanted = desktopSessionIdFor(appId);
   // openSession is idempotent on the gateway side only in that a fresh
   // id makes a fresh worktree; a re-open of the SAME id 409s. So we
   // tolerate "already exists" by treating it as success — the worktree
@@ -69,7 +77,7 @@ export async function ensureAppSession(appId: string): Promise<string> {
 export async function dropAppSession(appId: string): Promise<void> {
   const existing = sessions.get(appId);
   sessions.delete(appId);
-  let sessionId = sessionIdFor(appId);
+  let sessionId = desktopSessionIdFor(appId);
   if (existing) {
     try {
       sessionId = await existing;

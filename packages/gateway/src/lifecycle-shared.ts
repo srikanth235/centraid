@@ -33,7 +33,8 @@ export interface LifecycleRouteOptions {
    * is deleted wholesale, so its data.sqlite + run ledgers don't linger.
    */
   deregister: (appId: string) => Promise<void>;
-  /** Reconcile the OS scheduler after a publish changed the live set. */
+  /** Reconcile the gateway's in-process cron scheduler after a publish
+   *  changed the live set (issue #149/#150). */
   reconcile: () => void;
   /**
    * Resolve an app's LIVE `data.sqlite` path. Injected so a lifecycle
@@ -112,8 +113,8 @@ export function parseHistoryKeep(raw: unknown): AutomationHistoryKeep | undefine
 /**
  * The "a publish landed on `main`" invariant, in one place: validate the
  * worktree manifest, merge it onto `main`, register the now-live app, and
- * reconcile the OS scheduler against the new live set. Optionally close a
- * one-shot session afterward.
+ * reconcile the in-process cron scheduler against the new live set.
+ * Optionally close a one-shot session afterward.
  *
  * Every lifecycle mutation that publishes funnels through here so no route
  * hand-sequences `publish → ensureRegistered → reconcile` itself (issue #147,

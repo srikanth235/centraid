@@ -5,15 +5,15 @@
  * gateway via the existing remote-gateway path.
  *
  * Scenario:
- *   1. Client A uploads a tiny app via POST /centraid/<id>/_uploads/.
- *   2. Client B fetches GET /centraid/_apps and sees it.
- *   3. Client B reads back the app's manifest via GET /centraid/<id>/
- *      static-serve path (proves static serving works through the
- *      daemon, not just the bearer check).
+ *   1. An app is published onto the git-store `main` (issue #137).
+ *   2. Client A fetches GET /centraid/_apps and sees it in the registry.
+ *   3. Client B reads back the app's `index.html` via the `/centraid/<id>/`
+ *      static-serve path (proves static serving works through the daemon
+ *      from the live `main` worktree, not just the bearer check).
  *
  * No CLI spawn — we drive `serve()` in-process. The CLI smoke is
  * covered in `cli.test.ts`. This test focuses on the runtime contract
- * a second client expects after a first client writes.
+ * a second client expects after the gateway holds a published app.
  */
 
 import { test, beforeEach, afterEach } from 'node:test';
@@ -22,7 +22,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import * as tar from 'tar';
+import { WorktreeStore } from '@centraid/worktree-store';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 import type { SecretsProvider } from './secrets.ts';
@@ -42,32 +42,30 @@ function pathsUnder(dir: string): GatewayPaths {
     identityDb: path.join(dir, 'identity.sqlite'),
     analyticsDb: path.join(dir, 'analytics.sqlite'),
     chatRunnerSessionDir: path.join(dir, 'chat-runner-sessions'),
-    codexHomeBaseDir: path.join(dir, 'codex-home'),
   };
 }
 
-async function buildAppTarball(): Promise<Buffer> {
-  const stage = await fs.mkdtemp(path.join(os.tmpdir(), `app-stage-${crypto.randomUUID()}-`));
-  try {
-    await fs.writeFile(
-      path.join(stage, 'app.json'),
-      JSON.stringify({ name: 'multiclient-test', version: '0.1.0' }),
-    );
-    await fs.writeFile(path.join(stage, 'index.html'), '<!doctype html><title>mc</title>');
-    const chunks: Buffer[] = [];
-    const stream = tar.create({ gzip: true, cwd: stage }, ['app.json', 'index.html']);
-    for await (const chunk of stream as unknown as AsyncIterable<Buffer | string>) {
-      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-    }
-    return Buffer.concat(chunks);
-  } finally {
-    await fs.rm(stage, { recursive: true, force: true });
-  }
+/** Publish one app onto the git-store `main`, before serve() boots. */
+async function seedApp(appsStoreRoot: string, appId: string): Promise<void> {
+  const store = new WorktreeStore({ root: appsStoreRoot });
+  await store.init();
+  const session = await store.openSession('seed');
+  const appDir = path.join(session.worktreePath, 'apps', appId);
+  await fs.mkdir(appDir, { recursive: true });
+  await fs.writeFile(
+    path.join(appDir, 'app.json'),
+    JSON.stringify({ manifestVersion: 1, id: appId, name: 'multiclient-test', version: '0.1.0' }),
+  );
+  await fs.writeFile(path.join(appDir, 'index.html'), '<!doctype html><title>mc</title>');
+  await store.publish({ sessionId: 'seed', appId, message: 'seed' });
+  await store.closeSession('seed');
 }
 
 beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `mc-gateway-${crypto.randomUUID()}-`));
-  handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets });
+  const appsStoreRoot = path.join(dataDir, 'code');
+  await seedApp(appsStoreRoot, 'multiclient-test');
+  handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets, appsStoreRoot });
 });
 
 afterEach(async () => {
@@ -75,25 +73,8 @@ afterEach(async () => {
   await fs.rm(dataDir, { recursive: true, force: true });
 });
 
-test('one client uploads an app and a second client sees it in the registry', async () => {
-  const tarball = await buildAppTarball();
-
-  // Client A: upload. Route is POST /centraid/_apps/<id>/upload — apps are
-  // registered implicitly by uploading, no separate POST /centraid/_apps.
-  const upload = await fetch(`${handle.url}/centraid/_apps/multiclient-test/upload`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${handle.token}`,
-      'Content-Type': 'application/gzip',
-    },
-    body: tarball,
-  });
-  assert.ok(
-    upload.status >= 200 && upload.status < 300,
-    `upload failed (status=${upload.status}): ${await upload.text()}`,
-  );
-
-  // Client B: list — should see the freshly uploaded app.
+test('two clients see the published app consistently in the registry + static serve', async () => {
+  // Client A: list — sees the app synced from `main`.
   const list = await fetch(`${handle.url}/centraid/_apps`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
@@ -104,9 +85,9 @@ test('one client uploads an app and a second client sees it in the registry', as
     `expected to find multiclient-test in registry, got ${JSON.stringify(apps)}`,
   );
 
-  // Client B: static-serve the uploaded index.html — proves the daemon's
-  // `/centraid/<id>/` static path resolves the active version, not just
-  // the registry index.
+  // Client B: static-serve the app's index.html — proves the daemon's
+  // `/centraid/<id>/` static path resolves the live `main` worktree, not
+  // just the registry index.
   const html = await fetch(`${handle.url}/centraid/multiclient-test/`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });

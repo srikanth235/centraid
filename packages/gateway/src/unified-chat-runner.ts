@@ -6,9 +6,11 @@
  * engine; this runner merges them. A turn now runs with:
  *
  *   - cwd = the app's OPEN draft session worktree (`worktrees/sessions/
- *     desktop-<appId>/apps/<appId>/`), so the agent's native file edits
- *     stage in the draft — the same worktree the renderer's Code tab and
- *     the (retiring) local builder agent share, keyed `desktop-<appId>`;
+ *     <sessionId>/apps/<appId>/`), so the agent's native file edits stage in
+ *     the draft. `<sessionId>` is host-provided via `sessionIdFor` (the
+ *     desktop injects `desktop-<appId>` so this is the same worktree the
+ *     renderer's Code tab and the local builder agent share); the core
+ *     defaults to a host-neutral `chat-<appId>`;
  *   - the UNION of tools: the codex/claude adapter's native file-edit +
  *     shell tools (workspace-write against cwd) PLUS the `centraid_*`
  *     dispatcher threaded via `toolContext`, so the same turn can author a
@@ -66,8 +68,6 @@ export interface UnifiedChatRunnerOptions {
   /** Resolve the shared app-engine dispatcher for the `centraid_*` tools.
    *  Called per turn so the host can cycle-break on first use. */
   getDispatcher: () => Dispatcher;
-  /** Parent dir for scoped `CODEX_HOME`s when a custom provider is set. */
-  codexHomeBaseDir?: string;
   /** Resolve the public base URL (`http://host:port`) used to build webhook
    *  URLs after minting. A thunk because the ephemeral port is only known
    *  after the server starts — and a turn only ever runs post-start. */
@@ -76,9 +76,11 @@ export interface UnifiedChatRunnerOptions {
    *  worktree is seeded from it on first access (issue #144) so the agent
    *  operates on prod-shaped data while testing. */
   liveDataFile?: (appId: string) => string;
-  /** Session id for an app's shared draft worktree. Defaults to the
-   *  `desktop-<appId>` scheme the renderer + builder already use, so all
-   *  three edit ONE draft. Overridable for tests. */
+  /** Session id for an app's shared draft worktree. Defaults to a
+   *  host-neutral `chat-<appId>` scheme. Hosts that share the draft with
+   *  another editing surface inject their own scheme — the desktop passes
+   *  `desktop-<appId>` so the renderer Code tab, the local builder, and
+   *  gateway chat all edit ONE draft. Also overridable for tests. */
   sessionIdFor?: (appId: string) => string;
   /** Turn driver — defaults to `runAgentTurn`; injected in tests. */
   runTurn?: RunTurnFn;
@@ -88,7 +90,12 @@ export interface UnifiedChatRunnerOptions {
 }
 
 function defaultSessionIdFor(appId: string): string {
-  return `desktop-${appId}`;
+  // Host-neutral default — the `buildGateway()` core must not bake the
+  // desktop renderer's scheme in. Hosts that share the draft with another
+  // editing surface inject `sessionIdFor` (the desktop passes
+  // `desktop-<appId>`); the standalone daemon, with no second editor, is
+  // happy with this self-consistent scheme.
+  return `chat-${appId}`;
 }
 
 /**
@@ -144,7 +151,6 @@ export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunne
   return makeChatRunnerCore({
     prefsLoader: opts.prefsLoader,
     getDispatcher: opts.getDispatcher,
-    ...(opts.codexHomeBaseDir ? { codexHomeBaseDir: opts.codexHomeBaseDir } : {}),
     ...(extraPath ? { extraPath } : {}),
     ...(opts.runTurn ? { runTurn: opts.runTurn } : {}),
 

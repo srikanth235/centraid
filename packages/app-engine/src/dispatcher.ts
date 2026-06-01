@@ -25,9 +25,8 @@ import {
   type ManifestActionEntry,
   type ManifestQueryEntry,
 } from './manifest.js';
-import { appCodeDir, appDataDir } from './app-paths.js';
+import { appDataDir } from './app-paths.js';
 import type { RegistryEntry } from './types.js';
-import type { VersionStore } from './version-store.js';
 import type { ValidateFunction } from 'ajv';
 import { readAppSchema, type AppSchema } from './schema.js';
 import { runBuiltinRead, runBuiltinWrite } from './dispatcher-builtins.js';
@@ -109,14 +108,13 @@ export interface CentraidDescribeInput {
 
 export interface DispatcherOptions {
   readonly registry: Registry;
-  readonly versions: VersionStore;
   /** Write-notification callback per app — feeds the `_changes` SSE stream. */
   readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
   /**
-   * Optional code-dir resolver (issue #137). When set, it is the SOLE
-   * authority (git store owns all code; an app it can't resolve is not
-   * live — no `current.json` fallback). When absent, the legacy tarball
-   * backend resolves via `versions.getActiveVersion` + `appCodeDir`.
+   * Code-dir resolver (issue #137). The git store owns all code; this
+   * resolves an app id to its live code dir (the materialized `main`
+   * worktree). An app it can't resolve is not live. When absent, no app
+   * has servable code.
    */
   readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
 }
@@ -135,26 +133,21 @@ interface ManifestCacheEntry {
 
 export class Dispatcher {
   private readonly registry: Registry;
-  private readonly versions: VersionStore;
   private readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
   private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
   private readonly manifestCache = new Map<string, ManifestCacheEntry>();
 
   constructor(opts: DispatcherOptions) {
     this.registry = opts.registry;
-    this.versions = opts.versions;
     if (opts.onWriteFor) this.onWriteFor = opts.onWriteFor;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
   }
 
   // --------- resolution helpers ---------
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    // Git-store backend (#137): override is the sole authority. Else the
-    // legacy tarball backend resolves the active-version dir.
-    if (this.codeDirOverride) return this.codeDirOverride(entry.id);
-    const active = await this.versions.getActiveVersion(entry.path);
-    if (!active) return undefined;
-    return appCodeDir(entry, active);
+    // Git-store backend (#137): the override resolves an app's live code
+    // dir. No override → no servable code.
+    return this.codeDirOverride ? this.codeDirOverride(entry.id) : undefined;
   }
 
   private async loadManifest(codeDir: string): Promise<Manifest> {

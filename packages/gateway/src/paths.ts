@@ -33,18 +33,10 @@ export interface GatewayPaths {
 
   /**
    * Scratch base dir for the chat runner's per-session state files. The
-   * `POST /centraid/<id>/_chat` route passes `<dir>/<windowId>.jsonl` as
+   * `POST /centraid/<id>/_chat` route passes `<dir>/<chatSessionId>.jsonl` as
    * `ChatRunInput.sessionFile`.
    */
   chatRunnerSessionDir: string;
-
-  /**
-   * Parent dir for provider-scoped `CODEX_HOME`s. When the user has
-   * configured a custom OpenAI-compatible provider on the codex runner,
-   * the adapter materializes a per-provider `CODEX_HOME` here so the
-   * user's real `~/.codex` stays untouched.
-   */
-  codexHomeBaseDir: string;
 
   /**
    * Optional per-gateway template cache dir (issue #141). When set, the

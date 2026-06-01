@@ -87,14 +87,6 @@ export interface AgentTurnInput {
 
 export interface AgentTurnConfig {
   prefs: RunnerPrefs;
-  /**
-   * Parent directory under which scoped `CODEX_HOME`s are materialized
-   * when `prefs.provider` is set on a codex runner. The host should
-   * point this at a persistent location under its userData dir so codex
-   * thread state survives across launches. Ignored for `claude-code`
-   * runners. Defaults to `os.tmpdir()` inside the codex adapter.
-   */
-  codexHomeBaseDir?: string;
 }
 
 export interface AgentTurnResult {
@@ -127,7 +119,6 @@ export async function runAgentTurn(
         ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
         ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
         ...(prefs.provider ? { provider: prefs.provider } : {}),
-        ...(config.codexHomeBaseDir ? { codexHomeBaseDir: config.codexHomeBaseDir } : {}),
       },
     );
     return {

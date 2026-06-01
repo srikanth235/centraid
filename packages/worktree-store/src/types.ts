@@ -61,6 +61,14 @@ export interface RollbackInput {
   appId: string;
   /** Existing tag to roll back to — e.g. `todo/v1`. */
   versionTag: string;
+  // By design there is NO `migrate` hook here (the asymmetry with
+  // `PublishInput.migrate` is deliberate — issue #160 / #144): rollback is
+  // CODE-ONLY. It swaps the live `apps/<appId>/` tree back to an older tag
+  // but does NOT touch live `data.sqlite`. centraid migrations are
+  // forward-only, so there is no down-migration to run; the live schema
+  // stays at its current (forward) version, ahead of the rolled-back code.
+  // A subsequent re-publish re-applies the forward migration and heals any
+  // drift. See `rollbackCritical`.
 }
 
 export interface RollbackResult {

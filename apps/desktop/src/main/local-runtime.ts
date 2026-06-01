@@ -10,11 +10,11 @@ import {
   gatewayAnalyticsDb,
   gatewayAppsDir,
   gatewayChatRunnerSessionsDir,
-  gatewayCodexHomeBaseDir,
   gatewayCodeStoreDir,
   gatewayIdentityDb,
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
+import { desktopSessionIdFor } from './app-sessions.js';
 import { loadPersistedSettings, templatesCacheDir } from './settings.js';
 
 /**
@@ -28,17 +28,16 @@ import { loadPersistedSettings, templatesCacheDir } from './settings.js';
  *   - per-gateway lifecycle (the `handles` map + `starting` dedupe)
  *   - safeStorage-backed secrets
  *   - Electron-derived paths (via `gateway-paths.ts`)
- *   - OS-scheduler factory the desktop installs
  *
  * Auth: a per-launch random bearer token is minted by `serve()`. The
  * token is handed back to the renderer as the effective `gatewayToken`
  * so the renderer's HTTP client uses it on every request — same wire
  * format as remote OpenClaw mode.
  *
- * Switching the active local gateway tears down its HTTP server, but
- * automations registered with the OS scheduler keep firing — they
- * shell the CLI against the per-gateway DB paths baked into each
- * scheduler entry.
+ * Switching the active local gateway tears down its HTTP server, which
+ * also stops that gateway's in-process cron scheduler (issue #149/#150):
+ * the gateway owns scheduling internally now, so its automations only
+ * fire while the gateway runs — no OS scheduler, no backfill.
  */
 
 const handles = new Map<string, GatewayServeHandle>();
@@ -65,15 +64,6 @@ function ensureInfoProviderRegistered(): void {
  */
 export async function localRuntimeAppsDir(gatewayId: string): Promise<string> {
   return gatewayAppsDir(gatewayId);
-}
-
-/**
- * Parent directory under which provider-scoped `CODEX_HOME`s are
- * materialized when the user has configured a custom OpenAI-compatible
- * provider on the codex runner.
- */
-export function localRuntimeCodexHomeBaseDir(gatewayId: string): string {
-  return gatewayCodexHomeBaseDir(gatewayId);
 }
 
 /**
@@ -121,7 +111,6 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
         identityDb: localRuntimeGatewayDb(gatewayId),
         analyticsDb: localRuntimeAnalyticsDb(gatewayId),
         chatRunnerSessionDir: gatewayChatRunnerSessionsDir(gatewayId),
-        codexHomeBaseDir: localRuntimeCodexHomeBaseDir(gatewayId),
         // Gateway owns the template catalog now (issue #141): the
         // `GET /centraid/_templates` route resolves bundle-or-cache from
         // this per-gateway cache dir, matching the old desktop IPC.
@@ -133,6 +122,12 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
       // so drafts survive restarts and the publish/session HTTP surface
       // is identical to the standalone daemon.
       appsStoreRoot: gatewayCodeStoreDir(gatewayId),
+      // Inject the desktop's draft-session scheme so the gateway's unified
+      // chat runner edits the SAME `desktop-<appId>` worktree the renderer
+      // Code tab + local builder use (issue #160). Without this the runner
+      // would fall back to the host-neutral `chat-<appId>` default and chat
+      // edits wouldn't show up in the Code tab.
+      sessionIdFor: desktopSessionIdFor,
       // Scheduling (issue #149): the gateway owns an in-process cron
       // scheduler internally and fires automations while it runs — no OS
       // scheduler, no `centraid run-automation` subprocess. Nothing to
@@ -150,9 +145,10 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
 
 /**
  * Stop the in-process HTTP runtime for a specific local gateway.
- * Idempotent; safe to call for unknown ids. Automations registered with
- * the OS scheduler keep firing — they don't depend on the runtime
- * being up.
+ * Idempotent; safe to call for unknown ids. The gateway owns an
+ * in-process cron scheduler (issue #149/#150), so closing the runtime
+ * also stops that gateway's automations from firing — they only run
+ * while the gateway is up.
  */
 export async function shutdownLocalRuntime(gatewayId: string): Promise<void> {
   const h = handles.get(gatewayId);

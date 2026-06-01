@@ -39,9 +39,9 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 export function makeOpenClawChatRunner(api: OpenClawPluginApi): ChatRunner {
   return {
     async run(input: ChatRunInput): Promise<void> {
-      const sessionKey = `centraid-chat:${input.appId}:w${input.windowId}`;
+      const sessionKey = `centraid-chat:${input.appId}:w${input.chatSessionId}`;
       const sessionId = sessionKey;
-      const runId = `centraid:${input.appId}:${input.windowId}:${Date.now().toString(36)}`;
+      const runId = `centraid:${input.appId}:${input.chatSessionId}:${Date.now().toString(36)}`;
 
       // Plugin-owned scratch dir plus `isCanonicalWorkspace=false` so
       // OpenClaw skips AGENTS.md / SOUL.md / USER.md loading; the user's

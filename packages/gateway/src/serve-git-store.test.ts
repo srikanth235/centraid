@@ -36,7 +36,6 @@ function pathsUnder(dir: string): GatewayPaths {
     identityDb: path.join(dir, 'identity.sqlite'),
     analyticsDb: path.join(dir, 'analytics.sqlite'),
     chatRunnerSessionDir: path.join(dir, 'chat-runner-sessions'),
-    codexHomeBaseDir: path.join(dir, 'codex-home'),
   };
 }
 
@@ -124,7 +123,7 @@ test('serves an app from the git-store main worktree, not versions/', async () =
   assert.deepEqual(await read.json(), { pong: true });
 });
 
-test('without appsStoreRoot the handle has no appsStore (legacy backend)', async () => {
+test('without appsStoreRoot the handle has no appsStore (no code backend)', async () => {
   handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets });
   assert.equal(handle.appsStore, undefined);
 });

@@ -29,12 +29,9 @@
  */
 
 import { spawn } from 'node:child_process';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import type { RunnerKind } from './types.js';
 import { startMockLlmServer } from './mock-llm-server.js';
-import { materializeCodexHome } from './codex-provider-config.js';
+import { codexProviderOverrideArgs } from './codex-provider-config.js';
 
 /**
  * Drive one throwaway CLI turn against a mock-LLM server. The probe
@@ -49,7 +46,6 @@ async function spawnProbeCli(input: {
   mockBaseUrl: string;
   mockBearerToken: string;
   cwd: string;
-  scratchDir: string;
   abortSignal: AbortSignal;
 }): Promise<void> {
   const env: NodeJS.ProcessEnv = { ...process.env };
@@ -70,20 +66,21 @@ async function spawnProbeCli(input: {
       'bypassPermissions',
     ];
   } else {
-    const codexHome = await materializeCodexHome(
-      {
-        id: 'centraid-mock',
-        name: 'Centraid Automation Mock',
-        baseUrl: input.mockBaseUrl,
-        envKey: 'CENTRAID_MOCK_KEY',
-      },
-      input.scratchDir,
-    );
-    env.CODEX_HOME = codexHome;
+    // Route the probe's model calls through the mock provider via `-c`
+    // overrides on the user's REAL ~/.codex (no CODEX_HOME redirect), so the
+    // enumerated tool surface includes the user's `[mcp_servers.*]` — the
+    // same fix as run-automation-cli-spawn.ts (issue #160). The bearer token
+    // flows via env under the provider's env_key.
     env.CENTRAID_MOCK_KEY = input.mockBearerToken;
     bin = input.binPath ?? 'codex';
     args = [
       'exec',
+      ...codexProviderOverrideArgs({
+        id: 'centraid-mock',
+        name: 'Centraid Automation Mock',
+        baseUrl: input.mockBaseUrl,
+        envKey: 'CENTRAID_MOCK_KEY',
+      }),
       '--json',
       '--dangerously-bypass-approvals-and-sandbox',
       '--skip-git-repo-check',
@@ -162,7 +159,6 @@ async function probeRuntimeTools(
       }
     },
   });
-  const scratchDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-tool-probe-'));
   const timer = setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
   timer.unref?.();
   try {
@@ -174,14 +170,12 @@ async function probeRuntimeTools(
       mockBaseUrl: server.baseUrl,
       mockBearerToken: bearerToken,
       cwd: opts.cwd,
-      scratchDir,
       abortSignal: abort.signal,
       ...(opts.binPath ? { binPath: opts.binPath } : {}),
     });
   } finally {
     clearTimeout(timer);
     await server.close();
-    await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
   }
 
   if (!captured) return [];

@@ -416,10 +416,10 @@ import {
     let generating = false;
     let publishing = false;
     let lastPublishedVersionId: string | undefined;
-    // The gateway chat session this builder streams turns to (its id IS the
-    // window id). Reused across turns so the gateway resumes the same adapter
-    // thread; lazily created on first turn. Null until then.
-    let chatWindowId: string | null = null;
+    // The gateway chat session this builder streams turns to. Reused across
+    // turns so the gateway resumes the same adapter thread; lazily created on
+    // first turn. Null until then.
+    let chatSessionId: string | null = null;
     // Abort handle for the in-flight chat turn (Stop / unmount).
     let agentAbort: AbortController | null = null;
     let liveUrl: string | undefined;
@@ -3444,20 +3444,20 @@ import {
     // 'continue' reuses the app's most recent session so the gateway
     // resumes the same adapter thread across builder reopens; 'fresh' always
     // mints a new session (first build — don't append onto a stale thread).
-    async function ensureChatWindow(
+    async function ensureChatSession(
       id: string,
       sessionMode: 'fresh' | 'continue',
     ): Promise<string> {
-      if (chatWindowId) return chatWindowId;
+      if (chatSessionId) return chatSessionId;
       if (sessionMode === 'continue') {
         const sessions = await listChatSessions(id).catch(() => []);
         if (sessions[0]) {
-          chatWindowId = sessions[0].id;
-          return chatWindowId;
+          chatSessionId = sessions[0].id;
+          return chatSessionId;
         }
       }
-      chatWindowId = (await createChatSession(id, projName)).id;
-      return chatWindowId;
+      chatSessionId = (await createChatSession(id, projName)).id;
+      return chatSessionId;
     }
 
     // Stop streaming on the open thinking block (if any). New tool calls or
@@ -3643,9 +3643,14 @@ import {
       currentThinkingMsgIndex = -1;
       renderChat();
       try {
-        const windowId = await ensureChatWindow(appId, 'continue');
+        const sessionId = await ensureChatSession(appId, 'continue');
         agentAbort = new AbortController();
-        await streamChat(appId, { windowId, message: text }, handleStreamEvent, agentAbort.signal);
+        await streamChat(
+          appId,
+          { chatSessionId: sessionId, message: text },
+          handleStreamEvent,
+          agentAbort.signal,
+        );
         // Stream ended; settle in case it closed without a terminal event.
         if (generating) finishAgentTurn();
       } catch (err) {
@@ -3664,7 +3669,7 @@ import {
         // The automation app is scaffolded as a draft before the
         // builder opens, so this is always a "reopen" — load the manifest
         // snapshot, then seed the intro. The gateway resumes the prior
-        // adapter thread via the reused chat session (ensureChatWindow).
+        // adapter thread via the reused chat session (ensureChatSession).
         chat = [];
         renderChat();
         await refreshAutomationRow();
@@ -3712,7 +3717,7 @@ import {
         }
         // Seed a fresh pane. The gateway resumes the app's prior adapter
         // thread on the first turn via the reused chat session
-        // (ensureChatWindow → most recent session), so the agent keeps
+        // (ensureChatSession → most recent session), so the agent keeps
         // context even though the pane starts empty across reopens.
         chat = chat.concat([
           {
@@ -3761,7 +3766,7 @@ import {
       try {
         // First build → a FRESH chat session so the initial prompt isn't
         // appended onto a stale thread from a prior app at the same id.
-        chatWindowId = (await createChatSession(id, projName)).id;
+        chatSessionId = (await createChatSession(id, projName)).id;
       } catch (err) {
         pushMessage({ kind: 'status', text: `Could not start chat: ${String(err)}` });
         return;

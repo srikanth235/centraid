@@ -9,10 +9,6 @@
 export type Route =
   | { kind: 'registry-list' }
   | { kind: 'registry-deregister'; appId: string }
-  | { kind: 'app-upload'; appId: string }
-  | { kind: 'app-versions-list'; appId: string }
-  | { kind: 'app-version-activate'; appId: string }
-  | { kind: 'app-version-delete'; appId: string; versionId: string }
   | { kind: 'app-schema'; appId: string }
   | {
       kind: 'app-table-rows';
@@ -73,10 +69,9 @@ export function parseRoute(method: string, rawUrl: string): Route {
   const segments = pathname.split('/').filter(Boolean);
   const m = method.toUpperCase();
 
-  // Registry endpoints — reserved id "_apps". Apps are registered
-  // implicitly by uploading (no POST /centraid/_apps anymore — path-
-  // mode registration was retired so the local gateway behaves
-  // identically to the remote one).
+  // Registry endpoints — reserved id "_apps". Apps live in the git store;
+  // creation/publish goes through the gateway's apps-store surface, not
+  // here. This module exposes the read/data/deregister endpoints only.
   if (segments[0] === '_apps') {
     if (segments.length === 1) {
       if (m === 'GET') return { kind: 'registry-list' };
@@ -92,12 +87,6 @@ export function parseRoute(method: string, rawUrl: string): Route {
 
     const sub = decodeURIComponent(segments[2] ?? '');
 
-    if (sub === 'upload' && segments.length === 3 && m === 'POST') {
-      return { kind: 'app-upload', appId };
-    }
-    if (sub === 'activate' && segments.length === 3 && m === 'POST') {
-      return { kind: 'app-version-activate', appId };
-    }
     if (sub === 'schema' && segments.length === 3 && m === 'GET') {
       return { kind: 'app-schema', appId };
     }
@@ -113,15 +102,6 @@ export function parseRoute(method: string, rawUrl: string): Route {
     if (sub === 'logs' && segments.length === 3 && m === 'GET') {
       const query = Object.fromEntries(url.searchParams.entries());
       return { kind: 'app-logs', appId, query };
-    }
-    if (sub === 'versions') {
-      if (segments.length === 3 && m === 'GET') {
-        return { kind: 'app-versions-list', appId };
-      }
-      if (segments.length === 4 && m === 'DELETE') {
-        const versionId = decodeURIComponent(segments[3] ?? '');
-        return { kind: 'app-version-delete', appId, versionId };
-      }
     }
 
     return { kind: 'not-found' };
