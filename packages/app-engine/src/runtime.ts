@@ -3,8 +3,6 @@ import path from 'node:path';
 import os from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Registry, RegistryError } from './registry.js';
-import { VersionStore, VersionStoreError } from './version-store.js';
-import { UploadError } from './upload.js';
 import { parseWithDraft } from './router.js';
 import {
   Dispatcher,
@@ -15,12 +13,10 @@ import {
 } from './dispatcher.js';
 import { serveStatic } from './static-server.js';
 import { readBody, sendError, sendJson } from './http-utils.js';
-import { appCodeDir, appDataDir } from './app-paths.js';
+import { appDataDir } from './app-paths.js';
 import { cleanupDeregisteredApp } from './deregister-cleanup.js';
 import { readAppSchema } from './schema.js';
 import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './cloud-routes.js';
-import { makeAppUploadLocks } from './upload-lock.js';
-import { handleAppUpload } from './route-handlers.js';
 import { ChangeBus } from './change-bus.js';
 import { handleAppChanges } from './changes-sse.js';
 import type { UserStore } from './user-store.js';
@@ -40,8 +36,6 @@ export interface RuntimeLogger {
 export interface RuntimeOptions {
   /** Absolute path of the directory holding app folders + `_registry.json`. */
   appsDir: string;
-  /** Max retained versions per uploaded app (active always kept; min 2). */
-  versionRetention?: number;
   logger?: RuntimeLogger;
   /**
    * Optional change bus. When omitted the runtime constructs an internal
@@ -194,7 +188,6 @@ const noopLogger: RuntimeLogger = {
  */
 export class Runtime {
   readonly registry: Registry;
-  readonly versions: VersionStore;
   /**
    * Three-tool dispatcher (issue #107). Exposed so the OpenClaw plugin
    * can register `centraid_write`/`_read`/`_describe` tools that
@@ -226,11 +219,9 @@ export class Runtime {
   /** Optional runner-status preflight. */
   readonly runnerStatus?: () => Promise<RunnerStatus>;
   private readonly appsDir: string;
-  private readonly versionRetention: number;
   private readonly logger: RuntimeLogger;
   private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
   private readonly draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
-  private readonly withAppUploadLock: ReturnType<typeof makeAppUploadLocks>;
   /**
    * Per-runtime (and therefore per-gateway) chat-session lock map for the
    * `(appId, chatSessionId)` chat serialization. Was a module-level map in
@@ -242,10 +233,8 @@ export class Runtime {
 
   constructor(opts: RuntimeOptions) {
     this.appsDir = opts.appsDir;
-    this.versionRetention = Math.max(2, opts.versionRetention ?? 5);
     this.logger = opts.logger ?? noopLogger;
     this.registry = new Registry(opts.appsDir);
-    this.versions = new VersionStore();
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
     this.userStore = opts.userStore;
     this.chatHistoryStore = opts.chatHistoryStore;
@@ -256,10 +245,8 @@ export class Runtime {
     this.runnerStatus = opts.runnerStatus;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
     if (opts.draftCodeDir) this.draftCodeDir = opts.draftCodeDir;
-    this.withAppUploadLock = makeAppUploadLocks();
     this.dispatcher = new Dispatcher({
       registry: this.registry,
-      versions: this.versions,
       onWriteFor: (appId) => this.emitForApp(appId, 'handler'),
       ...(this.codeDirOverride ? { codeDirOverride: this.codeDirOverride } : {}),
     });
@@ -300,24 +287,12 @@ export class Runtime {
   }
 
   /**
-   * Load the registry and recover any torn `current.json` files. Idempotent;
-   * call once on host startup.
+   * Load the registry. Idempotent; call once on host startup. App code is
+   * served from the git store via `codeDirOverride`; this only loads the
+   * per-app data-dir registry.
    */
   async bootstrap(): Promise<void> {
     await this.registry.load();
-
-    for (const entry of this.registry.list()) {
-      try {
-        const repaired = await this.versions.recover(entry.path);
-        if (repaired) {
-          this.logger.warn(`[centraid] recovered current.json for app "${entry.id}"`);
-        }
-      } catch (err) {
-        this.logger.error(
-          `[centraid] recovery failed for "${entry.id}": ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
   }
 
   private chatRouteContext() {
@@ -332,31 +307,10 @@ export class Runtime {
     };
   }
 
-  private routeContext() {
-    return {
-      appsDir: this.appsDir,
-      versionRetention: this.versionRetention,
-      registry: this.registry,
-      versions: this.versions,
-      withAppUploadLock: this.withAppUploadLock,
-      resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
-      emitForApp: (appId: string) => this.emitForApp(appId, 'handler'),
-      logger: this.logger,
-    };
-  }
-
   private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
-    // Mirrors `Dispatcher.resolveCodeDir`: when the git-store override
-    // is set it is the sole authority (issue #137) — an app it can't
-    // resolve is not live, no legacy `current.json` fallback. The
-    // override is absent only for the legacy tarball backend (OpenClaw /
-    // pre-#137), which resolves the active-version dir instead.
-    if (this.codeDirOverride) {
-      return this.codeDirOverride(entry.id);
-    }
-    const active = await this.versions.getActiveVersion(entry.path);
-    if (!active) return undefined;
-    return appCodeDir(entry, active);
+    // Mirrors `Dispatcher.resolveCodeDir`: the git-store override resolves
+    // an app's live code dir (issue #137). No override → no servable code.
+    return this.codeDirOverride ? this.codeDirOverride(entry.id) : undefined;
   }
 
   private refOf(entry: RegistryEntry): AppRef {
@@ -509,54 +463,6 @@ export class Runtime {
           return;
         }
 
-        case 'app-upload': {
-          await handleAppUpload(req, res, this.routeContext(), route.appId);
-          return;
-        }
-
-        case 'app-versions-list': {
-          const entry = this.registry.get(route.appId);
-          if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          const { activeVersion, versions: history } = await this.versions.listVersions(entry.path);
-          sendJson(res, 200, {
-            activeVersion,
-            versions: history.map((v) => ({ ...v, current: v.versionId === activeVersion })),
-          });
-          return;
-        }
-
-        case 'app-version-activate': {
-          const entry = this.registry.get(route.appId);
-          if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          const body = JSON.parse((await readBody(req)).toString('utf8')) as {
-            versionId?: string;
-          };
-          if (!body.versionId) {
-            sendError(res, 400, 'bad_request', 'Body must include { versionId }.');
-            return;
-          }
-          await this.versions.activate(entry.path, body.versionId);
-          sendJson(res, 200, { activeVersion: body.versionId });
-          return;
-        }
-
-        case 'app-version-delete': {
-          const entry = this.registry.get(route.appId);
-          if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
-            return;
-          }
-          await this.versions.deleteVersion(entry.path, route.versionId);
-          sendJson(res, 200, { id: route.appId, versionId: route.versionId });
-          return;
-        }
-
         case 'app-schema': {
           const entry = this.registry.get(route.appId);
           if (!entry) {
@@ -685,16 +591,6 @@ export class Runtime {
               : err.code === 'not_a_directory'
                 ? 400
                 : 404;
-        sendError(res, status, err.code, err.message);
-        return;
-      }
-      if (err instanceof VersionStoreError) {
-        const status = err.code === 'not_found' ? 404 : 409;
-        sendError(res, status, err.code, err.message);
-        return;
-      }
-      if (err instanceof UploadError) {
-        const status = err.code === 'too_large' ? 413 : 400;
         sendError(res, status, err.code, err.message);
         return;
       }

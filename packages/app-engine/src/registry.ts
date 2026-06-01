@@ -28,10 +28,8 @@ export class Registry {
     try {
       const raw = await fs.readFile(this.filePath, 'utf8');
       const parsed = JSON.parse(raw) as {
-        apps: Array<{ id: string; path: string; registeredAt: string; mode?: string }>;
+        apps: Array<{ id: string; path: string; registeredAt: string }>;
       };
-      // Drop the legacy `mode` field if present — every app is uploaded
-      // mode now. The path stays exactly as written.
       this.cache = new Map(
         parsed.apps.map((a) => [
           a.id,

@@ -124,7 +124,7 @@ test('serves an app from the git-store main worktree, not versions/', async () =
   assert.deepEqual(await read.json(), { pong: true });
 });
 
-test('without appsStoreRoot the handle has no appsStore (legacy backend)', async () => {
+test('without appsStoreRoot the handle has no appsStore (no code backend)', async () => {
   handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets });
   assert.equal(handle.appsStore, undefined);
 });

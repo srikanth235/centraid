@@ -148,9 +148,13 @@ its live behavior should be validated against an OpenClaw deployment.
 
 ## Verification
 
-- `bun run typecheck` — all workspaces pass.
-- `bun run test` — affected package suites pass (app-engine chat-routes,
-  agent-runtime codex-provider-config, gateway unified-chat-runner /
-  worktree-store).
-- `bun run check` (oxfmt + oxlint) — clean.
+- `bun run ci` (oxfmt + oxlint + typecheck across all 21 workspaces) — clean.
+- `bun run test` — all 18 suites green after the tarball-backend deletion
+  (app-engine 294, gateway 83, agent-runtime 64, automation 62,
+  worktree-store 28, openclaw-plugin 6, …). app-engine `dispatcher.test` and
+  `app-paths.test`, automation `automation-app.test`, and gateway
+  `serve-multiclient.test` were migrated off the version/tarball layout onto
+  git-store / `codeDirOverride`.
+- OpenClaw's live runtime is **not** exercisable here (needs the SDK + a
+  populated store) — validate the git-store migration against a deployment.
 

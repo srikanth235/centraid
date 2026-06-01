@@ -99,23 +99,6 @@ describe('automation-app', () => {
     assert.equal(res.errors[0]!.id, 'ui-app/broken');
   });
 
-  it('listAutomations resolves an app active version via current.json', async () => {
-    const appDir = path.join(appsDir, 'auto.versioned');
-    const autoDir = path.join(appDir, 'versions', 'v_1', 'automations', 'job');
-    await fs.mkdir(autoDir, { recursive: true });
-    await fs.writeFile(
-      path.join(autoDir, 'automation.json'),
-      JSON.stringify(manifest({ name: 'Versioned' }), null, 2),
-    );
-    await fs.writeFile(path.join(appDir, 'current.json'), JSON.stringify({ activeVersion: 'v_1' }));
-    const res = await listAutomations(appsDir);
-    assert.deepEqual(
-      res.rows.map((r) => r.ref),
-      ['auto.versioned/job'],
-    );
-    assert.equal(res.rows[0]!.dir, autoDir);
-  });
-
   it('setAutomationEnabledAt rewrites the manifest in place', async () => {
     const dir = await writeAutomation(
       appsDir,

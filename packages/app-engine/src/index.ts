@@ -87,7 +87,7 @@ export {
 } from './sql-ops.js';
 export { readAppSchema } from './schema.js';
 export { Registry } from './registry.js';
-export { appDataDir, readActiveCodeDir, isValidAppId } from './app-paths.js';
+export { appDataDir, isValidAppId } from './app-paths.js';
 
 // Wrapper-dir cleanup on app delete — removes `<appsDir>/<id>/` (data.sqlite
 // + run ledgers) after the registry entry is dropped. Hosts that delete apps
@@ -144,8 +144,6 @@ export {
 // shapes can import these directly. (The Runtime.handle() default handler
 // already converts them to JSON error responses.)
 export { RegistryError } from './registry.js';
-export { VersionStoreError } from './version-store.js';
-export { UploadError } from './upload.js';
 export { MigrationError, runPendingMigrations, type MigrationsApplied } from './migrate.js';
 
 // Per-app change notifications. Subscribed by the SSE endpoint at

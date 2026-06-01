@@ -1,8 +1,10 @@
 # @centraid/app-engine
 
 Transport-agnostic engine for centraid apps. Owns the registry,
-versioned uploads, sqlite-backed handler runner, and the full
+sqlite-backed handler runner, and the full
 `/centraid/*` URL surface exposed through `Runtime.handle(req, res)`.
+App code is served from the gateway-owned git store via the host's
+`codeDirOverride` (issue #137).
 Consumed by [`@centraid/gateway`](../gateway) (Electron
 embed + standalone daemon) and [`@centraid/openclaw-plugin`](../openclaw-plugin)
 (OpenClaw gateway shim).
@@ -28,10 +30,6 @@ expects:
   fires from the per-handler `finish()` and from `run-query.ts` only
   after the implicit/explicit COMMIT, so subscribers never observe a
   change before it's durable.
-- **Version uploads** serialize through
-  [`makeAppUploadLocks`](src/upload-lock.ts) — two simultaneous
-  `POST /centraid/_apps/<id>/upload` calls for the same app run
-  sequentially. Different apps proceed in parallel.
 - **`_registry.json` writes** go through a tmp + atomic `rename`
   ([registry.ts](src/registry.ts)) so a reader never sees a partial
   file even if the writer crashes mid-write.
