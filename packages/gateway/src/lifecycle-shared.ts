@@ -134,16 +134,22 @@ export async function publishAndReconcile(
 ): Promise<void> {
   const validationError = await validateManifestAt(input.appDir);
   if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
-  // Apply the staged app's committed migrations to live data before the
-  // ff-merge (issue #144) — the store only merges code. A failing
+  // Apply the staged app's committed migrations to live data as part of the
+  // publish (issue #144). The `migrate` hook runs inside the store's mutex,
+  // post-rebase + pre-ff-merge, against the final worktree tree. A failing
   // migration throws and aborts the publish, live data untouched.
-  if (opts.liveDataFile) {
-    await runPublishMigrations(input.appDir, opts.liveDataFile(input.appId));
-  }
+  const liveDataFile = opts.liveDataFile;
+  const appId = input.appId;
   await opts.store.publish({
     sessionId: input.sessionId,
-    appId: input.appId,
+    appId,
     message: input.message,
+    ...(liveDataFile
+      ? {
+          migrate: (worktreeAppDir: string) =>
+            runPublishMigrations(worktreeAppDir, liveDataFile(appId)),
+        }
+      : {}),
   });
   await opts.ensureRegistered(input.appId);
   opts.reconcile();

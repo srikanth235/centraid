@@ -228,38 +228,39 @@ async function handlePublish(
     return true;
   }
 
-  // Run the session's committed migrations against LIVE data BEFORE the
-  // ff-merge (issue #144). The store only commits + ff-merges code; schema
-  // reaches live data only here. A failing migration rolls back inside
-  // `BEGIN IMMEDIATE` and aborts the publish — live data untouched, code
-  // unmerged.
-  let migrationsApplied: number[] = [];
-  if (liveDataFile) {
-    try {
-      migrationsApplied = await runPublishMigrations(appDir, liveDataFile(appId));
-    } catch (err) {
-      if (err instanceof MigrationError) {
-        const status = err.code === 'sql_failed' ? 422 : 400;
-        sendJson(res, status, {
-          error: err.code,
-          message: err.message,
-          file: err.file,
-          sqlError: err.sqlError,
-        });
-        return true;
-      }
-      throw err;
+  // Migrate LIVE data as part of publish (#144): the `migrate` hook fires
+  // inside the store's mutex, post-rebase + pre-ff-merge, so migrations apply
+  // against the exact tree going live. A failure aborts the publish untouched.
+  let result;
+  try {
+    result = await store.publish({
+      sessionId,
+      appId,
+      message,
+      ...(liveDataFile
+        ? { migrate: (dir: string) => runPublishMigrations(dir, liveDataFile(appId)) }
+        : {}),
+    });
+  } catch (err) {
+    if (err instanceof MigrationError) {
+      const status = err.code === 'sql_failed' ? 422 : 400;
+      sendJson(res, status, {
+        error: err.code,
+        message: err.message,
+        file: err.file,
+        sqlError: err.sqlError,
+      });
+      return true;
     }
+    throw err;
   }
-
-  const result = await store.publish({ sessionId, appId, message });
   await onAppLive?.(appId);
   sendJson(res, 201, {
     id: appId,
     versionTag: result.versionTag,
     sha: result.sha,
     activated: true,
-    migrationsApplied,
+    migrationsApplied: result.migrationsApplied,
   });
   return true;
 }

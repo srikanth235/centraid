@@ -40,15 +40,15 @@ import {
 const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
 /**
- * Repo-level `.gitignore` planted on `main` at init (issue #144). A draft's
- * branched `data.sqlite` (+ WAL/SHM sidecars) lives *inside* the session
- * worktree, next to the code the agent edits — so it must never be staged by
- * publish. Committing the ignore to `main` makes every session worktree
- * (which branches off `main`) inherit it, so publish's path-scoped
+ * Repo-level `.gitignore` patterns planted on `main` at init (issue #144). A
+ * draft's branched `data.sqlite` (+ WAL/SHM sidecars) lives *inside* the
+ * session worktree, next to the code the agent edits — so it must never be
+ * staged by publish. Committing the ignore to `main` makes every session
+ * worktree (which branches off `main`) inherit it, so publish's path-scoped
  * `git add apps/<id>` skips the draft data without any per-file dance. The
  * basename patterns match at any depth (`apps/<id>/data.sqlite`).
  */
-const DRAFT_DATA_GITIGNORE = ['data.sqlite', 'data.sqlite-wal', 'data.sqlite-shm', ''].join('\n');
+const DRAFT_DATA_IGNORE_PATTERNS = ['data.sqlite', 'data.sqlite-wal', 'data.sqlite-shm'];
 
 /**
  * Conservative slug check — matches the canonical app id rule
@@ -432,6 +432,18 @@ export class WorktreeStore {
 
     const sessionTipSha = await run(['rev-parse', 'HEAD'], { cwd: sessionDir });
 
+    // Migrate live data AFTER the rebase (the worktree now reflects the
+    // exact tree about to go live, with the final merged `migrations/`) and
+    // BEFORE the ff-merge, all inside the publish mutex (#144). A migration
+    // that fails — or a migration set the rebase made inconsistent (e.g. a
+    // duplicate id when another session published the same number first) —
+    // throws here, aborting the publish before `main` advances or a tag is
+    // minted. Live data + code stay untouched.
+    let migrationsApplied: number[] = [];
+    if (input.migrate) {
+      migrationsApplied = await input.migrate(path.join(sessionDir, 'apps', appId));
+    }
+
     // Pick the next version number BEFORE writing the tag so a
     // concurrent caller — though serialized through publishChain on
     // this store, a fresh WorktreeStore on the same disk would still
@@ -449,7 +461,12 @@ export class WorktreeStore {
     const newMainDir = await this.ensureMainMaterialization(sessionTipSha);
     await this.swapActiveMain(newMainDir);
 
-    return { versionTag: tag, sha: sessionTipSha, materializedMainDir: newMainDir };
+    return {
+      versionTag: tag,
+      sha: sessionTipSha,
+      materializedMainDir: newMainDir,
+      migrationsApplied,
+    };
   }
 
   private async rollbackCritical(input: RollbackInput): Promise<RollbackResult> {
@@ -569,20 +586,30 @@ export class WorktreeStore {
   }
 
   /**
-   * Commit the draft-data `.gitignore` to `main` if it isn't already
-   * there (issue #144). Idempotent: a no-op once the blob is on `main`, so
-   * every `init()` (including re-boots of an existing store) can call it.
-   * Uses a transient detached worktree — bare repos can't `checkout` —
-   * mirroring `rollback`/`delete`, and advances `main` by a forward commit
-   * so the audit log stays linear.
+   * Ensure `main`'s root `.gitignore` carries every draft-data pattern
+   * (issue #144). Idempotent and self-healing: a no-op once all patterns are
+   * present, but if `.gitignore` is missing OR exists without some patterns
+   * (e.g. an older store, or a template that committed its own ignore), it
+   * merges the missing lines in — existence alone is NOT treated as success,
+   * else a draft `data.sqlite` could still be staged by publish. Uses a
+   * transient detached worktree — bare repos can't `checkout` — mirroring
+   * `rollback`/`delete`, advancing `main` by a forward commit so the audit
+   * log stays linear.
    */
   private async ensureGitignore(): Promise<void> {
-    if (await this.treeSha('refs/heads/main:.gitignore')) return;
+    const existing = await this.readMainGitignore();
+    const present = new Set((existing ?? '').split('\n').map((line) => line.trim()));
+    const missing = DRAFT_DATA_IGNORE_PATTERNS.filter((p) => !present.has(p));
+    if (missing.length === 0) return;
+
     const txId = `_gitignore-${crypto.randomBytes(6).toString('hex')}`;
     const txDir = path.join(this.worktreesDir, txId);
     await run(['worktree', 'add', '--detach', txDir, 'refs/heads/main'], { cwd: this.bareDir });
     try {
-      await fs.writeFile(path.join(txDir, '.gitignore'), DRAFT_DATA_GITIGNORE);
+      const giPath = path.join(txDir, '.gitignore');
+      const current = await fs.readFile(giPath, 'utf8').catch(() => '');
+      const base = current.length === 0 || current.endsWith('\n') ? current : `${current}\n`;
+      await fs.writeFile(giPath, `${base}${missing.join('\n')}\n`);
       await run(['add', '--', '.gitignore'], { cwd: txDir });
       await run(['commit', '-m', 'centraid: gitignore draft data.sqlite'], { cwd: txDir });
       const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
@@ -595,6 +622,15 @@ export class WorktreeStore {
       });
       await run(['worktree', 'prune'], { cwd: this.bareDir });
     }
+  }
+
+  /** Raw content of `main`'s root `.gitignore`, or undefined when absent. */
+  private async readMainGitignore(): Promise<string | undefined> {
+    const r = await runRaw(['show', 'refs/heads/main:.gitignore'], {
+      cwd: this.bareDir,
+      allowNonZero: true,
+    });
+    return r.code === 0 ? r.stdout : undefined;
   }
 
   /**

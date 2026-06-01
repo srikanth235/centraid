@@ -232,3 +232,40 @@ test('reset-data surfaces an incompatible pending migration inline (422)', async
   assert.equal(body.error, 'sql_failed');
   assert.equal(body.file, '0002_bad.sql');
 });
+
+test('a failed seed migration leaves no draft DB, so a later access retries', async () => {
+  await publishBaseline();
+  const store = handle.appsStore!;
+  await store.openSession('d3');
+  const appDir = await store.snapshotSessionAppDir('d3', 'notes');
+  const draftDb = path.join(appDir, 'data.sqlite');
+
+  // A pending migration incompatible with the prod-seeded row (NOT NULL, no
+  // default) — seeding VACUUMs live in, then the migration fails.
+  await writeWorktreeFiles('d3', {
+    'migrations/0002_bad.sql': 'ALTER TABLE notes ADD COLUMN title TEXT NOT NULL;\n',
+  });
+
+  // First draft access fails (the migration error propagates) AND leaves no
+  // half-seeded copy behind — otherwise the next access would preview against
+  // a copied-but-unmigrated DB.
+  const failed = await draftSql('d3', 'SELECT 1');
+  assert.equal(failed.status, 500, `expected seed failure, got ${failed.status}`);
+  assert.equal(
+    await fs
+      .stat(draftDb)
+      .then(() => true)
+      .catch(() => false),
+    false,
+    'a failed seed must not leave a draft data.sqlite',
+  );
+
+  // Fix-forward the migration; the next access re-seeds cleanly from scratch.
+  await writeWorktreeFiles('d3', {
+    'migrations/0002_bad.sql': 'ALTER TABLE notes ADD COLUMN title TEXT NOT NULL DEFAULT "";\n',
+  });
+  const ok = await draftSql('d3', 'SELECT body, title FROM notes');
+  assert.equal(ok.status, 200, `retry should succeed: ${await ok.clone().text()}`);
+  const rows = (await ok.json()) as { rows: Array<{ body: string; title: string }> };
+  assert.deepEqual(rows.rows, [{ body: 'from-prod', title: '' }]);
+});

@@ -661,3 +661,34 @@ test('draft data.sqlite is gitignored — never staged by publish (#144)', async
     await rmTempRoot(root);
   }
 });
+
+test('ensureGitignore self-heals a .gitignore missing the data patterns (#144)', async () => {
+  const root = await makeTempRoot();
+  try {
+    const store = new WorktreeStore({ root });
+    await store.init();
+    const bare = store.bareRepoDir;
+
+    // Downgrade main's .gitignore to one WITHOUT the draft-data patterns,
+    // simulating an older store / a template that committed its own ignore.
+    const wt = path.join(root, 'worktrees', '_downgrade');
+    await run(['worktree', 'add', '--detach', wt, 'refs/heads/main'], { cwd: bare });
+    await fs.writeFile(path.join(wt, '.gitignore'), 'node_modules\n');
+    await run(['add', '--', '.gitignore'], { cwd: wt });
+    await run(['commit', '-m', 'downgrade gitignore'], { cwd: wt });
+    const sha = await run(['rev-parse', 'HEAD'], { cwd: wt });
+    await run(['update-ref', 'refs/heads/main', sha], { cwd: bare });
+    await run(['worktree', 'remove', '--force', wt], { cwd: bare });
+
+    // A fresh boot must merge the missing patterns back in — existence of a
+    // .gitignore is not treated as success — while preserving node_modules.
+    await new WorktreeStore({ root }).init();
+    const gi = await run(['show', 'refs/heads/main:.gitignore'], { cwd: bare });
+    assert.match(gi, /node_modules/, 'existing patterns preserved');
+    for (const p of ['data.sqlite', 'data.sqlite-wal', 'data.sqlite-shm']) {
+      assert.ok(gi.includes(p), `missing pattern ${p} should be merged in: ${gi}`);
+    }
+  } finally {
+    await rmTempRoot(root);
+  }
+});

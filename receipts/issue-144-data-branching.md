@@ -42,7 +42,7 @@ swapping `main/<sha>` dir, and it's the publish target.
 - [x] `.gitignore` draft data in the canonical repo (main + every worktree)
 - [x] Draft data dir = draft code dir (dispatcher + `_sql` + describe schema)
 - [x] Seed-on-first-draft-access (VACUUM INTO live + replay pending migrations)
-- [x] Preview-pane "Reset data from prod" endpoint + control
+- [x] "Reset data from prod" endpoint + renderer client method
 
 ## What changed
 
@@ -54,11 +54,12 @@ swapping `main/<sha>` dir, and it's the publish target.
   session worktree's committed migrations against the live `data.sqlite` —
   the composition root is the one layer that sees both the worktree's
   `migrations/` and the live data path, so the pure git store stays
-  data-agnostic. Called **before the ff-merge** in both publish chokepoints
-  (the `_apps/<id>/publish` route and the lifecycle `publishAndReconcile`),
-  mirroring the legacy migrate-then-commit ordering: a failing migration rolls
-  back inside `BEGIN IMMEDIATE`, aborts the publish (422 `sql_failed`), and
-  leaves live data untouched + code unmerged. The publish response reports
+  data-agnostic. Both publish chokepoints (the `_apps/<id>/publish` route and
+  the lifecycle `publishAndReconcile`) pass it as the store's `migrate` hook,
+  which fires inside the publish mutex **post-rebase, pre-ff-merge** (see
+  Review fixes for why ordering matters): a failing migration rolls back
+  inside `BEGIN IMMEDIATE`, aborts the publish (422 `sql_failed`), and leaves
+  live data untouched + code unmerged. The publish response reports
   `migrationsApplied`. `runPendingMigrations` is now exported from
   `@centraid/app-engine`.
 
@@ -106,14 +107,41 @@ swapping `main/<sha>` dir, and it's the publish target.
   the unified chat runner's `resolveCwd`. A brand-new app with no live data
   seeds from empty + a full migration run.
 
-- **Preview-pane "Reset data from prod" endpoint + control.** A new
+- **"Reset data from prod" endpoint + renderer client method.** A new
   `POST /centraid/_apps/<id>/reset-data` route re-seeds a draft session's data
   via `seedDraftData({ force: true })` — a fresh prod snapshot + replayed
   pending migrations — and reports `{ seeded, migrationsApplied }`. It doubles
   as a publish dress rehearsal: a migration incompatible with prod rows fails
   here and the SQL error surfaces inline (422 `sql_failed`) so the author hits
   it in preview, not at publish. The renderer's `gateway-client-editing.ts`
-  gains `resetAppData(...)` — the client method the preview-pane control calls.
+  gains `resetAppData(...)`, the client method a preview-pane control calls;
+  wiring the visible button into `builder.ts` is the one remaining renderer
+  step (see Out of scope).
+
+## Review fixes (post-PR)
+
+- **Migrations run against the post-rebase tree.** Originally the gateway ran
+  migrations against the session worktree *before* `WorktreeStore.publish`
+  rebased it onto current `main`. A stale session could validate/apply against
+  its pre-rebase tree, then publish a different final tree (skipping a
+  migration, or leaving a duplicate id when another session published the same
+  number first). Migrations now run via a `migrate` hook on `PublishInput`,
+  fired inside the publish mutex **after** the rebase and **before** the
+  ff-merge — against the exact tree going live. The store stays data-agnostic
+  (the gateway injects the SQLite runner). Regression test: two sessions adding
+  the same migration number — the second aborts with `duplicate`, main never
+  advances.
+- **Failed seed migration leaves no draft DB.** If `VACUUM INTO` succeeded but
+  the pending-migration replay threw, the copied-but-unmigrated draft
+  `data.sqlite` was left behind and treated as seeded — so preview ran against
+  it. `seedDraftData` now deletes the draft copy on a migration failure, so the
+  next access re-seeds from scratch. Regression test: a failed seed leaves no
+  DB and a fix-forward retry seeds cleanly.
+- **`.gitignore` self-heals missing patterns.** `ensureGitignore` no longer
+  treats any existing `.gitignore` as success — it verifies the three
+  draft-data patterns and merges in whichever are missing (preserving existing
+  lines), so an older store / a template-committed ignore can't leave draft
+  DBs stage-able.
 
 ## Out of scope
 
@@ -121,6 +149,11 @@ swapping `main/<sha>` dir, and it's the publish target.
   stale data; branch rows are throwaway and never merged back.
 - `runtime.sqlite` (chat sessions, run ledger, automation state) and logs are
   operational, not app data — not branched; they stay at `appsDir/<id>`.
+- **The visible "Reset data from prod" button** in the builder preview pane.
+  The endpoint + `resetAppData(...)` client method ship here; hanging the
+  button (with a destructive-action confirm) off the preview toolbar in
+  `builder.ts` is a follow-up renderer task, deferred because it can't be
+  verified without running the desktop UI.
 
 ## Verification
 

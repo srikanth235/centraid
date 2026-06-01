@@ -68,9 +68,18 @@ export async function seedDraftData(opts: {
     }
   }
 
-  // Replay the draft's pending (unpublished) migrations on top of the
-  // seeded copy — applies only ids greater than the snapshot's user_version.
-  const out = await runPendingMigrations(opts.worktreeAppDir, draftFile);
+  // Replay the draft's pending (unpublished) migrations on top of the seeded
+  // copy — applies only ids greater than the snapshot's user_version. If a
+  // migration fails, delete the half-seeded copy so seeding isn't treated as
+  // complete: the next access re-seeds from scratch rather than previewing
+  // against a copied-but-unmigrated DB.
+  let out;
+  try {
+    out = await runPendingMigrations(opts.worktreeAppDir, draftFile);
+  } catch (err) {
+    await removeDraftDb(opts.worktreeAppDir);
+    throw err;
+  }
   return { seeded: true, migrationsApplied: out.applied };
 }
 

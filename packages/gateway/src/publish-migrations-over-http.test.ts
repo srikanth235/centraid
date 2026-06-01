@@ -169,3 +169,45 @@ test('a migration incompatible with live rows aborts the publish (422), live dat
   const html = await (await fetch(`${handle.url}/centraid/notes/`, { headers: auth() })).text();
   assert.doesNotMatch(html, /v2/, 'v2 code must not have merged (publish aborted before ff-merge)');
 });
+
+test('migrations run against the post-rebase tree: a colliding number aborts (#144)', async () => {
+  // v1 establishes the table at user_version 1.
+  await stage('s1', {
+    'app.json': MANIFEST,
+    'index.html': '<!doctype html>notes',
+    'migrations/0001_init.sql':
+      'CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);\n',
+  });
+  assert.equal((await publish('s1', 'v1')).status, 201);
+
+  // Two sessions branch off v1; each adds its own 0002. (`0001` is inherited
+  // from main, so only the new migration is written.)
+  await stage('sb', { 'migrations/0002_b.sql': 'ALTER TABLE notes ADD COLUMN b INTEGER;\n' });
+  await stage('sa', { 'migrations/0002_a.sql': 'ALTER TABLE notes ADD COLUMN a INTEGER;\n' });
+
+  // sb publishes first → 0002_b applies to live (user_version → 2).
+  const pubB = await publish('sb', 'add b');
+  assert.equal(pubB.status, 201, `publish sb: ${await pubB.text()}`);
+  assert.equal(liveUserVersion(), 2);
+
+  // sa now publishes. The store rebases it onto the new main, so its worktree
+  // carries BOTH 0002_a and 0002_b — a duplicate id. Because migrations run
+  // against the post-rebase tree (not sa's stale pre-rebase tree, where
+  // 0002_a would be silently skipped as <= live user_version), the publish
+  // aborts with the duplicate error and main never advances.
+  const pubA = await publish('sa', 'add a');
+  const bodyA = (await pubA.json()) as { error?: string };
+  assert.equal(pubA.status, 400, `expected 400 duplicate, got ${pubA.status}`);
+  assert.equal(bodyA.error, 'duplicate');
+
+  // Live is unchanged (still user_version 2, b applied, a never reached it);
+  // no v3 tag was minted.
+  assert.equal(liveUserVersion(), 2);
+  const versions = (await (
+    await fetch(`${handle.url}/centraid/_apps/notes/git-versions`, { headers: auth() })
+  ).json()) as { versions: Array<{ tag: string }> };
+  assert.deepEqual(
+    versions.versions.map((v) => v.tag),
+    ['notes/v2', 'notes/v1'],
+  );
+});

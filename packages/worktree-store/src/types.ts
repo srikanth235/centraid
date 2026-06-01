@@ -30,6 +30,20 @@ export interface PublishInput {
   appId: string;
   /** Commit message body (the subject gets `<appId>:` prepended). */
   message: string;
+  /**
+   * Optional data-migration step, run inside the publish mutex AFTER the
+   * session is rebased onto current `main` and BEFORE the ff-merge (#144).
+   * Receives the post-rebase worktree app dir (`<worktree>/apps/<appId>/`,
+   * carrying the final, merged `migrations/`) and returns the ids applied.
+   * Throwing aborts the publish: `main` never advances, no tag is minted.
+   *
+   * The store stays data-agnostic — the gateway injects the SQLite runner
+   * (against live `data.sqlite`). Running it post-rebase ensures migrations
+   * are validated/applied against the exact tree about to go live, not the
+   * session's stale pre-rebase tree (which could skip or duplicate a
+   * migration when `main` advanced under the session).
+   */
+  migrate?: (worktreeAppDir: string) => Promise<number[]>;
 }
 
 export interface PublishResult {
@@ -39,6 +53,8 @@ export interface PublishResult {
   sha: string;
   /** Absolute path to the freshly-materialized main worktree. */
   materializedMainDir: string;
+  /** Migration ids the `migrate` step applied to live data, if any (#144). */
+  migrationsApplied: number[];
 }
 
 export interface RollbackInput {
