@@ -71,7 +71,7 @@ app.whenReady().then(() => {
   // #141, Phase 5): `local-runtime` passes the configured remote manifest
   // URL into `serve()`, and the gateway's `/centraid/_templates` route
   // fires a one-time best-effort fetch into its cache. The desktop main
-  // process no longer touches `@centraid/app-templates`.
+  // process no longer touches `@centraid/app-blueprints`.
   // First-launch credential probe. Reads Claude Code (macOS keychain) and
   // Codex (`~/.codex/auth.json`) to populate the Settings → AI providers
   // status card so the user can see which CLIs are already installed.

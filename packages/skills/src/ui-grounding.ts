@@ -255,9 +255,9 @@ function renderExemplarsBlock(): string {
     'When unsure about a pattern, read the bundled templates — they are the',
     'canonical references for what a well-grounded centraid app looks like:',
     '',
-    '- `@centraid/app-templates/todos/` — the tightest single-list example. Use this as the visual baseline for list-style apps. Notice the inline live-settings `<script>` at the top of `<head>`, the `.head/.add-bar/.list/.row/.empty` class shapes, and how it never hardcodes a color.',
-    '- `@centraid/app-templates/journal/` — a slightly richer surface (cards, editing, dated entries). Use for any app that has a "compose + browse" rhythm.',
+    '- `@centraid/app-blueprints/todos/` — the tightest single-list example. Use this as the visual baseline for list-style apps. Notice the inline live-settings `<script>` at the top of `<head>`, the `.head/.add-bar/.list/.row/.empty` class shapes, and how it never hardcodes a color.',
+    '- `@centraid/app-blueprints/journal/` — a slightly richer surface (cards, editing, dated entries). Use for any app that has a "compose + browse" rhythm.',
     '',
-    "You can read these directly via the bash tool, e.g. `cat ../../packages/app-templates/todos/app.css` from an app root that lives under the same workspace. If you can't reach them (paths vary by environment), the component primitives block above captures the load-bearing pieces.",
+    "You can read these directly via the bash tool, e.g. `cat ../../packages/app-blueprints/todos/app.css` from an app root that lives under the same workspace. If you can't reach them (paths vary by environment), the component primitives block above captures the load-bearing pieces.",
   ].join('\n');
 }

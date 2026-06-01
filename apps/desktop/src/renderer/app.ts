@@ -160,7 +160,7 @@ import {
     html.style.setProperty('--accent-deep', swatch.deep);
     // Broadcast to every mounted user-app iframe so they retune in lock-step
     // with the shell. The tiny bridge script in each template
-    // (packages/app-templates/*/index.html) listens for this and flips its
+    // (packages/app-blueprints/*/index.html) listens for this and flips its
     // own <html> data-attrs / CSS vars to match.
     broadcastSettingsToFrames();
     // §C2 — let an open Appearance settings page refresh its live-preview
@@ -176,7 +176,7 @@ import {
   // shape the runtime uses for server-side injection. The bridge inside each
   // app applies them as `<html data-…>` attrs and `--…` CSS vars — symmetric
   // with what the gateway bakes on first paint.
-  // Iframes (app-templates, user apps) only know how to style
+  // Iframes (app-blueprints, user apps) only know how to style
   // `data-theme='light'|'dark'`. Third-party shell themes (Monokai, Nord…)
   // still resolve to one of those two on the iframe side; the shell
   // itself wears the full named theme.
@@ -1942,7 +1942,7 @@ import {
 
   // ───────────────────────── Templates gallery ─────────────────────
   // Automation templates are real filesystem templates under
-  // `@centraid/app-templates/<slug>/` (marked `kind: 'automation'`),
+  // `@centraid/app-blueprints/<slug>/` (marked `kind: 'automation'`),
   // picked up by the shared
   // `listTemplates` IPC. Adopting one routes through `cloneTemplate` —
   // the same IPC the home Templates shelf uses for app templates —
@@ -3805,7 +3805,7 @@ import {
   }
 
   // ---------- Templates (inline tiles) ----------
-  // Renderer-side mirror of @centraid/app-templates' `TemplateMeta`. We don't
+  // Renderer-side mirror of @centraid/app-blueprints' `TemplateMeta`. We don't
   // import the package here — the IPC layer carries plain JSON. `kind`
   // splits the catalog into the home Templates shelf (kind: 'app') and the
   // Automations gallery (kind: 'automation'); the unified clone path
@@ -4277,7 +4277,7 @@ import {
   // every mini-app inherits the Centraid shell theme and the workspace
   // reads as one product. True per-app *aesthetics* (font, page width,
   // corner radius, etc.) live here. Each template declares its knobs in
-  // `app.json#knobs[]` (see `packages/app-templates`); the scaffolder
+  // `app.json#knobs[]` (see `packages/app-blueprints`); the scaffolder
   // copies that manifest into the cloned app; the gateway serves it
   // as a static file. We fetch the cloned copy at panel-open so the
   // controls match the app's CSS, not whatever the bundled template

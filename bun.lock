@@ -91,11 +91,23 @@
         "typescript": "catalog:",
       },
     },
+    "packages/app-blueprints": {
+      "name": "@centraid/app-blueprints",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/design-tokens": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
+      },
+    },
     "packages/app-engine": {
       "name": "@centraid/app-engine",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/design-tokens": "workspace:*",
         "ajv": "^8.17.1",
         "tar": "^7.4.3",
       },
@@ -107,22 +119,11 @@
         "typescript": "catalog:",
       },
     },
-    "packages/app-templates": {
-      "name": "@centraid/app-templates",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/design-tokens": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "typescript": "catalog:",
-      },
-    },
     "packages/automation": {
       "name": "@centraid/automation",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
       },
       "devDependencies": {
@@ -158,8 +159,8 @@
       },
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
+        "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/app-templates": "workspace:*",
         "@centraid/automation": "workspace:*",
         "@centraid/code-store": "workspace:*",
         "@centraid/skills": "workspace:*",
@@ -518,9 +519,9 @@
 
     "@centraid/agent-runtime": ["@centraid/agent-runtime@workspace:packages/agent-runtime"],
 
-    "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
+    "@centraid/app-blueprints": ["@centraid/app-blueprints@workspace:packages/app-blueprints"],
 
-    "@centraid/app-templates": ["@centraid/app-templates@workspace:packages/app-templates"],
+    "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
 
     "@centraid/automation": ["@centraid/automation@workspace:packages/automation"],
 

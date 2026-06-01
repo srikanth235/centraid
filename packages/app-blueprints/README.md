@@ -1,11 +1,11 @@
-# @centraid/app-templates
+# @centraid/app-blueprints
 
 Bundled, pre-built Centraid apps that the desktop gallery offers as **clone and deploy** starting points. Each template under `<id>/` is a fully-formed app — identical in shape to an app a user authors themselves (`index.html`, `app.css`, `app.js`, `queries/`, `actions/`, `migrations/`, `app.json`).
 
 ## Layout
 
 ```
-packages/app-templates/
+packages/app-blueprints/
   src/
     index.ts        — listTemplates(), appTemplatesDir, types
     types.ts        — TemplateMeta, TemplateManifest

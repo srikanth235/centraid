@@ -1,6 +1,6 @@
 /*
  * Template catalog over HTTP (issue #141). The gateway owns the bundled
- * @centraid/app-templates catalog and serves its display metadata at
+ * @centraid/app-blueprints catalog and serves its display metadata at
  * `GET /centraid/_templates`, so the renderer reads it directly instead of
  * through a desktop IPC. We boot serve() and assert the route returns the
  * stripped metadata rows (no `files`/`source`), behind the bearer check.
@@ -72,7 +72,7 @@ test('GET /centraid/_templates returns stripped bundled metadata behind auth', a
 
 // Issue #141, Phase 5: the gateway owns the remote template *refresh* too —
 // the fetch the desktop main process used to run before it dropped
-// `@centraid/app-templates`. Constructing the handler with both a cache dir
+// `@centraid/app-blueprints`. Constructing the handler with both a cache dir
 // and a remote URL kicks a one-time best-effort fetch; without the URL it
 // stays quiet.
 test('handler refreshes the cache from the remote URL on construction', async () => {

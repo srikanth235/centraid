@@ -60,7 +60,7 @@ export interface GatewayPaths {
    * URL once on startup (best-effort, never throws) so newer remote
    * templates shadow the bundle. The desktop used to run this fetch in its
    * own main process before serving the catalog moved here; folding it into
-   * the gateway lets the desktop drop its `@centraid/app-templates`
+   * the gateway lets the desktop drop its `@centraid/app-blueprints`
    * dependency entirely. Omit for bundle/cache-only resolution.
    */
   remoteTemplatesUrl?: string;
