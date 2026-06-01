@@ -160,6 +160,35 @@ duration, not the batch span.
   onto `-c` overrides — noted in the `codex-app-server.ts` comment; needs a
   live custom-provider chat turn to validate before flipping.
 
+## Review fixes (PR #159)
+
+Two stranded-stream bugs caught in review:
+
+1. **Tool nodes stranded open on dispatcher rejection** —
+   `dispatchToolBatch` (`automation-handler-ctx.ts`) opened durable
+   `run_nodes` rows before awaiting `toolDispatcher`; on a wholesale
+   rejection (e.g. CLI spawn failure) the runner's catch turns it into failed
+   tool replies and the run continues, so those nodes stayed `ended_at = NULL`
+   forever with no `node.end`. Now the dispatcher call is wrapped: every opened
+   node is closed (durable close + `node.end`, `ok: false`, the error) before
+   rethrowing, so the runner still sends its per-call failure replies.
+2. **SSE hang when a fire fails before the ledger opens** — `fireAutomation`
+   (`build-gateway.ts`) caught pre-ledger failures (bad ref, automation gone
+   after a race, prefs/dispatch setup failure) by logging only. Since `run-now`
+   already returned the minted `runId` and the SSE endpoint subscribes to it,
+   the stream hung forever — no `run.start`/`run.end` ever hit the bus and no
+   ledger row exists to replay. The catch now publishes a synthetic
+   `run.end{ok:false,error}` on the bus so a connected viewer closes. (A viewer
+   that joins *after* this fires has no ledger row to replay and falls back to
+   its bounded poll — persisting a failed row for that case is out of scope, as
+   the app dir may not exist for a bad-ref/not-found fire.)
+
+Tests: `automation-fire.test.ts` +1 (tool node settled `ok:false` with a
+duration + `node.end` emitted when the dispatcher rejects, run still ends ok);
+`run-events-sse.test.ts` +1 (no ledger row → synthetic `run.start`, a bus
+`run.end` closes the stream instead of hanging). Suites green: automation 63,
+gateway 83.
+
 ## Verification
 
 - **Item 1:** `codex-provider-config.test.ts` +3 (`codexProviderOverrideArgs`

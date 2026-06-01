@@ -162,6 +162,38 @@ test('joins an in-flight run: replays the open node, then streams live to run.en
   assert.equal(bus.subscriberCount(runId), 0, 'unsubscribed on close');
 });
 
+test('a fire that fails before the ledger opens still closes via a bus run.end', async () => {
+  // No insertRun: `fireAutomation` threw before the handler runner opened the
+  // ledger (bad ref / automation gone / dispatch setup failure). `run-now`
+  // already handed the caller this runId and the viewer subscribed, so without
+  // a terminal event the stream would hang. build-gateway's catch publishes a
+  // synthetic run.end — this proves the SSE side honors it and closes.
+  const runId = `${APP}/broken:${Date.now()}:dead0000`;
+  const c = sseClient(`/centraid/_automations/run/events?runId=${encodeURIComponent(runId)}`);
+  await handler(c.req, c.res);
+
+  // Synthetic run.start written, no ledger nodes, still live on the bus.
+  assert.deepEqual(
+    c.events().map((e) => e.type),
+    ['run.start'],
+  );
+  assert.equal(c.ended(), false);
+  assert.equal(bus.subscriberCount(runId), 1);
+
+  bus.publish(runId, { type: 'run.end', ok: false, error: 'automation not found' });
+
+  const evs = c.events();
+  assert.deepEqual(
+    evs.map((e) => e.type),
+    ['run.start', 'run.end'],
+  );
+  const end = evs[1] as Extract<RunStreamEvent, { type: 'run.end' }>;
+  assert.equal(end.ok, false);
+  assert.equal(end.error, 'automation not found');
+  assert.equal(c.ended(), true, 'the stream closes instead of hanging');
+  assert.equal(bus.subscriberCount(runId), 0);
+});
+
 test('run/events without ?runId= is a 400', async () => {
   const c = sseClient('/centraid/_automations/run/events');
   await handler(c.req, c.res);

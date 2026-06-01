@@ -569,3 +569,5 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-84bfff67-f97-1780331797 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 37404 | 236085 | 45532323 | 162107 | 435596 | 28.4814 |  |
 | claude-code-84bfff67-f97-1780332145 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 1261 | 57716 | 20004309 | 48442 | 107419 | 11.5802 |  |
 | claude-code-84bfff67-f97-1780332282 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 12103 | 22883 | 8386798 | 14640 | 49626 | 4.7629 |  |
+| claude-code-93554a8b-617-1780333299 | claude-code | 93554a8b-6176-4b14-b49a-92974b797d73 | #158 | claude-opus-4-7 | 5 | 13291 | 14871 | 109 | 13405 | 0.0933 | fix(automation): settle stranded run nodes + close hung SSE on pre-ledger fire f |
+| claude-code-84bfff67-f97-1780333405 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 67566 | 259328 | 10111477 | 66343 | 393237 | 8.6729 | fix(automation): settle stranded run nodes + close hung SSE on pre-ledger fire f |

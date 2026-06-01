@@ -263,6 +263,54 @@ describe('runAutomationFire', () => {
     store.close();
   });
 
+  it('settles tool nodes when the dispatcher rejects (no node stranded open)', async () => {
+    // The handler swallows the ctx.tool rejection and finishes ok — so the run
+    // ends while the tool node, opened before dispatch, must NOT stay
+    // `ended_at = NULL`. The dispatcher rejects wholesale (CLI spawn blew up).
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'flaky',
+      manifest({ name: 'Flaky' }),
+      `export default async ({ ctx }) => {
+         try { await ctx.tool('mailer', { to: 'x' }); } catch { /* swallow */ }
+         return { ok: true };
+       };`,
+    );
+    const events: RunStreamEvent[] = [];
+    const dispatch = (): Promise<AutomationDispatchSurface> =>
+      Promise.resolve({
+        toolDispatcher: async () => {
+          throw new Error('spawn blew up');
+        },
+        agentDispatcher: async () => '',
+        async close() {},
+      });
+
+    const { outcome, record } = await runAutomationFire(
+      { automationRef: 'notes/flaky', appsDir, onRunEvent: (ev) => events.push(ev) },
+      { openDispatch: dispatch },
+    );
+    assert.equal(outcome.ok, true, 'the handler swallowed the tool failure');
+
+    // The tool node terminated on the live stream despite the rejection.
+    const nodeEnds = events.filter((e) => e.type === 'node.end');
+    assert.equal(nodeEnds.length, 1);
+    const end = nodeEnds[0] as Extract<RunStreamEvent, { type: 'node.end' }>;
+    assert.equal(end.ok, false);
+    assert.match(String(end.error), /spawn blew up/);
+
+    // And the ledger row is closed (duration set), not stranded open.
+    const store = new AgentRunsStore(
+      makeRuntimeDbProvider(path.join(appsDir, 'notes', 'runtime.sqlite')),
+    );
+    const toolNode = store.listNodes(record.runId).find((n) => n.kind === 'tool');
+    assert.ok(toolNode, 'a tool node was recorded');
+    assert.equal(toolNode.ok, false);
+    assert.notEqual(toolNode.durationMs, undefined, 'the node was closed, not left running');
+    store.close();
+  });
+
   it('cascades onFailure through the SAME injected dispatch surface', async () => {
     // `main` throws → its onFailure target `recover` fires, both via the one
     // injected `openDispatch`. Proves the cascade stayed in the spine and did

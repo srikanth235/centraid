@@ -79,10 +79,35 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
       started,
     }),
   );
-  const results = await toolDispatcher(
-    calls.map((c) => ({ name: c.name, args: c.args })),
-    dispatchCtx,
-  );
+  let results: AutomationToolResult[];
+  try {
+    results = await toolDispatcher(
+      calls.map((c) => ({ name: c.name, args: c.args })),
+      dispatchCtx,
+    );
+  } catch (err) {
+    // The dispatcher rejected wholesale (e.g. CLI spawn blew up). The runner's
+    // catch turns this into failed tool replies and the run keeps going — so if
+    // we don't settle the nodes here they'd stay `ended_at = NULL` forever and
+    // the live stream would never see them terminate. Close every opened node
+    // as failed (durable close + `node.end`), then rethrow so the runner still
+    // sends its per-call failure replies to the worker.
+    const ended = Date.now();
+    const error = err instanceof Error ? err.message : String(err);
+    for (let i = 0; i < nodeIds.length; i++) {
+      closeRunNode({
+        store: audit.store,
+        emit: audit.emit,
+        nodeId: nodeIds[i]!,
+        ordinal: ordinals[i]!,
+        ok: false,
+        error,
+        started,
+        ended,
+      });
+    }
+    throw err;
+  }
   const ended = Date.now();
   return calls.map((_call, i) => {
     const result = results[i] ?? { ok: false, error: 'no result returned by dispatcher' };

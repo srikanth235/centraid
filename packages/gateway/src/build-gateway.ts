@@ -364,12 +364,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           triggerOrigin: opts.triggerOrigin,
           onRunEvent: (ev) => runEventBus.publish(runId, ev),
         });
-      })().catch((err) =>
-        logger.warn(
-          `${opts.triggerKind} ${automationRef} failed: ` +
-            (err instanceof Error ? err.message : String(err)),
-        ),
-      );
+      })().catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        // Failed before the ledger opened: close off the bus or the viewer hangs.
+        runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
+        logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
+      });
     };
     // One persistent in-process cron scheduler for the gateway's lifetime
     // (issue #149). `reconcileScheduler()` (boot + every publish/delete)
