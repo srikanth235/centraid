@@ -1,8 +1,8 @@
 {
-  "name": "@centraid/automation",
+  "name": "@centraid/stores",
   "version": "0.1.0",
   "private": true,
-  "description": "Centraid automation domain — manifest, fire spine + OpenAutomationDispatch seam, the AutomationHost interface + in-process scheduler, webhook ingress, the worker-thread handler runner, and app scaffolding. Backend-agnostic: execution and scheduling are injected callbacks, so it depends on @centraid/app-engine but never on any agent backend.",
+  "description": "Gateway-scoped stores that aren't the per-app run ledger: central analytics (push-based run summaries) and the read-only Insights aggregation over them. Depends on @centraid/app-engine for the DatabaseProvider seam and the RunSummary/RunSummarySink contract; app-engine never depends back.",
   "files": [
     "dist",
     "README.md"
@@ -17,9 +17,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/app-blueprints": "workspace:*",
-    "@centraid/app-engine": "workspace:*",
-    "@centraid/stores": "workspace:*"
+    "@centraid/app-engine": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

@@ -21,6 +21,7 @@
   "dependencies": {
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*",
+    "@centraid/stores": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.0",
     "@sinclair/typebox": "^0.27.0"
   },

@@ -25,7 +25,8 @@
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*",
     "@centraid/code-store": "workspace:*",
-    "@centraid/skills": "workspace:*"
+    "@centraid/skills": "workspace:*",
+    "@centraid/stores": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

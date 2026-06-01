@@ -191,10 +191,11 @@ export {
   type DatabaseProvider,
 } from './gateway-db.js';
 
-// Central analytics — push-based run summaries (issue #98, decision 4).
-// `AgentRunsStore.finishRun` write-throughs one row per run;
-// `InsightsStore` reads them as the single Insights source.
-export { AnalyticsStore, type RunSummary, type ListSummariesOptions } from './analytics-store.js';
+// Run-summary seam — the ledger emits one `RunSummary` per finished run
+// through a `RunSummarySink`. The concrete sink (`AnalyticsStore`) lives in
+// `@centraid/stores` and is injected by the host; keeping the contract here
+// is what keeps app-engine free of its own reporting consumer (#151).
+export type { RunSummary, RunSummarySink } from './run-summary-sink.js';
 
 // User-prefs store + HTTP route dispatcher. Wraps the gateway DB; mounted
 // by both hosts at `/_centraid-user`.
@@ -241,17 +242,9 @@ export type {
 // records NULL (distinct from a genuine $0). See issue #90 question 4.
 export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from './model-pricing.js';
 
-// Insights — read-only analytics over the run ledger (issue #90). Powers
-// the desktop Insights screen via an `INSIGHTS_SUMMARY` IPC handler.
-export {
-  InsightsStore,
-  INSIGHTS_QUOTA_TOKENS,
-  type InsightsSummary,
-  type InsightsKpis,
-  type InsightsDailyPoint,
-  type InsightsAutomationRow,
-  type InsightsModelRow,
-  type InsightsActivityRow,
-} from './insights-store.js';
+// AnalyticsStore + InsightsStore moved to @centraid/stores (#151). The
+// analytics DB ladder + `makeAnalyticsDbProvider` stay in `gateway-db` above
+// (the shared SQLite-open seam); a host opens the provider here and injects
+// it into the stores.
 
 // App scaffolders + clone moved to @centraid/app-blueprints (#151).

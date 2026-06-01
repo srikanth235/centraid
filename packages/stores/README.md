@@ -1,0 +1,38 @@
+# @centraid/stores
+
+Gateway-scoped stores that are neither the per-app engine nor the per-app run
+ledger, so they live *beside* [`@centraid/app-engine`](../app-engine) rather
+than inside it (centraid#151):
+
+- **`AnalyticsStore`** — push-based central run summaries. Implements
+  app-engine's `RunSummarySink`, so `AgentRunsStore.finishRun` write-throughs
+  one denormalized row per run (chat turn / automation fire / builder
+  iteration) without app-engine ever importing this package. Backed by the
+  central `centraid-analytics.sqlite`.
+- **`InsightsStore`** — read-only aggregation over those summaries (KPIs, daily
+  series, by-automation / by-model / recent-activity). The single source for
+  the desktop Insights screen.
+
+## Boundary
+
+One-way dependency: `@centraid/stores` → `@centraid/app-engine`, never back.
+
+- The stores take an injected `DatabaseProvider` (app-engine's shared
+  SQLite-open seam). The analytics DB ladder + `makeAnalyticsDbProvider` stay
+  in app-engine's `gateway-db` — the one place every centraid SQLite file is
+  opened with the WAL / `busy_timeout` / FK pragmas and the shared migrate
+  runner. A host opens the provider there and injects it here.
+- The run-summary contract (`RunSummary`, `RunSummarySink`) lives in
+  app-engine and is re-exported from this barrel for ergonomics.
+
+`UserStore` (identity) deliberately stays in app-engine: its route is mounted
+by app-engine's own HTTP surface (`http-server` / `runtime`), so relocating it
+would invert that seam and create a cycle. See the issue-151 receipt.
+
+## Build / test
+
+```sh
+bun run build
+bun run test
+bun run typecheck
+```

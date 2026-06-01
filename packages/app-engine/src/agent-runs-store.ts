@@ -19,7 +19,7 @@
  * `centraid-activity.sqlite`. Either way the store is runtime-owned: it
  * is never reachable from the handler's `db` proxy or the
  * `centraid_sql_*` agent tools (those only see an app's `data.sqlite`).
- * When an `AnalyticsStore` is supplied, `finishRun` write-throughs a
+ * When a `RunSummarySink` is supplied, `finishRun` write-throughs a
  * one-row summary to the central analytics DB.
  *
  * Row types live in `agent-runs-schema.ts`; the prepared-statement
@@ -28,7 +28,7 @@
 
 import { type DatabaseSync } from 'node:sqlite';
 import type { DatabaseProvider } from './gateway-db.js';
-import type { AnalyticsStore } from './analytics-store.js';
+import type { RunSummarySink } from './run-summary-sink.js';
 import type {
   AgentRunRow,
   AgentRunNodeRow,
@@ -122,7 +122,7 @@ export interface ListRunsOptions {
  */
 export class AgentRunsStore {
   private readonly provider: DatabaseProvider;
-  private readonly analytics: AnalyticsStore | undefined;
+  private readonly analytics: RunSummarySink | undefined;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
 
@@ -133,7 +133,7 @@ export class AgentRunsStore {
    * write-throughs a summary row to the central analytics DB
    * (best-effort — issue #98, decision 4).
    */
-  constructor(provider: DatabaseProvider, analytics?: AnalyticsStore) {
+  constructor(provider: DatabaseProvider, analytics?: RunSummarySink) {
     this.provider = provider;
     this.analytics = analytics;
   }
