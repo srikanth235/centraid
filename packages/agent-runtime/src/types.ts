@@ -6,7 +6,7 @@
  * know about user prefs.
  */
 
-export type RunnerKind = 'codex' | 'claude-code';
+export type RunnerKind = 'codex' | 'claude-code' | 'openclaw';
 
 /**
  * OpenAI-compatible inference endpoint that the codex CLI should route
@@ -66,7 +66,10 @@ export interface RunnerPrefs {
   /**
    * When set and `kind === 'codex'`, the spawned codex CLI is configured
    * via a scoped `CODEX_HOME` to route model requests through this
-   * OpenAI-compatible endpoint. Ignored when `kind === 'claude-code'`.
+   * OpenAI-compatible endpoint. Ignored when `kind === 'claude-code'`
+   * (Anthropic-wire-format only) and when `kind === 'openclaw'` (the
+   * `openclaw` CLI self-authenticates from the user's shell env — the
+   * model provider is configured in OpenClaw, not here).
    */
   provider?: OpenAICompatProvider;
 }

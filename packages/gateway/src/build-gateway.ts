@@ -1,32 +1,23 @@
 /*
  * `buildGateway()` — construct the host-agnostic centraid gateway core.
  *
- * The gateway is the host-agnostic lift of what `apps/desktop/src/main/
- * local-runtime.ts` used to do inline. `buildGateway()` constructs the
- * WHOLE object graph (stores, chat runner, `Runtime`, the in-process
- * scheduler, every route handler) and returns it — *without* binding a
- * socket. It also exposes a `composedHandler` that replays the gateway's
+ * Constructs the WHOLE object graph (stores, chat runner, `Runtime`, the
+ * in-process scheduler, every route handler) and returns it *without*
+ * binding a socket. It also exposes a `composedHandler` that replays the
  * route chain (`chatHistory → userStore → extraHandlers[] →
- * runtime.handle`) minus the bearer check, for hosts that own auth
- * themselves. The listener-and-bearer wrapper lives in `serve.ts`.
+ * runtime.handle`) minus the bearer check, for hosts that own auth. The
+ * listener-and-bearer wrapper lives in `serve.ts`.
  *
- * Three hosts mount the same core:
+ * Three hosts mount the same core: the Electron embed (`buildGateway()` /
+ * `serve()`, secrets from `safeStorage`), the `centraid-gateway` daemon
+ * (`serve()`, secrets from a sealed file), and `@centraid/openclaw-plugin`
+ * (mounts `composedHandler` on the OpenClaw HTTP server, drives
+ * `start()`/`stop()` from `gateway_start`/shutdown).
  *
- *   - Electron embed: `buildGateway()` (or `serve()`) in the main
- *     process, paths derived from `gateway-paths.ts`, secrets read from
- *     `safeStorage`.
- *   - `centraid-gateway` daemon: `serve()`, paths derived from a
- *     `--data-dir` config, secrets from a sealed file on disk.
- *   - `@centraid/openclaw-plugin`: `buildGateway()` + mount
- *     `composedHandler` on the OpenClaw HTTP server (which owns auth),
- *     driving `start()`/`stop()` from `gateway_start`/shutdown.
- *
- * Construction (stores → prefs loader → chat runner → `Runtime` → route
- * handlers) runs in `buildGateway()`; the per-step rationale lives in the
- * inline comments below. The returned `start(publicBaseUrl)` then runs the
- * post-listener lifecycle (bootstrap, git-store registry sync, scheduler
- * start + reconcile — issue #149). The only thing the caller injects is
- * paths + secrets (+ an optional scheduler, for tests).
+ * The returned `start(publicBaseUrl)` runs the post-listener lifecycle
+ * (bootstrap, git-store registry sync, scheduler start + reconcile —
+ * issue #149). The caller injects paths + secrets (+ an optional
+ * scheduler, for tests).
  */
 
 import { promises as fs } from 'node:fs';
@@ -100,6 +91,21 @@ export interface BuildGatewayOptions {
 /** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 
+/**
+ * Fire one automation, fire-and-forget — the single path behind "run now",
+ * cron, and (for hosts with their own webhook route) a webhook POST.
+ */
+export type FireAutomation = (
+  automationRef: string,
+  opts: {
+    runId?: string;
+    triggerKind: AutomationTriggerKind;
+    triggerOrigin: AutomationTriggerOrigin;
+    /** Optional trigger payload (e.g. a webhook body) handed to the handler. */
+    input?: unknown;
+  },
+) => void;
+
 // Prefixes the chat-history + user-store routes answer to, mirrored from
 // app-engine's http-server.ts so `composedHandler` matches the same URLs
 // `startRuntimeHttpServer` does.
@@ -143,6 +149,12 @@ export interface BuiltGateway {
   start(publicBaseUrl: string): Promise<void>;
   /** Stop the cron scheduler. Idempotent. */
   stop(): Promise<void>;
+  /**
+   * Fire an automation directly — the same path "run now" + cron use.
+   * Present only on the git-store backend. Hosts with their own inbound
+   * webhook route (the OpenClaw plugin) call this from the fire callback.
+   */
+  fireAutomation?: FireAutomation;
 }
 
 export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltGateway> {
@@ -151,10 +163,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   await fs.mkdir(paths.appsDir, { recursive: true });
 
-  // Git-store backend (issue #137). When a root is given, the gateway
-  // owns app code as a bare git repo + worktrees; the runtime serves
-  // handlers from the live `main` worktree. Constructed + initialized
-  // here so the code-dir override is available at Runtime construction.
+  // Git-store backend (issue #137). When a root is given, the gateway owns
+  // app code as a bare git repo + worktrees; the runtime serves handlers
+  // from the live `main` worktree. Initialized here so the code-dir
+  // override is available at Runtime construction.
   let appsStore: WorktreeStore | undefined;
   if (options.appsStoreRoot !== undefined) {
     appsStore = new WorktreeStore({ root: options.appsStoreRoot });
@@ -163,25 +175,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const codeDirOverride = appsStore
     ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
     : undefined;
-  // Stable live data file — injected so a publish migrates live data and a
-  // draft seeds from it (issue #144).
+  // Stable live data file — a publish migrates it, a draft seeds from it (#144).
   const liveDataFile = (appId: string): string => path.join(paths.appsDir, appId, 'data.sqlite');
   // Draft preview (#141 + #144): resolve an app's code dir to its OPEN
-  // session worktree (serving the staged draft before publish) and lazily
-  // seed the worktree's branched `data.sqlite` from live there — data dir =
-  // code dir in draft mode, so one resolver primes both planes.
+  // session worktree and lazily seed the worktree's branched `data.sqlite`
+  // from live — data dir = code dir in draft mode, one resolver primes both.
   const draftCodeDir = appsStore ? makeDraftCodeDirResolver(appsStore, liveDataFile) : undefined;
 
   // Cron-scheduler reconcile (issue #149). Automation *code* lives under
   // the git-store materialized `main` (`active-main/apps`), or `appsDir`
   // for the flat/legacy layout. We re-scan + reconcile the whole desired
-  // set (idempotent) rather than register single rows, so a publish /
-  // delete / rollback keeps the in-process cron scheduler in sync. Coalesced
-  // so concurrent publishes don't thrash it. `scheduler` is the single
-  // persistent instance, assigned once the fire surface is wired below.
+  // set (idempotent) on every publish/delete/rollback, coalesced so
+  // concurrent publishes don't thrash it.
   const schedulerCodeAppsDir = (): string =>
     appsStore ? path.join(appsStore.getActiveMainLink(), 'apps') : paths.appsDir;
   let scheduler: LocalScheduler | undefined;
+  // Exposed on the returned gateway (git-store backend only) so a host's
+  // own webhook route can fire through the same path as cron / run-now.
+  let fireAutomation: FireAutomation | undefined;
   let reconcileInFlight = false;
   let reconcileDirty = false;
   const reconcileScheduler = (): void => {
@@ -231,16 +242,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   );
 
   // Per-turn prefs loader. Re-reads the gateway user_prefs row every chat
-  // turn so a settings change lands without a restart. The API key is
-  // spliced in from the injected `secrets` provider (safeStorage vs.
-  // sealed file, per host).
+  // turn so a settings change lands without a restart; the API key is
+  // spliced in from the injected `secrets` provider.
   const prefsLoader = async (): Promise<RunnerPrefs | undefined> => {
     const allPrefs = userStore.getAllPrefs();
     const kindRaw = allPrefs['agent.runner.kind'];
     // Codex is the default when the user hasn't picked — matches the
     // settings panel's "Codex preferred when both present" copy.
     const kind: RunnerPrefs['kind'] =
-      kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : 'codex';
+      kindRaw === 'codex' || kindRaw === 'claude-code' || kindRaw === 'openclaw'
+        ? kindRaw
+        : 'codex';
     const binPath =
       typeof allPrefs['agent.runner.binPath'] === 'string'
         ? (allPrefs['agent.runner.binPath'] as string)
@@ -258,24 +270,22 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     };
   };
 
-  // Cycle break: the chat runner needs the Runtime's dispatcher, but
-  // the Runtime is constructed *with* the chat runner. The runtimeRef
-  // holder resolves at call time, after the assignment below.
+  // Cycle break: the chat runner needs the Runtime's dispatcher, but the
+  // Runtime is constructed *with* the chat runner — `runtimeRef` resolves
+  // at call time, after the assignment below.
   let runtimeRef: Runtime | undefined;
   const getDispatcher = (): Runtime['dispatcher'] => {
     const rt = runtimeRef;
     if (!rt) throw new Error('chat runner invoked before runtime was constructed');
     return rt.dispatcher;
   };
-  // The runner builds webhook URLs against the live server origin, known
-  // only after `startRuntimeHttpServer` resolves below — a turn only ever
-  // runs post-start, so this holder is populated by then.
+  // The runner builds webhook URLs against the live server origin, set by
+  // `start()` before any turn runs.
   let serverUrl = '';
-  // Unified chat (issue #141, Phase 3): when a git store backs app code,
-  // every chat turn runs in the app's draft worktree with the union of
-  // native file tools + the `centraid_*` dispatcher — one surface that both
-  // tweaks the app's code and operates its data. Without a store (no draft
-  // worktree to edit) we fall back to the data-only chat adapter.
+  // Unified chat (issue #141, Phase 3): with a git store, every chat turn
+  // runs in the app's draft worktree with native file tools + the
+  // `centraid_*` dispatcher (edits code AND operates data). Without a store
+  // we fall back to the data-only chat adapter.
   const chatRunner = appsStore
     ? makeUnifiedChatRunner({
         store: appsStore,
@@ -316,11 +326,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   runtimeRef = runtime;
 
-  // Template catalog (issue #141): the gateway owns it, so the renderer
-  // reads `GET /centraid/_templates` directly. Mounted regardless of the
-  // code backend — templates are bundle/cache-resolved, independent of the
-  // git store. The git-store publish/session/files surface (issue #137) is
-  // appended below when a store backend is active.
+  // Template catalog (issue #141): the gateway owns it (`GET
+  // /centraid/_templates`), bundle/cache-resolved independent of the code
+  // backend. The git-store surface (issue #137) is appended below.
   const extraHandlers: RouteHandler[] = [
     makeTemplatesRouteHandler({
       ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
@@ -334,14 +342,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // The one fire path, shared by "run now" (manual) and the cron
     // scheduler (scheduled). Both run on THIS host with the gateway's own
     // runner pref, against the live `main` code + the stable data tree.
-    const fireAutomation = (
-      automationRef: string,
-      opts: {
-        runId?: string;
-        triggerKind: AutomationTriggerKind;
-        triggerOrigin: AutomationTriggerOrigin;
-      },
-    ): void => {
+    const fire: FireAutomation = (automationRef, opts): void => {
       void (async () => {
         const prefs = await prefsLoader();
         await runAutomationLocal({
@@ -353,6 +354,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           runner: prefs?.kind ?? 'codex',
           triggerKind: opts.triggerKind,
           triggerOrigin: opts.triggerOrigin,
+          ...(opts.input !== undefined ? { input: opts.input } : {}),
         });
       })().catch((err) =>
         logger.warn(
@@ -361,6 +363,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         ),
       );
     };
+    fireAutomation = fire; // exposed for hosts with their own webhook route
     // One persistent in-process cron scheduler for the gateway's lifetime
     // (issue #149). `reconcileScheduler()` (boot + every publish/delete)
     // settles its in-memory registry; it fires cron automations through the
@@ -368,7 +371,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     scheduler =
       options.scheduler ??
       new InProcessScheduler({
-        fire: (ref) => fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
+        fire: (ref) => fire(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
         onError: (err, ref) =>
           logger.warn(
             `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err)),
@@ -421,7 +424,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         analytics: analyticsStore,
         insights: new InsightsStore(analyticsProvider),
         runAutomation: ({ automationRef, runId }) =>
-          fireAutomation(automationRef, {
+          fire(automationRef, {
             runId,
             triggerKind: 'manual',
             triggerOrigin: 'manual',
@@ -431,10 +434,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   }
 
   // `composedHandler` replays the chain `startRuntimeHttpServer` runs
-  // (app-engine http-server.ts:135-147) — chat-history → user-store →
-  // extra handlers → `runtime.handle` — but WITHOUT the bearer check, for
-  // hosts that own auth (OpenClaw's `auth: 'gateway'`). CORS is the host's
-  // job too: a fronting gateway emits its own.
+  // (app-engine http-server.ts:135-147) — chat-history → user-store → extra
+  // handlers → `runtime.handle` — WITHOUT the bearer check, for hosts that
+  // own auth (OpenClaw's `auth: 'gateway'`). CORS is the host's job too.
   const chatHistoryHandler = makeChatHistoryRouteHandler(() => chatHistoryStore);
   const userStoreHandler = makeUserStoreRouteHandler(() => userStore);
   const composedHandler: RouteHandler = async (req, res) => {
@@ -454,19 +456,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     serverUrl = publicBaseUrl;
     await runtime.bootstrap();
 
-    // Git-store sync: every app present on `main` gets a registry entry
-    // so `registry.get(id)` resolves and its data dir (`<appsDir>/<id>/`,
-    // where data.sqlite lives) exists. Code is served from the worktree
-    // via the override; this only bookkeeps existence + the data dir.
+    // Git-store sync: every app on `main` gets a registry entry so
+    // `registry.get(id)` resolves and its data dir exists (code is served
+    // from the worktree via the override; this only bookkeeps existence).
     if (appsStore) {
       for (const appId of await appsStore.listApps()) {
         await runtime.registry.ensureUploaded(appId);
       }
     }
 
-    // Start the in-process cron scheduler and settle it with disk. Under
-    // n8n semantics it only fires while running — downtime is not
-    // backfilled (issue #149).
+    // Start the in-process cron scheduler. n8n semantics: fires only while
+    // running, downtime not backfilled (issue #149).
     scheduler?.start();
     reconcileScheduler();
   };
@@ -485,6 +485,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     composedHandler,
     start,
     stop,
+    ...(fireAutomation ? { fireAutomation } : {}),
   } satisfies BuiltGateway;
 }
 

@@ -23,6 +23,7 @@ export {
   type BuildGatewayOptions,
   type BuiltGateway,
   type RouteHandler,
+  type FireAutomation,
 } from './build-gateway.js';
 export { serve, type ServeOptions, type GatewayServeHandle } from './serve.js';
 export type { GatewayPaths } from './paths.js';

@@ -2,12 +2,13 @@
  * Unified agent-turn primitive.
  *
  * Both chat and builder share this entry point. It dispatches to one of
- * two backends based on the user's persisted `agent.runner.kind` pref:
+ * three backends based on the user's persisted `agent.runner.kind` pref:
  *
  *   - `codex`       → spawn `codex app-server` (JSON-RPC stdio)
  *   - `claude-code` → call `@anthropic-ai/claude-agent-sdk`'s `query()` in-process
+ *   - `openclaw`    → spawn `openclaw acp` (Agent Client Protocol stdio)
  *
- * Both backends emit the same `ChatStreamEvent` shape, so callers don't
+ * All backends emit the same `ChatStreamEvent` shape, so callers don't
  * need to know which one ran a given turn. The returned `adapterSessionId`
  * (codex thread id / claude session id) is opaque — round-trip it on the
  * next turn via `prevSessionId` to resume the conversation.
@@ -21,6 +22,7 @@
 import type { ChatStreamEvent, Dispatcher } from '@centraid/app-engine';
 import { runCodexAppServerTurn } from './codex-app-server.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
+import { runOpenClawAcpTurn } from './openclaw-acp.js';
 import type { RunnerPrefs } from './types.js';
 
 /**
@@ -133,6 +135,31 @@ export async function runAgentTurn(
     return {
       adapterKind: 'codex',
       ...(result.threadId ? { sessionId: result.threadId } : {}),
+    };
+  }
+
+  if (prefs.kind === 'openclaw') {
+    // openclaw reaches centraid data via the bundled `centraid` CLI on
+    // PATH (its shell tool), not via the inline `toolContext` dispatcher —
+    // so `toolContext` is intentionally not forwarded here.
+    const result = await runOpenClawAcpTurn(
+      {
+        cwd: input.cwd,
+        message: input.message,
+        extraSystemPrompt: input.extraSystemPrompt,
+        ...(input.model ? { model: input.model } : {}),
+        ...(input.extraPath ? { extraPath: input.extraPath } : {}),
+        abortSignal: input.abortSignal,
+        onEvent: input.onEvent,
+      },
+      {
+        ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
+        ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
+      },
+    );
+    return {
+      adapterKind: 'openclaw',
+      ...(result.sessionId ? { sessionId: result.sessionId } : {}),
     };
   }
 

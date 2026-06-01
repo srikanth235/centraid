@@ -1,38 +1,44 @@
 /*
  * @centraid/openclaw-plugin
  *
- * Thin OpenClaw shim over `@centraid/app-engine`. Mounts the runtime's
- * `/centraid` URL surface on the gateway. All app-handling logic — registry,
- * versioned uploads, sqlite-backed query/action handlers, the full
- * `/centraid/...` switch — lives in app-engine. This file only:
+ * OpenClaw host for the centraid gateway. One of three hosts that mount
+ * the shared `buildGateway()` core (the others: the `centraid-gateway`
+ * daemon and the Electron embed). Instead of reimplementing the graph,
+ * this plugin builds the gateway and mounts its `composedHandler` on the
+ * OpenClaw HTTP server — OpenClaw owns auth (`auth: 'gateway'`), so the
+ * composed chain runs without the daemon's bearer check.
  *
- *   1. Resolves `pluginConfig` against the OpenClaw state dir
- *   2. Constructs a `Runtime`
- *   3. Forwards `gateway_start` to `runtime.bootstrap()`
- *   4. Mounts the runtime under `/centraid` via `api.registerHttpRoute`
+ * What the plugin owns:
+ *   1. Derive `GatewayPaths` + the git-store root under OpenClaw's state dir.
+ *   2. `buildGateway()` (async) and drive `start()` / `stop()` from the
+ *      `gateway_start` / `gateway_stop` lifecycle hooks.
+ *   3. Mount `composedHandler` on the `/centraid`, `/_centraid-chat`,
+ *      `/_centraid-user` prefixes, and a dedicated `/_centraid-hook`
+ *      webhook route (auth: 'plugin' — verifies its own secret) that fires
+ *      through the gateway's own automation path.
+ *   4. Register the `centraid_*` agent tools so any OpenClaw agent (not
+ *      just centraid chat) can address a registered app's data surface.
  *
- * See `@centraid/app-engine` for the engine and the public handler
- * surface (`QueryHandler`, `ActionHandler`).
+ * Everything else — the git store, draft/branching, the unified chat
+ * runner, the in-process cron scheduler, every route handler — comes from
+ * `@centraid/gateway`. Chat runs through the gateway's runner pref
+ * (`codex` / `claude-code` / `openclaw`), so this plugin no longer ships
+ * its own chat runner or automation pipeline.
  */
 
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
 import {
-  Runtime,
-  ChatHistoryStore,
-  makeChatHistoryRouteHandler,
-  UserStore,
-  makeUserStoreRouteHandler,
-  makeGatewayDbProvider,
-} from '@centraid/app-engine';
-import { AnalyticsStore, makeAnalyticsDbProvider } from '@centraid/analytics';
-import { listAutomations, makeWebhookRouteHandler } from '@centraid/automation';
+  buildGateway,
+  type BuiltGateway,
+  type GatewayPaths,
+  type RouteHandler,
+  type SecretsProvider,
+} from '@centraid/gateway';
+import { makeWebhookRouteHandler } from '@centraid/automation';
 import { registerCentraidTools } from './lib/tools.js';
-import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
-import { registerAutomationsProvider, setOpenClawConfig } from './lib/automations-provider.js';
-import { OpenclawAutomationHost } from './lib/automation-host.js';
-import { runOpenclawFire } from './lib/openclaw-fire.js';
 
 // Re-export the public handler & payload types from app-engine so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -59,185 +65,143 @@ export type {
 } from '@centraid/app-engine';
 export type { AutomationManifest, AutomationManifestRequires } from '@centraid/automation';
 
+/**
+ * OpenClaw's embedded runner self-authenticates from the user's shell, so
+ * the gateway never needs a custom OpenAI-compatible provider key here.
+ * (Picking the codex / claude runner inside the OpenClaw host uses their
+ * own `codex login` / `claude login`, not this key.)
+ */
+const noSecrets: SecretsProvider = { getProviderApiKey: async () => undefined };
+
 export default definePluginEntry({
   id: 'centraid',
   name: 'Centraid',
   description:
-    'Mounts /centraid on the gateway. Apps may be registered by path or uploaded as versioned tar.gz archives; each app has static assets, a persistent sqlite database, and JS handlers for queries / actions.',
+    'Mounts the centraid gateway on the OpenClaw HTTP server. Apps own static assets, a git-backed code store with draft/branching, a per-app sqlite database, and JS handlers for queries / actions; automations fire on an in-process scheduler.',
 
   register(api: OpenClawPluginApi) {
     const pluginConfig = (api.pluginConfig ?? {}) as {
-      appsDir?: string;
+      dataDir?: string;
       versionRetention?: number;
     };
-    // Relative `appsDir` resolves under OpenClaw's state dir (~/.openclaw by
+    // Relative `dataDir` resolves under OpenClaw's state dir (~/.openclaw by
     // default, OPENCLAW_STATE_DIR override), NOT the plugin source tree —
     // runtime state must not live next to code, especially with --link installs.
-    const appsDirRaw = pluginConfig.appsDir ?? 'centraid';
-    const appsDir = path.isAbsolute(appsDirRaw)
-      ? appsDirRaw
-      : path.join(resolveStateDir(process.env), appsDirRaw);
-    const versionRetention = Math.max(2, pluginConfig.versionRetention ?? 5);
+    const dataDirRaw = pluginConfig.dataDir ?? 'centraid';
+    const stateRoot = path.isAbsolute(dataDirRaw)
+      ? dataDirRaw
+      : path.join(resolveStateDir(process.env), dataDirRaw);
 
-    // Sibling SQLite files, one per domain — identity
-    // (`centraid-gateway.sqlite`: users + prefs) and the central
-    // analytics DB (`centraid-analytics.sqlite`: one summary row per
-    // run, every kind — issue #98). Automation *and* chat runs live in
-    // each app's own `runtime.sqlite`, resolved per app. Providers are
-    // lazy: a file is only opened when a store actually needs it, which
-    // keeps OpenClaw worker subprocesses (which `register()` runs in but
-    // which don't serve HTTP) from holding stray DB handles.
-    const dbDir = path.dirname(appsDir);
-    const gatewayDbProvider = makeGatewayDbProvider(path.join(dbDir, 'centraid-gateway.sqlite'));
-    const analyticsStore = new AnalyticsStore(
-      makeAnalyticsDbProvider(path.join(dbDir, 'centraid-analytics.sqlite')),
+    // Clean break on layout (v0, no live openclaw users, no migration): the
+    // gateway owns app *code* as a git store under `apps-store/`, app *data*
+    // (per-app `data.sqlite`) under `apps/`, and the identity + analytics DBs
+    // as siblings. Mirrors the daemon's `daemonLayoutFor`.
+    const paths: GatewayPaths = {
+      appsDir: path.join(stateRoot, 'apps'),
+      identityDb: path.join(stateRoot, 'identity.sqlite'),
+      analyticsDb: path.join(stateRoot, 'analytics.sqlite'),
+      chatRunnerSessionDir: path.join(stateRoot, 'chat-runner-sessions'),
+      codexHomeBaseDir: path.join(stateRoot, 'codex-home'),
+    };
+    const appsStoreRoot = path.join(stateRoot, 'apps-store');
+
+    // `buildGateway` is async but `register()` is synchronous. Kick the build
+    // off now and expose a `ready` promise that route handlers + lifecycle
+    // hooks await; cache the resolved gateway for synchronous reads (tools).
+    let gateway: BuiltGateway | undefined;
+    const ready = buildGateway({
+      paths,
+      secrets: noSecrets,
+      appsStoreRoot,
+      logger: {
+        info: (m) => api.logger.info(m),
+        warn: (m) => api.logger.warn(m),
+        error: (m) => api.logger.error(m),
+      },
+      logTag: 'centraid',
+    });
+    void ready.then(
+      (g) => {
+        gateway = g;
+      },
+      (err) =>
+        api.logger.error(
+          `[centraid] gateway build failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
     );
-    // Issue #98: an automation is never standalone — it lives inside an
-    // app folder under `appsDir`. There is no separate automations dir;
-    // `listAutomations(appsDir)` scans every app's active version.
-    const userStore = new UserStore(gatewayDbProvider);
 
-    // Chat-history store — app-scoped (issue #98): every chat session +
-    // turn lives in its app's `runtime.sqlite`, resolved from `appsDir`.
-    // The `/centraid/<id>/_chat` POST route reads sticky mode +
-    // runner-resume handles from it and records each turn as a `runs`
-    // row. Constructed before the runtime so it can be handed to the
-    // Runtime and also mounted on the `/_centraid-chat` HTTP surface.
-    const chatHistoryStore = new ChatHistoryStore(
-      appsDir,
-      () => userStore.getUserId(),
-      analyticsStore,
-    );
-
-    const chatRunner = makeOpenClawChatRunner(api);
-
-    // Openclaw cron host. Same `AutomationHost` shape the desktop's
-    // OS scheduler implements; centralizes register / unregister /
-    // reconcile so callers don't speak `cron.add` / `cron.update`
-    // directly.
-    const automationHost = new OpenclawAutomationHost();
-
-    const runtime = new Runtime({
-      appsDir,
-      versionRetention,
-      userStore,
-      chatHistoryStore,
-      chatRunnerSessionDir: path.join(
-        resolveStateDir(process.env),
-        'centraid',
-        'chat-runner-sessions',
-      ),
-      logger: api.logger,
-      chatRunner,
-      runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
-    });
-
-    // Register the centraid-mock provider plugin. The provider's
-    // StreamFn parses the dispatch sentinel from the cron-fire prompt,
-    // loads the automation handler off disk, and runs it with a ctx
-    // that routes ctx.tool through callGatewayTool and ctx.agent
-    // through the user's REAL provider via the simple-completion
-    // runtime. See `lib/automations-provider.ts`.
-    registerAutomationsProvider(api, {
-      appsDir,
-      analytics: analyticsStore,
-      logger: api.logger,
-    });
-
-    api.on('gateway_start', async () => {
-      await runtime.bootstrap();
-      // Bind the openclaw config so the provider plugin's ctx.agent
-      // path can route through `prepareSimpleCompletionModelForAgent`.
-      // `api.config` is available at gateway_start time; before this
-      // any cron fire would throw, but cron jobs don't fire until
-      // after gateway_start anyway.
-      setOpenClawConfig((api as unknown as { config: unknown }).config);
-      // Reconcile centraid's automations mirror with openclaw's cron
-      // store. Adds jobs we expect but openclaw doesn't know about,
-      // updates mismatched ones, removes zombies. Soft-fails on
-      // network / SDK errors so a transient cron-store hiccup doesn't
-      // prevent the plugin from booting.
-      try {
-        const { rows } = await listAutomations(appsDir);
-        const outcome = await automationHost.reconcile(rows);
-        if (outcome.added.length + outcome.updated.length + outcome.removed.length > 0) {
-          api.logger.info(
-            `[centraid] automations reconciled: +${outcome.added.length} ~${outcome.updated.length} -${outcome.removed.length}`,
-          );
-        }
-      } catch (err) {
-        api.logger.warn(
-          `[centraid] automations reconciliation failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    });
-
-    api.registerHttpRoute({
-      path: '/centraid',
-      match: 'prefix',
-      auth: 'gateway',
-      handler: (req, res) => runtime.handle(req, res),
-    });
-
-    // Agent tools — let the OpenClaw agent read a single app's data via
-    // SELECT only. Scope is enforced by the before_tool_call hook inside
-    // registerCentraidTools (uses sessionKey = "centraid-chat:<appId>").
-    registerCentraidTools(api, runtime);
-
-    // Mount the chat-history store (constructed above) on its HTTP surface.
-    // Per-user scoping: every chat_sessions row carries the gateway-side
-    // user UUID from `UserStore` (real FK to `users`, ON DELETE CASCADE).
-    // The provider closure resolves the UUID lazily — UserStore caches it
-    // after the first read.
-    api.registerHttpRoute({
-      path: '/_centraid-chat',
-      match: 'prefix',
-      auth: 'gateway',
-      handler: makeChatHistoryRouteHandler(() => chatHistoryStore),
-    });
-
-    // User-prefs route. The store was constructed eagerly above so that the
-    // runtime's app-index injection can read prefs synchronously, but the
-    // route handler still goes through a getter for symmetry with the
-    // chat-history wiring (and so future lazy-init refactors don't have to
-    // touch the route registration).
-    api.registerHttpRoute({
-      path: '/_centraid-user',
-      match: 'prefix',
-      auth: 'gateway',
-      handler: makeUserStoreRouteHandler(() => userStore),
-    });
+    // Mount `composedHandler` on each centraid URL prefix. OpenClaw owns auth
+    // (`auth: 'gateway'`); the composed chain replays chat → user → extra →
+    // runtime.handle minus the bearer check and always resolves the response.
+    for (const prefix of ['/centraid', '/_centraid-chat', '/_centraid-user']) {
+      api.registerHttpRoute({
+        path: prefix,
+        match: 'prefix',
+        auth: 'gateway',
+        handler: async (req, res) => (await ready).composedHandler(req, res),
+      });
+    }
 
     // Webhook-trigger route (issue #96). One prefix route fronts every
-    // automation with a `webhook` trigger: the path slug resolves to an
-    // automation and the handler verifies the shared secret itself, so
-    // it runs at `auth: 'plugin'` (no gateway bearer required). The fire
-    // rides the same `runOpenclawFire` path a cron trigger uses.
+    // automation with a `webhook` trigger: the slug resolves to an automation
+    // and the handler verifies the shared secret itself, so it runs at
+    // `auth: 'plugin'` (no gateway bearer). The fire rides the gateway's own
+    // automation path — the same one cron + "run now" use. Built lazily on
+    // first hit (the gateway + its `main` worktree exist only post-start).
+    let webhookHandler: RouteHandler | undefined;
     api.registerHttpRoute({
       path: '/_centraid-hook',
       match: 'prefix',
       auth: 'plugin',
-      handler: makeWebhookRouteHandler({
-        appsDir,
-        fire: async ({ automationRef, body }) => {
-          const outcome = await runOpenclawFire(
-            {
-              automationRef,
-              appsDir,
-              analytics: analyticsStore,
-              triggerKind: 'scheduled',
-              triggerOrigin: 'webhook',
-              ...(body !== undefined ? { input: body } : {}),
+      handler: async (req, res) => {
+        const g = await ready;
+        if (!g.fireAutomation || !g.appsStore) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ error: 'gateway not ready for webhooks' }));
+          return true;
+        }
+        if (!webhookHandler) {
+          const codeAppsDir = path.join(g.appsStore.getActiveMainLink(), 'apps');
+          const fireAutomation = g.fireAutomation;
+          webhookHandler = makeWebhookRouteHandler({
+            appsDir: codeAppsDir,
+            fire: async ({ automationRef, body }) => {
+              const runId = randomUUID();
+              fireAutomation(automationRef, {
+                runId,
+                triggerKind: 'scheduled',
+                triggerOrigin: 'webhook',
+                ...(body !== undefined ? { input: body } : {}),
+              });
+              return { ok: true, runId };
             },
-            api.logger,
-          );
-          return {
-            ok: outcome.ok,
-            ...(outcome.runId ? { runId: outcome.runId } : {}),
-            ...(outcome.error ? { error: outcome.error } : {}),
-          };
-        },
-      }),
+          });
+        }
+        return webhookHandler(req, res);
+      },
+    });
+
+    // Agent tools — let any OpenClaw agent read/act on a registered app's
+    // declared surface. Scope is enforced by the `before_tool_call` hook
+    // inside `registerCentraidTools` (sessionKey = "centraid-chat:<appId>").
+    // The runtime is resolved lazily since the gateway builds asynchronously.
+    registerCentraidTools(api, () => {
+      if (!gateway) throw new Error('centraid gateway is not ready yet');
+      return gateway.runtime;
+    });
+
+    // Lifecycle: `start()` runs bootstrap + git-store registry sync + the
+    // in-process cron scheduler; `stop()` halts the scheduler. The public
+    // base URL feeds post-turn webhook minting — OpenClaw binds loopback, so
+    // build it from the gateway port the hook reports.
+    api.on('gateway_start', async (event) => {
+      const port = (event as { port?: number }).port;
+      const publicBaseUrl = port ? `http://127.0.0.1:${port}` : 'http://127.0.0.1';
+      const g = await ready;
+      await g.start(publicBaseUrl);
+    });
+    api.on('gateway_stop', async () => {
+      await gateway?.stop();
     });
   },
 });

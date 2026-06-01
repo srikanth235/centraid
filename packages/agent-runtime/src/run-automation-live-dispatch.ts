@@ -132,6 +132,38 @@ function coerceAgentAnswer(text: string, json: unknown): unknown {
 }
 
 /**
+ * Pull the agent's reply text out of `openclaw agent --local --json`
+ * stdout. The CLI prints the gateway response object
+ * (`{ status, summary, result: { payloads: [{ text }] } }`); we join the
+ * payload texts, falling back to `summary` and finally the raw stdout so
+ * a shape change degrades to "return what it printed" rather than throwing.
+ */
+function extractOpenClawReply(stdout: string): string {
+  const trimmed = stdout.trim();
+  if (!trimmed) return trimmed;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return trimmed;
+  }
+  const obj = parsed as { summary?: unknown; result?: { payloads?: unknown } };
+  const payloads = obj.result?.payloads;
+  if (Array.isArray(payloads)) {
+    const text = payloads
+      .map((p) =>
+        p && typeof (p as { text?: unknown }).text === 'string' ? (p as { text: string }).text : '',
+      )
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+    if (text) return text;
+  }
+  if (typeof obj.summary === 'string' && obj.summary.trim()) return obj.summary.trim();
+  return trimmed;
+}
+
+/**
  * Stand up the live dispatch surface: an ephemeral mock-LLM server plus
  * a scratch dir. Returns the two dispatchers and a `close()` that tears
  * both down.
@@ -255,6 +287,25 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
         throw new Error(`ctx.agent CLI failed: ${result.stderr.slice(0, 2000)}`);
       }
       return coerceAgentAnswer(result.stdout, call.json);
+    }
+
+    if (opts.runner === 'openclaw') {
+      // openclaw self-authenticates from the user's shell provider (no
+      // mock, no CODEX_HOME). `--json` routes logs to stderr and prints the
+      // gateway response object to stdout; the reply text lives in
+      // `result.payloads[].text`. The `agent` command keys its workspace
+      // off process.cwd, so we run it with `cwd: opts.workdir`.
+      const result = await collectProcess(
+        spawn('openclaw', ['agent', '--local', '--json', '--message', call.prompt], {
+          ...spawnOpts,
+          cwd: opts.workdir,
+        }),
+      );
+      if (!result.ok) {
+        const detail = result.stderr.trim() || result.stdout.trim();
+        throw new Error(`ctx.agent CLI failed: ${detail.slice(0, 2000)}`);
+      }
+      return coerceAgentAnswer(extractOpenClawReply(result.stdout), call.json);
     }
 
     // codex exec — non-interactive, no approval prompts, runnable

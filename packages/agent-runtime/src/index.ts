@@ -1,13 +1,14 @@
 /*
  * @centraid/agent-runtime
  *
- * Engine layer for centraid's agent surfaces. Two coding-agent backends,
- * one normalized event stream:
+ * Engine layer for centraid's agent surfaces. Three coding-agent
+ * backends, one normalized event stream:
  *
  *   - `codex app-server` — spawned as a subprocess; JSON-RPC 2.0 stdio
  *   - `@anthropic-ai/claude-agent-sdk` — imported in-process; async generator
+ *   - `openclaw acp` — spawned as a subprocess; Agent Client Protocol stdio
  *
- * Both emit the same `ChatStreamEvent` shape, so downstream surfaces
+ * All emit the same `ChatStreamEvent` shape, so downstream surfaces
  * don't need to know which one ran a given turn.
  *
  * Where this package fits in the bigger picture:
@@ -68,6 +69,17 @@ export {
   type ClaudeSdkConfig,
   type ClaudeSdkResult,
 } from './claude-sdk.js';
+
+export {
+  runOpenClawAcpTurn,
+  type OpenClawAcpInput,
+  type OpenClawAcpConfig,
+  type OpenClawAcpResult,
+} from './openclaw-acp.js';
+
+// ACP → ChatStreamEvent translator, exported for unit testing the mapping
+// without spawning `openclaw acp`.
+export { AcpStreamTranslator } from './openclaw-acp-events.js';
 
 export {
   runPreflight,
