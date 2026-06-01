@@ -23,7 +23,7 @@ v0 pre-release: no backward compatibility, no migrations.
       override fix into `codex-app-server.ts` + `host-tools.ts`.
 - [x] **Decision — rollback migrations (3b).** Documented rollback as
       code-only (the lower-risk option); a re-publish heals the schema.
-- [ ] **Gateway session-scheme de-leak (Theme 2, `desktop-<appId>`).**
+- [x] **Gateway session-scheme de-leak (Theme 2, `desktop-<appId>`).**
       `sessionIdFor` defaults host-neutral in the gateway core; the desktop
       host injects its `desktop-<appId>` scheme.
 - [ ] **Gated on #155 — delete the tarball/VersionStore backend (Theme 2)**

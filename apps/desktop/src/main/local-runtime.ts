@@ -15,6 +15,7 @@ import {
   gatewayIdentityDb,
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
+import { desktopSessionIdFor } from './app-sessions.js';
 import { loadPersistedSettings, templatesCacheDir } from './settings.js';
 
 /**
@@ -132,6 +133,12 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
       // so drafts survive restarts and the publish/session HTTP surface
       // is identical to the standalone daemon.
       appsStoreRoot: gatewayCodeStoreDir(gatewayId),
+      // Inject the desktop's draft-session scheme so the gateway's unified
+      // chat runner edits the SAME `desktop-<appId>` worktree the renderer
+      // Code tab + local builder use (issue #160). Without this the runner
+      // would fall back to the host-neutral `chat-<appId>` default and chat
+      // edits wouldn't show up in the Code tab.
+      sessionIdFor: desktopSessionIdFor,
       // Scheduling (issue #149): the gateway owns an in-process cron
       // scheduler internally and fires automations while it runs — no OS
       // scheduler, no `centraid run-automation` subprocess. Nothing to

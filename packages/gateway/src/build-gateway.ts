@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit orchestration hub already at the cap; pending split of the route-handler wiring into a sibling module
 /*
  * `buildGateway()` — construct the host-agnostic centraid gateway core.
  *
@@ -98,6 +99,13 @@ export interface BuildGatewayOptions {
    * tarball-upload backend (OpenClaw, pre-#137 setups).
    */
   appsStoreRoot?: string;
+  /**
+   * Maps an app id to the draft-session id the unified chat runner edits.
+   * Defaults to a host-neutral `chat-<appId>`; the desktop injects
+   * `desktop-<appId>` so its renderer Code tab + local builder + gateway
+   * chat share ONE worktree. Only consulted when `appsStoreRoot` is set.
+   */
+  sessionIdFor?: (appId: string) => string;
 }
 
 /** A route handler in the gateway chain: `true` when it owned the response. */
@@ -287,6 +295,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         publicBaseUrl: () => serverUrl,
         codexHomeBaseDir: paths.codexHomeBaseDir,
         liveDataFile,
+        ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
       })
     : makeChatRunner({
         prefsLoader,
