@@ -40,7 +40,7 @@ swapping `main/<sha>` dir, and it's the publish target.
 - [x] Fix migrations-on-publish in the git-store backend
 - [x] Rename `@centraid/code-store` → `@centraid/worktree-store`
 - [x] `.gitignore` draft data in the canonical repo (main + every worktree)
-- [ ] Draft data dir = draft code dir (dispatcher + `_sql` + describe schema)
+- [x] Draft data dir = draft code dir (dispatcher + `_sql` + describe schema)
 - [ ] Seed-on-first-draft-access (VACUUM INTO live + replay pending migrations)
 - [ ] Preview-pane "Reset data from prod" endpoint + control
 
@@ -80,6 +80,19 @@ swapping `main/<sha>` dir, and it's the publish target.
   Session worktrees branch off `main` and inherit it, so publish's path-scoped
   `git add apps/<id>` skips a draft's branched data without any per-file
   handling. The basename patterns match at any depth (`apps/<id>/data.sqlite`).
+
+- **Draft data dir = draft code dir (dispatcher + `_sql` + describe schema).**
+  The dispatcher now resolves `dataDir = overrideCodeDir ?? appDataDir(entry)`:
+  in draft mode the handler `app.dir`, the `_sql` built-ins (which take an
+  explicit `dataDir` now instead of deriving it from the registry entry), and
+  the whole-app `describe` schema read all open the session worktree's
+  `data.sqlite`. The runtime's `app-schema` + `app-index` routes read the
+  draft's branched data/settings in draft mode too. The agent's chat tools
+  branch as well: `ToolContext` gained `overrideCodeDir`, threaded from the
+  turn's cwd via a new `cwdIsDraftWorktree` flag on `makeChatRunnerCore`
+  (set by the unified/builder runner, left off the data-only backend), so an
+  agent authoring a migration can exercise it against the draft without
+  touching live rows.
 
 ## Out of scope
 

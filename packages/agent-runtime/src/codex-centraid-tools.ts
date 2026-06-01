@@ -115,25 +115,34 @@ export async function handleCentraidToolCall(
   try {
     let result;
     if (toolName === 'centraid_describe') {
-      result = await ctx.dispatcher.describe({
-        app: ctx.appId,
-        ...(typeof args.action === 'string' ? { action: args.action } : {}),
-        ...(typeof args.query === 'string' ? { query: args.query } : {}),
-      });
+      result = await ctx.dispatcher.describe(
+        {
+          app: ctx.appId,
+          ...(typeof args.action === 'string' ? { action: args.action } : {}),
+          ...(typeof args.query === 'string' ? { query: args.query } : {}),
+        },
+        ctx.overrideCodeDir,
+      );
     } else if (toolName === 'centraid_read') {
       if (typeof args.query !== 'string') throw new Error('query argument required');
-      result = await ctx.dispatcher.read({
-        app: ctx.appId,
-        query: args.query,
-        input: args.input,
-      });
+      result = await ctx.dispatcher.read(
+        {
+          app: ctx.appId,
+          query: args.query,
+          input: args.input,
+        },
+        ctx.overrideCodeDir,
+      );
     } else if (toolName === 'centraid_write') {
       if (typeof args.action !== 'string') throw new Error('action argument required');
-      result = await ctx.dispatcher.write({
-        app: ctx.appId,
-        action: args.action,
-        input: args.input,
-      });
+      result = await ctx.dispatcher.write(
+        {
+          app: ctx.appId,
+          action: args.action,
+          input: args.input,
+        },
+        ctx.overrideCodeDir,
+      );
     } else {
       throw new Error(`unknown tool "${toolName}"`);
     }

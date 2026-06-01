@@ -245,12 +245,10 @@ export class Dispatcher {
     }
 
     if (action === undefined && query === undefined) {
-      // Whole-app describe: include the live schema alongside the manifest
-      // so an agent matching a user utterance against the catalog has
-      // everything it needs in one round-trip. The `_sql` escape hatch
-      // depends on this — agents reach for it when no declared handler
-      // fits, and they need the table layout to write SELECT/UPDATE/etc.
-      const schema = safeReadSchema(entry);
+      // Whole-app describe: schema alongside the manifest so an agent has
+      // everything in one round-trip. Draft mode reads the branched schema
+      // (data dir = code dir), so a pending migration is visible (#144).
+      const schema = safeReadSchema(overrideCodeDir ?? appDataDir(entry));
       return successResult({ manifest, schema });
     }
     if (action !== undefined) {
@@ -288,8 +286,10 @@ export class Dispatcher {
     if (!entry) {
       return errorResult('UNKNOWN_APP', `app "${appId}" is not registered`);
     }
+    // Draft mode: data dir = code dir = the override worktree (#144).
+    const dataDir = overrideCodeDir ?? appDataDir(entry);
     if (isReservedHandlerName(actionName)) {
-      return runBuiltinWrite(entry, actionName, handlerInput, this.builtinHelpers());
+      return runBuiltinWrite(entry, dataDir, actionName, handlerInput, this.builtinHelpers());
     }
     const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
@@ -318,7 +318,7 @@ export class Dispatcher {
     if (validation) return validation;
 
     const outcome = await runHandler({
-      app: { id: entry.id, dir: appDataDir(entry) },
+      app: { id: entry.id, dir: dataDir },
       handlerFile: path.join(codeDir, 'actions', `${actionName}.js`),
       handlerKind: 'action',
       args: { params: {}, body: handlerInput },
@@ -359,8 +359,9 @@ export class Dispatcher {
     if (!entry) {
       return errorResult('UNKNOWN_APP', `app "${appId}" is not registered`);
     }
+    const dataDir = overrideCodeDir ?? appDataDir(entry); // draft: data dir = code dir; see write
     if (isReservedHandlerName(queryName)) {
-      return runBuiltinRead(entry, queryName, handlerInput, this.builtinHelpers());
+      return runBuiltinRead(entry, dataDir, queryName, handlerInput, this.builtinHelpers());
     }
     const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
@@ -386,7 +387,7 @@ export class Dispatcher {
     if (validation) return validation;
 
     const outcome = await runHandler({
-      app: { id: entry.id, dir: appDataDir(entry) },
+      app: { id: entry.id, dir: dataDir },
       handlerFile: path.join(codeDir, 'queries', `${queryName}.js`),
       handlerKind: 'query',
       args: {
@@ -459,9 +460,9 @@ function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {
   );
 }
 
-function safeReadSchema(entry: RegistryEntry): AppSchema {
+function safeReadSchema(dataDir: string): AppSchema {
   try {
-    return readAppSchema(path.join(appDataDir(entry), 'data.sqlite'));
+    return readAppSchema(path.join(dataDir, 'data.sqlite'));
   } catch {
     return { schemaVersion: 0, tables: [], indexes: [], views: [] };
   }
