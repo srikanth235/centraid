@@ -240,7 +240,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Codex is the default when the user hasn't picked — matches the
     // settings panel's "Codex preferred when both present" copy.
     const kind: RunnerPrefs['kind'] =
-      kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : 'codex';
+      kindRaw === 'codex' || kindRaw === 'claude-code' || kindRaw === 'openclaw'
+        ? kindRaw
+        : 'codex';
     const binPath =
       typeof allPrefs['agent.runner.binPath'] === 'string'
         ? (allPrefs['agent.runner.binPath'] as string)

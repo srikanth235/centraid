@@ -6,17 +6,27 @@
  * inject their own spawn via the `spawnCli` option and never hit this
  * file.
  *
- * Both runners (`claude -p` for Claude, `codex exec` for codex) are
- * pointed at the per-fire mock-LLM URL + bearer token so tool dispatch
- * round-trips through the mock server. The codex path materializes a
- * transient `CODEX_HOME` so the per-invocation provider override lands
- * even if `codex exec -c` doesn't accept it on the installed version.
+ * All three runners (`claude -p` for Claude, `codex exec` for codex,
+ * `openclaw agent --local` for OpenClaw) are pointed at the per-fire
+ * mock-LLM URL + bearer token so `ctx.tool` dispatch round-trips through
+ * the mock server. The codex path materializes a transient `CODEX_HOME`
+ * so the per-invocation provider override lands even if `codex exec -c`
+ * doesn't accept it on the installed version; the openclaw path uses the
+ * `OPENAI_BASE_URL` / `OPENAI_API_KEY` env override openclaw honors for
+ * OpenAI-compatible providers.
+ *
+ * NOTE (openclaw): the `ctx.tool` round-trip through the mock for the
+ * openclaw runner is wired the same way as codex/claude but has not yet
+ * been exercised against a live `openclaw` build — validate the staged-
+ * tool round-trip end-to-end before relying on openclaw automations that
+ * call `ctx.tool`. The `ctx.agent` one-shot (real provider, no mock) is
+ * the primary openclaw automation path (see `run-automation-live-dispatch.ts`).
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { materializeCodexHome } from './codex-provider-config.js';
 
-export type LocalRunnerKind = 'codex' | 'claude-code';
+export type LocalRunnerKind = 'codex' | 'claude-code' | 'openclaw';
 
 export interface SpawnCliInput {
   /** Which CLI to invoke. */
@@ -74,6 +84,22 @@ export const defaultSpawnCli: SpawnCli = async (input) => {
     ];
     for (const tool of input.toolsAllow) args.push('--allowed-tools', tool);
     proc = spawn(input.binPath ?? 'claude', args, {
+      cwd: input.cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } else if (input.kind === 'openclaw') {
+    // openclaw honors the OpenAI-compatible env override, so the per-fire
+    // mock-LLM endpoint takes over for the duration of the spawn — the
+    // user's shell-configured provider is shadowed only here, only for the
+    // tool round-trip. `agent --local` keys its workspace off process.cwd
+    // (no `--cwd` flag on the `agent` command), so the spawn `cwd` is the
+    // app dir. There's no tool-allowlist flag (the mock only ever stages
+    // permitted calls, so the allowlist is enforced upstream as with codex).
+    env.OPENAI_BASE_URL = input.mockBaseUrl;
+    env.OPENAI_API_KEY = input.mockBearerToken;
+    const args = ['agent', '--local', '--json', '--message', input.prompt];
+    proc = spawn(input.binPath ?? 'openclaw', args, {
       cwd: input.cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],

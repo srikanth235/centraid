@@ -20,7 +20,7 @@ users — clean break on state layout.
 ## Checklist
 
 - [x] Phase 1 — extract host-agnostic `buildGateway()` core out of `serve()`
-- [ ] Phase 2 — add `'openclaw'` to `LocalRunnerKind` + CLI-spawn wiring
+- [x] Phase 2 — add `'openclaw'` to `LocalRunnerKind` + CLI-spawn wiring
 - [ ] Phase 3 — re-platform the plugin `index.ts` onto `buildGateway()` +
       `composedHandler`; delete the 5 legacy files; drop `pi-ai`
 - [ ] Phase 4 — cut automations to `InProcessScheduler` (remove the
@@ -60,12 +60,48 @@ moves in the issue.
 - `resolveProvider()` (parse provider prefs + splice the secret in) moves
   to `provider-prefs.ts`, next to its sync counterpart `parseProviderPrefs`.
 
+### Phase 2 — add `'openclaw'` to `LocalRunnerKind` + CLI-spawn wiring
+
+The second architectural move: `openclaw` joins `codex` and `claude-code`
+as a coding-agent backend the gateway can drive. Unlike those two,
+`openclaw` self-authenticates from the user's shell (the model provider
+is configured inside OpenClaw) — `RunnerPrefs.provider` is ignored, no
+`CODEX_HOME` / `ANTHROPIC_*` injection.
+
+- `RunnerKind` (`types.ts`) and `LocalRunnerKind`
+  (`run-automation-cli-spawn.ts`) both gain `'openclaw'`; `preflight.ts`
+  learns its bin name (`openclaw`), CalVer minimum, and install hint.
+- **Chat** (`runtime.ts` → new `openclaw-acp.ts`): a `kind === 'openclaw'`
+  turn spawns `openclaw acp` and drives one prompt over the Agent Client
+  Protocol (`@agentclientprotocol/sdk`'s `ClientSideConnection`, stdio).
+  `openclaw-acp-events.ts` translates `session/update` notifications
+  (`agent_message_chunk` / `agent_thought_chunk` / `tool_call` /
+  `tool_call_update` / `plan` / `usage_update`) into the shared
+  `ChatStreamEvent` shape. openclaw reaches centraid data through the
+  bundled `centraid` CLI on PATH (its shell tool), so no inline
+  `toolContext` is forwarded.
+- **Automation `ctx.agent` one-shot** (`run-automation-live-dispatch.ts`):
+  `openclaw agent --local --json --message <prompt>` against the user's
+  real provider; the reply text is read from the gateway response object's
+  `result.payloads[].text`.
+- **Automation `ctx.tool` round-trip** (`run-automation-cli-spawn.ts`):
+  an explicit openclaw branch points `openclaw agent --local` at the
+  per-fire mock-LLM endpoint via `OPENAI_BASE_URL` / `OPENAI_API_KEY`
+  (the OpenAI-compatible override openclaw honors), mirroring the
+  codex/claude provider shadow. Flagged in-code as needing live-openclaw
+  validation of the staged-tool round-trip.
+- `build-gateway.ts`'s prefs loader accepts `'openclaw'` as a runner kind.
+
 ## Out of scope (this phase)
 
-- Phases 2–4 — the `LocalRunnerKind` extension, the ACP→`ChatStreamEvent`
-  adapter, the plugin re-platform, and the file deletions land in
-  follow-up commits. This phase only carves the core so they have
-  something to mount.
+- Phases 3–4 — the plugin re-platform onto `buildGateway()` +
+  `composedHandler` and the file deletions, plus cutting automations to
+  `InProcessScheduler`, land in follow-up commits.
+- Live-openclaw end-to-end validation: the ACP chat turn and the
+  automation spawns typecheck + unit-test against the real
+  `@agentclientprotocol/sdk` contract and the installed `openclaw` CLI's
+  flags, but have not been exercised against a running `openclaw` agent in
+  this environment.
 
 ## Verification
 
@@ -74,3 +110,11 @@ moves in the issue.
   listener-free `buildGateway()` contract and the auth-free
   `composedHandler`). Full-repo `turbo run typecheck` green; lint + format
   clean. `build-gateway.ts` 498 lines (under the 500-line repo-hygiene cap).
+- Phase 2: `@centraid/agent-runtime` typecheck + build clean; 68 tests
+  pass (including 9 new in `openclaw-acp-events.test.ts` pinning every
+  `session/update` → `ChatStreamEvent` mapping). `@centraid/gateway`
+  typecheck clean + 74 tests pass with the openclaw runner kind threaded
+  through the prefs loader. New ACP imports resolve against the installed
+  `@agentclientprotocol/sdk` 0.21.0; openclaw spawn flags
+  (`acp --no-prefix-cwd`, `agent --local --json --message`) match the
+  installed `openclaw` 2026.5.7 CLI.

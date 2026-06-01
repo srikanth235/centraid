@@ -40,6 +40,10 @@ interface SemVer {
 const MIN_VERSIONS: Record<RunnerKind, SemVer> = {
   codex: { major: 0, minor: 128, patch: 0 },
   'claude-code': { major: 2, minor: 1, patch: 126 },
+  // openclaw ships ACP (`openclaw acp`) + the local one-shot
+  // (`openclaw agent --local --json`) from 2026.5.x. CalVer, so the
+  // semver fields map onto year.month.patch.
+  openclaw: { major: 2026, minor: 5, patch: 7 },
 };
 
 export function minVersionString(kind: RunnerKind): string {
@@ -122,12 +126,17 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
 }
 
 function defaultBinFor(kind: RunnerKind): string {
-  return kind === 'codex' ? 'codex' : 'claude';
+  if (kind === 'codex') return 'codex';
+  if (kind === 'openclaw') return 'openclaw';
+  return 'claude';
 }
 
 function hintFor(kind: RunnerKind): string {
   if (kind === 'codex') {
     return 'Install Codex CLI (https://platform.openai.com/docs/codex) and run `codex login`.';
+  }
+  if (kind === 'openclaw') {
+    return 'Install OpenClaw (https://openclaw.ai) and configure a model provider in your shell.';
   }
   return 'Install Claude Code (https://claude.com/code) and run `claude login`.';
 }
