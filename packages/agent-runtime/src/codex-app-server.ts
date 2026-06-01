@@ -16,24 +16,21 @@
  * Config: per-invocation config (cwd, developerInstructions, sandbox,
  * approvalPolicy, model) is passed directly inside `thread/start` params
  * — it's inherently per-turn, so the RPC is the natural home for it.
- * Provider routing, by contrast, still goes through a scoped `CODEX_HOME`
- * here (see `materializeCodexHome`). Note: codex-cli 0.128.0 DOES honor
- * `-c key=value` on `app-server` (contrary to older codex versions), so
- * provider routing could move to `codexProviderOverrideArgs` to preserve
- * the user's `[mcp_servers.*]` — same fix applied to `ctx.tool` in
- * `run-automation-cli-spawn.ts`. Tracked as a follow-up in issue #158
- * (needs validation against a live custom-provider chat turn).
+ * Provider routing rides on `-c key=value` overrides layered on the user's
+ * real `~/.codex` (see `codexProviderOverrideArgs`); codex-cli 0.128.0+
+ * honors `-c` on `app-server`. This preserves the user's `[mcp_servers.*]`
+ * in chat — the same fix `run-automation-cli-spawn.ts` applies to the
+ * `ctx.tool` path (issue #160, closing the #158 follow-up).
  *
  * Auth: codex reads `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`).
  * The user is expected to run `codex login` once before this runs.
  *
  * Custom OpenAI-compatible providers: when `config.provider` is set, the
- * adapter materializes a scoped `CODEX_HOME` under
- * `config.codexHomeBaseDir/codex-homes/<id>/` containing a generated
- * `config.toml` that declares the endpoint, and points the spawned
- * codex process at it via the `CODEX_HOME` env var. The user's real
- * `~/.codex` (and `auth.json`) is untouched. The API key is injected
- * into the child's env under `provider.envKey` — never written to disk.
+ * adapter passes `-c` provider overrides to `codex app-server` (model
+ * provider id + the `[model_providers.<id>]` table), layered on the user's
+ * real `~/.codex` so their MCP servers + auth survive. The API key is
+ * injected into the child's env under `provider.envKey` — never written to
+ * disk.
  *
  * Sandbox: we pin `sandbox: 'workspace-write'` and `approvalPolicy: 'never'`
  * so the agent can write files inside `cwd` without prompting. The
@@ -47,13 +44,12 @@
 
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import type { ChatStreamEvent } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
 import type { OpenAICompatProvider } from './types.js';
-import { materializeCodexHome } from './codex-provider-config.js';
+import { codexProviderOverrideArgs } from './codex-provider-config.js';
 import { centraidDynamicToolSpecs, handleCentraidToolCall } from './codex-centraid-tools.js';
 
 export interface CodexAppServerInput {
@@ -93,18 +89,18 @@ export interface CodexAppServerConfig {
   /** Extra args passed to `codex app-server` (rare). */
   extraArgs?: string[];
   /**
-   * When set, the spawned codex process gets a scoped `CODEX_HOME`
-   * containing a generated `config.toml` that routes all model calls
-   * through this OpenAI-compatible endpoint. The user's `~/.codex` is
-   * never read or modified.
+   * When set, the spawned codex process gets `-c key=value` provider
+   * overrides (rendered by `codexProviderOverrideArgs`) that route model
+   * calls through this OpenAI-compatible endpoint, layered on the user's
+   * real `~/.codex` so their `[mcp_servers.*]` + auth survive.
    */
   provider?: OpenAICompatProvider;
   /**
-   * Parent directory under which provider-scoped CODEX_HOMEs are
-   * materialized (one subdir per `provider.id`). Only used when
-   * `provider` is set. Defaults to `os.tmpdir()` — hosts that want
-   * codex thread state to persist across launches should point this
-   * at a stable location under their userData dir.
+   * Vestigial: previously the parent dir for provider-scoped CODEX_HOMEs
+   * materialized via `materializeCodexHome`. Provider routing now uses
+   * `-c` overrides on the real `~/.codex` (no redirect), so this is no
+   * longer consulted. Retained until the wider `codexHomeBaseDir` paths
+   * chain is removed (see issue #160 receipt).
    */
   codexHomeBaseDir?: string;
 }
@@ -134,14 +130,15 @@ export async function runCodexAppServerTurn(
   const bin = config.binPath ?? 'codex';
   await fs.mkdir(input.cwd, { recursive: true });
 
-  const codexHome = config.provider
-    ? await materializeCodexHome(config.provider, config.codexHomeBaseDir ?? os.tmpdir())
-    : undefined;
-
-  const args = ['app-server', ...(config.extraArgs ?? [])];
+  // Route a custom provider via `-c key=value` overrides layered on the
+  // user's real ~/.codex (honored by `codex app-server` since codex-cli
+  // 0.128.0), NOT a redirected CODEX_HOME — so the user's `[mcp_servers.*]`
+  // stay reachable in chat. Mirrors the `ctx.tool` fix in
+  // run-automation-cli-spawn.ts (issue #160, closing the #158 follow-up).
+  const providerArgs = config.provider ? codexProviderOverrideArgs(config.provider) : [];
+  const args = ['app-server', ...providerArgs, ...(config.extraArgs ?? [])];
   const childEnv = buildSpawnEnv({
     ...(input.extraPath ? { extraPath: input.extraPath } : {}),
-    ...(codexHome ? { codexHome } : {}),
     ...(config.provider?.envKey && config.provider.apiKey
       ? { apiKeyVar: config.provider.envKey, apiKeyVal: config.provider.apiKey }
       : {}),
@@ -584,22 +581,20 @@ function extractErrorText(item: Record<string, unknown>): string | undefined {
 
 interface SpawnEnvOptions {
   extraPath?: string;
-  codexHome?: string;
   apiKeyVar?: string;
   apiKeyVal?: string;
 }
 
 function buildSpawnEnv(opts: SpawnEnvOptions): NodeJS.ProcessEnv {
-  const { extraPath, codexHome, apiKeyVar, apiKeyVal } = opts;
-  if (!extraPath && !codexHome && !apiKeyVar) return process.env;
+  const { extraPath, apiKeyVar, apiKeyVal } = opts;
+  if (!extraPath && !apiKeyVar) return process.env;
   // Clone so we never mutate `process.env` — concurrent turns must not race
-  // on PATH/CODEX_HOME/API-key vars.
+  // on PATH/API-key vars.
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (extraPath) {
     const current = process.env.PATH ?? '';
     env.PATH = current ? `${extraPath}${path.delimiter}${current}` : extraPath;
   }
-  if (codexHome) env.CODEX_HOME = codexHome;
   if (apiKeyVar && apiKeyVal) env[apiKeyVar] = apiKeyVal;
   return env;
 }

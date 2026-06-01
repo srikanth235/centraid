@@ -19,7 +19,7 @@ v0 pre-release: no backward compatibility, no migrations.
       1e, and the stale "pi session" comments.
 - [x] **PR 2 — `windowId` → `chatSessionId` rename (1a).** Mechanical,
       contract-wide.
-- [ ] **PR 3 — codex MCP-server preservation (3a).** Mirror the `-c`
+- [x] **PR 3 — codex MCP-server preservation (3a).** Mirror the `-c`
       override fix into `codex-app-server.ts` + `host-tools.ts`.
 - [ ] **Decision — rollback migrations (3b).** Documented rollback as
       code-only (the lower-risk option); a re-publish heals the schema.
@@ -81,6 +81,14 @@ paths still redirected `CODEX_HOME` and dropped those servers:
 This makes chat, the builder's tool grounding, and automations consistent: a
 user on a custom OpenAI-compatible provider keeps their MCP tools across all
 three surfaces.
+
+After this fix `materializeCodexHome` has no production callers (kept as a
+tested utility / documented alternative strategy), and the `codexHomeBaseDir`
+paths chain (`GatewayPaths.codexHomeBaseDir` → agent-runtime configs) is
+**vestigial** — no longer consulted. Fully removing it would touch the
+`GatewayPaths` contract and ~13 gateway test fixtures, so it's left as a
+follow-up rather than expanding 3a's blast radius; the leaf field is doc'd as
+vestigial in `codex-app-server.ts`.
 
 ### 3b — rollback skips migrations while publish runs them (asymmetry from #144)
 
