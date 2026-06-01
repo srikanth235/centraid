@@ -146,7 +146,7 @@ export {
 export { RegistryError } from './registry.js';
 export { VersionStoreError } from './version-store.js';
 export { UploadError } from './upload.js';
-export { MigrationError } from './migrate.js';
+export { MigrationError, runPendingMigrations, type MigrationsApplied } from './migrate.js';
 
 // Per-app change notifications. Subscribed by the SSE endpoint at
 // /centraid/<appId>/_changes; emitted by any code path that writes to an

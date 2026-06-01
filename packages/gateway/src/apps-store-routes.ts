@@ -34,9 +34,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { ManifestError, parseAppManifest } from '@centraid/app-engine';
+import { ManifestError, MigrationError, parseAppManifest } from '@centraid/app-engine';
 import { AppsStore, AppsStoreError } from '@centraid/code-store';
 import { fileExists, readBody, readJson, sendJson } from './route-helpers.js';
+import { runPublishMigrations } from './publish-migrations.js';
 
 /** Text extensions a draft file write accepts — mirrors agent-harness. */
 const EDITABLE_EXT = new Set([
@@ -67,6 +68,13 @@ export interface AppsStoreRouteOptions {
    * it from the runtime's registry + tear down its data dir.
    */
   onAppDeleted?: (appId: string) => Promise<void>;
+  /**
+   * Resolve an app's LIVE `data.sqlite` path (`<appsDir>/<appId>/data.sqlite`).
+   * Injected so publish can run the session's committed migrations against
+   * live data before the ff-merge (issue #144) — the store itself stays
+   * data-agnostic. Omitted on backends without a live data tree.
+   */
+  liveDataFile?: (appId: string) => string;
 }
 
 /**
@@ -133,7 +141,7 @@ export function makeAppsStoreRouteHandler(
       }
 
       if (verb === 'publish' && method === 'POST') {
-        return await handlePublish(store, req, res, appId, opts.onAppLive);
+        return await handlePublish(store, req, res, appId, opts.onAppLive, opts.liveDataFile);
       }
       if (verb === 'rollback' && method === 'POST') {
         return await handleRollback(store, req, res, appId, opts.onAppLive);
@@ -193,6 +201,7 @@ async function handlePublish(
   res: ServerResponse,
   appId: string,
   onAppLive?: (appId: string) => Promise<void>,
+  liveDataFile?: (appId: string) => string,
 ): Promise<boolean> {
   const body = await readJson(req);
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -213,6 +222,30 @@ async function handlePublish(
     return true;
   }
 
+  // Run the session's committed migrations against LIVE data BEFORE the
+  // ff-merge (issue #144). The store only commits + ff-merges code; schema
+  // reaches live data only here. A failing migration rolls back inside
+  // `BEGIN IMMEDIATE` and aborts the publish — live data untouched, code
+  // unmerged.
+  let migrationsApplied: number[] = [];
+  if (liveDataFile) {
+    try {
+      migrationsApplied = await runPublishMigrations(appDir, liveDataFile(appId));
+    } catch (err) {
+      if (err instanceof MigrationError) {
+        const status = err.code === 'sql_failed' ? 422 : 400;
+        sendJson(res, status, {
+          error: err.code,
+          message: err.message,
+          file: err.file,
+          sqlError: err.sqlError,
+        });
+        return true;
+      }
+      throw err;
+    }
+  }
+
   const result = await store.publish({ sessionId, appId, message });
   await onAppLive?.(appId);
   sendJson(res, 201, {
@@ -220,6 +253,7 @@ async function handlePublish(
     versionTag: result.versionTag,
     sha: result.sha,
     activated: true,
+    migrationsApplied,
   });
   return true;
 }

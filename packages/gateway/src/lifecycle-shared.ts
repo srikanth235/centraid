@@ -6,9 +6,11 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError } from '@centraid/app-blueprints';
+import { MigrationError } from '@centraid/app-engine';
 import type { AutomationHistoryKeep } from '@centraid/automation';
 import { AppsStore, AppsStoreError } from '@centraid/code-store';
 import { validateManifestAt } from './apps-store-routes.js';
+import { runPublishMigrations } from './publish-migrations.js';
 import { sendJson, writeFileMap, type FileMapEntry } from './route-helpers.js';
 
 export interface LifecycleRouteOptions {
@@ -33,6 +35,13 @@ export interface LifecycleRouteOptions {
   deregister: (appId: string) => Promise<void>;
   /** Reconcile the OS scheduler after a publish changed the live set. */
   reconcile: () => void;
+  /**
+   * Resolve an app's LIVE `data.sqlite` path. Injected so a lifecycle
+   * publish runs the staged app's committed migrations against live data
+   * before the ff-merge (issue #144) — symmetric to the apps-store publish
+   * route.
+   */
+  liveDataFile?: (appId: string) => string;
 }
 
 /** Build an app's absolute webhook URL from the inbound request's host. */
@@ -125,6 +134,12 @@ export async function publishAndReconcile(
 ): Promise<void> {
   const validationError = await validateManifestAt(input.appDir);
   if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
+  // Apply the staged app's committed migrations to live data before the
+  // ff-merge (issue #144) — the store only merges code. A failing
+  // migration throws and aborts the publish, live data untouched.
+  if (opts.liveDataFile) {
+    await runPublishMigrations(input.appDir, opts.liveDataFile(input.appId));
+  }
   await opts.store.publish({
     sessionId: input.sessionId,
     appId: input.appId,
@@ -193,6 +208,18 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
   if (err instanceof AppScaffoldError) {
     const status = err.code === 'already_exists' ? 409 : err.code === 'not_found' ? 404 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
+  }
+  if (err instanceof MigrationError) {
+    // A staged migration that fails against live data aborts the publish
+    // (issue #144) — `sql_failed` is a runtime conflict (422), a malformed
+    // migration set is a bad request (400).
+    const status = err.code === 'sql_failed' ? 422 : 400;
+    return sendJson(res, status, {
+      error: err.code,
+      message: err.message,
+      file: err.file,
+      sqlError: err.sqlError,
+    });
   }
   if (err instanceof AppsStoreError) {
     const status =

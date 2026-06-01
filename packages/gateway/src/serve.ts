@@ -151,11 +151,9 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
     : undefined;
   // Draft preview (issue #141): resolve an app's code dir to its OPEN
-  // session worktree (`worktrees/sessions/<id>/apps/<app>/`) so the
-  // runtime can serve the staged draft — static + handlers — before it's
-  // published. Data still binds to the registry entry's dir, so the draft
-  // reads/writes the live `data.sqlite`. Returns `undefined` for an
-  // unknown/closed session (→ 503), so the live path is unaffected.
+  // session worktree so the runtime serves the staged draft (static +
+  // handlers) before publish. `undefined` for an unknown/closed session
+  // (→ 503), so the live serving path is unaffected.
   const draftCodeDir = appsStore
     ? async (appId: string, sessionId: string): Promise<string | undefined> => {
         try {
@@ -165,6 +163,8 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         }
       }
     : undefined;
+  // Stable live data file — injected so a publish migrates live data (#144).
+  const liveDataFile = (appId: string): string => path.join(paths.appsDir, appId, 'data.sqlite');
 
   // Cron-scheduler reconcile (issue #149). Automation *code* lives under
   // the git-store materialized `main` (`active-main/apps`), or `appsDir`
@@ -404,6 +404,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
           await deregisterAndCleanup(appId);
           reconcileScheduler();
         },
+        liveDataFile,
       }),
       // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
       // scaffold / clone / update-meta / automation create+toggle+delete.
@@ -418,6 +419,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         },
         deregister: deregisterAndCleanup,
         reconcile: reconcileScheduler,
+        liveDataFile,
       }),
       // Automation runtime ops over HTTP (issue #141): list/read/run-now,
       // the run feed + per-run detail, and insights. Run-now fires on
