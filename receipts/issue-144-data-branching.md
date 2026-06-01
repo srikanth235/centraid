@@ -41,7 +41,7 @@ swapping `main/<sha>` dir, and it's the publish target.
 - [x] Rename `@centraid/code-store` → `@centraid/worktree-store`
 - [x] `.gitignore` draft data in the canonical repo (main + every worktree)
 - [x] Draft data dir = draft code dir (dispatcher + `_sql` + describe schema)
-- [ ] Seed-on-first-draft-access (VACUUM INTO live + replay pending migrations)
+- [x] Seed-on-first-draft-access (VACUUM INTO live + replay pending migrations)
 - [ ] Preview-pane "Reset data from prod" endpoint + control
 
 ## What changed
@@ -93,6 +93,18 @@ swapping `main/<sha>` dir, and it's the publish target.
   (set by the unified/builder runner, left off the data-only backend), so an
   agent authoring a migration can exercise it against the draft without
   touching live rows.
+
+- **Seed-on-first-draft-access (VACUUM INTO live + replay pending migrations).**
+  A new gateway `draft-data.ts` (`seedDraftData`) copies the app's live
+  `data.sqlite` into the session worktree via `VACUUM INTO` (preserves
+  `user_version`, copies rows) and replays the draft's pending migrations on
+  top — so a seeded copy starts at live's schema version and applies only the
+  draft's *new* migrations. It's lazy + idempotent (a no-op once the copy
+  exists). Wired at the two seams that resolve a draft worktree for data: the
+  runtime's draft code-dir resolver (`makeDraftCodeDirResolver`, which the
+  composition root injects, replacing the inline closure in `serve.ts`) and
+  the unified chat runner's `resolveCwd`. A brand-new app with no live data
+  seeds from empty + a full migration run.
 
 ## Out of scope
 

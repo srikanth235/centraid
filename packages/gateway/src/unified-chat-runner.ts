@@ -53,6 +53,7 @@ import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/aut
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
 import { WorktreeStore } from '@centraid/worktree-store';
 import { ensureSession } from './lifecycle-shared.js';
+import { seedDraftData } from './draft-data.js';
 
 export type { RunTurnFn };
 
@@ -71,6 +72,10 @@ export interface UnifiedChatRunnerOptions {
    *  URLs after minting. A thunk because the ephemeral port is only known
    *  after the server starts — and a turn only ever runs post-start. */
   publicBaseUrl: () => string;
+  /** Resolve an app's live `data.sqlite` path. When set, the turn's draft
+   *  worktree is seeded from it on first access (issue #144) so the agent
+   *  operates on prod-shaped data while testing. */
+  liveDataFile?: (appId: string) => string;
   /** Session id for an app's shared draft worktree. Defaults to the
    *  `desktop-<appId>` scheme the renderer + builder already use, so all
    *  three edit ONE draft. Overridable for tests. */
@@ -148,11 +153,17 @@ export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunne
     cwdIsDraftWorktree: true,
 
     // Open (or reuse) the app's shared draft worktree so native file edits
-    // stage in the draft, and run the turn from its app dir.
+    // stage in the draft, and run the turn from its app dir. Seed the draft's
+    // branched data.sqlite from live on first access (#144) so the agent's
+    // data tools operate prod-shaped data.
     resolveCwd: async (input) => {
       const sessionId = sessionIdFor(input.appId);
       await ensureSession(opts.store, sessionId);
-      return opts.store.snapshotSessionAppDir(sessionId, input.appId);
+      const worktreeAppDir = await opts.store.snapshotSessionAppDir(sessionId, input.appId);
+      if (opts.liveDataFile) {
+        await seedDraftData({ liveDataFile: opts.liveDataFile(input.appId), worktreeAppDir });
+      }
+      return worktreeAppDir;
     },
 
     // Unified prompt: the route's data/schema preamble + the builder

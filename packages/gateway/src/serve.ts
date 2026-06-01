@@ -56,6 +56,7 @@ import {
 } from '@centraid/agent-runtime';
 import { WorktreeStore } from '@centraid/worktree-store';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
+import { makeDraftCodeDirResolver } from './draft-data.js';
 import { makeAutomationsRouteHandler } from './automations-routes.js';
 import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
 import { makeUnifiedChatRunner } from './unified-chat-runner.js';
@@ -150,21 +151,14 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   const codeDirOverride = appsStore
     ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
     : undefined;
-  // Draft preview (issue #141): resolve an app's code dir to its OPEN
-  // session worktree so the runtime serves the staged draft (static +
-  // handlers) before publish. `undefined` for an unknown/closed session
-  // (→ 503), so the live serving path is unaffected.
-  const draftCodeDir = appsStore
-    ? async (appId: string, sessionId: string): Promise<string | undefined> => {
-        try {
-          return await appsStore!.snapshotSessionAppDir(sessionId, appId);
-        } catch {
-          return undefined;
-        }
-      }
-    : undefined;
-  // Stable live data file — injected so a publish migrates live data (#144).
+  // Stable live data file — injected so a publish migrates live data and a
+  // draft seeds from it (issue #144).
   const liveDataFile = (appId: string): string => path.join(paths.appsDir, appId, 'data.sqlite');
+  // Draft preview (#141 + #144): resolve an app's code dir to its OPEN
+  // session worktree (serving the staged draft before publish) and lazily
+  // seed the worktree's branched `data.sqlite` from live there — data dir =
+  // code dir in draft mode, so one resolver primes both planes.
+  const draftCodeDir = appsStore ? makeDraftCodeDirResolver(appsStore, liveDataFile) : undefined;
 
   // Cron-scheduler reconcile (issue #149). Automation *code* lives under
   // the git-store materialized `main` (`active-main/apps`), or `appsDir`
@@ -278,6 +272,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         getDispatcher,
         publicBaseUrl: () => serverUrl,
         codexHomeBaseDir: paths.codexHomeBaseDir,
+        liveDataFile,
       })
     : makeChatRunner({
         prefsLoader,
