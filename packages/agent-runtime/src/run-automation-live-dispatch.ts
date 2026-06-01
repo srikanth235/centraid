@@ -146,9 +146,34 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   }
   const batchAwaiters = new Map<string, BatchAwaiter>();
 
+  // Per-call timing (issue #158, Phase 3): the mock signals when it hands the
+  // CLI a tool (start) and when each result lands (finish), keyed by dispatch
+  // then tool-use id. Lets each tool node record its real execution window
+  // instead of the batch span that also covers CLI spawn/teardown.
+  const toolTiming = new Map<string, Map<string, { startedAt?: number; endedAt?: number }>>();
+  const timingFor = (dispatchId: string, id: string): { startedAt?: number; endedAt?: number } => {
+    let perDispatch = toolTiming.get(dispatchId);
+    if (!perDispatch) {
+      perDispatch = new Map();
+      toolTiming.set(dispatchId, perDispatch);
+    }
+    let entry = perDispatch.get(id);
+    if (!entry) {
+      entry = {};
+      perDispatch.set(id, entry);
+    }
+    return entry;
+  };
+
   const mock = await startMockLlmServer({
     onLog: opts.onLog,
+    onToolStart: (dispatchId, toolUses) => {
+      const now = Date.now();
+      for (const u of toolUses) timingFor(dispatchId, u.id).startedAt = now;
+    },
     onToolResults: (dispatchId, results) => {
+      const now = Date.now();
+      for (const r of results) timingFor(dispatchId, r.id).endedAt = now;
       const pending = batchAwaiters.get(dispatchId);
       if (pending) pending.deliverResults(results);
     },
@@ -216,14 +241,23 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       const useIdx = turnUses.findIndex((u) => u.id === r.id);
       if (useIdx >= 0) byIdx.set(useIdx, { content: r.content, isError: r.isError });
     }
+    const perDispatch = toolTiming.get(dispatchId);
+    toolTiming.delete(dispatchId);
+    const timing = (idx: number): { startedAt?: number; endedAt?: number } => {
+      const t = perDispatch?.get(turnUses[idx]?.id ?? '');
+      return {
+        ...(t?.startedAt !== undefined ? { startedAt: t.startedAt } : {}),
+        ...(t?.endedAt !== undefined ? { endedAt: t.endedAt } : {}),
+      };
+    };
     return calls.map((_call, idx) => {
       const r = byIdx.get(idx);
       if (!r) return { ok: false, error: 'no tool_result returned by host CLI' };
-      if (r.isError) return { ok: false, error: r.content };
+      if (r.isError) return { ok: false, error: r.content, ...timing(idx) };
       try {
-        return { ok: true, result: JSON.parse(r.content) as unknown };
+        return { ok: true, result: JSON.parse(r.content) as unknown, ...timing(idx) };
       } catch {
-        return { ok: true, result: r.content };
+        return { ok: true, result: r.content, ...timing(idx) };
       }
     });
   };

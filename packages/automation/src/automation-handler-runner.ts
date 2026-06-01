@@ -41,6 +41,7 @@ import {
   noopRunEventSink,
   openRunNode,
   truncateForAudit,
+  usageCloseFields,
   type HandlerReturnEnvelope,
 } from './automation-handler-audit.js';
 import {
@@ -74,6 +75,14 @@ export interface AutomationToolResult {
   ok: boolean;
   result?: unknown;
   error?: string;
+  /**
+   * Real per-tool start/finish epoch-ms, when the dispatcher can observe them
+   * (issue #158, Phase 3 — from the mock server's onToolStart/onToolResults).
+   * When present, the audit node uses these instead of the batch-wide window,
+   * so a tool's recorded duration excludes CLI spawn/teardown overhead.
+   */
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export type AutomationToolDispatcher = (
@@ -338,27 +347,6 @@ export async function runAutomationHandler(
             /* swallow */
           }
         };
-        const usageFields = (): {
-          model?: string;
-          provider?: string;
-          inputTokens?: number;
-          outputTokens?: number;
-          cacheReadTokens?: number;
-          cacheWriteTokens?: number;
-        } => ({
-          ...(lastUsage?.model !== undefined ? { model: lastUsage.model } : {}),
-          ...(lastUsage?.provider !== undefined ? { provider: lastUsage.provider } : {}),
-          ...(lastUsage?.inputTokens !== undefined ? { inputTokens: lastUsage.inputTokens } : {}),
-          ...(lastUsage?.outputTokens !== undefined
-            ? { outputTokens: lastUsage.outputTokens }
-            : {}),
-          ...(lastUsage?.cacheReadTokens !== undefined
-            ? { cacheReadTokens: lastUsage.cacheReadTokens }
-            : {}),
-          ...(lastUsage?.cacheWriteTokens !== undefined
-            ? { cacheWriteTokens: lastUsage.cacheWriteTokens }
-            : {}),
-        });
         void opts
           .agentDispatcher({ prompt: msg.prompt, json: msg.json, onEvent }, dispatchCtx)
           .then((result) => {
@@ -371,7 +359,7 @@ export async function runAutomationHandler(
               result,
               started,
               ended: Date.now(),
-              ...usageFields(),
+              ...usageCloseFields(lastUsage),
             });
             send({ type: 'agent-reply', id: msg.id, ok: true, result });
           })
@@ -386,7 +374,7 @@ export async function runAutomationHandler(
               error: errorMsg,
               started,
               ended: Date.now(),
-              ...usageFields(),
+              ...usageCloseFields(lastUsage),
             });
             send({ type: 'agent-reply', id: msg.id, ok: false, error: errorMsg });
           });

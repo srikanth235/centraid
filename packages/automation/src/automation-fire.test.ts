@@ -226,6 +226,43 @@ describe('runAutomationFire', () => {
     store.close();
   });
 
+  it('records a ctx.tool node with the dispatcher-reported per-call window (Phase 3)', async () => {
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'send',
+      manifest({ name: 'Send' }),
+      `export default async ({ ctx }) => {
+         await ctx.tool('mailer', { to: 'x' });
+         return { ok: true };
+       };`,
+    );
+    // A dispatcher that reports a precise 250ms tool window (as the mock's
+    // onToolStart/onToolResults would), distinct from the batch span.
+    const dispatch = (): Promise<AutomationDispatchSurface> =>
+      Promise.resolve({
+        toolDispatcher: async () => [
+          { ok: true, result: { sent: true }, startedAt: 1_000_000, endedAt: 1_000_250 },
+        ],
+        agentDispatcher: async () => '',
+        async close() {},
+      });
+
+    const { record } = await runAutomationFire(
+      { automationRef: 'notes/send', appsDir },
+      { openDispatch: dispatch },
+    );
+
+    const store = new AgentRunsStore(
+      makeRuntimeDbProvider(path.join(appsDir, 'notes', 'runtime.sqlite')),
+    );
+    const toolNode = store.listNodes(record.runId).find((n) => n.kind === 'tool');
+    assert.ok(toolNode, 'a tool node was recorded');
+    // Duration is the dispatcher's per-call window, not the batch span.
+    assert.equal(toolNode.durationMs, 250);
+    store.close();
+  });
+
   it('cascades onFailure through the SAME injected dispatch surface', async () => {
     // `main` throws → its onFailure target `recover` fires, both via the one
     // injected `openDispatch`. Proves the cascade stayed in the spine and did

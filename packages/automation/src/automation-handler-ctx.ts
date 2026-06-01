@@ -86,6 +86,8 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
   const ended = Date.now();
   return calls.map((_call, i) => {
     const result = results[i] ?? { ok: false, error: 'no result returned by dispatcher' };
+    // Phase 3 (issue #158): prefer the dispatcher's real per-tool window when
+    // it reported one (mock onToolStart/onToolResults); else the batch span.
     closeRunNode({
       store: audit.store,
       emit: audit.emit,
@@ -94,8 +96,8 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
       ok: result.ok,
       ...(result.result !== undefined ? { result: result.result } : {}),
       ...(result.error !== undefined ? { error: result.error } : {}),
-      started,
-      ended,
+      started: result.startedAt ?? started,
+      ended: result.endedAt ?? ended,
     });
     return result;
   });

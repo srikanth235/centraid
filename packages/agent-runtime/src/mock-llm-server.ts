@@ -96,7 +96,21 @@ export interface CapturedToolResult {
   isError: boolean;
 }
 
+/** A tool the mock is about to hand the CLI to execute. */
+export interface StagedToolUse {
+  id: string;
+  name: string;
+}
+
 export interface MockLlmServerOptions {
+  /**
+   * Optional callback fired the moment the mock returns a turn containing
+   * `tool_use` blocks — i.e. the instant the CLI is handed the staged calls
+   * to execute. Pairs with `onToolResults` (the finish side) to give the
+   * orchestrator real per-tool start/finish timing (issue #158, Phase 3),
+   * excluding the CLI spawn/teardown that brackets the whole batch.
+   */
+  onToolStart?: (dispatchId: string, toolUses: StagedToolUse[]) => void;
   /**
    * Optional callback fired every time a CLI request lands carrying
    * `tool_result` blocks. Lets the orchestrator unblock the worker's
@@ -226,6 +240,15 @@ export async function startMockLlmServer(
       return;
     }
     staged.delete(dispatchId);
+
+    // Per-tool start signal: this turn is about to hand the CLI its staged
+    // tool calls (issue #158, Phase 3). Fires before the response is written.
+    if (opts.onToolStart && turn.toolUses && turn.toolUses.length > 0) {
+      opts.onToolStart(
+        dispatchId,
+        turn.toolUses.map((u) => ({ id: u.id, name: u.name })),
+      );
+    }
 
     if (url.startsWith('/v1/messages')) {
       writeAnthropicMessages(req, res, turn);

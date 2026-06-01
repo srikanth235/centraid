@@ -28,7 +28,8 @@ v0 pre-release: no backward compatibility, no migrations.
       claude (SDK) landed — backend + token persistence + desktop live
       render. codex (app-server) and openclaw (ACP) remain (need live-CLI
       validation + provider-config threading for codex).
-- [ ] **4 — Streaming Phase 3**: mock per-call tool timing
+- [x] **4 — Streaming Phase 3**: mock per-call tool timing — a tool node's
+      duration is its real execution window, not the batch span.
 
 ## What changed
 
@@ -126,26 +127,54 @@ collect-on-exit `claude -p` spawn.
 Test: a stubbed streaming dispatcher proves `node.delta` forwarding (agent
 ordinal) + usage persisted onto the node and rolled up on the run.
 
-## Out of scope (so far)
+### 4 — Streaming Phase 3: mock per-call tool timing
+
+In Phase 1 a tool batch opened every node at dispatch start and closed
+them all at dispatch end — so a tool's recorded duration also covered the
+CLI spawn/teardown that brackets the batch. Phase 3 narrows it to the real
+per-tool window.
+
+- **mock-llm-server** — new `onToolStart(dispatchId, toolUses)` callback,
+  fired the instant the mock returns a turn carrying `tool_use` blocks (the
+  CLI is handed the calls). Pairs with the existing per-call `onToolResults`
+  (the finish side).
+- **agent-runtime** — the live-dispatch tool dispatcher records per-tool
+  start (onToolStart) + finish (onToolResults) keyed by dispatch + tool-use
+  id, and attaches `startedAt`/`endedAt` to each `AutomationToolResult`.
+- **automation** — `dispatchToolBatch` uses the dispatcher's reported
+  per-call window for the node's duration when present, falling back to the
+  batch span otherwise.
+
+Tests: mock fires `onToolStart` per tool_use (and not for text-only turns);
+a fire with a dispatcher-reported 250ms window records that as the node
+duration, not the batch span.
+
+## Out of scope
 
 - **Phase 2 for codex + openclaw** — route their `ctx.agent` through the
-  app-server / ACP adapters. Deferred: needs live-CLI validation, and codex
-  needs provider-config threading into the automation fire path.
-- **Streaming Phase 3** (mock per-call tool timing) — follow-up commit.
+  app-server / ACP adapters (claude is done). Deferred: needs live-CLI
+  validation, and codex needs provider-config threading into the automation
+  fire path. The streaming transport + node.delta plumbing is already
+  runner-agnostic, so each is a localized adapter swap.
 - Moving the chat custom-provider codex path off `materializeCodexHome`
-  onto `-c` overrides — noted in the `codex-app-server.ts` comment, needs
-  a live custom-provider chat turn to validate before flipping.
+  onto `-c` overrides — noted in the `codex-app-server.ts` comment; needs a
+  live custom-provider chat turn to validate before flipping.
 
 ## Verification
 
-- **Item 1:** `codex-provider-config.test.ts` 12 → 15 tests pass (3 new
-  pinning `codexProviderOverrideArgs` output, env_key omission, no API key
-  in args).
-- **Phase 1 backend:** `agent-runs-store.test.ts` +2 (open/close lifecycle,
-  in-flight NULL marker, token rollup); `run-event-bus.test.ts` +5 (fanout
-  scoping, ephemeral no-op, unsubscribe, throwing/self-unsubscribing
-  subscriber); `run-events-sse.test.ts` +3 (finished-run replay, in-flight
-  late-join → live → close, 400 on missing runId); `automation-fire.test.ts`
-  +1 (full `run.start`→node lifecycle→`run.end` sequence for tool + agent).
-- Suites green: app-engine 310, automation 60, agent-runtime 62, gateway 82.
-- Full-repo `turbo run build` green; `format:check` + `lint` clean.
+- **Item 1:** `codex-provider-config.test.ts` +3 (`codexProviderOverrideArgs`
+  output, env_key omission, no API key in args).
+- **Phase 1:** `agent-runs-store.test.ts` +2 (open/close lifecycle, in-flight
+  NULL marker, token rollup); `run-event-bus.test.ts` +5; `run-events-sse.test.ts`
+  +3 (replay, late-join → live → close, 400 guard); `automation-fire.test.ts`
+  +1 (full `run.start`→node→`run.end` sequence). Desktop run viewer + the
+  standing-order wait reimplemented on the SSE stream (typecheck + bundle
+  green; Electron runtime not exercised here).
+- **Phase 2 (claude):** `automation-fire.test.ts` +1 (`node.delta` forwarding
+  on the agent ordinal + usage persisted onto the node and rolled up).
+- **Phase 3:** `mock-llm-server.test.ts` +2 (`onToolStart` per tool_use; not
+  fired for text-only turns); `automation-fire.test.ts` +1 (per-call window
+  → node duration, not the batch span).
+- Suites green: app-engine 310, automation 62, agent-runtime 64, gateway 82.
+- Full-repo `turbo run build` / `typecheck` / `test` green; `format:check` +
+  `lint` clean.

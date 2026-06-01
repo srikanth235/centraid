@@ -13,6 +13,7 @@ import type {
   AgentRunNodeKind,
   AgentRunRow,
   AutomationTriggerKind,
+  ChatStreamEvent,
   RunStreamEvent,
 } from '@centraid/app-engine';
 import type { AutomationHistoryConfig } from './automation-manifest.js';
@@ -182,6 +183,25 @@ export function openRunNode(args: OpenRunNodeArgs): string {
     /* swallow */
   }
   return nodeId;
+}
+
+/**
+ * Map a chat `usage` event (issue #158, Phase 2) onto the token/model fields
+ * `closeRunNode` persists. Returns `{}` when no usage was observed (a runner
+ * still on the collect-on-exit path).
+ */
+export function usageCloseFields(
+  usage: Extract<ChatStreamEvent, { type: 'usage' }> | undefined,
+): Partial<CloseRunNodeArgs> {
+  if (!usage) return {};
+  return {
+    ...(usage.model !== undefined ? { model: usage.model } : {}),
+    ...(usage.provider !== undefined ? { provider: usage.provider } : {}),
+    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+    ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+    ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
+    ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
+  };
 }
 
 export interface CloseRunNodeArgs {
