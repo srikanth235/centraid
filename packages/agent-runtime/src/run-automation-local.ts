@@ -11,7 +11,11 @@
  * `openDispatch`, leaving the spine — and the onFailure cascade — to app-engine.
  */
 
-import { type AutomationTriggerKind, type AutomationTriggerOrigin } from '@centraid/app-engine';
+import {
+  type AutomationTriggerKind,
+  type AutomationTriggerOrigin,
+  type RunStreamEvent,
+} from '@centraid/app-engine';
 import type { AnalyticsStore } from '@centraid/analytics';
 import {
   runAutomationFire,
@@ -71,6 +75,8 @@ export interface RunAutomationLocalOptions {
   spawnCli?: SpawnCli;
   /** Optional logger. */
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  /** Live run-stream sink (issue #158); forwarded to the fire spine. */
+  onRunEvent?: (ev: RunStreamEvent) => void;
   /**
    * Trigger that caused this fire. Defaults to `'scheduled'`. The onFailure
    * dispatch loop uses `'on_failure'`.
@@ -127,6 +133,7 @@ export async function runAutomationLocal(
       ...(opts.analytics ? { analytics: opts.analytics } : {}),
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
       ...(opts.onLog ? { onLog: opts.onLog } : {}),
+      ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
       ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
       ...(opts.input !== undefined ? { input: opts.input } : {}),

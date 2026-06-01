@@ -10,11 +10,22 @@
 import { randomUUID } from 'node:crypto';
 import type {
   AgentRunsStore,
-  InsertNodeInput,
+  AgentRunNodeKind,
   AgentRunRow,
   AutomationTriggerKind,
+  ChatStreamEvent,
+  RunStreamEvent,
 } from '@centraid/app-engine';
 import type { AutomationHistoryConfig } from './automation-manifest.js';
+
+/**
+ * Sink for live run-stream events (issue #158). The host wires this to its
+ * `runId`-keyed bus; when unwired it's a no-op (the durable ledger still
+ * records every node). A wedged sink must never fail the handler — every
+ * emit is guarded.
+ */
+export type RunEventSink = (ev: RunStreamEvent) => void;
+export const noopRunEventSink: RunEventSink = () => undefined;
 
 const AUDIT_FIELD_BYTE_CAP = 64 * 1024; // 64 KB hard cap on args_json / output_json per node.
 
@@ -123,122 +134,138 @@ export function makeNodeId(runId: string, ordinal: number): string {
   return `${runId}:${ordinal}:${randomUUID().slice(0, 6)}`;
 }
 
-export interface RecordToolNodeArgs {
+export interface OpenRunNodeArgs {
   store: AgentRunsStore;
+  emit: RunEventSink;
   runId: string;
   ordinal: number;
   batchId?: number;
-  name: string;
+  kind: AgentRunNodeKind;
+  /** Tool name / `'agent'` / `ctx.invoke` target. */
+  name?: string;
   args?: unknown;
-  ok: boolean;
-  result?: unknown;
-  error?: string;
   started: number;
-  ended: number;
-}
-
-export function recordToolNode(args: RecordToolNodeArgs): void {
-  const input: InsertNodeInput = {
-    nodeId: makeNodeId(args.runId, args.ordinal),
-    runId: args.runId,
-    ordinal: args.ordinal,
-    ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
-    kind: 'tool',
-    name: args.name,
-    ...(args.args !== undefined ? { argsJson: truncateForAudit(args.args) ?? '' } : {}),
-    ...(args.ok && args.result !== undefined
-      ? { outputJson: truncateForAudit(args.result) ?? '' }
-      : {}),
-    ok: args.ok,
-    ...(args.error ? { error: args.error } : {}),
-    startedAt: args.started,
-    endedAt: args.ended,
-    durationMs: args.ended - args.started,
-  };
-  try {
-    args.store.insertNode(input);
-  } catch {
-    /* never let audit failures bubble */
-  }
-}
-
-export interface RecordAgentNodeArgs {
-  store: AgentRunsStore;
-  runId: string;
-  ordinal: number;
-  prompt: string;
-  ok: boolean;
-  result?: unknown;
-  error?: string;
-  started: number;
-  ended: number;
-}
-
-export function recordAgentNode(args: RecordAgentNodeArgs): void {
-  const input: InsertNodeInput = {
-    nodeId: makeNodeId(args.runId, args.ordinal),
-    runId: args.runId,
-    ordinal: args.ordinal,
-    kind: 'agent',
-    name: 'agent',
-    argsJson: truncateForAudit({ prompt: args.prompt }) ?? '',
-    ...(args.ok && args.result !== undefined
-      ? { outputJson: truncateForAudit(args.result) ?? '' }
-      : {}),
-    ok: args.ok,
-    ...(args.error ? { error: args.error } : {}),
-    startedAt: args.started,
-    endedAt: args.ended,
-    durationMs: args.ended - args.started,
-  };
-  try {
-    args.store.insertNode(input);
-  } catch {
-    /* swallow */
-  }
-}
-
-export interface RecordInvokeNodeArgs {
-  store: AgentRunsStore;
-  runId: string;
-  ordinal: number;
-  /** The `ctx.invoke` target — `"name"` intra-app or `"appId/name"` cross-app. */
-  target: string;
-  input?: unknown;
-  ok: boolean;
-  result?: unknown;
-  error?: string;
-  /** Child run id, when the child run was created (some failures abort before that). */
-  childRunId?: string;
-  started: number;
-  ended: number;
 }
 
 /**
- * Record a `ctx.invoke` call as a `kind: 'invoke'` audit node. The
- * `childRunId` links it to the spawned run so the DAG view can nest the
- * child timeline.
+ * Open a durable "running" run node (issue #158, ledger-tail hybrid) AND
+ * publish `node.start` to the live bus. Returns the node id for the
+ * matching `closeRunNode`. Store + sink failures are swallowed — a broken
+ * ledger or wedged subscriber must never fail the handler.
  */
-export function recordInvokeNode(args: RecordInvokeNodeArgs): void {
-  const node: InsertNodeInput = {
-    nodeId: makeNodeId(args.runId, args.ordinal),
-    runId: args.runId,
-    ordinal: args.ordinal,
-    kind: 'invoke',
-    name: args.target,
-    ...(args.input !== undefined ? { argsJson: truncateForAudit(args.input) ?? '' } : {}),
-    ...(args.ok && args.result !== undefined
-      ? { outputJson: truncateForAudit(args.result) ?? '' }
-      : {}),
-    ok: args.ok,
-    ...(args.error ? { error: args.error } : {}),
-    ...(args.childRunId ? { childRunId: args.childRunId } : {}),
-    startedAt: args.started,
-    endedAt: args.ended,
-    durationMs: args.ended - args.started,
-  };
+export function openRunNode(args: OpenRunNodeArgs): string {
+  const nodeId = makeNodeId(args.runId, args.ordinal);
+  const argsJson = args.args !== undefined ? (truncateForAudit(args.args) ?? '') : undefined;
   try {
-    args.store.insertNode(node);
+    args.store.openNode({
+      nodeId,
+      runId: args.runId,
+      ordinal: args.ordinal,
+      ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
+      kind: args.kind,
+      ...(args.name !== undefined ? { name: args.name } : {}),
+      ...(argsJson !== undefined ? { argsJson } : {}),
+      startedAt: args.started,
+    });
+  } catch {
+    /* never let audit failures bubble */
+  }
+  try {
+    args.emit({
+      type: 'node.start',
+      ordinal: args.ordinal,
+      ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
+      kind: args.kind,
+      ...(args.name !== undefined ? { name: args.name } : {}),
+      ...(args.args !== undefined ? { args: args.args } : {}),
+    });
+  } catch {
+    /* swallow */
+  }
+  return nodeId;
+}
+
+/**
+ * Map a chat `usage` event (issue #158, Phase 2) onto the token/model fields
+ * `closeRunNode` persists. Returns `{}` when no usage was observed (a runner
+ * still on the collect-on-exit path).
+ */
+export function usageCloseFields(
+  usage: Extract<ChatStreamEvent, { type: 'usage' }> | undefined,
+): Partial<CloseRunNodeArgs> {
+  if (!usage) return {};
+  return {
+    ...(usage.model !== undefined ? { model: usage.model } : {}),
+    ...(usage.provider !== undefined ? { provider: usage.provider } : {}),
+    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+    ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+    ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
+    ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
+  };
+}
+
+export interface CloseRunNodeArgs {
+  store: AgentRunsStore;
+  emit: RunEventSink;
+  nodeId: string;
+  ordinal: number;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+  /** Child run id, when a `ctx.invoke` created one (some failures abort before that). */
+  childRunId?: string;
+  started: number;
+  ended: number;
+  /**
+   * Token/model rollup for an `agent` node (issue #158, Phase 2). Learned at
+   * end-of-turn from the chat adapter's `usage` event; feeds `runs.total_*`.
+   */
+  model?: string;
+  provider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}
+
+/**
+ * Settle a node opened by `openRunNode`: write the outcome to the ledger
+ * AND publish `node.end`. The `node.end` `result` carries the untruncated
+ * value (it's ephemeral on the bus); the ledger row keeps the 64 KB-capped
+ * copy.
+ */
+export function closeRunNode(args: CloseRunNodeArgs): void {
+  const durationMs = args.ended - args.started;
+  const outputJson =
+    args.ok && args.result !== undefined ? (truncateForAudit(args.result) ?? '') : undefined;
+  try {
+    args.store.closeNode({
+      nodeId: args.nodeId,
+      ok: args.ok,
+      ...(outputJson !== undefined ? { outputJson } : {}),
+      ...(args.error !== undefined ? { error: args.error } : {}),
+      ...(args.childRunId !== undefined ? { childRunId: args.childRunId } : {}),
+      endedAt: args.ended,
+      durationMs,
+      ...(args.model !== undefined ? { model: args.model } : {}),
+      ...(args.provider !== undefined ? { provider: args.provider } : {}),
+      ...(args.inputTokens !== undefined ? { inputTokens: args.inputTokens } : {}),
+      ...(args.outputTokens !== undefined ? { outputTokens: args.outputTokens } : {}),
+      ...(args.cacheReadTokens !== undefined ? { cacheReadTokens: args.cacheReadTokens } : {}),
+      ...(args.cacheWriteTokens !== undefined ? { cacheWriteTokens: args.cacheWriteTokens } : {}),
+    });
+  } catch {
+    /* swallow */
+  }
+  try {
+    args.emit({
+      type: 'node.end',
+      ordinal: args.ordinal,
+      ok: args.ok,
+      ...(args.result !== undefined ? { result: args.result } : {}),
+      ...(args.error !== undefined ? { error: args.error } : {}),
+      durationMs,
+    });
   } catch {
     /* swallow */
   }

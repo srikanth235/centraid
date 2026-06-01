@@ -8,13 +8,16 @@
  *
  * Both runners (`claude -p` for Claude, `codex exec` for codex) are
  * pointed at the per-fire mock-LLM URL + bearer token so tool dispatch
- * round-trips through the mock server. The codex path materializes a
- * transient `CODEX_HOME` so the per-invocation provider override lands
- * even if `codex exec -c` doesn't accept it on the installed version.
+ * round-trips through the mock server. The codex path injects the mock
+ * provider via `codex exec -c` overrides layered on the user's real
+ * `~/.codex` — NOT a redirected `CODEX_HOME` — so the user's configured
+ * `[mcp_servers.*]` stay reachable during deterministic tool dispatch
+ * (issue #158, "ride on top of the user's codex"). `-c` is honored by
+ * `codex exec` since codex-cli 0.128.0, our pinned minimum.
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { materializeCodexHome } from './codex-provider-config.js';
+import { codexProviderOverrideArgs } from './codex-provider-config.js';
 
 export type LocalRunnerKind = 'codex' | 'claude-code';
 
@@ -37,7 +40,7 @@ export interface SpawnCliInput {
   readonly toolsAllow: readonly string[];
   /** Workspace dir (app code dir) the CLI should treat as cwd. */
   readonly cwd: string;
-  /** Scratch dir for transient files (CODEX_HOME, etc). Auto-cleaned on close. */
+  /** Scratch dir for transient per-spawn files. Auto-cleaned on close. */
   readonly scratchDir: string;
   /** AbortSignal — fires on timeout or external cancel. */
   readonly abortSignal: AbortSignal;
@@ -79,17 +82,10 @@ export const defaultSpawnCli: SpawnCli = async (input) => {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
   } else {
-    const codexHome = await materializeCodexHome(
-      {
-        id: 'centraid-mock',
-        name: 'Centraid Automation Mock',
-        baseUrl: input.mockBaseUrl,
-        // wireApi defaults to 'responses' — the only format codex 0.128+ accepts.
-        envKey: 'CENTRAID_MOCK_KEY',
-      },
-      input.scratchDir,
-    );
-    env.CODEX_HOME = codexHome;
+    // Route model calls through the mock provider via `-c` overrides on
+    // the user's REAL ~/.codex (no CODEX_HOME redirect), so the user's
+    // `[mcp_servers.*]` stay reachable during tool dispatch. The bearer
+    // token flows via env under the provider's `env_key`, never on disk.
     env.CENTRAID_MOCK_KEY = input.mockBearerToken;
     // `codex exec` has no tool-allowlist flag; the mock-LLM server only
     // ever stages tool calls the manifest permits, so the allowlist is
@@ -98,6 +94,13 @@ export const defaultSpawnCli: SpawnCli = async (input) => {
     // `--skip-git-repo-check` allows app dirs that aren't git repos.
     const args = [
       'exec',
+      ...codexProviderOverrideArgs({
+        id: 'centraid-mock',
+        name: 'Centraid Automation Mock',
+        baseUrl: input.mockBaseUrl,
+        // wireApi defaults to 'responses' — the only format codex 0.128+ accepts.
+        envKey: 'CENTRAID_MOCK_KEY',
+      }),
       '--json',
       '--dangerously-bypass-approvals-and-sandbox',
       '--skip-git-repo-check',

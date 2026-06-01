@@ -25,6 +25,7 @@ import {
   makeRuntimeDbProvider,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
+  type RunStreamEvent,
 } from '@centraid/app-engine';
 import type { AnalyticsStore } from '@centraid/analytics';
 import { parseAutomationRef } from './automation-ref.js';
@@ -94,6 +95,13 @@ export interface RunAutomationFireOptions {
   timeoutMs?: number;
   /** Optional logger. */
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  /**
+   * Live run-stream sink (issue #158) for THIS fire's run. Not propagated
+   * into `onFailure` cascades — those are separate runs with their own ids
+   * and ledgers, so streaming them onto this run's channel would mislabel
+   * their events. A late viewer can open the child run by its own id.
+   */
+  onRunEvent?: (ev: RunStreamEvent) => void;
   /**
    * Trigger that caused this fire. Defaults to `'scheduled'`. The onFailure
    * dispatch loop uses `'on_failure'`.
@@ -181,6 +189,7 @@ export async function runAutomationFire(
       toolDispatcher: dispatch.toolDispatcher,
       agentDispatcher: dispatch.agentDispatcher,
       runsStore,
+      ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       triggerKind: opts.triggerKind ?? 'scheduled',
       triggerOrigin: opts.triggerOrigin ?? 'cron',
       ...(opts.input !== undefined ? { input: opts.input } : {}),

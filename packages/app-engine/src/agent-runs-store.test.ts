@@ -119,6 +119,81 @@ describe('AgentRunsStore', () => {
     store.close();
   });
 
+  it('openNode lands an in-flight row; closeNode settles outcome + duration', () => {
+    const store = newStore();
+    store.insertRun({ runId: 'r', automationId: 'a', triggerKind: 'manual', startedAt: 0 });
+    store.openNode({
+      nodeId: 'n1',
+      runId: 'r',
+      ordinal: 0,
+      kind: 'tool',
+      name: 'github.list_prs',
+      argsJson: '{"q":"open"}',
+      startedAt: 10,
+    });
+    // While open: ended_at / duration_ms are NULL — the in-flight marker.
+    const open = store.listNodes('r');
+    assert.equal(open.length, 1);
+    assert.equal(open[0]?.endedAt, undefined);
+    assert.equal(open[0]?.durationMs, undefined);
+    assert.equal(open[0]?.argsJson, '{"q":"open"}');
+    // ok defaults to true (provisional) until close.
+    assert.equal(open[0]?.ok, true);
+
+    store.closeNode({
+      nodeId: 'n1',
+      ok: false,
+      error: 'rate limited',
+      endedAt: 35,
+      durationMs: 25,
+    });
+    const closed = store.listNodes('r');
+    assert.equal(closed.length, 1, 'closeNode updates the existing row, never inserts');
+    assert.equal(closed[0]?.ok, false);
+    assert.equal(closed[0]?.error, 'rate limited');
+    assert.equal(closed[0]?.endedAt, 35);
+    assert.equal(closed[0]?.durationMs, 25);
+    // args written at open survive the close.
+    assert.equal(closed[0]?.argsJson, '{"q":"open"}');
+    store.close();
+  });
+
+  it('closeNode persists the token/model rollup for an agent node', () => {
+    const store = newStore();
+    store.insertRun({ runId: 'r', automationId: 'a', triggerKind: 'manual', startedAt: 0 });
+    store.openNode({
+      nodeId: 'n1',
+      runId: 'r',
+      ordinal: 0,
+      kind: 'agent',
+      name: 'agent',
+      startedAt: 1,
+    });
+    store.closeNode({
+      nodeId: 'n1',
+      ok: true,
+      outputJson: '"answer"',
+      endedAt: 9,
+      durationMs: 8,
+      model: 'a-capable-model',
+      provider: 'prov',
+      inputTokens: 100,
+      outputTokens: 20,
+    });
+    const [n] = store.listNodes('r');
+    assert.equal(n?.model, 'a-capable-model');
+    assert.equal(n?.provider, 'prov');
+    assert.equal(n?.inputTokens, 100);
+    assert.equal(n?.outputTokens, 20);
+    assert.equal(n?.outputJson, '"answer"');
+    // The run rollup sums agent nodes at finishRun.
+    store.finishRun({ runId: 'r', endedAt: 10, ok: true });
+    const run = store.getRun('r');
+    assert.equal(run?.totalInputTokens, 100);
+    assert.equal(run?.totalOutputTokens, 20);
+    store.close();
+  });
+
   it('automation_state get/set round-trips across store reopens', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'centraid-runs-store-'));
     const provider = makeRuntimeDbProvider(path.join(dir, 'runtime.sqlite'));

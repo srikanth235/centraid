@@ -29,14 +29,19 @@ import {
   type AgentRunsStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
+  type ChatStreamEvent,
+  type RunStreamEvent,
 } from '@centraid/app-engine';
 import type { AutomationHistoryConfig, AutomationOutputSchema } from './automation-manifest.js';
 import { validateOutputAgainstSchema } from './automation-manifest-output.js';
 import {
   applyRetention,
+  closeRunNode,
   extractReturnEnvelope,
-  recordAgentNode,
+  noopRunEventSink,
+  openRunNode,
   truncateForAudit,
+  usageCloseFields,
   type HandlerReturnEnvelope,
 } from './automation-handler-audit.js';
 import {
@@ -70,6 +75,14 @@ export interface AutomationToolResult {
   ok: boolean;
   result?: unknown;
   error?: string;
+  /**
+   * Real per-tool start/finish epoch-ms, when the dispatcher can observe them
+   * (issue #158, Phase 3 — from the mock server's onToolStart/onToolResults).
+   * When present, the audit node uses these instead of the batch-wide window,
+   * so a tool's recorded duration excludes CLI spawn/teardown overhead.
+   */
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export type AutomationToolDispatcher = (
@@ -80,6 +93,13 @@ export type AutomationToolDispatcher = (
 export interface AutomationAgentCall {
   readonly prompt: string;
   readonly json?: unknown;
+  /**
+   * Token-stream sink (issue #158, Phase 2). When a runner routes
+   * `ctx.agent` through its streaming chat adapter, each `ChatStreamEvent`
+   * is forwarded here; the runner wraps it as a `node.delta` on the owning
+   * agent node. Absent for runners still on the collect-on-exit path.
+   */
+  readonly onEvent?: (ev: ChatStreamEvent) => void;
 }
 
 export type AutomationAgentDispatcher = (
@@ -122,6 +142,13 @@ export interface RunAutomationHandlerOptions {
   invokeDispatcher?: AutomationInvokeDispatcher;
   /** Activity-DB-backed run-audit store for audit + ctx.state + ctx.runs. */
   runsStore: AgentRunsStore;
+  /**
+   * Live run-stream sink (issue #158). Receives `run.start` / `node.start` /
+   * `node.end` / `run.end` as the run unfolds, alongside `onLog`. Wired by
+   * the host to its `runId`-keyed bus; omit for a non-streamed fire (the
+   * durable ledger still records everything).
+   */
+  onRunEvent?: (ev: RunStreamEvent) => void;
   triggerKind?: AutomationTriggerKind;
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
   triggerOrigin?: AutomationTriggerOrigin;
@@ -183,12 +210,14 @@ export async function runAutomationHandler(
   let toolBatches = 0;
   let agentCalls = 0;
 
+  const emit = opts.onRunEvent ?? noopRunEventSink;
   const audit: AuditState = {
     store: opts.runsStore,
     runId: opts.runId,
     automationId: opts.automationId,
     ordinal: 0,
     nextBatchId: 1,
+    emit,
   };
 
   audit.store.insertRun({
@@ -201,6 +230,13 @@ export async function runAutomationHandler(
     ...(opts.input !== undefined ? { inputJson: truncateForAudit(opts.input) ?? '' } : {}),
     startedAt: Date.now(),
   });
+  // `run.start` opens the live stream; a viewer that joins later replays it
+  // from the ledger instead. Guarded — a wedged sink must not fail the run.
+  try {
+    emit({ type: 'run.start', runId: audit.runId });
+  } catch {
+    /* swallow */
+  }
 
   const worker = new Worker(WORKER_FILE, {
     workerData: {
@@ -245,6 +281,15 @@ export async function runAutomationHandler(
           ? { outputJson: truncateForAudit(outcome.output) ?? '' }
           : {}),
       });
+      try {
+        emit({
+          type: 'run.end',
+          ok: outcome.ok,
+          ...(outcome.error ? { error: outcome.error } : {}),
+        });
+      } catch {
+        /* swallow */
+      }
       applyRetention(audit.store, audit.automationId, opts.history);
       abortController.abort();
       worker.removeAllListeners();
@@ -280,32 +325,56 @@ export async function runAutomationHandler(
         agentCalls++;
         const ordinal = nextOrdinal(audit);
         const started = Date.now();
+        const nodeId = openRunNode({
+          store: audit.store,
+          emit,
+          runId: audit.runId,
+          ordinal,
+          kind: 'agent',
+          name: 'agent',
+          args: { prompt: msg.prompt },
+          started,
+        });
+        // When the runner streams (Phase 2), forward each chat event as a
+        // `node.delta` on this agent node, and remember the last `usage`
+        // event so `closeRunNode` can persist the token/model rollup.
+        let lastUsage: Extract<ChatStreamEvent, { type: 'usage' }> | undefined;
+        const onEvent = (ev: ChatStreamEvent): void => {
+          if (ev.type === 'usage') lastUsage = ev;
+          try {
+            emit({ type: 'node.delta', ordinal, event: ev });
+          } catch {
+            /* swallow */
+          }
+        };
         void opts
-          .agentDispatcher({ prompt: msg.prompt, json: msg.json }, dispatchCtx)
+          .agentDispatcher({ prompt: msg.prompt, json: msg.json, onEvent }, dispatchCtx)
           .then((result) => {
-            recordAgentNode({
+            closeRunNode({
               store: audit.store,
-              runId: audit.runId,
+              emit,
+              nodeId,
               ordinal,
-              prompt: msg.prompt,
               ok: true,
               result,
               started,
               ended: Date.now(),
+              ...usageCloseFields(lastUsage),
             });
             send({ type: 'agent-reply', id: msg.id, ok: true, result });
           })
           .catch((err: unknown) => {
             const errorMsg = err instanceof Error ? err.message : String(err);
-            recordAgentNode({
+            closeRunNode({
               store: audit.store,
-              runId: audit.runId,
+              emit,
+              nodeId,
               ordinal,
-              prompt: msg.prompt,
               ok: false,
               error: errorMsg,
               started,
               ended: Date.now(),
+              ...usageCloseFields(lastUsage),
             });
             send({ type: 'agent-reply', id: msg.id, ok: false, error: errorMsg });
           });

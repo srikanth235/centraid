@@ -1,15 +1,25 @@
 /*
- * Provider-scoped CODEX_HOME materialization.
+ * Codex provider routing — two strategies for pointing a spawned codex
+ * process at a custom OpenAI-compatible endpoint.
  *
  * Codex resolves its config + thread state under `$CODEX_HOME` (default
- * `~/.codex`). When the user has configured a custom OpenAI-compatible
- * provider, we point the spawned codex process at a centraid-owned
- * directory containing a generated `config.toml` declaring the provider —
- * the user's real `~/.codex/{config.toml,auth.json}` is never touched.
+ * `~/.codex`). To route model calls through a non-default provider we
+ * have two options:
  *
- * The API key is never written to the toml. It flows through the child
- * env under `provider.envKey`; see `codex-app-server.ts` for the spawn
- * env wiring.
+ *   1. `materializeCodexHome` — write a generated `config.toml` into a
+ *      centraid-owned directory and redirect `CODEX_HOME` there. Isolates
+ *      thread state, but DROPS everything else in the user's real home,
+ *      including their `[mcp_servers.*]`.
+ *
+ *   2. `codexProviderOverrideArgs` — pass `-c key=value` overrides that
+ *      layer on top of the user's real `~/.codex/config.toml`. Honored by
+ *      `codex exec` (and `app-server`) since codex-cli 0.128.0, our pinned
+ *      minimum. Preserves the user's MCP servers — this is what lets
+ *      deterministic `ctx.tool` dispatch ride on top of the user's codex.
+ *
+ * The API key is never written to the toml or the overrides. It flows
+ * through the child env under `provider.envKey`; see the spawn env wiring
+ * in `codex-app-server.ts` / `run-automation-cli-spawn.ts`.
  */
 
 import { promises as fs } from 'node:fs';
@@ -63,6 +73,44 @@ export function buildProviderToml(p: OpenAICompatProvider): string {
   if (p.envKey) lines.push(`env_key = ${tomlString(p.envKey)}`);
   lines.push('');
   return lines.join('\n');
+}
+
+/**
+ * Build `-c key=value` config-override args that route a spawned codex
+ * process's model calls through `provider`, layered on top of the user's
+ * real `~/.codex/config.toml`.
+ *
+ * Unlike `materializeCodexHome` (which redirects `CODEX_HOME` to a bare
+ * generated home and thereby DROPS the user's `[mcp_servers.*]`), these
+ * overrides preserve everything in the real home — the user's MCP servers
+ * stay reachable during deterministic `ctx.tool` dispatch. That is the
+ * whole point of the "ride on top of the user's codex" model.
+ *
+ * Each value is rendered as a TOML basic string (via `tomlString`) so
+ * codex's override parser treats it unambiguously as a string — bare URLs
+ * and ids would otherwise hit its TOML-value fast path and misparse.
+ *
+ * Honored by `codex exec` since codex-cli 0.128.0 (POC-proven, issue
+ * #158). The API key is never emitted here — it flows via the child env
+ * under `provider.envKey`, exactly as with the generated toml.
+ *
+ * Exported for unit tests.
+ */
+export function codexProviderOverrideArgs(p: OpenAICompatProvider): string[] {
+  const ns = `model_providers.${tomlBareOrQuotedKey(p.id)}`;
+  const args = [
+    '-c',
+    `model_provider=${tomlString(p.id)}`,
+    '-c',
+    `${ns}.name=${tomlString(p.name)}`,
+    '-c',
+    `${ns}.base_url=${tomlString(p.baseUrl)}`,
+    // codex 0.128+ rejects `wire_api = "chat"`; `responses` is the default.
+    '-c',
+    `${ns}.wire_api=${tomlString(p.wireApi ?? 'responses')}`,
+  ];
+  if (p.envKey) args.push('-c', `${ns}.env_key=${tomlString(p.envKey)}`);
+  return args;
 }
 
 function tomlString(s: string): string {

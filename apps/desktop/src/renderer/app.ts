@@ -19,6 +19,7 @@ import {
   listAutomationRuns,
   readAutomationRun,
   listAutomationRunNodes,
+  streamAutomationRun,
   pinAutomationRun,
   getInsightsSummary,
   createAutomation,
@@ -26,6 +27,7 @@ import {
   setAutomationEnabled,
   updateAppMeta,
   deleteApp,
+  type RunStreamEvent,
 } from './gateway-client.js';
 
 (function () {
@@ -2435,7 +2437,7 @@ import {
 
   // One node of a run rendered as a thread step — an expandable row
   // carrying the tool/agent name, duration, and (on open) its payload.
-  function renderThreadStep(node: CentraidAutomationRunNode): HTMLElement {
+  function renderThreadStep(node: CentraidAutomationRunNode, liveText?: string): HTMLElement {
     const step = el('div', { class: 'cd-au-step', 'data-ok': String(node.ok) });
     const body = el('div', { class: 'cd-au-step-body', hidden: 'true' });
     const head = el('button', {
@@ -2483,6 +2485,12 @@ import {
       }
     });
     step.append(head, body);
+    // Phase 2 (issue #158): while an agent node is in flight, show its
+    // streaming text live (the `node.delta` token deltas accumulated by the
+    // viewer). The collapsed body shows the final output once it lands.
+    if (liveText && node.endedAt === undefined) {
+      step.append(el('pre', { class: 'cd-au-step-pre cd-au-step-stream' }, liveText));
+    }
     return step;
   }
 
@@ -2495,24 +2503,111 @@ import {
     scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading run…'));
     mountShellPage('automations', main);
 
-    // While the run is still in flight (`endedAt` unset) the ledger is
-    // re-read on an interval, so the thread streams its steps live.
+    // The run streams live over SSE (issue #158): the gateway replays the
+    // durable ledger, then pushes each node lifecycle event until `run.end`.
+    // No more 1.5s polling — we keep a local node model keyed by ordinal and
+    // re-render on each event.
     let stopped = false;
-    let pollTimer: number | undefined;
+    const ac = new AbortController();
     registerCleanup(() => {
       stopped = true;
-      if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+      ac.abort();
     });
 
-    const load = async (): Promise<void> => {
-      let row: CentraidAutomationRow | null = null;
-      let run: CentraidAutomationRunRecord | null = null;
-      let nodes: CentraidAutomationRunNode[] = [];
+    let row: CentraidAutomationRow | null = null;
+    let run: CentraidAutomationRunRecord | null = null;
+    const nodesByOrdinal = new Map<number, CentraidAutomationRunNode>();
+    // Accumulated streaming text per node ordinal (Phase 2 `node.delta`).
+    const liveTextByOrdinal = new Map<number, string>();
+
+    const sortedNodes = (): CentraidAutomationRunNode[] =>
+      [...nodesByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal);
+
+    const rerender = (): void => {
+      if (stopped || !document.contains(scroll) || !row || !run) return;
+      // Keep scroll position so a live update doesn't yank the page.
+      const prevTop = scroll.scrollTop;
+      scroll.replaceChildren(buildRunView(row, run, sortedNodes(), liveTextByOrdinal));
+      scroll.scrollTop = prevTop;
+    };
+
+    const applyEvent = (ev: RunStreamEvent): void => {
+      if (ev.type === 'node.start') {
+        const prev = nodesByOrdinal.get(ev.ordinal);
+        nodesByOrdinal.set(ev.ordinal, {
+          nodeId: prev?.nodeId ?? `${runId}:${ev.ordinal}`,
+          runId,
+          ordinal: ev.ordinal,
+          ...(ev.batchId !== undefined ? { batchId: ev.batchId } : {}),
+          kind: ev.kind,
+          ...(ev.name !== undefined ? { name: ev.name } : {}),
+          ...(ev.args !== undefined ? { argsJson: JSON.stringify(ev.args) } : {}),
+          ok: true, // provisional until node.end
+          startedAt: prev?.startedAt ?? Date.now(),
+        });
+        rerender();
+      } else if (ev.type === 'node.end') {
+        const prev = nodesByOrdinal.get(ev.ordinal);
+        const startedAt = prev?.startedAt ?? Date.now() - ev.durationMs;
+        nodesByOrdinal.set(ev.ordinal, {
+          nodeId: prev?.nodeId ?? `${runId}:${ev.ordinal}`,
+          runId,
+          ordinal: ev.ordinal,
+          ...(prev?.batchId !== undefined ? { batchId: prev.batchId } : {}),
+          kind: prev?.kind ?? 'tool',
+          ...(prev?.name !== undefined ? { name: prev.name } : {}),
+          ...(prev?.argsJson !== undefined ? { argsJson: prev.argsJson } : {}),
+          ...(ev.result !== undefined ? { outputJson: JSON.stringify(ev.result) } : {}),
+          ok: ev.ok,
+          ...(ev.error !== undefined ? { error: ev.error } : {}),
+          startedAt,
+          endedAt: startedAt + ev.durationMs,
+          durationMs: ev.durationMs,
+        });
+        rerender();
+      } else if (ev.type === 'run.end') {
+        // Refetch the authoritative final run record (summary / output /
+        // rollup) + persisted nodes, then render the settled run.
+        void (async () => {
+          const [finalRun, finalNodes] = await Promise.all([
+            readAutomationRun({ runId }).catch(() => null),
+            listAutomationRunNodes({ runId }).catch(() => []),
+          ]);
+          if (stopped) return;
+          if (finalRun) run = finalRun;
+          else if (run)
+            run = {
+              ...run,
+              ok: ev.ok,
+              endedAt: Date.now(),
+              ...(ev.error ? { error: ev.error } : {}),
+            };
+          if (finalNodes.length > 0) {
+            nodesByOrdinal.clear();
+            for (const n of finalNodes) nodesByOrdinal.set(n.ordinal, n);
+          }
+          rerender();
+        })();
+      } else if (ev.type === 'node.delta') {
+        // Phase 2: accumulate the agent turn's streamed assistant text so the
+        // in-flight node card shows tokens as they arrive.
+        const inner = ev.event as { type?: string; delta?: string };
+        if (inner?.type === 'assistant.delta' && typeof inner.delta === 'string') {
+          liveTextByOrdinal.set(
+            ev.ordinal,
+            (liveTextByOrdinal.get(ev.ordinal) ?? '') + inner.delta,
+          );
+          rerender();
+        }
+      }
+      // run.start: nothing to render.
+    };
+
+    void (async () => {
       try {
-        [row, run, nodes] = await Promise.all([
+        [row, run] = await Promise.all([
           readAutomation({ automationId }),
           readAutomationRun({ runId }),
-          listAutomationRunNodes({ runId }),
         ]);
       } catch (err) {
         if (!stopped && document.contains(scroll)) {
@@ -2527,26 +2622,49 @@ import {
         return;
       }
       if (stopped || !document.contains(scroll)) return;
-      if (!row || !run) {
+      if (!row) {
         scroll.replaceChildren(el('div', { class: 'cd-au-loading' }, 'Run not found.'));
         return;
       }
-      // Re-render in place; keep the scroll position so a live refresh
-      // doesn't yank the page while the user is reading.
-      const prevTop = scroll.scrollTop;
-      scroll.replaceChildren(buildRunView(row, run, nodes));
-      scroll.scrollTop = prevTop;
-      if (run.endedAt === undefined) {
-        pollTimer = window.setTimeout(() => void load(), 1500);
+      // The ledger row may lag a just-fired run by a few ms; synthesize an
+      // in-flight header so the viewer renders immediately. run.end refetches
+      // the authoritative record.
+      if (!run) {
+        run = {
+          runId,
+          kind: 'automation',
+          automationId,
+          triggerKind: 'manual',
+          startedAt: Date.now(),
+          ok: false,
+          pinned: false,
+        };
       }
-    };
-    void load();
+      rerender();
+      try {
+        await streamAutomationRun(runId, applyEvent, ac.signal);
+      } catch {
+        // Stream couldn't be established — fall back to a one-shot ledger read
+        // so the timeline still shows (e.g. an older gateway without the SSE
+        // endpoint).
+        if (stopped) return;
+        const [fr, fn] = await Promise.all([
+          readAutomationRun({ runId }).catch(() => run),
+          listAutomationRunNodes({ runId }).catch(() => [] as CentraidAutomationRunNode[]),
+        ]);
+        if (fr) run = fr;
+        nodesByOrdinal.clear();
+        for (const n of fn) nodesByOrdinal.set(n.ordinal, n);
+        rerender();
+      }
+    })();
   }
 
   function buildRunView(
     row: CentraidAutomationRow,
     run: CentraidAutomationRunRecord,
     nodes: readonly CentraidAutomationRunNode[],
+    liveText?: Map<number, string>,
   ): HTMLElement {
     const wrap = el('div', { class: 'cd-au-rv' });
     const trigger = runTriggerLabel(run);
@@ -2672,7 +2790,8 @@ import {
       const okCount = nodes.filter((n) => n.ok).length;
       const failed = okCount < nodes.length;
       const stepsWrap = el('div', { class: 'cd-au-work-steps' });
-      for (const node of nodes) stepsWrap.append(renderThreadStep(node));
+      for (const node of nodes)
+        stepsWrap.append(renderThreadStep(node, liveText?.get(node.ordinal)));
       const workGroup = el('div', { class: 'cd-au-work' });
       if (failed || inFlight) workGroup.classList.add('cd-au-work--open');
       const workSum = el('button', {
@@ -4896,10 +5015,9 @@ import {
     }
   }
 
-  // Poll the run ledger until a run finishes (its `endedAt` is set).
-  // Used where the caller needs the run-now outcome but has no live
-  // viewer to watch it — the standing-order panel in app settings.
-  async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
+  // Bounded poll of the run ledger until a run finishes — the fallback for
+  // `waitForAutomationRun` when the live stream can't be established.
+  async function pollForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
     const deadline = Date.now() + 6 * 60 * 1000;
     while (Date.now() < deadline) {
       const rec = await readAutomationRun({ runId });
@@ -4907,6 +5025,38 @@ import {
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
     throw new Error('run did not finish within 6 minutes');
+  }
+
+  // Await a run's completion. Used where the caller needs the run-now outcome
+  // but has no live viewer (the standing-order panel in app settings). Rides
+  // the SSE stream (issue #158): resolve as soon as `run.end` lands, then read
+  // the authoritative final record. Falls back to polling if the stream
+  // fails or closes without a terminal event.
+  async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
+    const ac = new AbortController();
+    let sawEnd = false;
+    try {
+      await streamAutomationRun(
+        runId,
+        (ev) => {
+          if (ev.type === 'run.end') {
+            sawEnd = true;
+            ac.abort();
+          }
+        },
+        ac.signal,
+      );
+    } catch {
+      return pollForAutomationRun(runId);
+    } finally {
+      ac.abort();
+    }
+    if (sawEnd) {
+      const rec = await readAutomationRun({ runId });
+      if (rec && rec.endedAt !== undefined) return rec;
+    }
+    // Stream closed without a terminal event we could act on — poll to settle.
+    return pollForAutomationRun(runId);
   }
 
   async function onRunStandingOrder(row: CentraidAutomationRow, panel: HTMLElement): Promise<void> {

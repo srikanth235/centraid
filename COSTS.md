@@ -560,3 +560,14 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-297b0774-c48-1780316329 | claude-code | 297b0774-c48d-43fa-bd10-8f14e4e30c8e | #155 | claude-opus-4-8 | 38680 | 271617 | 8394554 | 83165 | 393462 | 8.1674 | refactor(gateway): extract host-agnostic buildGateway() core from serve() (#155) |
 | claude-code-297b0774-c48-1780316732 | claude-code | 297b0774-c48d-43fa-bd10-8f14e4e30c8e | #155 | claude-opus-4-8 | 2981 | 74095 | 12447348 | 46672 | 123748 | 7.8685 | refactor(gateway): extract host-agnostic buildGateway() core from serve() (#155) |
 | claude-code-297b0774-c48-1780316785 | claude-code | 297b0774-c48d-43fa-bd10-8f14e4e30c8e | #155 | claude-opus-4-8 | 16 | 17195 | 1247554 | 6905 | 24116 | 0.9040 | refactor(gateway): extract host-agnostic buildGateway() core from serve() (#155) |
+| claude-code-84bfff67-f97-1780329329 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 139563 | 385879 | 5938575 | 83837 | 609279 | 8.1748 |  |
+| claude-code-84bfff67-f97-1780329384 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 16 | 13353 | 917439 | 6143 | 19512 | 0.6958 |  |
+| claude-code-84bfff67-f97-1780329411 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 135 | 2862 | 358274 | 1233 | 4230 | 0.2285 |  |
+| claude-code-84bfff67-f97-1780330638 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 28371 | 360432 | 41417898 | 194116 | 582919 | 27.9564 |  |
+| claude-code-84bfff67-f97-1780330767 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 564 | 14200 | 6643184 | 14815 | 29579 | 3.7835 |  |
+| claude-code-5949c166-a14-1780331282 | claude-code | 5949c166-a149-4278-a0d2-4166c912649c | #158 | claude-opus-4-7 | 5 | 11167 | 14871 | 41 | 11213 | 0.0783 |  |
+| claude-code-84bfff67-f97-1780331797 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 37404 | 236085 | 45532323 | 162107 | 435596 | 28.4814 |  |
+| claude-code-84bfff67-f97-1780332145 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 1261 | 57716 | 20004309 | 48442 | 107419 | 11.5802 |  |
+| claude-code-84bfff67-f97-1780332282 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 12103 | 22883 | 8386798 | 14640 | 49626 | 4.7629 |  |
+| claude-code-93554a8b-617-1780333299 | claude-code | 93554a8b-6176-4b14-b49a-92974b797d73 | #158 | claude-opus-4-7 | 5 | 13291 | 14871 | 109 | 13405 | 0.0933 | fix(automation): settle stranded run nodes + close hung SSE on pre-ledger fire f |
+| claude-code-84bfff67-f97-1780333405 | claude-code | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | claude-opus-4-8 | 67566 | 259328 | 10111477 | 66343 | 393237 | 8.6729 | fix(automation): settle stranded run nodes + close hung SSE on pre-ledger fire f |

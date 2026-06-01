@@ -14,7 +14,12 @@ import type {
   AutomationToolResult,
 } from './automation-handler-runner.js';
 import type { AgentRunsStore } from '@centraid/app-engine';
-import { recordInvokeNode, recordToolNode, rowToRunRef } from './automation-handler-audit.js';
+import {
+  closeRunNode,
+  openRunNode,
+  rowToRunRef,
+  type RunEventSink,
+} from './automation-handler-audit.js';
 
 export interface ToolCallWire {
   name: string;
@@ -27,6 +32,8 @@ export interface AuditState {
   automationId: string;
   ordinal: number;
   nextBatchId: number;
+  /** Live run-stream sink. No-op until the host wires its bus (issue #158). */
+  emit: RunEventSink;
 }
 
 export function nextOrdinal(audit: AuditState): number {
@@ -57,25 +64,65 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
   const ordinals = calls.map(() => nextOrdinal(audit));
   const batchId = nextBatchIdFor(audit, calls.length);
   const started = Date.now();
-  const results = await toolDispatcher(
-    calls.map((c) => ({ name: c.name, args: c.args })),
-    dispatchCtx,
-  );
-  const ended = Date.now();
-  return calls.map((call, i) => {
-    const result = results[i] ?? { ok: false, error: 'no result returned by dispatcher' };
-    recordToolNode({
+  // Open every node (durable "running" row + `node.start`) BEFORE the batch
+  // dispatches, so the parallel lane shows all calls in flight at once.
+  const nodeIds = calls.map((call, i) =>
+    openRunNode({
       store: audit.store,
+      emit: audit.emit,
       runId: audit.runId,
       ordinal: ordinals[i]!,
       ...(batchId !== undefined ? { batchId } : {}),
+      kind: 'tool',
       name: call.name,
       args: call.args,
+      started,
+    }),
+  );
+  let results: AutomationToolResult[];
+  try {
+    results = await toolDispatcher(
+      calls.map((c) => ({ name: c.name, args: c.args })),
+      dispatchCtx,
+    );
+  } catch (err) {
+    // The dispatcher rejected wholesale (e.g. CLI spawn blew up). The runner's
+    // catch turns this into failed tool replies and the run keeps going — so if
+    // we don't settle the nodes here they'd stay `ended_at = NULL` forever and
+    // the live stream would never see them terminate. Close every opened node
+    // as failed (durable close + `node.end`), then rethrow so the runner still
+    // sends its per-call failure replies to the worker.
+    const ended = Date.now();
+    const error = err instanceof Error ? err.message : String(err);
+    for (let i = 0; i < nodeIds.length; i++) {
+      closeRunNode({
+        store: audit.store,
+        emit: audit.emit,
+        nodeId: nodeIds[i]!,
+        ordinal: ordinals[i]!,
+        ok: false,
+        error,
+        started,
+        ended,
+      });
+    }
+    throw err;
+  }
+  const ended = Date.now();
+  return calls.map((_call, i) => {
+    const result = results[i] ?? { ok: false, error: 'no result returned by dispatcher' };
+    // Phase 3 (issue #158): prefer the dispatcher's real per-tool window when
+    // it reported one (mock onToolStart/onToolResults); else the batch span.
+    closeRunNode({
+      store: audit.store,
+      emit: audit.emit,
+      nodeId: nodeIds[i]!,
+      ordinal: ordinals[i]!,
       ok: result.ok,
       ...(result.result !== undefined ? { result: result.result } : {}),
       ...(result.error !== undefined ? { error: result.error } : {}),
-      started,
-      ended,
+      started: result.startedAt ?? started,
+      ended: result.endedAt ?? ended,
     });
     return result;
   });
@@ -159,14 +206,23 @@ export async function handleInvokeMessage(
   }
   const ordinal = nextOrdinal(audit);
   const started = Date.now();
+  const nodeId = openRunNode({
+    store: audit.store,
+    emit: audit.emit,
+    runId: audit.runId,
+    ordinal,
+    kind: 'invoke',
+    name,
+    args: input,
+    started,
+  });
   try {
     const res = await invokeDispatcher(name, { input, parentRunId: audit.runId }, dispatchCtx);
-    recordInvokeNode({
+    closeRunNode({
       store: audit.store,
-      runId: audit.runId,
+      emit: audit.emit,
+      nodeId,
       ordinal,
-      target: name,
-      input,
       ok: true,
       result: res.output,
       ...(res.childRunId ? { childRunId: res.childRunId } : {}),
@@ -178,12 +234,11 @@ export async function handleInvokeMessage(
     const error = err instanceof Error ? err.message : String(err);
     const tagged = err as { childRunId?: unknown };
     const childRunId = typeof tagged.childRunId === 'string' ? tagged.childRunId : undefined;
-    recordInvokeNode({
+    closeRunNode({
       store: audit.store,
-      runId: audit.runId,
+      emit: audit.emit,
+      nodeId,
       ordinal,
-      target: name,
-      input,
       ok: false,
       error,
       ...(childRunId ? { childRunId } : {}),

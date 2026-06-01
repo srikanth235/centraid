@@ -85,6 +85,51 @@ describe('mock-llm-server: stage + serve', () => {
     });
   });
 
+  it('fires onToolStart with the per-call tool_uses when a tool turn is served', async () => {
+    const starts: Array<{ dispatchId: string; toolUses: Array<{ id: string; name: string }> }> = [];
+    await withServer(
+      async (server) => {
+        const { dispatchId, bearerToken } = server.mintDispatchToken();
+        server.stageTurn(dispatchId, {
+          toolUses: [
+            { id: 'toolu_a', name: 'mailer.send', input: {} },
+            { id: 'toolu_b', name: 'github.list', input: {} },
+          ],
+          stopReason: 'tool_use',
+        });
+        await fetch(`${server.baseUrl}/messages`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${bearerToken}`, accept: 'text/event-stream' },
+          body: JSON.stringify({ messages: [{ role: 'user', content: '<<<centraid:foo:bar>>>' }] }),
+        });
+        assert.equal(starts.length, 1);
+        assert.equal(starts[0]!.dispatchId, dispatchId);
+        assert.deepEqual(starts[0]!.toolUses, [
+          { id: 'toolu_a', name: 'mailer.send' },
+          { id: 'toolu_b', name: 'github.list' },
+        ]);
+      },
+      { onToolStart: (dispatchId, toolUses) => starts.push({ dispatchId, toolUses }) },
+    );
+  });
+
+  it('does not fire onToolStart for a text-only (no tool_use) turn', async () => {
+    let fired = false;
+    await withServer(
+      async (server) => {
+        const { dispatchId, bearerToken } = server.mintDispatchToken();
+        server.stageTurn(dispatchId, { text: 'done', stopReason: 'end_turn' });
+        await fetch(`${server.baseUrl}/messages`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${bearerToken}`, accept: 'text/event-stream' },
+          body: JSON.stringify({ messages: [{ role: 'user', content: '<<<centraid:foo:bar>>>' }] }),
+        });
+        assert.equal(fired, false);
+      },
+      { onToolStart: () => (fired = true) },
+    );
+  });
+
   it('serves an OpenAI-style streaming response for a tool_use turn', async () => {
     await withServer(async (server) => {
       const { dispatchId, bearerToken } = server.mintDispatchToken();

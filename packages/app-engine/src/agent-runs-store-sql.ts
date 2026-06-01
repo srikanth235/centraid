@@ -95,6 +95,8 @@ export interface PreparedStatements {
   pinnedRunByAutomation: StatementSync;
   listChildRunsByParent: StatementSync;
   insertNode: StatementSync;
+  openNode: StatementSync;
+  closeNode: StatementSync;
   listNodesByRun: StatementSync;
   upsertState: StatementSync;
   getState: StatementSync;
@@ -259,6 +261,28 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         app_id, name, args_json, output_json, child_run_id,
         ok, error, started_at, ended_at, duration_ms
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    // Ledger-tail hybrid (issue #158): a node lands in two writes. `openNode`
+    // inserts the durable "running" row — `ended_at`/`duration_ms` stay NULL
+    // (the in-flight marker the run viewer reads), `ok` provisionally 1.
+    openNode: db.prepare(`
+      INSERT INTO run_nodes (
+        id, run_id, ordinal, batch_id, kind, app_id, name, args_json, ok, started_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+    `),
+    // `closeNode` settles the row: outcome + the token/model rollup the
+    // `ctx.agent` adapter learns only at end-of-turn (Phase 2). Every column
+    // is set explicitly (open left them NULL), so callers pass null for the
+    // fields that don't apply to the node kind.
+    closeNode: db.prepare(`
+      UPDATE run_nodes SET
+        ok = $ok, output_json = $outputJson, error = $error,
+        child_run_id = $childRunId,
+        input_tokens = $inputTokens, output_tokens = $outputTokens,
+        cache_read_tokens = $cacheReadTokens, cache_write_tokens = $cacheWriteTokens,
+        model = $model, provider = $provider, cost_usd = $costUsd,
+        ended_at = $endedAt, duration_ms = $durationMs
+      WHERE id = $nodeId
     `),
     listNodesByRun: db.prepare(`
       SELECT * FROM run_nodes WHERE run_id = ? ORDER BY ordinal ASC, started_at ASC
