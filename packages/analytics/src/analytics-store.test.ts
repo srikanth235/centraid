@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { makeAnalyticsDbProvider } from './gateway-db.js';
-import { AnalyticsStore, type RunSummary } from './analytics-store.js';
+import { type RunSummary } from '@centraid/app-engine';
+import { makeAnalyticsDbProvider } from './analytics-db.js';
+import { AnalyticsStore } from './analytics-store.js';
 
 function store(): AnalyticsStore {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-analytics-'));

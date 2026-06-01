@@ -11,11 +11,8 @@
  * `openDispatch`, leaving the spine — and the onFailure cascade — to app-engine.
  */
 
-import {
-  type AnalyticsStore,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
-} from '@centraid/app-engine';
+import { type AutomationTriggerKind, type AutomationTriggerOrigin } from '@centraid/app-engine';
+import type { AnalyticsStore } from '@centraid/analytics';
 import {
   runAutomationFire,
   type AutomationHandlerOutcome,

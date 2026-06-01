@@ -19,6 +19,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@centraid/analytics": "workspace:*",
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.0",

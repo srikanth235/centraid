@@ -30,15 +30,14 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
-  AnalyticsStore,
   AgentRunsStore,
-  InsightsStore,
   makeRuntimeDbProvider,
   type AgentRunRow,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type RunSummary,
 } from '@centraid/app-engine';
+import { AnalyticsStore, InsightsStore } from '@centraid/analytics';
 import { listAutomations, parseAutomationRef, readAppOwnedAutomation } from '@centraid/automation';
 import type { AppsStore } from '@centraid/code-store';
 import { readJson, sendError, sendJson } from './route-helpers.js';

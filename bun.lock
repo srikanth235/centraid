@@ -80,9 +80,23 @@
       },
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.143",
+        "@centraid/analytics": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
         "zod": "^4.0.0",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/analytics": {
+      "name": "@centraid/analytics",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/app-engine": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -123,6 +137,7 @@
       "name": "@centraid/automation",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/analytics": "workspace:*",
         "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
       },
@@ -159,6 +174,7 @@
       },
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
+        "@centraid/analytics": "workspace:*",
         "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
@@ -178,6 +194,7 @@
       "name": "@centraid/openclaw-plugin",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/analytics": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
         "@mariozechner/pi-ai": "^0.73.0",
@@ -518,6 +535,8 @@
     "@braintree/sanitize-url": ["@braintree/sanitize-url@7.1.2", "", {}, "sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA=="],
 
     "@centraid/agent-runtime": ["@centraid/agent-runtime@workspace:packages/agent-runtime"],
+
+    "@centraid/analytics": ["@centraid/analytics@workspace:packages/analytics"],
 
     "@centraid/app-blueprints": ["@centraid/app-blueprints@workspace:packages/app-blueprints"],
 

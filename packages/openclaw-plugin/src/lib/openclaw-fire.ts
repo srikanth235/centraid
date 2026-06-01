@@ -20,10 +20,10 @@ import path from 'node:path';
 import {
   AgentRunsStore,
   makeRuntimeDbProvider,
-  type AnalyticsStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
+import type { AnalyticsStore } from '@centraid/analytics';
 import {
   automationHandlerPath,
   formatAutomationRef,

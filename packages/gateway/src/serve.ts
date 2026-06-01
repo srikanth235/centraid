@@ -35,19 +35,17 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
-  AnalyticsStore,
   ChatHistoryStore,
-  InsightsStore,
   Runtime,
   UserStore,
   cleanupDeregisteredApp,
   makeGatewayDbProvider,
-  makeAnalyticsDbProvider,
   startRuntimeHttpServer,
   type RuntimeLogger,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
+import { AnalyticsStore, InsightsStore, makeAnalyticsDbProvider } from '@centraid/analytics';
 import { listAutomations, InProcessScheduler, type LocalScheduler } from '@centraid/automation';
 import {
   makeChatRunner,

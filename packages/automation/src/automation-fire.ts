@@ -23,10 +23,10 @@ import path from 'node:path';
 import {
   AgentRunsStore,
   makeRuntimeDbProvider,
-  type AnalyticsStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
+import type { AnalyticsStore } from '@centraid/analytics';
 import { parseAutomationRef } from './automation-ref.js';
 import { automationHandlerPath, readAppOwnedAutomation } from './automation-app.js';
 import { runAutomationHandler } from './automation-handler-runner.js';
