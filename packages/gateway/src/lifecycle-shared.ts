@@ -8,14 +8,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError } from '@centraid/app-blueprints';
 import { MigrationError } from '@centraid/app-engine';
 import type { AutomationHistoryKeep } from '@centraid/automation';
-import { AppsStore, AppsStoreError } from '@centraid/code-store';
+import { WorktreeStore, WorktreeStoreError } from '@centraid/worktree-store';
 import { validateManifestAt } from './apps-store-routes.js';
 import { runPublishMigrations } from './publish-migrations.js';
 import { sendJson, writeFileMap, type FileMapEntry } from './route-helpers.js';
 
 export interface LifecycleRouteOptions {
   /** Git store backing app code. Sessions/publishes ride through it. */
-  store: AppsStore;
+  store: WorktreeStore;
   /** Materialized `main` apps dir — reads back a published automation row. */
   codeAppsDir: () => string;
   /** Per-gateway templates cache dir (clone resolves bundle-or-cache). */
@@ -54,12 +54,12 @@ export function webhookUrl(req: IncomingMessage, webhookId: string): string {
 }
 
 /** Open a session, tolerating one that already exists (reuse its worktree). */
-export async function ensureSession(store: AppsStore, sessionId: string): Promise<string> {
+export async function ensureSession(store: WorktreeStore, sessionId: string): Promise<string> {
   try {
     const handle = await store.openSession(sessionId);
     return handle.id;
   } catch (err) {
-    if (err instanceof AppsStoreError && err.code === 'session_exists') return sessionId;
+    if (err instanceof WorktreeStoreError && err.code === 'session_exists') return sessionId;
     throw err;
   }
 }
@@ -81,7 +81,7 @@ export async function ensureSession(store: AppsStore, sessionId: string): Promis
  * them open across the mutation.
  */
 export async function prepareLifecycleSession(
-  store: AppsStore,
+  store: WorktreeStore,
   sessionId: string,
   ephemeral: boolean,
 ): Promise<void> {
@@ -221,7 +221,7 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
       sqlError: err.sqlError,
     });
   }
-  if (err instanceof AppsStoreError) {
+  if (err instanceof WorktreeStoreError) {
     const status =
       err.code === 'session_missing' || err.code === 'tag_missing'
         ? 404

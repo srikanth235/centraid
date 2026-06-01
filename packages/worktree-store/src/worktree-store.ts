@@ -1,6 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit publish/rollback/delete critical sections share private state — keeping them in one file preserves the per-store mutex invariant
-// Gateway-owned git store for centraid app code. Full design in
-// receipt #137; this header sketches the layout + invariants.
+// Gateway-owned git store for centraid editing sessions — a session
+// worktree is the agent's single directory, holding app code plus its
+// branched draft data.sqlite (#144). Full design in receipt #137; this
+// header sketches the layout + invariants.
 //
 // Layout: `apps.git/` (bare repo, pushed to GitHub),
 // `worktrees/main/<sha>/` (read-only materialization, swapped on
@@ -13,7 +15,7 @@
 // is a *new* forward commit overlaying an older subtree — never a
 // reset, so `git log main` stays the audit of everything live.
 //
-// A single AppsStore serializes publish + rollback through one
+// A single WorktreeStore serializes publish + rollback through one
 // per-store mutex. Each publish materializes a fresh
 // `worktrees/main/<sha>/`, flips an in-memory pointer, then removes
 // the previous dir — fresh-path-per-publish rotates require() cache
@@ -24,8 +26,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { run, runRaw, revParse } from './git.js';
 import {
-  AppsStoreError,
-  type AppsStoreOptions,
+  WorktreeStoreError,
+  type WorktreeStoreOptions,
   type PublishInput,
   type PublishResult,
   type RollbackInput,
@@ -49,7 +51,7 @@ const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 /** Stable symlink name (under the store root) pointing at the live main worktree. */
 const ACTIVE_MAIN_LINK = 'active-main';
 
-export class AppsStore {
+export class WorktreeStore {
   private readonly root: string;
   private readonly bareDir: string;
   private readonly worktreesDir: string;
@@ -60,7 +62,7 @@ export class AppsStore {
   private publishChain: Promise<unknown> = Promise.resolve();
   private initialized = false;
 
-  constructor(options: AppsStoreOptions) {
+  constructor(options: WorktreeStoreOptions) {
     this.root = options.root;
     this.bareDir = path.join(options.root, 'apps.git');
     this.worktreesDir = path.join(options.root, 'worktrees');
@@ -224,7 +226,7 @@ export class AppsStore {
     this.assertInitialized();
     const worktreeRoot = this.sessionWorktreePath(sessionId);
     if (!(await pathExists(path.join(worktreeRoot, '.git')))) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'session_missing',
         `Session "${sessionId}" has no worktree — open it first via openSession().`,
       );
@@ -240,7 +242,7 @@ export class AppsStore {
     this.assertInitialized();
     const worktreePath = this.sessionWorktreePath(sessionId);
     if (await pathExists(worktreePath)) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'session_exists',
         `Session "${sessionId}" already has a worktree at ${worktreePath}.`,
       );
@@ -371,7 +373,7 @@ export class AppsStore {
 
     const sessionDir = this.sessionWorktreePath(sessionId);
     if (!(await pathExists(sessionDir))) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'session_missing',
         `Session "${sessionId}" has no worktree — call openSession() first.`,
       );
@@ -389,7 +391,7 @@ export class AppsStore {
       allowNonZero: true,
     });
     if (diff.code === 0) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'no_changes',
         `Session "${sessionId}" has no staged changes under ${appSubdir}.`,
       );
@@ -418,7 +420,7 @@ export class AppsStore {
 
     // Pick the next version number BEFORE writing the tag so a
     // concurrent caller — though serialized through publishChain on
-    // this store, a fresh AppsStore on the same disk would still
+    // this store, a fresh WorktreeStore on the same disk would still
     // honor existing tags — never collides.
     const nextN = await this.nextVersionNumber(appId);
     const tag = `${appId}/v${nextN}`;
@@ -442,7 +444,7 @@ export class AppsStore {
     this.assertInitialized();
 
     if (!(await revParse(this.bareDir, `refs/tags/${versionTag}`))) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'tag_missing',
         `Tag "${versionTag}" does not exist in the apps repo.`,
       );
@@ -464,7 +466,7 @@ export class AppsStore {
         allowNonZero: true,
       });
       if (diff.code === 0) {
-        throw new AppsStoreError(
+        throw new WorktreeStoreError(
           'no_changes',
           `Rollback to ${versionTag} would produce no change — current main already matches.`,
         );
@@ -504,14 +506,20 @@ export class AppsStore {
         allowNonZero: true,
       });
       if (rm.code !== 0) {
-        throw new AppsStoreError('no_changes', `App "${appId}" not on main — nothing to delete.`);
+        throw new WorktreeStoreError(
+          'no_changes',
+          `App "${appId}" not on main — nothing to delete.`,
+        );
       }
       const diff = await runRaw(['diff', '--cached', '--quiet', '--', appSubdir], {
         cwd: txDir,
         allowNonZero: true,
       });
       if (diff.code === 0) {
-        throw new AppsStoreError('no_changes', `App "${appId}" not on main — nothing to delete.`);
+        throw new WorktreeStoreError(
+          'no_changes',
+          `App "${appId}" not on main — nothing to delete.`,
+        );
       }
       await run(['commit', '-m', `delete: ${appId}`], { cwd: txDir });
       const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
@@ -606,7 +614,10 @@ export class AppsStore {
 
   private assertInitialized(): void {
     if (!this.initialized) {
-      throw new AppsStoreError('not_initialized', 'AppsStore.init() must be awaited first.');
+      throw new WorktreeStoreError(
+        'not_initialized',
+        'WorktreeStore.init() must be awaited first.',
+      );
     }
   }
 
@@ -629,7 +640,7 @@ function sessionBranchName(sessionId: string): string {
 
 function assertSafeId(id: string, code: 'invalid_app_id' | 'invalid_session_id'): void {
   if (!SAFE_ID_RE.test(id)) {
-    throw new AppsStoreError(
+    throw new WorktreeStoreError(
       code,
       `"${id}" is not a valid id (allowed: ASCII letter or digit, then letters/digits/_/-).`,
     );

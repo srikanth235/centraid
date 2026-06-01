@@ -3,7 +3,7 @@
 //
 // Export is `git push` of `main` + every `<app>/v<n>` tag from the
 // bare repo to a remote URL. Import is `git clone --bare` of that
-// remote into a fresh gateway root, after which `new AppsStore({
+// remote into a fresh gateway root, after which `new WorktreeStore({
 // root }).init()` materializes `main` and the runtime starts serving.
 //
 // Session branches (`sessions/<id>`) are deliberately NOT pushed —
@@ -75,7 +75,7 @@ export interface ImportResult {
 
 /**
  * Clone `remoteUrl` into `<root>/apps.git` as a bare repo. The
- * caller then constructs `new AppsStore({ root })` and calls
+ * caller then constructs `new WorktreeStore({ root })` and calls
  * `init()` to materialize `main`. Refuses if `<root>/apps.git`
  * already exists — import is for a fresh gateway, not a merge.
  */

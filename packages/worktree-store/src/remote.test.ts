@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppsStore } from './apps-store.js';
+import { WorktreeStore } from './worktree-store.js';
 import { exportToRemote, importFromRemote } from './remote.js';
 import { run } from './git.js';
 
@@ -11,7 +11,12 @@ async function makeTempRoot(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'apps-store-remote-'));
 }
 
-async function seedAndPublish(store: AppsStore, sessionId: string, appId: string, marker: string) {
+async function seedAndPublish(
+  store: WorktreeStore,
+  sessionId: string,
+  appId: string,
+  marker: string,
+) {
   const session = await store.openSession(sessionId);
   const appDir = path.join(session.worktreePath, 'apps', appId, 'actions');
   await fs.mkdir(appDir, { recursive: true });
@@ -28,7 +33,7 @@ async function seedAndPublish(store: AppsStore, sessionId: string, appId: string
 test('listApps returns app ids present on main, sorted', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     assert.deepEqual(await store.listApps(), []);
 
@@ -47,7 +52,7 @@ test('export pushes main + tags to a bare remote; import clones them back', asyn
   const importRoot = await makeTempRoot();
   try {
     // Build a source store with two published versions of one app.
-    const source = new AppsStore({ root: sourceRoot });
+    const source = new WorktreeStore({ root: sourceRoot });
     await source.init();
     await seedAndPublish(source, 's1', 'todo', 'v1');
     await seedAndPublish(source, 's2', 'todo', 'v2');
@@ -69,7 +74,7 @@ test('export pushes main + tags to a bare remote; import clones them back', asyn
     const imp = await importFromRemote(importRoot, remoteBare);
     assert.equal(imp.bareDir, path.join(importRoot, 'apps.git'));
 
-    const imported = new AppsStore({ root: importRoot });
+    const imported = new WorktreeStore({ root: importRoot });
     await imported.init();
     const appDir = await imported.resolveActiveAppDir('todo');
     assert.ok(appDir, 'imported store should serve todo from main');
@@ -95,7 +100,7 @@ test('export is idempotent — re-running repoints the remote and re-pushes', as
   const sourceRoot = await makeTempRoot();
   const remoteRoot = await makeTempRoot();
   try {
-    const source = new AppsStore({ root: sourceRoot });
+    const source = new WorktreeStore({ root: sourceRoot });
     await source.init();
     await seedAndPublish(source, 's1', 'todo', 'v1');
 
@@ -120,7 +125,7 @@ test('importFromRemote refuses when apps.git already exists', async () => {
   const root = await makeTempRoot();
   const remoteRoot = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init(); // creates root/apps.git
 
     const remoteBare = path.join(remoteRoot, 'remote.git');

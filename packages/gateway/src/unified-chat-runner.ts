@@ -48,14 +48,14 @@ import {
 import { type ChatRunner, type ChatStreamEvent, type Dispatcher } from '@centraid/app-engine';
 import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
-import { AppsStore } from '@centraid/code-store';
+import { WorktreeStore } from '@centraid/worktree-store';
 import { ensureSession } from './lifecycle-shared.js';
 
 export type { RunTurnFn };
 
 export interface UnifiedChatRunnerOptions {
   /** Git store backing app code; the draft worktree lives in its sessions. */
-  store: AppsStore;
+  store: WorktreeStore;
   /** Per-turn runner prefs (kind + provider). Loaded fresh so settings
    *  changes apply without a restart — mirrors `makeChatRunner`. */
   prefsLoader: () => Promise<RunnerPrefs | undefined>;

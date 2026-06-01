@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { scaffoldAutomationAppFiles } from '@centraid/automation';
-import type { AppsStore } from '@centraid/code-store';
+import type { WorktreeStore } from '@centraid/worktree-store';
 import { writeFileMap } from './route-helpers.js';
 import {
   deleteAppAndReconcile,
@@ -42,7 +42,7 @@ function makeOpts(): LifecycleRouteOptions {
     async closeSession() {
       calls.push('closeSession');
     },
-  } as unknown as AppsStore;
+  } as unknown as WorktreeStore;
 
   return {
     store,

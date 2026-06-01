@@ -38,7 +38,7 @@ swapping `main/<sha>` dir, and it's the publish target.
 ## Checklist
 
 - [x] Fix migrations-on-publish in the git-store backend
-- [ ] Rename `@centraid/code-store` → `@centraid/worktree-store`
+- [x] Rename `@centraid/code-store` → `@centraid/worktree-store`
 - [ ] `.gitignore` draft data in the canonical repo (main + every worktree)
 - [ ] Draft data dir = draft code dir (dispatcher + `_sql` + describe schema)
 - [ ] Seed-on-first-draft-access (VACUUM INTO live + replay pending migrations)
@@ -61,6 +61,17 @@ swapping `main/<sha>` dir, and it's the publish target.
   leaves live data untouched + code unmerged. The publish response reports
   `migrationsApplied`. `runPendingMigrations` is now exported from
   `@centraid/app-engine`.
+
+- **Rename `@centraid/code-store` → `@centraid/worktree-store`.** With draft
+  data now living inside the session worktree, the module owns both planes of
+  an editing session, not just code. `git mv` of `packages/code-store` →
+  `packages/worktree-store` (+ `src/apps-store.ts` → `src/worktree-store.ts`),
+  class `AppsStore` → `WorktreeStore`, `AppsStoreError`/`AppsStoreOptions`/
+  `AppsStoreErrorCode` → `WorktreeStore*`, the `package.json#name`, the gateway
+  dependency + all importers, and `bun.lock` repointed. The gateway's `_apps`
+  HTTP-namespace handler keeps its `apps-store-routes`/`makeAppsStoreRouteHandler`
+  names (they describe the `/centraid/_apps` URL surface, not the store class).
+  No behavior change.
 
 ## Out of scope
 

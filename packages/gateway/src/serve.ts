@@ -54,7 +54,7 @@ import {
   type OpenAICompatProvider,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
-import { AppsStore } from '@centraid/code-store';
+import { WorktreeStore } from '@centraid/worktree-store';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
 import { makeAutomationsRouteHandler } from './automations-routes.js';
 import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
@@ -129,7 +129,7 @@ export interface GatewayServeHandle {
    * (the publish endpoint, export/import, the desktop's file IPC) drive
    * sessions + publishes through this. `undefined` on the legacy backend.
    */
-  appsStore?: AppsStore;
+  appsStore?: WorktreeStore;
 }
 
 export async function serve(options: ServeOptions): Promise<GatewayServeHandle> {
@@ -142,9 +142,9 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // owns app code as a bare git repo + worktrees; the runtime serves
   // handlers from the live `main` worktree. Constructed + initialized
   // here so the code-dir override is available at Runtime construction.
-  let appsStore: AppsStore | undefined;
+  let appsStore: WorktreeStore | undefined;
   if (options.appsStoreRoot !== undefined) {
-    appsStore = new AppsStore({ root: options.appsStoreRoot });
+    appsStore = new WorktreeStore({ root: options.appsStoreRoot });
     await appsStore.init();
   }
   const codeDirOverride = appsStore

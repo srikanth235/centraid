@@ -1,7 +1,7 @@
 // HTTP surface for the gateway-owned git store (issue #137).
 //
 // These routes live in gateway-runtime, not app-engine, because
-// they're specific to the AppsStore backend — app-engine stays
+// they're specific to the WorktreeStore backend — app-engine stays
 // backend-agnostic (OpenClaw + standalone share it). They're mounted
 // via `startRuntimeHttpServer`'s `extraHandlers` seam, after the
 // bearer check, before `runtime.handle`.
@@ -35,7 +35,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ManifestError, MigrationError, parseAppManifest } from '@centraid/app-engine';
-import { AppsStore, AppsStoreError } from '@centraid/code-store';
+import { WorktreeStore, WorktreeStoreError } from '@centraid/worktree-store';
 import { fileExists, readBody, readJson, sendJson } from './route-helpers.js';
 import { runPublishMigrations } from './publish-migrations.js';
 
@@ -78,12 +78,12 @@ export interface AppsStoreRouteOptions {
 }
 
 /**
- * Build the apps-store route handler bound to a live `AppsStore`.
+ * Build the apps-store route handler bound to a live `WorktreeStore`.
  * Returns a function suitable for `startRuntimeHttpServer`'s
  * `extraHandlers`: resolves `true` when it owned the request.
  */
 export function makeAppsStoreRouteHandler(
-  store: AppsStore,
+  store: WorktreeStore,
   opts: AppsStoreRouteOptions = {},
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
@@ -129,7 +129,7 @@ export function makeAppsStoreRouteHandler(
         try {
           await store.deleteApp(appId);
         } catch (err) {
-          if (err instanceof AppsStoreError && err.code === 'no_changes') {
+          if (err instanceof WorktreeStoreError && err.code === 'no_changes') {
             codeRemoved = false;
           } else {
             throw err;
@@ -163,7 +163,7 @@ export function makeAppsStoreRouteHandler(
 }
 
 async function handleSessions(
-  store: AppsStore,
+  store: WorktreeStore,
   req: IncomingMessage,
   res: ServerResponse,
   method: string,
@@ -196,7 +196,7 @@ async function handleSessions(
 }
 
 async function handlePublish(
-  store: AppsStore,
+  store: WorktreeStore,
   req: IncomingMessage,
   res: ServerResponse,
   appId: string,
@@ -259,7 +259,7 @@ async function handlePublish(
 }
 
 async function handleRollback(
-  store: AppsStore,
+  store: WorktreeStore,
   req: IncomingMessage,
   res: ServerResponse,
   appId: string,
@@ -278,7 +278,7 @@ async function handleRollback(
 }
 
 async function handleFiles(
-  store: AppsStore,
+  store: WorktreeStore,
   req: IncomingMessage,
   res: ServerResponse,
   method: string,
@@ -326,7 +326,7 @@ async function handleFiles(
     const appDir = await store.snapshotSessionAppDir(sessionId, appId);
     const abs = path.resolve(appDir, rel);
     if (abs !== appDir && !abs.startsWith(appDir + path.sep)) {
-      throw new AppsStoreError('invalid_app_id', `Refusing to delete outside the app: ${rel}`);
+      throw new WorktreeStoreError('invalid_app_id', `Refusing to delete outside the app: ${rel}`);
     }
     await fs.rm(abs, { force: true });
     sendJson(res, 200, { path: rel, deleted: true });
@@ -405,7 +405,7 @@ async function walk(root: string, rel: string, out: DraftFile[]): Promise<void> 
 }
 
 async function writeDraftFile(
-  store: AppsStore,
+  store: WorktreeStore,
   sessionId: string,
   appId: string,
   rel: string,
@@ -414,10 +414,10 @@ async function writeDraftFile(
   const appDir = await store.snapshotSessionAppDir(sessionId, appId);
   const abs = path.resolve(appDir, rel);
   if (abs !== appDir && !abs.startsWith(appDir + path.sep)) {
-    throw new AppsStoreError('invalid_app_id', `Refusing to write outside the app: ${rel}`);
+    throw new WorktreeStoreError('invalid_app_id', `Refusing to write outside the app: ${rel}`);
   }
   if (!EDITABLE_EXT.has(path.extname(abs).toLowerCase())) {
-    throw new AppsStoreError('invalid_app_id', `Not an editable text file: ${rel}`);
+    throw new WorktreeStoreError('invalid_app_id', `Not an editable text file: ${rel}`);
   }
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, content);
@@ -427,7 +427,7 @@ async function writeDraftFile(
 // ---- apps-store-specific error mapping (delegates to shared sendJson) ----
 
 function sendStoreError(res: ServerResponse, err: unknown): true {
-  if (err instanceof AppsStoreError) {
+  if (err instanceof WorktreeStoreError) {
     const status =
       err.code === 'session_missing' || err.code === 'tag_missing'
         ? 404

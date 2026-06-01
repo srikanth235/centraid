@@ -1,11 +1,11 @@
-// Public types + error class for the apps-store package.
+// Public types + error class for the worktree-store package.
 //
-// Split out so `apps-store.ts` stays focused on the class
+// Split out so `worktree-store.ts` stays focused on the class
 // implementation. Consumers should still import from the package
-// root (`@centraid/code-store`) — this file is an internal split,
+// root (`@centraid/worktree-store`) — this file is an internal split,
 // not an alternate entry point.
 
-export interface AppsStoreOptions {
+export interface WorktreeStoreOptions {
   /**
    * Per-gateway root containing `apps.git/` + `worktrees/`. The host
    * is responsible for picking the path and ensuring its parent
@@ -72,7 +72,7 @@ export interface VersionEntry {
   active: boolean;
 }
 
-export type AppsStoreErrorCode =
+export type WorktreeStoreErrorCode =
   | 'not_initialized'
   | 'session_exists'
   | 'session_missing'
@@ -81,12 +81,12 @@ export type AppsStoreErrorCode =
   | 'invalid_app_id'
   | 'invalid_session_id';
 
-export class AppsStoreError extends Error {
+export class WorktreeStoreError extends Error {
   constructor(
-    public readonly code: AppsStoreErrorCode,
+    public readonly code: WorktreeStoreErrorCode,
     message: string,
   ) {
     super(message);
-    this.name = 'AppsStoreError';
+    this.name = 'WorktreeStoreError';
   }
 }

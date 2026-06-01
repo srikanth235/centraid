@@ -5,9 +5,9 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { AppsStore } from './apps-store.js';
+import { WorktreeStore } from './worktree-store.js';
 import { run } from './git.js';
-import { AppsStoreError } from './types.js';
+import { WorktreeStoreError } from './types.js';
 
 async function makeTempRoot(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'apps-store-'));
@@ -39,7 +39,7 @@ async function seedApp(sessionWorktree: string, appId: string, marker: string): 
 test('init creates the layout and is idempotent', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
 
     const mainDir = store.getActiveMainDir();
@@ -58,7 +58,7 @@ test('init creates the layout and is idempotent', async () => {
     assert.equal(mainSha.length, 40);
 
     // Second init reuses the same materialization — same sha, same path.
-    const store2 = new AppsStore({ root });
+    const store2 = new WorktreeStore({ root });
     await store2.init();
     assert.equal(store2.getActiveMainDir(), mainDir);
   } finally {
@@ -69,7 +69,7 @@ test('init creates the layout and is idempotent', async () => {
 test('active-main symlink stays pinned across publish + rollback', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
 
     // The stable link path never changes and resolves to the live main
@@ -112,7 +112,7 @@ test('active-main symlink stays pinned across publish + rollback', async () => {
 test('openSession creates a worktree branched off main; multiple sessions coexist', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
 
     const a = await store.openSession('alpha');
@@ -142,12 +142,12 @@ test('openSession creates a worktree branched off main; multiple sessions coexis
 test('openSession twice for the same id throws session_exists', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     await store.openSession('alpha');
     await assert.rejects(
       () => store.openSession('alpha'),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'session_exists',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'session_exists',
     );
   } finally {
     await rmTempRoot(root);
@@ -157,7 +157,7 @@ test('openSession twice for the same id throws session_exists', async () => {
 test('publishes a plain-slug app id; rejects dotted and ".." ids (#98)', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
 
     // App ids are plain slugs again — automation apps are marked by the
@@ -177,11 +177,11 @@ test('publishes a plain-slug app id; rejects dotted and ".." ids (#98)', async (
     // (and a tree-traversing `..` is impossible by construction).
     await assert.rejects(
       () => store.openSession('auto.brief'),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'invalid_session_id',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'invalid_session_id',
     );
     await assert.rejects(
       () => store.openSession('bad..id'),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'invalid_session_id',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'invalid_session_id',
     );
   } finally {
     await rmTempRoot(root);
@@ -191,7 +191,7 @@ test('publishes a plain-slug app id; rejects dotted and ".." ids (#98)', async (
 test('closeSession removes worktree + branch and is idempotent', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     const handle = await store.openSession('alpha');
 
@@ -213,7 +213,7 @@ test('closeSession removes worktree + branch and is idempotent', async () => {
 test('publish of a brand-new app tags v1 and materializes new main', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     const mainBefore = store.getActiveMainDir()!;
 
@@ -256,7 +256,7 @@ test('publish of a brand-new app tags v1 and materializes new main', async () =>
 test('publish increments to v2 on the next publish of the same app', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
 
     const s1 = await store.openSession('s1');
@@ -288,7 +288,7 @@ test('publish increments to v2 on the next publish of the same app', async () =>
 test('publish is path-scoped: a session that edits two apps publishes only one', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
 
     const session = await store.openSession('multi');
@@ -316,7 +316,7 @@ test('publish is path-scoped: a session that edits two apps publishes only one',
 test('publish with no staged changes under apps/<appId>/ throws no_changes', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     await store.openSession('empty');
     await assert.rejects(
@@ -326,7 +326,7 @@ test('publish with no staged changes under apps/<appId>/ throws no_changes', asy
           appId: 'todo',
           message: 'nothing to ship',
         }),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'no_changes',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'no_changes',
     );
   } finally {
     await rmTempRoot(root);
@@ -336,7 +336,7 @@ test('publish with no staged changes under apps/<appId>/ throws no_changes', asy
 test('concurrent publishes on the same store serialize and both succeed', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
 
     const a = await store.openSession('a');
@@ -370,7 +370,7 @@ test('concurrent publishes on the same store serialize and both succeed', async 
 test('rollback overlays the old subtree onto main without minting a tag', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
 
     const s1 = await store.openSession('s1');
@@ -426,7 +426,7 @@ test('rollback overlays the old subtree onto main without minting a tag', async 
 test('rollback to a tag that matches current main throws no_changes', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     const session = await store.openSession('s1');
     await seedApp(session.worktreePath, 'todo', 'one');
@@ -434,7 +434,7 @@ test('rollback to a tag that matches current main throws no_changes', async () =
 
     await assert.rejects(
       () => store.rollback({ appId: 'todo', versionTag: 'todo/v1' }),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'no_changes',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'no_changes',
     );
   } finally {
     await rmTempRoot(root);
@@ -444,11 +444,11 @@ test('rollback to a tag that matches current main throws no_changes', async () =
 test('rollback to a missing tag throws tag_missing', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     await assert.rejects(
       () => store.rollback({ appId: 'todo', versionTag: 'todo/v9' }),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'tag_missing',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'tag_missing',
     );
   } finally {
     await rmTempRoot(root);
@@ -458,7 +458,7 @@ test('rollback to a missing tag throws tag_missing', async () => {
 test('resolveActiveAppDir returns undefined for an app never published', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     assert.equal(await store.resolveActiveAppDir('ghost'), undefined);
   } finally {
@@ -469,7 +469,7 @@ test('resolveActiveAppDir returns undefined for an app never published', async (
 test('listVersions returns [] for an app with no tags', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     assert.deepEqual(await store.listVersions('ghost'), []);
   } finally {
@@ -480,7 +480,7 @@ test('listVersions returns [] for an app with no tags', async () => {
 test('deleteApp removes the app from main and reaps its version tags', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
 
     const s1 = await store.openSession('s1');
@@ -516,11 +516,11 @@ test('deleteApp removes the app from main and reaps its version tags', async () 
 test('deleteApp throws no_changes for an app that was never on main', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     await assert.rejects(
       () => store.deleteApp('ghost'),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'no_changes',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'no_changes',
     );
   } finally {
     await rmTempRoot(root);
@@ -536,11 +536,11 @@ test('snapshotSessionAppDir refuses to create phantom dirs without a worktree', 
   // `session_missing` here forces the caller to open a session first.
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     await assert.rejects(
       () => store.snapshotSessionAppDir('phantom', 'todo'),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'session_missing',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'session_missing',
     );
     // And no phantom dir was left behind.
     const phantomDir = path.join(root, 'worktrees', 'sessions', 'phantom');
@@ -557,7 +557,7 @@ test('snapshotSessionAppDir refuses to create phantom dirs without a worktree', 
 test('init replants main if the ref went missing between runs', async () => {
   const root = await makeTempRoot();
   try {
-    const first = new AppsStore({ root });
+    const first = new WorktreeStore({ root });
     await first.init();
 
     // Simulate a corrupted-ref recovery: blow away refs/heads/main.
@@ -565,7 +565,7 @@ test('init replants main if the ref went missing between runs', async () => {
     // packed-refs may still be there; nuke too to make sure rev-parse fails.
     await fs.rm(path.join(root, 'apps.git', 'packed-refs'), { force: true });
 
-    const second = new AppsStore({ root });
+    const second = new WorktreeStore({ root });
     await second.init();
 
     // After recovery init, main resolves again.
@@ -581,18 +581,18 @@ test('init replants main if the ref went missing between runs', async () => {
 test('every method except init throws not_initialized before init()', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await assert.rejects(
       () => store.resolveActiveAppDir('todo'),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'not_initialized',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'not_initialized',
     );
     await assert.rejects(
       () => store.openSession('s1'),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'not_initialized',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'not_initialized',
     );
     await assert.rejects(
       () => store.listSessions(),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'not_initialized',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'not_initialized',
     );
   } finally {
     await rmTempRoot(root);
@@ -602,15 +602,15 @@ test('every method except init throws not_initialized before init()', async () =
 test('app ids are validated', async () => {
   const root = await makeTempRoot();
   try {
-    const store = new AppsStore({ root });
+    const store = new WorktreeStore({ root });
     await store.init();
     await assert.rejects(
       () => store.resolveActiveAppDir('../etc/passwd'),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'invalid_app_id',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'invalid_app_id',
     );
     await assert.rejects(
       () => store.openSession('bad/name'),
-      (err: unknown) => err instanceof AppsStoreError && err.code === 'invalid_session_id',
+      (err: unknown) => err instanceof WorktreeStoreError && err.code === 'invalid_session_id',
     );
   } finally {
     // Make the linter happy that crypto is used (id collisions

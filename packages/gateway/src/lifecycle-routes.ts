@@ -72,7 +72,7 @@ import {
 export type { LifecycleRouteOptions } from './lifecycle-shared.js';
 
 /**
- * Build the lifecycle route handler bound to a live `AppsStore`. Returns
+ * Build the lifecycle route handler bound to a live `WorktreeStore`. Returns
  * a function suitable for `startRuntimeHttpServer`'s `extraHandlers`:
  * resolves `true` when it owned the request, `false` otherwise.
  */

@@ -1,8 +1,8 @@
-export { AppsStore } from './apps-store.js';
+export { WorktreeStore } from './worktree-store.js';
 export {
-  AppsStoreError,
-  type AppsStoreErrorCode,
-  type AppsStoreOptions,
+  WorktreeStoreError,
+  type WorktreeStoreErrorCode,
+  type WorktreeStoreOptions,
   type PublishInput,
   type PublishResult,
   type RollbackInput,

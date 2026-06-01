@@ -18,13 +18,13 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { AppsStore } from '@centraid/code-store';
+import { WorktreeStore } from '@centraid/worktree-store';
 import type { Dispatcher, ChatRunInput, ChatStreamEvent } from '@centraid/app-engine';
 import type { AgentTurnInput, AgentTurnConfig, AgentTurnResult } from '@centraid/agent-runtime';
 import { makeUnifiedChatRunner } from './unified-chat-runner.ts';
 
 let root: string;
-let store: AppsStore;
+let store: WorktreeStore;
 
 const dispatcher = { describe: 0 } as unknown as Dispatcher;
 
@@ -47,7 +47,7 @@ function baseInput(
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), `gw-unified-${crypto.randomUUID()}-`));
-  store = new AppsStore({ root: path.join(root, 'code') });
+  store = new WorktreeStore({ root: path.join(root, 'code') });
   await store.init();
 });
 
