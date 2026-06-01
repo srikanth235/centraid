@@ -562,3 +562,5 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-297b0774-c48-1780316785 | claude-code | 297b0774-c48d-43fa-bd10-8f14e4e30c8e | #155 | claude-opus-4-8 | 16 | 17195 | 1247554 | 6905 | 24116 | 0.9040 | refactor(gateway): extract host-agnostic buildGateway() core from serve() (#155) |
 | claude-code-297b0774-c48-1780318385 | claude-code | 297b0774-c48d-43fa-bd10-8f14e4e30c8e | #155 | claude-opus-4-8 | 90826 | 1419734 | 27860768 | 232318 | 1742878 | 29.0658 |  |
 | claude-code-297b0774-c48-1780318420 | claude-code | 297b0774-c48d-43fa-bd10-8f14e4e30c8e | #155 | claude-opus-4-8 | 293 | 7738 | 889301 | 3462 | 11493 | 0.5810 |  |
+| claude-code-297b0774-c48-1780319239 | claude-code | 297b0774-c48d-43fa-bd10-8f14e4e30c8e | #155 | claude-opus-4-8 | 3325 | 167188 | 25299710 | 126376 | 296889 | 16.8708 |  |
+| claude-code-297b0774-c48-1780320804 | claude-code | 297b0774-c48d-43fa-bd10-8f14e4e30c8e | #155 | claude-opus-4-8 | 3796 | 31309 | 17158936 | 22867 | 57972 | 9.3658 |  |

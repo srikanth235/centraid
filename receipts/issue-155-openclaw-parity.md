@@ -21,9 +21,9 @@ users — clean break on state layout.
 
 - [x] Phase 1 — extract host-agnostic `buildGateway()` core out of `serve()`
 - [x] Phase 2 — add `'openclaw'` to `LocalRunnerKind` + CLI-spawn wiring
-- [ ] Phase 3 — re-platform the plugin `index.ts` onto `buildGateway()` +
+- [x] Phase 3 — re-platform the plugin `index.ts` onto `buildGateway()` +
       `composedHandler`; delete the 5 legacy files; drop `pi-ai`
-- [ ] Phase 4 — cut automations to `InProcessScheduler` (remove the
+- [x] Phase 4 — cut automations to `InProcessScheduler` (remove the
       `centraid-mock` registration)
 
 ## What changed
@@ -92,16 +92,60 @@ is configured inside OpenClaw) — `RunnerPrefs.provider` is ignored, no
   validation of the staged-tool round-trip.
 - `build-gateway.ts`'s prefs loader accepts `'openclaw'` as a runner kind.
 
-## Out of scope (this phase)
+### Phase 3 — re-platform the plugin `index.ts` onto `buildGateway()` + `composedHandler`; delete the 5 legacy files; drop `pi-ai`
 
-- Phases 3–4 — the plugin re-platform onto `buildGateway()` +
-  `composedHandler` and the file deletions, plus cutting automations to
-  `InProcessScheduler`, land in follow-up commits.
+The plugin becomes the third `buildGateway()` host (beside the daemon and
+the Electron embed) instead of reimplementing the graph. The pre-#137
+architecture — tarball backend, data-only chat, automations smuggled
+through openclaw's cron behind a fake `pi-ai` provider — is gone.
+
+- `index.ts` (rewritten): derives `GatewayPaths` + a git-store root under
+  OpenClaw's state dir (clean break on layout — v0, no live users, no
+  migration), calls `buildGateway({ paths, secrets, appsStoreRoot })`, and
+  mounts its `composedHandler` on the `/centraid`, `/_centraid-chat`,
+  `/_centraid-user` prefixes at `auth: 'gateway'` (OpenClaw owns auth). The
+  `/_centraid-hook` webhook route stays at `auth: 'plugin'` and now fires
+  through the gateway's exposed `fireAutomation` — the same path cron +
+  "run now" use. `start()` / `stop()` are driven from the
+  `gateway_start` / `gateway_stop` hooks. Because `buildGateway` is async
+  and `register()` is sync, the build is kicked off once and route
+  handlers + the tool runtime resolve it lazily.
+- Deleted (~1000 lines): `automations-provider.ts`, `openclaw-fire.ts`,
+  `automations-cron.ts`, `automation-host.ts`, `openclaw-chat-runner.ts`.
+  Chat now runs through the gateway's unified chat runner (the git-store
+  backend gives draft/branching + code editing — full parity with the
+  desktop), so the plugin ships no chat runner of its own.
+- `@mariozechner/pi-ai` dropped from the plugin's dependencies (its only
+  use was the deleted centraid-mock provider's `AssistantMessage` shaping).
+- `tools.ts` kept (no `pi-ai` dependency): the `centraid_*` agent tools +
+  `before_tool_call` scope hook still let any OpenClaw agent address a
+  registered app's surface. `registerCentraidTools` now takes a lazy
+  runtime getter to bridge the async build.
+- `build-gateway.ts` gains an exposed `fireAutomation` (git-store backend
+  only) so a host with its own inbound webhook route reuses the gateway's
+  fire path rather than reimplementing it.
+
+### Phase 4 — cut automations to `InProcessScheduler` (remove the `centraid-mock` registration)
+
+Subsumed by Phase 3's deletions: removing `automations-provider.ts` drops
+the `centraid-mock` provider registration, and removing
+`automation-host.ts` + `automations-cron.ts` drops the openclaw-cron
+mirror. The plugin's automations now fire solely on the gateway's
+`InProcessScheduler` (issue #149), started by `g.start()` from
+`gateway_start` — identical to the daemon and the Electron embed.
+
+## Out of scope
+
 - Live-openclaw end-to-end validation: the ACP chat turn and the
   automation spawns typecheck + unit-test against the real
   `@agentclientprotocol/sdk` contract and the installed `openclaw` CLI's
   flags, but have not been exercised against a running `openclaw` agent in
-  this environment.
+  this environment. The openclaw `ctx.tool` round-trip through the mock-LLM
+  endpoint, in particular, is wired by analogy to codex/claude and needs a
+  live run to confirm.
+- Custom OpenAI-compatible provider keys for the OpenClaw host (its
+  `SecretsProvider` returns `undefined` — the openclaw runner self-auths
+  from the shell, and codex/claude use their own logins).
 
 ## Verification
 
@@ -118,3 +162,10 @@ is configured inside OpenClaw) — `RunnerPrefs.provider` is ignored, no
   `@agentclientprotocol/sdk` 0.21.0; openclaw spawn flags
   (`acp --no-prefix-cwd`, `agent --local --json --message`) match the
   installed `openclaw` 2026.5.7 CLI.
+- Phases 3–4: full-repo `turbo run typecheck` green (21/21). Tests pass
+  across the affected packages — `@centraid/openclaw-plugin` 6,
+  `@centraid/gateway` 74, `@centraid/agent-runtime` 68,
+  `@centraid/automation` 59. Plugin re-platformed onto `buildGateway`; the
+  5 legacy files + `@mariozechner/pi-ai` removed; no dangling references to
+  the deleted symbols remain. lint + format clean across all changed
+  packages.

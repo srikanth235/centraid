@@ -16,9 +16,9 @@
  *
  * The handler also enforces a body-size cap, a fixed-window rate limit,
  * and a single-in-flight guard per webhook id. Running the resolved
- * automation is delegated to the caller-supplied `fire` callback
- * (`runOpenclawFire` on the gateway) so this module stays free of any
- * openclaw dependency.
+ * automation is delegated to the caller-supplied `fire` callback (the
+ * gateway's own automation fire path) so this module stays free of any
+ * host dependency.
  */
 
 import crypto from 'node:crypto';
@@ -230,8 +230,9 @@ export interface WebhookFireResult {
 }
 
 /**
- * Runs the resolved automation. Supplied by the gateway host
- * (`runOpenclawFire`) so this module carries no openclaw dependency.
+ * Runs the resolved automation. Supplied by the gateway host (the
+ * gateway's own automation fire path) so this module carries no host
+ * dependency.
  */
 export type WebhookFireFn = (input: {
   /** `<appId>/<automationId>` handle of the resolved automation. */
