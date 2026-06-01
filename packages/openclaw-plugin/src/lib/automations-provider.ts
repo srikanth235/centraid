@@ -64,8 +64,14 @@ interface ProviderPluginShape {
 }
 
 export interface AutomationsProviderOptions {
-  /** Directory holding the gateway's app folders. */
+  /** Directory holding the gateway's per-app DATA folders (`runtime.sqlite`). */
   appsDir: string;
+  /**
+   * Resolves the live app CODE dir on git-store `main`
+   * (`<worktree>/apps`). A thunk because the active-main link rotates on
+   * each publish/rollback — call it per fire to pick up the current code.
+   */
+  codeAppsDir: () => string;
   /**
    * Central analytics store — a finished automation run write-throughs
    * its summary here (issue #98). The run ledger itself is the per-app
@@ -216,6 +222,7 @@ async function executeAutomation(
     {
       automationRef: dispatch.automationRef,
       appsDir: opts.appsDir,
+      codeAppsDir: opts.codeAppsDir(),
       ...(opts.analytics ? { analytics: opts.analytics } : {}),
       triggerKind: 'scheduled',
       triggerOrigin: 'cron',

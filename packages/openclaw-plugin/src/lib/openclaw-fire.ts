@@ -45,8 +45,18 @@ import {
 export interface OpenclawFireOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
   automationRef: string;
-  /** Directory holding the gateway's app folders. */
+  /**
+   * Directory holding the gateway's per-app DATA folders
+   * (`<appsDir>/<id>/runtime.sqlite` + `data.sqlite`). Stable across
+   * version swaps — this is NOT where code lives (issue #137).
+   */
   appsDir: string;
+  /**
+   * Directory holding the live app CODE on git-store `main`
+   * (`<worktree>/apps/<id>/automations/...`). Resolved per fire from the
+   * store's active-main link so a publish/rollback is picked up.
+   */
+  codeAppsDir: string;
   /**
    * Central analytics store. When set, the per-app run ledger
    * write-throughs each finished run's summary to it (issue #98).
@@ -81,18 +91,20 @@ export async function runOpenclawFire(
       runId,
     };
   }
-  const row = await readAppOwnedAutomation(opts.appsDir, parsed.appId, parsed.automationId).catch(
-    (err: unknown) => {
-      log.error(
-        `automation ${opts.automationRef}: manifest load failed — ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return undefined;
-    },
-  );
+  const row = await readAppOwnedAutomation(
+    opts.codeAppsDir,
+    parsed.appId,
+    parsed.automationId,
+  ).catch((err: unknown) => {
+    log.error(
+      `automation ${opts.automationRef}: manifest load failed — ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return undefined;
+  });
   if (!row) {
     return {
       ok: false,
-      error: `automation ${opts.automationRef}: not found under ${opts.appsDir}`,
+      error: `automation ${opts.automationRef}: not found under ${opts.codeAppsDir}`,
       logs: [],
       toolBatches: 0,
       agentCalls: 0,
@@ -170,6 +182,7 @@ export async function runOpenclawFire(
       {
         automationRef: formatAutomationRef(target.appId, target.automationId),
         appsDir: opts.appsDir,
+        codeAppsDir: opts.codeAppsDir,
         ...(opts.analytics ? { analytics: opts.analytics } : {}),
         triggerKind: 'manual',
         ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
@@ -232,6 +245,7 @@ export async function runOpenclawFire(
             {
               automationRef: formatAutomationRef(failTarget.appId, failTarget.automationId),
               appsDir: opts.appsDir,
+              codeAppsDir: opts.codeAppsDir,
               ...(opts.analytics ? { analytics: opts.analytics } : {}),
               triggerKind: 'on_failure',
               ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),

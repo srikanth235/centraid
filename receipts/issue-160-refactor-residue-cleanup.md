@@ -26,8 +26,9 @@ v0 pre-release: no backward compatibility, no migrations.
 - [x] **Gateway session-scheme de-leak (Theme 2, `desktop-<appId>`).**
       `sessionIdFor` defaults host-neutral in the gateway core; the desktop
       host injects its `desktop-<appId>` scheme.
-- [ ] **Gated on #155 — delete the tarball/VersionStore backend (Theme 2)**
-      once OpenClaw is on git-store. Tracked only; load-bearing until then.
+- [x] **Delete the tarball/VersionStore backend (Theme 2).** #155 closed —
+      OpenClaw migrated onto git-store, then the legacy backend deleted from
+      app-engine. (Was gated on #155; now done.)
 
 ## What changed
 
@@ -113,14 +114,31 @@ The tarball/VersionStore dead dual-path (Theme 2) is **not** deleted here —
 it is OpenClaw's sole code-ingestion path until OpenClaw moves to git-store
 (#155). Captured in the checklist above.
 
+### Theme 2 — delete the tarball / VersionStore backend
+
+Once #155 closed (OpenClaw parity), this stopped being gated:
+
+1. **OpenClaw migrated onto git-store.** `openclaw-plugin` now constructs a
+   `WorktreeStore` (code under `<dbDir>/centraid-code`), passes
+   `codeDirOverride` so the runtime serves handlers/static from the live
+   `main` worktree, and registry-syncs apps on `gateway_start`. Its
+   automation paths split CODE (the worktree `apps/`, via a `codeAppsDir()`
+   thunk) from DATA (`appsDir`, where `runtime.sqlite`/`data.sqlite` live) —
+   threaded through `openclaw-fire.ts`, `automations-provider.ts`, the
+   reconcile, and the webhook handler.
+2. **Deleted the backend from app-engine** (`version-store.ts`, `upload.ts`,
+   `route-handlers.ts`, the `app-upload`/`app-versions-*` routes, the
+   `resolveCodeDir`/dispatcher VersionStore fallbacks, the registry `mode`
+   shim, `appCodeDir`/`readActiveCodeDir`, the tarball `migrate` path, and
+   `current.json`). `codeDirOverride` is now the sole code-resolution path.
+
+**Runtime-validation note:** OpenClaw can't be exercised in this
+environment (needs the OpenClaw SDK + a populated git store). The migration
+is verified by typecheck + the openclaw/automation/app-engine unit suites;
+its live behavior should be validated against an OpenClaw deployment.
+
 ## Out of scope
 
-- **Deleting the tarball / VersionStore backend (Theme 2).** Gated on the
-  OpenClaw re-platform (#155): tarball upload is still OpenClaw's only
-  code-ingestion path, so `upload.ts`, `version-store.ts`, the
-  `app-upload` / `app-versions-list` routes, the `resolveCodeDir` fallback,
-  the registry `mode` shim, and `current.json` stay until OpenClaw is on
-  git-store. Tracked, not actioned.
 - **Audit over-reach explicitly recorded as non-violations** (kept as-is):
   `RunnerStatus.kind` runner identity, `prevThreadId` inside
   `codex-app-server.ts`, `agentTurnId` on the change-bus, the live `appMeta`
