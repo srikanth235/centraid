@@ -25,9 +25,8 @@ import {
   UserStore,
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
-  makeAnalyticsDbProvider,
 } from '@centraid/app-engine';
-import { AnalyticsStore } from '@centraid/stores';
+import { AnalyticsStore, makeAnalyticsDbProvider } from '@centraid/analytics';
 import { listAutomations, makeWebhookRouteHandler } from '@centraid/automation';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';

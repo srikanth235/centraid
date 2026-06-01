@@ -169,31 +169,30 @@ export {
 } from './chat-history.js';
 export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
-// SQLite state — three migration ladders, each its own file + connection:
-//   - gateway   (`centraid-gateway.sqlite`):   users, user_prefs
-//   - runtime   (`<appRoot>/runtime.sqlite`):  chat_sessions, runs,
-//                                              run_nodes, automation_state
-//   - analytics (`centraid-analytics.sqlite`): run_summary
+// SQLite state — app-engine owns two migration ladders, each its own file +
+// connection:
+//   - gateway (`centraid-gateway.sqlite`):  users, user_prefs
+//   - runtime (`<appRoot>/runtime.sqlite`): chat_sessions, runs, run_nodes,
+//                                           automation_state
 // `UserStore` ← gateway; `ChatHistoryStore` + the per-app run ledger ←
-// each app's runtime.sqlite; `AnalyticsStore` ← analytics. Cross-file FKs
-// aren't possible in SQLite, so `chat_sessions.user_id` is
-// application-enforced.
+// each app's runtime.sqlite. Cross-file FKs aren't possible in SQLite, so
+// `chat_sessions.user_id` is application-enforced. The third (analytics)
+// ladder lives in `@centraid/analytics`, built through `makeMigratedDbProvider`.
 export {
   openGatewayDb,
   makeGatewayDbProvider,
   openRuntimeDb,
   makeRuntimeDbProvider,
-  openAnalyticsDb,
-  makeAnalyticsDbProvider,
+  openMigratedDb,
+  makeMigratedDbProvider,
   GATEWAY_MIGRATIONS,
   RUNTIME_MIGRATIONS,
-  ANALYTICS_MIGRATIONS,
   type DatabaseProvider,
 } from './gateway-db.js';
 
 // Run-summary seam — the ledger emits one `RunSummary` per finished run
 // through a `RunSummarySink`. The concrete sink (`AnalyticsStore`) lives in
-// `@centraid/stores` and is injected by the host; keeping the contract here
+// `@centraid/analytics` and is injected by the host; keeping the contract here
 // is what keeps app-engine free of its own reporting consumer (#151).
 export type { RunSummary, RunSummarySink } from './run-summary-sink.js';
 
@@ -242,9 +241,9 @@ export type {
 // records NULL (distinct from a genuine $0). See issue #90 question 4.
 export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from './model-pricing.js';
 
-// AnalyticsStore + InsightsStore moved to @centraid/stores (#151). The
-// analytics DB ladder + `makeAnalyticsDbProvider` stay in `gateway-db` above
-// (the shared SQLite-open seam); a host opens the provider here and injects
-// it into the stores.
+// AnalyticsStore + InsightsStore + the analytics DB ladder moved to
+// @centraid/analytics (#151). That package builds its provider through the
+// shared `makeMigratedDbProvider` exported above; app-engine emits run
+// summaries through the injected `RunSummarySink` and never imports back.
 
 // App scaffolders + clone moved to @centraid/app-blueprints (#151).

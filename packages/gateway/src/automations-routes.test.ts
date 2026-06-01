@@ -12,8 +12,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { makeAnalyticsDbProvider } from '@centraid/app-engine';
-import { AnalyticsStore, InsightsStore } from '@centraid/stores';
+import { AnalyticsStore, InsightsStore, makeAnalyticsDbProvider } from '@centraid/analytics';
 import { AppsStore } from '@centraid/code-store';
 import { makeAutomationsRouteHandler } from './automations-routes.ts';
 

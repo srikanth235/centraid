@@ -1,8 +1,8 @@
 {
-  "name": "@centraid/stores",
+  "name": "@centraid/analytics",
   "version": "0.1.0",
   "private": true,
-  "description": "Gateway-scoped stores that aren't the per-app run ledger: central analytics (push-based run summaries) and the read-only Insights aggregation over them. Depends on @centraid/app-engine for the DatabaseProvider seam and the RunSummary/RunSummarySink contract; app-engine never depends back.",
+  "description": "Centraid's Insights domain — central push-based run summaries (AnalyticsStore, the RunSummarySink the ledger writes through), the read-only aggregation that powers the Insights screen (InsightsStore), and the centraid-analytics.sqlite migration ladder. Depends one-way on @centraid/app-engine for the DatabaseProvider seam, the RunSummary contract, and the shared SQLite-open helper; app-engine never depends back.",
   "files": [
     "dist",
     "README.md"

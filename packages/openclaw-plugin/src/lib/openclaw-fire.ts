@@ -23,7 +23,7 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
-import type { AnalyticsStore } from '@centraid/stores';
+import type { AnalyticsStore } from '@centraid/analytics';
 import {
   automationHandlerPath,
   formatAutomationRef,

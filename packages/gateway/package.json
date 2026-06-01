@@ -21,12 +21,12 @@
   },
   "dependencies": {
     "@centraid/agent-runtime": "workspace:*",
+    "@centraid/analytics": "workspace:*",
     "@centraid/app-blueprints": "workspace:*",
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*",
     "@centraid/code-store": "workspace:*",
-    "@centraid/skills": "workspace:*",
-    "@centraid/stores": "workspace:*"
+    "@centraid/skills": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

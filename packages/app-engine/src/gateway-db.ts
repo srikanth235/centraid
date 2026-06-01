@@ -1,6 +1,11 @@
 /*
- * Centraid SQLite state — three migration ladders, each with its own
- * connection and `PRAGMA user_version`:
+ * Centraid SQLite state. app-engine owns two migration ladders — the
+ * gateway (identity) file and the per-app runtime (ledger) file — each with
+ * its own connection and `PRAGMA user_version`. The shared open primitive
+ * (`openMigratedDb` / `makeMigratedDbProvider`) is exported so downstream
+ * ladders reuse the same WAL/busy_timeout/FK pragmas: `@centraid/analytics`
+ * owns the third ladder (`centraid-analytics.sqlite`, run summaries) and
+ * builds its provider through these helpers (#151).
  *
  *   gateway     (`centraid-gateway.sqlite`) — gateway-scoped identity
  *     users          — the user identity row(s). Single-user model today;
@@ -30,8 +35,9 @@
  *     sub-run's parent lives in another file). Runtime-owned; never
  *     reachable from handler `db` or the `centraid_sql_*` agent tools.
  *
- *   analytics   (`centraid-analytics.sqlite`) — gateway-scoped, one
- *                `run_summary` row per run; the Insights source.
+ * (The third ladder — `centraid-analytics.sqlite`, one `run_summary` row per
+ * run, the Insights source — lives in `@centraid/analytics`, built through
+ * the exported `makeMigratedDbProvider` helper.)
  *
  * Each file gets one connection and one provider. The OpenClaw plugin's
  * worker subprocesses (which construct the runtime in every context but
@@ -210,52 +216,6 @@ export const RUNTIME_MIGRATIONS: readonly string[] = [
 ];
 
 /**
- * Central analytics migration ladder — `centraid-analytics.sqlite`
- * (issue #98, decision 4).
- *
- * Push-based analytics: at run completion the runtime write-throughs a
- * one-row summary to this gateway-scoped file. Full run detail stays in
- * the per-app `runtime.sqlite` (automation *and* chat runs); this file
- * is the single source the Insights screen reads, so
- * it has no cross-file scan and no cron aggregator. The write is
- * best-effort — a failure never fails the run, and the per-app file
- * stays authoritative for a future backfill.
- */
-export const ANALYTICS_MIGRATIONS: readonly string[] = [
-  // 0 → 1: one summary row per agent run, every kind.
-  `
-    CREATE TABLE IF NOT EXISTS run_summary (
-      run_id                   TEXT PRIMARY KEY,
-      kind                     TEXT NOT NULL,
-      automation_ref           TEXT,
-      app_id                   TEXT,
-      trigger                  TEXT NOT NULL,
-      trigger_origin           TEXT,
-      ok                       INTEGER NOT NULL DEFAULT 0,
-      pinned                   INTEGER NOT NULL DEFAULT 0,
-      summary                  TEXT,
-      note                     TEXT,
-      error                    TEXT,
-      retry_of                 TEXT,
-      model                    TEXT,
-      started_at               INTEGER NOT NULL,
-      ended_at                 INTEGER,
-      total_input_tokens       INTEGER,
-      total_output_tokens      INTEGER,
-      total_cache_read_tokens  INTEGER,
-      total_cache_write_tokens INTEGER,
-      total_cost_usd           REAL,
-      step_count               INTEGER,
-      tool_count               INTEGER
-    );
-    CREATE INDEX IF NOT EXISTS idx_run_summary_started
-      ON run_summary(started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_run_summary_kind_ref
-      ON run_summary(kind, automation_ref, started_at DESC);
-  `,
-];
-
-/**
  * Run the pending migration tail of `migrations` against `db`. `label`
  * names the file in the version-mismatch error. Idempotent on an
  * already-current DB; throws if the DB is at a version newer than this
@@ -300,7 +260,11 @@ function migrate(db: DatabaseSync, migrations: readonly string[], label: string)
  * Pragmas must run outside any transaction (journal_mode in particular),
  * so they happen before migrate() opens its BEGIN IMMEDIATE block.
  */
-function openDb(dbPath: string, migrations: readonly string[], label: string): DatabaseSync {
+export function openMigratedDb(
+  dbPath: string,
+  migrations: readonly string[],
+  label: string,
+): DatabaseSync {
   const db = new DatabaseSync(dbPath);
   // busy_timeout: wait up to 30s for a lock instead of failing
   // immediately. Multi-client gateway (standalone daemon) makes this
@@ -320,44 +284,34 @@ function openDb(dbPath: string, migrations: readonly string[], label: string): D
  * opens the file on the first call (running migrations as a side effect)
  * and caches the handle for subsequent calls.
  */
-function makeProvider(
+export function makeMigratedDbProvider(
   dbPath: string,
   migrations: readonly string[],
   label: string,
 ): DatabaseProvider {
   let db: DatabaseSync | undefined;
   return () => {
-    if (!db) db = openDb(dbPath, migrations, label);
+    if (!db) db = openMigratedDb(dbPath, migrations, label);
     return db;
   };
 }
 
 /** Open the gateway (users + user_prefs) DB file. */
 export function openGatewayDb(dbPath: string): DatabaseSync {
-  return openDb(dbPath, GATEWAY_MIGRATIONS, 'gateway');
+  return openMigratedDb(dbPath, GATEWAY_MIGRATIONS, 'gateway');
 }
 
 /** Lazy provider for the gateway (users + user_prefs) DB file. */
 export function makeGatewayDbProvider(dbPath: string): DatabaseProvider {
-  return makeProvider(dbPath, GATEWAY_MIGRATIONS, 'gateway');
+  return makeMigratedDbProvider(dbPath, GATEWAY_MIGRATIONS, 'gateway');
 }
 
 /** Open an app's per-app `runtime.sqlite` (chat_sessions + runs + run_nodes + ctx.state). */
 export function openRuntimeDb(dbPath: string): DatabaseSync {
-  return openDb(dbPath, RUNTIME_MIGRATIONS, 'runtime');
+  return openMigratedDb(dbPath, RUNTIME_MIGRATIONS, 'runtime');
 }
 
 /** Lazy provider for an app's per-app `runtime.sqlite` run ledger. */
 export function makeRuntimeDbProvider(dbPath: string): DatabaseProvider {
-  return makeProvider(dbPath, RUNTIME_MIGRATIONS, 'runtime');
-}
-
-/** Open the central `centraid-analytics.sqlite` (run summaries). */
-export function openAnalyticsDb(dbPath: string): DatabaseSync {
-  return openDb(dbPath, ANALYTICS_MIGRATIONS, 'analytics');
-}
-
-/** Lazy provider for the central `centraid-analytics.sqlite` file. */
-export function makeAnalyticsDbProvider(dbPath: string): DatabaseProvider {
-  return makeProvider(dbPath, ANALYTICS_MIGRATIONS, 'analytics');
+  return makeMigratedDbProvider(dbPath, RUNTIME_MIGRATIONS, 'runtime');
 }

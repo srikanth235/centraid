@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { makeAnalyticsDbProvider, type RunSummary } from '@centraid/app-engine';
+import { type RunSummary } from '@centraid/app-engine';
+import { makeAnalyticsDbProvider } from './analytics-db.js';
 import { AnalyticsStore } from './analytics-store.js';
 
 function store(): AnalyticsStore {
