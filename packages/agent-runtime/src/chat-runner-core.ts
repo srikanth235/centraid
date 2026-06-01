@@ -79,6 +79,15 @@ export interface ChatRunnerCoreOptions {
   /** Extra PATH entry (the bundled `centraid` CLI dir) for the spawned
    *  agent. Builder chat sets it; data chat leaves it unset. */
   extraPath?: string;
+  /**
+   * When true, `resolveCwd` returns a draft session worktree (code + its
+   * branched `data.sqlite`), so the turn's `ToolContext.overrideCodeDir` is
+   * pinned to it: the agent's `centraid_*` tools then hit the draft's
+   * handlers and branched data, not live (issue #144). Builder chat sets it;
+   * the data-only backend leaves it false (cwd is the live data dir, no
+   * draft to override to).
+   */
+  cwdIsDraftWorktree?: boolean;
   /** Turn driver — defaults to `runAgentTurn`; injected in tests. */
   runTurn?: RunTurnFn;
 }
@@ -119,6 +128,7 @@ export function makeChatRunnerCore(opts: ChatRunnerCoreOptions): ChatRunner {
         appId: input.appId,
         dispatcher: opts.getDispatcher(),
         agentTurnId: randomUUID(),
+        ...(opts.cwdIsDraftWorktree ? { overrideCodeDir: cwd } : {}),
       };
 
       const turnInput: AgentTurnInput = {

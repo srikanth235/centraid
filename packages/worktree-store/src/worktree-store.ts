@@ -1,6 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit publish/rollback/delete critical sections share private state — keeping them in one file preserves the per-store mutex invariant
-// Gateway-owned git store for centraid app code. Full design in
-// receipt #137; this header sketches the layout + invariants.
+// Gateway-owned git store for centraid editing sessions — a session
+// worktree is the agent's single directory, holding app code plus its
+// branched draft data.sqlite (#144). Full design in receipt #137; this
+// header sketches the layout + invariants.
 //
 // Layout: `apps.git/` (bare repo, pushed to GitHub),
 // `worktrees/main/<sha>/` (read-only materialization, swapped on
@@ -13,7 +15,7 @@
 // is a *new* forward commit overlaying an older subtree — never a
 // reset, so `git log main` stays the audit of everything live.
 //
-// A single AppsStore serializes publish + rollback through one
+// A single WorktreeStore serializes publish + rollback through one
 // per-store mutex. Each publish materializes a fresh
 // `worktrees/main/<sha>/`, flips an in-memory pointer, then removes
 // the previous dir — fresh-path-per-publish rotates require() cache
@@ -24,8 +26,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { run, runRaw, revParse } from './git.js';
 import {
-  AppsStoreError,
-  type AppsStoreOptions,
+  WorktreeStoreError,
+  type WorktreeStoreOptions,
   type PublishInput,
   type PublishResult,
   type RollbackInput,
@@ -36,6 +38,17 @@ import {
 
 /** Git's canonical empty tree sha. Used to plant the initial main commit. */
 const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
+/**
+ * Repo-level `.gitignore` patterns planted on `main` at init (issue #144). A
+ * draft's branched `data.sqlite` (+ WAL/SHM sidecars) lives *inside* the
+ * session worktree, next to the code the agent edits — so it must never be
+ * staged by publish. Committing the ignore to `main` makes every session
+ * worktree (which branches off `main`) inherit it, so publish's path-scoped
+ * `git add apps/<id>` skips the draft data without any per-file dance. The
+ * basename patterns match at any depth (`apps/<id>/data.sqlite`).
+ */
+const DRAFT_DATA_IGNORE_PATTERNS = ['data.sqlite', 'data.sqlite-wal', 'data.sqlite-shm'];
 
 /**
  * Conservative slug check — matches the canonical app id rule
@@ -49,7 +62,7 @@ const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 /** Stable symlink name (under the store root) pointing at the live main worktree. */
 const ACTIVE_MAIN_LINK = 'active-main';
 
-export class AppsStore {
+export class WorktreeStore {
   private readonly root: string;
   private readonly bareDir: string;
   private readonly worktreesDir: string;
@@ -60,7 +73,7 @@ export class AppsStore {
   private publishChain: Promise<unknown> = Promise.resolve();
   private initialized = false;
 
-  constructor(options: AppsStoreOptions) {
+  constructor(options: WorktreeStoreOptions) {
     this.root = options.root;
     this.bareDir = path.join(options.root, 'apps.git');
     this.worktreesDir = path.join(options.root, 'worktrees');
@@ -101,6 +114,9 @@ export class AppsStore {
 
     // Drop worktree metadata pointing at vanished dirs (e.g. host crash).
     await run(['worktree', 'prune'], { cwd: this.bareDir });
+    // Plant the draft-data `.gitignore` on `main` (idempotent) BEFORE
+    // materializing, so the live worktree + every session inherit it.
+    await this.ensureGitignore();
     const mainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
     this.activeMainDir = await this.ensureMainMaterialization(mainSha);
     await this.updateActiveMainLink(this.activeMainDir);
@@ -224,7 +240,7 @@ export class AppsStore {
     this.assertInitialized();
     const worktreeRoot = this.sessionWorktreePath(sessionId);
     if (!(await pathExists(path.join(worktreeRoot, '.git')))) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'session_missing',
         `Session "${sessionId}" has no worktree — open it first via openSession().`,
       );
@@ -240,7 +256,7 @@ export class AppsStore {
     this.assertInitialized();
     const worktreePath = this.sessionWorktreePath(sessionId);
     if (await pathExists(worktreePath)) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'session_exists',
         `Session "${sessionId}" already has a worktree at ${worktreePath}.`,
       );
@@ -371,7 +387,7 @@ export class AppsStore {
 
     const sessionDir = this.sessionWorktreePath(sessionId);
     if (!(await pathExists(sessionDir))) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'session_missing',
         `Session "${sessionId}" has no worktree — call openSession() first.`,
       );
@@ -389,7 +405,7 @@ export class AppsStore {
       allowNonZero: true,
     });
     if (diff.code === 0) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'no_changes',
         `Session "${sessionId}" has no staged changes under ${appSubdir}.`,
       );
@@ -416,9 +432,21 @@ export class AppsStore {
 
     const sessionTipSha = await run(['rev-parse', 'HEAD'], { cwd: sessionDir });
 
+    // Migrate live data AFTER the rebase (the worktree now reflects the
+    // exact tree about to go live, with the final merged `migrations/`) and
+    // BEFORE the ff-merge, all inside the publish mutex (#144). A migration
+    // that fails — or a migration set the rebase made inconsistent (e.g. a
+    // duplicate id when another session published the same number first) —
+    // throws here, aborting the publish before `main` advances or a tag is
+    // minted. Live data + code stay untouched.
+    let migrationsApplied: number[] = [];
+    if (input.migrate) {
+      migrationsApplied = await input.migrate(path.join(sessionDir, 'apps', appId));
+    }
+
     // Pick the next version number BEFORE writing the tag so a
     // concurrent caller — though serialized through publishChain on
-    // this store, a fresh AppsStore on the same disk would still
+    // this store, a fresh WorktreeStore on the same disk would still
     // honor existing tags — never collides.
     const nextN = await this.nextVersionNumber(appId);
     const tag = `${appId}/v${nextN}`;
@@ -433,7 +461,12 @@ export class AppsStore {
     const newMainDir = await this.ensureMainMaterialization(sessionTipSha);
     await this.swapActiveMain(newMainDir);
 
-    return { versionTag: tag, sha: sessionTipSha, materializedMainDir: newMainDir };
+    return {
+      versionTag: tag,
+      sha: sessionTipSha,
+      materializedMainDir: newMainDir,
+      migrationsApplied,
+    };
   }
 
   private async rollbackCritical(input: RollbackInput): Promise<RollbackResult> {
@@ -442,7 +475,7 @@ export class AppsStore {
     this.assertInitialized();
 
     if (!(await revParse(this.bareDir, `refs/tags/${versionTag}`))) {
-      throw new AppsStoreError(
+      throw new WorktreeStoreError(
         'tag_missing',
         `Tag "${versionTag}" does not exist in the apps repo.`,
       );
@@ -464,7 +497,7 @@ export class AppsStore {
         allowNonZero: true,
       });
       if (diff.code === 0) {
-        throw new AppsStoreError(
+        throw new WorktreeStoreError(
           'no_changes',
           `Rollback to ${versionTag} would produce no change — current main already matches.`,
         );
@@ -504,14 +537,20 @@ export class AppsStore {
         allowNonZero: true,
       });
       if (rm.code !== 0) {
-        throw new AppsStoreError('no_changes', `App "${appId}" not on main — nothing to delete.`);
+        throw new WorktreeStoreError(
+          'no_changes',
+          `App "${appId}" not on main — nothing to delete.`,
+        );
       }
       const diff = await runRaw(['diff', '--cached', '--quiet', '--', appSubdir], {
         cwd: txDir,
         allowNonZero: true,
       });
       if (diff.code === 0) {
-        throw new AppsStoreError('no_changes', `App "${appId}" not on main — nothing to delete.`);
+        throw new WorktreeStoreError(
+          'no_changes',
+          `App "${appId}" not on main — nothing to delete.`,
+        );
       }
       await run(['commit', '-m', `delete: ${appId}`], { cwd: txDir });
       const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
@@ -544,6 +583,54 @@ export class AppsStore {
     if (versions.length === 0) return 1;
     const highest = versions[0]?.version ?? 0;
     return highest + 1;
+  }
+
+  /**
+   * Ensure `main`'s root `.gitignore` carries every draft-data pattern
+   * (issue #144). Idempotent and self-healing: a no-op once all patterns are
+   * present, but if `.gitignore` is missing OR exists without some patterns
+   * (e.g. an older store, or a template that committed its own ignore), it
+   * merges the missing lines in — existence alone is NOT treated as success,
+   * else a draft `data.sqlite` could still be staged by publish. Uses a
+   * transient detached worktree — bare repos can't `checkout` — mirroring
+   * `rollback`/`delete`, advancing `main` by a forward commit so the audit
+   * log stays linear.
+   */
+  private async ensureGitignore(): Promise<void> {
+    const existing = await this.readMainGitignore();
+    const present = new Set((existing ?? '').split('\n').map((line) => line.trim()));
+    const missing = DRAFT_DATA_IGNORE_PATTERNS.filter((p) => !present.has(p));
+    if (missing.length === 0) return;
+
+    const txId = `_gitignore-${crypto.randomBytes(6).toString('hex')}`;
+    const txDir = path.join(this.worktreesDir, txId);
+    await run(['worktree', 'add', '--detach', txDir, 'refs/heads/main'], { cwd: this.bareDir });
+    try {
+      const giPath = path.join(txDir, '.gitignore');
+      const current = await fs.readFile(giPath, 'utf8').catch(() => '');
+      const base = current.length === 0 || current.endsWith('\n') ? current : `${current}\n`;
+      await fs.writeFile(giPath, `${base}${missing.join('\n')}\n`);
+      await run(['add', '--', '.gitignore'], { cwd: txDir });
+      await run(['commit', '-m', 'centraid: gitignore draft data.sqlite'], { cwd: txDir });
+      const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
+      const oldMainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
+      await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], { cwd: this.bareDir });
+    } finally {
+      await runRaw(['worktree', 'remove', '--force', txDir], {
+        cwd: this.bareDir,
+        allowNonZero: true,
+      });
+      await run(['worktree', 'prune'], { cwd: this.bareDir });
+    }
+  }
+
+  /** Raw content of `main`'s root `.gitignore`, or undefined when absent. */
+  private async readMainGitignore(): Promise<string | undefined> {
+    const r = await runRaw(['show', 'refs/heads/main:.gitignore'], {
+      cwd: this.bareDir,
+      allowNonZero: true,
+    });
+    return r.code === 0 ? r.stdout : undefined;
   }
 
   /**
@@ -606,7 +693,10 @@ export class AppsStore {
 
   private assertInitialized(): void {
     if (!this.initialized) {
-      throw new AppsStoreError('not_initialized', 'AppsStore.init() must be awaited first.');
+      throw new WorktreeStoreError(
+        'not_initialized',
+        'WorktreeStore.init() must be awaited first.',
+      );
     }
   }
 
@@ -629,7 +719,7 @@ function sessionBranchName(sessionId: string): string {
 
 function assertSafeId(id: string, code: 'invalid_app_id' | 'invalid_session_id'): void {
   if (!SAFE_ID_RE.test(id)) {
-    throw new AppsStoreError(
+    throw new WorktreeStoreError(
       code,
       `"${id}" is not a valid id (allowed: ASCII letter or digit, then letters/digits/_/-).`,
     );

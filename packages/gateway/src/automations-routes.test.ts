@@ -13,7 +13,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AnalyticsStore, InsightsStore, makeAnalyticsDbProvider } from '@centraid/analytics';
-import { AppsStore } from '@centraid/code-store';
+import { WorktreeStore } from '@centraid/worktree-store';
 import { makeAutomationsRouteHandler } from './automations-routes.ts';
 
 let dir: string;
@@ -29,7 +29,7 @@ beforeEach(async () => {
   insights = new InsightsStore(provider);
   fired = [];
   handler = makeAutomationsRouteHandler({
-    store: new AppsStore({ root: path.join(dir, 'code') }),
+    store: new WorktreeStore({ root: path.join(dir, 'code') }),
     dataAppsDir: path.join(dir, 'apps'),
     analytics,
     insights,

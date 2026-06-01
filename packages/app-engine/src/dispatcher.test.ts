@@ -1,6 +1,7 @@
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { promises as fs } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
 import { Registry } from './registry.js';
@@ -364,5 +365,88 @@ describe('tool naming helpers', () => {
     assert.equal(statusForToolError('INVALID_MANIFEST'), 500);
     assert.equal(statusForToolError('NO_ACTIVE_VERSION'), 503);
     assert.equal(statusForToolError('HANDLER_ERROR'), 500);
+  });
+});
+
+// Draft data branching (#144): with an `overrideCodeDir` (the session
+// worktree), the dispatcher resolves data dir = code dir, so handler/`_sql`
+// data ops and the describe schema read hit the worktree's branched
+// `data.sqlite`, never the app's live rows.
+describe('Dispatcher draft data dir = code dir (#144)', () => {
+  let workDir: string;
+  let registry: Registry;
+  let dispatcher: Dispatcher;
+  let draftDir: string;
+
+  before(async () => {
+    workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatch-draft-'));
+    await makeTodoApp(workDir, 'todos');
+    registry = new Registry(workDir);
+    await registry.load();
+    await registry.ensureUploaded('todos');
+    dispatcher = new Dispatcher({ registry, versions: new VersionStore() });
+
+    // Draft worktree dir: a valid code dir (app.json) holding its own
+    // branched data.sqlite. Both live and draft start with a `notes` table
+    // (so `_sql`, which refuses DDL, has somewhere to write); the draft also
+    // gets a `draft_only` table to prove the describe schema is branched.
+    draftDir = path.join(workDir, 'draft');
+    await fs.mkdir(draftDir, { recursive: true });
+    await fs.writeFile(
+      path.join(draftDir, 'app.json'),
+      JSON.stringify({ manifestVersion: 1, id: 'todos', name: 'Todos', version: '0.1.0' }),
+    );
+    for (const dir of [path.join(workDir, 'todos'), draftDir]) {
+      const db = new DatabaseSync(path.join(dir, 'data.sqlite'));
+      db.exec('CREATE TABLE notes(id INTEGER PRIMARY KEY, body TEXT)');
+      db.close();
+    }
+    const ddb = new DatabaseSync(path.join(draftDir, 'data.sqlite'));
+    ddb.exec('CREATE TABLE draft_only(x INTEGER)');
+    ddb.close();
+  });
+
+  after(async () => {
+    await fs.rm(workDir, { recursive: true, force: true });
+  });
+
+  it('a draft _sql write lands in the worktree data.sqlite, never live', async () => {
+    const w = await dispatcher.write(
+      { app: 'todos', action: '_sql', input: { sql: "INSERT INTO notes(body) VALUES ('draft')" } },
+      draftDir,
+    );
+    assert.equal(w.isError, false, JSON.stringify(w.structuredContent));
+
+    // The draft read sees its own row… (SQLite returns null-prototype rows,
+    // so compare by value rather than deep-equal against a plain literal)
+    const draftResult = await dispatcher.read(
+      { app: 'todos', query: '_sql', input: { sql: 'SELECT body FROM notes' } },
+      draftDir,
+    );
+    const dRows = (draftResult.structuredContent as { rows: Array<{ body: string }> }).rows;
+    assert.equal(dRows.length, 1);
+    assert.equal(dRows[0]!.body, 'draft');
+
+    // …while live data has no rows — isolation held.
+    const liveRead = await dispatcher.read({
+      app: 'todos',
+      query: '_sql',
+      input: { sql: 'SELECT body FROM notes' },
+    });
+    assert.equal((liveRead.structuredContent as { rows: unknown[] }).rows.length, 0);
+  });
+
+  it('describe reads the branched schema from the worktree in draft mode', async () => {
+    const draftDesc = await dispatcher.describe({ app: 'todos' }, draftDir);
+    const draftTables = (
+      draftDesc.structuredContent as { schema: { tables: Array<{ name: string }> } }
+    ).schema.tables.map((t) => t.name);
+    assert.ok(draftTables.includes('draft_only'), `draft schema should branch: ${draftTables}`);
+
+    const liveDesc = await dispatcher.describe({ app: 'todos' });
+    const liveTables = (
+      liveDesc.structuredContent as { schema: { tables: Array<{ name: string }> } }
+    ).schema.tables.map((t) => t.name);
+    assert.ok(!liveTables.includes('draft_only'), `live schema must not see the draft table`);
   });
 });

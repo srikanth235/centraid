@@ -47,6 +47,14 @@ export interface ToolContext {
    * the chat UI can correlate iframe refreshes back to the chat pill.
    */
   agentTurnId: string;
+  /**
+   * Draft code dir for this turn — the session worktree's `apps/<id>/`
+   * (issue #144). When set, the dispatcher serves the draft's handlers AND
+   * its branched `data.sqlite` (data dir = code dir in draft mode), so the
+   * agent authoring a migration can exercise it against prod-seeded draft
+   * data without touching live rows. Absent on the data-only chat backend.
+   */
+  overrideCodeDir?: string;
 }
 
 export interface AgentTurnInput {

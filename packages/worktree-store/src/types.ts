@@ -1,11 +1,11 @@
-// Public types + error class for the apps-store package.
+// Public types + error class for the worktree-store package.
 //
-// Split out so `apps-store.ts` stays focused on the class
+// Split out so `worktree-store.ts` stays focused on the class
 // implementation. Consumers should still import from the package
-// root (`@centraid/code-store`) — this file is an internal split,
+// root (`@centraid/worktree-store`) — this file is an internal split,
 // not an alternate entry point.
 
-export interface AppsStoreOptions {
+export interface WorktreeStoreOptions {
   /**
    * Per-gateway root containing `apps.git/` + `worktrees/`. The host
    * is responsible for picking the path and ensuring its parent
@@ -30,6 +30,20 @@ export interface PublishInput {
   appId: string;
   /** Commit message body (the subject gets `<appId>:` prepended). */
   message: string;
+  /**
+   * Optional data-migration step, run inside the publish mutex AFTER the
+   * session is rebased onto current `main` and BEFORE the ff-merge (#144).
+   * Receives the post-rebase worktree app dir (`<worktree>/apps/<appId>/`,
+   * carrying the final, merged `migrations/`) and returns the ids applied.
+   * Throwing aborts the publish: `main` never advances, no tag is minted.
+   *
+   * The store stays data-agnostic — the gateway injects the SQLite runner
+   * (against live `data.sqlite`). Running it post-rebase ensures migrations
+   * are validated/applied against the exact tree about to go live, not the
+   * session's stale pre-rebase tree (which could skip or duplicate a
+   * migration when `main` advanced under the session).
+   */
+  migrate?: (worktreeAppDir: string) => Promise<number[]>;
 }
 
 export interface PublishResult {
@@ -39,6 +53,8 @@ export interface PublishResult {
   sha: string;
   /** Absolute path to the freshly-materialized main worktree. */
   materializedMainDir: string;
+  /** Migration ids the `migrate` step applied to live data, if any (#144). */
+  migrationsApplied: number[];
 }
 
 export interface RollbackInput {
@@ -72,7 +88,7 @@ export interface VersionEntry {
   active: boolean;
 }
 
-export type AppsStoreErrorCode =
+export type WorktreeStoreErrorCode =
   | 'not_initialized'
   | 'session_exists'
   | 'session_missing'
@@ -81,12 +97,12 @@ export type AppsStoreErrorCode =
   | 'invalid_app_id'
   | 'invalid_session_id';
 
-export class AppsStoreError extends Error {
+export class WorktreeStoreError extends Error {
   constructor(
-    public readonly code: AppsStoreErrorCode,
+    public readonly code: WorktreeStoreErrorCode,
     message: string,
   ) {
     super(message);
-    this.name = 'AppsStoreError';
+    this.name = 'WorktreeStoreError';
   }
 }

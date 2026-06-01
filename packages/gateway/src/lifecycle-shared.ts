@@ -6,14 +6,16 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError } from '@centraid/app-blueprints';
+import { MigrationError } from '@centraid/app-engine';
 import type { AutomationHistoryKeep } from '@centraid/automation';
-import { AppsStore, AppsStoreError } from '@centraid/code-store';
+import { WorktreeStore, WorktreeStoreError } from '@centraid/worktree-store';
 import { validateManifestAt } from './apps-store-routes.js';
+import { runPublishMigrations } from './publish-migrations.js';
 import { sendJson, writeFileMap, type FileMapEntry } from './route-helpers.js';
 
 export interface LifecycleRouteOptions {
   /** Git store backing app code. Sessions/publishes ride through it. */
-  store: AppsStore;
+  store: WorktreeStore;
   /** Materialized `main` apps dir — reads back a published automation row. */
   codeAppsDir: () => string;
   /** Per-gateway templates cache dir (clone resolves bundle-or-cache). */
@@ -33,6 +35,13 @@ export interface LifecycleRouteOptions {
   deregister: (appId: string) => Promise<void>;
   /** Reconcile the OS scheduler after a publish changed the live set. */
   reconcile: () => void;
+  /**
+   * Resolve an app's LIVE `data.sqlite` path. Injected so a lifecycle
+   * publish runs the staged app's committed migrations against live data
+   * before the ff-merge (issue #144) — symmetric to the apps-store publish
+   * route.
+   */
+  liveDataFile?: (appId: string) => string;
 }
 
 /** Build an app's absolute webhook URL from the inbound request's host. */
@@ -45,12 +54,12 @@ export function webhookUrl(req: IncomingMessage, webhookId: string): string {
 }
 
 /** Open a session, tolerating one that already exists (reuse its worktree). */
-export async function ensureSession(store: AppsStore, sessionId: string): Promise<string> {
+export async function ensureSession(store: WorktreeStore, sessionId: string): Promise<string> {
   try {
     const handle = await store.openSession(sessionId);
     return handle.id;
   } catch (err) {
-    if (err instanceof AppsStoreError && err.code === 'session_exists') return sessionId;
+    if (err instanceof WorktreeStoreError && err.code === 'session_exists') return sessionId;
     throw err;
   }
 }
@@ -72,7 +81,7 @@ export async function ensureSession(store: AppsStore, sessionId: string): Promis
  * them open across the mutation.
  */
 export async function prepareLifecycleSession(
-  store: AppsStore,
+  store: WorktreeStore,
   sessionId: string,
   ephemeral: boolean,
 ): Promise<void> {
@@ -125,10 +134,22 @@ export async function publishAndReconcile(
 ): Promise<void> {
   const validationError = await validateManifestAt(input.appDir);
   if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
+  // Apply the staged app's committed migrations to live data as part of the
+  // publish (issue #144). The `migrate` hook runs inside the store's mutex,
+  // post-rebase + pre-ff-merge, against the final worktree tree. A failing
+  // migration throws and aborts the publish, live data untouched.
+  const liveDataFile = opts.liveDataFile;
+  const appId = input.appId;
   await opts.store.publish({
     sessionId: input.sessionId,
-    appId: input.appId,
+    appId,
     message: input.message,
+    ...(liveDataFile
+      ? {
+          migrate: (worktreeAppDir: string) =>
+            runPublishMigrations(worktreeAppDir, liveDataFile(appId)),
+        }
+      : {}),
   });
   await opts.ensureRegistered(input.appId);
   opts.reconcile();
@@ -194,7 +215,19 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
     const status = err.code === 'already_exists' ? 409 : err.code === 'not_found' ? 404 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
-  if (err instanceof AppsStoreError) {
+  if (err instanceof MigrationError) {
+    // A staged migration that fails against live data aborts the publish
+    // (issue #144) — `sql_failed` is a runtime conflict (422), a malformed
+    // migration set is a bad request (400).
+    const status = err.code === 'sql_failed' ? 422 : 400;
+    return sendJson(res, status, {
+      error: err.code,
+      message: err.message,
+      file: err.file,
+      sqlError: err.sqlError,
+    });
+  }
+  if (err instanceof WorktreeStoreError) {
     const status =
       err.code === 'session_missing' || err.code === 'tag_missing'
         ? 404

@@ -54,8 +54,9 @@ import {
   type OpenAICompatProvider,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
-import { AppsStore } from '@centraid/code-store';
+import { WorktreeStore } from '@centraid/worktree-store';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
+import { makeDraftCodeDirResolver } from './draft-data.js';
 import { makeAutomationsRouteHandler } from './automations-routes.js';
 import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
 import { makeUnifiedChatRunner } from './unified-chat-runner.js';
@@ -129,7 +130,7 @@ export interface GatewayServeHandle {
    * (the publish endpoint, export/import, the desktop's file IPC) drive
    * sessions + publishes through this. `undefined` on the legacy backend.
    */
-  appsStore?: AppsStore;
+  appsStore?: WorktreeStore;
 }
 
 export async function serve(options: ServeOptions): Promise<GatewayServeHandle> {
@@ -142,29 +143,22 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // owns app code as a bare git repo + worktrees; the runtime serves
   // handlers from the live `main` worktree. Constructed + initialized
   // here so the code-dir override is available at Runtime construction.
-  let appsStore: AppsStore | undefined;
+  let appsStore: WorktreeStore | undefined;
   if (options.appsStoreRoot !== undefined) {
-    appsStore = new AppsStore({ root: options.appsStoreRoot });
+    appsStore = new WorktreeStore({ root: options.appsStoreRoot });
     await appsStore.init();
   }
   const codeDirOverride = appsStore
     ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
     : undefined;
-  // Draft preview (issue #141): resolve an app's code dir to its OPEN
-  // session worktree (`worktrees/sessions/<id>/apps/<app>/`) so the
-  // runtime can serve the staged draft — static + handlers — before it's
-  // published. Data still binds to the registry entry's dir, so the draft
-  // reads/writes the live `data.sqlite`. Returns `undefined` for an
-  // unknown/closed session (→ 503), so the live path is unaffected.
-  const draftCodeDir = appsStore
-    ? async (appId: string, sessionId: string): Promise<string | undefined> => {
-        try {
-          return await appsStore!.snapshotSessionAppDir(sessionId, appId);
-        } catch {
-          return undefined;
-        }
-      }
-    : undefined;
+  // Stable live data file — injected so a publish migrates live data and a
+  // draft seeds from it (issue #144).
+  const liveDataFile = (appId: string): string => path.join(paths.appsDir, appId, 'data.sqlite');
+  // Draft preview (#141 + #144): resolve an app's code dir to its OPEN
+  // session worktree (serving the staged draft before publish) and lazily
+  // seed the worktree's branched `data.sqlite` from live there — data dir =
+  // code dir in draft mode, so one resolver primes both planes.
+  const draftCodeDir = appsStore ? makeDraftCodeDirResolver(appsStore, liveDataFile) : undefined;
 
   // Cron-scheduler reconcile (issue #149). Automation *code* lives under
   // the git-store materialized `main` (`active-main/apps`), or `appsDir`
@@ -278,6 +272,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         getDispatcher,
         publicBaseUrl: () => serverUrl,
         codexHomeBaseDir: paths.codexHomeBaseDir,
+        liveDataFile,
       })
     : makeChatRunner({
         prefsLoader,
@@ -404,6 +399,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
           await deregisterAndCleanup(appId);
           reconcileScheduler();
         },
+        liveDataFile,
       }),
       // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
       // scaffold / clone / update-meta / automation create+toggle+delete.
@@ -418,6 +414,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         },
         deregister: deregisterAndCleanup,
         reconcile: reconcileScheduler,
+        liveDataFile,
       }),
       // Automation runtime ops over HTTP (issue #141): list/read/run-now,
       // the run feed + per-run detail, and insights. Run-now fires on

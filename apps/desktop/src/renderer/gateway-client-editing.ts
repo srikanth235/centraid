@@ -210,6 +210,26 @@ export async function publish(input: { id: string; skipBuild?: boolean }): Promi
   };
 }
 
+/**
+ * Reset the app's draft data from a fresh prod snapshot + replay its pending
+ * migrations (issue #144). Backs the preview-pane "Reset data from prod"
+ * control: a no-op once a draft copy exists is rebuilt from live, and a
+ * migration incompatible with prod rows rejects with the SQL error (HTTP
+ * 422) — surfacing the publish conflict in preview before publishing.
+ */
+export async function resetAppData(input: {
+  id: string;
+}): Promise<{ id: string; seeded: boolean; migrationsApplied: number[] }> {
+  const sessionId = await ensureAppSession(input.id);
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/reset-data`, {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ sessionId }),
+  });
+  return readJson<{ id: string; seeded: boolean; migrationsApplied: number[] }>(res, 'reset-data');
+}
+
 // ───────────────────────── lifecycle ─────────────────────
 
 /** Scaffold a fresh app (staged + published for immediate preview). */

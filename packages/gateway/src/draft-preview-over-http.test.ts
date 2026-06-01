@@ -17,7 +17,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { AppsStore } from '@centraid/code-store';
+import { WorktreeStore } from '@centraid/worktree-store';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 import type { SecretsProvider } from './secrets.ts';
@@ -64,7 +64,7 @@ const MANIFEST = (appId: string): string =>
 
 /** Seed one published app on `main` via a session + publish. */
 async function seedApp(appsStoreRoot: string, appId: string): Promise<void> {
-  const store = new AppsStore({ root: appsStoreRoot });
+  const store = new WorktreeStore({ root: appsStoreRoot });
   await store.init();
   const session = await store.openSession('seed');
   const appDir = path.join(session.worktreePath, 'apps', appId);

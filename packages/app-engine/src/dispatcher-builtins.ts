@@ -7,13 +7,17 @@
  * both `centraid_write` (DML) and `centraid_read` (SELECT/EXPLAIN);
  * the guards mirror the legacy `centraid_sql_*` tools this replaces.
  *
+ * The dispatcher passes in the resolved `dataDir` (the dir holding
+ * `data.sqlite`) rather than deriving it from the registry entry, so a
+ * draft dispatch (#144) hits the session worktree's branched data while
+ * a live dispatch hits the app's stable `data.sqlite`.
+ *
  * Split out of `dispatcher.ts` to keep that file under the repo's
  * file-size limit; the dispatcher delegates here on a `_`-prefixed
  * handler name.
  */
 
 import path from 'node:path';
-import { appDataDir } from './app-paths.js';
 import { readOp, writeOp, SqlOpRefusalError } from './sql-ops.js';
 import { RunQueryError } from './run-query.js';
 import type { RegistryEntry } from './types.js';
@@ -39,29 +43,27 @@ export interface BuiltinHelpers {
 
 export function runBuiltinWrite(
   entry: RegistryEntry,
+  dataDir: string,
   name: string,
   handlerInput: unknown,
   helpers: BuiltinHelpers,
 ): ToolResult {
-  if (name === '_sql') return runSqlWrite(entry, handlerInput, helpers);
+  if (name === '_sql') return runSqlWrite(entry, dataDir, handlerInput, helpers);
   return helpers.errorResult('UNKNOWN_ACTION', `no built-in action "${name}"`);
 }
 
 export function runBuiltinRead(
   entry: RegistryEntry,
+  dataDir: string,
   name: string,
   handlerInput: unknown,
   helpers: BuiltinHelpers,
 ): ToolResult {
-  if (name === '_sql') return runSqlRead(entry, handlerInput, helpers);
+  if (name === '_sql') return runSqlRead(dataDir, handlerInput, helpers);
   return helpers.errorResult('UNKNOWN_QUERY', `no built-in query "${name}"`);
 }
 
-function runSqlRead(
-  entry: RegistryEntry,
-  handlerInput: unknown,
-  helpers: BuiltinHelpers,
-): ToolResult {
+function runSqlRead(dataDir: string, handlerInput: unknown, helpers: BuiltinHelpers): ToolResult {
   const sql = readSqlField(handlerInput);
   if (!sql) {
     return helpers.errorResult(
@@ -70,7 +72,7 @@ function runSqlRead(
     );
   }
   try {
-    const result = readOp({ dataFile: path.join(appDataDir(entry), 'data.sqlite'), sql });
+    const result = readOp({ dataFile: path.join(dataDir, 'data.sqlite'), sql });
     return helpers.successResult(result);
   } catch (err) {
     return sqlErrorToResult(err, helpers);
@@ -79,6 +81,7 @@ function runSqlRead(
 
 function runSqlWrite(
   entry: RegistryEntry,
+  dataDir: string,
   handlerInput: unknown,
   helpers: BuiltinHelpers,
 ): ToolResult {
@@ -92,7 +95,7 @@ function runSqlWrite(
   try {
     const onWrite = helpers.onWriteFor?.(entry.id);
     const result = writeOp({
-      dataFile: path.join(appDataDir(entry), 'data.sqlite'),
+      dataFile: path.join(dataDir, 'data.sqlite'),
       sql,
       ...(onWrite ? { onWrite } : {}),
     });

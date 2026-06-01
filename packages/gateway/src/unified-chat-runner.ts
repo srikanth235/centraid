@@ -17,12 +17,15 @@
  *     builds (`input.extraSystemPrompt`) followed by the builder authoring
  *     prompt + UI/tools grounding (composed by `@centraid/skills`).
  *
- * Code edits STAGE in the draft (the preview iframe reflects the draft);
- * data tools hit the LIVE `data.sqlite` (registry-resolved, independent of
- * cwd). The user clicks Publish to flip the live version — explicit-publish
- * holds. Webhook secrets are minted as a post-turn step (the agent can't
- * generate crypto-random credentials) and surfaced once via a `webhooks`
- * stream event.
+ * Both code edits AND data ops STAGE in the draft (issue #144): native file
+ * edits land in the worktree, and the `centraid_*` tools dispatch with
+ * `overrideCodeDir = cwd`, so they hit the draft's branched `data.sqlite`
+ * (data dir = code dir in draft mode) — the agent can author a migration and
+ * exercise it against prod-seeded draft data without touching live rows. The
+ * user clicks Publish to flip the live version + apply the migration to live
+ * data — explicit-publish holds. Webhook secrets are minted as a post-turn
+ * step (the agent can't generate crypto-random credentials) and surfaced once
+ * via a `webhooks` stream event.
  *
  * Since issue #147 (Concern 1) this is a thin config over
  * `makeChatRunnerCore` (agent-runtime): the shared per-turn spine lives
@@ -48,14 +51,15 @@ import {
 import { type ChatRunner, type ChatStreamEvent, type Dispatcher } from '@centraid/app-engine';
 import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
-import { AppsStore } from '@centraid/code-store';
+import { WorktreeStore } from '@centraid/worktree-store';
 import { ensureSession } from './lifecycle-shared.js';
+import { seedDraftData } from './draft-data.js';
 
 export type { RunTurnFn };
 
 export interface UnifiedChatRunnerOptions {
   /** Git store backing app code; the draft worktree lives in its sessions. */
-  store: AppsStore;
+  store: WorktreeStore;
   /** Per-turn runner prefs (kind + provider). Loaded fresh so settings
    *  changes apply without a restart — mirrors `makeChatRunner`. */
   prefsLoader: () => Promise<RunnerPrefs | undefined>;
@@ -68,6 +72,10 @@ export interface UnifiedChatRunnerOptions {
    *  URLs after minting. A thunk because the ephemeral port is only known
    *  after the server starts — and a turn only ever runs post-start. */
   publicBaseUrl: () => string;
+  /** Resolve an app's live `data.sqlite` path. When set, the turn's draft
+   *  worktree is seeded from it on first access (issue #144) so the agent
+   *  operates on prod-shaped data while testing. */
+  liveDataFile?: (appId: string) => string;
   /** Session id for an app's shared draft worktree. Defaults to the
    *  `desktop-<appId>` scheme the renderer + builder already use, so all
    *  three edit ONE draft. Overridable for tests. */
@@ -140,12 +148,22 @@ export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunne
     ...(extraPath ? { extraPath } : {}),
     ...(opts.runTurn ? { runTurn: opts.runTurn } : {}),
 
+    // cwd IS the draft session worktree, so the agent's centraid_* tools
+    // operate the draft's branched data.sqlite, not live (issue #144).
+    cwdIsDraftWorktree: true,
+
     // Open (or reuse) the app's shared draft worktree so native file edits
-    // stage in the draft, and run the turn from its app dir.
+    // stage in the draft, and run the turn from its app dir. Seed the draft's
+    // branched data.sqlite from live on first access (#144) so the agent's
+    // data tools operate prod-shaped data.
     resolveCwd: async (input) => {
       const sessionId = sessionIdFor(input.appId);
       await ensureSession(opts.store, sessionId);
-      return opts.store.snapshotSessionAppDir(sessionId, input.appId);
+      const worktreeAppDir = await opts.store.snapshotSessionAppDir(sessionId, input.appId);
+      if (opts.liveDataFile) {
+        await seedDraftData({ liveDataFile: opts.liveDataFile(input.appId), worktreeAppDir });
+      }
+      return worktreeAppDir;
     },
 
     // Unified prompt: the route's data/schema preamble + the builder

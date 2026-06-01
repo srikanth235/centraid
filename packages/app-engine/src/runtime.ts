@@ -564,9 +564,10 @@ export class Runtime {
             return;
           }
           // Gate on code-dir presence rather than current.json so the
-          // git-store backend (no current.json) works too. data.sqlite
-          // still lives at the registry's per-app dir (entry.path) — a
-          // draft reads the live schema (drafts share the app's data).
+          // git-store backend (no current.json) works too. In draft mode
+          // data dir = code dir (the session worktree), so the schema read
+          // reflects the draft's branched data — incl. a pending migration
+          // the draft applied (#144). Live reads the per-app dir.
           const codeDir = draftSessionId
             ? await draftCodeDirFor(entry.id)
             : await this.resolveCodeDir(entry);
@@ -574,7 +575,7 @@ export class Runtime {
             sendError(res, 503, 'no_active_version', 'App has no active version yet.');
             return;
           }
-          const dataDbFile = path.join(entry.path, 'data.sqlite');
+          const dataDbFile = path.join(draftSessionId ? codeDir : entry.path, 'data.sqlite');
           const schema = readAppSchema(dataDbFile);
           sendJson(res, 200, schema);
           return;
@@ -632,8 +633,9 @@ export class Runtime {
             // Merge global prefs (gateway-side store) with this app's own
             // `__centraid_settings` rows and any URL-query overrides, then
             // bake the result into the served HTML so the iframe paints in
-            // the right shape before any script runs.
-            const dataDbFile = path.join(entry.path, 'data.sqlite');
+            // the right shape before any script runs. Draft mode reads the
+            // branched settings from the worktree's data.sqlite (#144).
+            const dataDbFile = path.join(draftSessionId ? codeDir : entry.path, 'data.sqlite');
             const globalPrefs = this.userStore?.getAllPrefs();
             const appSettings = readAppSettings(dataDbFile);
             const queryOverrides = route.query as Record<string, unknown>;

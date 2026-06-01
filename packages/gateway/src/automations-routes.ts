@@ -39,12 +39,12 @@ import {
 } from '@centraid/app-engine';
 import { AnalyticsStore, InsightsStore } from '@centraid/analytics';
 import { listAutomations, parseAutomationRef, readAppOwnedAutomation } from '@centraid/automation';
-import type { AppsStore } from '@centraid/code-store';
+import type { WorktreeStore } from '@centraid/worktree-store';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 
 export interface AutomationsRouteOptions {
   /** Git store — code (manifests) resolve from `<getActiveMainLink()>/apps`. */
-  store: AppsStore;
+  store: WorktreeStore;
   /** Stable per-app data dir (run ledgers + analytics live here). */
   dataAppsDir: string;
   /** Central analytics store (the gateway already owns one). */

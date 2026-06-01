@@ -148,16 +148,6 @@
         "typescript": "catalog:",
       },
     },
-    "packages/code-store": {
-      "name": "@centraid/code-store",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "tsx": "^4.20.3",
-        "typescript": "catalog:",
-      },
-    },
     "packages/design-tokens": {
       "name": "@centraid/design-tokens",
       "version": "0.1.0",
@@ -178,8 +168,8 @@
         "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
-        "@centraid/code-store": "workspace:*",
         "@centraid/skills": "workspace:*",
+        "@centraid/worktree-store": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -228,6 +218,16 @@
     "packages/tsconfig": {
       "name": "@centraid/tsconfig",
       "version": "0.0.0",
+    },
+    "packages/worktree-store": {
+      "name": "@centraid/worktree-store",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.20.3",
+        "typescript": "catalog:",
+      },
     },
   },
   "catalog": {
@@ -544,8 +544,6 @@
 
     "@centraid/automation": ["@centraid/automation@workspace:packages/automation"],
 
-    "@centraid/code-store": ["@centraid/code-store@workspace:packages/code-store"],
-
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
@@ -559,6 +557,8 @@
     "@centraid/skills": ["@centraid/skills@workspace:packages/skills"],
 
     "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
+
+    "@centraid/worktree-store": ["@centraid/worktree-store@workspace:packages/worktree-store"],
 
     "@chevrotain/types": ["@chevrotain/types@11.1.2", "", {}, "sha512-U+HFai5+zmJCkK86QsaJtoITlboZHBqrVketcO2ROv865xfCMSFpELQoz1GkX5GzME8pTa+3kbKrZHQtI0gdbw=="],
 

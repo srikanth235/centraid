@@ -395,11 +395,14 @@ async function buildCentraidMcpServer(
     async ({ action, query }) => {
       try {
         return fromDispatch(
-          await ctx.dispatcher.describe({
-            app: ctx.appId,
-            ...(action ? { action } : {}),
-            ...(query ? { query } : {}),
-          }),
+          await ctx.dispatcher.describe(
+            {
+              app: ctx.appId,
+              ...(action ? { action } : {}),
+              ...(query ? { query } : {}),
+            },
+            ctx.overrideCodeDir,
+          ),
         );
       } catch (err) {
         return errText(err instanceof Error ? err.message : String(err));
@@ -419,7 +422,9 @@ async function buildCentraidMcpServer(
     },
     async ({ query, input }) => {
       try {
-        return fromDispatch(await ctx.dispatcher.read({ app: ctx.appId, query, input }));
+        return fromDispatch(
+          await ctx.dispatcher.read({ app: ctx.appId, query, input }, ctx.overrideCodeDir),
+        );
       } catch (err) {
         return errText(err instanceof Error ? err.message : String(err));
       }
@@ -438,7 +443,9 @@ async function buildCentraidMcpServer(
     },
     async ({ action, input }) => {
       try {
-        return fromDispatch(await ctx.dispatcher.write({ app: ctx.appId, action, input }));
+        return fromDispatch(
+          await ctx.dispatcher.write({ app: ctx.appId, action, input }, ctx.overrideCodeDir),
+        );
       } catch (err) {
         return errText(err instanceof Error ? err.message : String(err));
       }

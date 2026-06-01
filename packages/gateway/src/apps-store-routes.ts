@@ -1,7 +1,7 @@
 // HTTP surface for the gateway-owned git store (issue #137).
 //
 // These routes live in gateway-runtime, not app-engine, because
-// they're specific to the AppsStore backend — app-engine stays
+// they're specific to the WorktreeStore backend — app-engine stays
 // backend-agnostic (OpenClaw + standalone share it). They're mounted
 // via `startRuntimeHttpServer`'s `extraHandlers` seam, after the
 // bearer check, before `runtime.handle`.
@@ -23,6 +23,8 @@
 //          → { sessionId, message }
 //   POST   /centraid/_apps/<appId>/rollback          forward-only rollback
 //          → { versionTag }
+//   POST   /centraid/_apps/<appId>/reset-data        re-seed draft data
+//          → { sessionId } — VACUUM live + replay pending migrations (#144)
 //   GET    /centraid/_apps/<appId>/git-versions      tag-driven history
 //   DELETE /centraid/_apps/<appId>                   remove app from main
 //
@@ -34,9 +36,11 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { ManifestError, parseAppManifest } from '@centraid/app-engine';
-import { AppsStore, AppsStoreError } from '@centraid/code-store';
+import { ManifestError, MigrationError, parseAppManifest } from '@centraid/app-engine';
+import { WorktreeStore, WorktreeStoreError } from '@centraid/worktree-store';
 import { fileExists, readBody, readJson, sendJson } from './route-helpers.js';
+import { runPublishMigrations } from './publish-migrations.js';
+import { seedDraftData } from './draft-data.js';
 
 /** Text extensions a draft file write accepts — mirrors agent-harness. */
 const EDITABLE_EXT = new Set([
@@ -67,15 +71,22 @@ export interface AppsStoreRouteOptions {
    * it from the runtime's registry + tear down its data dir.
    */
   onAppDeleted?: (appId: string) => Promise<void>;
+  /**
+   * Resolve an app's LIVE `data.sqlite` path (`<appsDir>/<appId>/data.sqlite`).
+   * Injected so publish can run the session's committed migrations against
+   * live data before the ff-merge (issue #144) — the store itself stays
+   * data-agnostic. Omitted on backends without a live data tree.
+   */
+  liveDataFile?: (appId: string) => string;
 }
 
 /**
- * Build the apps-store route handler bound to a live `AppsStore`.
+ * Build the apps-store route handler bound to a live `WorktreeStore`.
  * Returns a function suitable for `startRuntimeHttpServer`'s
  * `extraHandlers`: resolves `true` when it owned the request.
  */
 export function makeAppsStoreRouteHandler(
-  store: AppsStore,
+  store: WorktreeStore,
   opts: AppsStoreRouteOptions = {},
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
@@ -121,7 +132,7 @@ export function makeAppsStoreRouteHandler(
         try {
           await store.deleteApp(appId);
         } catch (err) {
-          if (err instanceof AppsStoreError && err.code === 'no_changes') {
+          if (err instanceof WorktreeStoreError && err.code === 'no_changes') {
             codeRemoved = false;
           } else {
             throw err;
@@ -133,10 +144,13 @@ export function makeAppsStoreRouteHandler(
       }
 
       if (verb === 'publish' && method === 'POST') {
-        return await handlePublish(store, req, res, appId, opts.onAppLive);
+        return await handlePublish(store, req, res, appId, opts.onAppLive, opts.liveDataFile);
       }
       if (verb === 'rollback' && method === 'POST') {
         return await handleRollback(store, req, res, appId, opts.onAppLive);
+      }
+      if (verb === 'reset-data' && method === 'POST') {
+        return await handleResetData(store, req, res, appId, opts.liveDataFile);
       }
       if (verb === 'git-versions' && method === 'GET') {
         const versions = await store.listVersions(appId);
@@ -155,7 +169,7 @@ export function makeAppsStoreRouteHandler(
 }
 
 async function handleSessions(
-  store: AppsStore,
+  store: WorktreeStore,
   req: IncomingMessage,
   res: ServerResponse,
   method: string,
@@ -188,11 +202,12 @@ async function handleSessions(
 }
 
 async function handlePublish(
-  store: AppsStore,
+  store: WorktreeStore,
   req: IncomingMessage,
   res: ServerResponse,
   appId: string,
   onAppLive?: (appId: string) => Promise<void>,
+  liveDataFile?: (appId: string) => string,
 ): Promise<boolean> {
   const body = await readJson(req);
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -213,19 +228,45 @@ async function handlePublish(
     return true;
   }
 
-  const result = await store.publish({ sessionId, appId, message });
+  // Migrate LIVE data as part of publish (#144): the `migrate` hook fires
+  // inside the store's mutex, post-rebase + pre-ff-merge, so migrations apply
+  // against the exact tree going live. A failure aborts the publish untouched.
+  let result;
+  try {
+    result = await store.publish({
+      sessionId,
+      appId,
+      message,
+      ...(liveDataFile
+        ? { migrate: (dir: string) => runPublishMigrations(dir, liveDataFile(appId)) }
+        : {}),
+    });
+  } catch (err) {
+    if (err instanceof MigrationError) {
+      const status = err.code === 'sql_failed' ? 422 : 400;
+      sendJson(res, status, {
+        error: err.code,
+        message: err.message,
+        file: err.file,
+        sqlError: err.sqlError,
+      });
+      return true;
+    }
+    throw err;
+  }
   await onAppLive?.(appId);
   sendJson(res, 201, {
     id: appId,
     versionTag: result.versionTag,
     sha: result.sha,
     activated: true,
+    migrationsApplied: result.migrationsApplied,
   });
   return true;
 }
 
 async function handleRollback(
-  store: AppsStore,
+  store: WorktreeStore,
   req: IncomingMessage,
   res: ServerResponse,
   appId: string,
@@ -243,8 +284,58 @@ async function handleRollback(
   return true;
 }
 
+/**
+ * Re-seed a draft session's branched `data.sqlite` from a fresh prod snapshot
+ * + replay its pending migrations (issue #144). Doubles as a dress rehearsal
+ * of the publish migration against real prod data: a migration incompatible
+ * with live rows fails here and the SQL error surfaces inline (422), letting
+ * the author hit it in preview before publishing.
+ */
+async function handleResetData(
+  store: WorktreeStore,
+  req: IncomingMessage,
+  res: ServerResponse,
+  appId: string,
+  liveDataFile?: (appId: string) => string,
+): Promise<boolean> {
+  const body = await readJson(req);
+  const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+  if (!sessionId) {
+    sendJson(res, 400, { error: 'bad_request', message: 'reset-data needs { sessionId }' });
+    return true;
+  }
+  if (!liveDataFile) {
+    sendJson(res, 400, { error: 'bad_request', message: 'reset-data needs a live data backend' });
+    return true;
+  }
+  // Throws `session_missing` (→ 404) via the outer handler when the worktree
+  // isn't open.
+  const worktreeAppDir = await store.snapshotSessionAppDir(sessionId, appId);
+  try {
+    const out = await seedDraftData({
+      liveDataFile: liveDataFile(appId),
+      worktreeAppDir,
+      force: true,
+    });
+    sendJson(res, 200, { id: appId, seeded: out.seeded, migrationsApplied: out.migrationsApplied });
+  } catch (err) {
+    if (err instanceof MigrationError) {
+      const status = err.code === 'sql_failed' ? 422 : 400;
+      sendJson(res, status, {
+        error: err.code,
+        message: err.message,
+        file: err.file,
+        sqlError: err.sqlError,
+      });
+      return true;
+    }
+    throw err;
+  }
+  return true;
+}
+
 async function handleFiles(
-  store: AppsStore,
+  store: WorktreeStore,
   req: IncomingMessage,
   res: ServerResponse,
   method: string,
@@ -292,7 +383,7 @@ async function handleFiles(
     const appDir = await store.snapshotSessionAppDir(sessionId, appId);
     const abs = path.resolve(appDir, rel);
     if (abs !== appDir && !abs.startsWith(appDir + path.sep)) {
-      throw new AppsStoreError('invalid_app_id', `Refusing to delete outside the app: ${rel}`);
+      throw new WorktreeStoreError('invalid_app_id', `Refusing to delete outside the app: ${rel}`);
     }
     await fs.rm(abs, { force: true });
     sendJson(res, 200, { path: rel, deleted: true });
@@ -371,7 +462,7 @@ async function walk(root: string, rel: string, out: DraftFile[]): Promise<void> 
 }
 
 async function writeDraftFile(
-  store: AppsStore,
+  store: WorktreeStore,
   sessionId: string,
   appId: string,
   rel: string,
@@ -380,10 +471,10 @@ async function writeDraftFile(
   const appDir = await store.snapshotSessionAppDir(sessionId, appId);
   const abs = path.resolve(appDir, rel);
   if (abs !== appDir && !abs.startsWith(appDir + path.sep)) {
-    throw new AppsStoreError('invalid_app_id', `Refusing to write outside the app: ${rel}`);
+    throw new WorktreeStoreError('invalid_app_id', `Refusing to write outside the app: ${rel}`);
   }
   if (!EDITABLE_EXT.has(path.extname(abs).toLowerCase())) {
-    throw new AppsStoreError('invalid_app_id', `Not an editable text file: ${rel}`);
+    throw new WorktreeStoreError('invalid_app_id', `Not an editable text file: ${rel}`);
   }
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, content);
@@ -393,7 +484,7 @@ async function writeDraftFile(
 // ---- apps-store-specific error mapping (delegates to shared sendJson) ----
 
 function sendStoreError(res: ServerResponse, err: unknown): true {
-  if (err instanceof AppsStoreError) {
+  if (err instanceof WorktreeStoreError) {
     const status =
       err.code === 'session_missing' || err.code === 'tag_missing'
         ? 404
