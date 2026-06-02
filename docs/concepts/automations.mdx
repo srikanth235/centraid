@@ -38,7 +38,7 @@ There is **no `kind: "automation"` flag** and **no `headless: true` field**. The
 | `webhook` (provisioned) | `{ kind: "webhook", id, secretHash }`     | Fires on POST to `/_centraid-hook/<id>` on a remote gateway. At most one webhook per automation. Desktop never registers the listener. |
 | `webhook` (pending)     | `{ kind: "webhook", pending: true }`      | The conversational builder's handoff form — a privileged server pass mints the route slug + secret.                                    |
 
-An empty `triggers: []` (or omitting the field) is legal — the automation fires only via "Run now" or `ctx.invoke` from another automation.
+An empty `triggers: []` (or omitting the field) is legal — the automation fires only via "Run now".
 
 ## What the handler can do
 
@@ -48,7 +48,6 @@ export default async ({ ctx, log, input }) => {
   // ctx.agent({ prompt })    — one constrained model turn
   // ctx.state.get/set/delete — cross-run KV in runtime.sqlite
   // ctx.runs.last/list       — prior-run history
-  // ctx.invoke(handle, args) — fire another automation
   return {
     summary: 'short line for the run list',
     output: {
@@ -65,7 +64,7 @@ Automations do **not** get the `db` proxy that queries and actions receive. To r
 Every fire writes to `<appDir>/runtime.sqlite`:
 
 - One `runs` row per fire — status, summary, output, the trigger origin, error if any.
-- One `run_nodes` row per `ctx.tool` / `ctx.agent` / `ctx.invoke` call — ordered, with timings and full request/response.
+- One `run_nodes` row per `ctx.tool` / `ctx.agent` call — ordered, with timings and full request/response.
 
 `history.keep` on the manifest controls retention — `{count: N}`, `{days: N}`, `"all"`, or `"errors"`. Default is `{count: 100}`.
 

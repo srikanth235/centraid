@@ -1,5 +1,5 @@
 ---
-summary: "Every automation fire writes a runs row and one run_nodes row per ctx.tool / ctx.agent / ctx.invoke call. The ledger lives in the parent app's runtime.sqlite. Retention is per-automation."
+summary: "Every automation fire writes a runs row and one run_nodes row per ctx.tool / ctx.agent call. The ledger lives in the parent app's runtime.sqlite. Retention is per-automation."
 title: 'Run history'
 ---
 
@@ -31,30 +31,30 @@ One row per fire. Created when the trigger fires, updated when the handler retur
 | `conversation_id`         | The durable conversation the run belongs to — the automation id (spans fires). A chat run carries its chat-session id instead. |
 | `app_id`                  | The owning app.                                                                                                                |
 | `status`                  | `"ok"` or `"error"`. `"running"` while in-flight.                                                                              |
-| `trigger_origin`          | `"cron"`, `"webhook"`, `"manual"`, or `"invoke"` — how this fire was triggered.                                                |
+| `trigger_origin`          | `"cron"`, `"webhook"`, or `"manual"` — how this fire was triggered.                                                            |
 | `started_at` / `ended_at` | Epoch ms.                                                                                                                      |
 | `summary`                 | The handler's returned `summary` string.                                                                                       |
 | `output_json`             | The handler's returned `output`, JSON-serialized.                                                                              |
 | `error`                   | When status is `"error"`, the thrown message.                                                                                  |
-| `input_json`              | The trigger's input — webhook body, invoke args, etc.                                                                          |
-| `parent_run_id`           | Set when this run was fired via `ctx.invoke` from another run.                                                                 |
+| `input_json`              | The trigger's input — webhook body, `onFailure` summary, etc.                                                                  |
+| `parent_run_id`           | Set when this run was fired as a sub-run of another (e.g. an `onFailure` cascade).                                             |
 
 ### `run_nodes`
 
-One row per `ctx.tool` / `ctx.agent` / `ctx.invoke` call, ordered within a run.
+One row per `ctx.tool` / `ctx.agent` call, ordered within a run.
 
 | Column                    | Meaning                                                                 |
 | ------------------------- | ----------------------------------------------------------------------- |
 | `run_id`                  | Foreign key into `runs`. CASCADE-deletes when the run is pruned.        |
 | `ordinal`                 | Position within the run. Monotonic per run.                             |
 | `batch_id`                | When multiple `ctx.tool` calls fire in parallel, they share a batch id. |
-| `kind`                    | `"tool"`, `"agent"`, or `"invoke"`.                                     |
-| `name`                    | Tool name, model name, or target automation handle.                     |
+| `kind`                    | `"tool"` or `"agent"`. (`"invoke"` is a legacy kind, no longer produced.) |
+| `name`                    | Tool name or model name.                                                |
 | `args_json`               | What was sent.                                                          |
 | `result_json`             | What came back.                                                         |
 | `ok`                      | Boolean.                                                                |
 | `error`                   | When `ok` is false.                                                     |
-| `child_run_id`            | For `kind: "invoke"`, the child run's id.                               |
+| `child_run_id`            | Legacy — the child run's id on a `kind: "invoke"` node. No current producer. |
 | `started_at` / `ended_at` | Epoch ms.                                                               |
 
 `run_nodes` is what the desktop's "Trace" view renders — a tree per run showing every tool call, every agent turn, every sub-invocation, in order, with timings.
@@ -112,20 +112,15 @@ sqlite3 ~/.centraid/apps/auto.briefing/runtime.sqlite \
 
 Logs are **plain text + a structured extras object** per line. Use them generously — they're the only way to see what's happening inside a handler that doesn't fail outright. (A handler that completes successfully but does the wrong thing leaves no `run_nodes` trace of the bug; the log is.)
 
-## `parent_run_id` and invoke chains
+## `parent_run_id` and `onFailure` sub-runs
 
-When a handler calls `ctx.invoke('<app>/<id>', { input })`:
+When a handler throws and `onFailure` is set on the manifest, the sibling automation fires as its **own** audited run:
 
-1. A `run_nodes` row with `kind: "invoke"` is recorded on the parent run.
-2. A new `runs` row is created for the child with `trigger_origin: "invoke"` and `parent_run_id` set to the parent's `run_id`.
-3. The child runs to completion (or failure) as its own audited run.
-4. The child's returned `output` is set as the `result_json` on the parent's invoke node.
+1. A new `runs` row is created for the sibling with `parent_run_id` set to the failed run's `run_id`.
+2. The failure context (the failed run's id, automation name, and error) is passed in as `input` to the sibling's handler.
+3. The sibling runs to completion (or failure) as its own run, with its own `run_nodes` trace.
 
-Chains can nest arbitrarily deep. The desktop's trace view follows `parent_run_id` to expand the chain inline.
-
-## `onFailure` runs separately
-
-When a handler throws and `onFailure` is set on the manifest, the sibling automation fires as its **own** run — with its own `runs` row and `trigger_origin: "manual"`. It's not a child of the failed run. The failure context is passed in as `input` to the sibling's handler.
+The sibling is a separate run, not nested inside the failed one — but `parent_run_id` links the two so the desktop's trace view can follow the chain. Cascades are capped at depth 3.
 
 This is deliberate: the failure-handling automation should be auditable independently. You can look at the `onFailure` automation's run list and see every time it fired, what failure it was responding to (in its `input_json`), and what it did about it.
 

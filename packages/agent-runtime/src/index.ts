@@ -32,14 +32,11 @@
 
 export { makeChatRunner, type MakeChatRunnerOptions } from './chat-adapter.js';
 
-// The shared per-turn chat spine. `makeChatRunner` (data) and the gateway's
-// `makeUnifiedChatRunner` (builder) are both thin configs over this.
-export {
-  makeChatRunnerCore,
-  type ChatRunnerCoreOptions,
-  type ChatTurnContext,
-  type RunTurnFn,
-} from './chat-runner-core.js';
+// The shared per-turn chat spine (`makeChatRunnerCore`) lives in
+// `@centraid/conversation-engine` (the backend-agnostic run engine), next to
+// the automation fire spine. `makeChatRunner` (above) is this backend's thin
+// config over it, injecting `runAgentTurn` as the `RunTurnFn`; the gateway's
+// `makeUnifiedChatRunner` imports the core from conversation-engine directly.
 
 // Builder agent sessions still want the `centraid` CLI on PATH for the
 // `centraid preview snapshot` flow; expose the dist-dir resolver.
@@ -83,7 +80,7 @@ export {
 // tools the host runtime actually exposes (issue #80 follow-up).
 export { enumerateHostTools, type HostTool } from './host-tools.js';
 
-// Mock-LLM server (issue #70) now lives in `@centraid/automation-engine` so
+// Mock-LLM server (issue #70) now lives in `@centraid/conversation-engine` so
 // both the CLI host (here) and the in-process host (openclaw-plugin) share one
 // persistent-session runtime (issue #166). Re-exported here for back-compat.
 export {
@@ -92,7 +89,7 @@ export {
   type MockLlmServerOptions,
   type StagedTurn,
   type CapturedToolResult,
-} from '@centraid/automation-engine';
+} from '@centraid/conversation-engine';
 
 // Local-side per-fire orchestrator for automations (issue #90 model-B).
 // Looks up the user-owned automation row and runs its manifest prompt
@@ -108,7 +105,7 @@ export {
   type SpawnCliResult,
 } from './run-automation-local.js';
 
-// Scheduling lives in `@centraid/automation-engine` now (issue #149): the gateway
+// Scheduling lives in `@centraid/conversation-engine` now (issue #149): the gateway
 // owns an in-process cron `InProcessScheduler` and fires automations while it
 // runs. The OS scheduler (launchd / systemd / Task Scheduler) and its
 // `centraid run-automation` entry point are gone.

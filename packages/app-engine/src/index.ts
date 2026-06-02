@@ -25,6 +25,21 @@ export {
 export type { ChatRunner, ChatRunInput, ChatRunResult, ChatStreamEvent } from './chat-runner.js';
 export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prompt.js';
 
+// Agent-turn contract — the host-agnostic interface between a run spine
+// (chat-runner core, automation fire) and the backend that drives one model
+// turn. The codex/claude implementation (`runAgentTurn`) lives in
+// `@centraid/agent-runtime`; hosts inject a `RunTurnFn` satisfying it.
+export type {
+  RunnerKind,
+  RunnerPrefs,
+  OpenAICompatProvider,
+  ToolContext,
+  AgentTurnInput,
+  AgentTurnConfig,
+  AgentTurnResult,
+  RunTurnFn,
+} from './agent-turn.js';
+
 export {
   startRuntimeHttpServer,
   type RuntimeHttpServerOptions,

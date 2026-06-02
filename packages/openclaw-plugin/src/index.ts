@@ -36,7 +36,7 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
-import { makeWebhookRouteHandler } from '@centraid/automation-engine';
+import { makeWebhookRouteHandler } from '@centraid/conversation-engine';
 import { buildGateway, type BuiltGateway } from '@centraid/gateway';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
@@ -65,7 +65,7 @@ export type {
   LogEntry,
   LogLevel,
 } from '@centraid/app-engine';
-export type { AutomationManifest, AutomationManifestRequires } from '@centraid/automation-engine';
+export type { AutomationManifest, AutomationManifestRequires } from '@centraid/conversation-engine';
 
 export default definePluginEntry({
   id: 'centraid',

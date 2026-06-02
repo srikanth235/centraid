@@ -2,7 +2,7 @@
  * OpenClaw automation fire — mock-puppeted, on the shared spine (issue #166).
  *
  * `runOpenclawFire` delegates the per-fire orchestration (manifest load, ledger,
- * journal/resume, onFailure, ctx.invoke) to app-engine's `runAutomationFire`,
+ * onFailure) to app-engine's `runAutomationFire`,
  * and injects an OpenClaw `OpenAutomationDispatch` — the ONLY host-specific
  * piece. Both dispatchers run one embedded-agent turn via the shared
  * `runEmbeddedTurn` helper (also used by the chat runner):
@@ -44,7 +44,7 @@ import {
   type AutomationHandlerOutcome,
   type OpenAutomationDispatch,
   type OpenAutomationDispatchArgs,
-} from '@centraid/automation-engine';
+} from '@centraid/conversation-engine';
 import {
   type AnalyticsStore,
   type AutomationTriggerKind,
@@ -79,8 +79,6 @@ export interface OpenclawFireOptions {
   triggerOrigin?: AutomationTriggerOrigin;
   /** Optional input payload (e.g. webhook body). */
   input?: unknown;
-  /** Resume an interrupted fire from its journal (issue #166, Phase 3). */
-  resumeFromRunId?: string;
 }
 
 type FireLog = { info(m: string): void; warn(m: string): void; error(m: string): void };
@@ -213,7 +211,6 @@ export async function runOpenclawFire(
       triggerKind: opts.triggerKind,
       ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
       ...(opts.input !== undefined ? { input: opts.input } : {}),
-      ...(opts.resumeFromRunId ? { resumeFromRunId: opts.resumeFromRunId } : {}),
     },
     { openDispatch: makeOpenClawDispatch(api) },
   );

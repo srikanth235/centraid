@@ -5,7 +5,7 @@ title: 'Triggers'
 
 # Triggers
 
-`triggers` is an **array** of discriminated-union entries. Each entry has a `kind` field that picks which shape to expect: `"cron"` or `"webhook"`. An automation with no triggers — `triggers: []` or `triggers` omitted entirely — is legal: it fires only via an explicit "Run now" or via `ctx.invoke` from another automation.
+`triggers` is an **array** of discriminated-union entries. Each entry has a `kind` field that picks which shape to expect: `"cron"` or `"webhook"`. An automation with no triggers — `triggers: []` or `triggers` omitted entirely — is legal: it fires only via an explicit "Run now" (or as an `onFailure` target).
 
 ```json
 {
@@ -68,18 +68,17 @@ The validator accepts this shape so the manifest round-trips through the builder
 
 ### At-most-one rule
 
-`triggers` may contain **at most one webhook entry** (whether pending or provisioned). The validator throws `invalid_trigger` if you declare two. If you need fan-in from multiple endpoints, the pattern is one automation per endpoint that calls a shared sibling via `ctx.invoke`.
+`triggers` may contain **at most one webhook entry** (whether pending or provisioned). The validator throws `invalid_trigger` if you declare two. If you need fan-in from multiple endpoints, the pattern is one automation per endpoint, each writing to a shared store (`ctx.state` or a `centraid_write` table) that a downstream automation reads.
 
 ## Manual triggers — the empty array
 
-`triggers: []` is legal and means "fire only when explicitly invoked." Two valid invocation paths:
+`triggers: []` is legal and means "fire only when explicitly run." Two ways that happens:
 
 1. **The "Run now" button** in the desktop's per-app Automations screen.
-2. **Cross-automation invocation** — another automation calls `ctx.invoke('<appId>/<id>', { input })` and this one fires as a child run.
+2. **As an `onFailure` target** — fired by the runtime when a sibling automation errors.
 
 Useful for:
 
-- Sub-routines you want to share between scheduled automations.
 - Manual cleanup or report-generation tasks that shouldn't run on a clock.
 - Targets of `onFailure` — a "log and notify" automation that fires only when its sibling errors.
 

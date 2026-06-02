@@ -6,7 +6,6 @@
  *   ctx.agent({ prompt })  — one constrained model turn
  *   ctx.state.get/set/del  — cross-run key/value persistence
  *   ctx.runs.last/list     — this automation's prior runs
- *   ctx.invoke(ref, { input }) — fire another automation by its handle
  *
  * Return `{ summary?, output? }` — `summary` shows in the run list.
  */

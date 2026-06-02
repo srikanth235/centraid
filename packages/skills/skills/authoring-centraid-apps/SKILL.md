@@ -227,7 +227,7 @@ Each automation the app owns is its own folder inside the app:
 
 `<id>` is a short stable slug — `daily-digest`, `evening-reminder`. **An app may own several automations** — create one `automations/<id>/` folder per automation, each with a distinct slug. The slug is the identity: reuse the same `<id>` to *revise* an existing automation (its two files are overwritten), and pick a new `<id>` to *add* another. Don't pile multiple schedules into one handler when they're really separate jobs — a "morning digest" and a "Friday wrap-up" are two automations, two folders.
 
-When one automation references another — `onFailure`, or `ctx.invoke(id, …)` — use the sibling's bare `<id>`; siblings are the other automations in the same app.
+When one automation references another — e.g. `onFailure` — use the sibling's bare `<id>`; siblings are the other automations in the same app.
 
 #### automation.json
 
@@ -261,7 +261,6 @@ export default async ({ ctx, log }) => {
   // ctx.agent({ prompt, json })  — one constrained model turn (pass json when consumed structurally)
   // ctx.state.get/set/del(key)   — cross-run KV scoped to this automation (cursors, watermarks)
   // ctx.runs.last/list(...)      — this automation's prior run records
-  // ctx.invoke(id, { input })    — fire a sibling automation
   log.info('automation fired');
   return { summary: 'one-line run description' };
 };
