@@ -12,17 +12,17 @@
  */
 
 import {
+  type AnalyticsStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import type { AnalyticsStore } from '@centraid/analytics';
 import {
   runAutomationFire,
   type AutomationHandlerOutcome,
   type AutomationRunRecord,
   type OpenAutomationDispatch,
-} from '@centraid/automation';
+} from '@centraid/automation-engine';
 import {
   defaultSpawnCli,
   type LocalRunnerKind,

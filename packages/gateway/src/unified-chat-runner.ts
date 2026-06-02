@@ -51,7 +51,7 @@ import {
   type RunTurnFn,
 } from '@centraid/agent-runtime';
 import { type ChatRunner, type ChatStreamEvent, type Dispatcher } from '@centraid/app-engine';
-import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
+import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation-engine';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
 import { WorktreeStore } from '@centraid/worktree-store';
 import { ensureSession } from './lifecycle-shared.js';

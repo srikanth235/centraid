@@ -12,8 +12,14 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AgentRunsStore, makeRuntimeDbProvider, type RunStreamEvent } from '@centraid/app-engine';
-import { AnalyticsStore, InsightsStore, makeAnalyticsDbProvider } from '@centraid/analytics';
+import {
+  AgentRunsStore,
+  AnalyticsStore,
+  InsightsStore,
+  makeAnalyticsDbProvider,
+  makeRuntimeDbProvider,
+  type RunStreamEvent,
+} from '@centraid/app-engine';
 import { WorktreeStore } from '@centraid/worktree-store';
 import { makeAutomationsRouteHandler } from './automations-routes.ts';
 import { RunEventBus } from './run-event-bus.ts';

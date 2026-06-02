@@ -18,7 +18,10 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/app-blueprints';
-import { setAutomationEnabledInFiles, deleteAutomationFromFiles } from '@centraid/automation';
+import {
+  setAutomationEnabledInFiles,
+  deleteAutomationFromFiles,
+} from '@centraid/automation-engine';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 import type { SecretsProvider } from './secrets.ts';

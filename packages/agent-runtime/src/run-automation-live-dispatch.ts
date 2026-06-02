@@ -23,7 +23,7 @@ import type {
   AutomationToolCall,
   AutomationToolDispatcher,
   AutomationToolResult,
-} from '@centraid/automation';
+} from '@centraid/automation-engine';
 import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 import {

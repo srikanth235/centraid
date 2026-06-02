@@ -1,5 +1,5 @@
 /**
- * `@centraid/automation` — the automation domain.
+ * `@centraid/automation-engine` — the automation domain.
  *
  * One home for everything automation: the manifest format, the on-disk
  * automation-app model, the globally-unique `<appId>/<id>` handle, the

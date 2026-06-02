@@ -1,4 +1,4 @@
-# @centraid/automation
+# @centraid/automation-engine
 
 The automation **domain** — one home for everything an automation is, minus
 the parts that belong to other layers.
@@ -29,8 +29,8 @@ surface (`runAutomationLocal` implements `openDispatch`); `@centraid/openclaw-pl
 is the cloud host; `@centraid/gateway` wires them together.
 
 ```
-agent-runtime ─▶ @centraid/automation ─▶ app-engine
-gateway / openclaw-plugin ─▶ @centraid/automation ─▶ app-engine
+agent-runtime ─▶ @centraid/automation-engine ─▶ app-engine
+gateway / openclaw-plugin ─▶ @centraid/automation-engine ─▶ app-engine
 ```
 
-No cycles: `@centraid/automation` never imports `agent-runtime`.
+No cycles: `@centraid/automation-engine` never imports `agent-runtime`.

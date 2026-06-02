@@ -175,7 +175,7 @@ export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 // `UserStore` ← gateway; `ChatHistoryStore` + the per-app run ledger ←
 // each app's runtime.sqlite. Cross-file FKs aren't possible in SQLite, so
 // `chat_sessions.user_id` is application-enforced. The third (analytics)
-// ladder lives in `@centraid/analytics`, built through `makeMigratedDbProvider`.
+// ladder lives in the `insights/` sub-module, built through `makeMigratedDbProvider`.
 export {
   openGatewayDb,
   makeGatewayDbProvider,
@@ -189,9 +189,10 @@ export {
 } from './gateway-db.js';
 
 // Run-summary seam — the ledger emits one `RunSummary` per finished run
-// through a `RunSummarySink`. The concrete sink (`AnalyticsStore`) lives in
-// `@centraid/analytics` and is injected by the host; keeping the contract here
-// is what keeps app-engine free of its own reporting consumer (#151).
+// through a `RunSummarySink`. The concrete sink (`AnalyticsStore`) lives in the
+// `insights/` sub-module and is injected by the host; keeping the contract here
+// (package root, not `insights/`) is what keeps the run ledger free of a
+// reporting dependency and the boundary one-way (#151).
 export type { RunSummary, RunSummarySink } from './run-summary-sink.js';
 
 // User-prefs store + HTTP route dispatcher. Wraps the gateway DB; mounted
@@ -242,9 +243,13 @@ export type {
 // records NULL (distinct from a genuine $0). See issue #90 question 4.
 export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from './model-pricing.js';
 
-// AnalyticsStore + InsightsStore + the analytics DB ladder moved to
-// @centraid/analytics (#151). That package builds its provider through the
-// shared `makeMigratedDbProvider` exported above; app-engine emits run
-// summaries through the injected `RunSummarySink` and never imports back.
+// Insights domain — AnalyticsStore + InsightsStore + the analytics DB ladder.
+// Lives in the `insights/` sub-module behind a one-way internal boundary:
+// `insights/` builds its provider through the shared `makeMigratedDbProvider`
+// above and implements the `RunSummarySink` contract, while the rest of
+// app-engine emits run summaries through the injected sink and never imports
+// back into `insights/`. Folded in from the former `@centraid/analytics`
+// package (#151), kept as its own folder + barrel.
+export * from './insights/index.js';
 
 // App scaffolders + clone moved to @centraid/app-blueprints (#151).

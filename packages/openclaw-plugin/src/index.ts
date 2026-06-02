@@ -26,9 +26,10 @@ import {
   UserStore,
   makeUserStoreRouteHandler,
   makeGatewayDbProvider,
+  AnalyticsStore,
+  makeAnalyticsDbProvider,
 } from '@centraid/app-engine';
-import { AnalyticsStore, makeAnalyticsDbProvider } from '@centraid/analytics';
-import { listAutomations, makeWebhookRouteHandler } from '@centraid/automation';
+import { listAutomations, makeWebhookRouteHandler } from '@centraid/automation-engine';
 import { WorktreeStore } from '@centraid/worktree-store';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
@@ -59,7 +60,7 @@ export type {
   LogEntry,
   LogLevel,
 } from '@centraid/app-engine';
-export type { AutomationManifest, AutomationManifestRequires } from '@centraid/automation';
+export type { AutomationManifest, AutomationManifestRequires } from '@centraid/automation-engine';
 
 export default definePluginEntry({
   id: 'centraid',

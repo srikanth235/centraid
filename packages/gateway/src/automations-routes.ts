@@ -31,6 +31,8 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AgentRunsStore,
+  AnalyticsStore,
+  InsightsStore,
   makeRuntimeDbProvider,
   type AgentRunNodeRow,
   type AgentRunRow,
@@ -39,8 +41,11 @@ import {
   type RunStreamEvent,
   type RunSummary,
 } from '@centraid/app-engine';
-import { AnalyticsStore, InsightsStore } from '@centraid/analytics';
-import { listAutomations, parseAutomationRef, readAppOwnedAutomation } from '@centraid/automation';
+import {
+  listAutomations,
+  parseAutomationRef,
+  readAppOwnedAutomation,
+} from '@centraid/automation-engine';
 import type { WorktreeStore } from '@centraid/worktree-store';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 
