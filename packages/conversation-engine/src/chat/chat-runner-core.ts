@@ -1,9 +1,16 @@
 /*
  * Chat-runner core — the one place the per-turn chat loop lives.
  *
- * `runAgentTurn` is mode-agnostic. Every `ChatRunner` the gateway's `/_chat`
- * route can inject does the same thing around it: load prefs, resolve a cwd,
- * build the system prompt, thread the `centraid_*` dispatcher into a
+ * This is the chat counterpart to the automation fire spine, and it lives in
+ * the same backend-agnostic engine package: both are "runners over the run
+ * ledger" that differ only in driver and fan-out (a chat run is one
+ * model-driven turn; an automation fire is a script-driven fan-out of many).
+ *
+ * `makeChatRunnerCore` is backend-agnostic. The actual model turn is injected
+ * as a `RunTurnFn` (`runTurn`) — agent-runtime passes its codex/claude
+ * `runAgentTurn`; tests pass a stub. Every `ChatRunner` the gateway's `/_chat`
+ * route can inject does the same thing around that turn: load prefs, resolve a
+ * cwd, build the system prompt, thread the `centraid_*` dispatcher into a
  * `ToolContext`, resume when the prior turn used the same runner kind, drive
  * the turn, and (optionally) run a post-turn side effect. That spine used to
  * be copied into both `makeChatRunner` (data-only chat) and the gateway's
@@ -19,18 +26,24 @@
  *   - `extraPath`             — builder chat puts the bundled `centraid` CLI
  *                              on the agent's PATH; data chat doesn't.
  *
- * The interface (`ChatRunner`, `ChatRunInput`, `ChatRunResult`) stays in
- * app-engine; this is its in-process implementation, same split as the agent
- * turn itself.
+ * The interface (`ChatRunner`, `ChatRunInput`, `ChatRunResult`) and the
+ * turn contract (`RunTurnFn`, `AgentTurnInput`, `ToolContext`) both live in
+ * app-engine; this is the host-agnostic spine that wires them together.
  */
 
 import { randomUUID } from 'node:crypto';
-import type { ChatRunInput, ChatRunResult, ChatRunner, Dispatcher } from '@centraid/app-engine';
-import { runAgentTurn, type AgentTurnInput, type ToolContext } from './runtime.js';
-import type { RunnerPrefs } from './types.js';
+import type {
+  AgentTurnInput,
+  ChatRunInput,
+  ChatRunResult,
+  ChatRunner,
+  Dispatcher,
+  RunnerPrefs,
+  RunTurnFn,
+  ToolContext,
+} from '@centraid/app-engine';
 
-/** The thin turn-driver the core depends on — `runAgentTurn` by default. */
-export type RunTurnFn = typeof runAgentTurn;
+export type { RunTurnFn };
 
 /** Per-turn context handed to the injected `buildExtraSystemPrompt` /
  *  `onTurnComplete` seams once prefs are loaded and the cwd is resolved. */
@@ -82,8 +95,12 @@ export interface ChatRunnerCoreOptions {
    * draft to override to).
    */
   cwdIsDraftWorktree?: boolean;
-  /** Turn driver — defaults to `runAgentTurn`; injected in tests. */
-  runTurn?: RunTurnFn;
+  /**
+   * The model turn driver. agent-runtime injects its codex/claude
+   * `runAgentTurn`; tests inject a stub. Required — this package is
+   * backend-agnostic and never imports a concrete backend.
+   */
+  runTurn: RunTurnFn;
 }
 
 /**
@@ -92,7 +109,7 @@ export interface ChatRunnerCoreOptions {
  * are thin configs over this.
  */
 export function makeChatRunnerCore(opts: ChatRunnerCoreOptions): ChatRunner {
-  const runTurn = opts.runTurn ?? runAgentTurn;
+  const runTurn = opts.runTurn;
 
   return {
     async run(input: ChatRunInput): Promise<ChatRunResult> {

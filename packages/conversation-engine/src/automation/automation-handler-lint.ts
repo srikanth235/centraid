@@ -1,34 +1,29 @@
 /**
- * Static replay-safety lint for automation `handler.js` (issue #167).
+ * Static handler lint for automation `handler.js` (issue #167).
  *
- * Under the #166 journal/replay runtime a fire is a chat whose brain is
- * `handler.js`: the handler **re-runs from the top on every step**, and a
- * `ctx.*` call whose ordinal already has a settled journal entry returns the
- * recorded result instead of re-dispatching (so `ctx.agent` is never re-billed
- * and `ctx.tool` side-effects are not re-run). Replay is sound only if the
- * handler issues the *same ordered sequence* of `ctx.*` calls on every run —
- * i.e. it is deterministic between syscalls. Nondeterminism (a wall-clock read,
- * a random value, a raw I/O call) shifts ordinals and desynchronizes the
- * journal; the runner does not police this (see `automation-handler-journal.ts`),
- * so the handler must own it.
+ * An automation fire is a chat whose brain is `handler.js`. Its outside effects
+ * must go through the `ctx.*` surface (`ctx.tool` / `ctx.agent` / `ctx.state` /
+ * `ctx.runs`): those calls are recorded in the run ledger (`run_nodes`) and
+ * gated by the manifest's `requires.tools` allowlist. A raw `fetch`/`fs` call is
+ * both invisible to the run history and outside the allowlist. The handler
+ * should also be deterministic: a crashed fire simply re-runs from the top
+ * (there is no resume journal), so a wall-clock read or a random value makes the
+ * re-run diverge and re-fire effects with different ids.
  *
  * This module is the *authoring-time* guard: a lexical scan that flags the
- * common replay-unsafe patterns (`Date.now()`, `Math.random()`, `randomUUID()`,
- * raw `fetch`/`fs`, ambient `process.*`, …) so the builder sees an authoring
- * error at publish time rather than a silent resume bug at fire time. It is a
- * lint, not a sandbox — it cannot catch every escape (an aliased global, an
- * `eval`), but it catches what a generated/edited handler realistically emits.
+ * common offenders (`Date.now()`, `Math.random()`, `randomUUID()`, raw
+ * `fetch`/`fs`, ambient `process.*`, …) so the builder sees an authoring error
+ * at publish time rather than a surprise at fire time. It is a lint, not a
+ * sandbox — it cannot catch every escape (an aliased global, an `eval`), but it
+ * catches what a generated/edited handler realistically emits.
  *
- * All effects and nondeterminism must go through the journaled `ctx.*` surface
- * (`ctx.tool` / `ctx.agent` / `ctx.invoke` / `ctx.state` / `ctx.runs`). There is
- * deliberately no `ctx.now()` / `ctx.random()` / `ctx.uuid()` in the runtime:
- * the deterministic alternatives are watermarks via `ctx.runs.last()` /
- * `ctx.state`, ids derived from journaled inputs, and timestamps returned by a
- * `ctx.tool` call. The rules below only ever match raw globals, so if such
- * primitives are added later they pass untouched (anything on `ctx.` is fine).
+ * The deterministic alternatives are watermarks via `ctx.runs.last()` /
+ * `ctx.state`, ids derived from the run's inputs, and timestamps returned by a
+ * `ctx.tool` call. The rules below only ever match raw globals, so anything on
+ * the `ctx.` surface passes untouched.
  */
 
-/** One replay-unsafe pattern found in a handler. */
+/** One flagged pattern found in a handler. */
 export interface HandlerLintFinding {
   /** Stable rule id (e.g. `no-date-now`). */
   readonly rule: string;
@@ -57,10 +52,10 @@ interface LintRule {
 }
 
 /**
- * The replay-unsafe patterns. Each `re` is a global regex run over the
+ * The flagged patterns. Each `re` is a global regex run over the
  * comment-and-string-masked source, so a match is real code — never a mention
  * inside a comment or a string/template literal (interpolated `${…}` code is
- * still scanned). Keep messages prescriptive: say *why* it breaks replay and
+ * still scanned). Keep messages prescriptive: say *why* it is a problem and
  * what to use instead.
  */
 const RULES: readonly LintRule[] = [
@@ -68,56 +63,56 @@ const RULES: readonly LintRule[] = [
     id: 'no-date-now',
     re: /\bDate\.now\s*\(/g,
     message:
-      'Date.now() reads the wall clock — replays return a different value and desync the journal. Derive time windows from ctx.runs.last() / ctx.state, or read a timestamp from a ctx.tool result.',
+      'Date.now() reads the wall clock, so a re-run produces a different value. Derive time windows from ctx.runs.last() / ctx.state, or read a timestamp from a ctx.tool result.',
   },
   {
     id: 'no-new-date',
     re: /\bnew\s+Date\s*\(\s*\)/g,
     message:
-      'new Date() (no args) reads the wall clock — nondeterministic across replays. Pass an explicit ms/ISO argument, or derive "now" from ctx.runs.last() / ctx.state. (new Date(value) with an argument is fine.)',
+      'new Date() (no args) reads the wall clock — nondeterministic across re-runs. Pass an explicit ms/ISO argument, or derive "now" from ctx.runs.last() / ctx.state. (new Date(value) with an argument is fine.)',
   },
   {
     id: 'no-math-random',
     re: /\bMath\.random\s*\(/g,
     message:
-      'Math.random() is nondeterministic — each replay produces a different value. Derive any needed variation from journaled inputs (ctx.input, ctx.state, a ctx.tool result).',
+      'Math.random() is nondeterministic — each run produces a different value. Derive any needed variation from the run inputs (ctx.input, ctx.state, a ctx.tool result).',
   },
   {
     id: 'no-random-uuid',
     re: /\brandomUUID\s*\(/g,
     message:
-      'randomUUID() mints a fresh id every replay, desyncing the journal. Derive ids deterministically from journaled inputs, or have a ctx.tool mint and return the id.',
+      'randomUUID() mints a fresh id on every run, so a re-run after a crash duplicates work under a new id. Derive ids deterministically from the run inputs, or have a ctx.tool mint and return the id.',
   },
   {
     id: 'no-random-bytes',
     re: /\b(?:getRandomValues|randomBytes|randomFillSync|randomInt)\s*\(/g,
     message:
-      'crypto randomness is nondeterministic — replays diverge. Use values derived from journaled inputs instead.',
+      'crypto randomness is nondeterministic — re-runs diverge. Use values derived from the run inputs instead.',
   },
   {
     id: 'no-performance-now',
     re: /\bperformance\.now\s*\(/g,
     message:
-      'performance.now() reads a monotonic wall clock — nondeterministic across replays. Measure via journaled ctx.runs timestamps instead.',
+      'performance.now() reads a monotonic wall clock — nondeterministic across runs. Measure via ctx.runs timestamps instead.',
   },
   {
     id: 'no-raw-fetch',
     re: /\bfetch\s*\(/g,
     message:
-      'A raw fetch() is un-journaled network I/O — it re-runs on every replay and is not recorded. Reach external data through a ctx.tool(...) call (an MCP tool), which is journaled and replayed.',
+      'A raw fetch() is network I/O that bypasses the run ledger and the requires.tools allowlist. Reach external data through a ctx.tool(...) call (an MCP tool), which is recorded and declared.',
   },
   {
     id: 'no-node-io-import',
     re: /\b(?:from|require\s*\(\s*)\s*['"](?:node:)?(?:fs(?:\/promises)?|child_process|net|http|https|dns|dgram|tls|cluster)['"]/g,
     message:
-      'Direct node I/O modules (fs, child_process, net, http, …) bypass the journal — their effects re-run on every replay and are never recorded. All I/O must go through ctx.tool(...).',
+      'Direct node I/O modules (fs, child_process, net, http, …) bypass the run ledger and the requires.tools allowlist — their effects are unrecorded and undeclared. All I/O must go through ctx.tool(...).',
     target: 'withStrings',
   },
   {
     id: 'no-process-ambient',
     re: /\bprocess\.(?:env|hrtime|cwd|uptime|argv|pid|platform)\b/g,
     message:
-      'Reading ambient process state (env, hrtime, cwd, argv, …) makes the handler depend on the host environment, not its journaled inputs. Pass configuration through the manifest / ctx.state instead.',
+      'Reading ambient process state (env, hrtime, cwd, argv, …) makes the handler depend on the host environment, not its run inputs. Pass configuration through the manifest / ctx.state instead.',
   },
 ];
 
@@ -268,9 +263,9 @@ function offsetToPosition(src: string, offset: number): { line: number; column: 
 }
 
 /**
- * Scan a handler's source for replay-unsafe patterns. Returns one finding per
- * match, sorted by position. An empty array means the handler is, lexically,
- * replay-safe. Pure — no I/O, no throw.
+ * Scan a handler's source for ambient-I/O and nondeterminism patterns. Returns
+ * one finding per match, sorted by position. An empty array means the handler
+ * is, lexically, clean. Pure — no I/O, no throw.
  */
 export function lintAutomationHandlerSource(source: string): HandlerLintFinding[] {
   const codeOnly = maskNonCode(source, true);
@@ -311,11 +306,11 @@ export function formatHandlerLintError(
   const lines = findings.map(
     (f) => `  ${file}:${f.line}:${f.column} [${f.rule}] ${f.message}\n    → ${f.snippet}`,
   );
-  const count =
-    findings.length === 1 ? '1 replay-unsafe pattern' : `${findings.length} replay-unsafe patterns`;
+  const count = findings.length === 1 ? '1 unsafe pattern' : `${findings.length} unsafe patterns`;
   return (
-    `${file} has ${count} — automation handlers must be deterministic between ctx.* calls so the ` +
-    `journal/replay runtime can resume them. Route all effects and nondeterminism through ctx.*:\n` +
+    `${file} has ${count} — an automation handler's effects must go through the audited ctx.* ` +
+    `rails, and it must stay deterministic so a re-run does not diverge. Route all I/O and ` +
+    `nondeterminism through ctx.*:\n` +
     lines.join('\n')
   );
 }

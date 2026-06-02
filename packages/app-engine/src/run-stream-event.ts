@@ -31,7 +31,7 @@ export type RunStreamEvent =
       /** Set when the node is part of a parallel batch (≥2 `ctx.tool` calls). */
       batchId?: number;
       kind: AgentRunNodeKind;
-      /** Tool name / `'agent'` / `ctx.invoke` target. */
+      /** Tool name or `'agent'`. */
       name?: string;
       args?: unknown;
     }

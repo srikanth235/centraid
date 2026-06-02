@@ -121,25 +121,6 @@ const recentFails = await ctx.runs.list({ status: 'error', limit: 10 });
 
 Each row carries `runId`, `automationId`, `status`, `startedAt`, `endedAt`, `summary`, and `output`.
 
-## `ctx.invoke(handle, { input })`
-
-Invoke another automation as a **subagent** — a child conversation that runs to completion and returns. Unlike a handoff (which transfers control and never comes back), `ctx.invoke` is call-and-return: the child runs its own `run` and hands its `output` back to the caller. Returns `{ output, childRunId }`.
-
-```js
-const { output } = await ctx.invoke('mail/triage-inbox', {
-  input: { since: lastCheck },
-});
-```
-
-**Handle grammar:**
-
-- `<appId>/<automationId>` — fully qualified, any app.
-- `<automationId>` — bare id, resolves to a sibling in the same app folder.
-
-The subagent call is recorded as a `run_nodes` row tagged `kind: "invoke"` on the parent, with the target handle, input, output, and the child's `runId`. The child run (sub-conversation) itself shows up in the run list as a normal entry with `trigger_origin: "manual"` (or however the host tags invoked fires).
-
-**`ctx.invoke` is only wired when the host runtime supplies an `invokeDispatcher`.** Currently the desktop wires it; the cloud gateway plans to. Calling `ctx.invoke` without a wired dispatcher returns `{ ok: false, error: 'ctx.invoke is not wired by the host runtime' }` — which surfaces as a thrown error in the handler.
-
 ## `onFailure` — declarative failure handoff
 
 When the handler throws (or a `ctx.tool` call rejects and the handler doesn't catch), the runtime checks `manifest.onFailure`. If set, it fires that sibling automation with the failure context as `input`:
@@ -152,7 +133,7 @@ When the handler throws (or a `ctx.tool` call rejects and the handler doesn't ca
 }
 ```
 
-The fallback automation receives the failure info as its `input` and can log to a table, post to Slack via `ctx.tool`, or escalate to another automation via `ctx.invoke`. It runs as a separate audited run, not as a child of the failed one.
+The fallback automation receives the failure info as its `input` and can log to a table or post to Slack via `ctx.tool`. It runs as a separate audited run, not as a child of the failed one.
 
 ## A complete handler
 

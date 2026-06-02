@@ -18,7 +18,7 @@ export default async ({ ctx, log }) => {
 `;
 
 describe('lintAutomationHandlerSource', () => {
-  it('passes a replay-safe handler that routes everything through ctx.*', () => {
+  it('passes a clean handler that routes everything through ctx.*', () => {
     assert.deepEqual(lintAutomationHandlerSource(CLEAN_HANDLER), []);
   });
 
@@ -120,6 +120,6 @@ describe('formatHandlerLintError', () => {
     assert.ok(msg);
     assert.match(msg!, /automations\/main\/handler\.js/);
     assert.match(msg!, /no-date-now/);
-    assert.match(msg!, /1 replay-unsafe pattern/);
+    assert.match(msg!, /1 unsafe pattern/);
   });
 });

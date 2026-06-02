@@ -7,7 +7,7 @@
  * three `ctx.agent` calls — assess the week, write the encouragement
  * line, suggest one tip — and writes the recap row.
  *
- * Each `ctx.agent` / `ctx.tool` / `ctx.invoke` call is captured as a
+ * Each `ctx.agent` / `ctx.tool` call is captured as a
  * step on the run, with its own timing, args and output.
  *
  * @type {import('@centraid/openclaw-plugin').AutomationHandler}

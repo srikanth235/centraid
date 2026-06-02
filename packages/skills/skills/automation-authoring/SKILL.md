@@ -1,6 +1,6 @@
 ---
 name: automation-authoring
-description: How to author a centraid automation app — the automation.json manifest, the scheduled handler.js contract (ctx.tool/agent/state/runs/invoke), cron and webhook triggers, and the draft-then-enable flow. Use whenever creating or editing the files of a UI-less automation app.
+description: How to author a centraid automation app — the automation.json manifest, the scheduled handler.js contract (ctx.tool/agent/state/runs), cron and webhook triggers, and the draft-then-enable flow. Use whenever creating or editing the files of a UI-less automation app.
 ---
 ## Centraid automation authoring
 
@@ -82,29 +82,28 @@ The handler receives `{ ctx, log }` — no `db`, no `body`, no `query`, no `wind
 - `ctx.agent({ prompt, json? })` — one constrained model turn. Always pass a `json` schema when the result is consumed structurally — it both parses the result and detects a model failure.
 - `ctx.state.get(key)` / `ctx.state.set(key, value)` / `ctx.state.del(key)` — cross-run key/value store scoped to this automation. Use for watermarks, cursors, ETags, dedup hashes. JSON-serializable values only; survives restart.
 - `ctx.runs.last({ status })` / `ctx.runs.list({ since, limit })` — this automation's prior run records. Use for "since last successful run" and aggregation windows. The in-progress self-run is filtered out.
-- `ctx.invoke(id, { input })` — synchronously fire a sibling automation and receive its `output`.
-- `ctx.input` — the payload for an invoked or `onFailure` run; `undefined` for a plain scheduled fire.
+- `ctx.input` — the payload this run was fired with (a webhook body, or the `onFailure` summary); `undefined` for a plain scheduled fire.
 
 Return `{ summary?, output? }`: `summary` is the one-line description shown in the run list; `output` is persisted and, if the manifest declares `outputSchema`, validated against it (a shape mismatch fails the run).
 
 There is **no runtime retry** on `ctx.tool` — a failed call rejects the Promise. Classify the error and write your own `try/catch` backoff when retry is warranted.
 
-### Replay-determinism contract (non-negotiable)
+### Audited rails + determinism (non-negotiable)
 
-A fire runs under a **journal/replay** model: the runtime **re-runs the handler from the top on every step**, and a `ctx.*` call whose result was already recorded in the journal is *fast-forwarded* — it returns the recorded value instead of dispatching again (so `ctx.agent` is never re-billed and `ctx.tool` side effects don't re-fire). Replay is sound **only if the handler issues the same ordered sequence of `ctx.*` calls every run** — i.e. it is deterministic between syscalls. Ordinals are assigned in call order; any nondeterminism shifts them and desynchronizes the journal.
+Every outside effect **must go through the `ctx.*` surface**. `ctx.tool` / `ctx.agent` / `ctx.state` / `ctx.runs` calls are recorded in the run ledger (the run history you see per fire) and `ctx.tool` is gated by the `requires.tools` allowlist. A raw `fetch(...)` or `fs` call is both **invisible to the run history** and **outside the allowlist** — so it never appears in a fire's trace and can't be reasoned about.
 
-So a handler **must not**:
+Keep the handler **deterministic** too. A fire has no crash-resume journal: if a fire dies partway, it simply re-runs from the top. A handler that reads the wall clock or a random value produces a *different* result on that re-run and re-fires effects under fresh ids — non-idempotent and hard to dedup. So a handler **must not**:
 
 - Read the wall clock: no `Date.now()`, no `new Date()` (argless), no `performance.now()`. (`new Date(value)` with an explicit argument is fine.)
 - Use randomness: no `Math.random()`, no `crypto.randomUUID()` / `randomBytes()` / `getRandomValues()`.
 - Touch ambient I/O directly: no raw `fetch(...)`, no `node:fs` / `child_process` / `net` / `http`, no `process.env` / `process.cwd()`.
 
-There is intentionally **no `ctx.now()` / `ctx.random()` / `ctx.uuid()`** — get these needs deterministically instead:
+There is no `ctx.now()` / `ctx.random()` / `ctx.uuid()` — get these needs deterministically instead:
 
-- **"Now" / "since last run"** → derive from `ctx.runs.last({ status: 'ok' })` (its `startedAt`/`endedAt`) or a watermark in `ctx.state`. If you truly need the current instant, read it off a `ctx.tool` result (journaled).
-- **A unique/derived id** → derive it from journaled inputs (`ctx.input`, `ctx.state`, a `ctx.tool` result), or have a `ctx.tool` mint it.
+- **"Now" / "since last run"** → derive from `ctx.runs.last({ status: 'ok' })` (its `startedAt`/`endedAt`) or a watermark in `ctx.state`. If you truly need the current instant, read it off a `ctx.tool` result.
+- **A unique/derived id** → derive it from the run's inputs (`ctx.input`, `ctx.state`, a `ctx.tool` result), or have a `ctx.tool` mint it.
 
-**Pure JS between syscalls is the whole point** — loops, conditionals, filters, maps, string/JSON shaping all run free and deterministically. Put as much work there as possible. The builder's publish gate runs a static lint for these patterns, so a replay-unsafe handler is rejected at publish time, not discovered as a resume bug at fire time — keep the handler clean.
+**Pure JS between `ctx.*` calls is free** — loops, conditionals, filters, maps, string/JSON shaping. Put as much work there as possible. The builder's publish gate runs a static lint for these patterns, so an unsafe handler is rejected at publish time, not discovered at fire time — keep the handler clean.
 
 ### Two cost rails
 

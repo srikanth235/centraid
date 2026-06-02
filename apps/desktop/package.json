@@ -19,7 +19,7 @@
   "dependencies": {
     "@centraid/agent-runtime": "workspace:*",
     "@centraid/app-engine": "workspace:*",
-    "@centraid/automation-engine": "workspace:*",
+    "@centraid/conversation-engine": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
     "@centraid/gateway": "workspace:*"
   },

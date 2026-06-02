@@ -102,18 +102,16 @@ function defaultAutomationId(appId: string): string {
 const DEFAULT_HANDLER = `/**
  * Automation handler — runs on the schedule/trigger in automation.json.
  *
- * REPLAY-DETERMINISM CONTRACT (read before editing)
- * The runtime re-runs this handler from the top on every step; a ctx.* call
- * whose result was already journaled is fast-forwarded (returns the recorded
- * value) instead of running again. That only works if the handler issues the
- * SAME ordered sequence of ctx.* calls every run — i.e. it is deterministic
- * between syscalls. So:
+ * DETERMINISM & THE AUDITED ctx.* RAILS (read before editing)
+ * All side effects and I/O MUST go through ctx.* — those calls are recorded in
+ * the run ledger and gated by requires.tools, so a raw fetch()/fs call is both
+ * invisible to the run history and outside the allowlist. Keep the handler
+ * deterministic too: a crashed fire re-runs from the top (there is no resume
+ * journal), so nondeterminism makes the re-run diverge and re-fire effects. So:
  *   • No ambient nondeterminism: no Date.now(), no new Date(), no Math.random(),
  *     no randomUUID(), no reading env/clock/filesystem/network directly.
- *   • All side effects + I/O go through ctx.tool (journaled + replayed) — never
- *     a raw fetch()/fs call.
- *   • Pure JS between syscalls (loops, conditionals, transforms) is the point —
- *     that's free and deterministic.
+ *   • All side effects + I/O go through ctx.tool — never a raw fetch()/fs call.
+ *   • Pure JS between ctx.* calls (loops, conditionals, transforms) is free.
  *   • Need "now" or a watermark? Derive it from ctx.runs.last() / ctx.state, or
  *     read a timestamp off a ctx.tool result — not the wall clock.
  *
@@ -125,8 +123,7 @@ const DEFAULT_HANDLER = `/**
  *     tier in automation.json#requires.model.
  *
  * \`ctx\` surface: ctx.tool · ctx.agent · ctx.state.get/set/del · ctx.runs.last/list
- * · ctx.invoke(ref, { input }) · ctx.input. Return \`{ summary?, output? }\` —
- * \`summary\` shows in the run list.
+ * · ctx.input. Return \`{ summary?, output? }\` — \`summary\` shows in the run list.
  *
  * @type {import('@centraid/openclaw-plugin').AutomationHandler}
  */
