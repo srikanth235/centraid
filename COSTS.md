@@ -588,3 +588,5 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-fcf9ef93-e2e-1780375820 | claude-code | fcf9ef93-e2e8-4e54-937d-2fe482adb83b | #162 | claude-opus-4-8 | 66892 | 717375 | 27168569 | 193863 | 978130 | 23.2489 |  |
 | claude-code-8f557f80-41b-1780381277 | claude-code | 8f557f80-41ba-4b77-8579-758f2b9938cf | #164 | claude-opus-4-8 | 48873 | 744724 | 26888210 | 264477 | 1058074 | 24.9549 | refactor(gateway): add in-process host execution seams to buildGateway() (#164)  |
 | claude-code-8f557f80-41b-1780381340 | claude-code | 8f557f80-41ba-4b77-8579-758f2b9938cf | #164 | claude-opus-4-8 | 8 | 7393 | 885351 | 11862 | 19263 | 0.7855 | refactor(openclaw-plugin): consume buildGateway() + delete vestigial cron glue ( |
+| claude-code-f840d9b8-bbc-1780392952 | claude-code | f840d9b8-bbc8-4ce2-ac65-62179d31f87c | #166 | claude-opus-4-8 | 56171 | 746165 | 59134516 | 335034 | 1137370 | 42.8875 |  |
+| claude-code-f840d9b8-bbc-1780393109 | claude-code | f840d9b8-bbc8-4ce2-ac65-62179d31f87c | #166 | claude-opus-4-8 | 1324 | 29826 | 8662327 | 24942 | 56092 | 5.1477 |  |

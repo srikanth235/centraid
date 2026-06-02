@@ -44,15 +44,40 @@ describe('mock-llm-server: bearer auth', () => {
 });
 
 describe('mock-llm-server: stage + serve', () => {
-  it('returns 503 when no turn is staged for the dispatch', async () => {
+  it('parks a request with no staged turn and releases it when one is staged (issue #166)', async () => {
     await withServer(async (server) => {
-      const { bearerToken } = server.mintDispatchToken();
-      const res = await fetch(`${server.baseUrl}/messages`, {
+      const { dispatchId, bearerToken } = server.mintDispatchToken();
+      // Fire the request BEFORE staging — the persistent session parks it
+      // instead of 503-ing, then `stageTurn` releases it.
+      const resPromise = fetch(`${server.baseUrl}/messages`, {
         method: 'POST',
         headers: { authorization: `Bearer ${bearerToken}`, accept: 'application/json' },
         body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
       });
-      assert.equal(res.status, 503);
+      // Give the request time to land + park, then stage the turn.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      server.stageTurn(dispatchId, { text: 'released', stopReason: 'end_turn' });
+      const res = await resPromise;
+      assert.equal(res.status, 200);
+      const text = await res.text();
+      assert.match(text, /"text":"released"/);
+    });
+  });
+
+  it('endDispatch releases a parked request with a benign end_turn (issue #166)', async () => {
+    await withServer(async (server) => {
+      const { dispatchId, bearerToken } = server.mintDispatchToken();
+      const resPromise = fetch(`${server.baseUrl}/messages`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${bearerToken}`, accept: 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      server.endDispatch(dispatchId);
+      const res = await resPromise;
+      assert.equal(res.status, 200);
+      const text = await res.text();
+      assert.match(text, /"stop_reason":"end_turn"/);
     });
   });
 
