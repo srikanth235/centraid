@@ -8,18 +8,21 @@
  */
 
 import type {
+  AutomationAgentDispatcher,
   AutomationDispatchContext,
   AutomationInvokeDispatcher,
   AutomationToolDispatcher,
   AutomationToolResult,
 } from './automation-handler-runner.js';
-import type { AgentRunsStore } from '@centraid/app-engine';
+import type { AgentRunsStore, ChatStreamEvent } from '@centraid/app-engine';
 import {
   closeRunNode,
   openRunNode,
   rowToRunRef,
+  usageCloseFields,
   type RunEventSink,
 } from './automation-handler-audit.js';
+import type { RunJournal } from './automation-handler-journal.js';
 
 export interface ToolCallWire {
   name: string;
@@ -34,6 +37,12 @@ export interface AuditState {
   nextBatchId: number;
   /** Live run-stream sink. No-op until the host wires its bus (issue #158). */
   emit: RunEventSink;
+  /**
+   * Journal of a prior run replayed on resume (issue #166, Phase 3). Empty
+   * for a fresh fire; on resume it serves recorded `ctx.tool`/`ctx.agent`/
+   * `ctx.invoke` results so already-done work is not re-dispatched.
+   */
+  journal: RunJournal;
 }
 
 export function nextOrdinal(audit: AuditState): number {
@@ -64,6 +73,40 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
   const ordinals = calls.map(() => nextOrdinal(audit));
   const batchId = nextBatchIdFor(audit, calls.length);
   const started = Date.now();
+
+  // Resume replay (issue #166, Phase 3): if every call in this batch has a
+  // settled, successful journal entry from the prior run, serve the recorded
+  // results without re-dispatching — no CLI session, no tool side-effects.
+  // A partially-journaled batch (the crash landed mid-batch) re-runs whole.
+  const replay = ordinals.map((o) => audit.journal.replayable(o));
+  if (replay.length > 0 && replay.every((e) => e !== undefined)) {
+    return calls.map((call, i) => {
+      const ended = Date.now();
+      const result: AutomationToolResult = { ok: true, result: replay[i]!.output };
+      const nodeId = openRunNode({
+        store: audit.store,
+        emit: audit.emit,
+        runId: audit.runId,
+        ordinal: ordinals[i]!,
+        ...(batchId !== undefined ? { batchId } : {}),
+        kind: 'tool',
+        name: call.name,
+        args: call.args,
+        started,
+      });
+      closeRunNode({
+        store: audit.store,
+        emit: audit.emit,
+        nodeId,
+        ordinal: ordinals[i]!,
+        ok: true,
+        result: replay[i]!.output,
+        started,
+        ended,
+      });
+      return result;
+    });
+  }
   // Open every node (durable "running" row + `node.start`) BEFORE the batch
   // dispatches, so the parallel lane shows all calls in flight at once.
   const nodeIds = calls.map((call, i) =>
@@ -132,6 +175,105 @@ export interface CtxReply {
   ok: boolean;
   result?: unknown;
   error?: string;
+}
+
+/**
+ * Service one `ctx.agent` call: open an `agent` run node, dispatch (or replay
+ * from the resume journal), forward streamed chat events as `node.delta`, and
+ * settle the node with the token/model rollup. Returns the reply the runner
+ * sends back to the worker. Extracted from the runner so each file stays under
+ * the repo-hygiene line cap (issue #166).
+ */
+export async function handleAgentMessage(
+  audit: AuditState,
+  dispatchCtx: AutomationDispatchContext,
+  agentDispatcher: AutomationAgentDispatcher,
+  prompt: string,
+  json: unknown,
+): Promise<CtxReply> {
+  const ordinal = nextOrdinal(audit);
+  const started = Date.now();
+
+  // Resume replay (issue #166, Phase 3): a journaled `ctx.agent` call returns
+  // its recorded answer WITHOUT touching the real provider — the billed
+  // inference is never paid twice. Recorded as a fresh node so this run is
+  // itself a complete journal for a later resume.
+  const replayed = audit.journal.replayable(ordinal);
+  if (replayed) {
+    const nodeId = openRunNode({
+      store: audit.store,
+      emit: audit.emit,
+      runId: audit.runId,
+      ordinal,
+      kind: 'agent',
+      name: 'agent',
+      args: { prompt },
+      started,
+    });
+    closeRunNode({
+      store: audit.store,
+      emit: audit.emit,
+      nodeId,
+      ordinal,
+      ok: true,
+      result: replayed.output,
+      started,
+      ended: Date.now(),
+    });
+    return { ok: true, result: replayed.output };
+  }
+
+  const nodeId = openRunNode({
+    store: audit.store,
+    emit: audit.emit,
+    runId: audit.runId,
+    ordinal,
+    kind: 'agent',
+    name: 'agent',
+    args: { prompt },
+    started,
+  });
+  // When the runner streams (issue #158, Phase 2), forward each chat event as a
+  // `node.delta` on this agent node, and remember the last `usage` event so
+  // `closeRunNode` can persist the token/model rollup.
+  let lastUsage: Extract<ChatStreamEvent, { type: 'usage' }> | undefined;
+  const onEvent = (ev: ChatStreamEvent): void => {
+    if (ev.type === 'usage') lastUsage = ev;
+    try {
+      audit.emit({ type: 'node.delta', ordinal, event: ev });
+    } catch {
+      /* swallow */
+    }
+  };
+  try {
+    const result = await agentDispatcher({ prompt, json, onEvent }, dispatchCtx);
+    closeRunNode({
+      store: audit.store,
+      emit: audit.emit,
+      nodeId,
+      ordinal,
+      ok: true,
+      result,
+      started,
+      ended: Date.now(),
+      ...usageCloseFields(lastUsage),
+    });
+    return { ok: true, result };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    closeRunNode({
+      store: audit.store,
+      emit: audit.emit,
+      nodeId,
+      ordinal,
+      ok: false,
+      error,
+      started,
+      ended: Date.now(),
+      ...usageCloseFields(lastUsage),
+    });
+    return { ok: false, error };
+  }
 }
 
 export function handleStateMessage(
@@ -206,6 +348,34 @@ export async function handleInvokeMessage(
   }
   const ordinal = nextOrdinal(audit);
   const started = Date.now();
+
+  // Resume replay (issue #166, Phase 3): a journaled child invocation returns
+  // its recorded output without re-firing the child automation.
+  const replayed = audit.journal.replayable(ordinal);
+  if (replayed) {
+    const nodeId = openRunNode({
+      store: audit.store,
+      emit: audit.emit,
+      runId: audit.runId,
+      ordinal,
+      kind: 'invoke',
+      name,
+      args: input,
+      started,
+    });
+    closeRunNode({
+      store: audit.store,
+      emit: audit.emit,
+      nodeId,
+      ordinal,
+      ok: true,
+      result: replayed.output,
+      started,
+      ended: Date.now(),
+    });
+    return { ok: true, result: replayed.output };
+  }
+
   const nodeId = openRunNode({
     store: audit.store,
     emit: audit.emit,

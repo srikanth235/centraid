@@ -83,17 +83,16 @@ export {
 // tools the host runtime actually exposes (issue #80 follow-up).
 export { enumerateHostTools, type HostTool } from './host-tools.js';
 
-// Ephemeral HTTP mock-LLM server used by the local automation runtime
-// (see issue #70). Per-spawn lifecycle, bearer-token-as-dispatch-id
-// correlation, speaks both Anthropic Messages and OpenAI Chat
-// Completions.
+// Mock-LLM server (issue #70) now lives in `@centraid/automation-engine` so
+// both the CLI host (here) and the in-process host (openclaw-plugin) share one
+// persistent-session runtime (issue #166). Re-exported here for back-compat.
 export {
   startMockLlmServer,
   type MockLlmServerHandle,
   type MockLlmServerOptions,
   type StagedTurn,
   type CapturedToolResult,
-} from './mock-llm-server.js';
+} from '@centraid/automation-engine';
 
 // Local-side per-fire orchestrator for automations (issue #90 model-B).
 // Looks up the user-owned automation row and runs its manifest prompt

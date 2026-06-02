@@ -381,3 +381,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-84bfff67f97-1780331281-1 | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | correction | classifier | user insists all checklist items be completed, not deferred |  |
 | steer-84bfff67f97-1780333299-1 | 84bfff67-f979-44fc-8792-27ea5b2ffdbb | #158 | correction | classifier | pushed back on PR #159 with two blocking bugs to fix | fix(automation): settle stranded run nodes + close hung SSE on pre-ledger fire … |
 | steer-de669149b8b-1780339549-1 | de669149-b8b6-4116-b496-424663d4ac4d | #160 | correction | classifier | Pushed back on leaving tarball gated; #155 closed, remove it now | refactor(openclaw): migrate to git-store, drop tarball backend dependency (#160… |
+| steer-f840d9b8bbc-1780394725-1 | f840d9b8-bbc8-4ce2-ac65-62179d31f87c | #166 | correction | classifier | pushed back on deferring Phase 2 step 8; demands full implementation of all phases |  |

@@ -131,6 +131,36 @@ export {
   type AutomationDispatchContext,
 } from './automation-handler-runner.js';
 export { truncateForAudit } from './automation-handler-audit.js';
+// Shared `ctx.agent` answer coercion — every host ends an agent turn with a
+// blob of text and must turn it into the value the handler awaits the same way.
+export { coerceAgentAnswer } from './automation-agent-answer.js';
+// Mock-LLM server + host-agnostic persistent session (issue #166): the
+// token-free `ctx.tool` rail. One long-lived agent session per fire, puppeted
+// by the mock, executes every tool batch; the per-host `driveAgent` is the
+// only thing that varies (CLI subprocess vs. embedded agent).
+export {
+  startMockLlmServer,
+  type MockLlmServerHandle,
+  type MockLlmServerOptions,
+  type StagedTurn,
+  type CapturedToolResult,
+} from './mock-llm-server.js';
+export {
+  startPersistentMockSession,
+  type AgentDriver,
+  type AgentDriveInput,
+  type AgentDriveResult,
+  type PersistentMockSession,
+  type PersistentMockSessionOptions,
+} from './persistent-mock-session.js';
+// Crash-resume journal (issue #166, Phase 3): a prior run's `run_nodes`
+// replayed so already-serviced `ctx.*` calls are not re-dispatched.
+export {
+  buildRunJournal,
+  EMPTY_JOURNAL,
+  type RunJournal,
+  type JournalEntry,
+} from './automation-handler-journal.js';
 
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected

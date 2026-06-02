@@ -4,9 +4,21 @@
  *
  * Split out of `run-automation-local.ts` so that file can stay focused
  * on the per-fire lifecycle (manifest load, audit store, onFailure
- * cascade). This module owns the "live" side: the ephemeral mock-LLM
- * server, the per-batch CLI subprocess spawn, and the `ctx.agent`
- * one-shot against the user's real provider.
+ * cascade). This module owns the "live" side: the persistent mock-LLM
+ * session, the single long-lived CLI subprocess that executes every
+ * `ctx.tool` batch, and the `ctx.agent` one-shot against the user's
+ * real provider.
+ *
+ * Issue #166 — persistent session: a fire spawns ONE CLI session pointed
+ * at the mock and keeps it alive across the whole handler run. The
+ * deterministic handler drives; each `ctx.tool` batch is staged into the
+ * live session (the CLI executes the tools natively through its MCP/auth
+ * machinery and returns `tool_result` blocks), and the session only exits
+ * when the fire ends and the driver stages a final `end_turn`. This
+ * replaces the previous per-batch cold-start spawn: one session, ~0 real
+ * model tokens (the mock dictates every turn), a structurally single and
+ * controlled session. `ctx.agent` is the only billed path — a separate
+ * bounded turn against the user's real provider.
  *
  * Issue #91: an automation is a standalone app — the CLI runs with
  * the app directory as cwd, and the dispatch context carries the
@@ -17,14 +29,13 @@ import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import type {
-  AutomationAgentDispatcher,
-  AutomationDispatchContext,
-  AutomationToolCall,
-  AutomationToolDispatcher,
-  AutomationToolResult,
+import {
+  coerceAgentAnswer,
+  startPersistentMockSession,
+  type AgentDriver,
+  type AutomationAgentDispatcher,
+  type AutomationToolDispatcher,
 } from '@centraid/automation-engine';
-import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 import {
   defaultSpawnCli,
@@ -50,23 +61,6 @@ export interface LiveDispatch {
   agentDispatcher: AutomationAgentDispatcher;
   /** Tear down the mock server + scratch dir. Safe to call once. */
   close(): Promise<void>;
-}
-
-/** Compose the per-batch CLI prompt the mock server expects. */
-function buildBatchPrompt(automationId: string): string {
-  return `<<<centraid:${automationId}>>>\nExecute the staged tool calls and return tool_result blocks.`;
-}
-
-/** Convert worker tool calls into the StagedTurn shape the mock returns. */
-function batchToStagedTurn(calls: readonly AutomationToolCall[]): StagedTurn {
-  return {
-    stopReason: 'tool_use',
-    toolUses: calls.map((c, idx) => ({
-      id: `toolu_${idx}_${randomUUID().slice(0, 8)}`,
-      name: c.name,
-      input: c.args,
-    })),
-  };
 }
 
 /** Drain a spawned CLI's stdout/stderr and resolve once it exits. */
@@ -113,154 +107,46 @@ function normalizeOutputSchema(schema: unknown): unknown {
 }
 
 /**
- * Coerce a CLI's final answer into the shape `ctx.agent` promised: a
- * plain prompt returns the text as-is; a `json` prompt parses it,
- * tolerating a ```json fence the model may wrap around the object.
- */
-function coerceAgentAnswer(text: string, json: unknown): unknown {
-  const trimmed = text.trim();
-  if (!json) return trimmed;
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(trimmed);
-  const candidate = fenced ? fenced[1]!.trim() : trimmed;
-  try {
-    return JSON.parse(candidate) as unknown;
-  } catch (err) {
-    throw new Error(
-      `ctx.agent expected JSON but got: ${trimmed.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
-      { cause: err },
-    );
-  }
-}
-
-/**
- * Stand up the live dispatch surface: an ephemeral mock-LLM server plus
- * a scratch dir. Returns the two dispatchers and a `close()` that tears
- * both down.
+ * Stand up the live dispatch surface for the CLI runner: the shared persistent
+ * mock session (issue #166) plus a scratch dir. The CLI session is started
+ * lazily on the first `ctx.tool` batch (an automation that never calls a tool
+ * never spawns one). The only CLI-specific piece is the `driveAgent` adapter,
+ * which runs `codex exec` / `claude -p` against the mock; everything else (the
+ * mock, batch staging/correlation, timing) is the shared session.
  */
 export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<LiveDispatch> {
   const scratchDir = path.join(opts.workdir, '.automation-scratch', opts.runId);
   await fs.mkdir(scratchDir, { recursive: true });
 
-  interface BatchAwaiter {
-    deliverResults(results: ReadonlyArray<{ id: string; content: string; isError: boolean }>): void;
-  }
-  const batchAwaiters = new Map<string, BatchAwaiter>();
-
-  // Per-call timing (issue #158, Phase 3): the mock signals when it hands the
-  // CLI a tool (start) and when each result lands (finish), keyed by dispatch
-  // then tool-use id. Lets each tool node record its real execution window
-  // instead of the batch span that also covers CLI spawn/teardown.
-  const toolTiming = new Map<string, Map<string, { startedAt?: number; endedAt?: number }>>();
-  const timingFor = (dispatchId: string, id: string): { startedAt?: number; endedAt?: number } => {
-    let perDispatch = toolTiming.get(dispatchId);
-    if (!perDispatch) {
-      perDispatch = new Map();
-      toolTiming.set(dispatchId, perDispatch);
-    }
-    let entry = perDispatch.get(id);
-    if (!entry) {
-      entry = {};
-      perDispatch.set(id, entry);
-    }
-    return entry;
-  };
-
-  const mock = await startMockLlmServer({
-    onLog: opts.onLog,
-    onToolStart: (dispatchId, toolUses) => {
-      const now = Date.now();
-      for (const u of toolUses) timingFor(dispatchId, u.id).startedAt = now;
-    },
-    onToolResults: (dispatchId, results) => {
-      const now = Date.now();
-      for (const r of results) timingFor(dispatchId, r.id).endedAt = now;
-      const pending = batchAwaiters.get(dispatchId);
-      if (pending) pending.deliverResults(results);
-    },
-  });
-
-  const toolDispatcher: AutomationToolDispatcher = async (
-    calls: readonly AutomationToolCall[],
-    ctx: AutomationDispatchContext,
-  ): Promise<AutomationToolResult[]> => {
-    const { dispatchId, bearerToken } = mock.mintDispatchToken();
-    const turn = batchToStagedTurn(calls);
-    mock.stageTurn(dispatchId, turn);
-
-    const resultPromise = new Promise<
-      ReadonlyArray<{ id: string; content: string; isError: boolean }>
-    >((resolve) => {
-      batchAwaiters.set(dispatchId, {
-        deliverResults(results) {
-          batchAwaiters.delete(dispatchId);
-          resolve(results);
-        },
-      });
-    });
-
-    const spawnPromise = opts.spawnCli({
+  // The CLI host adapter: point a `codex exec` / `claude -p` session at the
+  // mock for the lifetime of the fire. Resolves when the CLI exits (`close()`
+  // stages the final `end_turn`).
+  const driveAgent: AgentDriver = async (input) => {
+    const outcome = await opts.spawnCli({
       kind: opts.runner,
-      mockBaseUrl: mock.baseUrl,
-      mockBearerToken: bearerToken,
-      prompt: buildBatchPrompt(ctx.automationId),
+      mockBaseUrl: input.mockBaseUrl,
+      mockBearerToken: input.mockBearerToken,
+      prompt: input.prompt,
       toolsAllow: opts.toolsAllow,
-      cwd: opts.workdir,
+      cwd: input.cwd,
       scratchDir,
-      abortSignal: ctx.abortSignal,
+      abortSignal: input.abortSignal,
     });
-
-    let collected: ReadonlyArray<{ id: string; content: string; isError: boolean }> | undefined;
-    const results = await Promise.race([
-      resultPromise.then((r) => {
-        collected = r;
-        return r;
-      }),
-      spawnPromise.then(() => undefined as undefined),
-    ]);
-
-    if (results) {
-      try {
-        mock.stageTurn(dispatchId, { text: 'ok', stopReason: 'end_turn' });
-      } catch {
-        /* the dispatch may have already cleared */
-      }
-    }
-
-    const cliOutcome = await spawnPromise;
-    batchAwaiters.delete(dispatchId);
-
-    if (!cliOutcome.ok && !collected) {
-      const errMsg = `CLI exited code=${cliOutcome.exitCode ?? '?'}\n${cliOutcome.stderr.slice(0, 2000)}`;
-      return calls.map(() => ({ ok: false, error: errMsg }));
-    }
-
-    const captured = collected ?? [];
-    const byIdx = new Map<number, { content: string; isError: boolean }>();
-    const turnUses = turn.toolUses ?? [];
-    for (const r of captured) {
-      const useIdx = turnUses.findIndex((u) => u.id === r.id);
-      if (useIdx >= 0) byIdx.set(useIdx, { content: r.content, isError: r.isError });
-    }
-    const perDispatch = toolTiming.get(dispatchId);
-    toolTiming.delete(dispatchId);
-    const timing = (idx: number): { startedAt?: number; endedAt?: number } => {
-      const t = perDispatch?.get(turnUses[idx]?.id ?? '');
-      return {
-        ...(t?.startedAt !== undefined ? { startedAt: t.startedAt } : {}),
-        ...(t?.endedAt !== undefined ? { endedAt: t.endedAt } : {}),
-      };
-    };
-    return calls.map((_call, idx) => {
-      const r = byIdx.get(idx);
-      if (!r) return { ok: false, error: 'no tool_result returned by host CLI' };
-      if (r.isError) return { ok: false, error: r.content, ...timing(idx) };
-      try {
-        return { ok: true, result: JSON.parse(r.content) as unknown, ...timing(idx) };
-      } catch {
-        return { ok: true, result: r.content, ...timing(idx) };
-      }
-    });
+    return outcome.ok
+      ? { ok: true }
+      : {
+          ok: false,
+          error: `CLI exited code=${outcome.exitCode ?? '?'}\n${outcome.stderr.slice(0, 2000)}`,
+        };
   };
+
+  const session = await startPersistentMockSession({
+    workdir: opts.workdir,
+    automationId: opts.automationId,
+    driveAgent,
+    onLog: opts.onLog,
+  });
+  const toolDispatcher: AutomationToolDispatcher = session.toolDispatcher;
 
   // ctx.agent routes to the user's REAL provider via the local CLI —
   // no mock involvement. The final answer is read from a file the CLI
@@ -353,7 +239,9 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
-      await mock.close().catch(() => undefined);
+      // End the shared session (final `end_turn` + drain + mock stop), then
+      // remove the CLI scratch dir this host owns.
+      await session.close().catch(() => undefined);
       await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
     },
   };

@@ -32,13 +32,19 @@
  * the mock can route requests to per-dispatch staged responses without
  * relying on the host CLI to forward custom body fields.
  *
- * Concurrency model: callers `stageTurn(dispatchId, response)` before
- * spawning the CLI. The CLI's first POST consumes the staged turn; if
- * the CLI follows up after `tool_result` (the back-half of a tool-use
- * round-trip), the caller stages a second turn (typically the
- * `stopReason: 'end_turn'` ack) before the CLI replies. If a request
- * arrives with no staged turn, the mock returns 503 — failing loudly
- * rather than fabricating a response the host would mistake for real.
+ * Concurrency model (issue #166 — persistent session): the mock is a
+ * long-lived multi-turn session, not a per-batch one-shot. A single CLI
+ * session is spawned per fire and stays alive across every `ctx.tool`
+ * batch; the mock dictates each turn. When a CLI request arrives and no
+ * turn is staged yet — because the deterministic handler hasn't reached
+ * its next `ctx.tool` call — the mock **awaits** (it does not 503),
+ * holding the HTTP request open until the driver `stageTurn`s the next
+ * turn. This is the structural guarantee of a single controlled session:
+ * the handler drives, the mock paces the CLI, and the CLI loops until the
+ * driver finally stages an `end_turn` (via `endDispatch`) and the session
+ * exits. An awaiting request is released with a benign `end_turn` if the
+ * dispatch is ended (teardown) or the client disconnects, so teardown
+ * never hangs.
  */
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -136,11 +142,20 @@ export interface MockLlmServerHandle {
   readonly baseUrl: string;
   /**
    * Stage the next turn the mock will return for the given dispatch id.
-   * Throws if a turn is already staged (caller bug — would silently lose
-   * a response). Replacements are explicit via `clearStaged(dispatchId)`.
+   * If a CLI request is already parked awaiting a turn, it is released
+   * immediately with this turn. Otherwise the turn is buffered for the
+   * next request. Throws if a turn is already buffered (caller bug —
+   * would silently lose a response). Replacements are explicit via
+   * `clearStaged(dispatchId)`.
    */
   stageTurn(dispatchId: string, turn: StagedTurn): void;
   clearStaged(dispatchId: string): void;
+  /**
+   * End a persistent dispatch (issue #166): release any parked request
+   * with a benign `end_turn` so the CLI session finishes and exits, and
+   * drop all buffered/waiter state for the id. Idempotent.
+   */
+  endDispatch(dispatchId: string): void;
   /** Mint a fresh per-spawn bearer token (`centraid-mock-<uuid>`). */
   mintDispatchToken(): { dispatchId: string; bearerToken: string };
   close(): Promise<void>;
@@ -157,6 +172,49 @@ export async function startMockLlmServer(
 ): Promise<MockLlmServerHandle> {
   const staged = new Map<string, StagedTurn>();
   const validDispatchIds = new Set<string>();
+  // Persistent-session waiters (issue #166): a CLI request that arrives
+  // before the driver has staged its next turn parks here until `stageTurn`
+  // (or `endDispatch`) releases it. FIFO per dispatch — the handler is
+  // serialized (it awaits each `ctx.tool` before the next), so in practice
+  // there is at most one parked request per dispatch, but a queue keeps the
+  // contract correct under any interleaving.
+  const waiters = new Map<string, Array<(turn: StagedTurn) => void>>();
+
+  /** A benign final turn used to release a parked request on teardown. */
+  const END_TURN: StagedTurn = { text: '', stopReason: 'end_turn' };
+
+  /**
+   * Resolve the next turn for a dispatch: consume a buffered turn if one is
+   * staged, else park until `stageTurn`/`endDispatch` releases the request.
+   * Releases with `END_TURN` if the client disconnects so the handler unwinds.
+   */
+  const awaitTurn = (dispatchId: string, req: IncomingMessage): Promise<StagedTurn> => {
+    const buffered = staged.get(dispatchId);
+    if (buffered) {
+      staged.delete(dispatchId);
+      return Promise.resolve(buffered);
+    }
+    return new Promise<StagedTurn>((resolve) => {
+      let settled = false;
+      const settle = (turn: StagedTurn): void => {
+        if (settled) return;
+        settled = true;
+        resolve(turn);
+      };
+      const queue = waiters.get(dispatchId) ?? [];
+      queue.push(settle);
+      waiters.set(dispatchId, queue);
+      // A dropped connection must not strand the request forever.
+      req.once('close', () => {
+        const q = waiters.get(dispatchId);
+        if (q) {
+          const idx = q.indexOf(settle);
+          if (idx >= 0) q.splice(idx, 1);
+        }
+        settle(END_TURN);
+      });
+    });
+  };
 
   const log = (level: 'info' | 'warn' | 'error', msg: string): void => {
     opts.onLog?.(level, msg);
@@ -231,15 +289,15 @@ export async function startMockLlmServer(
       opts.onToolResults(dispatchId, results);
     }
 
-    const turn = staged.get(dispatchId);
-    if (!turn) {
-      // Failing loudly is by design: silently returning "ok" would mask
-      // missing dispatcher logic upstream.
-      res.writeHead(503, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'no staged turn for this dispatch' } }));
+    // Persistent session (issue #166): if the handler hasn't reached its
+    // next `ctx.tool` yet, no turn is staged — park the request until the
+    // driver stages one rather than 503-ing. `endDispatch` / a dropped
+    // connection releases it with a benign `end_turn` so nothing hangs.
+    const turn = await awaitTurn(dispatchId, req);
+    if (res.writableEnded) {
+      // The client disconnected while we were parked; nothing to write.
       return;
     }
-    staged.delete(dispatchId);
 
     // Per-tool start signal: this turn is about to hand the CLI its staged
     // tool calls (issue #158, Phase 3). Fires before the response is written.
@@ -283,6 +341,14 @@ export async function startMockLlmServer(
       if (!validDispatchIds.has(dispatchId)) {
         throw new Error(`unknown dispatch id: ${dispatchId}`);
       }
+      // Release a parked CLI request directly — it never touches `staged`.
+      const queue = waiters.get(dispatchId);
+      if (queue && queue.length > 0) {
+        const release = queue.shift()!;
+        if (queue.length === 0) waiters.delete(dispatchId);
+        release(turn);
+        return;
+      }
       if (staged.has(dispatchId)) {
         throw new Error(`a turn is already staged for dispatch ${dispatchId}`);
       }
@@ -291,12 +357,25 @@ export async function startMockLlmServer(
     clearStaged(dispatchId) {
       staged.delete(dispatchId);
     },
+    endDispatch(dispatchId) {
+      staged.delete(dispatchId);
+      const queue = waiters.get(dispatchId);
+      if (queue) {
+        waiters.delete(dispatchId);
+        for (const release of queue) release(END_TURN);
+      }
+    },
     mintDispatchToken() {
       const dispatchId = randomBytes(16).toString('hex');
       validDispatchIds.add(dispatchId);
       return { dispatchId, bearerToken: `${BEARER_PREFIX}${dispatchId}` };
     },
     close() {
+      // Release every parked request so no open connection blocks the close.
+      for (const [, queue] of waiters) {
+        for (const release of queue) release(END_TURN);
+      }
+      waiters.clear();
       return new Promise<void>((resolve, reject) => {
         server.close((err) => {
           if (err) reject(err);
