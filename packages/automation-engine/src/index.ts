@@ -162,6 +162,16 @@ export {
   type JournalEntry,
 } from './automation-handler-journal.js';
 
+// Authoring-time replay-safety lint (issue #167): a static scan that flags the
+// nondeterministic / ambient-I/O patterns (`Date.now`, `Math.random`, raw
+// `fetch`/`fs`, …) that would desync the journal on resume. The builder grounds
+// on this so a handler is rejected at publish time, not at fire time.
+export {
+  lintAutomationHandlerSource,
+  formatHandlerLintError,
+  type HandlerLintFinding,
+} from './automation-handler-lint.js';
+
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomationLocal`
