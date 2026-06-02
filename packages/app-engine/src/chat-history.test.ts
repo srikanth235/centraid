@@ -31,13 +31,13 @@ function newStore(provider: () => string = stubUserIdProvider): ChatHistoryStore
 
 /** Build a minimal one-step chat turn for `recordTurn`. */
 function turn(
-  chatSessionId: string,
+  conversationId: string,
   userMessage: string,
   reply: string,
   startedAt: number = Date.now(),
 ): RecordTurnInput {
   return {
-    chatSessionId,
+    conversationId,
     userMessage,
     startedAt,
     endedAt: startedAt + 10,
@@ -120,7 +120,7 @@ describe('ChatHistoryStore', () => {
     const s = store.createSession(APP);
     const t = 5_000;
     store.recordTurn(APP, {
-      chatSessionId: s.id,
+      conversationId: s.id,
       userMessage: 'count rows',
       startedAt: t,
       endedAt: t + 50,
@@ -156,7 +156,7 @@ describe('ChatHistoryStore', () => {
     const s = store.createSession(APP);
     const t = 6_000;
     store.recordTurn(APP, {
-      chatSessionId: s.id,
+      conversationId: s.id,
       userMessage: 'break it',
       startedAt: t,
       endedAt: t + 30,
@@ -181,7 +181,7 @@ describe('ChatHistoryStore', () => {
     const s = store.createSession(APP);
     const t = 7_000;
     store.recordTurn(APP, {
-      chatSessionId: s.id,
+      conversationId: s.id,
       userMessage: 'go',
       startedAt: t,
       endedAt: t + 5,

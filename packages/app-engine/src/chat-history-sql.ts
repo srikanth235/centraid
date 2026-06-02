@@ -41,9 +41,9 @@ export function mapSessionRow(r: SessionRow): ChatSessionMeta {
 const SESSION_COLS = `s.id, s.user_id, s.title,
         s.adapter_kind, s.adapter_session_id, s.turn_count,
         s.created_at, s.updated_at,
-        ((SELECT COUNT(*) FROM runs r WHERE r.chat_session_id = s.id)
+        ((SELECT COUNT(*) FROM runs r WHERE r.conversation_id = s.id)
          + (SELECT COUNT(*) FROM run_nodes n
-            WHERE n.run_id IN (SELECT id FROM runs WHERE chat_session_id = s.id))
+            WHERE n.run_id IN (SELECT id FROM runs WHERE conversation_id = s.id))
         ) AS msg_count`;
 
 export interface ChatStatements {
@@ -52,6 +52,7 @@ export interface ChatStatements {
   getSession: StatementSync;
   rename: StatementSync;
   deleteSession: StatementSync;
+  deleteRunsByConversation: StatementSync;
   titleOf: StatementSync;
   setTitle: StatementSync;
   touch: StatementSync;
@@ -83,6 +84,9 @@ export function prepareChatStatements(db: DatabaseSync): ChatStatements {
       `UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
     ),
     deleteSession: db.prepare(`DELETE FROM chat_sessions WHERE id = ? AND user_id = ?`),
+    // conversation_id is a plain (polymorphic) column, not an FK, so the
+    // session → runs cascade is enforced here; run_nodes drop via their FK.
+    deleteRunsByConversation: db.prepare(`DELETE FROM runs WHERE conversation_id = ?`),
     titleOf: db.prepare(`SELECT title FROM chat_sessions WHERE id = ? AND user_id = ?`),
     setTitle: db.prepare(
       `UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`,

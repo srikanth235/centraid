@@ -1074,7 +1074,7 @@ import {
         await streamChat(
           appId,
           {
-            chatSessionId: currentSessionId,
+            conversationId: currentSessionId,
             message: text,
             ...(settings.chatModel ? { model: settings.chatModel } : {}),
           },

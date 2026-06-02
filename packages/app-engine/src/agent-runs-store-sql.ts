@@ -27,7 +27,7 @@ export interface RawRun {
   id: string;
   kind: string;
   automation_id: string | null;
-  chat_session_id: string | null;
+  conversation_id: string | null;
   app_id: string | null;
   trigger: string;
   trigger_origin: string | null;
@@ -88,7 +88,7 @@ export interface PreparedStatements {
   finishRun: StatementSync;
   getRun: StatementSync;
   listRunsByAutomation: StatementSync;
-  listRunsByChatSession: StatementSync;
+  listRunsByConversation: StatementSync;
   listRunsAll: StatementSync;
   lastRunByAutomation: StatementSync;
   setPinned: StatementSync;
@@ -120,7 +120,7 @@ export function runFromRaw(raw: RawRun): AgentRunRow {
       ? { triggerOrigin: raw.trigger_origin as AutomationTriggerOrigin }
       : {}),
     ...(raw.parent_run_id !== null ? { parentRunId: raw.parent_run_id } : {}),
-    ...(raw.chat_session_id !== null ? { chatSessionId: raw.chat_session_id } : {}),
+    ...(raw.conversation_id !== null ? { conversationId: raw.conversation_id } : {}),
     ...(raw.app_id !== null ? { appId: raw.app_id } : {}),
     ...(raw.note !== null ? { note: raw.note } : {}),
     ...(raw.retry_of !== null ? { retryOf: raw.retry_of } : {}),
@@ -186,7 +186,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
   return {
     insertRun: db.prepare(`
       INSERT INTO runs
-        (id, kind, automation_id, chat_session_id, app_id,
+        (id, kind, automation_id, conversation_id, app_id,
          trigger, trigger_origin, parent_run_id, retry_of, note,
          input_json, started_at, ok)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
@@ -229,9 +229,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       ORDER BY started_at DESC LIMIT ?
     `),
     // Ascending — the chat transcript is replayed oldest-turn-first.
-    listRunsByChatSession: db.prepare(`
+    listRunsByConversation: db.prepare(`
       SELECT * FROM runs
-      WHERE chat_session_id = ?
+      WHERE conversation_id = ?
       ORDER BY started_at ASC
     `),
     listRunsAll: db.prepare(`

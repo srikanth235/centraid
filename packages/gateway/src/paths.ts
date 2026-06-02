@@ -33,7 +33,7 @@ export interface GatewayPaths {
 
   /**
    * Scratch base dir for the chat runner's per-session state files. The
-   * `POST /centraid/<id>/_chat` route passes `<dir>/<chatSessionId>.jsonl` as
+   * `POST /centraid/<id>/_chat` route passes `<dir>/<conversationId>.jsonl` as
    * `ChatRunInput.sessionFile`.
    */
   chatRunnerSessionDir: string;

@@ -419,7 +419,7 @@ import {
     // The gateway chat session this builder streams turns to. Reused across
     // turns so the gateway resumes the same adapter thread; lazily created on
     // first turn. Null until then.
-    let chatSessionId: string | null = null;
+    let conversationId: string | null = null;
     // Abort handle for the in-flight chat turn (Stop / unmount).
     let agentAbort: AbortController | null = null;
     let liveUrl: string | undefined;
@@ -3448,16 +3448,16 @@ import {
       id: string,
       sessionMode: 'fresh' | 'continue',
     ): Promise<string> {
-      if (chatSessionId) return chatSessionId;
+      if (conversationId) return conversationId;
       if (sessionMode === 'continue') {
         const sessions = await listChatSessions(id).catch(() => []);
         if (sessions[0]) {
-          chatSessionId = sessions[0].id;
-          return chatSessionId;
+          conversationId = sessions[0].id;
+          return conversationId;
         }
       }
-      chatSessionId = (await createChatSession(id, projName)).id;
-      return chatSessionId;
+      conversationId = (await createChatSession(id, projName)).id;
+      return conversationId;
     }
 
     // Stop streaming on the open thinking block (if any). New tool calls or
@@ -3647,7 +3647,7 @@ import {
         agentAbort = new AbortController();
         await streamChat(
           appId,
-          { chatSessionId: sessionId, message: text },
+          { conversationId: sessionId, message: text },
           handleStreamEvent,
           agentAbort.signal,
         );
@@ -3766,7 +3766,7 @@ import {
       try {
         // First build → a FRESH chat session so the initial prompt isn't
         // appended onto a stale thread from a prior app at the same id.
-        chatSessionId = (await createChatSession(id, projName)).id;
+        conversationId = (await createChatSession(id, projName)).id;
       } catch (err) {
         pushMessage({ kind: 'status', text: `Could not start chat: ${String(err)}` });
         return;

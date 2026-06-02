@@ -11,7 +11,7 @@
  * stays correct.
  *
  * The transcript is NOT its own table. A chat turn is a `runs` row
- * (`kind='chat'`, `chat_session_id` FK) and the turn's messages are
+ * (`kind='chat'`, `conversation_id` FK) and the turn's messages are
  * `run_nodes` (issue #90 fold: `chat_messages` is gone). `recordTurn`
  * writes that trace; `getSession` reconstructs the renderer transcript.
  * Exposed over HTTP at `/_centraid-chat`, mounted identically by the
@@ -95,7 +95,7 @@ export type ChatTurnNode =
     };
 
 export interface RecordTurnInput {
-  chatSessionId: string;
+  conversationId: string;
   /** The user's prompt for the turn — stored as the run's `input_json`. */
   userMessage: string;
   startedAt: number;
@@ -271,11 +271,14 @@ export class ChatHistoryStore {
 
   deleteSession(appId: string, id: string): boolean {
     const { stmts } = this.appChat(appId);
-    // `runs.chat_session_id` is an ON DELETE CASCADE FK within the app's
-    // own `runtime.sqlite`, so the session's turns (and their cascading
-    // `run_nodes`) drop with the session.
+    // `conversation_id` is a plain (polymorphic) column — not an FK — so the
+    // session's turns are dropped explicitly here; their `run_nodes` cascade
+    // off the surviving `run_nodes.run_id → runs.id` FK within the app's
+    // `runtime.sqlite`.
     const res = stmts.deleteSession.run(id, this.currentUserId());
-    return Number(res.changes) > 0;
+    if (Number(res.changes) === 0) return false;
+    stmts.deleteRunsByConversation.run(id);
+    return true;
   }
 
   /**
@@ -289,7 +292,7 @@ export class ChatHistoryStore {
   recordTurn(appId: string, input: RecordTurnInput): { runId: string } | undefined {
     const { db, stmts, runs } = this.appChat(appId);
     const userId = this.currentUserId();
-    const existing = stmts.titleOf.get(input.chatSessionId, userId) as
+    const existing = stmts.titleOf.get(input.conversationId, userId) as
       | { title: string }
       | undefined;
     if (!existing) return undefined;
@@ -301,7 +304,7 @@ export class ChatHistoryStore {
         runId,
         kind: 'chat',
         triggerKind: 'interactive',
-        chatSessionId: input.chatSessionId,
+        conversationId: input.conversationId,
         appId,
         inputJson: JSON.stringify({ message: input.userMessage }),
         startedAt: input.startedAt,
@@ -380,9 +383,9 @@ export class ChatHistoryStore {
       });
       const now = Date.now();
       if (!existing.title) {
-        stmts.setTitle.run(deriveTitle(input.userMessage), now, input.chatSessionId, userId);
+        stmts.setTitle.run(deriveTitle(input.userMessage), now, input.conversationId, userId);
       } else {
-        stmts.touch.run(now, input.chatSessionId, userId);
+        stmts.touch.run(now, input.conversationId, userId);
       }
       db.exec('COMMIT');
       return { runId };

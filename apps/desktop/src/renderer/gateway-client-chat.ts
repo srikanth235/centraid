@@ -71,7 +71,7 @@ export type ChatStreamEvent =
 
 export interface StreamChatInput {
   /** The chat session id the gateway keys the turn on. */
-  chatSessionId: string;
+  conversationId: string;
   message: string;
   model?: string;
   thinking?: string;
@@ -94,7 +94,7 @@ export async function streamChat(
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
-      chatSessionId: input.chatSessionId,
+      conversationId: input.conversationId,
       message: input.message,
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
