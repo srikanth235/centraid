@@ -45,6 +45,8 @@ import {
   makeChatHistoryRouteHandler,
   makeGatewayDbProvider,
   makeUserStoreRouteHandler,
+  type ChatRunner,
+  type RunnerStatus,
   type RuntimeLogger,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
@@ -112,7 +114,71 @@ export interface BuildGatewayOptions {
    * chat share ONE worktree. Only consulted when `appsStoreRoot` is set.
    */
   sessionIdFor?: (appId: string) => string;
+  /**
+   * In-process chat runner override (Plane B). When set, this runner backs
+   * `POST /centraid/<id>/_chat` instead of the gateway's own codex/claude
+   * CLI runner. The OpenClaw plugin injects a `runEmbeddedAgent`-backed
+   * runner so chat runs in OpenClaw's process — the desktop/daemon omit it
+   * and get the default CLI runner (unchanged).
+   */
+  chatRunner?: ChatRunner;
+  /**
+   * Override for the `GET /centraid/_chat/runner-status` preflight. Defaults
+   * to reporting the configured codex/claude CLI adapter (via `runPreflight`).
+   * The OpenClaw plugin injects `{ kind: 'openclaw', ok: true }` — its chat
+   * runs in-process, not through a CLI, so a codex/claude preflight would
+   * misreport readiness.
+   */
+  runnerStatus?: () => Promise<RunnerStatus>;
+  /**
+   * Override for how an automation is fired (Plane B). The gateway's default
+   * runs the handler through `runAutomationLocal` (codex/claude CLI puppet).
+   * The OpenClaw plugin injects an in-process fire (`runOpenclawFire`:
+   * `ctx.tool` → `callGatewayTool`, `ctx.agent` → simple-completion) here, so
+   * BOTH scheduled (cron) and manual (run-now) fires execute in OpenClaw's
+   * process. The factory is called once with the gateway-resolved deps; it
+   * returns the fire function the scheduler + automations route share.
+   *
+   * (Phase 2 of issue #164 replaces this whole-function override with a
+   * shared orchestrator parameterized by injected dispatchers.)
+   */
+  fireAutomationFactory?: FireAutomationFactory;
+  /**
+   * Defer the git-store `init()` (bare-repo + worktree materialization) from
+   * construction to `start()`. OpenClaw runs the plugin's `register()` in
+   * multiple worker subprocesses but `start()` only in the HTTP-serving
+   * process; deferring keeps the concurrent git-init off the workers (only
+   * the one process that calls `start()` touches the repo). Desktop/daemon
+   * omit it — single-process, so `init()` at construction is safe and keeps
+   * the store ready before the socket binds.
+   */
+  lazyStoreInit?: boolean;
 }
+
+/** Fires one automation. Shared by the cron scheduler + the run-now route. */
+export type FireAutomation = (
+  automationRef: string,
+  opts: {
+    runId?: string;
+    triggerKind: AutomationTriggerKind;
+    triggerOrigin: AutomationTriggerOrigin;
+  },
+) => void;
+
+/** Gateway-resolved deps handed to a {@link FireAutomationFactory}. */
+export interface FireAutomationDeps {
+  /** Per-app DATA root (`<appsDir>/<id>/runtime.sqlite` + `data.sqlite`). */
+  appsDir: string;
+  /** Resolves the live `main` worktree's `apps` dir; rotates per publish. */
+  codeAppsDir: () => string;
+  /** Central analytics sink for finished-run summaries. */
+  analytics: AnalyticsStore;
+  /** Logger for fire failures. */
+  logger: RuntimeLogger;
+}
+
+/** Builds a {@link FireAutomation} from gateway-resolved deps. */
+export type FireAutomationFactory = (deps: FireAutomationDeps) => FireAutomation;
 
 /** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
@@ -136,6 +202,14 @@ export interface BuiltGateway {
    * sessions + publishes through this. `undefined` on the legacy backend.
    */
   appsStore?: WorktreeStore;
+  /**
+   * Resolves the live `main` worktree's `apps` dir (`<active-main>/apps`),
+   * rotating atomically per publish/rollback. Present only on the git-store
+   * backend. Hosts that register their own automation surface — e.g. the
+   * OpenClaw plugin's `/_centraid-hook` webhook route — resolve automation
+   * CODE through this without naming the underlying `WorktreeStore`.
+   */
+  codeAppsDir?: () => string;
   /**
    * Route handlers run after auth, before `runtime.handle` (templates
    * always; apps-store / lifecycle / automations on the git-store
@@ -175,7 +249,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   let appsStore: WorktreeStore | undefined;
   if (options.appsStoreRoot !== undefined) {
     appsStore = new WorktreeStore({ root: options.appsStoreRoot });
-    await appsStore.init();
+    // `lazyStoreInit` hosts (OpenClaw) defer `init()` to `start()` so the
+    // concurrent git-init stays off worker subprocesses; everyone else inits
+    // here so the store is ready before the socket binds.
+    if (!options.lazyStoreInit) await appsStore.init();
   }
   const codeDirOverride = appsStore
     ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
@@ -293,19 +370,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // native file tools + the `centraid_*` dispatcher — one surface that both
   // tweaks the app's code and operates its data. Without a store (no draft
   // worktree to edit) we fall back to the data-only chat adapter.
-  const chatRunner = appsStore
-    ? makeUnifiedChatRunner({
-        store: appsStore,
-        prefsLoader,
-        getDispatcher,
-        publicBaseUrl: () => serverUrl,
-        liveDataFile,
-        ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
-      })
-    : makeChatRunner({
-        prefsLoader,
-        getDispatcher,
-      });
+  // A host can inject its own in-process chat runner (Plane B); otherwise the
+  // gateway builds its own — unified (draft worktree + dispatcher tools) on the
+  // git-store backend, data-only on the legacy backend.
+  const chatRunner =
+    options.chatRunner ??
+    (appsStore
+      ? makeUnifiedChatRunner({
+          store: appsStore,
+          prefsLoader,
+          getDispatcher,
+          publicBaseUrl: () => serverUrl,
+          liveDataFile,
+          ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
+        })
+      : makeChatRunner({
+          prefsLoader,
+          getDispatcher,
+        }));
 
   const runtime = new Runtime({
     appsDir: paths.appsDir,
@@ -313,18 +395,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     chatHistoryStore,
     chatRunner,
     chatRunnerSessionDir: paths.chatRunnerSessionDir,
-    runnerStatus: async () => {
-      const prefs = await prefsLoader();
-      if (!prefs) {
-        return {
-          kind: 'none' as const,
-          ok: false,
-          reason: 'No coding agent configured.',
-          hint: 'Open Settings → AI providers and pick Codex or Claude Code.',
-        };
-      }
-      return runPreflight(prefs);
-    },
+    runnerStatus:
+      options.runnerStatus ??
+      (async () => {
+        const prefs = await prefsLoader();
+        if (!prefs) {
+          return {
+            kind: 'none' as const,
+            ok: false,
+            reason: 'No coding agent configured.',
+            hint: 'Open Settings → AI providers and pick Codex or Claude Code.',
+          };
+        }
+        return runPreflight(prefs);
+      }),
     logger,
     ...(codeDirOverride ? { codeDirOverride } : {}),
     ...(draftCodeDir ? { draftCodeDir } : {}),
@@ -344,46 +428,50 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }),
   ];
 
+  let builtCodeAppsDir: (() => string) | undefined;
   if (appsStore) {
     const store = appsStore;
     const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
+    builtCodeAppsDir = codeAppsDir;
     // In-process bus for live run streaming (issue #158): a fire publishes via
     // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
     const runEventBus = new RunEventBus();
     // The one fire path, shared by "run now" (manual) and the cron
-    // scheduler (scheduled). Both run on THIS host with the gateway's own
-    // runner pref, against the live `main` code + the stable data tree.
-    const fireAutomation = (
-      automationRef: string,
-      opts: {
-        runId?: string;
-        triggerKind: AutomationTriggerKind;
-        triggerOrigin: AutomationTriggerOrigin;
-      },
-    ): void => {
-      // Mint the runId here so every fire (cron included) has a bus channel.
-      const runId =
-        opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-      void (async () => {
-        const prefs = await prefsLoader();
-        await runAutomationLocal({
-          automationRef,
-          runId,
+    // scheduler (scheduled). A host can override the fire entirely (Plane B —
+    // OpenClaw runs it in-process); the default below runs on THIS host with
+    // the gateway's own runner pref, against the live `main` code + the stable
+    // data tree, streaming each run over the event bus.
+    const fireAutomation: FireAutomation = options.fireAutomationFactory
+      ? options.fireAutomationFactory({
           appsDir: paths.appsDir,
-          codeAppsDir: codeAppsDir(),
+          codeAppsDir,
           analytics: analyticsStore,
-          runner: prefs?.kind ?? 'codex',
-          triggerKind: opts.triggerKind,
-          triggerOrigin: opts.triggerOrigin,
-          onRunEvent: (ev) => runEventBus.publish(runId, ev),
-        });
-      })().catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        // Failed before the ledger opened: close off the bus or the viewer hangs.
-        runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
-        logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
-      });
-    };
+          logger,
+        })
+      : (automationRef, opts): void => {
+          // Mint the runId here so every fire (cron included) has a bus channel.
+          const runId =
+            opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+          void (async () => {
+            const prefs = await prefsLoader();
+            await runAutomationLocal({
+              automationRef,
+              runId,
+              appsDir: paths.appsDir,
+              codeAppsDir: codeAppsDir(),
+              analytics: analyticsStore,
+              runner: prefs?.kind ?? 'codex',
+              triggerKind: opts.triggerKind,
+              triggerOrigin: opts.triggerOrigin,
+              onRunEvent: (ev) => runEventBus.publish(runId, ev),
+            });
+          })().catch((err) => {
+            const message = err instanceof Error ? err.message : String(err);
+            // Failed before the ledger opened: close off the bus or the viewer hangs.
+            runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
+            logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
+          });
+        };
     // One persistent in-process cron scheduler for the gateway's lifetime
     // (issue #149). `reconcileScheduler()` (boot + every publish/delete)
     // settles its in-memory registry; it fires cron automations through the
@@ -476,6 +564,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Publish the live origin to the unified chat runner so post-turn
     // webhook minting can build absolute `_centraid-hook` URLs.
     serverUrl = publicBaseUrl;
+    // `lazyStoreInit` hosts deferred the git-store `init()` to here so it runs
+    // only in the process that calls `start()` (single git-init, no worker
+    // races). A no-op for the eager path — `init()` already ran at construction.
+    if (appsStore && options.lazyStoreInit) await appsStore.init();
     await runtime.bootstrap();
 
     // Git-store sync: every app present on `main` gets a registry entry
@@ -505,6 +597,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     analyticsStore,
     chatHistoryStore,
     ...(appsStore ? { appsStore } : {}),
+    ...(builtCodeAppsDir ? { codeAppsDir: builtCodeAppsDir } : {}),
     extraHandlers,
     composedHandler,
     start,
