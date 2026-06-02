@@ -34,7 +34,7 @@
  * this module just exports the ProviderPlugin descriptor as a factory.
  */
 
-import type { AnalyticsStore } from '@centraid/analytics';
+import type { AnalyticsStore } from '@centraid/app-engine';
 import { runOpenclawFire } from './openclaw-fire.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 // pi-ai types — open-import (matches openclaw's own pattern) so this

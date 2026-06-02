@@ -1,6 +1,7 @@
 /*
  * The central analytics migration ladder — `centraid-analytics.sqlite`
- * (issue #98, decision 4). Owned by `@centraid/analytics` (#151).
+ * (issue #98, decision 4). The Insights domain, folded into app-engine under
+ * `insights/` while keeping its own barrel and one-way internal boundary (#151).
  *
  * Push-based analytics: at run completion the runtime write-throughs a
  * one-row summary to this gateway-scoped file. Full run detail stays in the
@@ -15,11 +16,7 @@
  * centraid SQLite file.
  */
 
-import {
-  openMigratedDb,
-  makeMigratedDbProvider,
-  type DatabaseProvider,
-} from '@centraid/app-engine';
+import { openMigratedDb, makeMigratedDbProvider, type DatabaseProvider } from '../gateway-db.js';
 import type { DatabaseSync } from 'node:sqlite';
 
 export const ANALYTICS_MIGRATIONS: readonly string[] = [

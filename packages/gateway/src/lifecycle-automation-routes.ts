@@ -18,7 +18,7 @@ import {
   deleteAutomationFromFiles,
   scaffoldAutomationAppFiles,
   setAutomationEnabledInFiles,
-} from '@centraid/automation';
+} from '@centraid/automation-engine';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
   defaultSessionId,

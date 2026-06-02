@@ -1,11 +1,12 @@
 /*
- * The seam between the agent-run ledger (app-engine) and central analytics
- * (`@centraid/analytics`). The ledger builds one `RunSummary` per finished run
- * and pushes it through a `RunSummarySink`; the concrete sink — `AnalyticsStore`
- * in `@centraid/analytics` — is injected by the host (#151).
+ * The seam between the agent-run ledger and central analytics (the `insights/`
+ * sub-module). The ledger builds one `RunSummary` per finished run and pushes
+ * it through a `RunSummarySink`; the concrete sink — `AnalyticsStore` in
+ * `insights/` — is injected by the host (#151).
  *
- * Keeping the interface here (not importing `AnalyticsStore`) is what keeps
- * app-engine free of its own reporting consumer: app-engine emits, stores
+ * Keeping the interface here at the package root (not importing `AnalyticsStore`,
+ * not living under `insights/`) is what keeps the ledger free of a reporting
+ * consumer and the `insights/` boundary one-way: the ledger emits, `insights/`
  * implements. Same injection pattern as `ChatRunner` / `AutomationHost`.
  */
 

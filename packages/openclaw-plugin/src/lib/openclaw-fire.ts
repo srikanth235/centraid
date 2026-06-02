@@ -20,10 +20,10 @@ import path from 'node:path';
 import {
   AgentRunsStore,
   makeRuntimeDbProvider,
+  type AnalyticsStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
-import type { AnalyticsStore } from '@centraid/analytics';
 import {
   automationHandlerPath,
   formatAutomationRef,
@@ -35,7 +35,7 @@ import {
   type AutomationInvokeDispatcher,
   type AutomationToolCall,
   type AutomationToolResult,
-} from '@centraid/automation';
+} from '@centraid/automation-engine';
 import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
 import {
   prepareSimpleCompletionModelForAgent,

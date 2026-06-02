@@ -3,9 +3,9 @@
  * gateway (identity) file and the per-app runtime (ledger) file — each with
  * its own connection and `PRAGMA user_version`. The shared open primitive
  * (`openMigratedDb` / `makeMigratedDbProvider`) is exported so downstream
- * ladders reuse the same WAL/busy_timeout/FK pragmas: `@centraid/analytics`
- * owns the third ladder (`centraid-analytics.sqlite`, run summaries) and
- * builds its provider through these helpers (#151).
+ * ladders reuse the same WAL/busy_timeout/FK pragmas: the `insights/`
+ * sub-module owns the third ladder (`centraid-analytics.sqlite`, run summaries)
+ * and builds its provider through these helpers (#151).
  *
  *   gateway     (`centraid-gateway.sqlite`) — gateway-scoped identity
  *     users          — the user identity row(s). Single-user model today;
@@ -36,7 +36,7 @@
  *     reachable from handler `db` or the `centraid_sql_*` agent tools.
  *
  * (The third ladder — `centraid-analytics.sqlite`, one `run_summary` row per
- * run, the Insights source — lives in `@centraid/analytics`, built through
+ * run, the Insights source — lives in the `insights/` sub-module, built through
  * the exported `makeMigratedDbProvider` helper.)
  *
  * Each file gets one connection and one provider. The OpenClaw plugin's

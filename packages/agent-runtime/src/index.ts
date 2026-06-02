@@ -109,7 +109,7 @@ export {
   type SpawnCliResult,
 } from './run-automation-local.js';
 
-// Scheduling lives in `@centraid/automation` now (issue #149): the gateway
+// Scheduling lives in `@centraid/automation-engine` now (issue #149): the gateway
 // owns an in-process cron `InProcessScheduler` and fires automations while it
 // runs. The OS scheduler (launchd / systemd / Task Scheduler) and its
 // `centraid run-automation` entry point are gone.

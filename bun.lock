@@ -27,7 +27,7 @@
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/automation": "workspace:*",
+        "@centraid/automation-engine": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@centraid/gateway": "workspace:*",
       },
@@ -80,23 +80,9 @@
       },
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.143",
-        "@centraid/analytics": "workspace:*",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/automation": "workspace:*",
+        "@centraid/automation-engine": "workspace:*",
         "zod": "^4.0.0",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "tsx": "^4.20.3",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/analytics": {
-      "name": "@centraid/analytics",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/app-engine": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -132,11 +118,10 @@
         "typescript": "catalog:",
       },
     },
-    "packages/automation": {
-      "name": "@centraid/automation",
+    "packages/automation-engine": {
+      "name": "@centraid/automation-engine",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/analytics": "workspace:*",
         "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
       },
@@ -163,10 +148,9 @@
       },
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
-        "@centraid/analytics": "workspace:*",
         "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/automation": "workspace:*",
+        "@centraid/automation-engine": "workspace:*",
         "@centraid/skills": "workspace:*",
         "@centraid/worktree-store": "workspace:*",
       },
@@ -181,9 +165,8 @@
       "name": "@centraid/openclaw-plugin",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/analytics": "workspace:*",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/automation": "workspace:*",
+        "@centraid/automation-engine": "workspace:*",
         "@centraid/worktree-store": "workspace:*",
         "@mariozechner/pi-ai": "^0.73.0",
         "@sinclair/typebox": "^0.27.0",
@@ -534,13 +517,11 @@
 
     "@centraid/agent-runtime": ["@centraid/agent-runtime@workspace:packages/agent-runtime"],
 
-    "@centraid/analytics": ["@centraid/analytics@workspace:packages/analytics"],
-
     "@centraid/app-blueprints": ["@centraid/app-blueprints@workspace:packages/app-blueprints"],
 
     "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
 
-    "@centraid/automation": ["@centraid/automation@workspace:packages/automation"],
+    "@centraid/automation-engine": ["@centraid/automation-engine@workspace:packages/automation-engine"],
 
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 

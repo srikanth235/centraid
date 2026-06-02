@@ -1,5 +1,5 @@
 {
-  "name": "@centraid/automation",
+  "name": "@centraid/automation-engine",
   "version": "0.1.0",
   "private": true,
   "description": "Centraid automation domain — manifest, fire spine + OpenAutomationDispatch seam, the AutomationHost interface + in-process scheduler, webhook ingress, the worker-thread handler runner, and app scaffolding. Backend-agnostic: execution and scheduling are injected callbacks, so it depends on @centraid/app-engine but never on any agent backend.",
@@ -17,7 +17,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/analytics": "workspace:*",
     "@centraid/app-blueprints": "workspace:*",
     "@centraid/app-engine": "workspace:*"
   },

@@ -35,10 +35,13 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
+  AnalyticsStore,
   ChatHistoryStore,
+  InsightsStore,
   Runtime,
   UserStore,
   cleanupDeregisteredApp,
+  makeAnalyticsDbProvider,
   makeChatHistoryRouteHandler,
   makeGatewayDbProvider,
   makeUserStoreRouteHandler,
@@ -46,8 +49,11 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
-import { AnalyticsStore, InsightsStore, makeAnalyticsDbProvider } from '@centraid/analytics';
-import { listAutomations, InProcessScheduler, type LocalScheduler } from '@centraid/automation';
+import {
+  listAutomations,
+  InProcessScheduler,
+  type LocalScheduler,
+} from '@centraid/automation-engine';
 import {
   makeChatRunner,
   runAutomationLocal,
