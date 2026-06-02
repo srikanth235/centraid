@@ -1,34 +1,45 @@
 /*
- * OpenClaw automation fire — now a thin adapter over the shared spine.
+ * OpenClaw automation fire — mock-puppeted, on the shared spine (issue #166).
  *
- * Issue #166 (Phase 2): the per-fire orchestration — resolve the automation,
- * open its ledger, run `handler.js`, replay a resume journal, cascade
- * `onFailure`, and dispatch `ctx.invoke` — lives ONCE in app-engine's
- * `runAutomationFire`. The only host-specific piece is the live `ctx.tool` /
- * `ctx.agent` dispatch surface, injected as `openDispatch`. So OpenClaw no
- * longer reimplements the spine (the duplicated manifest-load + ledger +
- * onFailure + invoke glue is deleted); it just provides its in-process
- * dispatch surface and delegates to the spine — the same dependency inversion
- * the CLI runner (`runAutomationLocal`) uses.
+ * `runOpenclawFire` delegates the per-fire orchestration (manifest load, ledger,
+ * journal/resume, onFailure, ctx.invoke) to app-engine's `runAutomationFire`,
+ * and injects an OpenClaw `OpenAutomationDispatch` — the ONLY host-specific
+ * piece. Both dispatchers run `api.runtime.agent.runEmbeddedAgent`:
  *
- * The dispatch surface:
- *   - `toolDispatcher` routes `ctx.tool` through `callGatewayTool` (full
- *     harness MCP routing + audit + before-tool hooks).
- *   - `agentDispatcher` routes `ctx.agent` through the user's real provider
- *     via `prepareSimpleCompletionModelForAgent`, at the manifest's declared
- *     model tier (`OpenAutomationDispatchArgs.model`).
+ *   - `toolDispatcher` rides the shared `startPersistentMockSession`: ONE
+ *     embedded-agent session per fire, pointed at a localhost `centraid-mock`
+ *     provider (base_url → the mock). The deterministic handler stages each
+ *     `ctx.tool` batch into that session; the embedded agent executes the
+ *     mock-staged tool through its native tool/MCP machinery (the same
+ *     `callGatewayTool` path, now driven from inside the agent loop) and
+ *     returns the result — ~0 real model tokens (the mock dictates every turn).
+ *   - `agentDispatcher` is `runEmbeddedAgent({ modelRun: true })` against the
+ *     user's REAL provider — the one billed path, at the manifest's model tier.
  *
- * Because the spine drives the run, OpenClaw automations now get journaled
- * crash-resume (issue #166, Phase 3) and the lifted `ctx.invoke` for free.
+ * This is the same persistent-session runtime the codex/claude CLI host uses;
+ * the only difference is the `driveAgent` adapter (an embedded run vs. a CLI
+ * subprocess). The bespoke in-process dispatchers (`callGatewayTool` /
+ * `prepareSimpleCompletionModelForAgent` wired directly) and the
+ * `setOpenClawConfig` global are gone — `api` is captured by closure.
+ *
+ * NOTE: end-to-end execution (the embedded agent hitting the localhost mock on
+ * a supported wire and running mock-staged tools) is validated on a live
+ * OpenClaw host, not from a bare worktree — the issue's Phase 2 spike. The
+ * code is type-checked against the installed SDK; the host run confirms the
+ * wire (`anthropic-messages`) + tool-name-space assumptions.
  */
 
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import {
   runAutomationFire,
+  startPersistentMockSession,
+  type AgentDriver,
+  type AutomationAgentCall,
   type AutomationDispatchContext,
   type AutomationDispatchSurface,
   type AutomationHandlerOutcome,
-  type AutomationToolCall,
-  type AutomationToolResult,
   type OpenAutomationDispatch,
   type OpenAutomationDispatchArgs,
 } from '@centraid/automation-engine';
@@ -37,31 +48,34 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
-import { callGatewayTool } from 'openclaw/plugin-sdk/agent-harness-runtime';
-import {
-  prepareSimpleCompletionModelForAgent,
-  completeWithPreparedSimpleCompletionModel,
-} from 'openclaw/plugin-sdk/simple-completion-runtime';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
+
+/** The `centraid-mock` provider the embedded agent is pointed at for tools. */
+const MOCK_PROVIDER = 'centraid-mock';
+const MOCK_MODEL = 'centraid-mock-run-automation';
+const FIRE_TIMEOUT_MS = 5 * 60 * 1000;
+
+// Derive the embedded-agent param + config types from the installed SDK so we
+// don't depend on a non-exported `OpenClawConfig` symbol.
+type RunEmbeddedAgent = OpenClawPluginApi['runtime']['agent']['runEmbeddedAgent'];
+type EmbeddedParams = Parameters<RunEmbeddedAgent>[0];
+type EmbeddedConfig = NonNullable<EmbeddedParams['config']>;
 
 export interface OpenclawFireOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
   automationRef: string;
   /**
    * Directory holding the gateway's per-app DATA folders
-   * (`<appsDir>/<id>/runtime.sqlite` + `data.sqlite`). Stable across
-   * version swaps — this is NOT where code lives (issue #137).
+   * (`<appsDir>/<id>/runtime.sqlite` + `data.sqlite`). Stable across version
+   * swaps — this is NOT where code lives (issue #137).
    */
   appsDir: string;
   /**
-   * Directory holding the live app CODE on git-store `main`
-   * (`<worktree>/apps/<id>/automations/...`). Resolved per fire from the
-   * store's active-main link so a publish/rollback is picked up.
+   * Directory holding the live app CODE on git-store `main`. Resolved per fire
+   * from the store's active-main link so a publish/rollback is picked up.
    */
   codeAppsDir: string;
-  /**
-   * Central analytics store. When set, the per-app run ledger
-   * write-throughs each finished run's summary to it (issue #98).
-   */
+  /** Central analytics store for run-summary write-through (issue #98). */
   analytics?: AnalyticsStore;
   triggerKind: AutomationTriggerKind;
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
@@ -75,71 +89,141 @@ export interface OpenclawFireOptions {
 type FireLog = { info(m: string): void; warn(m: string): void; error(m: string): void };
 
 /**
- * The in-process OpenClaw dispatch surface: `ctx.tool` → `callGatewayTool`,
- * `ctx.agent` → simple-completion at the manifest's model tier. Injected into
- * `runAutomationFire` so the spine owns everything else.
+ * Patch the base OpenClaw config with a localhost `centraid-mock` provider so
+ * the embedded agent's model calls hit the mock (token-free) on the
+ * `anthropic-messages` wire the mock serves at `<baseUrl>/messages`.
  */
-function makeOpenClawDispatch(): OpenAutomationDispatch {
-  return (args: OpenAutomationDispatchArgs): Promise<AutomationDispatchSurface> => {
-    const toolDispatcher = async (
-      calls: readonly AutomationToolCall[],
-      _ctx: AutomationDispatchContext,
-    ): Promise<AutomationToolResult[]> =>
-      Promise.all(
-        calls.map(async (call) => {
-          try {
-            const out = await callGatewayTool(call.name, {}, call.args);
-            return { ok: true, result: out } satisfies AutomationToolResult;
-          } catch (err) {
-            return {
-              ok: false,
-              error: err instanceof Error ? err.message : String(err),
-            } satisfies AutomationToolResult;
-          }
-        }),
-      );
+function withMockProvider(base: EmbeddedConfig, baseUrl: string, apiKey: string): EmbeddedConfig {
+  const models = (base.models ?? {}) as NonNullable<EmbeddedConfig['models']>;
+  const providers = { ...models.providers };
+  providers[MOCK_PROVIDER] = {
+    baseUrl,
+    apiKey,
+    auth: 'api-key',
+    api: 'anthropic-messages',
+    models: [
+      {
+        id: MOCK_MODEL,
+        name: 'Centraid Automation Mock',
+        api: 'anthropic-messages',
+        reasoning: false,
+        input: ['text'],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200_000,
+        maxTokens: 4096,
+      },
+    ],
+  };
+  return { ...base, models: { ...models, mode: 'merge', providers } };
+}
 
-    const agentDispatcher = async (
-      call: { prompt: string; json?: unknown },
-      ctx: AutomationDispatchContext,
-    ): Promise<unknown> => {
-      if (!args.model) {
-        throw new Error(
-          'ctx.agent called but manifest.requires.model is unset — declare a model in the automation manifest',
-        );
-      }
-      const prepared = await prepareSimpleCompletionModelForAgent({
-        cfg: getOpenClawConfig(),
-        agentId: `centraid-automation:${ctx.automationId}`,
-        modelRef: args.model,
-      });
-      if ('error' in prepared) throw new Error(`ctx.agent prepare failed: ${prepared.error}`);
-      const out = await completeWithPreparedSimpleCompletionModel({
-        model: prepared.model,
-        auth: prepared.auth,
-        context: { messages: [{ role: 'user', content: call.prompt, timestamp: Date.now() }] },
-      });
-      const text = (out.content ?? [])
-        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-        .map((c) => c.text)
-        .join('');
-      if (!call.json) return text;
+/** Pull the assistant text out of an embedded-run result. */
+function payloadText(result: Awaited<ReturnType<RunEmbeddedAgent>>): string {
+  return (result.payloads ?? [])
+    .filter((p) => !p.isReasoning && typeof p.text === 'string')
+    .map((p) => p.text ?? '')
+    .join('')
+    .trim();
+}
+
+/** Coerce `ctx.agent`'s answer: plain text as-is; a `json` prompt is parsed. */
+function coerceAgentAnswer(text: string, json: unknown): unknown {
+  if (!json) return text;
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+  const candidate = (fenced ? fenced[1]! : text).trim();
+  try {
+    return JSON.parse(candidate) as unknown;
+  } catch (err) {
+    throw new Error(
+      `ctx.agent expected JSON but got: ${text.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
+      { cause: err },
+    );
+  }
+}
+
+/**
+ * Build the OpenClaw dispatch surface: the mock-puppeted tool session +
+ * `modelRun` agent, both via `runEmbeddedAgent`. Captures `api` so no global
+ * config handle is needed.
+ */
+function makeOpenClawDispatch(api: OpenClawPluginApi): OpenAutomationDispatch {
+  const baseCfg = (api as unknown as { config?: EmbeddedConfig }).config;
+  return async (args: OpenAutomationDispatchArgs): Promise<AutomationDispatchSurface> => {
+    if (!baseCfg) {
+      throw new Error('centraid automation fire: OpenClaw api.config is unavailable');
+    }
+    const scratchDir = path.join(args.workdir, '.automation-scratch', args.runId);
+    await fs.mkdir(scratchDir, { recursive: true });
+
+    // The OpenClaw host adapter: drive ONE embedded-agent session against the
+    // localhost mock for the lifetime of the fire (the mock dictates turns; the
+    // agent executes staged tools through its native loop). Resolves on exit.
+    const driveAgent: AgentDriver = async (input) => {
+      const sessionFile = path.join(scratchDir, 'tool-session.json');
       try {
-        return JSON.parse(text) as unknown;
+        await api.runtime.agent.runEmbeddedAgent({
+          sessionId: `centraid-automation:${args.automationRef}`,
+          sessionKey: `centraid-automation:${args.automationRef}`,
+          sessionFile,
+          workspaceDir: args.workdir,
+          isCanonicalWorkspace: false,
+          provider: MOCK_PROVIDER,
+          model: MOCK_MODEL,
+          config: withMockProvider(baseCfg, input.mockBaseUrl, input.mockBearerToken),
+          prompt: input.prompt,
+          promptMode: 'full',
+          trigger: 'manual',
+          timeoutMs: FIRE_TIMEOUT_MS,
+          runId: `${args.runId}:tools`,
+          abortSignal: input.abortSignal,
+        });
+        return { ok: true };
       } catch (err) {
-        throw new Error(
-          `ctx.agent expected JSON but got: ${text.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
-          { cause: err },
-        );
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
       }
     };
 
-    return Promise.resolve({
-      toolDispatcher,
-      agentDispatcher,
-      // In-process — nothing to tear down per fire.
-      close: async () => undefined,
+    const session = await startPersistentMockSession({
+      workdir: args.workdir,
+      automationId: args.automationRef,
+      driveAgent,
+      onLog: args.onLog,
     });
+
+    // ctx.agent → a bounded one-shot model probe (no tools) against the user's
+    // REAL provider, at the manifest's declared tier. The only billed path.
+    const agentDispatcher = async (
+      call: AutomationAgentCall,
+      ctx: AutomationDispatchContext,
+    ): Promise<unknown> => {
+      const sessionFile = path.join(scratchDir, `agent-${randomUUID().slice(0, 8)}.json`);
+      const result = await api.runtime.agent.runEmbeddedAgent({
+        sessionId: `centraid-automation-agent:${ctx.automationId}`,
+        sessionKey: `centraid-automation-agent:${ctx.automationId}`,
+        sessionFile,
+        workspaceDir: args.workdir,
+        isCanonicalWorkspace: false,
+        modelRun: true,
+        disableTools: true,
+        ...(args.model ? { model: args.model } : {}),
+        prompt: call.prompt,
+        promptMode: 'full',
+        trigger: 'manual',
+        timeoutMs: FIRE_TIMEOUT_MS,
+        runId: `${args.runId}:agent:${randomUUID().slice(0, 6)}`,
+        abortSignal: ctx.abortSignal,
+      });
+      return coerceAgentAnswer(payloadText(result), call.json);
+    };
+
+    return {
+      toolDispatcher: session.toolDispatcher,
+      agentDispatcher,
+      async close() {
+        await session.close().catch(() => undefined);
+        await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
+      },
+    };
   };
 }
 
@@ -148,6 +232,7 @@ function makeOpenClawDispatch(): OpenAutomationDispatch {
 export async function runOpenclawFire(
   opts: OpenclawFireOptions,
   log: FireLog,
+  api: OpenClawPluginApi,
 ): Promise<AutomationHandlerOutcome & { runId: string }> {
   const { outcome, record } = await runAutomationFire(
     {
@@ -161,33 +246,7 @@ export async function runOpenclawFire(
       ...(opts.input !== undefined ? { input: opts.input } : {}),
       ...(opts.resumeFromRunId ? { resumeFromRunId: opts.resumeFromRunId } : {}),
     },
-    { openDispatch: makeOpenClawDispatch() },
+    { openDispatch: makeOpenClawDispatch(api) },
   );
   return { ...outcome, runId: record.runId };
-}
-
-/**
- * Resolve the OpenClawConfig handle bound by the plugin entry. openclaw makes
- * its config available via the runtime context; the plugin entry stashes it
- * module-scoped (see `setOpenClawConfig`) so `ctx.agent` can route through the
- * user's real provider auth.
- */
-function getOpenClawConfig(): never {
-  const cfg = openclawConfigRef.current;
-  if (!cfg) {
-    throw new Error(
-      'centraid ctx.agent used before openclaw config was bound — plugin entry must call setOpenClawConfig() at registration',
-    );
-  }
-  return cfg as never;
-}
-
-const openclawConfigRef: { current: unknown } = { current: undefined };
-
-/**
- * Called by the plugin entry once `api.config` is in hand, before any cron
- * fire reaches our StreamFn.
- */
-export function setOpenClawConfig(cfg: unknown): void {
-  openclawConfigRef.current = cfg;
 }

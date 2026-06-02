@@ -131,6 +131,25 @@ export {
   type AutomationDispatchContext,
 } from './automation-handler-runner.js';
 export { truncateForAudit } from './automation-handler-audit.js';
+// Mock-LLM server + host-agnostic persistent session (issue #166): the
+// token-free `ctx.tool` rail. One long-lived agent session per fire, puppeted
+// by the mock, executes every tool batch; the per-host `driveAgent` is the
+// only thing that varies (CLI subprocess vs. embedded agent).
+export {
+  startMockLlmServer,
+  type MockLlmServerHandle,
+  type MockLlmServerOptions,
+  type StagedTurn,
+  type CapturedToolResult,
+} from './mock-llm-server.js';
+export {
+  startPersistentMockSession,
+  type AgentDriver,
+  type AgentDriveInput,
+  type AgentDriveResult,
+  type PersistentMockSession,
+  type PersistentMockSessionOptions,
+} from './persistent-mock-session.js';
 // Crash-resume journal (issue #166, Phase 3): a prior run's `run_nodes`
 // replayed so already-serviced `ctx.*` calls are not re-dispatched.
 export {

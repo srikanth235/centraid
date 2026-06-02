@@ -40,7 +40,7 @@ import { makeWebhookRouteHandler } from '@centraid/automation-engine';
 import { buildGateway, type BuiltGateway } from '@centraid/gateway';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
-import { runOpenclawFire, setOpenClawConfig } from './lib/openclaw-fire.js';
+import { runOpenclawFire } from './lib/openclaw-fire.js';
 
 // Re-export the public handler & payload types from app-engine so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -137,6 +137,7 @@ export default definePluginEntry({
             triggerOrigin: fireOpts.triggerOrigin,
           },
           deps.logger,
+          api,
         ).catch((err) =>
           deps.logger.warn(
             `${fireOpts.triggerKind} ${automationRef} failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -147,10 +148,8 @@ export default definePluginEntry({
 
     api.on('gateway_start', async () => {
       const gw = await gwPromise;
-      // Bind the OpenClaw config so `runOpenclawFire`'s ctx.agent path can
-      // route through the user's real provider. `api.config` is available at
-      // gateway_start; cron/webhook fires only happen after this point.
-      setOpenClawConfig((api as unknown as { config: unknown }).config);
+      // `runOpenclawFire` reads `api.config` directly via the captured `api`
+      // (no module-global handle) for its ctx.tool/ctx.agent embedded runs.
       // `start()` runs the git-store init, registry sync, bootstrap, and starts
       // the in-process cron scheduler — only here, in the HTTP-serving process.
       // The base URL is unused by the OpenClaw path (the injected chat runner
@@ -217,6 +216,7 @@ export default definePluginEntry({
               ...(body !== undefined ? { input: body } : {}),
             },
             api.logger,
+            api,
           );
           return {
             ok: outcome.ok,

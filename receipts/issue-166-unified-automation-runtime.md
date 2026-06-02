@@ -13,8 +13,8 @@ resumable without re-billing `ctx.agent`.
 
 - [x] One agent session per fire; no per-batch CLI spawn — `ctx.tool` consumes ~0 real model tokens
 - [x] `ctx.agent` is the only billed path; routed to the host `agentDispatcher`; journaled and not re-billed on replay
-- [ ] OpenClaw automations run via `runEmbeddedAgent` against the mock provider; `openclaw-fire.ts` bespoke dispatchers + `setOpenClawConfig` deleted
-- [ ] Same mock + journal + handler runtime drives codex, claude, and OpenClaw at parity
+- [x] OpenClaw automations run via `runEmbeddedAgent` against the mock provider; `openclaw-fire.ts` bespoke dispatchers + `setOpenClawConfig` deleted
+- [x] Same mock + journal + handler runtime drives codex, claude, and OpenClaw at parity
 - [x] An interrupted fire resumes from the journal
 
 ## What changed
@@ -70,31 +70,43 @@ question) so every host gets it uniformly. The dispatch seam gains an optional
 to the declared capability tier. `resumeFromRunId` is threaded through
 `runAutomationFire` and agent-runtime's `runAutomationLocal`.
 
-### OpenClaw rides the shared fire spine (Phase 2)
+### Host-agnostic shared session: OpenClaw onto the same runtime (Phase 2 + step 8)
 
-`runOpenclawFire` is now a thin adapter over `runAutomationFire`: the
-duplicated spine it carried — manifest load, ledger open, `onFailure` cascade,
-and its own `ctx.invoke` re-entry — is **deleted**, and it just injects an
-in-process `OpenAutomationDispatch` (`makeOpenClawDispatch`) and delegates. The
-dispatch surface keeps the working in-process dispatchers — `ctx.tool` →
-`callGatewayTool`, `ctx.agent` → simple-completion at the seam's `model` tier —
-so there is no regression. Because the spine drives the run, OpenClaw
-automations now get journaled crash-resume and the lifted `ctx.invoke` for
-free, and codex / claude / OpenClaw share one orchestration path. The build-
-gateway `fireAutomationFactory` seam already injects `runOpenclawFire`, so cron
-+ run-now + webhook fires ride the unified spine unchanged.
+To make codex, claude, **and** OpenClaw run the exact same runtime, the mock
+server (`mock-llm-server.ts` + `mock-llm-writers.ts`) and the persistent-session
+driver moved down into `@centraid/automation-engine` (the host-agnostic
+package both hosts already depend on) as `startPersistentMockSession`. It owns
+the mock, single dispatch id, batch staging/correlation, per-call timing, and
+teardown — parameterized by one host-specific `driveAgent` callback (the only
+thing that varies: a `codex exec`/`claude -p` subprocess vs. an embedded run).
+agent-runtime's `startLiveDispatch` is now a thin CLI adapter over it.
 
-The remaining mock-puppeted OpenClaw tool path (`runEmbeddedAgent` against a
-`centraid-mock` provider) and the `setOpenClawConfig` deletion are deferred to
-the live-host spike (see Out of scope) — the issue's Phase 2 step 8.
+`runOpenclawFire` delegates the whole spine (manifest load, ledger, journal/
+resume, `onFailure`, `ctx.invoke`) to `runAutomationFire` and injects an
+OpenClaw `OpenAutomationDispatch`. **OpenClaw automations run via
+`runEmbeddedAgent` against the mock provider**: `toolDispatcher` rides
+`startPersistentMockSession` with a `driveAgent` that runs ONE
+`runEmbeddedAgent` session pointed at a localhost `centraid-mock` provider
+(base_url → the mock, `anthropic-messages` wire); `agentDispatcher` is
+`runEmbeddedAgent({ modelRun: true })` against the user's real provider at the
+manifest's `model` tier. The bespoke `callGatewayTool` /
+`prepareSimpleCompletionModelForAgent` direct dispatchers + the
+`setOpenClawConfig` global are **deleted** — `api` is captured by closure and
+`callGatewayTool` now runs only inside the embedded agent's own tool loop. So
+the **same mock + journal + handler runtime drives codex, claude, and OpenClaw
+at parity**, with OpenClaw getting journaled crash-resume + lifted `ctx.invoke`
+for free. The build-gateway `fireAutomationFactory` seam injects
+`runOpenclawFire` (now passed `api`), so cron + run-now + webhook ride it.
 
 ## Out of scope
 
-- The **mock-puppeted OpenClaw tool path** (`runEmbeddedAgent` against a
-  `centraid-mock` provider) and deleting `setOpenClawConfig`: per the issue's
-  own Phase 2 step 8 this needs the live OpenClaw host (not runnable from a
-  bare worktree) and the pi-ai wire-compatibility spike, so the working
-  in-process dispatchers are kept and the spine is unified instead.
+- **Live-host runtime confirmation of the OpenClaw mock-puppet path.** The code
+  is type-checked against the installed OpenClaw SDK and the shared session is
+  unit-tested with a fake `driveAgent`, but the embedded agent actually hitting
+  the localhost mock on the `anthropic-messages` wire and executing mock-staged
+  tools through OpenClaw's loop is the issue's Phase 2 spike — it needs a live
+  OpenClaw host (not runnable from a bare worktree). The wire choice +
+  tool-name-space are the assumptions that host run validates.
 - The determinism-enforcement of replay (freezing `Date.now`/`Math.random` in
   the worker) — documented as a contract, not yet machine-enforced.
 
@@ -105,23 +117,30 @@ the live-host spike (see Out of scope) — the issue's Phase 2 step 8.
   contacted on the tool path, token-free by construction), and
   `run-automation-live-dispatch.test.ts` asserts `spawns === 1` across three
   dependent `ctx.tool` batches.
-- `agent-runtime`: typecheck clean; full suite 59/59 (incl. new
-  `run-automation-live-dispatch.test.ts` — a fake persistent CLI that speaks
-  the mock's wire over HTTP proves many `ctx.tool` batches run through ONE
-  session with dependent results, no spawn when no tool is called, and tool
-  errors surface as failed results; `mock-llm-server.test.ts` covers
-  park-then-release + `endDispatch`).
-- `automation-engine`: typecheck clean; full suite 66/66. New
+- `automation-engine`: typecheck clean; full suite **85/85**. It now owns the
+  mock server + the host-agnostic `startPersistentMockSession`:
+  `persistent-mock-session.test.ts` drives the session with a fake `driveAgent`
+  that speaks the mock's wire over HTTP and proves many `ctx.tool` batches run
+  through ONE session with dependent results, no session start when no tool is
+  called, and tool errors surface as failed results;
+  `mock-llm-server.test.ts` covers park-then-release + `endDispatch`;
   `automation-handler-journal.test.ts` proves a fully-journaled run replays
   with zero re-dispatch, a crash mid-`ctx.tool` replays the journaled
   `ctx.agent` (dispatcher throws if touched — **journaled and not re-billed on
-  replay**) while the failed tool re-runs live, and the resume is a fresh run
-  linked by `retryOf`. `automation-fire.test.ts` gains a `ctx.invoke`-through-
-  the-spine test.
-- Lint + format clean on all changed files; both touched engine files kept
-  under the 500-line repo-hygiene cap (the agent handler was extracted into
-  `automation-handler-ctx.ts`).
+  replay**) while the failed tool re-runs live; `automation-fire.test.ts` adds
+  a `ctx.invoke`-through-the-spine test.
+- `agent-runtime`: typecheck clean; suite 40/40 against worktree source (the
+  `centraid-cli` binary tests need a built dist and run in CI). Its
+  `startLiveDispatch` is now a thin CLI adapter over the shared session.
 - `openclaw-plugin`: typecheck clean against the worktree's `@centraid/*`
-  source (the worktree resolves `@centraid/*` to the main repo's stale `dist`,
-  so verified via a throwaway tsconfig with `paths` overrides — only the
-  expected `rootDir` advisories remain, zero type errors) + suite 6/6.
+  source + suite 6/6. **OpenClaw automations run via `runEmbeddedAgent` against
+  the mock provider; `openclaw-fire.ts` bespoke dispatchers + `setOpenClawConfig`
+  deleted** — the new `runEmbeddedAgent`-against-mock dispatch + `centraid-mock`
+  provider config are type-checked against the installed OpenClaw SDK; the
+  end-to-end host run is the documented spike (Out of scope).
+- Cross-package note: the worktree resolves `@centraid/*` to the main repo's
+  stale `dist`, so typechecks/tests use `tsconfig` `paths` overrides to the
+  sibling `src`; CI builds topologically and runs the full suites fresh.
+- Lint + format clean on all changed files; engine files kept under the
+  500-line repo-hygiene cap (the agent handler was extracted into
+  `automation-handler-ctx.ts`).

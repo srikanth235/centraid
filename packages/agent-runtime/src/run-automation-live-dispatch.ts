@@ -29,20 +29,17 @@ import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import type {
-  AutomationAgentDispatcher,
-  AutomationDispatchContext,
-  AutomationToolCall,
-  AutomationToolDispatcher,
-  AutomationToolResult,
+import {
+  startPersistentMockSession,
+  type AgentDriver,
+  type AutomationAgentDispatcher,
+  type AutomationToolDispatcher,
 } from '@centraid/automation-engine';
-import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 import {
   defaultSpawnCli,
   type LocalRunnerKind,
   type SpawnCli,
-  type SpawnCliResult,
 } from './run-automation-cli-spawn.js';
 
 export interface LiveDispatchOptions {
@@ -63,33 +60,6 @@ export interface LiveDispatch {
   agentDispatcher: AutomationAgentDispatcher;
   /** Tear down the mock server + scratch dir. Safe to call once. */
   close(): Promise<void>;
-}
-
-/**
- * Compose the persistent CLI session prompt. The mock dictates every turn,
- * so the content barely matters — but a clear instruction keeps the CLI in
- * "execute the staged tool, return its result, await the next" mode for the
- * lifetime of the session (issue #166).
- */
-function buildSessionPrompt(automationId: string): string {
-  return (
-    `<<<centraid:${automationId}>>>\n` +
-    'You are the deterministic tool executor for a centraid automation. ' +
-    'Execute each staged tool call exactly as given and return its tool_result. ' +
-    'Do not improvise, add tools, or stop early — continue until told the run is complete.'
-  );
-}
-
-/** Convert worker tool calls into the StagedTurn shape the mock returns. */
-function batchToStagedTurn(calls: readonly AutomationToolCall[]): StagedTurn {
-  return {
-    stopReason: 'tool_use',
-    toolUses: calls.map((c, idx) => ({
-      id: `toolu_${idx}_${randomUUID().slice(0, 8)}`,
-      name: c.name,
-      input: c.args,
-    })),
-  };
 }
 
 /** Drain a spawned CLI's stdout/stderr and resolve once it exits. */
@@ -155,177 +125,47 @@ function coerceAgentAnswer(text: string, json: unknown): unknown {
   }
 }
 
-/** One captured tool result as the mock surfaces it. */
-type CapturedResult = { id: string; content: string; isError: boolean };
-
-/** What a parked `toolDispatcher` is woken with: results, or a dead session. */
-type BatchOutcome =
-  | { kind: 'results'; results: ReadonlyArray<CapturedResult> }
-  | { kind: 'exit'; outcome: SpawnCliResult };
-
-const closeKindError = (outcome: SpawnCliResult): string =>
-  `CLI session exited code=${outcome.exitCode ?? '?'} before returning tool results\n${outcome.stderr.slice(0, 2000)}`;
-
 /**
- * Race `promise` against an `ms` deadline. Bounds teardown so a wedged CLI
- * never hangs the fire, and clears the timer the moment the promise wins so
- * a finished run leaves no dangling timeout holding the event loop open.
- */
-function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
-  return new Promise<T | undefined>((resolve) => {
-    let settled = false;
-    const settle = (v: T | undefined): void => {
-      if (settled) return;
-      settled = true;
-      resolve(v);
-    };
-    const timer = setTimeout(() => settle(undefined), ms);
-    void promise.then(
-      (v) => {
-        clearTimeout(timer);
-        settle(v);
-      },
-      () => {
-        clearTimeout(timer);
-        settle(undefined);
-      },
-    );
-  });
-}
-
-/**
- * Stand up the live dispatch surface: a persistent mock-LLM server plus a
- * scratch dir. The CLI session itself is spawned lazily on the first
- * `ctx.tool` batch (an automation that never calls a tool never spawns one).
- * Returns the two dispatchers and a `close()` that ends the session and tears
- * everything down.
+ * Stand up the live dispatch surface for the CLI runner: the shared persistent
+ * mock session (issue #166) plus a scratch dir. The CLI session is started
+ * lazily on the first `ctx.tool` batch (an automation that never calls a tool
+ * never spawns one). The only CLI-specific piece is the `driveAgent` adapter,
+ * which runs `codex exec` / `claude -p` against the mock; everything else (the
+ * mock, batch staging/correlation, timing) is the shared session.
  */
 export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<LiveDispatch> {
   const scratchDir = path.join(opts.workdir, '.automation-scratch', opts.runId);
   await fs.mkdir(scratchDir, { recursive: true });
 
-  interface BatchAwaiter {
-    settle(outcome: BatchOutcome): void;
-  }
-  // Single persistent dispatch → at most one outstanding batch awaiter at a
-  // time (the handler awaits each `ctx.tool` before the next). Keyed by the
-  // session dispatch id so the mock callbacks can find the current awaiter.
-  const batchAwaiters = new Map<string, BatchAwaiter>();
-
-  // Per-call timing (issue #158, Phase 3): the mock signals when it hands the
-  // CLI a tool (start) and when each result lands (finish). Tool-use ids are
-  // globally unique (randomUUID), so a flat id→window map serves the whole
-  // persistent session — each tool node records its real execution window
-  // rather than a batch span that also covers CLI spawn/teardown.
-  const toolTiming = new Map<string, { startedAt?: number; endedAt?: number }>();
-  const timingFor = (id: string): { startedAt?: number; endedAt?: number } => {
-    let entry = toolTiming.get(id);
-    if (!entry) {
-      entry = {};
-      toolTiming.set(id, entry);
-    }
-    return entry;
-  };
-
-  const mock = await startMockLlmServer({
-    onLog: opts.onLog,
-    onToolStart: (_dispatchId, toolUses) => {
-      const now = Date.now();
-      for (const u of toolUses) timingFor(u.id).startedAt = now;
-    },
-    onToolResults: (dispatchId, results) => {
-      const now = Date.now();
-      for (const r of results) timingFor(r.id).endedAt = now;
-      const pending = batchAwaiters.get(dispatchId);
-      if (pending) pending.settle({ kind: 'results', results });
-    },
-  });
-
-  // The persistent session: minted + spawned lazily, shared by every batch.
-  interface Session {
-    dispatchId: string;
-    spawn: Promise<SpawnCliResult>;
-    exited: SpawnCliResult | undefined;
-  }
-  let session: Session | undefined;
-
-  const ensureSession = (ctx: AutomationDispatchContext): Session => {
-    if (session) return session;
-    const { dispatchId, bearerToken } = mock.mintDispatchToken();
-    const spawn = opts.spawnCli({
+  // The CLI host adapter: point a `codex exec` / `claude -p` session at the
+  // mock for the lifetime of the fire. Resolves when the CLI exits (`close()`
+  // stages the final `end_turn`).
+  const driveAgent: AgentDriver = async (input) => {
+    const outcome = await opts.spawnCli({
       kind: opts.runner,
-      mockBaseUrl: mock.baseUrl,
-      mockBearerToken: bearerToken,
-      prompt: buildSessionPrompt(ctx.automationId),
+      mockBaseUrl: input.mockBaseUrl,
+      mockBearerToken: input.mockBearerToken,
+      prompt: input.prompt,
       toolsAllow: opts.toolsAllow,
-      cwd: opts.workdir,
+      cwd: input.cwd,
       scratchDir,
-      abortSignal: ctx.abortSignal,
+      abortSignal: input.abortSignal,
     });
-    const s: Session = { dispatchId, spawn, exited: undefined };
-    // If the CLI session dies (crash / abort) while a batch is parked, wake
-    // the awaiter so the handler sees a failure instead of hanging forever.
-    void spawn.then((outcome) => {
-      s.exited = outcome;
-      const pending = batchAwaiters.get(dispatchId);
-      if (pending) pending.settle({ kind: 'exit', outcome });
-    });
-    session = s;
-    return s;
+    return outcome.ok
+      ? { ok: true }
+      : {
+          ok: false,
+          error: `CLI exited code=${outcome.exitCode ?? '?'}\n${outcome.stderr.slice(0, 2000)}`,
+        };
   };
 
-  const toolDispatcher: AutomationToolDispatcher = async (
-    calls: readonly AutomationToolCall[],
-    ctx: AutomationDispatchContext,
-  ): Promise<AutomationToolResult[]> => {
-    const s = ensureSession(ctx);
-    if (s.exited) {
-      // Session already gone (a prior batch killed it) — fail fast.
-      return calls.map(() => ({ ok: false, error: closeKindError(s.exited!) }));
-    }
-    const turn = batchToStagedTurn(calls);
-
-    // Register the awaiter BEFORE staging: staging releases the parked CLI
-    // request, which may deliver results almost immediately.
-    const outcomePromise = new Promise<BatchOutcome>((resolve) => {
-      batchAwaiters.set(s.dispatchId, {
-        settle(outcome) {
-          batchAwaiters.delete(s.dispatchId);
-          resolve(outcome);
-        },
-      });
-    });
-    mock.stageTurn(s.dispatchId, turn);
-
-    const outcome = await outcomePromise;
-    if (outcome.kind === 'exit') {
-      return calls.map(() => ({ ok: false, error: closeKindError(outcome.outcome) }));
-    }
-
-    const turnUses = turn.toolUses ?? [];
-    const byIdx = new Map<number, { content: string; isError: boolean }>();
-    for (const r of outcome.results) {
-      const useIdx = turnUses.findIndex((u) => u.id === r.id);
-      if (useIdx >= 0) byIdx.set(useIdx, { content: r.content, isError: r.isError });
-    }
-    const timing = (idx: number): { startedAt?: number; endedAt?: number } => {
-      const t = toolTiming.get(turnUses[idx]?.id ?? '');
-      return {
-        ...(t?.startedAt !== undefined ? { startedAt: t.startedAt } : {}),
-        ...(t?.endedAt !== undefined ? { endedAt: t.endedAt } : {}),
-      };
-    };
-    return calls.map((_call, idx) => {
-      const r = byIdx.get(idx);
-      if (!r) return { ok: false, error: 'no tool_result returned by host CLI' };
-      if (r.isError) return { ok: false, error: r.content, ...timing(idx) };
-      try {
-        return { ok: true, result: JSON.parse(r.content) as unknown, ...timing(idx) };
-      } catch {
-        return { ok: true, result: r.content, ...timing(idx) };
-      }
-    });
-  };
+  const session = await startPersistentMockSession({
+    workdir: opts.workdir,
+    automationId: opts.automationId,
+    driveAgent,
+    onLog: opts.onLog,
+  });
+  const toolDispatcher: AutomationToolDispatcher = session.toolDispatcher;
 
   // ctx.agent routes to the user's REAL provider via the local CLI —
   // no mock involvement. The final answer is read from a file the CLI
@@ -418,18 +258,9 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
-      // End the persistent session: stage a final `end_turn` so the CLI
-      // session completes and exits, then wait (bounded) for it to drain.
-      // `mock.close()` releases any straggler parked request afterwards.
-      if (session && !session.exited) {
-        try {
-          mock.stageTurn(session.dispatchId, { text: '', stopReason: 'end_turn' });
-        } catch {
-          /* a turn may already be buffered; mock.close() will release it */
-        }
-        await withDeadline(session.spawn, 5000);
-      }
-      await mock.close().catch(() => undefined);
+      // End the shared session (final `end_turn` + drain + mock stop), then
+      // remove the CLI scratch dir this host owns.
+      await session.close().catch(() => undefined);
       await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
     },
   };
