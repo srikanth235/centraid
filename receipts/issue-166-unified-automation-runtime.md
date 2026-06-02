@@ -70,6 +70,24 @@ question) so every host gets it uniformly. The dispatch seam gains an optional
 to the declared capability tier. `resumeFromRunId` is threaded through
 `runAutomationFire` and agent-runtime's `runAutomationLocal`.
 
+### OpenClaw rides the shared fire spine (Phase 2)
+
+`runOpenclawFire` is now a thin adapter over `runAutomationFire`: the
+duplicated spine it carried — manifest load, ledger open, `onFailure` cascade,
+and its own `ctx.invoke` re-entry — is **deleted**, and it just injects an
+in-process `OpenAutomationDispatch` (`makeOpenClawDispatch`) and delegates. The
+dispatch surface keeps the working in-process dispatchers — `ctx.tool` →
+`callGatewayTool`, `ctx.agent` → simple-completion at the seam's `model` tier —
+so there is no regression. Because the spine drives the run, OpenClaw
+automations now get journaled crash-resume and the lifted `ctx.invoke` for
+free, and codex / claude / OpenClaw share one orchestration path. The build-
+gateway `fireAutomationFactory` seam already injects `runOpenclawFire`, so cron
++ run-now + webhook fires ride the unified spine unchanged.
+
+The remaining mock-puppeted OpenClaw tool path (`runEmbeddedAgent` against a
+`centraid-mock` provider) and the `setOpenClawConfig` deletion are deferred to
+the live-host spike (see Out of scope) — the issue's Phase 2 step 8.
+
 ## Out of scope
 
 - The **mock-puppeted OpenClaw tool path** (`runEmbeddedAgent` against a
@@ -103,3 +121,7 @@ to the declared capability tier. `resumeFromRunId` is threaded through
 - Lint + format clean on all changed files; both touched engine files kept
   under the 500-line repo-hygiene cap (the agent handler was extracted into
   `automation-handler-ctx.ts`).
+- `openclaw-plugin`: typecheck clean against the worktree's `@centraid/*`
+  source (the worktree resolves `@centraid/*` to the main repo's stale `dist`,
+  so verified via a throwaway tsconfig with `paths` overrides — only the
+  expected `rootDir` advisories remain, zero type errors) + suite 6/6.
