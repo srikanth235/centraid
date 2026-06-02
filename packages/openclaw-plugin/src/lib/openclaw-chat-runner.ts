@@ -29,6 +29,7 @@ import path from 'node:path';
 import os from 'node:os';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import type { ChatRunner, ChatRunInput, ChatStreamEvent } from '@centraid/app-engine';
+import { runEmbeddedTurn } from './openclaw-agent-turn.js';
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -61,19 +62,20 @@ export function makeOpenClawChatRunner(api: OpenClawPluginApi): ChatRunner {
       };
 
       try {
-        await api.runtime.agent.runEmbeddedAgent({
+        // `runEmbeddedTurn` applies the centraid defaults `isCanonicalWorkspace:
+        // false` (→ bootstrapMode "limited", so AGENTS.md / SOUL.md / USER.md
+        // loading is skipped) and `promptMode: 'full'`.
+        await runEmbeddedTurn(api, {
           sessionId,
           sessionKey,
           sessionFile: input.sessionFile,
           workspaceDir,
-          isCanonicalWorkspace: false,
           prompt: input.message,
           extraSystemPrompt: input.extraSystemPrompt,
           ...(input.model ? { model: input.model } : {}),
           ...(input.thinking
             ? { thinkLevel: input.thinking as 'low' | 'medium' | 'high' | 'off' }
             : {}),
-          promptMode: 'full',
           trigger: 'user',
           abortSignal: input.abortSignal,
           timeoutMs: DEFAULT_TIMEOUT_MS,

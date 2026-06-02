@@ -131,6 +131,9 @@ export {
   type AutomationDispatchContext,
 } from './automation-handler-runner.js';
 export { truncateForAudit } from './automation-handler-audit.js';
+// Shared `ctx.agent` answer coercion — every host ends an agent turn with a
+// blob of text and must turn it into the value the handler awaits the same way.
+export { coerceAgentAnswer } from './automation-agent-answer.js';
 // Mock-LLM server + host-agnostic persistent session (issue #166): the
 // token-free `ctx.tool` rail. One long-lived agent session per fire, puppeted
 // by the mock, executes every tool batch; the per-host `driveAgent` is the

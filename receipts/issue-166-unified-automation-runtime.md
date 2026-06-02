@@ -16,6 +16,7 @@ resumable without re-billing `ctx.agent`.
 - [x] OpenClaw automations run via `runEmbeddedAgent` against the mock provider; `openclaw-fire.ts` bespoke dispatchers + `setOpenClawConfig` deleted
 - [x] Same mock + journal + handler runtime drives codex, claude, and OpenClaw at parity
 - [x] An interrupted fire resumes from the journal
+- [x] Chat and automation share one embedded-agent turn helper — no duplicated runEmbeddedAgent wiring; ctx.agent answer coercion is shared cross-package
 
 ## What changed
 
@@ -97,6 +98,35 @@ the **same mock + journal + handler runtime drives codex, claude, and OpenClaw
 at parity**, with OpenClaw getting journaled crash-resume + lifted `ctx.invoke`
 for free. The build-gateway `fireAutomationFactory` seam injects
 `runOpenclawFire` (now passed `api`), so cron + run-now + webhook ride it.
+
+### Shared embedded-agent turn helper — post-#166 dedup
+
+Routing OpenClaw's `ctx.tool`/`ctx.agent` rails through the same
+`runEmbeddedAgent` primitive the per-app chat runner already uses exposed
+duplication at the agent-turn **leaf** (one layer below the runtime cores,
+which stay separate — they're near-inverses, not the same thing). Collapsed:
+
+- `coerceAgentAnswer` (plain-text vs. fenced-JSON coercion of a `ctx.agent`
+  answer) lived in BOTH `openclaw-fire.ts` and agent-runtime's
+  `run-automation-live-dispatch.ts` — two packages. It moves to
+  `@centraid/automation-engine` (`automation-agent-answer.ts`, exported from the
+  index) and both hosts import the one copy.
+- The OpenClaw `runEmbeddedAgent` invocation — the SDK-derived
+  param/config/result types, the centraid defaults (`isCanonicalWorkspace:
+  false` → bootstrapMode "limited", `promptMode: 'full'`), and `payloadText` —
+  was re-derived in `openclaw-fire.ts` and re-inlined in `openclaw-chat-runner.ts`.
+  A new `openclaw-plugin/src/lib/openclaw-agent-turn.ts` owns it as
+  `runEmbeddedTurn(api, params)` + `payloadText` + the shared types; the chat
+  runner and both fire dispatchers consume it, so **chat and automation share
+  one embedded-agent turn helper — no duplicated runEmbeddedAgent wiring; ctx.agent
+  answer coercion is shared cross-package**.
+
+The cores are NOT merged: the automation runtime (manifest, deterministic
+handler worker, run-nodes ledger, journal/crash-resume, the `ctx.invoke` DAG,
+cron/webhook triggers) has no chat analog, and at the tool layer the two are
+opposite — chat hits the real model interactively; automation `ctx.tool` is
+mock-puppeted and token-free. `translateAgentEvent` stays chat-only (it maps to
+`ChatStreamEvent`, so sharing it would dedup nothing).
 
 ## Out of scope
 

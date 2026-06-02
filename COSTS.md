@@ -593,3 +593,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-f840d9b8-bbc-1780393195 | claude-code | f840d9b8-bbc8-4ce2-ac65-62179d31f87c | #166 | claude-opus-4-8 | 776 | 9429 | 2303799 | 8118 | 18323 | 1.4177 |  |
 | claude-code-f840d9b8-bbc-1780393243 | claude-code | f840d9b8-bbc8-4ce2-ac65-62179d31f87c | #166 | claude-opus-4-8 | 10 | 5105 | 1667982 | 3754 | 8869 | 0.9598 |  |
 | claude-code-a55319b5-9d1-1780394725 | claude-code | a55319b5-9d13-49ef-9f6f-f33950c303a9 | #166 | claude-opus-4-7 | 5 | 11867 | 14871 | 53 | 11925 | 0.0830 |  |
+| claude-code-f7f2b2bd-ec9-1780395719 | claude-code | f7f2b2bd-ec98-49a7-ada9-f9a017d9568b | #166 | claude-opus-4-7 | 5 | 13028 | 14871 | 108 | 13141 | 0.0916 | refactor(openclaw-plugin): share one embedded-agent turn helper across chat + au |

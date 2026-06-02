@@ -30,6 +30,7 @@ import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
+  coerceAgentAnswer,
   startPersistentMockSession,
   type AgentDriver,
   type AutomationAgentDispatcher,
@@ -103,26 +104,6 @@ function normalizeOutputSchema(schema: unknown): unknown {
     return obj;
   }
   return schema;
-}
-
-/**
- * Coerce a CLI's final answer into the shape `ctx.agent` promised: a
- * plain prompt returns the text as-is; a `json` prompt parses it,
- * tolerating a ```json fence the model may wrap around the object.
- */
-function coerceAgentAnswer(text: string, json: unknown): unknown {
-  const trimmed = text.trim();
-  if (!json) return trimmed;
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(trimmed);
-  const candidate = fenced ? fenced[1]!.trim() : trimmed;
-  try {
-    return JSON.parse(candidate) as unknown;
-  } catch (err) {
-    throw new Error(
-      `ctx.agent expected JSON but got: ${trimmed.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
-      { cause: err },
-    );
-  }
 }
 
 /**

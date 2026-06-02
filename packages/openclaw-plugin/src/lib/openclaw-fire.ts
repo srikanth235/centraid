@@ -4,7 +4,8 @@
  * `runOpenclawFire` delegates the per-fire orchestration (manifest load, ledger,
  * journal/resume, onFailure, ctx.invoke) to app-engine's `runAutomationFire`,
  * and injects an OpenClaw `OpenAutomationDispatch` — the ONLY host-specific
- * piece. Both dispatchers run `api.runtime.agent.runEmbeddedAgent`:
+ * piece. Both dispatchers run one embedded-agent turn via the shared
+ * `runEmbeddedTurn` helper (also used by the chat runner):
  *
  *   - `toolDispatcher` rides the shared `startPersistentMockSession`: ONE
  *     embedded-agent session per fire, pointed at a localhost `centraid-mock`
@@ -33,6 +34,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import {
+  coerceAgentAnswer,
   runAutomationFire,
   startPersistentMockSession,
   type AgentDriver,
@@ -49,17 +51,12 @@ import {
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
+import { runEmbeddedTurn, payloadText, type EmbeddedConfig } from './openclaw-agent-turn.js';
 
 /** The `centraid-mock` provider the embedded agent is pointed at for tools. */
 const MOCK_PROVIDER = 'centraid-mock';
 const MOCK_MODEL = 'centraid-mock-run-automation';
 const FIRE_TIMEOUT_MS = 5 * 60 * 1000;
-
-// Derive the embedded-agent param + config types from the installed SDK so we
-// don't depend on a non-exported `OpenClawConfig` symbol.
-type RunEmbeddedAgent = OpenClawPluginApi['runtime']['agent']['runEmbeddedAgent'];
-type EmbeddedParams = Parameters<RunEmbeddedAgent>[0];
-type EmbeddedConfig = NonNullable<EmbeddedParams['config']>;
 
 export interface OpenclawFireOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
@@ -117,30 +114,6 @@ function withMockProvider(base: EmbeddedConfig, baseUrl: string, apiKey: string)
   return { ...base, models: { ...models, mode: 'merge', providers } };
 }
 
-/** Pull the assistant text out of an embedded-run result. */
-function payloadText(result: Awaited<ReturnType<RunEmbeddedAgent>>): string {
-  return (result.payloads ?? [])
-    .filter((p) => !p.isReasoning && typeof p.text === 'string')
-    .map((p) => p.text ?? '')
-    .join('')
-    .trim();
-}
-
-/** Coerce `ctx.agent`'s answer: plain text as-is; a `json` prompt is parsed. */
-function coerceAgentAnswer(text: string, json: unknown): unknown {
-  if (!json) return text;
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
-  const candidate = (fenced ? fenced[1]! : text).trim();
-  try {
-    return JSON.parse(candidate) as unknown;
-  } catch (err) {
-    throw new Error(
-      `ctx.agent expected JSON but got: ${text.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
-      { cause: err },
-    );
-  }
-}
-
 /**
  * Build the OpenClaw dispatch surface: the mock-puppeted tool session +
  * `modelRun` agent, both via `runEmbeddedAgent`. Captures `api` so no global
@@ -161,17 +134,15 @@ function makeOpenClawDispatch(api: OpenClawPluginApi): OpenAutomationDispatch {
     const driveAgent: AgentDriver = async (input) => {
       const sessionFile = path.join(scratchDir, 'tool-session.json');
       try {
-        await api.runtime.agent.runEmbeddedAgent({
+        await runEmbeddedTurn(api, {
           sessionId: `centraid-automation:${args.automationRef}`,
           sessionKey: `centraid-automation:${args.automationRef}`,
           sessionFile,
           workspaceDir: args.workdir,
-          isCanonicalWorkspace: false,
           provider: MOCK_PROVIDER,
           model: MOCK_MODEL,
           config: withMockProvider(baseCfg, input.mockBaseUrl, input.mockBearerToken),
           prompt: input.prompt,
-          promptMode: 'full',
           trigger: 'manual',
           timeoutMs: FIRE_TIMEOUT_MS,
           runId: `${args.runId}:tools`,
@@ -197,17 +168,15 @@ function makeOpenClawDispatch(api: OpenClawPluginApi): OpenAutomationDispatch {
       ctx: AutomationDispatchContext,
     ): Promise<unknown> => {
       const sessionFile = path.join(scratchDir, `agent-${randomUUID().slice(0, 8)}.json`);
-      const result = await api.runtime.agent.runEmbeddedAgent({
+      const result = await runEmbeddedTurn(api, {
         sessionId: `centraid-automation-agent:${ctx.automationId}`,
         sessionKey: `centraid-automation-agent:${ctx.automationId}`,
         sessionFile,
         workspaceDir: args.workdir,
-        isCanonicalWorkspace: false,
         modelRun: true,
         disableTools: true,
         ...(args.model ? { model: args.model } : {}),
         prompt: call.prompt,
-        promptMode: 'full',
         trigger: 'manual',
         timeoutMs: FIRE_TIMEOUT_MS,
         runId: `${args.runId}:agent:${randomUUID().slice(0, 6)}`,
