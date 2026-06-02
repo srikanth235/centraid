@@ -23,7 +23,7 @@ Centraid's first principle is that **everything is agentic chat** — automation
 | **turn**         | one model exchange / loop round (documented; nodes are flat today) | the reply round | one `ctx.agent` round    |
 | **node**         | one recorded trace entry                           | message / tool         | tool / agent / invoke            |
 
-A `Runner` executes one `run`; `ChatRunner` and the automation fire spine are two runners over the same structure. They differ on only three axes — **driver** (person vs script), **trigger** (message vs cron/webhook/manual), and **fan-out** (chat ≈ one turn per run; automation = many). The ledger lives in `@centraid/app-engine` (`runs` ⊃ `run_nodes` tables); `runs.conversation_id` is the polymorphic conversation handle (a chat-session id or an automation id). `ctx.invoke` calls a **subagent / sub-conversation** — a child `run` that returns its output to the caller (call-and-return, not a handoff); `ctx.agent` runs one model turn inside the current run.
+A `Runner` executes one `run`; `ChatRunner` and the automation fire spine are two runners over the same structure. They differ on only three axes — **driver** (person vs script), **trigger** (message vs cron/webhook/manual), and **fan-out** (chat ≈ one turn per run; automation = many). The ledger lives in `@centraid/app-engine` (`runs` ⊃ `run_nodes` tables); `runs.conversation_id` is the polymorphic conversation handle (a chat-session id or an automation id). `ctx.agent` runs one model turn inside the current run.
 
 ## Workspace layout
 

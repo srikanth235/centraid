@@ -39,7 +39,8 @@ export type AutomationTriggerOrigin = 'cron' | 'webhook' | 'manual';
 /**
  * Trace-node discriminator. `step` is one primary model-inference call —
  * per-call token + cost accounting lives at this grain. `tool` / `agent`
- * / `invoke` are the per-call audit rows.
+ * are the per-call audit rows. `invoke` is retained for legacy rows and has
+ * no current producer (the `ctx.invoke` surface was removed).
  */
 export type AgentRunNodeKind = 'step' | 'tool' | 'agent' | 'invoke';
 
@@ -121,10 +122,11 @@ export interface AgentRunNodeRow {
   /** `tool` / `agent` / `invoke` — the app whose data the call touched. */
   readonly appId?: string;
   /**
-   * For `kind: 'invoke'` nodes — the `run_id` of the child run spawned by
-   * `ctx.invoke`. All runs (intra- and cross-app) live in the same
-   * activity DB, so the DAG view can nest the child timeline from this
-   * link regardless of which app the child belongs to.
+   * For legacy `kind: 'invoke'` nodes — the `run_id` of the child run the
+   * node spawned (the `ctx.invoke` surface that produced these was removed;
+   * the column is retained for historical rows). All runs (intra- and
+   * cross-app) live in the same activity DB, so the DAG view can nest the
+   * child timeline from this link regardless of which app the child belongs to.
    */
   readonly childRunId?: string;
 }

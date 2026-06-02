@@ -14,7 +14,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { scaffoldAutomationAppFiles } from '@centraid/automation-engine';
+import { scaffoldAutomationAppFiles } from '@centraid/conversation-engine';
 import type { WorktreeStore } from '@centraid/worktree-store';
 import { writeFileMap } from './route-helpers.js';
 import {

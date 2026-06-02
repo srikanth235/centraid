@@ -28,13 +28,12 @@ import {
   type AutomationTriggerOrigin,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import { formatAutomationRef, parseAutomationRef } from './automation-ref.js';
+import { parseAutomationRef } from './automation-ref.js';
 import { automationHandlerPath, readAppOwnedAutomation } from './automation-app.js';
 import { runAutomationHandler } from './automation-handler-runner.js';
 import type {
   AutomationAgentDispatcher,
   AutomationHandlerOutcome,
-  AutomationInvokeDispatcher,
   AutomationToolDispatcher,
 } from './automation-handler-runner.js';
 
@@ -124,15 +123,6 @@ export interface RunAutomationFireOptions {
   /** Optional parent run id for the onFailure sub-run DAG link. */
   parentRunId?: string;
   /**
-   * Resume an interrupted fire (issue #166, Phase 3). The prior run's
-   * `run_nodes` become a journal: already-serviced `ctx.tool`/`ctx.agent`/
-   * `ctx.invoke` calls return their recorded results without re-dispatching
-   * (so `ctx.agent` is never re-billed), and the handler runs live from the
-   * first un-journaled call. The resume is recorded as a fresh run with
-   * `retryOf = resumeFromRunId`.
-   */
-  resumeFromRunId?: string;
-  /**
    * Recursion guard for `onFailure` cascades. Defaults to 0 — the runtime
    * refuses to push the chain past depth 3.
    */
@@ -187,41 +177,6 @@ export async function runAutomationFire(
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
 
-  // ctx.invoke is owned by the spine (issue #166, Phase 2 — lifted out of the
-  // per-host fire). It re-enters `runAutomationFire` with the SAME injected
-  // dispatch surface, so a child automation runs on the same runtime as its
-  // parent (codex / claude / OpenClaw alike) and links into the run DAG.
-  // A bare id resolves within the calling automation's app.
-  const invokeDispatcher: AutomationInvokeDispatcher = async (targetId, invokeArgs) => {
-    const target = parseAutomationRef(targetId, parsed.appId);
-    if (!target) {
-      throw new Error(`ctx.invoke("${targetId}"): not a valid automation handle`);
-    }
-    const child = await runAutomationFire(
-      {
-        automationRef: formatAutomationRef(target.appId, target.automationId),
-        appsDir: opts.appsDir,
-        ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
-        ...(opts.analytics ? { analytics: opts.analytics } : {}),
-        ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
-        onLog,
-        triggerKind: 'manual',
-        ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
-        parentRunId: invokeArgs.parentRunId,
-        ...(invokeArgs.input !== undefined ? { input: invokeArgs.input } : {}),
-        failureDepth,
-      },
-      deps,
-    );
-    if (!child.outcome.ok) {
-      throw Object.assign(
-        new Error(`ctx.invoke("${targetId}") failed: ${child.outcome.error ?? 'unknown error'}`),
-        { childRunId: child.record.runId },
-      );
-    }
-    return { output: child.outcome.output, childRunId: child.record.runId };
-  };
-
   const dispatch = await deps.openDispatch({
     workdir: row.dir,
     automationRef: opts.automationRef,
@@ -240,14 +195,12 @@ export async function runAutomationFire(
       runId,
       toolDispatcher: dispatch.toolDispatcher,
       agentDispatcher: dispatch.agentDispatcher,
-      invokeDispatcher,
       runsStore,
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       triggerKind: opts.triggerKind ?? 'scheduled',
       triggerOrigin: opts.triggerOrigin ?? 'cron',
       ...(opts.input !== undefined ? { input: opts.input } : {}),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-      ...(opts.resumeFromRunId ? { resumeFromRunId: opts.resumeFromRunId } : {}),
       ...(row.manifest.outputSchema ? { outputSchema: row.manifest.outputSchema } : {}),
       history: row.manifest.history,
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),

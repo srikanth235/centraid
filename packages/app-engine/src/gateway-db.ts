@@ -31,9 +31,9 @@
  *     automation_state — per-automation KV, keyed by (automation_id, key).
  *
  *     Within one app's file `runs.conversation_id` is a real same-file
- *     FK; `parent_run_id` is a plain column (a cross-app `ctx.invoke`
- *     sub-run's parent lives in another file). Runtime-owned; never
- *     reachable from handler `db` or the `centraid_sql_*` agent tools.
+ *     FK; `parent_run_id` is a plain column (a cross-app sub-run — e.g. an
+ *     `onFailure` cascade — has its parent in another file). Runtime-owned;
+ *     never reachable from handler `db` or the `centraid_sql_*` agent tools.
  *
  * (The third ladder — `centraid-analytics.sqlite`, one `run_summary` row per
  * run, the Insights source — lives in the `insights/` sub-module, built through
@@ -124,8 +124,8 @@ export const GATEWAY_MIGRATIONS: readonly string[] = [
  * runs cascade is enforced in the store (`ChatHistoryStore.deleteSession`).
  * `chat_sessions` holds chat-specific conversation metadata (title, adapter
  * resume handle, turn count). `parent_run_id` likewise stays FK-free: a
- * cross-app `ctx.invoke` sub-run's parent lives in a *different* app's file
- * and a SQLite FK cannot span files.
+ * cross-app sub-run (e.g. an `onFailure` cascade) has its parent in a
+ * *different* app's file and a SQLite FK cannot span files.
  */
 export const RUNTIME_MIGRATIONS: readonly string[] = [
   // 0 → 1: the per-app run ledger + chat sessions. `runs.trigger_origin`

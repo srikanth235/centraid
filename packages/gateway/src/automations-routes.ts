@@ -45,7 +45,7 @@ import {
   listAutomations,
   parseAutomationRef,
   readAppOwnedAutomation,
-} from '@centraid/automation-engine';
+} from '@centraid/conversation-engine';
 import type { WorktreeStore } from '@centraid/worktree-store';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 

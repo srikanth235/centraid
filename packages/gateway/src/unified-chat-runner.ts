@@ -30,8 +30,8 @@
  * via a `webhooks` stream event.
  *
  * Since issue #147 (Concern 1) this is a thin config over
- * `makeChatRunnerCore` (agent-runtime): the shared per-turn spine lives
- * there; this file supplies only the builder seams — draft-worktree cwd,
+ * `makeChatRunnerCore` (`@centraid/conversation-engine`): the shared per-turn
+ * spine lives there; this file supplies only the builder seams — draft-worktree cwd,
  * the authoring prompt (delegated to `@centraid/skills`), and post-turn
  * webhook minting.
  *
@@ -43,15 +43,19 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { enumerateHostTools, defaultCentraidCliDir, runAgentTurn } from '@centraid/agent-runtime';
 import {
-  enumerateHostTools,
-  defaultCentraidCliDir,
-  makeChatRunnerCore,
+  type ChatRunner,
+  type ChatStreamEvent,
+  type Dispatcher,
   type RunnerPrefs,
   type RunTurnFn,
-} from '@centraid/agent-runtime';
-import { type ChatRunner, type ChatStreamEvent, type Dispatcher } from '@centraid/app-engine';
-import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation-engine';
+} from '@centraid/app-engine';
+import {
+  makeChatRunnerCore,
+  provisionAppPendingWebhooks,
+  WEBHOOK_ROUTE_PREFIX,
+} from '@centraid/conversation-engine';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
 import { WorktreeStore } from '@centraid/worktree-store';
 import { ensureSession } from './lifecycle-shared.js';
@@ -152,7 +156,9 @@ export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunne
     prefsLoader: opts.prefsLoader,
     getDispatcher: opts.getDispatcher,
     ...(extraPath ? { extraPath } : {}),
-    ...(opts.runTurn ? { runTurn: opts.runTurn } : {}),
+    // The model turn driver — the local codex/claude `runAgentTurn` unless a
+    // test injects a stub.
+    runTurn: opts.runTurn ?? runAgentTurn,
 
     // cwd IS the draft session worktree, so the agent's centraid_* tools
     // operate the draft's branched data.sqlite, not live (issue #144).

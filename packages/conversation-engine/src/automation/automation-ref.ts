@@ -4,7 +4,7 @@
  * An automation's directory slug (`isValidAutomationId`) is unique
  * within its owning app folder; its handle, `<appId>/<id>`, is unique
  * across the whole gateway and is what scheduler labels, webhook
- * routing, `ctx.invoke`, and `onFailure` address it by (issue #98).
+ * routing, and `onFailure` address it by (issue #98).
  */
 
 import { isValidAppId } from '@centraid/app-engine';
@@ -20,8 +20,7 @@ export function isValidAutomationId(id: string): boolean {
 
 /**
  * A parsed automation handle — the globally-unique address of an
- * automation across scheduler labels, webhook routing, `ctx.invoke`,
- * and `onFailure`.
+ * automation across scheduler labels, webhook routing, and `onFailure`.
  */
 export interface AutomationRef {
   readonly appId: string;

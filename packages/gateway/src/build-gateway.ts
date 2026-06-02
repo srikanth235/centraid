@@ -55,7 +55,7 @@ import {
   listAutomations,
   InProcessScheduler,
   type LocalScheduler,
-} from '@centraid/automation-engine';
+} from '@centraid/conversation-engine';
 import {
   makeChatRunner,
   runAutomationLocal,

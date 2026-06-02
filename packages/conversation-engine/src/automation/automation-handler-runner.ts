@@ -4,14 +4,12 @@
  * Issue #98: an automation is a self-contained unit that lives inside an
  * app folder (`<appCodeDir>/automations/<id>/`). The generated handler is a
  * single `handler.js` in that directory, executed in a worker thread
- * that exposes `ctx.tool` / `ctx.agent` / `ctx.state` / `ctx.runs` /
- * `ctx.invoke`. Cross-run persistence is `ctx.state` (the
- * `automation_state` KV keyed by the automation id).
+ * that exposes `ctx.tool` / `ctx.agent` / `ctx.state` / `ctx.runs`.
+ * Cross-run persistence is `ctx.state` (the `automation_state` KV keyed
+ * by the automation id).
  *
  *   - Worker entry is `worker/automation-runner.js`.
- *   - The parent supplies `toolDispatcher`, `agentDispatcher`, and an
- *     optional `invokeDispatcher`. app-engine doesn't know how to
- *     load + execute a sibling automation — that's host-specific.
+ *   - The parent supplies `toolDispatcher` and `agentDispatcher`.
  *   - Tool calls arrive in batches; each call becomes one `run_nodes`
  *     audit row. There is no runtime retry — a failed `ctx.tool`
  *     rejects the handler Promise (see `automation-handler-ctx.ts`).
@@ -44,13 +42,11 @@ import {
 import {
   dispatchToolBatch,
   handleAgentMessage,
-  handleInvokeMessage,
   handleRunsMessage,
   handleStateMessage,
   type AuditState,
   type ToolCallWire,
 } from './automation-handler-ctx.js';
-import { buildRunJournal, EMPTY_JOURNAL } from './automation-handler-journal.js';
 
 function resolveWorkerFile(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -105,22 +101,6 @@ export type AutomationAgentDispatcher = (
   ctx: AutomationDispatchContext,
 ) => Promise<unknown>;
 
-/**
- * Result of an `invokeDispatcher` call. `output` is the child handler's
- * return value (surfaced to `ctx.invoke`'s caller); `childRunId` links
- * the parent's `invoke` audit node to the child run for the DAG view.
- */
-export interface AutomationInvokeResult {
-  output: unknown;
-  childRunId?: string;
-}
-
-export type AutomationInvokeDispatcher = (
-  automationId: string,
-  args: { input?: unknown; parentRunId: string },
-  ctx: AutomationDispatchContext,
-) => Promise<AutomationInvokeResult>;
-
 export interface AutomationDispatchContext {
   readonly runId: string;
   readonly automationId: string;
@@ -137,7 +117,6 @@ export interface RunAutomationHandlerOptions {
   runId: string;
   toolDispatcher: AutomationToolDispatcher;
   agentDispatcher: AutomationAgentDispatcher;
-  invokeDispatcher?: AutomationInvokeDispatcher;
   /** Activity-DB-backed run-audit store for audit + ctx.state + ctx.runs. */
   runsStore: AgentRunsStore;
   /**
@@ -152,15 +131,6 @@ export interface RunAutomationHandlerOptions {
   triggerOrigin?: AutomationTriggerOrigin;
   input?: unknown;
   parentRunId?: string;
-  /**
-   * Resume an interrupted fire (issue #166, Phase 3). When set, the prior
-   * run's `run_nodes` are loaded as a journal: the handler re-runs from the
-   * top and each `ctx.tool`/`ctx.agent`/`ctx.invoke` call whose ordinal has a
-   * settled, successful journal entry returns the recorded result without
-   * re-dispatching — so `ctx.agent` is never re-billed. This run is recorded
-   * as a fresh run with `retryOf = resumeFromRunId`.
-   */
-  resumeFromRunId?: string;
   outputSchema?: AutomationOutputSchema;
   history?: AutomationHistoryConfig;
   timeoutMs?: number;
@@ -192,7 +162,6 @@ type WorkerToParentMessage =
       method: 'last' | 'list';
       filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number };
     }
-  | { type: 'invoke'; id: number; name: string; input?: unknown }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
   | { type: 'result'; ok: boolean; value?: unknown; error?: string };
 
@@ -217,12 +186,6 @@ export async function runAutomationHandler(
   let toolBatches = 0;
   let agentCalls = 0;
 
-  // Resume (issue #166, Phase 3): build the prior run's journal before the
-  // handler starts, so the first replayable ordinal is served from it.
-  const journal = opts.resumeFromRunId
-    ? buildRunJournal(opts.runsStore, opts.resumeFromRunId)
-    : EMPTY_JOURNAL;
-
   const emit = opts.onRunEvent ?? noopRunEventSink;
   const audit: AuditState = {
     store: opts.runsStore,
@@ -231,7 +194,6 @@ export async function runAutomationHandler(
     ordinal: 0,
     nextBatchId: 1,
     emit,
-    journal,
   };
 
   audit.store.insertRun({
@@ -244,7 +206,6 @@ export async function runAutomationHandler(
     triggerKind: opts.triggerKind ?? 'scheduled',
     ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
     ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-    ...(opts.resumeFromRunId ? { retryOf: opts.resumeFromRunId } : {}),
     ...(opts.input !== undefined ? { inputJson: truncateForAudit(opts.input) ?? '' } : {}),
     startedAt: Date.now(),
   });
@@ -365,18 +326,6 @@ export async function runAutomationHandler(
           type: 'runs-reply',
           id: msg.id,
           ...handleRunsMessage(audit, msg.method, msg.filter),
-        });
-        return;
-      }
-      if (msg.type === 'invoke') {
-        void handleInvokeMessage(
-          audit,
-          dispatchCtx,
-          opts.invokeDispatcher,
-          msg.name,
-          msg.input,
-        ).then((reply) => {
-          send({ type: 'invoke-reply', id: msg.id, ...reply });
         });
         return;
       }

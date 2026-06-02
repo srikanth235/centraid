@@ -141,7 +141,7 @@ export interface OpenRunNodeArgs {
   ordinal: number;
   batchId?: number;
   kind: AgentRunNodeKind;
-  /** Tool name / `'agent'` / `ctx.invoke` target. */
+  /** Tool name or `'agent'`. */
   name?: string;
   args?: unknown;
   started: number;
@@ -212,7 +212,7 @@ export interface CloseRunNodeArgs {
   ok: boolean;
   result?: unknown;
   error?: string;
-  /** Child run id, when a `ctx.invoke` created one (some failures abort before that). */
+  /** Child run id for a legacy node that spawned one. Dormant — no current producer. */
   childRunId?: string;
   started: number;
   ended: number;

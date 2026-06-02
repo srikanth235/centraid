@@ -52,7 +52,7 @@ When a trigger fires — the cron clock hits its expression, or an HTTP POST arr
 
 1. Resolves the automation by its handle (`<appId>/<automationId>`) and reads the manifest.
 2. Spawns a worker thread, loads `handler.js`, and invokes its default export with `{ ctx, log, input }`.
-3. The handler runs JavaScript. It can call MCP tools via `ctx.tool`, ask the model for a constrained turn via `ctx.agent({ prompt })`, read/write its KV state via `ctx.state`, look at prior runs via `ctx.runs`, and chain to another automation via `ctx.invoke`. See [Handler runtime](/automations/handler).
+3. The handler runs JavaScript. It can call MCP tools via `ctx.tool`, ask the model for a constrained turn via `ctx.agent({ prompt })`, read/write its KV state via `ctx.state`, and look at prior runs via `ctx.runs`. See [Handler runtime](/automations/handler).
 4. The handler returns `{ summary?, output? }`. The summary shows in the run list; the output is persisted in the run ledger and validated against `outputSchema` if declared.
 5. Tool calls, model turns, sub-invocations, and the final result are written to per-app `runtime.sqlite` as a `runs` row plus `run_nodes` children. See [Run history](/automations/run-history).
 

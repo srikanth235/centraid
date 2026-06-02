@@ -30,7 +30,7 @@
 
 import { spawn } from 'node:child_process';
 import type { RunnerKind } from './types.js';
-import { startMockLlmServer } from '@centraid/automation-engine';
+import { startMockLlmServer } from '@centraid/conversation-engine';
 import { codexProviderOverrideArgs } from './codex-provider-config.js';
 
 /**

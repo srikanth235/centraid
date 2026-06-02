@@ -1,6 +1,6 @@
 ---
 name: automation-authoring
-description: How to author a centraid automation app — the automation.json manifest, the scheduled handler.js contract (ctx.tool/agent/state/runs/invoke), cron and webhook triggers, and the draft-then-enable flow. Use whenever creating or editing the files of a UI-less automation app.
+description: How to author a centraid automation app — the automation.json manifest, the scheduled handler.js contract (ctx.tool/agent/state/runs), cron and webhook triggers, and the draft-then-enable flow. Use whenever creating or editing the files of a UI-less automation app.
 ---
 ## Centraid automation authoring
 
@@ -82,8 +82,7 @@ The handler receives `{ ctx, log }` — no `db`, no `body`, no `query`, no `wind
 - `ctx.agent({ prompt, json? })` — one constrained model turn. Always pass a `json` schema when the result is consumed structurally — it both parses the result and detects a model failure.
 - `ctx.state.get(key)` / `ctx.state.set(key, value)` / `ctx.state.del(key)` — cross-run key/value store scoped to this automation. Use for watermarks, cursors, ETags, dedup hashes. JSON-serializable values only; survives restart.
 - `ctx.runs.last({ status })` / `ctx.runs.list({ since, limit })` — this automation's prior run records. Use for "since last successful run" and aggregation windows. The in-progress self-run is filtered out.
-- `ctx.invoke(id, { input })` — synchronously fire a sibling automation and receive its `output`.
-- `ctx.input` — the payload for an invoked or `onFailure` run; `undefined` for a plain scheduled fire.
+- `ctx.input` — the payload this run was fired with (a webhook body, or the `onFailure` summary); `undefined` for a plain scheduled fire.
 
 Return `{ summary?, output? }`: `summary` is the one-line description shown in the run list; `output` is persisted and, if the manifest declares `outputSchema`, validated against it (a shape mismatch fails the run).
 

@@ -3,7 +3,7 @@
  *
  * Issue #91: an automation is a standalone app, so the handler arg
  * is `{ automation, log, ctx }` — there is no app `db`. `ctx` exposes
- * `tool` / `agent` / `state` / `runs` / `invoke`. The runner forwards
+ * `tool` / `agent` / `state` / `runs`. The runner forwards
  * `tool` and `agent` calls back to the parent via message-passing, with
  * per-microtask **batching** for `ctx.tool`.
  *
@@ -22,10 +22,10 @@
  * Promise, and the handler (plain JS) owns retry / backoff / error
  * classification via `try/catch`.
  *
- * `ctx.agent`, `ctx.state.*`, `ctx.runs.*`, and `ctx.invoke` are
- * fundamentally different turn shapes so they never batch with
- * `ctx.tool` — each flushes any pending tool batch first, then runs as
- * its own one-shot turn.
+ * `ctx.agent`, `ctx.state.*`, and `ctx.runs.*` are fundamentally
+ * different turn shapes so they never batch with `ctx.tool` — each
+ * flushes any pending tool batch first, then runs as its own one-shot
+ * turn.
  *
  * Trust model: same as `runner.ts`. App code is trusted; the worker is
  * for crash + timeout isolation, not security sandboxing.
@@ -55,7 +55,6 @@ type ParentMessage =
   | { type: 'agent-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'state-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'runs-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | { type: 'invoke-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'abort'; reason?: string };
 
 type WorkerMessage =
@@ -68,7 +67,6 @@ type WorkerMessage =
       method: 'last' | 'list';
       filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number };
     }
-  | { type: 'invoke'; id: number; name: string; input?: unknown }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
   | { type: 'result'; ok: boolean; value?: unknown; error?: string };
 
@@ -88,10 +86,6 @@ const pendingState = new Map<
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
 >();
 const pendingRuns = new Map<
-  number,
-  { resolve: (v: unknown) => void; reject: (e: Error) => void }
->();
-const pendingInvoke = new Map<
   number,
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
 >();
@@ -134,8 +128,6 @@ function rejectAllPending(reason: string): void {
   pendingState.clear();
   for (const [, p] of pendingRuns) p.reject(err);
   pendingRuns.clear();
-  for (const [, p] of pendingInvoke) p.reject(err);
-  pendingInvoke.clear();
   for (const call of pendingToolBatch) call.reject(err);
   pendingToolBatch = [];
   for (const [, batch] of pendingToolBatchById) {
@@ -183,14 +175,6 @@ port.on('message', (msg: ParentMessage) => {
     pendingRuns.delete(msg.id);
     if (msg.ok) p.resolve(msg.result);
     else p.reject(new Error(msg.error ?? 'runs query failed'));
-    return;
-  }
-  if (msg.type === 'invoke-reply') {
-    const p = pendingInvoke.get(msg.id);
-    if (!p) return;
-    pendingInvoke.delete(msg.id);
-    if (msg.ok) p.resolve(msg.result);
-    else p.reject(new Error(msg.error ?? 'invoke failed'));
     return;
   }
   if (msg.type === 'abort') {
@@ -289,20 +273,6 @@ const ctx = {
   state,
   runs,
   input: req.input,
-  invoke(name: string, args: { input?: unknown } = {}): Promise<unknown> {
-    flushPendingToolBatchIfAny();
-    return new Promise((resolve, reject) => {
-      const id = nextCallId++;
-      pendingInvoke.set(id, { resolve, reject });
-      const msg: WorkerMessage = {
-        type: 'invoke',
-        id,
-        name,
-        ...(args.input !== undefined ? { input: args.input } : {}),
-      };
-      port.postMessage(msg);
-    });
-  },
   abortSignal: abortController.signal,
 };
 
