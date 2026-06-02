@@ -124,9 +124,12 @@ describe('openRuntimeDb (per-app chat_sessions + run ledger)', () => {
     }
   });
 
-  it('run_nodes cascades off runs; chat_session_id cascades; parent_run_id has no FK', () => {
-    // `parent_run_id` is a plain column — a cross-app `ctx.invoke` sub-run's
-    // parent lives in a different app's file and a SQLite FK can't span files.
+  it('run_nodes cascades off runs; conversation_id + parent_run_id have no FK', () => {
+    // `conversation_id` is polymorphic (chat-session id OR automation id), so
+    // it is a plain column with no FK — the chat-session → runs cascade lives
+    // in the store. `parent_run_id` is likewise plain — a cross-app
+    // `ctx.invoke` sub-run's parent lives in a different app's file and a
+    // SQLite FK can't span files.
     const path = freshDbPath();
     openRuntimeDb(path).close();
     const db = new DatabaseSync(path);
@@ -142,23 +145,18 @@ describe('openRuntimeDb (per-app chat_sessions + run ledger)', () => {
 
       const runFks = db.prepare(`PRAGMA foreign_key_list('runs')`).all() as Array<{
         table: string;
-        on_delete: string;
       }>;
       assert.equal(
-        runFks.find((f) => f.table === 'runs'),
-        undefined,
-        'runs.parent_run_id must NOT declare a self-FK',
+        runFks.length,
+        0,
+        'runs declares no foreign keys (conversation_id is polymorphic)',
       );
-
-      const chatFk = runFks.find((f) => f.table === 'chat_sessions');
-      assert.ok(chatFk, 'expected FK on runs.chat_session_id → chat_sessions.id');
-      assert.equal(chatFk.on_delete, 'CASCADE');
     } finally {
       db.close();
     }
   });
 
-  it('deleting a chat session cascades its runs and their run_nodes', () => {
+  it('runs.conversation_id stores chat-session and automation ids alike', () => {
     const path = freshDbPath();
     const db = openRuntimeDb(path);
     try {
@@ -167,21 +165,26 @@ describe('openRuntimeDb (per-app chat_sessions + run ledger)', () => {
         `INSERT INTO chat_sessions (id, user_id, title, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?)`,
       ).run('s1', 'u1', 'hi', now, now);
+      // A chat run (conversation = chat session) and an automation run
+      // (conversation = automation id, no chat_sessions row) coexist — proof
+      // the column is FK-free and polymorphic.
       db.prepare(
-        `INSERT INTO runs (id, kind, chat_session_id, trigger, started_at)
+        `INSERT INTO runs (id, kind, conversation_id, trigger, started_at)
          VALUES (?, 'chat', ?, 'interactive', ?)`,
       ).run('r1', 's1', now);
+      db.prepare(
+        `INSERT INTO runs (id, kind, automation_id, conversation_id, trigger, started_at)
+         VALUES (?, 'automation', ?, ?, 'manual', ?)`,
+      ).run('r2', 'app/digest', 'app/digest', now);
       db.prepare(
         `INSERT INTO run_nodes (id, run_id, ordinal, kind, ok, started_at)
          VALUES (?, ?, 0, 'step', 1, ?)`,
       ).run('n1', 'r1', now);
 
-      db.prepare(`DELETE FROM chat_sessions WHERE id = ?`).run('s1');
-
-      const runs = db.prepare(`SELECT COUNT(*) AS n FROM runs`).get() as { n: number };
-      const nodes = db.prepare(`SELECT COUNT(*) AS n FROM run_nodes`).get() as { n: number };
-      assert.equal(Number(runs.n), 0);
-      assert.equal(Number(nodes.n), 0);
+      // run_nodes still cascade off runs.
+      db.prepare(`DELETE FROM runs WHERE id = ?`).run('r1');
+      const after = db.prepare(`SELECT COUNT(*) AS n FROM run_nodes`).get() as { n: number };
+      assert.equal(Number(after.n), 0, 'run_nodes cascade when their run is deleted');
     } finally {
       db.close();
     }

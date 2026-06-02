@@ -100,10 +100,10 @@ export interface ChatRunInput {
    * The chat session id — the `chat_sessions` row id in the central gateway
    * SQLite the transcript persists to.
    */
-  chatSessionId: string;
+  conversationId: string;
   /**
    * Absolute path to a runner-owned scratch session file (under the central
-   * `chatRunnerSessionDir`, named `<chatSessionId>.jsonl`). The runner is free to
+   * `chatRunnerSessionDir`, named `<conversationId>.jsonl`). The runner is free to
    * use this for its own session-resume mechanism (e.g. the OpenClaw runner
    * hands it to `runEmbeddedAgent` as its session-resume file). It is NOT the
    * chat transcript — the transcript lives in the gateway DB.

@@ -59,7 +59,7 @@ export interface InsertRunInput {
   /** UUID of the automation — set for `kind: 'automation'`. */
   readonly automationId?: string;
   readonly parentRunId?: string;
-  readonly chatSessionId?: string;
+  readonly conversationId?: string;
   readonly appId?: string;
   readonly note?: string;
   readonly retryOf?: string;
@@ -189,7 +189,7 @@ export class AgentRunsStore {
       input.runId,
       input.kind ?? 'automation',
       input.automationId ?? null,
-      input.chatSessionId ?? null,
+      input.conversationId ?? null,
       input.appId ?? null,
       input.triggerKind,
       input.triggerOrigin ?? null,
@@ -295,9 +295,9 @@ export class AgentRunsStore {
   }
 
   /** Every run for a chat session, oldest first — the conversation's turns. */
-  listChatRuns(chatSessionId: string): AgentRunRow[] {
+  listChatRuns(conversationId: string): AgentRunRow[] {
     const { stmts } = this.ensureReady();
-    const rows = stmts.listRunsByChatSession.all(chatSessionId) as unknown as RawRun[];
+    const rows = stmts.listRunsByConversation.all(conversationId) as unknown as RawRun[];
     return rows.map(runFromRaw);
   }
 

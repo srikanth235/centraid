@@ -14,6 +14,8 @@ Every time an automation fires, the runtime writes an audit trail to **`runtime.
   versions/v_…/         ← code versions
 ```
 
+The ledger follows one cohesive model — **`conversation ⊃ run ⊃ turn ⊃ node`**. A `run` is one activation (one fire); its `run_nodes` are the ordered trace entries (one model exchange or tool call each); and all of an automation's runs share one **conversation** (the automation itself — a run's `conversation_id` is the automation id, so the conversation spans every fire). A chat session is the same shape with a person driving it. `turn` — one model exchange inside a run — is a documented concept; nodes are stored flat today.
+
 ## The schema
 
 Two tables drive the ledger:
@@ -22,19 +24,20 @@ Two tables drive the ledger:
 
 One row per fire. Created when the trigger fires, updated when the handler returns (or throws).
 
-| Column                    | Meaning                                                                         |
-| ------------------------- | ------------------------------------------------------------------------------- |
-| `run_id`                  | UUID. The handle for log lines, downstream-event refs, audit nodes.             |
-| `automation_id`           | Which automation this run belongs to (matches the on-disk directory name).      |
-| `app_id`                  | The owning app.                                                                 |
-| `status`                  | `"ok"` or `"error"`. `"running"` while in-flight.                               |
-| `trigger_origin`          | `"cron"`, `"webhook"`, `"manual"`, or `"invoke"` — how this fire was triggered. |
-| `started_at` / `ended_at` | Epoch ms.                                                                       |
-| `summary`                 | The handler's returned `summary` string.                                        |
-| `output_json`             | The handler's returned `output`, JSON-serialized.                               |
-| `error`                   | When status is `"error"`, the thrown message.                                   |
-| `input_json`              | The trigger's input — webhook body, invoke args, etc.                           |
-| `parent_run_id`           | Set when this run was fired via `ctx.invoke` from another run.                  |
+| Column                    | Meaning                                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `run_id`                  | UUID. The handle for log lines, downstream-event refs, audit nodes.                                                            |
+| `automation_id`           | Which automation this run belongs to (matches the on-disk directory name).                                                     |
+| `conversation_id`         | The durable conversation the run belongs to — the automation id (spans fires). A chat run carries its chat-session id instead. |
+| `app_id`                  | The owning app.                                                                                                                |
+| `status`                  | `"ok"` or `"error"`. `"running"` while in-flight.                                                                              |
+| `trigger_origin`          | `"cron"`, `"webhook"`, `"manual"`, or `"invoke"` — how this fire was triggered.                                                |
+| `started_at` / `ended_at` | Epoch ms.                                                                                                                      |
+| `summary`                 | The handler's returned `summary` string.                                                                                       |
+| `output_json`             | The handler's returned `output`, JSON-serialized.                                                                              |
+| `error`                   | When status is `"error"`, the thrown message.                                                                                  |
+| `input_json`              | The trigger's input — webhook body, invoke args, etc.                                                                          |
+| `parent_run_id`           | Set when this run was fired via `ctx.invoke` from another run.                                                                 |
 
 ### `run_nodes`
 

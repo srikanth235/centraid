@@ -238,6 +238,9 @@ export async function runAutomationHandler(
     runId: audit.runId,
     kind: 'automation',
     automationId: audit.automationId,
+    // The automation's conversation spans all its fires: the conversation id
+    // is the automation id.
+    conversationId: audit.automationId,
     triggerKind: opts.triggerKind ?? 'scheduled',
     ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
     ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),

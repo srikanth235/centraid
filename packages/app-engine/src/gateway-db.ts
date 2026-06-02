@@ -30,7 +30,7 @@
  *                        sub-run. A chat turn's transcript is folded here.
  *     automation_state — per-automation KV, keyed by (automation_id, key).
  *
- *     Within one app's file `runs.chat_session_id` is a real same-file
+ *     Within one app's file `runs.conversation_id` is a real same-file
  *     FK; `parent_run_id` is a plain column (a cross-app `ctx.invoke`
  *     sub-run's parent lives in another file). Runtime-owned; never
  *     reachable from handler `db` or the `centraid_sql_*` agent tools.
@@ -116,12 +116,16 @@ export const GATEWAY_MIGRATIONS: readonly string[] = [
  * `data.sqlite`, version-persistent. The global
  * `centraid-activity.sqlite` is gone; chat is app-scoped now.
  *
- * `chat_sessions` is the conversation-container table; a chat turn is a
- * `runs` row (`kind='chat'`) and `runs.chat_session_id` is a real
- * same-file FK so deleting a session cascades its turns. The other
- * sub-run edge — `parent_run_id` — stays a plain column with no FK: a
- * cross-app `ctx.invoke` sub-run's parent lives in a *different* app's
- * file and a SQLite FK cannot span files.
+ * Every run belongs to a `conversation` (the durable container that a
+ * trigger re-enters). `runs.conversation_id` is polymorphic — a chat run
+ * points at a `chat_sessions` row, an automation run at its automation id
+ * (the conversation spans all the automation's fires). Because the id is
+ * polymorphic it is a plain indexed column with no FK; the chat-session →
+ * runs cascade is enforced in the store (`ChatHistoryStore.deleteSession`).
+ * `chat_sessions` holds chat-specific conversation metadata (title, adapter
+ * resume handle, turn count). `parent_run_id` likewise stays FK-free: a
+ * cross-app `ctx.invoke` sub-run's parent lives in a *different* app's file
+ * and a SQLite FK cannot span files.
  */
 export const RUNTIME_MIGRATIONS: readonly string[] = [
   // 0 → 1: the per-app run ledger + chat sessions. `runs.trigger_origin`
@@ -144,7 +148,7 @@ export const RUNTIME_MIGRATIONS: readonly string[] = [
       id                       TEXT PRIMARY KEY,
       kind                     TEXT NOT NULL DEFAULT 'automation',
       automation_id            TEXT,
-      chat_session_id          TEXT REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      conversation_id          TEXT,
       app_id                   TEXT,
       trigger                  TEXT NOT NULL,
       trigger_origin           TEXT,
@@ -171,8 +175,8 @@ export const RUNTIME_MIGRATIONS: readonly string[] = [
       ON runs(automation_id, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_runs_started
       ON runs(started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_runs_chat_session
-      ON runs(chat_session_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_runs_conversation
+      ON runs(conversation_id, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_runs_parent
       ON runs(parent_run_id);
 

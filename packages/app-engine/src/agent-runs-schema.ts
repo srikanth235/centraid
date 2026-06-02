@@ -52,8 +52,13 @@ export interface AgentRunRow {
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
   readonly triggerOrigin?: AutomationTriggerOrigin;
   readonly parentRunId?: string;
-  /** Set for `kind: 'chat'` — the conversation container. */
-  readonly chatSessionId?: string;
+  /**
+   * The durable conversation this run belongs to. Polymorphic: a `chat`
+   * run's chat-session id; an `automation` run's automation id (the
+   * conversation spans all the automation's fires). Plain column, no FK —
+   * see `gateway-db.ts`.
+   */
+  readonly conversationId?: string;
   /** Set for `kind: 'build'` — the app being built. */
   readonly appId?: string;
   /** One-line human-readable label for the activity feed. */

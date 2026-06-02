@@ -35,7 +35,7 @@ function baseInput(
   return {
     appId: 'notes',
     dataDir: path.join(root, 'data', 'notes'),
-    chatSessionId: 'win-1',
+    conversationId: 'win-1',
     sessionFile: path.join(root, 'sessions', 'win-1.jsonl'),
     message: 'add a webhook automation',
     extraSystemPrompt: 'BASE_DATA_PREAMBLE',
