@@ -19,11 +19,11 @@ explicitly out of scope here.
 
 ## Checklist
 
-- [ ] Plugin imports and mounts buildGateway().composedHandler; no hand-rolled store/runtime/route graph remains
-- [ ] @centraid/worktree-store and @mariozechner/pi-ai removed from the plugin package.json
-- [ ] automation-host.ts, automations-cron.ts, automations-provider.ts deleted
-- [ ] Cron runs via InProcessScheduler, started only from gateway_start (single-process invariant)
-- [ ] Chat + ctx.agent + ctx.tool behavior unchanged (in-process surfaces retained)
+- [x] Plugin imports and mounts buildGateway().composedHandler; no hand-rolled store/runtime/route graph remains
+- [x] @centraid/worktree-store and @mariozechner/pi-ai removed from the plugin package.json
+- [x] automation-host.ts, automations-cron.ts, automations-provider.ts deleted
+- [x] Cron runs via InProcessScheduler, started only from gateway_start (single-process invariant)
+- [x] Chat + ctx.agent + ctx.tool behavior unchanged (in-process surfaces retained)
 - [ ] Automation fire goes through the shared orchestrator with injected dispatchers, manual + scheduled at parity (Phase 2)
 
 ## What changed
@@ -50,12 +50,65 @@ desktop + daemon callers are byte-for-byte unchanged:
 resolver for the live `main` worktree's `apps` dir — so a host can wire its
 own automation routes without naming the git store.
 
+### Plugin gutted onto `buildGateway()` + `composedHandler` (Plane A)
+
+`packages/openclaw-plugin/src/index.ts` no longer constructs a
+`WorktreeStore`, DB providers, the `UserStore` / `AnalyticsStore` /
+`ChatHistoryStore`, or the `Runtime`. `register()` now calls
+`buildGateway({ appsStoreRoot, lazyStoreInit, … })` once per process and
+mounts the returned `gw.composedHandler` on the three gateway-auth prefixes
+(`/centraid`, `/_centraid-chat`, `/_centraid-user`) — the handler replays
+`chatHistory → userStore → extraHandlers[] → runtime.handle` minus the
+bearer check, for a host that owns auth. `gw.start('')` is driven from
+`gateway_start`; bootstrap, git-store registry sync, and the cron scheduler
+all run inside it. The plugin no longer names the git store, the DB
+providers, or the `Runtime`.
+
+### Cron switched to `InProcessScheduler` (Plane C)
+
+The plugin no longer registers OpenClaw native cron jobs. `buildGateway()`
+owns a single in-process `InProcessScheduler` that fires enabled cron
+automations on a minute-boundary timer, started only from `gw.start()` —
+i.e. only in the HTTP-serving process — preserving the single-process
+invariant even though OpenClaw runs `register()` in multiple worker
+subprocesses. `lazyStoreInit` keeps the concurrent git-store `init()` off
+those workers; construction stays cheap, so it is safe in every process and
+gives the worker's `centraid_*` tools a live runtime.
+
+This let three files be deleted: `automation-host.ts` (the adapter onto
+OpenClaw's `cron.add/update/remove`), `automations-cron.ts` (the OpenClaw
+cron wire format + `centraid:<ref>:N` job-name mangling), and
+`automations-provider.ts` (the `centraid-mock` provider whose StreamFn
+recovered the dispatch from a `<<<centraid:…>>>` sentinel prompt). The
+`@mariozechner/pi-ai` dependency died with the mock provider, and
+`@centraid/worktree-store` dropped out now that the plugin never names the
+git store; `@centraid/gateway` was added.
+
+### In-process Plane B retained via injection
+
+The plugin injects the three execution seams above so chat, runner-status,
+and automation fires still run in OpenClaw's process: `chatRunner` →
+`makeOpenClawChatRunner` (`runEmbeddedAgent`); `runnerStatus` →
+`{ kind: 'openclaw', ok: true }`; `fireAutomationFactory` →
+`runOpenclawFire` (`ctx.tool` → `callGatewayTool`, `ctx.agent` →
+simple-completion), shared by the cron scheduler and the run-now route.
+`runOpenclawFire` itself is kept as-is for Phase 1. The plugin-owned
+`/_centraid-hook` webhook route (not part of `composedHandler`) resolves
+live app code through `gw.codeAppsDir()`. `registerCentraidTools` now takes
+a `Promise<Runtime>` and resolves it lazily on first tool call, since the
+runtime is built asynchronously and the tools run in worker subprocesses.
+
 ## Out of scope
 
 - **Phase 2 — Plane B orchestrator refactor.** Extracting the shared
   automation-run orchestrator (ledger + analytics + `runAutomationHandler`)
   parameterized by injected dispatchers, and collapsing `openclaw-fire.ts`
-  onto it.
+  onto it. Phase 1 keeps `openclaw-fire.ts` whole and injects it through
+  `fireAutomationFactory`.
+- **Live run streaming for OpenClaw automation fires.** The gateway's
+  run-event bus (issue #158) is not wired to `runOpenclawFire`; OpenClaw
+  automation runs are recorded in the ledger but do not stream live. This
+  is folded into the Phase 2 orchestrator dedup.
 - **Host inversion** (`/acp spawn openclaw`): explicitly deferred — centraid
   stays an in-process OpenClaw plugin.
 
@@ -63,8 +116,14 @@ own automation routes without naming the git store.
 
 - **Typecheck** — `bunx turbo run typecheck` is green across all 19
   workspace packages, including `@centraid/desktop` (which consumes
-  `serve()`/`buildGateway()`). The new options are all optional, so desktop
-  + daemon call sites compile unchanged.
+  `serve()`/`buildGateway()`) and `@centraid/openclaw-plugin`. The new
+  `buildGateway()` options are all optional, so desktop + daemon call sites
+  compile unchanged.
 - **Tests** — `bunx turbo run test` for the gateway / app-engine /
-  automation-engine set passes (gateway: 83/83), so the default
-  (non-injected) `buildGateway()` paths are unchanged.
+  automation-engine / openclaw-plugin set passes (gateway: 83/83), so the
+  default (non-injected) `buildGateway()` paths are byte-for-byte unchanged.
+- **Plugin imports and mounts buildGateway().composedHandler; no hand-rolled store/runtime/route graph remains** — verified by reading `index.ts`: no `new WorktreeStore`, no `new Runtime`, no store/provider construction; `composedHandler` is mounted on the gateway-auth prefixes.
+- **@centraid/worktree-store and @mariozechner/pi-ai removed from the plugin package.json** — verified in `packages/openclaw-plugin/package.json`; `@centraid/gateway` added; `grep` finds no remaining references in `src/`.
+- **automation-host.ts, automations-cron.ts, automations-provider.ts deleted** — removed via `git rm`; no dangling imports remain (`grep` clean).
+- **Cron runs via InProcessScheduler, started only from gateway_start (single-process invariant)** — the plugin no longer touches OpenClaw cron; the scheduler is `buildGateway()`'s and `scheduler.start()` runs only inside `gw.start()`, which the plugin drives from `gateway_start` (the only event firing in the HTTP-serving process). `lazyStoreInit` keeps git-store `init()` off the worker subprocesses.
+- **Chat + ctx.agent + ctx.tool behavior unchanged (in-process surfaces retained)** — chat still runs through `makeOpenClawChatRunner` (`runEmbeddedAgent`), and automation fires still run through `runOpenclawFire` (`ctx.tool` → `callGatewayTool`, `ctx.agent` → simple-completion); both are injected into `buildGateway()` rather than reconstructed.

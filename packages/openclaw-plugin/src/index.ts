@@ -1,41 +1,46 @@
 /*
  * @centraid/openclaw-plugin
  *
- * Thin OpenClaw shim over `@centraid/app-engine`. Mounts the runtime's
- * `/centraid` URL surface on the gateway. All app-handling logic — registry,
- * sqlite-backed query/action handlers, the full `/centraid/...` switch —
- * lives in app-engine. App CODE is backed by the gateway-owned git store
- * (issue #137); DATA lives under `appsDir`. This file only:
+ * Thin OpenClaw shim over `@centraid/gateway`. The whole store / runtime /
+ * route graph is built by `buildGateway()` (the host-agnostic gateway core
+ * desktop + the standalone daemon also mount); this file only adapts it to
+ * the OpenClaw host:
  *
- *   1. Resolves `pluginConfig` against the OpenClaw state dir
- *   2. Constructs the git `WorktreeStore` + a `Runtime` wired to serve from it
- *   3. Forwards `gateway_start` to `store.init()` + `runtime.bootstrap()`
- *   4. Mounts the runtime under `/centraid` via `api.registerHttpRoute`
+ *   1. Resolves `pluginConfig` + paths against the OpenClaw state dir.
+ *   2. Constructs `buildGateway({ appsStoreRoot, lazyStoreInit, … })` — once
+ *      per process, lazily (no git-store `init()` at construction, so the
+ *      worker subprocesses OpenClaw runs `register()` in stay inert).
+ *   3. Mounts `gw.composedHandler` on the gateway-auth route prefixes
+ *      (`/centraid`, `/_centraid-chat`, `/_centraid-user`) — OpenClaw owns
+ *      auth, so the handler replays the gateway's route chain MINUS the
+ *      bearer check.
+ *   4. Drives `gw.start()` from `gateway_start` (the only event that fires in
+ *      the single HTTP-serving process — so the in-process cron scheduler
+ *      and git-store init run in exactly one process).
  *
- * See `@centraid/app-engine` for the engine and the public handler
- * surface (`QueryHandler`, `ActionHandler`).
+ * Plane B (in-process, OpenClaw-specific) is injected into `buildGateway()`:
+ *   - chat → `makeOpenClawChatRunner` (`runEmbeddedAgent`)
+ *   - automation fire → `runOpenclawFire` (`ctx.tool` → `callGatewayTool`,
+ *     `ctx.agent` → simple-completion), shared by cron + run-now
+ *   - runner status → `{ kind: 'openclaw', ok: true }`
+ *
+ * The `/_centraid-hook` webhook route stays plugin-owned (it isn't part of
+ * `composedHandler`): it verifies its own shared secret (`auth: 'plugin'`)
+ * and fires through the same `runOpenclawFire` path.
+ *
+ * See `@centraid/app-engine` for the engine + public handler surface
+ * (`QueryHandler`, `ActionHandler`) and `@centraid/gateway` for the core.
  */
 
 import path from 'node:path';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
-import {
-  Runtime,
-  ChatHistoryStore,
-  makeChatHistoryRouteHandler,
-  UserStore,
-  makeUserStoreRouteHandler,
-  makeGatewayDbProvider,
-  AnalyticsStore,
-  makeAnalyticsDbProvider,
-} from '@centraid/app-engine';
-import { listAutomations, makeWebhookRouteHandler } from '@centraid/automation-engine';
-import { WorktreeStore } from '@centraid/worktree-store';
+import { makeWebhookRouteHandler } from '@centraid/automation-engine';
+import { buildGateway, type BuiltGateway } from '@centraid/gateway';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
-import { registerAutomationsProvider, setOpenClawConfig } from './lib/automations-provider.js';
-import { OpenclawAutomationHost } from './lib/automation-host.js';
-import { runOpenclawFire } from './lib/openclaw-fire.js';
+import { runOpenclawFire, setOpenClawConfig } from './lib/openclaw-fire.js';
 
 // Re-export the public handler & payload types from app-engine so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -79,170 +84,126 @@ export default definePluginEntry({
     const appsDir = path.isAbsolute(appsDirRaw)
       ? appsDirRaw
       : path.join(resolveStateDir(process.env), appsDirRaw);
-
-    // Sibling SQLite files, one per domain — identity
-    // (`centraid-gateway.sqlite`: users + prefs) and the central
-    // analytics DB (`centraid-analytics.sqlite`: one summary row per
-    // run, every kind — issue #98). Automation *and* chat runs live in
-    // each app's own `runtime.sqlite`, resolved per app. Providers are
-    // lazy: a file is only opened when a store actually needs it, which
-    // keeps OpenClaw worker subprocesses (which `register()` runs in but
-    // which don't serve HTTP) from holding stray DB handles.
+    // Sibling SQLite files live one level up from `appsDir` — identity
+    // (`centraid-gateway.sqlite`: users + prefs) + the central analytics DB
+    // (`centraid-analytics.sqlite`). App CODE is a git store under
+    // `centraid-code`; app DATA stays under `appsDir`.
     const dbDir = path.dirname(appsDir);
-    const gatewayDbProvider = makeGatewayDbProvider(path.join(dbDir, 'centraid-gateway.sqlite'));
-    const analyticsStore = new AnalyticsStore(
-      makeAnalyticsDbProvider(path.join(dbDir, 'centraid-analytics.sqlite')),
-    );
 
-    // Git-store backend (issue #137): app CODE lives in a bare git repo +
-    // worktrees under `<dbDir>/centraid-code`; DATA stays under `appsDir`.
-    // `codeStore.init()` runs in `gateway_start` below. `codeDirOverride`
-    // makes the runtime serve handlers/static from the live `main` worktree
-    // — the legacy tarball/VersionStore backend is gone. `codeAppsDir()` is
-    // a thunk: the active-main link rotates on each publish/rollback, so
-    // automation reads resolve the current code per fire.
-    const codeStore = new WorktreeStore({ root: path.join(dbDir, 'centraid-code') });
-    const codeAppsDir = (): string => path.join(codeStore.getActiveMainLink(), 'apps');
-
-    // Issue #98: an automation is never standalone — it lives inside an
-    // app folder. There is no separate automations dir; `listAutomations`
-    // scans every app's `automations/` under the live `main` worktree.
-    const userStore = new UserStore(gatewayDbProvider);
-
-    // Chat-history store — app-scoped (issue #98): every chat session +
-    // turn lives in its app's `runtime.sqlite`, resolved from `appsDir`.
-    // The `/centraid/<id>/_chat` POST route reads the runner-resume handle
-    // from it and records each turn as a `runs` row. Constructed before the
-    // runtime so it can be handed to the Runtime and also mounted on the
-    // `/_centraid-chat` HTTP surface.
-    const chatHistoryStore = new ChatHistoryStore(
-      appsDir,
-      () => userStore.getUserId(),
-      analyticsStore,
-    );
-
-    const chatRunner = makeOpenClawChatRunner(api);
-
-    // Openclaw cron host. Same `AutomationHost` shape the desktop's
-    // OS scheduler implements; centralizes register / unregister /
-    // reconcile so callers don't speak `cron.add` / `cron.update`
-    // directly.
-    const automationHost = new OpenclawAutomationHost();
-
-    const runtime = new Runtime({
-      appsDir,
-      userStore,
-      chatHistoryStore,
-      chatRunnerSessionDir: path.join(
-        resolveStateDir(process.env),
-        'centraid',
-        'chat-runner-sessions',
-      ),
+    // Build the gateway core once per process. `register()` also runs in
+    // OpenClaw worker subprocesses (which execute the centraid_* agent tools
+    // but never serve HTTP) — `lazyStoreInit` keeps the git-store `init()` +
+    // the in-process scheduler off them; both run only from `gw.start()`,
+    // driven by `gateway_start` in the single HTTP-serving process. The
+    // construction itself is cheap (no git I/O, lazy DB handles), so doing it
+    // in every process is safe and gives the worker's tools a live runtime.
+    const gwPromise: Promise<BuiltGateway> = buildGateway({
+      paths: {
+        appsDir,
+        identityDb: path.join(dbDir, 'centraid-gateway.sqlite'),
+        analyticsDb: path.join(dbDir, 'centraid-analytics.sqlite'),
+        chatRunnerSessionDir: path.join(
+          resolveStateDir(process.env),
+          'centraid',
+          'chat-runner-sessions',
+        ),
+      },
+      // OpenClaw owns provider auth; the gateway's secrets seam is unused
+      // because chat + ctx.agent run in-process through OpenClaw, never the
+      // CLI runner — so a no-op key reader satisfies the required option.
+      secrets: { getProviderApiKey: async () => undefined },
+      // App CODE backed by the gateway-owned git store (issue #137).
+      appsStoreRoot: path.join(dbDir, 'centraid-code'),
+      lazyStoreInit: true,
       logger: api.logger,
-      chatRunner,
+      logTag: 'centraid',
+      // Plane B (in-process): chat drives OpenClaw's embedded agent, not a
+      // codex/claude CLI puppet.
+      chatRunner: makeOpenClawChatRunner(api),
+      // OpenClaw chat runs in-process regardless of any local CLI, so report
+      // ready rather than running a codex/claude preflight.
       runnerStatus: async () => ({ kind: 'openclaw', ok: true }),
-      // Serve handlers + static from the live git-store `main` worktree.
-      codeDirOverride: (appId) => codeStore.resolveActiveAppDir(appId),
-    });
-
-    // Register the centraid-mock provider plugin. The provider's
-    // StreamFn parses the dispatch sentinel from the cron-fire prompt,
-    // loads the automation handler off disk, and runs it with a ctx
-    // that routes ctx.tool through callGatewayTool and ctx.agent
-    // through the user's REAL provider via the simple-completion
-    // runtime. See `lib/automations-provider.ts`.
-    registerAutomationsProvider(api, {
-      appsDir,
-      codeAppsDir,
-      analytics: analyticsStore,
-      logger: api.logger,
+      // Plane B (in-process): both scheduled (cron) and manual (run-now) fires
+      // run the handler in THIS process via `runOpenclawFire` — `ctx.tool` →
+      // `callGatewayTool`, `ctx.agent` → simple-completion.
+      fireAutomationFactory: (deps) => (automationRef, fireOpts) => {
+        void runOpenclawFire(
+          {
+            automationRef,
+            appsDir: deps.appsDir,
+            codeAppsDir: deps.codeAppsDir(),
+            analytics: deps.analytics,
+            triggerKind: fireOpts.triggerKind,
+            triggerOrigin: fireOpts.triggerOrigin,
+          },
+          deps.logger,
+        ).catch((err) =>
+          deps.logger.warn(
+            `${fireOpts.triggerKind} ${automationRef} failed: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      },
     });
 
     api.on('gateway_start', async () => {
-      // Initialize the git store, then register every app present on `main`
-      // so `registry.get(id)` resolves + its data dir exists (issue #137).
-      // Code is served from the worktree via `codeDirOverride`; this only
-      // bookkeeps existence + the per-app data dir.
-      await codeStore.init();
-      for (const appId of await codeStore.listApps()) {
-        await runtime.registry.ensureUploaded(appId);
-      }
-      await runtime.bootstrap();
-      // Bind the openclaw config so the provider plugin's ctx.agent
-      // path can route through `prepareSimpleCompletionModelForAgent`.
-      // `api.config` is available at gateway_start time; before this
-      // any cron fire would throw, but cron jobs don't fire until
-      // after gateway_start anyway.
+      const gw = await gwPromise;
+      // Bind the OpenClaw config so `runOpenclawFire`'s ctx.agent path can
+      // route through the user's real provider. `api.config` is available at
+      // gateway_start; cron/webhook fires only happen after this point.
       setOpenClawConfig((api as unknown as { config: unknown }).config);
-      // Reconcile centraid's automations mirror with openclaw's cron
-      // store. Adds jobs we expect but openclaw doesn't know about,
-      // updates mismatched ones, removes zombies. Soft-fails on
-      // network / SDK errors so a transient cron-store hiccup doesn't
-      // prevent the plugin from booting.
-      try {
-        const { rows } = await listAutomations(codeAppsDir());
-        const outcome = await automationHost.reconcile(rows);
-        if (outcome.added.length + outcome.updated.length + outcome.removed.length > 0) {
-          api.logger.info(
-            `[centraid] automations reconciled: +${outcome.added.length} ~${outcome.updated.length} -${outcome.removed.length}`,
-          );
-        }
-      } catch (err) {
-        api.logger.warn(
-          `[centraid] automations reconciliation failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
+      // `start()` runs the git-store init, registry sync, bootstrap, and starts
+      // the in-process cron scheduler — only here, in the HTTP-serving process.
+      // The base URL is unused by the OpenClaw path (the injected chat runner
+      // ignores it; webhook URLs are minted from each request's Host header).
+      await gw.start('');
     });
 
-    api.registerHttpRoute({
-      path: '/centraid',
-      match: 'prefix',
-      auth: 'gateway',
-      handler: (req, res) => runtime.handle(req, res),
-    });
+    // `gw.composedHandler` replays `chatHistory → userStore → extraHandlers[]
+    // → runtime.handle` minus the bearer check (OpenClaw owns auth, hence
+    // `auth: 'gateway'`). It dispatches `/_centraid-chat` + `/_centraid-user`
+    // internally by URL prefix, so all three gateway-auth prefixes route to it.
+    const handleGateway = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      const gw = await gwPromise;
+      await gw.composedHandler(req, res);
+    };
+    for (const prefix of ['/centraid', '/_centraid-chat', '/_centraid-user']) {
+      api.registerHttpRoute({
+        path: prefix,
+        match: 'prefix',
+        auth: 'gateway',
+        handler: handleGateway,
+      });
+    }
 
-    // Agent tools — let the OpenClaw agent read a single app's data via
-    // SELECT only. Scope is enforced by the before_tool_call hook inside
-    // registerCentraidTools (uses sessionKey = "centraid-chat:<appId>").
-    registerCentraidTools(api, runtime);
+    // Agent tools — let the OpenClaw agent read a single app's data via SELECT
+    // only. Scope is enforced by the before_tool_call hook inside
+    // registerCentraidTools (sessionKey = "centraid-chat:<appId>"). The runtime
+    // is resolved lazily so the worker's tools get the per-process instance.
+    registerCentraidTools(
+      api,
+      gwPromise.then((gw) => gw.runtime),
+    );
 
-    // Mount the chat-history store (constructed above) on its HTTP surface.
-    // Per-user scoping: every chat_sessions row carries the gateway-side
-    // user UUID from `UserStore` (real FK to `users`, ON DELETE CASCADE).
-    // The provider closure resolves the UUID lazily — UserStore caches it
-    // after the first read.
-    api.registerHttpRoute({
-      path: '/_centraid-chat',
-      match: 'prefix',
-      auth: 'gateway',
-      handler: makeChatHistoryRouteHandler(() => chatHistoryStore),
-    });
-
-    // User-prefs route. The store was constructed eagerly above so that the
-    // runtime's app-index injection can read prefs synchronously, but the
-    // route handler still goes through a getter for symmetry with the
-    // chat-history wiring (and so future lazy-init refactors don't have to
-    // touch the route registration).
-    api.registerHttpRoute({
-      path: '/_centraid-user',
-      match: 'prefix',
-      auth: 'gateway',
-      handler: makeUserStoreRouteHandler(() => userStore),
-    });
-
-    // Webhook-trigger route (issue #96). One prefix route fronts every
-    // automation with a `webhook` trigger: the path slug resolves to an
-    // automation and the handler verifies the shared secret itself, so
-    // it runs at `auth: 'plugin'` (no gateway bearer required). The fire
-    // rides the same `runOpenclawFire` path a cron trigger uses.
-    api.registerHttpRoute({
-      path: '/_centraid-hook',
-      match: 'prefix',
-      auth: 'plugin',
-      handler: makeWebhookRouteHandler({
-        // The webhook handler resolves the target automation from CODE on
-        // `main` (`getActiveMainLink()` is a stable symlink path repointed
-        // atomically on publish, so resolving once stays correct).
+    // Webhook-trigger route (issue #96). Not part of `composedHandler`: one
+    // prefix route fronts every automation with a `webhook` trigger — the path
+    // slug resolves to an automation and the handler verifies the shared secret
+    // itself, so it runs at `auth: 'plugin'` (no gateway bearer). The fire
+    // rides the same `runOpenclawFire` path cron + run-now use. Built lazily
+    // (and cached) once the gateway core resolves so it can read live app CODE
+    // through `gw.codeAppsDir()` without the plugin naming the git store.
+    let webhookHandler:
+      | ((req: IncomingMessage, res: ServerResponse) => Promise<boolean>)
+      | undefined;
+    const ensureWebhookHandler = async (): Promise<
+      (req: IncomingMessage, res: ServerResponse) => Promise<boolean>
+    > => {
+      if (webhookHandler) return webhookHandler;
+      const gw = await gwPromise;
+      const codeAppsDir = gw.codeAppsDir!;
+      webhookHandler = makeWebhookRouteHandler({
+        // `codeAppsDir()` resolves the automation from CODE on `main` — a
+        // stable symlink path repointed atomically on publish, so resolving
+        // once stays correct.
         appsDir: codeAppsDir(),
         fire: async ({ automationRef, body }) => {
           const outcome = await runOpenclawFire(
@@ -250,7 +211,7 @@ export default definePluginEntry({
               automationRef,
               appsDir,
               codeAppsDir: codeAppsDir(),
-              analytics: analyticsStore,
+              analytics: gw.analyticsStore,
               triggerKind: 'scheduled',
               triggerOrigin: 'webhook',
               ...(body !== undefined ? { input: body } : {}),
@@ -263,7 +224,17 @@ export default definePluginEntry({
             ...(outcome.error ? { error: outcome.error } : {}),
           };
         },
-      }),
+      });
+      return webhookHandler;
+    };
+    api.registerHttpRoute({
+      path: '/_centraid-hook',
+      match: 'prefix',
+      auth: 'plugin',
+      handler: async (req, res) => {
+        const handler = await ensureWebhookHandler();
+        await handler(req, res);
+      },
     });
   },
 });

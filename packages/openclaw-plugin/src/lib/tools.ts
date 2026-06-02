@@ -51,9 +51,10 @@ function readSessionKey(value: unknown): string | undefined {
   return undefined;
 }
 
-export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime): void {
-  const { registry, dispatcher } = runtime;
-
+export function registerCentraidTools(
+  api: OpenClawPluginApi,
+  runtimeReady: Promise<Runtime>,
+): void {
   const textResult = (text: string, details: Record<string, unknown> = {}) => ({
     content: [{ type: 'text' as const, text }],
     details,
@@ -80,11 +81,13 @@ export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime):
 
   // Plugin `register()` may run in multiple contexts (gateway process + agent
   // worker), and only the gateway's instance gets `gateway_start` → bootstrap.
-  // Lazy-load on first tool call so the worker's registry is hydrated too.
-  // `Registry.load` is idempotent.
-  const ensureRegistry = async (): Promise<typeof registry> => {
-    await registry.load();
-    return registry;
+  // The runtime is built lazily (per process) via `buildGateway()`, so resolve
+  // it on first tool call and load its registry (idempotent) — that hydrates
+  // the worker's registry too.
+  const ensureRuntime = async (): Promise<Runtime> => {
+    const runtime = await runtimeReady;
+    await runtime.registry.load();
+    return runtime;
   };
 
   // ------- centraid_describe -------
@@ -108,7 +111,7 @@ export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime):
         action?: string;
         query?: string;
       };
-      await ensureRegistry();
+      const { dispatcher } = await ensureRuntime();
       return fromDispatch(
         await dispatcher.describe({
           ...(params.app ? { app: params.app } : {}),
@@ -149,7 +152,7 @@ export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime):
       if (!params.app || !params.action) {
         throw new Error('both app and action are required.');
       }
-      await ensureRegistry();
+      const { dispatcher } = await ensureRuntime();
       return fromDispatch(
         await dispatcher.write({
           app: params.app,
@@ -188,7 +191,7 @@ export function registerCentraidTools(api: OpenClawPluginApi, runtime: Runtime):
       if (!params.app || !params.query) {
         throw new Error('both app and query are required.');
       }
-      await ensureRegistry();
+      const { dispatcher } = await ensureRuntime();
       return fromDispatch(
         await dispatcher.read({
           app: params.app,
