@@ -92,6 +92,13 @@ export interface RunAutomationLocalOptions {
   /** Optional parent run id for the onFailure sub-run DAG link. */
   parentRunId?: string;
   /**
+   * Resume an interrupted fire (issue #166, Phase 3): replay the prior run's
+   * journal so already-serviced `ctx.tool`/`ctx.agent` calls are not
+   * re-dispatched (and `ctx.agent` is not re-billed), running live from the
+   * first un-journaled call.
+   */
+  resumeFromRunId?: string;
+  /**
    * Recursion guard for `onFailure` cascades. Defaults to 0 — the runtime
    * refuses to push the chain past depth 3.
    */
@@ -138,6 +145,7 @@ export async function runAutomationLocal(
       ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
       ...(opts.input !== undefined ? { input: opts.input } : {}),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
+      ...(opts.resumeFromRunId ? { resumeFromRunId: opts.resumeFromRunId } : {}),
       ...(opts.failureDepth !== undefined ? { failureDepth: opts.failureDepth } : {}),
     },
     { openDispatch },

@@ -36,23 +36,21 @@ import type { AutomationHistoryConfig, AutomationOutputSchema } from './automati
 import { validateOutputAgainstSchema } from './automation-manifest-output.js';
 import {
   applyRetention,
-  closeRunNode,
   extractReturnEnvelope,
   noopRunEventSink,
-  openRunNode,
   truncateForAudit,
-  usageCloseFields,
   type HandlerReturnEnvelope,
 } from './automation-handler-audit.js';
 import {
   dispatchToolBatch,
+  handleAgentMessage,
   handleInvokeMessage,
   handleRunsMessage,
   handleStateMessage,
-  nextOrdinal,
   type AuditState,
   type ToolCallWire,
 } from './automation-handler-ctx.js';
+import { buildRunJournal, EMPTY_JOURNAL } from './automation-handler-journal.js';
 
 function resolveWorkerFile(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -154,6 +152,15 @@ export interface RunAutomationHandlerOptions {
   triggerOrigin?: AutomationTriggerOrigin;
   input?: unknown;
   parentRunId?: string;
+  /**
+   * Resume an interrupted fire (issue #166, Phase 3). When set, the prior
+   * run's `run_nodes` are loaded as a journal: the handler re-runs from the
+   * top and each `ctx.tool`/`ctx.agent`/`ctx.invoke` call whose ordinal has a
+   * settled, successful journal entry returns the recorded result without
+   * re-dispatching — so `ctx.agent` is never re-billed. This run is recorded
+   * as a fresh run with `retryOf = resumeFromRunId`.
+   */
+  resumeFromRunId?: string;
   outputSchema?: AutomationOutputSchema;
   history?: AutomationHistoryConfig;
   timeoutMs?: number;
@@ -210,6 +217,12 @@ export async function runAutomationHandler(
   let toolBatches = 0;
   let agentCalls = 0;
 
+  // Resume (issue #166, Phase 3): build the prior run's journal before the
+  // handler starts, so the first replayable ordinal is served from it.
+  const journal = opts.resumeFromRunId
+    ? buildRunJournal(opts.runsStore, opts.resumeFromRunId)
+    : EMPTY_JOURNAL;
+
   const emit = opts.onRunEvent ?? noopRunEventSink;
   const audit: AuditState = {
     store: opts.runsStore,
@@ -218,6 +231,7 @@ export async function runAutomationHandler(
     ordinal: 0,
     nextBatchId: 1,
     emit,
+    journal,
   };
 
   audit.store.insertRun({
@@ -227,6 +241,7 @@ export async function runAutomationHandler(
     triggerKind: opts.triggerKind ?? 'scheduled',
     ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
     ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
+    ...(opts.resumeFromRunId ? { retryOf: opts.resumeFromRunId } : {}),
     ...(opts.input !== undefined ? { inputJson: truncateForAudit(opts.input) ?? '' } : {}),
     startedAt: Date.now(),
   });
@@ -323,61 +338,15 @@ export async function runAutomationHandler(
       }
       if (msg.type === 'agent') {
         agentCalls++;
-        const ordinal = nextOrdinal(audit);
-        const started = Date.now();
-        const nodeId = openRunNode({
-          store: audit.store,
-          emit,
-          runId: audit.runId,
-          ordinal,
-          kind: 'agent',
-          name: 'agent',
-          args: { prompt: msg.prompt },
-          started,
+        void handleAgentMessage(
+          audit,
+          dispatchCtx,
+          opts.agentDispatcher,
+          msg.prompt,
+          msg.json,
+        ).then((reply) => {
+          send({ type: 'agent-reply', id: msg.id, ...reply });
         });
-        // When the runner streams (Phase 2), forward each chat event as a
-        // `node.delta` on this agent node, and remember the last `usage`
-        // event so `closeRunNode` can persist the token/model rollup.
-        let lastUsage: Extract<ChatStreamEvent, { type: 'usage' }> | undefined;
-        const onEvent = (ev: ChatStreamEvent): void => {
-          if (ev.type === 'usage') lastUsage = ev;
-          try {
-            emit({ type: 'node.delta', ordinal, event: ev });
-          } catch {
-            /* swallow */
-          }
-        };
-        void opts
-          .agentDispatcher({ prompt: msg.prompt, json: msg.json, onEvent }, dispatchCtx)
-          .then((result) => {
-            closeRunNode({
-              store: audit.store,
-              emit,
-              nodeId,
-              ordinal,
-              ok: true,
-              result,
-              started,
-              ended: Date.now(),
-              ...usageCloseFields(lastUsage),
-            });
-            send({ type: 'agent-reply', id: msg.id, ok: true, result });
-          })
-          .catch((err: unknown) => {
-            const errorMsg = err instanceof Error ? err.message : String(err);
-            closeRunNode({
-              store: audit.store,
-              emit,
-              nodeId,
-              ordinal,
-              ok: false,
-              error: errorMsg,
-              started,
-              ended: Date.now(),
-              ...usageCloseFields(lastUsage),
-            });
-            send({ type: 'agent-reply', id: msg.id, ok: false, error: errorMsg });
-          });
         return;
       }
       if (msg.type === 'state') {

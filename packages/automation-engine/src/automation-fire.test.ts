@@ -311,6 +311,46 @@ describe('runAutomationFire', () => {
     store.close();
   });
 
+  it('runs ctx.invoke through the spine — child fires on the same dispatch surface', async () => {
+    // The parent invokes `child` by bare id; the spine resolves it within the
+    // same app and fires it via the SAME injected openDispatch, returning the
+    // child's output to the parent (issue #166, Phase 2 — invoke lifted into
+    // the spine, so every host gets it without its own invoke glue).
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'parent',
+      manifest({ name: 'Parent' }),
+      `export default async ({ ctx }) => {
+         const out = await ctx.invoke('child', { input: { n: 21 } });
+         return { output: out };
+       };`,
+    );
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'child',
+      manifest({ name: 'Child' }),
+      `export default async ({ ctx }) => ({ output: { doubled: ctx.input.n * 2 } });`,
+    );
+
+    const opened: OpenAutomationDispatchArgs[] = [];
+    const closes = { n: 0 };
+    const { outcome } = await runAutomationFire(
+      { automationRef: 'notes/parent', appsDir },
+      { openDispatch: stubDispatch(opened, closes) },
+    );
+
+    assert.equal(outcome.ok, true);
+    assert.deepEqual(outcome.output, { doubled: 42 }, 'child output flowed back to the parent');
+    // Both parent + child opened (and closed) a dispatch surface via the spine.
+    assert.deepEqual(
+      opened.map((o) => o.automationRef),
+      ['notes/parent', 'notes/child'],
+    );
+    assert.equal(closes.n, 2, 'both surfaces torn down');
+  });
+
   it('cascades onFailure through the SAME injected dispatch surface', async () => {
     // `main` throws → its onFailure target `recover` fires, both via the one
     // injected `openDispatch`. Proves the cascade stayed in the spine and did

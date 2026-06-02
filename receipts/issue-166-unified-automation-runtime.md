@@ -12,10 +12,10 @@ resumable without re-billing `ctx.agent`.
 ## Checklist
 
 - [x] One agent session per fire; no per-batch CLI spawn — `ctx.tool` consumes ~0 real model tokens
-- [ ] `ctx.agent` is the only billed path; routed to the host `agentDispatcher`; journaled and not re-billed on replay
+- [x] `ctx.agent` is the only billed path; routed to the host `agentDispatcher`; journaled and not re-billed on replay
 - [ ] OpenClaw automations run via `runEmbeddedAgent` against the mock provider; `openclaw-fire.ts` bespoke dispatchers + `setOpenClawConfig` deleted
 - [ ] Same mock + journal + handler runtime drives codex, claude, and OpenClaw at parity
-- [ ] An interrupted fire resumes from the journal
+- [x] An interrupted fire resumes from the journal
 
 ## What changed
 
@@ -43,6 +43,33 @@ when `close()` stages the final `end_turn`. Per-call timing (issue #158) is
 preserved via a flat tool-use-id → window map. If the session dies mid-run
 (crash/abort) a parked batch is woken with a failure instead of hanging.
 
+### Journaled crash-resume + one fire spine across hosts (Phase 3 + the spine lift)
+
+The `run_nodes` ledger already records every `ctx.*` call with its
+`output_json` — that IS the journal. `automation-handler-journal.ts` builds a
+`RunJournal` from a prior run's settled, successful nodes keyed by ordinal; an
+open node (the crash point) or a failed node is not replayable so it re-runs
+live. `runAutomationHandler` gains `resumeFromRunId`: it loads the journal
+before the handler starts and records the resume as a fresh run linked by
+`retryOf`. The three dispatch points consult the journal by ordinal —
+`dispatchToolBatch` (whole batch replays when every call is journaled),
+`handleAgentMessage` (extracted from the runner), and `handleInvokeMessage`.
+Because a replayed call returns the recorded result without dispatching,
+**`ctx.agent` is the only billed path; routed to the host `agentDispatcher`;
+journaled and not re-billed on replay**, and **an interrupted fire resumes from
+the journal** running live only from the first un-journaled call. The
+determinism contract (no `Date.now`/`Math.random`/ambient I/O outside `ctx.*`,
+so ordinals align on re-run) is documented in the journal module.
+
+The fire spine (`runAutomationFire`) now also **owns `ctx.invoke`**: it builds
+an invoke dispatcher that re-enters `runAutomationFire` with the same injected
+dispatch surface, so a child automation runs on the same runtime as its parent
+and links into the run DAG — lifted out of the per-host fire (the issue's open
+question) so every host gets it uniformly. The dispatch seam gains an optional
+`model` (the manifest's `requires.model` tier) so a host's `ctx.agent` routes
+to the declared capability tier. `resumeFromRunId` is threaded through
+`runAutomationFire` and agent-runtime's `runAutomationLocal`.
+
 ## Out of scope
 
 - The **mock-puppeted OpenClaw tool path** (`runEmbeddedAgent` against a
@@ -66,4 +93,13 @@ preserved via a flat tool-use-id → window map. If the session dies mid-run
   session with dependent results, no spawn when no tool is called, and tool
   errors surface as failed results; `mock-llm-server.test.ts` covers
   park-then-release + `endDispatch`).
-- Lint + format clean on all changed files.
+- `automation-engine`: typecheck clean; full suite 66/66. New
+  `automation-handler-journal.test.ts` proves a fully-journaled run replays
+  with zero re-dispatch, a crash mid-`ctx.tool` replays the journaled
+  `ctx.agent` (dispatcher throws if touched — **journaled and not re-billed on
+  replay**) while the failed tool re-runs live, and the resume is a fresh run
+  linked by `retryOf`. `automation-fire.test.ts` gains a `ctx.invoke`-through-
+  the-spine test.
+- Lint + format clean on all changed files; both touched engine files kept
+  under the 500-line repo-hygiene cap (the agent handler was extracted into
+  `automation-handler-ctx.ts`).

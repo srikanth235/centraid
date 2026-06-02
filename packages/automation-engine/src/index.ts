@@ -131,6 +131,14 @@ export {
   type AutomationDispatchContext,
 } from './automation-handler-runner.js';
 export { truncateForAudit } from './automation-handler-audit.js';
+// Crash-resume journal (issue #166, Phase 3): a prior run's `run_nodes`
+// replayed so already-serviced `ctx.*` calls are not re-dispatched.
+export {
+  buildRunJournal,
+  EMPTY_JOURNAL,
+  type RunJournal,
+  type JournalEntry,
+} from './automation-handler-journal.js';
 
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
