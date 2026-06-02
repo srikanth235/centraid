@@ -167,6 +167,17 @@ export {
   type ChatTurnContext,
   type RunTurnFn,
 } from './chat/chat-runner-core.js';
+
+// Authoring-time handler lint (issue #167): a static scan that flags ambient
+// I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
+// handler — effects that bypass the audited `ctx.*` rails or make a re-run
+// diverge. The builder grounds on this so a handler is rejected at publish
+// time, not at fire time.
+export {
+  lintAutomationHandlerSource,
+  formatHandlerLintError,
+  type HandlerLintFinding,
+} from './automation/automation-handler-lint.js';
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomationLocal`

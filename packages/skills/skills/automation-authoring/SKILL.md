@@ -57,8 +57,8 @@ Rules for editing `automation.json`:
 - **`triggers`** is an array. A cron trigger is `{ "kind": "cron", "expr": "<5-field UTC cron>" }`. Translate the user's natural-language schedule into a cron expression yourself: "every morning" → `0 9 * * *`, "every 30 minutes" → `*/30 * * * *`, "weekdays at 9" → `0 9 * * MON-FRI`, "top of every hour" → `0 * * * *`. An empty `triggers` array is legal — that's a manual-fire-only automation.
 - **Webhook triggers.** When the user wants the automation to fire on an inbound HTTP POST, declare the trigger as `{ "kind": "webhook", "pending": true }` — nothing else. You cannot mint the route `id` or `secretHash`; that is a privileged server step, so never invent them. After your turn the builder provisions the webhook (mints the id + secret, rewrites the trigger to its final form) and shows the user the endpoint URL + secret once. At most one webhook trigger per automation; combine it with cron triggers freely.
 - Keep `prompt` current — it is the canonical record of what the user asked for.
-- `requires.tools` must list every fully-qualified tool name the handler calls via `ctx.tool(...)`; `requires.mcps` lists the MCP servers those tools belong to. The host enforces this allowlist — an undeclared tool call fails.
-- `requires.model` is the model `ctx.agent` routes through (`provider/model-id`). Never set it to `centraid-mock/...` — that recurses into the runner.
+- `requires.tools` must list every fully-qualified tool name the handler calls via `ctx.tool(...)`; `requires.mcps` lists the MCP servers those tools belong to. The host enforces this allowlist — an undeclared tool call fails. The scaffold seeds `tools: []`; grow it as you add `ctx.tool(...)` calls.
+- `requires.model` is the capability tier `ctx.agent` routes through (`provider/model-id`). Pick the **cheapest tier that does the inference** — a small/cheap tier for summarize/classify/extract; reserve a stronger tier for genuinely hard reasoning. `ctx.agent` is the only billed path (see *Two cost rails* below), so the tier you declare is the per-fire cost. Never set it to `centraid-mock/...` — that recurses into the runner.
 - The runtime validates the manifest on every read; a malformed shape is rejected. Keep the structure exactly as shown.
 
 ### The handler — `handler.js`
@@ -88,10 +88,31 @@ Return `{ summary?, output? }`: `summary` is the one-line description shown in t
 
 There is **no runtime retry** on `ctx.tool` — a failed call rejects the Promise. Classify the error and write your own `try/catch` backoff when retry is warranted.
 
-Avoid in handlers:
+### Audited rails + determinism (non-negotiable)
+
+Every outside effect **must go through the `ctx.*` surface**. `ctx.tool` / `ctx.agent` / `ctx.state` / `ctx.runs` calls are recorded in the run ledger (the run history you see per fire) and `ctx.tool` is gated by the `requires.tools` allowlist. A raw `fetch(...)` or `fs` call is both **invisible to the run history** and **outside the allowlist** — so it never appears in a fire's trace and can't be reasoned about.
+
+Keep the handler **deterministic** too. A fire has no crash-resume journal: if a fire dies partway, it simply re-runs from the top. A handler that reads the wall clock or a random value produces a *different* result on that re-run and re-fires effects under fresh ids — non-idempotent and hard to dedup. So a handler **must not**:
+
+- Read the wall clock: no `Date.now()`, no `new Date()` (argless), no `performance.now()`. (`new Date(value)` with an explicit argument is fine.)
+- Use randomness: no `Math.random()`, no `crypto.randomUUID()` / `randomBytes()` / `getRandomValues()`.
+- Touch ambient I/O directly: no raw `fetch(...)`, no `node:fs` / `child_process` / `net` / `http`, no `process.env` / `process.cwd()`.
+
+There is no `ctx.now()` / `ctx.random()` / `ctx.uuid()` — get these needs deterministically instead:
+
+- **"Now" / "since last run"** → derive from `ctx.runs.last({ status: 'ok' })` (its `startedAt`/`endedAt`) or a watermark in `ctx.state`. If you truly need the current instant, read it off a `ctx.tool` result.
+- **A unique/derived id** → derive it from the run's inputs (`ctx.input`, `ctx.state`, a `ctx.tool` result), or have a `ctx.tool` mint it.
+
+**Pure JS between `ctx.*` calls is free** — loops, conditionals, filters, maps, string/JSON shaping. Put as much work there as possible. The builder's publish gate runs a static lint for these patterns, so an unsafe handler is rejected at publish time, not discovered at fire time — keep the handler clean.
+
+### Two cost rails
+
+- **`ctx.tool` is ~0 model tokens.** It is mock-puppeted — the runtime drives the agent's *native* tool through a mock provider, spending no real inference. Prefer it for anything a tool (or plain JS) can do: fetching, listing, posting, file/db ops.
+- **`ctx.agent` is the only billed path.** Reserve it for genuine inference — summarize, classify, extract, draft. Don't reach for it to do work a `ctx.tool` call or a deterministic JS transform already covers. When you do use it, pass a `json` schema and batch (one structured call over the whole set, never a per-item `ctx.agent` loop), and declare the cheapest sufficient `requires.model` tier.
+
+Also avoid in handlers:
 
 - `ctx.fetch` — does not exist. Use `ctx.tool` through an MCP for external data.
-- Per-item `ctx.agent` loops when one structured call covers the batch — token cost is real.
 - Any reference to `window`, the DOM, or an interactive chat surface — cron fires have none.
 
 ### Authoring flow

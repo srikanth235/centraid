@@ -6,6 +6,7 @@ import {
   setAutomationEnabledInFiles,
   deleteAutomationFromFiles,
 } from './scaffold-automation.js';
+import { lintAutomationHandlerSource } from './automation-handler-lint.js';
 
 function byPath(files: ScaffoldFile[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));
@@ -31,6 +32,30 @@ describe('scaffoldAutomationAppFiles', () => {
 
   it('rejects a dotted / path-unsafe app id', () => {
     assert.throws(() => scaffoldAutomationAppFiles('auto.briefing'), /Invalid automation app id/);
+  });
+
+  it('emits a replay-safe default handler (passes the determinism lint)', () => {
+    const out = byPath(scaffoldAutomationAppFiles('briefing'));
+    assert.deepEqual(lintAutomationHandlerSource(out.get('automations/briefing/handler.js')!), []);
+  });
+
+  it('emits the requires.tools allowlist slot (and model when given)', () => {
+    const plain = byPath(scaffoldAutomationAppFiles('briefing'));
+    const reqs = (
+      JSON.parse(plain.get('automations/briefing/automation.json')!) as {
+        requires: { tools?: unknown; model?: unknown };
+      }
+    ).requires;
+    assert.deepEqual(reqs.tools, []);
+    assert.equal(reqs.model, undefined);
+
+    const withModel = byPath(scaffoldAutomationAppFiles('briefing', { model: 'anthropic/x' }));
+    const reqs2 = (
+      JSON.parse(withModel.get('automations/briefing/automation.json')!) as {
+        requires: { model?: unknown };
+      }
+    ).requires;
+    assert.equal(reqs2.model, 'anthropic/x');
   });
 });
 

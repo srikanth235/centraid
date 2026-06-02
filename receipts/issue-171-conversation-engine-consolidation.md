@@ -69,6 +69,7 @@ barrel at the root.
 
 ## Verification
 
+- Full typecheck and test suite green (details below).
 - Full typecheck green across the monorepo (`turbo run typecheck`, 19/19 packages
   including desktop, mobile, openclaw).
 - Full test suite green (`turbo run test`): 588 tests, 0 failures — app-engine

@@ -84,8 +84,8 @@ The conversational builder always writes `enabled: false` at scaffold time — a
 
 ### Failure handoff
 
-| Field       | Type   | Notes                                                                                                                                                                                            |
-| ----------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Field       | Type   | Notes                                                                                                                                                                                 |
+| ----------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `onFailure` | string | Automation handle to fire when this one fails. Format: `<appId>/<automationId>`, or a bare `<id>` for a sibling within the same app. Validated against the automation-handle grammar. |
 
 A typical pattern: the main automation does its work; `onFailure` points at a sibling that logs to a "needs-attention" table or notifies a Slack channel.

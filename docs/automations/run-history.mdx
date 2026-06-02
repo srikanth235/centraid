@@ -43,19 +43,19 @@ One row per fire. Created when the trigger fires, updated when the handler retur
 
 One row per `ctx.tool` / `ctx.agent` call, ordered within a run.
 
-| Column                    | Meaning                                                                 |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `run_id`                  | Foreign key into `runs`. CASCADE-deletes when the run is pruned.        |
-| `ordinal`                 | Position within the run. Monotonic per run.                             |
-| `batch_id`                | When multiple `ctx.tool` calls fire in parallel, they share a batch id. |
-| `kind`                    | `"tool"` or `"agent"`. (`"invoke"` is a legacy kind, no longer produced.) |
-| `name`                    | Tool name or model name.                                                |
-| `args_json`               | What was sent.                                                          |
-| `result_json`             | What came back.                                                         |
-| `ok`                      | Boolean.                                                                |
-| `error`                   | When `ok` is false.                                                     |
+| Column                    | Meaning                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------- |
+| `run_id`                  | Foreign key into `runs`. CASCADE-deletes when the run is pruned.             |
+| `ordinal`                 | Position within the run. Monotonic per run.                                  |
+| `batch_id`                | When multiple `ctx.tool` calls fire in parallel, they share a batch id.      |
+| `kind`                    | `"tool"` or `"agent"`. (`"invoke"` is a legacy kind, no longer produced.)    |
+| `name`                    | Tool name or model name.                                                     |
+| `args_json`               | What was sent.                                                               |
+| `result_json`             | What came back.                                                              |
+| `ok`                      | Boolean.                                                                     |
+| `error`                   | When `ok` is false.                                                          |
 | `child_run_id`            | Legacy — the child run's id on a `kind: "invoke"` node. No current producer. |
-| `started_at` / `ended_at` | Epoch ms.                                                               |
+| `started_at` / `ended_at` | Epoch ms.                                                                    |
 
 `run_nodes` is what the desktop's "Trace" view renders — a tree per run showing every tool call, every agent turn, every sub-invocation, in order, with timings.
 
