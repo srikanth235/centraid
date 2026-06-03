@@ -196,7 +196,8 @@ export async function probeProvider(provider: OpenAICompatProvider): Promise<Pro
       };
     }
     const body = (await res.json().catch(() => undefined)) as unknown;
-    return { ...base, ok: true, modelCount: countModels(body) };
+    const models = extractModels(body);
+    return { ...base, ok: true, modelCount: models?.length, models };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const isAbort = controller.signal.aborted;
@@ -217,13 +218,19 @@ function joinUrl(base: string, segment: string): string {
   return `${trimmedBase}/${trimmedSeg}`;
 }
 
-function countModels(body: unknown): number | undefined {
+function extractModels(body: unknown): string[] | undefined {
   if (!body || typeof body !== 'object') return undefined;
   const data = (body as { data?: unknown }).data;
-  if (Array.isArray(data)) return data.length;
-  // Ollama's /v1/models also returns { data: [...] } so the OpenAI shape
-  // is the common path. If a provider deviates, we just omit the count.
-  return undefined;
+  // Ollama's /v1/models also returns { data: [{ id }] } so the OpenAI shape
+  // is the common path. If a provider deviates, we just omit the list.
+  if (!Array.isArray(data)) return undefined;
+  const ids: string[] = [];
+  for (const entry of data) {
+    if (entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string') {
+      ids.push((entry as { id: string }).id);
+    }
+  }
+  return ids;
 }
 
 async function execVersion(bin: string): Promise<string> {

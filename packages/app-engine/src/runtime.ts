@@ -133,6 +133,12 @@ export interface ProviderStatus {
   ok: boolean;
   /** Number of models returned by `GET <baseUrl>/models` when probe succeeded. */
   modelCount?: number;
+  /**
+   * Model ids returned by `GET <baseUrl>/models` (the `data[].id` entries of
+   * the OpenAI shape) when the probe succeeded. Feeds the chat model picker
+   * so it can list the endpoint's real models instead of a static guess.
+   */
+  models?: string[];
   /** Plain-text reason for `ok: false` (timeout, 401, connection refused, …). */
   reason?: string;
 }

@@ -3033,8 +3033,6 @@ import {
       'Workspace',
       'AI providers',
       'Inference endpoint',
-      'Where apps run',
-      'Sync & backups',
     ];
 
     let rows: PaletteRow[] = [];
@@ -3046,8 +3044,6 @@ import {
       Workspace: 'Sidebar, chat model',
       'AI providers': 'Codex · Claude Code · custom endpoint',
       'Inference endpoint': 'Route Codex through any OpenAI endpoint',
-      'Where apps run': 'Local or remote runtime',
-      'Sync & backups': 'Cross-device sync and snapshots',
     };
 
     const collectGroups = (q: string): Array<{ group: string; items: PaletteRow[] }> => {
@@ -5552,9 +5548,7 @@ import {
       | 'workspace'
       | 'profiles'
       | 'providers'
-      | 'inference'
-      | 'runtime'
-      | 'sync';
+      | 'inference';
     const pageHosts: Record<SettingsPageId, HTMLElement> = {
       appearance: el('div', { class: 'cd-settings-page' }),
       layout: el('div', { class: 'cd-settings-page' }),
@@ -5562,8 +5556,6 @@ import {
       profiles: el('div', { class: 'cd-settings-page' }),
       providers: el('div', { class: 'cd-settings-page' }),
       inference: el('div', { class: 'cd-settings-page' }),
-      runtime: el('div', { class: 'cd-settings-page' }),
-      sync: el('div', { class: 'cd-settings-page' }),
     };
 
     // ---- Theme group ----
@@ -5706,11 +5698,10 @@ import {
       ]),
     );
 
-    // ---- Runtime group ----
-    // After #109 the runtime page is the Gateways panel. Gateway
-    // selection + lifecycle (add / rename / remove) replaces the old
-    // "Local vs Remote toggle + URL/token/appsDir form". Paths
-    // are fixed under userData and are no longer user-configurable.
+    // Gateway selection + lifecycle (add / rename / remove) lives on the
+    // Profiles page (profiles are backed by gateways). Paths are fixed under
+    // userData and are not user-configurable, so there's no separate runtime
+    // page.
 
     const labeled = (label: string, hint: string, input: HTMLElement): HTMLElement =>
       el('div', { class: 'drawer-row' }, [
@@ -5734,17 +5725,34 @@ import {
       chatModelSelect.append(seed);
     }
     async function loadChatModels(): Promise<void> {
-      // The chat model is gateway-owned (the runner picks it from the
-      // gateway's runner prefs), so there's no per-app model list to fetch —
-      // the dropdown keeps its "Gateway default" entry + the persisted seed.
-      const models: Array<{ id: string; name: string; provider: string }> = [];
+      // The list comes from the active gateway's configured provider: the
+      // runner-status probe hits `GET <baseUrl>/models` and returns the ids.
+      // When no custom OpenAI-compatible endpoint is set, the runner uses its
+      // built-in models and there's no list to enumerate — the dropdown then
+      // just offers "Gateway default" plus any persisted choice.
+      let models: string[] = [];
+      try {
+        const status = await window.CentraidApi.getRunnerStatus();
+        if (status.provider?.ok && status.provider.models?.length) {
+          models = status.provider.models;
+        }
+      } catch {
+        /* gateway unreachable — keep "Gateway default" + persisted seed */
+      }
       // Replace existing options but keep the leading "Gateway default" entry.
       while (chatModelSelect.children.length > 1) {
         chatModelSelect.lastChild?.remove();
       }
-      for (const m of models) {
-        const opt = el('option', { value: m.id }, `${m.name} · ${m.provider}`) as HTMLOptionElement;
-        if (m.id === chatModelInitial) opt.selected = true;
+      // Re-add the persisted choice up front if the probe didn't surface it,
+      // so a previously-saved model isn't silently dropped from the picker.
+      if (chatModelInitial && !models.includes(chatModelInitial)) {
+        chatModelSelect.append(
+          el('option', { value: chatModelInitial, selected: '' }, chatModelInitial),
+        );
+      }
+      for (const id of models) {
+        const opt = el('option', { value: id }, id) as HTMLOptionElement;
+        if (id === chatModelInitial) opt.selected = true;
         chatModelSelect.append(opt);
       }
     }
@@ -5754,9 +5762,9 @@ import {
       void window.CentraidApi.saveSettings({ chatModel: chatModelSelect.value || undefined });
     });
 
-    // Refresh button — re-hits `models.list` on the gateway. Useful when the
-    // user adds a provider profile in openclaw and wants the list to update
-    // without restarting the desktop app.
+    // Refresh button — re-probes the active gateway's provider endpoint.
+    // Useful after configuring an inference endpoint (or starting a local
+    // model server) so the list updates without restarting the desktop app.
     const refreshModelsBtn = el('button', {
       class: 'btn btn-soft app-chat-models-refresh',
       type: 'button',
@@ -5788,7 +5796,7 @@ import {
         ),
         labeled(
           'Model',
-          'Pick any model exposed by `openclaw infer model list`. "Gateway default" lets openclaw choose.',
+          'Lists models from the gateway’s configured inference endpoint, if any. "Gateway default" lets the gateway choose.',
           modelRow,
         ),
       ]),
@@ -6252,11 +6260,6 @@ import {
         }),
       ]),
     );
-    pageHosts.sync.append(
-      drawerGroup('Sync', [
-        el('div', { class: 'settings-note' }, 'App sync and backup settings will live here.'),
-      ]),
-    );
 
     // §C1 — inner-sidebar shell modelled on RefinedSettingsV2. A grouped
     // category nav (Workspace / Models / Runtime) — each entry an icon +
@@ -6316,22 +6319,6 @@ import {
         hint: 'Custom',
         subtitle:
           'Route Codex through any OpenAI-compatible endpoint (Ollama, vLLM, Groq, Together, LM Studio). Your ~/.codex/auth.json and config.toml are not touched.',
-      },
-      {
-        id: 'runtime',
-        label: 'Where apps run',
-        section: 'Runtime',
-        icon: 'Monitor',
-        subtitle:
-          'Local mode runs apps inside this Electron process. Remote mode delegates to the Centraid gateway so they’re reachable from any device.',
-      },
-      {
-        id: 'sync',
-        label: 'Sync & backups',
-        section: 'Runtime',
-        icon: 'History',
-        subtitle:
-          'Keep apps, drafts, and chats in sync across your devices and back up automatically.',
       },
     ];
 

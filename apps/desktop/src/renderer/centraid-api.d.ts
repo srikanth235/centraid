@@ -683,6 +683,8 @@ export interface CentraidProviderStatus {
   baseUrl: string;
   ok: boolean;
   modelCount?: number;
+  /** Model ids from `GET <baseUrl>/models`; feeds the chat model picker. */
+  models?: string[];
   reason?: string;
 }
 
