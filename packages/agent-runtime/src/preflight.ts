@@ -14,6 +14,7 @@
 import { spawn } from 'node:child_process';
 import type { ProviderStatus, RunnerStatus } from '@centraid/app-engine';
 import type { OpenAICompatProvider, RunnerKind, RunnerPrefs } from './types.js';
+import { RUNNER_TIERS } from './model-tiers.js';
 
 const VERSION_TIMEOUT_MS = 5_000;
 const PROVIDER_PROBE_TIMEOUT_MS = 4_000;
@@ -73,7 +74,15 @@ export async function runPreflight(prefs: RunnerPrefs): Promise<RunnerStatus> {
   if (cached && cached.cacheKey === key) return cached.status;
   const status = await probe(prefs);
   if (prefs.kind === 'codex' && prefs.provider) {
+    // Custom OpenAI-compatible endpoint — its live `/models` catalog wins
+    // over the static list (the user may run any model the endpoint serves).
     status.provider = await probeProvider(prefs.provider);
+  } else {
+    // Built-in runner with no model-list command: offer capability tiers
+    // (the adapter resolves them to native models at turn time). codex has
+    // no tier vocabulary, so it stays on "Gateway default".
+    const tiers = RUNNER_TIERS[prefs.kind];
+    if (tiers) status.models = [...tiers];
   }
   cached = { status, cacheKey: key };
   return status;
@@ -196,7 +205,8 @@ export async function probeProvider(provider: OpenAICompatProvider): Promise<Pro
       };
     }
     const body = (await res.json().catch(() => undefined)) as unknown;
-    return { ...base, ok: true, modelCount: countModels(body) };
+    const models = extractModels(body);
+    return { ...base, ok: true, modelCount: models?.length, models };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const isAbort = controller.signal.aborted;
@@ -217,13 +227,19 @@ function joinUrl(base: string, segment: string): string {
   return `${trimmedBase}/${trimmedSeg}`;
 }
 
-function countModels(body: unknown): number | undefined {
+function extractModels(body: unknown): string[] | undefined {
   if (!body || typeof body !== 'object') return undefined;
   const data = (body as { data?: unknown }).data;
-  if (Array.isArray(data)) return data.length;
-  // Ollama's /v1/models also returns { data: [...] } so the OpenAI shape
-  // is the common path. If a provider deviates, we just omit the count.
-  return undefined;
+  // Ollama's /v1/models also returns { data: [{ id }] } so the OpenAI shape
+  // is the common path. If a provider deviates, we just omit the list.
+  if (!Array.isArray(data)) return undefined;
+  const ids: string[] = [];
+  for (const entry of data) {
+    if (entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string') {
+      ids.push((entry as { id: string }).id);
+    }
+  }
+  return ids;
 }
 
 async function execVersion(bin: string): Promise<string> {

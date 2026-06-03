@@ -47,6 +47,7 @@ import {
   makeUserStoreRouteHandler,
   type ChatRunner,
   type RunnerStatus,
+  type RunnerStatusOptions,
   type RuntimeLogger,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
@@ -129,7 +130,7 @@ export interface BuildGatewayOptions {
    * runs in-process, not through a CLI, so a codex/claude preflight would
    * misreport readiness.
    */
-  runnerStatus?: () => Promise<RunnerStatus>;
+  runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   /**
    * Override for how an automation is fired (Plane B). The gateway's default
    * runs the handler through `runAutomationLocal` (codex/claude CLI puppet).

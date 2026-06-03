@@ -25,6 +25,28 @@ import {
   readJson,
   GatewayClientError,
 } from './gateway-client-core.js';
+import type { CentraidRunnerStatus } from './centraid-api.js';
+
+/**
+ * Runner preflight + model catalog from the ACTIVE gateway. Unlike the
+ * desktop's local `window.CentraidApi.getRunnerStatus()` IPC (which always
+ * probes the in-process codex/claude runtime), this reads the gateway's own
+ * `GET /centraid/_chat/runner-status` — so a remote OpenClaw gateway reports
+ * `{ kind: 'openclaw', models: [...] }` and the chat picker can list them.
+ */
+export async function getRunnerStatus(
+  opts: { refresh?: boolean } = {},
+): Promise<CentraidRunnerStatus> {
+  const { baseUrl, token } = await auth();
+  const path = opts.refresh
+    ? '/centraid/_chat/runner-status?refresh=1'
+    : '/centraid/_chat/runner-status';
+  const res = await doFetch(baseUrl, path, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  return readJson<CentraidRunnerStatus>(res, 'fetch runner status');
+}
 
 /**
  * The gateway's native chat stream event (mirrors

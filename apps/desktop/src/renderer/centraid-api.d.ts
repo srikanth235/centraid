@@ -683,7 +683,18 @@ export interface CentraidProviderStatus {
   baseUrl: string;
   ok: boolean;
   modelCount?: number;
+  /** Model ids from `GET <baseUrl>/models`; feeds the chat model picker. */
+  models?: string[];
   reason?: string;
+}
+
+/** One model a runtime can serve (OpenClaw enumerates these). */
+export interface CentraidRunnerModel {
+  id: string;
+  name?: string;
+  default?: boolean;
+  /** Capability tier for grouping concrete models in the picker. */
+  tier?: 'smart' | 'balanced' | 'fast';
 }
 
 /** Preflight snapshot returned by `getRunnerStatus`. */
@@ -696,6 +707,8 @@ export interface CentraidRunnerStatus {
   reason?: string;
   hint?: string;
   provider?: CentraidProviderStatus;
+  /** Models the runtime can serve, when enumerable (OpenClaw). */
+  models?: CentraidRunnerModel[];
 }
 
 declare global {

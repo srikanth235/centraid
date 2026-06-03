@@ -8,6 +8,7 @@
 import {
   appQuery,
   appLiveUrl,
+  getRunnerStatus as getGatewayRunnerStatus,
   deregisterApp,
   listApps,
   listTemplates,
@@ -3033,8 +3034,6 @@ import {
       'Workspace',
       'AI providers',
       'Inference endpoint',
-      'Where apps run',
-      'Sync & backups',
     ];
 
     let rows: PaletteRow[] = [];
@@ -3046,8 +3045,6 @@ import {
       Workspace: 'Sidebar, chat model',
       'AI providers': 'Codex · Claude Code · custom endpoint',
       'Inference endpoint': 'Route Codex through any OpenAI endpoint',
-      'Where apps run': 'Local or remote runtime',
-      'Sync & backups': 'Cross-device sync and snapshots',
     };
 
     const collectGroups = (q: string): Array<{ group: string; items: PaletteRow[] }> => {
@@ -5524,13 +5521,9 @@ import {
     clear();
     const seq = renderSeq;
 
+    // Only `chatModel` is read off this object (the chat picker seed); the
+    // fallback covers the case where `getSettings` is unreachable.
     const current = await window.CentraidApi.getSettings().catch(() => ({
-      gatewayUrl: 'http://127.0.0.1:18789',
-      gatewayToken: '',
-      appsDir: '~/centraid-apps',
-      runtimeMode: 'local' as const,
-      remoteGatewayUrl: 'http://127.0.0.1:18789',
-      remoteGatewayToken: '',
       chatModel: undefined as string | undefined,
     }));
 
@@ -5552,9 +5545,7 @@ import {
       | 'workspace'
       | 'profiles'
       | 'providers'
-      | 'inference'
-      | 'runtime'
-      | 'sync';
+      | 'inference';
     const pageHosts: Record<SettingsPageId, HTMLElement> = {
       appearance: el('div', { class: 'cd-settings-page' }),
       layout: el('div', { class: 'cd-settings-page' }),
@@ -5562,8 +5553,6 @@ import {
       profiles: el('div', { class: 'cd-settings-page' }),
       providers: el('div', { class: 'cd-settings-page' }),
       inference: el('div', { class: 'cd-settings-page' }),
-      runtime: el('div', { class: 'cd-settings-page' }),
-      sync: el('div', { class: 'cd-settings-page' }),
     };
 
     // ---- Theme group ----
@@ -5706,11 +5695,10 @@ import {
       ]),
     );
 
-    // ---- Runtime group ----
-    // After #109 the runtime page is the Gateways panel. Gateway
-    // selection + lifecycle (add / rename / remove) replaces the old
-    // "Local vs Remote toggle + URL/token/appsDir form". Paths
-    // are fixed under userData and are no longer user-configurable.
+    // Gateway selection + lifecycle (add / rename / remove) lives on the
+    // Profiles page (profiles are backed by gateways). Paths are fixed under
+    // userData and are not user-configurable, so there's no separate runtime
+    // page.
 
     const labeled = (label: string, hint: string, input: HTMLElement): HTMLElement =>
       el('div', { class: 'drawer-row' }, [
@@ -5733,19 +5721,68 @@ import {
       ) as HTMLOptionElement;
       chatModelSelect.append(seed);
     }
-    async function loadChatModels(): Promise<void> {
-      // The chat model is gateway-owned (the runner picks it from the
-      // gateway's runner prefs), so there's no per-app model list to fetch —
-      // the dropdown keeps its "Gateway default" entry + the persisted seed.
-      const models: Array<{ id: string; name: string; provider: string }> = [];
+    // Tier → display header for the grouped picker (matches the claude-code
+    // tier labels). Order is most-capable first.
+    const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
+    const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
+      smart: 'Most capable',
+      balanced: 'Balanced',
+      fast: 'Fastest',
+    };
+
+    type PickerModel = { id: string; label: string; tier?: 'smart' | 'balanced' | 'fast' };
+
+    async function loadChatModels(opts: { refresh?: boolean } = {}): Promise<void> {
+      // Models come from the ACTIVE gateway's runner-status:
+      //   - OpenClaw enumerates its configured models and classifies each into
+      //     a capability tier (`status.models[].tier`) — grouped below.
+      //   - claude-code offers capability tiers directly (no per-model tier).
+      //   - A codex custom OpenAI endpoint surfaces its `/models` catalog.
+      //   - Otherwise the dropdown is just "Gateway default" + persisted choice.
+      let models: PickerModel[] = [];
+      try {
+        const status = await getGatewayRunnerStatus(opts);
+        if (status.models?.length) {
+          models = status.models.map((m) => ({
+            id: m.id,
+            label: (m.name ?? m.id) + (m.default ? ' · default' : ''),
+            ...(m.tier ? { tier: m.tier } : {}),
+          }));
+        } else if (status.provider?.ok && status.provider.models?.length) {
+          models = status.provider.models.map((id) => ({ id, label: id }));
+        }
+      } catch {
+        /* gateway unreachable — keep "Gateway default" + persisted seed */
+      }
       // Replace existing options but keep the leading "Gateway default" entry.
       while (chatModelSelect.children.length > 1) {
         chatModelSelect.lastChild?.remove();
       }
-      for (const m of models) {
-        const opt = el('option', { value: m.id }, `${m.name} · ${m.provider}`) as HTMLOptionElement;
+      // Re-add the persisted choice up front if the list didn't surface it,
+      // so a previously-saved model isn't silently dropped from the picker.
+      if (chatModelInitial && !models.some((m) => m.id === chatModelInitial)) {
+        chatModelSelect.append(
+          el('option', { value: chatModelInitial, selected: '' }, chatModelInitial),
+        );
+      }
+      const mkOption = (m: PickerModel): HTMLOptionElement => {
+        const opt = el('option', { value: m.id }, m.label) as HTMLOptionElement;
         if (m.id === chatModelInitial) opt.selected = true;
-        chatModelSelect.append(opt);
+        return opt;
+      };
+      // Group by tier when classified (OpenClaw); otherwise render flat.
+      if (models.some((m) => m.tier)) {
+        for (const tier of TIER_ORDER) {
+          const inTier = models.filter((m) => m.tier === tier);
+          if (!inTier.length) continue;
+          chatModelSelect.append(el('optgroup', { label: TIER_LABEL[tier] }, inTier.map(mkOption)));
+        }
+        const untiered = models.filter((m) => !m.tier);
+        if (untiered.length) {
+          chatModelSelect.append(el('optgroup', { label: 'Other' }, untiered.map(mkOption)));
+        }
+      } else {
+        for (const m of models) chatModelSelect.append(mkOption(m));
       }
     }
     void loadChatModels();
@@ -5754,9 +5791,9 @@ import {
       void window.CentraidApi.saveSettings({ chatModel: chatModelSelect.value || undefined });
     });
 
-    // Refresh button — re-hits `models.list` on the gateway. Useful when the
-    // user adds a provider profile in openclaw and wants the list to update
-    // without restarting the desktop app.
+    // Refresh button — forces the gateway to re-probe and re-classify its
+    // models (OpenClaw re-runs the tier classifier; a codex custom endpoint
+    // re-probes `/models`), so the list updates without restarting the app.
     const refreshModelsBtn = el('button', {
       class: 'btn btn-soft app-chat-models-refresh',
       type: 'button',
@@ -5765,7 +5802,7 @@ import {
       onClick: async () => {
         refreshModelsBtn.setAttribute('disabled', '');
         try {
-          await loadChatModels();
+          await loadChatModels({ refresh: true });
           showToast('Model list refreshed');
         } finally {
           refreshModelsBtn.removeAttribute('disabled');
@@ -5788,7 +5825,7 @@ import {
         ),
         labeled(
           'Model',
-          'Pick any model exposed by `openclaw infer model list`. "Gateway default" lets openclaw choose.',
+          'Lists what the gateway exposes — OpenClaw’s model catalog, Claude Code capability tiers, or a codex runner’s configured inference endpoint. "Gateway default" lets the gateway choose.',
           modelRow,
         ),
       ]),
@@ -6252,11 +6289,6 @@ import {
         }),
       ]),
     );
-    pageHosts.sync.append(
-      drawerGroup('Sync', [
-        el('div', { class: 'settings-note' }, 'App sync and backup settings will live here.'),
-      ]),
-    );
 
     // §C1 — inner-sidebar shell modelled on RefinedSettingsV2. A grouped
     // category nav (Workspace / Models / Runtime) — each entry an icon +
@@ -6316,22 +6348,6 @@ import {
         hint: 'Custom',
         subtitle:
           'Route Codex through any OpenAI-compatible endpoint (Ollama, vLLM, Groq, Together, LM Studio). Your ~/.codex/auth.json and config.toml are not touched.',
-      },
-      {
-        id: 'runtime',
-        label: 'Where apps run',
-        section: 'Runtime',
-        icon: 'Monitor',
-        subtitle:
-          'Local mode runs apps inside this Electron process. Remote mode delegates to the Centraid gateway so they’re reachable from any device.',
-      },
-      {
-        id: 'sync',
-        label: 'Sync & backups',
-        section: 'Runtime',
-        icon: 'History',
-        subtitle:
-          'Keep apps, drafts, and chats in sync across your devices and back up automatically.',
       },
     ];
 

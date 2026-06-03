@@ -92,7 +92,7 @@ export interface RuntimeOptions {
    * each adapter's readiness so the chat panel can show a Setup screen
    * instead of failing per-turn when the CLI is missing or unauthenticated.
    */
-  runnerStatus?: () => Promise<RunnerStatus>;
+  runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   /**
    * Optional code-dir resolver (issue #137). When provided, the runtime
    * serves handlers + static files from whatever dir this returns for an
@@ -133,14 +133,50 @@ export interface ProviderStatus {
   ok: boolean;
   /** Number of models returned by `GET <baseUrl>/models` when probe succeeded. */
   modelCount?: number;
+  /**
+   * Model ids returned by `GET <baseUrl>/models` (the `data[].id` entries of
+   * the OpenAI shape) when the probe succeeded. Feeds the chat model picker
+   * so it can list the endpoint's real models instead of a static guess.
+   */
+  models?: string[];
   /** Plain-text reason for `ok: false` (timeout, 401, connection refused, …). */
   reason?: string;
 }
 
+/** Provider-agnostic capability tier a model is classified into. */
+export type ModelTier = 'smart' | 'balanced' | 'fast';
+
+/**
+ * One model a runtime can serve, as surfaced by a runtime that can
+ * enumerate its catalog (e.g. OpenClaw via `openclaw models list`). The
+ * `id` is what the chat picker persists and hands back as the chat model.
+ */
+export interface RunnerModel {
+  /** Stable model id passed back as the chat model (e.g. "openai-codex/gpt-5.5"). */
+  id: string;
+  /** Human-friendly label for the picker; falls back to `id` when absent. */
+  name?: string;
+  /** `true` for the runtime's default / configured model. */
+  default?: boolean;
+  /**
+   * Capability tier the model was classified into, used by the picker to
+   * group concrete models (smart / balanced / fast). Absent when the runtime
+   * hasn't classified its catalog yet.
+   */
+  tier?: ModelTier;
+}
+
+/** Options for the runner-status reporter (e.g. force a model reclassify). */
+export interface RunnerStatusOptions {
+  /** Force a fresh model-tier classification rather than serving the cache. */
+  refresh?: boolean;
+}
+
 /**
  * Shape returned by the runner-status preflight route. Both hosts share
- * the schema; OpenClaw always reports `{ kind: 'openclaw', ok: true }`,
- * the desktop local-runtime reports the configured CLI adapter.
+ * the schema; OpenClaw reports `{ kind: 'openclaw', ok: true }` plus its
+ * enumerated `models`, the desktop local-runtime reports the configured
+ * CLI adapter.
  */
 export interface RunnerStatus {
   kind: 'openclaw' | 'codex' | 'claude-code' | 'none';
@@ -170,6 +206,14 @@ export interface RunnerStatus {
    * or the API key is wrong, so the UI surfaces both.
    */
   provider?: ProviderStatus;
+  /**
+   * Models the runtime can serve, when it can enumerate them (OpenClaw via
+   * `openclaw models list`). Distinct from `provider.models`, which is the
+   * custom OpenAI-compatible endpoint's `/models` catalog for the codex
+   * runner. Absent when the runtime has no enumerable list (built-in
+   * codex / claude-code, which pick the model internally).
+   */
+  models?: RunnerModel[];
 }
 
 const noopLogger: RuntimeLogger = {
@@ -217,7 +261,7 @@ export class Runtime {
   /** Optional app-metadata reader for chat extra-system-prompt. */
   readonly appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /** Optional runner-status preflight. */
-  readonly runnerStatus?: () => Promise<RunnerStatus>;
+  readonly runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   private readonly appsDir: string;
   private readonly logger: RuntimeLogger;
   private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
@@ -573,7 +617,7 @@ export class Runtime {
             sendJson(res, 200, { kind: 'none', ok: false, reason: 'no runner configured' });
             return;
           }
-          const status = await this.runnerStatus();
+          const status = await this.runnerStatus({ refresh: route.refresh });
           sendJson(res, 200, status);
           return;
         }

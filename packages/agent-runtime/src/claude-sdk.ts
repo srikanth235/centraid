@@ -23,6 +23,23 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { type ChatStreamEvent } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
+import type { CapabilityTier } from './model-tiers.js';
+
+/**
+ * Map a provider-agnostic capability tier to the Claude CLI's built-in model
+ * aliases (it resolves these to the latest model in each tier). Any other
+ * value — a full model id or the gateway default — passes through unchanged,
+ * so concrete ids the caller supplies still work.
+ */
+const CLAUDE_TIER_ALIAS: Record<CapabilityTier, string> = {
+  smart: 'opus',
+  balanced: 'sonnet',
+  fast: 'haiku',
+};
+
+export function resolveClaudeModel(model: string): string {
+  return CLAUDE_TIER_ALIAS[model as CapabilityTier] ?? model;
+}
 
 export interface ClaudeSdkInput {
   cwd: string;
@@ -116,7 +133,7 @@ export async function runClaudeSdkTurn(
         append: input.extraSystemPrompt,
       };
     }
-    if (input.model) options.model = input.model;
+    if (input.model) options.model = resolveClaudeModel(input.model);
     if (input.permissionMode) options.permissionMode = input.permissionMode;
     if (input.prevSessionId) options.resume = input.prevSessionId;
     if (input.extraPath) {
