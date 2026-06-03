@@ -6,6 +6,7 @@ import {
   gatewayChatRunnerSessionsDir,
   gatewayCodeStoreDir,
   gatewayIdentityDb,
+  gatewayModelCatalogFile,
 } from './gateway-paths.js';
 import { setLocalRuntimeInfoProvider } from './gateway-store.js';
 import { desktopSessionIdFor } from './app-sessions.js';
@@ -102,6 +103,10 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
         identityDb: localRuntimeGatewayDb(gatewayId),
         analyticsDb: localRuntimeAnalyticsDb(gatewayId),
         chatRunnerSessionDir: gatewayChatRunnerSessionsDir(gatewayId),
+        // Chat picker's per-runner model catalog (issue #188): the gateway
+        // seeds it with defaults and overwrites it with live self-reported
+        // ids on Refresh.
+        modelCatalogFile: gatewayModelCatalogFile(gatewayId),
         // Gateway owns the template catalog now (issue #141): the
         // `GET /centraid/_templates` route resolves bundle-or-cache from
         // this per-gateway cache dir, matching the old desktop IPC.

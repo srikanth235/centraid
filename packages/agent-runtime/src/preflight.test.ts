@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   compareSemver,
   invalidatePreflightCache,
@@ -8,6 +11,7 @@ import {
   probeCliAvailability,
   runPreflight,
 } from './preflight.ts';
+import { defaultModelsFor } from './model-defaults.ts';
 
 test('reports binary-not-found when bin does not exist', async () => {
   invalidatePreflightCache();
@@ -67,6 +71,23 @@ test('preflight surfaces versionAtLeast when version parses', async () => {
   assert.equal(status.ok, true);
   assert.equal(status.versionAtLeast, undefined);
   assert.equal(status.minVersion, minVersionString('codex'));
+});
+
+test('attaches the default model seed when no catalog path is set', async () => {
+  invalidatePreflightCache();
+  const status = await runPreflight({ kind: 'codex', binPath: 'true' });
+  assert.equal(status.ok, true);
+  assert.deepEqual(status.models, defaultModelsFor('codex'));
+});
+
+test('serves the default seed from a catalog path without enumerating on a normal load', async () => {
+  invalidatePreflightCache();
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-'));
+  const catalogPath = path.join(dir, 'model-catalog.json');
+  const status = await runPreflight({ kind: 'codex', binPath: 'true' }, { catalogPath });
+  assert.deepEqual(status.models, defaultModelsFor('codex'));
+  // A normal (non-refresh) load must not enumerate, so no catalog is written.
+  await assert.rejects(fs.access(catalogPath));
 });
 
 // ---- probeCliAvailability tests -----------------------------------------

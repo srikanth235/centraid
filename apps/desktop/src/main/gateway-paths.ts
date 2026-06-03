@@ -123,3 +123,13 @@ export function gatewayChatRunnerSessionsDir(id: string): string {
 export function gatewayTemplatesCacheDir(id: string): string {
   return path.join(gatewayDir(id), 'templates-cache');
 }
+
+/**
+ * Chat picker's per-runner model catalog (`model-catalog.json`, issue #188).
+ * The gateway seeds the picker with the default model list and overwrites this
+ * file with live self-reported ids when the user hits Refresh. Per-gateway so
+ * each gateway's runner enumeration is isolated.
+ */
+export function gatewayModelCatalogFile(id: string): string {
+  return path.join(gatewayDir(id), 'model-catalog.json');
+}

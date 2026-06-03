@@ -12,6 +12,7 @@
  *     identity.sqlite       — users + per-user prefs
  *     analytics.sqlite      — one summary row per run
  *     chat-runner-sessions/ — codex thread state for in-app chat
+ *     model-catalog.json    — chat picker's per-runner model catalog
  *     token.bin             — persistent bearer token (mode 0o600)
  */
 
@@ -30,6 +31,7 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     identityDb: path.join(abs, 'identity.sqlite'),
     analyticsDb: path.join(abs, 'analytics.sqlite'),
     chatRunnerSessionDir: path.join(abs, 'chat-runner-sessions'),
+    modelCatalogFile: path.join(abs, 'model-catalog.json'),
     tokenFile: path.join(abs, 'token.bin'),
   };
 }

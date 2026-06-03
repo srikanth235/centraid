@@ -8,7 +8,6 @@
 import {
   appQuery,
   appLiveUrl,
-  getRunnerStatus as getGatewayRunnerStatus,
   getAgentsStatus,
   deregisterApp,
   listApps,
@@ -5515,12 +5514,6 @@ import {
     clear();
     const seq = renderSeq;
 
-    // Only `chatModel` is read off this object (the chat picker seed); the
-    // fallback covers the case where `getSettings` is unreachable.
-    const current = await window.CentraidApi.getSettings().catch(() => ({
-      chatModel: undefined as string | undefined,
-    }));
-
     // Profiles ("spaces") are backed by gateways — fetch the list so the
     // Account → Profiles manage page can render the cards. Active id comes
     // from the cached gateway summary (always primed before settings open).
@@ -5687,133 +5680,11 @@ import {
     // userData and are not user-configurable, so there's no separate runtime
     // page.
 
-    const labeled = (label: string, hint: string, input: HTMLElement): HTMLElement =>
-      el('div', { class: 'drawer-row' }, [
-        el('span', { class: 'drawer-row-label' }, label),
-        input,
-        el('div', { class: 'settings-hint' }, hint),
-      ]);
-
-    // ---- Chat group ----
-    const chatModelSelect = el('select', { class: 'input' }) as HTMLSelectElement;
-    chatModelSelect.append(el('option', { value: '' }, 'Gateway default') as HTMLOptionElement);
-    let chatModelInitial = current.chatModel ?? '';
-    if (chatModelInitial) {
-      // Pre-seed with the persisted choice so the dropdown shows the current
-      // model even before the async list resolves.
-      const seed = el(
-        'option',
-        { value: chatModelInitial, selected: '' },
-        chatModelInitial,
-      ) as HTMLOptionElement;
-      chatModelSelect.append(seed);
-    }
-    // Tier → display header for the grouped picker (matches the claude-code
-    // tier labels). Order is most-capable first.
-    const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
-    const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
-      smart: 'Most capable',
-      balanced: 'Balanced',
-      fast: 'Fastest',
-    };
-
-    type PickerModel = { id: string; label: string; tier?: 'smart' | 'balanced' | 'fast' };
-
-    async function loadChatModels(opts: { refresh?: boolean } = {}): Promise<void> {
-      // Models come from the ACTIVE gateway's runner-status:
-      //   - OpenClaw enumerates its configured models and classifies each into
-      //     a capability tier (`status.models[].tier`) — grouped below.
-      //   - claude-code offers capability tiers directly (no per-model tier).
-      //   - Otherwise the dropdown is just "Gateway default" + persisted choice.
-      let models: PickerModel[] = [];
-      try {
-        const status = await getGatewayRunnerStatus(opts);
-        if (status.models?.length) {
-          models = status.models.map((m) => ({
-            id: m.id,
-            label: (m.name ?? m.id) + (m.default ? ' · default' : ''),
-            ...(m.tier ? { tier: m.tier } : {}),
-          }));
-        }
-      } catch {
-        /* gateway unreachable — keep "Gateway default" + persisted seed */
-      }
-      // Replace existing options but keep the leading "Gateway default" entry.
-      while (chatModelSelect.children.length > 1) {
-        chatModelSelect.lastChild?.remove();
-      }
-      // Re-add the persisted choice up front if the list didn't surface it,
-      // so a previously-saved model isn't silently dropped from the picker.
-      if (chatModelInitial && !models.some((m) => m.id === chatModelInitial)) {
-        chatModelSelect.append(
-          el('option', { value: chatModelInitial, selected: '' }, chatModelInitial),
-        );
-      }
-      const mkOption = (m: PickerModel): HTMLOptionElement => {
-        const opt = el('option', { value: m.id }, m.label) as HTMLOptionElement;
-        if (m.id === chatModelInitial) opt.selected = true;
-        return opt;
-      };
-      // Group by tier when classified (OpenClaw); otherwise render flat.
-      if (models.some((m) => m.tier)) {
-        for (const tier of TIER_ORDER) {
-          const inTier = models.filter((m) => m.tier === tier);
-          if (!inTier.length) continue;
-          chatModelSelect.append(el('optgroup', { label: TIER_LABEL[tier] }, inTier.map(mkOption)));
-        }
-        const untiered = models.filter((m) => !m.tier);
-        if (untiered.length) {
-          chatModelSelect.append(el('optgroup', { label: 'Other' }, untiered.map(mkOption)));
-        }
-      } else {
-        for (const m of models) chatModelSelect.append(mkOption(m));
-      }
-    }
-    void loadChatModels();
-    chatModelSelect.addEventListener('change', () => {
-      chatModelInitial = chatModelSelect.value;
-      void window.CentraidApi.saveSettings({ chatModel: chatModelSelect.value || undefined });
-    });
-
-    // Refresh button — forces the gateway to re-probe and re-classify its
-    // models (OpenClaw re-runs the tier classifier), so the list updates
-    // without restarting the app.
-    const refreshModelsBtn = el('button', {
-      class: 'btn btn-soft app-chat-models-refresh',
-      type: 'button',
-      title: 'Refresh model list',
-      'aria-label': 'Refresh model list',
-      onClick: async () => {
-        refreshModelsBtn.setAttribute('disabled', '');
-        try {
-          await loadChatModels({ refresh: true });
-          showToast('Model list refreshed');
-        } finally {
-          refreshModelsBtn.removeAttribute('disabled');
-        }
-      },
-    });
-    refreshModelsBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Refresh</span>';
-
-    const modelRow = el('div', { style: { alignItems: 'center', display: 'flex', gap: '8px' } }, [
-      chatModelSelect,
-      refreshModelsBtn,
-    ]);
-
-    pageHosts.workspace.append(
-      drawerGroup('Chat', [
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Model used by the in-app chat. The chat is sandboxed to one app at a time and only issues read-only SELECTs.',
-        ),
-        labeled(
-          'Model',
-          'Lists what the gateway exposes — OpenClaw’s model catalog or Claude Code capability tiers. "Gateway default" lets the gateway choose.',
-          modelRow,
-        ),
-      ]),
-    );
+    // The in-app chat's model picker used to live here, as a single global
+    // "Model" dropdown. It moved into the chat composer as a coupled
+    // Agent · Model control (app-chat.ts) so the model reads as a property of
+    // the active agent — see issue #188. Storage is now per-runner
+    // (`chatModelByRunner`); there is no global model setting to surface here.
 
     // ---- Agents (Claude Code / Codex credential status) ----
     // Centraid's coding agent runs the user's installed CLIs in place:
@@ -5851,9 +5722,6 @@ import {
             ? 'Codex is now the active agent'
             : 'Claude Code is now the active agent',
         );
-        // The chat model picker lists the ACTIVE runner's catalog/tiers, so
-        // re-fetch it now that the runner changed.
-        void loadChatModels({ refresh: true });
       } catch (err) {
         selectedRunnerKind = prev;
         showToast(`Couldn’t switch agent: ${String(err)}`);
@@ -5889,132 +5757,197 @@ import {
       },
     ];
 
+    // Per-agent default model. Each agent's models come from the agents-status
+    // snapshot (`codexModels` / `claudeModels`); the choice is stored per-runner
+    // in `chatModelByRunner` and is independent of which agent is active — you
+    // can set each agent's default without switching the active one.
+    const MODEL_TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
+    const MODEL_TIER_LABEL: Record<(typeof MODEL_TIER_ORDER)[number], string> = {
+      smart: 'Most capable',
+      balanced: 'Balanced',
+      fast: 'Fastest',
+    };
+    type AgentModelOpt = {
+      id: string;
+      name?: string;
+      default?: boolean;
+      tier?: 'smart' | 'balanced' | 'fast';
+    };
+    let agentModelByRunner: Record<string, string> = {};
+
+    // Active-agent switch — the single, obvious control for which agent runs.
+    // Built once and updated in place (not recreated on each render) so the
+    // accent pill SLIDES under the active segment instead of jumping.
+    const RUNNER_INDEX: Record<ActiveRunnerKind, number> = { codex: 0, 'claude-code': 1 };
+    const agentSwitchInd = el('span', { class: 'agent-switch-ind' });
+    const agentSwitchSegs = {} as Record<ActiveRunnerKind, HTMLButtonElement>;
+    for (const runner of RUNNERS) {
+      agentSwitchSegs[runner.kind] = el(
+        'button',
+        {
+          class: 'agent-switch-seg',
+          type: 'button',
+          role: 'tab',
+          title: `Make ${runner.title} the active agent`,
+          onClick: () => void activateRunner(runner.kind),
+        },
+        [
+          el('span', { class: 'agent-switch-dot', style: { background: runner.accent } }),
+          el('span', {}, runner.title),
+        ],
+      ) as HTMLButtonElement;
+    }
+    const agentSwitch = el(
+      'div',
+      { class: 'agent-switch', role: 'tablist', 'aria-label': 'Active agent' },
+      [agentSwitchInd, agentSwitchSegs.codex, agentSwitchSegs['claude-code']],
+    );
+    const updateAgentSwitch = (status: AuthStatusSnapshot | null): void => {
+      const activeAccent =
+        RUNNERS.find((r) => r.kind === selectedRunnerKind)?.accent ?? 'var(--accent)';
+      agentSwitch.style.setProperty('--seg-accent', activeAccent);
+      agentSwitch.dataset.activeIndex = String(RUNNER_INDEX[selectedRunnerKind]);
+      for (const runner of RUNNERS) {
+        const seg = agentSwitchSegs[runner.kind];
+        const available = status ? runner.available(status) : false;
+        const active = runner.kind === selectedRunnerKind;
+        seg.dataset.active = active ? 'true' : '';
+        seg.dataset.unavail = available ? '' : 'true';
+        seg.setAttribute('aria-selected', active ? 'true' : 'false');
+        // Only an available, non-active agent is switchable.
+        if (available && !active) seg.removeAttribute('disabled');
+        else seg.setAttribute('disabled', '');
+      }
+    };
+
+    // The agent cards (status + per-agent model picker) live in their own host
+    // so renderAuthStatus can rebuild them without recreating the switch above.
+    const agentCardsHost = el('div', { class: 'agents-panel' });
+    authStatusHost.append(
+      el(
+        'div',
+        { class: 'settings-note' },
+        'Switch the active agent above; set each agent’s default model below. Detection is CLI-only — the gateway ran `<bin> --version`; Centraid doesn’t inspect how each agent authenticates.',
+      ),
+      agentSwitch,
+      agentCardsHost,
+    );
+
     const renderAuthStatus = (status: AuthStatusSnapshot | null): void => {
       lastStatus = status;
-      authStatusHost.replaceChildren();
+      updateAgentSwitch(status);
       if (!status) {
-        authStatusHost.append(el('div', { class: 'settings-note' }, 'Reading credential status…'));
+        agentCardsHost.replaceChildren(
+          el('div', { class: 'settings-note' }, 'Reading credential status…'),
+        );
         return;
       }
-      // §C3 — each provider row carries a state badge (Active / Standby /
-      // Not found) so the at-a-glance status doesn't rely on reading the
-      // subtitle prose. An available, non-active row is clickable to make
-      // it the active agent.
-      const providerRow = (params: {
+      // Each agent is a row in the panel: accent dot + name/version on the left,
+      // its OWN default-model picker on the right. Activation is the switch
+      // above — the row isn't clickable, so the select never fights a tap.
+      const providerCard = (params: {
+        kind: ActiveRunnerKind;
         title: string;
         subtitle: string;
         connected: boolean;
         active: boolean;
         accent: string;
-        badge: { label: string; tone: 'on' | 'standby' | 'off' };
-        onActivate?: () => void;
+        models: AgentModelOpt[];
       }): HTMLElement => {
         const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
-        const clickable = Boolean(params.onActivate);
-        return el(
+
+        // Default-model select for THIS agent — populated from its own catalog
+        // (agents-status), saved to chatModelByRunner[kind]. A pinned id the
+        // agent no longer offers is kept visible, flagged "· unavailable".
+        const select = el('select', {
+          class: 'agent-model-select',
+          'aria-label': `Default model for ${params.title}`,
+        }) as HTMLSelectElement;
+        const saved = agentModelByRunner[params.kind] ?? '';
+        select.append(el('option', { value: '' }, 'Gateway default') as HTMLOptionElement);
+        if (saved && !params.models.some((m) => m.id === saved)) {
+          select.append(
+            el('option', { value: saved }, `${saved} · unavailable`) as HTMLOptionElement,
+          );
+        }
+        const mkOpt = (m: AgentModelOpt): HTMLOptionElement =>
+          el(
+            'option',
+            { value: m.id },
+            (m.name ?? m.id) + (m.default ? ' · default' : ''),
+          ) as HTMLOptionElement;
+        if (params.models.some((m) => m.tier)) {
+          for (const tier of MODEL_TIER_ORDER) {
+            const inTier = params.models.filter((m) => m.tier === tier);
+            if (inTier.length) {
+              select.append(el('optgroup', { label: MODEL_TIER_LABEL[tier] }, inTier.map(mkOpt)));
+            }
+          }
+          const untiered = params.models.filter((m) => !m.tier);
+          if (untiered.length) {
+            select.append(el('optgroup', { label: 'Other' }, untiered.map(mkOpt)));
+          }
+        } else {
+          for (const m of params.models) select.append(mkOpt(m));
+        }
+        select.value = saved;
+        if (!params.connected) select.setAttribute('disabled', '');
+        select.addEventListener('change', () => {
+          const v = select.value;
+          const nextMap = { ...agentModelByRunner };
+          if (v) nextMap[params.kind] = v;
+          else delete nextMap[params.kind];
+          agentModelByRunner = nextMap;
+          // Patch just this runner's entry; '' clears it (back to Gateway default).
+          void window.CentraidApi.saveSettings({ chatModelByRunner: { [params.kind]: v } });
+        });
+
+        const row = el(
           'div',
           {
-            ...(clickable
-              ? {
-                  role: 'button',
-                  tabindex: '0',
-                  title: `Make ${params.title} the active agent`,
-                  onClick: () => params.onActivate?.(),
-                  onKeydown: (e: Event) => {
-                    const key = (e as KeyboardEvent).key;
-                    if (key === 'Enter' || key === ' ') {
-                      e.preventDefault();
-                      params.onActivate?.();
-                    }
-                  },
-                }
-              : {}),
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '8px 10px',
-              border: `0.5px solid ${params.active ? params.accent : 'var(--line)'}`,
-              borderRadius: '8px',
-              background: 'var(--bg-elev)',
-              ...(clickable ? { cursor: 'pointer' } : {}),
-            },
+            class: 'agent-row',
+            'data-active': params.active ? 'true' : '',
+            'data-unavail': params.connected ? '' : 'true',
           },
           [
-            el('span', {
-              style: {
-                width: '8px',
-                height: '8px',
-                borderRadius: '999px',
-                background: dotColor,
-                flexShrink: '0',
-              },
-            }),
-            el(
-              'div',
-              {
-                style: {
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1px',
-                  flex: '1',
-                  minWidth: '0',
-                },
-              },
-              [
-                el('span', { style: { fontSize: '13px', fontWeight: '500' } }, params.title),
-                el(
-                  'span',
-                  { style: { fontSize: '11.5px', color: 'var(--ink-3)' } },
-                  params.subtitle,
-                ),
-              ],
-            ),
-            el(
-              'span',
-              { class: 'provider-badge', 'data-tone': params.badge.tone },
-              params.badge.label,
-            ),
+            el('span', { class: 'agent-row-dot', style: { background: dotColor } }),
+            el('div', { class: 'agent-row-meta' }, [
+              el('div', { class: 'agent-row-name' }, [
+                params.title,
+                params.active ? el('span', { class: 'agent-row-active' }, 'Active') : false,
+              ]),
+              el('span', { class: 'agent-row-sub' }, params.subtitle),
+            ]),
+            el('div', { class: 'agent-row-model' }, [select]),
           ],
         );
+        row.style.setProperty('--row-accent', params.accent);
+        return row;
       };
 
-      authStatusHost.append(
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Click an available agent to make it the active one. Detection is CLI-only — the gateway ran `<bin> --version`; Centraid doesn’t inspect how each agent authenticates.',
-        ),
-      );
-
-      for (const runner of RUNNERS) {
+      const cards = RUNNERS.map((runner) => {
         const available = runner.available(status);
         const isActive = runner.kind === selectedRunnerKind;
         const ver = runner.version(status);
         const subtitle = available
-          ? `${runner.bin} CLI detected${ver ? ` · ${ver}` : ''}`
-          : `${runner.bin} CLI not found on the gateway’s PATH`;
-        const badge: { label: string; tone: 'on' | 'standby' | 'off' } = !available
-          ? { label: 'Not found', tone: 'off' }
-          : isActive
-            ? { label: 'Active', tone: 'on' }
-            : { label: 'Standby', tone: 'standby' };
-        authStatusHost.append(
-          providerRow({
-            title: runner.title,
-            subtitle,
-            connected: available,
-            active: isActive,
-            accent: runner.accent,
-            badge,
-            ...(available && !isActive
-              ? { onActivate: () => void activateRunner(runner.kind) }
-              : {}),
-          }),
-        );
-      }
+          ? (ver ?? `${runner.bin} · detected`)
+          : `${runner.bin} CLI not found on PATH`;
+        const models = (runner.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
+        return providerCard({
+          kind: runner.kind,
+          title: runner.title,
+          subtitle,
+          connected: available,
+          active: isActive,
+          accent: runner.accent,
+          models,
+        });
+      });
+      agentCardsHost.replaceChildren(...cards);
     };
 
+    // Refresh re-probes CLI availability AND re-enumerates each agent's models
+    // live (?refresh=1), so the per-agent pickers update without a restart.
     const refreshBtn = el('button', {
       class: 'btn btn-soft',
       type: 'button',
@@ -6024,7 +5957,8 @@ import {
       refreshBtn.setAttribute('disabled', '');
       renderAuthStatus(null);
       try {
-        renderAuthStatus(await getAgentsStatus());
+        renderAuthStatus(await getAgentsStatus({ refresh: true }));
+        showToast('Agents and models refreshed');
       } catch (err) {
         showToast(`Refresh failed: ${String(err)}`);
         renderAuthStatus({
@@ -6041,8 +5975,10 @@ import {
       el('div', { class: 'sheet-actions' }, [refreshBtn]),
     );
 
-    // Initial load — read the active-runner pref and the CLI detection
-    // snapshot together so the first render shows the right "Active" badge.
+    // Initial load — read the active-runner pref, the agents snapshot (now
+    // carrying each agent's models), and the persisted per-runner model map so
+    // the first render shows the right "Active" badge and each agent's saved
+    // default model.
     renderAuthStatus(null);
     void Promise.all([
       getAgentsStatus().catch(
@@ -6051,8 +5987,12 @@ import {
       getUserPrefs()
         .then((p) => p['agent.runner.kind'])
         .catch(() => undefined),
-    ]).then(([status, kindRaw]) => {
+      window.CentraidApi.getSettings()
+        .then((s) => s.chatModelByRunner)
+        .catch(() => undefined),
+    ]).then(([status, kindRaw, modelMap]) => {
       selectedRunnerKind = kindRaw === 'claude-code' ? 'claude-code' : 'codex';
+      agentModelByRunner = modelMap ?? {};
       renderAuthStatus(status);
     });
 
@@ -6110,7 +6050,7 @@ import {
         label: 'Workspace',
         section: 'Workspace',
         icon: 'Folder',
-        subtitle: 'Sidebar, navigation, and the in-app chat model.',
+        subtitle: 'Sidebar and navigation.',
       },
       {
         id: 'profiles',
