@@ -32,6 +32,9 @@ import {
   loadChatSession,
   deleteChatSession,
   getUserPrefs,
+  saveUserPrefs,
+  getRunnerStatus,
+  getAgentsStatus,
   type ChatStreamEvent,
 } from './gateway-client.js';
 
@@ -67,6 +70,23 @@ import {
     // this aborts (Stop button / new chat / panel teardown).
     let abortController: AbortController | null = null;
     let chat: AppChatMsg[] = [];
+
+    // ---- Coupled Agent · Model picker state ----
+    // The composer carries one control that reads "<Agent> · <Model>". The
+    // model selection is stored per-runner (`chatModelByRunner`) so it is
+    // always scoped to its agent and can never carry across an agent switch.
+    // `amModels` holds the catalog for the *active* runner only (that's all
+    // runner-status reports), so stale detection applies to the active runner.
+    type RunnerKey = 'codex' | 'claude-code';
+    type AmAgents = Awaited<ReturnType<typeof getAgentsStatus>>;
+    type AmModel = NonNullable<Awaited<ReturnType<typeof getRunnerStatus>>['models']>[number];
+    let amOpen = false;
+    let amLoaded = false;
+    let amActiveRunner: RunnerKey = 'codex';
+    let amAgents: AmAgents | null = null;
+    let amModels: AmModel[] = [];
+    let amSelByRunner: Record<string, string> = {};
+    let amSwitching = false;
     // Per-turn streaming state. `streamed` accumulates assistant deltas;
     // `hadContent` flips once we've shown any AI text or tool group, which
     // hides the centered "Thinking…" status row.
@@ -364,8 +384,360 @@ import {
       trustedHtml:
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
     });
+    // ---- Coupled Agent · Model control ----
+    // One pill that reads "<Agent> · <Model>". Opening it reveals the agents
+    // (switching the active runner is a gateway-wide change) and, below, the
+    // active runner's own models. Because the selection is keyed per-runner,
+    // an agent switch can never leave a foreign model id selected; a model
+    // that's gone stale within its runner is shown as an explicit
+    // "unavailable" state with one-click repair, never silently re-sent.
+    const AM_ACCENT: Record<RunnerKey, string> = {
+      codex: '#10b981',
+      'claude-code': '#a855f7',
+    };
+    const AM_TITLE: Record<RunnerKey, string> = { codex: 'Codex', 'claude-code': 'Claude Code' };
+    const AM_BIN: Record<RunnerKey, string> = { codex: 'codex', 'claude-code': 'claude' };
+    const AM_TIERS: Array<[NonNullable<AmModel['tier']>, string]> = [
+      ['smart', 'Most capable'],
+      ['balanced', 'Balanced'],
+      ['fast', 'Fastest'],
+    ];
+    const amCaret =
+      '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    const amRefreshIcon =
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>';
+
+    const amTrigger = el('button', {
+      class: 'app-chat-am-trigger',
+      type: 'button',
+      'aria-haspopup': 'true',
+      'aria-expanded': 'false',
+      title: 'Agent and model',
+      onClick: (e: Event) => {
+        e.stopPropagation();
+        toggleAm();
+      },
+    }) as HTMLButtonElement;
+    const amPop = el('div', {
+      class: 'app-chat-am-pop',
+      role: 'menu',
+      'aria-label': 'Agent and model',
+    });
+    const amWrap = el('div', { class: 'app-chat-am' }, [amTrigger, amPop]);
+
+    const amAgentAvailable = (kind: RunnerKey): boolean =>
+      kind === 'codex' ? !!amAgents?.codexAvailable : !!amAgents?.claudeAvailable;
+    const amAgentVersion = (kind: RunnerKey): string | undefined =>
+      kind === 'codex' ? amAgents?.codexVersion : amAgents?.claudeVersion;
+
+    // The active runner's current selection: a gateway default, a valid pinned
+    // model, or a pinned id no longer offered by the runner (stale).
+    function amSelection(): { mode: 'default' | 'pinned' | 'stale'; id: string; model?: AmModel } {
+      const saved = amSelByRunner[amActiveRunner];
+      if (!saved) return { mode: 'default', id: '' };
+      const model = amModels.find((m) => m.id === saved);
+      return model ? { mode: 'pinned', id: saved, model } : { mode: 'stale', id: saved };
+    }
+    const amModelName = (m: AmModel): string => m.name ?? m.id;
+
+    function renderAmTrigger(): void {
+      const accent = AM_ACCENT[amActiveRunner];
+      amTrigger.style.setProperty('--am-accent', accent);
+      amPop.style.setProperty('--am-accent', accent);
+      const sel = amSelection();
+      const modelNode =
+        sel.mode === 'default'
+          ? el('span', {}, 'Gateway default')
+          : sel.mode === 'pinned'
+            ? el('span', {}, amModelName(sel.model as AmModel))
+            : el('span', { class: 'app-chat-am-warn', title: `${sel.id} is no longer available` }, [
+                '⚠ ',
+                sel.id,
+              ]);
+      amTrigger.replaceChildren(
+        el('span', { class: 'app-chat-am-seg app-chat-am-agent' }, [
+          el('span', { class: 'app-chat-am-dot', style: { background: accent } }),
+          AM_TITLE[amActiveRunner],
+        ]),
+        el('span', { class: 'app-chat-am-seg app-chat-am-model' }, [
+          modelNode,
+          el('span', { class: 'app-chat-am-caret', trustedHtml: amCaret }),
+        ]),
+      );
+    }
+
+    function amAgentCard(kind: RunnerKey): HTMLElement {
+      const active = kind === amActiveRunner;
+      const available = amAgentAvailable(kind);
+      const version = amAgentVersion(kind);
+      const meta = !available
+        ? 'not found'
+        : version
+          ? `${AM_BIN[kind]} · ${version}`
+          : AM_BIN[kind];
+      const card = el(
+        'button',
+        {
+          class: 'app-chat-am-agentcard',
+          type: 'button',
+          'aria-pressed': active ? 'true' : 'false',
+          ...(available && !active ? {} : { disabled: '' }),
+          onClick: () => void amSwitchAgent(kind),
+        },
+        [
+          el('span', { class: 'app-chat-am-ac-top' }, [
+            el('span', { class: 'app-chat-am-dot', style: { background: AM_ACCENT[kind] } }),
+            el('span', { class: 'app-chat-am-ac-name' }, AM_TITLE[kind]),
+          ]),
+          el('span', { class: 'app-chat-am-ac-meta' }, meta),
+          active ? el('span', { class: 'app-chat-am-ac-active' }, 'ACTIVE') : false,
+        ],
+      );
+      card.style.setProperty('--am-accent', AM_ACCENT[kind]);
+      return card;
+    }
+
+    function amOptionRow(opts: {
+      label: string;
+      id: string;
+      selected: boolean;
+      hint?: string;
+      isDefault?: boolean;
+      onChoose: () => void;
+    }): HTMLElement {
+      return el(
+        'button',
+        {
+          class: 'app-chat-am-opt',
+          type: 'button',
+          role: 'menuitemradio',
+          'aria-checked': opts.selected ? 'true' : 'false',
+          onClick: opts.onChoose,
+        },
+        [
+          el('span', { class: 'app-chat-am-check' }, opts.selected ? '✓' : ''),
+          el('span', { class: 'app-chat-am-opt-lab' }, [
+            opts.label,
+            opts.hint ? el('small', {}, ` · ${opts.hint}`) : false,
+          ]),
+          opts.id ? el('span', { class: 'app-chat-am-opt-id' }, opts.id) : false,
+          opts.isDefault ? el('span', { class: 'app-chat-am-tag' }, 'default') : false,
+        ],
+      );
+    }
+
+    function renderAmPop(): void {
+      if (!amLoaded) {
+        amPop.replaceChildren(el('div', { class: 'app-chat-am-loading' }, 'Loading agents…'));
+        return;
+      }
+      const sel = amSelection();
+      const children: Array<HTMLElement | false> = [
+        el('div', { class: 'app-chat-am-seclabel' }, 'Agent'),
+        el('div', { class: 'app-chat-am-agentgrid' }, [
+          amAgentCard('codex'),
+          amAgentCard('claude-code'),
+        ]),
+        el('div', { class: 'app-chat-am-divider' }),
+        el('div', { class: 'app-chat-am-modelhead' }, [
+          el('span', { class: 'app-chat-am-modelfor' }, `Models for ${AM_TITLE[amActiveRunner]}`),
+          el(
+            'button',
+            {
+              class: 'app-chat-am-refresh',
+              type: 'button',
+              title: 'Re-enumerate from the runner',
+              onClick: () => void amRefresh(),
+            },
+            [
+              el('span', { class: 'app-chat-am-refresh-icon', trustedHtml: amRefreshIcon }),
+              'Refresh',
+            ],
+          ),
+        ]),
+      ];
+
+      if (sel.mode === 'stale') {
+        const def = amModels.find((m) => m.default) ?? amModels[0];
+        children.push(
+          el('div', { class: 'app-chat-am-stale' }, [
+            el('span', {}, `Saved model `),
+            el('b', {}, sel.id),
+            el(
+              'span',
+              {},
+              ` isn’t offered by ${AM_TITLE[amActiveRunner]} anymore. It won’t be sent.`,
+            ),
+            el('div', { class: 'app-chat-am-stale-fix' }, [
+              def
+                ? el(
+                    'button',
+                    {
+                      class: 'app-chat-am-stale-btn primary',
+                      type: 'button',
+                      onClick: () => void amSelectModel(def.id),
+                    },
+                    `Use ${amModelName(def)}`,
+                  )
+                : false,
+              el(
+                'button',
+                {
+                  class: 'app-chat-am-stale-btn',
+                  type: 'button',
+                  onClick: () => void amSelectModel(''),
+                },
+                'Gateway default',
+              ),
+            ]),
+          ]),
+        );
+      }
+
+      const list = el('div', { class: 'app-chat-am-modellist' });
+      list.append(
+        amOptionRow({
+          label: 'Gateway default',
+          id: '',
+          hint: 'runner decides',
+          selected: sel.mode === 'default',
+          onChoose: () => void amSelectModel(''),
+        }),
+      );
+      const tiered = amModels.some((m) => m.tier);
+      if (tiered) {
+        for (const [tier, label] of AM_TIERS) {
+          const inTier = amModels.filter((m) => m.tier === tier);
+          if (!inTier.length) continue;
+          list.append(el('div', { class: 'app-chat-am-tierlabel' }, label));
+          for (const m of inTier) {
+            list.append(
+              amOptionRow({
+                label: amModelName(m),
+                id: m.id,
+                isDefault: m.default,
+                selected: sel.mode === 'pinned' && sel.id === m.id,
+                onChoose: () => void amSelectModel(m.id),
+              }),
+            );
+          }
+        }
+      } else {
+        for (const m of amModels) {
+          list.append(
+            amOptionRow({
+              label: amModelName(m),
+              id: m.id,
+              isDefault: m.default,
+              selected: sel.mode === 'pinned' && sel.id === m.id,
+              onChoose: () => void amSelectModel(m.id),
+            }),
+          );
+        }
+      }
+      children.push(list);
+      amPop.replaceChildren(...children.filter((c): c is HTMLElement => c !== false));
+    }
+
+    async function amLoad(opts: { refresh?: boolean } = {}): Promise<void> {
+      const [prefs, agents, status, settings] = await Promise.all([
+        getUserPrefs().catch(() => ({}) as Record<string, unknown>),
+        getAgentsStatus().catch(() => null),
+        getRunnerStatus(opts).catch(() => null),
+        window.CentraidApi.getSettings().catch(() => null),
+      ]);
+      const statusKind = status?.kind;
+      amActiveRunner =
+        statusKind === 'claude-code' || statusKind === 'codex'
+          ? statusKind
+          : prefs['agent.runner.kind'] === 'claude-code'
+            ? 'claude-code'
+            : 'codex';
+      amAgents = agents;
+      amModels = status?.models ?? [];
+      amSelByRunner = settings?.chatModelByRunner ?? {};
+      amLoaded = true;
+      renderAmTrigger();
+      renderAmPop();
+    }
+
+    async function amSwitchAgent(kind: RunnerKey): Promise<void> {
+      if (kind === amActiveRunner || amSwitching || !amAgentAvailable(kind)) return;
+      amSwitching = true;
+      renderAmPop();
+      try {
+        await saveUserPrefs({ 'agent.runner.kind': kind });
+        amActiveRunner = kind;
+        // Re-enumerate so the model list + selection reflect the new runner.
+        await amLoad({ refresh: true });
+      } catch {
+        /* keep the prior runner; the pop re-renders below */
+      } finally {
+        amSwitching = false;
+        renderAmTrigger();
+        renderAmPop();
+      }
+    }
+
+    async function amSelectModel(id: string): Promise<void> {
+      // Optimistic local update, then persist just this runner's entry.
+      if (id) amSelByRunner = { ...amSelByRunner, [amActiveRunner]: id };
+      else {
+        const next = { ...amSelByRunner };
+        delete next[amActiveRunner];
+        amSelByRunner = next;
+      }
+      renderAmTrigger();
+      closeAm();
+      try {
+        await window.CentraidApi.saveSettings({ chatModelByRunner: { [amActiveRunner]: id } });
+      } catch {
+        /* best-effort; the next open reconciles from disk */
+      }
+    }
+
+    async function amRefresh(): Promise<void> {
+      amTrigger.classList.add('app-chat-am-busy');
+      try {
+        await amLoad({ refresh: true });
+      } finally {
+        amTrigger.classList.remove('app-chat-am-busy');
+      }
+    }
+
+    function openAm(): void {
+      amOpen = true;
+      amPop.classList.add('open');
+      amTrigger.setAttribute('aria-expanded', 'true');
+      if (!amLoaded) {
+        renderAmPop();
+        void amLoad();
+      } else {
+        renderAmPop();
+      }
+    }
+    function closeAm(): void {
+      amOpen = false;
+      amPop.classList.remove('open');
+      amTrigger.setAttribute('aria-expanded', 'false');
+    }
+    function toggleAm(): void {
+      if (amOpen) closeAm();
+      else openAm();
+    }
+    const onAmDocClick = (e: MouseEvent): void => {
+      if (amOpen && !amWrap.contains(e.target as Node)) closeAm();
+    };
+    const onAmEsc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && amOpen) closeAm();
+    };
+    document.addEventListener('click', onAmDocClick);
+    document.addEventListener('keydown', onAmEsc);
+    renderAmTrigger();
+
     const inputTools = el('div', { class: 'app-chat-input-tools' }, [
       attachBtn,
+      amWrap,
       el('span', { class: 'app-chat-input-spacer' }),
       el('span', { class: 'app-chat-input-kbd' }, '⌘↵'),
       sendBtn,
@@ -388,6 +760,9 @@ import {
       fab.classList.toggle('hidden', open);
       if (open) {
         void loadRecentChats();
+        // Populate the Agent · Model pill so the composer shows the live
+        // active agent + its model the moment the panel opens.
+        if (!amLoaded) void amLoad();
         setTimeout(() => input.focus(), 60);
       }
     }
@@ -1053,12 +1428,14 @@ import {
     /**
      * Resolve the model id to send for the gateway's currently-active runner.
      * The selection is stored per-runner (`chatModelByRunner`) so it can never
-     * carry across an agent switch; we key it by the same `agent.runner.kind`
-     * user-pref the agent picker writes. Returns `undefined` → let the gateway
-     * pick its default. (The composer pill keeps this in sync; here we read it
-     * fresh so a send is always against the live active runner.)
+     * carry across an agent switch. When the composer pill has loaded we use
+     * its cached (optimistically-updated) selection — that avoids racing a
+     * just-saved choice against a fresh `getSettings` read. Otherwise we read
+     * settings + the `agent.runner.kind` pref directly. `undefined` → let the
+     * gateway pick its default.
      */
     async function resolveChatModelForActiveRunner(): Promise<string | undefined> {
+      if (amLoaded) return amSelByRunner[amActiveRunner];
       const [settings, prefs] = await Promise.all([
         window.CentraidApi.getSettings(),
         getUserPrefs().catch(() => ({}) as Record<string, unknown>),
@@ -1141,6 +1518,8 @@ import {
         /* swallow */
       }
       document.removeEventListener('keydown', onGlobalKey);
+      document.removeEventListener('click', onAmDocClick);
+      document.removeEventListener('keydown', onAmEsc);
       fab.remove();
       panel.remove();
     };
