@@ -5772,7 +5772,10 @@ import {
     void loadChatModels();
     chatModelSelect.addEventListener('change', () => {
       chatModelInitial = chatModelSelect.value;
-      void window.CentraidApi.saveSettings({ chatModel: chatModelSelect.value || undefined });
+      // Send the raw value (empty string for "Gateway default") so the main
+      // process can CLEAR a previously-pinned model. `undefined` would be
+      // treated as "preserve current" and leave the old model stuck.
+      void window.CentraidApi.saveSettings({ chatModel: chatModelSelect.value });
     });
 
     // Refresh button — forces the gateway to re-probe and re-classify its

@@ -15,6 +15,7 @@ Refresh button.
 - [x] Commit 2 — agent-runtime: gateway-owned model catalog store + default seed
 - [x] Commit 3 — gateway: wire model catalog into runner-status preflight
 - [x] Commit 4 — desktop: supply per-gateway model-catalog path
+- [x] Follow-up — "Gateway default" clears a pinned chat model (review note)
 
 ## What changed
 
@@ -24,6 +25,7 @@ Refresh button.
 - **Commit 4 — desktop: supply per-gateway model-catalog path.** New `gatewayModelCatalogFile(id)` in `gateway-paths.ts` → `<userData>/gateways/<id>/model-catalog.json`; wired into the `serve({ paths })` object in `local-runtime.ts` so the local gateway persists/refreshes its catalog there.
 - **Follow-up — align codex default seed with OpenClaw's catalog.** Replaced the ad-hoc codex seed (`gpt-5-codex`/`gpt-5.5`/`o3`) with OpenClaw's `FALLBACK_CODEX_MODELS` (`extensions/codex/provider-catalog.ts`): `gpt-5.5` (default) + `gpt-5.4-mini`.
 - **Follow-up — thread runner `extraArgs` into codex enumeration (review P1/P2).** `enumerateRunnerModels` now forwards `prefs.extraArgs` to `enumerateCodexModels`, which appends them to `codex app-server` — mirroring the chat runner (`runtime.ts:52`). Without this, a configured `-c`/profile override would make Refresh enumerate a different catalog than the runner actually serves. The claude path is unchanged (its SDK turn ignores `extraArgs`).
+- **Follow-up — "Gateway default" clears a pinned chat model (review note).** `saveSettings` treated `chatModel: undefined` as "preserve", so the picker (which sent `value || undefined`) could never return to "Gateway default" once a concrete model was saved — newly hittable now that the picker offers concrete per-runner ids. The picker now sends the raw value (`''` for Gateway default); the merge was extracted to a pure, electron-free `settings-merge.ts` (`mergePersistedSettings`) where empty-string clears, non-empty sets, and `undefined` still preserves. Added `settings-merge.test.ts` (+ a `test` script for `apps/desktop`, tests excluded from the tsc build).
 
 ## Out of scope
 
@@ -31,12 +33,13 @@ Refresh button.
 - Migrating the OpenClaw plugin off its own `model-tiers.json` onto the shared store.
 - De-duplicating `hashModelIds` between `openclaw-models.ts` and the new store.
 - A CI job to refresh the hardcoded default seed.
+- Clearing a stale persisted `chatModel` when the active runner *changes* (e.g. a claude id left selected after switching to codex). The picker re-adds the persisted choice and the turn errors visibly on an unknown id; proactive runner-switch invalidation is deferred.
 
 ## Verification
 
 - **Typecheck:** `agent-runtime`, `gateway`, and `apps/desktop` all typecheck clean (`tsc --noEmit`).
 - **Lint/format:** `oxlint` + `oxfmt` clean across all touched files.
-- **Unit tests:** `agent-runtime` 51 pass (incl. new `model-enumerators.test.ts` parser shapes for claude `-p` and codex `model/list`, and `model-catalog.test.ts` covering default-load-without-enumerate, warm cache, refresh-overwrite, refresh-failure-preserves-prior, and corrupt-file→defaults); `gateway` 114 pass. `preflight.test.ts` confirms the default seed attaches and a normal load never writes the catalog.
+- **Unit tests:** `agent-runtime` 51 pass (incl. new `model-enumerators.test.ts` parser shapes for claude `-p` and codex `model/list`, and `model-catalog.test.ts` covering default-load-without-enumerate, warm cache, refresh-overwrite, refresh-failure-preserves-prior, and corrupt-file→defaults); `gateway` 114 pass. `preflight.test.ts` confirms the default seed attaches and a normal load never writes the catalog. New `apps/desktop` `settings-merge.test.ts` (5 pass) covers empty-string-clears / non-empty-sets / undefined-preserves / clear-leaves-other-fields / activeGatewayId fallback.
 - **Empirical basis:** `claude -p` model enumeration was verified live (reproducible across runs, returning the current pinned `claude-*` ids) before building on it.
 - **Manual (to run in desktop):** Workspace → Chat → Model shows the hardcoded default ids instantly on first open; clicking **Refresh** enumerates live, writes `<userData>/gateways/local/model-catalog.json`, and updates the list; reopening settings reads the persisted list; deleting the file restores defaults; with codex active and `model/list` unsupported the picker degrades to defaults without error.
 

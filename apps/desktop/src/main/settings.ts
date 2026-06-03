@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { gatewayTemplatesCacheDir, LOCAL_GATEWAY_ID } from './gateway-paths.js';
 import { ensureLocalGateway, listGateways, resolveGateway } from './gateway-store.js';
+import { mergePersistedSettings } from './settings-merge.js';
 
 /**
  * Persisted desktop settings live at `<userData>/centraid-settings.json`
@@ -236,24 +237,7 @@ export async function saveSettings(patch: Partial<DesktopSettings>): Promise<Des
     }
   }
   const current = await readPersisted();
-  const next: PersistedSettings = {
-    activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
-    ...(patch.remoteTemplatesUrl !== undefined
-      ? { remoteTemplatesUrl: patch.remoteTemplatesUrl }
-      : current.remoteTemplatesUrl !== undefined
-        ? { remoteTemplatesUrl: current.remoteTemplatesUrl }
-        : {}),
-    ...(patch.chatModel !== undefined
-      ? { chatModel: patch.chatModel }
-      : current.chatModel !== undefined
-        ? { chatModel: current.chatModel }
-        : {}),
-    ...(patch.onboardingCompletedAt !== undefined
-      ? { onboardingCompletedAt: patch.onboardingCompletedAt }
-      : current.onboardingCompletedAt !== undefined
-        ? { onboardingCompletedAt: current.onboardingCompletedAt }
-        : {}),
-  };
+  const next = mergePersistedSettings(current, patch);
   await writePersisted(next);
   return resolveEffective(next);
 }
