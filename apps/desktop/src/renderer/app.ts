@@ -5521,13 +5521,9 @@ import {
     clear();
     const seq = renderSeq;
 
+    // Only `chatModel` is read off this object (the chat picker seed); the
+    // fallback covers the case where `getSettings` is unreachable.
     const current = await window.CentraidApi.getSettings().catch(() => ({
-      gatewayUrl: 'http://127.0.0.1:18789',
-      gatewayToken: '',
-      appsDir: '~/centraid-apps',
-      runtimeMode: 'local' as const,
-      remoteGatewayUrl: 'http://127.0.0.1:18789',
-      remoteGatewayToken: '',
       chatModel: undefined as string | undefined,
     }));
 
