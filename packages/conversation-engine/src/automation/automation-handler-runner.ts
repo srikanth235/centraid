@@ -21,6 +21,7 @@ import { Worker } from 'node:worker_threads';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import {
   appendLogs,
   type LogEntry,
@@ -196,16 +197,17 @@ export async function runAutomationHandler(
     emit,
   };
 
-  // The automation's conversation spans all its fires: the conversation id IS
-  // the automation id (issue #190). The `<appId>/<id>` ref carries the app id
-  // in its first segment.
+  // Each fire is its own execution conversation (fresh id, tagged with the
+  // automation ref), so independent runs aren't piled into one perpetual
+  // thread. The `<appId>/<id>` ref carries the app id in its first segment.
   const slash = audit.automationId.indexOf('/');
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
-  audit.store.ensureAutomationConversation(audit.automationId, appId);
+  const execConversationId = randomUUID();
+  audit.store.createAutomationRun(execConversationId, audit.automationId, appId);
   const startedAt = Date.now();
   audit.store.insertTurn({
     turnId: audit.runId,
-    conversationId: audit.automationId,
+    conversationId: execConversationId,
     triggerKind: opts.triggerKind ?? 'scheduled',
     ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
     ...(opts.parentRunId ? { parentTurnId: opts.parentRunId } : {}),

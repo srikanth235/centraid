@@ -127,7 +127,4 @@ export interface TurnResult {
  * Kept structural (not `typeof runTurn`) so this layer never imports
  * the codex/claude backend.
  */
-export type RunTurnFn = (
-  input: TurnInput,
-  config: TurnConfig,
-) => Promise<TurnResult>;
+export type RunTurnFn = (input: TurnInput, config: TurnConfig) => Promise<TurnResult>;

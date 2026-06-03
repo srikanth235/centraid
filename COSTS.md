@@ -646,3 +646,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-cdbbe46e-618-1780511026 | claude-code | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | claude-opus-4-8 | 156161 | 2473456 | 75955491 | 444491 | 3074108 | 65.3299 |  |
 | claude-code-3fa98abb-9bd-1780512102 | claude-code | 3fa98abb-9bd3-4a2f-b29f-af9d76794b8f | #190 | claude-opus-4-8 | 23828 | 13836 | 32008 | 1406 | 39070 | 0.2568 |  |
 | claude-code-cdbbe46e-618-1780512146 | claude-code | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | claude-opus-4-8 | 28124 | 725462 | 17502300 | 117451 | 871037 | 16.3622 |  |
+| claude-code-cdbbe46e-618-1780513132 | claude-code | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | claude-opus-4-8 | 30963 | 224516 | 53182520 | 133295 | 388774 | 31.4817 |  |

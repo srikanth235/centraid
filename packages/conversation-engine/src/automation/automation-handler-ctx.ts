@@ -243,13 +243,14 @@ export function handleRunsMessage(
   filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number },
 ): CtxReply {
   try {
-    // The automation's conversation id IS the automation id (issue #190).
-    const conversationId = filter.automationId ?? audit.automationId;
+    // An automation's runs are its execution conversations, grouped by the
+    // automation ref (each fire is its own conversation now).
+    const automationRef = filter.automationId ?? audit.automationId;
     const limit = filter.limit ?? 50;
     // Fetch one extra row so we can drop the in-progress self-turn without
     // short-changing the caller's limit.
     const rows = audit.store
-      .listTurnsFiltered(conversationId, {
+      .listAutomationTurns(automationRef, {
         ...(filter.status ? { status: filter.status } : {}),
         ...(filter.since !== undefined ? { since: filter.since } : {}),
         limit: limit + 1,
@@ -257,7 +258,7 @@ export function handleRunsMessage(
       .filter((r) => r.turnId !== audit.runId)
       .slice(0, limit);
     const toRef = (r: (typeof rows)[number]): ReturnType<typeof rowToRunRef> =>
-      rowToRunRef(r, audit.store.messageInText(r.turnId));
+      rowToRunRef(r, automationRef, audit.store.messageInText(r.turnId));
     if (method === 'last') {
       const first = rows[0];
       return { ok: true, result: first ? toRef(first) : undefined };

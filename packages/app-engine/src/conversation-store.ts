@@ -8,10 +8,11 @@
  * Five tables — `conversations`, `turns`, `items`, `attachments`,
  * `automation_state` — the `RUNTIME_MIGRATIONS` shape in `gateway-db.ts`.
  *
- *   conversations    — the first-class durable thread. `kind` (chat |
+ *   conversations    — the first-class durable record. `kind` (chat |
  *                      automation | build), `app_id`, `automation_id` live
- *                      here. For an automation the conversation id IS the
- *                      automation id, so the thread spans all its fires.
+ *                      here. Each automation FIRE is its own conversation
+ *                      (fresh id, `automation_id=<ref>`); the automation's run
+ *                      history is the set of conversations sharing that ref.
  *   turns            — one execution under a conversation (chat turn /
  *                      automation fire / builder iteration). NOT NULL,
  *                      FK-backed `conversation_id`. Carries the token/cost
@@ -64,7 +65,8 @@ import {
 } from './conversation-store-sql.js';
 
 export interface CreateConversationInput {
-  /** Defaults to a fresh UUID; pass the automation id for `kind: 'automation'`. */
+  /** Defaults to a fresh UUID. For an automation fire, set `automationId` to
+   *  the ref and leave `id` to default (each fire is its own conversation). */
   readonly id?: string;
   readonly kind: RunKind;
   readonly userId: string;
@@ -246,11 +248,21 @@ export class ConversationStore {
     };
   }
 
-  /** Idempotently create the automation's thread (id == automation id). */
-  ensureAutomationConversation(automationId: string, appId?: string): void {
-    const { stmts } = this.ensureReady();
-    const now = Date.now();
-    stmts.ensureAutomationConversation.run(automationId, appId ?? null, automationId, now, now);
+  /**
+   * Create one execution conversation for an automation fire — a fresh
+   * `kind='automation'` record (its own id) tagged with the automation ref in
+   * `automation_id`, so every fire is an independent durable run grouped by ref
+   * (not turns piled into one perpetual thread). Automations aren't user-scoped,
+   * so `user_id` is empty. The fire then inserts its turn under `conversationId`.
+   */
+  createAutomationRun(conversationId: string, automationRef: string, appId?: string): void {
+    this.createConversation({
+      id: conversationId,
+      kind: 'automation',
+      userId: '',
+      automationId: automationRef,
+      ...(appId !== undefined ? { appId } : {}),
+    });
   }
 
   getConversation(id: string): Conversation | undefined {
@@ -287,11 +299,11 @@ export class ConversationStore {
     return Number(stmts.deleteConversationForUser.run(id, userId).changes) > 0;
   }
 
-  /** Delete an automation's thread + state (id == automation id). Cascades. */
-  deleteAutomationData(automationId: string): void {
+  /** Delete every execution conversation of an automation + its state. Cascades. */
+  deleteAutomationData(automationRef: string): void {
     const { stmts } = this.ensureReady();
-    stmts.deleteConversationById.run(automationId);
-    stmts.deleteStateByAutomation.run(automationId);
+    stmts.deleteConversationsByAutomation.run(automationRef);
+    stmts.deleteStateByAutomation.run(automationRef);
   }
 
   titleOf(id: string, userId: string): string | undefined {
@@ -391,31 +403,54 @@ export class ConversationStore {
     return rows.map(turnFromRaw);
   }
 
+  /**
+   * An automation's run history — every fire's turn across its execution
+   * conversations (grouped by `automation_id = ref`), newest-first. The
+   * handler-facing `ctx.runs` feed and any "recent runs" view read this.
+   */
+  listAutomationTurns(automationRef: string, opts: ListTurnsOptions = {}): Turn[] {
+    const { stmts } = this.ensureReady();
+    const limit = opts.limit ?? 50;
+    const since = opts.since ?? null;
+    const okFilter = opts.status === undefined ? null : opts.status === 'ok' ? 1 : 0;
+    const rows = stmts.listTurnsByAutomation.all(
+      automationRef,
+      since,
+      since,
+      okFilter,
+      okFilter,
+      limit,
+    ) as unknown as RawTurn[];
+    return rows.map(turnFromRaw);
+  }
+
   setTurnPinned(turnId: string, pinned: boolean): void {
     const { stmts } = this.ensureReady();
     stmts.setTurnPinned.run(pinned ? 1 : 0, turnId);
   }
 
   /**
-   * Apply a `history.keep` retention policy for a conversation. Cascading
-   * FKs drop the orphaned items + attachments.
+   * Apply a `history.keep` retention policy to an automation — at execution
+   * grain: drop whole old fires (their execution conversations), keeping the
+   * latest N / within-window / error fires, and any pinned execution. Cascading
+   * FKs drop the orphaned turns + items + attachments.
    */
-  prune(
-    conversationId: string,
+  pruneAutomation(
+    automationRef: string,
     keep: { count?: number; days?: number; errorsOnly?: boolean; all?: boolean },
   ): void {
     const { stmts } = this.ensureReady();
     if (keep.all) return;
     if (keep.errorsOnly) {
-      stmts.pruneErrorsOnly.run(conversationId);
+      stmts.pruneAutomationErrorsOnly.run(automationRef);
       return;
     }
     if (keep.count !== undefined && keep.count >= 0) {
-      stmts.pruneByCount.run(conversationId, conversationId, keep.count);
+      stmts.pruneAutomationByCount.run(automationRef, automationRef, keep.count);
       return;
     }
     if (keep.days !== undefined && keep.days >= 0) {
-      stmts.pruneByDays.run(conversationId, Date.now() - keep.days * 24 * 60 * 60 * 1000);
+      stmts.pruneAutomationByDays.run(automationRef, Date.now() - keep.days * 24 * 60 * 60 * 1000);
     }
   }
 

@@ -171,6 +171,39 @@ absorbs the new shape.
   Out of scope: openclaw's separate `openclaw-agent-turn.ts` (`runEmbeddedTurn`)
   and the desktop builder's `finishAgentTurn()` UI helper.
 
+### Follow-up — each automation fire is its own execution conversation
+
+- The original #190 shape made `conversations.id == automation_id`, so every
+  fire of an automation appended a turn to ONE perpetual conversation. That
+  conflated the automation *definition* with its *run log* and broke down at
+  scale: an immortal row that only grows + trims, contention/`seq` races between
+  overlapping fires, and forced "continuity" between independent runs. It also
+  contradicted the register's `run(fire) → Conversation`. The schema already
+  anticipated the fix — `idx_conversations_automation` is a *non-unique* index,
+  pointless under one-row-per-automation.
+- Now **each fire is its own execution conversation**: a fresh-id
+  `kind='automation'` row tagged with the ref in `automation_id`. An automation's
+  run history is the set of conversations sharing that ref; `automation_state`
+  (keyed by `automation_id`) stays the only thing that persists across fires.
+- `runId` stays `= turnId` (each execution has one turn), so the run-event bus,
+  run-feed wire shape, and run-detail path (`getTurn(runId)`, `listItems(runId)`)
+  are unchanged — only the *grouping* queries moved from "turns of conv `ref`"
+  to "by `automation_id`".
+- Store: `ensureAutomationConversation`(id==ref, get-or-create) →
+  `createAutomationRun`(fresh conv per fire); added `listAutomationTurns` (turns
+  JOIN conversations by ref); `deleteAutomationData` now drops *all* execution
+  conversations of the ref; `prune`(turn-grain) → `pruneAutomation` (drops whole
+  old execution conversations, windowed by the fire's turn `started_at`/`ok`,
+  exempting pinned). Engine: the fire path mints a fresh `execConversationId`;
+  `rowToRunRef` takes the ref explicitly; `ctx.runs` reads `listAutomationTurns`.
+  Gateway: the run-detail fallback sources the ref from the execution
+  conversation's `automation_id` instead of `turn.conversationId`.
+- Insights need no change — the per-fire summary already sourced `automationRef`
+  from the owning conversation, which now carries it per execution.
+- Opt-in cross-run continuity (a fire that references prior runs) remains via
+  lineage (`parent_turn_id`/`retry_of`) or `automation_state` — explicit, never
+  the silent default the old shape baked in.
+
 ## Out of scope
 
 - Cross-app referential integrity and the `run_summary` best-effort

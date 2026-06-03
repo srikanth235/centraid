@@ -61,14 +61,15 @@ export interface RunRef {
 }
 
 /**
- * Project a `turns` row into the handler-facing `ctx.runs` ref. The
- * automation id is the conversation id (issue #190); `inputText` is the
- * turn's ordinal-0 `message_in` payload, fetched by the caller.
+ * Project a `turns` row into the handler-facing `ctx.runs` ref. Each fire is
+ * its own execution conversation now, so the automation ref is passed in
+ * (it's no longer the conversation id); `inputText` is the turn's ordinal-0
+ * `message_in` payload, fetched by the caller.
  */
-export function rowToRunRef(row: Turn, inputText?: string): RunRef {
+export function rowToRunRef(row: Turn, automationRef: string, inputText?: string): RunRef {
   const ref: RunRef = {
     runId: row.turnId,
-    automationId: row.conversationId,
+    automationId: automationRef,
     triggerKind: row.triggerKind,
     startedAt: row.startedAt,
     ok: row.ok,
@@ -95,21 +96,21 @@ export function rowToRunRef(row: Turn, inputText?: string): RunRef {
 
 export function applyRetention(
   store: ConversationStore,
-  automationId: string,
+  automationRef: string,
   history: AutomationHistoryConfig | undefined,
 ): void {
   if (!history) return;
   const keep = history.keep;
   if (keep === 'all') return;
   if (keep === 'errors') {
-    store.prune(automationId, { errorsOnly: true });
+    store.pruneAutomation(automationRef, { errorsOnly: true });
     return;
   }
   if ('count' in keep) {
-    store.prune(automationId, { count: keep.count });
+    store.pruneAutomation(automationRef, { count: keep.count });
     return;
   }
-  if ('days' in keep) store.prune(automationId, { days: keep.days });
+  if ('days' in keep) store.pruneAutomation(automationRef, { days: keep.days });
 }
 
 export interface HandlerReturnEnvelope {

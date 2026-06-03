@@ -15,16 +15,21 @@ function newStore(): ConversationStore {
   return new ConversationStore(newProvider());
 }
 
-/** Seed an automation thread + a finished turn under it. */
+/** Seed one automation fire: its own execution conversation + a finished turn. */
 function seedAutomationTurn(
   store: ConversationStore,
-  automationId: string,
+  automationRef: string,
   turnId: string,
   startedAt: number,
   ok = true,
 ): void {
-  store.ensureAutomationConversation(automationId, automationId.split('/')[0]);
-  store.insertTurn({ turnId, conversationId: automationId, triggerKind: 'scheduled', startedAt });
+  store.createAutomationRun(`conv-${turnId}`, automationRef, automationRef.split('/')[0]);
+  store.insertTurn({
+    turnId,
+    conversationId: `conv-${turnId}`,
+    triggerKind: 'scheduled',
+    startedAt,
+  });
   store.finishTurn({ turnId, endedAt: startedAt + 1, ok });
 }
 
@@ -46,21 +51,24 @@ describe('ConversationStore — conversations', () => {
     store.close();
   });
 
-  it('ensureAutomationConversation is idempotent (id == automation id)', () => {
+  it('createAutomationRun makes a fresh execution conversation per fire, grouped by ref', () => {
     const store = newStore();
-    store.ensureAutomationConversation('app/digest', 'app');
-    store.ensureAutomationConversation('app/digest', 'app');
-    const conv = store.getConversation('app/digest');
-    assert.equal(conv?.kind, 'automation');
-    assert.equal(conv?.automationId, 'app/digest');
-    assert.equal(conv?.appId, 'app');
+    store.createAutomationRun('c1', 'app/digest', 'app');
+    store.createAutomationRun('c2', 'app/digest', 'app');
+    const a = store.getConversation('c1');
+    const b = store.getConversation('c2');
+    assert.equal(a?.kind, 'automation');
+    assert.equal(a?.automationId, 'app/digest');
+    assert.equal(a?.appId, 'app');
+    assert.equal(b?.automationId, 'app/digest');
+    assert.notEqual(a?.id, b?.id, 're-firing makes a new conversation, not one reused thread');
     store.close();
   });
 
   it('listConversationsMeta returns chat/build threads with a transcript count', () => {
     const store = newStore();
     const c = store.createConversation({ kind: 'chat', userId: 'u1', appId: 'app' });
-    store.ensureAutomationConversation('app/auto'); // automation — excluded from list
+    store.createAutomationRun('auto-conv', 'app/auto'); // automation — excluded from chat list
     store.insertTurn({
       turnId: 't1',
       conversationId: c.id,
@@ -104,8 +112,8 @@ describe('ConversationStore — turns', () => {
 
   it('finishTurn rolls up step/agent tokens + step/tool counts', () => {
     const store = newStore();
-    seedAutomationTurn(store, 'app/a', 'setup', 0);
-    store.insertTurn({ turnId: 'r', conversationId: 'app/a', triggerKind: 'manual', startedAt: 1 });
+    const c = store.createConversation({ kind: 'automation', userId: '', automationId: 'app/a' });
+    store.insertTurn({ turnId: 'r', conversationId: c.id, triggerKind: 'manual', startedAt: 1 });
     store.openItem({
       turnId: 'r',
       itemId: 'i1',
@@ -145,23 +153,23 @@ describe('ConversationStore — turns', () => {
 
   it('listTurnsFiltered supports status/since/limit and newest-first order', () => {
     const store = newStore();
-    store.ensureAutomationConversation('app/foo');
+    const c = store.createConversation({ kind: 'chat', userId: 'u1' });
     for (let i = 0; i < 5; i++) {
       const id = `r${i}`;
       store.insertTurn({
         turnId: id,
-        conversationId: 'app/foo',
+        conversationId: c.id,
         triggerKind: 'scheduled',
         startedAt: 100 + i,
       });
       store.finishTurn({ turnId: id, endedAt: 200 + i, ok: i !== 1 });
     }
-    assert.equal(store.listTurnsFiltered('app/foo').length, 5);
-    assert.equal(store.listTurnsFiltered('app/foo', { status: 'ok' }).length, 4);
-    assert.equal(store.listTurnsFiltered('app/foo', { status: 'error' }).length, 1);
-    assert.equal(store.listTurnsFiltered('app/foo', { since: 103 }).length, 2);
+    assert.equal(store.listTurnsFiltered(c.id).length, 5);
+    assert.equal(store.listTurnsFiltered(c.id, { status: 'ok' }).length, 4);
+    assert.equal(store.listTurnsFiltered(c.id, { status: 'error' }).length, 1);
+    assert.equal(store.listTurnsFiltered(c.id, { since: 103 }).length, 2);
     assert.deepEqual(
-      store.listTurnsFiltered('app/foo', { limit: 2 }).map((t) => t.turnId),
+      store.listTurnsFiltered(c.id, { limit: 2 }).map((t) => t.turnId),
       ['r4', 'r3'],
     );
     store.close();
@@ -292,65 +300,58 @@ describe('ConversationStore — automation state', () => {
 });
 
 describe('ConversationStore — prune + delete', () => {
-  it('prune by count keeps newest N turns and cascades items; pinned survives', () => {
+  /** Seed one fire (its own execution conversation + turn + a tool item). */
+  function seedFire(store: ConversationStore, i: number, ok = true): void {
+    const id = `r${i}`;
+    store.createAutomationRun(`c${i}`, 'app/foo', 'app');
+    store.insertTurn({
+      turnId: id,
+      conversationId: `c${i}`,
+      triggerKind: 'scheduled',
+      startedAt: 100 + i,
+    });
+    store.finishTurn({ turnId: id, endedAt: 200 + i, ok });
+    store.insertItem({
+      itemId: `n-${i}`,
+      turnId: id,
+      ordinal: 0,
+      kind: 'tool',
+      name: 'a',
+      ok: true,
+      startedAt: 150 + i,
+      endedAt: 151 + i,
+      durationMs: 1,
+    });
+  }
+
+  it('pruneAutomation by count keeps newest N fires and cascades; pinned survives', () => {
     const store = newStore();
-    store.ensureAutomationConversation('app/foo');
-    for (let i = 0; i < 6; i++) {
-      const id = `r${i}`;
-      store.insertTurn({
-        turnId: id,
-        conversationId: 'app/foo',
-        triggerKind: 'scheduled',
-        startedAt: 100 + i,
-      });
-      store.finishTurn({ turnId: id, endedAt: 200 + i, ok: true });
-      store.insertItem({
-        itemId: `n-${i}`,
-        turnId: id,
-        ordinal: 0,
-        kind: 'tool',
-        name: 'a',
-        ok: true,
-        startedAt: 150 + i,
-        endedAt: 151 + i,
-        durationMs: 1,
-      });
-    }
+    for (let i = 0; i < 6; i++) seedFire(store, i);
     store.setTurnPinned('r0', true);
-    store.prune('app/foo', { count: 2 });
+    store.pruneAutomation('app/foo', { count: 2 });
     const remaining = store
-      .listTurns('app/foo')
+      .listAutomationTurns('app/foo', { limit: 100 })
       .map((t) => t.turnId)
       .sort();
     assert.deepEqual(remaining, ['r0', 'r4', 'r5'], 'pinned r0 survives count pruning');
-    assert.equal(store.listItems('r1').length, 0, 'pruned turn items cascade away');
+    assert.equal(store.listItems('r1').length, 0, 'pruned fire items cascade away');
     assert.equal(store.listItems('r5').length, 1);
     store.close();
   });
 
-  it('prune errorsOnly drops successful turns; all=true is a no-op', () => {
+  it('pruneAutomation errorsOnly drops successful fires; all=true is a no-op', () => {
     const store = newStore();
-    store.ensureAutomationConversation('app/foo');
-    for (let i = 0; i < 4; i++) {
-      const id = `r${i}`;
-      store.insertTurn({
-        turnId: id,
-        conversationId: 'app/foo',
-        triggerKind: 'scheduled',
-        startedAt: 100 + i,
-      });
-      store.finishTurn({ turnId: id, endedAt: 200 + i, ok: i % 2 === 0 });
-    }
-    store.prune('app/foo', { errorsOnly: true });
-    const remaining = store.listTurns('app/foo');
+    for (let i = 0; i < 4; i++) seedFire(store, i, i % 2 === 0);
+    store.pruneAutomation('app/foo', { errorsOnly: true });
+    const remaining = store.listAutomationTurns('app/foo', { limit: 100 });
     assert.equal(remaining.length, 2);
     for (const t of remaining) assert.equal(t.ok, false);
-    store.prune('app/foo', { all: true });
-    assert.equal(store.listTurns('app/foo').length, 2);
+    store.pruneAutomation('app/foo', { all: true });
+    assert.equal(store.listAutomationTurns('app/foo', { limit: 100 }).length, 2);
     store.close();
   });
 
-  it('deleteAutomationData drops the thread (cascade) + state, leaving others', () => {
+  it('deleteAutomationData drops every execution conversation (cascade) + state, leaving others', () => {
     const store = newStore();
     seedAutomationTurn(store, 'app/a', 'a1', 1);
     seedAutomationTurn(store, 'app/b', 'b1', 1);
@@ -358,12 +359,10 @@ describe('ConversationStore — prune + delete', () => {
     store.stateSet('app/a', 'k', JSON.stringify('v'), 1);
     store.stateSet('app/b', 'k', JSON.stringify('v'), 1);
     store.deleteAutomationData('app/a');
-    assert.equal(store.getConversation('app/a'), undefined);
-    assert.equal(store.listTurns('app/a').length, 0);
+    assert.equal(store.listAutomationTurns('app/a').length, 0);
     assert.equal(store.listItems('a1').length, 0, 'items cascade with the conversation');
     assert.equal(store.stateGet('app/a', 'k'), undefined);
-    assert.ok(store.getConversation('app/b'));
-    assert.equal(store.listTurns('app/b').length, 1);
+    assert.equal(store.listAutomationTurns('app/b').length, 1);
     assert.ok(store.stateGet('app/b', 'k'));
     store.close();
   });

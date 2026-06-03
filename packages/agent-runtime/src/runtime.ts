@@ -21,17 +21,9 @@ import { runClaudeSdkTurn } from './claude-sdk.js';
 // now lives in `@centraid/app-engine` so the backend-agnostic run engine can
 // speak it. Re-exported here so this package's modules + back-compat
 // consumers keep importing them from `@centraid/agent-runtime`.
-export type {
-  ToolContext,
-  TurnInput,
-  TurnConfig,
-  TurnResult,
-} from '@centraid/app-engine';
+export type { ToolContext, TurnInput, TurnConfig, TurnResult } from '@centraid/app-engine';
 
-export async function runTurn(
-  input: TurnInput,
-  config: TurnConfig,
-): Promise<TurnResult> {
+export async function runTurn(input: TurnInput, config: TurnConfig): Promise<TurnResult> {
   const { prefs } = config;
 
   if (prefs.kind === 'codex') {

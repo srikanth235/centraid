@@ -179,13 +179,16 @@ function turnToRunRecord(
   turn: Turn,
   summary: RunSummary | undefined,
   inputJson: string | undefined,
+  automationRef: string | undefined,
 ): RunRecordJson {
+  // Prefer the analytics summary's ref; fall back to the owning execution
+  // conversation's `automation_id` (the conversation id is no longer the ref —
+  // each fire is its own conversation).
+  const ref = summary?.automationRef ?? automationRef;
   return {
     runId: turn.turnId,
     kind: summary?.kind ?? 'automation',
-    ...(summary?.automationRef !== undefined
-      ? { automationId: summary.automationRef }
-      : { automationId: turn.conversationId }),
+    ...(ref !== undefined ? { automationId: ref } : {}),
     triggerKind: turn.triggerKind,
     ...(turn.triggerOrigin !== undefined ? { triggerOrigin: turn.triggerOrigin } : {}),
     ...(turn.parentTurnId !== undefined ? { parentRunId: turn.parentTurnId } : {}),
@@ -415,6 +418,7 @@ export function makeAutomationsRouteHandler(
           turn,
           opts.analytics.getSummary(runId),
           store.messageInText(runId),
+          store.getConversation(turn.conversationId)?.automationId,
         );
         return sendJson(res, 200, { run: record });
       }

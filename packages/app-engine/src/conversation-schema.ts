@@ -48,19 +48,20 @@ export type AutomationTriggerOrigin = 'cron' | 'webhook' | 'manual';
 export type ItemKind = 'message_in' | 'step' | 'tool' | 'agent';
 
 /**
- * The durable thread spanning every turn it contains. Was `chat_sessions`,
+ * The durable record holding the turns of one execution. Was `chat_sessions`,
  * generalized: `kind` / `app_id` / `automation_id` moved UP here off the
- * per-turn row. For `kind='automation'` the conversation id IS the automation
- * id (the thread spans all the automation's fires).
+ * per-turn row. For `kind='automation'` each fire is its OWN conversation
+ * (fresh id) tagged with the automation ref in `automation_id`, so an
+ * automation's run history is the conversations sharing that ref.
  */
 export interface Conversation {
   readonly id: string;
   readonly kind: RunKind;
-  /** Owner — the gateway-side user UUID from `UserStore`. */
+  /** Owner — the gateway-side user UUID from `UserStore` (empty for automations). */
   readonly userId: string;
   /** Owning app — set for automation and build conversations. */
   readonly appId?: string;
-  /** UUID/handle of the automation — set for `kind: 'automation'`. */
+  /** The automation ref (`<appId>/<id>`) this fire ran — set for `kind: 'automation'`. */
   readonly automationId?: string;
   readonly title: string;
   /** Runner kind that owns `adapterSessionId` (codex | claude-code | openclaw). */

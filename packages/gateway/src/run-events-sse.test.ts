@@ -38,10 +38,11 @@ function ledger(): ConversationStore {
   );
 }
 
-/** Seed an automation turn (conversation = the automation ref) — the #190 shape. */
+/** Seed one automation fire: its own execution conversation + a turn under it. */
 function seedTurn(store: ConversationStore, ref: string, turnId: string, startedAt: number): void {
-  store.ensureAutomationConversation(ref, ref.split('/')[0]);
-  store.insertTurn({ turnId, conversationId: ref, triggerKind: 'manual', startedAt });
+  const convId = `conv-${turnId}`;
+  store.createAutomationRun(convId, ref, ref.split('/')[0]);
+  store.insertTurn({ turnId, conversationId: convId, triggerKind: 'manual', startedAt });
 }
 
 beforeEach(async () => {

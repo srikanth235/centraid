@@ -7,9 +7,11 @@
  * `gateway-db.ts` RUNTIME_MIGRATIONS).
  *
  * Issue #190: the conversation is the spine. `turns.conversation_id` is a
- * NOT NULL same-file FK (CASCADE); for an automation the conversation id IS
- * the automation id, so "turns for an automation" and "turns for a chat
- * thread" are the same query (`conversation_id = ?`).
+ * NOT NULL same-file FK (CASCADE). Each automation FIRE is its own execution
+ * conversation (`kind='automation'`, `automation_id=<ref>`, fresh id), so an
+ * automation's run history is `conversations WHERE automation_id = ?` — each
+ * row a single independent execution — and `automation_state` (keyed by
+ * `automation_id`) is the only thing that persists across them.
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
@@ -213,13 +215,13 @@ export function stateFromRaw(raw: RawState): AutomationStateEntry {
 
 export interface PreparedStatements {
   insertConversation: StatementSync;
-  ensureAutomationConversation: StatementSync;
   getConversation: StatementSync;
   getConversationWithCount: StatementSync;
   listConversations: StatementSync;
   renameConversation: StatementSync;
   deleteConversationForUser: StatementSync;
   deleteConversationById: StatementSync;
+  deleteConversationsByAutomation: StatementSync;
   titleOf: StatementSync;
   setTitle: StatementSync;
   setKind: StatementSync;
@@ -233,10 +235,11 @@ export interface PreparedStatements {
   getTurn: StatementSync;
   listTurnsAsc: StatementSync;
   listTurnsFiltered: StatementSync;
+  listTurnsByAutomation: StatementSync;
   setTurnPinned: StatementSync;
-  pruneByCount: StatementSync;
-  pruneByDays: StatementSync;
-  pruneErrorsOnly: StatementSync;
+  pruneAutomationByCount: StatementSync;
+  pruneAutomationByDays: StatementSync;
+  pruneAutomationErrorsOnly: StatementSync;
   dominantModel: StatementSync;
   convForTurn: StatementSync;
   insertItem: StatementSync;
@@ -269,14 +272,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
          adapter_kind, adapter_session_id, turn_count, pinned, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, ?, ?)
     `),
-    // Idempotent automation-thread creation: the conversation id IS the
-    // automation id, so re-firing the same automation reuses one thread.
-    ensureAutomationConversation: db.prepare(`
-      INSERT INTO conversations
-        (id, kind, user_id, app_id, automation_id, title, turn_count, pinned, created_at, updated_at)
-      VALUES (?, 'automation', '', ?, ?, '', 0, 0, ?, ?)
-      ON CONFLICT(id) DO NOTHING
-    `),
     getConversation: db.prepare(`SELECT ${CONV_COLS} FROM conversations c WHERE c.id = ?`),
     getConversationWithCount: db.prepare(`
       SELECT ${CONV_COLS},
@@ -297,6 +292,11 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     ),
     deleteConversationForUser: db.prepare(`DELETE FROM conversations WHERE id = ? AND user_id = ?`),
     deleteConversationById: db.prepare(`DELETE FROM conversations WHERE id = ?`),
+    // Every execution conversation of one automation. CASCADE drops their
+    // turns/items/attachments (issue: per-execution conversations).
+    deleteConversationsByAutomation: db.prepare(
+      `DELETE FROM conversations WHERE automation_id = ?`,
+    ),
     titleOf: db.prepare(`SELECT title FROM conversations WHERE id = ? AND user_id = ?`),
     setTitle: db.prepare(
       `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
@@ -364,23 +364,42 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT ?
     `),
-    setTurnPinned: db.prepare(`UPDATE turns SET pinned = ? WHERE id = ?`),
-    pruneByCount: db.prepare(`
-      DELETE FROM turns
-      WHERE conversation_id = ?
-        AND pinned = 0
-        AND id NOT IN (
-          SELECT id FROM turns
-          WHERE conversation_id = ?
-          ORDER BY started_at DESC LIMIT ?
-        )
+    // An automation's run history: every fire's turn across its execution
+    // conversations, newest-first. Mirrors listTurnsFiltered but keyed by the
+    // automation ref (`conversations.automation_id`) instead of one conv id.
+    listTurnsByAutomation: db.prepare(`
+      SELECT t.* FROM turns t JOIN conversations c ON t.conversation_id = c.id
+      WHERE c.automation_id = ?
+        AND (? IS NULL OR t.started_at >= ?)
+        AND (? IS NULL OR t.ok = ?)
+      ORDER BY t.started_at DESC LIMIT ?
     `),
-    pruneByDays: db.prepare(
-      `DELETE FROM turns WHERE conversation_id = ? AND pinned = 0 AND started_at < ?`,
-    ),
-    pruneErrorsOnly: db.prepare(
-      `DELETE FROM turns WHERE conversation_id = ? AND pinned = 0 AND ok = 1`,
-    ),
+    setTurnPinned: db.prepare(`UPDATE turns SET pinned = ? WHERE id = ?`),
+    // Retention is per-automation at execution-conversation grain: drop whole
+    // old fires (CASCADE their turns/items/attachments). Ordering/windowing is
+    // by the fire's own turn (`started_at`/`ok`/`pinned`), not the conversation
+    // row, so a pinned fire always survives.
+    pruneAutomationByCount: db.prepare(`
+      DELETE FROM conversations
+      WHERE automation_id = ?
+        AND id NOT IN (
+          SELECT c.id FROM conversations c JOIN turns t ON t.conversation_id = c.id
+          WHERE c.automation_id = ?
+          ORDER BY t.started_at DESC LIMIT ?
+        )
+        AND id NOT IN (SELECT conversation_id FROM turns WHERE pinned = 1)
+    `),
+    pruneAutomationByDays: db.prepare(`
+      DELETE FROM conversations
+      WHERE automation_id = ?
+        AND id IN (SELECT conversation_id FROM turns WHERE started_at < ? AND pinned = 0)
+    `),
+    // keep='errors': drop the successful fires, keep failures (+ pinned).
+    pruneAutomationErrorsOnly: db.prepare(`
+      DELETE FROM conversations
+      WHERE automation_id = ?
+        AND id IN (SELECT conversation_id FROM turns WHERE ok = 1 AND pinned = 0)
+    `),
     dominantModel: db.prepare(`
       SELECT model FROM items
       WHERE turn_id = ? AND model IS NOT NULL AND kind IN ('step','agent')
