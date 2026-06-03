@@ -18,7 +18,7 @@
  */
 
 import type { RunKind } from './conversation-schema.js';
-import type { TurnAttachment } from './agent-turn.js';
+import type { TurnAttachment } from './turn.js';
 
 /**
  * Normalized stream events both adapters emit. The route handler translates

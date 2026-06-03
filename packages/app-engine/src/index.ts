@@ -34,18 +34,18 @@ export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prom
 
 // Agent-turn contract — the host-agnostic interface between a run spine
 // (chat-runner core, automation fire) and the backend that drives one model
-// turn. The codex/claude implementation (`runAgentTurn`) lives in
+// turn. The codex/claude implementation (`runTurn`) lives in
 // `@centraid/agent-runtime`; hosts inject a `RunTurnFn` satisfying it.
 export type {
   RunnerKind,
   RunnerPrefs,
   ToolContext,
-  AgentTurnInput,
-  AgentTurnConfig,
-  AgentTurnResult,
+  TurnInput,
+  TurnConfig,
+  TurnResult,
   TurnAttachment,
   RunTurnFn,
-} from './agent-turn.js';
+} from './turn.js';
 
 export {
   startRuntimeHttpServer,

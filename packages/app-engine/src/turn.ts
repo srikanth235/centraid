@@ -1,5 +1,5 @@
 /*
- * Agent-turn contract — the host-agnostic interface between a run spine and
+ * Turn-driver contract — the host-agnostic interface between a run spine and
  * the backend that actually drives one model turn.
  *
  * These types used to live in `@centraid/agent-runtime` (the local
@@ -8,7 +8,7 @@
  * turn contract without depending on any agent backend — agent-runtime,
  * the gateway, and openclaw all inject a concrete `RunTurnFn` that satisfies
  * it. The interface lives here next to `ConversationRunner`; the codex/claude
- * implementation (`runAgentTurn`) stays in agent-runtime.
+ * implementation (`runTurn`) stays in agent-runtime.
  */
 
 import type { TurnStreamEvent } from './conversation-runner.js';
@@ -20,7 +20,7 @@ export type RunnerKind = 'codex' | 'claude-code';
  * Per-user settings for the coding agent. Persisted by the desktop's
  * UserStore (gateway DB, `user_prefs`) under the `agent.runner.*` keys.
  * The host loads + passes these into `makeConversationRunner` (for chat) or
- * directly into `runAgentTurn` (for builder).
+ * directly into `runTurn` (for builder).
  */
 export interface RunnerPrefs {
   /** Which CLI/SDK to invoke. Required when the desktop is in local-runtime mode. */
@@ -50,11 +50,11 @@ export interface ToolContext {
    */
   dispatcher: Dispatcher;
   /**
-   * Stable id for this single `runAgentTurn` invocation. Stamped on every
+   * Stable id for this single `runTurn` invocation. Stamped on every
    * `centraid:datachange` event produced by tool calls inside this turn so
    * the chat UI can correlate iframe refreshes back to the chat pill.
    */
-  agentTurnId: string;
+  turnId: string;
   /**
    * Draft code dir for this turn — the session worktree's `apps/<id>/`
    * (issue #144). When set, the dispatcher serves the draft's handlers AND
@@ -76,7 +76,7 @@ export interface TurnAttachment {
   filename?: string;
 }
 
-export interface AgentTurnInput {
+export interface TurnInput {
   /** Working directory the agent operates in (chat: app data dir; builder: app dir). */
   cwd: string;
   message: string;
@@ -110,11 +110,11 @@ export interface AgentTurnInput {
   onEvent: (event: TurnStreamEvent) => void;
 }
 
-export interface AgentTurnConfig {
+export interface TurnConfig {
   prefs: RunnerPrefs;
 }
 
-export interface AgentTurnResult {
+export interface TurnResult {
   /** Codex thread id (when `prefs.kind === 'codex'`) or Claude session id. */
   sessionId?: string;
   /** Echoes the runner kind that produced `sessionId`. */
@@ -123,11 +123,11 @@ export interface AgentTurnResult {
 
 /**
  * The thin turn-driver the run engine depends on. agent-runtime's
- * `runAgentTurn` is the production implementation; tests inject a stub.
- * Kept structural (not `typeof runAgentTurn`) so this layer never imports
+ * `runTurn` is the production implementation; tests inject a stub.
+ * Kept structural (not `typeof runTurn`) so this layer never imports
  * the codex/claude backend.
  */
 export type RunTurnFn = (
-  input: AgentTurnInput,
-  config: AgentTurnConfig,
-) => Promise<AgentTurnResult>;
+  input: TurnInput,
+  config: TurnConfig,
+) => Promise<TurnResult>;

@@ -8,7 +8,7 @@
  *
  * `makeConversationRunnerCore` is backend-agnostic. The actual model turn is injected
  * as a `RunTurnFn` (`runTurn`) — agent-runtime passes its codex/claude
- * `runAgentTurn`; tests pass a stub. Every `ConversationRunner` the gateway's `/_turn`
+ * `runTurn`; tests pass a stub. Every `ConversationRunner` the gateway's `/_turn`
  * route can inject does the same thing around that turn: load prefs, resolve a
  * cwd, build the system prompt, thread the `centraid_*` dispatcher into a
  * `ToolContext`, resume when the prior turn used the same runner kind, drive
@@ -27,13 +27,13 @@
  *                              on the agent's PATH; data chat doesn't.
  *
  * The interface (`ConversationRunner`, `ConversationTurnInput`, `ConversationTurnResult`) and the
- * turn contract (`RunTurnFn`, `AgentTurnInput`, `ToolContext`) both live in
+ * turn contract (`RunTurnFn`, `TurnInput`, `ToolContext`) both live in
  * app-engine; this is the host-agnostic spine that wires them together.
  */
 
 import { randomUUID } from 'node:crypto';
 import type {
-  AgentTurnInput,
+  TurnInput,
   ConversationTurnInput,
   ConversationTurnResult,
   ConversationRunner,
@@ -98,7 +98,7 @@ export interface ConversationRunnerCoreOptions {
   cwdIsDraftWorktree?: boolean;
   /**
    * The model turn driver. agent-runtime injects its codex/claude
-   * `runAgentTurn`; tests inject a stub. Required — this package is
+   * `runTurn`; tests inject a stub. Required — this package is
    * backend-agnostic and never imports a concrete backend.
    */
   runTurn: RunTurnFn;
@@ -148,11 +148,11 @@ export function makeConversationRunnerCore(
       const toolContext: ToolContext = {
         appId: input.appId,
         dispatcher: opts.getDispatcher(),
-        agentTurnId: randomUUID(),
+        turnId: randomUUID(),
         ...(opts.cwdIsDraftWorktree ? { overrideCodeDir: cwd } : {}),
       };
 
-      const turnInput: AgentTurnInput = {
+      const turnInput: TurnInput = {
         cwd,
         message: input.message,
         ...(input.attachments?.length ? { attachments: input.attachments } : {}),

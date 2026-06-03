@@ -161,6 +161,16 @@ absorbs the new shape.
   intermediate state where the client calls `/_chat` while the server serves
   `/_turn`. Atomicity beats per-package commits here.
 
+### Follow-up — `agent-turn` → `turn` contract
+
+- The turn-driver contract predated the first-class `Turn` entity and still wore
+  the "agent-turn" name. Renamed `agent-turn.ts`→`turn.ts`; types
+  `AgentTurnInput`/`AgentTurnConfig`/`AgentTurnResult`→`TurnInput`/`TurnConfig`/
+  `TurnResult`; impl `runAgentTurn`→`runTurn`; `ToolContext.agentTurnId`→`turnId`.
+  Kept `RunTurnFn`/`RunnerKind`/`RunnerPrefs`/`ToolContext`/`TurnAttachment`.
+  Out of scope: openclaw's separate `openclaw-agent-turn.ts` (`runEmbeddedTurn`)
+  and the desktop builder's `finishAgentTurn()` UI helper.
+
 ## Out of scope
 
 - Cross-app referential integrity and the `run_summary` best-effort

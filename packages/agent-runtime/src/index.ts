@@ -12,12 +12,12 @@
  *
  * Where this package fits in the bigger picture:
  *
- *   - `runAgentTurn` is the mode-agnostic engine primitive. The builder
+ *   - `runTurn` is the mode-agnostic engine primitive. The builder
  *     (`@centraid/agent-harness`) calls it directly with its own cwd /
  *     preamble / resume plumbing.
  *
  *   - `makeConversationRunner` is the chat-side adapter (see ./conversation-adapter.ts)
- *     that wraps `runAgentTurn` into a `ConversationRunner` the gateway's
+ *     that wraps `runTurn` into a `ConversationRunner` the gateway's
  *     `/_turn` route can inject. It's one of two `ConversationRunner`
  *     implementations in the repo — the other lives in
  *     `@centraid/openclaw-plugin` and drives an in-process openclaw
@@ -38,7 +38,7 @@ export {
 // The shared per-turn chat spine (`makeConversationRunnerCore`) lives in
 // `@centraid/conversation-engine` (the backend-agnostic run engine), next to
 // the automation fire spine. `makeConversationRunner` (above) is this backend's thin
-// config over it, injecting `runAgentTurn` as the `RunTurnFn`; the gateway's
+// config over it, injecting `runTurn` as the `RunTurnFn`; the gateway's
 // `makeUnifiedConversationRunner` imports the core from conversation-engine directly.
 
 // Builder agent sessions still want the `centraid` CLI on PATH for the
@@ -48,10 +48,10 @@ export { defaultCentraidCliDir } from './centraid-cli-dir.js';
 export type { RunnerKind, RunnerPrefs } from './types.js';
 
 export {
-  runAgentTurn,
-  type AgentTurnInput,
-  type AgentTurnConfig,
-  type AgentTurnResult,
+  runTurn,
+  type TurnInput,
+  type TurnConfig,
+  type TurnResult,
   type ToolContext,
 } from './runtime.js';
 

@@ -43,7 +43,7 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { enumerateHostTools, defaultCentraidCliDir, runAgentTurn } from '@centraid/agent-runtime';
+import { enumerateHostTools, defaultCentraidCliDir, runTurn } from '@centraid/agent-runtime';
 import {
   type ConversationRunner,
   type TurnStreamEvent,
@@ -86,7 +86,7 @@ export interface UnifiedConversationRunnerOptions {
    *  `desktop-<appId>` so the renderer Code tab, the local builder, and
    *  gateway chat all edit ONE draft. Also overridable for tests. */
   sessionIdFor?: (appId: string) => string;
-  /** Turn driver — defaults to `runAgentTurn`; injected in tests. */
+  /** Turn driver — defaults to `runTurn`; injected in tests. */
   runTurn?: RunTurnFn;
   /** Host-tool enumerator for the grounding block — defaults to
    *  `enumerateHostTools`; injected in tests to stay hermetic. */
@@ -163,9 +163,9 @@ export function makeUnifiedConversationRunner(
     // worktree, so they persist as `kind: 'build'` in the run ledger. The
     // data-only `makeConversationRunner` leaves this unset (records as `'chat'`).
     runKind: 'build',
-    // The model turn driver — the local codex/claude `runAgentTurn` unless a
+    // The model turn driver — the local codex/claude `runTurn` unless a
     // test injects a stub.
-    runTurn: opts.runTurn ?? runAgentTurn,
+    runTurn: opts.runTurn ?? runTurn,
 
     // cwd IS the draft session worktree, so the agent's centraid_* tools
     // operate the draft's branched data.sqlite, not live (issue #144).

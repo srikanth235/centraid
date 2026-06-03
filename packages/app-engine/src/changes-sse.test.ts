@@ -32,7 +32,7 @@ type ChangeEvt = {
   tables: string[];
   source?: string;
   toolCallId?: string;
-  agentTurnId?: string;
+  turnId?: string;
 };
 
 async function readChangeEvents(
@@ -152,7 +152,7 @@ test('SSE: requires the bearer token (gated by the surrounding http-server)', as
   assert.equal(res.status, 401);
 });
 
-test('SSE: agent-sourced events carry source, toolCallId, and agentTurnId', async () => {
+test('SSE: agent-sourced events carry source, toolCallId, and turnId', async () => {
   const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
@@ -165,7 +165,7 @@ test('SSE: agent-sourced events carry source, toolCallId, and agentTurnId', asyn
       ts: 5,
       source: 'agent',
       toolCallId: 'call-abc',
-      agentTurnId: 'turn-xyz',
+      turnId: 'turn-xyz',
     });
   }, 50);
 
@@ -173,10 +173,10 @@ test('SSE: agent-sourced events carry source, toolCallId, and agentTurnId', asyn
   assert.equal(events.length, 1);
   assert.equal(events[0]!.source, 'agent');
   assert.equal(events[0]!.toolCallId, 'call-abc');
-  assert.equal(events[0]!.agentTurnId, 'turn-xyz');
+  assert.equal(events[0]!.turnId, 'turn-xyz');
 });
 
-test('SSE: handler-sourced events carry source but omit toolCallId/agentTurnId', async () => {
+test('SSE: handler-sourced events carry source but omit toolCallId/turnId', async () => {
   const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
@@ -195,5 +195,5 @@ test('SSE: handler-sourced events carry source but omit toolCallId/agentTurnId',
   assert.equal(events.length, 1);
   assert.equal(events[0]!.source, 'handler');
   assert.equal(events[0]!.toolCallId, undefined);
-  assert.equal(events[0]!.agentTurnId, undefined);
+  assert.equal(events[0]!.turnId, undefined);
 });

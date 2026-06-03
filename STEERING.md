@@ -399,3 +399,5 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-cdbbe46e618-1780509057-1 | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | correction | classifier | Questions leftover chat-history/chat-routes naming after settling on conversation |  |
 | steer-cdbbe46e618-1780509057-2 | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | correction | classifier | Rejects 'keep chat naming' take; insists chat and automation are all conversation |  |
 | steer-cdbbe46e618-1780510890-1 | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | correction | classifier | Rejected keeping 'chat' terminology; everything should be unified as conversation |  |
+| steer-cdbbe46e618-1780512101-1 | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | correction | classifier | Rejected one-conversation-per-automation design as poor; wants executions separated |  |
+| steer-cdbbe46e618-1780512101-2 | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | correction | classifier | Corrected agent's false assumption that PR #190 had merged |  |

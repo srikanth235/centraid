@@ -13,25 +13,25 @@
  * next turn via `prevSessionId` to resume the conversation.
  */
 
-import type { AgentTurnConfig, AgentTurnInput, AgentTurnResult } from '@centraid/app-engine';
+import type { TurnConfig, TurnInput, TurnResult } from '@centraid/app-engine';
 import { runCodexAppServerTurn } from './codex-app-server.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 
-// The agent-turn contract (`ToolContext`, `AgentTurnInput/Config/Result`)
+// The turn-driver contract (`ToolContext`, `TurnInput/Config/Result`)
 // now lives in `@centraid/app-engine` so the backend-agnostic run engine can
 // speak it. Re-exported here so this package's modules + back-compat
 // consumers keep importing them from `@centraid/agent-runtime`.
 export type {
   ToolContext,
-  AgentTurnInput,
-  AgentTurnConfig,
-  AgentTurnResult,
+  TurnInput,
+  TurnConfig,
+  TurnResult,
 } from '@centraid/app-engine';
 
-export async function runAgentTurn(
-  input: AgentTurnInput,
-  config: AgentTurnConfig,
-): Promise<AgentTurnResult> {
+export async function runTurn(
+  input: TurnInput,
+  config: TurnConfig,
+): Promise<TurnResult> {
   const { prefs } = config;
 
   if (prefs.kind === 'codex') {

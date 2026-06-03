@@ -4,7 +4,7 @@
  * agent's shell tool can invoke `centraid preview snapshot` by bare name.
  *
  * Chat-side agents no longer need this — they use the inline
- * `centraid_sql_*` tools registered by `runAgentTurn`.
+ * `centraid_sql_*` tools registered by `runTurn`.
  */
 
 import path from 'node:path';

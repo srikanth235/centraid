@@ -283,7 +283,7 @@ export class Runtime {
    */
   agentEmitForApp(
     appId: string,
-  ): (payload: { tables: string[]; toolCallId?: string; agentTurnId?: string }) => void {
+  ): (payload: { tables: string[]; toolCallId?: string; turnId?: string }) => void {
     return (payload) => {
       if (payload.tables.length === 0) return;
       this.changeBus.emit({
@@ -292,7 +292,7 @@ export class Runtime {
         ts: Date.now(),
         source: 'agent',
         ...(payload.toolCallId ? { toolCallId: payload.toolCallId } : {}),
-        ...(payload.agentTurnId ? { agentTurnId: payload.agentTurnId } : {}),
+        ...(payload.turnId ? { turnId: payload.turnId } : {}),
       });
     };
   }

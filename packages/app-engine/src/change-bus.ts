@@ -52,7 +52,7 @@ export interface AppChange {
    * to group all writes from one turn — handy for "assistant updated 3
    * rows" style summaries.
    */
-  agentTurnId?: string;
+  turnId?: string;
 }
 
 export type ChangeListener = (change: AppChange) => void;

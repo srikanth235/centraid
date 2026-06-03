@@ -56,7 +56,7 @@ export async function handleAppChanges(
       source: change.source,
     };
     if (change.toolCallId) payload.toolCallId = change.toolCallId;
-    if (change.agentTurnId) payload.agentTurnId = change.agentTurnId;
+    if (change.turnId) payload.turnId = change.turnId;
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   });
 

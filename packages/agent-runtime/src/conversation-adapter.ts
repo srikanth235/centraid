@@ -22,7 +22,7 @@
 
 import type { ConversationRunner, Dispatcher } from '@centraid/app-engine';
 import { makeConversationRunnerCore } from '@centraid/conversation-engine';
-import { runAgentTurn } from './runtime.js';
+import { runTurn } from './runtime.js';
 import type { RunnerPrefs } from './types.js';
 
 export interface MakeConversationRunnerOptions {
@@ -44,7 +44,7 @@ export function makeConversationRunner(opts: MakeConversationRunnerOptions): Con
     prefsLoader: opts.prefsLoader,
     getDispatcher: opts.getDispatcher,
     // The local codex/claude turn driver.
-    runTurn: runAgentTurn,
+    runTurn: runTurn,
     // Data chat runs in the app's data dir; the route preamble is passed
     // through unchanged (no authoring grounding) and there's no post-turn
     // side effect, so those seams are left at their defaults.

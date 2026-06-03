@@ -17,7 +17,7 @@
  * Backend-agnostic by construction: the model turn (`runTurn`), execution
  * (`openDispatch`), and scheduling (`fire`) are injected callbacks, so this
  * package depends on `@centraid/app-engine` (the per-app engine, the shared
- * agent-run ledger, and the agent-turn contract) but never on any agent
+ * agent-run ledger, and the turn-driver contract) but never on any agent
  * backend. `agent-runtime` provides the local codex/claude backend;
  * `openclaw-plugin` the cloud host; `gateway` wires them.
  */
@@ -159,7 +159,7 @@ export {
 } from './automation/persistent-mock-session.js';
 // Chat-runner core — the per-turn chat spine, sibling to the automation fire
 // spine in this backend-agnostic engine. The model turn is injected as a
-// `RunTurnFn`; agent-runtime passes its codex/claude `runAgentTurn`, the
+// `RunTurnFn`; agent-runtime passes its codex/claude `runTurn`, the
 // gateway's `makeUnifiedConversationRunner` configures it for builder chat.
 export {
   makeConversationRunnerCore,

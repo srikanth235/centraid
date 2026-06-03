@@ -20,7 +20,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { WorktreeStore } from './worktree-store/index.js';
 import type { Dispatcher, ConversationTurnInput, TurnStreamEvent } from '@centraid/app-engine';
-import type { AgentTurnInput, AgentTurnConfig, AgentTurnResult } from '@centraid/agent-runtime';
+import type { TurnInput, TurnConfig, TurnResult } from '@centraid/agent-runtime';
 import { makeUnifiedConversationRunner } from './unified-conversation-runner.ts';
 
 let root: string;
@@ -56,7 +56,7 @@ afterEach(async () => {
 });
 
 test('runs the turn in the draft worktree with the union of tools + builder prompt', async () => {
-  let captured: { input: AgentTurnInput; config: AgentTurnConfig } | undefined;
+  let captured: { input: TurnInput; config: TurnConfig } | undefined;
   const events: TurnStreamEvent[] = [];
 
   const runner = makeUnifiedConversationRunner({
@@ -65,7 +65,7 @@ test('runs the turn in the draft worktree with the union of tools + builder prom
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
     enumerateTools: async () => [],
-    runTurn: async (input, config): Promise<AgentTurnResult> => {
+    runTurn: async (input, config): Promise<TurnResult> => {
       captured = { input, config };
       input.onEvent({ type: 'assistant.delta', delta: 'ok' });
       input.onEvent({ type: 'final', text: 'done' });
@@ -112,7 +112,7 @@ test('mints a pending webhook authored during the turn and surfaces it once', as
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
     enumerateTools: async () => [],
-    runTurn: async (input): Promise<AgentTurnResult> => {
+    runTurn: async (input): Promise<TurnResult> => {
       // The agent authors an automation with a PENDING webhook trigger —
       // it can't mint crypto-random credentials itself.
       const autoDir = path.join(input.cwd, 'automations', 'notify');
@@ -179,7 +179,7 @@ test('errors when no coding agent is configured', async () => {
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
     enumerateTools: async () => [],
-    runTurn: async (): Promise<AgentTurnResult> => {
+    runTurn: async (): Promise<TurnResult> => {
       throw new Error('should not be called');
     },
   });
