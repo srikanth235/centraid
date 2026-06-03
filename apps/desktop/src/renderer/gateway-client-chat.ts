@@ -34,9 +34,14 @@ import type { CentraidRunnerStatus } from './centraid-api.js';
  * `GET /centraid/_chat/runner-status` — so a remote OpenClaw gateway reports
  * `{ kind: 'openclaw', models: [...] }` and the chat picker can list them.
  */
-export async function getRunnerStatus(): Promise<CentraidRunnerStatus> {
+export async function getRunnerStatus(
+  opts: { refresh?: boolean } = {},
+): Promise<CentraidRunnerStatus> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_chat/runner-status', {
+  const path = opts.refresh
+    ? '/centraid/_chat/runner-status?refresh=1'
+    : '/centraid/_chat/runner-status';
+  const res = await doFetch(baseUrl, path, {
     method: 'GET',
     headers: authHeaders(token),
   });

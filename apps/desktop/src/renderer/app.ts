@@ -5725,21 +5725,32 @@ import {
       ) as HTMLOptionElement;
       chatModelSelect.append(seed);
     }
-    async function loadChatModels(): Promise<void> {
+    // Tier → display header for the grouped picker (matches the claude-code
+    // tier labels). Order is most-capable first.
+    const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
+    const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
+      smart: 'Most capable',
+      balanced: 'Balanced',
+      fast: 'Fastest',
+    };
+
+    type PickerModel = { id: string; label: string; tier?: 'smart' | 'balanced' | 'fast' };
+
+    async function loadChatModels(opts: { refresh?: boolean } = {}): Promise<void> {
       // Models come from the ACTIVE gateway's runner-status:
-      //   - OpenClaw enumerates its configured models (`status.models`,
-      //     from `openclaw models list --json`).
-      //   - The codex runner with a custom OpenAI-compatible endpoint
-      //     surfaces that endpoint's `/models` catalog (`status.provider.models`).
-      //   - Built-in codex / claude-code have no enumerable list — the
-      //     dropdown then just offers "Gateway default" + any persisted choice.
-      let models: Array<{ id: string; label: string }> = [];
+      //   - OpenClaw enumerates its configured models and classifies each into
+      //     a capability tier (`status.models[].tier`) — grouped below.
+      //   - claude-code offers capability tiers directly (no per-model tier).
+      //   - A codex custom OpenAI endpoint surfaces its `/models` catalog.
+      //   - Otherwise the dropdown is just "Gateway default" + persisted choice.
+      let models: PickerModel[] = [];
       try {
-        const status = await getGatewayRunnerStatus();
+        const status = await getGatewayRunnerStatus(opts);
         if (status.models?.length) {
           models = status.models.map((m) => ({
             id: m.id,
             label: (m.name ?? m.id) + (m.default ? ' · default' : ''),
+            ...(m.tier ? { tier: m.tier } : {}),
           }));
         } else if (status.provider?.ok && status.provider.models?.length) {
           models = status.provider.models.map((id) => ({ id, label: id }));
@@ -5758,10 +5769,24 @@ import {
           el('option', { value: chatModelInitial, selected: '' }, chatModelInitial),
         );
       }
-      for (const m of models) {
+      const mkOption = (m: PickerModel): HTMLOptionElement => {
         const opt = el('option', { value: m.id }, m.label) as HTMLOptionElement;
         if (m.id === chatModelInitial) opt.selected = true;
-        chatModelSelect.append(opt);
+        return opt;
+      };
+      // Group by tier when classified (OpenClaw); otherwise render flat.
+      if (models.some((m) => m.tier)) {
+        for (const tier of TIER_ORDER) {
+          const inTier = models.filter((m) => m.tier === tier);
+          if (!inTier.length) continue;
+          chatModelSelect.append(el('optgroup', { label: TIER_LABEL[tier] }, inTier.map(mkOption)));
+        }
+        const untiered = models.filter((m) => !m.tier);
+        if (untiered.length) {
+          chatModelSelect.append(el('optgroup', { label: 'Other' }, untiered.map(mkOption)));
+        }
+      } else {
+        for (const m of models) chatModelSelect.append(mkOption(m));
       }
     }
     void loadChatModels();
@@ -5770,9 +5795,9 @@ import {
       void window.CentraidApi.saveSettings({ chatModel: chatModelSelect.value || undefined });
     });
 
-    // Refresh button — re-probes the active gateway's provider endpoint.
-    // Useful after configuring an inference endpoint (or starting a local
-    // model server) so the list updates without restarting the desktop app.
+    // Refresh button — forces the gateway to re-probe and re-classify its
+    // models (OpenClaw re-runs the tier classifier; a codex custom endpoint
+    // re-probes `/models`), so the list updates without restarting the app.
     const refreshModelsBtn = el('button', {
       class: 'btn btn-soft app-chat-models-refresh',
       type: 'button',
@@ -5781,7 +5806,7 @@ import {
       onClick: async () => {
         refreshModelsBtn.setAttribute('disabled', '');
         try {
-          await loadChatModels();
+          await loadChatModels({ refresh: true });
           showToast('Model list refreshed');
         } finally {
           refreshModelsBtn.removeAttribute('disabled');

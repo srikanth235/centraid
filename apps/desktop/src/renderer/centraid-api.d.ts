@@ -693,6 +693,8 @@ export interface CentraidRunnerModel {
   id: string;
   name?: string;
   default?: boolean;
+  /** Capability tier for grouping concrete models in the picker. */
+  tier?: 'smart' | 'balanced' | 'fast';
 }
 
 /** Preflight snapshot returned by `getRunnerStatus`. */

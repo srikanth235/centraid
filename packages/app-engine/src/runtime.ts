@@ -92,7 +92,7 @@ export interface RuntimeOptions {
    * each adapter's readiness so the chat panel can show a Setup screen
    * instead of failing per-turn when the CLI is missing or unauthenticated.
    */
-  runnerStatus?: () => Promise<RunnerStatus>;
+  runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   /**
    * Optional code-dir resolver (issue #137). When provided, the runtime
    * serves handlers + static files from whatever dir this returns for an
@@ -143,6 +143,9 @@ export interface ProviderStatus {
   reason?: string;
 }
 
+/** Provider-agnostic capability tier a model is classified into. */
+export type ModelTier = 'smart' | 'balanced' | 'fast';
+
 /**
  * One model a runtime can serve, as surfaced by a runtime that can
  * enumerate its catalog (e.g. OpenClaw via `openclaw models list`). The
@@ -155,6 +158,18 @@ export interface RunnerModel {
   name?: string;
   /** `true` for the runtime's default / configured model. */
   default?: boolean;
+  /**
+   * Capability tier the model was classified into, used by the picker to
+   * group concrete models (smart / balanced / fast). Absent when the runtime
+   * hasn't classified its catalog yet.
+   */
+  tier?: ModelTier;
+}
+
+/** Options for the runner-status reporter (e.g. force a model reclassify). */
+export interface RunnerStatusOptions {
+  /** Force a fresh model-tier classification rather than serving the cache. */
+  refresh?: boolean;
 }
 
 /**
@@ -246,7 +261,7 @@ export class Runtime {
   /** Optional app-metadata reader for chat extra-system-prompt. */
   readonly appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /** Optional runner-status preflight. */
-  readonly runnerStatus?: () => Promise<RunnerStatus>;
+  readonly runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   private readonly appsDir: string;
   private readonly logger: RuntimeLogger;
   private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
@@ -602,7 +617,7 @@ export class Runtime {
             sendJson(res, 200, { kind: 'none', ok: false, reason: 'no runner configured' });
             return;
           }
-          const status = await this.runnerStatus();
+          const status = await this.runnerStatus({ refresh: route.refresh });
           sendJson(res, 200, status);
           return;
         }

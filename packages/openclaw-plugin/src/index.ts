@@ -41,7 +41,7 @@ import { buildGateway, type BuiltGateway } from '@centraid/gateway';
 import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
 import { runOpenclawFire } from './lib/openclaw-fire.js';
-import { listOpenClawModels } from './lib/openclaw-models.js';
+import { resolveOpenClawModels } from './lib/openclaw-models.js';
 
 // Re-export the public handler & payload types from app-engine so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -122,11 +122,14 @@ export default definePluginEntry({
       // codex/claude CLI puppet.
       chatRunner: makeOpenClawChatRunner(api),
       // OpenClaw chat runs in-process regardless of any local CLI, so report
-      // ready rather than running a codex/claude preflight. The model list is
-      // enumerated from `openclaw models list --json` (best-effort) so the
-      // desktop chat picker can offer OpenClaw's configured models.
-      runnerStatus: async () => {
-        const models = await listOpenClawModels();
+      // ready rather than running a codex/claude preflight. Models are
+      // enumerated from `openclaw models list --json` and classified into
+      // capability tiers (cached on disk; `refresh` forces a reclassify).
+      runnerStatus: async (statusOpts?: { refresh?: boolean }) => {
+        const models = await resolveOpenClawModels({
+          cachePath: path.join(resolveStateDir(process.env), 'centraid', 'model-tiers.json'),
+          refresh: statusOpts?.refresh,
+        });
         return { kind: 'openclaw' as const, ok: true, ...(models.length ? { models } : {}) };
       },
       // Plane B (in-process): both scheduled (cron) and manual (run-now) fires
