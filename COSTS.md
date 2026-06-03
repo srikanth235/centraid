@@ -610,3 +610,7 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-d26e07cb-194-1780477060 | claude-code | d26e07cb-1945-43d8-a061-b4bcb79597cc | #180 | claude-opus-4-7 | 5 | 11397 | 14871 | 24 | 11426 | 0.0793 | refactor(desktop): drop dead gateway/runtime defaults from settings fallback (#1 |
 | claude-code-403520f0-2bc-1780481206 | claude-code | 403520f0-2bce-4667-8485-2044f3e7758f | #181 | claude-opus-4-7 | 5 | 12940 | 14871 | 150 | 13095 | 0.0921 | feat(app-engine): persist builder chat runs as kind='build' (#181) -m Builder ch |
 | claude-code-403520f0-2bc-1780482041 | claude-code | 403520f0-2bce-4667-8485-2044f3e7758f | #185 | claude-opus-4-7 | 0 | 0 | 0 | 0 | 0 | 0.0000 | fix: repair red main — format app.ts + unlink deleted auth-import.ts (#185) -m m |
+| claude-code-5a137b32-0a1-1780483162 | claude-code | 5a137b32-0a17-4bff-810e-89b4261ada7a | #186 | claude-opus-4-8 | 30314 | 555746 | 21616933 | 182796 | 768856 | 19.0033 |  |
+| claude-code-5a137b32-0a1-1780483456 | claude-code | 5a137b32-0a17-4bff-810e-89b4261ada7a | #186 | claude-opus-4-8 | 439 | 49505 | 4167535 | 50436 | 100380 | 3.6563 |  |
+| claude-code-34dee7fc-5fd-1780483672 | claude-code | 34dee7fc-5fd5-47ca-912f-158dd8949b4e | #186 | claude-opus-4-7 | 5 | 10944 | 14871 | 24 | 10973 | 0.0765 |  |
+| claude-code-5a137b32-0a1-1780483750 | claude-code | 5a137b32-0a17-4bff-810e-89b4261ada7a | #186 | claude-opus-4-8 | 826 | 562197 | 4254466 | 49505 | 612528 | 6.8827 |  |

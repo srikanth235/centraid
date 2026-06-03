@@ -393,3 +393,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-cb2bd1cbd17-1780473964-4 | cb2bd1cb-d171-4570-8a47-f691d7d61a48 | #178 | interrupt | structural |  | feat(agent-runtime): enumerate chat models per runtime (#178) -m The chat model… |
 | steer-cb2bd1cbd17-1780473964-5 | cb2bd1cb-d171-4570-8a47-f691d7d61a48 | #178 | correction | classifier | pushed back that live list includes models not shown in claude code | feat(agent-runtime): enumerate chat models per runtime (#178) -m The chat model… |
 | steer-cb2bd1cbd17-1780473964-6 | cb2bd1cb-d171-4570-8a47-f691d7d61a48 | #178 | correction | classifier | abandoned live-fetch approach, asked to hardcode like openclaw | feat(agent-runtime): enumerate chat models per runtime (#178) -m The chat model… |
+| steer-5a137b320a1-1780483672-1 | 5a137b32-0a17-4bff-810e-89b4261ada7a | #186 | interrupt | structural |  |  |
