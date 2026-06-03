@@ -146,6 +146,11 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
     ...(typeof raw.remoteTemplatesUrl === 'string'
       ? { remoteTemplatesUrl: raw.remoteTemplatesUrl }
       : {}),
+    // A legacy global `chatModel` string (pre-#188) is intentionally NOT
+    // migrated into `chatModelByRunner`: Centraid is v0/pre-release with no
+    // on-disk-shape compatibility guarantees, and a stale global id can't be
+    // safely attributed to a specific runner anyway. It's dropped; the picker
+    // falls back to each runner's gateway default until the user re-picks.
     ...sanitizeModelMap(raw.chatModelByRunner),
     ...(typeof raw.onboardingCompletedAt === 'string'
       ? { onboardingCompletedAt: raw.onboardingCompletedAt }

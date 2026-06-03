@@ -77,7 +77,12 @@ import {
     // always scoped to its agent and can never carry across an agent switch.
     // `amModels` holds the catalog for the *active* runner only (that's all
     // runner-status reports), so stale detection applies to the active runner.
-    type RunnerKey = 'codex' | 'claude-code';
+    // `openclaw` is a non-switchable runner (a remote OpenClaw gateway drives
+    // it; you can't flip to codex/claude from here) — it's shown read-only.
+    type RunnerKey = 'codex' | 'claude-code' | 'openclaw';
+    type SwitchableKind = 'codex' | 'claude-code';
+    const isSwitchable = (k: RunnerKey): k is SwitchableKind =>
+      k === 'codex' || k === 'claude-code';
     type AmAgents = Awaited<ReturnType<typeof getAgentsStatus>>;
     type AmModel = NonNullable<Awaited<ReturnType<typeof getRunnerStatus>>['models']>[number];
     let amOpen = false;
@@ -394,9 +399,18 @@ import {
     const AM_ACCENT: Record<RunnerKey, string> = {
       codex: '#10b981',
       'claude-code': '#a855f7',
+      openclaw: '#4950f6',
     };
-    const AM_TITLE: Record<RunnerKey, string> = { codex: 'Codex', 'claude-code': 'Claude Code' };
-    const AM_BIN: Record<RunnerKey, string> = { codex: 'codex', 'claude-code': 'claude' };
+    const AM_TITLE: Record<RunnerKey, string> = {
+      codex: 'Codex',
+      'claude-code': 'Claude Code',
+      openclaw: 'OpenClaw',
+    };
+    const AM_BIN: Record<RunnerKey, string> = {
+      codex: 'codex',
+      'claude-code': 'claude',
+      openclaw: 'openclaw',
+    };
     const AM_TIERS: Array<[NonNullable<AmModel['tier']>, string]> = [
       ['smart', 'Most capable'],
       ['balanced', 'Balanced'],
@@ -466,7 +480,24 @@ import {
       );
     }
 
-    function amAgentCard(kind: RunnerKey): HTMLElement {
+    // Read-only card for a non-switchable active runner (a remote OpenClaw
+    // gateway): show it as the agent without offering codex/claude switches.
+    function amAgentSoloCard(): HTMLElement {
+      const card = el('div', { class: 'app-chat-am-agentcard', 'aria-pressed': 'true' }, [
+        el('span', { class: 'app-chat-am-ac-top' }, [
+          el('span', {
+            class: 'app-chat-am-dot',
+            style: { background: AM_ACCENT[amActiveRunner] },
+          }),
+          el('span', { class: 'app-chat-am-ac-name' }, AM_TITLE[amActiveRunner]),
+        ]),
+        el('span', { class: 'app-chat-am-ac-meta' }, 'active runner'),
+      ]);
+      card.style.setProperty('--am-accent', AM_ACCENT[amActiveRunner]);
+      return card;
+    }
+
+    function amAgentCard(kind: SwitchableKind): HTMLElement {
       const active = kind === amActiveRunner;
       const available = amAgentAvailable(kind);
       const version = amAgentVersion(kind);
@@ -534,10 +565,12 @@ import {
       const sel = amSelection();
       const children: Array<HTMLElement | false> = [
         el('div', { class: 'app-chat-am-seclabel' }, 'Agent'),
-        el('div', { class: 'app-chat-am-agentgrid' }, [
-          amAgentCard('codex'),
-          amAgentCard('claude-code'),
-        ]),
+        isSwitchable(amActiveRunner)
+          ? el('div', { class: 'app-chat-am-agentgrid' }, [
+              amAgentCard('codex'),
+              amAgentCard('claude-code'),
+            ])
+          : amAgentSoloCard(),
         el('div', { class: 'app-chat-am-divider' }),
         el('div', { class: 'app-chat-am-modelhead' }, [
           el('span', { class: 'app-chat-am-modelfor' }, `Models for ${AM_TITLE[amActiveRunner]}`),
@@ -646,9 +679,13 @@ import {
         getRunnerStatus(opts).catch(() => null),
         window.CentraidApi.getSettings().catch(() => null),
       ]);
+      // Trust the gateway's reported runner kind (incl. `openclaw`) so a remote
+      // OpenClaw gateway isn't mislabelled as codex and its model isn't saved
+      // under a fake key. Fall back to the local agent pref only when the
+      // gateway didn't report a usable kind.
       const statusKind = status?.kind;
       amActiveRunner =
-        statusKind === 'claude-code' || statusKind === 'codex'
+        statusKind === 'claude-code' || statusKind === 'codex' || statusKind === 'openclaw'
           ? statusKind
           : prefs['agent.runner.kind'] === 'claude-code'
             ? 'claude-code'
@@ -661,7 +698,7 @@ import {
       renderAmPop();
     }
 
-    async function amSwitchAgent(kind: RunnerKey): Promise<void> {
+    async function amSwitchAgent(kind: SwitchableKind): Promise<void> {
       if (kind === amActiveRunner || amSwitching || !amAgentAvailable(kind)) return;
       amSwitching = true;
       renderAmPop();
@@ -1435,7 +1472,16 @@ import {
      * gateway pick its default.
      */
     async function resolveChatModelForActiveRunner(): Promise<string | undefined> {
-      if (amLoaded) return amSelByRunner[amActiveRunner];
+      if (amLoaded) {
+        const saved = amSelByRunner[amActiveRunner];
+        if (!saved) return undefined;
+        // Don't send a model the active runner no longer offers — that's the
+        // "unavailable · won't be sent" state the pill shows. Only suppress
+        // when we actually have a catalog to check against; if enumeration
+        // failed (empty list) send it anyway rather than silently dropping it.
+        if (amModels.length && !amModels.some((m) => m.id === saved)) return undefined;
+        return saved;
+      }
       const [settings, prefs] = await Promise.all([
         window.CentraidApi.getSettings(),
         getUserPrefs().catch(() => ({}) as Record<string, unknown>),

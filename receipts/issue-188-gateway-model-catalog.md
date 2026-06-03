@@ -24,6 +24,9 @@ Refresh button.
 - [x] Rethink — per-agent default-model picker in Settings → Agents
 - [x] Rethink — fix native select text color in dark theme (global reset omitted select)
 - [x] Rethink — redesign the active-agent control as a segmented switch (Settings → Agents)
+- [x] Review P1 — handle the openclaw runner in the composer pill (no fake codex key / misleading UI)
+- [x] Review P2 — don't send a stale model the active runner no longer offers
+- [x] Review P3 — document that a legacy global chatModel is intentionally not migrated
 
 ## What changed
 
@@ -48,6 +51,10 @@ Refresh button.
 - **Rethink — fix native select text color in dark theme (global reset omitted select).** The model `<select>` rendered with dark, near-invisible text on dark-theme cards: the global control reset was `input, textarea { color: inherit }` and never included `select`, so native selects fell back to the OS text color. Added `select` to the reset (so the closed value inherits `--ink`) and styled `.input option` with `--bg-elev` / `--ink` so the open dropdown is readable too. Fixes every native select in the app, not just the model picker.
 
 - **Rethink — redesign the active-agent control as a segmented switch (Settings → Agents).** The old activation affordance was weak — you clicked a whole agent card to make it active, which both read poorly and risked fighting the model select inside it. Replaced it with a dedicated segmented “Active agent” switch at the top of the page: a pill slides under the active segment, tinted with that agent's accent (codex green / claude purple), with unavailable agents dimmed and non-interactive. The switch is built once and updated in place so the pill animates (`translateX`) rather than jumping; the cards below are now pure status + per-agent model picker (no click-to-activate), and the active card keeps its accent border + “Active” badge. Verified live in the running app (both positions).
+
+- **Review P1 — handle the openclaw runner in the composer pill (no fake codex key / misleading UI).** `amLoad` forced any non-codex/claude kind to `codex`, so a remote OpenClaw gateway (`runner-status.kind: 'openclaw'`) rendered Codex/Claude UI and saved its model under a `codex` key. The pill now trusts the gateway's reported kind (incl. `openclaw`), keys `chatModelByRunner` by the real kind, and — since OpenClaw isn't switchable from the desktop — renders a read-only "OpenClaw · active runner" card instead of the codex/claude switch grid (`isSwitchable` guard; `amAgentSoloCard`).
+- **Review P2 — don't send a stale model the active runner no longer offers.** `resolveChatModelForActiveRunner` returned the saved id unconditionally, so a model the pill flagged "unavailable · won't be sent" was still sent on submit. It now suppresses the saved id (→ gateway default) when the live catalog is known and doesn't contain it; if enumeration failed (empty catalog) it sends the saved id rather than silently dropping it.
+- **Review P3 — document that a legacy global chatModel is intentionally not migrated.** Added a comment in `settings.ts` `narrow()`: the pre-#188 global `chatModel` string is deliberately dropped (Centraid is v0/pre-release with no on-disk-shape compatibility, and a stale global id can't be safely attributed to a runner); the picker falls back to each runner's gateway default until re-picked.
 
 ## Out of scope
 
