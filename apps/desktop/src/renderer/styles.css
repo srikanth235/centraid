@@ -64,9 +64,17 @@ button {
   cursor: pointer;
 }
 input,
+select,
 textarea {
   font: inherit;
   color: inherit;
+}
+/* Native dropdown list (open state) — inherit the theme so options stay
+   readable in dark mode instead of falling back to the OS default. */
+.input option,
+select.input option {
+  background: var(--bg-elev);
+  color: var(--ink);
 }
 ::-webkit-scrollbar {
   width: 10px;

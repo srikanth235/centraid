@@ -22,6 +22,7 @@ Refresh button.
 - [x] Rethink — verify the pill in a running Electron app; fix popover clipping in the narrow chat panel
 - [x] Rethink — per-agent models in agents-status (each agent's catalog, not just the active runner)
 - [x] Rethink — per-agent default-model picker in Settings → Agents
+- [x] Rethink — fix native select text color in dark theme (global reset omitted select)
 
 ## What changed
 
@@ -42,6 +43,8 @@ Refresh button.
 - **Rethink — per-agent models in agents-status (each agent's catalog, not just the active runner).** `runner-status` only knows the active runner's models, so a per-agent picker needs every agent's catalog. Extended `GET /centraid/_agents/status` to return `codexModels` / `claudeModels` (cheap cached-or-defaults from the gateway catalog; `?refresh=1` enumerates each agent live, honoring the active runner's configured `binPath`/`extraArgs`). `agent-runtime` now exports `resolveRunnerModels` / `defaultModelsFor` / `enumerateRunnerModels`; `build-gateway` injects the resolver into `makeAgentsRouteHandler`. New `agents-routes.test.ts` (4 pass) covers resolver plumbing, refresh threading, and best-effort degradation.
 
 - **Rethink — per-agent default-model picker in Settings → Agents.** Each agent now renders as a card (clickable header to make it active + a status badge) with its **own** “Default model” select, populated from that agent's models in the agents-status snapshot and saved to `chatModelByRunner[kind]`. Both agents are configurable at once — you no longer switch the active agent just to set the other's model. A pinned id the agent no longer offers shows as “· unavailable”; an unavailable CLI disables its select. The earlier single active-tracking picker (and the redundant second Refresh button) were removed; one Refresh now re-probes availability and re-enumerates each agent live (`getAgentsStatus({ refresh: true })`). `CentraidAgentsStatus` gains `codexModels` / `claudeModels`.
+
+- **Rethink — fix native select text color in dark theme (global reset omitted select).** The model `<select>` rendered with dark, near-invisible text on dark-theme cards: the global control reset was `input, textarea { color: inherit }` and never included `select`, so native selects fell back to the OS text color. Added `select` to the reset (so the closed value inherits `--ink`) and styled `.input option` with `--bg-elev` / `--ink` so the open dropdown is readable too. Fixes every native select in the app, not just the model picker.
 
 ## Out of scope
 
