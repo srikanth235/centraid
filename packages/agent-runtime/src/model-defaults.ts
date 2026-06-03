@@ -24,10 +24,10 @@ export const DEFAULT_MODELS: Record<RunnerKind, RunnerModel[]> = {
     { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' }, // governance: allow-no-hardcoded-model-ids default picker seed, superseded by Refresh
     { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5' }, // governance: allow-no-hardcoded-model-ids default picker seed, superseded by Refresh
   ],
+  // Mirrors OpenClaw's FALLBACK_CODEX_MODELS (extensions/codex/provider-catalog.ts).
   codex: [
-    { id: 'gpt-5-codex', name: 'GPT-5 Codex', default: true }, // governance: allow-no-hardcoded-model-ids default picker seed, superseded by Refresh
-    { id: 'gpt-5.5', name: 'GPT-5.5' }, // governance: allow-no-hardcoded-model-ids default picker seed, superseded by Refresh
-    { id: 'o3', name: 'o3' }, // governance: allow-no-hardcoded-model-ids default picker seed, superseded by Refresh
+    { id: 'gpt-5.5', name: 'GPT-5.5', default: true }, // governance: allow-no-hardcoded-model-ids default picker seed, superseded by Refresh
+    { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini' }, // governance: allow-no-hardcoded-model-ids default picker seed, superseded by Refresh
   ],
 };
 
