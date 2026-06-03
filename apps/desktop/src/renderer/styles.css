@@ -4353,6 +4353,116 @@ select.input option {
   color: var(--ink-4);
 }
 
+/* Agent config panel — one surface, a row per agent (hairline-divided). The
+   active row wears its agent's accent as a left rail + a faint wash. */
+.agents-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.agent-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  transition: background 0.18s ease;
+}
+.agent-row + .agent-row {
+  border-top: 1px solid var(--line);
+}
+.agent-row[data-active='true'] {
+  background: color-mix(in oklab, var(--row-accent, var(--accent)) 7%, transparent);
+}
+.agent-row[data-active='true']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--row-accent, var(--accent));
+}
+.agent-row[data-unavail='true'] {
+  opacity: 0.55;
+}
+.agent-row-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--row-accent, var(--accent)) 16%, transparent);
+}
+.agent-row-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.agent-row-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agent-row-active {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--row-accent, var(--accent));
+}
+.agent-row-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agent-row-model {
+  flex: none;
+}
+/* Refined model picker — native select with the chrome stripped: custom
+   chevron, compact, right-aligned. Replaces the full-width default control. */
+.agent-model-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 180px;
+  max-width: 240px;
+  padding: 8px 32px 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background-color: var(--bg-sunken);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.agent-model-select:hover:not(:disabled) {
+  border-color: var(--ink-4);
+}
+.agent-model-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+.agent-model-select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* §C2 — Appearance live-preview tile. A 4-up grid of app tiles whose
    surfaces ride the live accent / tile-variant choices. */
 .ap-preview {

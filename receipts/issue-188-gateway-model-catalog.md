@@ -27,6 +27,7 @@ Refresh button.
 - [x] Review P1 — handle the openclaw runner in the composer pill (no fake codex key / misleading UI)
 - [x] Review P2 — don't send a stale model the active runner no longer offers
 - [x] Review P3 — document that a legacy global chatModel is intentionally not migrated
+- [x] Rethink — refine the Agents panel visuals (hairline rows + compact model dropdown)
 
 ## What changed
 
@@ -55,6 +56,8 @@ Refresh button.
 - **Review P1 — handle the openclaw runner in the composer pill (no fake codex key / misleading UI).** `amLoad` forced any non-codex/claude kind to `codex`, so a remote OpenClaw gateway (`runner-status.kind: 'openclaw'`) rendered Codex/Claude UI and saved its model under a `codex` key. The pill now trusts the gateway's reported kind (incl. `openclaw`), keys `chatModelByRunner` by the real kind, and — since OpenClaw isn't switchable from the desktop — renders a read-only "OpenClaw · active runner" card instead of the codex/claude switch grid (`isSwitchable` guard; `amAgentSoloCard`).
 - **Review P2 — don't send a stale model the active runner no longer offers.** `resolveChatModelForActiveRunner` returned the saved id unconditionally, so a model the pill flagged "unavailable · won't be sent" was still sent on submit. It now suppresses the saved id (→ gateway default) when the live catalog is known and doesn't contain it; if enumeration failed (empty catalog) it sends the saved id rather than silently dropping it.
 - **Review P3 — document that a legacy global chatModel is intentionally not migrated.** Added a comment in `settings.ts` `narrow()`: the pre-#188 global `chatModel` string is deliberately dropped (Centraid is v0/pre-release with no on-disk-shape compatibility, and a stale global id can't be safely attributed to a runner); the picker falls back to each runner's gateway default until re-picked.
+
+- **Rethink — refine the Agents panel visuals (hairline rows + compact model dropdown).** The two heavy bordered cards + full-width native selects read as generic grey boxes. Replaced with a single elevated panel of hairline-divided agent rows: accent dot (with a soft glow), agent name in the display font + a small accent “Active” tag, the version in mono, and a **compact right-aligned model dropdown** (native `<select>` with the chrome stripped — custom chevron, `--bg-sunken` fill, accent focus ring). The active row wears its agent's accent as a left rail + a faint wash that tracks the switch (green ↔ purple). Verified live in both states.
 
 ## Out of scope
 

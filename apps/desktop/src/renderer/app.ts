@@ -5822,9 +5822,7 @@ import {
 
     // The agent cards (status + per-agent model picker) live in their own host
     // so renderAuthStatus can rebuild them without recreating the switch above.
-    const agentCardsHost = el('div', {
-      style: { display: 'flex', flexDirection: 'column', gap: '8px' },
-    });
+    const agentCardsHost = el('div', { class: 'agents-panel' });
     authStatusHost.append(
       el(
         'div',
@@ -5844,9 +5842,9 @@ import {
         );
         return;
       }
-      // Each agent is a card: identity + detection status + its OWN default-model
-      // select (keyed per-runner, saved independently). Activation is the switch
-      // above — the card isn't clickable, so the select never fights a card tap.
+      // Each agent is a row in the panel: accent dot + name/version on the left,
+      // its OWN default-model picker on the right. Activation is the switch
+      // above — the row isn't clickable, so the select never fights a tap.
       const providerCard = (params: {
         kind: ActiveRunnerKind;
         title: string;
@@ -5857,57 +5855,14 @@ import {
         models: AgentModelOpt[];
       }): HTMLElement => {
         const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
-        const header = el(
-          'div',
-          {
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-            },
-          },
-          [
-            el('span', {
-              style: {
-                width: '8px',
-                height: '8px',
-                borderRadius: '999px',
-                background: dotColor,
-                flexShrink: '0',
-              },
-            }),
-            el(
-              'div',
-              {
-                style: {
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1px',
-                  flex: '1',
-                  minWidth: '0',
-                },
-              },
-              [
-                el('span', { style: { fontSize: '13px', fontWeight: '500' } }, params.title),
-                el(
-                  'span',
-                  { style: { fontSize: '11.5px', color: 'var(--ink-3)' } },
-                  params.subtitle,
-                ),
-              ],
-            ),
-            params.active
-              ? el('span', { class: 'provider-badge', 'data-tone': 'on' }, 'Active')
-              : !params.connected
-                ? el('span', { class: 'provider-badge', 'data-tone': 'off' }, 'Not found')
-                : false,
-          ],
-        );
 
         // Default-model select for THIS agent — populated from its own catalog
         // (agents-status), saved to chatModelByRunner[kind]. A pinned id the
         // agent no longer offers is kept visible, flagged "· unavailable".
-        const select = el('select', { class: 'input' }) as HTMLSelectElement;
+        const select = el('select', {
+          class: 'agent-model-select',
+          'aria-label': `Default model for ${params.title}`,
+        }) as HTMLSelectElement;
         const saved = agentModelByRunner[params.kind] ?? '';
         select.append(el('option', { value: '' }, 'Gateway default') as HTMLOptionElement);
         if (saved && !params.models.some((m) => m.id === saved)) {
@@ -5947,34 +5902,27 @@ import {
           void window.CentraidApi.saveSettings({ chatModelByRunner: { [params.kind]: v } });
         });
 
-        const modelRow = el(
-          'div',
-          { style: { display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '18px' } },
-          [
-            el(
-              'span',
-              { style: { fontSize: '11.5px', color: 'var(--ink-3)', flexShrink: '0' } },
-              'Default model',
-            ),
-            select,
-          ],
-        );
-
-        return el(
+        const row = el(
           'div',
           {
-            style: {
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-              padding: '10px',
-              border: `0.5px solid ${params.active ? params.accent : 'var(--line)'}`,
-              borderRadius: '8px',
-              background: 'var(--bg-elev)',
-            },
+            class: 'agent-row',
+            'data-active': params.active ? 'true' : '',
+            'data-unavail': params.connected ? '' : 'true',
           },
-          [header, modelRow],
+          [
+            el('span', { class: 'agent-row-dot', style: { background: dotColor } }),
+            el('div', { class: 'agent-row-meta' }, [
+              el('div', { class: 'agent-row-name' }, [
+                params.title,
+                params.active ? el('span', { class: 'agent-row-active' }, 'Active') : false,
+              ]),
+              el('span', { class: 'agent-row-sub' }, params.subtitle),
+            ]),
+            el('div', { class: 'agent-row-model' }, [select]),
+          ],
         );
+        row.style.setProperty('--row-accent', params.accent);
+        return row;
       };
 
       const cards = RUNNERS.map((runner) => {
@@ -5982,8 +5930,8 @@ import {
         const isActive = runner.kind === selectedRunnerKind;
         const ver = runner.version(status);
         const subtitle = available
-          ? `${runner.bin} CLI detected${ver ? ` · ${ver}` : ''}`
-          : `${runner.bin} CLI not found on the gateway’s PATH`;
+          ? (ver ?? `${runner.bin} · detected`)
+          : `${runner.bin} CLI not found on PATH`;
         const models = (runner.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
         return providerCard({
           kind: runner.kind,
