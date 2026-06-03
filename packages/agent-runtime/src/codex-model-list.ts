@@ -36,12 +36,21 @@ interface RpcMessage {
 /**
  * Enumerate the models the codex app-server reports via `model/list`.
  * Returns `[]` on any failure — never throws.
+ *
+ * `extraArgs` must mirror what the actual chat runner passes to
+ * `codex app-server` (see runtime.ts → CodexAppServerConfig.extraArgs):
+ * a configured `-c`/profile flag changes which models codex serves, so
+ * enumerating without it would populate the catalog with ids the real
+ * runner can't run.
  */
-export function enumerateCodexModels(binPath = 'codex'): Promise<RunnerModel[]> {
+export function enumerateCodexModels(
+  binPath = 'codex',
+  extraArgs: string[] = [],
+): Promise<RunnerModel[]> {
   return new Promise<RunnerModel[]>((resolve) => {
     let child: ChildProcessByStdio<Writable, Readable, Readable>;
     try {
-      child = spawn(binPath, ['app-server'], {
+      child = spawn(binPath, ['app-server', ...extraArgs], {
         stdio: ['pipe', 'pipe', 'pipe'],
       }) as ChildProcessByStdio<Writable, Readable, Readable>;
     } catch {

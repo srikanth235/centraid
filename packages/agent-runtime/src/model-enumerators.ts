@@ -41,12 +41,16 @@ const CLAUDE_ID_RE = /^claude-[a-z0-9.-]+$/i;
 export function enumerateRunnerModels(prefs: {
   kind: RunnerKind;
   binPath?: string;
+  extraArgs?: string[];
 }): Promise<RunnerModel[]> {
   switch (prefs.kind) {
     case 'claude-code':
+      // The claude SDK turn path ignores extraArgs, so enumeration does too.
       return enumerateClaudeModels(prefs.binPath);
     case 'codex':
-      return enumerateCodexModels(prefs.binPath);
+      // Mirror the runner's `codex app-server` args so we enumerate the same
+      // catalog the real runner serves (e.g. a `-c`/profile override).
+      return enumerateCodexModels(prefs.binPath, prefs.extraArgs);
     default:
       return Promise.resolve([]);
   }
