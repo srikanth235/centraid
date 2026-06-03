@@ -37,7 +37,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { MigrationError } from '@centraid/app-engine';
-import { WorktreeStore, WorktreeStoreError } from '@centraid/worktree-store';
+import { WorktreeStore, WorktreeStoreError } from './worktree-store/index.js';
 import { readBody, readJson, sendJson } from './route-helpers.js';
 import { validateManifestAt } from './validate-manifest.js';
 import { runPublishMigrations } from './publish-migrations.js';

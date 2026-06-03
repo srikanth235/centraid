@@ -18,7 +18,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { WorktreeStore } from '@centraid/worktree-store';
+import { WorktreeStore } from './worktree-store/index.js';
 import type { Dispatcher, ChatRunInput, ChatStreamEvent } from '@centraid/app-engine';
 import type { AgentTurnInput, AgentTurnConfig, AgentTurnResult } from '@centraid/agent-runtime';
 import { makeUnifiedChatRunner } from './unified-chat-runner.ts';

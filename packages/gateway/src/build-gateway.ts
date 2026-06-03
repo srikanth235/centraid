@@ -62,7 +62,7 @@ import {
   runPreflight,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
-import { WorktreeStore } from '@centraid/worktree-store';
+import { WorktreeStore } from './worktree-store/index.js';
 import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
 import { makeDraftCodeDirResolver } from './draft-data.js';
 import { makeAutomationsRouteHandler } from './automations-routes.js';

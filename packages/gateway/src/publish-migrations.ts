@@ -1,6 +1,6 @@
 // Migrations-on-publish for the git-store backend (issue #144).
 //
-// The pure git store (`@centraid/worktree-store`) only commits + ff-merges
+// The pure git store (`./worktree-store/`) only commits + ff-merges
 // *code* on publish — it never touches `data.sqlite`. So under the
 // git-store backend a published schema change never reached live data;
 // `runPendingMigrations` was wired only into the legacy tarball-upload

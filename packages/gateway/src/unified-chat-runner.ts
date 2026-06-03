@@ -57,7 +57,7 @@ import {
   WEBHOOK_ROUTE_PREFIX,
 } from '@centraid/conversation-engine';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
-import { WorktreeStore } from '@centraid/worktree-store';
+import { WorktreeStore } from './worktree-store/index.js';
 import { ensureSession } from './lifecycle-shared.js';
 import { seedDraftData } from './draft-data.js';
 
