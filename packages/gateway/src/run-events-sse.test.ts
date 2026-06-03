@@ -20,7 +20,7 @@ import {
   makeRuntimeDbProvider,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import { WorktreeStore } from '@centraid/worktree-store';
+import { WorktreeStore } from './worktree-store/index.js';
 import { makeAutomationsRouteHandler } from './automations-routes.ts';
 import { RunEventBus } from './run-event-bus.ts';
 

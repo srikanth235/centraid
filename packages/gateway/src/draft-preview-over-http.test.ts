@@ -17,7 +17,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { WorktreeStore } from '@centraid/worktree-store';
+import { WorktreeStore } from './worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 import type { SecretsProvider } from './secrets.ts';

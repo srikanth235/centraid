@@ -152,7 +152,6 @@
         "@centraid/app-engine": "workspace:*",
         "@centraid/conversation-engine": "workspace:*",
         "@centraid/skills": "workspace:*",
-        "@centraid/worktree-store": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -198,16 +197,6 @@
     "packages/tsconfig": {
       "name": "@centraid/tsconfig",
       "version": "0.0.0",
-    },
-    "packages/worktree-store": {
-      "name": "@centraid/worktree-store",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "tsx": "^4.20.3",
-        "typescript": "catalog:",
-      },
     },
   },
   "catalog": {
@@ -535,8 +524,6 @@
     "@centraid/skills": ["@centraid/skills@workspace:packages/skills"],
 
     "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
-
-    "@centraid/worktree-store": ["@centraid/worktree-store@workspace:packages/worktree-store"],
 
     "@chevrotain/types": ["@chevrotain/types@11.1.2", "", {}, "sha512-U+HFai5+zmJCkK86QsaJtoITlboZHBqrVketcO2ROv865xfCMSFpELQoz1GkX5GzME8pTa+3kbKrZHQtI0gdbw=="],
 

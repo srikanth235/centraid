@@ -24,8 +24,7 @@
     "@centraid/app-blueprints": "workspace:*",
     "@centraid/app-engine": "workspace:*",
     "@centraid/conversation-engine": "workspace:*",
-    "@centraid/skills": "workspace:*",
-    "@centraid/worktree-store": "workspace:*"
+    "@centraid/skills": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

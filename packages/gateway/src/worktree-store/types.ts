@@ -1,9 +1,9 @@
-// Public types + error class for the worktree-store package.
+// Public types + error class for the worktree-store module.
 //
 // Split out so `worktree-store.ts` stays focused on the class
-// implementation. Consumers should still import from the package
-// root (`@centraid/worktree-store`) — this file is an internal split,
-// not an alternate entry point.
+// implementation. Consumers should still import from the module
+// barrel (`./index.js`) — this file is an internal split, not an
+// alternate entry point.
 
 export interface WorktreeStoreOptions {
   /**
