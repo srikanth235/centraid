@@ -222,7 +222,7 @@ Considered telling the agent the snapshot path in its system prompt and letting 
 - New `BuilderSession` in `@centraid/builder-harness` calling `runCodexTurn` / `runClaudeTurn` with builder-specific cwd (`<projectsDir>/<projectId>`), preamble (the centraid format guide + UI grounding + preview-snapshot pointer that pi's `appendSystemPromptOverride` hook currently injects), and resume id (per-project, not per-window).
 - Desktop main-process loop that writes `<projectDir>/.preview/snapshot.png` whenever the builder preview `<webview>` paints (debounced).
 - Delete `@earendil-works/pi-coding-agent` from `packages/builder-harness/package.json` plus the now-unused `agent-session.ts` / `preview-screenshot-tool.ts`.
-- Drop the pi target from [auth-import.ts](../apps/desktop/src/main/auth-import.ts) (credentials now belong solely to the user's `codex` / `claude` installs).
+- Drop the pi target from `apps/desktop/src/main/auth-import.ts` (credentials now belong solely to the user's `codex` / `claude` installs).
 
 ## v0 swap — codex app-server + Claude Agent SDK
 
@@ -276,7 +276,7 @@ The previous "extract primitives" pass kept the `codex exec --json` and `claude 
 
 ### Auth-import simplification (follow-up commit)
 
-[apps/desktop/src/main/auth-import.ts](../apps/desktop/src/main/auth-import.ts) was rewritten as a status-only reporter. The old flow read Claude Code's keychain entry + `~/.codex/auth.json` and *wrote them into pi's auth.json* so pi-coding-agent could share the user's subscription. Now that pi is gone, no translation is needed:
+`apps/desktop/src/main/auth-import.ts` was rewritten as a status-only reporter. The old flow read Claude Code's keychain entry + `~/.codex/auth.json` and *wrote them into pi's auth.json* so pi-coding-agent could share the user's subscription. Now that pi is gone, no translation is needed:
 
 - Codex app-server reads `~/.codex/auth.json` directly. The user runs `codex login` once; nothing else touches the file.
 - The Claude Agent SDK reads `ANTHROPIC_API_KEY` from the process environment. The Claude Code OAuth token in the macOS keychain is not consumable by the SDK, so the import step is now an intentional no-op.
