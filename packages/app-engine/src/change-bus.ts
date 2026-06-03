@@ -48,11 +48,11 @@ export interface AppChange {
    */
   toolCallId?: string;
   /**
-   * Stable id for a single `ChatRunner.run` invocation. Used by the chat UI
+   * Stable id for a single `ConversationRunner.run` invocation. Used by the chat UI
    * to group all writes from one turn — handy for "assistant updated 3
    * rows" style summaries.
    */
-  agentTurnId?: string;
+  turnId?: string;
 }
 
 export type ChangeListener = (change: AppChange) => void;

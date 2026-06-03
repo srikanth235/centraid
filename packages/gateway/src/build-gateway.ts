@@ -7,7 +7,7 @@
  * WHOLE object graph (stores, chat runner, `Runtime`, the in-process
  * scheduler, every route handler) and returns it — *without* binding a
  * socket. It also exposes a `composedHandler` that replays the gateway's
- * route chain (`chatHistory → userStore → extraHandlers[] →
+ * route chain (`conversation → userStore → extraHandlers[] →
  * runtime.handle`) minus the bearer check, for hosts that own auth
  * themselves. The listener-and-bearer wrapper lives in `serve.ts`.
  *
@@ -36,16 +36,16 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AnalyticsStore,
-  ChatHistoryStore,
+  ConversationHistoryStore,
   InsightsStore,
   Runtime,
   UserStore,
   cleanupDeregisteredApp,
   makeAnalyticsDbProvider,
-  makeChatHistoryRouteHandler,
+  makeConversationRouteHandler,
   makeGatewayDbProvider,
   makeUserStoreRouteHandler,
-  type ChatRunner,
+  type ConversationRunner,
   type RunnerStatus,
   type RunnerStatusOptions,
   type RuntimeLogger,
@@ -58,7 +58,7 @@ import {
   type LocalScheduler,
 } from '@centraid/conversation-engine';
 import {
-  makeChatRunner,
+  makeConversationRunner,
   runAutomationLocal,
   runPreflight,
   resolveRunnerModels,
@@ -73,7 +73,7 @@ import { makeAutomationsRouteHandler } from './automations-routes.js';
 import { RunEventBus } from './run-event-bus.js';
 import { defaultLogger } from './default-logger.js';
 import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
-import { makeUnifiedChatRunner } from './unified-chat-runner.js';
+import { makeUnifiedConversationRunner } from './unified-conversation-runner.js';
 import { makeTemplatesRouteHandler } from './templates-routes.js';
 import { makeAgentsRouteHandler } from './agents-routes.js';
 import type { GatewayPaths } from './paths.js';
@@ -117,14 +117,14 @@ export interface BuildGatewayOptions {
   sessionIdFor?: (appId: string) => string;
   /**
    * In-process chat runner override (Plane B). When set, this runner backs
-   * `POST /centraid/<id>/_chat` instead of the gateway's own codex/claude
+   * `POST /centraid/<id>/_turn` instead of the gateway's own codex/claude
    * CLI runner. The OpenClaw plugin injects a `runEmbeddedAgent`-backed
    * runner so chat runs in OpenClaw's process — the desktop/daemon omit it
    * and get the default CLI runner (unchanged).
    */
-  chatRunner?: ChatRunner;
+  conversationRunner?: ConversationRunner;
   /**
-   * Override for the `GET /centraid/_chat/runner-status` preflight. Defaults
+   * Override for the `GET /centraid/_turn/runner-status` preflight. Defaults
    * to reporting the configured codex/claude CLI adapter (via `runPreflight`).
    * The OpenClaw plugin injects `{ kind: 'openclaw', ok: true }` — its chat
    * runs in-process, not through a CLI, so a codex/claude preflight would
@@ -187,7 +187,7 @@ export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promis
 // Prefixes the chat-history + user-store routes answer to, mirrored from
 // app-engine's http-server.ts so `composedHandler` matches the same URLs
 // `startRuntimeHttpServer` does.
-const CHAT_HISTORY_PREFIX = '/_centraid-chat';
+const CONVERSATIONS_PREFIX = '/_centraid-conversations';
 const USER_STORE_PREFIX = '/_centraid-user';
 
 export interface BuiltGateway {
@@ -196,7 +196,7 @@ export interface BuiltGateway {
   /** Stores exposed so callers can read directly without reconstructing. */
   userStore: UserStore;
   analyticsStore: AnalyticsStore;
-  chatHistoryStore: ChatHistoryStore;
+  conversationHistoryStore: ConversationHistoryStore;
   /**
    * The git-store backend, when `appsStoreRoot` was supplied. Callers
    * (the publish endpoint, export/import, the desktop's file IPC) drive
@@ -218,7 +218,7 @@ export interface BuiltGateway {
    */
   extraHandlers: RouteHandler[];
   /**
-   * One handler replaying the full chain — `chatHistory → userStore →
+   * One handler replaying the full chain — `conversation → userStore →
    * extraHandlers[] → runtime.handle` — MINUS the bearer check (cf.
    * `app-engine` http-server.ts:135-147). Hosts that own auth (the
    * OpenClaw plugin's `auth: 'gateway'`) mount this on a single prefix
@@ -311,15 +311,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   // Gateway identity DB + the central analytics DB. Each store wraps a
-  // lazy provider that opens its file on first use. Chat sessions + chat
-  // runs live in each app's `runtime.sqlite` under `appsDir`, so
-  // `ChatHistoryStore` is constructed with `appsDir` and resolves the
+  // lazy provider that opens its file on first use. Conversations (chat +
+  // build) live in each app's `runtime.sqlite` under `appsDir`, so
+  // `ConversationHistoryStore` is constructed with `appsDir` and resolves the
   // file per app.
   const gatewayDbProvider = makeGatewayDbProvider(paths.identityDb);
   const analyticsProvider = makeAnalyticsDbProvider(paths.analyticsDb);
   const analyticsStore = new AnalyticsStore(analyticsProvider);
   const userStore = new UserStore(gatewayDbProvider);
-  const chatHistoryStore = new ChatHistoryStore(
+  const conversationHistoryStore = new ConversationHistoryStore(
     paths.appsDir,
     () => userStore.getUserId(),
     analyticsStore,
@@ -370,10 +370,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // A host can inject its own in-process chat runner (Plane B); otherwise the
   // gateway builds its own — unified (draft worktree + dispatcher tools) on the
   // git-store backend, data-only on the legacy backend.
-  const chatRunner =
-    options.chatRunner ??
+  const conversationRunner =
+    options.conversationRunner ??
     (appsStore
-      ? makeUnifiedChatRunner({
+      ? makeUnifiedConversationRunner({
           store: appsStore,
           prefsLoader,
           getDispatcher,
@@ -381,7 +381,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           liveDataFile,
           ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
         })
-      : makeChatRunner({
+      : makeConversationRunner({
           prefsLoader,
           getDispatcher,
         }));
@@ -389,9 +389,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const runtime = new Runtime({
     appsDir: paths.appsDir,
     userStore,
-    chatHistoryStore,
-    chatRunner,
-    chatRunnerSessionDir: paths.chatRunnerSessionDir,
+    conversationHistoryStore,
+    conversationRunner,
+    conversationRunnerSessionDir: paths.conversationRunnerSessionDir,
     runnerStatus:
       options.runnerStatus ??
       (async (statusOpts) => {
@@ -575,11 +575,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // extra handlers → `runtime.handle` — but WITHOUT the bearer check, for
   // hosts that own auth (OpenClaw's `auth: 'gateway'`). CORS is the host's
   // job too: a fronting gateway emits its own.
-  const chatHistoryHandler = makeChatHistoryRouteHandler(() => chatHistoryStore);
+  const conversationHandler = makeConversationRouteHandler(() => conversationHistoryStore);
   const userStoreHandler = makeUserStoreRouteHandler(() => userStore);
   const composedHandler: RouteHandler = async (req, res) => {
     const url = req.url ?? '';
-    if (url.startsWith(CHAT_HISTORY_PREFIX) && (await chatHistoryHandler(req, res))) return true;
+    if (url.startsWith(CONVERSATIONS_PREFIX) && (await conversationHandler(req, res))) return true;
     if (url.startsWith(USER_STORE_PREFIX) && (await userStoreHandler(req, res))) return true;
     for (const handler of extraHandlers) {
       if (await handler(req, res)) return true;
@@ -623,7 +623,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     runtime,
     userStore,
     analyticsStore,
-    chatHistoryStore,
+    conversationHistoryStore,
     ...(appsStore ? { appsStore } : {}),
     ...(builtCodeAppsDir ? { codeAppsDir: builtCodeAppsDir } : {}),
     extraHandlers,

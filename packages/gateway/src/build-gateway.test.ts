@@ -22,7 +22,7 @@ function pathsUnder(dir: string): GatewayPaths {
     appsDir: path.join(dir, 'apps'),
     identityDb: path.join(dir, 'identity.sqlite'),
     analyticsDb: path.join(dir, 'analytics.sqlite'),
-    chatRunnerSessionDir: path.join(dir, 'chat-runner-sessions'),
+    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
   };
 }
 
@@ -62,7 +62,7 @@ test('constructs the graph and exposes the lifecycle without binding a socket', 
   assert.ok(gateway.runtime);
   assert.ok(gateway.userStore);
   assert.ok(gateway.analyticsStore);
-  assert.ok(gateway.chatHistoryStore);
+  assert.ok(gateway.conversationHistoryStore);
   assert.equal(typeof gateway.start, 'function');
   assert.equal(typeof gateway.stop, 'function');
   assert.ok(Array.isArray(gateway.extraHandlers));

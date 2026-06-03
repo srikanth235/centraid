@@ -1,25 +1,16 @@
 /*
- * Transcript codec — the JSON shapes a chat turn's `runs` row and its
- * `run_nodes` carry, plus defensive parsers.
+ * Transcript codec — the JSON shapes a chat turn's `step` / `tool` items
+ * carry, plus defensive parsers.
  *
- * `ChatHistoryStore.recordTurn` writes these shapes; `getSession` reads
- * them back to reconstruct the renderer transcript. Kept in its own file
- * so the store stays focused on SQL. Every parser tolerates malformed or
- * absent JSON — a corrupt row degrades to an empty message, never throws.
+ * `ConversationHistoryStore.recordTurn` writes these shapes; `getSession` reads them
+ * back to reconstruct the renderer transcript. (The inbound user message is a
+ * first-class `message_in` item — its text is read directly, no codec — so
+ * there is no `parseUserMessage` anymore; issue #190.) Kept in its own file so
+ * the store stays focused on SQL. Every parser tolerates malformed or absent
+ * JSON — a corrupt row degrades to an empty message, never throws.
  */
 
-/** Pull the user message text out of a chat run's `input_json`. */
-export function parseUserMessage(inputJson: string | undefined): string {
-  if (!inputJson) return '';
-  try {
-    const parsed = JSON.parse(inputJson) as { message?: unknown };
-    return typeof parsed.message === 'string' ? parsed.message : '';
-  } catch {
-    return '';
-  }
-}
-
-/** Pull the assistant text + error flag out of a `step` node's `output_json`. */
+/** Pull the assistant text + error flag out of a `step` item's `output_json`. */
 export function parseStepOutput(outputJson: string | undefined): {
   text: string;
   error: boolean;

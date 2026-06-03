@@ -5,32 +5,34 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { makeRuntimeDbProvider } from '../gateway-db.js';
-import { AgentRunsStore } from '../agent-runs-store.js';
+import { ConversationStore } from '../conversation-store.js';
 import { makeAnalyticsDbProvider } from './analytics-db.js';
 import { AnalyticsStore } from './analytics-store.js';
 import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
 
 /**
- * `runs` writes to a run ledger and — because it is constructed WITH an
- * `AnalyticsStore` — write-throughs each finished run's summary to the
- * central analytics DB. `insights` reads only that central DB.
+ * `runs` writes to a conversation ledger and — because it is constructed WITH
+ * an `AnalyticsStore` — write-throughs each finished turn's summary (sourcing
+ * `kind`/`app_id` from the owning conversation, issue #190) to the central
+ * analytics DB. `insights` reads only that central DB.
  */
-function setup(): { runs: AgentRunsStore; insights: InsightsStore } {
+function setup(): { runs: ConversationStore; insights: InsightsStore } {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-insights-'));
   const ledger = makeRuntimeDbProvider(join(dir, 'runtime.sqlite'));
   const analyticsProvider = makeAnalyticsDbProvider(join(dir, 'analytics.sqlite'));
   const analytics = new AnalyticsStore(analyticsProvider);
   return {
-    runs: new AgentRunsStore(ledger, analytics),
+    runs: new ConversationStore(ledger, analytics),
     insights: new InsightsStore(analyticsProvider),
   };
 }
 
-/** Insert a finished run with one step node (model + tokens). For an
- *  automation run, `automationRef` is its `<appId>/<id>` handle — the
- *  write-through derives the owning app id from it. Returns the run id. */
+/** Insert a finished turn with one step item (model + tokens), under a
+ *  conversation of the given kind. For an automation, each fire is its own
+ *  execution conversation tagged with the `<appId>/<id>` ref — the
+ *  write-through derives the owning app id from it. Returns the turn id. */
 function seedRun(
-  runs: AgentRunsStore,
+  runs: ConversationStore,
   opts: {
     kind: 'automation' | 'chat' | 'build';
     automationRef?: string;
@@ -44,17 +46,24 @@ function seedRun(
 ): string {
   const runId = randomUUID();
   const startedAt = opts.startedAt ?? Date.now();
-  runs.insertRun({
-    runId,
-    kind: opts.kind,
+  let conversationId: string;
+  if (opts.kind === 'automation' && opts.automationRef) {
+    // Each fire is its own execution conversation, grouped by the automation ref.
+    conversationId = randomUUID();
+    runs.createAutomationRun(conversationId, opts.automationRef, opts.automationRef.split('/')[0]);
+  } else {
+    conversationId = runs.createConversation({ kind: opts.kind, userId: 'u' }).id;
+  }
+  runs.insertTurn({
+    turnId: runId,
+    conversationId,
     triggerKind: opts.kind === 'chat' ? 'interactive' : 'manual',
-    ...(opts.automationRef ? { automationId: opts.automationRef } : {}),
     ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
     startedAt,
   });
-  runs.insertNode({
-    nodeId: randomUUID(),
-    runId,
+  runs.insertItem({
+    itemId: randomUUID(),
+    turnId: runId,
     ordinal: 0,
     kind: 'step',
     ok: true,
@@ -66,9 +75,9 @@ function seedRun(
     endedAt: startedAt + 100,
     durationMs: 100,
   });
-  // finishRun rolls the step nodes up into runs.total_* AND
-  // write-throughs the summary to the central analytics DB.
-  runs.finishRun({ runId, endedAt: startedAt + 200, ok: true });
+  // finishTurn rolls the step items up into turns.total_* AND write-throughs
+  // the summary to the central analytics DB.
+  runs.finishTurn({ turnId: runId, endedAt: startedAt + 200, ok: true });
   return runId;
 }
 

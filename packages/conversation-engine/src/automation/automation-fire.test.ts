@@ -13,7 +13,11 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AgentRunsStore, makeRuntimeDbProvider, type RunStreamEvent } from '@centraid/app-engine';
+import {
+  ConversationStore,
+  makeRuntimeDbProvider,
+  type RunStreamEvent,
+} from '@centraid/app-engine';
 import {
   runAutomationFire,
   type AutomationDispatchSurface,
@@ -212,15 +216,15 @@ describe('runAutomationFire', () => {
 
     // The usage event was persisted onto the agent node's ledger row, so the
     // run's token rollup is accurate.
-    const store = new AgentRunsStore(
+    const store = new ConversationStore(
       makeRuntimeDbProvider(path.join(appsDir, 'notes', 'runtime.sqlite')),
     );
-    const agentNode = store.listNodes(record.runId).find((n) => n.kind === 'agent');
+    const agentNode = store.listItems(record.runId).find((n) => n.kind === 'agent');
     assert.ok(agentNode, 'an agent node was recorded');
     assert.equal(agentNode.model, 'a-capable-model');
     assert.equal(agentNode.inputTokens, 12);
     assert.equal(agentNode.outputTokens, 3);
-    const run = store.getRun(record.runId);
+    const run = store.getTurn(record.runId);
     assert.equal(run?.totalInputTokens, 12);
     assert.equal(run?.totalOutputTokens, 3);
     store.close();
@@ -253,10 +257,10 @@ describe('runAutomationFire', () => {
       { openDispatch: dispatch },
     );
 
-    const store = new AgentRunsStore(
+    const store = new ConversationStore(
       makeRuntimeDbProvider(path.join(appsDir, 'notes', 'runtime.sqlite')),
     );
-    const toolNode = store.listNodes(record.runId).find((n) => n.kind === 'tool');
+    const toolNode = store.listItems(record.runId).find((n) => n.kind === 'tool');
     assert.ok(toolNode, 'a tool node was recorded');
     // Duration is the dispatcher's per-call window, not the batch span.
     assert.equal(toolNode.durationMs, 250);
@@ -301,10 +305,10 @@ describe('runAutomationFire', () => {
     assert.match(String(end.error), /spawn blew up/);
 
     // And the ledger row is closed (duration set), not stranded open.
-    const store = new AgentRunsStore(
+    const store = new ConversationStore(
       makeRuntimeDbProvider(path.join(appsDir, 'notes', 'runtime.sqlite')),
     );
-    const toolNode = store.listNodes(record.runId).find((n) => n.kind === 'tool');
+    const toolNode = store.listItems(record.runId).find((n) => n.kind === 'tool');
     assert.ok(toolNode, 'a tool node was recorded');
     assert.equal(toolNode.ok, false);
     assert.notEqual(toolNode.durationMs, undefined, 'the node was closed, not left running');

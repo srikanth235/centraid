@@ -5,7 +5,7 @@
  * not streamed — `run-now` detached and the viewer polled the ledger.
  * This is the event union that streams a run end-to-end, with **full chat
  * parity**: a node's token-level activity is carried as chat's own
- * `ChatStreamEvent`, nested under the owning run node.
+ * `TurnStreamEvent`, nested under the owning run node.
  *
  * Ledger-tail hybrid (the durability contract):
  *   - `run.start` / `node.start` / `node.end` / `run.end` mirror durable
@@ -20,8 +20,8 @@
  * `ctx.agent` source of `node.delta` differs per runner.
  */
 
-import type { ChatStreamEvent } from './chat-runner.js';
-import type { AgentRunNodeKind } from './agent-runs-schema.js';
+import type { TurnStreamEvent } from './conversation-runner.js';
+import type { ItemKind } from './conversation-schema.js';
 
 export type RunStreamEvent =
   | { type: 'run.start'; runId: string }
@@ -30,13 +30,13 @@ export type RunStreamEvent =
       ordinal: number;
       /** Set when the node is part of a parallel batch (≥2 `ctx.tool` calls). */
       batchId?: number;
-      kind: AgentRunNodeKind;
+      kind: ItemKind;
       /** Tool name or `'agent'`. */
       name?: string;
       args?: unknown;
     }
   /** Token-level chat event, nested under run node `ordinal`. Ephemeral. */
-  | { type: 'node.delta'; ordinal: number; event: ChatStreamEvent }
+  | { type: 'node.delta'; ordinal: number; event: TurnStreamEvent }
   | {
       type: 'node.end';
       ordinal: number;

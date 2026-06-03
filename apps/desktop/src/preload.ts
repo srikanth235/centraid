@@ -75,8 +75,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
 
   // The in-process AGENT_* builder retired with the unified chat (issue
   // #141, Phase 3): the builder + the app-view data chat both stream the
-  // gateway's `/centraid/<id>/_chat` SSE directly via
-  // `renderer/gateway-client-chat.ts` — no main-process relay.
+  // gateway's `/centraid/<id>/_turn` SSE directly via
+  // `renderer/gateway-client-conversation.ts` — no main-process relay.
 
   // Publish moved to the renderer's direct HTTP client (it holds the
   // editing session and POSTs `…/publish`).
@@ -151,9 +151,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // (`POST /centraid/_apps/_clone`).
 
   // App chat (turn streaming + history) moved to the renderer's direct HTTP
-  // client (`renderer/gateway-client-chat.ts`): the panel streams
-  // `/centraid/<appId>/_chat` SSE itself and reads/writes history over the
-  // gateway's `/_centraid-chat` surface — no main-process relay.
+  // client (`renderer/gateway-client-conversation.ts`): the panel streams
+  // `/centraid/<appId>/_turn` SSE itself and reads/writes history over the
+  // gateway's `/_centraid-conversations` surface — no main-process relay.
 
   // Gateway-side user identity + global prefs (centraid-user.sqlite) moved
   // to the renderer's direct HTTP client (renderer/gateway-client.ts) under
@@ -162,7 +162,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // Coding-agent detection, the runner preflight, and the custom
   // OpenAI-compatible endpoint config + key moved to the gateway (colocated
   // with the runner): the renderer reads `/centraid/_agents/status` and
-  // `/centraid/_chat/runner-status` over HTTP via gateway-client-chat.ts.
+  // `/centraid/_turn/runner-status` over HTTP via gateway-client-conversation.ts.
 
   // Automations: create/enable/delete + the read/run/analytics surface +
   // insights moved to the renderer's direct HTTP client

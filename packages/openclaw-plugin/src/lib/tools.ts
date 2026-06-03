@@ -10,7 +10,7 @@
  *
  * Scoping: each tool takes an `app` parameter. A `before_tool_call` hook
  * cross-checks that `app` against the session key — the chat client connects
- * with `sessionKey = "centraid-chat:<appId>"`, so the gateway refuses any
+ * with `sessionKey = "centraid-conversation:<appId>"`, so the gateway refuses any
  * cross-app read attempt before the tool runs.
  *
  * **Logging.** Use `api.logger.info/warn/error` for diagnostics. `console.log`
@@ -24,14 +24,14 @@ import { Type } from '@sinclair/typebox';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { type Runtime, type ToolResult } from '@centraid/app-engine';
 
-export const SESSION_PREFIX = 'centraid-chat:';
+export const SESSION_PREFIX = 'centraid-conversation:';
 
 /**
  * Extract the app id from a chat session key. Exported for tests; used by the
  * `before_tool_call` hook to derive the calling app from the session.
  *
  * OpenClaw prefixes session keys with `agent:<agentId>:`, so the stored form
- * is e.g. `agent:main:centraid-chat:todos:w1`. We locate `centraid-chat:` as
+ * is e.g. `agent:main:centraid-conversation:todos:w1`. We locate `centraid-conversation:` as
  * a substring rather than requiring a prefix match.
  */
 export function appIdFromSessionKey(sessionKey: string | undefined): string | undefined {
@@ -203,7 +203,7 @@ export function registerCentraidTools(
   });
 
   // ------- Scope guard -------
-  // The chat client always opens its session as `centraid-chat:<appId>[:<...>]`.
+  // The chat client always opens its session as `centraid-conversation:<appId>[:<...>]`.
   // Enforce: if a tool call goes to a centraid_* tool, the params.app must
   // match the session's app, regardless of what the model tries to do.
   //
@@ -227,7 +227,7 @@ export function registerCentraidTools(
       return {
         block: true,
         blockReason:
-          'centraid_* tools require a session opened with sessionKey "centraid-chat:<appId>".',
+          'centraid_* tools require a session opened with sessionKey "centraid-conversation:<appId>".',
       };
     }
     const params = (event.params ?? {}) as { app?: string };

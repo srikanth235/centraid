@@ -11,7 +11,7 @@
  *
  * Schema reference: `codex-rs/app-server-protocol/src/protocol/v2/{thread,item}.rs`.
  */
-import type { ChatStreamEvent } from '@centraid/app-engine';
+import type { TurnStreamEvent } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
 
 /**
@@ -76,8 +76,8 @@ export interface DynamicToolCallOutcome {
     id: number;
     result: { success: boolean; contentItems: Array<{ type: 'inputText'; text: string }> };
   };
-  /** Events to forward into the normalized `ChatStreamEvent` stream. */
-  events: ChatStreamEvent[];
+  /** Events to forward into the normalized `TurnStreamEvent` stream. */
+  events: TurnStreamEvent[];
 }
 
 /**
@@ -108,7 +108,7 @@ export async function handleCentraidToolCall(
   };
   const callId = typeof p.callId === 'string' ? p.callId : `tool-${id}`;
 
-  const events: ChatStreamEvent[] = [
+  const events: TurnStreamEvent[] = [
     { type: 'tool.start', toolCallId: callId, toolName, args, ...sqlOf(args) },
   ];
 

@@ -20,11 +20,11 @@ import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './cloud
 import { ChangeBus } from './change-bus.js';
 import { handleAppChanges } from './changes-sse.js';
 import type { UserStore } from './user-store.js';
-import type { ChatHistoryStore } from './chat-history.js';
+import type { ConversationHistoryStore } from './conversation-history.js';
 import { readAppSettings } from './app-settings.js';
 import { buildSettingsInject } from './settings-merge.js';
-import { handleChatRoute, parseChatSubRoute } from './chat-routes.js';
-import type { ChatRunner } from './chat-runner.js';
+import { handleTurnRoute, parseTurnSubRoute } from './turn-routes.js';
+import type { ConversationRunner } from './conversation-runner.js';
 import type { AppRef, RegistryEntry } from './types.js';
 
 export interface RuntimeLogger {
@@ -55,29 +55,30 @@ export interface RuntimeOptions {
    */
   userStore?: UserStore;
   /**
-   * Optional chat-history store. Wraps the same gateway DB as `userStore`
-   * (real FK from `chat_sessions.user_id` → `users.id`). When provided,
-   * `startRuntimeHttpServer` mounts `/_centraid-chat/*` against it.
+   * Optional conversation-history store backing the chat surface. Conversations
+   * live in each app's per-app `runtime.sqlite` (`conversations.user_id` is
+   * application-enforced — no cross-file FK). When provided,
+   * `startRuntimeHttpServer` mounts `/_centraid-conversations/*` against it.
    */
-  chatHistoryStore?: ChatHistoryStore;
+  conversationHistoryStore?: ConversationHistoryStore;
   /**
-   * Optional per-app chat runner. When provided, `POST /centraid/<id>/_chat`
+   * Optional per-app chat runner. When provided, `POST /centraid/<id>/_turn`
    * drives a model turn via this runner. Two implementations exist:
-   * `openclaw-plugin/lib/openclaw-chat-runner` (calls `runEmbeddedAgent`
+   * `openclaw-plugin/lib/openclaw-conversation-runner` (calls `runEmbeddedAgent`
    * in-process on the gateway side) and `@centraid/agent-runtime`'s
-   * `makeChatRunner` (drives codex app-server / Claude SDK locally).
+   * `makeConversationRunner` (drives codex app-server / Claude SDK locally).
    *
-   * Without a runner the chat routes 503 with `no_chat_runner`. Hosts
+   * Without a runner the chat routes 503 with `no_conversation_runner`. Hosts
    * decide whether to inject one — single-app standalone setups, tests,
    * and worker subprocesses all run fine without it.
    */
-  chatRunner?: ChatRunner;
+  conversationRunner?: ConversationRunner;
   /**
    * Central scratch base dir for runner-owned chat session files. The
-   * `POST /centraid/<id>/_chat` route passes `<dir>/<conversationId>.jsonl` as
-   * `ChatRunInput.sessionFile`. Defaults to an OS-tmpdir path when omitted.
+   * `POST /centraid/<id>/_turn` route passes `<dir>/<conversationId>.jsonl` as
+   * `ConversationTurnInput.sessionFile`. Defaults to an OS-tmpdir path when omitted.
    */
-  chatRunnerSessionDir?: string;
+  conversationRunnerSessionDir?: string;
   /**
    * Optional reader for per-app metadata (name, description). The chat
    * route uses it to populate the `extraSystemPrompt` it hands to the
@@ -88,7 +89,7 @@ export interface RuntimeOptions {
   appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /**
    * Optional preflight reporter for the gateway-wide
-   * `GET /centraid/_chat/runner-status` route. Returns the host's view of
+   * `GET /centraid/_turn/runner-status` route. Returns the host's view of
    * each adapter's readiness so the chat panel can show a Setup screen
    * instead of failing per-turn when the CLI is missing or unauthenticated.
    */
@@ -217,12 +218,12 @@ export class Runtime {
    * (so the desktop can read/write prefs over HTTP).
    */
   readonly userStore?: UserStore;
-  /** Optional chat-history store. See `RuntimeOptions.chatHistoryStore`. */
-  readonly chatHistoryStore?: ChatHistoryStore;
-  /** Optional per-app chat runner. See `RuntimeOptions.chatRunner`. */
-  readonly chatRunner?: ChatRunner;
+  /** Optional conversation-history store. See `RuntimeOptions.conversationHistoryStore`. */
+  readonly conversationHistoryStore?: ConversationHistoryStore;
+  /** Optional per-app chat runner. See `RuntimeOptions.conversationRunner`. */
+  readonly conversationRunner?: ConversationRunner;
   /** Central scratch base dir for runner-owned chat session files. */
-  readonly chatRunnerSessionDir: string;
+  readonly conversationRunnerSessionDir: string;
   /** Optional app-metadata reader for chat extra-system-prompt. */
   readonly appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /** Optional runner-status preflight. */
@@ -246,10 +247,11 @@ export class Runtime {
     this.registry = new Registry(opts.appsDir);
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
     this.userStore = opts.userStore;
-    this.chatHistoryStore = opts.chatHistoryStore;
-    this.chatRunner = opts.chatRunner;
-    this.chatRunnerSessionDir =
-      opts.chatRunnerSessionDir ?? path.join(os.tmpdir(), 'centraid-chat-runner-sessions');
+    this.conversationHistoryStore = opts.conversationHistoryStore;
+    this.conversationRunner = opts.conversationRunner;
+    this.conversationRunnerSessionDir =
+      opts.conversationRunnerSessionDir ??
+      path.join(os.tmpdir(), 'centraid-conversation-runner-sessions');
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
@@ -281,7 +283,7 @@ export class Runtime {
    */
   agentEmitForApp(
     appId: string,
-  ): (payload: { tables: string[]; toolCallId?: string; agentTurnId?: string }) => void {
+  ): (payload: { tables: string[]; toolCallId?: string; turnId?: string }) => void {
     return (payload) => {
       if (payload.tables.length === 0) return;
       this.changeBus.emit({
@@ -290,7 +292,7 @@ export class Runtime {
         ts: Date.now(),
         source: 'agent',
         ...(payload.toolCallId ? { toolCallId: payload.toolCallId } : {}),
-        ...(payload.agentTurnId ? { agentTurnId: payload.agentTurnId } : {}),
+        ...(payload.turnId ? { turnId: payload.turnId } : {}),
       });
     };
   }
@@ -304,13 +306,13 @@ export class Runtime {
     await this.registry.load();
   }
 
-  private chatRouteContext() {
+  private turnRouteContext() {
     return {
       registry: this.registry,
       resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
-      runner: this.chatRunner,
-      chatStore: this.chatHistoryStore,
-      chatRunnerSessionDir: this.chatRunnerSessionDir,
+      runner: this.conversationRunner,
+      conversationStore: this.conversationHistoryStore,
+      conversationRunnerSessionDir: this.conversationRunnerSessionDir,
       appMeta: this.appMeta,
       conversationLocks: this.conversationLocks,
     };
@@ -568,12 +570,12 @@ export class Runtime {
         }
 
         case 'app-chat': {
-          const parsed = parseChatSubRoute(route.appId, route.segments, req.method ?? 'GET');
+          const parsed = parseTurnSubRoute(route.appId, route.segments, req.method ?? 'GET');
           if (!parsed) {
             sendError(res, 404, 'not_found', 'Unknown chat sub-route.');
             return;
           }
-          await handleChatRoute(req, res, this.chatRouteContext(), parsed);
+          await handleTurnRoute(req, res, this.turnRouteContext(), parsed);
           return;
         }
 

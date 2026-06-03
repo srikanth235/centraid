@@ -15,25 +15,39 @@
  *                      values. Real FK-cascaded from `users` (same file).
  *
  *   runtime     (`<appRoot>/runtime.sqlite`) — one per app, the app's
- *                run ledger + chat history + automation KV
- *     chat_sessions    — conversation containers, scoped by `user_id`. A
- *                        session is the single chat concept — its id IS
- *                        the chat window id. Chat is app-scoped (#98):
- *                        every session belongs to the app whose file it
- *                        lives in.
- *     runs             — one row per agent run. A chat turn and an
- *                        automation fire are the same object; `kind`
- *                        discriminates. Carries denormalized token/cost
- *                        rollups written at finish.
- *     run_nodes        — the ordered agentic trace. One row per model
- *                        inference call (`kind='step'`), tool call, or
- *                        sub-run. A chat turn's transcript is folded here.
+ *                conversation ledger + automation KV
+ *     conversations    — the first-class spine: one durable thread per
+ *                        chat window, automation, or builder session.
+ *                        `kind` (chat|automation|build) moved UP here off
+ *                        the per-turn row — a thread is single-kind. Scoped
+ *                        by `user_id`; app-scoped (#98) by the file it lives
+ *                        in. `app_id`/`automation_id` also live here.
+ *     turns            — one row per execution: a chat turn, an automation
+ *                        fire, a builder iteration. `conversation_id` is a
+ *                        NOT NULL, FK-backed, CASCADE spine — the
+ *                        conversation is the primary entity, not optional
+ *                        metadata. Carries denormalized token/cost rollups
+ *                        written at finish.
+ *     items            — the ordered agentic trace, INCLUDING the inbound
+ *                        message. `kind='message_in'` (ordinal 0) is the
+ *                        user/trigger input as a first-class message;
+ *                        `step` is one model inference call; `tool`/`agent`
+ *                        are per-call audit rows. A turn's transcript folds
+ *                        from here uniformly.
+ *     attachments      — universal inbound-file rows (chat upload OR
+ *                        webhook/email file), FK'd to the `message_in` item
+ *                        they arrived on. Bytes live content-addressed on
+ *                        disk at `<appsDir>/<appId>/blobs/<hash>`, never in
+ *                        sqlite. CASCADE off `items`.
  *     automation_state — per-automation KV, keyed by (automation_id, key).
  *
- *     Within one app's file `runs.conversation_id` is a real same-file
- *     FK; `parent_run_id` is a plain column (a cross-app sub-run — e.g. an
- *     `onFailure` cascade — has its parent in another file). Runtime-owned;
- *     never reachable from handler `db` or the `centraid_sql_*` agent tools.
+ *     `turns.conversation_id` and `items.turn_id` and `attachments.item_id`
+ *     are real same-file FKs (CASCADE): deleting a conversation drops its
+ *     turns, items, and attachment rows. `turns.parent_turn_id` stays a
+ *     plain column (a cross-app sub-run — e.g. an `onFailure` cascade — has
+ *     its parent in another app's file; a SQLite FK cannot span files).
+ *     Runtime-owned; never reachable from handler `db` or the
+ *     `centraid_sql_*` agent tools.
  *
  * (The third ladder — `centraid-analytics.sqlite`, one `run_summary` row per
  * run, the Insights source — lives in the `insights/` sub-module, built through
@@ -89,78 +103,67 @@ export const GATEWAY_MIGRATIONS: readonly string[] = [
 ];
 
 /**
- * Activity file migration ladder — the unified agent-run ledger
- * (issue #90). The `automations` table plus a generalized
- * `runs` / `run_nodes` ledger and the `automation_state` KV.
+ * Per-app conversation-ledger migration ladder — `runtime.sqlite`
+ * (issue #98, reshaped by #190).
  *
- * `runs` / `run_nodes` are the run-audit tables from issue #80
- * generalized: a chat turn, an automation fire, and a builder iteration
- * are all the same object — an agent run — and `kind` discriminates.
- * `run_nodes.kind='step'` is the genuinely-new node: one primary
- * model-inference call, where per-call token + cost accounting lives.
+ * Decision 3 of the #98 revision: an app's conversation ledger and
+ * `ctx.state` are per-app, in `<appRoot>/runtime.sqlite` — a separate file
+ * from the handler-owned `data.sqlite`, version-persistent.
  *
- * Model-B identity (issue #90): automations are user-owned and keyed by
- * a UUID `id` — no `origin_app_id`. A run for `kind='automation'` points
- * at `automation_id`; the JS-handler engine is gone, an automation fire
- * is now an agent turn driven by the manifest prompt. All tables stay in
- * one file so a sub-run can link its `parent_run_id` self-FK into one
- * joinable DAG. Runtime-owned; never reachable from handler `db` or the
- * `centraid_sql_*` agent tools.
- */
-/**
- * Per-app run-ledger migration ladder — `runtime.sqlite` (issue #98).
+ * Issue #190 makes "everything is chat" first-class. The **conversation** is
+ * the primary entity: every turn belongs to exactly one, via a NOT NULL,
+ * FK-backed, CASCADE `conversation_id` (no more polymorphic, FK-free
+ * column). `kind` / `app_id` / `automation_id` move UP onto the conversation
+ * — a thread is single-kind, so they stop being re-stamped per turn — and a
+ * `CHECK` constraint guards the `kind` / `trigger` / item-`kind` enums.
+ * The inbound message (a person typing, a webhook firing, a cron tick) is a
+ * first-class `items` row (`kind='message_in'`, ordinal 0), same shape as the
+ * response — not a JSON blob on the turn. `attachments` ride that inbound
+ * message and cascade off it.
  *
- * Decision 3 of the #98 revision: an app's automation run ledger,
- * chat sessions, and `ctx.state` are per-app, in
- * `<appRoot>/runtime.sqlite` — a separate file from the handler-owned
- * `data.sqlite`, version-persistent. The global
- * `centraid-activity.sqlite` is gone; chat is app-scoped now.
- *
- * Every run belongs to a `conversation` (the durable container that a
- * trigger re-enters). `runs.conversation_id` is polymorphic — a chat run
- * points at a `chat_sessions` row, an automation run at its automation id
- * (the conversation spans all the automation's fires). Because the id is
- * polymorphic it is a plain indexed column with no FK; the chat-session →
- * runs cascade is enforced in the store (`ChatHistoryStore.deleteSession`).
- * `chat_sessions` holds chat-specific conversation metadata (title, adapter
- * resume handle, turn count). `parent_run_id` likewise stays FK-free: a
- * cross-app sub-run (e.g. an `onFailure` cascade) has its parent in a
- * *different* app's file and a SQLite FK cannot span files.
+ * `turns.parent_turn_id` stays FK-free: a cross-app sub-run (e.g. an
+ * `onFailure` cascade) has its parent in a *different* app's file and a
+ * SQLite FK cannot span files (an orthogonal sharding axis — #190 Out scope).
  */
 export const RUNTIME_MIGRATIONS: readonly string[] = [
-  // 0 → 1: the per-app run ledger + chat sessions. `runs.trigger_origin`
-  // is in the baseline (a fresh file never needs the #96 column-add).
+  // 0 → 1: the per-app conversation ledger. Pre-1.0 baseline (no production
+  // rows to migrate) — the rename from chat_sessions/runs/run_nodes is a code
+  // refactor absorbed by this slot, not a data migration (#190).
   `
-    CREATE TABLE IF NOT EXISTS chat_sessions (
+    CREATE TABLE IF NOT EXISTS conversations (
       id                 TEXT PRIMARY KEY,
+      kind               TEXT NOT NULL,
       user_id            TEXT NOT NULL,
+      app_id             TEXT,
+      automation_id      TEXT,
       title              TEXT NOT NULL DEFAULT '',
       adapter_kind       TEXT,
       adapter_session_id TEXT,
       turn_count         INTEGER NOT NULL DEFAULT 0,
+      pinned             INTEGER NOT NULL DEFAULT 0,
       created_at         INTEGER NOT NULL,
-      updated_at         INTEGER NOT NULL
+      updated_at         INTEGER NOT NULL,
+      CHECK (kind IN ('chat','automation','build'))
     );
-    CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_updated
-      ON chat_sessions(user_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
+      ON conversations(user_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_conversations_automation
+      ON conversations(automation_id);
 
-    CREATE TABLE IF NOT EXISTS runs (
+    CREATE TABLE IF NOT EXISTS turns (
       id                       TEXT PRIMARY KEY,
-      kind                     TEXT NOT NULL DEFAULT 'automation',
-      automation_id            TEXT,
-      conversation_id          TEXT,
-      app_id                   TEXT,
+      conversation_id          TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      seq                      INTEGER NOT NULL,
+      parent_turn_id           TEXT,
       trigger                  TEXT NOT NULL,
       trigger_origin           TEXT,
-      parent_run_id            TEXT,
       note                     TEXT,
       summary                  TEXT,
-      input_json               TEXT,
       output_json              TEXT,
+      retry_of                 TEXT,
       ok                       INTEGER NOT NULL DEFAULT 0,
       error                    TEXT,
       pinned                   INTEGER NOT NULL DEFAULT 0,
-      retry_of                 TEXT,
       started_at               INTEGER NOT NULL,
       ended_at                 INTEGER,
       total_input_tokens       INTEGER,
@@ -169,23 +172,28 @@ export const RUNTIME_MIGRATIONS: readonly string[] = [
       total_cache_write_tokens INTEGER,
       total_cost_usd           REAL,
       step_count               INTEGER,
-      tool_count               INTEGER
+      tool_count               INTEGER,
+      CHECK (trigger IN ('scheduled','manual','replay','on_failure','interactive'))
     );
-    CREATE INDEX IF NOT EXISTS idx_runs_automation_started
-      ON runs(automation_id, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_runs_started
-      ON runs(started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_runs_conversation
-      ON runs(conversation_id, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_runs_parent
-      ON runs(parent_run_id);
+    CREATE INDEX IF NOT EXISTS idx_turns_conversation
+      ON turns(conversation_id, seq);
+    CREATE INDEX IF NOT EXISTS idx_turns_started
+      ON turns(started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_turns_parent
+      ON turns(parent_turn_id);
 
-    CREATE TABLE IF NOT EXISTS run_nodes (
+    CREATE TABLE IF NOT EXISTS items (
       id                 TEXT PRIMARY KEY,
-      run_id             TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      turn_id            TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
       ordinal            INTEGER NOT NULL,
       batch_id           INTEGER,
       kind               TEXT NOT NULL,
+      role               TEXT,
+      text               TEXT,
+      name               TEXT,
+      args_json          TEXT,
+      output_json        TEXT,
+      child_turn_id      TEXT,
       model              TEXT,
       provider           TEXT,
       input_tokens       INTEGER,
@@ -194,20 +202,32 @@ export const RUNTIME_MIGRATIONS: readonly string[] = [
       cache_write_tokens INTEGER,
       cost_usd           REAL,
       app_id             TEXT,
-      name               TEXT,
-      args_json          TEXT,
-      output_json        TEXT,
-      child_run_id       TEXT,
       ok                 INTEGER NOT NULL DEFAULT 1,
       error              TEXT,
       started_at         INTEGER NOT NULL,
       ended_at           INTEGER,
-      duration_ms        INTEGER
+      duration_ms        INTEGER,
+      CHECK (kind IN ('message_in','step','tool','agent'))
     );
-    CREATE INDEX IF NOT EXISTS idx_run_nodes_by_run
-      ON run_nodes(run_id, ordinal);
-    CREATE INDEX IF NOT EXISTS idx_run_nodes_by_model
-      ON run_nodes(model, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_items_by_turn
+      ON items(turn_id, ordinal);
+    CREATE INDEX IF NOT EXISTS idx_items_by_model
+      ON items(model, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS attachments (
+      id         TEXT PRIMARY KEY,
+      item_id    TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+      hash       TEXT NOT NULL,
+      mime       TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      source     TEXT,
+      filename   TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_attachments_item
+      ON attachments(item_id);
+    CREATE INDEX IF NOT EXISTS idx_attachments_hash
+      ON attachments(hash);
 
     CREATE TABLE IF NOT EXISTS automation_state (
       automation_id TEXT NOT NULL,
@@ -310,7 +330,7 @@ export function makeGatewayDbProvider(dbPath: string): DatabaseProvider {
   return makeMigratedDbProvider(dbPath, GATEWAY_MIGRATIONS, 'gateway');
 }
 
-/** Open an app's per-app `runtime.sqlite` (chat_sessions + runs + run_nodes + ctx.state). */
+/** Open an app's per-app `runtime.sqlite` (conversations + turns + items + attachments + ctx.state). */
 export function openRuntimeDb(dbPath: string): DatabaseSync {
   return openMigratedDb(dbPath, RUNTIME_MIGRATIONS, 'runtime');
 }

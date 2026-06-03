@@ -6,15 +6,15 @@
  * ledger" that differ only in driver and fan-out (a chat run is one
  * model-driven turn; an automation fire is a script-driven fan-out of many).
  *
- * `makeChatRunnerCore` is backend-agnostic. The actual model turn is injected
+ * `makeConversationRunnerCore` is backend-agnostic. The actual model turn is injected
  * as a `RunTurnFn` (`runTurn`) — agent-runtime passes its codex/claude
- * `runAgentTurn`; tests pass a stub. Every `ChatRunner` the gateway's `/_chat`
+ * `runTurn`; tests pass a stub. Every `ConversationRunner` the gateway's `/_turn`
  * route can inject does the same thing around that turn: load prefs, resolve a
  * cwd, build the system prompt, thread the `centraid_*` dispatcher into a
  * `ToolContext`, resume when the prior turn used the same runner kind, drive
  * the turn, and (optionally) run a post-turn side effect. That spine used to
- * be copied into both `makeChatRunner` (data-only chat) and the gateway's
- * `makeUnifiedChatRunner` (code+data builder chat); they now differ only by
+ * be copied into both `makeConversationRunner` (data-only chat) and the gateway's
+ * `makeUnifiedConversationRunner` (code+data builder chat); they now differ only by
  * the four injected seams below (issue #147, Concern 1):
  *
  *   - `resolveCwd`            — data chat returns `input.dataDir`; builder
@@ -26,17 +26,17 @@
  *   - `extraPath`             — builder chat puts the bundled `centraid` CLI
  *                              on the agent's PATH; data chat doesn't.
  *
- * The interface (`ChatRunner`, `ChatRunInput`, `ChatRunResult`) and the
- * turn contract (`RunTurnFn`, `AgentTurnInput`, `ToolContext`) both live in
+ * The interface (`ConversationRunner`, `ConversationTurnInput`, `ConversationTurnResult`) and the
+ * turn contract (`RunTurnFn`, `TurnInput`, `ToolContext`) both live in
  * app-engine; this is the host-agnostic spine that wires them together.
  */
 
 import { randomUUID } from 'node:crypto';
 import type {
-  AgentTurnInput,
-  ChatRunInput,
-  ChatRunResult,
-  ChatRunner,
+  TurnInput,
+  ConversationTurnInput,
+  ConversationTurnResult,
+  ConversationRunner,
   Dispatcher,
   RunKind,
   RunnerPrefs,
@@ -48,14 +48,14 @@ export type { RunTurnFn };
 
 /** Per-turn context handed to the injected `buildExtraSystemPrompt` /
  *  `onTurnComplete` seams once prefs are loaded and the cwd is resolved. */
-export interface ChatTurnContext {
-  input: ChatRunInput;
+export interface TurnContext {
+  input: ConversationTurnInput;
   prefs: RunnerPrefs;
   /** The working dir this turn runs in (data dir, or draft worktree). */
   cwd: string;
 }
 
-export interface ChatRunnerCoreOptions {
+export interface ConversationRunnerCoreOptions {
   /** Loader for the user's persisted runner prefs. Called per turn so the
    *  runner picks up settings changes without a runtime restart. */
   prefsLoader: () => Promise<RunnerPrefs | undefined>;
@@ -71,19 +71,19 @@ export interface ChatRunnerCoreOptions {
    * builder chat opens (or reuses) the app's draft session worktree and
    * returns its app dir.
    */
-  resolveCwd: (input: ChatRunInput) => Promise<string> | string;
+  resolveCwd: (input: ConversationTurnInput) => Promise<string> | string;
   /**
    * Build the final extra-system-prompt. Defaults to passing
    * `input.extraSystemPrompt` (the route's data/schema preamble) through
    * unchanged. Builder chat folds the authoring grounding in on top.
    */
-  buildExtraSystemPrompt?: (ctx: ChatTurnContext) => Promise<string> | string;
+  buildExtraSystemPrompt?: (ctx: TurnContext) => Promise<string> | string;
   /**
    * Post-turn side effect, run after the turn settles and before the result
    * is returned. Best-effort — a throw is swallowed and never fails the turn
    * (builder chat mints webhook secrets here).
    */
-  onTurnComplete?: (ctx: ChatTurnContext) => Promise<void> | void;
+  onTurnComplete?: (ctx: TurnContext) => Promise<void> | void;
   /** Extra PATH entry (the bundled `centraid` CLI dir) for the spawned
    *  agent. Builder chat sets it; data chat leaves it unset. */
   extraPath?: string;
@@ -98,29 +98,31 @@ export interface ChatRunnerCoreOptions {
   cwdIsDraftWorktree?: boolean;
   /**
    * The model turn driver. agent-runtime injects its codex/claude
-   * `runAgentTurn`; tests inject a stub. Required — this package is
+   * `runTurn`; tests inject a stub. Required — this package is
    * backend-agnostic and never imports a concrete backend.
    */
   runTurn: RunTurnFn;
   /**
    * The ledger `RunKind` turns through this runner persist as, surfaced on
-   * the built `ChatRunner` for the route to read. Builder chat sets `'build'`;
+   * the built `ConversationRunner` for the route to read. Builder chat sets `'build'`;
    * data chat leaves it unset (the route defaults to `'chat'`) — issue #181.
    */
   runKind?: RunKind;
 }
 
 /**
- * Build a `ChatRunner` from the shared spine plus the injected seams. Both
- * the data-only `makeChatRunner` and the gateway's `makeUnifiedChatRunner`
+ * Build a `ConversationRunner` from the shared spine plus the injected seams. Both
+ * the data-only `makeConversationRunner` and the gateway's `makeUnifiedConversationRunner`
  * are thin configs over this.
  */
-export function makeChatRunnerCore(opts: ChatRunnerCoreOptions): ChatRunner {
+export function makeConversationRunnerCore(
+  opts: ConversationRunnerCoreOptions,
+): ConversationRunner {
   const runTurn = opts.runTurn;
 
   return {
     ...(opts.runKind ? { runKind: opts.runKind } : {}),
-    async run(input: ChatRunInput): Promise<ChatRunResult> {
+    async run(input: ConversationTurnInput): Promise<ConversationTurnResult> {
       const prefs = await opts.prefsLoader();
       if (!prefs) {
         input.onEvent({
@@ -132,7 +134,7 @@ export function makeChatRunnerCore(opts: ChatRunnerCoreOptions): ChatRunner {
       }
 
       const cwd = await opts.resolveCwd(input);
-      const turnCtx: ChatTurnContext = { input, prefs, cwd };
+      const turnCtx: TurnContext = { input, prefs, cwd };
 
       const extraSystemPrompt = opts.buildExtraSystemPrompt
         ? await opts.buildExtraSystemPrompt(turnCtx)
@@ -146,13 +148,14 @@ export function makeChatRunnerCore(opts: ChatRunnerCoreOptions): ChatRunner {
       const toolContext: ToolContext = {
         appId: input.appId,
         dispatcher: opts.getDispatcher(),
-        agentTurnId: randomUUID(),
+        turnId: randomUUID(),
         ...(opts.cwdIsDraftWorktree ? { overrideCodeDir: cwd } : {}),
       };
 
-      const turnInput: AgentTurnInput = {
+      const turnInput: TurnInput = {
         cwd,
         message: input.message,
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
         extraSystemPrompt,
         toolContext,
         abortSignal: input.abortSignal,

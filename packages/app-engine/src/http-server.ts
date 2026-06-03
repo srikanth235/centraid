@@ -2,7 +2,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import crypto from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { timingSafeEqual } from './security.js';
-import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
+import { makeConversationRouteHandler } from './conversation-routes.js';
 import { makeUserStoreRouteHandler } from './user-store.js';
 import type { Runtime } from './runtime.js';
 
@@ -25,11 +25,11 @@ export interface RuntimeHttpServerOptions {
    */
   exposeUserStoreRoute?: boolean;
   /**
-   * Whether to mount `/_centraid-chat/*` against `runtime.chatHistoryStore`.
-   * Defaults to true when `runtime.chatHistoryStore` is set; same opt-out
+   * Whether to mount `/_centraid-conversations/*` against `runtime.conversationHistoryStore`.
+   * Defaults to true when `runtime.conversationHistoryStore` is set; same opt-out
    * pattern as `exposeUserStoreRoute`.
    */
-  exposeChatHistoryRoute?: boolean;
+  exposeConversationRoute?: boolean;
   /**
    * Host-supplied route handlers run after auth but before
    * `runtime.handle` (issue #137). Each returns `true` when it handled
@@ -50,7 +50,7 @@ export interface RuntimeHttpServerHandle {
   close(): Promise<void>;
 }
 
-const CHAT_HISTORY_PREFIX = '/_centraid-chat';
+const CONVERSATIONS_PREFIX = '/_centraid-conversations';
 const USER_STORE_PREFIX = '/_centraid-user';
 
 /**
@@ -84,8 +84,8 @@ function setCorsHeaders(res: ServerResponse): void {
  *   - All requests require `Authorization: Bearer <token>`.
  *   - The token is randomly minted on `start()` unless one is provided.
  *
- * When `chatHistoryDbPath` is provided, the server also serves the
- * `/_centraid-chat/*` HTTP surface (same shape the OpenClaw plugin exposes
+ * When `conversationDbPath` is provided, the server also serves the
+ * `/_centraid-conversations/*` HTTP surface (same shape the OpenClaw plugin exposes
  * on the remote gateway). The same bearer check applies.
  */
 export async function startRuntimeHttpServer(
@@ -106,10 +106,11 @@ export async function startRuntimeHttpServer(
     ? makeUserStoreRouteHandler(() => userStore!)
     : undefined;
 
-  const chatHistoryStore = opts.runtime.chatHistoryStore;
-  const exposeChatHistory = opts.exposeChatHistoryRoute !== false && chatHistoryStore !== undefined;
-  const chatHistoryHandler = exposeChatHistory
-    ? makeChatHistoryRouteHandler(() => chatHistoryStore!)
+  const conversationHistoryStore = opts.runtime.conversationHistoryStore;
+  const exposeConversation =
+    opts.exposeConversationRoute !== false && conversationHistoryStore !== undefined;
+  const conversationHandler = exposeConversation
+    ? makeConversationRouteHandler(() => conversationHistoryStore!)
     : undefined;
 
   const server = http.createServer((req, res) => {
@@ -132,8 +133,8 @@ export async function startRuntimeHttpServer(
       res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
       return;
     }
-    if (chatHistoryHandler && (req.url ?? '').startsWith(CHAT_HISTORY_PREFIX)) {
-      const handled = await chatHistoryHandler(req, res);
+    if (conversationHandler && (req.url ?? '').startsWith(CONVERSATIONS_PREFIX)) {
+      const handled = await conversationHandler(req, res);
       if (handled) return;
     }
     if (userStoreHandler && (req.url ?? '').startsWith(USER_STORE_PREFIX)) {

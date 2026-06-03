@@ -6,17 +6,17 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { Runtime } from './runtime.ts';
 import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
-import type { ChatRunner } from './chat-runner.ts';
+import type { ConversationRunner } from './chat-runner.ts';
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
 let runtime: Runtime;
 
-async function bootstrap(opts: { runner?: ChatRunner } = {}): Promise<void> {
+async function bootstrap(opts: { runner?: ConversationRunner } = {}): Promise<void> {
   workspace = await fs.mkdtemp(
     path.join(os.tmpdir(), `centraid-chat-routes-${crypto.randomUUID()}-`),
   );
-  runtime = new Runtime({ appsDir: workspace, chatRunner: opts.runner });
+  runtime = new Runtime({ appsDir: workspace, conversationRunner: opts.runner });
   server = await startRuntimeHttpServer({ runtime });
   await runtime.bootstrap();
 }
@@ -33,10 +33,10 @@ async function registerApp(appId: string): Promise<void> {
   await runtime.registry.ensureUploaded(appId);
 }
 
-test('POST /_chat returns 503 when no runner is configured', async () => {
+test('POST /_turn returns 503 when no runner is configured', async () => {
   await bootstrap();
   await registerApp('demo');
-  const res = await fetch(`${server.url}/centraid/demo/_chat`, {
+  const res = await fetch(`${server.url}/centraid/demo/_turn`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${server.token}`,
@@ -46,20 +46,20 @@ test('POST /_chat returns 503 when no runner is configured', async () => {
   });
   assert.equal(res.status, 503);
   const body = (await res.json()) as { error: string };
-  assert.equal(body.error, 'no_chat_runner');
+  assert.equal(body.error, 'no_conversation_runner');
 });
 
-test('GET /_chat/windows is no longer a route (404)', async () => {
+test('GET /_turn/windows is no longer a route (404)', async () => {
   await bootstrap();
   await registerApp('demo');
-  const res = await fetch(`${server.url}/centraid/demo/_chat/windows`, {
+  const res = await fetch(`${server.url}/centraid/demo/_turn/windows`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
   assert.equal(res.status, 404);
 });
 
-test('POST /_chat drives the runner and streams events', async () => {
-  const runner: ChatRunner = {
+test('POST /_turn drives the runner and streams events', async () => {
+  const runner: ConversationRunner = {
     async run(input) {
       input.onEvent({ type: 'assistant.start' });
       input.onEvent({ type: 'assistant.delta', delta: 'Hi ' });
@@ -70,7 +70,7 @@ test('POST /_chat drives the runner and streams events', async () => {
   await bootstrap({ runner });
   await registerApp('demo');
 
-  const res = await fetch(`${server.url}/centraid/demo/_chat`, {
+  const res = await fetch(`${server.url}/centraid/demo/_turn`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${server.token}`,
@@ -89,9 +89,9 @@ test('POST /_chat drives the runner and streams events', async () => {
   assert.match(text, /event: end/);
 });
 
-test('POST /_chat passes the runner-owned session file under the scratch dir', async () => {
+test('POST /_turn passes the runner-owned session file under the scratch dir', async () => {
   let seenSessionFile = '';
-  const runner: ChatRunner = {
+  const runner: ConversationRunner = {
     async run(input) {
       seenSessionFile = input.sessionFile;
       input.onEvent({ type: 'final', text: 'ok' });
@@ -99,20 +99,20 @@ test('POST /_chat passes the runner-owned session file under the scratch dir', a
   };
   await bootstrap({ runner });
   await registerApp('demo');
-  await fetch(`${server.url}/centraid/demo/_chat`, {
+  await fetch(`${server.url}/centraid/demo/_turn`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ conversationId: 'w1', message: 'hello' }),
   }).then((r) => r.text());
   assert.equal(path.basename(seenSessionFile), 'w1.jsonl');
-  assert.equal(path.dirname(seenSessionFile), runtime.chatRunnerSessionDir);
+  assert.equal(path.dirname(seenSessionFile), runtime.conversationRunnerSessionDir);
 });
 
-test('POST /_chat with invalid conversationId returns 400', async () => {
-  const runner: ChatRunner = { run: async () => undefined };
+test('POST /_turn with invalid conversationId returns 400', async () => {
+  const runner: ConversationRunner = { run: async () => undefined };
   await bootstrap({ runner });
   await registerApp('demo');
-  const res = await fetch(`${server.url}/centraid/demo/_chat`, {
+  const res = await fetch(`${server.url}/centraid/demo/_turn`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${server.token}`,
@@ -123,9 +123,9 @@ test('POST /_chat with invalid conversationId returns 400', async () => {
   assert.equal(res.status, 400);
 });
 
-test('GET /centraid/_chat/runner-status returns "none" when no runner configured', async () => {
+test('GET /centraid/_turn/runner-status returns "none" when no runner configured', async () => {
   await bootstrap();
-  const res = await fetch(`${server.url}/centraid/_chat/runner-status`, {
+  const res = await fetch(`${server.url}/centraid/_turn/runner-status`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
   assert.equal(res.status, 200);
@@ -135,14 +135,14 @@ test('GET /centraid/_chat/runner-status returns "none" when no runner configured
 });
 
 test('runner error becomes an SSE error frame', async () => {
-  const runner: ChatRunner = {
+  const runner: ConversationRunner = {
     async run() {
       throw new Error('model went poof');
     },
   };
   await bootstrap({ runner });
   await registerApp('demo');
-  const res = await fetch(`${server.url}/centraid/demo/_chat`, {
+  const res = await fetch(`${server.url}/centraid/demo/_turn`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ conversationId: 'w1', message: 'hello' }),
@@ -168,7 +168,7 @@ test('conversationLocks are per-runtime — two runtimes sharing appId+conversat
   // -- Setup runtime A: runner hangs on `releaseA`.
   let releaseA!: () => void;
   const aDone = new Promise<void>((resolve) => (releaseA = resolve));
-  const runnerA: ChatRunner = {
+  const runnerA: ConversationRunner = {
     async run(input) {
       input.onEvent({ type: 'assistant.start' });
       await aDone;
@@ -178,13 +178,13 @@ test('conversationLocks are per-runtime — two runtimes sharing appId+conversat
   const workspaceA = await fs.mkdtemp(
     path.join(os.tmpdir(), `centraid-chat-iso-A-${crypto.randomUUID()}-`),
   );
-  const runtimeA = new Runtime({ appsDir: workspaceA, chatRunner: runnerA });
+  const runtimeA = new Runtime({ appsDir: workspaceA, conversationRunner: runnerA });
   const serverA = await startRuntimeHttpServer({ runtime: runtimeA });
   await runtimeA.bootstrap();
   await runtimeA.registry.ensureUploaded('demo');
 
   // -- Setup runtime B: runner finishes instantly.
-  const runnerB: ChatRunner = {
+  const runnerB: ConversationRunner = {
     async run(input) {
       input.onEvent({ type: 'final', text: 'b-final' });
     },
@@ -192,14 +192,14 @@ test('conversationLocks are per-runtime — two runtimes sharing appId+conversat
   const workspaceB = await fs.mkdtemp(
     path.join(os.tmpdir(), `centraid-chat-iso-B-${crypto.randomUUID()}-`),
   );
-  const runtimeB = new Runtime({ appsDir: workspaceB, chatRunner: runnerB });
+  const runtimeB = new Runtime({ appsDir: workspaceB, conversationRunner: runnerB });
   const serverB = await startRuntimeHttpServer({ runtime: runtimeB });
   await runtimeB.bootstrap();
   await runtimeB.registry.ensureUploaded('demo');
 
   try {
     // Fire A first — its runner hangs. Don't await the response.
-    const aResponsePromise = fetch(`${serverA.url}/centraid/demo/_chat`, {
+    const aResponsePromise = fetch(`${serverA.url}/centraid/demo/_turn`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${serverA.token}`,
@@ -215,7 +215,7 @@ test('conversationLocks are per-runtime — two runtimes sharing appId+conversat
     // per-runtime (the fix), this resolves on its own without waiting
     // for A. If locks are module-shared (the bug), it queues behind A.
     const bText = await Promise.race([
-      fetch(`${serverB.url}/centraid/demo/_chat`, {
+      fetch(`${serverB.url}/centraid/demo/_turn`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${serverB.token}`,
@@ -259,7 +259,7 @@ test('chat prompt resolves the manifest via the git-store code-dir override (#13
   // with declared handlers; the turn's system prompt must name them (and must
   // NOT report the manifest unavailable).
   let seenPrompt = '';
-  const runner: ChatRunner = {
+  const runner: ConversationRunner = {
     async run(input) {
       seenPrompt = input.extraSystemPrompt;
       input.onEvent({ type: 'final', text: 'ok' });
@@ -300,14 +300,14 @@ test('chat prompt resolves the manifest via the git-store code-dir override (#13
   );
   runtime = new Runtime({
     appsDir: workspace,
-    chatRunner: runner,
+    conversationRunner: runner,
     codeDirOverride: async () => codeDir,
   });
   server = await startRuntimeHttpServer({ runtime });
   await runtime.bootstrap();
   await runtime.registry.ensureUploaded('demo');
 
-  await fetch(`${server.url}/centraid/demo/_chat`, {
+  await fetch(`${server.url}/centraid/demo/_turn`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ conversationId: 'w1', message: 'hi' }),

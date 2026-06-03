@@ -15,7 +15,7 @@ function pathsUnder(dir: string): GatewayPaths {
     appsDir: path.join(dir, 'apps'),
     identityDb: path.join(dir, 'identity.sqlite'),
     analyticsDb: path.join(dir, 'analytics.sqlite'),
-    chatRunnerSessionDir: path.join(dir, 'chat-runner-sessions'),
+    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
   };
 }
 
@@ -42,7 +42,7 @@ test('mkdirs the appsDir on bootstrap so the registry has somewhere to live', as
 test('returns the constructed stores on the handle for host introspection', () => {
   assert.ok(handle.userStore);
   assert.ok(handle.analyticsStore);
-  assert.ok(handle.chatHistoryStore);
+  assert.ok(handle.conversationHistoryStore);
   assert.ok(handle.runtime);
 });
 
@@ -85,7 +85,7 @@ test('honors a caller-supplied host (loopback alias still resolves)', async () =
 });
 
 test('runnerStatus is reachable and returns a RunnerStatus body', async () => {
-  const res = await fetch(`${handle.url}/centraid/_chat/runner-status`, {
+  const res = await fetch(`${handle.url}/centraid/_turn/runner-status`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
   // Whether the runner shows `ok` depends on whether codex / claude-code
