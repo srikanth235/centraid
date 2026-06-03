@@ -30,14 +30,15 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
-  AgentRunsStore,
+  ConversationStore,
   AnalyticsStore,
   InsightsStore,
   makeRuntimeDbProvider,
-  type AgentRunNodeRow,
-  type AgentRunRow,
+  type Item,
+  type Turn,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
+  type RunKind,
   type RunStreamEvent,
   type RunSummary,
 } from '@centraid/app-engine';
@@ -82,33 +83,65 @@ function safeParseJson(json: string): unknown {
 }
 
 /**
- * Reconstruct a durable ledger node as live-stream events for SSE replay: a
- * `node.start`, plus a `node.end` when the node has finished (in-flight nodes
- * — `endedAt` NULL — replay as start-only and finish live off the bus).
+ * The run-record JSON the desktop's run feed / detail consumes
+ * (`CentraidAutomationRunRecord`). Under issue #190 the spine is
+ * conversation/turn/item; `kind` / `automationId` (the ref) source from the
+ * owning conversation (via the run summary), `inputJson` from the turn's
+ * `message_in` item — so this wire shape stays stable for the renderer.
  */
-function replayNodeEvents(node: AgentRunNodeRow): RunStreamEvent[] {
+interface RunRecordJson {
+  runId: string;
+  kind: RunKind;
+  automationId?: string;
+  triggerKind: AutomationTriggerKind;
+  triggerOrigin?: AutomationTriggerOrigin;
+  parentRunId?: string;
+  inputJson?: string;
+  startedAt: number;
+  endedAt?: number;
+  ok: boolean;
+  error?: string;
+  summary?: string;
+  outputJson?: string;
+  pinned: boolean;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCacheReadTokens?: number;
+  totalCacheWriteTokens?: number;
+  totalCostUsd?: number;
+  stepCount?: number;
+  toolCount?: number;
+}
+
+/**
+ * Reconstruct a durable ledger item as live-stream events for SSE replay: a
+ * `node.start`, plus a `node.end` when the item has finished (in-flight items
+ * — `endedAt` NULL — replay as start-only and finish live off the bus). The
+ * inbound `message_in` item is not a trace node and is filtered by the caller.
+ */
+function replayNodeEvents(item: Item): RunStreamEvent[] {
   const start: RunStreamEvent = {
     type: 'node.start',
-    ordinal: node.ordinal,
-    ...(node.batchId !== undefined ? { batchId: node.batchId } : {}),
-    kind: node.kind,
-    ...(node.name !== undefined ? { name: node.name } : {}),
-    ...(node.argsJson !== undefined ? { args: safeParseJson(node.argsJson) } : {}),
+    ordinal: item.ordinal,
+    ...(item.batchId !== undefined ? { batchId: item.batchId } : {}),
+    kind: item.kind,
+    ...(item.name !== undefined ? { name: item.name } : {}),
+    ...(item.argsJson !== undefined ? { args: safeParseJson(item.argsJson) } : {}),
   };
-  if (node.endedAt === undefined) return [start];
+  if (item.endedAt === undefined) return [start];
   const end: RunStreamEvent = {
     type: 'node.end',
-    ordinal: node.ordinal,
-    ok: node.ok,
-    ...(node.outputJson !== undefined ? { result: safeParseJson(node.outputJson) } : {}),
-    ...(node.error !== undefined ? { error: node.error } : {}),
-    durationMs: node.durationMs ?? 0,
+    ordinal: item.ordinal,
+    ok: item.ok,
+    ...(item.outputJson !== undefined ? { result: safeParseJson(item.outputJson) } : {}),
+    ...(item.error !== undefined ? { error: item.error } : {}),
+    durationMs: item.durationMs ?? 0,
   };
   return [start, end];
 }
 
-/** Map a central run summary into the `AgentRunRow` feed shape. */
-function summaryToRunRow(s: RunSummary): AgentRunRow {
+/** Map a central run summary into the run-feed record shape. */
+function summaryToRunRow(s: RunSummary): RunRecordJson {
   return {
     runId: s.runId,
     kind: s.kind,
@@ -117,9 +150,6 @@ function summaryToRunRow(s: RunSummary): AgentRunRow {
     ...(s.triggerOrigin !== undefined
       ? { triggerOrigin: s.triggerOrigin as AutomationTriggerOrigin }
       : {}),
-    ...(s.appId !== undefined ? { appId: s.appId } : {}),
-    ...(s.note !== undefined ? { note: s.note } : {}),
-    ...(s.retryOf !== undefined ? { retryOf: s.retryOf } : {}),
     startedAt: s.startedAt,
     ...(s.endedAt !== undefined ? { endedAt: s.endedAt } : {}),
     ok: s.ok,
@@ -141,6 +171,74 @@ function summaryToRunRow(s: RunSummary): AgentRunRow {
 }
 
 /**
+ * The single-run detail record: the `turns` row enriched with `kind` /
+ * `automationId` from the run summary and `inputJson` from the turn's
+ * `message_in` item — the stable wire shape the renderer's run viewer reads.
+ */
+function turnToRunRecord(
+  turn: Turn,
+  summary: RunSummary | undefined,
+  inputJson: string | undefined,
+): RunRecordJson {
+  return {
+    runId: turn.turnId,
+    kind: summary?.kind ?? 'automation',
+    ...(summary?.automationRef !== undefined
+      ? { automationId: summary.automationRef }
+      : { automationId: turn.conversationId }),
+    triggerKind: turn.triggerKind,
+    ...(turn.triggerOrigin !== undefined ? { triggerOrigin: turn.triggerOrigin } : {}),
+    ...(turn.parentTurnId !== undefined ? { parentRunId: turn.parentTurnId } : {}),
+    ...(inputJson !== undefined ? { inputJson } : {}),
+    startedAt: turn.startedAt,
+    ...(turn.endedAt !== undefined ? { endedAt: turn.endedAt } : {}),
+    ok: turn.ok,
+    ...(turn.error !== undefined ? { error: turn.error } : {}),
+    ...(turn.summary !== undefined ? { summary: turn.summary } : {}),
+    ...(turn.outputJson !== undefined ? { outputJson: turn.outputJson } : {}),
+    pinned: turn.pinned,
+    ...(turn.totalInputTokens !== undefined ? { totalInputTokens: turn.totalInputTokens } : {}),
+    ...(turn.totalOutputTokens !== undefined ? { totalOutputTokens: turn.totalOutputTokens } : {}),
+    ...(turn.totalCacheReadTokens !== undefined
+      ? { totalCacheReadTokens: turn.totalCacheReadTokens }
+      : {}),
+    ...(turn.totalCacheWriteTokens !== undefined
+      ? { totalCacheWriteTokens: turn.totalCacheWriteTokens }
+      : {}),
+    ...(turn.totalCostUsd !== undefined ? { totalCostUsd: turn.totalCostUsd } : {}),
+    ...(turn.stepCount !== undefined ? { stepCount: turn.stepCount } : {}),
+    ...(turn.toolCount !== undefined ? { toolCount: turn.toolCount } : {}),
+  };
+}
+
+/** Map an `items` row into the legacy run-node wire shape the renderer reads. */
+function itemToNode(item: Item): Record<string, unknown> {
+  return {
+    nodeId: item.itemId,
+    runId: item.turnId,
+    ordinal: item.ordinal,
+    ...(item.batchId !== undefined ? { batchId: item.batchId } : {}),
+    kind: item.kind,
+    ...(item.name !== undefined ? { name: item.name } : {}),
+    ...(item.argsJson !== undefined ? { argsJson: item.argsJson } : {}),
+    ...(item.outputJson !== undefined ? { outputJson: item.outputJson } : {}),
+    ok: item.ok,
+    ...(item.error !== undefined ? { error: item.error } : {}),
+    startedAt: item.startedAt,
+    ...(item.endedAt !== undefined ? { endedAt: item.endedAt } : {}),
+    ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
+    ...(item.inputTokens !== undefined ? { inputTokens: item.inputTokens } : {}),
+    ...(item.outputTokens !== undefined ? { outputTokens: item.outputTokens } : {}),
+    ...(item.cacheReadTokens !== undefined ? { cacheReadTokens: item.cacheReadTokens } : {}),
+    ...(item.cacheWriteTokens !== undefined ? { cacheWriteTokens: item.cacheWriteTokens } : {}),
+    ...(item.model !== undefined ? { model: item.model } : {}),
+    ...(item.provider !== undefined ? { provider: item.provider } : {}),
+    ...(item.costUsd !== undefined ? { costUsd: item.costUsd } : {}),
+    ...(item.childTurnId !== undefined ? { childRunId: item.childTurnId } : {}),
+  };
+}
+
+/**
  * Build the automation/insights route handler. Returns a function
  * suitable for `startRuntimeHttpServer`'s `extraHandlers`: resolves
  * `true` when it owned the request.
@@ -154,7 +252,7 @@ export function makeAutomationsRouteHandler(
   // app's `runtime.sqlite` under the stable data dir. Automation run ids
   // are `<appId>/<id>:...` (app id inline); a chat run id is a bare UUID,
   // so its owning app comes from the central run summary.
-  const runsStoreForRunId = (runId: string): AgentRunsStore | undefined => {
+  const runsStoreForRunId = (runId: string): ConversationStore | undefined => {
     const slash = runId.indexOf('/');
     const appId = slash > 0 ? runId.slice(0, slash) : opts.analytics.getSummary(runId)?.appId;
     if (!appId) return undefined;
@@ -162,7 +260,7 @@ export function makeAutomationsRouteHandler(
     // No ledger file means the app/run is unknown here — return undefined
     // rather than letting sqlite throw on a missing parent dir.
     if (!existsSync(dbPath)) return undefined;
-    return new AgentRunsStore(makeRuntimeDbProvider(dbPath));
+    return new ConversationStore(makeRuntimeDbProvider(dbPath));
   };
 
   // SSE: stream one run end-to-end (issue #158, ledger-tail hybrid). Subscribe
@@ -221,10 +319,13 @@ export function makeAutomationsRouteHandler(
       }) ?? ((): void => undefined);
 
     const store = runsStoreForRunId(runId);
-    const run = store?.getRun(runId);
+    const run = store?.getTurn(runId);
     write({ type: 'run.start', runId });
-    const nodes = store ? store.listNodes(runId) : [];
-    for (const node of nodes) for (const ev of replayNodeEvents(node)) write(ev);
+    const items = store ? store.listItems(runId) : [];
+    for (const item of items) {
+      if (item.kind === 'message_in') continue;
+      for (const ev of replayNodeEvents(item)) write(ev);
+    }
 
     // Run already finished (background fire / late join) — emit terminal + close.
     if (run && run.endedAt !== undefined) {
@@ -308,13 +409,26 @@ export function makeAutomationsRouteHandler(
       if (sub === 'run' && method === 'GET') {
         const runId = url.searchParams.get('runId') ?? '';
         const store = runsStoreForRunId(runId);
-        return sendJson(res, 200, { run: store?.getRun(runId) ?? null });
+        const turn = store?.getTurn(runId);
+        if (!store || !turn) return sendJson(res, 200, { run: null });
+        const record = turnToRunRecord(
+          turn,
+          opts.analytics.getSummary(runId),
+          store.messageInText(runId),
+        );
+        return sendJson(res, 200, { run: record });
       }
 
       if (sub === 'run/nodes' && method === 'GET') {
         const runId = url.searchParams.get('runId') ?? '';
         const store = runsStoreForRunId(runId);
-        return sendJson(res, 200, { nodes: store ? store.listNodes(runId) : [] });
+        const nodes = store
+          ? store
+              .listItems(runId)
+              .filter((i) => i.kind !== 'message_in')
+              .map(itemToNode)
+          : [];
+        return sendJson(res, 200, { nodes });
       }
 
       if (sub === 'run/events' && method === 'GET') {
@@ -329,7 +443,7 @@ export function makeAutomationsRouteHandler(
         const runId = url.searchParams.get('runId') ?? '';
         const body = await readJson(req);
         const pinned = body.pinned === true;
-        runsStoreForRunId(runId)?.setPinned(runId, pinned);
+        runsStoreForRunId(runId)?.setTurnPinned(runId, pinned);
         opts.analytics.setPinned(runId, pinned);
         return sendJson(res, 200, { ok: true });
       }

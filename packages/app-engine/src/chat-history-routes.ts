@@ -16,13 +16,24 @@ import type { ChatHistoryStore } from './chat-history.js';
 
 const ROUTE_PREFIX = '/_centraid-chat';
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB per attachment.
+
+async function readRawBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
+  let total = 0;
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.byteLength;
+    if (total > MAX_UPLOAD_BYTES) throw new Error(`upload exceeds ${MAX_UPLOAD_BYTES} bytes`);
+    chunks.push(buf);
   }
-  if (chunks.length === 0) return undefined;
-  const text = Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const raw = await readRawBody(req);
+  if (raw.length === 0) return undefined;
+  const text = raw.toString('utf8');
   if (!text) return undefined;
   return JSON.parse(text) as unknown;
 }
@@ -70,6 +81,48 @@ export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
     const store = getStore();
 
     try {
+      // Attachment blob CAS (issue #190):
+      //   POST /apps/<appId>/blobs            upload bytes → { hash, sizeBytes, url }
+      //   GET  /apps/<appId>/blobs/<hash>     download bytes
+      const blobMatch = sub.match(/^\/apps\/([^/]+)\/blobs(?:\/([a-f0-9]{64}))?\/?$/);
+      if (blobMatch && blobMatch[1]) {
+        const appId = decodeURIComponent(blobMatch[1]);
+        const hash = blobMatch[2];
+        if (!hash && method === 'POST') {
+          const bytes = await readRawBody(req);
+          if (bytes.length === 0) {
+            sendError(res, 400, 'empty upload');
+            return true;
+          }
+          const put = await store.uploadBlob(appId, bytes);
+          const mime = req.headers['content-type'] ?? 'application/octet-stream';
+          sendJson(res, 200, {
+            hash: put.hash,
+            sizeBytes: put.sizeBytes,
+            mime,
+            url: `${ROUTE_PREFIX}/apps/${encodeURIComponent(appId)}/blobs/${put.hash}`,
+          });
+          return true;
+        }
+        if (hash && method === 'GET') {
+          const bytes = await store.readBlob(appId, hash);
+          if (!bytes) {
+            sendError(res, 404, 'blob not found');
+            return true;
+          }
+          const mime = url.searchParams.get('mime') ?? 'application/octet-stream';
+          res.writeHead(200, {
+            'content-type': mime,
+            'content-length': bytes.byteLength.toString(),
+            'cache-control': 'private, max-age=31536000, immutable',
+          });
+          res.end(bytes);
+          return true;
+        }
+        sendError(res, 405, 'method not allowed');
+        return true;
+      }
+
       // /apps/<appId>/sessions  and  /apps/<appId>/sessions/<id>
       const m = sub.match(/^\/apps\/([^/]+)\/sessions(?:\/([^/]+))?\/?$/);
       if (!m || !m[1]) {

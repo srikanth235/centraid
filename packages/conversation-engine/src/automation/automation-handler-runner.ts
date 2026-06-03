@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 import {
   appendLogs,
   type LogEntry,
-  type AgentRunsStore,
+  type ConversationStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type ChatStreamEvent,
@@ -117,8 +117,8 @@ export interface RunAutomationHandlerOptions {
   runId: string;
   toolDispatcher: AutomationToolDispatcher;
   agentDispatcher: AutomationAgentDispatcher;
-  /** Activity-DB-backed run-audit store for audit + ctx.state + ctx.runs. */
-  runsStore: AgentRunsStore;
+  /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
+  runsStore: ConversationStore;
   /**
    * Live run-stream sink (issue #158). Receives `run.start` / `node.start` /
    * `node.end` / `run.end` as the run unfolds, alongside `onLog`. Wired by
@@ -196,19 +196,33 @@ export async function runAutomationHandler(
     emit,
   };
 
-  audit.store.insertRun({
-    runId: audit.runId,
-    kind: 'automation',
-    automationId: audit.automationId,
-    // The automation's conversation spans all its fires: the conversation id
-    // is the automation id.
+  // The automation's conversation spans all its fires: the conversation id IS
+  // the automation id (issue #190). The `<appId>/<id>` ref carries the app id
+  // in its first segment.
+  const slash = audit.automationId.indexOf('/');
+  const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
+  audit.store.ensureAutomationConversation(audit.automationId, appId);
+  const startedAt = Date.now();
+  audit.store.insertTurn({
+    turnId: audit.runId,
     conversationId: audit.automationId,
     triggerKind: opts.triggerKind ?? 'scheduled',
     ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
-    ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-    ...(opts.input !== undefined ? { inputJson: truncateForAudit(opts.input) ?? '' } : {}),
-    startedAt: Date.now(),
+    ...(opts.parentRunId ? { parentTurnId: opts.parentRunId } : {}),
+    startedAt,
   });
+  // The trigger payload is the inbound `message_in` item (ordinal 0) — the
+  // same shape a chat turn records (issue #190, criterion 4). Trace items
+  // (tool/agent) then start at ordinal 1.
+  if (opts.input !== undefined) {
+    audit.store.insertMessageIn({
+      turnId: audit.runId,
+      role: 'user',
+      text: truncateForAudit(opts.input) ?? '',
+      startedAt,
+    });
+    audit.ordinal = 1;
+  }
   // `run.start` opens the live stream; a viewer that joins later replays it
   // from the ledger instead. Guarded — a wedged sink must not fail the run.
   try {
@@ -250,8 +264,8 @@ export async function runAutomationHandler(
       if (state.resolved) return;
       state.resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      audit.store.finishRun({
-        runId: audit.runId,
+      audit.store.finishTurn({
+        turnId: audit.runId,
         endedAt: Date.now(),
         ok: outcome.ok,
         ...(outcome.error ? { error: outcome.error } : {}),

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { ChatHistoryStore, deriveTitle, type RecordTurnInput } from './chat-history.js';
 import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
-import { AgentRunsStore } from './agent-runs-store.js';
+import { ConversationStore } from './agent-runs-store.js';
 import { makeRuntimeDbProvider } from './gateway-db.js';
 
 // Tests that don't care about cross-user isolation share this stub UUID.
@@ -100,7 +100,7 @@ describe('ChatHistoryStore', () => {
   it('recordTurn folds a turn into a run and getSession reconstructs it', () => {
     const s = store.createSession(APP);
     const r = store.recordTurn(APP, turn(s.id, 'first', 'reply'));
-    assert.ok(r?.runId);
+    assert.ok(r?.turnId);
     const loaded = store.getSession(APP, s.id);
     assert.equal(loaded?.messages.length, 2);
     assert.deepEqual(
@@ -128,12 +128,12 @@ describe('ChatHistoryStore', () => {
     local.recordTurn(APP, turn(chat.id, 'data q', 'data a', 1_000));
     local.recordTurn(APP, { ...turn(build.id, 'tweak ui', 'done', 2_000), kind: 'build' });
 
-    // Read the persisted rows back through a fresh runs store on the same
-    // app `runtime.sqlite`. The builder turn lands as `kind: 'build'`; the
-    // default stays `'chat'`.
-    const runs = new AgentRunsStore(makeRuntimeDbProvider(join(appsDir, APP, 'runtime.sqlite')));
-    assert.equal(runs.listChatRuns(chat.id)[0]!.kind, 'chat');
-    assert.equal(runs.listChatRuns(build.id)[0]!.kind, 'build');
+    // The kind moved UP onto the conversation (issue #190): a builder turn
+    // sets its thread to `kind: 'build'`; a data chat stays `'chat'`. Read the
+    // persisted conversations back through a fresh store on the same file.
+    const conv = new ConversationStore(makeRuntimeDbProvider(join(appsDir, APP, 'runtime.sqlite')));
+    assert.equal(conv.getConversation(chat.id)?.kind, 'chat');
+    assert.equal(conv.getConversation(build.id)?.kind, 'build');
 
     // Transcript reconstruction is kind-agnostic — a build turn round-trips
     // exactly like a chat turn.

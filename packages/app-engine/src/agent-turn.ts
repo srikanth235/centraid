@@ -65,10 +65,27 @@ export interface ToolContext {
   overrideCodeDir?: string;
 }
 
+/**
+ * A file riding the turn's inbound message (issue #190). The bytes already
+ * live in the per-app blob CAS; `path` is the absolute on-disk blob path the
+ * adapter reads to build an image/document content block.
+ */
+export interface TurnAttachment {
+  path: string;
+  mime: string;
+  filename?: string;
+}
+
 export interface AgentTurnInput {
   /** Working directory the agent operates in (chat: app data dir; builder: app dir). */
   cwd: string;
   message: string;
+  /**
+   * Files attached to the inbound message. When present, the codex / claude
+   * adapters turn the user turn into multimodal content blocks (text + image /
+   * document) instead of a bare text prompt (issue #190).
+   */
+  attachments?: TurnAttachment[];
   /** Backend-specific append point: codex `developerInstructions` / claude `systemPrompt.append`. */
   extraSystemPrompt: string;
   model?: string;

@@ -9,9 +9,9 @@
 
 import { randomUUID } from 'node:crypto';
 import type {
-  AgentRunsStore,
-  AgentRunNodeKind,
-  AgentRunRow,
+  ConversationStore,
+  ItemKind,
+  Turn,
   AutomationTriggerKind,
   ChatStreamEvent,
   RunStreamEvent,
@@ -60,10 +60,15 @@ export interface RunRef {
   output?: unknown;
 }
 
-export function rowToRunRef(row: AgentRunRow): RunRef {
+/**
+ * Project a `turns` row into the handler-facing `ctx.runs` ref. The
+ * automation id is the conversation id (issue #190); `inputText` is the
+ * turn's ordinal-0 `message_in` payload, fetched by the caller.
+ */
+export function rowToRunRef(row: Turn, inputText?: string): RunRef {
   const ref: RunRef = {
-    runId: row.runId,
-    automationId: row.automationId ?? '',
+    runId: row.turnId,
+    automationId: row.conversationId,
     triggerKind: row.triggerKind,
     startedAt: row.startedAt,
     ok: row.ok,
@@ -71,11 +76,11 @@ export function rowToRunRef(row: AgentRunRow): RunRef {
   if (row.endedAt !== undefined) ref.endedAt = row.endedAt;
   if (row.error !== undefined) ref.error = row.error;
   if (row.summary !== undefined) ref.summary = row.summary;
-  if (row.inputJson !== undefined) {
+  if (inputText !== undefined) {
     try {
-      ref.input = JSON.parse(row.inputJson) as unknown;
+      ref.input = JSON.parse(inputText) as unknown;
     } catch {
-      ref.input = row.inputJson;
+      ref.input = inputText;
     }
   }
   if (row.outputJson !== undefined) {
@@ -89,7 +94,7 @@ export function rowToRunRef(row: AgentRunRow): RunRef {
 }
 
 export function applyRetention(
-  store: AgentRunsStore,
+  store: ConversationStore,
   automationId: string,
   history: AutomationHistoryConfig | undefined,
 ): void {
@@ -135,12 +140,13 @@ export function makeNodeId(runId: string, ordinal: number): string {
 }
 
 export interface OpenRunNodeArgs {
-  store: AgentRunsStore;
+  store: ConversationStore;
   emit: RunEventSink;
+  /** The turn this item belongs to. */
   runId: string;
   ordinal: number;
   batchId?: number;
-  kind: AgentRunNodeKind;
+  kind: ItemKind;
   /** Tool name or `'agent'`. */
   name?: string;
   args?: unknown;
@@ -157,9 +163,9 @@ export function openRunNode(args: OpenRunNodeArgs): string {
   const nodeId = makeNodeId(args.runId, args.ordinal);
   const argsJson = args.args !== undefined ? (truncateForAudit(args.args) ?? '') : undefined;
   try {
-    args.store.openNode({
-      nodeId,
-      runId: args.runId,
+    args.store.openItem({
+      itemId: nodeId,
+      turnId: args.runId,
       ordinal: args.ordinal,
       ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
       kind: args.kind,
@@ -205,15 +211,15 @@ export function usageCloseFields(
 }
 
 export interface CloseRunNodeArgs {
-  store: AgentRunsStore;
+  store: ConversationStore;
   emit: RunEventSink;
   nodeId: string;
   ordinal: number;
   ok: boolean;
   result?: unknown;
   error?: string;
-  /** Child run id for a legacy node that spawned one. Dormant — no current producer. */
-  childRunId?: string;
+  /** Child turn id for an item that spawned a sub-agent. Dormant — no current producer. */
+  childTurnId?: string;
   started: number;
   ended: number;
   /**
@@ -239,12 +245,12 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
   const outputJson =
     args.ok && args.result !== undefined ? (truncateForAudit(args.result) ?? '') : undefined;
   try {
-    args.store.closeNode({
-      nodeId: args.nodeId,
+    args.store.closeItem({
+      itemId: args.nodeId,
       ok: args.ok,
       ...(outputJson !== undefined ? { outputJson } : {}),
       ...(args.error !== undefined ? { error: args.error } : {}),
-      ...(args.childRunId !== undefined ? { childRunId: args.childRunId } : {}),
+      ...(args.childTurnId !== undefined ? { childTurnId: args.childTurnId } : {}),
       endedAt: args.ended,
       durationMs,
       ...(args.model !== undefined ? { model: args.model } : {}),

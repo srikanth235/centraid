@@ -1,74 +1,91 @@
+// governance: allow-repo-hygiene file-size-limit #190 — one cohesive
+// ConversationStore class; its SQL + row mappers are already split into
+// agent-runs-store-sql.ts and the row types into agent-runs-schema.ts.
 /*
- * AgentRunsStore — agent-run ledger + automation KV.
+ * ConversationStore — the per-app conversation ledger + automation KV
+ * (issue #90, reshaped by #190).
  *
- * The three tables — `runs`, `run_nodes`, `automation_state` — are the
- * `RUNTIME_MIGRATIONS` / `ACTIVITY_MIGRATIONS` shape in `gateway-db.ts`.
+ * Five tables — `conversations`, `turns`, `items`, `attachments`,
+ * `automation_state` — the `RUNTIME_MIGRATIONS` shape in `gateway-db.ts`.
  *
- *   runs             — one row per agent run (chat turn / automation
- *                      fire / builder iteration; `kind` discriminates).
- *                      Carries parent_run_id for sub-runs, a run
- *                      summary, validated output_json, and a
- *                      denormalized token/cost rollup.
- *   run_nodes        — the ordered agentic trace: one `kind='step'` row
- *                      per primary model-inference call, plus `tool` /
- *                      `agent` / `invoke` audit rows.
+ *   conversations    — the first-class durable thread. `kind` (chat |
+ *                      automation | build), `app_id`, `automation_id` live
+ *                      here. For an automation the conversation id IS the
+ *                      automation id, so the thread spans all its fires.
+ *   turns            — one execution under a conversation (chat turn /
+ *                      automation fire / builder iteration). NOT NULL,
+ *                      FK-backed `conversation_id`. Carries the token/cost
+ *                      rollup written at finish.
+ *   items            — the ordered trace, including the inbound `message_in`
+ *                      (ordinal 0). `step` is one model call; `tool`/`agent`
+ *                      are per-call audit rows.
+ *   attachments      — files riding an inbound message (chat upload OR
+ *                      webhook/email file), CASCADE off `items`.
  *   automation_state — per-(automation_id, key) KV.
  *
- * Issue #98: an automation's run ledger is per-app — the store is
- * constructed over that app's `runtime.sqlite`; a chat run's ledger is
- * `centraid-activity.sqlite`. Either way the store is runtime-owned: it
- * is never reachable from the handler's `db` proxy or the
- * `centraid_sql_*` agent tools (those only see an app's `data.sqlite`).
- * When a `RunSummarySink` is supplied, `finishRun` write-throughs a
- * one-row summary to the central analytics DB.
+ * Constructed over one app's `runtime.sqlite` `DatabaseProvider`. Runtime-
+ * owned: never reachable from the handler `db` proxy or the `centraid_sql_*`
+ * agent tools. When a `RunSummarySink` is supplied, `finishTurn` write-throughs
+ * a one-row summary (sourcing `kind`/`app_id`/`automation_ref` from the
+ * owning conversation) to the central analytics DB.
  *
- * Row types live in `agent-runs-schema.ts`; the prepared-statement
- * block + raw-row mappers live in `agent-runs-store-sql.ts`.
+ * Row types live in `agent-runs-schema.ts`; the prepared-statement block +
+ * raw-row mappers live in `agent-runs-store-sql.ts`.
  */
 
+import { randomUUID } from 'node:crypto';
 import { type DatabaseSync } from 'node:sqlite';
 import type { DatabaseProvider } from './gateway-db.js';
 import type { RunSummarySink } from './run-summary-sink.js';
 import type {
-  AgentRunRow,
-  AgentRunNodeRow,
+  Conversation,
+  Turn,
+  Item,
+  Attachment,
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationTriggerOrigin,
-  AgentRunNodeKind,
+  ItemKind,
   RunKind,
 } from './agent-runs-schema.js';
 import {
   prepare,
-  runFromRaw,
-  nodeFromRaw,
+  conversationFromRaw,
+  turnFromRaw,
+  itemFromRaw,
+  attachmentFromRaw,
   stateFromRaw,
   type PreparedStatements,
-  type RawRun,
-  type RawNode,
+  type RawConversation,
+  type RawTurn,
+  type RawItem,
+  type RawAttachment,
   type RawState,
 } from './agent-runs-store-sql.js';
 
-export interface InsertRunInput {
-  readonly runId: string;
-  readonly triggerKind: AutomationTriggerKind;
-  /** Source that fired the run (`cron` / `webhook` / `manual`). */
-  readonly triggerOrigin?: AutomationTriggerOrigin;
-  /** Defaults to `'automation'`. */
-  readonly kind?: RunKind;
-  /** UUID of the automation — set for `kind: 'automation'`. */
-  readonly automationId?: string;
-  readonly parentRunId?: string;
-  readonly conversationId?: string;
+export interface CreateConversationInput {
+  /** Defaults to a fresh UUID; pass the automation id for `kind: 'automation'`. */
+  readonly id?: string;
+  readonly kind: RunKind;
+  readonly userId: string;
   readonly appId?: string;
-  readonly note?: string;
+  readonly automationId?: string;
+  readonly title?: string;
+}
+
+export interface InsertTurnInput {
+  readonly turnId: string;
+  readonly conversationId: string;
+  readonly triggerKind: AutomationTriggerKind;
+  readonly triggerOrigin?: AutomationTriggerOrigin;
+  readonly parentTurnId?: string;
   readonly retryOf?: string;
-  readonly inputJson?: string;
+  readonly note?: string;
   readonly startedAt: number;
 }
 
-export interface FinishRunInput {
-  readonly runId: string;
+export interface FinishTurnInput {
+  readonly turnId: string;
   readonly endedAt: number;
   readonly ok: boolean;
   readonly error?: string;
@@ -76,16 +93,27 @@ export interface FinishRunInput {
   readonly outputJson?: string;
 }
 
-export interface InsertNodeInput {
-  readonly nodeId: string;
-  readonly runId: string;
+export interface InsertMessageInInput {
+  readonly turnId: string;
+  /** Defaults to a fresh UUID — returned so attachments can FK to it. */
+  readonly itemId?: string;
+  readonly role: 'user' | 'assistant';
+  readonly text: string;
+  readonly startedAt: number;
+}
+
+export interface InsertItemInput {
+  readonly itemId: string;
+  readonly turnId: string;
   readonly ordinal: number;
   readonly batchId?: number;
-  readonly kind: AgentRunNodeKind;
-  /** The tool name or sub-run target. Omitted for `kind: 'step'`. */
+  readonly kind: ItemKind;
+  readonly role?: 'user' | 'assistant';
+  readonly text?: string;
   readonly name?: string;
   readonly argsJson?: string;
   readonly outputJson?: string;
+  readonly childTurnId?: string;
   readonly ok: boolean;
   readonly error?: string;
   readonly startedAt: number;
@@ -95,41 +123,31 @@ export interface InsertNodeInput {
   readonly outputTokens?: number;
   readonly cacheReadTokens?: number;
   readonly cacheWriteTokens?: number;
-  /** `step` / `agent` — the model + provider that served the call. */
   readonly model?: string;
   readonly provider?: string;
-  /** Frozen at write time from the per-model price table. */
   readonly costUsd?: number;
-  /** `tool` / `agent` / `invoke` — the app whose data the call touched. */
   readonly appId?: string;
-  readonly childRunId?: string;
 }
 
-/**
- * Insert a durable "running" `run_nodes` row (issue #158, ledger-tail
- * hybrid). The companion `closeNode` settles it on completion. While open,
- * `ended_at`/`duration_ms` are NULL — the in-flight marker the run viewer
- * reads — and `ok` is provisionally true.
- */
-export interface OpenNodeInput {
-  readonly nodeId: string;
-  readonly runId: string;
+/** Insert a durable "running" item (issue #158); `closeItem` settles it. */
+export interface OpenItemInput {
+  readonly itemId: string;
+  readonly turnId: string;
   readonly ordinal: number;
   readonly batchId?: number;
-  readonly kind: AgentRunNodeKind;
+  readonly kind: ItemKind;
   readonly name?: string;
   readonly argsJson?: string;
   readonly appId?: string;
   readonly startedAt: number;
 }
 
-/** Settle a node opened by `openNode`: outcome + the token/model rollup. */
-export interface CloseNodeInput {
-  readonly nodeId: string;
+export interface CloseItemInput {
+  readonly itemId: string;
   readonly ok: boolean;
   readonly outputJson?: string;
   readonly error?: string;
-  readonly childRunId?: string;
+  readonly childTurnId?: string;
   readonly endedAt: number;
   readonly durationMs: number;
   readonly inputTokens?: number;
@@ -141,34 +159,31 @@ export interface CloseNodeInput {
   readonly costUsd?: number;
 }
 
-export interface ListRunsOptions {
-  /** When set, scope to one automation's runs. */
-  readonly automationId?: string;
+export interface InsertAttachmentInput {
+  readonly id?: string;
+  readonly itemId: string;
+  readonly hash: string;
+  readonly mime: string;
+  readonly sizeBytes: number;
+  readonly source?: string;
+  readonly filename?: string;
+}
+
+export interface ListTurnsOptions {
   readonly status?: 'ok' | 'error';
   readonly since?: number;
   readonly limit?: number;
 }
 
-/**
- * Store over the activity DB's unified ledger tables.
- *
- * Construct with a shared `DatabaseProvider` (the same one `UserStore`
- * / `ChatHistoryStore` / `AutomationStore` use). The connection is
- * opened lazily by the provider on first method call.
- */
-export class AgentRunsStore {
+/** `Conversation` plus its reconstructed transcript length. */
+export type ConversationMeta = Conversation & { readonly messageCount: number };
+
+export class ConversationStore {
   private readonly provider: DatabaseProvider;
   private readonly analytics: RunSummarySink | undefined;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
 
-  /**
-   * Construct over a run-ledger `DatabaseProvider` — a per-app
-   * `runtime.sqlite` for automation runs, or `centraid-activity.sqlite`
-   * for chat runs. When an `analytics` store is supplied, `finishRun`
-   * write-throughs a summary row to the central analytics DB
-   * (best-effort — issue #98, decision 4).
-   */
   constructor(provider: DatabaseProvider, analytics?: RunSummarySink) {
     this.provider = provider;
     this.analytics = analytics;
@@ -183,57 +198,396 @@ export class AgentRunsStore {
     return { db, stmts };
   }
 
-  insertRun(input: InsertRunInput): void {
+  /** Run `fn` inside one `IMMEDIATE` transaction; rolls back on throw. */
+  runInTransaction<T>(fn: () => T): T {
+    const { db } = this.ensureReady();
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const out = fn();
+      db.exec('COMMIT');
+      return out;
+    } catch (err) {
+      try {
+        db.exec('ROLLBACK');
+      } catch {
+        /* already rolled back */
+      }
+      throw err;
+    }
+  }
+
+  // ─── conversations ──────────────────────────────────────────────────
+
+  createConversation(input: CreateConversationInput): Conversation {
     const { stmts } = this.ensureReady();
-    stmts.insertRun.run(
-      input.runId,
-      input.kind ?? 'automation',
-      input.automationId ?? null,
-      input.conversationId ?? null,
+    const now = Date.now();
+    const id = input.id ?? randomUUID();
+    stmts.insertConversation.run(
+      id,
+      input.kind,
+      input.userId,
       input.appId ?? null,
+      input.automationId ?? null,
+      input.title ?? '',
+      now,
+      now,
+    );
+    return {
+      id,
+      kind: input.kind,
+      userId: input.userId,
+      ...(input.appId !== undefined ? { appId: input.appId } : {}),
+      ...(input.automationId !== undefined ? { automationId: input.automationId } : {}),
+      title: input.title ?? '',
+      turnCount: 0,
+      pinned: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  /** Idempotently create the automation's thread (id == automation id). */
+  ensureAutomationConversation(automationId: string, appId?: string): void {
+    const { stmts } = this.ensureReady();
+    const now = Date.now();
+    stmts.ensureAutomationConversation.run(automationId, appId ?? null, automationId, now, now);
+  }
+
+  getConversation(id: string): Conversation | undefined {
+    const { stmts } = this.ensureReady();
+    const raw = stmts.getConversation.get(id) as RawConversation | undefined;
+    return raw ? conversationFromRaw(raw) : undefined;
+  }
+
+  getConversationMeta(id: string, userId: string): ConversationMeta | undefined {
+    const { stmts } = this.ensureReady();
+    const raw = stmts.getConversationWithCount.get(id, userId) as
+      | (RawConversation & { msg_count: number })
+      | undefined;
+    if (!raw) return undefined;
+    return { ...conversationFromRaw(raw), messageCount: Number(raw.msg_count) };
+  }
+
+  listConversationsMeta(userId: string): ConversationMeta[] {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listConversations.all(userId) as unknown as (RawConversation & {
+      msg_count: number;
+    })[];
+    return rows.map((r) => ({ ...conversationFromRaw(r), messageCount: Number(r.msg_count) }));
+  }
+
+  renameConversation(id: string, userId: string, title: string): boolean {
+    const { stmts } = this.ensureReady();
+    return Number(stmts.renameConversation.run(title, Date.now(), id, userId).changes) > 0;
+  }
+
+  /** Delete a conversation (user-scoped). Turns / items / attachments cascade. */
+  deleteConversation(id: string, userId: string): boolean {
+    const { stmts } = this.ensureReady();
+    return Number(stmts.deleteConversationForUser.run(id, userId).changes) > 0;
+  }
+
+  /** Delete an automation's thread + state (id == automation id). Cascades. */
+  deleteAutomationData(automationId: string): void {
+    const { stmts } = this.ensureReady();
+    stmts.deleteConversationById.run(automationId);
+    stmts.deleteStateByAutomation.run(automationId);
+  }
+
+  titleOf(id: string, userId: string): string | undefined {
+    const { stmts } = this.ensureReady();
+    const row = stmts.titleOf.get(id, userId) as { title: string } | undefined;
+    return row?.title;
+  }
+
+  setTitle(id: string, userId: string, title: string, now: number): void {
+    const { stmts } = this.ensureReady();
+    stmts.setTitle.run(title, now, id, userId);
+  }
+
+  setKind(id: string, userId: string, kind: RunKind): void {
+    const { stmts } = this.ensureReady();
+    stmts.setKind.run(kind, id, userId);
+  }
+
+  touchConversation(id: string, userId: string, now: number): void {
+    const { stmts } = this.ensureReady();
+    stmts.touchConversation.run(now, id, userId);
+  }
+
+  /** Bump turn_count + updated_at; optionally persist the runner-resume handle. */
+  noteTurn(id: string, userId: string, adapter?: { kind: string; sessionId?: string }): boolean {
+    const { stmts } = this.ensureReady();
+    const now = Date.now();
+    let res;
+    if (adapter && adapter.sessionId !== undefined) {
+      res = stmts.noteTurnWithAdapter.run(now, adapter.kind, adapter.sessionId, id, userId);
+    } else if (adapter) {
+      res = stmts.noteTurnKindOnly.run(now, adapter.kind, id, userId);
+    } else {
+      res = stmts.noteTurnNoAdapter.run(now, id, userId);
+    }
+    return Number(res.changes) > 0;
+  }
+
+  // ─── turns ──────────────────────────────────────────────────────────
+
+  insertTurn(input: InsertTurnInput): void {
+    const { stmts } = this.ensureReady();
+    const seqRow = stmts.maxSeq.get(input.conversationId) as { m: number };
+    stmts.insertTurn.run(
+      input.turnId,
+      input.conversationId,
+      Number(seqRow.m) + 1,
+      input.parentTurnId ?? null,
       input.triggerKind,
       input.triggerOrigin ?? null,
-      input.parentRunId ?? null,
       input.retryOf ?? null,
       input.note ?? null,
-      input.inputJson ?? null,
       input.startedAt,
     );
   }
 
-  finishRun(input: FinishRunInput): void {
+  finishTurn(input: FinishTurnInput): void {
     const { stmts } = this.ensureReady();
-    stmts.finishRun.run({
+    stmts.finishTurn.run({
       endedAt: input.endedAt,
       ok: input.ok ? 1 : 0,
       error: input.error ?? null,
       summary: input.summary ?? null,
       outputJson: input.outputJson ?? null,
-      rid: input.runId,
+      tid: input.turnId,
     });
-    if (this.analytics) this.writeRunSummary(input.runId);
+    if (this.analytics) this.writeRunSummary(input.turnId);
+  }
+
+  getTurn(turnId: string): Turn | undefined {
+    const { stmts } = this.ensureReady();
+    const raw = stmts.getTurn.get(turnId) as RawTurn | undefined;
+    return raw ? turnFromRaw(raw) : undefined;
+  }
+
+  /** Every turn of a conversation, oldest-first (seq ASC) — the thread's turns. */
+  listTurns(conversationId: string): Turn[] {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listTurnsAsc.all(conversationId) as unknown as RawTurn[];
+    return rows.map(turnFromRaw);
+  }
+
+  /** Newest-first, filtered turns of a conversation — the activity feed. */
+  listTurnsFiltered(conversationId: string, opts: ListTurnsOptions = {}): Turn[] {
+    const { stmts } = this.ensureReady();
+    const limit = opts.limit ?? 50;
+    const since = opts.since ?? null;
+    const okFilter = opts.status === undefined ? null : opts.status === 'ok' ? 1 : 0;
+    const rows = stmts.listTurnsFiltered.all(
+      conversationId,
+      since,
+      since,
+      okFilter,
+      okFilter,
+      limit,
+    ) as unknown as RawTurn[];
+    return rows.map(turnFromRaw);
+  }
+
+  setTurnPinned(turnId: string, pinned: boolean): void {
+    const { stmts } = this.ensureReady();
+    stmts.setTurnPinned.run(pinned ? 1 : 0, turnId);
   }
 
   /**
-   * Write-through this run's one-row summary to the central analytics
-   * DB. Best-effort — an analytics-DB failure is swallowed so it never
-   * fails the run; the run ledger here stays authoritative.
+   * Apply a `history.keep` retention policy for a conversation. Cascading
+   * FKs drop the orphaned items + attachments.
    */
-  private writeRunSummary(runId: string): void {
+  prune(
+    conversationId: string,
+    keep: { count?: number; days?: number; errorsOnly?: boolean; all?: boolean },
+  ): void {
+    const { stmts } = this.ensureReady();
+    if (keep.all) return;
+    if (keep.errorsOnly) {
+      stmts.pruneErrorsOnly.run(conversationId);
+      return;
+    }
+    if (keep.count !== undefined && keep.count >= 0) {
+      stmts.pruneByCount.run(conversationId, conversationId, keep.count);
+      return;
+    }
+    if (keep.days !== undefined && keep.days >= 0) {
+      stmts.pruneByDays.run(conversationId, Date.now() - keep.days * 24 * 60 * 60 * 1000);
+    }
+  }
+
+  // ─── items ──────────────────────────────────────────────────────────
+
+  /** Record the inbound message as ordinal 0; returns the item id for attachments. */
+  insertMessageIn(input: InsertMessageInInput): string {
+    const { stmts } = this.ensureReady();
+    const itemId = input.itemId ?? randomUUID();
+    stmts.insertMessageIn.run(itemId, input.turnId, 0, input.role, input.text, input.startedAt);
+    return itemId;
+  }
+
+  insertItem(input: InsertItemInput): void {
+    const { stmts } = this.ensureReady();
+    stmts.insertItem.run(
+      input.itemId,
+      input.turnId,
+      input.ordinal,
+      input.batchId ?? null,
+      input.kind,
+      input.role ?? null,
+      input.text ?? null,
+      input.model ?? null,
+      input.provider ?? null,
+      input.inputTokens ?? null,
+      input.outputTokens ?? null,
+      input.cacheReadTokens ?? null,
+      input.cacheWriteTokens ?? null,
+      input.costUsd ?? null,
+      input.appId ?? null,
+      input.name ?? null,
+      input.argsJson ?? null,
+      input.outputJson ?? null,
+      input.childTurnId ?? null,
+      input.ok ? 1 : 0,
+      input.error ?? null,
+      input.startedAt,
+      input.endedAt,
+      input.durationMs,
+    );
+  }
+
+  openItem(input: OpenItemInput): void {
+    const { stmts } = this.ensureReady();
+    stmts.openItem.run(
+      input.itemId,
+      input.turnId,
+      input.ordinal,
+      input.batchId ?? null,
+      input.kind,
+      input.appId ?? null,
+      input.name ?? null,
+      input.argsJson ?? null,
+      input.startedAt,
+    );
+  }
+
+  closeItem(input: CloseItemInput): void {
+    const { stmts } = this.ensureReady();
+    stmts.closeItem.run({
+      ok: input.ok ? 1 : 0,
+      outputJson: input.outputJson ?? null,
+      error: input.error ?? null,
+      childTurnId: input.childTurnId ?? null,
+      inputTokens: input.inputTokens ?? null,
+      outputTokens: input.outputTokens ?? null,
+      cacheReadTokens: input.cacheReadTokens ?? null,
+      cacheWriteTokens: input.cacheWriteTokens ?? null,
+      model: input.model ?? null,
+      provider: input.provider ?? null,
+      costUsd: input.costUsd ?? null,
+      endedAt: input.endedAt,
+      durationMs: input.durationMs,
+      itemId: input.itemId,
+    });
+  }
+
+  listItems(turnId: string): Item[] {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listItems.all(turnId) as unknown as RawItem[];
+    return rows.map(itemFromRaw);
+  }
+
+  /** The turn's inbound `message_in` payload text, if any. */
+  messageInText(turnId: string): string | undefined {
+    const { stmts } = this.ensureReady();
+    const row = stmts.messageInText.get(turnId) as { text: string | null } | undefined;
+    return row?.text ?? undefined;
+  }
+
+  // ─── attachments ────────────────────────────────────────────────────
+
+  insertAttachment(input: InsertAttachmentInput): string {
+    const { stmts } = this.ensureReady();
+    const id = input.id ?? randomUUID();
+    stmts.insertAttachment.run(
+      id,
+      input.itemId,
+      input.hash,
+      input.mime,
+      input.sizeBytes,
+      input.source ?? null,
+      input.filename ?? null,
+      Date.now(),
+    );
+    return id;
+  }
+
+  listAttachmentsForItem(itemId: string): Attachment[] {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listAttachmentsForItem.all(itemId) as unknown as RawAttachment[];
+    return rows.map(attachmentFromRaw);
+  }
+
+  listAttachmentsForTurn(turnId: string): Attachment[] {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listAttachmentsForTurn.all(turnId) as unknown as RawAttachment[];
+    return rows.map(attachmentFromRaw);
+  }
+
+  /** Every blob hash still referenced by an attachment row — the GC live set. */
+  referencedHashes(): Set<string> {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.referencedHashes.all() as unknown as { hash: string }[];
+    return new Set(rows.map((r) => r.hash));
+  }
+
+  // ─── automation state KV ────────────────────────────────────────────
+
+  stateGet(automationId: string, key: string): AutomationStateEntry | undefined {
+    const { stmts } = this.ensureReady();
+    const raw = stmts.getState.get(automationId, key) as RawState | undefined;
+    return raw ? stateFromRaw(raw) : undefined;
+  }
+
+  stateSet(automationId: string, key: string, valueJson: string, updatedAt: number): void {
+    const { stmts } = this.ensureReady();
+    stmts.upsertState.run(automationId, key, valueJson, updatedAt);
+  }
+
+  stateDelete(automationId: string, key: string): void {
+    const { stmts } = this.ensureReady();
+    stmts.deleteState.run(automationId, key);
+  }
+
+  /**
+   * Write-through this turn's one-row summary to the central analytics DB,
+   * sourcing `kind` / `app_id` / `automation_ref` from the owning conversation
+   * (issue #190). Best-effort — an analytics-DB failure is swallowed so it
+   * never fails the turn; this per-app ledger stays authoritative.
+   */
+  private writeRunSummary(turnId: string): void {
     if (!this.analytics) return;
     try {
       const { stmts } = this.ensureReady();
-      const row = this.getRun(runId);
+      const row = this.getTurn(turnId);
       if (!row) return;
-      const dom = stmts.dominantModel.get(runId) as { model: string } | undefined;
-      // For an automation run, `automation_id` is the `<appId>/<id>`
-      // handle; the app id is the segment before the slash.
-      const automationRef = row.kind === 'automation' ? row.automationId : undefined;
+      const conv = stmts.convForTurn.get(turnId) as
+        | { kind: string; app_id: string | null; automation_id: string | null }
+        | undefined;
+      if (!conv) return;
+      const kind = conv.kind as RunKind;
+      const dom = stmts.dominantModel.get(turnId) as { model: string } | undefined;
+      const automationRef = kind === 'automation' ? (conv.automation_id ?? undefined) : undefined;
+      // For an automation, the `<appId>/<id>` handle's app id is the segment
+      // before the slash; else the conversation's own `app_id`.
       const slash = automationRef ? automationRef.indexOf('/') : -1;
-      const appId = slash > 0 ? automationRef!.slice(0, slash) : row.appId;
+      const appId = slash > 0 ? automationRef!.slice(0, slash) : (conv.app_id ?? undefined);
       this.analytics.recordRunSummary({
-        runId: row.runId,
-        kind: row.kind,
+        runId: row.turnId,
+        kind,
         ...(automationRef !== undefined ? { automationRef } : {}),
         ...(appId !== undefined ? { appId } : {}),
         trigger: row.triggerKind,
@@ -266,207 +620,10 @@ export class AgentRunsStore {
     }
   }
 
-  getRun(runId: string): AgentRunRow | undefined {
-    const { stmts } = this.ensureReady();
-    const raw = stmts.getRun.get(runId) as RawRun | undefined;
-    return raw ? runFromRaw(raw) : undefined;
-  }
-
-  listRuns(opts: ListRunsOptions = {}): AgentRunRow[] {
-    const { stmts } = this.ensureReady();
-    const limit = opts.limit ?? 50;
-    const since = opts.since ?? null;
-    // `status` is pushed into the SQL predicate (not filtered after LIMIT)
-    // so `{ status: 'ok', limit: N }` returns N successful runs even when
-    // recent failures would otherwise crowd them out of the window.
-    const okFilter = opts.status === undefined ? null : opts.status === 'ok' ? 1 : 0;
-    const rows =
-      opts.automationId !== undefined
-        ? (stmts.listRunsByAutomation.all(
-            opts.automationId,
-            since,
-            since,
-            okFilter,
-            okFilter,
-            limit,
-          ) as unknown as RawRun[])
-        : (stmts.listRunsAll.all(since, since, okFilter, okFilter, limit) as unknown as RawRun[]);
-    return rows.map(runFromRaw);
-  }
-
-  /** Every run for a chat session, oldest first — the conversation's turns. */
-  listChatRuns(conversationId: string): AgentRunRow[] {
-    const { stmts } = this.ensureReady();
-    const rows = stmts.listRunsByConversation.all(conversationId) as unknown as RawRun[];
-    return rows.map(runFromRaw);
-  }
-
-  lastRun(automationId: string, status?: 'ok' | 'error'): AgentRunRow | undefined {
-    const { stmts } = this.ensureReady();
-    const okFilter = status === undefined ? null : status === 'ok' ? 1 : 0;
-    const raw = stmts.lastRunByAutomation.get(automationId, okFilter, okFilter) as
-      | RawRun
-      | undefined;
-    return raw ? runFromRaw(raw) : undefined;
-  }
-
   /**
-   * Pin / unpin a run. A pinned run becomes a replay fixture: a
-   * `triggerKind: 'replay'` fire serves its recorded `run_nodes` outputs,
-   * and retention pruning never drops it.
-   */
-  setPinned(runId: string, pinned: boolean): void {
-    const { stmts } = this.ensureReady();
-    stmts.setPinned.run(pinned ? 1 : 0, runId);
-  }
-
-  /** Most recent pinned run for an automation, or undefined when none is pinned. */
-  pinnedRun(automationId: string): AgentRunRow | undefined {
-    const { stmts } = this.ensureReady();
-    const raw = stmts.pinnedRunByAutomation.get(automationId) as RawRun | undefined;
-    return raw ? runFromRaw(raw) : undefined;
-  }
-
-  /** Child runs spawned as sub-runs of the given parent, oldest first. */
-  listChildRuns(parentRunId: string): AgentRunRow[] {
-    const { stmts } = this.ensureReady();
-    const rows = stmts.listChildRunsByParent.all(parentRunId) as unknown as RawRun[];
-    return rows.map(runFromRaw);
-  }
-
-  insertNode(input: InsertNodeInput): void {
-    const { stmts } = this.ensureReady();
-    stmts.insertNode.run(
-      input.nodeId,
-      input.runId,
-      input.ordinal,
-      input.batchId ?? null,
-      input.kind,
-      input.model ?? null,
-      input.provider ?? null,
-      input.inputTokens ?? null,
-      input.outputTokens ?? null,
-      input.cacheReadTokens ?? null,
-      input.cacheWriteTokens ?? null,
-      input.costUsd ?? null,
-      input.appId ?? null,
-      input.name ?? null,
-      input.argsJson ?? null,
-      input.outputJson ?? null,
-      input.childRunId ?? null,
-      input.ok ? 1 : 0,
-      input.error ?? null,
-      input.startedAt,
-      input.endedAt,
-      input.durationMs,
-    );
-  }
-
-  /** Insert a durable "running" node row (ended_at NULL). See `OpenNodeInput`. */
-  openNode(input: OpenNodeInput): void {
-    const { stmts } = this.ensureReady();
-    stmts.openNode.run(
-      input.nodeId,
-      input.runId,
-      input.ordinal,
-      input.batchId ?? null,
-      input.kind,
-      input.appId ?? null,
-      input.name ?? null,
-      input.argsJson ?? null,
-      input.startedAt,
-    );
-  }
-
-  /** Settle a node opened by `openNode`. See `CloseNodeInput`. */
-  closeNode(input: CloseNodeInput): void {
-    const { stmts } = this.ensureReady();
-    stmts.closeNode.run({
-      ok: input.ok ? 1 : 0,
-      outputJson: input.outputJson ?? null,
-      error: input.error ?? null,
-      childRunId: input.childRunId ?? null,
-      inputTokens: input.inputTokens ?? null,
-      outputTokens: input.outputTokens ?? null,
-      cacheReadTokens: input.cacheReadTokens ?? null,
-      cacheWriteTokens: input.cacheWriteTokens ?? null,
-      model: input.model ?? null,
-      provider: input.provider ?? null,
-      costUsd: input.costUsd ?? null,
-      endedAt: input.endedAt,
-      durationMs: input.durationMs,
-      nodeId: input.nodeId,
-    });
-  }
-
-  listNodes(runId: string): AgentRunNodeRow[] {
-    const { stmts } = this.ensureReady();
-    const rows = stmts.listNodesByRun.all(runId) as unknown as RawNode[];
-    return rows.map(nodeFromRaw);
-  }
-
-  stateGet(automationId: string, key: string): AutomationStateEntry | undefined {
-    const { stmts } = this.ensureReady();
-    const raw = stmts.getState.get(automationId, key) as RawState | undefined;
-    return raw ? stateFromRaw(raw) : undefined;
-  }
-
-  stateSet(automationId: string, key: string, valueJson: string, updatedAt: number): void {
-    const { stmts } = this.ensureReady();
-    stmts.upsertState.run(automationId, key, valueJson, updatedAt);
-  }
-
-  stateDelete(automationId: string, key: string): void {
-    const { stmts } = this.ensureReady();
-    stmts.deleteState.run(automationId, key);
-  }
-
-  countRuns(automationId: string): number {
-    const { stmts } = this.ensureReady();
-    const raw = stmts.countRunsByAutomation.get(automationId) as { c: number } | undefined;
-    return raw?.c ?? 0;
-  }
-
-  /**
-   * Apply a `history.keep` retention policy for an automation. Cascading
-   * FKs drop the orphaned `run_nodes`. Runs at end-of-run.
-   */
-  prune(
-    automationId: string,
-    keep: { count?: number; days?: number; errorsOnly?: boolean; all?: boolean },
-  ): void {
-    const { stmts } = this.ensureReady();
-    if (keep.all) return;
-    if (keep.errorsOnly) {
-      stmts.pruneErrorsOnly.run(automationId);
-      return;
-    }
-    if (keep.count !== undefined && keep.count >= 0) {
-      stmts.pruneByCount.run(automationId, automationId, keep.count);
-      return;
-    }
-    if (keep.days !== undefined && keep.days >= 0) {
-      const cutoff = Date.now() - keep.days * 24 * 60 * 60 * 1000;
-      stmts.pruneByDays.run(automationId, cutoff);
-    }
-  }
-
-  /**
-   * Drop every run + state row for one automation. `run_nodes` cascade
-   * off `runs`. Called when the automation is deleted.
-   */
-  deleteAutomationData(automationId: string): void {
-    const { stmts } = this.ensureReady();
-    stmts.deleteRunsByAutomation.run(automationId);
-    stmts.deleteStateByAutomation.run(automationId);
-  }
-
-  /**
-   * No-op. The activity DB connection is owned by the host's
-   * `DatabaseProvider` and shared with `UserStore` / `ChatHistoryStore`
-   * / `AutomationStore` — closing it mid-fire would break them. Kept
-   * for call-site compatibility; only the cached prepared statements
-   * are cleared.
+   * No-op close. The connection is owned by the host's `DatabaseProvider`
+   * and shared with the other gateway-state stores; only the cached prepared
+   * statements are cleared.
    */
   close(): void {
     this.db = undefined;

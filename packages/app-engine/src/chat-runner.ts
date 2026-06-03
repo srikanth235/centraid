@@ -18,6 +18,7 @@
  */
 
 import type { RunKind } from './agent-runs-schema.js';
+import type { TurnAttachment } from './agent-turn.js';
 
 /**
  * Normalized stream events both adapters emit. The route handler translates
@@ -112,6 +113,13 @@ export interface ChatRunInput {
    */
   sessionFile: string;
   message: string;
+  /**
+   * Files attached to this turn's inbound message — already landed in the
+   * per-app blob CAS; `path` is the absolute blob path (issue #190). The
+   * route resolves these from the turn POST body's attachment refs; the
+   * runner threads them into the adapter as multimodal content blocks.
+   */
+  attachments?: TurnAttachment[];
   /**
    * App-context prompt the app-engine builds (app name, description,
    * live schema). Adapters splice this into their own `extraSystemPrompt`

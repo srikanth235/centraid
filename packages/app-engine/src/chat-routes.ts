@@ -1,3 +1,5 @@
+// governance: allow-repo-hygiene file-size-limit #190 — attachment ingestion
+// wiring (issue #190) tips this cohesive route handler just over the cap.
 /*
  * HTTP route handler for the per-app chat surface.
  *
@@ -146,13 +148,25 @@ async function withConversationLock<T>(
   }
 }
 
+/** A file uploaded to the blob CAS before the turn, referenced by its hash. */
+interface AttachmentRef {
+  hash: string;
+  mime: string;
+  filename?: string;
+  sizeBytes?: number;
+}
+
 interface PostBody {
   conversationId?: string;
   message?: string;
   model?: string;
   thinking?: string;
   idempotencyKey?: string;
+  /** Attachments uploaded ahead of this turn (issue #190). */
+  attachments?: AttachmentRef[];
 }
+
+const HASH_RE = /^[a-f0-9]{64}$/;
 
 /**
  * Dispatch one chat-route request. Errors thrown out of here are caught by
@@ -227,6 +241,25 @@ async function handlePostTurn(
     prevAdapterSessionId = session.adapterSessionId ?? undefined;
     prevAdapterKind = session.adapterKind ?? undefined;
   }
+
+  // Attachments uploaded ahead of the turn (issue #190): the bytes already
+  // live in the per-app blob CAS, keyed by sha256. We resolve each to its
+  // on-disk path so the adapter can build an image/document content block, and
+  // keep the refs to record `attachments` rows on the turn's `message_in` item.
+  const attachmentRefs: AttachmentRef[] = Array.isArray(body.attachments)
+    ? body.attachments.filter(
+        (a): a is AttachmentRef =>
+          !!a && typeof a.hash === 'string' && HASH_RE.test(a.hash) && typeof a.mime === 'string',
+      )
+    : [];
+  const turnAttachments =
+    ctx.chatStore && attachmentRefs.length > 0
+      ? attachmentRefs.map((a) => ({
+          path: ctx.chatStore!.blobPathFor(entry.id, a.hash),
+          mime: a.mime,
+          ...(a.filename !== undefined ? { filename: a.filename } : {}),
+        }))
+      : [];
 
   const appMeta = ctx.appMeta ? await ctx.appMeta(entry).catch(() => ({}) as never) : undefined;
   const schema = safeReadSchema(entry);
@@ -364,6 +397,7 @@ async function handlePostTurn(
     conversationId,
     sessionFile,
     message,
+    ...(turnAttachments.length > 0 ? { attachments: turnAttachments } : {}),
     extraSystemPrompt,
     abortSignal: abortController.signal,
     onEvent,
@@ -423,6 +457,16 @@ async function handlePostTurn(
             // runner so an errored turn (no `ChatRunResult`) is still tagged.
             ...(ctx.runner?.runKind ? { kind: ctx.runner.runKind } : {}),
             userMessage: message,
+            ...(attachmentRefs.length > 0
+              ? {
+                  attachments: attachmentRefs.map((a) => ({
+                    hash: a.hash,
+                    mime: a.mime,
+                    sizeBytes: a.sizeBytes ?? 0,
+                    ...(a.filename !== undefined ? { filename: a.filename } : {}),
+                  })),
+                }
+              : {}),
             startedAt: turnStartedAt,
             endedAt,
             ok: acc.errorMessage === undefined,

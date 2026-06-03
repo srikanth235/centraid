@@ -38,6 +38,7 @@ export type {
   AgentTurnInput,
   AgentTurnConfig,
   AgentTurnResult,
+  TurnAttachment,
   RunTurnFn,
 } from './agent-turn.js';
 
@@ -178,19 +179,26 @@ export {
   type ChatSessionMeta,
   type ChatMessageRow,
   type ChatTurnNode,
+  type ChatTurnAttachment,
   type RecordTurnInput,
   type UserIdProvider,
 } from './chat-history.js';
 export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
+// Per-app blob content-addressed store for attachment bytes (issue #190).
+// Bytes live at `<appsDir>/<appId>/blobs/<hash>`, deduped by sha256; the
+// `attachments` rows in `runtime.sqlite` carry the metadata. GC is
+// refcount-by-hash off `ConversationStore.referencedHashes`.
+export { BlobStore, blobUrl, hashBytes, type PutResult } from './blob-store.js';
+
 // SQLite state — app-engine owns two migration ladders, each its own file +
 // connection:
 //   - gateway (`centraid-gateway.sqlite`):  users, user_prefs
-//   - runtime (`<appRoot>/runtime.sqlite`): chat_sessions, runs, run_nodes,
-//                                           automation_state
-// `UserStore` ← gateway; `ChatHistoryStore` + the per-app run ledger ←
-// each app's runtime.sqlite. Cross-file FKs aren't possible in SQLite, so
-// `chat_sessions.user_id` is application-enforced. The third (analytics)
+//   - runtime (`<appRoot>/runtime.sqlite`): conversations, turns, items,
+//                                           attachments, automation_state
+// `UserStore` ← gateway; `ChatHistoryStore` + the per-app conversation ledger
+// ← each app's runtime.sqlite. Cross-file FKs aren't possible in SQLite, so
+// `conversations.user_id` is application-enforced. The third (analytics)
 // ladder lives in the `insights/` sub-module, built through `makeMigratedDbProvider`.
 export {
   openGatewayDb,
@@ -230,27 +238,33 @@ export {
 export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
 export type { SettingsInject } from './static-server.js';
 
-// Unified agent-run ledger + ctx.state store. The three tables
-// (`runs`, `run_nodes`, `automation_state`) live in the activity DB;
-// the store is runtime-owned and never reachable from handler `db` or
-// the `centraid_sql_*` agent tools. See issues #80 and #90.
+// Conversation ledger + ctx.state store (issue #190). The five tables
+// (`conversations`, `turns`, `items`, `attachments`, `automation_state`)
+// live in the per-app runtime DB; the store is runtime-owned and never
+// reachable from handler `db` or the `centraid_sql_*` agent tools.
 export {
-  AgentRunsStore,
-  type InsertRunInput,
-  type FinishRunInput,
-  type InsertNodeInput,
-  type OpenNodeInput,
-  type CloseNodeInput,
-  type ListRunsOptions,
+  ConversationStore,
+  type ConversationMeta,
+  type CreateConversationInput,
+  type InsertTurnInput,
+  type FinishTurnInput,
+  type InsertMessageInInput,
+  type InsertItemInput,
+  type OpenItemInput,
+  type CloseItemInput,
+  type InsertAttachmentInput,
+  type ListTurnsOptions,
 } from './agent-runs-store.js';
 export type { RunStreamEvent } from './run-stream-event.js';
 export type {
-  AgentRunRow,
-  AgentRunNodeRow,
+  Conversation,
+  Turn,
+  Item,
+  Attachment,
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationTriggerOrigin,
-  AgentRunNodeKind,
+  ItemKind,
   RunKind,
 } from './agent-runs-schema.js';
 

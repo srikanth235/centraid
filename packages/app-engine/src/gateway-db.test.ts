@@ -95,7 +95,7 @@ describe('openGatewayDb (users + user_prefs)', () => {
   });
 });
 
-describe('openRuntimeDb (per-app chat_sessions + run ledger)', () => {
+describe('openRuntimeDb (per-app conversation ledger)', () => {
   it('advances PRAGMA user_version to RUNTIME_MIGRATIONS.length on a fresh DB', () => {
     const path = freshDbPath();
     openRuntimeDb(path).close();
@@ -103,88 +103,125 @@ describe('openRuntimeDb (per-app chat_sessions + run ledger)', () => {
     assert.equal(RUNTIME_MIGRATIONS.length, 1);
   });
 
-  it('creates chat_sessions + the run ledger (no automations table)', () => {
-    // Issue #91: automation definitions live on disk, not in SQLite.
+  it('creates conversations/turns/items/attachments + automation_state (no legacy tables)', () => {
     const path = freshDbPath();
     openRuntimeDb(path).close();
-    assert.deepEqual(tableNames(path), ['automation_state', 'chat_sessions', 'run_nodes', 'runs']);
+    assert.deepEqual(tableNames(path), [
+      'attachments',
+      'automation_state',
+      'conversations',
+      'items',
+      'turns',
+    ]);
   });
 
-  it('chat_sessions has NO foreign key (user_id is application-enforced)', () => {
-    // `users` lives in the separate gateway file; SQLite has no cross-file
-    // FKs, so chat_sessions must not declare one.
+  it('conversations has NO foreign key (user_id is application-enforced)', () => {
+    // `users` lives in the separate gateway file; SQLite has no cross-file FKs.
     const path = freshDbPath();
     openRuntimeDb(path).close();
     const db = new DatabaseSync(path);
     try {
-      const fks = db.prepare(`PRAGMA foreign_key_list('chat_sessions')`).all();
-      assert.equal(fks.length, 0, 'chat_sessions should declare no foreign keys');
+      assert.equal(db.prepare(`PRAGMA foreign_key_list('conversations')`).all().length, 0);
     } finally {
       db.close();
     }
   });
 
-  it('run_nodes cascades off runs; conversation_id + parent_run_id have no FK', () => {
-    // `conversation_id` is polymorphic (chat-session id OR automation id), so
-    // it is a plain column with no FK — the chat-session → runs cascade lives
-    // in the store. `parent_run_id` is likewise plain — a cross-app
-    // `ctx.invoke` sub-run's parent lives in a different app's file and a
-    // SQLite FK can't span files.
+  it('turns→conversations and items→turns and attachments→items are CASCADE FKs', () => {
     const path = freshDbPath();
     openRuntimeDb(path).close();
     const db = new DatabaseSync(path);
     try {
-      const nodeFk = (
-        db.prepare(`PRAGMA foreign_key_list('run_nodes')`).all() as Array<{
-          table: string;
-          on_delete: string;
-        }>
-      ).find((f) => f.table === 'runs');
-      assert.ok(nodeFk, 'expected FK on run_nodes.run_id → runs.id');
-      assert.equal(nodeFk.on_delete, 'CASCADE');
-
-      const runFks = db.prepare(`PRAGMA foreign_key_list('runs')`).all() as Array<{
-        table: string;
+      const fk = (table: string, parent: string) =>
+        (
+          db.prepare(`PRAGMA foreign_key_list('${table}')`).all() as Array<{
+            table: string;
+            on_delete: string;
+          }>
+        ).find((f) => f.table === parent);
+      assert.equal(fk('turns', 'conversations')?.on_delete, 'CASCADE');
+      assert.equal(fk('items', 'turns')?.on_delete, 'CASCADE');
+      assert.equal(fk('attachments', 'items')?.on_delete, 'CASCADE');
+      // parent_turn_id is FK-free (cross-app sub-runs span files).
+      const turnFks = db.prepare(`PRAGMA foreign_key_list('turns')`).all() as Array<{
+        from: string;
       }>;
-      assert.equal(
-        runFks.length,
-        0,
-        'runs declares no foreign keys (conversation_id is polymorphic)',
-      );
+      assert.ok(!turnFks.some((f) => f.from === 'parent_turn_id'));
     } finally {
       db.close();
     }
   });
 
-  it('runs.conversation_id stores chat-session and automation ids alike', () => {
+  it('deleting a conversation cascades to its turns, items, and attachments', () => {
     const path = freshDbPath();
     const db = openRuntimeDb(path);
     try {
       const now = Date.now();
       db.prepare(
-        `INSERT INTO chat_sessions (id, user_id, title, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).run('s1', 'u1', 'hi', now, now);
-      // A chat run (conversation = chat session) and an automation run
-      // (conversation = automation id, no chat_sessions row) coexist — proof
-      // the column is FK-free and polymorphic.
+        `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
+         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+      ).run(now, now);
       db.prepare(
-        `INSERT INTO runs (id, kind, conversation_id, trigger, started_at)
-         VALUES (?, 'chat', ?, 'interactive', ?)`,
-      ).run('r1', 's1', now);
+        `INSERT INTO turns (id, conversation_id, seq, trigger, started_at)
+         VALUES ('t1', 'c1', 0, 'interactive', ?)`,
+      ).run(now);
       db.prepare(
-        `INSERT INTO runs (id, kind, automation_id, conversation_id, trigger, started_at)
-         VALUES (?, 'automation', ?, ?, 'manual', ?)`,
-      ).run('r2', 'app/digest', 'app/digest', now);
+        `INSERT INTO items (id, turn_id, ordinal, kind, role, text, started_at)
+         VALUES ('i1', 't1', 0, 'message_in', 'user', 'hi', ?)`,
+      ).run(now);
       db.prepare(
-        `INSERT INTO run_nodes (id, run_id, ordinal, kind, ok, started_at)
-         VALUES (?, ?, 0, 'step', 1, ?)`,
-      ).run('n1', 'r1', now);
+        `INSERT INTO attachments (id, item_id, hash, mime, size_bytes, created_at)
+         VALUES ('a1', 'i1', 'deadbeef', 'image/png', 10, ?)`,
+      ).run(now);
 
-      // run_nodes still cascade off runs.
-      db.prepare(`DELETE FROM runs WHERE id = ?`).run('r1');
-      const after = db.prepare(`SELECT COUNT(*) AS n FROM run_nodes`).get() as { n: number };
-      assert.equal(Number(after.n), 0, 'run_nodes cascade when their run is deleted');
+      db.prepare(`DELETE FROM conversations WHERE id = 'c1'`).run();
+      for (const table of ['turns', 'items', 'attachments']) {
+        const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number };
+        assert.equal(Number(n.n), 0, `${table} should cascade-delete with the conversation`);
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  it('CHECK constraints reject unknown conversation kind / turn trigger / item kind', () => {
+    const path = freshDbPath();
+    const db = openRuntimeDb(path);
+    try {
+      const now = Date.now();
+      assert.throws(
+        () =>
+          db
+            .prepare(
+              `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c', 'bogus', 'u', ?, ?)`,
+            )
+            .run(now, now),
+        /CHECK/i,
+      );
+      db.prepare(
+        `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c1','chat','u',?,?)`,
+      ).run(now, now);
+      assert.throws(
+        () =>
+          db
+            .prepare(
+              `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t','c1',0,'bogus',?)`,
+            )
+            .run(now),
+        /CHECK/i,
+      );
+      db.prepare(
+        `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t1','c1',0,'interactive',?)`,
+      ).run(now);
+      assert.throws(
+        () =>
+          db
+            .prepare(
+              `INSERT INTO items (id, turn_id, ordinal, kind, started_at) VALUES ('i','t1',0,'bogus',?)`,
+            )
+            .run(now),
+        /CHECK/i,
+      );
     } finally {
       db.close();
     }

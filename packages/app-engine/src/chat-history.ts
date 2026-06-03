@@ -1,39 +1,31 @@
 /*
- * Centraid chat store — the conversation-container store + transcript fold.
+ * Centraid chat facade — the conversation-container API + transcript fold,
+ * over the per-app `ConversationStore` (issue #98, reshaped by #190).
  *
- * Chat is app-scoped (issue #98): `chat_sessions` and a chat turn's run
- * ledger live in the owning app's per-app `runtime.sqlite` — the same
- * file as the app's automation runs. One `ChatHistoryStore` fronts every
- * app; each method takes the `appId` and resolves
- * `<appsDir>/<appId>/runtime.sqlite` lazily, caching the connection +
- * prepared statements per app. Sessions are still scoped by the
- * gateway-side user UUID (`UserStore.getUserId`) so a multi-user gateway
- * stays correct.
+ * A chat session IS a `conversations` row (`kind='chat'` | `'build'`). Chat is
+ * app-scoped: conversations + their turns/items/attachments live in the owning
+ * app's per-app `runtime.sqlite`. One `ChatHistoryStore` fronts every app;
+ * each method takes the `appId` and resolves `<appsDir>/<appId>/runtime.sqlite`
+ * lazily, caching one `ConversationStore` per app. Conversations are scoped by
+ * the gateway-side user UUID (`UserStore.getUserId`).
  *
- * The transcript is NOT its own table. A chat turn is a `runs` row
- * (`kind='chat'`, `conversation_id` FK) and the turn's messages are
- * `run_nodes` (issue #90 fold: `chat_messages` is gone). `recordTurn`
- * writes that trace; `getSession` reconstructs the renderer transcript.
- * Exposed over HTTP at `/_centraid-chat`, mounted identically by the
- * OpenClaw plugin and the embedded local runtime.
+ * The transcript is NOT its own table. A chat turn is a `turns` row; the
+ * turn's inbound message is its ordinal-0 `message_in` item, and the
+ * assistant text + tool calls are the remaining `items` (issue #190 fold).
+ * `recordTurn` writes that trace; `getSession` reconstructs the renderer
+ * transcript uniformly from items. Exposed over HTTP at `/_centraid-chat`.
  */
 
 import path from 'node:path';
-import { type DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
-import { makeRuntimeDbProvider, type DatabaseProvider } from './gateway-db.js';
-import { AgentRunsStore } from './agent-runs-store.js';
+import { makeRuntimeDbProvider } from './gateway-db.js';
+import { ConversationStore, type ConversationMeta } from './agent-runs-store.js';
 import type { RunKind } from './agent-runs-schema.js';
 import type { RunSummarySink } from './run-summary-sink.js';
 import { isValidAppId } from './app-paths.js';
 import { costForUsage } from './model-pricing.js';
-import { mapSessionRow, prepareChatStatements, type ChatStatements } from './chat-history-sql.js';
-import {
-  parseStepOutput,
-  parseToolArgs,
-  parseToolOutput,
-  parseUserMessage,
-} from './chat-transcript.js';
+import { parseStepOutput, parseToolArgs, parseToolOutput } from './chat-transcript.js';
+import { BlobStore, blobUrl, type PutResult } from './blob-store.js';
 
 export interface ChatSessionMeta {
   id: string;
@@ -58,9 +50,19 @@ export interface ChatMessageRow {
   createdAt: number;
 }
 
+/** A file already landed in the blob CAS, to attach to a turn's inbound message. */
+export interface ChatTurnAttachment {
+  hash: string;
+  mime: string;
+  sizeBytes: number;
+  filename?: string;
+  /** Defaults to `'upload'`. */
+  source?: string;
+}
+
 /**
- * One node of a completed chat turn, handed to `recordTurn`. The chat
- * route accumulates these from the runner's `ChatStreamEvent`s.
+ * One item of a completed chat turn, handed to `recordTurn`. The chat route
+ * accumulates these from the runner's `ChatStreamEvent`s.
  */
 export type ChatTurnNode =
   | {
@@ -69,10 +71,8 @@ export type ChatTurnNode =
       text: string;
       /** True when this step carries a runner/turn error message. */
       isError?: boolean;
-      /** The model + provider that served the turn, when the runner reports it. */
       model?: string;
       provider?: string;
-      /** Per-turn token usage from the runner's `usage` event, when reported. */
       inputTokens?: number;
       outputTokens?: number;
       cacheReadTokens?: number;
@@ -83,13 +83,11 @@ export type ChatTurnNode =
   | {
       kind: 'tool';
       toolName: string;
-      /** SQL surfaced separately for `centraid_sql_*` tools. */
       sql?: string;
       args?: unknown;
       ok: boolean;
       result?: unknown;
       errorText?: string;
-      /** App whose data the tool call touched (per-turn context). */
       appId?: string;
       startedAt: number;
       endedAt: number;
@@ -98,290 +96,233 @@ export type ChatTurnNode =
 export interface RecordTurnInput {
   conversationId: string;
   /**
-   * The ledger kind to persist this turn as. A builder-surface turn is
-   * `'build'`; a data chat is `'chat'` (the default when omitted) — issue
-   * #181. Both are interactive chat turns sharing one transcript shape; the
-   * kind only records which surface drove the turn.
+   * The conversation kind. A builder-surface turn is `'build'`; a data chat is
+   * `'chat'` (the default). Set on the conversation the first time it differs
+   * — a thread is single-kind (issue #190).
    */
   kind?: RunKind;
-  /** The user's prompt for the turn — stored as the run's `input_json`. */
+  /** The user's prompt for the turn — recorded as the `message_in` item. */
   userMessage: string;
+  /** Files that rode in on this turn's inbound message (already in the CAS). */
+  attachments?: ChatTurnAttachment[];
   startedAt: number;
   endedAt: number;
   ok: boolean;
   error?: string;
-  /** The assistant's final reply text (the run's `output_json`). */
+  /** The assistant's final reply text (the turn's terminal output). */
   finalText?: string;
-  /** The turn's ordered trace. */
+  /** The turn's ordered trace (assistant steps + tool calls). */
   nodes: ChatTurnNode[];
 }
 
-/**
- * Provides the gateway-side single user UUID. Wired to `UserStore.getUserId`
- * by both hosts. Called once per ChatHistoryStore method invocation that
- * needs the id — cheap because UserStore caches the row in memory after the
- * first lookup.
- */
+/** Provides the gateway-side single user UUID. Wired to `UserStore.getUserId`. */
 export type UserIdProvider = () => string;
 
-/** Per-app lazily-opened chat state — one entry per app touched. */
+/** Per-app lazily-opened conversation store — one entry per app touched. */
 interface AppChat {
-  db: DatabaseSync;
-  stmts: ChatStatements;
-  runs: AgentRunsStore;
+  store: ConversationStore;
 }
 
 export class ChatHistoryStore {
   private readonly appsDir: string;
   private readonly userIdProvider: UserIdProvider;
   private readonly analytics: RunSummarySink | undefined;
-  // One entry per app whose chat has been touched this process. Each is
-  // opened lazily — see `UserStore` for the worker-subprocess rationale
-  // behind the lazy pattern across gateway-state stores.
+  /** Per-app blob CAS for attachment bytes — shares `appsDir` (issue #190). */
+  private readonly blobs: BlobStore;
   private readonly perApp = new Map<string, AppChat>();
 
-  /** `analytics`, when set, threads into each app's runs store so a chat
-   *  turn's `finishRun` write-throughs a summary (issue #98). */
+  /**
+   * `analytics`, when set, threads into each app's `ConversationStore` so a
+   * chat turn's `finishTurn` write-throughs a summary.
+   */
   constructor(appsDir: string, userIdProvider: UserIdProvider, analytics?: RunSummarySink) {
     this.appsDir = appsDir;
     this.userIdProvider = userIdProvider;
     this.analytics = analytics;
+    this.blobs = new BlobStore(appsDir);
   }
 
-  /**
-   * Resolve (and cache) one app's chat state. The DB file is the app's
-   * `runtime.sqlite` — shared with its automation run ledger. `appId` is
-   * validated because it indexes into the apps directory.
-   */
   private appChat(appId: string): AppChat {
     const cached = this.perApp.get(appId);
     if (cached) return cached;
     if (!isValidAppId(appId)) throw new Error(`chat-history: invalid app id "${appId}"`);
-    const provider: DatabaseProvider = makeRuntimeDbProvider(
-      path.join(this.appsDir, appId, 'runtime.sqlite'),
-    );
-    const db = provider();
-    const entry: AppChat = {
-      db,
-      stmts: prepareChatStatements(db),
-      runs: new AgentRunsStore(provider, this.analytics),
-    };
+    const provider = makeRuntimeDbProvider(path.join(this.appsDir, appId, 'runtime.sqlite'));
+    const entry: AppChat = { store: new ConversationStore(provider, this.analytics) };
     this.perApp.set(appId, entry);
     return entry;
   }
 
-  /** Resolve the current user UUID for scoping reads + writes. */
   private currentUserId(): string {
     return this.userIdProvider();
   }
 
-  /** List every session for the current user in `appId`, newest-updated first. */
   listSessions(appId: string): ChatSessionMeta[] {
-    const { stmts } = this.appChat(appId);
-    const rows = stmts.list.all(this.currentUserId()) as unknown[];
-    return (rows as Parameters<typeof mapSessionRow>[0][]).map(mapSessionRow);
+    const { store } = this.appChat(appId);
+    return store.listConversationsMeta(this.currentUserId()).map(toMeta);
   }
 
-  /**
-   * Create a fresh chat session in `appId`. `title` is optionally
-   * pre-derived by the caller from the first user message. The new row
-   * starts with turn_count 0 and NULL adapters.
-   */
-  createSession(appId: string, title: string = ''): ChatSessionMeta {
-    const { stmts } = this.appChat(appId);
-    const userId = this.currentUserId();
-    const now = Date.now();
-    const id = randomUUID();
-    stmts.insertSession.run(id, userId, title, now, now);
-    return {
-      id,
-      userId,
+  /** Create a fresh chat session in `appId`. */
+  createSession(appId: string, title: string = '', kind: RunKind = 'chat'): ChatSessionMeta {
+    const { store } = this.appChat(appId);
+    const conv = store.createConversation({
+      kind,
+      userId: this.currentUserId(),
+      appId,
       title,
-      adapterKind: null,
-      adapterSessionId: null,
-      turnCount: 0,
-      createdAt: now,
-      updatedAt: now,
-      messageCount: 0,
-    };
+    });
+    return toMeta({ ...conv, messageCount: 0 });
   }
 
   /**
-   * Load a session with its transcript reconstructed from the run ledger:
-   * each `kind='chat'` run contributes a `user` message (the run's
-   * `input_json`) followed by its `run_nodes` — `step` nodes as `ai`
-   * messages, `tool` nodes as `tool` messages.
+   * Load a session with its transcript reconstructed uniformly from the
+   * conversation's items: each turn contributes its ordinal-0 `message_in`
+   * item as a `user` message (with any attachments), then `step` items as
+   * `ai` messages and `tool` items as `tool` messages (issue #190).
    */
   getSession(
     appId: string,
     id: string,
   ): (ChatSessionMeta & { messages: ChatMessageRow[] }) | undefined {
-    const { stmts, runs } = this.appChat(appId);
-    const userId = this.currentUserId();
-    const row = stmts.getSession.get(id, userId) as unknown;
-    if (!row) return undefined;
+    const { store } = this.appChat(appId);
+    const meta = store.getConversationMeta(id, this.currentUserId());
+    if (!meta) return undefined;
 
     const messages: ChatMessageRow[] = [];
     let idx = 0;
-    for (const run of runs.listChatRuns(id)) {
-      messages.push({
-        idx: idx++,
-        payload: { kind: 'user', text: parseUserMessage(run.inputJson) },
-        createdAt: run.startedAt,
-      });
-      for (const node of runs.listNodes(run.runId)) {
-        if (node.kind === 'step') {
-          const parsed = parseStepOutput(node.outputJson);
+    for (const turn of store.listTurns(id)) {
+      for (const item of store.listItems(turn.turnId)) {
+        if (item.kind === 'message_in') {
+          const attachments = this.attachmentsPayload(appId, item.itemId);
+          messages.push({
+            idx: idx++,
+            payload: {
+              kind: 'user',
+              text: item.text ?? '',
+              ...(attachments.length > 0 ? { attachments } : {}),
+            },
+            createdAt: item.startedAt,
+          });
+        } else if (item.kind === 'step') {
+          const parsed = parseStepOutput(item.outputJson);
           messages.push({
             idx: idx++,
             payload: { kind: 'ai', text: parsed.text, ...(parsed.error ? { error: true } : {}) },
-            createdAt: node.startedAt,
+            createdAt: item.startedAt,
           });
-        } else if (node.kind === 'tool') {
-          const args = parseToolArgs(node.argsJson);
-          const out = parseToolOutput(node.outputJson);
+        } else if (item.kind === 'tool') {
+          const args = parseToolArgs(item.argsJson);
+          const out = parseToolOutput(item.outputJson);
           messages.push({
             idx: idx++,
             payload: {
               kind: 'tool',
-              id: node.nodeId,
-              tool: node.name ?? 'tool',
+              id: item.itemId,
+              tool: item.name ?? 'tool',
               ...(args.sql !== undefined ? { sql: args.sql } : {}),
               ...(args.args !== undefined ? { args: args.args } : {}),
-              state: node.ok ? 'ok' : 'error',
+              state: item.ok ? 'ok' : 'error',
               ...(out.result !== undefined ? { result: out.result } : {}),
               ...(out.errorText !== undefined ? { errorText: out.errorText } : {}),
             },
-            createdAt: node.startedAt,
+            createdAt: item.startedAt,
           });
         }
       }
     }
-    const meta = mapSessionRow(row as Parameters<typeof mapSessionRow>[0]);
-    return { ...meta, messageCount: messages.length, messages };
+    return { ...toMeta(meta), messageCount: messages.length, messages };
   }
 
-  /** Session meta only (no transcript). Cheap — the `_chat` POST route
-   *  uses this to read the runner-resume handle per turn. */
+  /** Attachment metadata + download URL for a message item's attachments. */
+  private attachmentsPayload(appId: string, itemId: string): unknown[] {
+    const { store } = this.appChat(appId);
+    return store.listAttachmentsForItem(itemId).map((a) => ({
+      id: a.id,
+      mime: a.mime,
+      sizeBytes: a.sizeBytes,
+      ...(a.filename !== undefined ? { filename: a.filename } : {}),
+      url: blobUrl(appId, a.hash),
+    }));
+  }
+
+  /** Persist uploaded bytes to the app's blob CAS (dedup by content hash). */
+  uploadBlob(appId: string, bytes: Uint8Array): Promise<PutResult> {
+    return this.blobs.put(appId, bytes);
+  }
+
+  /** Read attachment bytes back from the CAS (for the download route). */
+  readBlob(appId: string, hash: string): Promise<Buffer | undefined> {
+    return this.blobs.read(appId, hash);
+  }
+
+  /** Absolute on-disk path of a blob — the multimodal adapter reads it. */
+  blobPathFor(appId: string, hash: string): string {
+    return this.blobs.pathFor(appId, hash);
+  }
+
   getSessionMeta(appId: string, id: string): ChatSessionMeta | undefined {
-    const { stmts } = this.appChat(appId);
-    const row = stmts.getSession.get(id, this.currentUserId()) as unknown;
-    return row ? mapSessionRow(row as Parameters<typeof mapSessionRow>[0]) : undefined;
+    const { store } = this.appChat(appId);
+    const meta = store.getConversationMeta(id, this.currentUserId());
+    return meta ? toMeta(meta) : undefined;
   }
 
   renameSession(appId: string, id: string, title: string): ChatSessionMeta | undefined {
-    const { stmts } = this.appChat(appId);
-    const userId = this.currentUserId();
-    const res = stmts.rename.run(title, Date.now(), id, userId);
-    if (Number(res.changes) === 0) return undefined;
+    const { store } = this.appChat(appId);
+    if (!store.renameConversation(id, this.currentUserId(), title)) return undefined;
     return this.getSessionMeta(appId, id);
   }
 
   deleteSession(appId: string, id: string): boolean {
-    const { stmts } = this.appChat(appId);
-    // `conversation_id` is a plain (polymorphic) column — not an FK — so the
-    // session's turns are dropped explicitly here; their `run_nodes` cascade
-    // off the surviving `run_nodes.run_id → runs.id` FK within the app's
-    // `runtime.sqlite`.
-    const res = stmts.deleteSession.run(id, this.currentUserId());
-    if (Number(res.changes) === 0) return false;
-    stmts.deleteRunsByConversation.run(id);
-    return true;
+    // Real FK CASCADE drops the conversation's turns, items, and attachment
+    // rows; a follow-up blob GC reclaims now-unreferenced bytes (issue #190).
+    const { store } = this.appChat(appId);
+    const ok = store.deleteConversation(id, this.currentUserId());
+    if (ok) void this.blobs.gc(appId, store.referencedHashes()).catch(() => undefined);
+    return ok;
   }
 
   /**
-   * Persist one completed chat turn as a `runs` row plus its `run_nodes`
-   * trace, in `appId`'s `runtime.sqlite`. Returns `undefined` if the
-   * session doesn't exist or is owned by a different user (cross-user
-   * writes are silently impossible). When the session title is still
-   * empty it is derived from the user message — the first turn names the
-   * conversation.
+   * Persist one completed chat turn: a `turns` row, its ordinal-0 `message_in`
+   * item (plus any attachments), and the assistant/tool `items`, in `appId`'s
+   * `runtime.sqlite`. Returns `undefined` when the conversation doesn't exist
+   * or is owned by another user. The first turn names the conversation.
    */
-  recordTurn(appId: string, input: RecordTurnInput): { runId: string } | undefined {
-    const { db, stmts, runs } = this.appChat(appId);
+  recordTurn(appId: string, input: RecordTurnInput): { turnId: string } | undefined {
+    const { store } = this.appChat(appId);
     const userId = this.currentUserId();
-    const existing = stmts.titleOf.get(input.conversationId, userId) as
-      | { title: string }
-      | undefined;
-    if (!existing) return undefined;
+    const existingTitle = store.titleOf(input.conversationId, userId);
+    if (existingTitle === undefined) return undefined;
 
-    const runId = randomUUID();
-    db.exec('BEGIN IMMEDIATE');
-    try {
-      runs.insertRun({
-        runId,
-        kind: input.kind ?? 'chat',
-        triggerKind: 'interactive',
+    const turnId = randomUUID();
+    store.runInTransaction(() => {
+      if (input.kind && input.kind !== 'chat') {
+        store.setKind(input.conversationId, userId, input.kind);
+      }
+      store.insertTurn({
+        turnId,
         conversationId: input.conversationId,
-        appId,
-        inputJson: JSON.stringify({ message: input.userMessage }),
+        triggerKind: 'interactive',
         startedAt: input.startedAt,
       });
-      input.nodes.forEach((node, ordinal) => {
-        if (node.kind === 'step') {
-          // Freeze the per-call cost at write time from the model price
-          // table — NULL when the model is unknown (distinct from $0).
-          const cost = costForUsage(node.model, {
-            ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
-            ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
-            ...(node.cacheReadTokens !== undefined
-              ? { cacheReadTokens: node.cacheReadTokens }
-              : {}),
-            ...(node.cacheWriteTokens !== undefined
-              ? { cacheWriteTokens: node.cacheWriteTokens }
-              : {}),
-          });
-          runs.insertNode({
-            nodeId: randomUUID(),
-            runId,
-            ordinal,
-            kind: 'step',
-            outputJson: JSON.stringify({
-              text: node.text,
-              ...(node.isError ? { error: true } : {}),
-            }),
-            ok: !node.isError,
-            ...(node.model !== undefined ? { model: node.model } : {}),
-            ...(node.provider !== undefined ? { provider: node.provider } : {}),
-            ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
-            ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
-            ...(node.cacheReadTokens !== undefined
-              ? { cacheReadTokens: node.cacheReadTokens }
-              : {}),
-            ...(node.cacheWriteTokens !== undefined
-              ? { cacheWriteTokens: node.cacheWriteTokens }
-              : {}),
-            ...(cost !== undefined ? { costUsd: cost } : {}),
-            startedAt: node.startedAt,
-            endedAt: node.endedAt,
-            durationMs: Math.max(0, node.endedAt - node.startedAt),
-          });
-        } else {
-          runs.insertNode({
-            nodeId: randomUUID(),
-            runId,
-            ordinal,
-            kind: 'tool',
-            name: node.toolName,
-            argsJson: JSON.stringify({
-              ...(node.sql !== undefined ? { sql: node.sql } : {}),
-              ...(node.args !== undefined ? { args: node.args } : {}),
-            }),
-            outputJson: JSON.stringify({
-              ...(node.result !== undefined ? { result: node.result } : {}),
-              ...(node.errorText !== undefined ? { errorText: node.errorText } : {}),
-            }),
-            ok: node.ok,
-            ...(node.errorText !== undefined ? { error: node.errorText } : {}),
-            ...(node.appId !== undefined ? { appId: node.appId } : {}),
-            startedAt: node.startedAt,
-            endedAt: node.endedAt,
-            durationMs: Math.max(0, node.endedAt - node.startedAt),
-          });
-        }
+      const messageItemId = store.insertMessageIn({
+        turnId,
+        role: 'user',
+        text: input.userMessage,
+        startedAt: input.startedAt,
       });
-      runs.finishRun({
-        runId,
+      for (const att of input.attachments ?? []) {
+        store.insertAttachment({
+          itemId: messageItemId,
+          hash: att.hash,
+          mime: att.mime,
+          sizeBytes: att.sizeBytes,
+          source: att.source ?? 'upload',
+          ...(att.filename !== undefined ? { filename: att.filename } : {}),
+        });
+      }
+      // Trace items start at ordinal 1 — the inbound message is ordinal 0.
+      input.nodes.forEach((node, i) => recordNode(store, turnId, i + 1, node));
+      store.finishTurn({
+        turnId,
         endedAt: input.endedAt,
         ok: input.ok,
         ...(input.error !== undefined ? { error: input.error } : {}),
@@ -390,46 +331,96 @@ export class ChatHistoryStore {
           : {}),
       });
       const now = Date.now();
-      if (!existing.title) {
-        stmts.setTitle.run(deriveTitle(input.userMessage), now, input.conversationId, userId);
+      if (!existingTitle) {
+        store.setTitle(input.conversationId, userId, deriveTitle(input.userMessage), now);
       } else {
-        stmts.touch.run(now, input.conversationId, userId);
+        store.touchConversation(input.conversationId, userId, now);
       }
-      db.exec('COMMIT');
-      return { runId };
-    } catch (err) {
-      db.exec('ROLLBACK');
-      throw err;
-    }
+    });
+    return { turnId };
   }
 
-  /**
-   * Record turn completion: bump `turn_count` + `updated_at`, and persist
-   * the runner-resume handle. When `adapter` is provided, `adapter_kind` is
-   * always set; `adapter_session_id` is only overwritten when
-   * `adapter.sessionId` is defined. When `adapter` is omitted, only the
-   * counters move. Returns the updated meta, or `undefined` if the session
-   * is missing / owned by another user.
-   */
+  /** Bump turn_count + persist the runner-resume handle. */
   noteTurn(
     appId: string,
     sessionId: string,
     adapter?: { kind: string; sessionId?: string },
   ): ChatSessionMeta | undefined {
-    const { stmts } = this.appChat(appId);
-    const userId = this.currentUserId();
-    const now = Date.now();
-    let res;
-    if (adapter && adapter.sessionId !== undefined) {
-      res = stmts.noteTurnWithAdapter.run(now, adapter.kind, adapter.sessionId, sessionId, userId);
-    } else if (adapter) {
-      res = stmts.noteTurnKindOnly.run(now, adapter.kind, sessionId, userId);
-    } else {
-      res = stmts.noteTurnNoAdapter.run(now, sessionId, userId);
-    }
-    if (Number(res.changes) === 0) return undefined;
+    const { store } = this.appChat(appId);
+    if (!store.noteTurn(sessionId, this.currentUserId(), adapter)) return undefined;
     return this.getSessionMeta(appId, sessionId);
   }
+}
+
+function recordNode(
+  store: ConversationStore,
+  turnId: string,
+  ordinal: number,
+  node: ChatTurnNode,
+): void {
+  if (node.kind === 'step') {
+    // Freeze the per-call cost at write time — NULL when the model is unknown.
+    const cost = costForUsage(node.model, {
+      ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
+      ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
+      ...(node.cacheReadTokens !== undefined ? { cacheReadTokens: node.cacheReadTokens } : {}),
+      ...(node.cacheWriteTokens !== undefined ? { cacheWriteTokens: node.cacheWriteTokens } : {}),
+    });
+    store.insertItem({
+      itemId: randomUUID(),
+      turnId,
+      ordinal,
+      kind: 'step',
+      outputJson: JSON.stringify({ text: node.text, ...(node.isError ? { error: true } : {}) }),
+      ok: !node.isError,
+      ...(node.model !== undefined ? { model: node.model } : {}),
+      ...(node.provider !== undefined ? { provider: node.provider } : {}),
+      ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
+      ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
+      ...(node.cacheReadTokens !== undefined ? { cacheReadTokens: node.cacheReadTokens } : {}),
+      ...(node.cacheWriteTokens !== undefined ? { cacheWriteTokens: node.cacheWriteTokens } : {}),
+      ...(cost !== undefined ? { costUsd: cost } : {}),
+      startedAt: node.startedAt,
+      endedAt: node.endedAt,
+      durationMs: Math.max(0, node.endedAt - node.startedAt),
+    });
+  } else {
+    store.insertItem({
+      itemId: randomUUID(),
+      turnId,
+      ordinal,
+      kind: 'tool',
+      name: node.toolName,
+      argsJson: JSON.stringify({
+        ...(node.sql !== undefined ? { sql: node.sql } : {}),
+        ...(node.args !== undefined ? { args: node.args } : {}),
+      }),
+      outputJson: JSON.stringify({
+        ...(node.result !== undefined ? { result: node.result } : {}),
+        ...(node.errorText !== undefined ? { errorText: node.errorText } : {}),
+      }),
+      ok: node.ok,
+      ...(node.errorText !== undefined ? { error: node.errorText } : {}),
+      ...(node.appId !== undefined ? { appId: node.appId } : {}),
+      startedAt: node.startedAt,
+      endedAt: node.endedAt,
+      durationMs: Math.max(0, node.endedAt - node.startedAt),
+    });
+  }
+}
+
+function toMeta(c: ConversationMeta): ChatSessionMeta {
+  return {
+    id: c.id,
+    userId: c.userId,
+    title: c.title,
+    adapterKind: c.adapterKind ?? null,
+    adapterSessionId: c.adapterSessionId ?? null,
+    turnCount: c.turnCount,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+    messageCount: c.messageCount,
+  };
 }
 
 export function deriveTitle(text: string): string {
@@ -440,4 +431,4 @@ export function deriveTitle(text: string): string {
 }
 
 // HTTP route dispatcher lives in chat-history-routes.ts to keep this file
-// focused on schema + store. Re-exported below from the package index.
+// focused on the facade + fold. Re-exported below from the package index.

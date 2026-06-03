@@ -35,13 +35,17 @@ import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
-import type { ChatStreamEvent } from '@centraid/app-engine';
+import type { ChatStreamEvent, TurnAttachment } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
 import { centraidDynamicToolSpecs, handleCentraidToolCall } from './codex-centraid-tools.js';
+import { codexImageItems } from './multimodal.js';
 
 export interface CodexAppServerInput {
   cwd: string;
   message: string;
+  /** Image attachments on the inbound message — sent as `localImage` input
+   *  items so codex reads them itself (issue #190). PDFs aren't supported. */
+  attachments?: TurnAttachment[];
   /**
    * Spliced as `developerInstructions` on `thread/start`. Scope is the
    * thread, not per-turn — but since we spawn one thread per turn in
@@ -397,7 +401,10 @@ export async function runCodexAppServerTurn(
 
     await request('turn/start', {
       threadId,
-      input: [{ type: 'text', text: input.message }],
+      input: [
+        { type: 'text', text: input.message },
+        ...(input.attachments?.length ? codexImageItems(input.attachments) : []),
+      ],
     });
 
     await completion;

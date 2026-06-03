@@ -21,7 +21,7 @@
  */
 
 import type { ChatStreamEvent } from './chat-runner.js';
-import type { AgentRunNodeKind } from './agent-runs-schema.js';
+import type { ItemKind } from './agent-runs-schema.js';
 
 export type RunStreamEvent =
   | { type: 'run.start'; runId: string }
@@ -30,7 +30,7 @@ export type RunStreamEvent =
       ordinal: number;
       /** Set when the node is part of a parallel batch (≥2 `ctx.tool` calls). */
       batchId?: number;
-      kind: AgentRunNodeKind;
+      kind: ItemKind;
       /** Tool name or `'agent'`. */
       name?: string;
       args?: unknown;

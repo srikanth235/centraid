@@ -110,12 +110,47 @@ export type ChatStreamEvent =
       }>;
     };
 
+/** An attachment already uploaded to the blob CAS, referenced on the next turn. */
+export interface ChatAttachmentRef {
+  hash: string;
+  mime: string;
+  sizeBytes: number;
+  filename?: string;
+}
+
 export interface StreamChatInput {
   /** The chat session id the gateway keys the turn on. */
   conversationId: string;
   message: string;
   model?: string;
   thinking?: string;
+  /** Files uploaded ahead of the turn (issue #190). */
+  attachments?: ChatAttachmentRef[];
+}
+
+/**
+ * Upload one file to the app's blob CAS ahead of a chat turn
+ * (`POST /_centraid-chat/apps/<appId>/blobs`). Returns the dedup-keyed ref the
+ * caller threads into `streamChat({ attachments })` (issue #190).
+ */
+export async function uploadChatAttachment(
+  appId: string,
+  bytes: Uint8Array,
+  mime: string,
+  filename?: string,
+): Promise<ChatAttachmentRef> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/_centraid-chat/apps/${enc(appId)}/blobs`, {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'content-type': mime },
+    body: bytes as BodyInit,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new GatewayClientError('gateway_error', `upload failed (HTTP ${res.status}): ${text}`);
+  }
+  const out = (await res.json()) as { hash: string; sizeBytes: number };
+  return { hash: out.hash, mime, sizeBytes: out.sizeBytes, ...(filename ? { filename } : {}) };
 }
 
 /**
@@ -139,6 +174,7 @@ export async function streamChat(
       message: input.message,
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
     signal,
   });

@@ -1,24 +1,28 @@
 /*
- * Unified agent-run ledger row types (issue #90, commit 1).
+ * Conversation / turn / item row types (issue #90, reshaped by #190).
  *
- * Pure types — the table DDL lives in `gateway-db.ts` (ACTIVITY_MIGRATIONS:
- * `runs`, `run_nodes`, `automation_state`). These shapes are exported
- * separately so callers (the SQLite-backed store in
- * `agent-runs-store.ts` and the desktop UI) can import the row
- * types without pulling in the store implementation.
+ * Pure types — the table DDL lives in `gateway-db.ts` (RUNTIME_MIGRATIONS:
+ * `conversations`, `turns`, `items`, `attachments`, `automation_state`).
+ * These shapes are exported separately so callers (the SQLite-backed
+ * `ConversationStore` in `agent-runs-store.ts` and the desktop UI) can
+ * import the row types without pulling in the store implementation.
  *
- * A chat turn, an automation fire, and a builder iteration are all the
- * same object — an agent run. `RunKind` discriminates. `run_nodes` is
- * the ordered agentic trace; `AgentRunNodeKind` discriminates a
- * primary model-inference step from a tool / agent / invoke call.
+ * "Everything is chat" (issue #190): the **conversation** is the first-class
+ * spine. A chat window, an automation, and a builder session are each a
+ * single-kind conversation; `RunKind` discriminates and lives on the
+ * conversation, not re-stamped per turn. A **turn** is one execution under
+ * it — a chat turn, an automation fire, a builder iteration. **Items** are
+ * the ordered trace, now including the inbound message (`kind='message_in'`,
+ * ordinal 0): the user/trigger input is a first-class message, same shape as
+ * the response. **Attachments** ride that inbound message.
  */
 
-/** What produced the run. Insights groups `automation` runs by automation. */
+/** What kind of thread this conversation is. Insights groups `automation` by automation. */
 export type RunKind = 'automation' | 'chat' | 'build';
 
 /**
- * Why the run fired. `interactive` is a chat turn; the rest are
- * automation fires.
+ * Why a turn fired. `interactive` is a chat turn; the rest are automation
+ * fires.
  */
 export type AutomationTriggerKind =
   | 'scheduled'
@@ -28,62 +32,91 @@ export type AutomationTriggerKind =
   | 'interactive';
 
 /**
- * What *source* fired the run — recorded once an automation can fire
- * from more than one place (issue #96). `cron` is a scheduler fire,
- * `webhook` an inbound HTTP POST, `manual` an explicit "Run now".
- * Distinct from `AutomationTriggerKind`, which records the run's
- * intent rather than its transport.
+ * What *source* fired a turn (issue #96). `cron` is a scheduler fire,
+ * `webhook` an inbound HTTP POST, `manual` an explicit "Run now". Distinct
+ * from `AutomationTriggerKind`, which records intent rather than transport.
  */
 export type AutomationTriggerOrigin = 'cron' | 'webhook' | 'manual';
 
 /**
- * Trace-node discriminator. `step` is one primary model-inference call —
- * per-call token + cost accounting lives at this grain. `tool` / `agent`
- * are the per-call audit rows. `invoke` is retained for legacy rows and has
- * no current producer (the `ctx.invoke` surface was removed).
+ * Item discriminator. `message_in` is the inbound message — a person typing,
+ * a webhook firing, a cron tick — recorded as ordinal 0 of the turn
+ * (issue #190). `step` is one primary model-inference call — per-call token +
+ * cost accounting lives at this grain. `tool` / `agent` are per-call audit
+ * rows.
  */
-export type AgentRunNodeKind = 'step' | 'tool' | 'agent' | 'invoke';
+export type ItemKind = 'message_in' | 'step' | 'tool' | 'agent';
 
-export interface AgentRunRow {
-  readonly runId: string;
+/**
+ * The durable thread spanning every turn it contains. Was `chat_sessions`,
+ * generalized: `kind` / `app_id` / `automation_id` moved UP here off the
+ * per-turn row. For `kind='automation'` the conversation id IS the automation
+ * id (the thread spans all the automation's fires).
+ */
+export interface Conversation {
+  readonly id: string;
   readonly kind: RunKind;
-  /** UUID of the automation — set for `kind: 'automation'`. */
-  readonly automationId?: string;
-  readonly triggerKind: AutomationTriggerKind;
-  /** Source that fired the run (`cron` / `webhook` / `manual`). */
-  readonly triggerOrigin?: AutomationTriggerOrigin;
-  readonly parentRunId?: string;
-  /**
-   * The durable conversation this run belongs to. Polymorphic: a `chat`
-   * run's chat-session id; an `automation` run's automation id (the
-   * conversation spans all the automation's fires). Plain column, no FK —
-   * see `gateway-db.ts`.
-   */
-  readonly conversationId?: string;
-  /** Set for `kind: 'build'` — the app being built. */
+  /** Owner — the gateway-side user UUID from `UserStore`. */
+  readonly userId: string;
+  /** Owning app — set for automation and build conversations. */
   readonly appId?: string;
+  /** UUID/handle of the automation — set for `kind: 'automation'`. */
+  readonly automationId?: string;
+  readonly title: string;
+  /** Runner kind that owns `adapterSessionId` (codex | claude-code | openclaw). */
+  readonly adapterKind?: string;
+  /** Opaque per-runner resume handle; absent until the first turn lands. */
+  readonly adapterSessionId?: string;
+  /** Number of completed turns on this conversation. */
+  readonly turnCount: number;
+  /**
+   * When true the conversation is kept: retention pruning skips its turns
+   * and a `replay` fire can serve its recorded items (issue #80 follow-up).
+   */
+  readonly pinned: boolean;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+}
+
+export interface Turn {
+  readonly turnId: string;
+  /**
+   * The conversation this turn belongs to — NOT NULL, FK-backed, CASCADE
+   * (issue #190). For an automation, this equals the automation id.
+   */
+  readonly conversationId: string;
+  /** Ordinal within the thread (0-based). */
+  readonly seq: number;
+  readonly parentTurnId?: string;
+  readonly triggerKind: AutomationTriggerKind;
+  /** Source that fired the turn (`cron` / `webhook` / `manual`). */
+  readonly triggerOrigin?: AutomationTriggerOrigin;
   /** One-line human-readable label for the activity feed. */
   readonly note?: string;
-  /** When this run is a retry, the run id it re-runs. */
+  /** When this turn is a retry, the turn id it re-runs. */
   readonly retryOf?: string;
-  readonly inputJson?: string;
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly ok: boolean;
   readonly error?: string;
   readonly summary?: string;
+  /**
+   * The turn's structured result. For an automation it is the handler's
+   * validated `output` envelope, read back by `ctx.runs.last().output` and
+   * fed to an `onFailure` cascade. (The inbound message moved to a
+   * `message_in` item; this terminal output stays on the turn since there is
+   * no `message_out` item kind — issue #190.)
+   */
   readonly outputJson?: string;
   /**
-   * When true the run is a kept fixture: its recorded `run_nodes` can be
-   * replayed by a `triggerKind: 'replay'` fire, and retention pruning
-   * skips it (issue #80 follow-up — pinned data during builder iteration).
+   * When true the turn is a kept fixture: its recorded `items` can be replayed
+   * by a `triggerKind: 'replay'` fire, and retention pruning skips it.
    */
   readonly pinned: boolean;
   /**
-   * Denormalized rollup, written at finish. Token sums + cost are Σ over
-   * this run's own `kind IN ('step','agent')` nodes — exclusive of
-   * child-`invoke` runs, so a SUM over every run is the true grand total
-   * with no double-count. Null on an in-flight or crashed run.
+   * Denormalized rollup, written at finish. Token sums + cost are Σ over this
+   * turn's own `kind IN ('step','agent')` items. Null on an in-flight or
+   * crashed turn.
    */
   readonly totalInputTokens?: number;
   readonly totalOutputTokens?: number;
@@ -94,13 +127,17 @@ export interface AgentRunRow {
   readonly toolCount?: number;
 }
 
-export interface AgentRunNodeRow {
-  readonly nodeId: string;
-  readonly runId: string;
+export interface Item {
+  readonly itemId: string;
+  readonly turnId: string;
   readonly ordinal: number;
   readonly batchId?: number;
-  readonly kind: AgentRunNodeKind;
-  /** The tool name or `ctx.invoke` target. Absent for `kind: 'step'`. */
+  readonly kind: ItemKind;
+  /** `message_in` messages: 'user' (incl. a webhook/cron trigger) | 'assistant'. */
+  readonly role?: 'user' | 'assistant';
+  /** `message_in` payload text. (Assistant step text stays in `outputJson`.) */
+  readonly text?: string;
+  /** The tool name or `'agent'`. Absent for `kind: 'step'` / `'message_in'`. */
   readonly name?: string;
   readonly argsJson?: string;
   readonly outputJson?: string;
@@ -117,18 +154,31 @@ export interface AgentRunNodeRow {
   /** `step` / `agent` — the model + provider that served the call. */
   readonly model?: string;
   readonly provider?: string;
-  /** Frozen at write time from the per-model price table; NULL = no price known. */
+  /** Frozen at write time from the per-model price table; absent = no price known. */
   readonly costUsd?: number;
-  /** `tool` / `agent` / `invoke` — the app whose data the call touched. */
+  /** `tool` / `agent` — the app whose data the call touched. */
   readonly appId?: string;
-  /**
-   * For legacy `kind: 'invoke'` nodes — the `run_id` of the child run the
-   * node spawned (the `ctx.invoke` surface that produced these was removed;
-   * the column is retained for historical rows). All runs (intra- and
-   * cross-app) live in the same activity DB, so the DAG view can nest the
-   * child timeline from this link regardless of which app the child belongs to.
-   */
-  readonly childRunId?: string;
+  /** `agent` — the turn id of a child turn this item spawned (sub-agent). */
+  readonly childTurnId?: string;
+}
+
+/**
+ * A file that arrived on an inbound message — a chat upload OR a webhook /
+ * email / folder-watch file (issue #190). Universal across all kinds. FK'd
+ * to the `message_in` item it rode in on (CASCADE). The bytes live
+ * content-addressed on disk at `<appsDir>/<appId>/blobs/<hash>`, never in
+ * sqlite — `hash` is the CAS key.
+ */
+export interface Attachment {
+  readonly id: string;
+  readonly itemId: string;
+  readonly hash: string;
+  readonly mime: string;
+  readonly sizeBytes: number;
+  /** `'upload'` | `'webhook'` | `'email'` | … */
+  readonly source?: string;
+  readonly filename?: string;
+  readonly createdAt: number;
 }
 
 export interface AutomationStateEntry {

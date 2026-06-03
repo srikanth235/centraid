@@ -1,3 +1,5 @@
+// governance: allow-repo-hygiene file-size-limit #190 — multimodal content-block
+// wiring (issue #190) tips this cohesive adapter just over the cap.
 /*
  * Claude Agent SDK backend.
  *
@@ -21,9 +23,10 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { type ChatStreamEvent } from '@centraid/app-engine';
+import { type ChatStreamEvent, type TurnAttachment } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
 import type { CapabilityTier } from './model-tiers.js';
+import { buildUserContent } from './multimodal.js';
 
 /**
  * Map a provider-agnostic capability tier to the Claude CLI's built-in model
@@ -44,6 +47,12 @@ export function resolveClaudeModel(model: string): string {
 export interface ClaudeSdkInput {
   cwd: string;
   message: string;
+  /**
+   * Attachments on this turn's inbound message (issue #190). When present the
+   * prompt is sent as a structured user message with image/document content
+   * blocks instead of a bare text string.
+   */
+  attachments?: TurnAttachment[];
   /** Appended to the `claude_code` preset prompt via `systemPrompt.append`. */
   extraSystemPrompt: string;
   model?: string;
@@ -151,8 +160,25 @@ export async function runClaudeSdkTurn(
       options.mcpServers = { centraid: server };
     }
 
+    // With attachments, send a structured user message (text + image/document
+    // content blocks) as a single-shot async iterable; else a bare text
+    // prompt (issue #190).
+    const promptArg = input.attachments?.length
+      ? (async function* () {
+          yield {
+            type: 'user' as const,
+            message: {
+              role: 'user' as const,
+              content: buildUserContent(input.message, input.attachments!),
+            },
+            parent_tool_use_id: null,
+            session_id: '',
+          };
+        })()
+      : input.message;
+
     const generator = mod.query({
-      prompt: input.message,
+      prompt: promptArg as Parameters<typeof mod.query>[0]['prompt'],
       options: options as Parameters<typeof mod.query>[0]['options'],
     });
 

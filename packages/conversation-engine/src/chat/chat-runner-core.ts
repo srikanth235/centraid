@@ -153,6 +153,7 @@ export function makeChatRunnerCore(opts: ChatRunnerCoreOptions): ChatRunner {
       const turnInput: AgentTurnInput = {
         cwd,
         message: input.message,
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
         extraSystemPrompt,
         toolContext,
         abortSignal: input.abortSignal,

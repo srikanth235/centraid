@@ -13,7 +13,7 @@ import type {
   AutomationToolDispatcher,
   AutomationToolResult,
 } from './automation-handler-runner.js';
-import type { AgentRunsStore, ChatStreamEvent } from '@centraid/app-engine';
+import type { ConversationStore, ChatStreamEvent } from '@centraid/app-engine';
 import {
   closeRunNode,
   openRunNode,
@@ -28,7 +28,7 @@ export interface ToolCallWire {
 }
 
 export interface AuditState {
-  store: AgentRunsStore;
+  store: ConversationStore;
   runId: string;
   automationId: string;
   ordinal: number;
@@ -243,24 +243,26 @@ export function handleRunsMessage(
   filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number },
 ): CtxReply {
   try {
-    const automationId = filter.automationId ?? audit.automationId;
+    // The automation's conversation id IS the automation id (issue #190).
+    const conversationId = filter.automationId ?? audit.automationId;
     const limit = filter.limit ?? 50;
-    // Fetch one extra row so we can drop the in-progress self-run without
+    // Fetch one extra row so we can drop the in-progress self-turn without
     // short-changing the caller's limit.
     const rows = audit.store
-      .listRuns({
-        automationId,
+      .listTurnsFiltered(conversationId, {
         ...(filter.status ? { status: filter.status } : {}),
         ...(filter.since !== undefined ? { since: filter.since } : {}),
         limit: limit + 1,
       })
-      .filter((r) => r.runId !== audit.runId)
+      .filter((r) => r.turnId !== audit.runId)
       .slice(0, limit);
+    const toRef = (r: (typeof rows)[number]): ReturnType<typeof rowToRunRef> =>
+      rowToRunRef(r, audit.store.messageInText(r.turnId));
     if (method === 'last') {
       const first = rows[0];
-      return { ok: true, result: first ? rowToRunRef(first) : undefined };
+      return { ok: true, result: first ? toRef(first) : undefined };
     }
-    return { ok: true, result: rows.map(rowToRunRef) };
+    return { ok: true, result: rows.map(toRef) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

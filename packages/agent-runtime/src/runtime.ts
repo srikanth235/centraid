@@ -39,6 +39,7 @@ export async function runAgentTurn(
       {
         cwd: input.cwd,
         message: input.message,
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
         extraSystemPrompt: input.extraSystemPrompt,
         ...(input.model ? { model: input.model } : {}),
         ...(input.prevSessionId ? { prevThreadId: input.prevSessionId } : {}),
@@ -62,6 +63,7 @@ export async function runAgentTurn(
     {
       cwd: input.cwd,
       message: input.message,
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       extraSystemPrompt: input.extraSystemPrompt,
       ...(input.model ? { model: input.model } : {}),
       ...(input.prevSessionId ? { prevSessionId: input.prevSessionId } : {}),

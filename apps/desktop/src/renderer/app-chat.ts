@@ -27,6 +27,7 @@
 
 import {
   streamChat,
+  uploadChatAttachment,
   createChatSession,
   listChatSessions,
   loadChatSession,
@@ -36,6 +37,7 @@ import {
   getRunnerStatus,
   getAgentsStatus,
   type ChatStreamEvent,
+  type ChatAttachmentRef,
 } from './gateway-client.js';
 
 (function () {
@@ -70,6 +72,8 @@ import {
     // this aborts (Stop button / new chat / panel teardown).
     let abortController: AbortController | null = null;
     let chat: AppChatMsg[] = [];
+    // Files uploaded to the blob CAS, queued for the next turn (issue #190).
+    let pendingAttachments: ChatAttachmentRef[] = [];
 
     // ---- Coupled Agent · Model picker state ----
     // The composer carries one control that reads "<Agent> · <Model>". The
@@ -389,6 +393,53 @@ import {
       trustedHtml:
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
     });
+    // Attachments uploaded ahead of the next turn (issue #190). The bytes land
+    // in the app's blob CAS on pick; the refs ride the next `streamChat` send.
+    const attachChips = el('div', { class: 'app-chat-attach-chips' });
+    const renderAttachChips = (): void => {
+      attachChips.replaceChildren(
+        ...pendingAttachments.map((a) =>
+          el('span', { class: 'app-chat-attach-chip', title: a.filename ?? a.mime }, [
+            `${a.filename ?? a.mime} `,
+            el(
+              'button',
+              {
+                type: 'button',
+                'aria-label': 'Remove attachment',
+                onClick: () => {
+                  pendingAttachments = pendingAttachments.filter((p) => p !== a);
+                  renderAttachChips();
+                },
+              },
+              '×',
+            ),
+          ]),
+        ),
+      );
+    };
+    const fileInput = el('input', {
+      type: 'file',
+      multiple: true,
+      style: { display: 'none' },
+    }) as HTMLInputElement;
+    fileInput.addEventListener('change', () => {
+      const files = Array.from(fileInput.files ?? []);
+      fileInput.value = '';
+      void Promise.all(
+        files.map(async (file) => {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const ref = await uploadChatAttachment(
+            appId,
+            bytes,
+            file.type || 'application/octet-stream',
+            file.name,
+          );
+          pendingAttachments.push(ref);
+          renderAttachChips();
+        }),
+      ).catch(() => undefined);
+    });
+    attachBtn.addEventListener('click', () => fileInput.click());
     // ---- Coupled Agent · Model control ----
     // One pill that reads "<Agent> · <Model>". Opening it reveals the agents
     // (switching the active runner is a gateway-wide change) and, below, the
@@ -774,6 +825,8 @@ import {
 
     const inputTools = el('div', { class: 'app-chat-input-tools' }, [
       attachBtn,
+      fileInput,
+      attachChips,
       amWrap,
       el('span', { class: 'app-chat-input-spacer' }),
       el('span', { class: 'app-chat-input-kbd' }, '⌘↵'),
@@ -1519,10 +1572,13 @@ import {
             conversationId: currentSessionId,
             message: text,
             ...(model ? { model } : {}),
+            ...(pendingAttachments.length ? { attachments: pendingAttachments } : {}),
           },
           (evt) => handleStreamEvent(turnId, evt),
           abortController.signal,
         );
+        pendingAttachments = [];
+        renderAttachChips();
         // Stream ended; finalize in case it closed without a terminal event.
         finishTurn(turnId);
         renderChat();
