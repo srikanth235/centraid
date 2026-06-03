@@ -688,6 +688,13 @@ export interface CentraidProviderStatus {
   reason?: string;
 }
 
+/** One model a runtime can serve (OpenClaw enumerates these). */
+export interface CentraidRunnerModel {
+  id: string;
+  name?: string;
+  default?: boolean;
+}
+
 /** Preflight snapshot returned by `getRunnerStatus`. */
 export interface CentraidRunnerStatus {
   kind: 'openclaw' | 'codex' | 'claude-code' | 'none';
@@ -698,6 +705,8 @@ export interface CentraidRunnerStatus {
   reason?: string;
   hint?: string;
   provider?: CentraidProviderStatus;
+  /** Models the runtime can serve, when enumerable (OpenClaw). */
+  models?: CentraidRunnerModel[];
 }
 
 declare global {

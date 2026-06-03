@@ -8,6 +8,7 @@
 import {
   appQuery,
   appLiveUrl,
+  getRunnerStatus as getGatewayRunnerStatus,
   deregisterApp,
   listApps,
   listTemplates,
@@ -5725,16 +5726,23 @@ import {
       chatModelSelect.append(seed);
     }
     async function loadChatModels(): Promise<void> {
-      // The list comes from the active gateway's configured provider: the
-      // runner-status probe hits `GET <baseUrl>/models` and returns the ids.
-      // When no custom OpenAI-compatible endpoint is set, the runner uses its
-      // built-in models and there's no list to enumerate — the dropdown then
-      // just offers "Gateway default" plus any persisted choice.
-      let models: string[] = [];
+      // Models come from the ACTIVE gateway's runner-status:
+      //   - OpenClaw enumerates its configured models (`status.models`,
+      //     from `openclaw models list --json`).
+      //   - The codex runner with a custom OpenAI-compatible endpoint
+      //     surfaces that endpoint's `/models` catalog (`status.provider.models`).
+      //   - Built-in codex / claude-code have no enumerable list — the
+      //     dropdown then just offers "Gateway default" + any persisted choice.
+      let models: Array<{ id: string; label: string }> = [];
       try {
-        const status = await window.CentraidApi.getRunnerStatus();
-        if (status.provider?.ok && status.provider.models?.length) {
-          models = status.provider.models;
+        const status = await getGatewayRunnerStatus();
+        if (status.models?.length) {
+          models = status.models.map((m) => ({
+            id: m.id,
+            label: (m.name ?? m.id) + (m.default ? ' · default' : ''),
+          }));
+        } else if (status.provider?.ok && status.provider.models?.length) {
+          models = status.provider.models.map((id) => ({ id, label: id }));
         }
       } catch {
         /* gateway unreachable — keep "Gateway default" + persisted seed */
@@ -5743,16 +5751,16 @@ import {
       while (chatModelSelect.children.length > 1) {
         chatModelSelect.lastChild?.remove();
       }
-      // Re-add the persisted choice up front if the probe didn't surface it,
+      // Re-add the persisted choice up front if the list didn't surface it,
       // so a previously-saved model isn't silently dropped from the picker.
-      if (chatModelInitial && !models.includes(chatModelInitial)) {
+      if (chatModelInitial && !models.some((m) => m.id === chatModelInitial)) {
         chatModelSelect.append(
           el('option', { value: chatModelInitial, selected: '' }, chatModelInitial),
         );
       }
-      for (const id of models) {
-        const opt = el('option', { value: id }, id) as HTMLOptionElement;
-        if (id === chatModelInitial) opt.selected = true;
+      for (const m of models) {
+        const opt = el('option', { value: m.id }, m.label) as HTMLOptionElement;
+        if (m.id === chatModelInitial) opt.selected = true;
         chatModelSelect.append(opt);
       }
     }
@@ -5796,7 +5804,7 @@ import {
         ),
         labeled(
           'Model',
-          'Lists models from the gateway’s configured inference endpoint, if any. "Gateway default" lets the gateway choose.',
+          'Lists what the gateway exposes — OpenClaw’s model catalog, Claude Code capability tiers, or a codex runner’s configured inference endpoint. "Gateway default" lets the gateway choose.',
           modelRow,
         ),
       ]),

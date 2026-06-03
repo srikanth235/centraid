@@ -14,6 +14,7 @@ export {
   type RuntimeOptions,
   type RuntimeLogger,
   type RunnerStatus,
+  type RunnerModel,
   type ProviderStatus,
 } from './runtime.js';
 

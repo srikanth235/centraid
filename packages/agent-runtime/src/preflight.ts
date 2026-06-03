@@ -14,6 +14,7 @@
 import { spawn } from 'node:child_process';
 import type { ProviderStatus, RunnerStatus } from '@centraid/app-engine';
 import type { OpenAICompatProvider, RunnerKind, RunnerPrefs } from './types.js';
+import { RUNNER_TIERS } from './model-tiers.js';
 
 const VERSION_TIMEOUT_MS = 5_000;
 const PROVIDER_PROBE_TIMEOUT_MS = 4_000;
@@ -73,7 +74,15 @@ export async function runPreflight(prefs: RunnerPrefs): Promise<RunnerStatus> {
   if (cached && cached.cacheKey === key) return cached.status;
   const status = await probe(prefs);
   if (prefs.kind === 'codex' && prefs.provider) {
+    // Custom OpenAI-compatible endpoint — its live `/models` catalog wins
+    // over the static list (the user may run any model the endpoint serves).
     status.provider = await probeProvider(prefs.provider);
+  } else {
+    // Built-in runner with no model-list command: offer capability tiers
+    // (the adapter resolves them to native models at turn time). codex has
+    // no tier vocabulary, so it stays on "Gateway default".
+    const tiers = RUNNER_TIERS[prefs.kind];
+    if (tiers) status.models = [...tiers];
   }
   cached = { status, cacheKey: key };
   return status;

@@ -144,9 +144,24 @@ export interface ProviderStatus {
 }
 
 /**
+ * One model a runtime can serve, as surfaced by a runtime that can
+ * enumerate its catalog (e.g. OpenClaw via `openclaw models list`). The
+ * `id` is what the chat picker persists and hands back as the chat model.
+ */
+export interface RunnerModel {
+  /** Stable model id passed back as the chat model (e.g. "openai-codex/gpt-5.5"). */
+  id: string;
+  /** Human-friendly label for the picker; falls back to `id` when absent. */
+  name?: string;
+  /** `true` for the runtime's default / configured model. */
+  default?: boolean;
+}
+
+/**
  * Shape returned by the runner-status preflight route. Both hosts share
- * the schema; OpenClaw always reports `{ kind: 'openclaw', ok: true }`,
- * the desktop local-runtime reports the configured CLI adapter.
+ * the schema; OpenClaw reports `{ kind: 'openclaw', ok: true }` plus its
+ * enumerated `models`, the desktop local-runtime reports the configured
+ * CLI adapter.
  */
 export interface RunnerStatus {
   kind: 'openclaw' | 'codex' | 'claude-code' | 'none';
@@ -176,6 +191,14 @@ export interface RunnerStatus {
    * or the API key is wrong, so the UI surfaces both.
    */
   provider?: ProviderStatus;
+  /**
+   * Models the runtime can serve, when it can enumerate them (OpenClaw via
+   * `openclaw models list`). Distinct from `provider.models`, which is the
+   * custom OpenAI-compatible endpoint's `/models` catalog for the codex
+   * runner. Absent when the runtime has no enumerable list (built-in
+   * codex / claude-code, which pick the model internally).
+   */
+  models?: RunnerModel[];
 }
 
 const noopLogger: RuntimeLogger = {
