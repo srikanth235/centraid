@@ -7,7 +7,6 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { buildGateway, type BuiltGateway } from './build-gateway.ts';
 import type { GatewayPaths } from './paths.ts';
-import type { SecretsProvider } from './secrets.ts';
 
 // `buildGateway()` is the host-agnostic core: it constructs the whole
 // object graph but binds no socket. These tests pin that contract — the
@@ -17,12 +16,6 @@ import type { SecretsProvider } from './secrets.ts';
 
 let dataDir: string;
 let gateway: BuiltGateway;
-
-const noSecrets: SecretsProvider = {
-  async getProviderApiKey() {
-    return undefined;
-  },
-};
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
@@ -57,7 +50,7 @@ async function mountUnauthed(
 
 beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `build-gateway-${crypto.randomUUID()}-`));
-  gateway = await buildGateway({ paths: pathsUnder(dataDir), secrets: noSecrets });
+  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {

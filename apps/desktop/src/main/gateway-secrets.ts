@@ -6,9 +6,6 @@
 // `safeStorage` (Keychain on macOS, DPAPI on Windows, libsecret on
 // Linux). Removing a gateway wipes its directory, which takes the
 // token with it.
-//
-// Mirrors `provider-secrets.ts` for the OpenAI-compat key, just keyed
-// by gateway id instead of being a single file.
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';

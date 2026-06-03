@@ -33,15 +33,6 @@ const Channel = {
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
-
-  AUTH_STATUS: 'centraid:auth:status',
-  AUTH_RESYNC: 'centraid:auth:resync',
-
-  PROVIDER_API_KEY_SET: 'centraid:agent:provider:setApiKey',
-  PROVIDER_API_KEY_HAS: 'centraid:agent:provider:hasApiKey',
-  PROVIDER_API_KEY_CLEAR: 'centraid:agent:provider:clearApiKey',
-
-  RUNNER_STATUS_GET: 'centraid:agent:runner:status',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -164,26 +155,14 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // `/centraid/<appId>/_chat` SSE itself and reads/writes history over the
   // gateway's `/_centraid-chat` surface — no main-process relay.
 
-  // Credential import (Claude Code / Codex → pi auth.json)
-  authStatus: () => ipcRenderer.invoke(Channel.AUTH_STATUS),
-  authResync: () => ipcRenderer.invoke(Channel.AUTH_RESYNC),
-
   // Gateway-side user identity + global prefs (centraid-user.sqlite) moved
   // to the renderer's direct HTTP client (renderer/gateway-client.ts) under
   // the thin-client pivot — pure `/_centraid-user` reads/writes.
-
-  // Custom OpenAI-compatible provider — API key persisted via Electron
-  // safeStorage in the main process. Renderer can write, check presence,
-  // or clear; it can never read the plaintext back.
-  setProviderApiKey: (input: { apiKey: string }) =>
-    ipcRenderer.invoke(Channel.PROVIDER_API_KEY_SET, input),
-  hasProviderApiKey: () => ipcRenderer.invoke(Channel.PROVIDER_API_KEY_HAS),
-  clearProviderApiKey: () => ipcRenderer.invoke(Channel.PROVIDER_API_KEY_CLEAR),
-
-  // Fresh preflight — re-probes the binary and (if configured) the
-  // custom OpenAI-compatible endpoint. Renderer calls this when the
-  // settings panel opens or the user clicks "Test connection".
-  getRunnerStatus: () => ipcRenderer.invoke(Channel.RUNNER_STATUS_GET),
+  //
+  // Coding-agent detection, the runner preflight, and the custom
+  // OpenAI-compatible endpoint config + key moved to the gateway (colocated
+  // with the runner): the renderer reads `/centraid/_agents/status` and
+  // `/centraid/_chat/runner-status` over HTTP via gateway-client-chat.ts.
 
   // Automations: create/enable/delete + the read/run/analytics surface +
   // insights moved to the renderer's direct HTTP client

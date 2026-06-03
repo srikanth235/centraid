@@ -29,5 +29,4 @@ export {
 } from './build-gateway.js';
 export { serve, type ServeOptions, type GatewayServeHandle } from './serve.js';
 export type { GatewayPaths } from './paths.js';
-export type { SecretsProvider } from './secrets.js';
-export { parseProviderPrefs } from './provider-prefs.js';
+export { readAgentsStatus, type AgentsStatus } from './agents-routes.js';

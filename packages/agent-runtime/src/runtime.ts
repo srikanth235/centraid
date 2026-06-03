@@ -11,11 +11,6 @@
  * need to know which one ran a given turn. The returned `adapterSessionId`
  * (codex thread id / claude session id) is opaque — round-trip it on the
  * next turn via `prevSessionId` to resume the conversation.
- *
- * When `prefs.provider` is set on a codex runner, the codex CLI is
- * pointed at an OpenAI-compatible endpoint (Ollama, Groq, vLLM, …) via
- * a scoped `CODEX_HOME`. The dispatcher just plumbs the prefs through;
- * see `codex-app-server.ts` for the toml materialization.
  */
 
 import type { AgentTurnConfig, AgentTurnInput, AgentTurnResult } from '@centraid/app-engine';
@@ -55,7 +50,6 @@ export async function runAgentTurn(
       {
         ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
         ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
-        ...(prefs.provider ? { provider: prefs.provider } : {}),
       },
     );
     return {

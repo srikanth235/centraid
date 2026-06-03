@@ -13,7 +13,6 @@
  *     analytics.sqlite      — one summary row per run
  *     chat-runner-sessions/ — codex thread state for in-app chat
  *     token.bin             — persistent bearer token (mode 0o600)
- *     provider-key.bin      — OpenAI-compat provider API key (mode 0o600)
  */
 
 import path from 'node:path';
@@ -22,8 +21,6 @@ import type { GatewayPaths } from './paths.js';
 export interface DaemonLayout extends GatewayPaths {
   /** Persistent shared-bearer token file (`<dataDir>/token.bin`). */
   tokenFile: string;
-  /** Sealed provider-API-key file (`<dataDir>/provider-key.bin`). */
-  providerKeyFile: string;
 }
 
 export function daemonLayoutFor(dataDir: string): DaemonLayout {
@@ -34,6 +31,5 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     analyticsDb: path.join(abs, 'analytics.sqlite'),
     chatRunnerSessionDir: path.join(abs, 'chat-runner-sessions'),
     tokenFile: path.join(abs, 'token.bin'),
-    providerKeyFile: path.join(abs, 'provider-key.bin'),
   };
 }

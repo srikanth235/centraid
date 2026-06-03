@@ -6,16 +6,9 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
-import type { SecretsProvider } from './secrets.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
-
-const noSecrets: SecretsProvider = {
-  async getProviderApiKey() {
-    return undefined;
-  },
-};
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
@@ -28,7 +21,7 @@ function pathsUnder(dir: string): GatewayPaths {
 
 beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gateway-runtime-${crypto.randomUUID()}-`));
-  handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets });
+  handle = await serve({ paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {
@@ -72,7 +65,6 @@ test('honors a caller-supplied token instead of minting one', async () => {
   const fixed = 'fixed-token-for-test-purposes-only-do-not-use-elsewhere';
   handle = await serve({
     paths: pathsUnder(dataDir),
-    secrets: noSecrets,
     token: fixed,
   });
   assert.equal(handle.token, fixed);
@@ -86,7 +78,6 @@ test('honors a caller-supplied host (loopback alias still resolves)', async () =
   await handle.close();
   handle = await serve({
     paths: pathsUnder(dataDir),
-    secrets: noSecrets,
     host: '127.0.0.1',
     port: 0,
   });
@@ -105,4 +96,25 @@ test('runnerStatus is reachable and returns a RunnerStatus body', async () => {
   const body = (await res.json()) as { kind: string; ok: boolean };
   assert.ok(typeof body.kind === 'string' && body.kind.length > 0);
   assert.equal(typeof body.ok, 'boolean');
+});
+
+test('agents status is reachable and returns CLI availability booleans', async () => {
+  const res = await fetch(`${handle.url}/centraid/_agents/status`, {
+    headers: { Authorization: `Bearer ${handle.token}` },
+  });
+  // Which CLIs show available depends on whether codex / claude are on the
+  // test host's PATH — we only assert the route is mounted and returns a
+  // well-shaped snapshot (the gateway probes its own host).
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    codexAvailable: boolean;
+    claudeAvailable: boolean;
+  };
+  assert.equal(typeof body.codexAvailable, 'boolean');
+  assert.equal(typeof body.claudeAvailable, 'boolean');
+});
+
+test('rejects /centraid/_agents/status without the bearer token', async () => {
+  const res = await fetch(`${handle.url}/centraid/_agents/status`);
+  assert.equal(res.status, 401);
 });

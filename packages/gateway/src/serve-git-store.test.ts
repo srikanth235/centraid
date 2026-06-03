@@ -19,16 +19,9 @@ import crypto from 'node:crypto';
 import { WorktreeStore } from './worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
-import type { SecretsProvider } from './secrets.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
-
-const noSecrets: SecretsProvider = {
-  async getProviderApiKey() {
-    return undefined;
-  },
-};
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
@@ -90,7 +83,7 @@ test('serves an app from the git-store main worktree, not versions/', async () =
   const appsStoreRoot = path.join(dataDir, 'code');
   await seedApp(appsStoreRoot, 'gitapp');
 
-  handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets, appsStoreRoot });
+  handle = await serve({ paths: pathsUnder(dataDir), appsStoreRoot });
 
   // The handle exposes the live WorktreeStore.
   assert.ok(handle.appsStore, 'expected appsStore on the handle');
@@ -124,6 +117,6 @@ test('serves an app from the git-store main worktree, not versions/', async () =
 });
 
 test('without appsStoreRoot the handle has no appsStore (no code backend)', async () => {
-  handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets });
+  handle = await serve({ paths: pathsUnder(dataDir) });
   assert.equal(handle.appsStore, undefined);
 });

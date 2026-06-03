@@ -17,7 +17,6 @@ export {
   type RunnerStatusOptions,
   type RunnerModel,
   type ModelTier,
-  type ProviderStatus,
 } from './runtime.js';
 
 // Per-app chat surface — `ChatRunner` is the host-injected seam, both
@@ -35,7 +34,6 @@ export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prom
 export type {
   RunnerKind,
   RunnerPrefs,
-  OpenAICompatProvider,
   ToolContext,
   AgentTurnInput,
   AgentTurnConfig,

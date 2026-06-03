@@ -15,16 +15,9 @@ import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import { makeTemplatesRouteHandler } from './templates-routes.ts';
 import type { GatewayPaths } from './paths.ts';
-import type { SecretsProvider } from './secrets.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
-
-const noSecrets: SecretsProvider = {
-  async getProviderApiKey() {
-    return undefined;
-  },
-};
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
@@ -45,7 +38,7 @@ afterEach(async () => {
 });
 
 test('GET /centraid/_templates returns stripped bundled metadata behind auth', async () => {
-  handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets });
+  handle = await serve({ paths: pathsUnder(dataDir) });
 
   // No bearer → 401.
   const unauth = await fetch(`${handle.url}/centraid/_templates`);

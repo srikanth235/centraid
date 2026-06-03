@@ -118,7 +118,7 @@ export function makeChatRunnerCore(opts: ChatRunnerCoreOptions): ChatRunner {
         input.onEvent({
           type: 'error',
           message:
-            'No coding agent configured. Open Settings → AI providers and pick Codex or Claude Code.',
+            'No coding agent configured. Open Settings → Agents and pick Codex or Claude Code.',
         });
         throw new Error('no coding agent configured');
       }

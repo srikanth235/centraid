@@ -11,7 +11,6 @@ import { buildPrefsPatch, seedRunnerPrefs } from './cli-runner-prefs.ts';
 import type { UserStore } from '@centraid/app-engine';
 import { daemonLayoutFor } from './cli-paths.ts';
 import { readOrMintToken, readPersistedToken } from './cli-token.ts';
-import { makeFileSecretsProvider, writeProviderApiKey } from './cli-secrets.ts';
 
 const here = path.dirname(url.fileURLToPath(import.meta.url));
 const CLI_TS = path.resolve(here, 'cli.ts');
@@ -42,37 +41,15 @@ test('validateConfig accepts a minimal config and a fully populated one', () => 
     host: '0.0.0.0',
     port: 8765,
     runner: { kind: 'codex', binPath: '/opt/bin/codex', extraArgs: ['--foo'] },
-    provider: {
-      id: 'p',
-      baseUrl: 'http://x',
-      name: 'P',
-      wireApi: 'chat',
-      envKey: 'P_KEY',
-      apiKey: 'sk-x',
-    },
   });
   assert.equal(full.runner?.kind, 'codex');
-  assert.equal(full.provider?.id, 'p');
+  assert.equal(full.runner?.binPath, '/opt/bin/codex');
 });
 
-test('validateConfig rejects provider.apiKey without provider.envKey', () => {
-  // apiKey without envKey would silently persist the key to disk while
-  // resolveProvider() inside serve() skips the key lookup — every
-  // request would go out unauthenticated.
-  assert.throws(
-    () =>
-      validateConfig({
-        dataDir: '/tmp/x',
-        provider: { id: 'p', baseUrl: 'http://x', apiKey: 'sk-x' },
-      }),
-    /requires `provider.envKey`/,
-  );
-});
-
-test('buildPrefsPatch clears every runner key when no runner/provider is configured', () => {
+test('buildPrefsPatch clears every runner key when no runner is configured', () => {
   const patch = buildPrefsPatch({ dataDir: '/x' });
-  // No runner / provider → every key must clear to null so a removed
-  // entry in the config file actually wipes the DB.
+  // No runner → every key must clear to null so a removed entry in the
+  // config file actually wipes the DB.
   for (const v of Object.values(patch)) assert.equal(v, null);
 });
 
@@ -80,19 +57,16 @@ test('buildPrefsPatch sets only the keys the config carries', () => {
   const patch = buildPrefsPatch({
     dataDir: '/x',
     runner: { kind: 'claude-code' },
-    provider: { id: 'p', baseUrl: 'http://x' },
   });
   assert.equal(patch['agent.runner.kind'], 'claude-code');
   assert.equal(patch['agent.runner.binPath'], null);
-  assert.equal(patch['agent.runner.provider.id'], 'p');
-  assert.equal(patch['agent.runner.provider.baseUrl'], 'http://x');
-  assert.equal(patch['agent.runner.provider.name'], null);
+  assert.equal(patch['agent.runner.extraArgs'], null);
 });
 
-test('seedRunnerPrefs calls setPrefs even on empty config so a removed provider is cleared', () => {
-  // Regression: the early `if (!runner && !provider) return` previously
-  // skipped setPrefs entirely when both blocks were absent, leaving a
-  // previously seeded `agent.runner.provider.*` row stale across reboots.
+test('seedRunnerPrefs calls setPrefs even on empty config so a removed runner is cleared', () => {
+  // Regression: an early `if (!runner) return` would skip setPrefs entirely
+  // when the block is absent, leaving a previously seeded `agent.runner.*`
+  // row stale across reboots.
   const patches: Array<Record<string, unknown>> = [];
   const fakeStore = {
     setPrefs(p: Record<string, unknown>) {
@@ -101,11 +75,7 @@ test('seedRunnerPrefs calls setPrefs even on empty config so a removed provider 
     },
   } as unknown as UserStore;
   seedRunnerPrefs(fakeStore, { dataDir: '/x' });
-  assert.equal(
-    patches.length,
-    1,
-    'setPrefs must be called even when config has no runner/provider',
-  );
+  assert.equal(patches.length, 1, 'setPrefs must be called even when config has no runner');
   for (const v of Object.values(patches[0]!)) assert.equal(v, null);
 });
 
@@ -123,20 +93,6 @@ test('readOrMintToken creates a 64-hex token on first call and re-reads it on th
   assert.equal(a, b);
   const persisted = await readPersistedToken(tokenFile);
   assert.equal(persisted, a);
-});
-
-test('makeFileSecretsProvider returns undefined when no key file exists', async () => {
-  const layout = daemonLayoutFor(dataDir);
-  const secrets = makeFileSecretsProvider(layout.providerKeyFile);
-  assert.equal(await secrets.getProviderApiKey(), undefined);
-});
-
-test('writeProviderApiKey + makeFileSecretsProvider round-trips a plaintext key', async () => {
-  const layout = daemonLayoutFor(dataDir);
-  await fs.mkdir(dataDir, { recursive: true });
-  await writeProviderApiKey(layout.providerKeyFile, 'sk-test-abc');
-  const secrets = makeFileSecretsProvider(layout.providerKeyFile);
-  assert.equal(await secrets.getProviderApiKey(), 'sk-test-abc');
 });
 
 // End-to-end: spawn the CLI via tsx, parse "listening on …" + "token: …"

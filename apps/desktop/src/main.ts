@@ -2,9 +2,7 @@ import { app, BrowserWindow, nativeImage, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installAuthInjector } from './main/auth-injector.js';
-import { importAvailableCreds } from './main/auth-import.js';
 import { registerIpcHandlers } from './main/ipc.js';
-import { loadSettings, saveSettings } from './main/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -72,35 +70,15 @@ app.whenReady().then(() => {
   // URL into `serve()`, and the gateway's `/centraid/_templates` route
   // fires a one-time best-effort fetch into its cache. The desktop main
   // process no longer touches `@centraid/app-blueprints`.
-  // First-launch credential probe. Reads Claude Code (macOS keychain) and
-  // Codex (`~/.codex/auth.json`) to populate the Settings → AI providers
-  // status card so the user can see which CLIs are already installed.
-  // No credentials are copied — each backend reads its own auth in place
-  // (codex from `~/.codex/auth.json`, Claude SDK from `ANTHROPIC_API_KEY`).
-  void firstLaunchAuthImport();
+  // Coding-agent detection moved to the gateway (`GET /centraid/_agents/status`):
+  // it's colocated with the runner and probes its own host on demand, so the
+  // desktop no longer runs a first-launch credential probe.
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
 });
-
-async function firstLaunchAuthImport(): Promise<void> {
-  try {
-    const settings = await loadSettings();
-    if (settings.authImportedAt) return;
-    const result = await importAvailableCreds({ overwrite: false });
-    // Always stamp the marker — even when nothing was found, so we don't
-    // re-prompt the macOS keychain dialog on every subsequent launch. The
-    // user can still trigger an explicit import via Settings → Re-sync,
-    // which always overwrites and refreshes the marker.
-    await saveSettings({ authImportedAt: new Date().toISOString() });
-    // The Settings → AI providers panel surfaces the result; nothing to do here.
-    void result;
-  } catch (err) {
-    console.error('[centraid] first-launch auth import failed:', err);
-  }
-}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

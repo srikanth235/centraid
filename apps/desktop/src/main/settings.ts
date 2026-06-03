@@ -33,12 +33,6 @@ export interface PersistedSettings {
   /** Model id used by the app-view agentic chat. */
   chatModel?: string;
   /**
-   * ISO timestamp of the most recent Claude Code / Codex credential
-   * auto-import. Empty/undefined on first launch — main.ts uses that
-   * as the trigger to run the importer once.
-   */
-  authImportedAt?: string;
-  /**
    * ISO timestamp the user finished the first-run onboarding (set their
    * own profile name + avatar color). Absent on a fresh install — the
    * renderer reads this as the gate for showing the onboarding view
@@ -92,7 +86,6 @@ export interface DesktopSettings {
   /** UI prefs (unchanged from earlier shapes). */
   remoteTemplatesUrl?: string;
   chatModel?: string;
-  authImportedAt?: string;
   /**
    * ISO timestamp the user finished first-run onboarding. Absent on a
    * fresh install — the renderer gates on this to show onboarding
@@ -129,7 +122,6 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
       ? { remoteTemplatesUrl: raw.remoteTemplatesUrl }
       : {}),
     ...(typeof raw.chatModel === 'string' ? { chatModel: raw.chatModel } : {}),
-    ...(typeof raw.authImportedAt === 'string' ? { authImportedAt: raw.authImportedAt } : {}),
     ...(typeof raw.onboardingCompletedAt === 'string'
       ? { onboardingCompletedAt: raw.onboardingCompletedAt }
       : {}),
@@ -200,7 +192,6 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     gatewayToken: resolved.token,
     ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
     ...(p.chatModel !== undefined ? { chatModel: p.chatModel } : {}),
-    ...(p.authImportedAt !== undefined ? { authImportedAt: p.authImportedAt } : {}),
     ...(p.onboardingCompletedAt !== undefined
       ? { onboardingCompletedAt: p.onboardingCompletedAt }
       : {}),
@@ -256,11 +247,6 @@ export async function saveSettings(patch: Partial<DesktopSettings>): Promise<Des
       ? { chatModel: patch.chatModel }
       : current.chatModel !== undefined
         ? { chatModel: current.chatModel }
-        : {}),
-    ...(patch.authImportedAt !== undefined
-      ? { authImportedAt: patch.authImportedAt }
-      : current.authImportedAt !== undefined
-        ? { authImportedAt: current.authImportedAt }
         : {}),
     ...(patch.onboardingCompletedAt !== undefined
       ? { onboardingCompletedAt: patch.onboardingCompletedAt }
