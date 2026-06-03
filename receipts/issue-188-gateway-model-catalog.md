@@ -12,13 +12,14 @@ Refresh button.
 ## Checklist
 
 - [x] Commit 1 — agent-runtime: codex `model/list` + claude `-p` enumerators
-- [ ] Commit 2 — agent-runtime: gateway-owned model catalog store + default seed
+- [x] Commit 2 — agent-runtime: gateway-owned model catalog store + default seed
 - [ ] Commit 3 — gateway: wire model catalog into runner-status preflight
 - [ ] Commit 4 — desktop: supply per-gateway model-catalog path
 
 ## What changed
 
 - **Commit 1 — agent-runtime: codex `model/list` + claude `-p` enumerators.** New `codex-model-list.ts` spawns `codex app-server`, handshakes `initialize`→`initialized`, requests `model/list`, and parses the result with a defensive parser (`{models}`/`{data}`/bare-array; string or object entries; default detection). New `model-enumerators.ts` exposes `enumerateRunnerModels(prefs)` dispatching to the codex helper and to `enumerateClaudeModels` (`claude -p` with fence-stripping + `claude-*` id validation). Both are best-effort (timeout + `[]` on any failure). Pure-function parser unit tests in `model-enumerators.test.ts`.
+- **Commit 2 — agent-runtime: gateway-owned model catalog store + default seed.** New `model-catalog.ts` persists per-runner models at `<dir>/model-catalog.json`; `resolveRunnerModels` returns the cached entry or the `defaults` seed on a normal load (never enumerates), and on `refresh` runs `enumerate()` synchronously, overwriting only on a non-empty result (a transient failure keeps the prior entry / falls back to defaults). New `model-defaults.ts` holds the hardcoded concrete-id seed per runner, each entry behind a per-line `no-hardcoded-model-ids` waiver, shown by default until first Refresh. Store tests in `model-catalog.test.ts`.
 
 ## Out of scope
 

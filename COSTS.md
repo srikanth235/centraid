@@ -616,3 +616,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-5a137b32-0a1-1780483750 | claude-code | 5a137b32-0a17-4bff-810e-89b4261ada7a | #186 | claude-opus-4-8 | 826 | 562197 | 4254466 | 49505 | 612528 | 6.8827 |  |
 | claude-code-ec28ff14-004-1780488006 | claude-code | ec28ff14-0041-489a-acc2-47960a6e8925 | #188 | claude-opus-4-7 | 6 | 10655 | 14867 | 181 | 10842 | 0.0786 | feat(agent-runtime): codex model/list + claude -p model enumerators (#188)Add pe |
 | claude-code-ec28ff14-004-1780488042 | claude-code | ec28ff14-0041-489a-acc2-47960a6e8925 | #188 | claude-opus-4-7 | 0 | 0 | 0 | 0 | 0 | 0.0000 | feat(agent-runtime): codex model/list + claude -p model enumerators (#188)Add pe |
+| claude-code-ec28ff14-004-1780488200 | claude-code | ec28ff14-0041-489a-acc2-47960a6e8925 | #188 | claude-opus-4-7 | 0 | 0 | 0 | 0 | 0 | 0.0000 | feat(agent-runtime): gateway-owned model catalog store + default seed (#188)Add  |
