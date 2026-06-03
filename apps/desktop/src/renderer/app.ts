@@ -5827,34 +5827,117 @@ import {
     });
 
     type AuthStatusSnapshot = Awaited<ReturnType<typeof getAgentsStatus>>;
+    // Which CLI the gateway actually drives, mirroring the gateway pref
+    // `agent.runner.kind` (default `codex` when unset — see build-gateway's
+    // prefs loader). Switching writes that pref back; the badges below
+    // reflect THIS selection, not a hardcoded codex-first ordering.
+    type ActiveRunnerKind = 'codex' | 'claude-code';
+    let selectedRunnerKind: ActiveRunnerKind = 'codex';
+    let lastStatus: AuthStatusSnapshot | null = null;
+    let switchingRunner = false;
+
+    // Persist the picked agent and re-render. Optimistic: flip the local
+    // selection first so the badges move immediately, revert on failure.
+    const activateRunner = async (kind: ActiveRunnerKind): Promise<void> => {
+      if (kind === selectedRunnerKind || switchingRunner) return;
+      const prev = selectedRunnerKind;
+      selectedRunnerKind = kind;
+      switchingRunner = true;
+      renderAuthStatus(lastStatus);
+      try {
+        await saveUserPrefs({ 'agent.runner.kind': kind });
+        showToast(
+          kind === 'codex'
+            ? 'Codex is now the active agent'
+            : 'Claude Code is now the active agent',
+        );
+        // The chat model picker lists the ACTIVE runner's catalog/tiers, so
+        // re-fetch it now that the runner changed.
+        void loadChatModels({ refresh: true });
+      } catch (err) {
+        selectedRunnerKind = prev;
+        showToast(`Couldn’t switch agent: ${String(err)}`);
+      } finally {
+        switchingRunner = false;
+        renderAuthStatus(lastStatus);
+      }
+    };
+
+    const RUNNERS: ReadonlyArray<{
+      kind: ActiveRunnerKind;
+      title: string;
+      bin: string;
+      accent: string;
+      available: (s: AuthStatusSnapshot) => boolean;
+      version: (s: AuthStatusSnapshot) => string | undefined;
+    }> = [
+      {
+        kind: 'codex',
+        title: 'Codex',
+        bin: 'codex',
+        accent: '#10b981',
+        available: (s) => s.codexAvailable,
+        version: (s) => s.codexVersion,
+      },
+      {
+        kind: 'claude-code',
+        title: 'Claude Code',
+        bin: 'claude',
+        accent: '#a855f7',
+        available: (s) => s.claudeAvailable,
+        version: (s) => s.claudeVersion,
+      },
+    ];
+
     const renderAuthStatus = (status: AuthStatusSnapshot | null): void => {
+      lastStatus = status;
       authStatusHost.replaceChildren();
       if (!status) {
         authStatusHost.append(el('div', { class: 'settings-note' }, 'Reading credential status…'));
         return;
       }
-      // §C3 — each provider row carries a state badge (Connected /
-      // Standby / Not found) so the at-a-glance status doesn't rely on
-      // reading the subtitle prose.
+      // §C3 — each provider row carries a state badge (Active / Standby /
+      // Not found) so the at-a-glance status doesn't rely on reading the
+      // subtitle prose. An available, non-active row is clickable to make
+      // it the active agent.
       const providerRow = (params: {
         title: string;
         subtitle: string;
         connected: boolean;
+        active: boolean;
         accent: string;
         badge: { label: string; tone: 'on' | 'standby' | 'off' };
+        onActivate?: () => void;
       }): HTMLElement => {
         const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
+        const clickable = Boolean(params.onActivate);
         return el(
           'div',
           {
+            ...(clickable
+              ? {
+                  role: 'button',
+                  tabindex: '0',
+                  title: `Make ${params.title} the active agent`,
+                  onClick: () => params.onActivate?.(),
+                  onKeydown: (e: Event) => {
+                    const key = (e as KeyboardEvent).key;
+                    if (key === 'Enter' || key === ' ') {
+                      e.preventDefault();
+                      params.onActivate?.();
+                    }
+                  },
+                }
+              : {}),
             style: {
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
               padding: '8px 10px',
-              border: '0.5px solid var(--line)',
+              border: `0.5px solid ${params.active ? params.accent : 'var(--line)'}`,
               borderRadius: '8px',
               background: 'var(--bg-elev)',
+              ...(clickable ? { cursor: 'pointer' } : {}),
             },
           },
           [
@@ -5896,41 +5979,40 @@ import {
         );
       };
 
-      // Codex row first — preferred when both CLIs are present. Detection is
-      // CLI-only: the gateway ran `codex --version`. Centraid doesn't inspect
-      // how codex authenticates — that's codex's own business.
       authStatusHost.append(
-        providerRow({
-          title: 'Codex — preferred',
-          subtitle: status.codexAvailable
-            ? `codex CLI detected${status.codexVersion ? ` · ${status.codexVersion}` : ''}`
-            : 'codex CLI not found on the gateway’s PATH',
-          connected: status.codexAvailable,
-          accent: '#10b981',
-          badge: status.codexAvailable
-            ? { label: 'Preferred', tone: 'on' }
-            : { label: 'Not found', tone: 'off' },
-        }),
+        el(
+          'div',
+          { class: 'settings-note' },
+          'Click an available agent to make it the active one. Detection is CLI-only — the gateway ran `<bin> --version`; Centraid doesn’t inspect how each agent authenticates.',
+        ),
       );
 
-      const claudeSubtitle = status.claudeAvailable
-        ? status.codexAvailable
-          ? 'claude CLI detected — held back because Codex is preferred'
-          : `claude CLI detected${status.claudeVersion ? ` · ${status.claudeVersion}` : ''}`
-        : 'claude CLI not found on the gateway’s PATH';
-      authStatusHost.append(
-        providerRow({
-          title: 'Claude Code',
-          subtitle: claudeSubtitle,
-          connected: status.claudeAvailable,
-          accent: '#a855f7',
-          badge: !status.claudeAvailable
-            ? { label: 'Not found', tone: 'off' }
-            : status.codexAvailable
-              ? { label: 'Standby', tone: 'standby' }
-              : { label: 'Connected', tone: 'on' },
-        }),
-      );
+      for (const runner of RUNNERS) {
+        const available = runner.available(status);
+        const isActive = runner.kind === selectedRunnerKind;
+        const ver = runner.version(status);
+        const subtitle = available
+          ? `${runner.bin} CLI detected${ver ? ` · ${ver}` : ''}`
+          : `${runner.bin} CLI not found on the gateway’s PATH`;
+        const badge: { label: string; tone: 'on' | 'standby' | 'off' } = !available
+          ? { label: 'Not found', tone: 'off' }
+          : isActive
+            ? { label: 'Active', tone: 'on' }
+            : { label: 'Standby', tone: 'standby' };
+        authStatusHost.append(
+          providerRow({
+            title: runner.title,
+            subtitle,
+            connected: available,
+            active: isActive,
+            accent: runner.accent,
+            badge,
+            ...(available && !isActive
+              ? { onActivate: () => void activateRunner(runner.kind) }
+              : {}),
+          }),
+        );
+      }
     };
 
     const refreshBtn = el('button', {
@@ -5959,16 +6041,20 @@ import {
       el('div', { class: 'sheet-actions' }, [refreshBtn]),
     );
 
-    // Initial status load — populates the rows after the page mounts.
+    // Initial load — read the active-runner pref and the CLI detection
+    // snapshot together so the first render shows the right "Active" badge.
     renderAuthStatus(null);
-    void getAgentsStatus()
-      .then(renderAuthStatus)
-      .catch(() =>
-        renderAuthStatus({
-          codexAvailable: false,
-          claudeAvailable: false,
-        }),
-      );
+    void Promise.all([
+      getAgentsStatus().catch(
+        () => ({ codexAvailable: false, claudeAvailable: false }) as AuthStatusSnapshot,
+      ),
+      getUserPrefs()
+        .then((p) => p['agent.runner.kind'])
+        .catch(() => undefined),
+    ]).then(([status, kindRaw]) => {
+      selectedRunnerKind = kindRaw === 'claude-code' ? 'claude-code' : 'codex';
+      renderAuthStatus(status);
+    });
 
     // Profiles ("spaces") — full manage surface. Each profile is its own
     // home grid of apps; switching re-scopes the shell. Lives under the
