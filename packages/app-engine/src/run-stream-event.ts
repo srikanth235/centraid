@@ -21,7 +21,7 @@
  */
 
 import type { ChatStreamEvent } from './chat-runner.js';
-import type { ItemKind } from './agent-runs-schema.js';
+import type { ItemKind } from './conversation-schema.js';
 
 export type RunStreamEvent =
   | { type: 'run.start'; runId: string }

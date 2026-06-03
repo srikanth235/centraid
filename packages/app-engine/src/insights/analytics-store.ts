@@ -15,7 +15,7 @@
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
 import type { DatabaseProvider } from '../gateway-db.js';
-import type { RunKind } from '../agent-runs-schema.js';
+import type { RunKind } from '../conversation-schema.js';
 import type { RunSummary, RunSummarySink } from '../run-summary-sink.js';
 
 export interface ListSummariesOptions {

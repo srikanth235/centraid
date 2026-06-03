@@ -24,6 +24,7 @@ absorbs the new shape.
 - [x] deleting the conversation removes attachment rows and the GC sweep removes now-unreferenced blobs
 - [x] insights/run_summary report correct per-kind and total token/cost after sourcing kind from the conversation
 - [x] existing chat, automation, and build flows pass end to end under typecheck and the unit suites
+- [x] rename the stale agent-runs-* files to conversation-* so the filenames match the Conversation entity
 
 ## What changed
 
@@ -92,6 +93,15 @@ absorbs the new shape.
   queue attachments that ride the next `streamChat` turn. The run-feed wire
   shapes are unchanged, so the renderer's run/insights views need no type
   changes.
+
+### Follow-up — file rename
+
+- The data model stays in `app-engine` (the persistence/host layer that
+  `conversation-engine` depends on — moving it up would cycle). To remove the
+  naming dissonance we rename the stale agent-runs-* files to conversation-* so
+  the filenames match the Conversation entity: `agent-runs-schema`→
+  `conversation-schema`, `agent-runs-store[-sql]`→`conversation-store[-sql]`.
+  Barrel exports are unchanged, so no downstream package is affected.
 
 ## Out of scope
 

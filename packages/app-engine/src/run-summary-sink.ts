@@ -10,7 +10,7 @@
  * implements. Same injection pattern as `ChatRunner` / `AutomationHost`.
  */
 
-import type { RunKind } from './agent-runs-schema.js';
+import type { RunKind } from './conversation-schema.js';
 
 /**
  * One denormalized row per agent run (chat turn, automation fire, or builder

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { ChatHistoryStore, deriveTitle, type RecordTurnInput } from './chat-history.js';
 import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
-import { ConversationStore } from './agent-runs-store.js';
+import { ConversationStore } from './conversation-store.js';
 import { makeRuntimeDbProvider } from './gateway-db.js';
 
 // Tests that don't care about cross-user isolation share this stub UUID.

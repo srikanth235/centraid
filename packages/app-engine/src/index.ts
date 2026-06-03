@@ -254,7 +254,7 @@ export {
   type CloseItemInput,
   type InsertAttachmentInput,
   type ListTurnsOptions,
-} from './agent-runs-store.js';
+} from './conversation-store.js';
 export type { RunStreamEvent } from './run-stream-event.js';
 export type {
   Conversation,
@@ -266,7 +266,7 @@ export type {
   AutomationTriggerOrigin,
   ItemKind,
   RunKind,
-} from './agent-runs-schema.js';
+} from './conversation-schema.js';
 
 // Per-model token pricing. `run_nodes.cost_usd` is frozen at write time
 // via `costForUsage`; an unknown model yields `undefined` so the ledger

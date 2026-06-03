@@ -1,7 +1,7 @@
 /*
  * Prepared-statement block + raw-row mappers for `ConversationStore`.
  *
- * Split out of `agent-runs-store.ts` to keep that file under the repo's
+ * Split out of `conversation-store.ts` to keep that file under the repo's
  * 500-line cap. The SQL targets the per-app runtime DB's conversation ledger
  * (`conversations`, `turns`, `items`, `attachments`, `automation_state` — see
  * `gateway-db.ts` RUNTIME_MIGRATIONS).
@@ -23,7 +23,7 @@ import type {
   AutomationTriggerOrigin,
   ItemKind,
   RunKind,
-} from './agent-runs-schema.js';
+} from './conversation-schema.js';
 
 export interface RawConversation {
   id: string;

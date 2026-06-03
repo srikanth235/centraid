@@ -640,3 +640,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-ec28ff14-004-1780502955 | claude-code | ec28ff14-0041-489a-acc2-47960a6e8925 | #188 | claude-opus-4-7 | 0 | 0 | 0 | 0 | 0 | 0.0000 | feat(desktop): refine the Agents panel visuals (#188)The two heavy bordered card |
 | claude-code-cdbbe46e-618-1780506977 | claude-code | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | claude-opus-4-8 | 87053 | 1323720 | 167813185 | 617773 | 2028546 | 108.0594 |  |
 | claude-code-cdbbe46e-618-1780507033 | claude-code | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | claude-opus-4-8 | 16 | 7658 | 3909060 | 5841 | 13515 | 2.1485 |  |
+| claude-code-fa1108d3-b04-1780507821 | claude-code | fa1108d3-b04c-41d3-a697-8d21114a2d53 | #190 | claude-opus-4-8 | 5478 | 11886 | 32008 | 952 | 18316 | 0.1415 |  |

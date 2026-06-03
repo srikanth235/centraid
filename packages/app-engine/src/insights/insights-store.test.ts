@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { makeRuntimeDbProvider } from '../gateway-db.js';
-import { ConversationStore } from '../agent-runs-store.js';
+import { ConversationStore } from '../conversation-store.js';
 import { makeAnalyticsDbProvider } from './analytics-db.js';
 import { AnalyticsStore } from './analytics-store.js';
 import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
