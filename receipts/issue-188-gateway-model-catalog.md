@@ -20,6 +20,8 @@ Refresh button.
 - [x] Rethink — coupled Agent · Model picker in the chat composer (Direction A)
 - [x] Rethink — keep Settings → Agents as a global switcher alongside the composer pill
 - [x] Rethink — verify the pill in a running Electron app; fix popover clipping in the narrow chat panel
+- [x] Rethink — per-agent models in agents-status (each agent's catalog, not just the active runner)
+- [ ] Rethink — per-agent default-model picker in Settings → Agents
 
 ## What changed
 
@@ -36,6 +38,8 @@ Refresh button.
 - **Rethink — keep Settings → Agents as a global switcher alongside the composer pill.** The composer pill is per-app (only reachable inside an app's chat), so Settings → Agents is intentionally retained as a clickable global agent switcher. Both surfaces write the same `agent.runner.kind` gateway pref, so they stay in sync; the pill re-reads the pref each time the chat panel opens. (The earlier `activateRunner` call into the removed `loadChatModels` was dropped in the per-runner commit; switching otherwise behaves as before.) Demoting the page to status-only was considered and declined to preserve a global switch point outside the app chat.
 
 - **Rethink — verify the pill in a running Electron app; fix popover clipping in the narrow chat panel.** Drove the built app with Playwright's `_electron` against the real in-process gateway (which enumerated live codex models via `codex app-server model/list`), exercising the real `saveSettings` per-runner merge to render the pinned / stale / default states. The screenshots caught a layout bug typecheck/lint can't: the popover, anchored to the trigger, overflowed the narrow chat panel (`overflow:hidden`) and clipped the second agent card. Fixed by anchoring the popover to the composer (`.app-chat-input-wrap` as positioning context) and spanning its width minus small insets, so it always stays inside the panel.
+
+- **Rethink — per-agent models in agents-status (each agent's catalog, not just the active runner).** `runner-status` only knows the active runner's models, so a per-agent picker needs every agent's catalog. Extended `GET /centraid/_agents/status` to return `codexModels` / `claudeModels` (cheap cached-or-defaults from the gateway catalog; `?refresh=1` enumerates each agent live, honoring the active runner's configured `binPath`/`extraArgs`). `agent-runtime` now exports `resolveRunnerModels` / `defaultModelsFor` / `enumerateRunnerModels`; `build-gateway` injects the resolver into `makeAgentsRouteHandler`. New `agents-routes.test.ts` (4 pass) covers resolver plumbing, refresh threading, and best-effort degradation.
 
 ## Out of scope
 

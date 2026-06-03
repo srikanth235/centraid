@@ -76,6 +76,13 @@ export {
   compareSemver,
 } from './preflight.js';
 
+// Per-runner model catalog + default seed (issue #188). Exposed so the gateway
+// can resolve each agent's models for the per-agent picker in Settings →
+// Agents, not just the active runner's via runner-status.
+export { resolveRunnerModels } from './model-catalog.js';
+export { defaultModelsFor, DEFAULT_MODELS } from './model-defaults.js';
+export { enumerateRunnerModels } from './model-enumerators.js';
+
 // Host tool enumeration — feeds the builder's available-tools grounding
 // block so the agent declares `ctx.tool` calls + `requires` against the
 // tools the host runtime actually exposes (issue #80 follow-up).

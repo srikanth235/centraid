@@ -61,6 +61,9 @@ import {
   makeChatRunner,
   runAutomationLocal,
   runPreflight,
+  resolveRunnerModels,
+  defaultModelsFor,
+  enumerateRunnerModels,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
 import { WorktreeStore } from './worktree-store/index.js';
@@ -425,8 +428,32 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }),
     // Coding-agent detection (codex/claude credentials on the gateway host).
     // The gateway is colocated with the runner, so it probes its own host —
-    // a remote gateway reports its host's agents, not the desktop's.
-    makeAgentsRouteHandler(),
+    // a remote gateway reports its host's agents, not the desktop's. It also
+    // reports EACH agent's models (issue #188) so Settings → Agents can offer a
+    // per-agent default-model picker; the active runner's configured
+    // binPath/extraArgs are honored when enumerating it, defaults otherwise.
+    makeAgentsRouteHandler(
+      paths.modelCatalogFile
+        ? {
+            resolveModels: async (kind, refresh) => {
+              const prefs = await prefsLoader();
+              const isActive = prefs?.kind === kind;
+              return resolveRunnerModels({
+                kind,
+                catalogPath: paths.modelCatalogFile as string,
+                defaults: defaultModelsFor(kind),
+                enumerate: () =>
+                  enumerateRunnerModels({
+                    kind,
+                    ...(isActive && prefs?.binPath ? { binPath: prefs.binPath } : {}),
+                    ...(isActive && prefs?.extraArgs ? { extraArgs: prefs.extraArgs } : {}),
+                  }),
+                refresh,
+              });
+            },
+          }
+        : {},
+    ),
   ];
 
   let builtCodeAppsDir: (() => string) | undefined;
