@@ -25,16 +25,9 @@ import crypto from 'node:crypto';
 import { WorktreeStore } from './worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
-import type { SecretsProvider } from './secrets.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
-
-const noSecrets: SecretsProvider = {
-  async getProviderApiKey() {
-    return undefined;
-  },
-};
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
@@ -65,7 +58,7 @@ beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `mc-gateway-${crypto.randomUUID()}-`));
   const appsStoreRoot = path.join(dataDir, 'code');
   await seedApp(appsStoreRoot, 'multiclient-test');
-  handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets, appsStoreRoot });
+  handle = await serve({ paths: pathsUnder(dataDir), appsStoreRoot });
 });
 
 afterEach(async () => {

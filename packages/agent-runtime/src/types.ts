@@ -8,4 +8,4 @@
  * `@centraid/agent-runtime`) keep their existing import paths.
  */
 
-export type { RunnerKind, RunnerPrefs, OpenAICompatProvider } from '@centraid/app-engine';
+export type { RunnerKind, RunnerPrefs } from '@centraid/app-engine';

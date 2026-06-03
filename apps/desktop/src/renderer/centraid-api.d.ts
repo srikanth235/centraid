@@ -71,8 +71,6 @@ export interface CentraidSettings {
   gatewayToken?: string;
   /** Provider/model id (e.g. `openai/gpt-4o`) used by the app-view agentic chat. */
   chatModel?: string;
-  /** ISO timestamp of the last Claude Code / Codex credential import. */
-  authImportedAt?: string;
   /**
    * ISO timestamp the user finished first-run onboarding. Absent on a
    * fresh install — the renderer gates on this to show the welcome /
@@ -102,17 +100,22 @@ export interface CentraidGatewayProfile {
   createdAt: string;
 }
 
-export interface CentraidAuthStatus {
-  /** `~/.codex/auth.json` exists (i.e. `codex login` has run). */
+/**
+ * Which coding-agent CLIs are runnable on the GATEWAY host. Probed
+ * gateway-side (`<bin> --version`) and read over `GET /centraid/_agents/status`
+ * (see `renderer/gateway-client-chat.ts`). Centraid is agnostic to how each
+ * agent authenticates — this reflects CLI presence only. A remote gateway
+ * reports its own host's CLIs, not the desktop's.
+ */
+export interface CentraidAgentsStatus {
+  /** The `codex` CLI is runnable on the gateway host. */
   codexAvailable: boolean;
-  /** Claude Code OAuth entry present in macOS keychain. */
+  /** The `claude` CLI is runnable on the gateway host. */
   claudeAvailable: boolean;
-}
-
-export interface CentraidAuthImportResult {
-  importedCodex: boolean;
-  importedClaude: boolean;
-  status: CentraidAuthStatus;
+  /** `codex --version` output when available. */
+  codexVersion?: string;
+  /** `claude --version` output when available. */
+  claudeVersion?: string;
 }
 
 // The renderer-side chat event union is the gateway's native `ChatStreamEvent`
@@ -443,38 +446,15 @@ interface CentraidApi {
   // (issue #141, Phase 3): the panel streams `/centraid/<appId>/_chat` SSE
   // itself and reads/writes history over `/_centraid-chat` — no IPC.
 
-  /** Snapshot of which coding-agent credentials are present on this machine. */
-  authStatus(): Promise<CentraidAuthStatus>;
-  /** Re-probe the on-disk credential locations and return a fresh snapshot. */
-  authResync(): Promise<CentraidAuthImportResult>;
+  // Coding-agent detection moved to the gateway (`GET /centraid/_agents/status`,
+  // read via `renderer/gateway-client-chat.ts`): the gateway is colocated with
+  // the runner, so it probes its own host. No IPC, no desktop-side probing.
 
   // getUserId / getUserPrefs / saveUserPrefs moved to the renderer's direct
   // HTTP client (renderer/gateway-client.ts) under the thin-client pivot —
   // pure `/_centraid-user` reads/writes. The main-side preflight-cache drop
   // that rode `saveUserPrefs` is no longer needed (the cache keys on the
   // runner prefs that matter, and the runner-status read force-invalidates).
-
-  /**
-   * Persist the API key for the custom OpenAI-compatible provider via
-   * Electron `safeStorage`. The plaintext key crosses the IPC bridge once
-   * (renderer → main) and is encrypted before being written to disk.
-   * It never enters `user_prefs` or any renderer-readable surface.
-   * Pass an empty string to delete; equivalent to `clearProviderApiKey`.
-   */
-  setProviderApiKey(input: { apiKey: string }): Promise<{ ok: true }>;
-  /** Whether an encrypted API key blob is on disk. The plaintext is never returned. */
-  hasProviderApiKey(): Promise<{ present: boolean }>;
-  /** Delete the encrypted API key blob from disk. */
-  clearProviderApiKey(): Promise<{ ok: true }>;
-
-  /**
-   * Fresh preflight of the configured runner: binary version + (if a
-   * custom OpenAI-compatible endpoint is set) reachability probe of
-   * `<baseUrl>/models` with the persisted API key. Always re-probes —
-   * the renderer should call this only on settings-panel open or after
-   * an explicit user action.
-   */
-  getRunnerStatus(): Promise<CentraidRunnerStatus>;
 
   // Automations (issue #98). Every automation lives inside an app
   // folder under `appsDir`; these read/write that app tree and the
@@ -677,17 +657,6 @@ export interface CentraidMintedWebhook {
   secret: string;
 }
 
-/** Sub-status for a custom OpenAI-compatible provider on a codex runner. */
-export interface CentraidProviderStatus {
-  id: string;
-  baseUrl: string;
-  ok: boolean;
-  modelCount?: number;
-  /** Model ids from `GET <baseUrl>/models`; feeds the chat model picker. */
-  models?: string[];
-  reason?: string;
-}
-
 /** One model a runtime can serve (OpenClaw enumerates these). */
 export interface CentraidRunnerModel {
   id: string;
@@ -706,7 +675,6 @@ export interface CentraidRunnerStatus {
   versionAtLeast?: boolean;
   reason?: string;
   hint?: string;
-  provider?: CentraidProviderStatus;
   /** Models the runtime can serve, when enumerable (OpenClaw). */
   models?: CentraidRunnerModel[];
 }

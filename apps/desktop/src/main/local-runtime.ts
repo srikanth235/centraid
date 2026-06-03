@@ -1,11 +1,5 @@
-import {
-  parseProviderPrefs,
-  serve,
-  type GatewayServeHandle,
-  type SecretsProvider,
-} from '@centraid/gateway';
-import { invalidatePreflightCache, type OpenAICompatProvider } from '@centraid/agent-runtime';
-import { getProviderApiKey } from './provider-secrets.js';
+import { serve, type GatewayServeHandle } from '@centraid/gateway';
+import { invalidatePreflightCache } from '@centraid/agent-runtime';
 import {
   gatewayAnalyticsDb,
   gatewayAppsDir,
@@ -88,9 +82,6 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
   if (inFlight) return inFlight;
   const p = (async () => {
     const appsDir = await localRuntimeAppsDir(gatewayId);
-    const secrets: SecretsProvider = {
-      getProviderApiKey: () => getProviderApiKey(gatewayId),
-    };
     // The gateway owns the template catalog AND its remote refresh now
     // (issue #141, Phase 5), so pass the optional remote manifest URL down
     // — the templates route fires a one-time best-effort fetch into the
@@ -117,7 +108,6 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
         templatesCacheDir: templatesCacheDir(gatewayId),
         ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
       },
-      secrets,
       // Issue #137: the local gateway owns app code as a git store too,
       // so drafts survive restarts and the publish/session HTTP surface
       // is identical to the standalone daemon.
@@ -176,32 +166,4 @@ export async function shutdownAllLocalRuntimesExcept(exceptId?: string): Promise
  */
 export function noteRunnerPrefsChanged(): void {
   invalidatePreflightCache();
-}
-
-/**
- * Re-export `parseProviderPrefs` so [ipc.ts](apps/desktop/src/main/ipc.ts)
- * keeps its existing import surface (parsing has no Electron deps and
- * lives in `@centraid/gateway`).
- */
-export { parseProviderPrefs };
-
-/**
- * Build a complete `OpenAICompatProvider` by combining user_prefs-side
- * config with the safeStorage-backed API key. Used by [ipc.ts:236](apps/desktop/src/main/ipc.ts)
- * when persisting/validating provider settings from the renderer.
- *
- * The runtime's own per-turn prefs loader (inside `serve()`) goes
- * through the injected `SecretsProvider` instead — same end shape, just
- * a different code path so the gateway package stays free of
- * Electron deps.
- */
-export async function resolveProviderPrefs(
-  prefs: Record<string, unknown>,
-  gatewayId: string,
-): Promise<OpenAICompatProvider | undefined> {
-  const base = parseProviderPrefs(prefs);
-  if (!base) return undefined;
-  if (!base.envKey) return base;
-  const apiKey = await getProviderApiKey(gatewayId);
-  return apiKey ? { ...base, apiKey } : base;
 }

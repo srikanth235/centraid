@@ -16,21 +16,10 @@
  * Config: per-invocation config (cwd, developerInstructions, sandbox,
  * approvalPolicy, model) is passed directly inside `thread/start` params
  * — it's inherently per-turn, so the RPC is the natural home for it.
- * Provider routing rides on `-c key=value` overrides layered on the user's
- * real `~/.codex` (see `codexProviderOverrideArgs`); codex-cli 0.128.0+
- * honors `-c` on `app-server`. This preserves the user's `[mcp_servers.*]`
- * in chat — the same fix `run-automation-cli-spawn.ts` applies to the
- * `ctx.tool` path (issue #160, closing the #158 follow-up).
  *
  * Auth: codex reads `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`).
- * The user is expected to run `codex login` once before this runs.
- *
- * Custom OpenAI-compatible providers: when `config.provider` is set, the
- * adapter passes `-c` provider overrides to `codex app-server` (model
- * provider id + the `[model_providers.<id>]` table), layered on the user's
- * real `~/.codex` so their MCP servers + auth survive. The API key is
- * injected into the child's env under `provider.envKey` — never written to
- * disk.
+ * The user is expected to run `codex login` once before this runs. Centraid
+ * never touches that file — it's codex's own business how it authenticates.
  *
  * Sandbox: we pin `sandbox: 'workspace-write'` and `approvalPolicy: 'never'`
  * so the agent can write files inside `cwd` without prompting. The
@@ -48,8 +37,6 @@ import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import type { ChatStreamEvent } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
-import type { OpenAICompatProvider } from './types.js';
-import { codexProviderOverrideArgs } from './codex-provider-config.js';
 import { centraidDynamicToolSpecs, handleCentraidToolCall } from './codex-centraid-tools.js';
 
 export interface CodexAppServerInput {
@@ -88,13 +75,6 @@ export interface CodexAppServerConfig {
   binPath?: string;
   /** Extra args passed to `codex app-server` (rare). */
   extraArgs?: string[];
-  /**
-   * When set, the spawned codex process gets `-c key=value` provider
-   * overrides (rendered by `codexProviderOverrideArgs`) that route model
-   * calls through this OpenAI-compatible endpoint, layered on the user's
-   * real `~/.codex` so their `[mcp_servers.*]` + auth survive.
-   */
-  provider?: OpenAICompatProvider;
 }
 
 export interface CodexAppServerResult {
@@ -122,19 +102,8 @@ export async function runCodexAppServerTurn(
   const bin = config.binPath ?? 'codex';
   await fs.mkdir(input.cwd, { recursive: true });
 
-  // Route a custom provider via `-c key=value` overrides layered on the
-  // user's real ~/.codex (honored by `codex app-server` since codex-cli
-  // 0.128.0), NOT a redirected CODEX_HOME — so the user's `[mcp_servers.*]`
-  // stay reachable in chat. Mirrors the `ctx.tool` fix in
-  // run-automation-cli-spawn.ts (issue #160, closing the #158 follow-up).
-  const providerArgs = config.provider ? codexProviderOverrideArgs(config.provider) : [];
-  const args = ['app-server', ...providerArgs, ...(config.extraArgs ?? [])];
-  const childEnv = buildSpawnEnv({
-    ...(input.extraPath ? { extraPath: input.extraPath } : {}),
-    ...(config.provider?.envKey && config.provider.apiKey
-      ? { apiKeyVar: config.provider.envKey, apiKeyVal: config.provider.apiKey }
-      : {}),
-  });
+  const args = ['app-server', ...(config.extraArgs ?? [])];
+  const childEnv = buildSpawnEnv(input.extraPath ? { extraPath: input.extraPath } : {});
   const child = spawn(bin, args, {
     cwd: input.cwd,
     env: childEnv,
@@ -573,21 +542,16 @@ function extractErrorText(item: Record<string, unknown>): string | undefined {
 
 interface SpawnEnvOptions {
   extraPath?: string;
-  apiKeyVar?: string;
-  apiKeyVal?: string;
 }
 
 function buildSpawnEnv(opts: SpawnEnvOptions): NodeJS.ProcessEnv {
-  const { extraPath, apiKeyVar, apiKeyVal } = opts;
-  if (!extraPath && !apiKeyVar) return process.env;
+  const { extraPath } = opts;
+  if (!extraPath) return process.env;
   // Clone so we never mutate `process.env` — concurrent turns must not race
-  // on PATH/API-key vars.
+  // on PATH.
   const env: NodeJS.ProcessEnv = { ...process.env };
-  if (extraPath) {
-    const current = process.env.PATH ?? '';
-    env.PATH = current ? `${extraPath}${path.delimiter}${current}` : extraPath;
-  }
-  if (apiKeyVar && apiKeyVal) env[apiKeyVar] = apiKeyVal;
+  const current = process.env.PATH ?? '';
+  env.PATH = current ? `${extraPath}${path.delimiter}${current}` : extraPath;
   return env;
 }
 

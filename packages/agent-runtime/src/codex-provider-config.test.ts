@@ -35,18 +35,3 @@ test('codexProviderOverrideArgs omits env_key for keyless providers', () => {
     false,
   );
 });
-
-test('codexProviderOverrideArgs never emits the API key', () => {
-  // The key flows via env under env_key; it is never an arg.
-  const args = codexProviderOverrideArgs({
-    id: 'p',
-    name: 'P',
-    baseUrl: 'http://localhost/v1',
-    envKey: 'P_KEY',
-    apiKey: 'sk-secret-should-not-appear',
-  });
-  assert.equal(
-    args.some((a) => a.includes('sk-secret')),
-    false,
-  );
-});

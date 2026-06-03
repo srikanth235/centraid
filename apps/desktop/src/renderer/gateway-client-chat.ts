@@ -25,14 +25,13 @@ import {
   readJson,
   GatewayClientError,
 } from './gateway-client-core.js';
-import type { CentraidRunnerStatus } from './centraid-api.js';
+import type { CentraidAgentsStatus, CentraidRunnerStatus } from './centraid-api.js';
 
 /**
- * Runner preflight + model catalog from the ACTIVE gateway. Unlike the
- * desktop's local `window.CentraidApi.getRunnerStatus()` IPC (which always
- * probes the in-process codex/claude runtime), this reads the gateway's own
- * `GET /centraid/_chat/runner-status` — so a remote OpenClaw gateway reports
- * `{ kind: 'openclaw', models: [...] }` and the chat picker can list them.
+ * Runner preflight + model catalog from the ACTIVE gateway. Reads the
+ * gateway's own `GET /centraid/_chat/runner-status` — so a remote OpenClaw
+ * gateway reports `{ kind: 'openclaw', models: [...] }` and the chat picker
+ * can list them.
  */
 export async function getRunnerStatus(
   opts: { refresh?: boolean } = {},
@@ -46,6 +45,21 @@ export async function getRunnerStatus(
     headers: authHeaders(token),
   });
   return readJson<CentraidRunnerStatus>(res, 'fetch runner status');
+}
+
+/**
+ * Which coding-agent credentials are present on the ACTIVE gateway's host.
+ * Reads the gateway's `GET /centraid/_agents/status` — detection lives
+ * beside the runner, so a remote OpenClaw gateway reports its own host's
+ * agents rather than whatever is installed on the desktop.
+ */
+export async function getAgentsStatus(): Promise<CentraidAgentsStatus> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_agents/status', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  return readJson<CentraidAgentsStatus>(res, 'fetch agents status');
 }
 
 /**

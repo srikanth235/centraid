@@ -19,19 +19,9 @@ import {
 } from './gateway-store.js';
 import { refreshAuthInjector } from './auth-injector.js';
 import { resetChatHistoryAuthCache } from './chat-history-client.js';
-import { fetchUserPrefs, resetUserPrefsAuthCache } from './user-prefs-client.js';
+import { resetUserPrefsAuthCache } from './user-prefs-client.js';
 import { resetAppsStoreAuthCache } from './apps-store-client.js';
 import { ensureAppSessionDir, resetAppSessions } from './app-sessions.js';
-import {
-  importAvailableCreds,
-  readAuthStatus,
-  type AuthImportResult,
-  type AuthStatus,
-} from './auth-import.js';
-import { noteRunnerPrefsChanged, resolveProviderPrefs } from './local-runtime.js';
-import { runPreflight, type OpenAICompatProvider, type RunnerPrefs } from '@centraid/agent-runtime';
-import { type RunnerStatus } from '@centraid/app-engine';
-import { clearProviderApiKey, hasProviderApiKey, setProviderApiKey } from './provider-secrets.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -92,63 +82,20 @@ export const Channel = {
   // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
   // client — the gateway owns the catalog + clone (`POST /_apps/_clone`).
 
-  AUTH_STATUS: 'centraid:auth:status',
-  AUTH_RESYNC: 'centraid:auth:resync',
-
   // Gateway-side user identity + global preferences (theme, density, accent…)
   // moved to the renderer's direct HTTP client (renderer/gateway-client.ts)
   // under the thin-client pivot — pure `/_centraid-user/*` reads/writes.
-
-  // Provider secret (custom OpenAI-compatible endpoint API key, stored
-  // via Electron `safeStorage` outside the gateway DB). The plaintext
-  // never leaves the main process — the renderer only sees "has it / does not".
-  PROVIDER_API_KEY_SET: 'centraid:agent:provider:setApiKey',
-  PROVIDER_API_KEY_HAS: 'centraid:agent:provider:hasApiKey',
-  PROVIDER_API_KEY_CLEAR: 'centraid:agent:provider:clearApiKey',
-
-  // Force-refresh + return the current preflight status for the configured
-  // runner (binary version + optional provider endpoint probe).
-  RUNNER_STATUS_GET: 'centraid:agent:runner:status',
+  //
+  // Coding-agent detection, the runner preflight, and the custom
+  // OpenAI-compatible endpoint config + key all moved to the gateway (it's
+  // colocated with the runner): the renderer reads `/centraid/_agents/status`
+  // and `/centraid/_chat/runner-status` over HTTP.
 
   // Automations (issue #98): the full surface — create/enable/delete +
   // read/run/analytics + INSIGHTS_SUMMARY — moved to the renderer's direct
   // HTTP client (renderer/gateway-client.ts) under the thin-client pivot;
   // the gateway owns scaffold + webhook mint + stage + publish.
 } as const;
-
-async function loadRunnerPrefs(): Promise<{
-  kind: 'codex' | 'claude-code';
-  binPath?: string;
-  extraArgs?: string[];
-  provider?: OpenAICompatProvider;
-}> {
-  // `fetchUserPrefs` routes to the active gateway's `/_centraid-user/prefs`,
-  // so we need to scope the provider API key to that same active gateway —
-  // otherwise we'd mix one gateway's config with another's key.
-  const settings = await loadSettings();
-  const prefs = await fetchUserPrefs();
-  const kindRaw = prefs['agent.runner.kind'];
-  // Codex is the preferred default — mirrors the chat-side loader in
-  // local-runtime.ts so the builder agent gets the same fallback when
-  // the user hasn't explicitly picked a runner.
-  const kind: 'codex' | 'claude-code' =
-    kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : 'codex';
-  const binPath =
-    typeof prefs['agent.runner.binPath'] === 'string'
-      ? (prefs['agent.runner.binPath'] as string)
-      : undefined;
-  const extraArgsRaw = prefs['agent.runner.extraArgs'];
-  const extraArgs = Array.isArray(extraArgsRaw)
-    ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
-    : undefined;
-  const provider = await resolveProviderPrefs(prefs, settings.activeGatewayId);
-  return {
-    kind,
-    ...(binPath ? { binPath } : {}),
-    ...(extraArgs ? { extraArgs } : {}),
-    ...(provider ? { provider } : {}),
-  };
-}
 
 export function registerIpcHandlers(): void {
   // Broadcast helper for "active gateway changed" — fires after any
@@ -331,59 +278,14 @@ export function registerIpcHandlers(): void {
   // ----- User identity + prefs (gateway-backed) -----
   // USER_ID_GET / USER_PREFS_GET / USER_PREFS_SAVE moved to the renderer's
   // direct HTTP client (renderer/gateway-client.ts) under the thin-client
-  // pivot. The preflight-cache drop that rode prefs-save is no longer needed
-  // here: the cache keys on the runner prefs that matter and the
-  // runner-status read (RUNNER_STATUS_GET) force-invalidates before probing.
-  // The main process still reads prefs internally via `fetchUserPrefs` in
-  // `loadRunnerPrefs` below.
-
-  // ----- Provider secret (custom OpenAI-compatible endpoint API key) -----
-  // The plaintext lives only in the main process — renderer can set, query
-  // presence, or clear, but never read the key back. Per-gateway (#109)
-  // because the matching provider config (URL, envKey, ...) is already
-  // per-gateway in the identity DB; storing the key against the same
-  // active gateway keeps config + key matched. Switching gateways
-  // surfaces a different (possibly empty) slot to the AI providers panel.
-  ipcMain.handle(
-    Channel.PROVIDER_API_KEY_SET,
-    async (_e, input: { apiKey: string }): Promise<{ ok: true }> => {
-      const settings = await loadSettings();
-      await setProviderApiKey(settings.activeGatewayId, input.apiKey);
-      noteRunnerPrefsChanged();
-      return { ok: true };
-    },
-  );
-  ipcMain.handle(Channel.PROVIDER_API_KEY_HAS, async (): Promise<{ present: boolean }> => {
-    const settings = await loadSettings();
-    return { present: await hasProviderApiKey(settings.activeGatewayId) };
-  });
-  ipcMain.handle(Channel.PROVIDER_API_KEY_CLEAR, async (): Promise<{ ok: true }> => {
-    const settings = await loadSettings();
-    await clearProviderApiKey(settings.activeGatewayId);
-    noteRunnerPrefsChanged();
-    return { ok: true };
-  });
-
-  // ----- Runner / endpoint preflight -----
-  // The settings UI calls this to show whether the codex binary is
-  // installed AND whether the configured custom endpoint is reachable.
-  // Always re-probes — the renderer only asks when the user opens the panel
-  // or clicks "Test connection".
-  ipcMain.handle(Channel.RUNNER_STATUS_GET, async (): Promise<RunnerStatus> => {
-    noteRunnerPrefsChanged();
-    const prefs = (await loadRunnerPrefs()) as RunnerPrefs;
-    return runPreflight(prefs);
-  });
-
-  // ----- Credential import (Claude Code / Codex → pi auth.json) -----
-  // Status read is silent; the resync handler runs the importer with
-  // overwrite=true so the user can refresh after rotating their tokens.
-  ipcMain.handle(Channel.AUTH_STATUS, async (): Promise<AuthStatus> => readAuthStatus());
-  ipcMain.handle(Channel.AUTH_RESYNC, async (): Promise<AuthImportResult> => {
-    const result = await importAvailableCreds({ overwrite: true });
-    await saveSettings({ authImportedAt: new Date().toISOString() });
-    return result;
-  });
+  // pivot.
+  //
+  // Coding-agent detection + the custom OpenAI-compatible endpoint config
+  // also left the main process: the gateway is colocated with the runner, so
+  // it owns both the credential probe (`GET /centraid/_agents/status`) and
+  // the runner preflight (`GET /centraid/_chat/runner-status`). The renderer
+  // reads them over HTTP via `renderer/gateway-client-chat.ts` — a remote
+  // gateway reports its own host's agents.
 
   // ----- Apps (issue #137: git-store backend; #141: thin client) -----
   // App lifecycle (create/files/write/delete/update-meta) + publish moved to

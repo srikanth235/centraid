@@ -117,32 +117,6 @@ export interface RuntimeOptions {
   draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
 }
 
-/**
- * Sub-status for a custom OpenAI-compatible provider configured on the
- * codex runner. Surfaced in `RunnerStatus.provider` when set, so the
- * settings UI can show whether the endpoint is reachable and what
- * models it exposes — independent of whether the codex binary itself
- * is healthy.
- */
-export interface ProviderStatus {
-  /** Provider id from `RunnerPrefs.provider.id`. */
-  id: string;
-  /** Base URL probed. */
-  baseUrl: string;
-  /** `true` when the endpoint responded successfully. */
-  ok: boolean;
-  /** Number of models returned by `GET <baseUrl>/models` when probe succeeded. */
-  modelCount?: number;
-  /**
-   * Model ids returned by `GET <baseUrl>/models` (the `data[].id` entries of
-   * the OpenAI shape) when the probe succeeded. Feeds the chat model picker
-   * so it can list the endpoint's real models instead of a static guess.
-   */
-  models?: string[];
-  /** Plain-text reason for `ok: false` (timeout, 401, connection refused, …). */
-  reason?: string;
-}
-
 /** Provider-agnostic capability tier a model is classified into. */
 export type ModelTier = 'smart' | 'balanced' | 'fast';
 
@@ -200,18 +174,9 @@ export interface RunnerStatus {
   /** Caller-facing hint (install link, settings path …). */
   hint?: string;
   /**
-   * Probe of the configured custom OpenAI-compatible endpoint, if any.
-   * Independent from the binary preflight — a healthy codex CLI can
-   * still fail at runtime if the configured endpoint is unreachable
-   * or the API key is wrong, so the UI surfaces both.
-   */
-  provider?: ProviderStatus;
-  /**
    * Models the runtime can serve, when it can enumerate them (OpenClaw via
-   * `openclaw models list`). Distinct from `provider.models`, which is the
-   * custom OpenAI-compatible endpoint's `/models` catalog for the codex
-   * runner. Absent when the runtime has no enumerable list (built-in
-   * codex / claude-code, which pick the model internally).
+   * `openclaw models list`). Absent when the runtime has no enumerable list
+   * (built-in codex / claude-code, which pick the model internally).
    */
   models?: RunnerModel[];
 }

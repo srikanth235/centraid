@@ -10,23 +10,14 @@
  *     "runner": {
  *       "kind": "codex",
  *       "binPath": "/opt/homebrew/bin/codex",
- *       "extraArgs": ["--model", "<provider-model-id>"]
- *     },
- *     "provider": {
- *       "id": "ollama-local",
- *       "name": "Local Ollama",
- *       "baseUrl": "http://127.0.0.1:11434/v1",
- *       "wireApi": "chat",
- *       "envKey": "OLLAMA_API_KEY",
- *       "apiKey": "<plaintext>"
+ *       "extraArgs": ["--model", "<model-id>"]
  *     }
  *   }
  *
  * Every field is optional except `dataDir`. CLI flags
- * (`--host`/`--port`/`--data-dir`) override file fields. The `provider`
- * block (including the plaintext `apiKey`) is *seeded* into the
- * gateway's identity DB on first boot so the runtime's existing
- * per-turn prefs loader picks it up unchanged.
+ * (`--host`/`--port`/`--data-dir`) override file fields. The `runner`
+ * block is *seeded* into the gateway's identity DB on first boot so the
+ * runtime's per-turn prefs loader picks it up unchanged.
  */
 
 import { promises as fs } from 'node:fs';
@@ -37,21 +28,11 @@ export interface DaemonRunnerConfig {
   extraArgs?: string[];
 }
 
-export interface DaemonProviderConfig {
-  id: string;
-  name?: string;
-  baseUrl: string;
-  wireApi?: 'chat' | 'responses';
-  envKey?: string;
-  apiKey?: string;
-}
-
 export interface DaemonConfig {
   dataDir: string;
   host?: string;
   port?: number;
   runner?: DaemonRunnerConfig;
-  provider?: DaemonProviderConfig;
 }
 
 export class DaemonConfigError extends Error {
@@ -104,9 +85,6 @@ export function validateConfig(value: unknown): DaemonConfig {
   if (value.runner !== undefined) {
     out.runner = validateRunner(value.runner);
   }
-  if (value.provider !== undefined) {
-    out.provider = validateProvider(value.provider);
-  }
   return out;
 }
 
@@ -128,53 +106,6 @@ function validateRunner(value: unknown): DaemonRunnerConfig {
       throw new DaemonConfigError('`runner.extraArgs` must be an array of strings when set');
     }
     out.extraArgs = value.extraArgs as string[];
-  }
-  return out;
-}
-
-function validateProvider(value: unknown): DaemonProviderConfig {
-  if (!isRecord(value)) throw new DaemonConfigError('`provider` must be an object');
-  const id = value.id;
-  const baseUrl = value.baseUrl;
-  if (typeof id !== 'string' || id.length === 0) {
-    throw new DaemonConfigError('`provider.id` is required (non-empty string)');
-  }
-  if (typeof baseUrl !== 'string' || baseUrl.length === 0) {
-    throw new DaemonConfigError('`provider.baseUrl` is required (non-empty string)');
-  }
-  const out: DaemonProviderConfig = { id, baseUrl };
-  if (value.name !== undefined) {
-    if (typeof value.name !== 'string') {
-      throw new DaemonConfigError('`provider.name` must be a string when set');
-    }
-    out.name = value.name;
-  }
-  if (value.wireApi !== undefined) {
-    if (value.wireApi !== 'chat' && value.wireApi !== 'responses') {
-      throw new DaemonConfigError('`provider.wireApi` must be "chat" or "responses"');
-    }
-    out.wireApi = value.wireApi;
-  }
-  if (value.envKey !== undefined) {
-    if (typeof value.envKey !== 'string') {
-      throw new DaemonConfigError('`provider.envKey` must be a string when set');
-    }
-    out.envKey = value.envKey;
-  }
-  if (value.apiKey !== undefined) {
-    if (typeof value.apiKey !== 'string') {
-      throw new DaemonConfigError('`provider.apiKey` must be a string when set');
-    }
-    // The codex adapter only injects the stored key when `envKey` is set —
-    // `resolveProvider()` in serve.ts short-circuits otherwise. Accepting
-    // `apiKey` alone would silently persist the key to disk and still let
-    // every request go out unauthenticated; reject the config instead.
-    if (out.envKey === undefined) {
-      throw new DaemonConfigError(
-        '`provider.apiKey` requires `provider.envKey` to also be set — the runtime injects the stored key into that env var name',
-      );
-    }
-    out.apiKey = value.apiKey;
   }
   return out;
 }

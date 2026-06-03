@@ -72,15 +72,12 @@ import { defaultLogger } from './default-logger.js';
 import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
 import { makeUnifiedChatRunner } from './unified-chat-runner.js';
 import { makeTemplatesRouteHandler } from './templates-routes.js';
+import { makeAgentsRouteHandler } from './agents-routes.js';
 import type { GatewayPaths } from './paths.js';
-import type { SecretsProvider } from './secrets.js';
-import { resolveProvider } from './provider-prefs.js';
 
 export interface BuildGatewayOptions {
   /** On-disk slots the runtime reads/writes. Caller-derived. */
   paths: GatewayPaths;
-  /** Pluggable secret reader for the OpenAI-compatible provider API key. */
-  secrets: SecretsProvider;
   /**
    * The cron scheduler `start()` runs (issue #149) is gateway-owned and
    * in-process: a single minute-boundary timer fires enabled cron
@@ -238,7 +235,7 @@ export interface BuiltGateway {
 }
 
 export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltGateway> {
-  const { paths, secrets } = options;
+  const { paths } = options;
   const logger = options.logger ?? defaultLogger(options.logTag);
 
   await fs.mkdir(paths.appsDir, { recursive: true });
@@ -326,9 +323,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   );
 
   // Per-turn prefs loader. Re-reads the gateway user_prefs row every chat
-  // turn so a settings change lands without a restart. The API key is
-  // spliced in from the injected `secrets` provider (safeStorage vs.
-  // sealed file, per host).
+  // turn so a settings change lands without a restart.
   const prefsLoader = async (): Promise<RunnerPrefs | undefined> => {
     const allPrefs = userStore.getAllPrefs();
     const kindRaw = allPrefs['agent.runner.kind'];
@@ -344,12 +339,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const extraArgs = Array.isArray(extraArgsRaw)
       ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
       : undefined;
-    const provider = await resolveProvider(allPrefs, secrets);
     return {
       kind,
       ...(binPath ? { binPath } : {}),
       ...(extraArgs ? { extraArgs } : {}),
-      ...(provider ? { provider } : {}),
     };
   };
 
@@ -405,7 +398,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             kind: 'none' as const,
             ok: false,
             reason: 'No coding agent configured.',
-            hint: 'Open Settings → AI providers and pick Codex or Claude Code.',
+            hint: 'Open Settings → Agents and pick Codex or Claude Code.',
           };
         }
         return runPreflight(prefs);
@@ -427,6 +420,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
       ...(paths.remoteTemplatesUrl ? { remoteTemplatesUrl: paths.remoteTemplatesUrl } : {}),
     }),
+    // Coding-agent detection (codex/claude credentials on the gateway host).
+    // The gateway is colocated with the runner, so it probes its own host —
+    // a remote gateway reports its host's agents, not the desktop's.
+    makeAgentsRouteHandler(),
   ];
 
   let builtCodeAppsDir: (() => string) | undefined;

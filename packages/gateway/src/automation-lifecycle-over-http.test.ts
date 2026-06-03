@@ -24,16 +24,9 @@ import {
 } from '@centraid/conversation-engine';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
-import type { SecretsProvider } from './secrets.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
-
-const noSecrets: SecretsProvider = {
-  async getProviderApiKey() {
-    return undefined;
-  },
-};
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
@@ -124,7 +117,6 @@ beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-autocrud-${crypto.randomUUID()}-`));
   handle = await serve({
     paths: pathsUnder(dataDir),
-    secrets: noSecrets,
     appsStoreRoot: path.join(dataDir, 'code'),
   });
 });

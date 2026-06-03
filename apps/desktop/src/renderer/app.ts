@@ -9,6 +9,7 @@ import {
   appQuery,
   appLiveUrl,
   getRunnerStatus as getGatewayRunnerStatus,
+  getAgentsStatus,
   deregisterApp,
   listApps,
   listTemplates,
@@ -3028,13 +3029,7 @@ import {
       render();
     });
 
-    const settingsLabels = [
-      'Appearance',
-      'Layout',
-      'Workspace',
-      'AI providers',
-      'Inference endpoint',
-    ];
+    const settingsLabels = ['Appearance', 'Layout', 'Workspace', 'Agents'];
 
     let rows: PaletteRow[] = [];
     let active = 0;
@@ -3043,8 +3038,7 @@ import {
       Appearance: 'Theme, accent, app tiles',
       Layout: 'Density, cards, sidebar',
       Workspace: 'Sidebar, chat model',
-      'AI providers': 'Codex · Claude Code · custom endpoint',
-      'Inference endpoint': 'Route Codex through any OpenAI endpoint',
+      Agents: 'Codex · Claude Code',
     };
 
     const collectGroups = (q: string): Array<{ group: string; items: PaletteRow[] }> => {
@@ -3142,7 +3136,7 @@ import {
         });
       }
 
-      // ── Settings — the seven inner pages, each with a one-line blurb.
+      // ── Settings — the inner pages, each with a one-line blurb.
       const setMatches = settingsLabels.filter((s) => !q || s.toLowerCase().includes(lc));
       if (setMatches.length > 0) {
         groups.push({
@@ -5544,15 +5538,13 @@ import {
       | 'layout'
       | 'workspace'
       | 'profiles'
-      | 'providers'
-      | 'inference';
+      | 'providers';
     const pageHosts: Record<SettingsPageId, HTMLElement> = {
       appearance: el('div', { class: 'cd-settings-page' }),
       layout: el('div', { class: 'cd-settings-page' }),
       workspace: el('div', { class: 'cd-settings-page' }),
       profiles: el('div', { class: 'cd-settings-page' }),
       providers: el('div', { class: 'cd-settings-page' }),
-      inference: el('div', { class: 'cd-settings-page' }),
     };
 
     // ---- Theme group ----
@@ -5737,7 +5729,6 @@ import {
       //   - OpenClaw enumerates its configured models and classifies each into
       //     a capability tier (`status.models[].tier`) — grouped below.
       //   - claude-code offers capability tiers directly (no per-model tier).
-      //   - A codex custom OpenAI endpoint surfaces its `/models` catalog.
       //   - Otherwise the dropdown is just "Gateway default" + persisted choice.
       let models: PickerModel[] = [];
       try {
@@ -5748,8 +5739,6 @@ import {
             label: (m.name ?? m.id) + (m.default ? ' · default' : ''),
             ...(m.tier ? { tier: m.tier } : {}),
           }));
-        } else if (status.provider?.ok && status.provider.models?.length) {
-          models = status.provider.models.map((id) => ({ id, label: id }));
         }
       } catch {
         /* gateway unreachable — keep "Gateway default" + persisted seed */
@@ -5792,8 +5781,8 @@ import {
     });
 
     // Refresh button — forces the gateway to re-probe and re-classify its
-    // models (OpenClaw re-runs the tier classifier; a codex custom endpoint
-    // re-probes `/models`), so the list updates without restarting the app.
+    // models (OpenClaw re-runs the tier classifier), so the list updates
+    // without restarting the app.
     const refreshModelsBtn = el('button', {
       class: 'btn btn-soft app-chat-models-refresh',
       type: 'button',
@@ -5825,22 +5814,24 @@ import {
         ),
         labeled(
           'Model',
-          'Lists what the gateway exposes — OpenClaw’s model catalog, Claude Code capability tiers, or a codex runner’s configured inference endpoint. "Gateway default" lets the gateway choose.',
+          'Lists what the gateway exposes — OpenClaw’s model catalog or Claude Code capability tiers. "Gateway default" lets the gateway choose.',
           modelRow,
         ),
       ]),
     );
 
-    // ---- AI providers (Claude Code / Codex credential status) ----
+    // ---- Agents (Claude Code / Codex credential status) ----
     // Centraid's coding agent runs the user's installed CLIs in place:
     // codex app-server reads `~/.codex/auth.json` (set up by `codex login`)
-    // and the Claude Agent SDK reads `ANTHROPIC_API_KEY`. This panel just
-    // probes the on-machine state and shows which backends are ready.
+    // and the Claude Agent SDK reads `ANTHROPIC_API_KEY`. Detection lives on
+    // the gateway (`GET /centraid/_agents/status`) — it's colocated with the
+    // runner, so a remote gateway reports its own host's agents. This panel
+    // just reads that snapshot and shows which backends are ready.
     const authStatusHost = el('div', {
       style: { display: 'flex', flexDirection: 'column', gap: '8px' },
     });
 
-    type AuthStatusSnapshot = Awaited<ReturnType<Window['CentraidApi']['authStatus']>>;
+    type AuthStatusSnapshot = Awaited<ReturnType<typeof getAgentsStatus>>;
     const renderAuthStatus = (status: AuthStatusSnapshot | null): void => {
       authStatusHost.replaceChildren();
       if (!status) {
@@ -5910,15 +5901,15 @@ import {
         );
       };
 
-      // Codex row first — preferred when both subscriptions are present.
-      // The runtime reads `~/.codex/auth.json` in place, so "available" IS
-      // "connected" for our purposes; there's no separate import step.
+      // Codex row first — preferred when both CLIs are present. Detection is
+      // CLI-only: the gateway ran `codex --version`. Centraid doesn't inspect
+      // how codex authenticates — that's codex's own business.
       authStatusHost.append(
         providerRow({
-          title: 'Codex (ChatGPT Plus/Pro) — preferred',
+          title: 'Codex — preferred',
           subtitle: status.codexAvailable
-            ? 'connected via ~/.codex/auth.json'
-            : 'not found — run `codex login`',
+            ? `codex CLI detected${status.codexVersion ? ` · ${status.codexVersion}` : ''}`
+            : 'codex CLI not found on the gateway’s PATH',
           connected: status.codexAvailable,
           accent: '#10b981',
           badge: status.codexAvailable
@@ -5929,12 +5920,12 @@ import {
 
       const claudeSubtitle = status.claudeAvailable
         ? status.codexAvailable
-          ? 'connected — held back because Codex is preferred'
-          : 'connected via macOS keychain'
-        : 'not found in keychain';
+          ? 'claude CLI detected — held back because Codex is preferred'
+          : `claude CLI detected${status.claudeVersion ? ` · ${status.claudeVersion}` : ''}`
+        : 'claude CLI not found on the gateway’s PATH';
       authStatusHost.append(
         providerRow({
-          title: 'Claude Code (Pro/Max)',
+          title: 'Claude Code',
           subtitle: claudeSubtitle,
           connected: status.claudeAvailable,
           accent: '#a855f7',
@@ -5947,35 +5938,35 @@ import {
       );
     };
 
-    const resyncBtn = el('button', {
+    const refreshBtn = el('button', {
       class: 'btn btn-soft',
       type: 'button',
     }) as HTMLButtonElement;
-    resyncBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Re-sync</span>';
-    resyncBtn.addEventListener('click', async () => {
-      resyncBtn.setAttribute('disabled', '');
+    refreshBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Refresh</span>';
+    refreshBtn.addEventListener('click', async () => {
+      refreshBtn.setAttribute('disabled', '');
+      renderAuthStatus(null);
       try {
-        const result = await window.CentraidApi.authResync();
-        renderAuthStatus(result.status);
-        const parts: string[] = [];
-        if (result.importedCodex) parts.push('Codex');
-        if (result.importedClaude) parts.push('Claude Code');
-        showToast(parts.length ? `Imported ${parts.join(' + ')}` : 'No new creds to import');
+        renderAuthStatus(await getAgentsStatus());
       } catch (err) {
-        showToast(`Re-sync failed: ${String(err)}`);
+        showToast(`Refresh failed: ${String(err)}`);
+        renderAuthStatus({
+          codexAvailable: false,
+          claudeAvailable: false,
+        });
       } finally {
-        resyncBtn.removeAttribute('disabled');
+        refreshBtn.removeAttribute('disabled');
       }
     });
 
     pageHosts.providers.append(
       drawerGroup('Connected', [authStatusHost]),
-      el('div', { class: 'sheet-actions' }, [resyncBtn]),
+      el('div', { class: 'sheet-actions' }, [refreshBtn]),
     );
 
     // Initial status load — populates the rows after the page mounts.
     renderAuthStatus(null);
-    void window.CentraidApi.authStatus()
+    void getAgentsStatus()
       .then(renderAuthStatus)
       .catch(() =>
         renderAuthStatus({
@@ -5983,290 +5974,6 @@ import {
           claudeAvailable: false,
         }),
       );
-
-    // ---- Custom inference endpoint (OpenAI-compatible providers) ----
-    // Codex can route through any OpenAI-compatible /v1/chat/completions
-    // endpoint (Ollama, vLLM, Groq, Together, LM Studio). The renderer
-    // writes provider config to user_prefs under `agent.runner.provider.*`;
-    // the API key is held by main's safeStorage (never round-tripped to the
-    // renderer). On every spawn the main process materializes a scoped
-    // CODEX_HOME so the user's ~/.codex/config.toml is left untouched.
-    type ProviderPreset = {
-      id: string;
-      name: string;
-      baseUrl: string;
-      envKey: string;
-      wireApi: 'chat' | 'responses';
-    };
-    const PROVIDER_PRESETS: Record<string, ProviderPreset | null> = {
-      '': null, // Custom
-      ollama: {
-        id: 'ollama',
-        name: 'Ollama',
-        baseUrl: 'http://localhost:11434/v1',
-        envKey: '',
-        wireApi: 'chat',
-      },
-      groq: {
-        id: 'groq',
-        name: 'Groq',
-        baseUrl: 'https://api.groq.com/openai/v1',
-        envKey: 'GROQ_API_KEY',
-        wireApi: 'chat',
-      },
-      together: {
-        id: 'together',
-        name: 'Together',
-        baseUrl: 'https://api.together.xyz/v1',
-        envKey: 'TOGETHER_API_KEY',
-        wireApi: 'chat',
-      },
-      vllm: {
-        id: 'vllm',
-        name: 'vLLM (local)',
-        baseUrl: 'http://localhost:8000/v1',
-        envKey: '',
-        wireApi: 'chat',
-      },
-    };
-
-    const userPrefsSnapshot = await getUserPrefs().catch(() => ({}) as Record<string, unknown>);
-    const readPref = (k: string): string =>
-      typeof userPrefsSnapshot[k] === 'string' ? (userPrefsSnapshot[k] as string) : '';
-    const initialWire = readPref('agent.runner.provider.wireApi');
-    const wireApiInitial: 'chat' | 'responses' = initialWire === 'responses' ? 'responses' : 'chat';
-
-    const presetSelect = el('select', { class: 'input' }) as HTMLSelectElement;
-    presetSelect.append(el('option', { value: '' }, 'Custom') as HTMLOptionElement);
-    for (const [key, p] of Object.entries(PROVIDER_PRESETS)) {
-      if (!p) continue;
-      presetSelect.append(el('option', { value: key }, p.name) as HTMLOptionElement);
-    }
-
-    const providerIdInput = el('input', {
-      class: 'input',
-      type: 'text',
-      placeholder: 'groq',
-      value: readPref('agent.runner.provider.id'),
-    }) as HTMLInputElement;
-    const providerNameInput = el('input', {
-      class: 'input',
-      type: 'text',
-      placeholder: 'Groq',
-      value: readPref('agent.runner.provider.name'),
-    }) as HTMLInputElement;
-    const baseUrlInput = el('input', {
-      class: 'input',
-      type: 'text',
-      placeholder: 'https://api.example.com/v1',
-      value: readPref('agent.runner.provider.baseUrl'),
-    }) as HTMLInputElement;
-    const envKeyInput = el('input', {
-      class: 'input',
-      type: 'text',
-      placeholder: 'GROQ_API_KEY (leave empty for keyless local endpoints)',
-      value: readPref('agent.runner.provider.envKey'),
-    }) as HTMLInputElement;
-    const wireApiSelect = el('select', { class: 'input' }) as HTMLSelectElement;
-    wireApiSelect.append(
-      el('option', { value: 'chat' }, 'Chat completions (default)') as HTMLOptionElement,
-    );
-    wireApiSelect.append(
-      el('option', { value: 'responses' }, 'Responses API') as HTMLOptionElement,
-    );
-    wireApiSelect.value = wireApiInitial;
-    const apiKeyInput = el('input', {
-      class: 'input',
-      type: 'password',
-      placeholder: 'paste new key to update; leave empty to keep existing',
-    }) as HTMLInputElement;
-    const apiKeyStatusEl = el(
-      'span',
-      { style: { fontSize: '11.5px', color: 'var(--ink-3)' } },
-      'checking…',
-    );
-    const providerStatusEl = el('div', { class: 'settings-note' }, '');
-
-    const refreshKeyStatus = async (): Promise<void> => {
-      try {
-        const r = await window.CentraidApi.hasProviderApiKey();
-        apiKeyStatusEl.textContent = r.present
-          ? 'A key is stored (encrypted in OS keychain). Paste a new one to replace.'
-          : 'No key configured.';
-      } catch {
-        apiKeyStatusEl.textContent = 'Could not read key status.';
-      }
-    };
-    const refreshProviderStatus = async (): Promise<void> => {
-      providerStatusEl.textContent = 'Probing endpoint…';
-      try {
-        const status = await window.CentraidApi.getRunnerStatus();
-        if (!status.provider) {
-          providerStatusEl.textContent = providerIdInput.value
-            ? 'Saved a config but no probe yet — click Test connection.'
-            : 'No custom endpoint configured — codex uses its built-in models.';
-          return;
-        }
-        const p = status.provider;
-        if (p.ok) {
-          providerStatusEl.textContent = `Connected${
-            p.modelCount !== undefined ? ` · ${p.modelCount} models available` : ''
-          } · ${p.baseUrl}`;
-        } else {
-          providerStatusEl.textContent = `Endpoint unreachable — ${p.reason ?? 'unknown error'}`;
-        }
-      } catch (err) {
-        providerStatusEl.textContent = `Probe failed: ${err instanceof Error ? err.message : String(err)}`;
-      }
-    };
-
-    presetSelect.addEventListener('change', () => {
-      const p = PROVIDER_PRESETS[presetSelect.value];
-      if (!p) return;
-      providerIdInput.value = p.id;
-      providerNameInput.value = p.name;
-      baseUrlInput.value = p.baseUrl;
-      envKeyInput.value = p.envKey;
-      wireApiSelect.value = p.wireApi;
-    });
-
-    const saveProviderBtn = el('button', {
-      class: 'btn btn-primary',
-      type: 'button',
-      onClick: async () => {
-        saveProviderBtn.setAttribute('disabled', '');
-        try {
-          // null deletes the key — keeps `user_prefs` clean when the user
-          // clears a field (matches the gateway's merge semantics).
-          const trim = (s: string): string | null => (s.trim() ? s.trim() : null);
-          // OpenAI-compatible endpoints only work through the Codex runner —
-          // the Claude Agent SDK speaks Anthropic wire format and ignores
-          // `RunnerPrefs.provider`. If the user is on a different runner, flip
-          // them to Codex so saving doesn't silently no-op.
-          const livePrefs = await getUserPrefs().catch(() => ({}) as Record<string, unknown>);
-          const currentKind = livePrefs['agent.runner.kind'];
-          const switchingKind = currentKind !== 'codex';
-          await saveUserPrefs({
-            'agent.runner.provider.id': trim(providerIdInput.value),
-            'agent.runner.provider.name': trim(providerNameInput.value),
-            'agent.runner.provider.baseUrl': trim(baseUrlInput.value),
-            'agent.runner.provider.envKey': trim(envKeyInput.value),
-            // Skip writing the wire format when it equals the default 'chat' —
-            // keeps `user_prefs` tidy and lets the engine's default kick in
-            // naturally if we ever change it.
-            'agent.runner.provider.wireApi':
-              wireApiSelect.value === 'responses' ? 'responses' : null,
-            ...(switchingKind ? { 'agent.runner.kind': 'codex' } : {}),
-          });
-          if (apiKeyInput.value) {
-            await window.CentraidApi.setProviderApiKey({ apiKey: apiKeyInput.value });
-            apiKeyInput.value = '';
-          }
-          showToast(
-            switchingKind
-              ? 'Provider saved · runner switched to Codex (only OpenAI-compatible API is supported here; Claude Code is Anthropic-wire-format only)'
-              : 'Provider saved',
-          );
-          await Promise.all([refreshKeyStatus(), refreshProviderStatus()]);
-        } catch (err) {
-          showToast(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
-        } finally {
-          saveProviderBtn.removeAttribute('disabled');
-        }
-      },
-    }) as HTMLButtonElement;
-    saveProviderBtn.innerHTML = Icon.Save({ size: 13 }) + '<span>Save provider</span>';
-
-    const testProviderBtn = el('button', {
-      class: 'btn btn-soft',
-      type: 'button',
-      onClick: async () => {
-        testProviderBtn.setAttribute('disabled', '');
-        try {
-          await refreshProviderStatus();
-        } finally {
-          testProviderBtn.removeAttribute('disabled');
-        }
-      },
-    }) as HTMLButtonElement;
-    testProviderBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Test connection</span>';
-
-    const clearProviderBtn = el('button', {
-      class: 'btn btn-soft',
-      type: 'button',
-      onClick: async () => {
-        clearProviderBtn.setAttribute('disabled', '');
-        try {
-          await saveUserPrefs({
-            'agent.runner.provider.id': null,
-            'agent.runner.provider.name': null,
-            'agent.runner.provider.baseUrl': null,
-            'agent.runner.provider.envKey': null,
-            'agent.runner.provider.wireApi': null,
-          });
-          await window.CentraidApi.clearProviderApiKey();
-          providerIdInput.value = '';
-          providerNameInput.value = '';
-          baseUrlInput.value = '';
-          envKeyInput.value = '';
-          wireApiSelect.value = 'chat';
-          apiKeyInput.value = '';
-          presetSelect.value = '';
-          showToast('Custom endpoint cleared — codex will use its built-in models');
-          await Promise.all([refreshKeyStatus(), refreshProviderStatus()]);
-        } finally {
-          clearProviderBtn.removeAttribute('disabled');
-        }
-      },
-    }) as HTMLButtonElement;
-    clearProviderBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Disable</span>';
-
-    pageHosts.inference.append(
-      drawerGroup('Provider', [
-        labeled('Preset', 'Quick-fills the fields below from a known provider.', presetSelect),
-        labeled(
-          'Provider id',
-          'Used as the [model_providers.<id>] key in codex config.',
-          providerIdInput,
-        ),
-        labeled('Display name', 'Shown in codex logs.', providerNameInput),
-      ]),
-      drawerGroup('Connection', [
-        labeled(
-          'Base URL',
-          'Must include /v1 (or whatever path precedes /chat/completions).',
-          baseUrlInput,
-        ),
-        labeled(
-          'API key env var',
-          'Codex reads the bearer token from this env var. Empty = no auth.',
-          envKeyInput,
-        ),
-        labeled(
-          'Wire format',
-          'Default is Chat completions; only flip if your provider supports /responses.',
-          wireApiSelect,
-        ),
-      ]),
-      drawerGroup('Credentials', [
-        labeled(
-          'API key',
-          'Stored encrypted via OS keychain. Never written to disk in plaintext.',
-          apiKeyInput,
-        ),
-        el('div', { class: 'drawer-row drawer-row-grid' }, [
-          el('div', { class: 'drawer-row-head' }, [
-            el('span', { class: 'drawer-row-label' }, 'Key status'),
-          ]),
-          el('div', { class: 'drawer-row-control' }, [apiKeyStatusEl]),
-        ]),
-        providerStatusEl,
-      ]),
-      el('div', { class: 'sheet-actions' }, [saveProviderBtn, testProviderBtn, clearProviderBtn]),
-    );
-
-    void refreshKeyStatus();
-    void refreshProviderStatus();
 
     // Profiles ("spaces") — full manage surface. Each profile is its own
     // home grid of apps; switching re-scopes the shell. Lives under the
@@ -6334,20 +6041,11 @@ import {
       },
       {
         id: 'providers',
-        label: 'AI providers',
+        label: 'Agents',
         section: 'Models',
         icon: 'Sparkle',
         subtitle:
-          'Centraid auto-imports your Claude Code and Codex credentials on first launch so the coding agent rides on your existing subscription.',
-      },
-      {
-        id: 'inference',
-        label: 'Inference endpoint',
-        section: 'Models',
-        icon: 'Bolt',
-        hint: 'Custom',
-        subtitle:
-          'Route Codex through any OpenAI-compatible endpoint (Ollama, vLLM, Groq, Together, LM Studio). Your ~/.codex/auth.json and config.toml are not touched.',
+          'The coding-agent CLIs the gateway can drive. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.',
       },
     ];
 
@@ -6361,8 +6059,8 @@ import {
     );
 
     // §C4 — pages whose controls persist on change carry an "Auto-saved"
-    // marker; the credential pages (inference, runtime) keep their
-    // explicit Save/Test buttons and so get no marker.
+    // marker; the Agents page is read-only status with an explicit Refresh
+    // button and so gets no marker.
     const autoSavePages = new Set<SettingsPageId>(['appearance', 'layout', 'workspace']);
 
     const navButtons = new Map<SettingsPageId, HTMLElement>();

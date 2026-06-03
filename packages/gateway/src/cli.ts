@@ -5,7 +5,6 @@
  * The same `serve()` the Electron desktop embeds, wrapped with:
  *   - JSON config file (`--config <path>`)
  *   - persistent shared bearer token (`<dataDir>/token.bin`)
- *   - filesystem-backed provider-key sealed file
  *   - SIGINT / SIGTERM graceful shutdown
  *
  * v0 PoC scope per centraid#131: loopback or LAN bind, no TLS, single
@@ -29,7 +28,6 @@ import {
   type DaemonConfig,
   DaemonConfigError,
 } from './cli-config.js';
-import { makeFileSecretsProvider, writeProviderApiKey } from './cli-secrets.js';
 import { readOrMintToken, readPersistedToken } from './cli-token.js';
 import { seedRunnerPrefs } from './cli-runner-prefs.js';
 
@@ -135,23 +133,10 @@ async function commandServe(args: string[]): Promise<void> {
 
   await fs.mkdir(config.dataDir, { recursive: true });
 
-  // Seed the provider API key into the sealed file if one came in via
-  // the config; do it before serve() so the first turn picks it up.
-  if (config.provider?.apiKey) {
-    await writeProviderApiKey(layout.providerKeyFile, config.provider.apiKey);
-  }
-
-  // v0 honesty: no OS keychain integration. The file is mode 0o600 and
-  // co-located with the rest of the gateway state.
-  process.stderr.write(
-    '[centraid-gateway] v0 secrets: provider key stored as plaintext at mode 0600 — rely on filesystem permissions.\n',
-  );
-
   const token = await readOrMintToken(layout.tokenFile);
 
   const handle = await serve({
     paths: layout,
-    secrets: makeFileSecretsProvider(layout.providerKeyFile),
     ...(config.host !== undefined ? { host: config.host } : {}),
     ...(config.port !== undefined ? { port: config.port } : {}),
     token,

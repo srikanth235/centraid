@@ -15,18 +15,11 @@ import crypto from 'node:crypto';
 import type { AutomationRow, LocalScheduler } from '@centraid/conversation-engine';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
-import type { SecretsProvider } from './secrets.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
 let reconcileCalls: Array<{ rows: readonly AutomationRow[] }>;
 let started: number;
-
-const noSecrets: SecretsProvider = {
-  async getProviderApiKey() {
-    return undefined;
-  },
-};
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
@@ -88,7 +81,6 @@ beforeEach(async () => {
   started = 0;
   handle = await serve({
     paths: pathsUnder(dataDir),
-    secrets: noSecrets,
     appsStoreRoot: path.join(dataDir, 'code'),
     scheduler: stubScheduler(),
   });

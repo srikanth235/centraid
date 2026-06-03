@@ -20,16 +20,9 @@ import crypto from 'node:crypto';
 import { WorktreeStore } from './worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
-import type { SecretsProvider } from './secrets.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
-
-const noSecrets: SecretsProvider = {
-  async getProviderApiKey() {
-    return undefined;
-  },
-};
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
@@ -91,7 +84,7 @@ test('serves a staged draft (static + handlers) while live keeps the published v
   const appsStoreRoot = path.join(dataDir, 'code');
   await seedApp(appsStoreRoot, 'app');
 
-  handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets, appsStoreRoot });
+  handle = await serve({ paths: pathsUnder(dataDir), appsStoreRoot });
   const store = handle.appsStore!;
   assert.ok(store, 'expected appsStore on the handle');
 
@@ -147,7 +140,7 @@ test('serves a staged draft (static + handlers) while live keeps the published v
 test('an unknown draft session yields 503 (no live fallback)', async () => {
   const appsStoreRoot = path.join(dataDir, 'code');
   await seedApp(appsStoreRoot, 'app');
-  handle = await serve({ paths: pathsUnder(dataDir), secrets: noSecrets, appsStoreRoot });
+  handle = await serve({ paths: pathsUnder(dataDir), appsStoreRoot });
 
   const res = await fetch(`${handle.url}/centraid/_draft/ghost/app/`, {
     headers: { Authorization: `Bearer ${handle.token}` },

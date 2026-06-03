@@ -42,7 +42,7 @@ export { makeChatRunner, type MakeChatRunnerOptions } from './chat-adapter.js';
 // `centraid preview snapshot` flow; expose the dist-dir resolver.
 export { defaultCentraidCliDir } from './centraid-cli-dir.js';
 
-export type { RunnerKind, RunnerPrefs, OpenAICompatProvider } from './types.js';
+export type { RunnerKind, RunnerPrefs } from './types.js';
 
 export {
   runAgentTurn,
@@ -68,7 +68,8 @@ export {
 
 export {
   runPreflight,
-  probeProvider,
+  probeCliAvailability,
+  type CliAvailability,
   invalidatePreflightCache,
   minVersionString,
   parseSemver,

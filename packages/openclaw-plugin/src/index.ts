@@ -109,10 +109,6 @@ export default definePluginEntry({
           'chat-runner-sessions',
         ),
       },
-      // OpenClaw owns provider auth; the gateway's secrets seam is unused
-      // because chat + ctx.agent run in-process through OpenClaw, never the
-      // CLI runner — so a no-op key reader satisfies the required option.
-      secrets: { getProviderApiKey: async () => undefined },
       // App CODE backed by the gateway-owned git store (issue #137).
       appsStoreRoot: path.join(dbDir, 'centraid-code'),
       lazyStoreInit: true,
