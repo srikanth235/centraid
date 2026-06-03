@@ -1,12 +1,17 @@
-// governance: allow-repo-hygiene file-size-limit #181 — cohesive chat-history
-// suite; the build-kind coverage tips it just over 500 lines, not worth a split.
+// governance: allow-repo-hygiene file-size-limit #181 — cohesive
+// conversation-history suite; the build-kind coverage tips it just over 500
+// lines, not worth a split.
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { IncomingMessage, ServerResponse } from 'node:http';
-import { ChatHistoryStore, deriveTitle, type RecordTurnInput } from './chat-history.js';
+import {
+  ConversationHistoryStore,
+  deriveTitle,
+  type RecordTurnInput,
+} from './conversation-history.js';
 import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 import { ConversationStore } from './conversation-store.js';
 import { makeRuntimeDbProvider } from './gateway-db.js';
@@ -29,8 +34,8 @@ function freshAppsDir(...appIds: string[]): string {
   return dir;
 }
 
-function newStore(provider: () => string = stubUserIdProvider): ChatHistoryStore {
-  return new ChatHistoryStore(freshAppsDir(), provider);
+function newStore(provider: () => string = stubUserIdProvider): ConversationHistoryStore {
+  return new ConversationHistoryStore(freshAppsDir(), provider);
 }
 
 /** Build a minimal one-step chat turn for `recordTurn`. */
@@ -72,8 +77,8 @@ describe('deriveTitle', () => {
   });
 });
 
-describe('ChatHistoryStore', () => {
-  let store: ChatHistoryStore;
+describe('ConversationHistoryStore', () => {
+  let store: ConversationHistoryStore;
   beforeEach(() => {
     store = newStore();
   });
@@ -122,7 +127,7 @@ describe('ChatHistoryStore', () => {
 
   it('recordTurn defaults the run kind to chat; honors an explicit build kind (#181)', () => {
     const appsDir = freshAppsDir();
-    const local = new ChatHistoryStore(appsDir, stubUserIdProvider);
+    const local = new ConversationHistoryStore(appsDir, stubUserIdProvider);
     const chat = local.createSession(APP);
     const build = local.createSession(APP);
     local.recordTurn(APP, turn(chat.id, 'data q', 'data a', 1_000));
@@ -313,9 +318,9 @@ describe('ChatHistoryStore', () => {
   });
 });
 
-describe('ChatHistoryStore per-app scoping', () => {
+describe('ConversationHistoryStore per-app scoping', () => {
   it('isolates sessions and lookups per app', () => {
-    const store = new ChatHistoryStore(freshAppsDir('todos', 'habits'), stubUserIdProvider);
+    const store = new ConversationHistoryStore(freshAppsDir('todos', 'habits'), stubUserIdProvider);
     const t = store.createSession('todos', 'todos-1');
     store.createSession('habits', 'habits-1');
     store.createSession('habits', 'habits-2');
@@ -330,13 +335,13 @@ describe('ChatHistoryStore per-app scoping', () => {
   });
 });
 
-describe('ChatHistoryStore per-user scoping', () => {
+describe('ConversationHistoryStore per-user scoping', () => {
   // Two stores on the same app's runtime.sqlite, different user identities.
-  function pair(): { alice: ChatHistoryStore; bob: ChatHistoryStore } {
+  function pair(): { alice: ConversationHistoryStore; bob: ConversationHistoryStore } {
     const appsDir = freshAppsDir();
     return {
-      alice: new ChatHistoryStore(appsDir, () => 'alice'),
-      bob: new ChatHistoryStore(appsDir, () => 'bob'),
+      alice: new ConversationHistoryStore(appsDir, () => 'alice'),
+      bob: new ConversationHistoryStore(appsDir, () => 'bob'),
     };
   }
 
@@ -384,14 +389,14 @@ describe('ChatHistoryStore per-user scoping', () => {
   });
 });
 
-describe('ChatHistoryStore data persistence', () => {
-  it("a second ChatHistoryStore on the same app sees the first one's writes", () => {
+describe('ConversationHistoryStore data persistence', () => {
+  it("a second ConversationHistoryStore on the same app sees the first one's writes", () => {
     const appsDir = freshAppsDir();
-    const first = new ChatHistoryStore(appsDir, stubUserIdProvider);
+    const first = new ConversationHistoryStore(appsDir, stubUserIdProvider);
     const s = first.createSession(APP, 'kept');
     first.recordTurn(APP, turn(s.id, 'hello', 'world'));
 
-    const second = new ChatHistoryStore(appsDir, stubUserIdProvider);
+    const second = new ConversationHistoryStore(appsDir, stubUserIdProvider);
     const loaded = second.getSession(APP, s.id);
     assert.equal(loaded?.title, 'kept');
     assert.equal(loaded?.messages.length, 2);
@@ -458,7 +463,7 @@ function call(
 describe('makeChatHistoryRouteHandler', () => {
   const BASE = `/_centraid-chat/apps/${APP}/sessions`;
   let handler: ReturnType<typeof makeChatHistoryRouteHandler>;
-  let store: ChatHistoryStore;
+  let store: ConversationHistoryStore;
   beforeEach(() => {
     store = newStore();
     handler = makeChatHistoryRouteHandler(() => store);

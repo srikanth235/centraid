@@ -22,8 +22,8 @@ export {
 // Per-app chat surface — `ChatRunner` is the host-injected seam, both
 // OpenClaw and the desktop local-runtime implement it. The HTTP route
 // (`POST /centraid/<id>/_chat`) is dispatched by `Runtime.handle` when
-// `RuntimeOptions.chatRunner` is set. The transcript itself lives in the
-// central gateway SQLite (`ChatHistoryStore`), not a per-app folder.
+// `RuntimeOptions.chatRunner` is set. The transcript lives in each app's
+// per-app `runtime.sqlite`, fronted by `ConversationHistoryStore`.
 export type { ChatRunner, ChatRunInput, ChatRunResult, ChatStreamEvent } from './chat-runner.js';
 export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prompt.js';
 
@@ -169,12 +169,15 @@ export { MigrationError, runPendingMigrations, type MigrationsApplied } from './
 // Hosts can subscribe from outside too — `runtime.changeBus.subscribe(...)`.
 export { ChangeBus, type AppChange, type ChangeListener } from './change-bus.js';
 
-// Chat-history store + HTTP route dispatcher. Used in two places:
+// Conversation-history store (the read/write facade backing the chat surface)
+// + its HTTP route dispatcher. Used in two places:
 //   - openclaw-plugin registers it on the gateway's HTTP surface
 //   - startRuntimeHttpServer intercepts the same prefix for the embedded
 //     local runtime, so the desktop sees identical behavior in both modes
+// The store is conversation-first (spans kind=chat|build); the DTO types it
+// returns keep the chat-surface vocabulary the renderer speaks.
 export {
-  ChatHistoryStore,
+  ConversationHistoryStore,
   deriveTitle,
   type ChatSessionMeta,
   type ChatMessageRow,
@@ -182,7 +185,7 @@ export {
   type ChatTurnAttachment,
   type RecordTurnInput,
   type UserIdProvider,
-} from './chat-history.js';
+} from './conversation-history.js';
 export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
 
 // Per-app blob content-addressed store for attachment bytes (issue #190).
@@ -196,8 +199,8 @@ export { BlobStore, blobUrl, hashBytes, type PutResult } from './blob-store.js';
 //   - gateway (`centraid-gateway.sqlite`):  users, user_prefs
 //   - runtime (`<appRoot>/runtime.sqlite`): conversations, turns, items,
 //                                           attachments, automation_state
-// `UserStore` ← gateway; `ChatHistoryStore` + the per-app conversation ledger
-// ← each app's runtime.sqlite. Cross-file FKs aren't possible in SQLite, so
+// `UserStore` ← gateway; `ConversationHistoryStore` + the per-app conversation
+// ledger ← each app's runtime.sqlite. Cross-file FKs aren't possible in SQLite, so
 // `conversations.user_id` is application-enforced. The third (analytics)
 // ladder lives in the `insights/` sub-module, built through `makeMigratedDbProvider`.
 export {

@@ -396,3 +396,5 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-5a137b320a1-1780483672-1 | 5a137b32-0a17-4bff-810e-89b4261ada7a | #186 | interrupt | structural |  |  |
 | steer-cdbbe46e618-1780507820-1 | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | correction | classifier | Asked agent to step back and rethink where new data models should live |  |
 | steer-cdbbe46e618-1780507820-2 | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | correction | classifier | Rejected the proposed package extraction; wants only file renames |  |
+| steer-cdbbe46e618-1780509057-1 | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | correction | classifier | Questions leftover chat-history/chat-routes naming after settling on conversation |  |
+| steer-cdbbe46e618-1780509057-2 | cdbbe46e-6185-40ca-ab98-540470ac612a | #190 | correction | classifier | Rejects 'keep chat naming' take; insists chat and automation are all conversation |  |

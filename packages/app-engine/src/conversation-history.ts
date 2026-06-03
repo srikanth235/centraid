@@ -1,11 +1,14 @@
 /*
- * Centraid chat facade — the conversation-container API + transcript fold,
- * over the per-app `ConversationStore` (issue #98, reshaped by #190).
+ * Centraid conversation-history facade — the conversation-container API +
+ * transcript fold, over the per-app `ConversationStore` (issue #98, reshaped
+ * by #190). This is the read/write API the interactive chat surface uses; the
+ * store is conversation-first (it spans `kind='chat'` and `'build'`), while the
+ * HTTP route it's exposed over stays the `/_centraid-chat` wire surface.
  *
  * A chat session IS a `conversations` row (`kind='chat'` | `'build'`). Chat is
  * app-scoped: conversations + their turns/items/attachments live in the owning
- * app's per-app `runtime.sqlite`. One `ChatHistoryStore` fronts every app;
- * each method takes the `appId` and resolves `<appsDir>/<appId>/runtime.sqlite`
+ * app's per-app `runtime.sqlite`. One `ConversationHistoryStore` fronts every
+ * app; each method takes the `appId` and resolves `<appsDir>/<appId>/runtime.sqlite`
  * lazily, caching one `ConversationStore` per app. Conversations are scoped by
  * the gateway-side user UUID (`UserStore.getUserId`).
  *
@@ -123,7 +126,7 @@ interface AppChat {
   store: ConversationStore;
 }
 
-export class ChatHistoryStore {
+export class ConversationHistoryStore {
   private readonly appsDir: string;
   private readonly userIdProvider: UserIdProvider;
   private readonly analytics: RunSummarySink | undefined;
@@ -145,7 +148,7 @@ export class ChatHistoryStore {
   private appChat(appId: string): AppChat {
     const cached = this.perApp.get(appId);
     if (cached) return cached;
-    if (!isValidAppId(appId)) throw new Error(`chat-history: invalid app id "${appId}"`);
+    if (!isValidAppId(appId)) throw new Error(`conversation-history: invalid app id "${appId}"`);
     const provider = makeRuntimeDbProvider(path.join(this.appsDir, appId, 'runtime.sqlite'));
     const entry: AppChat = { store: new ConversationStore(provider, this.analytics) };
     this.perApp.set(appId, entry);

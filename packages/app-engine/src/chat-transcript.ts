@@ -2,7 +2,7 @@
  * Transcript codec — the JSON shapes a chat turn's `step` / `tool` items
  * carry, plus defensive parsers.
  *
- * `ChatHistoryStore.recordTurn` writes these shapes; `getSession` reads them
+ * `ConversationHistoryStore.recordTurn` writes these shapes; `getSession` reads them
  * back to reconstruct the renderer transcript. (The inbound user message is a
  * first-class `message_in` item — its text is read directly, no codec — so
  * there is no `parseUserMessage` anymore; issue #190.) Kept in its own file so

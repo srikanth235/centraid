@@ -36,7 +36,7 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AnalyticsStore,
-  ChatHistoryStore,
+  ConversationHistoryStore,
   InsightsStore,
   Runtime,
   UserStore,
@@ -196,7 +196,7 @@ export interface BuiltGateway {
   /** Stores exposed so callers can read directly without reconstructing. */
   userStore: UserStore;
   analyticsStore: AnalyticsStore;
-  chatHistoryStore: ChatHistoryStore;
+  conversationHistoryStore: ConversationHistoryStore;
   /**
    * The git-store backend, when `appsStoreRoot` was supplied. Callers
    * (the publish endpoint, export/import, the desktop's file IPC) drive
@@ -311,15 +311,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   // Gateway identity DB + the central analytics DB. Each store wraps a
-  // lazy provider that opens its file on first use. Chat sessions + chat
-  // runs live in each app's `runtime.sqlite` under `appsDir`, so
-  // `ChatHistoryStore` is constructed with `appsDir` and resolves the
+  // lazy provider that opens its file on first use. Conversations (chat +
+  // build) live in each app's `runtime.sqlite` under `appsDir`, so
+  // `ConversationHistoryStore` is constructed with `appsDir` and resolves the
   // file per app.
   const gatewayDbProvider = makeGatewayDbProvider(paths.identityDb);
   const analyticsProvider = makeAnalyticsDbProvider(paths.analyticsDb);
   const analyticsStore = new AnalyticsStore(analyticsProvider);
   const userStore = new UserStore(gatewayDbProvider);
-  const chatHistoryStore = new ChatHistoryStore(
+  const conversationHistoryStore = new ConversationHistoryStore(
     paths.appsDir,
     () => userStore.getUserId(),
     analyticsStore,
@@ -389,7 +389,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const runtime = new Runtime({
     appsDir: paths.appsDir,
     userStore,
-    chatHistoryStore,
+    conversationHistoryStore,
     chatRunner,
     chatRunnerSessionDir: paths.chatRunnerSessionDir,
     runnerStatus:
@@ -575,7 +575,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // extra handlers → `runtime.handle` — but WITHOUT the bearer check, for
   // hosts that own auth (OpenClaw's `auth: 'gateway'`). CORS is the host's
   // job too: a fronting gateway emits its own.
-  const chatHistoryHandler = makeChatHistoryRouteHandler(() => chatHistoryStore);
+  const chatHistoryHandler = makeChatHistoryRouteHandler(() => conversationHistoryStore);
   const userStoreHandler = makeUserStoreRouteHandler(() => userStore);
   const composedHandler: RouteHandler = async (req, res) => {
     const url = req.url ?? '';
@@ -623,7 +623,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     runtime,
     userStore,
     analyticsStore,
-    chatHistoryStore,
+    conversationHistoryStore,
     ...(appsStore ? { appsStore } : {}),
     ...(builtCodeAppsDir ? { codeAppsDir: builtCodeAppsDir } : {}),
     extraHandlers,

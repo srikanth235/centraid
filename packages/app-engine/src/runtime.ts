@@ -20,7 +20,7 @@ import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './cloud
 import { ChangeBus } from './change-bus.js';
 import { handleAppChanges } from './changes-sse.js';
 import type { UserStore } from './user-store.js';
-import type { ChatHistoryStore } from './chat-history.js';
+import type { ConversationHistoryStore } from './conversation-history.js';
 import { readAppSettings } from './app-settings.js';
 import { buildSettingsInject } from './settings-merge.js';
 import { handleChatRoute, parseChatSubRoute } from './chat-routes.js';
@@ -55,11 +55,12 @@ export interface RuntimeOptions {
    */
   userStore?: UserStore;
   /**
-   * Optional chat-history store. Wraps the same gateway DB as `userStore`
-   * (real FK from `chat_sessions.user_id` → `users.id`). When provided,
+   * Optional conversation-history store backing the chat surface. Conversations
+   * live in each app's per-app `runtime.sqlite` (`conversations.user_id` is
+   * application-enforced — no cross-file FK). When provided,
    * `startRuntimeHttpServer` mounts `/_centraid-chat/*` against it.
    */
-  chatHistoryStore?: ChatHistoryStore;
+  conversationHistoryStore?: ConversationHistoryStore;
   /**
    * Optional per-app chat runner. When provided, `POST /centraid/<id>/_chat`
    * drives a model turn via this runner. Two implementations exist:
@@ -217,8 +218,8 @@ export class Runtime {
    * (so the desktop can read/write prefs over HTTP).
    */
   readonly userStore?: UserStore;
-  /** Optional chat-history store. See `RuntimeOptions.chatHistoryStore`. */
-  readonly chatHistoryStore?: ChatHistoryStore;
+  /** Optional conversation-history store. See `RuntimeOptions.conversationHistoryStore`. */
+  readonly conversationHistoryStore?: ConversationHistoryStore;
   /** Optional per-app chat runner. See `RuntimeOptions.chatRunner`. */
   readonly chatRunner?: ChatRunner;
   /** Central scratch base dir for runner-owned chat session files. */
@@ -246,7 +247,7 @@ export class Runtime {
     this.registry = new Registry(opts.appsDir);
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
     this.userStore = opts.userStore;
-    this.chatHistoryStore = opts.chatHistoryStore;
+    this.conversationHistoryStore = opts.conversationHistoryStore;
     this.chatRunner = opts.chatRunner;
     this.chatRunnerSessionDir =
       opts.chatRunnerSessionDir ?? path.join(os.tmpdir(), 'centraid-chat-runner-sessions');
@@ -309,7 +310,7 @@ export class Runtime {
       registry: this.registry,
       resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
       runner: this.chatRunner,
-      chatStore: this.chatHistoryStore,
+      chatStore: this.conversationHistoryStore,
       chatRunnerSessionDir: this.chatRunnerSessionDir,
       appMeta: this.appMeta,
       conversationLocks: this.conversationLocks,

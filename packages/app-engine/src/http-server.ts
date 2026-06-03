@@ -25,8 +25,8 @@ export interface RuntimeHttpServerOptions {
    */
   exposeUserStoreRoute?: boolean;
   /**
-   * Whether to mount `/_centraid-chat/*` against `runtime.chatHistoryStore`.
-   * Defaults to true when `runtime.chatHistoryStore` is set; same opt-out
+   * Whether to mount `/_centraid-chat/*` against `runtime.conversationHistoryStore`.
+   * Defaults to true when `runtime.conversationHistoryStore` is set; same opt-out
    * pattern as `exposeUserStoreRoute`.
    */
   exposeChatHistoryRoute?: boolean;
@@ -106,10 +106,11 @@ export async function startRuntimeHttpServer(
     ? makeUserStoreRouteHandler(() => userStore!)
     : undefined;
 
-  const chatHistoryStore = opts.runtime.chatHistoryStore;
-  const exposeChatHistory = opts.exposeChatHistoryRoute !== false && chatHistoryStore !== undefined;
+  const conversationHistoryStore = opts.runtime.conversationHistoryStore;
+  const exposeChatHistory =
+    opts.exposeChatHistoryRoute !== false && conversationHistoryStore !== undefined;
   const chatHistoryHandler = exposeChatHistory
-    ? makeChatHistoryRouteHandler(() => chatHistoryStore!)
+    ? makeChatHistoryRouteHandler(() => conversationHistoryStore!)
     : undefined;
 
   const server = http.createServer((req, res) => {

@@ -29,7 +29,7 @@ import { sendError, readBody, MAX_BODY_BYTES } from './http-utils.js';
 import { readAppSchema } from './schema.js';
 import { buildExtraPrompt } from './build-extra-prompt.js';
 import type { ChatRunInput, ChatRunner, ChatStreamEvent } from './chat-runner.js';
-import type { ChatHistoryStore, ChatTurnNode } from './chat-history.js';
+import type { ConversationHistoryStore, ChatTurnNode } from './conversation-history.js';
 import type { Registry } from './registry.js';
 import { appDataDir } from './app-paths.js';
 import type { RegistryEntry } from './types.js';
@@ -69,7 +69,7 @@ export interface ChatRouteContext {
    * When unset, the route still works — no resume handle is threaded, so
    * each turn starts the adapter fresh.
    */
-  chatStore?: ChatHistoryStore;
+  chatStore?: ConversationHistoryStore;
   /**
    * Central scratch base dir for runner-owned session files. The route
    * passes `<chatRunnerSessionDir>/<conversationId>.jsonl` as `ChatRunInput.sessionFile`.

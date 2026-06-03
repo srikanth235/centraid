@@ -5,14 +5,14 @@
  *   - the OpenClaw plugin (remote gateway) via `api.registerHttpRoute`
  *   - `startRuntimeHttpServer` for the desktop's embedded local runtime
  *
- * The store itself lives in `chat-history.ts`. This module is split out
- * purely for file-size reasons — keeping the store, its schema, and its
+ * The store itself lives in `conversation-history.ts`. This module is split
+ * out purely for file-size reasons — keeping the store, its schema, and its
  * SQL prepared statements in one file (where the per-user scoping rules
  * are easier to audit at a glance) is the more important constraint.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ChatHistoryStore } from './chat-history.js';
+import type { ConversationHistoryStore } from './conversation-history.js';
 
 const ROUTE_PREFIX = '/_centraid-chat';
 
@@ -71,7 +71,7 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  * The transcript is not appended over HTTP — a chat turn is recorded as a
  * `runs` row by the `/centraid/<id>/_chat` route's runner (issue #90 fold).
  */
-export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
+export function makeChatHistoryRouteHandler(getStore: () => ConversationHistoryStore) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     if (!req.url || !req.url.startsWith(ROUTE_PREFIX)) return false;
     // Use a dummy host because IncomingMessage.url is path-only.

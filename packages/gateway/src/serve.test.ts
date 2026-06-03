@@ -42,7 +42,7 @@ test('mkdirs the appsDir on bootstrap so the registry has somewhere to live', as
 test('returns the constructed stores on the handle for host introspection', () => {
   assert.ok(handle.userStore);
   assert.ok(handle.analyticsStore);
-  assert.ok(handle.chatHistoryStore);
+  assert.ok(handle.conversationHistoryStore);
   assert.ok(handle.runtime);
 });
 

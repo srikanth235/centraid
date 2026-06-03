@@ -1,7 +1,7 @@
 /*
  * HTTP client for the centraid chat routes exposed under `/_centraid-chat`.
  * The gateway owns the chat sessions — see
- * packages/app-engine/src/chat-history.ts. A chat session IS the chat
+ * packages/app-engine/src/conversation-history.ts. A chat session IS the chat
  * window: the session id is the window id. Chat is app-scoped (issue
  * #98): every call carries the owning app and the session lives in that
  * app's `runtime.sqlite`. The transcript is reconstructed from the run

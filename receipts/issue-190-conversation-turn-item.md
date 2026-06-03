@@ -103,6 +103,21 @@ absorbs the new shape.
   `conversation-schema`, `agent-runs-store[-sql]`→`conversation-store[-sql]`.
   Barrel exports are unchanged, so no downstream package is affected.
 
+### Follow-up — `ChatHistoryStore` → `ConversationHistoryStore`
+
+- The store backing the chat surface is a kind-agnostic facade over
+  `ConversationStore` (it spans `kind IN ('chat','build')`), so "chat history"
+  was the same stale-vocabulary mismatch `agent-runs-*` was. Renamed the
+  *record/persistence* concern to be conversation-first:
+  `chat-history.ts`→`conversation-history.ts`, `ChatHistoryStore`→
+  `ConversationHistoryStore`, and the injection field `chatHistoryStore`→
+  `conversationHistoryStore` (RuntimeOptions/Runtime, BuiltGateway, serve).
+- The *interactive surface* stays "chat" deliberately: the `/_centraid-chat`
+  wire route, `chat-history-routes.ts` / `makeChatHistoryRouteHandler`, the
+  `chat-runner` seam, and the renderer-facing DTOs (`ChatSessionMeta`,
+  `ChatMessageRow`, `ChatTurnNode`) — "chat" there means *interactive*, and
+  `ChatSessionMeta` would also collide with the existing `ConversationMeta`.
+
 ## Out of scope
 
 - Cross-app referential integrity and the `run_summary` best-effort
