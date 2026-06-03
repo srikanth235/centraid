@@ -19,6 +19,7 @@ Refresh button.
 - [x] Rethink — scope chat model per runner (`chatModelByRunner`), retire the global Settings model picker
 - [x] Rethink — coupled Agent · Model picker in the chat composer (Direction A)
 - [x] Rethink — keep Settings → Agents as a global switcher alongside the composer pill
+- [x] Rethink — verify the pill in a running Electron app; fix popover clipping in the narrow chat panel
 
 ## What changed
 
@@ -33,6 +34,8 @@ Refresh button.
 
 - **Rethink — coupled Agent · Model picker in the chat composer (Direction A).** Added one control to the in-app chat composer (`app-chat.ts`) that reads `<Agent> · <Model>`. Opening it shows the agents (codex / claude-code, with availability + version, accent-colored) — selecting one switches the gateway's active runner via `saveUserPrefs({ 'agent.runner.kind' })` and re-enumerates — and, below, the **active runner's own** models (Gateway default + tier-grouped catalog from `getRunnerStatus`), with a Refresh affordance. Picking a model persists just that runner's entry (`saveSettings({ chatModelByRunner: { [kind]: id } })`). The popover only ever offers the active agent's catalog, so a mismatched pair is structurally impossible; a saved id no longer in the runner's catalog renders as an explicit "unavailable" banner with one-click repair (use the runner default / Gateway default) rather than being silently re-selected or re-sent. The send path prefers the pill's cached, optimistically-updated selection to avoid racing a just-saved choice. New styles under `.app-chat-am-*`.
 - **Rethink — keep Settings → Agents as a global switcher alongside the composer pill.** The composer pill is per-app (only reachable inside an app's chat), so Settings → Agents is intentionally retained as a clickable global agent switcher. Both surfaces write the same `agent.runner.kind` gateway pref, so they stay in sync; the pill re-reads the pref each time the chat panel opens. (The earlier `activateRunner` call into the removed `loadChatModels` was dropped in the per-runner commit; switching otherwise behaves as before.) Demoting the page to status-only was considered and declined to preserve a global switch point outside the app chat.
+
+- **Rethink — verify the pill in a running Electron app; fix popover clipping in the narrow chat panel.** Drove the built app with Playwright's `_electron` against the real in-process gateway (which enumerated live codex models via `codex app-server model/list`), exercising the real `saveSettings` per-runner merge to render the pinned / stale / default states. The screenshots caught a layout bug typecheck/lint can't: the popover, anchored to the trigger, overflowed the narrow chat panel (`overflow:hidden`) and clipped the second agent card. Fixed by anchoring the popover to the composer (`.app-chat-input-wrap` as positioning context) and spanning its width minus small insets, so it always stays inside the panel.
 
 ## Out of scope
 

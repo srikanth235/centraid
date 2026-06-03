@@ -7562,6 +7562,7 @@ textarea {
 /* §D — composer card: the textarea sits above a toolbar row carrying
    a paperclip affordance, a ⌘↵ keycap, and the accent send button. */
 .app-chat-input-wrap {
+  position: relative; /* positioning context for the Agent · Model popover */
   flex: none;
   display: flex;
   flex-direction: column;
@@ -7662,7 +7663,7 @@ textarea {
    own models. The model is scoped to its agent, so the popover only ever
    offers the active agent's catalog — a stale id is flagged, never re-sent. */
 .app-chat-am {
-  position: relative;
+  position: static;
   flex: none;
   display: flex;
 }
@@ -7732,12 +7733,15 @@ textarea {
   opacity: 0.6;
 }
 
-/* popover — anchored above the composer */
+/* popover — anchored to the COMPOSER (its positioning context), spanning the
+   composer width minus small insets. The trigger sits mid-composer in a narrow
+   chat panel, so anchoring to the composer (not the trigger) is the only way to
+   guarantee the popover stays inside the panel, which clips overflow. */
 .app-chat-am-pop {
   position: absolute;
   bottom: calc(100% + 8px);
-  left: 0;
-  width: 284px;
+  left: 6px;
+  right: 6px;
   max-height: 60vh;
   overflow: auto;
   background: var(--bg-elev);
@@ -7748,7 +7752,7 @@ textarea {
   z-index: 40;
   opacity: 0;
   transform: translateY(6px) scale(0.985);
-  transform-origin: bottom left;
+  transform-origin: bottom center;
   pointer-events: none;
   transition:
     opacity 0.15s ease,
