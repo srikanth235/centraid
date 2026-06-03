@@ -110,7 +110,7 @@ export interface CentraidGatewayProfile {
 /**
  * Which coding-agent CLIs are runnable on the GATEWAY host. Probed
  * gateway-side (`<bin> --version`) and read over `GET /centraid/_agents/status`
- * (see `renderer/gateway-client-chat.ts`). Centraid is agnostic to how each
+ * (see `renderer/gateway-client-conversation.ts`). Centraid is agnostic to how each
  * agent authenticates — this reflects CLI presence only. A remote gateway
  * reports its own host's CLIs, not the desktop's.
  */
@@ -129,15 +129,15 @@ export interface CentraidAgentsStatus {
   claudeModels?: CentraidRunnerModel[];
 }
 
-// The renderer-side chat event union is the gateway's native `ChatStreamEvent`
-// (see `renderer/gateway-client-chat.ts`) now that the chat panel streams the
-// turn directly — no IPC-translated `CentraidChatEvent` / model-list shape.
+// The renderer-side chat event union is the gateway's native `TurnStreamEvent`
+// (see `renderer/gateway-client-conversation.ts`) now that the chat panel streams the
+// turn directly — no IPC-translated `CentraidTurnEvent` / model-list shape.
 
 /**
  * One persisted chat session — the session id is also the chat window id.
  * Sessions list RPCs return these sorted by `updatedAt` desc.
  */
-export interface CentraidChatSessionMeta {
+export interface CentraidConversationSummary {
   id: string;
   /** App the chat was opened from; `null` for chats started from the shell. */
   originAppId: string | null;
@@ -154,7 +154,7 @@ export interface CentraidChatSessionMeta {
 }
 
 /** Coarse-grained persisted shape per message in a chat session. */
-export type CentraidChatHistoryMessage =
+export type CentraidConversationHistoryMessage =
   | { kind: 'user'; text: string }
   | { kind: 'ai'; text: string; error?: boolean }
   | {
@@ -320,8 +320,8 @@ export interface CentraidCloneTemplateResult {
 // The in-process builder agent's persisted-message + event types
 // (CentraidContentBlock / CentraidAgentMessage / CentraidAgentEvent) retired
 // with the unified chat (issue #141, Phase 3): the builder + the app-view
-// data chat now stream the gateway's native `ChatStreamEvent` directly (see
-// `renderer/gateway-client-chat.ts`).
+// data chat now stream the gateway's native `TurnStreamEvent` directly (see
+// `renderer/gateway-client-conversation.ts`).
 
 interface CentraidApi {
   getSettings(): Promise<CentraidSettings>;
@@ -335,8 +335,8 @@ interface CentraidApi {
   openAppFolder(input: { id: string }): Promise<{ ok: true }>;
 
   // The in-process AGENT_* builder retired with the unified chat (issue
-  // #141, Phase 3): the builder streams `/centraid/<id>/_chat` SSE directly
-  // (renderer/gateway-client-chat.ts), so there are no startAgent /
+  // #141, Phase 3): the builder streams `/centraid/<id>/_turn` SSE directly
+  // (renderer/gateway-client-conversation.ts), so there are no startAgent /
   // promptAgent / stopAgent / onAgentEvent IPC methods.
 
   // publish moved to the renderer's direct HTTP client. appLiveUrl /
@@ -453,12 +453,12 @@ interface CentraidApi {
   // (`POST /centraid/_apps/_clone`).
 
   // App chat (turn streaming + history) moved to the renderer's direct HTTP
-  // client (`renderer/gateway-client-chat.ts`) under the unified-chat pivot
-  // (issue #141, Phase 3): the panel streams `/centraid/<appId>/_chat` SSE
-  // itself and reads/writes history over `/_centraid-chat` — no IPC.
+  // client (`renderer/gateway-client-conversation.ts`) under the unified-chat pivot
+  // (issue #141, Phase 3): the panel streams `/centraid/<appId>/_turn` SSE
+  // itself and reads/writes history over `/_centraid-conversations` — no IPC.
 
   // Coding-agent detection moved to the gateway (`GET /centraid/_agents/status`,
-  // read via `renderer/gateway-client-chat.ts`): the gateway is colocated with
+  // read via `renderer/gateway-client-conversation.ts`): the gateway is colocated with
   // the runner, so it probes its own host. No IPC, no desktop-side probing.
 
   // getUserId / getUserPrefs / saveUserPrefs moved to the renderer's direct
@@ -762,7 +762,7 @@ declare global {
     source: 'query' | 'action';
     handler: string;
   }
-  interface CentraidChatSessionMeta {
+  interface CentraidConversationSummary {
     id: string;
     originAppId: string | null;
     title: string;
@@ -773,7 +773,7 @@ declare global {
     updatedAt: number;
     messageCount: number;
   }
-  type CentraidChatHistoryMessage =
+  type CentraidConversationHistoryMessage =
     | { kind: 'user'; text: string }
     | { kind: 'ai'; text: string; error?: boolean }
     | {

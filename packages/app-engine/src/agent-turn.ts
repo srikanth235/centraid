@@ -4,14 +4,14 @@
  *
  * These types used to live in `@centraid/agent-runtime` (the local
  * codex/claude backend). They moved down here so the backend-agnostic run
- * engine (`makeChatRunnerCore`, the automation fire spine) can speak the
+ * engine (`makeConversationRunnerCore`, the automation fire spine) can speak the
  * turn contract without depending on any agent backend — agent-runtime,
  * the gateway, and openclaw all inject a concrete `RunTurnFn` that satisfies
- * it. The interface lives here next to `ChatRunner`; the codex/claude
+ * it. The interface lives here next to `ConversationRunner`; the codex/claude
  * implementation (`runAgentTurn`) stays in agent-runtime.
  */
 
-import type { ChatStreamEvent } from './chat-runner.js';
+import type { TurnStreamEvent } from './conversation-runner.js';
 import type { Dispatcher } from './dispatcher.js';
 
 export type RunnerKind = 'codex' | 'claude-code';
@@ -19,7 +19,7 @@ export type RunnerKind = 'codex' | 'claude-code';
 /**
  * Per-user settings for the coding agent. Persisted by the desktop's
  * UserStore (gateway DB, `user_prefs`) under the `agent.runner.*` keys.
- * The host loads + passes these into `makeChatRunner` (for chat) or
+ * The host loads + passes these into `makeConversationRunner` (for chat) or
  * directly into `runAgentTurn` (for builder).
  */
 export interface RunnerPrefs {
@@ -107,7 +107,7 @@ export interface AgentTurnInput {
    */
   toolContext?: ToolContext;
   abortSignal: AbortSignal;
-  onEvent: (event: ChatStreamEvent) => void;
+  onEvent: (event: TurnStreamEvent) => void;
 }
 
 export interface AgentTurnConfig {

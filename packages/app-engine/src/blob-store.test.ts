@@ -58,7 +58,7 @@ describe('BlobStore', () => {
   it('blobUrl builds the chat-history download path', () => {
     assert.equal(
       blobUrl('app', 'a'.repeat(64)),
-      `/_centraid-chat/apps/app/blobs/${'a'.repeat(64)}`,
+      `/_centraid-conversations/apps/app/blobs/${'a'.repeat(64)}`,
     );
   });
 });

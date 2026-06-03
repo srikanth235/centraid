@@ -5,7 +5,7 @@
 // read/write this app's data.sqlite — see `apps/desktop/src/main/chat.ts`.
 //
 // Rendering mirrors the builder chat (apps/desktop/src/renderer/builder.ts):
-// a typed `AppChatMsg[]` is fully re-rendered on every update, with adjacent
+// a typed `AppConversationMsg[]` is fully re-rendered on every update, with adjacent
 // tool calls folded into one collapsible "tool group" pill, an author chip
 // on assistant turns, and a centered "Thinking…" status while the agent
 // works. The in-app twist is that each tool row drills in to show the SQL
@@ -18,26 +18,26 @@
 //
 // Issue #141, Phase 3 — unified chat: the panel no longer relays through the
 // desktop main process (`main/chat.ts` + `centraid:chat:*` IPC). It streams
-// the turn straight from the gateway's `/centraid/<appId>/_chat` SSE and
-// consumes the native `ChatStreamEvent` union, and reads/writes chat history
-// over the gateway's `/_centraid-chat` surface directly. Because the
+// the turn straight from the gateway's `/centraid/<appId>/_turn` SSE and
+// consumes the native `TurnStreamEvent` union, and reads/writes chat history
+// over the gateway's `/_centraid-conversations` surface directly. Because the
 // gateway-side runner runs the turn in the app's draft worktree with the
 // union of tools, the same panel both tweaks the app's code and operates its
 // data — one chat surface, both jobs.
 
 import {
-  streamChat,
-  uploadChatAttachment,
-  createChatSession,
-  listChatSessions,
-  loadChatSession,
-  deleteChatSession,
+  streamTurn,
+  uploadConversationAttachment,
+  createConversation,
+  listConversations,
+  loadConversation,
+  deleteConversation,
   getUserPrefs,
   saveUserPrefs,
   getRunnerStatus,
   getAgentsStatus,
-  type ChatStreamEvent,
-  type ChatAttachmentRef,
+  type TurnStreamEvent,
+  type ConversationAttachmentRef,
 } from './gateway-client.js';
 
 (function () {
@@ -52,7 +52,7 @@ import {
     errorText?: string;
     open?: boolean;
   };
-  type AppChatMsg =
+  type AppConversationMsg =
     | { kind: 'user'; text: string }
     | { kind: 'ai'; text: string; streaming?: boolean; error?: boolean }
     | { kind: 'toolGroup'; id: string; calls: AppToolCall[]; open: boolean };
@@ -68,12 +68,12 @@ import {
     let open = false;
     let nextTurnId = 1;
     let activeTurn: number | null = null;
-    // The in-flight turn's abort handle — streamChat() cancels its fetch when
+    // The in-flight turn's abort handle — streamTurn() cancels its fetch when
     // this aborts (Stop button / new chat / panel teardown).
     let abortController: AbortController | null = null;
-    let chat: AppChatMsg[] = [];
+    let chat: AppConversationMsg[] = [];
     // Files uploaded to the blob CAS, queued for the next turn (issue #190).
-    let pendingAttachments: ChatAttachmentRef[] = [];
+    let pendingAttachments: ConversationAttachmentRef[] = [];
 
     // ---- Coupled Agent · Model picker state ----
     // The composer carries one control that reads "<Agent> · <Model>". The
@@ -164,7 +164,7 @@ import {
     // toggles between the conversation surface and the history list.
     let currentSessionId: string | null = null;
     let viewMode: 'chat' | 'history' = 'chat';
-    let historySessions: CentraidChatSessionMeta[] = [];
+    let historySessions: CentraidConversationSummary[] = [];
     let historyLoading = false;
     let historySearch = '';
 
@@ -394,7 +394,7 @@ import {
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
     });
     // Attachments uploaded ahead of the next turn (issue #190). The bytes land
-    // in the app's blob CAS on pick; the refs ride the next `streamChat` send.
+    // in the app's blob CAS on pick; the refs ride the next `streamTurn` send.
     const attachChips = el('div', { class: 'app-chat-attach-chips' });
     const renderAttachChips = (): void => {
       attachChips.replaceChildren(
@@ -428,7 +428,7 @@ import {
       void Promise.all(
         files.map(async (file) => {
           const bytes = new Uint8Array(await file.arrayBuffer());
-          const ref = await uploadChatAttachment(
+          const ref = await uploadConversationAttachment(
             appId,
             bytes,
             file.type || 'application/octet-stream',
@@ -887,7 +887,7 @@ import {
       historyLoading = true;
       renderHistory();
       try {
-        historySessions = await listChatSessions(appId);
+        historySessions = await listConversations(appId);
       } catch (err) {
         historySessions = [];
         console.warn('chat history list failed', err);
@@ -919,7 +919,7 @@ import {
       input.focus();
     }
 
-    async function resumeSession(meta: CentraidChatSessionMeta): Promise<void> {
+    async function resumeSession(meta: CentraidConversationSummary): Promise<void> {
       abortActiveTurn();
       currentSessionId = meta.id;
       chat = [];
@@ -935,7 +935,7 @@ import {
         ]),
       );
       try {
-        const loaded = await loadChatSession(appId, meta.id);
+        const loaded = await loadConversation(appId, meta.id);
         chat = hydrateMessages(loaded.messages);
       } catch (err) {
         appendError(`Failed to load chat: ${String(err)}`);
@@ -945,14 +945,14 @@ import {
     }
 
     /**
-     * Rebuild the renderer's `AppChatMsg[]` from the coarse-grained persisted
+     * Rebuild the renderer's `AppConversationMsg[]` from the coarse-grained persisted
      * messages: consecutive `tool` rows fold into a single toolGroup so the
      * UI matches what the user saw live.
      */
     function hydrateMessages(
-      rows: Array<{ idx: number; payload: CentraidChatHistoryMessage }>,
-    ): AppChatMsg[] {
-      const out: AppChatMsg[] = [];
+      rows: Array<{ idx: number; payload: CentraidConversationHistoryMessage }>,
+    ): AppConversationMsg[] {
+      const out: AppConversationMsg[] = [];
       for (const { payload } of rows) {
         if (payload.kind === 'user') {
           out.push({ kind: 'user', text: payload.text });
@@ -1070,9 +1070,9 @@ import {
       }
     }
 
-    async function deleteSession(s: CentraidChatSessionMeta): Promise<void> {
+    async function deleteSession(s: CentraidConversationSummary): Promise<void> {
       try {
-        await deleteChatSession(appId, s.id);
+        await deleteConversation(appId, s.id);
         historySessions = historySessions.filter((x) => x.id !== s.id);
         renderHistory();
         // If we just deleted the chat the user is currently viewing, reset
@@ -1093,7 +1093,7 @@ import {
       if (recentLoaded) return;
       recentLoaded = true;
       try {
-        const sessions = (await listChatSessions(appId)).slice(0, 4);
+        const sessions = (await listConversations(appId)).slice(0, 4);
         if (sessions.length === 0) return;
         recentList.innerHTML = '';
         const now = Date.now();
@@ -1129,7 +1129,7 @@ import {
       scroll.scrollTop = scroll.scrollHeight;
     }
 
-    // ---------- ChatMsg renderer ----------
+    // ---------- ConversationMsg renderer ----------
     function renderRows(columns: string[], rows: Array<Record<string, unknown>>): HTMLElement {
       if (rows.length === 0) {
         return el('div', { class: 'app-chat-rows-empty' }, 'No rows.');
@@ -1234,7 +1234,7 @@ import {
       return wrap;
     }
 
-    function renderMessage(m: AppChatMsg): HTMLElement {
+    function renderMessage(m: AppConversationMsg): HTMLElement {
       if (m.kind === 'user') {
         return el('div', { class: 'msg-user' }, [el('div', { class: 'msg-user-bubble' }, m.text)]);
       }
@@ -1345,7 +1345,7 @@ import {
       scroll.scrollTop = wasAtBottom ? scroll.scrollHeight : prevScrollTop;
     }
 
-    // ---------- ChatMsg mutators ----------
+    // ---------- ConversationMsg mutators ----------
     function ensureTurnState(turnId: number): {
       streamed: string;
       hadDelta: boolean;
@@ -1364,7 +1364,10 @@ import {
       return chat.length - 1;
     }
 
-    function patchAi(idx: number, patch: Partial<Extract<AppChatMsg, { kind: 'ai' }>>): void {
+    function patchAi(
+      idx: number,
+      patch: Partial<Extract<AppConversationMsg, { kind: 'ai' }>>,
+    ): void {
       chat = chat.map((m, i) => (i === idx && m.kind === 'ai' ? { ...m, ...patch } : m));
     }
 
@@ -1372,7 +1375,7 @@ import {
       const lastIdx = chat.length - 1;
       const last = chat[lastIdx];
       if (last && last.kind === 'toolGroup') {
-        const updated: AppChatMsg = { ...last, calls: [...last.calls, call] };
+        const updated: AppConversationMsg = { ...last, calls: [...last.calls, call] };
         chat = chat.map((m, i) => (i === lastIdx ? updated : m));
       } else {
         chat = chat.concat([{ kind: 'toolGroup', id: call.id, calls: [call], open: true }]);
@@ -1391,7 +1394,7 @@ import {
     }
 
     /** Mark a turn done if it's still the active one (idempotent — fired by
-     *  the terminal stream event and again when streamChat() resolves). */
+     *  the terminal stream event and again when streamTurn() resolves). */
     function finishTurn(turnId: number): void {
       if (activeTurn === turnId) {
         activeTurn = null;
@@ -1416,12 +1419,12 @@ import {
     }
 
     /**
-     * Consume the gateway's native `ChatStreamEvent` union (issue #141,
+     * Consume the gateway's native `TurnStreamEvent` union (issue #141,
      * Phase 3 — no IPC translation layer). Tool calls now carry a real
      * `toolCallId`, so the renderer targets results directly instead of
      * minting its own ids.
      */
-    function handleStreamEvent(turnId: number, event: ChatStreamEvent): void {
+    function handleStreamEvent(turnId: number, event: TurnStreamEvent): void {
       const state = ensureTurnState(turnId);
       switch (event.type) {
         case 'assistant.start':
@@ -1560,13 +1563,13 @@ import {
         // Lazily create the session row on first send — its id is the
         // chat session id the gateway keys the turn (+ transcript) on.
         if (!currentSessionId) {
-          const created = await createChatSession(appId, deriveTitle(text));
+          const created = await createConversation(appId, deriveTitle(text));
           currentSessionId = created.id;
           setHeadContext(created.title || null);
         }
         const model = await resolveChatModelForActiveRunner();
         abortController = new AbortController();
-        await streamChat(
+        await streamTurn(
           appId,
           {
             conversationId: currentSessionId,

@@ -1,6 +1,6 @@
 /*
  * Build the app-context system prompt fragment the app-engine injects
- * into every chat turn before delegating to the host's `ChatRunner`.
+ * into every chat turn before delegating to the host's `ConversationRunner`.
  *
  * Both adapters splice this verbatim into their own system-prompt mechanism:
  *   - OpenClaw runner → `extraSystemPrompt` on `runEmbeddedAgent`

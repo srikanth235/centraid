@@ -13,7 +13,7 @@ import type {
   AutomationToolDispatcher,
   AutomationToolResult,
 } from './automation-handler-runner.js';
-import type { ConversationStore, ChatStreamEvent } from '@centraid/app-engine';
+import type { ConversationStore, TurnStreamEvent } from '@centraid/app-engine';
 import {
   closeRunNode,
   openRunNode,
@@ -166,8 +166,8 @@ export async function handleAgentMessage(
   // When the runner streams (issue #158, Phase 2), forward each chat event as a
   // `node.delta` on this agent node, and remember the last `usage` event so
   // `closeRunNode` can persist the token/model rollup.
-  let lastUsage: Extract<ChatStreamEvent, { type: 'usage' }> | undefined;
-  const onEvent = (ev: ChatStreamEvent): void => {
+  let lastUsage: Extract<TurnStreamEvent, { type: 'usage' }> | undefined;
+  const onEvent = (ev: TurnStreamEvent): void => {
     if (ev.type === 'usage') lastUsage = ev;
     try {
       audit.emit({ type: 'node.delta', ordinal, event: ev });

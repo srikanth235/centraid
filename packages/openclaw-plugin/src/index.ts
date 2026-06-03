@@ -11,7 +11,7 @@
  *      per process, lazily (no git-store `init()` at construction, so the
  *      worker subprocesses OpenClaw runs `register()` in stay inert).
  *   3. Mounts `gw.composedHandler` on the gateway-auth route prefixes
- *      (`/centraid`, `/_centraid-chat`, `/_centraid-user`) — OpenClaw owns
+ *      (`/centraid`, `/_centraid-conversations`, `/_centraid-user`) — OpenClaw owns
  *      auth, so the handler replays the gateway's route chain MINUS the
  *      bearer check.
  *   4. Drives `gw.start()` from `gateway_start` (the only event that fires in
@@ -19,7 +19,7 @@
  *      and git-store init run in exactly one process).
  *
  * Plane B (in-process, OpenClaw-specific) is injected into `buildGateway()`:
- *   - chat → `makeOpenClawChatRunner` (`runEmbeddedAgent`)
+ *   - chat → `makeOpenClawConversationRunner` (`runEmbeddedAgent`)
  *   - automation fire → `runOpenclawFire` (`ctx.tool` → `callGatewayTool`,
  *     `ctx.agent` → simple-completion), shared by cron + run-now
  *   - runner status → `{ kind: 'openclaw', ok: true }`
@@ -39,7 +39,7 @@ import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
 import { makeWebhookRouteHandler } from '@centraid/conversation-engine';
 import { buildGateway, type BuiltGateway } from '@centraid/gateway';
 import { registerCentraidTools } from './lib/tools.js';
-import { makeOpenClawChatRunner } from './lib/openclaw-chat-runner.js';
+import { makeOpenClawConversationRunner } from './lib/openclaw-conversation-runner.js';
 import { runOpenclawFire } from './lib/openclaw-fire.js';
 import { resolveOpenClawModels } from './lib/openclaw-models.js';
 
@@ -103,10 +103,10 @@ export default definePluginEntry({
         appsDir,
         identityDb: path.join(dbDir, 'centraid-gateway.sqlite'),
         analyticsDb: path.join(dbDir, 'centraid-analytics.sqlite'),
-        chatRunnerSessionDir: path.join(
+        conversationRunnerSessionDir: path.join(
           resolveStateDir(process.env),
           'centraid',
-          'chat-runner-sessions',
+          'conversation-runner-sessions',
         ),
       },
       // App CODE backed by the gateway-owned git store (issue #137).
@@ -116,7 +116,7 @@ export default definePluginEntry({
       logTag: 'centraid',
       // Plane B (in-process): chat drives OpenClaw's embedded agent, not a
       // codex/claude CLI puppet.
-      chatRunner: makeOpenClawChatRunner(api),
+      conversationRunner: makeOpenClawConversationRunner(api),
       // OpenClaw chat runs in-process regardless of any local CLI, so report
       // ready rather than running a codex/claude preflight. Models are
       // enumerated from `openclaw models list --json` and classified into
@@ -162,15 +162,15 @@ export default definePluginEntry({
       await gw.start('');
     });
 
-    // `gw.composedHandler` replays `chatHistory → userStore → extraHandlers[]
+    // `gw.composedHandler` replays `conversation → userStore → extraHandlers[]
     // → runtime.handle` minus the bearer check (OpenClaw owns auth, hence
-    // `auth: 'gateway'`). It dispatches `/_centraid-chat` + `/_centraid-user`
+    // `auth: 'gateway'`). It dispatches `/_centraid-conversations` + `/_centraid-user`
     // internally by URL prefix, so all three gateway-auth prefixes route to it.
     const handleGateway = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
       const gw = await gwPromise;
       await gw.composedHandler(req, res);
     };
-    for (const prefix of ['/centraid', '/_centraid-chat', '/_centraid-user']) {
+    for (const prefix of ['/centraid', '/_centraid-conversations', '/_centraid-user']) {
       api.registerHttpRoute({
         path: prefix,
         match: 'prefix',
@@ -181,7 +181,7 @@ export default definePluginEntry({
 
     // Agent tools — let the OpenClaw agent read a single app's data via SELECT
     // only. Scope is enforced by the before_tool_call hook inside
-    // registerCentraidTools (sessionKey = "centraid-chat:<appId>"). The runtime
+    // registerCentraidTools (sessionKey = "centraid-conversation:<appId>"). The runtime
     // is resolved lazily so the worker's tools get the per-process instance.
     registerCentraidTools(
       api,

@@ -1,5 +1,5 @@
 // Builder mode — chat-driven app generation, wired live to:
-//   - the gateway's unified chat (streamChat → POST /centraid/<id>/_chat SSE):
+//   - the gateway's unified chat (streamTurn → POST /centraid/<id>/_turn SSE):
 //     the turn runs server-side in the app's draft worktree with the union of
 //     tools, so the builder's "edit my app" chat and the app view's data chat
 //     are one surface on one transport (issue #141, Phase 3)
@@ -34,10 +34,10 @@ import {
   updateAppMeta,
   setAutomationEnabled,
   deleteAutomation,
-  streamChat,
-  createChatSession,
-  listChatSessions,
-  type ChatStreamEvent,
+  streamTurn,
+  createConversation,
+  listConversations,
+  type TurnStreamEvent,
 } from './gateway-client.js';
 
 (function () {
@@ -50,7 +50,7 @@ import {
     state: 'running' | 'ok' | 'error';
   };
 
-  type ChatMsg =
+  type ConversationMsg =
     | { kind: 'divider'; text: string }
     | { kind: 'status'; text: string; spinning?: boolean }
     | { kind: 'user'; text: string }
@@ -404,7 +404,7 @@ import {
 
     // ---------- State ----------
     let appId: string | undefined = opts.appId;
-    let chat: ChatMsg[] = [];
+    let chat: ConversationMsg[] = [];
     let tab: Tab = isAutomation ? 'config' : 'preview';
     // Latest `automation.json` snapshot, re-read after each agent turn so
     // the config pane reflects what the agent wrote. Automation mode only.
@@ -976,7 +976,7 @@ import {
     let chatScroll: HTMLElement = el('div', { class: 'chat-scroll' });
     let inputWrap: HTMLElement = el('div', { class: 'chat-input-wrap' });
 
-    function renderMessage(m: ChatMsg): HTMLElement {
+    function renderMessage(m: ConversationMsg): HTMLElement {
       if (m.kind === 'divider') {
         return el('div', { class: 'chat-divider' }, [el('span', {}, m.text)]);
       }
@@ -1113,16 +1113,16 @@ import {
       refreshSyncStatus();
     }
 
-    function pushMessage(m: ChatMsg): number {
+    function pushMessage(m: ConversationMsg): number {
       chat = chat.concat([m]);
       renderChat();
       return chat.length - 1;
     }
 
-    function updateMessage(idx: number, patch: Partial<ChatMsg>): void {
+    function updateMessage(idx: number, patch: Partial<ConversationMsg>): void {
       const at = chat[idx];
       if (!at) return;
-      chat = chat.map((m, i) => (i === idx ? ({ ...m, ...patch } as ChatMsg) : m));
+      chat = chat.map((m, i) => (i === idx ? ({ ...m, ...patch } as ConversationMsg) : m));
       renderChat();
     }
 
@@ -3444,19 +3444,19 @@ import {
     // 'continue' reuses the app's most recent session so the gateway
     // resumes the same adapter thread across builder reopens; 'fresh' always
     // mints a new session (first build — don't append onto a stale thread).
-    async function ensureChatSession(
+    async function ensureConversation(
       id: string,
       sessionMode: 'fresh' | 'continue',
     ): Promise<string> {
       if (conversationId) return conversationId;
       if (sessionMode === 'continue') {
-        const sessions = await listChatSessions(id).catch(() => []);
+        const sessions = await listConversations(id).catch(() => []);
         if (sessions[0]) {
           conversationId = sessions[0].id;
           return conversationId;
         }
       }
-      conversationId = (await createChatSession(id, projName)).id;
+      conversationId = (await createConversation(id, projName)).id;
       return conversationId;
     }
 
@@ -3499,12 +3499,12 @@ import {
       previewReloadPending = false;
     }
 
-    // Consume the gateway's native `ChatStreamEvent` union (issue #141,
+    // Consume the gateway's native `TurnStreamEvent` union (issue #141,
     // Phase 3 — no IPC translation). The builder + the app-view data chat
-    // now share this event model + the `streamChat` transport — one chat
+    // now share this event model + the `streamTurn` transport — one chat
     // surface, both jobs. Tool calls carry a real `toolCallId`, so results
     // target their group directly.
-    function handleStreamEvent(event: ChatStreamEvent): void {
+    function handleStreamEvent(event: TurnStreamEvent): void {
       switch (event.type) {
         case 'assistant.start':
           generating = true;
@@ -3556,7 +3556,7 @@ import {
           // Consolidate adjacent tool calls into one bubble; AI text/thinking
           // between calls breaks the group.
           if (last && last.kind === 'toolGroup') {
-            const updated: ChatMsg = { ...last, calls: [...last.calls, newCall] };
+            const updated: ConversationMsg = { ...last, calls: [...last.calls, newCall] };
             chat = chat.map((m, i) => (i === lastIdx ? updated : m));
             renderChat();
             pendingToolStarts.set(event.toolCallId, lastIdx);
@@ -3643,9 +3643,9 @@ import {
       currentThinkingMsgIndex = -1;
       renderChat();
       try {
-        const sessionId = await ensureChatSession(appId, 'continue');
+        const sessionId = await ensureConversation(appId, 'continue');
         agentAbort = new AbortController();
-        await streamChat(
+        await streamTurn(
           appId,
           { conversationId: sessionId, message: text },
           handleStreamEvent,
@@ -3669,7 +3669,7 @@ import {
         // The automation app is scaffolded as a draft before the
         // builder opens, so this is always a "reopen" — load the manifest
         // snapshot, then seed the intro. The gateway resumes the prior
-        // adapter thread via the reused chat session (ensureChatSession).
+        // adapter thread via the reused chat session (ensureConversation).
         chat = [];
         renderChat();
         await refreshAutomationRow();
@@ -3717,7 +3717,7 @@ import {
         }
         // Seed a fresh pane. The gateway resumes the app's prior adapter
         // thread on the first turn via the reused chat session
-        // (ensureChatSession → most recent session), so the agent keeps
+        // (ensureConversation → most recent session), so the agent keeps
         // context even though the pane starts empty across reopens.
         chat = chat.concat([
           {
@@ -3766,7 +3766,7 @@ import {
       try {
         // First build → a FRESH chat session so the initial prompt isn't
         // appended onto a stale thread from a prior app at the same id.
-        conversationId = (await createChatSession(id, projName)).id;
+        conversationId = (await createConversation(id, projName)).id;
       } catch (err) {
         pushMessage({ kind: 'status', text: `Could not start chat: ${String(err)}` });
         return;

@@ -29,7 +29,7 @@ function pathsUnder(dir: string): GatewayPaths {
     appsDir: path.join(dir, 'apps'),
     identityDb: path.join(dir, 'identity.sqlite'),
     analyticsDb: path.join(dir, 'analytics.sqlite'),
-    chatRunnerSessionDir: path.join(dir, 'chat-runner-sessions'),
+    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
   };
 }
 

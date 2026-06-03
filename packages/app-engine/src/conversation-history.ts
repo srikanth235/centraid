@@ -3,7 +3,7 @@
  * transcript fold, over the per-app `ConversationStore` (issue #98, reshaped
  * by #190). This is the read/write API the interactive chat surface uses; the
  * store is conversation-first (it spans `kind='chat'` and `'build'`), while the
- * HTTP route it's exposed over stays the `/_centraid-chat` wire surface.
+ * HTTP route it's exposed over stays the `/_centraid-conversations` wire surface.
  *
  * A chat session IS a `conversations` row (`kind='chat'` | `'build'`). Chat is
  * app-scoped: conversations + their turns/items/attachments live in the owning
@@ -16,7 +16,7 @@
  * turn's inbound message is its ordinal-0 `message_in` item, and the
  * assistant text + tool calls are the remaining `items` (issue #190 fold).
  * `recordTurn` writes that trace; `getSession` reconstructs the renderer
- * transcript uniformly from items. Exposed over HTTP at `/_centraid-chat`.
+ * transcript uniformly from items. Exposed over HTTP at `/_centraid-conversations`.
  */
 
 import path from 'node:path';
@@ -27,10 +27,10 @@ import type { RunKind } from './conversation-schema.js';
 import type { RunSummarySink } from './run-summary-sink.js';
 import { isValidAppId } from './app-paths.js';
 import { costForUsage } from './model-pricing.js';
-import { parseStepOutput, parseToolArgs, parseToolOutput } from './chat-transcript.js';
+import { parseStepOutput, parseToolArgs, parseToolOutput } from './conversation-transcript.js';
 import { BlobStore, blobUrl, type PutResult } from './blob-store.js';
 
-export interface ChatSessionMeta {
+export interface ConversationSummary {
   id: string;
   /** Owner of the session — the gateway-side user UUID from `UserStore`. */
   userId: string;
@@ -47,14 +47,14 @@ export interface ChatSessionMeta {
   messageCount: number;
 }
 
-export interface ChatMessageRow {
+export interface ConversationMessageRow {
   idx: number;
   payload: unknown;
   createdAt: number;
 }
 
 /** A file already landed in the blob CAS, to attach to a turn's inbound message. */
-export interface ChatTurnAttachment {
+export interface ConversationTurnAttachment {
   hash: string;
   mime: string;
   sizeBytes: number;
@@ -65,9 +65,9 @@ export interface ChatTurnAttachment {
 
 /**
  * One item of a completed chat turn, handed to `recordTurn`. The chat route
- * accumulates these from the runner's `ChatStreamEvent`s.
+ * accumulates these from the runner's `TurnStreamEvent`s.
  */
-export type ChatTurnNode =
+export type TurnNode =
   | {
       kind: 'step';
       /** Accumulated assistant text for the turn. */
@@ -107,7 +107,7 @@ export interface RecordTurnInput {
   /** The user's prompt for the turn — recorded as the `message_in` item. */
   userMessage: string;
   /** Files that rode in on this turn's inbound message (already in the CAS). */
-  attachments?: ChatTurnAttachment[];
+  attachments?: ConversationTurnAttachment[];
   startedAt: number;
   endedAt: number;
   ok: boolean;
@@ -115,14 +115,14 @@ export interface RecordTurnInput {
   /** The assistant's final reply text (the turn's terminal output). */
   finalText?: string;
   /** The turn's ordered trace (assistant steps + tool calls). */
-  nodes: ChatTurnNode[];
+  nodes: TurnNode[];
 }
 
 /** Provides the gateway-side single user UUID. Wired to `UserStore.getUserId`. */
 export type UserIdProvider = () => string;
 
 /** Per-app lazily-opened conversation store — one entry per app touched. */
-interface AppChat {
+interface AppConversation {
   store: ConversationStore;
 }
 
@@ -132,7 +132,7 @@ export class ConversationHistoryStore {
   private readonly analytics: RunSummarySink | undefined;
   /** Per-app blob CAS for attachment bytes — shares `appsDir` (issue #190). */
   private readonly blobs: BlobStore;
-  private readonly perApp = new Map<string, AppChat>();
+  private readonly perApp = new Map<string, AppConversation>();
 
   /**
    * `analytics`, when set, threads into each app's `ConversationStore` so a
@@ -145,12 +145,12 @@ export class ConversationHistoryStore {
     this.blobs = new BlobStore(appsDir);
   }
 
-  private appChat(appId: string): AppChat {
+  private appConversation(appId: string): AppConversation {
     const cached = this.perApp.get(appId);
     if (cached) return cached;
     if (!isValidAppId(appId)) throw new Error(`conversation-history: invalid app id "${appId}"`);
     const provider = makeRuntimeDbProvider(path.join(this.appsDir, appId, 'runtime.sqlite'));
-    const entry: AppChat = { store: new ConversationStore(provider, this.analytics) };
+    const entry: AppConversation = { store: new ConversationStore(provider, this.analytics) };
     this.perApp.set(appId, entry);
     return entry;
   }
@@ -159,14 +159,14 @@ export class ConversationHistoryStore {
     return this.userIdProvider();
   }
 
-  listSessions(appId: string): ChatSessionMeta[] {
-    const { store } = this.appChat(appId);
+  listSessions(appId: string): ConversationSummary[] {
+    const { store } = this.appConversation(appId);
     return store.listConversationsMeta(this.currentUserId()).map(toMeta);
   }
 
   /** Create a fresh chat session in `appId`. */
-  createSession(appId: string, title: string = '', kind: RunKind = 'chat'): ChatSessionMeta {
-    const { store } = this.appChat(appId);
+  createSession(appId: string, title: string = '', kind: RunKind = 'chat'): ConversationSummary {
+    const { store } = this.appConversation(appId);
     const conv = store.createConversation({
       kind,
       userId: this.currentUserId(),
@@ -185,12 +185,12 @@ export class ConversationHistoryStore {
   getSession(
     appId: string,
     id: string,
-  ): (ChatSessionMeta & { messages: ChatMessageRow[] }) | undefined {
-    const { store } = this.appChat(appId);
+  ): (ConversationSummary & { messages: ConversationMessageRow[] }) | undefined {
+    const { store } = this.appConversation(appId);
     const meta = store.getConversationMeta(id, this.currentUserId());
     if (!meta) return undefined;
 
-    const messages: ChatMessageRow[] = [];
+    const messages: ConversationMessageRow[] = [];
     let idx = 0;
     for (const turn of store.listTurns(id)) {
       for (const item of store.listItems(turn.turnId)) {
@@ -237,7 +237,7 @@ export class ConversationHistoryStore {
 
   /** Attachment metadata + download URL for a message item's attachments. */
   private attachmentsPayload(appId: string, itemId: string): unknown[] {
-    const { store } = this.appChat(appId);
+    const { store } = this.appConversation(appId);
     return store.listAttachmentsForItem(itemId).map((a) => ({
       id: a.id,
       mime: a.mime,
@@ -262,14 +262,14 @@ export class ConversationHistoryStore {
     return this.blobs.pathFor(appId, hash);
   }
 
-  getSessionMeta(appId: string, id: string): ChatSessionMeta | undefined {
-    const { store } = this.appChat(appId);
+  getSessionMeta(appId: string, id: string): ConversationSummary | undefined {
+    const { store } = this.appConversation(appId);
     const meta = store.getConversationMeta(id, this.currentUserId());
     return meta ? toMeta(meta) : undefined;
   }
 
-  renameSession(appId: string, id: string, title: string): ChatSessionMeta | undefined {
-    const { store } = this.appChat(appId);
+  renameSession(appId: string, id: string, title: string): ConversationSummary | undefined {
+    const { store } = this.appConversation(appId);
     if (!store.renameConversation(id, this.currentUserId(), title)) return undefined;
     return this.getSessionMeta(appId, id);
   }
@@ -277,7 +277,7 @@ export class ConversationHistoryStore {
   deleteSession(appId: string, id: string): boolean {
     // Real FK CASCADE drops the conversation's turns, items, and attachment
     // rows; a follow-up blob GC reclaims now-unreferenced bytes (issue #190).
-    const { store } = this.appChat(appId);
+    const { store } = this.appConversation(appId);
     const ok = store.deleteConversation(id, this.currentUserId());
     if (ok) void this.blobs.gc(appId, store.referencedHashes()).catch(() => undefined);
     return ok;
@@ -290,7 +290,7 @@ export class ConversationHistoryStore {
    * or is owned by another user. The first turn names the conversation.
    */
   recordTurn(appId: string, input: RecordTurnInput): { turnId: string } | undefined {
-    const { store } = this.appChat(appId);
+    const { store } = this.appConversation(appId);
     const userId = this.currentUserId();
     const existingTitle = store.titleOf(input.conversationId, userId);
     if (existingTitle === undefined) return undefined;
@@ -348,8 +348,8 @@ export class ConversationHistoryStore {
     appId: string,
     sessionId: string,
     adapter?: { kind: string; sessionId?: string },
-  ): ChatSessionMeta | undefined {
-    const { store } = this.appChat(appId);
+  ): ConversationSummary | undefined {
+    const { store } = this.appConversation(appId);
     if (!store.noteTurn(sessionId, this.currentUserId(), adapter)) return undefined;
     return this.getSessionMeta(appId, sessionId);
   }
@@ -359,7 +359,7 @@ function recordNode(
   store: ConversationStore,
   turnId: string,
   ordinal: number,
-  node: ChatTurnNode,
+  node: TurnNode,
 ): void {
   if (node.kind === 'step') {
     // Freeze the per-call cost at write time — NULL when the model is unknown.
@@ -412,7 +412,7 @@ function recordNode(
   }
 }
 
-function toMeta(c: ConversationMeta): ChatSessionMeta {
+function toMeta(c: ConversationMeta): ConversationSummary {
   return {
     id: c.id,
     userId: c.userId,
@@ -433,5 +433,5 @@ export function deriveTitle(text: string): string {
   return `${cleaned.slice(0, 57)}…`;
 }
 
-// HTTP route dispatcher lives in chat-history-routes.ts to keep this file
+// HTTP route dispatcher lives in conversation-routes.ts to keep this file
 // focused on the facade + fold. Re-exported below from the package index.

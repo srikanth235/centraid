@@ -1,19 +1,19 @@
 /*
  * Host-agnostic chat-runner interface.
  *
- * The per-app chat endpoint (`POST /centraid/<appId>/_chat`) delegates the
- * actual model turn to a host-injected `ChatRunner`. Two implementations
+ * The per-app chat endpoint (`POST /centraid/<appId>/_turn`) delegates the
+ * actual model turn to a host-injected `ConversationRunner`. Two implementations
  * exist today:
  *
- *   - `openclaw-plugin/lib/openclaw-chat-runner.ts` — wraps
+ *   - `openclaw-plugin/lib/openclaw-conversation-runner.ts` — wraps
  *     `api.runtime.agent.runEmbeddedAgent`. OpenClaw owns the loop and
  *     dispatches plugin-registered tools server-side.
- *   - `@centraid/agent-runtime`'s `makeChatRunner` — drives codex
+ *   - `@centraid/agent-runtime`'s `makeConversationRunner` — drives codex
  *     app-server / Claude SDK locally with the three structured tools
  *     declared inline (`centraid_describe` / `centraid_read` / `centraid_write`).
  *
  * Either way, the route handler in app-engine never implements a model
- * loop itself; it just translates the runner's `ChatStreamEvent`s into SSE
+ * loop itself; it just translates the runner's `TurnStreamEvent`s into SSE
  * frames and pipes them back to the harness client.
  */
 
@@ -27,7 +27,7 @@ import type { TurnAttachment } from './agent-turn.js';
  * Discriminated on `type`. Adapters are free to emit a subset — the
  * harness handles unknown event types gracefully and ignores them.
  */
-export type ChatStreamEvent =
+export type TurnStreamEvent =
   | { type: 'assistant.start' }
   | { type: 'assistant.delta'; delta: string }
   | { type: 'reasoning.delta'; delta: string }
@@ -88,7 +88,7 @@ export type ChatStreamEvent =
       cacheWriteTokens?: number;
     };
 
-export interface ChatRunInput {
+export interface ConversationTurnInput {
   appId: string;
   /**
    * Absolute path to the app's data directory — `entry.path` as resolved by
@@ -100,13 +100,13 @@ export interface ChatRunInput {
    */
   dataDir: string;
   /**
-   * The chat session id — the `chat_sessions` row id in the central gateway
+   * The chat session id — the `conversations` row id in the per-app runtime
    * SQLite the transcript persists to.
    */
   conversationId: string;
   /**
    * Absolute path to a runner-owned scratch session file (under the central
-   * `chatRunnerSessionDir`, named `<conversationId>.jsonl`). The runner is free to
+   * `conversationRunnerSessionDir`, named `<conversationId>.jsonl`). The runner is free to
    * use this for its own session-resume mechanism (e.g. the OpenClaw runner
    * hands it to `runEmbeddedAgent` as its session-resume file). It is NOT the
    * chat transcript — the transcript lives in the gateway DB.
@@ -137,40 +137,40 @@ export interface ChatRunInput {
    */
   idempotencyKey?: string;
   /**
-   * The runner's previous resume handle, read from the `chat_sessions` row
+   * The runner's previous resume handle, read from the `conversations` row
    * by the route. The adapter resumes only when `prevAdapterKind` matches
    * the kind it's about to use — a mid-session runner switch starts fresh.
    */
   prevAdapterSessionId?: string;
   prevAdapterKind?: string;
-  onEvent: (event: ChatStreamEvent) => void;
+  onEvent: (event: TurnStreamEvent) => void;
 }
 
-export interface ChatRunResult {
+export interface ConversationTurnResult {
   /**
    * Resumable session id assigned by the adapter (codex thread id,
    * claude-code session id). Omitted by adapters whose resume happens via
    * the on-disk `sessionFile` (OpenClaw runner). The route handler persists
-   * this to the session's `chat_sessions` row so the next turn can resume.
+   * this to the session's `conversations` row so the next turn can resume.
    */
   adapterSessionId?: string;
   /** Adapter kind that wrote `adapterSessionId`. */
   adapterKind?: string;
 }
 
-export interface ChatRunner {
+export interface ConversationRunner {
   /**
    * The ledger `RunKind` a turn through this runner persists as — a property
    * of the *surface*, not the individual turn. The builder-capable unified
    * runner (draft worktree + file-edit tools + authoring prompt) reports
    * `'build'`; the data-only runner leaves it unset (the route defaults to
    * `'chat'`). Read statically by the route, so the kind is recorded even
-   * when a turn errors and returns no `ChatRunResult` (issue #181).
+   * when a turn errors and returns no `ConversationTurnResult` (issue #181).
    */
   readonly runKind?: RunKind;
   /** Drive one turn. Resolves when the model has emitted its final reply
    *  or the run aborted/errored. Errors are reported via `onEvent`
    *  (type: 'error') AND by rejecting the returned promise — the route
    *  handler relies on the rejection to release the per-session lock. */
-  run(input: ChatRunInput): Promise<ChatRunResult | void>;
+  run(input: ConversationTurnInput): Promise<ConversationTurnResult | void>;
 }

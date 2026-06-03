@@ -1,5 +1,5 @@
 /*
- * HTTP client for the centraid chat routes exposed under `/_centraid-chat`.
+ * HTTP client for the centraid chat routes exposed under `/_centraid-conversations`.
  * The gateway owns the chat sessions — see
  * packages/app-engine/src/conversation-history.ts. A chat session IS the chat
  * window: the session id is the window id. Chat is app-scoped (issue
@@ -9,13 +9,13 @@
  *
  * The client is thin on purpose: it shapes URLs, attaches the bearer token,
  * and JSON-decodes. Auth resolution is cached for the process lifetime.
- * Callers can invalidate via `resetChatHistoryAuthCache()` after a settings
+ * Callers can invalidate via `resetConversationHistoryAuthCache()` after a settings
  * save flips the gateway URL or token.
  */
 
 import { loadSettings } from './settings.js';
 
-export interface ChatSessionMeta {
+export interface ConversationSummary {
   id: string;
   title: string;
   /** Runner kind that owns `adapterSessionId`. */
@@ -29,7 +29,7 @@ export interface ChatSessionMeta {
   messageCount: number;
 }
 
-export interface ChatSessionWithMessages extends ChatSessionMeta {
+export interface ConversationWithMessages extends ConversationSummary {
   messages: Array<{ idx: number; payload: unknown; createdAt: number }>;
 }
 
@@ -62,13 +62,13 @@ async function authHeaders(): Promise<AuthCache> {
 }
 
 /** Called from settings-save when gatewayUrl/Token may have changed. */
-export function resetChatHistoryAuthCache(): void {
+export function resetConversationHistoryAuthCache(): void {
   cachedAuth = undefined;
 }
 
 async function call<T>(method: string, pathAndQuery: string, body?: unknown): Promise<T> {
   const { baseUrl, headers } = await authHeaders();
-  const url = `${baseUrl}/_centraid-chat${pathAndQuery}`;
+  const url = `${baseUrl}/_centraid-conversations${pathAndQuery}`;
   const res = await fetch(url, {
     method,
     headers,
@@ -85,7 +85,7 @@ async function call<T>(method: string, pathAndQuery: string, body?: unknown): Pr
     const msg =
       (parsed && typeof parsed === 'object' && 'error' in parsed
         ? String((parsed as { error: unknown }).error)
-        : undefined) ?? `chat-history HTTP ${res.status}`;
+        : undefined) ?? `conversation-history HTTP ${res.status}`;
     throw new Error(msg);
   }
   return parsed as T;
@@ -96,25 +96,25 @@ function sessionsPath(appId: string): string {
   return `/apps/${encodeURIComponent(appId)}/sessions`;
 }
 
-export async function historyList(appId: string): Promise<ChatSessionMeta[]> {
-  const out = await call<{ sessions: ChatSessionMeta[] }>('GET', sessionsPath(appId));
+export async function historyList(appId: string): Promise<ConversationSummary[]> {
+  const out = await call<{ sessions: ConversationSummary[] }>('GET', sessionsPath(appId));
   return out.sessions ?? [];
 }
 
-export async function historyCreate(appId: string, title = ''): Promise<ChatSessionMeta> {
-  return call<ChatSessionMeta>('POST', sessionsPath(appId), { title });
+export async function historyCreate(appId: string, title = ''): Promise<ConversationSummary> {
+  return call<ConversationSummary>('POST', sessionsPath(appId), { title });
 }
 
-export async function historyLoad(appId: string, id: string): Promise<ChatSessionWithMessages> {
-  return call<ChatSessionWithMessages>('GET', `${sessionsPath(appId)}/${encodeURIComponent(id)}`);
+export async function historyLoad(appId: string, id: string): Promise<ConversationWithMessages> {
+  return call<ConversationWithMessages>('GET', `${sessionsPath(appId)}/${encodeURIComponent(id)}`);
 }
 
 export async function historyRename(
   appId: string,
   id: string,
   title: string,
-): Promise<ChatSessionMeta> {
-  return call<ChatSessionMeta>('PATCH', `${sessionsPath(appId)}/${encodeURIComponent(id)}`, {
+): Promise<ConversationSummary> {
+  return call<ConversationSummary>('PATCH', `${sessionsPath(appId)}/${encodeURIComponent(id)}`, {
     title,
   });
 }

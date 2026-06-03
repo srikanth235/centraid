@@ -10,7 +10,7 @@
  * needed from agent-runtime was the live `ctx.tool` / `ctx.agent` dispatch
  * surface (the mock-LLM server + CLI spawn). So the spine moves down and the
  * dispatch surface is injected via `openDispatch` — the same dependency
- * inversion the `AutomationHost` / `ChatRunner` seams already use.
+ * inversion the `AutomationHost` / `ConversationRunner` seams already use.
  *
  * agent-runtime's `runAutomationLocal` is now a thin wrapper that builds the
  * `openDispatch` closure (capturing the runner kind + CLI spawn) and calls

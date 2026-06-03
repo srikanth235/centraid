@@ -6,7 +6,7 @@
  * on stdio. The handshake is `initialize` (with `experimentalApi: true`)
  * → `initialized` notification → `thread/start` (or `thread/resume`) →
  * `turn/start`. We translate server notifications into the normalized
- * `ChatStreamEvent` shape both surfaces (chat + builder) consume.
+ * `TurnStreamEvent` shape both surfaces (chat + builder) consume.
  *
  * Why app-server and not `codex exec`: app-server gives us token deltas
  * (`item/agentMessage/delta`), structured tool-call lifecycle, and a
@@ -35,7 +35,7 @@ import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
-import type { ChatStreamEvent, TurnAttachment } from '@centraid/app-engine';
+import type { TurnStreamEvent, TurnAttachment } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
 import { centraidDynamicToolSpecs, handleCentraidToolCall } from './codex-centraid-tools.js';
 import { codexImageItems } from './multimodal.js';
@@ -71,7 +71,7 @@ export interface CodexAppServerInput {
    */
   toolContext?: ToolContext;
   abortSignal: AbortSignal;
-  onEvent: (event: ChatStreamEvent) => void;
+  onEvent: (event: TurnStreamEvent) => void;
 }
 
 export interface CodexAppServerConfig {
@@ -125,7 +125,7 @@ export async function runCodexAppServerTurn(
   let processExited = false;
   let exitError: Error | undefined;
 
-  const emit = (event: ChatStreamEvent): void => {
+  const emit = (event: TurnStreamEvent): void => {
     if (input.abortSignal.aborted) return;
     input.onEvent(event);
   };

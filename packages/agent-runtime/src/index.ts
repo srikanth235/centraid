@@ -7,7 +7,7 @@
  *   - `codex app-server` — spawned as a subprocess; JSON-RPC 2.0 stdio
  *   - `@anthropic-ai/claude-agent-sdk` — imported in-process; async generator
  *
- * Both emit the same `ChatStreamEvent` shape, so downstream surfaces
+ * Both emit the same `TurnStreamEvent` shape, so downstream surfaces
  * don't need to know which one ran a given turn.
  *
  * Where this package fits in the bigger picture:
@@ -16,9 +16,9 @@
  *     (`@centraid/agent-harness`) calls it directly with its own cwd /
  *     preamble / resume plumbing.
  *
- *   - `makeChatRunner` is the chat-side adapter (see ./chat-adapter.ts)
- *     that wraps `runAgentTurn` into a `ChatRunner` the gateway's
- *     `/_chat` route can inject. It's one of two `ChatRunner`
+ *   - `makeConversationRunner` is the chat-side adapter (see ./conversation-adapter.ts)
+ *     that wraps `runAgentTurn` into a `ConversationRunner` the gateway's
+ *     `/_turn` route can inject. It's one of two `ConversationRunner`
  *     implementations in the repo — the other lives in
  *     `@centraid/openclaw-plugin` and drives an in-process openclaw
  *     agent. Desktop's embedded runtime injects this one; openclaw
@@ -30,13 +30,16 @@
  * per-app sqlite or checking the preview snapshot's freshness).
  */
 
-export { makeChatRunner, type MakeChatRunnerOptions } from './chat-adapter.js';
+export {
+  makeConversationRunner,
+  type MakeConversationRunnerOptions,
+} from './conversation-adapter.js';
 
-// The shared per-turn chat spine (`makeChatRunnerCore`) lives in
+// The shared per-turn chat spine (`makeConversationRunnerCore`) lives in
 // `@centraid/conversation-engine` (the backend-agnostic run engine), next to
-// the automation fire spine. `makeChatRunner` (above) is this backend's thin
+// the automation fire spine. `makeConversationRunner` (above) is this backend's thin
 // config over it, injecting `runAgentTurn` as the `RunTurnFn`; the gateway's
-// `makeUnifiedChatRunner` imports the core from conversation-engine directly.
+// `makeUnifiedConversationRunner` imports the core from conversation-engine directly.
 
 // Builder agent sessions still want the `centraid` CLI on PATH for the
 // `centraid preview snapshot` flow; expose the dist-dir resolver.

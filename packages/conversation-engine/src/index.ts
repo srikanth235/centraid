@@ -4,7 +4,7 @@
  * Home for the two runners over the shared run ledger — both "a run over
  * runs/run_nodes," differing only in driver and fan-out:
  *
- *   - the **chat-runner core** (`makeChatRunnerCore`) — one model-driven turn;
+ *   - the **chat-runner core** (`makeConversationRunnerCore`) — one model-driven turn;
  *   - the **automation fire spine** (`runAutomationFire` + the
  *     `OpenAutomationDispatch` seam) — a script-driven fan-out of many turns,
  *     run from a worker-thread `handler.js`.
@@ -160,13 +160,13 @@ export {
 // Chat-runner core — the per-turn chat spine, sibling to the automation fire
 // spine in this backend-agnostic engine. The model turn is injected as a
 // `RunTurnFn`; agent-runtime passes its codex/claude `runAgentTurn`, the
-// gateway's `makeUnifiedChatRunner` configures it for builder chat.
+// gateway's `makeUnifiedConversationRunner` configures it for builder chat.
 export {
-  makeChatRunnerCore,
-  type ChatRunnerCoreOptions,
-  type ChatTurnContext,
+  makeConversationRunnerCore,
+  type ConversationRunnerCoreOptions,
+  type TurnContext,
   type RunTurnFn,
-} from './chat/chat-runner-core.js';
+} from './conversation/conversation-runner-core.js';
 
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a

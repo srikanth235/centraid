@@ -118,6 +118,49 @@ absorbs the new shape.
   `ChatMessageRow`, `ChatTurnNode`) — "chat" there means *interactive*, and
   `ChatSessionMeta` would also collide with the existing `ConversationMeta`.
 
+### Follow-up — strip "chat" from code + wire routes (everything is a conversation)
+
+- Per the first principle ("everything is a conversation; the differentiator is
+  the *trigger* — interactive / scheduled / webhook — not a separate `chat`
+  entity"), the prior "interactive surface keeps chat" carve-out is dropped.
+  `chat` is no longer a code concept — only a *visible UI label* in the desktop
+  renderer. Since centraid is v0 (no back-compat), the wire routes rename too.
+- Wire routes: `POST /centraid/<id>/_chat` → `…/_turn`;
+  `GET /centraid/_chat/runner-status` → `…/_turn/runner-status`;
+  `/_centraid-chat/*` → `/_centraid-conversations/*`.
+- Runner seam: `ChatRunner`/`ChatRunInput`/`ChatRunResult`/`ChatStreamEvent` →
+  `ConversationRunner`/`ConversationTurnInput`/`ConversationTurnResult`/
+  `TurnStreamEvent`; `makeChatRunner`→`makeConversationRunner`,
+  `makeChatRunnerCore`→`makeConversationRunnerCore`,
+  `makeUnifiedChatRunner`→`makeUnifiedConversationRunner`,
+  `makeOpenClawChatRunner`→`makeOpenClawConversationRunner`. Error code
+  `no_chat_runner`→`no_conversation_runner`.
+- Files: `chat-runner`→`conversation-runner`, `chat-routes`→`turn-routes`,
+  `chat-history-routes`→`conversation-routes`, `chat-transcript`→
+  `conversation-transcript` (app-engine); `chat-adapter`→`conversation-adapter`
+  (agent-runtime); `chat/chat-runner-core`→`conversation/conversation-runner-core`
+  (conversation-engine); `unified-chat-runner`→`unified-conversation-runner`
+  (gateway); `openclaw-chat-runner`→`openclaw-conversation-runner` (openclaw);
+  `chat-history-client`→`conversation-history-client`,
+  `gateway-client-chat`→`gateway-client-conversation` (desktop).
+- DTOs: `ChatSessionMeta`→`ConversationSummary`, `ChatMessageRow`→
+  `ConversationMessageRow`, `ChatTurnNode`→`TurnNode`, `ChatTurnAttachment`→
+  `ConversationTurnAttachment`. Fields: `chatRunner`→`conversationRunner`,
+  `chatRunnerSessionDir`→`conversationRunnerSessionDir`, `chatStore`→
+  `conversationStore`. OpenClaw session key `centraid-chat:`→
+  `centraid-conversation:` (the runner + `tools.ts` validator stay in lockstep).
+- Deliberately KEPT as "chat": (a) the persisted **kind** value `'chat'`
+  (`kind IN ('chat','automation','build')`) — a chat is the interactive *kind*
+  of conversation, not a separate table; (b) the **visible desktop pane** and
+  its renderer-local view model (`ChatPane`/`ChatToggle`/`ChatView`/`ChatOpen`,
+  the "Chats" tab, `chatModelByRunner`, the `app-chat-history-*` CSS) — that's
+  the human-facing label the user reads; (c) the provider OpenAI-compat surface
+  in the mock-LLM (`/v1/chat/completions`, `ChatCompletions`, `chatcmpl`).
+- Landed as ONE commit: the route rename spans server (app-engine/gateway) and
+  client (desktop/openclaw) simultaneously, so splitting would leave an
+  intermediate state where the client calls `/_chat` while the server serves
+  `/_turn`. Atomicity beats per-package commits here.
+
 ## Out of scope
 
 - Cross-app referential integrity and the `run_summary` best-effort

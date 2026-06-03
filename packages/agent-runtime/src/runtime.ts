@@ -7,7 +7,7 @@
  *   - `codex`       → spawn `codex app-server` (JSON-RPC stdio)
  *   - `claude-code` → call `@anthropic-ai/claude-agent-sdk`'s `query()` in-process
  *
- * Both backends emit the same `ChatStreamEvent` shape, so callers don't
+ * Both backends emit the same `TurnStreamEvent` shape, so callers don't
  * need to know which one ran a given turn. The returned `adapterSessionId`
  * (codex thread id / claude session id) is opaque — round-trip it on the
  * next turn via `prevSessionId` to resume the conversation.

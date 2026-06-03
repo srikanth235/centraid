@@ -68,8 +68,8 @@ describe('parseRoute — unaffected routes still work', () => {
     assert.equal(r.kind, 'app-changes');
   });
 
-  it('parses /_chat', () => {
-    const r = parseRoute('POST', '/centraid/todos/_chat');
+  it('parses /_turn', () => {
+    const r = parseRoute('POST', '/centraid/todos/_turn');
     assert.equal(r.kind, 'app-chat');
   });
 

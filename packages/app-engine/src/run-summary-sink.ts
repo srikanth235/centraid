@@ -7,7 +7,7 @@
  * Keeping the interface here at the package root (not importing `AnalyticsStore`,
  * not living under `insights/`) is what keeps the ledger free of a reporting
  * consumer and the `insights/` boundary one-way: the ledger emits, `insights/`
- * implements. Same injection pattern as `ChatRunner` / `AutomationHost`.
+ * implements. Same injection pattern as `ConversationRunner` / `AutomationHost`.
  */
 
 import type { RunKind } from './conversation-schema.js';

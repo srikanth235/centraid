@@ -19,12 +19,17 @@ export {
   type ModelTier,
 } from './runtime.js';
 
-// Per-app chat surface — `ChatRunner` is the host-injected seam, both
+// Per-app chat surface — `ConversationRunner` is the host-injected seam, both
 // OpenClaw and the desktop local-runtime implement it. The HTTP route
-// (`POST /centraid/<id>/_chat`) is dispatched by `Runtime.handle` when
-// `RuntimeOptions.chatRunner` is set. The transcript lives in each app's
+// (`POST /centraid/<id>/_turn`) is dispatched by `Runtime.handle` when
+// `RuntimeOptions.conversationRunner` is set. The transcript lives in each app's
 // per-app `runtime.sqlite`, fronted by `ConversationHistoryStore`.
-export type { ChatRunner, ChatRunInput, ChatRunResult, ChatStreamEvent } from './chat-runner.js';
+export type {
+  ConversationRunner,
+  ConversationTurnInput,
+  ConversationTurnResult,
+  TurnStreamEvent,
+} from './conversation-runner.js';
 export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prompt.js';
 
 // Agent-turn contract — the host-agnostic interface between a run spine
@@ -179,14 +184,14 @@ export { ChangeBus, type AppChange, type ChangeListener } from './change-bus.js'
 export {
   ConversationHistoryStore,
   deriveTitle,
-  type ChatSessionMeta,
-  type ChatMessageRow,
-  type ChatTurnNode,
-  type ChatTurnAttachment,
+  type ConversationSummary,
+  type ConversationMessageRow,
+  type TurnNode,
+  type ConversationTurnAttachment,
   type RecordTurnInput,
   type UserIdProvider,
 } from './conversation-history.js';
-export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
+export { makeConversationRouteHandler } from './conversation-routes.js';
 
 // Per-app blob content-addressed store for attachment bytes (issue #190).
 // Bytes live at `<appsDir>/<appId>/blobs/<hash>`, deduped by sha256; the

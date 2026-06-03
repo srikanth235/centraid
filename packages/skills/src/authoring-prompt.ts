@@ -7,7 +7,7 @@
  * (`baseExtra`) first, then the authoring contract for the app `kind`
  * (`composeSkills`), then — for apps with a front end — the live UI grounding
  * (`buildUiGroundingBlocks`), then the host tool list (`buildToolsGroundingBlock`).
- * This used to live in the gateway's `unified-chat-runner`; it belongs with the
+ * This used to live in the gateway's `unified-conversation-runner`; it belongs with the
  * skills it composes.
  *
  * Enumerating host tools spawns the configured CLI, so the result is cached

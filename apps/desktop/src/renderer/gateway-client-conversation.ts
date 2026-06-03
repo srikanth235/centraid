@@ -4,14 +4,14 @@
  * (`main/chat.ts` + the `centraid:chat:*` IPC); it now talks to the gateway
  * directly:
  *
- *   - `streamChat` POSTs `/centraid/<appId>/_chat` and parses the SSE stream
- *     into the gateway's native `ChatStreamEvent`s (fetch + ReadableStream
+ *   - `streamTurn` POSTs `/centraid/<appId>/_turn` and parses the SSE stream
+ *     into the gateway's native `TurnStreamEvent`s (fetch + ReadableStream
  *     reader, not `EventSource` — we need a POST body + the Bearer header).
- *     The gateway-side runner (Phase 3a `makeUnifiedChatRunner`) runs the
+ *     The gateway-side runner (Phase 3a `makeUnifiedConversationRunner`) runs the
  *     turn in the app's draft worktree with the union of tools, so one turn
  *     can both tweak the app's code and operate its data.
- *   - the chat-history surface (`/_centraid-chat/apps/<appId>/sessions…`)
- *     mirrors the old `main/chat-history-client.ts`: list / create / load /
+ *   - the chat-history surface (`/_centraid-conversations/apps/<appId>/sessions…`)
+ *     mirrors the old `main/conversation-history-client.ts`: list / create / load /
  *     rename / delete, used to persist + resume conversations.
  *
  * Re-exported from `gateway-client.ts` so call sites import from one barrel.
@@ -29,7 +29,7 @@ import type { CentraidAgentsStatus, CentraidRunnerStatus } from './centraid-api.
 
 /**
  * Runner preflight + model catalog from the ACTIVE gateway. Reads the
- * gateway's own `GET /centraid/_chat/runner-status` — so a remote OpenClaw
+ * gateway's own `GET /centraid/_turn/runner-status` — so a remote OpenClaw
  * gateway reports `{ kind: 'openclaw', models: [...] }` and the chat picker
  * can list them.
  */
@@ -38,8 +38,8 @@ export async function getRunnerStatus(
 ): Promise<CentraidRunnerStatus> {
   const { baseUrl, token } = await auth();
   const path = opts.refresh
-    ? '/centraid/_chat/runner-status?refresh=1'
-    : '/centraid/_chat/runner-status';
+    ? '/centraid/_turn/runner-status?refresh=1'
+    : '/centraid/_turn/runner-status';
   const res = await doFetch(baseUrl, path, {
     method: 'GET',
     headers: authHeaders(token),
@@ -69,11 +69,11 @@ export async function getAgentsStatus(
 
 /**
  * The gateway's native chat stream event (mirrors
- * `@centraid/app-engine`'s `ChatStreamEvent`). Kept as a local type so the
+ * `@centraid/app-engine`'s `TurnStreamEvent`). Kept as a local type so the
  * renderer doesn't import the Node package; the panel consumes this union
  * directly now that the turn isn't translated through IPC.
  */
-export type ChatStreamEvent =
+export type TurnStreamEvent =
   | { type: 'assistant.start' }
   | { type: 'assistant.delta'; delta: string }
   | { type: 'reasoning.delta'; delta: string }
@@ -111,36 +111,36 @@ export type ChatStreamEvent =
     };
 
 /** An attachment already uploaded to the blob CAS, referenced on the next turn. */
-export interface ChatAttachmentRef {
+export interface ConversationAttachmentRef {
   hash: string;
   mime: string;
   sizeBytes: number;
   filename?: string;
 }
 
-export interface StreamChatInput {
+export interface StreamTurnInput {
   /** The chat session id the gateway keys the turn on. */
   conversationId: string;
   message: string;
   model?: string;
   thinking?: string;
   /** Files uploaded ahead of the turn (issue #190). */
-  attachments?: ChatAttachmentRef[];
+  attachments?: ConversationAttachmentRef[];
 }
 
 /**
  * Upload one file to the app's blob CAS ahead of a chat turn
- * (`POST /_centraid-chat/apps/<appId>/blobs`). Returns the dedup-keyed ref the
- * caller threads into `streamChat({ attachments })` (issue #190).
+ * (`POST /_centraid-conversations/apps/<appId>/blobs`). Returns the dedup-keyed ref the
+ * caller threads into `streamTurn({ attachments })` (issue #190).
  */
-export async function uploadChatAttachment(
+export async function uploadConversationAttachment(
   appId: string,
   bytes: Uint8Array,
   mime: string,
   filename?: string,
-): Promise<ChatAttachmentRef> {
+): Promise<ConversationAttachmentRef> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/_centraid-chat/apps/${enc(appId)}/blobs`, {
+  const res = await doFetch(baseUrl, `/_centraid-conversations/apps/${enc(appId)}/blobs`, {
     method: 'POST',
     headers: { ...authHeaders(token), 'content-type': mime },
     body: bytes as BodyInit,
@@ -154,19 +154,19 @@ export async function uploadChatAttachment(
 }
 
 /**
- * Drive one chat turn against `POST /centraid/<appId>/_chat`, invoking
- * `onEvent` for each parsed `ChatStreamEvent`. Resolves when the stream ends
+ * Drive one chat turn against `POST /centraid/<appId>/_turn`, invoking
+ * `onEvent` for each parsed `TurnStreamEvent`. Resolves when the stream ends
  * (the gateway's `event: end` frame / connection close). Pass an
  * `AbortSignal` to cancel the in-flight turn (Stop button / panel teardown).
  */
-export async function streamChat(
+export async function streamTurn(
   appId: string,
-  input: StreamChatInput,
-  onEvent: (event: ChatStreamEvent) => void,
+  input: StreamTurnInput,
+  onEvent: (event: TurnStreamEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/${enc(appId)}/_chat`, {
+  const res = await doFetch(baseUrl, `/centraid/${enc(appId)}/_turn`, {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
@@ -218,7 +218,7 @@ export async function streamChat(
       if (!data) continue;
       try {
         const evt = JSON.parse(data) as { type?: string };
-        if (evt && typeof evt.type === 'string') onEvent(evt as ChatStreamEvent);
+        if (evt && typeof evt.type === 'string') onEvent(evt as TurnStreamEvent);
       } catch {
         /* skip a malformed frame rather than abort the stream */
       }
@@ -229,41 +229,45 @@ export async function streamChat(
 // ───────────────────────── chat history ─────────────────────
 
 function sessionsPath(appId: string): string {
-  return `/_centraid-chat/apps/${enc(appId)}/sessions`;
+  return `/_centraid-conversations/apps/${enc(appId)}/sessions`;
 }
 
 /** List this app's persisted chat sessions, newest first. */
-export async function listChatSessions(appId: string): Promise<CentraidChatSessionMeta[]> {
+export async function listConversations(appId: string): Promise<CentraidConversationSummary[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, sessionsPath(appId), {
     method: 'GET',
     headers: authHeaders(token),
   });
-  const out = await readJson<{ sessions: CentraidChatSessionMeta[] }>(res, 'list chats');
+  const out = await readJson<{ sessions: CentraidConversationSummary[] }>(res, 'list chats');
   return out.sessions ?? [];
 }
 
 /** Create a fresh chat session row (the chat session id the turn streams to). */
-export async function createChatSession(
+export async function createConversation(
   appId: string,
   title = '',
-): Promise<CentraidChatSessionMeta> {
+): Promise<CentraidConversationSummary> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, sessionsPath(appId), {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({ title }),
   });
-  return readJson<CentraidChatSessionMeta>(res, 'create chat');
+  return readJson<CentraidConversationSummary>(res, 'create chat');
 }
 
 /** Load one chat session with its reconstructed transcript. */
-export async function loadChatSession(
+export async function loadConversation(
   appId: string,
   sessionId: string,
 ): Promise<
-  CentraidChatSessionMeta & {
-    messages: Array<{ idx: number; payload: CentraidChatHistoryMessage; createdAt: number }>;
+  CentraidConversationSummary & {
+    messages: Array<{
+      idx: number;
+      payload: CentraidConversationHistoryMessage;
+      createdAt: number;
+    }>;
   }
 > {
   const { baseUrl, token } = await auth();
@@ -275,7 +279,7 @@ export async function loadChatSession(
 }
 
 /** Rename a chat session. */
-export async function renameChatSession(
+export async function renameConversation(
   appId: string,
   sessionId: string,
   title: string,
@@ -290,7 +294,7 @@ export async function renameChatSession(
 }
 
 /** Delete a chat session. */
-export async function deleteChatSession(appId: string, sessionId: string): Promise<void> {
+export async function deleteConversation(appId: string, sessionId: string): Promise<void> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `${sessionsPath(appId)}/${enc(sessionId)}`, {
     method: 'DELETE',

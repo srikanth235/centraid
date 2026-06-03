@@ -27,7 +27,7 @@ import {
   type ConversationStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type ChatStreamEvent,
+  type TurnStreamEvent,
   type RunStreamEvent,
 } from '@centraid/app-engine';
 import type { AutomationHistoryConfig, AutomationOutputSchema } from './automation-manifest.js';
@@ -89,11 +89,11 @@ export interface AutomationAgentCall {
   readonly json?: unknown;
   /**
    * Token-stream sink (issue #158, Phase 2). When a runner routes
-   * `ctx.agent` through its streaming chat adapter, each `ChatStreamEvent`
+   * `ctx.agent` through its streaming chat adapter, each `TurnStreamEvent`
    * is forwarded here; the runner wraps it as a `node.delta` on the owning
    * agent node. Absent for runners still on the collect-on-exit path.
    */
-  readonly onEvent?: (ev: ChatStreamEvent) => void;
+  readonly onEvent?: (ev: TurnStreamEvent) => void;
 }
 
 export type AutomationAgentDispatcher = (

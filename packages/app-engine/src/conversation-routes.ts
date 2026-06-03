@@ -1,7 +1,7 @@
 /*
- * HTTP route dispatcher for the chat-history store.
+ * HTTP route dispatcher for the conversation-history store.
  *
- * Mounted under `/_centraid-chat` by both gateway hosts:
+ * Mounted under `/_centraid-conversations` by both gateway hosts:
  *   - the OpenClaw plugin (remote gateway) via `api.registerHttpRoute`
  *   - `startRuntimeHttpServer` for the desktop's embedded local runtime
  *
@@ -14,7 +14,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ConversationHistoryStore } from './conversation-history.js';
 
-const ROUTE_PREFIX = '/_centraid-chat';
+const ROUTE_PREFIX = '/_centraid-conversations';
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB per attachment.
 
@@ -52,7 +52,7 @@ function sendError(res: ServerResponse, status: number, message: string): void {
 }
 
 /**
- * Build the chat-history HTTP route handler. The store is resolved lazily
+ * Build the conversation HTTP route handler. The store is resolved lazily
  * via `getStore()` so the SQLite connection only opens in the gateway
  * process (route handlers don't fire in agent-worker contexts), avoiding
  * stray DB handles in subprocesses that never touch chat history.
@@ -62,16 +62,16 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  * scoping is still enforced inside the store via its `userIdProvider`.
  *
  * Dispatch map:
- *   GET    /_centraid-chat/apps/<appId>/sessions        list (this app)
- *   POST   /_centraid-chat/apps/<appId>/sessions        create  body: {mode?, title?}
- *   GET    /_centraid-chat/apps/<appId>/sessions/<id>   load (with transcript)
- *   PATCH  /_centraid-chat/apps/<appId>/sessions/<id>   rename  body: {title}
- *   DELETE /_centraid-chat/apps/<appId>/sessions/<id>   delete
+ *   GET    /_centraid-conversations/apps/<appId>/sessions        list (this app)
+ *   POST   /_centraid-conversations/apps/<appId>/sessions        create  body: {mode?, title?}
+ *   GET    /_centraid-conversations/apps/<appId>/sessions/<id>   load (with transcript)
+ *   PATCH  /_centraid-conversations/apps/<appId>/sessions/<id>   rename  body: {title}
+ *   DELETE /_centraid-conversations/apps/<appId>/sessions/<id>   delete
  *
  * The transcript is not appended over HTTP — a chat turn is recorded as a
- * `runs` row by the `/centraid/<id>/_chat` route's runner (issue #90 fold).
+ * `runs` row by the `/centraid/<id>/_turn` route's runner (issue #90 fold).
  */
-export function makeChatHistoryRouteHandler(getStore: () => ConversationHistoryStore) {
+export function makeConversationRouteHandler(getStore: () => ConversationHistoryStore) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     if (!req.url || !req.url.startsWith(ROUTE_PREFIX)) return false;
     // Use a dummy host because IncomingMessage.url is path-only.
@@ -126,7 +126,7 @@ export function makeChatHistoryRouteHandler(getStore: () => ConversationHistoryS
       // /apps/<appId>/sessions  and  /apps/<appId>/sessions/<id>
       const m = sub.match(/^\/apps\/([^/]+)\/sessions(?:\/([^/]+))?\/?$/);
       if (!m || !m[1]) {
-        sendError(res, 404, 'unknown chat-history route');
+        sendError(res, 404, 'unknown conversation route');
         return true;
       }
       const appId = decodeURIComponent(m[1]);

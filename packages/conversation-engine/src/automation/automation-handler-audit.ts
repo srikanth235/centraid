@@ -13,7 +13,7 @@ import type {
   ItemKind,
   Turn,
   AutomationTriggerKind,
-  ChatStreamEvent,
+  TurnStreamEvent,
   RunStreamEvent,
 } from '@centraid/app-engine';
 import type { AutomationHistoryConfig } from './automation-manifest.js';
@@ -197,7 +197,7 @@ export function openRunNode(args: OpenRunNodeArgs): string {
  * still on the collect-on-exit path).
  */
 export function usageCloseFields(
-  usage: Extract<ChatStreamEvent, { type: 'usage' }> | undefined,
+  usage: Extract<TurnStreamEvent, { type: 'usage' }> | undefined,
 ): Partial<CloseRunNodeArgs> {
   if (!usage) return {};
   return {

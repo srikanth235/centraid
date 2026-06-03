@@ -31,10 +31,10 @@ export function hashBytes(bytes: Uint8Array): string {
 
 /**
  * The renderer-facing download path for an attachment blob. Served by the
- * chat-history route dispatcher (`makeChatHistoryRouteHandler`).
+ * conversation route dispatcher (`makeConversationRouteHandler`).
  */
 export function blobUrl(appId: string, hash: string): string {
-  return `/_centraid-chat/apps/${encodeURIComponent(appId)}/blobs/${hash}`;
+  return `/_centraid-conversations/apps/${encodeURIComponent(appId)}/blobs/${hash}`;
 }
 
 export interface PutResult {

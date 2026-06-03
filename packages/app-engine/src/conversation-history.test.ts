@@ -12,7 +12,7 @@ import {
   deriveTitle,
   type RecordTurnInput,
 } from './conversation-history.js';
-import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
+import { makeConversationRouteHandler } from './conversation-routes.js';
 import { ConversationStore } from './conversation-store.js';
 import { makeRuntimeDbProvider } from './gateway-db.js';
 
@@ -450,7 +450,7 @@ function makeRes(): FakeRes {
 }
 
 function call(
-  handler: ReturnType<typeof makeChatHistoryRouteHandler>,
+  handler: ReturnType<typeof makeConversationRouteHandler>,
   method: string,
   url: string,
   body?: unknown,
@@ -460,13 +460,13 @@ function call(
   return handler(req, res as unknown as ServerResponse).then(() => res);
 }
 
-describe('makeChatHistoryRouteHandler', () => {
-  const BASE = `/_centraid-chat/apps/${APP}/sessions`;
-  let handler: ReturnType<typeof makeChatHistoryRouteHandler>;
+describe('makeConversationRouteHandler', () => {
+  const BASE = `/_centraid-conversations/apps/${APP}/sessions`;
+  let handler: ReturnType<typeof makeConversationRouteHandler>;
   let store: ConversationHistoryStore;
   beforeEach(() => {
     store = newStore();
-    handler = makeChatHistoryRouteHandler(() => store);
+    handler = makeConversationRouteHandler(() => store);
   });
 
   it('POST sessions creates a session', async () => {
@@ -514,7 +514,7 @@ describe('makeChatHistoryRouteHandler', () => {
   });
 
   it('404s on a malformed route (no /apps/<appId> segment)', async () => {
-    const res = await call(handler, 'GET', '/_centraid-chat/sessions');
+    const res = await call(handler, 'GET', '/_centraid-conversations/sessions');
     assert.equal(res.status, 404);
   });
 

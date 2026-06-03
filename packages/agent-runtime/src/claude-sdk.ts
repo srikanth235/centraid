@@ -7,7 +7,7 @@
  * `query()` function — in-process, no subprocess we manage. We pass
  * `extraSystemPrompt` via the documented preset+append shape and
  * iterate the async generator, translating each `SDKMessage` into the
- * normalized `ChatStreamEvent` union the rest of the codebase consumes.
+ * normalized `TurnStreamEvent` union the rest of the codebase consumes.
  *
  * `includePartialMessages: true` is required for token-level streaming;
  * without it, the SDK only yields complete assistant messages.
@@ -23,7 +23,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { type ChatStreamEvent, type TurnAttachment } from '@centraid/app-engine';
+import { type TurnStreamEvent, type TurnAttachment } from '@centraid/app-engine';
 import type { ToolContext } from './runtime.js';
 import type { CapabilityTier } from './model-tiers.js';
 import { buildUserContent } from './multimodal.js';
@@ -82,7 +82,7 @@ export interface ClaudeSdkInput {
    */
   permissionMode?: string;
   abortSignal: AbortSignal;
-  onEvent: (event: ChatStreamEvent) => void;
+  onEvent: (event: TurnStreamEvent) => void;
 }
 
 export interface ClaudeSdkConfig {
@@ -100,7 +100,7 @@ export async function runClaudeSdkTurn(
 ): Promise<ClaudeSdkResult> {
   await fs.mkdir(input.cwd, { recursive: true });
 
-  const emit = (event: ChatStreamEvent): void => {
+  const emit = (event: TurnStreamEvent): void => {
     if (input.abortSignal.aborted) return;
     input.onEvent(event);
   };
@@ -202,7 +202,7 @@ export async function runClaudeSdkTurn(
 }
 
 /**
- * Translate `SDKMessage` events into `ChatStreamEvent`s.
+ * Translate `SDKMessage` events into `TurnStreamEvent`s.
  *
  * The SDK's union is wider than what the renderer consumes; we handle
  * the load-bearing variants (`assistant`, partial assistant, `user`
@@ -211,7 +211,7 @@ export async function runClaudeSdkTurn(
  * exploding the chat surface.
  */
 function makeSdkMessageTranslator(
-  emit: (event: ChatStreamEvent) => void,
+  emit: (event: TurnStreamEvent) => void,
   onSessionId: (id: string) => void,
 ): {
   (msg: Record<string, unknown>): void;
