@@ -53,9 +53,14 @@ export async function getRunnerStatus(
  * beside the runner, so a remote OpenClaw gateway reports its own host's
  * agents rather than whatever is installed on the desktop.
  */
-export async function getAgentsStatus(): Promise<CentraidAgentsStatus> {
+export async function getAgentsStatus(
+  opts: { refresh?: boolean } = {},
+): Promise<CentraidAgentsStatus> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_agents/status', {
+  // `?refresh=1` makes the gateway re-enumerate each agent's models live
+  // (issue #188); a plain load returns the catalog cache / default seed.
+  const path = opts.refresh ? '/centraid/_agents/status?refresh=1' : '/centraid/_agents/status';
+  const res = await doFetch(baseUrl, path, {
     method: 'GET',
     headers: authHeaders(token),
   });

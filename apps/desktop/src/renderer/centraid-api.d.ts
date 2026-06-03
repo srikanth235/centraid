@@ -123,6 +123,10 @@ export interface CentraidAgentsStatus {
   codexVersion?: string;
   /** `claude --version` output when available. */
   claudeVersion?: string;
+  /** Models codex can serve — catalog cache or default seed (issue #188). */
+  codexModels?: CentraidRunnerModel[];
+  /** Models Claude Code can serve — catalog cache or default seed. */
+  claudeModels?: CentraidRunnerModel[];
 }
 
 // The renderer-side chat event union is the gateway's native `ChatStreamEvent`

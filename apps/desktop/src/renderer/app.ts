@@ -5757,6 +5757,24 @@ import {
       },
     ];
 
+    // Per-agent default model. Each agent's models come from the agents-status
+    // snapshot (`codexModels` / `claudeModels`); the choice is stored per-runner
+    // in `chatModelByRunner` and is independent of which agent is active — you
+    // can set each agent's default without switching the active one.
+    const MODEL_TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
+    const MODEL_TIER_LABEL: Record<(typeof MODEL_TIER_ORDER)[number], string> = {
+      smart: 'Most capable',
+      balanced: 'Balanced',
+      fast: 'Fastest',
+    };
+    type AgentModelOpt = {
+      id: string;
+      name?: string;
+      default?: boolean;
+      tier?: 'smart' | 'balanced' | 'fast';
+    };
+    let agentModelByRunner: Record<string, string> = {};
+
     const renderAuthStatus = (status: AuthStatusSnapshot | null): void => {
       lastStatus = status;
       authStatusHost.replaceChildren();
@@ -5768,18 +5786,23 @@ import {
       // Not found) so the at-a-glance status doesn't rely on reading the
       // subtitle prose. An available, non-active row is clickable to make
       // it the active agent.
-      const providerRow = (params: {
+      // Each agent renders as a card: a clickable header (make it active) plus
+      // its OWN default-model select. The select is keyed per-runner and saves
+      // independently, so you can configure both agents without switching.
+      const providerCard = (params: {
+        kind: ActiveRunnerKind;
         title: string;
         subtitle: string;
         connected: boolean;
         active: boolean;
         accent: string;
         badge: { label: string; tone: 'on' | 'standby' | 'off' };
+        models: AgentModelOpt[];
         onActivate?: () => void;
       }): HTMLElement => {
         const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
         const clickable = Boolean(params.onActivate);
-        return el(
+        const header = el(
           'div',
           {
             ...(clickable
@@ -5801,10 +5824,6 @@ import {
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
-              padding: '8px 10px',
-              border: `0.5px solid ${params.active ? params.accent : 'var(--line)'}`,
-              borderRadius: '8px',
-              background: 'var(--bg-elev)',
               ...(clickable ? { cursor: 'pointer' } : {}),
             },
           },
@@ -5845,13 +5864,85 @@ import {
             ),
           ],
         );
+
+        // Default-model select for THIS agent — populated from its own catalog
+        // (agents-status), saved to chatModelByRunner[kind]. A pinned id the
+        // agent no longer offers is kept visible, flagged "· unavailable".
+        const select = el('select', { class: 'input' }) as HTMLSelectElement;
+        const saved = agentModelByRunner[params.kind] ?? '';
+        select.append(el('option', { value: '' }, 'Gateway default') as HTMLOptionElement);
+        if (saved && !params.models.some((m) => m.id === saved)) {
+          select.append(
+            el('option', { value: saved }, `${saved} · unavailable`) as HTMLOptionElement,
+          );
+        }
+        const mkOpt = (m: AgentModelOpt): HTMLOptionElement =>
+          el(
+            'option',
+            { value: m.id },
+            (m.name ?? m.id) + (m.default ? ' · default' : ''),
+          ) as HTMLOptionElement;
+        if (params.models.some((m) => m.tier)) {
+          for (const tier of MODEL_TIER_ORDER) {
+            const inTier = params.models.filter((m) => m.tier === tier);
+            if (inTier.length) {
+              select.append(el('optgroup', { label: MODEL_TIER_LABEL[tier] }, inTier.map(mkOpt)));
+            }
+          }
+          const untiered = params.models.filter((m) => !m.tier);
+          if (untiered.length) {
+            select.append(el('optgroup', { label: 'Other' }, untiered.map(mkOpt)));
+          }
+        } else {
+          for (const m of params.models) select.append(mkOpt(m));
+        }
+        select.value = saved;
+        if (!params.connected) select.setAttribute('disabled', '');
+        select.addEventListener('change', () => {
+          const v = select.value;
+          const nextMap = { ...agentModelByRunner };
+          if (v) nextMap[params.kind] = v;
+          else delete nextMap[params.kind];
+          agentModelByRunner = nextMap;
+          // Patch just this runner's entry; '' clears it (back to Gateway default).
+          void window.CentraidApi.saveSettings({ chatModelByRunner: { [params.kind]: v } });
+        });
+
+        const modelRow = el(
+          'div',
+          { style: { display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '18px' } },
+          [
+            el(
+              'span',
+              { style: { fontSize: '11.5px', color: 'var(--ink-3)', flexShrink: '0' } },
+              'Default model',
+            ),
+            select,
+          ],
+        );
+
+        return el(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              padding: '10px',
+              border: `0.5px solid ${params.active ? params.accent : 'var(--line)'}`,
+              borderRadius: '8px',
+              background: 'var(--bg-elev)',
+            },
+          },
+          [header, modelRow],
+        );
       };
 
       authStatusHost.append(
         el(
           'div',
           { class: 'settings-note' },
-          'Click an available agent to make it the active one. Detection is CLI-only — the gateway ran `<bin> --version`; Centraid doesn’t inspect how each agent authenticates.',
+          'Click an available agent to make it the active one, and set each agent’s default model below it. Detection is CLI-only — the gateway ran `<bin> --version`; Centraid doesn’t inspect how each agent authenticates.',
         ),
       );
 
@@ -5867,14 +5958,17 @@ import {
           : isActive
             ? { label: 'Active', tone: 'on' }
             : { label: 'Standby', tone: 'standby' };
+        const models = (runner.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
         authStatusHost.append(
-          providerRow({
+          providerCard({
+            kind: runner.kind,
             title: runner.title,
             subtitle,
             connected: available,
             active: isActive,
             accent: runner.accent,
             badge,
+            models,
             ...(available && !isActive
               ? { onActivate: () => void activateRunner(runner.kind) }
               : {}),
@@ -5883,6 +5977,8 @@ import {
       }
     };
 
+    // Refresh re-probes CLI availability AND re-enumerates each agent's models
+    // live (?refresh=1), so the per-agent pickers update without a restart.
     const refreshBtn = el('button', {
       class: 'btn btn-soft',
       type: 'button',
@@ -5892,7 +5988,8 @@ import {
       refreshBtn.setAttribute('disabled', '');
       renderAuthStatus(null);
       try {
-        renderAuthStatus(await getAgentsStatus());
+        renderAuthStatus(await getAgentsStatus({ refresh: true }));
+        showToast('Agents and models refreshed');
       } catch (err) {
         showToast(`Refresh failed: ${String(err)}`);
         renderAuthStatus({
@@ -5909,8 +6006,10 @@ import {
       el('div', { class: 'sheet-actions' }, [refreshBtn]),
     );
 
-    // Initial load — read the active-runner pref and the CLI detection
-    // snapshot together so the first render shows the right "Active" badge.
+    // Initial load — read the active-runner pref, the agents snapshot (now
+    // carrying each agent's models), and the persisted per-runner model map so
+    // the first render shows the right "Active" badge and each agent's saved
+    // default model.
     renderAuthStatus(null);
     void Promise.all([
       getAgentsStatus().catch(
@@ -5919,8 +6018,12 @@ import {
       getUserPrefs()
         .then((p) => p['agent.runner.kind'])
         .catch(() => undefined),
-    ]).then(([status, kindRaw]) => {
+      window.CentraidApi.getSettings()
+        .then((s) => s.chatModelByRunner)
+        .catch(() => undefined),
+    ]).then(([status, kindRaw, modelMap]) => {
       selectedRunnerKind = kindRaw === 'claude-code' ? 'claude-code' : 'codex';
+      agentModelByRunner = modelMap ?? {};
       renderAuthStatus(status);
     });
 

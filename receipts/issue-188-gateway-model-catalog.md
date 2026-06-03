@@ -21,7 +21,7 @@ Refresh button.
 - [x] Rethink — keep Settings → Agents as a global switcher alongside the composer pill
 - [x] Rethink — verify the pill in a running Electron app; fix popover clipping in the narrow chat panel
 - [x] Rethink — per-agent models in agents-status (each agent's catalog, not just the active runner)
-- [ ] Rethink — per-agent default-model picker in Settings → Agents
+- [x] Rethink — per-agent default-model picker in Settings → Agents
 
 ## What changed
 
@@ -40,6 +40,8 @@ Refresh button.
 - **Rethink — verify the pill in a running Electron app; fix popover clipping in the narrow chat panel.** Drove the built app with Playwright's `_electron` against the real in-process gateway (which enumerated live codex models via `codex app-server model/list`), exercising the real `saveSettings` per-runner merge to render the pinned / stale / default states. The screenshots caught a layout bug typecheck/lint can't: the popover, anchored to the trigger, overflowed the narrow chat panel (`overflow:hidden`) and clipped the second agent card. Fixed by anchoring the popover to the composer (`.app-chat-input-wrap` as positioning context) and spanning its width minus small insets, so it always stays inside the panel.
 
 - **Rethink — per-agent models in agents-status (each agent's catalog, not just the active runner).** `runner-status` only knows the active runner's models, so a per-agent picker needs every agent's catalog. Extended `GET /centraid/_agents/status` to return `codexModels` / `claudeModels` (cheap cached-or-defaults from the gateway catalog; `?refresh=1` enumerates each agent live, honoring the active runner's configured `binPath`/`extraArgs`). `agent-runtime` now exports `resolveRunnerModels` / `defaultModelsFor` / `enumerateRunnerModels`; `build-gateway` injects the resolver into `makeAgentsRouteHandler`. New `agents-routes.test.ts` (4 pass) covers resolver plumbing, refresh threading, and best-effort degradation.
+
+- **Rethink — per-agent default-model picker in Settings → Agents.** Each agent now renders as a card (clickable header to make it active + a status badge) with its **own** “Default model” select, populated from that agent's models in the agents-status snapshot and saved to `chatModelByRunner[kind]`. Both agents are configurable at once — you no longer switch the active agent just to set the other's model. A pinned id the agent no longer offers shows as “· unavailable”; an unavailable CLI disables its select. The earlier single active-tracking picker (and the redundant second Refresh button) were removed; one Refresh now re-probes availability and re-enumerates each agent live (`getAgentsStatus({ refresh: true })`). `CentraidAgentsStatus` gains `codexModels` / `claudeModels`.
 
 ## Out of scope
 
