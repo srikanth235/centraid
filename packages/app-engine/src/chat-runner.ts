@@ -17,6 +17,8 @@
  * frames and pipes them back to the harness client.
  */
 
+import type { RunKind } from './agent-runs-schema.js';
+
 /**
  * Normalized stream events both adapters emit. The route handler translates
  * each event into one SSE frame; the harness consumes the SSE stream.
@@ -149,6 +151,15 @@ export interface ChatRunResult {
 }
 
 export interface ChatRunner {
+  /**
+   * The ledger `RunKind` a turn through this runner persists as — a property
+   * of the *surface*, not the individual turn. The builder-capable unified
+   * runner (draft worktree + file-edit tools + authoring prompt) reports
+   * `'build'`; the data-only runner leaves it unset (the route defaults to
+   * `'chat'`). Read statically by the route, so the kind is recorded even
+   * when a turn errors and returns no `ChatRunResult` (issue #181).
+   */
+  readonly runKind?: RunKind;
   /** Drive one turn. Resolves when the model has emitted its final reply
    *  or the run aborted/errored. Errors are reported via `onEvent`
    *  (type: 'error') AND by rejecting the returned promise — the route

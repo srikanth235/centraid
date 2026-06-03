@@ -156,6 +156,11 @@ export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunne
     prefsLoader: opts.prefsLoader,
     getDispatcher: opts.getDispatcher,
     ...(extraPath ? { extraPath } : {}),
+
+    // This IS the builder surface — its turns author code in the draft
+    // worktree, so they persist as `kind: 'build'` in the run ledger. The
+    // data-only `makeChatRunner` leaves this unset (records as `'chat'`).
+    runKind: 'build',
     // The model turn driver — the local codex/claude `runAgentTurn` unless a
     // test injects a stub.
     runTurn: opts.runTurn ?? runAgentTurn,

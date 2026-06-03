@@ -5533,12 +5533,7 @@ import {
     // pages. Each `drawerGroup` appends into its page host instead of
     // one continuous scroll; an inner sidebar (built at the end) swaps
     // which host is visible.
-    type SettingsPageId =
-      | 'appearance'
-      | 'layout'
-      | 'workspace'
-      | 'profiles'
-      | 'providers';
+    type SettingsPageId = 'appearance' | 'layout' | 'workspace' | 'profiles' | 'providers';
     const pageHosts: Record<SettingsPageId, HTMLElement> = {
       appearance: el('div', { class: 'cd-settings-page' }),
       layout: el('div', { class: 'cd-settings-page' }),

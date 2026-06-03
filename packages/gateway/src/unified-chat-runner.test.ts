@@ -91,6 +91,10 @@ test('runs the turn in the draft worktree with the union of tools + builder prom
     'builder authoring blocks were folded into the prompt',
   );
 
+  // This IS the builder surface — the route reads `runKind` to persist its
+  // turns as `kind: 'build'` in the ledger (#181).
+  assert.equal(runner.runKind, 'build');
+
   // Resume handle round-trips back to the route.
   assert.equal(result?.adapterKind, 'codex');
   assert.equal(result?.adapterSessionId, 'thread-1');

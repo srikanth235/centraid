@@ -417,6 +417,11 @@ async function handlePostTurn(
           }
           ctx.chatStore.recordTurn(entry.id, {
             conversationId: conversationId,
+            // The runner's surface decides the ledger kind: the builder-capable
+            // unified runner reports `'build'`, the data-only runner leaves it
+            // unset → recorded as `'chat'` (issue #181). Read statically off the
+            // runner so an errored turn (no `ChatRunResult`) is still tagged.
+            ...(ctx.runner?.runKind ? { kind: ctx.runner.runKind } : {}),
             userMessage: message,
             startedAt: turnStartedAt,
             endedAt,

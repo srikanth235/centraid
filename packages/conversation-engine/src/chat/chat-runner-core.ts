@@ -38,6 +38,7 @@ import type {
   ChatRunResult,
   ChatRunner,
   Dispatcher,
+  RunKind,
   RunnerPrefs,
   RunTurnFn,
   ToolContext,
@@ -101,6 +102,12 @@ export interface ChatRunnerCoreOptions {
    * backend-agnostic and never imports a concrete backend.
    */
   runTurn: RunTurnFn;
+  /**
+   * The ledger `RunKind` turns through this runner persist as, surfaced on
+   * the built `ChatRunner` for the route to read. Builder chat sets `'build'`;
+   * data chat leaves it unset (the route defaults to `'chat'`) — issue #181.
+   */
+  runKind?: RunKind;
 }
 
 /**
@@ -112,6 +119,7 @@ export function makeChatRunnerCore(opts: ChatRunnerCoreOptions): ChatRunner {
   const runTurn = opts.runTurn;
 
   return {
+    ...(opts.runKind ? { runKind: opts.runKind } : {}),
     async run(input: ChatRunInput): Promise<ChatRunResult> {
       const prefs = await opts.prefsLoader();
       if (!prefs) {
