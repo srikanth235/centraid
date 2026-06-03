@@ -23,6 +23,7 @@ import { type DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { makeRuntimeDbProvider, type DatabaseProvider } from './gateway-db.js';
 import { AgentRunsStore } from './agent-runs-store.js';
+import type { RunKind } from './agent-runs-schema.js';
 import type { RunSummarySink } from './run-summary-sink.js';
 import { isValidAppId } from './app-paths.js';
 import { costForUsage } from './model-pricing.js';
@@ -96,6 +97,13 @@ export type ChatTurnNode =
 
 export interface RecordTurnInput {
   conversationId: string;
+  /**
+   * The ledger kind to persist this turn as. A builder-surface turn is
+   * `'build'`; a data chat is `'chat'` (the default when omitted) — issue
+   * #181. Both are interactive chat turns sharing one transcript shape; the
+   * kind only records which surface drove the turn.
+   */
+  kind?: RunKind;
   /** The user's prompt for the turn — stored as the run's `input_json`. */
   userMessage: string;
   startedAt: number;
@@ -302,7 +310,7 @@ export class ChatHistoryStore {
     try {
       runs.insertRun({
         runId,
-        kind: 'chat',
+        kind: input.kind ?? 'chat',
         triggerKind: 'interactive',
         conversationId: input.conversationId,
         appId,

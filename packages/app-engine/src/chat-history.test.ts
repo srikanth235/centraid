@@ -1,3 +1,5 @@
+// governance: allow-repo-hygiene file-size-limit #181 — cohesive chat-history
+// suite; the build-kind coverage tips it just over 500 lines, not worth a split.
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync } from 'node:fs';
@@ -6,6 +8,8 @@ import { join } from 'node:path';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { ChatHistoryStore, deriveTitle, type RecordTurnInput } from './chat-history.js';
 import { makeChatHistoryRouteHandler } from './chat-history-routes.js';
+import { AgentRunsStore } from './agent-runs-store.js';
+import { makeRuntimeDbProvider } from './gateway-db.js';
 
 // Tests that don't care about cross-user isolation share this stub UUID.
 const TEST_USER_ID = 'test-user-uuid-0000';
@@ -114,6 +118,28 @@ describe('ChatHistoryStore', () => {
     const loaded = store.getSession(APP, s.id);
     const texts = (loaded?.messages ?? []).map((m) => (m.payload as { text?: string }).text);
     assert.deepEqual(texts, ['q1', 'a1', 'q2', 'a2']);
+  });
+
+  it('recordTurn defaults the run kind to chat; honors an explicit build kind (#181)', () => {
+    const appsDir = freshAppsDir();
+    const local = new ChatHistoryStore(appsDir, stubUserIdProvider);
+    const chat = local.createSession(APP);
+    const build = local.createSession(APP);
+    local.recordTurn(APP, turn(chat.id, 'data q', 'data a', 1_000));
+    local.recordTurn(APP, { ...turn(build.id, 'tweak ui', 'done', 2_000), kind: 'build' });
+
+    // Read the persisted rows back through a fresh runs store on the same
+    // app `runtime.sqlite`. The builder turn lands as `kind: 'build'`; the
+    // default stays `'chat'`.
+    const runs = new AgentRunsStore(makeRuntimeDbProvider(join(appsDir, APP, 'runtime.sqlite')));
+    assert.equal(runs.listChatRuns(chat.id)[0]!.kind, 'chat');
+    assert.equal(runs.listChatRuns(build.id)[0]!.kind, 'build');
+
+    // Transcript reconstruction is kind-agnostic — a build turn round-trips
+    // exactly like a chat turn.
+    const loaded = local.getSession(APP, build.id);
+    assert.deepEqual(loaded?.messages[0]!.payload, { kind: 'user', text: 'tweak ui' });
+    assert.deepEqual(loaded?.messages[1]!.payload, { kind: 'ai', text: 'done' });
   });
 
   it('recordTurn reconstructs tool nodes interleaved before the assistant reply', () => {
