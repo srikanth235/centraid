@@ -69,8 +69,15 @@ export interface CentraidSettings {
   gatewayUrl: string;
   /** Effective bearer token; companion to `gatewayUrl`. Read-only. */
   gatewayToken?: string;
-  /** Provider/model id (e.g. `openai/gpt-4o`) used by the app-view agentic chat. */
-  chatModel?: string;
+  /**
+   * Per-runner chat-model selection for the app-view agentic chat, keyed by
+   * runner kind (`'codex'` | `'claude-code'` | …). The model is scoped to its
+   * runner so switching agents never leaves a foreign id selected; a missing
+   * key means that runner uses its gateway default. Patch one runner at a time
+   * via `saveSettings({ chatModelByRunner: { [kind]: id } })` (`''` clears that
+   * runner; omitting the field preserves the whole map).
+   */
+  chatModelByRunner?: Record<string, string>;
   /**
    * ISO timestamp the user finished first-run onboarding. Absent on a
    * fresh install — the renderer gates on this to show the welcome /

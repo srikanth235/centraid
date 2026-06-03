@@ -5,12 +5,16 @@
  * Merge rules per field:
  *   - `undefined` in the patch  → preserve the current value
  *   - a value in the patch       → set it
- *   - **empty-string `chatModel`** → CLEAR it (the "Gateway default" choice)
  *
- * The empty-string clear is why this isn't a plain spread: the chat picker's
- * "Gateway default" option has value `''`, and the user must be able to drop a
- * previously-pinned concrete model. `undefined` still means "leave untouched"
- * so unrelated `saveSettings({ ... })` calls never wipe the chat model.
+ * `chatModelByRunner` is special: it's a per-runner map merged KEY-BY-KEY into
+ * the current map, so saving one agent's model never disturbs another's:
+ *   - `{ codex: '<model-id>' }` → set codex's model
+ *   - `{ codex: '' }`           → CLEAR codex's model (back to "Gateway default")
+ *   - key absent from patch      → that runner's entry is preserved
+ *   - whole field `undefined`    → the entire map is preserved
+ * The empty-string-clears rule is why this isn't a plain spread: the picker's
+ * "Gateway default" choice for a runner has value `''`, and the user must be
+ * able to drop a previously-pinned concrete model for that runner alone.
  */
 
 import type { PersistedSettings } from './settings.js';
@@ -19,9 +23,32 @@ import type { PersistedSettings } from './settings.js';
 export interface PersistedSettingsPatch {
   activeGatewayId?: string;
   remoteTemplatesUrl?: string;
-  /** Non-empty → set; `''` → clear ("Gateway default"); `undefined` → preserve. */
-  chatModel?: string;
+  /**
+   * Per-runner chat-model patch, merged key-by-key (see file header):
+   * non-empty value → set that runner; `''` → clear that runner; key absent →
+   * preserve; whole field `undefined` → preserve the entire map.
+   */
+  chatModelByRunner?: Record<string, string>;
   onboardingCompletedAt?: string;
+}
+
+/**
+ * Merge a per-runner model patch into the current map. Returns `undefined`
+ * when nothing remains (so the field is dropped rather than persisted empty),
+ * or `current` untouched when the patch omits the field.
+ */
+function mergeChatModelByRunner(
+  current: Record<string, string> | undefined,
+  patch: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (patch === undefined) return current; // preserve the whole map
+  const next: Record<string, string> = { ...current };
+  for (const [kind, value] of Object.entries(patch)) {
+    if (value)
+      next[kind] = value; // non-empty → set
+    else delete next[kind]; // '' → clear this runner only
+  }
+  return Object.keys(next).length ? next : undefined;
 }
 
 /** Preserve-or-set for a plain optional string field (`undefined` = preserve). */
@@ -40,17 +67,14 @@ export function mergePersistedSettings(
   current: PersistedSettings,
   patch: PersistedSettingsPatch,
 ): PersistedSettings {
+  const chatModelByRunner = mergeChatModelByRunner(
+    current.chatModelByRunner,
+    patch.chatModelByRunner,
+  );
   return {
     activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
     ...preserveOrSet('remoteTemplatesUrl', patch.remoteTemplatesUrl, current.remoteTemplatesUrl),
-    // chatModel: empty string clears, non-empty sets, undefined preserves.
-    ...(patch.chatModel !== undefined
-      ? patch.chatModel
-        ? { chatModel: patch.chatModel }
-        : {}
-      : current.chatModel !== undefined
-        ? { chatModel: current.chatModel }
-        : {}),
+    ...(chatModelByRunner !== undefined ? { chatModelByRunner } : {}),
     ...preserveOrSet(
       'onboardingCompletedAt',
       patch.onboardingCompletedAt,

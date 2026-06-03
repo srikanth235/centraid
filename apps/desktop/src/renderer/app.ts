@@ -8,7 +8,6 @@
 import {
   appQuery,
   appLiveUrl,
-  getRunnerStatus as getGatewayRunnerStatus,
   getAgentsStatus,
   deregisterApp,
   listApps,
@@ -5515,12 +5514,6 @@ import {
     clear();
     const seq = renderSeq;
 
-    // Only `chatModel` is read off this object (the chat picker seed); the
-    // fallback covers the case where `getSettings` is unreachable.
-    const current = await window.CentraidApi.getSettings().catch(() => ({
-      chatModel: undefined as string | undefined,
-    }));
-
     // Profiles ("spaces") are backed by gateways — fetch the list so the
     // Account → Profiles manage page can render the cards. Active id comes
     // from the cached gateway summary (always primed before settings open).
@@ -5687,136 +5680,11 @@ import {
     // userData and are not user-configurable, so there's no separate runtime
     // page.
 
-    const labeled = (label: string, hint: string, input: HTMLElement): HTMLElement =>
-      el('div', { class: 'drawer-row' }, [
-        el('span', { class: 'drawer-row-label' }, label),
-        input,
-        el('div', { class: 'settings-hint' }, hint),
-      ]);
-
-    // ---- Chat group ----
-    const chatModelSelect = el('select', { class: 'input' }) as HTMLSelectElement;
-    chatModelSelect.append(el('option', { value: '' }, 'Gateway default') as HTMLOptionElement);
-    let chatModelInitial = current.chatModel ?? '';
-    if (chatModelInitial) {
-      // Pre-seed with the persisted choice so the dropdown shows the current
-      // model even before the async list resolves.
-      const seed = el(
-        'option',
-        { value: chatModelInitial, selected: '' },
-        chatModelInitial,
-      ) as HTMLOptionElement;
-      chatModelSelect.append(seed);
-    }
-    // Tier → display header for the grouped picker (matches the claude-code
-    // tier labels). Order is most-capable first.
-    const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
-    const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
-      smart: 'Most capable',
-      balanced: 'Balanced',
-      fast: 'Fastest',
-    };
-
-    type PickerModel = { id: string; label: string; tier?: 'smart' | 'balanced' | 'fast' };
-
-    async function loadChatModels(opts: { refresh?: boolean } = {}): Promise<void> {
-      // Models come from the ACTIVE gateway's runner-status:
-      //   - OpenClaw enumerates its configured models and classifies each into
-      //     a capability tier (`status.models[].tier`) — grouped below.
-      //   - claude-code offers capability tiers directly (no per-model tier).
-      //   - Otherwise the dropdown is just "Gateway default" + persisted choice.
-      let models: PickerModel[] = [];
-      try {
-        const status = await getGatewayRunnerStatus(opts);
-        if (status.models?.length) {
-          models = status.models.map((m) => ({
-            id: m.id,
-            label: (m.name ?? m.id) + (m.default ? ' · default' : ''),
-            ...(m.tier ? { tier: m.tier } : {}),
-          }));
-        }
-      } catch {
-        /* gateway unreachable — keep "Gateway default" + persisted seed */
-      }
-      // Replace existing options but keep the leading "Gateway default" entry.
-      while (chatModelSelect.children.length > 1) {
-        chatModelSelect.lastChild?.remove();
-      }
-      // Re-add the persisted choice up front if the list didn't surface it,
-      // so a previously-saved model isn't silently dropped from the picker.
-      if (chatModelInitial && !models.some((m) => m.id === chatModelInitial)) {
-        chatModelSelect.append(
-          el('option', { value: chatModelInitial, selected: '' }, chatModelInitial),
-        );
-      }
-      const mkOption = (m: PickerModel): HTMLOptionElement => {
-        const opt = el('option', { value: m.id }, m.label) as HTMLOptionElement;
-        if (m.id === chatModelInitial) opt.selected = true;
-        return opt;
-      };
-      // Group by tier when classified (OpenClaw); otherwise render flat.
-      if (models.some((m) => m.tier)) {
-        for (const tier of TIER_ORDER) {
-          const inTier = models.filter((m) => m.tier === tier);
-          if (!inTier.length) continue;
-          chatModelSelect.append(el('optgroup', { label: TIER_LABEL[tier] }, inTier.map(mkOption)));
-        }
-        const untiered = models.filter((m) => !m.tier);
-        if (untiered.length) {
-          chatModelSelect.append(el('optgroup', { label: 'Other' }, untiered.map(mkOption)));
-        }
-      } else {
-        for (const m of models) chatModelSelect.append(mkOption(m));
-      }
-    }
-    void loadChatModels();
-    chatModelSelect.addEventListener('change', () => {
-      chatModelInitial = chatModelSelect.value;
-      // Send the raw value (empty string for "Gateway default") so the main
-      // process can CLEAR a previously-pinned model. `undefined` would be
-      // treated as "preserve current" and leave the old model stuck.
-      void window.CentraidApi.saveSettings({ chatModel: chatModelSelect.value });
-    });
-
-    // Refresh button — forces the gateway to re-probe and re-classify its
-    // models (OpenClaw re-runs the tier classifier), so the list updates
-    // without restarting the app.
-    const refreshModelsBtn = el('button', {
-      class: 'btn btn-soft app-chat-models-refresh',
-      type: 'button',
-      title: 'Refresh model list',
-      'aria-label': 'Refresh model list',
-      onClick: async () => {
-        refreshModelsBtn.setAttribute('disabled', '');
-        try {
-          await loadChatModels({ refresh: true });
-          showToast('Model list refreshed');
-        } finally {
-          refreshModelsBtn.removeAttribute('disabled');
-        }
-      },
-    });
-    refreshModelsBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Refresh</span>';
-
-    const modelRow = el('div', { style: { alignItems: 'center', display: 'flex', gap: '8px' } }, [
-      chatModelSelect,
-      refreshModelsBtn,
-    ]);
-
-    pageHosts.workspace.append(
-      drawerGroup('Chat', [
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Model used by the in-app chat. The chat is sandboxed to one app at a time and only issues read-only SELECTs.',
-        ),
-        labeled(
-          'Model',
-          'Lists what the gateway exposes — OpenClaw’s model catalog or Claude Code capability tiers. "Gateway default" lets the gateway choose.',
-          modelRow,
-        ),
-      ]),
-    );
+    // The in-app chat's model picker used to live here, as a single global
+    // "Model" dropdown. It moved into the chat composer as a coupled
+    // Agent · Model control (app-chat.ts) so the model reads as a property of
+    // the active agent — see issue #188. Storage is now per-runner
+    // (`chatModelByRunner`); there is no global model setting to surface here.
 
     // ---- Agents (Claude Code / Codex credential status) ----
     // Centraid's coding agent runs the user's installed CLIs in place:
@@ -5854,9 +5722,6 @@ import {
             ? 'Codex is now the active agent'
             : 'Claude Code is now the active agent',
         );
-        // The chat model picker lists the ACTIVE runner's catalog/tiers, so
-        // re-fetch it now that the runner changed.
-        void loadChatModels({ refresh: true });
       } catch (err) {
         selectedRunnerKind = prev;
         showToast(`Couldn’t switch agent: ${String(err)}`);
@@ -6113,7 +5978,7 @@ import {
         label: 'Workspace',
         section: 'Workspace',
         icon: 'Folder',
-        subtitle: 'Sidebar, navigation, and the in-app chat model.',
+        subtitle: 'Sidebar and navigation.',
       },
       {
         id: 'profiles',

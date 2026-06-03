@@ -31,6 +31,7 @@ import {
   listChatSessions,
   loadChatSession,
   deleteChatSession,
+  getUserPrefs,
   type ChatStreamEvent,
 } from './gateway-client.js';
 
@@ -1049,6 +1050,24 @@ import {
       return text.replace(/\s+/g, ' ').trim().slice(0, 60);
     }
 
+    /**
+     * Resolve the model id to send for the gateway's currently-active runner.
+     * The selection is stored per-runner (`chatModelByRunner`) so it can never
+     * carry across an agent switch; we key it by the same `agent.runner.kind`
+     * user-pref the agent picker writes. Returns `undefined` → let the gateway
+     * pick its default. (The composer pill keeps this in sync; here we read it
+     * fresh so a send is always against the live active runner.)
+     */
+    async function resolveChatModelForActiveRunner(): Promise<string | undefined> {
+      const [settings, prefs] = await Promise.all([
+        window.CentraidApi.getSettings(),
+        getUserPrefs().catch(() => ({}) as Record<string, unknown>),
+      ]);
+      const kindRaw = prefs['agent.runner.kind'];
+      const kind = typeof kindRaw === 'string' && kindRaw ? kindRaw : 'codex';
+      return settings.chatModelByRunner?.[kind];
+    }
+
     async function submit(): Promise<void> {
       const text = input.value.trim();
       if (!text || activeTurn !== null) return;
@@ -1069,14 +1088,14 @@ import {
           currentSessionId = created.id;
           setHeadContext(created.title || null);
         }
-        const settings = await window.CentraidApi.getSettings();
+        const model = await resolveChatModelForActiveRunner();
         abortController = new AbortController();
         await streamChat(
           appId,
           {
             conversationId: currentSessionId,
             message: text,
-            ...(settings.chatModel ? { model: settings.chatModel } : {}),
+            ...(model ? { model } : {}),
           },
           (evt) => handleStreamEvent(turnId, evt),
           abortController.signal,
