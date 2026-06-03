@@ -391,7 +391,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     chatRunnerSessionDir: paths.chatRunnerSessionDir,
     runnerStatus:
       options.runnerStatus ??
-      (async () => {
+      (async (statusOpts) => {
         const prefs = await prefsLoader();
         if (!prefs) {
           return {
@@ -401,7 +401,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             hint: 'Open Settings → Agents and pick Codex or Claude Code.',
           };
         }
-        return runPreflight(prefs);
+        return runPreflight(prefs, {
+          ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
+          ...(statusOpts?.refresh ? { refresh: true } : {}),
+        });
       }),
     logger,
     ...(codeDirOverride ? { codeDirOverride } : {}),

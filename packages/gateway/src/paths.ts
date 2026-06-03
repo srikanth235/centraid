@@ -56,4 +56,13 @@ export interface GatewayPaths {
    * dependency entirely. Omit for bundle/cache-only resolution.
    */
   remoteTemplatesUrl?: string;
+
+  /**
+   * Optional path to the gateway-owned model catalog (`model-catalog.json`,
+   * issue #188). When set, the default `runnerStatus` reporter persists the
+   * chat picker's per-runner model list here and re-enumerates it on Refresh.
+   * Omit to fall back to the hardcoded default seed without persistence
+   * (e.g. the OpenClaw plugin, which supplies its own `runnerStatus`).
+   */
+  modelCatalogFile?: string;
 }
