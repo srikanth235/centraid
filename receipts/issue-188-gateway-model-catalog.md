@@ -23,6 +23,7 @@ Refresh button.
 - [x] Rethink — per-agent models in agents-status (each agent's catalog, not just the active runner)
 - [x] Rethink — per-agent default-model picker in Settings → Agents
 - [x] Rethink — fix native select text color in dark theme (global reset omitted select)
+- [x] Rethink — redesign the active-agent control as a segmented switch (Settings → Agents)
 
 ## What changed
 
@@ -45,6 +46,8 @@ Refresh button.
 - **Rethink — per-agent default-model picker in Settings → Agents.** Each agent now renders as a card (clickable header to make it active + a status badge) with its **own** “Default model” select, populated from that agent's models in the agents-status snapshot and saved to `chatModelByRunner[kind]`. Both agents are configurable at once — you no longer switch the active agent just to set the other's model. A pinned id the agent no longer offers shows as “· unavailable”; an unavailable CLI disables its select. The earlier single active-tracking picker (and the redundant second Refresh button) were removed; one Refresh now re-probes availability and re-enumerates each agent live (`getAgentsStatus({ refresh: true })`). `CentraidAgentsStatus` gains `codexModels` / `claudeModels`.
 
 - **Rethink — fix native select text color in dark theme (global reset omitted select).** The model `<select>` rendered with dark, near-invisible text on dark-theme cards: the global control reset was `input, textarea { color: inherit }` and never included `select`, so native selects fell back to the OS text color. Added `select` to the reset (so the closed value inherits `--ink`) and styled `.input option` with `--bg-elev` / `--ink` so the open dropdown is readable too. Fixes every native select in the app, not just the model picker.
+
+- **Rethink — redesign the active-agent control as a segmented switch (Settings → Agents).** The old activation affordance was weak — you clicked a whole agent card to make it active, which both read poorly and risked fighting the model select inside it. Replaced it with a dedicated segmented “Active agent” switch at the top of the page: a pill slides under the active segment, tinted with that agent's accent (codex green / claude purple), with unavailable agents dimmed and non-interactive. The switch is built once and updated in place so the pill animates (`translateX`) rather than jumping; the cards below are now pure status + per-agent model picker (no click-to-activate), and the active card keeps its accent border + “Active” badge. Verified live in the running app (both positions).
 
 ## Out of scope
 

@@ -4266,6 +4266,93 @@ select.input option {
   color: var(--ink-4);
 }
 
+/* Active-agent segmented switch (Settings → Agents). One control for which
+   agent runs: a pill slides under the active segment, tinted with that agent's
+   accent. Unavailable agents are dimmed and non-interactive. */
+.agent-switch {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: 380px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+.agent-switch-ind {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  /* Two equal segments (each seg is flex:1). The pill matches one segment and
+     slides via translateX(100%) — measurement-free, so it positions correctly
+     even while the settings page is hidden. */
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--seg-accent, var(--accent)) 12%, var(--bg-elev));
+  border: 1px solid color-mix(in oklab, var(--seg-accent, var(--accent)) 55%, var(--line-strong));
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 3px color-mix(in oklab, var(--seg-accent, var(--accent)) 12%, transparent);
+  transition:
+    transform 0.26s cubic-bezier(0.2, 0.7, 0.3, 1),
+    background 0.2s ease,
+    border-color 0.2s ease;
+  pointer-events: none;
+}
+.agent-switch[data-active-index='1'] .agent-switch-ind {
+  transform: translateX(100%);
+}
+.agent-switch-seg {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-3);
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.18s ease;
+}
+.agent-switch-seg:not([data-active='true']):not([data-unavail='true']):hover {
+  color: var(--ink-2);
+}
+.agent-switch-seg[data-active='true'] {
+  color: var(--ink);
+  font-weight: 600;
+  cursor: default;
+}
+.agent-switch-seg[data-unavail='true'] {
+  color: var(--ink-4);
+  cursor: default;
+}
+.agent-switch-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  transition: background 0.18s ease;
+}
+.agent-switch-seg[data-unavail='true'] .agent-switch-dot {
+  background: var(--ink-4) !important;
+}
+.agent-switch-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
 /* §C2 — Appearance live-preview tile. A 4-up grid of app tiles whose
    surfaces ride the live accent / tile-variant choices. */
 .ap-preview {

@@ -5775,20 +5775,78 @@ import {
     };
     let agentModelByRunner: Record<string, string> = {};
 
+    // Active-agent switch — the single, obvious control for which agent runs.
+    // Built once and updated in place (not recreated on each render) so the
+    // accent pill SLIDES under the active segment instead of jumping.
+    const RUNNER_INDEX: Record<ActiveRunnerKind, number> = { codex: 0, 'claude-code': 1 };
+    const agentSwitchInd = el('span', { class: 'agent-switch-ind' });
+    const agentSwitchSegs = {} as Record<ActiveRunnerKind, HTMLButtonElement>;
+    for (const runner of RUNNERS) {
+      agentSwitchSegs[runner.kind] = el(
+        'button',
+        {
+          class: 'agent-switch-seg',
+          type: 'button',
+          role: 'tab',
+          title: `Make ${runner.title} the active agent`,
+          onClick: () => void activateRunner(runner.kind),
+        },
+        [
+          el('span', { class: 'agent-switch-dot', style: { background: runner.accent } }),
+          el('span', {}, runner.title),
+        ],
+      ) as HTMLButtonElement;
+    }
+    const agentSwitch = el(
+      'div',
+      { class: 'agent-switch', role: 'tablist', 'aria-label': 'Active agent' },
+      [agentSwitchInd, agentSwitchSegs.codex, agentSwitchSegs['claude-code']],
+    );
+    const updateAgentSwitch = (status: AuthStatusSnapshot | null): void => {
+      const activeAccent =
+        RUNNERS.find((r) => r.kind === selectedRunnerKind)?.accent ?? 'var(--accent)';
+      agentSwitch.style.setProperty('--seg-accent', activeAccent);
+      agentSwitch.dataset.activeIndex = String(RUNNER_INDEX[selectedRunnerKind]);
+      for (const runner of RUNNERS) {
+        const seg = agentSwitchSegs[runner.kind];
+        const available = status ? runner.available(status) : false;
+        const active = runner.kind === selectedRunnerKind;
+        seg.dataset.active = active ? 'true' : '';
+        seg.dataset.unavail = available ? '' : 'true';
+        seg.setAttribute('aria-selected', active ? 'true' : 'false');
+        // Only an available, non-active agent is switchable.
+        if (available && !active) seg.removeAttribute('disabled');
+        else seg.setAttribute('disabled', '');
+      }
+    };
+
+    // The agent cards (status + per-agent model picker) live in their own host
+    // so renderAuthStatus can rebuild them without recreating the switch above.
+    const agentCardsHost = el('div', {
+      style: { display: 'flex', flexDirection: 'column', gap: '8px' },
+    });
+    authStatusHost.append(
+      el(
+        'div',
+        { class: 'settings-note' },
+        'Switch the active agent above; set each agent’s default model below. Detection is CLI-only — the gateway ran `<bin> --version`; Centraid doesn’t inspect how each agent authenticates.',
+      ),
+      agentSwitch,
+      agentCardsHost,
+    );
+
     const renderAuthStatus = (status: AuthStatusSnapshot | null): void => {
       lastStatus = status;
-      authStatusHost.replaceChildren();
+      updateAgentSwitch(status);
       if (!status) {
-        authStatusHost.append(el('div', { class: 'settings-note' }, 'Reading credential status…'));
+        agentCardsHost.replaceChildren(
+          el('div', { class: 'settings-note' }, 'Reading credential status…'),
+        );
         return;
       }
-      // §C3 — each provider row carries a state badge (Active / Standby /
-      // Not found) so the at-a-glance status doesn't rely on reading the
-      // subtitle prose. An available, non-active row is clickable to make
-      // it the active agent.
-      // Each agent renders as a card: a clickable header (make it active) plus
-      // its OWN default-model select. The select is keyed per-runner and saves
-      // independently, so you can configure both agents without switching.
+      // Each agent is a card: identity + detection status + its OWN default-model
+      // select (keyed per-runner, saved independently). Activation is the switch
+      // above — the card isn't clickable, so the select never fights a card tap.
       const providerCard = (params: {
         kind: ActiveRunnerKind;
         title: string;
@@ -5796,35 +5854,16 @@ import {
         connected: boolean;
         active: boolean;
         accent: string;
-        badge: { label: string; tone: 'on' | 'standby' | 'off' };
         models: AgentModelOpt[];
-        onActivate?: () => void;
       }): HTMLElement => {
         const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
-        const clickable = Boolean(params.onActivate);
         const header = el(
           'div',
           {
-            ...(clickable
-              ? {
-                  role: 'button',
-                  tabindex: '0',
-                  title: `Make ${params.title} the active agent`,
-                  onClick: () => params.onActivate?.(),
-                  onKeydown: (e: Event) => {
-                    const key = (e as KeyboardEvent).key;
-                    if (key === 'Enter' || key === ' ') {
-                      e.preventDefault();
-                      params.onActivate?.();
-                    }
-                  },
-                }
-              : {}),
             style: {
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
-              ...(clickable ? { cursor: 'pointer' } : {}),
             },
           },
           [
@@ -5857,11 +5896,11 @@ import {
                 ),
               ],
             ),
-            el(
-              'span',
-              { class: 'provider-badge', 'data-tone': params.badge.tone },
-              params.badge.label,
-            ),
+            params.active
+              ? el('span', { class: 'provider-badge', 'data-tone': 'on' }, 'Active')
+              : !params.connected
+                ? el('span', { class: 'provider-badge', 'data-tone': 'off' }, 'Not found')
+                : false,
           ],
         );
 
@@ -5938,43 +5977,25 @@ import {
         );
       };
 
-      authStatusHost.append(
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Click an available agent to make it the active one, and set each agent’s default model below it. Detection is CLI-only — the gateway ran `<bin> --version`; Centraid doesn’t inspect how each agent authenticates.',
-        ),
-      );
-
-      for (const runner of RUNNERS) {
+      const cards = RUNNERS.map((runner) => {
         const available = runner.available(status);
         const isActive = runner.kind === selectedRunnerKind;
         const ver = runner.version(status);
         const subtitle = available
           ? `${runner.bin} CLI detected${ver ? ` · ${ver}` : ''}`
           : `${runner.bin} CLI not found on the gateway’s PATH`;
-        const badge: { label: string; tone: 'on' | 'standby' | 'off' } = !available
-          ? { label: 'Not found', tone: 'off' }
-          : isActive
-            ? { label: 'Active', tone: 'on' }
-            : { label: 'Standby', tone: 'standby' };
         const models = (runner.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
-        authStatusHost.append(
-          providerCard({
-            kind: runner.kind,
-            title: runner.title,
-            subtitle,
-            connected: available,
-            active: isActive,
-            accent: runner.accent,
-            badge,
-            models,
-            ...(available && !isActive
-              ? { onActivate: () => void activateRunner(runner.kind) }
-              : {}),
-          }),
-        );
-      }
+        return providerCard({
+          kind: runner.kind,
+          title: runner.title,
+          subtitle,
+          connected: available,
+          active: isActive,
+          accent: runner.accent,
+          models,
+        });
+      });
+      agentCardsHost.replaceChildren(...cards);
     };
 
     // Refresh re-probes CLI availability AND re-enumerates each agent's models
