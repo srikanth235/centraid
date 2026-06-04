@@ -1,11 +1,8 @@
 {
-  "name": "@centraid/agent-runtime",
+  "name": "@centraid/automation",
   "version": "0.1.0",
   "private": true,
-  "description": "Unified local agent runtime for centraid: drives one turn through either codex app-server (JSON-RPC subprocess) or @anthropic-ai/claude-agent-sdk (in-process). Used by both the per-app data chat and the builder. Ships a tiny `centraid` CLI bin agents shell out to.",
-  "bin": {
-    "centraid": "./dist/centraid-cli.js"
-  },
+  "description": "Centraid automation engine — manifest, fire spine + OpenDispatch seam, the Host interface + in-process scheduler, webhook ingress, the worker-thread handler runner, and app scaffolding. Backend-agnostic: execution and scheduling are injected callbacks, so it depends on @centraid/app-engine but never on any agent backend. Consumers import it namespaced (`import * as automation`).",
   "files": [
     "dist",
     "README.md"
@@ -20,10 +17,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.143",
-    "@centraid/app-engine": "workspace:*",
-    "@centraid/automation": "workspace:*",
-    "zod": "^4.0.0"
+    "@centraid/app-blueprints": "workspace:*",
+    "@centraid/app-engine": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

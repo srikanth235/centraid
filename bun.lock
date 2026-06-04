@@ -27,7 +27,7 @@
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/conversation-engine": "workspace:*",
+        "@centraid/automation": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@centraid/gateway": "workspace:*",
       },
@@ -81,7 +81,7 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.143",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/conversation-engine": "workspace:*",
+        "@centraid/automation": "workspace:*",
         "zod": "^4.0.0",
       },
       "devDependencies": {
@@ -118,8 +118,8 @@
         "typescript": "catalog:",
       },
     },
-    "packages/conversation-engine": {
-      "name": "@centraid/conversation-engine",
+    "packages/automation": {
+      "name": "@centraid/automation",
       "version": "0.1.0",
       "dependencies": {
         "@centraid/app-blueprints": "workspace:*",
@@ -150,7 +150,7 @@
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
-        "@centraid/conversation-engine": "workspace:*",
+        "@centraid/automation": "workspace:*",
         "@centraid/skills": "workspace:*",
       },
       "devDependencies": {
@@ -165,7 +165,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/app-engine": "workspace:*",
-        "@centraid/conversation-engine": "workspace:*",
+        "@centraid/automation": "workspace:*",
         "@centraid/gateway": "workspace:*",
         "@sinclair/typebox": "^0.27.0",
       },
@@ -509,7 +509,7 @@
 
     "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
 
-    "@centraid/conversation-engine": ["@centraid/conversation-engine@workspace:packages/conversation-engine"],
+    "@centraid/automation": ["@centraid/automation@workspace:packages/automation"],
 
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 

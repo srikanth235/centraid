@@ -36,10 +36,10 @@ export {
 } from './conversation-adapter.js';
 
 // The shared per-turn chat spine (`makeConversationRunnerCore`) lives in
-// `@centraid/conversation-engine` (the backend-agnostic run engine), next to
-// the automation fire spine. `makeConversationRunner` (above) is this backend's thin
-// config over it, injecting `runTurn` as the `RunTurnFn`; the gateway's
-// `makeUnifiedConversationRunner` imports the core from conversation-engine directly.
+// `@centraid/app-engine`, next to the `ConversationRunner` interface and the
+// agent-turn contract it wires together. `makeConversationRunner` (above) is
+// this backend's thin config over it, injecting `runTurn` as the `RunTurnFn`;
+// the gateway's `makeUnifiedConversationRunner` configures the same core.
 
 // Builder agent sessions still want the `centraid` CLI on PATH for the
 // `centraid preview snapshot` flow; expose the dist-dir resolver.
@@ -91,7 +91,7 @@ export { enumerateRunnerModels } from './model-enumerators.js';
 // tools the host runtime actually exposes (issue #80 follow-up).
 export { enumerateHostTools, type HostTool } from './host-tools.js';
 
-// Mock-LLM server (issue #70) now lives in `@centraid/conversation-engine` so
+// Mock-LLM server (issue #70) now lives in `@centraid/automation` so
 // both the CLI host (here) and the in-process host (openclaw-plugin) share one
 // persistent-session runtime (issue #166). Re-exported here for back-compat.
 export {
@@ -100,7 +100,7 @@ export {
   type MockLlmServerOptions,
   type StagedTurn,
   type CapturedToolResult,
-} from '@centraid/conversation-engine';
+} from '@centraid/automation';
 
 // Local-side per-fire orchestrator for automations (issue #90 model-B).
 // Looks up the user-owned automation row and runs its manifest prompt
@@ -116,7 +116,7 @@ export {
   type SpawnCliResult,
 } from './run-automation-local.js';
 
-// Scheduling lives in `@centraid/conversation-engine` now (issue #149): the gateway
+// Scheduling lives in `@centraid/automation` now (issue #149): the gateway
 // owns an in-process cron `InProcessScheduler` and fires automations while it
 // runs. The OS scheduler (launchd / systemd / Task Scheduler) and its
 // `centraid run-automation` entry point are gone.

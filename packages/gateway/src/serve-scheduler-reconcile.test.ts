@@ -12,13 +12,13 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import type { AutomationRow, LocalScheduler } from '@centraid/conversation-engine';
+import type * as automation from '@centraid/automation';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
-let reconcileCalls: Array<{ rows: readonly AutomationRow[] }>;
+let reconcileCalls: Array<{ rows: readonly automation.Row[] }>;
 let started: number;
 
 function pathsUnder(dir: string): GatewayPaths {
@@ -30,9 +30,9 @@ function pathsUnder(dir: string): GatewayPaths {
   };
 }
 
-// A spy `LocalScheduler` — records the rows each reconcile receives and
+// A spy `automation.LocalScheduler` — records the rows each reconcile receives and
 // never arms a real timer, so the test stays deterministic.
-function stubScheduler(): LocalScheduler {
+function stubScheduler(): automation.LocalScheduler {
   return {
     async register() {},
     async unregister() {},
