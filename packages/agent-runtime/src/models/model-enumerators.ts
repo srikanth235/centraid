@@ -17,7 +17,7 @@
  */
 
 import type { RunnerKind, RunnerModel } from '@centraid/app-engine';
-import { enumerateCodexModels } from './codex-model-list.js';
+import { enumerateCodexModels } from '../backends/codex-model-list.js';
 
 /** Cap on the SDK control call — generous; Refresh-only so latency is fine. */
 const MODEL_LIST_TIMEOUT_MS = 15_000;

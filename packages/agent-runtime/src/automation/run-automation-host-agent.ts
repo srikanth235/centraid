@@ -22,8 +22,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import type { RunnerKind } from './types.js';
-import { codexProviderOverrideArgs } from './codex-provider-config.js';
+import type { RunnerKind } from '../types.js';
+import { codexProviderOverrideArgs } from '../backends/codex-provider-config.js';
 
 export interface RunHostAgentInput {
   /** Which agent backend to drive. */

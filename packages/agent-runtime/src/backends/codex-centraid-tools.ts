@@ -12,7 +12,7 @@
  * Schema reference: `codex-rs/app-server-protocol/src/protocol/v2/{thread,item}.rs`.
  */
 import type { TurnStreamEvent } from '@centraid/app-engine';
-import type { ToolContext } from './runtime.js';
+import type { ToolContext } from '../runtime.js';
 
 /**
  * Codex `dynamicTools` spec for the three structured centraid tools.

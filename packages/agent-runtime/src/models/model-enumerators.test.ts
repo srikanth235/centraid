@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { mapClaudeModels } from './model-enumerators.ts';
-import { parseModelList } from './codex-model-list.ts';
+import { parseModelList } from '../backends/codex-model-list.ts';
 
 // ---- claude SDK `supportedModels()` mapping ----
 

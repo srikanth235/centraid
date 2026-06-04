@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { RunnerModel } from '@centraid/app-engine';
-import type { HostTool } from './host-tools.ts';
+import type { HostTool } from '../host-tools.ts';
 import {
   readCatalog,
   resolveRunnerModels,

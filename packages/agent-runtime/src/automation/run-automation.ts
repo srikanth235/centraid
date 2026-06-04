@@ -19,7 +19,7 @@ import {
   type RunStreamEvent,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
-import type { RunnerKind } from './types.js';
+import type { RunnerKind } from '../types.js';
 import {
   defaultRunHostAgent,
   type RunHostAgent,
