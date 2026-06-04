@@ -47,6 +47,8 @@ export interface AppKnobsManifest {
  *     manifest with optional `knobs[]`.
  *   - `kind: 'automation'` — an app folder (`app.json#kind = "automation"`)
  *     with no UI assets; just `app.json` + `automations/<id>/{automation.json,handler.js}`.
+ *     These live under the package's `automations/` directory; UI apps live
+ *     under `apps/`. The kind-segment is derived from `kind`, not stored.
  *     Automation templates carry extra display fields (`emoji`, `category`,
  *     `triggerKind`, `triggerLabel`, `integrations`) the Automations
  *     gallery uses to render its richer cards.
@@ -55,7 +57,7 @@ export interface AppKnobsManifest {
  * which gallery surfaces the template and how the card is laid out.
  */
 export interface TemplateMeta {
-  /** Unique template id; also the folder name at the package root. */
+  /** Unique template id; also the folder name under `apps/` or `automations/`. */
   id: string;
   /** Display name shown in the gallery. */
   name: string;

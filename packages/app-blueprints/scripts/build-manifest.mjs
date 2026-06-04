@@ -41,7 +41,11 @@ const enriched = {
 };
 
 for (const tmpl of src.templates) {
-  const dir = path.join(PACKAGE_ROOT, tmpl.id);
+  // Kind-segment directory: automation apps live under `automations/`, every
+  // other app under `apps/`. Derived from `kind` so the manifest, the disk
+  // resolver, and the remote fetcher all agree on the prefix.
+  const kindDir = tmpl.kind === 'automation' ? 'automations' : 'apps';
+  const dir = path.join(PACKAGE_ROOT, kindDir, tmpl.id);
   let files = [];
   try {
     files = await walk(dir);

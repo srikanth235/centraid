@@ -5,9 +5,8 @@
   "description": "How a new centraid app comes into being: blank-app scaffolders, template clone, and the bundled template gallery (pre-built apps + remote-fetch resolver) the desktop offers as clone-and-deploy starting points.",
   "files": [
     "dist",
-    "hydrate",
-    "journal",
-    "todos",
+    "apps",
+    "automations",
     "index.json",
     "manifest.json",
     "README.md"

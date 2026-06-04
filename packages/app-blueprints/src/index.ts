@@ -9,10 +9,12 @@
  *      bundled gallery templates into a fresh app.
  *
  * The gallery half: bundled, pre-built Centraid apps the desktop offers as
- * "clone and deploy" starting points. Each template folder sits directly at
- * the package root (`hydrate/`, `journal/`, `todos/`, …) and is a fully-formed
- * app (HTML/CSS/JS + queries/ + actions/ + migrations/) — identical in shape
- * to an app the user authors themselves. Two layers stack on top of the bundle:
+ * "clone and deploy" starting points. Each template folder lives under a
+ * kind-segment directory — `apps/<id>/` for full UI apps (`apps/hydrate/`,
+ * `apps/journal/`, `apps/todos/`, …) and `automations/<id>/` for automation
+ * apps — and is a fully-formed app (HTML/CSS/JS + queries/ + actions/ +
+ * migrations/) — identical in shape to an app the user authors themselves.
+ * Two layers stack on top of the bundle:
  *   - A user-data cache that can hold newer copies pulled from a remote URL.
  *   - A resolver that picks bundle-or-cache per template, preferring the
  *     higher semver version.
@@ -25,14 +27,20 @@
  *   - appTemplatesDir: string                                       — bundled dir
  *   - listTemplates(): Promise<TemplateMeta[]>                   — bundled manifest
  *   - resolveTemplates({ cacheDir? }): Promise<ResolvedTemplate[]>
- *   - templateSourceDir(id, { cacheDir?, source? }): string
+ *   - templateSourceDir(id, { kind?, cacheDir?, source? }): string
  *   - fetchRemoteTemplates({ cacheDir, remoteUrl }): Promise<void>
  */
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ResolvedTemplate, TemplateManifest, TemplateMeta, TemplateSource } from './types.js';
+import type {
+  ResolvedTemplate,
+  TemplateKind,
+  TemplateManifest,
+  TemplateMeta,
+  TemplateSource,
+} from './types.js';
 
 export type {
   AppKnob,
@@ -53,6 +61,20 @@ export const appTemplatesDir: string = PACKAGE_ROOT;
 
 /** Manifest file name — same on bundle and cache. */
 const MANIFEST_FILE = 'manifest.json';
+
+/**
+ * The kind-segment directory a template's files live under, relative to the
+ * bundle/cache/remote base: `automations/` for automation apps, `apps/` for
+ * everything else. Derived from `kind` (no separate field) and shared by the
+ * disk resolver ({@link templateSourceDir}), the remote fetcher
+ * ({@link downloadTemplate}), and the manifest build script, so all three
+ * stay in lock-step. The bundled layout doubles as the remote layout (GitHub
+ * raw serves the checked-in tree), so this prefix must match on disk and over
+ * the wire.
+ */
+export function templateKindDir(kind: TemplateKind | undefined): string {
+  return kind === 'automation' ? 'automations' : 'apps';
+}
 
 /**
  * Read the bundled manifest at `<package>/manifest.json`. Throws if the
@@ -97,15 +119,18 @@ export async function resolveTemplates(
 }
 
 /**
- * Absolute path to a template's source directory. Defaults to the bundled
- * path; pass `{ source: 'cache', cacheDir }` for the cache path.
+ * Absolute path to a template's source directory:
+ * `<base>/<apps|automations>/<id>`. Defaults to the bundled path; pass
+ * `{ source: 'cache', cacheDir }` for the cache path. `kind` selects the
+ * kind-segment directory (see {@link templateKindDir}) and defaults to
+ * `'app'` when omitted.
  */
 export function templateSourceDir(
   templateId: string,
-  opts: { cacheDir?: string; source?: TemplateSource } = {},
+  opts: { kind?: TemplateKind; cacheDir?: string; source?: TemplateSource } = {},
 ): string {
   const base = opts.source === 'cache' && opts.cacheDir ? opts.cacheDir : appTemplatesDir;
-  return path.join(base, templateId);
+  return path.join(base, templateKindDir(opts.kind), templateId);
 }
 
 /**
@@ -119,10 +144,11 @@ export function templateSourceDir(
  * on disk is a build/catalog error and surfaces as a read rejection.
  */
 export async function readTemplateFiles(
-  template: Pick<TemplateMeta, 'id' | 'files'> & { source?: TemplateSource },
+  template: Pick<TemplateMeta, 'id' | 'files' | 'kind'> & { source?: TemplateSource },
   opts: { cacheDir?: string } = {},
 ): Promise<{ path: string; content: string }[]> {
   const dir = templateSourceDir(template.id, {
+    ...(template.kind !== undefined ? { kind: template.kind } : {}),
     ...(opts.cacheDir !== undefined ? { cacheDir: opts.cacheDir } : {}),
     ...(template.source !== undefined ? { source: template.source } : {}),
   });
@@ -238,7 +264,8 @@ function stripTrailingSlash(s: string): string {
 }
 
 /**
- * Downloads every file listed in `tmpl.files` into `<cacheDir>/<id>/...`.
+ * Downloads every file listed in `tmpl.files` into
+ * `<cacheDir>/<apps|automations>/<id>/...`, mirroring the bundled layout.
  * Each file is written to a `.tmp` sibling first, then renamed, so a torn
  * fetch never leaves a half-written file in place. Returns false on any
  * file fetch failure — the caller skips updating the manifest entry, so a
@@ -250,10 +277,11 @@ async function downloadTemplate(
   tmpl: TemplateMeta,
   doFetch: typeof fetch,
 ): Promise<boolean> {
-  const targetDir = path.join(cacheDir, tmpl.id);
+  const kindDir = templateKindDir(tmpl.kind);
+  const targetDir = path.join(cacheDir, kindDir, tmpl.id);
   await fs.mkdir(targetDir, { recursive: true });
   for (const rel of tmpl.files) {
-    const url = `${base}/${encodeURIComponent(tmpl.id)}/${rel
+    const url = `${base}/${kindDir}/${encodeURIComponent(tmpl.id)}/${rel
       .split('/')
       .map(encodeURIComponent)
       .join('/')}`;
@@ -284,7 +312,7 @@ async function writeManifestAtomic(dir: string, manifest: TemplateManifest): Pro
 // ---------------------------------------------------------------------------
 // App scaffolders + clone (moved out of @centraid/app-engine in #151; both
 // "how a new app comes into being" — a blank scaffold and a cloned template
-// are both blueprints you instantiate). The gateway lifecycle routes use the
+// are both app-blueprints you instantiate). The gateway lifecycle routes use the
 // file-map (`*Files`) variants; the disk wrappers back the CLI / local paths.
 // ---------------------------------------------------------------------------
 export {
