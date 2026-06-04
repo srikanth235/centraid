@@ -43,11 +43,17 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { enumerateHostTools, defaultCentraidCliDir, runAgentTurn } from '@centraid/agent-runtime';
+import {
+  readRunnerTools,
+  defaultCentraidCliDir,
+  runAgentTurn,
+  type HostTool,
+} from '@centraid/agent-runtime';
 import {
   type ChatRunner,
   type ChatStreamEvent,
   type Dispatcher,
+  type RunnerKind,
   type RunnerPrefs,
   type RunTurnFn,
 } from '@centraid/app-engine';
@@ -88,9 +94,12 @@ export interface UnifiedChatRunnerOptions {
   sessionIdFor?: (appId: string) => string;
   /** Turn driver — defaults to `runAgentTurn`; injected in tests. */
   runTurn?: RunTurnFn;
-  /** Host-tool enumerator for the grounding block — defaults to
-   *  `enumerateHostTools`; injected in tests to stay hermetic. */
-  enumerateTools?: typeof enumerateHostTools;
+  /** Gateway-owned catalog path — the builder reads cached host tools from it
+   *  for the grounding block (no per-turn CLI spawn). Omitted → no grounding. */
+  catalogPath?: string;
+  /** Host-tool resolver for the grounding block — defaults to a cached read of
+   *  `catalogPath`; injected in tests to stay hermetic. */
+  resolveTools?: (kind: RunnerKind) => Promise<readonly HostTool[]>;
 }
 
 function defaultSessionIdFor(appId: string): string {
@@ -146,7 +155,14 @@ async function mintPendingWebhooks(
 
 export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunner {
   const sessionIdFor = opts.sessionIdFor ?? defaultSessionIdFor;
-  const enumerate = opts.enumerateTools ?? enumerateHostTools;
+  // Builder grounding reads cached tools from the catalog — never probes a CLI
+  // on the turn path. The boot probe / explicit refresh keeps the catalog warm.
+  const resolveTools =
+    opts.resolveTools ??
+    (opts.catalogPath
+      ? (kind: RunnerKind): Promise<readonly HostTool[]> =>
+          readRunnerTools(opts.catalogPath as string, kind)
+      : async (): Promise<readonly HostTool[]> => []);
   const extraPath = defaultCentraidCliDir();
 
   // Builder chat is the data-chat spine plus three seams: cwd = the app's
@@ -189,9 +205,7 @@ export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunne
       buildAuthoringExtraPrompt({
         baseExtra: input.extraSystemPrompt,
         appKind: await readAppKind(cwd),
-        prefs,
-        cwd,
-        enumerate,
+        tools: await resolveTools(prefs.kind),
       }),
 
     onTurnComplete: ({ input, cwd }) => mintPendingWebhooks(cwd, opts.publicBaseUrl, input.onEvent),

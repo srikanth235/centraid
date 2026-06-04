@@ -62,8 +62,13 @@ import {
   runAutomationLocal,
   runPreflight,
   resolveRunnerModels,
+  resolveRunnerTools,
   defaultModelsFor,
   enumerateRunnerModels,
+  enumerateHostTools,
+  probeCliAvailability,
+  type HostTool,
+  type RunnerKind,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
 import { WorktreeStore } from './worktree-store/index.js';
@@ -349,6 +354,29 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     };
   };
 
+  // Host-tool catalog resolver — shared by the agents route (read/refresh) and
+  // the boot probe below. Tools are captured by spawning the CLI against a
+  // mock-LLM server (`enumerateHostTools`), so we probe from a stable cwd (the
+  // gateway's own working dir, NOT a draft worktree — a worktree cwd makes the
+  // claude SDK report 0 tools) and honor the active runner's binPath.
+  const toolProbeCwd = process.cwd();
+  const resolveCatalogTools = paths.modelCatalogFile
+    ? async (kind: RunnerKind, refresh: boolean): Promise<HostTool[]> => {
+        const prefs = await prefsLoader();
+        const isActive = prefs?.kind === kind;
+        return resolveRunnerTools({
+          kind,
+          catalogPath: paths.modelCatalogFile as string,
+          enumerate: () =>
+            enumerateHostTools(kind, {
+              cwd: toolProbeCwd,
+              ...(isActive && prefs?.binPath ? { binPath: prefs.binPath } : {}),
+            }),
+          ...(refresh ? { refresh: true } : {}),
+        });
+      }
+    : undefined;
+
   // Cycle break: the chat runner needs the Runtime's dispatcher, but
   // the Runtime is constructed *with* the chat runner. The runtimeRef
   // holder resolves at call time, after the assignment below.
@@ -379,6 +407,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           getDispatcher,
           publicBaseUrl: () => serverUrl,
           liveDataFile,
+          ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
           ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
         })
       : makeChatRunner({
@@ -451,6 +480,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                 refresh,
               });
             },
+            // Tools refresh on their own `?refreshTools=1` flag — slower (spawns
+            // a CLI) than the zero-token model refresh, so it's a separate
+            // trigger and a separate button in Settings → Agents.
+            ...(resolveCatalogTools ? { resolveTools: resolveCatalogTools } : {}),
           }
         : {},
     ),
@@ -613,6 +646,35 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // backfilled (issue #149).
     scheduler?.start();
     reconcileScheduler();
+
+    // Warm the host-tool catalog (builtins + MCP) for each detected runner on
+    // EVERY gateway start, in the background so it never delays readiness. The
+    // builder grounding and Settings → Agents read this cache; this boot probe
+    // keeps it fresh without a per-turn CLI spawn. Best-effort.
+    if (resolveCatalogTools) {
+      const warm = resolveCatalogTools;
+      void (async () => {
+        const kinds: RunnerKind[] = ['codex', 'claude-code'];
+        const checks = await Promise.all(
+          kinds.map(async (kind) => ({
+            kind,
+            present: (await probeCliAvailability(kind)).available,
+          })),
+        );
+        await Promise.all(
+          checks
+            .filter((c) => c.present)
+            .map((c) =>
+              warm(c.kind, true).catch((err) =>
+                logger.warn(
+                  `tool catalog warm (${c.kind}) failed: ` +
+                    (err instanceof Error ? err.message : String(err)),
+                ),
+              ),
+            ),
+        );
+      })();
+    }
   };
 
   const stop = async (): Promise<void> => {

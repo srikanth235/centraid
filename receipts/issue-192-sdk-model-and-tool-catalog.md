@@ -13,7 +13,7 @@ control, independent of the model Refresh.
 
 - [x] Commit 1 — agent-runtime: enumerate claude models via SDK `supportedModels()`
 - [x] Commit 2 — agent-runtime: host-tool probe (SDK loopback + MCP gate) + catalog v2 (tools beside models)
-- [ ] Commit 3 — gateway/skills: boot-probe tools, agents-status tools + `?refreshTools=1`, builder reads catalog
+- [x] Commit 3 — gateway/skills: boot-probe tools, agents-status tools + `?refreshTools=1`, builder reads catalog
 - [ ] Commit 4 — desktop: per-agent tools view + separate Refresh tools control
 
 ## What changed
@@ -49,6 +49,20 @@ control, independent of the model Refresh.
   `model-catalog.test.ts` cover cold/warm/refresh/failure-preserve and
   model↔tool merge independence.
 
+- **Commit 3 — gateway/skills: boot-probe tools, agents-status tools + `?refreshTools=1`, builder reads catalog.**
+  `build-gateway.ts` warms the tool catalog for each detected runner on every
+  `start()` — a background, best-effort probe from a stable `process.cwd()` (never
+  a draft worktree, which makes the claude SDK report 0 tools). A shared
+  `resolveCatalogTools` feeds both the boot probe and the route. `agents-routes.ts`
+  now returns `codexTools`/`claudeTools` from the catalog and re-probes on a
+  **separate** `?refreshTools=1` flag (distinct from models' `?refresh=1`, since
+  the tool probe spawns a CLI). The builder stops probing on the hot path:
+  `skills/authoring-prompt.ts` takes `tools` as data (the per-process in-memory
+  cache and the `enumerateTools` injection seam are gone), and
+  `unified-chat-runner.ts` reads cached tools from the catalog per turn via
+  `readRunnerTools`. Route tests in `agents-routes.test.ts` (+3) cover the tools
+  resolver, independent `refreshTools` threading, and best-effort degradation.
+
 ## Out of scope
 
 - codex model enumeration is unchanged — it has no alias vocabulary and no
@@ -68,3 +82,7 @@ control, independent of the model Refresh.
 - Live tool-catalog chain: cold read 0 → refresh probes the real claude CLI
   (44 tools / 16 MCP / 44 with schemas, ~5.5s) → persisted as catalog v2 with
   `toolsEnumeratedAt` → warm read returns 44 from disk.
+- `agents-routes.test.ts` — 7 pass (models + tools resolver plumbing);
+  `unified-chat-runner.test.ts` — 3 pass with the catalog-backed `resolveTools` seam.
+- `tsc -p` clean for agent-runtime, skills, gateway; verified the dev desktop boots
+  the in-process gateway against the fresh worktree dist.

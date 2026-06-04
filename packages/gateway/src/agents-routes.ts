@@ -8,14 +8,20 @@
 // `<bin> --version` for each known runner and report success.
 //
 //   GET /centraid/_agents/status → { codexAvailable, claudeAvailable,
-//                                    codexVersion?, claudeVersion? }
+//                                    codexVersion?, claudeVersion?,
+//                                    codexModels?, claudeModels?,
+//                                    codexTools?, claudeTools? }
+//
+// Models and tools refresh on INDEPENDENT triggers: `?refresh=1` re-enumerates
+// each agent's models; `?refreshTools=1` re-probes each agent's tool surface
+// (builtins + MCP). A plain read returns both from the catalog cache.
 //
 // Mounted via `startRuntimeHttpServer`'s `extraHandlers` seam, after the
 // bearer check. A remote gateway reports its own host's CLIs, not the
 // desktop's.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { probeCliAvailability } from '@centraid/agent-runtime';
+import { probeCliAvailability, type HostTool } from '@centraid/agent-runtime';
 import type { RunnerModel } from '@centraid/app-engine';
 import { sendJson } from './route-helpers.js';
 
@@ -30,6 +36,12 @@ export type AgentKind = 'codex' | 'claude-code';
  */
 export type ResolveAgentModels = (kind: AgentKind, refresh: boolean) => Promise<RunnerModel[]>;
 
+/**
+ * Resolve the host tools for a single runner kind (catalog cache; `refresh`
+ * re-probes the CLI live). Tools have no seed, so a cold catalog yields `[]`.
+ */
+export type ResolveAgentTools = (kind: AgentKind, refresh: boolean) => Promise<HostTool[]>;
+
 export interface AgentsStatus {
   /** The `codex` CLI is runnable on the gateway host. */
   codexAvailable: boolean;
@@ -43,24 +55,39 @@ export interface AgentsStatus {
   codexModels?: RunnerModel[];
   /** Models Claude Code can serve (default seed or refreshed catalog). */
   claudeModels?: RunnerModel[];
+  /** Tools codex exposes (builtins + MCP), from the catalog. */
+  codexTools?: HostTool[];
+  /** Tools Claude Code exposes (builtins + MCP), from the catalog. */
+  claudeTools?: HostTool[];
 }
 
 /**
- * Probe the gateway host for runnable coding-agent CLIs, and — when a model
- * resolver is supplied — each agent's models (so Settings → Agents can offer a
- * per-agent default-model picker, independent of which runner is active).
+ * Probe the gateway host for runnable coding-agent CLIs, and — when the
+ * resolvers are supplied — each agent's models and tools (so Settings → Agents
+ * can show a per-agent model picker and tool list, independent of which runner
+ * is active). Models and tools refresh on independent flags.
  */
 export async function readAgentsStatus(opts?: {
   resolveModels?: ResolveAgentModels;
+  resolveTools?: ResolveAgentTools;
   refresh?: boolean;
+  refreshTools?: boolean;
 }): Promise<AgentsStatus> {
-  const resolve = opts?.resolveModels;
+  const resolveModels = opts?.resolveModels;
+  const resolveTools = opts?.resolveTools;
   const refresh = opts?.refresh ?? false;
-  const [codex, claude, codexModels, claudeModels] = await Promise.all([
+  const refreshTools = opts?.refreshTools ?? false;
+  const [codex, claude, codexModels, claudeModels, codexTools, claudeTools] = await Promise.all([
     probeCliAvailability('codex'),
     probeCliAvailability('claude-code'),
-    resolve ? resolve('codex', refresh).catch(() => []) : Promise.resolve(undefined),
-    resolve ? resolve('claude-code', refresh).catch(() => []) : Promise.resolve(undefined),
+    resolveModels ? resolveModels('codex', refresh).catch(() => []) : Promise.resolve(undefined),
+    resolveModels
+      ? resolveModels('claude-code', refresh).catch(() => [])
+      : Promise.resolve(undefined),
+    resolveTools ? resolveTools('codex', refreshTools).catch(() => []) : Promise.resolve(undefined),
+    resolveTools
+      ? resolveTools('claude-code', refreshTools).catch(() => [])
+      : Promise.resolve(undefined),
   ]);
   return {
     codexAvailable: codex.available,
@@ -69,17 +96,21 @@ export async function readAgentsStatus(opts?: {
     ...(claude.version ? { claudeVersion: claude.version } : {}),
     ...(codexModels ? { codexModels } : {}),
     ...(claudeModels ? { claudeModels } : {}),
+    ...(codexTools ? { codexTools } : {}),
+    ...(claudeTools ? { claudeTools } : {}),
   };
 }
 
 /**
  * Build the agents route handler. Returns a function suitable for
- * `startRuntimeHttpServer`'s `extraHandlers`: resolves `true` when it owned
- * the request, `false` otherwise. `?refresh=1` re-enumerates each agent's
- * models live (otherwise the catalog cache / default seed is returned).
+ * `startRuntimeHttpServer`'s `extraHandlers`: resolves `true` when it owned the
+ * request, `false` otherwise. `?refresh=1` re-enumerates each agent's models;
+ * `?refreshTools=1` re-probes each agent's tools (otherwise the catalog cache /
+ * default seed is returned).
  */
 export function makeAgentsRouteHandler(opts?: {
   resolveModels?: ResolveAgentModels;
+  resolveTools?: ResolveAgentTools;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -87,12 +118,15 @@ export function makeAgentsRouteHandler(opts?: {
     if ((req.method ?? 'GET').toUpperCase() !== 'GET') return false;
 
     const refresh = url.searchParams.get('refresh') === '1';
+    const refreshTools = url.searchParams.get('refreshTools') === '1';
     sendJson(
       res,
       200,
       await readAgentsStatus({
         ...(opts?.resolveModels ? { resolveModels: opts.resolveModels } : {}),
+        ...(opts?.resolveTools ? { resolveTools: opts.resolveTools } : {}),
         refresh,
+        refreshTools,
       }),
     );
     return true;
