@@ -68,8 +68,8 @@ test('constructs the graph and exposes the lifecycle without binding a socket', 
   assert.ok(Array.isArray(gateway.extraHandlers));
   assert.equal(typeof gateway.composedHandler, 'function');
   // No listener bound — nothing in the handle resembles a URL/token.
-  assert.equal((gateway as Record<string, unknown>).url, undefined);
-  assert.equal((gateway as Record<string, unknown>).token, undefined);
+  assert.equal((gateway as unknown as Record<string, unknown>).url, undefined);
+  assert.equal((gateway as unknown as Record<string, unknown>).token, undefined);
 });
 
 test('the legacy backend reports no appsStore on the handle', () => {

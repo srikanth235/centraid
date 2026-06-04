@@ -3408,20 +3408,21 @@ import {
                       'button',
                       {
                         class: 'btn btn-soft tiny-btn',
-                        onClick: async () => {
-                          try {
-                            await activateVersion({
-                              id: appId!,
-                              versionId: v.versionId,
-                            });
-                            showToast(`Restored to ${shortVersionTitle(v)}`);
-                            lastPublishedVersionId = v.versionId;
-                            if (chatView === 'history') renderChatPane();
-                            if (tab === 'preview') renderRight();
-                          } catch (err) {
-                            showToast(`Restore failed: ${String(err)}`);
-                          }
-                        },
+                        onClick: () =>
+                          void (async () => {
+                            try {
+                              await activateVersion({
+                                id: appId!,
+                                versionId: v.versionId,
+                              });
+                              showToast(`Restored to ${shortVersionTitle(v)}`);
+                              lastPublishedVersionId = v.versionId;
+                              if (chatView === 'history') renderChatPane();
+                              if (tab === 'preview') renderRight();
+                            } catch (err) {
+                              showToast(`Restore failed: ${String(err)}`);
+                            }
+                          })(),
                       },
                       'Restore',
                     )

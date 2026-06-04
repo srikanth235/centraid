@@ -11,6 +11,15 @@
     "packages/blueprints/apps/**",
     "packages/blueprints/automations/**"
   ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "off",
+    "restriction": "off",
+    "style": "off",
+    "nursery": "off"
+  },
   "rules": {
     "arrow-body-style": "off",
     "class-methods-use-this": "off",
@@ -36,6 +45,17 @@
     "no-nested-ternary": "off",
     "no-plusplus": "off",
     "no-promise-executor-return": "off",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["@centraid/*/src/*", "@centraid/*/dist/*"],
+            "message": "Import from the package root barrel (e.g. '@centraid/app-engine'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports."
+          }
+        ]
+      }
+    ],
     "no-shadow": "off",
     "no-throw-literal": "off",
     "no-unmodified-loop-condition": "off",
@@ -65,6 +85,7 @@
     "require-await": "off",
     "sort-keys": "off",
     "typescript/array-type": "off",
+    "typescript/ban-ts-comment": "error",
     "typescript/consistent-type-definitions": "off",
     "typescript/consistent-type-imports": "off",
     "typescript/no-dynamic-delete": "off",
@@ -111,5 +132,48 @@
     "unicorn/prefer-type-error": "off",
     "unicorn/switch-case-braces": "off",
     "unicorn/text-encoding-identifier-case": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["packages/app-engine/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@centraid/*"],
+                "message": "app-engine is the stable core of the dependency DAG — it must not import other @centraid packages. Mode/runtime specifics belong at entrypoints (desktop main, openclaw-plugin). See governance: module-layering."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/automation/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@centraid/agent-runtime",
+                  "@centraid/agent-runtime/*",
+                  "@centraid/gateway",
+                  "@centraid/gateway/*"
+                ],
+                "message": "automation must not depend on an agent backend — execution and scheduling are injected callbacks (it depends on app-engine, never on agent-runtime/gateway). See governance: module-layering."
+              },
+              {
+                "group": ["@centraid/*/src/*", "@centraid/*/dist/*"],
+                "message": "Import from the package root barrel, not its internals. See governance: no-deep-imports."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

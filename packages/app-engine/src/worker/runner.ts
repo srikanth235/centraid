@@ -136,7 +136,7 @@ const ctx = {
   abortSignal: abortController.signal,
 };
 
-(async () => {
+void (async () => {
   try {
     const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
       default?: (args: unknown) => Promise<unknown>;

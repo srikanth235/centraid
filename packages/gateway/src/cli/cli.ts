@@ -71,6 +71,7 @@ function parseServeArgs(args: string[]): ParsedServe {
   const out: ParsedServe = {};
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
+    if (flag === undefined) continue;
     const next = (): string => {
       const v = args[++i];
       if (v === undefined) fail(`flag "${flag}" requires a value`, 2);
@@ -167,8 +168,8 @@ async function commandServe(args: string[]): Promise<void> {
     });
     process.exit(0);
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', (signal) => void shutdown(signal));
+  process.on('SIGTERM', (signal) => void shutdown(signal));
 }
 
 async function commandPrintToken(args: string[]): Promise<void> {

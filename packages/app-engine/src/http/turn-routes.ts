@@ -372,8 +372,15 @@ async function handlePostTurn(
       case 'error':
         acc.errorMessage = event.message;
         break;
-      // assistant.start / reasoning.delta / phase / aborted — no ledger
-      // state to fold; the SSE write still happens via `writeEvent`.
+      // No ledger state to fold for these; the SSE write still happens via
+      // `writeEvent`. Listed explicitly (not a default) so a newly added
+      // event type fails the exhaustiveness check instead of slipping through.
+      case 'assistant.start':
+      case 'reasoning.delta':
+      case 'phase':
+      case 'aborted':
+      case 'webhooks':
+        break;
     }
   };
   const onEvent = (event: TurnStreamEvent): void => {
