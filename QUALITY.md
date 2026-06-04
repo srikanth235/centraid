@@ -2,7 +2,11 @@
 
 ## Open
 
-- Nothing tracked yet.
+- #212 — Testing strategy is documented in [TESTING.md](TESTING.md) but not yet
+  implemented: the repo still runs `tsx --test` (`node:test`) across ~80 files.
+  Migration to vitest (one v8 coverage tool, worker tests against `dist`),
+  engine coverage gating, the Playwright `_electron` boot test, and Maestro
+  flows land incrementally in follow-up PRs, package by package.
 
 ## Resolved
 

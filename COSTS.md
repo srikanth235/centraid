@@ -706,3 +706,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-a32d3715-763-1780595141 | claude-code | a32d3715-763e-4ae6-b1ec-3a522e856d12 | #210 | claude-opus-4-8 | 2876 | 5170 | 16004 | 22 | 8068 | 0.0552 |  |
 | claude-code-b72e775d-901-1780596741 | claude-code | b72e775d-901b-43cb-bb28-2707f7e1ba5f | #210 | claude-opus-4-8 | 8334 | 49529 | 693392 | 7396 | 65259 | 0.8828 |  |
 | claude-code-a312fd27-2c4-1780596878 | claude-code | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | claude-opus-4-8 | 22242 | 1159128 | 56319044 | 247518 | 1428888 | 41.7032 |  |
+| claude-code-ed31e5ae-22b-1780597284 | claude-code | ed31e5ae-22b8-499c-9e9e-23131aa4be06 | #212 | claude-opus-4-8 | 26170 | 92365 | 1884335 | 29831 | 148366 | 2.3961 | docs(testing): codify the testing strategy as TESTING.md (#212)Land issue #212's |
