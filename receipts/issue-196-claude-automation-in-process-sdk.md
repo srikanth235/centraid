@@ -1,0 +1,131 @@
+# issue-196 — Drive local claude automations via in-process Agent SDK
+
+GitHub issue: [#196](https://github.com/srikanth235/centraid/issues/196)
+
+The local automation runner's `defaultSpawnCli` was the last `claude -p`
+subprocess holdout. Every other claude path already runs the in-process
+`@anthropic-ai/claude-agent-sdk` `query()` — chat, `ctx.agent`
+(`runClaudeSdkTurn`), model enumeration, and host-tool enumeration
+(`captureClaudeTools`). This moves the `ctx.tool` dispatch path to the same
+in-process SDK and fixes the comment drift that still called the claude runner
+a `claude -p` subprocess.
+
+## Checklist
+
+- [x] Replace `claude -p` spawn with in-process Agent SDK `query()`
+- [x] Point at the mock via `options.env` without mutating `process.env`
+- [x] Fix `claude -p` comment drift
+- [x] Rename the CLI-implying public surface to `RunHostAgent`
+- [x] Rename `run-automation-local.ts` to `run-automation.ts`
+- [x] Fold `LocalRunnerKind` into the shared `RunnerKind`
+
+## What changed
+
+### `packages/agent-runtime/src/run-automation-host-agent.ts`
+
+- **Replace `claude -p` spawn with in-process Agent SDK `query()`.**
+  `defaultRunHostAgent` now branches into two helpers. The claude branch calls a
+  new `runClaudeAgentSdk` that drives one turn through the in-process
+  `@anthropic-ai/claude-agent-sdk` instead of spawning a subprocess; the codex
+  branch is extracted unchanged into `spawnCodexExec` (still a real
+  `codex exec` subprocess — there is no in-process equivalent).
+- **Map CLI flags to SDK options.** `--allowed-tools` → `allowedTools`,
+  `--permission-mode bypassPermissions` → `permissionMode` +
+  `allowDangerouslySkipPermissions: true`, `binPath` →
+  `pathToClaudeCodeExecutable`. The `--verbose` / `--output-format stream-json`
+  flags are dropped (they were CLI-stdout concerns the SDK does not have).
+- **Point at the mock via `options.env` without mutating `process.env`.** The
+  per-fire mock URL + bearer are set as `ANTHROPIC_BASE_URL` /
+  `ANTHROPIC_API_KEY` on a copied env passed through `options.env`, which the
+  SDK uses as the child env wholesale — the host `process.env` is never
+  touched (matching `captureClaudeTools` / `runClaudeSdkTurn`).
+- The generator is drained to completion: the mock dictates every turn and
+  ends it with `end_turn`, so a clean turn returns `{ ok: true, exitCode: 0 }`
+  and an abort/error returns `{ ok: false }` so the awaiting `ctx.tool` batch
+  sees a failure rather than a silent success. The behavior contract is
+  unchanged; `RunHostAgentResult.exitCode`'s doc now notes the SDK path
+  synthesizes `0`/`null`.
+
+### Rename the CLI-implying public surface to `RunHostAgent`
+
+Since the claude runner no longer shells out, the `SpawnCli`-family names
+mis-described the surface. Renamed across `@centraid/agent-runtime`
+(no external consumers): the file
+`run-automation-cli-spawn.ts` → `run-automation-host-agent.ts`, and the
+exported symbols `SpawnCli` → `RunHostAgent`, `defaultSpawnCli` →
+`defaultRunHostAgent`, `SpawnCliInput` → `RunHostAgentInput`,
+`SpawnCliResult` → `RunHostAgentResult`, plus the `spawnCli` option field
+on `RunAutomationOptions` / `LiveDispatchOptions` → `runHostAgent`. The
+barrel re-exports in `index.ts` and the filename references in
+`run-automation.ts`, `run-automation-live-dispatch.ts`, and
+`codex-provider-config.ts` were updated to match.
+
+### Rename `run-automation-local.ts` to `run-automation.ts`
+
+The `-local` qualifier was redundant — it's the package's automation-fire entry
+point. Renamed the file `run-automation-local.ts` → `run-automation.ts` and its
+exports `runAutomationLocal` → `runAutomation`, `RunAutomationLocalOptions` →
+`RunAutomationOptions`. Updated the consumer (`@centraid/gateway`'s
+`build-gateway.ts`) and the doc-comment references in `@centraid/agent-runtime`
+(`index.ts`, `run-automation-host-agent.ts`, `run-automation-live-dispatch.ts`),
+`@centraid/gateway` (`automations-routes.ts`), and `@centraid/automation`
+(`fire.ts`, `index.ts`, `in-process-scheduler.ts`). The gateway's existing
+`runAutomation` run-now *field* is an object property in a different scope, so
+it coexists without collision.
+
+### Fold `LocalRunnerKind` into the shared `RunnerKind`
+
+`LocalRunnerKind` (`'codex' | 'claude-code'`) was a verbatim duplicate of the
+canonical `RunnerKind` from `@centraid/app-engine` (already re-exported through
+agent-runtime's `types.ts`). Deleted the duplicate type in
+`run-automation-host-agent.ts` and switched its `RunHostAgentInput.kind`, plus
+the `runner` fields/locals in `run-automation.ts` and
+`run-automation-live-dispatch.ts`, to `RunnerKind` (imported from `./types.js`,
+matching `host-tools.ts`). Dropped the now-redundant `LocalRunnerKind`
+re-export from the barrel — consumers use the already-exported `RunnerKind`.
+This also removes the last stray "local" qualifier from the runner vocabulary.
+
+### Fix `claude -p` comment drift
+
+The claude runner is no longer a subprocess, so comments that described it as
+`claude -p` were corrected to "in-process Claude Agent SDK turn":
+
+- `packages/agent-runtime/src/run-automation-live-dispatch.ts` — module header,
+  the `startLiveDispatch` doc, and the `driveAgent` adapter comment.
+- `packages/agent-runtime/src/run-automation-local.ts` — module header.
+- `packages/conversation-engine/src/automation/mock-llm-server.ts` — module
+  header, the wire-protocol table's `(claude -p)` → `(Claude Agent SDK)`
+  annotation, the concurrency-model paragraph, and `endDispatch`'s doc.
+- `packages/conversation-engine/src/automation/mock-llm-writers.ts` — the
+  streaming-default and Anthropic-Messages writer comments.
+- `packages/conversation-engine/src/automation/persistent-mock-session.ts` —
+  the `driveAgent` variants comment.
+- `packages/conversation-engine/src/automation/worker/automation-runner.ts` —
+  the "why batching" comment, also reframed off the pre-#166 per-batch-spawn
+  model onto per-turn mock round-trips.
+- `packages/conversation-engine/src/index.ts` — two re-export comments.
+
+## Out of scope
+
+- The codex `codex exec` subprocess path is unchanged — there is no in-process
+  codex SDK, so it still spawns.
+- The OpenClaw embedded (`runEmbeddedAgent`) dispatch path is untouched.
+- The `RunHostAgent` rename is confined to `@centraid/agent-runtime`; the codex
+  helper is still named `spawnCodexExec` because that path genuinely spawns.
+
+## Verification
+
+- `tsc --noEmit` clean on `@centraid/agent-runtime` (all of `src`, including the
+  renamed `run-automation-host-agent.ts`) — resolved against the live worktree
+  source of its `@centraid/*` deps. The post-rename grep shows zero remaining
+  `SpawnCli` / `spawnCli` references and a consistent `RunHostAgent` surface.
+- Automation tests pass (25/25) across `persistent-mock-session`,
+  `mock-llm-server`, and `automation-fire` in conversation-engine — the
+  dispatch contract `runHostAgent` plugs into is exercised there via injected
+  drivers (recorded with the first commit, before the local checkout's
+  cross-package resolution drifted; CI re-runs them authoritatively).
+- The SDK option names (`allowedTools`, `permissionMode`,
+  `allowDangerouslySkipPermissions`, `pathToClaudeCodeExecutable`) were checked
+  against the installed `@anthropic-ai/claude-agent-sdk` `sdk.d.ts` before
+  wiring. No test imports `defaultRunHostAgent` directly (tests inject their own
+  `runHostAgent`), so the public behavior contract is preserved.

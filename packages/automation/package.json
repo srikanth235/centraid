@@ -1,0 +1,32 @@
+{
+  "name": "@centraid/automation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Centraid automation engine — manifest, fire spine + OpenDispatch seam, the Host interface + in-process scheduler, webhook ingress, the worker-thread handler runner, and app scaffolding. Backend-agnostic: execution and scheduling are injected callbacks, so it depends on @centraid/app-engine but never on any agent backend. Consumers import it namespaced (`import * as automation`).",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@centraid/blueprints": "workspace:*",
+    "@centraid/app-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@centraid/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.3",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

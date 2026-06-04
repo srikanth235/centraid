@@ -14,7 +14,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { scaffoldAutomationAppFiles } from '@centraid/conversation-engine';
+import * as automation from '@centraid/automation';
 import type { WorktreeStore } from './worktree-store/index.js';
 import { writeFileMap } from './route-helpers.js';
 import {
@@ -70,7 +70,7 @@ afterEach(async () => {
 
 test('publishAndReconcile validates, publishes, registers, reconciles, then closes', async () => {
   // A valid scaffolded automation app so manifest validation passes.
-  await writeFileMap(appDir, scaffoldAutomationAppFiles('notes', { prompt: 'do it' }));
+  await writeFileMap(appDir, automation.scaffoldAppFiles('notes', { prompt: 'do it' }));
 
   await publishAndReconcile(makeOpts(), {
     appId: 'notes',
@@ -84,7 +84,7 @@ test('publishAndReconcile validates, publishes, registers, reconciles, then clos
 });
 
 test('publishAndReconcile keeps a non-ephemeral session open', async () => {
-  await writeFileMap(appDir, scaffoldAutomationAppFiles('notes', { prompt: 'do it' }));
+  await writeFileMap(appDir, automation.scaffoldAppFiles('notes', { prompt: 'do it' }));
 
   await publishAndReconcile(makeOpts(), {
     appId: 'notes',

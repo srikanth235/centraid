@@ -52,14 +52,10 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
-import {
-  listAutomations,
-  InProcessScheduler,
-  type LocalScheduler,
-} from '@centraid/conversation-engine';
+import * as automation from '@centraid/automation';
 import {
   makeConversationRunner,
-  runAutomationLocal,
+  runAutomation,
   runPreflight,
   resolveRunnerModels,
   resolveRunnerTools,
@@ -89,12 +85,12 @@ export interface BuildGatewayOptions {
   /**
    * The cron scheduler `start()` runs (issue #149) is gateway-owned and
    * in-process: a single minute-boundary timer fires enabled cron
-   * automations through the same `runAutomationLocal` path as "run now".
+   * automations through the same `runAutomation` path as "run now".
    * There is no OS scheduler; missed minutes during downtime are skipped
-   * (n8n semantics — no backfill). Defaults to a fresh `InProcessScheduler`;
+   * (n8n semantics — no backfill). Defaults to a fresh `automation.InProcessScheduler`;
    * inject one (e.g. a spy) only for tests.
    */
-  scheduler?: LocalScheduler;
+  scheduler?: automation.LocalScheduler;
   /** Logger forwarded to `Runtime`. Defaults to a `console.*` wrapper. */
   logger?: RuntimeLogger;
   /**
@@ -138,7 +134,7 @@ export interface BuildGatewayOptions {
   runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   /**
    * Override for how an automation is fired (Plane B). The gateway's default
-   * runs the handler through `runAutomationLocal` (codex/claude CLI puppet).
+   * runs the handler through `runAutomation` (codex/claude CLI puppet).
    * The OpenClaw plugin injects an in-process fire (`runOpenclawFire`:
    * `ctx.tool` → `callGatewayTool`, `ctx.agent` → simple-completion) here, so
    * BOTH scheduled (cron) and manual (run-now) fires execute in OpenClaw's
@@ -281,7 +277,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // persistent instance, assigned once the fire surface is wired below.
   const schedulerCodeAppsDir = (): string =>
     appsStore ? path.join(appsStore.getActiveMainLink(), 'apps') : paths.appsDir;
-  let scheduler: LocalScheduler | undefined;
+  let scheduler: automation.LocalScheduler | undefined;
   let reconcileInFlight = false;
   let reconcileDirty = false;
   const reconcileScheduler = (): void => {
@@ -295,7 +291,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     void (async () => {
       do {
         reconcileDirty = false;
-        const { rows } = await listAutomations(schedulerCodeAppsDir());
+        const { rows } = await automation.list(schedulerCodeAppsDir());
         const diff = await sched.reconcile(rows);
         if (diff.added.length || diff.updated.length || diff.removed.length) {
           logger.info(
@@ -515,7 +511,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
           void (async () => {
             const prefs = await prefsLoader();
-            await runAutomationLocal({
+            await runAutomation({
               automationRef,
               runId,
               appsDir: paths.appsDir,
@@ -539,7 +535,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // same `fireAutomation` path as run-now. Injectable for tests.
     scheduler =
       options.scheduler ??
-      new InProcessScheduler({
+      new automation.InProcessScheduler({
         fire: (ref) => fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
         onError: (err, ref) =>
           logger.warn(

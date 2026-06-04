@@ -2,14 +2,15 @@
  * Live `ctx.tool` / `ctx.agent` dispatch for the local automation
  * runner.
  *
- * Split out of `run-automation-local.ts` so that file can stay focused
+ * Split out of `run-automation.ts` so that file can stay focused
  * on the per-fire lifecycle (manifest load, audit store, onFailure
  * cascade). This module owns the "live" side: the persistent mock-LLM
- * session, the single long-lived CLI subprocess that executes every
- * `ctx.tool` batch, and the `ctx.agent` one-shot against the user's
- * real provider.
+ * session, the single long-lived agent turn that executes every
+ * `ctx.tool` batch (an in-process Claude SDK `query()` for claude, a
+ * `codex exec` subprocess for codex), and the `ctx.agent` one-shot
+ * against the user's real provider.
  *
- * Issue #166 — persistent session: a fire spawns ONE CLI session pointed
+ * Issue #166 — persistent session: a fire opens ONE agent session pointed
  * at the mock and keeps it alive across the whole handler run. The
  * deterministic handler drives; each `ctx.tool` batch is staged into the
  * live session (the CLI executes the tools natively through its MCP/auth
@@ -29,19 +30,10 @@ import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import {
-  coerceAgentAnswer,
-  startPersistentMockSession,
-  type AgentDriver,
-  type AutomationAgentDispatcher,
-  type AutomationToolDispatcher,
-} from '@centraid/conversation-engine';
+import * as automation from '@centraid/automation';
+import type { RunnerKind } from './types.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
-import {
-  defaultSpawnCli,
-  type LocalRunnerKind,
-  type SpawnCli,
-} from './run-automation-cli-spawn.js';
+import { defaultRunHostAgent, type RunHostAgent } from './run-automation-host-agent.js';
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the CLI's cwd. */
@@ -49,16 +41,16 @@ export interface LiveDispatchOptions {
   /** Id of the automation being fired. */
   automationId: string;
   runId: string;
-  runner: LocalRunnerKind;
-  spawnCli: SpawnCli;
+  runner: RunnerKind;
+  runHostAgent: RunHostAgent;
   /** Manifest `requires.tools` allowlist forwarded to the CLI. */
   toolsAllow: readonly string[];
   onLog: (level: 'info' | 'warn' | 'error', msg: string) => void;
 }
 
 export interface LiveDispatch {
-  toolDispatcher: AutomationToolDispatcher;
-  agentDispatcher: AutomationAgentDispatcher;
+  toolDispatcher: automation.ToolDispatcher;
+  agentDispatcher: automation.AgentDispatcher;
   /** Tear down the mock server + scratch dir. Safe to call once. */
   close(): Promise<void>;
 }
@@ -108,21 +100,21 @@ function normalizeOutputSchema(schema: unknown): unknown {
 
 /**
  * Stand up the live dispatch surface for the CLI runner: the shared persistent
- * mock session (issue #166) plus a scratch dir. The CLI session is started
+ * mock session (issue #166) plus a scratch dir. The agent session is started
  * lazily on the first `ctx.tool` batch (an automation that never calls a tool
- * never spawns one). The only CLI-specific piece is the `driveAgent` adapter,
- * which runs `codex exec` / `claude -p` against the mock; everything else (the
- * mock, batch staging/correlation, timing) is the shared session.
+ * never opens one). The only runner-specific piece is the `driveAgent` adapter,
+ * which runs the Claude SDK `query()` / `codex exec` against the mock;
+ * everything else (the mock, batch staging/correlation, timing) is shared.
  */
 export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<LiveDispatch> {
   const scratchDir = path.join(opts.workdir, '.automation-scratch', opts.runId);
   await fs.mkdir(scratchDir, { recursive: true });
 
-  // The CLI host adapter: point a `codex exec` / `claude -p` session at the
-  // mock for the lifetime of the fire. Resolves when the CLI exits (`close()`
-  // stages the final `end_turn`).
-  const driveAgent: AgentDriver = async (input) => {
-    const outcome = await opts.spawnCli({
+  // The host agent adapter: point an in-process Claude SDK `query()` / a
+  // `codex exec` subprocess at the mock for the lifetime of the fire. Resolves
+  // when the agent turn ends (`close()` stages the final `end_turn`).
+  const driveAgent: automation.AgentDriver = async (input) => {
+    const outcome = await opts.runHostAgent({
       kind: opts.runner,
       mockBaseUrl: input.mockBaseUrl,
       mockBearerToken: input.mockBearerToken,
@@ -140,19 +132,19 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
         };
   };
 
-  const session = await startPersistentMockSession({
+  const session = await automation.startPersistentMockSession({
     workdir: opts.workdir,
     automationId: opts.automationId,
     driveAgent,
     onLog: opts.onLog,
   });
-  const toolDispatcher: AutomationToolDispatcher = session.toolDispatcher;
+  const toolDispatcher: automation.ToolDispatcher = session.toolDispatcher;
 
   // ctx.agent routes to the user's REAL provider via the local CLI —
   // no mock involvement. The final answer is read from a file the CLI
   // writes (codex `--output-last-message`) rather than parsed out of
   // the event stream, and `--output-schema` enforces the JSON shape.
-  const agentDispatcher: AutomationAgentDispatcher = async (call, ctx): Promise<unknown> => {
+  const agentDispatcher: automation.AgentDispatcher = async (call, ctx): Promise<unknown> => {
     const env = { ...process.env };
     // `stdin: 'ignore'` is load-bearing: `codex exec` treats an open
     // stdin pipe as an appended `<stdin>` instruction block and blocks
@@ -189,7 +181,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       if (errorMessage && !finalText) {
         throw new Error(`ctx.agent (claude) failed: ${errorMessage}`);
       }
-      return coerceAgentAnswer(finalText, call.json);
+      return automation.coerceAgentAnswer(finalText, call.json);
     }
 
     // codex exec — non-interactive, no approval prompts, runnable
@@ -229,7 +221,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       // whatever it printed to stdout.
       answer = result.stdout;
     }
-    return coerceAgentAnswer(answer, call.json);
+    return automation.coerceAgentAnswer(answer, call.json);
   };
 
   let closed = false;
@@ -247,4 +239,4 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   };
 }
 
-export { defaultSpawnCli };
+export { defaultRunHostAgent };

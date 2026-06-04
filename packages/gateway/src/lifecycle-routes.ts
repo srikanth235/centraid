@@ -53,7 +53,7 @@ import {
   updateAppMetaFiles,
   type ScaffoldFile,
 } from '@centraid/blueprints';
-import { provisionPendingWebhooksInFiles } from '@centraid/conversation-engine';
+import { provisionPendingWebhooksInFiles } from '@centraid/automation';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
   handleAutomationCreate,

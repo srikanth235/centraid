@@ -30,7 +30,7 @@
  * via a `webhooks` stream event.
  *
  * Since issue #147 (Concern 1) this is a thin config over
- * `makeConversationRunnerCore` (`@centraid/conversation-engine`): the shared per-turn
+ * `makeConversationRunnerCore` (`@centraid/app-engine`): the shared per-turn
  * spine lives there; this file supplies only the builder seams — draft-worktree cwd,
  * the authoring prompt (delegated to `@centraid/skills`), and post-turn
  * webhook minting.
@@ -50,6 +50,7 @@ import {
   type HostTool,
 } from '@centraid/agent-runtime';
 import {
+  makeConversationRunnerCore,
   type ConversationRunner,
   type TurnStreamEvent,
   type Dispatcher,
@@ -57,11 +58,7 @@ import {
   type RunnerPrefs,
   type RunTurnFn,
 } from '@centraid/app-engine';
-import {
-  makeConversationRunnerCore,
-  provisionAppPendingWebhooks,
-  WEBHOOK_ROUTE_PREFIX,
-} from '@centraid/conversation-engine';
+import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
 import { WorktreeStore } from './worktree-store/index.js';
 import { ensureSession } from './lifecycle-shared.js';
