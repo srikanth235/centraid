@@ -9,11 +9,11 @@
 
 import { randomUUID } from 'node:crypto';
 import type {
-  AgentRunsStore,
-  AgentRunNodeKind,
-  AgentRunRow,
+  ConversationStore,
+  ItemKind,
+  Turn,
   AutomationTriggerKind,
-  ChatStreamEvent,
+  TurnStreamEvent,
   RunStreamEvent,
 } from '@centraid/app-engine';
 import type { AutomationHistoryConfig } from './automation-manifest.js';
@@ -60,10 +60,16 @@ export interface RunRef {
   output?: unknown;
 }
 
-export function rowToRunRef(row: AgentRunRow): RunRef {
+/**
+ * Project a `turns` row into the handler-facing `ctx.runs` ref. Each fire is
+ * its own execution conversation now, so the automation ref is passed in
+ * (it's no longer the conversation id); `inputText` is the turn's ordinal-0
+ * `message_in` payload, fetched by the caller.
+ */
+export function rowToRunRef(row: Turn, automationRef: string, inputText?: string): RunRef {
   const ref: RunRef = {
-    runId: row.runId,
-    automationId: row.automationId ?? '',
+    runId: row.turnId,
+    automationId: automationRef,
     triggerKind: row.triggerKind,
     startedAt: row.startedAt,
     ok: row.ok,
@@ -71,11 +77,11 @@ export function rowToRunRef(row: AgentRunRow): RunRef {
   if (row.endedAt !== undefined) ref.endedAt = row.endedAt;
   if (row.error !== undefined) ref.error = row.error;
   if (row.summary !== undefined) ref.summary = row.summary;
-  if (row.inputJson !== undefined) {
+  if (inputText !== undefined) {
     try {
-      ref.input = JSON.parse(row.inputJson) as unknown;
+      ref.input = JSON.parse(inputText) as unknown;
     } catch {
-      ref.input = row.inputJson;
+      ref.input = inputText;
     }
   }
   if (row.outputJson !== undefined) {
@@ -89,22 +95,22 @@ export function rowToRunRef(row: AgentRunRow): RunRef {
 }
 
 export function applyRetention(
-  store: AgentRunsStore,
-  automationId: string,
+  store: ConversationStore,
+  automationRef: string,
   history: AutomationHistoryConfig | undefined,
 ): void {
   if (!history) return;
   const keep = history.keep;
   if (keep === 'all') return;
   if (keep === 'errors') {
-    store.prune(automationId, { errorsOnly: true });
+    store.pruneAutomation(automationRef, { errorsOnly: true });
     return;
   }
   if ('count' in keep) {
-    store.prune(automationId, { count: keep.count });
+    store.pruneAutomation(automationRef, { count: keep.count });
     return;
   }
-  if ('days' in keep) store.prune(automationId, { days: keep.days });
+  if ('days' in keep) store.pruneAutomation(automationRef, { days: keep.days });
 }
 
 export interface HandlerReturnEnvelope {
@@ -135,12 +141,13 @@ export function makeNodeId(runId: string, ordinal: number): string {
 }
 
 export interface OpenRunNodeArgs {
-  store: AgentRunsStore;
+  store: ConversationStore;
   emit: RunEventSink;
+  /** The turn this item belongs to. */
   runId: string;
   ordinal: number;
   batchId?: number;
-  kind: AgentRunNodeKind;
+  kind: ItemKind;
   /** Tool name or `'agent'`. */
   name?: string;
   args?: unknown;
@@ -157,9 +164,9 @@ export function openRunNode(args: OpenRunNodeArgs): string {
   const nodeId = makeNodeId(args.runId, args.ordinal);
   const argsJson = args.args !== undefined ? (truncateForAudit(args.args) ?? '') : undefined;
   try {
-    args.store.openNode({
-      nodeId,
-      runId: args.runId,
+    args.store.openItem({
+      itemId: nodeId,
+      turnId: args.runId,
       ordinal: args.ordinal,
       ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
       kind: args.kind,
@@ -191,7 +198,7 @@ export function openRunNode(args: OpenRunNodeArgs): string {
  * still on the collect-on-exit path).
  */
 export function usageCloseFields(
-  usage: Extract<ChatStreamEvent, { type: 'usage' }> | undefined,
+  usage: Extract<TurnStreamEvent, { type: 'usage' }> | undefined,
 ): Partial<CloseRunNodeArgs> {
   if (!usage) return {};
   return {
@@ -205,15 +212,15 @@ export function usageCloseFields(
 }
 
 export interface CloseRunNodeArgs {
-  store: AgentRunsStore;
+  store: ConversationStore;
   emit: RunEventSink;
   nodeId: string;
   ordinal: number;
   ok: boolean;
   result?: unknown;
   error?: string;
-  /** Child run id for a legacy node that spawned one. Dormant — no current producer. */
-  childRunId?: string;
+  /** Child turn id for an item that spawned a sub-agent. Dormant — no current producer. */
+  childTurnId?: string;
   started: number;
   ended: number;
   /**
@@ -239,12 +246,12 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
   const outputJson =
     args.ok && args.result !== undefined ? (truncateForAudit(args.result) ?? '') : undefined;
   try {
-    args.store.closeNode({
-      nodeId: args.nodeId,
+    args.store.closeItem({
+      itemId: args.nodeId,
       ok: args.ok,
       ...(outputJson !== undefined ? { outputJson } : {}),
       ...(args.error !== undefined ? { error: args.error } : {}),
-      ...(args.childRunId !== undefined ? { childRunId: args.childRunId } : {}),
+      ...(args.childTurnId !== undefined ? { childTurnId: args.childTurnId } : {}),
       endedAt: args.ended,
       durationMs,
       ...(args.model !== undefined ? { model: args.model } : {}),

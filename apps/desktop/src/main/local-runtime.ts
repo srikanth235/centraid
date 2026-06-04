@@ -3,7 +3,7 @@ import { invalidatePreflightCache } from '@centraid/agent-runtime';
 import {
   gatewayAnalyticsDb,
   gatewayAppsDir,
-  gatewayChatRunnerSessionsDir,
+  gatewayConversationRunnerSessionsDir,
   gatewayCodeStoreDir,
   gatewayIdentityDb,
   gatewayModelCatalogFile,
@@ -102,7 +102,7 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
         appsDir,
         identityDb: localRuntimeGatewayDb(gatewayId),
         analyticsDb: localRuntimeAnalyticsDb(gatewayId),
-        chatRunnerSessionDir: gatewayChatRunnerSessionsDir(gatewayId),
+        conversationRunnerSessionDir: gatewayConversationRunnerSessionsDir(gatewayId),
         // Chat picker's per-runner model catalog (issue #188): the gateway
         // seeds it with defaults and overwrites it with live self-reported
         // ids on Refresh.

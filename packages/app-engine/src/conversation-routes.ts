@@ -1,28 +1,39 @@
 /*
- * HTTP route dispatcher for the chat-history store.
+ * HTTP route dispatcher for the conversation-history store.
  *
- * Mounted under `/_centraid-chat` by both gateway hosts:
+ * Mounted under `/_centraid-conversations` by both gateway hosts:
  *   - the OpenClaw plugin (remote gateway) via `api.registerHttpRoute`
  *   - `startRuntimeHttpServer` for the desktop's embedded local runtime
  *
- * The store itself lives in `chat-history.ts`. This module is split out
- * purely for file-size reasons — keeping the store, its schema, and its
+ * The store itself lives in `conversation-history.ts`. This module is split
+ * out purely for file-size reasons — keeping the store, its schema, and its
  * SQL prepared statements in one file (where the per-user scoping rules
  * are easier to audit at a glance) is the more important constraint.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ChatHistoryStore } from './chat-history.js';
+import type { ConversationHistoryStore } from './conversation-history.js';
 
-const ROUTE_PREFIX = '/_centraid-chat';
+const ROUTE_PREFIX = '/_centraid-conversations';
+
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB per attachment.
+
+async function readRawBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.byteLength;
+    if (total > MAX_UPLOAD_BYTES) throw new Error(`upload exceeds ${MAX_UPLOAD_BYTES} bytes`);
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks);
+}
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  if (chunks.length === 0) return undefined;
-  const text = Buffer.concat(chunks).toString('utf8');
+  const raw = await readRawBody(req);
+  if (raw.length === 0) return undefined;
+  const text = raw.toString('utf8');
   if (!text) return undefined;
   return JSON.parse(text) as unknown;
 }
@@ -41,7 +52,7 @@ function sendError(res: ServerResponse, status: number, message: string): void {
 }
 
 /**
- * Build the chat-history HTTP route handler. The store is resolved lazily
+ * Build the conversation HTTP route handler. The store is resolved lazily
  * via `getStore()` so the SQLite connection only opens in the gateway
  * process (route handlers don't fire in agent-worker contexts), avoiding
  * stray DB handles in subprocesses that never touch chat history.
@@ -51,16 +62,16 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  * scoping is still enforced inside the store via its `userIdProvider`.
  *
  * Dispatch map:
- *   GET    /_centraid-chat/apps/<appId>/sessions        list (this app)
- *   POST   /_centraid-chat/apps/<appId>/sessions        create  body: {mode?, title?}
- *   GET    /_centraid-chat/apps/<appId>/sessions/<id>   load (with transcript)
- *   PATCH  /_centraid-chat/apps/<appId>/sessions/<id>   rename  body: {title}
- *   DELETE /_centraid-chat/apps/<appId>/sessions/<id>   delete
+ *   GET    /_centraid-conversations/apps/<appId>/sessions        list (this app)
+ *   POST   /_centraid-conversations/apps/<appId>/sessions        create  body: {mode?, title?}
+ *   GET    /_centraid-conversations/apps/<appId>/sessions/<id>   load (with transcript)
+ *   PATCH  /_centraid-conversations/apps/<appId>/sessions/<id>   rename  body: {title}
+ *   DELETE /_centraid-conversations/apps/<appId>/sessions/<id>   delete
  *
  * The transcript is not appended over HTTP — a chat turn is recorded as a
- * `runs` row by the `/centraid/<id>/_chat` route's runner (issue #90 fold).
+ * `runs` row by the `/centraid/<id>/_turn` route's runner (issue #90 fold).
  */
-export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
+export function makeConversationRouteHandler(getStore: () => ConversationHistoryStore) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     if (!req.url || !req.url.startsWith(ROUTE_PREFIX)) return false;
     // Use a dummy host because IncomingMessage.url is path-only.
@@ -70,10 +81,52 @@ export function makeChatHistoryRouteHandler(getStore: () => ChatHistoryStore) {
     const store = getStore();
 
     try {
+      // Attachment blob CAS (issue #190):
+      //   POST /apps/<appId>/blobs            upload bytes → { hash, sizeBytes, url }
+      //   GET  /apps/<appId>/blobs/<hash>     download bytes
+      const blobMatch = sub.match(/^\/apps\/([^/]+)\/blobs(?:\/([a-f0-9]{64}))?\/?$/);
+      if (blobMatch && blobMatch[1]) {
+        const appId = decodeURIComponent(blobMatch[1]);
+        const hash = blobMatch[2];
+        if (!hash && method === 'POST') {
+          const bytes = await readRawBody(req);
+          if (bytes.length === 0) {
+            sendError(res, 400, 'empty upload');
+            return true;
+          }
+          const put = await store.uploadBlob(appId, bytes);
+          const mime = req.headers['content-type'] ?? 'application/octet-stream';
+          sendJson(res, 200, {
+            hash: put.hash,
+            sizeBytes: put.sizeBytes,
+            mime,
+            url: `${ROUTE_PREFIX}/apps/${encodeURIComponent(appId)}/blobs/${put.hash}`,
+          });
+          return true;
+        }
+        if (hash && method === 'GET') {
+          const bytes = await store.readBlob(appId, hash);
+          if (!bytes) {
+            sendError(res, 404, 'blob not found');
+            return true;
+          }
+          const mime = url.searchParams.get('mime') ?? 'application/octet-stream';
+          res.writeHead(200, {
+            'content-type': mime,
+            'content-length': bytes.byteLength.toString(),
+            'cache-control': 'private, max-age=31536000, immutable',
+          });
+          res.end(bytes);
+          return true;
+        }
+        sendError(res, 405, 'method not allowed');
+        return true;
+      }
+
       // /apps/<appId>/sessions  and  /apps/<appId>/sessions/<id>
       const m = sub.match(/^\/apps\/([^/]+)\/sessions(?:\/([^/]+))?\/?$/);
       if (!m || !m[1]) {
-        sendError(res, 404, 'unknown chat-history route');
+        sendError(res, 404, 'unknown conversation route');
         return true;
       }
       const appId = decodeURIComponent(m[1]);

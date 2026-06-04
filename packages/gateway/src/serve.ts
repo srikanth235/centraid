@@ -69,7 +69,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     runtime: gateway.runtime,
     userStore: gateway.userStore,
     analyticsStore: gateway.analyticsStore,
-    chatHistoryStore: gateway.chatHistoryStore,
+    conversationHistoryStore: gateway.conversationHistoryStore,
     ...(gateway.appsStore ? { appsStore: gateway.appsStore } : {}),
   } satisfies GatewayServeHandle;
 }

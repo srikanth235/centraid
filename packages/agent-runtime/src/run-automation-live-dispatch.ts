@@ -167,7 +167,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     if (opts.runner === 'claude-code') {
       // Phase 2 (issue #158): route ctx.agent through the Claude SDK chat
       // adapter — the same one chat uses — instead of a collect-on-exit
-      // `claude -p` spawn. The turn now streams token-level ChatStreamEvents
+      // `claude -p` spawn. The turn now streams token-level TurnStreamEvents
       // (forwarded to the run bus as node.delta via `call.onEvent`). The
       // return contract is unchanged: accumulate the final text and coerce
       // it exactly as before. `bypassPermissions` preserves the old

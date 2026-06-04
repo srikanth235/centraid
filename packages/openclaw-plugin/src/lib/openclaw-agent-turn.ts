@@ -1,7 +1,7 @@
 /*
  * Shared OpenClaw embedded-agent turn helper.
  *
- * The per-app chat runner (`openclaw-chat-runner.ts`) and the automation fire's
+ * The per-app chat runner (`openclaw-conversation-runner.ts`) and the automation fire's
  * dispatchers (`openclaw-fire.ts`) both bottom out in the same call:
  * `api.runtime.agent.runEmbeddedAgent(...)`. This module owns what they share —
  * the SDK-derived param/result/config types, the centraid defaults every turn

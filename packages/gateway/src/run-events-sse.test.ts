@@ -13,7 +13,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
-  AgentRunsStore,
+  ConversationStore,
   AnalyticsStore,
   InsightsStore,
   makeAnalyticsDbProvider,
@@ -32,8 +32,17 @@ let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 const APP = 'brief';
 
 /** Open a ledger at the path the route resolves for `<APP>/...` run ids. */
-function ledger(): AgentRunsStore {
-  return new AgentRunsStore(makeRuntimeDbProvider(path.join(dir, 'apps', APP, 'runtime.sqlite')));
+function ledger(): ConversationStore {
+  return new ConversationStore(
+    makeRuntimeDbProvider(path.join(dir, 'apps', APP, 'runtime.sqlite')),
+  );
+}
+
+/** Seed one automation fire: its own execution conversation + a turn under it. */
+function seedTurn(store: ConversationStore, ref: string, turnId: string, startedAt: number): void {
+  const convId = `conv-${turnId}`;
+  store.createAutomationRun(convId, ref, ref.split('/')[0]);
+  store.insertTurn({ turnId, conversationId: convId, triggerKind: 'manual', startedAt });
 }
 
 beforeEach(async () => {
@@ -110,16 +119,23 @@ function sseClient(url: string): SseClient {
 test('replays a finished run from the ledger then closes', async () => {
   const runId = `${APP}/digest:${Date.now()}:abcd1234`;
   const store = ledger();
-  store.insertRun({ runId, automationId: `${APP}/digest`, triggerKind: 'manual', startedAt: 1 });
-  store.openNode({ nodeId: 'n0', runId, ordinal: 0, kind: 'tool', name: 'http.get', startedAt: 2 });
-  store.closeNode({
-    nodeId: 'n0',
+  seedTurn(store, `${APP}/digest`, runId, 1);
+  store.openItem({
+    itemId: 'n0',
+    turnId: runId,
+    ordinal: 0,
+    kind: 'tool',
+    name: 'http.get',
+    startedAt: 2,
+  });
+  store.closeItem({
+    itemId: 'n0',
     ok: true,
     outputJson: '{"status":200}',
     endedAt: 5,
     durationMs: 3,
   });
-  store.finishRun({ runId, endedAt: 6, ok: true, summary: 'done' });
+  store.finishTurn({ turnId: runId, endedAt: 6, ok: true, summary: 'done' });
 
   const c = sseClient(`/centraid/_automations/run/events?runId=${encodeURIComponent(runId)}`);
   const owned = await handler(c.req, c.res);
@@ -141,9 +157,16 @@ test('replays a finished run from the ledger then closes', async () => {
 test('joins an in-flight run: replays the open node, then streams live to run.end', async () => {
   const runId = `${APP}/watch:${Date.now()}:beef0000`;
   const store = ledger();
-  store.insertRun({ runId, automationId: `${APP}/watch`, triggerKind: 'manual', startedAt: 1 });
-  // One node already running (opened, not closed) when the viewer joins.
-  store.openNode({ nodeId: 'n0', runId, ordinal: 0, kind: 'agent', name: 'agent', startedAt: 2 });
+  seedTurn(store, `${APP}/watch`, runId, 1);
+  // One item already running (opened, not closed) when the viewer joins.
+  store.openItem({
+    itemId: 'n0',
+    turnId: runId,
+    ordinal: 0,
+    kind: 'agent',
+    name: 'agent',
+    startedAt: 2,
+  });
 
   const c = sseClient(`/centraid/_automations/run/events?runId=${encodeURIComponent(runId)}`);
   await handler(c.req, c.res);

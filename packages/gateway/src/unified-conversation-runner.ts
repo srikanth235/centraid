@@ -30,15 +30,15 @@
  * via a `webhooks` stream event.
  *
  * Since issue #147 (Concern 1) this is a thin config over
- * `makeChatRunnerCore` (`@centraid/conversation-engine`): the shared per-turn
+ * `makeConversationRunnerCore` (`@centraid/conversation-engine`): the shared per-turn
  * spine lives there; this file supplies only the builder seams — draft-worktree cwd,
  * the authoring prompt (delegated to `@centraid/skills`), and post-turn
  * webhook minting.
  *
- * Replaces the data-only `makeChatRunner` injection in `serve.ts` whenever a
+ * Replaces the data-only `makeConversationRunner` injection in `serve.ts` whenever a
  * git store is active (the local embedded gateway and the standalone daemon
  * both have one). Without a store there's no draft worktree to edit, so the
- * host falls back to the data-only `makeChatRunner`.
+ * host falls back to the data-only `makeConversationRunner`.
  */
 
 import path from 'node:path';
@@ -46,19 +46,19 @@ import { promises as fs } from 'node:fs';
 import {
   readRunnerTools,
   defaultCentraidCliDir,
-  runAgentTurn,
+  runTurn,
   type HostTool,
 } from '@centraid/agent-runtime';
 import {
-  type ChatRunner,
-  type ChatStreamEvent,
+  type ConversationRunner,
+  type TurnStreamEvent,
   type Dispatcher,
   type RunnerKind,
   type RunnerPrefs,
   type RunTurnFn,
 } from '@centraid/app-engine';
 import {
-  makeChatRunnerCore,
+  makeConversationRunnerCore,
   provisionAppPendingWebhooks,
   WEBHOOK_ROUTE_PREFIX,
 } from '@centraid/conversation-engine';
@@ -69,11 +69,11 @@ import { seedDraftData } from './draft-data.js';
 
 export type { RunTurnFn };
 
-export interface UnifiedChatRunnerOptions {
+export interface UnifiedConversationRunnerOptions {
   /** Git store backing app code; the draft worktree lives in its sessions. */
   store: WorktreeStore;
   /** Per-turn runner prefs (kind + provider). Loaded fresh so settings
-   *  changes apply without a restart — mirrors `makeChatRunner`. */
+   *  changes apply without a restart — mirrors `makeConversationRunner`. */
   prefsLoader: () => Promise<RunnerPrefs | undefined>;
   /** Resolve the shared app-engine dispatcher for the `centraid_*` tools.
    *  Called per turn so the host can cycle-break on first use. */
@@ -92,7 +92,7 @@ export interface UnifiedChatRunnerOptions {
    *  `desktop-<appId>` so the renderer Code tab, the local builder, and
    *  gateway chat all edit ONE draft. Also overridable for tests. */
   sessionIdFor?: (appId: string) => string;
-  /** Turn driver — defaults to `runAgentTurn`; injected in tests. */
+  /** Turn driver — defaults to `runTurn`; injected in tests. */
   runTurn?: RunTurnFn;
   /** Gateway-owned catalog path — the builder reads cached host tools from it
    *  for the grounding block (no per-turn CLI spawn). Omitted → no grounding. */
@@ -136,7 +136,7 @@ async function readAppKind(appDir: string): Promise<'app' | 'automation'> {
 async function mintPendingWebhooks(
   cwd: string,
   publicBaseUrl: () => string,
-  onEvent: (event: ChatStreamEvent) => void,
+  onEvent: (event: TurnStreamEvent) => void,
 ): Promise<void> {
   const minted = await provisionAppPendingWebhooks(cwd);
   if (minted.length === 0) return;
@@ -153,7 +153,9 @@ async function mintPendingWebhooks(
   });
 }
 
-export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunner {
+export function makeUnifiedConversationRunner(
+  opts: UnifiedConversationRunnerOptions,
+): ConversationRunner {
   const sessionIdFor = opts.sessionIdFor ?? defaultSessionIdFor;
   // Builder grounding reads cached tools from the catalog — never probes a CLI
   // on the turn path. The boot probe / explicit refresh keeps the catalog warm.
@@ -168,18 +170,18 @@ export function makeUnifiedChatRunner(opts: UnifiedChatRunnerOptions): ChatRunne
   // Builder chat is the data-chat spine plus three seams: cwd = the app's
   // shared draft worktree, the unified authoring prompt (grounding owned by
   // `@centraid/skills`), and post-turn webhook minting.
-  return makeChatRunnerCore({
+  return makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
     getDispatcher: opts.getDispatcher,
     ...(extraPath ? { extraPath } : {}),
 
     // This IS the builder surface — its turns author code in the draft
     // worktree, so they persist as `kind: 'build'` in the run ledger. The
-    // data-only `makeChatRunner` leaves this unset (records as `'chat'`).
+    // data-only `makeConversationRunner` leaves this unset (records as `'chat'`).
     runKind: 'build',
-    // The model turn driver — the local codex/claude `runAgentTurn` unless a
+    // The model turn driver — the local codex/claude `runTurn` unless a
     // test injects a stub.
-    runTurn: opts.runTurn ?? runAgentTurn,
+    runTurn: opts.runTurn ?? runTurn,
 
     // cwd IS the draft session worktree, so the agent's centraid_* tools
     // operate the draft's branched data.sqlite, not live (issue #144).

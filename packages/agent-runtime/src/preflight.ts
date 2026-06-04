@@ -1,7 +1,7 @@
 /*
  * CLI preflight — runs `<bin> --version` once on settings change or
  * gateway boot. Result cached in memory and exposed via
- * `GET /centraid/_chat/runner-status` so the chat panel can show a
+ * `GET /centraid/_turn/runner-status` so the chat panel can show a
  * Setup screen when the binary is missing, unauthenticated, or too old.
  *
  * Minimum versions are empirically-verified — see `MIN_VERSIONS` below.

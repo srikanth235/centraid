@@ -1,8 +1,8 @@
 /*
- * OpenClaw `ChatRunner` implementation.
+ * OpenClaw `ConversationRunner` implementation.
  *
  * Wraps `api.runtime.agent.runEmbeddedAgent` so the per-app chat endpoint
- * (`POST /centraid/<appId>/_chat`) drives the same in-process embedded
+ * (`POST /centraid/<appId>/_turn`) drives the same in-process embedded
  * agent that powers everything else in the gateway. Centraid does NOT
  * register its own agent identity here:
  *
@@ -12,7 +12,7 @@
  *   - No `agentId` override; OpenClaw falls back to its default (`"main"`)
  *     so model resolution + tool policy follow the user's existing config.
  *
- * Streaming translation maps OpenClaw's callbacks onto `ChatStreamEvent`s:
+ * Streaming translation maps OpenClaw's callbacks onto `TurnStreamEvent`s:
  *   onAssistantMessageStart → { type: 'assistant.start' }
  *   onBlockReply (text=...)  → { type: 'assistant.delta' }
  *   onReasoningStream        → { type: 'reasoning.delta' }
@@ -28,19 +28,23 @@
 import path from 'node:path';
 import os from 'node:os';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
-import type { ChatRunner, ChatRunInput, ChatStreamEvent } from '@centraid/app-engine';
+import type {
+  ConversationRunner,
+  ConversationTurnInput,
+  TurnStreamEvent,
+} from '@centraid/app-engine';
 import { runEmbeddedTurn } from './openclaw-agent-turn.js';
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
- * Construct a `ChatRunner` bound to the OpenClaw plugin api. The runner is
+ * Construct a `ConversationRunner` bound to the OpenClaw plugin api. The runner is
  * stateless — every `run()` call resolves an independent agent run.
  */
-export function makeOpenClawChatRunner(api: OpenClawPluginApi): ChatRunner {
+export function makeOpenClawConversationRunner(api: OpenClawPluginApi): ConversationRunner {
   return {
-    async run(input: ChatRunInput): Promise<void> {
-      const sessionKey = `centraid-chat:${input.appId}:w${input.conversationId}`;
+    async run(input: ConversationTurnInput): Promise<void> {
+      const sessionKey = `centraid-conversation:${input.appId}:w${input.conversationId}`;
       const sessionId = sessionKey;
       const runId = `centraid:${input.appId}:${input.conversationId}:${Date.now().toString(36)}`;
 
@@ -48,7 +52,12 @@ export function makeOpenClawChatRunner(api: OpenClawPluginApi): ChatRunner {
       // OpenClaw skips AGENTS.md / SOUL.md / USER.md loading; the user's
       // agent persona still drives tool-policy resolution because agentId
       // is unset (defaults to main).
-      const workspaceDir = path.join(os.homedir(), '.openclaw', 'centraid', '_chat-workspace');
+      const workspaceDir = path.join(
+        os.homedir(),
+        '.openclaw',
+        'centraid',
+        '_conversation-workspace',
+      );
 
       // Synthesize tool.start events from the generic agent-event stream.
       // OpenClaw doesn't expose a typed `onToolStart` callback, so we
@@ -56,7 +65,7 @@ export function makeOpenClawChatRunner(api: OpenClawPluginApi): ChatRunner {
       // through as a `phase` event for the harness to log/ignore.
       const pendingByCallId = new Map<string, string>();
 
-      const emit = (event: ChatStreamEvent): void => {
+      const emit = (event: TurnStreamEvent): void => {
         if (input.abortSignal.aborted) return;
         input.onEvent(event);
       };
@@ -139,12 +148,12 @@ export function makeOpenClawChatRunner(api: OpenClawPluginApi): ChatRunner {
 
 /**
  * Translate one entry from OpenClaw's generic agent-event stream into a
- * `ChatStreamEvent`. We recognize a handful of shapes (tool start) and
+ * `TurnStreamEvent`. We recognize a handful of shapes (tool start) and
  * pass the rest through as `phase` events for the harness's diagnostic UI.
  */
 function translateAgentEvent(
   evt: { stream: string; data: Record<string, unknown> },
-  emit: (e: ChatStreamEvent) => void,
+  emit: (e: TurnStreamEvent) => void,
   pending: Map<string, string>,
 ): void {
   const stream = evt.stream;

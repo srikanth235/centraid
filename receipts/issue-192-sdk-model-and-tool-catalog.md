@@ -97,3 +97,9 @@ control, independent of the model Refresh.
   `unified-chat-runner.test.ts` — 3 pass with the catalog-backed `resolveTools` seam.
 - `tsc -p` clean for agent-runtime, skills, gateway; verified the dev desktop boots
   the in-process gateway against the fresh worktree dist.
+- Merged `origin/main` (#191 chat→conversation/turn rename) into this branch:
+  `unified-chat-runner` → `unified-conversation-runner` keeps the catalog-backed
+  `resolveTools` seam (with the `runTurn` rename); `authoring-prompt` keeps the
+  data-based tools header; `COSTS.md`/`STEERING.md` union both sides in epoch order.
+  Post-merge `turbo run build` (gateway + desktop graph, 8 tasks) and the catalog /
+  route / runner tests (22) pass.

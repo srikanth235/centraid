@@ -1,15 +1,17 @@
+// governance: allow-repo-hygiene file-size-limit #190 — attachment ingestion
+// wiring (issue #190) tips this cohesive route handler just over the cap.
 /*
  * HTTP route handler for the per-app chat surface.
  *
- *   POST    /centraid/<appId>/_chat                        ← send turn (SSE stream)
+ *   POST    /centraid/<appId>/_turn                        ← send turn (SSE stream)
  *
  * Surface A is now POST-only. The `conversationId` in the POST body is the
- * `chat_sessions` row id in the central gateway SQLite. The desktop persists
- * the transcript itself via Surface B (`/_centraid-chat`); this route only
+ * `conversations` row id in the per-app runtime SQLite. The desktop persists
+ * the transcript itself via Surface B (`/_centraid-conversations`); this route only
  * drives the model turn and records turn completion + the runner-resume
  * handle against the session row.
  *
- * The runtime delegates to a host-injected `ChatRunner`. When no runner is
+ * The runtime delegates to a host-injected `ConversationRunner`. When no runner is
  * configured, the chat route 503s with a clear error — that is the M1
  * stub behavior the issue calls out.
  *
@@ -26,8 +28,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { sendError, readBody, MAX_BODY_BYTES } from './http-utils.js';
 import { readAppSchema } from './schema.js';
 import { buildExtraPrompt } from './build-extra-prompt.js';
-import type { ChatRunInput, ChatRunner, ChatStreamEvent } from './chat-runner.js';
-import type { ChatHistoryStore, ChatTurnNode } from './chat-history.js';
+import type {
+  ConversationTurnInput,
+  ConversationRunner,
+  TurnStreamEvent,
+} from './conversation-runner.js';
+import type { ConversationHistoryStore, TurnNode } from './conversation-history.js';
 import type { Registry } from './registry.js';
 import { appDataDir } from './app-paths.js';
 import type { RegistryEntry } from './types.js';
@@ -50,7 +56,7 @@ export function isValidConversationId(id: string): boolean {
  * Dependencies injected from `Runtime`. Pulled out so the chat routes don't
  * need to know about `Runtime` directly (avoids a circular module shape).
  */
-export interface ChatRouteContext {
+export interface TurnRouteContext {
   registry: Registry;
   /**
    * Resolve an app's live code dir, honoring the git-store override
@@ -60,19 +66,19 @@ export interface ChatRouteContext {
    * system prompt. Returns undefined when the app has no live code.
    */
   resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>;
-  runner?: ChatRunner;
+  runner?: ConversationRunner;
   /**
    * Optional central chat store. When set, the route reads the session's
    * runner-resume handle from it and records turn completion back into it.
    * When unset, the route still works — no resume handle is threaded, so
    * each turn starts the adapter fresh.
    */
-  chatStore?: ChatHistoryStore;
+  conversationStore?: ConversationHistoryStore;
   /**
    * Central scratch base dir for runner-owned session files. The route
-   * passes `<chatRunnerSessionDir>/<conversationId>.jsonl` as `ChatRunInput.sessionFile`.
+   * passes `<conversationRunnerSessionDir>/<conversationId>.jsonl` as `ConversationTurnInput.sessionFile`.
    */
-  chatRunnerSessionDir: string;
+  conversationRunnerSessionDir: string;
   /**
    * Optional per-app metadata reader. Used to populate `appName` / `appDescription`
    * in the extra-system-prompt. Returns undefined when the app has no
@@ -90,22 +96,22 @@ export interface ChatRouteContext {
   conversationLocks: Map<string, Promise<void>>;
 }
 
-export type ParsedChatRoute = { kind: 'post'; appId: string };
+export type ParsedTurnRoute = { kind: 'post'; appId: string };
 
 /**
- * Match the chat sub-routes under `/centraid/<appId>/_chat`. The caller
- * (router.ts) has already established the URL is under `/centraid/<id>/_chat...`.
+ * Match the chat sub-routes under `/centraid/<appId>/_turn`. The caller
+ * (router.ts) has already established the URL is under `/centraid/<id>/_turn...`.
  *
  * Surface A is POST-only — anything else (including the old `windows...`
  * sub-paths) returns undefined and the caller 404s.
  */
-export function parseChatSubRoute(
+export function parseTurnSubRoute(
   appId: string,
   segments: string[],
   method: string,
-): ParsedChatRoute | undefined {
-  // segments here are the path under /centraid/<appId>/ starting with "_chat"
-  // segments[0] === "_chat"
+): ParsedTurnRoute | undefined {
+  // segments here are the path under /centraid/<appId>/ starting with "_turn"
+  // segments[0] === "_turn"
   if (segments.length === 1 && method.toUpperCase() === 'POST') {
     return { kind: 'post', appId };
   }
@@ -118,7 +124,7 @@ export function parseChatSubRoute(
  * own. The lock entry is cleared lazily once the current task settles.
  *
  * The lock map is per-runtime — held on the `Runtime` instance and threaded
- * through `ChatRouteContext`. A module-level map would collide across
+ * through `TurnRouteContext`. A module-level map would collide across
  * gateways that share an `appId` (two profiles can install the same
  * template). See issue #113.
  */
@@ -146,23 +152,35 @@ async function withConversationLock<T>(
   }
 }
 
+/** A file uploaded to the blob CAS before the turn, referenced by its hash. */
+interface AttachmentRef {
+  hash: string;
+  mime: string;
+  filename?: string;
+  sizeBytes?: number;
+}
+
 interface PostBody {
   conversationId?: string;
   message?: string;
   model?: string;
   thinking?: string;
   idempotencyKey?: string;
+  /** Attachments uploaded ahead of this turn (issue #190). */
+  attachments?: AttachmentRef[];
 }
+
+const HASH_RE = /^[a-f0-9]{64}$/;
 
 /**
  * Dispatch one chat-route request. Errors thrown out of here are caught by
  * `Runtime.handle`'s catch-all and turned into 500s.
  */
-export async function handleChatRoute(
+export async function handleTurnRoute(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: ChatRouteContext,
-  parsed: ParsedChatRoute,
+  ctx: TurnRouteContext,
+  parsed: ParsedTurnRoute,
 ): Promise<void> {
   const entry = ctx.registry.get(parsed.appId);
   if (!entry) {
@@ -175,14 +193,14 @@ export async function handleChatRoute(
 async function handlePostTurn(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: ChatRouteContext,
+  ctx: TurnRouteContext,
   entry: RegistryEntry,
 ): Promise<void> {
   if (!ctx.runner) {
     sendError(
       res,
       503,
-      'no_chat_runner',
+      'no_conversation_runner',
       'No chat runner is configured for this runtime. The host must inject one.',
     );
     return;
@@ -218,8 +236,8 @@ async function handlePostTurn(
   // there is no per-session mode toggle to read.
   let prevAdapterSessionId: string | undefined;
   let prevAdapterKind: string | undefined;
-  if (ctx.chatStore) {
-    const session = ctx.chatStore.getSessionMeta(entry.id, conversationId);
+  if (ctx.conversationStore) {
+    const session = ctx.conversationStore.getSessionMeta(entry.id, conversationId);
     if (!session) {
       sendError(res, 404, 'not_found', 'No such chat session.');
       return;
@@ -227,6 +245,25 @@ async function handlePostTurn(
     prevAdapterSessionId = session.adapterSessionId ?? undefined;
     prevAdapterKind = session.adapterKind ?? undefined;
   }
+
+  // Attachments uploaded ahead of the turn (issue #190): the bytes already
+  // live in the per-app blob CAS, keyed by sha256. We resolve each to its
+  // on-disk path so the adapter can build an image/document content block, and
+  // keep the refs to record `attachments` rows on the turn's `message_in` item.
+  const attachmentRefs: AttachmentRef[] = Array.isArray(body.attachments)
+    ? body.attachments.filter(
+        (a): a is AttachmentRef =>
+          !!a && typeof a.hash === 'string' && HASH_RE.test(a.hash) && typeof a.mime === 'string',
+      )
+    : [];
+  const turnAttachments =
+    ctx.conversationStore && attachmentRefs.length > 0
+      ? attachmentRefs.map((a) => ({
+          path: ctx.conversationStore!.blobPathFor(entry.id, a.hash),
+          mime: a.mime,
+          ...(a.filename !== undefined ? { filename: a.filename } : {}),
+        }))
+      : [];
 
   const appMeta = ctx.appMeta ? await ctx.appMeta(entry).catch(() => ({}) as never) : undefined;
   const schema = safeReadSchema(entry);
@@ -254,13 +291,13 @@ async function handlePostTurn(
   }, 30_000);
   heartbeat.unref?.();
 
-  const writeEvent = (event: ChatStreamEvent): void => {
+  const writeEvent = (event: TurnStreamEvent): void => {
     if (res.writableEnded) return;
     res.write(`event: ${event.type}\n`);
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
-  // Turn accumulator — folds the runner's `ChatStreamEvent`s into the
+  // Turn accumulator — folds the runner's `TurnStreamEvent`s into the
   // `runs` / `run_nodes` audit trace (issue #90). The runner's `usage`
   // event (when emitted) is folded into the turn's `step` node so the
   // ledger carries real token + cost accounting for chat turns.
@@ -273,7 +310,7 @@ async function handlePostTurn(
       string,
       { toolName: string; sql?: string; args?: unknown; startedAt: number }
     >(),
-    toolNodes: [] as ChatTurnNode[],
+    toolNodes: [] as TurnNode[],
     usage: undefined as
       | {
           model?: string;
@@ -285,7 +322,7 @@ async function handlePostTurn(
         }
       | undefined,
   };
-  const accumulate = (event: ChatStreamEvent): void => {
+  const accumulate = (event: TurnStreamEvent): void => {
     switch (event.type) {
       case 'assistant.delta':
         acc.aiText += event.delta;
@@ -339,7 +376,7 @@ async function handlePostTurn(
       // state to fold; the SSE write still happens via `writeEvent`.
     }
   };
-  const onEvent = (event: ChatStreamEvent): void => {
+  const onEvent = (event: TurnStreamEvent): void => {
     accumulate(event);
     writeEvent(event);
   };
@@ -355,15 +392,16 @@ async function handlePostTurn(
   // parent dir exists before any runner writes — the OpenClaw runner hands
   // this path to `runEmbeddedAgent` as its session file and silently no-ops
   // if the parent dir is missing.
-  const sessionFile = path.join(ctx.chatRunnerSessionDir, `${conversationId}.jsonl`);
-  await fs.mkdir(ctx.chatRunnerSessionDir, { recursive: true }).catch(() => undefined);
+  const sessionFile = path.join(ctx.conversationRunnerSessionDir, `${conversationId}.jsonl`);
+  await fs.mkdir(ctx.conversationRunnerSessionDir, { recursive: true }).catch(() => undefined);
 
-  const input: ChatRunInput = {
+  const input: ConversationTurnInput = {
     appId: entry.id,
     dataDir: appDataDir(entry),
     conversationId,
     sessionFile,
     message,
+    ...(turnAttachments.length > 0 ? { attachments: turnAttachments } : {}),
     extraSystemPrompt,
     abortSignal: abortController.signal,
     onEvent,
@@ -386,14 +424,14 @@ async function handlePostTurn(
       clearInterval(heartbeat);
       req.off('close', onClientClose);
       req.off('error', onClientClose);
-      if (ctx.chatStore) {
+      if (ctx.conversationStore) {
         // Persist the turn as a `runs` row + its `run_nodes` trace. The
         // assistant reply (or the turn error) is one `step` node ordered
         // after the turn's `tool` nodes — matching the transcript shape
         // `getSession` reconstructs.
         try {
           const endedAt = Date.now();
-          const nodes: ChatTurnNode[] = [...acc.toolNodes];
+          const nodes: TurnNode[] = [...acc.toolNodes];
           // The turn consumed tokens whether it ended in a reply or an
           // error, so the `usage` totals apply to either step node.
           const usage = acc.usage ?? {};
@@ -415,14 +453,24 @@ async function handlePostTurn(
               endedAt,
             });
           }
-          ctx.chatStore.recordTurn(entry.id, {
+          ctx.conversationStore.recordTurn(entry.id, {
             conversationId: conversationId,
             // The runner's surface decides the ledger kind: the builder-capable
             // unified runner reports `'build'`, the data-only runner leaves it
             // unset → recorded as `'chat'` (issue #181). Read statically off the
-            // runner so an errored turn (no `ChatRunResult`) is still tagged.
+            // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
             ...(ctx.runner?.runKind ? { kind: ctx.runner.runKind } : {}),
             userMessage: message,
+            ...(attachmentRefs.length > 0
+              ? {
+                  attachments: attachmentRefs.map((a) => ({
+                    hash: a.hash,
+                    mime: a.mime,
+                    sizeBytes: a.sizeBytes ?? 0,
+                    ...(a.filename !== undefined ? { filename: a.filename } : {}),
+                  })),
+                }
+              : {}),
             startedAt: turnStartedAt,
             endedAt,
             ok: acc.errorMessage === undefined,
@@ -438,7 +486,7 @@ async function handlePostTurn(
         // claude-code; the OpenClaw runner resumes via `sessionFile` and
         // returns void).
         try {
-          ctx.chatStore.noteTurn(
+          ctx.conversationStore.noteTurn(
             entry.id,
             conversationId,
             runResult?.adapterKind

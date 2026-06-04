@@ -19,27 +19,33 @@ export {
   type ModelTier,
 } from './runtime.js';
 
-// Per-app chat surface — `ChatRunner` is the host-injected seam, both
+// Per-app chat surface — `ConversationRunner` is the host-injected seam, both
 // OpenClaw and the desktop local-runtime implement it. The HTTP route
-// (`POST /centraid/<id>/_chat`) is dispatched by `Runtime.handle` when
-// `RuntimeOptions.chatRunner` is set. The transcript itself lives in the
-// central gateway SQLite (`ChatHistoryStore`), not a per-app folder.
-export type { ChatRunner, ChatRunInput, ChatRunResult, ChatStreamEvent } from './chat-runner.js';
+// (`POST /centraid/<id>/_turn`) is dispatched by `Runtime.handle` when
+// `RuntimeOptions.conversationRunner` is set. The transcript lives in each app's
+// per-app `runtime.sqlite`, fronted by `ConversationHistoryStore`.
+export type {
+  ConversationRunner,
+  ConversationTurnInput,
+  ConversationTurnResult,
+  TurnStreamEvent,
+} from './conversation-runner.js';
 export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prompt.js';
 
 // Agent-turn contract — the host-agnostic interface between a run spine
 // (chat-runner core, automation fire) and the backend that drives one model
-// turn. The codex/claude implementation (`runAgentTurn`) lives in
+// turn. The codex/claude implementation (`runTurn`) lives in
 // `@centraid/agent-runtime`; hosts inject a `RunTurnFn` satisfying it.
 export type {
   RunnerKind,
   RunnerPrefs,
   ToolContext,
-  AgentTurnInput,
-  AgentTurnConfig,
-  AgentTurnResult,
+  TurnInput,
+  TurnConfig,
+  TurnResult,
+  TurnAttachment,
   RunTurnFn,
-} from './agent-turn.js';
+} from './turn.js';
 
 export {
   startRuntimeHttpServer,
@@ -168,29 +174,39 @@ export { MigrationError, runPendingMigrations, type MigrationsApplied } from './
 // Hosts can subscribe from outside too — `runtime.changeBus.subscribe(...)`.
 export { ChangeBus, type AppChange, type ChangeListener } from './change-bus.js';
 
-// Chat-history store + HTTP route dispatcher. Used in two places:
+// Conversation-history store (the read/write facade backing the chat surface)
+// + its HTTP route dispatcher. Used in two places:
 //   - openclaw-plugin registers it on the gateway's HTTP surface
 //   - startRuntimeHttpServer intercepts the same prefix for the embedded
 //     local runtime, so the desktop sees identical behavior in both modes
+// The store is conversation-first (spans kind=chat|build); the DTO types it
+// returns keep the chat-surface vocabulary the renderer speaks.
 export {
-  ChatHistoryStore,
+  ConversationHistoryStore,
   deriveTitle,
-  type ChatSessionMeta,
-  type ChatMessageRow,
-  type ChatTurnNode,
+  type ConversationSummary,
+  type ConversationMessageRow,
+  type TurnNode,
+  type ConversationTurnAttachment,
   type RecordTurnInput,
   type UserIdProvider,
-} from './chat-history.js';
-export { makeChatHistoryRouteHandler } from './chat-history-routes.js';
+} from './conversation-history.js';
+export { makeConversationRouteHandler } from './conversation-routes.js';
+
+// Per-app blob content-addressed store for attachment bytes (issue #190).
+// Bytes live at `<appsDir>/<appId>/blobs/<hash>`, deduped by sha256; the
+// `attachments` rows in `runtime.sqlite` carry the metadata. GC is
+// refcount-by-hash off `ConversationStore.referencedHashes`.
+export { BlobStore, blobUrl, hashBytes, type PutResult } from './blob-store.js';
 
 // SQLite state — app-engine owns two migration ladders, each its own file +
 // connection:
 //   - gateway (`centraid-gateway.sqlite`):  users, user_prefs
-//   - runtime (`<appRoot>/runtime.sqlite`): chat_sessions, runs, run_nodes,
-//                                           automation_state
-// `UserStore` ← gateway; `ChatHistoryStore` + the per-app run ledger ←
-// each app's runtime.sqlite. Cross-file FKs aren't possible in SQLite, so
-// `chat_sessions.user_id` is application-enforced. The third (analytics)
+//   - runtime (`<appRoot>/runtime.sqlite`): conversations, turns, items,
+//                                           attachments, automation_state
+// `UserStore` ← gateway; `ConversationHistoryStore` + the per-app conversation
+// ledger ← each app's runtime.sqlite. Cross-file FKs aren't possible in SQLite, so
+// `conversations.user_id` is application-enforced. The third (analytics)
 // ladder lives in the `insights/` sub-module, built through `makeMigratedDbProvider`.
 export {
   openGatewayDb,
@@ -230,29 +246,35 @@ export {
 export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
 export type { SettingsInject } from './static-server.js';
 
-// Unified agent-run ledger + ctx.state store. The three tables
-// (`runs`, `run_nodes`, `automation_state`) live in the activity DB;
-// the store is runtime-owned and never reachable from handler `db` or
-// the `centraid_sql_*` agent tools. See issues #80 and #90.
+// Conversation ledger + ctx.state store (issue #190). The five tables
+// (`conversations`, `turns`, `items`, `attachments`, `automation_state`)
+// live in the per-app runtime DB; the store is runtime-owned and never
+// reachable from handler `db` or the `centraid_sql_*` agent tools.
 export {
-  AgentRunsStore,
-  type InsertRunInput,
-  type FinishRunInput,
-  type InsertNodeInput,
-  type OpenNodeInput,
-  type CloseNodeInput,
-  type ListRunsOptions,
-} from './agent-runs-store.js';
+  ConversationStore,
+  type ConversationMeta,
+  type CreateConversationInput,
+  type InsertTurnInput,
+  type FinishTurnInput,
+  type InsertMessageInInput,
+  type InsertItemInput,
+  type OpenItemInput,
+  type CloseItemInput,
+  type InsertAttachmentInput,
+  type ListTurnsOptions,
+} from './conversation-store.js';
 export type { RunStreamEvent } from './run-stream-event.js';
 export type {
-  AgentRunRow,
-  AgentRunNodeRow,
+  Conversation,
+  Turn,
+  Item,
+  Attachment,
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationTriggerOrigin,
-  AgentRunNodeKind,
+  ItemKind,
   RunKind,
-} from './agent-runs-schema.js';
+} from './conversation-schema.js';
 
 // Per-model token pricing. `run_nodes.cost_usd` is frozen at write time
 // via `costForUsage`; an unknown model yields `undefined` so the ledger

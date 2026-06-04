@@ -108,7 +108,7 @@ export function gatewayAnalyticsDb(id: string): string {
  * session. Per-gateway because a chat session is between the user
  * and a specific app on a specific gateway.
  */
-export function gatewayChatRunnerSessionsDir(id: string): string {
+export function gatewayConversationRunnerSessionsDir(id: string): string {
   return path.join(gatewayDir(id), 'chat-runner-sessions');
 }
 

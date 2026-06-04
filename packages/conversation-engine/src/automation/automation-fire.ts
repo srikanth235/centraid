@@ -10,7 +10,7 @@
  * needed from agent-runtime was the live `ctx.tool` / `ctx.agent` dispatch
  * surface (the mock-LLM server + CLI spawn). So the spine moves down and the
  * dispatch surface is injected via `openDispatch` — the same dependency
- * inversion the `AutomationHost` / `ChatRunner` seams already use.
+ * inversion the `AutomationHost` / `ConversationRunner` seams already use.
  *
  * agent-runtime's `runAutomationLocal` is now a thin wrapper that builds the
  * `openDispatch` closure (capturing the runner kind + CLI spawn) and calls
@@ -21,7 +21,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
-  AgentRunsStore,
+  ConversationStore,
   makeRuntimeDbProvider,
   type AnalyticsStore,
   type AutomationTriggerKind,
@@ -172,7 +172,7 @@ export async function runAutomationFire(
   // The automation's run ledger is its app's per-app `runtime.sqlite` (issue
   // #98); `finishRun` write-throughs a summary to `analytics`.
   const runtimeDbPath = path.join(opts.appsDir, parsed.appId, 'runtime.sqlite');
-  const runsStore = new AgentRunsStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
+  const runsStore = new ConversationStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
   const runId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;

@@ -18,7 +18,7 @@ import {
   type GatewayProfile,
 } from './gateway-store.js';
 import { refreshAuthInjector } from './auth-injector.js';
-import { resetChatHistoryAuthCache } from './chat-history-client.js';
+import { resetConversationHistoryAuthCache } from './conversation-history-client.js';
 import { resetUserPrefsAuthCache } from './user-prefs-client.js';
 import { resetAppsStoreAuthCache } from './apps-store-client.js';
 import { ensureAppSessionDir, resetAppSessions } from './app-sessions.js';
@@ -49,7 +49,7 @@ export const Channel = {
   APPS_OPEN: 'centraid:apps:open',
 
   // The in-process AGENT_* builder retired with the unified chat (issue
-  // #141, Phase 3): the builder now streams the gateway's `/centraid/<id>/_chat`
+  // #141, Phase 3): the builder now streams the gateway's `/centraid/<id>/_turn`
   // SSE directly, so the agent runs server-side in the draft worktree.
 
   // PUBLISH + the app read surface (APP_LIVE_URL / APP_SCHEMA /
@@ -89,7 +89,7 @@ export const Channel = {
   // Coding-agent detection, the runner preflight, and the custom
   // OpenAI-compatible endpoint config + key all moved to the gateway (it's
   // colocated with the runner): the renderer reads `/centraid/_agents/status`
-  // and `/centraid/_chat/runner-status` over HTTP.
+  // and `/centraid/_turn/runner-status` over HTTP.
 
   // Automations (issue #98): the full surface — create/enable/delete +
   // read/run/analytics + INSIGHTS_SUMMARY — moved to the renderer's direct
@@ -119,7 +119,7 @@ export function registerIpcHandlers(): void {
   // header per origin; the user-prefs / chat-history clients cache
   // their bearer too. All three need to drop their caches together.
   const invalidateGatewayCaches = async (): Promise<void> => {
-    resetChatHistoryAuthCache();
+    resetConversationHistoryAuthCache();
     resetUserPrefsAuthCache();
     resetAppsStoreAuthCache();
     // Per-app editing sessions are per-gateway (the worktrees live in
@@ -283,8 +283,8 @@ export function registerIpcHandlers(): void {
   // Coding-agent detection + the custom OpenAI-compatible endpoint config
   // also left the main process: the gateway is colocated with the runner, so
   // it owns both the credential probe (`GET /centraid/_agents/status`) and
-  // the runner preflight (`GET /centraid/_chat/runner-status`). The renderer
-  // reads them over HTTP via `renderer/gateway-client-chat.ts` — a remote
+  // the runner preflight (`GET /centraid/_turn/runner-status`). The renderer
+  // reads them over HTTP via `renderer/gateway-client-conversation.ts` — a remote
   // gateway reports its own host's agents.
 
   // ----- Apps (issue #137: git-store backend; #141: thin client) -----

@@ -4,7 +4,7 @@
  * Home for the two runners over the shared run ledger — both "a run over
  * runs/run_nodes," differing only in driver and fan-out:
  *
- *   - the **chat-runner core** (`makeChatRunnerCore`) — one model-driven turn;
+ *   - the **chat-runner core** (`makeConversationRunnerCore`) — one model-driven turn;
  *   - the **automation fire spine** (`runAutomationFire` + the
  *     `OpenAutomationDispatch` seam) — a script-driven fan-out of many turns,
  *     run from a worker-thread `handler.js`.
@@ -17,7 +17,7 @@
  * Backend-agnostic by construction: the model turn (`runTurn`), execution
  * (`openDispatch`), and scheduling (`fire`) are injected callbacks, so this
  * package depends on `@centraid/app-engine` (the per-app engine, the shared
- * agent-run ledger, and the agent-turn contract) but never on any agent
+ * agent-run ledger, and the turn-driver contract) but never on any agent
  * backend. `agent-runtime` provides the local codex/claude backend;
  * `openclaw-plugin` the cloud host; `gateway` wires them.
  */
@@ -159,14 +159,14 @@ export {
 } from './automation/persistent-mock-session.js';
 // Chat-runner core — the per-turn chat spine, sibling to the automation fire
 // spine in this backend-agnostic engine. The model turn is injected as a
-// `RunTurnFn`; agent-runtime passes its codex/claude `runAgentTurn`, the
-// gateway's `makeUnifiedChatRunner` configures it for builder chat.
+// `RunTurnFn`; agent-runtime passes its codex/claude `runTurn`, the
+// gateway's `makeUnifiedConversationRunner` configures it for builder chat.
 export {
-  makeChatRunnerCore,
-  type ChatRunnerCoreOptions,
-  type ChatTurnContext,
+  makeConversationRunnerCore,
+  type ConversationRunnerCoreOptions,
+  type TurnContext,
   type RunTurnFn,
-} from './chat/chat-runner-core.js';
+} from './conversation/conversation-runner-core.js';
 
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a

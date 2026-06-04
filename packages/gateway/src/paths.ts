@@ -33,10 +33,10 @@ export interface GatewayPaths {
 
   /**
    * Scratch base dir for the chat runner's per-session state files. The
-   * `POST /centraid/<id>/_chat` route passes `<dir>/<conversationId>.jsonl` as
-   * `ChatRunInput.sessionFile`.
+   * `POST /centraid/<id>/_turn` route passes `<dir>/<conversationId>.jsonl` as
+   * `ConversationTurnInput.sessionFile`.
    */
-  chatRunnerSessionDir: string;
+  conversationRunnerSessionDir: string;
 
   /**
    * Optional per-gateway template cache dir (issue #141). When set, the
