@@ -33,7 +33,7 @@ import {
   webhookTriggerOf,
   type Trigger,
   type WebhookTrigger,
-} from './manifest.js';
+} from '../manifest/manifest.js';
 
 /** URL prefix the gateway mounts the webhook route under. */
 export const WEBHOOK_ROUTE_PREFIX = '/_centraid-hook';

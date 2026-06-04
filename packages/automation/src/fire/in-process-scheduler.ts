@@ -24,8 +24,8 @@
  */
 
 import type { Host, ReconcileResult } from './host.js';
-import type { Row } from './app.js';
-import { cronTriggersOf } from './manifest.js';
+import type { Row } from '../scaffold/app.js';
+import { cronTriggersOf } from '../manifest/manifest.js';
 import { cronMatches } from './cron-match.js';
 
 export interface InProcessSchedulerOptions {

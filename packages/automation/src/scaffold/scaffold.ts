@@ -19,7 +19,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { APP_AUTOMATIONS_SUBDIR } from './app.js';
-import { isValidId } from './ref.js';
+import { isValidId } from '../manifest/ref.js';
 import {
   HANDLER_FILE,
   MANIFEST_FILE,
@@ -27,7 +27,7 @@ import {
   type Manifest,
   type Trigger,
   type HistoryKeep,
-} from './manifest.js';
+} from '../manifest/manifest.js';
 import { isValidAppId } from '@centraid/app-engine';
 import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/blueprints';
 

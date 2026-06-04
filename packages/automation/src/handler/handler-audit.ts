@@ -16,7 +16,7 @@ import type {
   TurnStreamEvent,
   RunStreamEvent,
 } from '@centraid/app-engine';
-import type { HistoryConfig } from './manifest.js';
+import type { HistoryConfig } from '../manifest/manifest.js';
 
 /**
  * Sink for live run-stream events (issue #158). The host wires this to its

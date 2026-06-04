@@ -30,8 +30,8 @@ import {
   parseManifest,
   type Manifest,
   type Trigger,
-} from './manifest.js';
-import { formatRef, isValidId } from './ref.js';
+} from '../manifest/manifest.js';
+import { formatRef, isValidId } from '../manifest/ref.js';
 
 /** Subdirectory under an app's code dir that holds the app's automations. */
 export const APP_AUTOMATIONS_SUBDIR = 'automations';

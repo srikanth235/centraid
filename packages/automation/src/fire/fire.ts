@@ -28,10 +28,10 @@ import {
   type AutomationTriggerOrigin,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import { parseRef } from './ref.js';
-import { handlerPath, readAppOwned } from './app.js';
-import { runHandler } from './handler-runner.js';
-import type { AgentDispatcher, HandlerOutcome, ToolDispatcher } from './handler-runner.js';
+import { parseRef } from '../manifest/ref.js';
+import { handlerPath, readAppOwned } from '../scaffold/app.js';
+import { runHandler } from '../handler/handler-runner.js';
+import type { AgentDispatcher, HandlerOutcome, ToolDispatcher } from '../handler/handler-runner.js';
 
 /**
  * The live dispatch surface a fire runs against. Provided by the host

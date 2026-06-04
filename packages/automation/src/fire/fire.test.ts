@@ -19,7 +19,7 @@ import {
   type RunStreamEvent,
 } from '@centraid/app-engine';
 import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
-import type { Manifest } from './manifest.js';
+import type { Manifest } from '../manifest/manifest.js';
 
 function manifest(over: Partial<Manifest> = {}): Manifest {
   return {

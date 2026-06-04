@@ -31,8 +31,8 @@ import {
   type TurnStreamEvent,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import type { HistoryConfig, OutputSchema } from './manifest.js';
-import { validateOutputAgainstSchema } from './manifest-output.js';
+import type { HistoryConfig, OutputSchema } from '../manifest/manifest.js';
+import { validateOutputAgainstSchema } from '../manifest/manifest-output.js';
 import {
   applyRetention,
   extractReturnEnvelope,

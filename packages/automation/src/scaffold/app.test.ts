@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { deleteAt, list, readAppOwned, readAppAt, setEnabledAt } from './app.js';
-import type { Manifest } from './manifest.js';
+import type { Manifest } from '../manifest/manifest.js';
 
 function manifest(over: Partial<Manifest> = {}): Manifest {
   return {

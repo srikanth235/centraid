@@ -23,7 +23,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
-import type { DispatchContext, ToolCall, ToolDispatcher, ToolResult } from './handler-runner.js';
+import type { DispatchContext, ToolCall, ToolDispatcher, ToolResult } from '../handler/handler-runner.js';
 
 /** What a host's `driveAgent` is handed to run the agent against the mock. */
 export interface AgentDriveInput {
