@@ -32,7 +32,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import * as automation from '@centraid/automation';
 import type { RunnerKind } from '../types.js';
-import { runClaudeSdkTurn } from '../backends/claude-sdk.js';
+import { runClaudeSdkTurn } from '../backends/claude/backend.js';
 import { defaultRunHostAgent, type RunHostAgent } from './run-automation-host-agent.js';
 
 export interface LiveDispatchOptions {

@@ -26,9 +26,9 @@ backfill.
 
 Both local runners already *receive* per-inference-call usage and
 discard it: codex's `turn/completed` notification carries a `usage`
-object ([`codex-app-server.ts`](../packages/agent-runtime/src/backends/codex-app-server.ts));
+object ([`codex-app-server.ts`](../packages/agent-runtime/src/backends/codex/backend.ts));
 the Claude Agent SDK's `result` message carries `usage` +
-`total_cost_usd` ([`claude-sdk.ts`](../packages/agent-runtime/src/backends/claude-sdk.ts)).
+`total_cost_usd` ([`claude-sdk.ts`](../packages/agent-runtime/src/backends/claude/backend.ts)).
 The gap is plumbing only — `ChatStreamEvent` has no usage-bearing
 variant. The ledger design is viable; wiring the capture is scheduled
 for the Insights-backend commit.

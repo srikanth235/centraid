@@ -60,14 +60,14 @@ export {
   type CodexAppServerInput,
   type CodexAppServerConfig,
   type CodexAppServerResult,
-} from './backends/codex-app-server.js';
+} from './backends/codex/backend.js';
 
 export {
   runClaudeSdkTurn,
   type ClaudeSdkInput,
   type ClaudeSdkConfig,
   type ClaudeSdkResult,
-} from './backends/claude-sdk.js';
+} from './backends/claude/backend.js';
 
 export {
   runPreflight,

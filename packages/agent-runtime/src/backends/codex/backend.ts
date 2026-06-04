@@ -36,9 +36,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import type { TurnStreamEvent, TurnAttachment } from '@centraid/app-engine';
-import type { ToolContext } from '../runtime.js';
-import { centraidDynamicToolSpecs, handleCentraidToolCall } from './codex-centraid-tools.js';
-import { codexImageItems } from '../multimodal.js';
+import type { ToolContext } from '../../runtime.js';
+import { centraidDynamicToolSpecs, handleCentraidToolCall } from './host-tools.js';
+import { codexImageItems } from '../../multimodal.js';
 
 export interface CodexAppServerInput {
   cwd: string;
