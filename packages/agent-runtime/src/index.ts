@@ -56,17 +56,17 @@ export {
 } from './runtime.js';
 
 export {
-  runCodexAppServerTurn,
-  type CodexAppServerInput,
-  type CodexAppServerConfig,
-  type CodexAppServerResult,
+  runCodexTurn,
+  type CodexTurnInput,
+  type CodexTurnConfig,
+  type CodexTurnResult,
 } from './backends/codex/backend.js';
 
 export {
-  runClaudeSdkTurn,
-  type ClaudeSdkInput,
-  type ClaudeSdkConfig,
-  type ClaudeSdkResult,
+  runClaudeTurn,
+  type ClaudeTurnInput,
+  type ClaudeTurnConfig,
+  type ClaudeTurnResult,
 } from './backends/claude/backend.js';
 
 export {

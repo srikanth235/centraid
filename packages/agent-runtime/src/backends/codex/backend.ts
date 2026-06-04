@@ -40,7 +40,7 @@ import type { ToolContext } from '../../runtime.js';
 import { centraidDynamicToolSpecs, handleCentraidToolCall } from './host-tools.js';
 import { codexImageItems } from '../../multimodal.js';
 
-export interface CodexAppServerInput {
+export interface CodexTurnInput {
   cwd: string;
   message: string;
   /** Image attachments on the inbound message — sent as `localImage` input
@@ -74,14 +74,14 @@ export interface CodexAppServerInput {
   onEvent: (event: TurnStreamEvent) => void;
 }
 
-export interface CodexAppServerConfig {
+export interface CodexTurnConfig {
   /** Override the codex binary; defaults to PATH lookup of `codex`. */
   binPath?: string;
   /** Extra args passed to `codex app-server` (rare). */
   extraArgs?: string[];
 }
 
-export interface CodexAppServerResult {
+export interface CodexTurnResult {
   threadId?: string;
 }
 
@@ -99,10 +99,10 @@ interface RpcMessage {
   error?: { code: number; message: string };
 }
 
-export async function runCodexAppServerTurn(
-  input: CodexAppServerInput,
-  config: CodexAppServerConfig = {},
-): Promise<CodexAppServerResult> {
+export async function runCodexTurn(
+  input: CodexTurnInput,
+  config: CodexTurnConfig = {},
+): Promise<CodexTurnResult> {
   const bin = config.binPath ?? 'codex';
   await fs.mkdir(input.cwd, { recursive: true });
 

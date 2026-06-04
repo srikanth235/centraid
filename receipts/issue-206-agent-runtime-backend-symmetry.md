@@ -7,6 +7,7 @@ Issue: #206
 - [x] Extracted claude's buildCentraidMcpServer into claude/host-tools.ts
 - [x] Extracted claude's model enumeration into claude/model-list.ts and reduced model-enumerators.ts to the switchboard
 - [x] Co-located the split model-list tests beside their subjects
+- [x] Renamed exported backend symbols onto the vendor+Turn axis
 
 ## What changed
 
@@ -40,15 +41,20 @@ from codex's.
 - Updated all importers (`runtime.ts`, `index.ts`, root `host-tools.ts`, the two
   `automation/run-automation-*.ts` files, `models/model-tiers.test.ts`) and three
   stale doc-comment references to the old filenames.
+- **Renamed exported backend symbols onto the vendor+Turn axis** so they no
+  longer encode the transport (`-app-server` vs `-sdk`), parallel to dropping
+  the vendor prefix from filenames: `runCodexAppServerTurn` → `runCodexTurn`,
+  `runClaudeSdkTurn` → `runClaudeTurn`, and the `CodexAppServer{Input,Config,Result}`
+  / `ClaudeSdk{Input,Config,Result}` interfaces → `CodexTurn{Input,Config,Result}`
+  / `ClaudeTurn{Input,Config,Result}`. Updated the `index.ts` re-exports, both
+  `runtime.ts` call sites, the `run-automation-live-dispatch.ts` import, and the
+  `codex/model-list.ts` doc reference. `resolveClaudeModel` is unchanged (it has
+  no codex counterpart).
 
 Pure refactor — no behavior change. The `centraid_*` tool names (the literal
-names the model sees) and all exported symbols are unchanged.
+names the model sees) are unchanged.
 
 ## Out of scope
-- Exported symbol names still carry the old naming axis (`runClaudeSdkTurn`,
-  `ClaudeSdkInput`, `runCodexAppServerTurn`, `CodexAppServerInput`). Renaming
-  those touches the `index.ts` public surface and is left as a separate
-  follow-up.
 - The broader cross-module naming inconsistencies surfaced in review (the
   `design-tokens` no-`src/` layout, folder-prefix redundancy in other folders)
   are not part of this change.

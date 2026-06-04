@@ -37,7 +37,7 @@ interface RpcMessage {
  * Returns `[]` on any failure — never throws.
  *
  * `extraArgs` must mirror what the actual chat runner passes to
- * `codex app-server` (see runtime.ts → CodexAppServerConfig.extraArgs):
+ * `codex app-server` (see runtime.ts → CodexTurnConfig.extraArgs):
  * a configured `-c`/profile flag changes which models codex serves, so
  * enumerating without it would populate the catalog with ids the real
  * runner can't run.

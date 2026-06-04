@@ -45,7 +45,7 @@ export function resolveClaudeModel(model: string): string {
   return CLAUDE_TIER_ALIAS[model as CapabilityTier] ?? model;
 }
 
-export interface ClaudeSdkInput {
+export interface ClaudeTurnInput {
   cwd: string;
   message: string;
   /**
@@ -86,19 +86,19 @@ export interface ClaudeSdkInput {
   onEvent: (event: TurnStreamEvent) => void;
 }
 
-export interface ClaudeSdkConfig {
+export interface ClaudeTurnConfig {
   /** Override the bundled `claude` binary location. */
   pathToClaudeCodeExecutable?: string;
 }
 
-export interface ClaudeSdkResult {
+export interface ClaudeTurnResult {
   sessionId?: string;
 }
 
-export async function runClaudeSdkTurn(
-  input: ClaudeSdkInput,
-  config: ClaudeSdkConfig = {},
-): Promise<ClaudeSdkResult> {
+export async function runClaudeTurn(
+  input: ClaudeTurnInput,
+  config: ClaudeTurnConfig = {},
+): Promise<ClaudeTurnResult> {
   await fs.mkdir(input.cwd, { recursive: true });
 
   const emit = (event: TurnStreamEvent): void => {
