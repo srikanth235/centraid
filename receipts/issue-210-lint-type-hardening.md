@@ -39,12 +39,21 @@ safe mechanical fix.
 ### Type-aware linting
 
 `oxlint --type-aware` (via the `oxlint-tsgolint` dev dependency) runs through
-`scripts/lint-types.sh`, wired into the root `ci` script as `lint:types`. oxlint's
-automatic tsconfig discovery is unreliable in this monorepo — a root invocation
-silently ran zero type-aware rules on some packages — so the script runs
-per-package with an explicit `--tsconfig` and asserts rules actually loaded (a
-"0 rules" result fails the build). Enforces `no-floating-promises`,
-`no-misused-promises`, `await-thenable`, and `switch-exhaustiveness-check`.
+`scripts/lint-types.sh`, wired into the root `ci` script as `lint:types` **and
+into the CI workflow** (`.github/workflows/ci.yml` runs `bun run lint:types`
+after typecheck, so the type-aware pass is actually enforced on PRs — the
+workflow previously ran only `check` + `typecheck`). oxlint's automatic tsconfig
+discovery is unreliable in this monorepo — a root invocation silently ran zero
+type-aware rules on some packages — so the script runs per-package with an
+explicit `--tsconfig` and asserts rules actually loaded (a "0 rules" result
+fails the build). Enforces `no-floating-promises`, `no-misused-promises`,
+`await-thenable`, and `switch-exhaustiveness-check`.
+
+Multi-file analysis (oxlint's module-graph feature) is already active via the
+ultracite baseline: the `import` plugin plus `import/no-cycle` give true
+cross-file circular-dependency detection, complementing the syntactic
+`no-restricted-imports` layering rules. The CI oxlint step uses `--format github`
+for inline PR annotations.
 
 ### Tests in the type program
 
