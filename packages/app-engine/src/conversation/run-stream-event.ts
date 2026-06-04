@@ -20,8 +20,8 @@
  * `ctx.agent` source of `node.delta` differs per runner.
  */
 
-import type { TurnStreamEvent } from './conversation-runner.js';
-import type { ItemKind } from './conversation-schema.js';
+import type { TurnStreamEvent } from './runner.js';
+import type { ItemKind } from './schema.js';
 
 export type RunStreamEvent =
   | { type: 'run.start'; runId: string }

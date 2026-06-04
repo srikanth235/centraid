@@ -11,7 +11,7 @@ import {
   probeCliAvailability,
   runPreflight,
 } from './preflight.ts';
-import { defaultModelsFor } from './models/model-defaults.ts';
+import { defaultModelsFor } from './models/defaults.ts';
 
 test('reports binary-not-found when bin does not exist', async () => {
   invalidatePreflightCache();

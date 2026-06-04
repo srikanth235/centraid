@@ -21,15 +21,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { serve } from '../serve/serve.js';
-import { daemonLayoutFor, type DaemonLayout } from './cli-paths.js';
-import {
-  loadConfigFile,
-  validateConfig,
-  type DaemonConfig,
-  DaemonConfigError,
-} from './cli-config.js';
-import { readOrMintToken, readPersistedToken } from './cli-token.js';
-import { seedRunnerPrefs } from './cli-runner-prefs.js';
+import { daemonLayoutFor, type DaemonLayout } from './paths.js';
+import { loadConfigFile, validateConfig, type DaemonConfig, DaemonConfigError } from './config.js';
+import { readOrMintToken, readPersistedToken } from './token.js';
+import { seedRunnerPrefs } from './runner-prefs.js';
 
 const PKG_VERSION = '0.1.0';
 

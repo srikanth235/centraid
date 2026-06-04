@@ -6,7 +6,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { Runtime } from '../runtime.ts';
 import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
-import type { ConversationRunner } from '../conversation/conversation-runner.ts';
+import type { ConversationRunner } from '../conversation/runner.ts';
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;

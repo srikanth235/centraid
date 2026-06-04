@@ -5,14 +5,14 @@
  *   - the OpenClaw plugin (remote gateway) via `api.registerHttpRoute`
  *   - `startRuntimeHttpServer` for the desktop's embedded local runtime
  *
- * The store itself lives in `conversation-history.ts`. This module is split
+ * The store itself lives in `history.ts`. This module is split
  * out purely for file-size reasons — keeping the store, its schema, and its
  * SQL prepared statements in one file (where the per-user scoping rules
  * are easier to audit at a glance) is the more important constraint.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ConversationHistoryStore } from '../conversation/conversation-history.js';
+import type { ConversationHistoryStore } from '../conversation/history.js';
 
 const ROUTE_PREFIX = '/_centraid-conversations';
 

@@ -8,7 +8,7 @@ receipt tracks the layer-1 cleanups, each landed as its own focused commit.
 
 ## Checklist
 - [x] A — Move design-tokens source under src/ and update package.json + tsconfig
-- [ ] B — Drop redundant folder-name prefixes in models/, cli/, handler/, conversation/
+- [x] B — Drop redundant folder-name prefixes in models/, cli/, handler/, conversation/
 - [x] C — Resolve insights/ analytics-vs-insights prefix question
 - [x] D — Rename design-tokens/themes/_shared.ts to shared.ts
 
@@ -28,6 +28,35 @@ the per-file `files` list → `["dist", "src"]` (which also drops the stale
 (`dist/index.js`, `dist/themes/*`), verified by a clean `tsc` build. All
 consumers import the package via the `@centraid/design-tokens` barrel, so there
 were no subpath importers to update.
+
+### B — Drop redundant folder-name prefixes in models/, cli/, handler/, conversation/
+Dropped the redundant folder-name prefix in the four folders where (nearly)
+every file repeated it, via `git mv` + relative-import updates contained within
+each package (no cross-package deep imports exist — consumers use barrels):
+- `agent-runtime/models/`: `model-catalog`/`model-defaults`/`model-enumerators`/
+  `model-tiers` → `catalog`/`defaults`/`enumerators`/`tiers` (+ their tests).
+- `gateway/cli/`: `cli-config`/`cli-paths`/`cli-runner-prefs`/`cli-token` →
+  `config`/`paths`/`runner-prefs`/`token` (`cli.ts` is the entry, kept).
+- `automation/handler/`: `handler-audit`/`handler-ctx`/`handler-lint`/
+  `handler-runner` → `audit`/`ctx`/`lint`/`runner` (`agent-answer.ts` already
+  unprefixed).
+- `app-engine/conversation/`: `conversation-history`/`conversation-runner`/
+  `conversation-runner-core`/`conversation-schema`/`conversation-store`/
+  `conversation-store-sql`/`conversation-transcript` → `history`/`runner`/
+  `runner-core`/`schema`/`store`/`store-sql`/`transcript` (+ tests).
+
+Renames were anchored to import specifiers and file-reference prose only.
+Same-named string literals and data files were deliberately preserved: the
+`centraid-conversation-runner-sessions` temp-dir name, the
+`conversation-history:` error prefix, the `model-catalog.json` /
+`model-tiers.json` data files, the `conversation-runner-sessions` gateway dir,
+and prose references to *other* files (`openclaw-conversation-runner.ts` in
+openclaw-plugin, the separate `app-engine/handlers/handler-runner.ts`, gateway's
+`unified-conversation-runner.ts`) are all untouched.
+
+Partial-prefix folders (`http/`, `settings/`, `manifest/`, `mock-llm/`,
+`lifecycle/`) were intentionally left — there the prefix disambiguates a
+minority of files rather than redundantly repeating the folder name.
 
 ### C — Resolve insights/ analytics-vs-insights prefix question
 Investigated `app-engine/src/insights/` (`analytics-db.ts`, `analytics-store.ts`
@@ -59,6 +88,15 @@ eight relative importers under `themes/` (`nord`, `github`, `notion`,
   minority of files rather than redundantly repeating the folder name.
 
 ## Verification
+- B: each affected package's own `tsc --noEmit` is clean for the renamed files
+  (agent-runtime, app-engine, automation; gateway has one pre-existing
+  cross-package implicit-any in an untouched `routes/` file from the worktree's
+  stale-dist resolution). Tests on the renamed folders pass: agent-runtime
+  models 15/15, gateway cli 8/8, app-engine conversation+http 100/100,
+  automation handler/mock-llm green. The 5 `fire.test.ts` failures are
+  pre-existing — confirmed by stashing this change and reproducing them on the
+  prior commit. Repo-wide grep confirms no broken import paths or doc links;
+  preserved string literals / data files verified present.
 - A: `tsc -p tsconfig.json` build on `@centraid/design-tokens` is clean and
   emits a flat `dist/` (`dist/index.js` at root, `dist/themes/*`), so
   `main`/`types` remain valid. Repo-wide grep confirms the only consumers use

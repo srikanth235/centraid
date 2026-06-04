@@ -82,13 +82,9 @@ export {
 // Per-runner model catalog + default seed (issue #188). Exposed so the gateway
 // can resolve each agent's models for the per-agent picker in Settings →
 // Agents, not just the active runner's via runner-status.
-export {
-  resolveRunnerModels,
-  resolveRunnerTools,
-  readRunnerTools,
-} from './models/model-catalog.js';
-export { defaultModelsFor, DEFAULT_MODELS } from './models/model-defaults.js';
-export { enumerateRunnerModels } from './models/model-enumerators.js';
+export { resolveRunnerModels, resolveRunnerTools, readRunnerTools } from './models/catalog.js';
+export { defaultModelsFor, DEFAULT_MODELS } from './models/defaults.js';
+export { enumerateRunnerModels } from './models/enumerators.js';
 
 // Host tool enumeration — feeds the builder's available-tools grounding
 // block so the agent declares `ctx.tool` calls + `requires` against the

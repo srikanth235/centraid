@@ -10,7 +10,7 @@ import {
   resolveRunnerModels,
   resolveRunnerTools,
   writeCatalogEntry,
-} from './model-catalog.ts';
+} from './catalog.ts';
 
 let counter = 0;
 async function tmpCatalogPath(): Promise<string> {

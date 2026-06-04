@@ -12,7 +12,7 @@
  *   - The parent supplies `toolDispatcher` and `agentDispatcher`.
  *   - Tool calls arrive in batches; each call becomes one `run_nodes`
  *     audit row. There is no runtime retry — a failed `ctx.tool`
- *     rejects the handler Promise (see `handler-ctx.ts`).
+ *     rejects the handler Promise (see `ctx.ts`).
  *   - Every ctx surface call lands in the activity DB's run-audit
  *     tables. Retention runs at end-of-run per `manifest.history.keep`.
  */
@@ -39,7 +39,7 @@ import {
   noopRunEventSink,
   truncateForAudit,
   type HandlerReturnEnvelope,
-} from './handler-audit.js';
+} from './audit.js';
 import {
   dispatchToolBatch,
   handleAgentMessage,
@@ -47,7 +47,7 @@ import {
   handleStateMessage,
   type AuditState,
   type ToolCallWire,
-} from './handler-ctx.js';
+} from './ctx.js';
 
 function resolveWorkerFile(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));

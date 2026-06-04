@@ -25,7 +25,7 @@ import type {
   AutomationTriggerOrigin,
   ItemKind,
   RunKind,
-} from './conversation-schema.js';
+} from './schema.js';
 
 export interface RawConversation {
   id: string;

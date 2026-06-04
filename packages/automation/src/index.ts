@@ -125,8 +125,8 @@ export {
   type AgentCall,
   type AgentDispatcher,
   type DispatchContext,
-} from './handler/handler-runner.js';
-export { truncateForAudit } from './handler/handler-audit.js';
+} from './handler/runner.js';
+export { truncateForAudit } from './handler/audit.js';
 // Shared `ctx.agent` answer coercion — every host ends an agent turn with a
 // blob of text and must turn it into the value the handler awaits the same way.
 export { coerceAgentAnswer } from './handler/agent-answer.js';
@@ -159,7 +159,7 @@ export {
   lintHandlerSource,
   formatHandlerLintError,
   type HandlerLintFinding,
-} from './handler/handler-lint.js';
+} from './handler/lint.js';
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomation`

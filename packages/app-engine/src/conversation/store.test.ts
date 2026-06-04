@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
 import { makeRuntimeDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
-import { ConversationStore } from './conversation-store.js';
+import { ConversationStore } from './store.js';
 
 function newProvider(): DatabaseProvider {
   const dir = mkdtempSync(path.join(tmpdir(), 'centraid-conv-store-'));

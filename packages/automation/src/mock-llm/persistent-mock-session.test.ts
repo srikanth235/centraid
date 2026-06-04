@@ -13,7 +13,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { startPersistentMockSession, type AgentDriver } from './persistent-mock-session.js';
-import type { DispatchContext } from '../handler/handler-runner.js';
+import type { DispatchContext } from '../handler/runner.js';
 
 interface ToolUseBlock {
   type: 'tool_use';

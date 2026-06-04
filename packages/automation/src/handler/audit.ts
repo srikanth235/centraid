@@ -1,7 +1,7 @@
 /**
  * Audit-row helpers for automation handler runs (issue #80).
  *
- * Split out of `handler-runner.ts` so the runner stays
+ * Split out of `runner.ts` so the runner stays
  * focused on worker/message orchestration. Everything here is
  * pure-ish — the only side-effect surface is the supplied
  * `AgentRunsStore` reference.
