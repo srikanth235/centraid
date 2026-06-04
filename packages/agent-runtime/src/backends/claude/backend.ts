@@ -25,7 +25,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { type TurnStreamEvent, type TurnAttachment } from '@centraid/app-engine';
 import type { ToolContext } from '../../runtime.js';
-import type { CapabilityTier } from '../../models/model-tiers.js';
+import type { CapabilityTier } from '../../models/tiers.js';
 import { buildUserContent } from '../../multimodal.js';
 import { buildCentraidMcpServer } from './host-tools.js';
 

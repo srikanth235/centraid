@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ScaffoldFile } from '@centraid/blueprints';
 import { scaffoldAppFiles, setEnabledInFiles, deleteFromFiles } from './scaffold.js';
-import { lintHandlerSource } from '../handler/handler-lint.js';
+import { lintHandlerSource } from '../handler/lint.js';
 
 function byPath(files: ScaffoldFile[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));

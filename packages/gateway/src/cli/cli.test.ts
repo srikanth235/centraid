@@ -6,11 +6,11 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import url from 'node:url';
-import { validateConfig, DaemonConfigError } from './cli-config.ts';
-import { buildPrefsPatch, seedRunnerPrefs } from './cli-runner-prefs.ts';
+import { validateConfig, DaemonConfigError } from './config.ts';
+import { buildPrefsPatch, seedRunnerPrefs } from './runner-prefs.ts';
 import type { UserStore } from '@centraid/app-engine';
-import { daemonLayoutFor } from './cli-paths.ts';
-import { readOrMintToken, readPersistedToken } from './cli-token.ts';
+import { daemonLayoutFor } from './paths.ts';
+import { readOrMintToken, readPersistedToken } from './token.ts';
 
 const here = path.dirname(url.fileURLToPath(import.meta.url));
 const CLI_TS = path.resolve(here, 'cli.ts');

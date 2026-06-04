@@ -2,7 +2,7 @@
  * Claude model enumeration via the Agent SDK's `supportedModels()` control
  * method. Mirrors codex's `model-list.ts` so both backends expose their model
  * catalog from a parallel file; the per-runner switchboard in
- * `models/model-enumerators.ts` dispatches to each.
+ * `models/enumerators.ts` dispatches to each.
  *
  * The CLI reports its built-in model list (aliases like `default`/`sonnet`/
  * `haiku`, each with a display name) over the control channel — no model turn,

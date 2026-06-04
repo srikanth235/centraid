@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit #190 — one cohesive
 // ConversationStore class; its SQL + row mappers are already split into
-// conversation-store-sql.ts and the row types into conversation-schema.ts.
+// store-sql.ts and the row types into schema.ts.
 /*
  * ConversationStore — the per-app conversation ledger + automation KV
  * (issue #90, reshaped by #190).
@@ -30,8 +30,8 @@
  * a one-row summary (sourcing `kind`/`app_id`/`automation_ref` from the
  * owning conversation) to the central analytics DB.
  *
- * Row types live in `conversation-schema.ts`; the prepared-statement block +
- * raw-row mappers live in `conversation-store-sql.ts`.
+ * Row types live in `schema.ts`; the prepared-statement block +
+ * raw-row mappers live in `store-sql.ts`.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -48,7 +48,7 @@ import type {
   AutomationTriggerOrigin,
   ItemKind,
   RunKind,
-} from './conversation-schema.js';
+} from './schema.js';
 import {
   prepare,
   conversationFromRaw,
@@ -62,7 +62,7 @@ import {
   type RawItem,
   type RawAttachment,
   type RawState,
-} from './conversation-store-sql.js';
+} from './store-sql.js';
 
 export interface CreateConversationInput {
   /** Defaults to a fresh UUID. For an automation fire, set `automationId` to

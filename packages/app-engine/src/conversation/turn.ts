@@ -11,7 +11,7 @@
  * implementation (`runTurn`) stays in agent-runtime.
  */
 
-import type { TurnStreamEvent } from './conversation-runner.js';
+import type { TurnStreamEvent } from './runner.js';
 import type { Dispatcher } from '../handlers/dispatcher.js';
 
 export type RunnerKind = 'codex' | 'claude-code';

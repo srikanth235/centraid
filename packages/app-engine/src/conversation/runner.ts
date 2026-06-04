@@ -17,7 +17,7 @@
  * frames and pipes them back to the harness client.
  */
 
-import type { RunKind } from './conversation-schema.js';
+import type { RunKind } from './schema.js';
 import type { TurnAttachment } from './turn.js';
 
 /**

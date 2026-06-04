@@ -2,12 +2,12 @@
   "extends": "@centraid/tsconfig/base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": ".",
+    "rootDir": "./src",
     "noEmit": false,
     "declaration": true,
     "module": "CommonJS",
     "moduleResolution": "Node"
   },
-  "include": ["index.ts", "palette.ts", "icons.ts", "apps.ts"],
+  "include": ["src"],
   "exclude": ["dist", "node_modules"]
 }

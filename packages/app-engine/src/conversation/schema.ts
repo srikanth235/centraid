@@ -4,7 +4,7 @@
  * Pure types — the table DDL lives in `gateway-db.ts` (RUNTIME_MIGRATIONS:
  * `conversations`, `turns`, `items`, `attachments`, `automation_state`).
  * These shapes are exported separately so callers (the SQLite-backed
- * `ConversationStore` in `conversation-store.ts` and the desktop UI) can
+ * `ConversationStore` in `store.ts` and the desktop UI) can
  * import the row types without pulling in the store implementation.
  *
  * "Everything is chat" (issue #190): the **conversation** is the first-class

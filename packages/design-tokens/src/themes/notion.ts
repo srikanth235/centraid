@@ -3,7 +3,7 @@
 // the canonical link / accent.
 
 import { palette } from '../palette';
-import { BEZEL, BEZEL_INNER, type Theme } from './_shared';
+import { BEZEL, BEZEL_INNER, type Theme } from './shared';
 
 export const notionLightTheme: Theme = {
   kind: 'light',

@@ -7,13 +7,9 @@ import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { IncomingMessage, ServerResponse } from 'node:http';
-import {
-  ConversationHistoryStore,
-  deriveTitle,
-  type RecordTurnInput,
-} from './conversation-history.js';
+import { ConversationHistoryStore, deriveTitle, type RecordTurnInput } from './history.js';
 import { makeConversationRouteHandler } from '../http/conversation-routes.js';
-import { ConversationStore } from './conversation-store.js';
+import { ConversationStore } from './store.js';
 import { makeRuntimeDbProvider } from '../stores/gateway-db.js';
 
 // Tests that don't care about cross-user isolation share this stub UUID.

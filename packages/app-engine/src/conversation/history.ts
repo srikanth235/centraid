@@ -22,12 +22,12 @@
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { makeRuntimeDbProvider } from '../stores/gateway-db.js';
-import { ConversationStore, type ConversationMeta } from './conversation-store.js';
-import type { RunKind } from './conversation-schema.js';
+import { ConversationStore, type ConversationMeta } from './store.js';
+import type { RunKind } from './schema.js';
 import type { RunSummarySink } from './run-summary-sink.js';
 import { isValidAppId } from '../registry/app-paths.js';
 import { costForUsage } from '../model-pricing.js';
-import { parseStepOutput, parseToolArgs, parseToolOutput } from './conversation-transcript.js';
+import { parseStepOutput, parseToolArgs, parseToolOutput } from './transcript.js';
 import { BlobStore, blobUrl, type PutResult } from '../data/blob-store.js';
 
 export interface ConversationSummary {

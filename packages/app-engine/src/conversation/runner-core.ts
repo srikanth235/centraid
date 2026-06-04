@@ -29,12 +29,12 @@
 
 import { randomUUID } from 'node:crypto';
 import type { Dispatcher } from '../handlers/dispatcher.js';
-import type { RunKind } from './conversation-schema.js';
+import type { RunKind } from './schema.js';
 import type {
   ConversationRunner,
   ConversationTurnInput,
   ConversationTurnResult,
-} from './conversation-runner.js';
+} from './runner.js';
 import type { RunnerPrefs, RunTurnFn, ToolContext, TurnInput } from './turn.js';
 
 /** Per-turn context handed to the injected `buildExtraSystemPrompt` /

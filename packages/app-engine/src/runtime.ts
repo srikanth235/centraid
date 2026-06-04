@@ -20,11 +20,11 @@ import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './http/
 import { ChangeBus } from './changes/change-bus.js';
 import { handleAppChanges } from './http/changes-sse.js';
 import type { UserStore } from './stores/user-store.js';
-import type { ConversationHistoryStore } from './conversation/conversation-history.js';
+import type { ConversationHistoryStore } from './conversation/history.js';
 import { readAppSettings } from './settings/app-settings.js';
 import { buildSettingsInject } from './settings/settings-merge.js';
 import { handleTurnRoute, parseTurnSubRoute } from './http/turn-routes.js';
-import type { ConversationRunner } from './conversation/conversation-runner.js';
+import type { ConversationRunner } from './conversation/runner.js';
 import type { AppRef, RegistryEntry } from './types.js';
 
 export interface RuntimeLogger {

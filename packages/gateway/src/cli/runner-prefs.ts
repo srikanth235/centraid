@@ -15,7 +15,7 @@
  */
 
 import type { UserStore } from '@centraid/app-engine';
-import type { DaemonConfig } from './cli-config.js';
+import type { DaemonConfig } from './config.js';
 
 const RUNNER_KEYS = [
   'agent.runner.kind',
