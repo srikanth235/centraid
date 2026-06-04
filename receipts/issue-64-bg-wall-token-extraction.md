@@ -36,7 +36,7 @@ Template apps run as sandboxed iframes that can't consume the shell's token CSS 
 
 ### Template refactor
 
-Each template's `app.css` — [journal](../packages/app-blueprints/apps/journal/app.css), [hydrate](../packages/app-blueprints/apps/hydrate/app.css), [todos](../packages/app-blueprints/apps/todos/app.css) — drops the inline `--bg: linear-gradient(...)` and uses `--bg: var(--bg-wall)`. The standalone `@media (prefers-color-scheme: dark) :root:not([data-theme])` blocks now also set `--bg-l: 10%` so the formula in wall.css's matching media block resolves consistently — previously these blocks hardcoded HSL literals.
+Each template's `app.css` — [journal](../packages/blueprints/apps/journal/app.css), [hydrate](../packages/blueprints/apps/hydrate/app.css), [todos](../packages/blueprints/apps/todos/app.css) — drops the inline `--bg: linear-gradient(...)` and uses `--bg: var(--bg-wall)`. The standalone `@media (prefers-color-scheme: dark) :root:not([data-theme])` blocks now also set `--bg-l: 10%` so the formula in wall.css's matching media block resolves consistently — previously these blocks hardcoded HSL literals.
 
 ### Manifest regenerated
 

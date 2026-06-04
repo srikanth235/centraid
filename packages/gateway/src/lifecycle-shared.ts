@@ -5,7 +5,7 @@
 // limit while sharing the stage-vs-publish fork and error mapping.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AppScaffoldError } from '@centraid/app-blueprints';
+import { AppScaffoldError } from '@centraid/blueprints';
 import { MigrationError } from '@centraid/app-engine';
 import type { AutomationHistoryKeep } from '@centraid/conversation-engine';
 import { WorktreeStore, WorktreeStoreError } from './worktree-store/index.js';

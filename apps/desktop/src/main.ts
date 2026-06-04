@@ -69,7 +69,7 @@ app.whenReady().then(() => {
   // #141, Phase 5): `local-runtime` passes the configured remote manifest
   // URL into `serve()`, and the gateway's `/centraid/_templates` route
   // fires a one-time best-effort fetch into its cache. The desktop main
-  // process no longer touches `@centraid/app-blueprints`.
+  // process no longer touches `@centraid/blueprints`.
   // Coding-agent detection moved to the gateway (`GET /centraid/_agents/status`):
   // it's colocated with the runner and probes its own host on demand, so the
   // desktop no longer runs a first-launch credential probe.

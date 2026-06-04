@@ -52,7 +52,7 @@ import {
   suggestCloneIdentityFrom,
   updateAppMetaFiles,
   type ScaffoldFile,
-} from '@centraid/app-blueprints';
+} from '@centraid/blueprints';
 import { provisionPendingWebhooksInFiles } from '@centraid/conversation-engine';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {

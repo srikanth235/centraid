@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ScaffoldFile } from '@centraid/app-blueprints';
+import type { ScaffoldFile } from '@centraid/blueprints';
 import {
   scaffoldAutomationAppFiles,
   setAutomationEnabledInFiles,

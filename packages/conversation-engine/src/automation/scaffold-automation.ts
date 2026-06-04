@@ -29,7 +29,7 @@ import {
   type AutomationHistoryKeep,
 } from './automation-manifest.js';
 import { isValidAppId } from '@centraid/app-engine';
-import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/app-blueprints';
+import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/blueprints';
 
 export interface AutomationScaffoldOptions {
   /** Display name. Defaults to the app id. */

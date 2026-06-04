@@ -5,7 +5,7 @@ Issue: #198
 ## Checklist
 - [x] Split templates into apps/ and automations/ subfolders
 - [x] Surface automation templates on the home shelf
-- [ ] Rename package to @centraid/blueprints
+- [x] Rename package to @centraid/blueprints
 
 ## What changed
 
@@ -34,8 +34,15 @@ chips). A staggered rise-in plays per cell on every tab switch, and "Browse all"
 is now tab-aware (→ Discover for apps, → the automations gallery for automations).
 `renderHomeAsync` loads both kinds in parallel.
 
+### Rename package to @centraid/blueprints
+With the package now holding both kinds, the `app-` prefix was a misnomer.
+Renamed the directory `packages/app-blueprints` → `packages/blueprints` and the
+npm package `@centraid/app-blueprints` → `@centraid/blueprints`, updating all
+importers (gateway, app-engine, conversation-engine, desktop, skills), their
+`package.json` deps, 9 live `docs/*.mdx` files, and the 5 `bun.lock` references.
+Historical `receipts/` were left as-is except the moved-file links in issue-64.
+
 ## Out of scope
-- Renaming the package itself — the remaining checklist item in this PR.
 - Unifying the two adoption paths: app templates open a preview first while
   automation cards adopt directly into the builder. Each kind keeps its
   existing behavior (matching the dedicated automations gallery).

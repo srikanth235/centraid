@@ -19,7 +19,7 @@ export interface CloneTemplateOptions {
   appsDir: string;
   /** Id for the new app (folder name). Validated against the standard rules. */
   newAppId: string;
-  /** Absolute path to the template's source directory (e.g. from `@centraid/app-blueprints`). */
+  /** Absolute path to the template's source directory (e.g. from `@centraid/blueprints`). */
   templateDir: string;
   /** Optional display name; defaults to whatever the template's `app.json` had. */
   newName?: string;
@@ -153,7 +153,7 @@ export async function suggestAppId(
  * 1000 attempts; throws `already_exists` if every candidate is taken.
  *
  * The template and the user's clone live in different filesystem trees
- * (`packages/app-blueprints/<id>/` vs `<appsDir>/<id>/`), so a clone
+ * (`packages/blueprints/<id>/` vs `<appsDir>/<id>/`), so a clone
  * using the template's bare id is not a collision — the gateway only
  * routes `<appsDir>` entries.
  */

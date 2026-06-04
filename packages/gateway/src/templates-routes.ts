@@ -1,6 +1,6 @@
 // HTTP surface for the gateway-owned template catalog (issue #141).
 //
-// The desktop used to resolve the bundled @centraid/app-blueprints catalog
+// The desktop used to resolve the bundled @centraid/blueprints catalog
 // in the main process and hand the renderer a stripped metadata list over
 // IPC. Under the thin-client pivot the gateway owns the catalog: it
 // resolves bundle-or-cache (preferring the higher semver) and serves the
@@ -17,7 +17,7 @@
 // path reads files gateway-side).
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { fetchRemoteTemplates, resolveTemplates } from '@centraid/app-blueprints';
+import { fetchRemoteTemplates, resolveTemplates } from '@centraid/blueprints';
 import { sendJson } from './route-helpers.js';
 
 export interface TemplatesRouteOptions {
@@ -32,7 +32,7 @@ export interface TemplatesRouteOptions {
    * Optional remote template manifest URL (issue #141, Phase 5). When set
    * with `cacheDir`, the handler kicks a one-time best-effort refresh of the
    * cache from this URL on construction — the catalog refresh the desktop
-   * main process used to own before it dropped `@centraid/app-blueprints`.
+   * main process used to own before it dropped `@centraid/blueprints`.
    * `fetchRemoteTemplates` never throws (offline / 404 / bad manifest leave
    * the cache untouched), so this is safe to fire-and-forget.
    */

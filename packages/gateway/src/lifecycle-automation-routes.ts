@@ -7,7 +7,7 @@
 import { promises as fs } from 'node:fs';
 import nodePath from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AppScaffoldError, type ScaffoldFile } from '@centraid/app-blueprints';
+import { AppScaffoldError, type ScaffoldFile } from '@centraid/blueprints';
 import {
   generateWebhookId,
   generateWebhookSecret,

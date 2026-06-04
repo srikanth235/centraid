@@ -87,7 +87,7 @@ export async function ensureLocalRuntime(gatewayId: string): Promise<GatewayServ
     // (issue #141, Phase 5), so pass the optional remote manifest URL down
     // — the templates route fires a one-time best-effort fetch into the
     // cache on startup. This is the last thing the desktop main process did
-    // with `@centraid/app-blueprints`; with it relocated, the desktop drops
+    // with `@centraid/blueprints`; with it relocated, the desktop drops
     // the dependency entirely.
     // Read the *persisted* settings, not the resolved ones: `loadSettings()`
     // resolves the active gateway, which for a local profile re-enters

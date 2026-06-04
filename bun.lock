@@ -91,8 +91,8 @@
         "typescript": "catalog:",
       },
     },
-    "packages/app-blueprints": {
-      "name": "@centraid/app-blueprints",
+    "packages/blueprints": {
+      "name": "@centraid/blueprints",
       "version": "0.1.0",
       "dependencies": {
         "@centraid/design-tokens": "workspace:*",
@@ -122,7 +122,7 @@
       "name": "@centraid/conversation-engine",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/app-blueprints": "workspace:*",
+        "@centraid/blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
       },
       "devDependencies": {
@@ -148,7 +148,7 @@
       },
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
-        "@centraid/app-blueprints": "workspace:*",
+        "@centraid/blueprints": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/conversation-engine": "workspace:*",
         "@centraid/skills": "workspace:*",
@@ -505,7 +505,7 @@
 
     "@centraid/agent-runtime": ["@centraid/agent-runtime@workspace:packages/agent-runtime"],
 
-    "@centraid/app-blueprints": ["@centraid/app-blueprints@workspace:packages/app-blueprints"],
+    "@centraid/blueprints": ["@centraid/blueprints@workspace:packages/blueprints"],
 
     "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
 

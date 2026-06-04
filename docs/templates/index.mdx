@@ -7,7 +7,7 @@ title: 'Templates'
 
 Templates are pre-built Centraid apps that ship with the desktop. Each one is **identical in shape** to an app you'd author yourself — `index.html`, `app.css`, `app.js`, `queries/`, `actions/`, `migrations/`, `app.json`. You clone, you tweak, you ship.
 
-The templates live in [`packages/app-blueprints/`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/app-blueprints).
+The templates live in [`packages/blueprints/`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/blueprints).
 
 ## The two flavors
 
@@ -40,10 +40,10 @@ Templates with `kind: "automation"` in the gallery's `index.json` (separate from
 
 > **TODO(#120)** — flesh out the per-template trigger schedules. They're declared in each template's `index.json` entry as `triggerLabel`; worth pulling them all into this table.
 
-## What's inside `packages/app-blueprints/`
+## What's inside `packages/blueprints/`
 
 ```
-packages/app-blueprints/
+packages/blueprints/
 ├── README.md
 ├── src/                      # listTemplates(), types
 ├── index.json                # the manifest source — TemplateManifest
@@ -92,14 +92,14 @@ For an automation:
 
 The `kind: "automation"` flag plus `triggerKind` / `triggerLabel` / `integrations` are what the gallery uses to render automations differently from regular apps.
 
-This `kind` field is **gallery-level metadata only** — it lives on the template-gallery entry in `packages/app-blueprints/index.json`, not on the runtime `app.json` inside the template directory. The runtime doesn't read it. The desktop's gallery picker reads it to decide which tab to surface the template under (`Apps` vs `Automations`).
+This `kind` field is **gallery-level metadata only** — it lives on the template-gallery entry in `packages/blueprints/index.json`, not on the runtime `app.json` inside the template directory. The runtime doesn't read it. The desktop's gallery picker reads it to decide which tab to surface the template under (`Apps` vs `Automations`).
 
 ## Pre-built handlers
 
 Templates ship with **compiled `.js` already in place**. Cloning is "click and deploy" — no `bun install`, no compile step.
 
 > Pre-build the handlers: commit the compiled `.js` files alongside `.ts` so cloning is "click and deploy" — no `bun install` needed on first use.
-> — [`packages/app-blueprints/README.md`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-blueprints/README.md)
+> — [`packages/blueprints/README.md`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/blueprints/README.md)
 
 This is what makes the gallery feel instant.
 

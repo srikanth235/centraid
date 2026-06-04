@@ -17,7 +17,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/app-blueprints';
+import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/blueprints';
 import {
   setAutomationEnabledInFiles,
   deleteAutomationFromFiles,

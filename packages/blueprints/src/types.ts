@@ -1,5 +1,5 @@
 /**
- * Public types for @centraid/app-blueprints.
+ * Public types for @centraid/blueprints.
  */
 
 import type { ColorKey, IconName } from '@centraid/design-tokens';

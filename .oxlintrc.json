@@ -8,8 +8,8 @@
     "**/dist/**",
     "**/.expo/**",
     "**/node_modules/**",
-    "packages/app-blueprints/apps/**",
-    "packages/app-blueprints/automations/**"
+    "packages/blueprints/apps/**",
+    "packages/blueprints/automations/**"
   ],
   "rules": {
     "arrow-body-style": "off",

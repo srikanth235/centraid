@@ -1,5 +1,5 @@
 /*
- * @centraid/app-blueprints
+ * @centraid/blueprints
  *
  * How a new centraid app comes into being. Two kinds of blueprint, one home:
  *
@@ -312,7 +312,7 @@ async function writeManifestAtomic(dir: string, manifest: TemplateManifest): Pro
 // ---------------------------------------------------------------------------
 // App scaffolders + clone (moved out of @centraid/app-engine in #151; both
 // "how a new app comes into being" — a blank scaffold and a cloned template
-// are both app-blueprints you instantiate). The gateway lifecycle routes use the
+// are both blueprints you instantiate). The gateway lifecycle routes use the
 // file-map (`*Files`) variants; the disk wrappers back the CLI / local paths.
 // ---------------------------------------------------------------------------
 export {

@@ -290,4 +290,4 @@ export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from '.
 // package (#151), kept as its own folder + barrel.
 export * from './insights/index.js';
 
-// App scaffolders + clone moved to @centraid/app-blueprints (#151).
+// App scaffolders + clone moved to @centraid/blueprints (#151).
