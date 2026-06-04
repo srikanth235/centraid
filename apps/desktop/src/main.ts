@@ -66,7 +66,7 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createWindow();
   // Remote template refresh now runs inside the embedded gateway (issue
-  // #141, Phase 5): `local-runtime` passes the configured remote manifest
+  // #141, Phase 5): `local-gateway` passes the configured remote manifest
   // URL into `serve()`, and the gateway's `/centraid/_templates` route
   // fires a one-time best-effort fetch into its cache. The desktop main
   // process no longer touches `@centraid/blueprints`.

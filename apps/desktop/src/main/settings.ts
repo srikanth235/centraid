@@ -202,8 +202,8 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
   // settings (with empty URL/token) so boot-time code paths that just
   // need `appsDir` don't deadlock waiting for it.
   if (resolved.profile.kind === 'local' && !resolved.url) {
-    const { ensureLocalRuntime } = await import('./local-runtime.js');
-    const handle = await ensureLocalRuntime(resolved.profile.id);
+    const { ensureLocalGateway } = await import('./local-gateway.js');
+    const handle = await ensureLocalGateway(resolved.profile.id);
     resolved = {
       ...resolved,
       url: handle.url,

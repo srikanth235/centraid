@@ -125,18 +125,18 @@ class GatewayError extends Error {
 
 /**
  * Per-gateway provider of the local in-process runtime's URL+token.
- * Registered once by `local-runtime.ts`; the closure reads the
+ * Registered once by `local-gateway.ts`; the closure reads the
  * runtime's handle map at lookup time so a gateway that hasn't been
  * activated yet returns undefined here (and `resolveGateway` returns
  * an empty url/token, which callers in boot-time code paths tolerate).
  */
-let localRuntimeInfo: (gatewayId: string) => { url: string; token: string } | undefined = () =>
+let localGatewayInfo: (gatewayId: string) => { url: string; token: string } | undefined = () =>
   undefined;
 
-export function setLocalRuntimeInfoProvider(
+export function setLocalGatewayInfoProvider(
   fn: (gatewayId: string) => { url: string; token: string } | undefined,
 ): void {
-  localRuntimeInfo = fn;
+  localGatewayInfo = fn;
 }
 
 /**
@@ -311,7 +311,7 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
 /**
  * Mint a UUID and persist a NEW local gateway profile + its workspace +
  * apps dirs. The in-process runtime for this gateway is NOT started —
- * `ensureLocalRuntime(id)` starts on first activation. Used for
+ * `ensureLocalGateway(id)` starts on first activation. Used for
  * "create another local workspace" (isolated dev/scratch/per-project
  * locals). The primordial `'local'` gateway is still auto-created on
  * boot by `ensureLocalGateway`; this is purely additive.
@@ -430,7 +430,7 @@ export async function resolveGateway(id: string): Promise<ResolvedGateway | unde
   const profile = await readProfile(id);
   if (!profile) return undefined;
   if (profile.kind === 'local') {
-    const info = localRuntimeInfo(profile.id);
+    const info = localGatewayInfo(profile.id);
     return {
       profile,
       appsDir: gatewayAppsDir(profile.id),

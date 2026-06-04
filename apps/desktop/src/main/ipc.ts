@@ -265,8 +265,8 @@ export function registerIpcHandlers(): void {
       // the runtime being up. For multi-local installs this keeps just
       // one in-process server alive at a time; for the common
       // local-then-remote case it shuts the local server down entirely.
-      const { shutdownAllLocalRuntimesExcept } = await import('./local-runtime.js');
-      await shutdownAllLocalRuntimesExcept(
+      const { shutdownAllLocalGatewaysExcept } = await import('./local-gateway.js');
+      await shutdownAllLocalGatewaysExcept(
         next.activeGatewayKind === 'local' ? next.activeGatewayId : undefined,
       );
       await invalidateGatewayCaches();
