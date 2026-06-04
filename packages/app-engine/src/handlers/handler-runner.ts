@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
@@ -6,7 +7,19 @@ import type { AppRef } from '../types.js';
 import { appendLogs, type LogEntry } from '../data/log-store.js';
 import { trackChanges } from '../changes/change-tracker.js';
 
-const WORKER_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'worker', 'runner.js');
+function resolveWorkerFile(): string {
+  // `here` is this module's dir (`src/handlers` → `dist/handlers` once built);
+  // the worker runner lives one level up under `worker/`.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const jsPath = path.join(here, '..', 'worker', 'runner.js');
+  if (existsSync(jsPath)) return jsPath;
+  // Running tests via tsx from src/ where .js isn't emitted — fall back to
+  // the .ts source. tsx propagates its loader to spawned Workers via
+  // NODE_OPTIONS, so this works under `tsx --test`.
+  return path.join(here, '..', 'worker', 'runner.ts');
+}
+
+const WORKER_FILE = resolveWorkerFile();
 
 export interface RunHandlerOptions {
   app: AppRef;

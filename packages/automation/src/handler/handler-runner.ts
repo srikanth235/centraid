@@ -50,13 +50,15 @@ import {
 } from './handler-ctx.js';
 
 function resolveWorkerFile(): string {
+  // `here` is the dir of this module (`src/handler` → `dist/handler` once
+  // built); the worker runner lives one level up under `worker/`.
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const jsPath = path.join(here, 'worker', 'runner.js');
+  const jsPath = path.join(here, '..', 'worker', 'runner.js');
   if (existsSync(jsPath)) return jsPath;
   // Running tests via tsx from src/ where .js isn't emitted — fall back to
   // the .ts source. tsx propagates its loader to spawned Workers via
   // NODE_OPTIONS, so this works under `tsx --test`.
-  return path.join(here, 'worker', 'runner.ts');
+  return path.join(here, '..', 'worker', 'runner.ts');
 }
 
 const WORKER_FILE = resolveWorkerFile();

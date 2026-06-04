@@ -687,3 +687,5 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-e020b3c7-4a0-1780588254 | claude-code | e020b3c7-4a0e-42b3-9a38-fbf3b6437f47 | #205 | claude-opus-4-8 | 12343 | 45048 | 15516082 | 32003 | 89394 | 8.9014 | chore: apply oxfmt formatting across the refactor PR (#205) -m The reorg/rename  |
 | claude-code-75c0bcfc-d98-1780593634 | claude-code | 75c0bcfc-d989-4a56-9d33-fc59d8a6844e | #210 | claude-opus-4-8 | 5752 | 22400 | 32008 | 4420 | 32572 | 0.2953 |  |
 | claude-code-a312fd27-2c4-1780593716 | claude-code | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | claude-opus-4-8 | 39131 | 2242703 | 101478411 | 638067 | 2919901 | 80.9034 |  |
+| claude-code-a312fd27-2c4-1780593753 | claude-code | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | claude-opus-4-8 | 10 | 5344 | 1780401 | 2446 | 7800 | 0.9848 |  |
+| claude-code-a312fd27-2c4-1780593794 | claude-code | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | claude-opus-4-8 | 393 | 3780 | 1073484 | 5727 | 9900 | 0.7055 |  |

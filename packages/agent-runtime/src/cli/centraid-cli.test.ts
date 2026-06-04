@@ -1,6 +1,6 @@
 /*
  * End-to-end smoke test for the centraid CLI bin. The CLI is invoked
- * as a subprocess (using the built dist/centraid-cli.js) against a
+ * as a subprocess (using the built dist/cli/centraid-cli.js) against a
  * temporary SQLite. This verifies both the JSON output contract and
  * the refusal exit codes that codex / claude-code rely on.
  *
@@ -17,10 +17,14 @@ import os from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
+// This test lives at src/cli/; the built CLI is at <pkg>/dist/cli/ (rootDir
+// src mirrors into dist). Two levels up from src/cli reaches the package root.
 const CLI_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
+  '..',
   'dist',
+  'cli',
   'centraid-cli.js',
 );
 
