@@ -1,12 +1,13 @@
 /**
- * Local-side automation fire (issue #98) — the agent-runtime wrapper over the
- * fire spine (issue #147, Concern 2).
+ * Local-side automation fire (issue #98) — `runAutomation`, the agent-runtime
+ * wrapper over the fire spine (issue #147, Concern 2).
  *
  * The per-fire orchestration (resolve the automation, open its ledger, run
  * `handler.js`, cascade `onFailure`) lives in `@centraid/automation`'s `runFire`
  * — it only touches app-engine primitives. The one thing it needs from
  * agent-runtime is the live `ctx.tool` / `ctx.agent` dispatch surface: an
- * ephemeral mock-LLM server plus a per-batch CLI subprocess spawn. This file
+ * ephemeral mock-LLM server plus a per-fire host agent session (an in-process
+ * Claude SDK turn, or a `codex exec` subprocess). This file
  * builds that surface (capturing the runner kind + spawn fn) and injects it as
  * `openDispatch`, leaving the spine — and the onFailure cascade — to app-engine.
  */
@@ -18,27 +19,21 @@ import {
   type RunStreamEvent,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
+import type { RunnerKind } from './types.js';
 import {
-  defaultSpawnCli,
-  type LocalRunnerKind,
-  type SpawnCli,
-  type SpawnCliInput,
-  type SpawnCliResult,
-} from './run-automation-cli-spawn.js';
+  defaultRunHostAgent,
+  type RunHostAgent,
+  type RunHostAgentInput,
+  type RunHostAgentResult,
+} from './run-automation-host-agent.js';
 import { startLiveDispatch } from './run-automation-live-dispatch.js';
 
-export {
-  defaultSpawnCli,
-  type LocalRunnerKind,
-  type SpawnCli,
-  type SpawnCliInput,
-  type SpawnCliResult,
-};
+export { defaultRunHostAgent, type RunHostAgent, type RunHostAgentInput, type RunHostAgentResult };
 // The run record shape lives with the spine now; re-export under
 // agent-runtime's stable name so existing consumers keep importing it here.
 export type AutomationRunRecord = automation.RunRecord;
 
-export interface RunAutomationLocalOptions {
+export interface RunAutomationOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
   automationRef: string;
   /**
@@ -63,11 +58,11 @@ export interface RunAutomationLocalOptions {
    */
   analytics?: AnalyticsStore;
   /** Which CLI to drive. Defaults to codex. */
-  runner?: LocalRunnerKind;
+  runner?: RunnerKind;
   /** Hard timeout. Defaults to 5 minutes. */
   timeoutMs?: number;
   /** Override spawn for tests. */
-  spawnCli?: SpawnCli;
+  runHostAgent?: RunHostAgent;
   /** Optional logger. */
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
   /** Live run-stream sink (issue #158); forwarded to the fire spine. */
@@ -98,11 +93,11 @@ export interface RunAutomationLocalOptions {
  * missing automation app throws; a handler failure surfaces in
  * `outcome.ok === false`.
  */
-export async function runAutomationLocal(
-  opts: RunAutomationLocalOptions,
+export async function runAutomation(
+  opts: RunAutomationOptions,
 ): Promise<{ outcome: automation.HandlerOutcome; record: AutomationRunRecord }> {
-  const runner: LocalRunnerKind = opts.runner ?? 'codex';
-  const spawnCli = opts.spawnCli ?? defaultSpawnCli;
+  const runner: RunnerKind = opts.runner ?? 'codex';
+  const runHostAgent = opts.runHostAgent ?? defaultRunHostAgent;
 
   // The injected dispatch surface: a fresh mock-LLM server + CLI spawn per
   // fire. The runner kind + spawn fn are captured here, so onFailure cascades
@@ -114,7 +109,7 @@ export async function runAutomationLocal(
       automationId: args.automationRef,
       runId: args.runId,
       runner,
-      spawnCli,
+      runHostAgent,
       toolsAllow: args.toolsAllow,
       onLog: args.onLog,
     });

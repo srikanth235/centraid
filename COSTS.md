@@ -664,3 +664,10 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-b5918574-10e-1780571343 | claude-code | b5918574-10e9-4407-be3d-dc38f2a3d941 | #194 | claude-opus-4-8 | 5752 | 11862 | 32008 | 628 | 18242 | 0.1346 | refactor(automation-engine): flatten src layout, drop automation- filename prefi |
 | claude-code-605a5aff-95d-1780572848 | claude-code | 605a5aff-95da-4a21-93db-d78f5150ed6b | #194 | claude-opus-4-8 | 5478 | 12218 | 32008 | 1092 | 18788 | 0.1471 | refactor(automation): rename to @centraid/automation, drop Automation* API prefi |
 | claude-code-5d76c40b-3ca-1780572871 | claude-code | 5d76c40b-3ca7-46ee-8157-75cea189bdaa | #194 | claude-opus-4-8 | 76450 | 861405 | 29566705 | 255966 | 1193821 | 26.9485 | refactor(automation): rename to @centraid/automation, drop Automation* API prefi |
+| claude-code-7157f555-141-1780578897 | claude-code | 7157f555-141d-4859-9231-88218b715217 | #196 | claude-opus-4-8 | 14054 | 13540 | 32008 | 570 | 28164 | 0.1851 |  |
+| claude-code-2089b9de-d90-1780578979 | claude-code | 2089b9de-d902-441f-ad71-0dace231f3da | #196 | claude-opus-4-8 | 38276 | 586113 | 14802573 | 149494 | 773883 | 14.9932 |  |
+| claude-code-f006ef03-9d0-1780579751 | claude-code | f006ef03-9d02-40b8-aa8c-8bf670208d44 | #196 | claude-opus-4-8 | 2876 | 5282 | 16004 | 201 | 8359 | 0.0604 |  |
+| claude-code-2089b9de-d90-1780580119 | claude-code | 2089b9de-d902-441f-ad71-0dace231f3da | #196 | claude-opus-4-8 | 29652 | 252703 | 29529529 | 173067 | 455422 | 20.8191 |  |
+| claude-code-2089b9de-d90-1780580233 | claude-code | 2089b9de-d902-441f-ad71-0dace231f3da | #196 | claude-opus-4-8 | 405 | 24429 | 2266572 | 20883 | 45717 | 1.8101 |  |
+| claude-code-c9430325-350-1780580849 | claude-code | c9430325-3509-4033-a25b-5f76e2894803 | #196 | claude-opus-4-8 | 2876 | 5334 | 16004 | 22 | 8232 | 0.0563 |  |
+| claude-code-c7027ae7-0af-1780581311 | claude-code | c7027ae7-0af4-4eb6-ab09-363cae559902 | #196 | claude-opus-4-8 | 2876 | 5718 | 16004 | 120 | 8714 | 0.0611 |  |

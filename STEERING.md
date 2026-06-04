@@ -411,3 +411,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-5d76c40b3ca-1780572847-1 | 5d76c40b-3ca7-46ee-8157-75cea189bdaa | #194 | correction | classifier | Halts work to question naming: 'automation-engine' vs just 'automation' | refactor(automation): rename to @centraid/automation, drop Automation* API pref… |
 | steer-5d76c40b3ca-1780572847-2 | 5d76c40b-3ca7-46ee-8157-75cea189bdaa | #194 | interrupt | structural |  | refactor(automation): rename to @centraid/automation, drop Automation* API pref… |
 | steer-5d76c40b3ca-1780572847-3 | 5d76c40b-3ca7-46ee-8157-75cea189bdaa | #194 | correction | classifier | Halts work to question naming the module 'automation-engine' vs 'automation' | refactor(automation): rename to @centraid/automation, drop Automation* API pref… |
+| steer-2089b9ded90-1780579751-1 | 2089b9de-d902-441f-ad71-0dace231f3da | #196 | correction | classifier | Public API names still say CLI though it's now in-process SDK |  |

@@ -7,11 +7,11 @@
  * `tool` and `agent` calls back to the parent via message-passing, with
  * per-microtask **batching** for `ctx.tool`.
  *
- * Why batching: each batch dispatches to one host agent turn (one
- * `codex exec` / `claude -p` spawn on local). Spawning a CLI subprocess
- * costs 1–3s of cold start; if a handler did `for (const x of xs) await
- * ctx.tool(...)`, 50 sequential calls = 50 spawns = 50–150 s of
- * overhead.
+ * Why batching: each batch dispatches to one host agent turn (a mock
+ * round-trip through the persistent session — an in-process Claude SDK turn
+ * or a `codex exec` subprocess on local). Each turn carries latency; if a
+ * handler did `for (const x of xs) await ctx.tool(...)`, 50 sequential calls
+ * = 50 turns = 50 round-trips of overhead.
  *
  * Mitigation: when the handler does `Promise.all([ctx.tool(a),
  * ctx.tool(b), ctx.tool(c)])`, we collect all three queued tool calls

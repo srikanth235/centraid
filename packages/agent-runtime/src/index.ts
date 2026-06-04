@@ -103,18 +103,18 @@ export {
 } from '@centraid/automation';
 
 // Local-side per-fire orchestrator for automations (issue #90 model-B).
-// Looks up the user-owned automation row and runs its manifest prompt
-// as an agent turn by spawning the claude / codex CLI.
+// Looks up the user-owned automation and runs its handler against a live
+// dispatch surface, driving the host agent in-process (Claude Agent SDK) or
+// as a `codex exec` subprocess.
 export {
-  runAutomationLocal,
-  defaultSpawnCli,
-  type RunAutomationLocalOptions,
+  runAutomation,
+  defaultRunHostAgent,
+  type RunAutomationOptions,
   type AutomationRunRecord,
-  type LocalRunnerKind,
-  type SpawnCli,
-  type SpawnCliInput,
-  type SpawnCliResult,
-} from './run-automation-local.js';
+  type RunHostAgent,
+  type RunHostAgentInput,
+  type RunHostAgentResult,
+} from './run-automation.js';
 
 // Scheduling lives in `@centraid/automation` now (issue #149): the gateway
 // owns an in-process cron `InProcessScheduler` and fires automations while it

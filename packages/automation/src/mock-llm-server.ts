@@ -1,19 +1,19 @@
 /**
  * Ephemeral HTTP "mock LLM" server for the local automation runtime.
  *
- * The unlock (see issue #70 § Mock-LLM server): point a host CLI
- * (`codex exec` / `claude -p`) at a dummy inference endpoint that
- * returns pre-scripted tool-call responses. The CLI's tool dispatch +
- * MCP + auth machinery executes the calls through the user's real
+ * The unlock (see issue #70 § Mock-LLM server): point a host agent
+ * (`codex exec`, or the in-process Claude Agent SDK) at a dummy inference
+ * endpoint that returns pre-scripted tool-call responses. The agent's tool
+ * dispatch + MCP + auth machinery executes the calls through the user's real
  * integrations, returns `tool_result` blocks back through the mock,
  * which then returns "done." Zero real LLM tokens are consumed by the
  * outer turn — only by `ctx.agent` calls that route through a
  * different (real) provider.
  *
  * This module ships **all three wire protocols** so the same server
- * serves either CLI:
+ * serves either runner:
  *
- *   - Anthropic Messages      — `POST /v1/messages`           (claude -p)
+ *   - Anthropic Messages      — `POST /v1/messages`           (Claude Agent SDK)
  *   - OpenAI Responses        — `POST /v1/responses`          (codex exec)
  *   - OpenAI Chat Completions — `POST /v1/chat/completions`   (legacy)
  *
@@ -33,14 +33,14 @@
  * relying on the host CLI to forward custom body fields.
  *
  * Concurrency model (issue #166 — persistent session): the mock is a
- * long-lived multi-turn session, not a per-batch one-shot. A single CLI
- * session is spawned per fire and stays alive across every `ctx.tool`
- * batch; the mock dictates each turn. When a CLI request arrives and no
+ * long-lived multi-turn session, not a per-batch one-shot. A single agent
+ * session is opened per fire and stays alive across every `ctx.tool`
+ * batch; the mock dictates each turn. When an agent request arrives and no
  * turn is staged yet — because the deterministic handler hasn't reached
  * its next `ctx.tool` call — the mock **awaits** (it does not 503),
  * holding the HTTP request open until the driver `stageTurn`s the next
  * turn. This is the structural guarantee of a single controlled session:
- * the handler drives, the mock paces the CLI, and the CLI loops until the
+ * the handler drives, the mock paces the agent, and the agent loops until the
  * driver finally stages an `end_turn` (via `endDispatch`) and the session
  * exits. An awaiting request is released with a benign `end_turn` if the
  * dispatch is ended (teardown) or the client disconnects, so teardown
@@ -152,7 +152,7 @@ export interface MockLlmServerHandle {
   clearStaged(dispatchId: string): void;
   /**
    * End a persistent dispatch (issue #166): release any parked request
-   * with a benign `end_turn` so the CLI session finishes and exits, and
+   * with a benign `end_turn` so the agent session finishes and exits, and
    * drop all buffered/waiter state for the id. Idempotent.
    */
   endDispatch(dispatchId: string): void;
