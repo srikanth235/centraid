@@ -7,18 +7,21 @@
  * from training priors. So at session start we ask the host runtime which
  * tools it exposes, *with their exact JSON input schemas*.
  *
- * Mechanism — capture from the mock-LLM server:
- *   Every coding agent must tell its LLM, on the very first request, the
- *   full set of callable tools (builtins + MCP) with complete JSON
- *   schemas — that is the agent↔model contract. So we point the CLI at
- *   the same per-run mock-LLM server the automation runtime uses, stage
- *   an immediate end-turn, and snapshot the `tools` array off that first
- *   request. The CLI gets an "ok" and exits; zero model tokens are spent.
+ * Mechanism — snapshot the tools off the agent's first model request:
+ *   Every coding agent sends its LLM, on the first request, the full set of
+ *   callable tools (builtins + MCP) with complete JSON schemas — the
+ *   agent↔model contract. We capture that request against a throwaway local
+ *   endpoint and abort; zero model tokens are spent.
+ *     - claude: the Agent SDK is pointed at a trivial loopback server. claude
+ *       connects MCP asynchronously, so we drive the turn in streaming-input
+ *       mode and hold the message until `mcpServerStatus()` reports the servers
+ *       have connected — otherwise the snapshot under-counts MCP tools.
+ *     - codex: `codex exec` runs against the mock-LLM server the automation
+ *       runtime uses. codex connects its `[mcp_servers.*]` synchronously, so the
+ *       first request is already complete — no gate needed.
  *
- * This is deliberately *the same path* the automation runtime drives, so
- * the enumerated surface is exactly what a deployed handler's `ctx.tool`
- * can reach — not a second-hand registry that might over- or
- * under-promise.
+ * The enumerated surface is exactly what a deployed handler's `ctx.tool` can
+ * reach — not a second-hand registry that might over- or under-promise.
  *
  * "A tool is a tool": native builtins and MCP-backed tools are treated
  * uniformly; `source` is an informational tag only.
@@ -29,19 +32,39 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { RunnerKind } from './types.js';
 import { startMockLlmServer } from '@centraid/conversation-engine';
 import { codexProviderOverrideArgs } from './codex-provider-config.js';
 
+/** The throwaway prompt; the mock ends the turn at once, so it's never acted on. */
+const PROBE_PROMPT = 'centraid tool-enumeration probe — reply with: ok';
+
+/** Hard cap on the probe — a hung/missing CLI must not stall the builder. */
+const PROBE_TIMEOUT_MS = 30_000;
+
 /**
- * Drive one throwaway CLI turn against a mock-LLM server. The probe
- * needs the mock (not the real provider) so the CLI's first-request
- * `tools` array can be snapshotted; the automation runtime's
- * `defaultSpawnCli` runs against the real provider, so this probe
- * carries its own mock-aware spawn.
+ * Max time to wait for MCP servers to leave `pending` before snapshotting the
+ * tool list. MCP servers connect asynchronously after the agent starts; if we
+ * capture the first request before they finish, their tools are missing from
+ * the enumerated surface (an under-count the builder would read as "tool
+ * doesn't exist"). Bounded so a slow/stuck server can't stall the probe past
+ * `PROBE_TIMEOUT_MS`.
+ */
+const MCP_SETTLE_TIMEOUT_MS = 15_000;
+const MCP_POLL_INTERVAL_MS = 120;
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Spawn `codex exec` pointed at the mock-LLM server. Routes model calls through
+ * the mock provider via `-c` overrides on the user's REAL ~/.codex (no
+ * CODEX_HOME redirect), so the enumerated tool surface includes the user's
+ * `[mcp_servers.*]` (issue #160). The bearer token flows via env under the
+ * provider's env_key.
  */
 async function spawnProbeCli(input: {
-  kind: RunnerKind;
   binPath?: string;
   mockBaseUrl: string;
   mockBearerToken: string;
@@ -49,45 +72,25 @@ async function spawnProbeCli(input: {
   abortSignal: AbortSignal;
 }): Promise<void> {
   const env: NodeJS.ProcessEnv = { ...process.env };
-  const prompt = 'centraid tool-enumeration probe — reply with: ok';
-  let bin: string;
-  let args: string[];
-  if (input.kind === 'claude-code') {
-    env.ANTHROPIC_BASE_URL = input.mockBaseUrl;
-    env.ANTHROPIC_API_KEY = input.mockBearerToken;
-    bin = input.binPath ?? 'claude';
-    args = [
-      '-p',
-      prompt,
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--permission-mode',
-      'bypassPermissions',
-    ];
-  } else {
-    // Route the probe's model calls through the mock provider via `-c`
-    // overrides on the user's REAL ~/.codex (no CODEX_HOME redirect), so the
-    // enumerated tool surface includes the user's `[mcp_servers.*]` — the
-    // same fix as run-automation-cli-spawn.ts (issue #160). The bearer token
-    // flows via env under the provider's env_key.
-    env.CENTRAID_MOCK_KEY = input.mockBearerToken;
-    bin = input.binPath ?? 'codex';
-    args = [
-      'exec',
-      ...codexProviderOverrideArgs({
-        id: 'centraid-mock',
-        name: 'Centraid Automation Mock',
-        baseUrl: input.mockBaseUrl,
-        envKey: 'CENTRAID_MOCK_KEY',
-      }),
-      '--json',
-      '--dangerously-bypass-approvals-and-sandbox',
-      '--skip-git-repo-check',
-      prompt,
-    ];
-  }
-  const proc = spawn(bin, args, { cwd: input.cwd, env, stdio: ['ignore', 'ignore', 'ignore'] });
+  env.CENTRAID_MOCK_KEY = input.mockBearerToken;
+  const args = [
+    'exec',
+    ...codexProviderOverrideArgs({
+      id: 'centraid-mock',
+      name: 'Centraid Automation Mock',
+      baseUrl: input.mockBaseUrl,
+      envKey: 'CENTRAID_MOCK_KEY',
+    }),
+    '--json',
+    '--dangerously-bypass-approvals-and-sandbox',
+    '--skip-git-repo-check',
+    PROBE_PROMPT,
+  ];
+  const proc = spawn(input.binPath ?? 'codex', args, {
+    cwd: input.cwd,
+    env,
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
   const onAbort = (): void => {
     if (!proc.killed) proc.kill('SIGTERM');
   };
@@ -99,8 +102,191 @@ async function spawnProbeCli(input: {
   input.abortSignal.removeEventListener('abort', onAbort);
 }
 
-/** Hard cap on the probe — a hung/missing CLI must not stall the builder. */
-const PROBE_TIMEOUT_MS = 30_000;
+/**
+ * Wait until no configured MCP server is still `pending` (all connected /
+ * failed / disabled / needs-auth), or until the bounded deadline. Best-effort:
+ * the control method may throw before the session is ready, so we just retry
+ * until the deadline; an empty server list returns immediately. This closes
+ * the MCP race — the first Messages request must carry the MCP tool set, which
+ * only appears once the servers have connected.
+ */
+async function waitForMcpSettled(
+  q: { mcpServerStatus(): Promise<Array<{ status: string }>> },
+  abortSignal: AbortSignal,
+): Promise<void> {
+  const deadline = Date.now() + MCP_SETTLE_TIMEOUT_MS;
+  while (Date.now() < deadline && !abortSignal.aborted) {
+    let statuses: Array<{ status: string }>;
+    try {
+      // Guard each poll: before init the control method can hang, which would
+      // block the gated turn indefinitely. A timed-out poll just retries until
+      // the deadline.
+      statuses = await Promise.race([
+        q.mcpServerStatus(),
+        delay(1000).then(() => {
+          throw new Error('mcp-status-timeout');
+        }),
+      ]);
+    } catch {
+      await delay(MCP_POLL_INTERVAL_MS);
+      continue;
+    }
+    // `[].every()` is true, so this also covers the no-servers case.
+    if (statuses.every((s) => s.status !== 'pending')) return;
+    await delay(MCP_POLL_INTERVAL_MS);
+  }
+}
+
+/**
+ * Capture claude's tool definitions, with schemas, the simple way: point the
+ * Agent SDK at a throwaway loopback server and snapshot the `tools` array off
+ * the single Messages request. No mock-LLM is needed — the response is
+ * irrelevant because we abort the instant we have the tools, so the server just
+ * replies `{}`.
+ *
+ * The one real subtlety is timing: claude connects MCP servers asynchronously,
+ * so we drive the turn in streaming-input mode and hold the user message until
+ * `mcpServerStatus()` reports every server has left `pending`. That guarantees
+ * the request carries the full builtin + MCP tool set in one shot. Best-effort:
+ * any failure resolves to `undefined` and the caller falls back to `[]`.
+ */
+async function captureClaudeTools(opts: {
+  cwd: string;
+  binPath?: string;
+}): Promise<unknown[] | undefined> {
+  let mod: typeof import('@anthropic-ai/claude-agent-sdk');
+  try {
+    mod = await import('@anthropic-ai/claude-agent-sdk');
+  } catch {
+    return undefined;
+  }
+
+  return await new Promise<unknown[] | undefined>((resolve) => {
+    let captured: unknown[] | undefined;
+    let settled = false;
+    const abort = new AbortController();
+
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      try {
+        abort.abort();
+      } catch {
+        /* ignore */
+      }
+      try {
+        server.close();
+      } catch {
+        /* ignore */
+      }
+      resolve(captured);
+    };
+
+    const server = createServer((req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (c: string) => (body += c));
+      req.on('end', () => {
+        if (captured === undefined) {
+          try {
+            const parsed = JSON.parse(body) as { tools?: unknown };
+            if (Array.isArray(parsed.tools) && parsed.tools.length > 0) captured = parsed.tools;
+          } catch {
+            /* ignore non-JSON bodies */
+          }
+        }
+        res.statusCode = 200;
+        res.setHeader('content-type', 'application/json');
+        res.end('{}');
+        if (captured !== undefined) finish();
+      });
+    });
+
+    const timer = setTimeout(finish, PROBE_TIMEOUT_MS);
+    timer.unref?.();
+    server.on('error', finish);
+
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address() as AddressInfo | null;
+      if (!addr) {
+        finish();
+        return;
+      }
+
+      // Replace the child env: strip inherited Anthropic routing/auth (so the
+      // probe can't reach the real provider) and the CLAUDE_*/CLAUDECODE session
+      // markers that hijack the child when the gateway runs nested in a Claude
+      // session. Keep CLAUDE_CONFIG_DIR so the user's MCP servers are still
+      // discovered. process.env is never mutated.
+      const env: NodeJS.ProcessEnv = {};
+      for (const [k, v] of Object.entries(process.env)) {
+        if (k === 'CLAUDE_CONFIG_DIR') {
+          env[k] = v;
+          continue;
+        }
+        if (k.startsWith('ANTHROPIC_') || k.startsWith('CLAUDE')) continue;
+        env[k] = v;
+      }
+      env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${addr.port}`;
+      env.ANTHROPIC_API_KEY = 'centraid-probe';
+
+      // `query()` may start pulling the prompt iterator before it returns, so
+      // hand the Query handle to the gate via a deferred promise.
+      let resolveQ!: (q: unknown) => void;
+      const qReady = new Promise<unknown>((resolve) => {
+        resolveQ = resolve;
+      });
+
+      async function* gatedPrompt(): AsyncGenerator<{
+        type: 'user';
+        message: { role: 'user'; content: string };
+        parent_tool_use_id: null;
+      }> {
+        const q = (await qReady) as {
+          mcpServerStatus(): Promise<Array<{ status: string }>>;
+        };
+        await waitForMcpSettled(q, abort.signal);
+        if (abort.signal.aborted) return;
+        yield {
+          type: 'user',
+          message: { role: 'user', content: PROBE_PROMPT },
+          parent_tool_use_id: null,
+        };
+      }
+
+      const options: Record<string, unknown> = {
+        cwd: opts.cwd,
+        permissionMode: 'bypassPermissions',
+        // Documented requirement alongside permissionMode: 'bypassPermissions'.
+        allowDangerouslySkipPermissions: true,
+        abortController: abort,
+        env,
+      };
+      if (opts.binPath) options.pathToClaudeCodeExecutable = opts.binPath;
+
+      let q: AsyncGenerator<unknown>;
+      try {
+        q = mod.query({
+          prompt: gatedPrompt() as unknown as Parameters<typeof mod.query>[0]['prompt'],
+          options: options as Parameters<typeof mod.query>[0]['options'],
+        }) as unknown as AsyncGenerator<unknown>;
+      } catch {
+        finish();
+        return;
+      }
+      resolveQ(q);
+      void (async () => {
+        try {
+          for await (const _ of q) {
+            if (abort.signal.aborted) break;
+          }
+        } catch {
+          /* aborted on capture / teardown — expected */
+        }
+      })();
+    });
+  });
+}
 
 export interface HostTool {
   /**
@@ -139,22 +325,25 @@ export async function enumerateHostTools(
 }
 
 /**
- * Drive one throwaway CLI turn against a mock-LLM server and snapshot the
- * `tools` array off the first request.
+ * Capture codex's tool definitions by spawning `codex exec` against the
+ * mock-LLM server and snapshotting the first request's `tools` array. codex
+ * connects its `[mcp_servers.*]` synchronously during startup, so the first
+ * request already carries the full set — no readiness gate needed. The `-c`
+ * overrides layer on the user's real ~/.codex so those servers stay reachable
+ * (issue #160). Best-effort: resolves to `undefined` on any failure.
  */
-async function probeRuntimeTools(
-  kind: RunnerKind,
-  opts: { cwd: string; binPath?: string },
-): Promise<HostTool[]> {
+async function captureCodexTools(opts: {
+  cwd: string;
+  binPath?: string;
+}): Promise<unknown[] | undefined> {
   let captured: unknown[] | undefined;
   const abort = new AbortController();
   const server = await startMockLlmServer({
     onRequest: (_dispatchId, body) => {
       if (captured === undefined && Array.isArray(body.tools)) {
         captured = body.tools;
-        // The first request carries the full tool set — stop the CLI
-        // now rather than waiting for it to finish its turn (codex
-        // exits promptly; `claude -p` otherwise lingers).
+        // The first request carries the full tool set — stop the CLI now
+        // rather than waiting for it to finish its turn.
         abort.abort();
       }
     },
@@ -166,7 +355,6 @@ async function probeRuntimeTools(
     // An immediate end-turn: the CLI sends its tools, gets "ok", exits.
     server.stageTurn(dispatchId, { text: 'ok', stopReason: 'end_turn' });
     await spawnProbeCli({
-      kind,
       mockBaseUrl: server.baseUrl,
       mockBearerToken: bearerToken,
       cwd: opts.cwd,
@@ -177,7 +365,20 @@ async function probeRuntimeTools(
     clearTimeout(timer);
     await server.close();
   }
+  return captured;
+}
 
+/**
+ * Capture the host runtime's tool `tools` array and normalize it. claude drives
+ * the SDK against a trivial loopback server with an MCP-readiness gate; codex
+ * spawns `codex exec` against the mock-LLM server.
+ */
+async function probeRuntimeTools(
+  kind: RunnerKind,
+  opts: { cwd: string; binPath?: string },
+): Promise<HostTool[]> {
+  const captured =
+    kind === 'claude-code' ? await captureClaudeTools(opts) : await captureCodexTools(opts);
   if (!captured) return [];
   return kind === 'codex' ? normalizeCodexTools(captured) : normalizeClaudeTools(captured);
 }

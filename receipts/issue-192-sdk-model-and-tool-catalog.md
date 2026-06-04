@@ -12,7 +12,7 @@ control, independent of the model Refresh.
 ## Checklist
 
 - [x] Commit 1 — agent-runtime: enumerate claude models via SDK `supportedModels()`
-- [ ] Commit 2 — agent-runtime: host-tool probe (SDK loopback + MCP gate) + catalog v2 (tools beside models)
+- [x] Commit 2 — agent-runtime: host-tool probe (SDK loopback + MCP gate) + catalog v2 (tools beside models)
 - [ ] Commit 3 — gateway/skills: boot-probe tools, agents-status tools + `?refreshTools=1`, builder reads catalog
 - [ ] Commit 4 — desktop: per-agent tools view + separate Refresh tools control
 
@@ -34,6 +34,21 @@ control, independent of the model Refresh.
   `model-enumerators.test.ts` to cover the mapping (description→name, dedupe,
   default flag).
 
+- **Commit 2 — agent-runtime: host-tool probe (SDK loopback + MCP gate) + catalog v2 (tools beside models).**
+  Reworked `host-tools.ts` so claude tool enumeration drives the Agent SDK against
+  a trivial loopback server and snapshots the first Messages request's `tools[]`,
+  holding the user message in streaming-input mode until `mcpServerStatus()`
+  reports no MCP server is still `pending` (so the snapshot carries builtins + MCP
+  in one shot); codex keeps the mock-LLM `codex exec` capture (synchronous MCP, no
+  gate). Both zero-token, best-effort → `[]`. Extended the catalog store to **v2**:
+  `CatalogEntry` carries `tools` + `toolsEnumeratedAt` beside `models`;
+  `writeCatalogEntry` now **merges a partial patch** so models and tools refresh
+  independently without clobbering each other. Added `resolveRunnerTools` (mirrors
+  `resolveRunnerModels` but with **no seed** — tools are MCP-config-specific) and a
+  pure `readRunnerTools` cache reader; exported both. Store tests in
+  `model-catalog.test.ts` cover cold/warm/refresh/failure-preserve and
+  model↔tool merge independence.
+
 ## Out of scope
 
 - codex model enumeration is unchanged — it has no alias vocabulary and no
@@ -49,3 +64,7 @@ control, independent of the model Refresh.
 - `model-enumerators.test.ts` — claude mapping tests pass.
 - Live `enumerateClaudeModels()` → `default`/`sonnet`/`haiku` with versioned
   descriptions as names; alias round-trip confirmed (`haiku`→4.5, `default`→Opus 4.7).
+- `model-catalog.test.ts` — 12 pass (models + tools + merge independence).
+- Live tool-catalog chain: cold read 0 → refresh probes the real claude CLI
+  (44 tools / 16 MCP / 44 with schemas, ~5.5s) → persisted as catalog v2 with
+  `toolsEnumeratedAt` → warm read returns 44 from disk.
