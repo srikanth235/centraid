@@ -8,7 +8,7 @@
  * roadmap, not in scope here.
  */
 
-import { AutomationManifestError } from './automation-manifest-errors.js';
+import { AutomationManifestError } from './manifest-errors.js';
 
 export interface AutomationOutputSchema {
   readonly type: 'object';

@@ -8,11 +8,11 @@
  * Cross-run persistence is `ctx.state` (the `automation_state` KV keyed
  * by the automation id).
  *
- *   - Worker entry is `worker/automation-runner.js`.
+ *   - Worker entry is `worker/runner.js`.
  *   - The parent supplies `toolDispatcher` and `agentDispatcher`.
  *   - Tool calls arrive in batches; each call becomes one `run_nodes`
  *     audit row. There is no runtime retry — a failed `ctx.tool`
- *     rejects the handler Promise (see `automation-handler-ctx.ts`).
+ *     rejects the handler Promise (see `handler-ctx.ts`).
  *   - Every ctx surface call lands in the activity DB's run-audit
  *     tables. Retention runs at end-of-run per `manifest.history.keep`.
  */
@@ -31,15 +31,15 @@ import {
   type TurnStreamEvent,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import type { AutomationHistoryConfig, AutomationOutputSchema } from './automation-manifest.js';
-import { validateOutputAgainstSchema } from './automation-manifest-output.js';
+import type { AutomationHistoryConfig, AutomationOutputSchema } from './manifest.js';
+import { validateOutputAgainstSchema } from './manifest-output.js';
 import {
   applyRetention,
   extractReturnEnvelope,
   noopRunEventSink,
   truncateForAudit,
   type HandlerReturnEnvelope,
-} from './automation-handler-audit.js';
+} from './handler-audit.js';
 import {
   dispatchToolBatch,
   handleAgentMessage,
@@ -47,16 +47,16 @@ import {
   handleStateMessage,
   type AuditState,
   type ToolCallWire,
-} from './automation-handler-ctx.js';
+} from './handler-ctx.js';
 
 function resolveWorkerFile(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const jsPath = path.join(here, 'worker', 'automation-runner.js');
+  const jsPath = path.join(here, 'worker', 'runner.js');
   if (existsSync(jsPath)) return jsPath;
   // Running tests via tsx from src/ where .js isn't emitted — fall back to
   // the .ts source. tsx propagates its loader to spawned Workers via
   // NODE_OPTIONS, so this works under `tsx --test`.
-  return path.join(here, 'worker', 'automation-runner.ts');
+  return path.join(here, 'worker', 'runner.ts');
 }
 
 const WORKER_FILE = resolveWorkerFile();

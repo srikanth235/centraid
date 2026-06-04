@@ -23,9 +23,9 @@
  * exercised in practice; `register`/`unregister`/`list` round it out.
  */
 
-import type { AutomationHost, AutomationReconcileResult } from './automation-host.js';
-import type { AutomationRow } from './automation-app.js';
-import { cronTriggersOf } from './automation-manifest.js';
+import type { AutomationHost, AutomationReconcileResult } from './host.js';
+import type { AutomationRow } from './app.js';
+import { cronTriggersOf } from './manifest.js';
 import { cronMatches } from './cron-match.js';
 
 export interface InProcessSchedulerOptions {

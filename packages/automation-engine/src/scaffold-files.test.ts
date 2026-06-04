@@ -5,8 +5,8 @@ import {
   scaffoldAutomationAppFiles,
   setAutomationEnabledInFiles,
   deleteAutomationFromFiles,
-} from './scaffold-automation.js';
-import { lintAutomationHandlerSource } from './automation-handler-lint.js';
+} from './scaffold.js';
+import { lintAutomationHandlerSource } from './handler-lint.js';
 
 function byPath(files: ScaffoldFile[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));

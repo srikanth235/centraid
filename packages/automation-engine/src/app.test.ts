@@ -9,8 +9,8 @@ import {
   readAppOwnedAutomation,
   readAutomationAppAt,
   setAutomationEnabledAt,
-} from './automation-app.js';
-import type { AutomationManifest } from './automation-manifest.js';
+} from './app.js';
+import type { AutomationManifest } from './manifest.js';
 
 function manifest(over: Partial<AutomationManifest> = {}): AutomationManifest {
   return {

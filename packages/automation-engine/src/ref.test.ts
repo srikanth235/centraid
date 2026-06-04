@@ -5,7 +5,7 @@ import {
   isValidAutomationId,
   isValidAutomationRef,
   parseAutomationRef,
-} from './automation-ref.js';
+} from './ref.js';
 
 describe('isValidAutomationId', () => {
   it('accepts filesystem-safe slugs', () => {

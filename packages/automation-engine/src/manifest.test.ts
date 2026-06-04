@@ -7,7 +7,7 @@ import {
   parseManifest,
   validateManifest,
   type AutomationManifest,
-} from './automation-manifest.js';
+} from './manifest.js';
 
 /** A minimal valid `automation.json` object. */
 function baseManifest(over: Record<string, unknown> = {}): Record<string, unknown> {

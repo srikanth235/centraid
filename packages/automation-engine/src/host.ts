@@ -39,7 +39,7 @@
  *     to settle every entry.
  */
 
-import type { AutomationRow } from './automation-app.js';
+import type { AutomationRow } from './app.js';
 
 export interface AutomationHost {
   /**

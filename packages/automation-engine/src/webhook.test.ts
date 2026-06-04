@@ -4,7 +4,7 @@ import {
   provisionPendingWebhooksInFiles,
   verifyWebhookSecret,
   type WebhookFileMapEntry,
-} from './automation-webhook.js';
+} from './webhook.js';
 
 function manifest(triggers: unknown[]): string {
   return (

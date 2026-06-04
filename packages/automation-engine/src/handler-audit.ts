@@ -1,7 +1,7 @@
 /**
  * Audit-row helpers for automation handler runs (issue #80).
  *
- * Split out of `automation-handler-runner.ts` so the runner stays
+ * Split out of `handler-runner.ts` so the runner stays
  * focused on worker/message orchestration. Everything here is
  * pure-ish — the only side-effect surface is the supplied
  * `AgentRunsStore` reference.
@@ -16,7 +16,7 @@ import type {
   TurnStreamEvent,
   RunStreamEvent,
 } from '@centraid/app-engine';
-import type { AutomationHistoryConfig } from './automation-manifest.js';
+import type { AutomationHistoryConfig } from './manifest.js';
 
 /**
  * Sink for live run-stream events (issue #158). The host wires this to its

@@ -1,7 +1,7 @@
 /**
  * Parent-side handlers for the worker's `ctx.*` messages (issue #80).
  *
- * Split out of `automation-handler-runner.ts` so the runner stays focused
+ * Split out of `handler-runner.ts` so the runner stays focused
  * on worker lifecycle + message routing. Each function here takes the
  * audit `AgentRunsStore` (when present) and returns a reply that
  * matches the worker's expected wire shape.
@@ -12,7 +12,7 @@ import type {
   AutomationDispatchContext,
   AutomationToolDispatcher,
   AutomationToolResult,
-} from './automation-handler-runner.js';
+} from './handler-runner.js';
 import type { ConversationStore, TurnStreamEvent } from '@centraid/app-engine';
 import {
   closeRunNode,
@@ -20,7 +20,7 @@ import {
   rowToRunRef,
   usageCloseFields,
   type RunEventSink,
-} from './automation-handler-audit.js';
+} from './handler-audit.js';
 
 export interface ToolCallWire {
   name: string;

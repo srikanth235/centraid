@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { InProcessScheduler } from './in-process-scheduler.js';
-import type { AutomationRow } from './automation-app.js';
-import type { AutomationManifest } from './automation-manifest.js';
+import type { AutomationRow } from './app.js';
+import type { AutomationManifest } from './manifest.js';
 
 const manifest = (enabled: boolean): AutomationManifest => ({
   name: 'x',

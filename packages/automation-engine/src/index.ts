@@ -48,7 +48,7 @@ export {
   type AutomationOutputSchema,
   type AutomationHistoryConfig,
   type AutomationHistoryKeep,
-} from './automation/automation-manifest.js';
+} from './manifest.js';
 
 // Automation identity — the directory-slug grammar and the
 // `<appId>/<id>` handle that scheduler labels, webhook routing,
@@ -59,7 +59,7 @@ export {
   formatAutomationRef,
   parseAutomationRef,
   type AutomationRef,
-} from './automation/automation-ref.js';
+} from './ref.js';
 
 // Automation apps on disk (issue #98 unified model). An automation
 // always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
@@ -78,12 +78,12 @@ export {
   type AutomationRow,
   type AutomationAppError,
   type ListAutomationAppsResult,
-} from './automation/automation-app.js';
+} from './app.js';
 
 // The host interface every "thing that fires automations on a schedule"
 // implements — the local in-process scheduler (gateway) and the cloud
 // openclaw cron host both satisfy it.
-export type { AutomationHost, AutomationReconcileResult } from './automation/automation-host.js';
+export type { AutomationHost, AutomationReconcileResult } from './host.js';
 
 // In-process cron scheduler (issue #149, n8n semantics): the gateway-owned
 // always-on minute timer that fires enabled cron automations while it runs.
@@ -92,8 +92,8 @@ export {
   InProcessScheduler,
   type InProcessSchedulerOptions,
   type LocalScheduler,
-} from './automation/in-process-scheduler.js';
-export { cronMatches } from './automation/cron-match.js';
+} from './in-process-scheduler.js';
+export { cronMatches } from './cron-match.js';
 
 // Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
 // automation on an inbound HTTP POST; the gateway mounts the route
@@ -115,7 +115,7 @@ export {
   type WebhookFireFn,
   type WebhookFireResult,
   type WebhookRouteOptions,
-} from './automation/automation-webhook.js';
+} from './webhook.js';
 
 // Automation handler runtime (issue #91). A fire executes the app's
 // generated `handler.js` in a worker thread; the host supplies the
@@ -131,11 +131,11 @@ export {
   type AutomationAgentCall,
   type AutomationAgentDispatcher,
   type AutomationDispatchContext,
-} from './automation/automation-handler-runner.js';
-export { truncateForAudit } from './automation/automation-handler-audit.js';
+} from './handler-runner.js';
+export { truncateForAudit } from './handler-audit.js';
 // Shared `ctx.agent` answer coercion — every host ends an agent turn with a
 // blob of text and must turn it into the value the handler awaits the same way.
-export { coerceAgentAnswer } from './automation/automation-agent-answer.js';
+export { coerceAgentAnswer } from './agent-answer.js';
 // Mock-LLM server + host-agnostic persistent session (issue #166): the
 // token-free `ctx.tool` rail. One long-lived agent session per fire, puppeted
 // by the mock, executes every tool batch; the per-host `driveAgent` is the
@@ -146,7 +146,7 @@ export {
   type MockLlmServerOptions,
   type StagedTurn,
   type CapturedToolResult,
-} from './automation/mock-llm-server.js';
+} from './mock-llm-server.js';
 export {
   startPersistentMockSession,
   type AgentDriver,
@@ -154,7 +154,7 @@ export {
   type AgentDriveResult,
   type PersistentMockSession,
   type PersistentMockSessionOptions,
-} from './automation/persistent-mock-session.js';
+} from './persistent-mock-session.js';
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
 // handler — effects that bypass the audited `ctx.*` rails or make a re-run
@@ -164,7 +164,7 @@ export {
   lintAutomationHandlerSource,
   formatHandlerLintError,
   type HandlerLintFinding,
-} from './automation/automation-handler-lint.js';
+} from './handler-lint.js';
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomationLocal`
@@ -176,7 +176,7 @@ export {
   type AutomationDispatchSurface,
   type OpenAutomationDispatch,
   type OpenAutomationDispatchArgs,
-} from './automation/automation-fire.js';
+} from './fire.js';
 
 // Automation-app scaffolders. The gateway lifecycle routes use the
 // file-map (`*Files`) variants; the disk wrappers back the CLI / local
@@ -189,4 +189,4 @@ export {
   validateAutomationId,
   validateAutomationAppId,
   type AutomationScaffoldOptions,
-} from './automation/scaffold-automation.js';
+} from './scaffold.js';

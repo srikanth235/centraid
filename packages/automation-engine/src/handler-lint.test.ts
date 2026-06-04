@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintAutomationHandlerSource, formatHandlerLintError } from './automation-handler-lint.js';
+import { lintAutomationHandlerSource, formatHandlerLintError } from './handler-lint.js';
 
 const CLEAN_HANDLER = `
 /** @type {import('@centraid/openclaw-plugin').AutomationHandler} */

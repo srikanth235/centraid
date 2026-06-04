@@ -18,8 +18,8 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { APP_AUTOMATIONS_SUBDIR } from './automation-app.js';
-import { isValidAutomationId } from './automation-ref.js';
+import { APP_AUTOMATIONS_SUBDIR } from './app.js';
+import { isValidAutomationId } from './ref.js';
 import {
   AUTOMATION_HANDLER_FILE,
   AUTOMATION_MANIFEST_FILE,
@@ -27,7 +27,7 @@ import {
   type AutomationManifest,
   type AutomationTrigger,
   type AutomationHistoryKeep,
-} from './automation-manifest.js';
+} from './manifest.js';
 import { isValidAppId } from '@centraid/app-engine';
 import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/app-blueprints';
 

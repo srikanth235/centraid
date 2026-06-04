@@ -30,7 +30,7 @@ import {
   listAutomations,
   readAutomationAppAt,
   writeAutomationManifestAt,
-} from './automation-app.js';
+} from './app.js';
 import {
   isPendingWebhookTrigger,
   parseManifest,
@@ -38,7 +38,7 @@ import {
   webhookTriggerOf,
   type AutomationTrigger,
   type WebhookTrigger,
-} from './automation-manifest.js';
+} from './manifest.js';
 
 /** URL prefix the gateway mounts the webhook route under. */
 export const WEBHOOK_ROUTE_PREFIX = '/_centraid-hook';

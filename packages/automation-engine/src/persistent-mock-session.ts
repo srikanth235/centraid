@@ -27,7 +27,7 @@ import type {
   AutomationToolCall,
   AutomationToolDispatcher,
   AutomationToolResult,
-} from './automation-handler-runner.js';
+} from './handler-runner.js';
 
 /** What a host's `driveAgent` is handed to run the agent against the mock. */
 export interface AgentDriveInput {

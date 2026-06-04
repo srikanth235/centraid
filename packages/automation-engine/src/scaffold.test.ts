@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseManifest } from './automation-manifest.js';
+import { parseManifest } from './manifest.js';
 import {
   scaffoldAutomationApp,
   validateAutomationId,
   validateAutomationAppId,
-} from './scaffold-automation.js';
+} from './scaffold.js';
 import { AppScaffoldError } from '@centraid/app-blueprints';
 
 describe('scaffoldAutomationApp', () => {

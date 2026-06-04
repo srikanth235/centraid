@@ -22,8 +22,8 @@ import {
   runAutomationFire,
   type AutomationDispatchSurface,
   type OpenAutomationDispatchArgs,
-} from './automation-fire.js';
-import type { AutomationManifest } from './automation-manifest.js';
+} from './fire.js';
+import type { AutomationManifest } from './manifest.js';
 
 function manifest(over: Partial<AutomationManifest> = {}): AutomationManifest {
   return {

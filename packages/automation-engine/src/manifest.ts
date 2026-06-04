@@ -17,22 +17,19 @@
  * no filesystem migration is needed.
  *
  * Output-schema validation + `validateOutputAgainstSchema` live in
- * `automation-manifest-output.ts` to keep this file focused. Error class
- * + validation-code union live in `automation-manifest-errors.ts`.
+ * `manifest-output.ts` to keep this file focused. Error class
+ * + validation-code union live in `manifest-errors.ts`.
  */
 
-import { AutomationManifestError } from './automation-manifest-errors.js';
-import { validateOutputSchema, type AutomationOutputSchema } from './automation-manifest-output.js';
-import { isValidAutomationRef } from './automation-ref.js';
+import { AutomationManifestError } from './manifest-errors.js';
+import { validateOutputSchema, type AutomationOutputSchema } from './manifest-output.js';
+import { isValidAutomationRef } from './ref.js';
 
 export {
   AutomationManifestError,
   type AutomationManifestValidationCode,
-} from './automation-manifest-errors.js';
-export {
-  validateOutputAgainstSchema,
-  type AutomationOutputSchema,
-} from './automation-manifest-output.js';
+} from './manifest-errors.js';
+export { validateOutputAgainstSchema, type AutomationOutputSchema } from './manifest-output.js';
 
 /** Conventional handler filename inside an automation app directory. */
 export const AUTOMATION_HANDLER_FILE = 'handler.js';
