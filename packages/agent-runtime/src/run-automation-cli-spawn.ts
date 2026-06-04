@@ -1,44 +1,52 @@
 /**
- * Default CLI-spawn implementation for the local automation runner.
+ * Default agent backends for the local automation runner.
  *
  * The production `defaultSpawnCli` lives here (separately from
  * `run-automation-local.ts` which owns the orchestration loop). Tests
  * inject their own spawn via the `spawnCli` option and never hit this
  * file.
  *
- * Both runners (`claude -p` for Claude, `codex exec` for codex) are
- * pointed at the per-fire mock-LLM URL + bearer token so tool dispatch
- * round-trips through the mock server. The codex path injects the mock
- * provider via `codex exec -c` overrides layered on the user's real
- * `~/.codex` — NOT a redirected `CODEX_HOME` — so the user's configured
- * `[mcp_servers.*]` stay reachable during deterministic tool dispatch
- * (issue #158, "ride on top of the user's codex"). `-c` is honored by
- * `codex exec` since codex-cli 0.128.0, our pinned minimum.
+ * Both runners are pointed at the per-fire mock-LLM URL + bearer token so
+ * tool dispatch round-trips through the mock server, but they reach it
+ * differently:
+ *   - claude: the Agent SDK's `query()` runs in-process — the same backend
+ *     chat and `ctx.agent` already use — with `ANTHROPIC_BASE_URL` /
+ *     `ANTHROPIC_API_KEY` pointed at the mock via `options.env`, instead of a
+ *     `claude -p` subprocess we manage.
+ *   - codex: `codex exec` is spawned as a subprocess. The codex path injects
+ *     the mock provider via `codex exec -c` overrides layered on the user's
+ *     real `~/.codex` — NOT a redirected `CODEX_HOME` — so the user's
+ *     configured `[mcp_servers.*]` stay reachable during deterministic tool
+ *     dispatch (issue #158, "ride on top of the user's codex"). `-c` is
+ *     honored by `codex exec` since codex-cli 0.128.0, our pinned minimum.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { codexProviderOverrideArgs } from './codex-provider-config.js';
 
 export type LocalRunnerKind = 'codex' | 'claude-code';
 
 export interface SpawnCliInput {
-  /** Which CLI to invoke. */
+  /** Which agent backend to drive. */
   readonly kind: LocalRunnerKind;
-  /** Override the CLI binary location; defaults to a PATH lookup of `codex`/`claude`. */
+  /**
+   * Override the agent binary location; defaults to a PATH lookup of `codex`,
+   * or — for claude — the SDK's bundled `claude` executable.
+   */
   readonly binPath?: string;
   /** Mock-LLM base URL (`http://127.0.0.1:<port>/v1`). */
   readonly mockBaseUrl: string;
   /** Per-spawn bearer token (`centraid-mock-<dispatchId>`). */
   readonly mockBearerToken: string;
-  /** The natural-language prompt to feed the CLI. Contains the dispatch sentinel. */
+  /** The natural-language prompt to feed the agent. Contains the dispatch sentinel. */
   readonly prompt: string;
   /**
-   * Tool allowlist from the manifest. Passed to `claude --allowed-tools`;
-   * ignored for `codex` (which has no `exec` allowlist flag — the mock
-   * server enforces the allowlist by only staging permitted calls).
+   * Tool allowlist from the manifest. Passed to the Claude SDK's
+   * `allowedTools`; ignored for `codex` (which has no `exec` allowlist flag —
+   * the mock server enforces the allowlist by only staging permitted calls).
    */
   readonly toolsAllow: readonly string[];
-  /** Workspace dir (app code dir) the CLI should treat as cwd. */
+  /** Workspace dir (app code dir) the agent should treat as cwd. */
   readonly cwd: string;
   /** Scratch dir for transient per-spawn files. Auto-cleaned on close. */
   readonly scratchDir: string;
@@ -47,71 +55,134 @@ export interface SpawnCliInput {
 }
 
 export interface SpawnCliResult {
-  /** Process exit code, or null when killed by signal. */
+  /**
+   * Subprocess exit code (codex), or null on signal kill / spawn error. The
+   * in-process claude SDK path has no process exit code, so it synthesizes
+   * `0` on a clean turn and `null` on failure/abort.
+   */
   readonly exitCode: number | null;
-  /** True on graceful exit (code === 0). */
+  /** True on graceful completion (codex `code === 0`, or a clean SDK turn). */
   readonly ok: boolean;
-  /** Buffered stderr — surfaced in the run record on failure. */
+  /** Buffered stderr / failure detail — surfaced in the run record on failure. */
   readonly stderr: string;
 }
 
 export type SpawnCli = (input: SpawnCliInput) => Promise<SpawnCliResult>;
 
-export const defaultSpawnCli: SpawnCli = async (input) => {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  let proc: ChildProcess;
-  if (input.kind === 'claude-code') {
-    env.ANTHROPIC_BASE_URL = input.mockBaseUrl;
-    env.ANTHROPIC_API_KEY = input.mockBearerToken;
-    // `claude --print --output-format=stream-json` requires `--verbose`
-    // on current claude (2.1.x); without it the CLI exits non-zero
-    // before making a single model request.
-    const args = [
-      '-p',
-      input.prompt,
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--permission-mode',
-      'bypassPermissions',
-    ];
-    for (const tool of input.toolsAllow) args.push('--allowed-tools', tool);
-    proc = spawn(input.binPath ?? 'claude', args, {
-      cwd: input.cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-  } else {
-    // Route model calls through the mock provider via `-c` overrides on
-    // the user's REAL ~/.codex (no CODEX_HOME redirect), so the user's
-    // `[mcp_servers.*]` stay reachable during tool dispatch. The bearer
-    // token flows via env under the provider's `env_key`, never on disk.
-    env.CENTRAID_MOCK_KEY = input.mockBearerToken;
-    // `codex exec` has no tool-allowlist flag; the mock-LLM server only
-    // ever stages tool calls the manifest permits, so the allowlist is
-    // already enforced upstream. `--dangerously-bypass-approvals-and-sandbox`
-    // lets the staged calls run without an interactive prompt;
-    // `--skip-git-repo-check` allows app dirs that aren't git repos.
-    const args = [
-      'exec',
-      ...codexProviderOverrideArgs({
-        id: 'centraid-mock',
-        name: 'Centraid Automation Mock',
-        baseUrl: input.mockBaseUrl,
-        // wireApi defaults to 'responses' — the only format codex 0.128+ accepts.
-        envKey: 'CENTRAID_MOCK_KEY',
-      }),
-      '--json',
-      '--dangerously-bypass-approvals-and-sandbox',
-      '--skip-git-repo-check',
-      input.prompt,
-    ];
-    proc = spawn(input.binPath ?? 'codex', args, {
-      cwd: input.cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+export const defaultSpawnCli: SpawnCli = async (input) =>
+  input.kind === 'claude-code' ? runClaudeAgentSdk(input) : spawnCodexExec(input);
+
+/**
+ * Drive one claude turn against the mock with the Agent SDK's in-process
+ * `query()` — the same backend chat and `ctx.agent` use — rather than a
+ * `claude -p` subprocess. `options.env` points the SDK-spawned claude at the
+ * per-fire mock (it replaces the child env wholesale, so the host's
+ * `process.env` is never mutated).
+ *
+ * The mock dictates every turn, so we don't translate the event stream: we
+ * just drain the generator to completion. It loops tool_use → tool_result —
+ * the SDK executes each staged tool through its native MCP/auth machinery and
+ * returns the result through the mock — until the session stages a final
+ * `end_turn`, which ends the turn and resolves the generator. `bypassPermissions`
+ * preserves the non-interactive behavior of the old spawn: a detached turn
+ * must never block on an approval prompt.
+ */
+async function runClaudeAgentSdk(input: SpawnCliInput): Promise<SpawnCliResult> {
+  let mod: typeof import('@anthropic-ai/claude-agent-sdk');
+  try {
+    mod = await import('@anthropic-ai/claude-agent-sdk');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      exitCode: null,
+      ok: false,
+      stderr: `failed to load @anthropic-ai/claude-agent-sdk: ${msg}`,
+    };
   }
+
+  const abort = new AbortController();
+  const onAbort = (): void => abort.abort();
+  if (input.abortSignal.aborted) abort.abort();
+  else input.abortSignal.addEventListener('abort', onAbort, { once: true });
+
+  // Replace the child env wholesale (never mutate process.env): point the
+  // SDK-spawned claude at the per-fire mock instead of the real Anthropic API.
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  env.ANTHROPIC_BASE_URL = input.mockBaseUrl;
+  env.ANTHROPIC_API_KEY = input.mockBearerToken;
+
+  const options: Record<string, unknown> = {
+    cwd: input.cwd,
+    permissionMode: 'bypassPermissions',
+    // Required by the SDK alongside permissionMode: 'bypassPermissions'.
+    allowDangerouslySkipPermissions: true,
+    abortController: abort,
+    env,
+  };
+  // The manifest's `requires.tools` allowlist — the SDK equivalent of the old
+  // `claude --allowed-tools` flags.
+  if (input.toolsAllow.length > 0) options.allowedTools = [...input.toolsAllow];
+  if (input.binPath) options.pathToClaudeCodeExecutable = input.binPath;
+
+  try {
+    const generator = mod.query({
+      prompt: input.prompt as Parameters<typeof mod.query>[0]['prompt'],
+      options: options as Parameters<typeof mod.query>[0]['options'],
+    });
+    for await (const _ of generator) {
+      if (abort.signal.aborted) break;
+    }
+    // An abort is a timeout / external cancel — surface it as a failure so the
+    // awaiting `ctx.tool` batch sees an error rather than a silent success.
+    if (input.abortSignal.aborted) {
+      return { exitCode: null, ok: false, stderr: 'claude SDK turn aborted' };
+    }
+    return { exitCode: 0, ok: true, stderr: '' };
+  } catch (err) {
+    if (input.abortSignal.aborted) {
+      return { exitCode: null, ok: false, stderr: 'claude SDK turn aborted' };
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    return { exitCode: null, ok: false, stderr: msg };
+  } finally {
+    input.abortSignal.removeEventListener('abort', onAbort);
+  }
+}
+
+/**
+ * Spawn `codex exec` as a subprocess pointed at the mock. Routes model calls
+ * through the mock provider via `-c` overrides on the user's REAL ~/.codex (no
+ * CODEX_HOME redirect), so the user's `[mcp_servers.*]` stay reachable during
+ * tool dispatch. The bearer token flows via env under the provider's
+ * `env_key`, never on disk.
+ */
+async function spawnCodexExec(input: SpawnCliInput): Promise<SpawnCliResult> {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  env.CENTRAID_MOCK_KEY = input.mockBearerToken;
+  // `codex exec` has no tool-allowlist flag; the mock-LLM server only ever
+  // stages tool calls the manifest permits, so the allowlist is already
+  // enforced upstream. `--dangerously-bypass-approvals-and-sandbox` lets the
+  // staged calls run without an interactive prompt; `--skip-git-repo-check`
+  // allows app dirs that aren't git repos.
+  const args = [
+    'exec',
+    ...codexProviderOverrideArgs({
+      id: 'centraid-mock',
+      name: 'Centraid Automation Mock',
+      baseUrl: input.mockBaseUrl,
+      // wireApi defaults to 'responses' — the only format codex 0.128+ accepts.
+      envKey: 'CENTRAID_MOCK_KEY',
+    }),
+    '--json',
+    '--dangerously-bypass-approvals-and-sandbox',
+    '--skip-git-repo-check',
+    input.prompt,
+  ];
+  const proc = spawn(input.binPath ?? 'codex', args, {
+    cwd: input.cwd,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 
   const stderrChunks: Buffer[] = [];
   proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
@@ -142,4 +213,4 @@ export const defaultSpawnCli: SpawnCli = async (input) => {
       });
     });
   });
-};
+}

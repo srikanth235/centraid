@@ -141,7 +141,8 @@ export { coerceAgentAnswer } from './automation/automation-agent-answer.js';
 // Mock-LLM server + host-agnostic persistent session (issue #166): the
 // token-free `ctx.tool` rail. One long-lived agent session per fire, puppeted
 // by the mock, executes every tool batch; the per-host `driveAgent` is the
-// only thing that varies (CLI subprocess vs. embedded agent).
+// only thing that varies (in-process Claude SDK / `codex exec` subprocess vs.
+// embedded agent).
 export {
   startMockLlmServer,
   type MockLlmServerHandle,
@@ -181,7 +182,7 @@ export {
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomationLocal`
-// is a thin wrapper that injects a mock-LLM + CLI-spawn dispatch surface.
+// is a thin wrapper that injects a mock-LLM + host-agent dispatch surface.
 export {
   runAutomationFire,
   type RunAutomationFireOptions,

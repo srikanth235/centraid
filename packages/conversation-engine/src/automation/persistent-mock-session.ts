@@ -11,8 +11,9 @@
  *
  * The ONE thing that varies per host is how the agent is pointed at the mock —
  * a `driveAgent` callback that runs the host's agent against the mock's base
- * URL + bearer (a `codex exec` / `claude -p` subprocess for the CLI runner, an
- * embedded `runEmbeddedAgent` run for OpenClaw). Everything else — the mock
+ * URL + bearer (an in-process Claude SDK turn or a `codex exec` subprocess for
+ * the local runner, an embedded `runEmbeddedAgent` run for OpenClaw).
+ * Everything else — the mock
  * server, the single dispatch id, batch staging/correlation, per-call timing,
  * and teardown — is shared here so codex, claude, and OpenClaw run the exact
  * same runtime (the issue's central goal). Lives in app-engine-adjacent

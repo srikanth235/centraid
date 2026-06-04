@@ -6,7 +6,8 @@
  * `handler.js`, cascade `onFailure`) lives in app-engine's `runAutomationFire`
  * — it only touches app-engine primitives. The one thing it needs from
  * agent-runtime is the live `ctx.tool` / `ctx.agent` dispatch surface: an
- * ephemeral mock-LLM server plus a per-batch CLI subprocess spawn. This file
+ * ephemeral mock-LLM server plus a per-fire host agent session (an in-process
+ * Claude SDK turn, or a `codex exec` subprocess). This file
  * builds that surface (capturing the runner kind + spawn fn) and injects it as
  * `openDispatch`, leaving the spine — and the onFailure cascade — to app-engine.
  */

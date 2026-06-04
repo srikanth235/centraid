@@ -17,7 +17,7 @@ function isStreamingRequested(req: IncomingMessage): boolean {
   // peek the Accept header instead — `text/event-stream` reliably
   // signals streaming. Callers that need the non-stream form set
   // Accept: application/json explicitly. The default is streaming
-  // because both CLIs we drive (claude -p stream-json, codex exec
+  // because both runners we drive (the Claude Agent SDK, codex exec
   // --json) request it.
   const accept = req.headers.accept;
   if (typeof accept === 'string' && accept.includes('application/json')) return false;
@@ -26,8 +26,8 @@ function isStreamingRequested(req: IncomingMessage): boolean {
 
 /**
  * Anthropic Messages response (POST /v1/messages). Streams a minimal
- * sequence both `claude -p --output-format stream-json` and the SDK's
- * tool-result back-half consume.
+ * sequence the Claude Agent SDK's request and its tool-result back-half
+ * consume.
  */
 export function writeAnthropicMessages(
   req: IncomingMessage,

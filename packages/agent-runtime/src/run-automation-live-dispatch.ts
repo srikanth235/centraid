@@ -5,11 +5,12 @@
  * Split out of `run-automation-local.ts` so that file can stay focused
  * on the per-fire lifecycle (manifest load, audit store, onFailure
  * cascade). This module owns the "live" side: the persistent mock-LLM
- * session, the single long-lived CLI subprocess that executes every
- * `ctx.tool` batch, and the `ctx.agent` one-shot against the user's
- * real provider.
+ * session, the single long-lived agent turn that executes every
+ * `ctx.tool` batch (an in-process Claude SDK `query()` for claude, a
+ * `codex exec` subprocess for codex), and the `ctx.agent` one-shot
+ * against the user's real provider.
  *
- * Issue #166 — persistent session: a fire spawns ONE CLI session pointed
+ * Issue #166 — persistent session: a fire opens ONE agent session pointed
  * at the mock and keeps it alive across the whole handler run. The
  * deterministic handler drives; each `ctx.tool` batch is staged into the
  * live session (the CLI executes the tools natively through its MCP/auth
@@ -108,19 +109,19 @@ function normalizeOutputSchema(schema: unknown): unknown {
 
 /**
  * Stand up the live dispatch surface for the CLI runner: the shared persistent
- * mock session (issue #166) plus a scratch dir. The CLI session is started
+ * mock session (issue #166) plus a scratch dir. The agent session is started
  * lazily on the first `ctx.tool` batch (an automation that never calls a tool
- * never spawns one). The only CLI-specific piece is the `driveAgent` adapter,
- * which runs `codex exec` / `claude -p` against the mock; everything else (the
- * mock, batch staging/correlation, timing) is the shared session.
+ * never opens one). The only runner-specific piece is the `driveAgent` adapter,
+ * which runs the Claude SDK `query()` / `codex exec` against the mock;
+ * everything else (the mock, batch staging/correlation, timing) is shared.
  */
 export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<LiveDispatch> {
   const scratchDir = path.join(opts.workdir, '.automation-scratch', opts.runId);
   await fs.mkdir(scratchDir, { recursive: true });
 
-  // The CLI host adapter: point a `codex exec` / `claude -p` session at the
-  // mock for the lifetime of the fire. Resolves when the CLI exits (`close()`
-  // stages the final `end_turn`).
+  // The host agent adapter: point an in-process Claude SDK `query()` / a
+  // `codex exec` subprocess at the mock for the lifetime of the fire. Resolves
+  // when the agent turn ends (`close()` stages the final `end_turn`).
   const driveAgent: AgentDriver = async (input) => {
     const outcome = await opts.spawnCli({
       kind: opts.runner,
