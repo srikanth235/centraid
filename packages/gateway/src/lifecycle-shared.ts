@@ -7,7 +7,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError } from '@centraid/app-blueprints';
 import { MigrationError } from '@centraid/app-engine';
-import type { AutomationHistoryKeep } from '@centraid/conversation-engine';
+import type { AutomationHistoryKeep } from '@centraid/automation-engine';
 import { WorktreeStore, WorktreeStoreError } from './worktree-store/index.js';
 import { validateManifestAt } from './apps-store-routes.js';
 import { runPublishMigrations } from './publish-migrations.js';

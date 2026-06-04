@@ -21,7 +21,7 @@ import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/app-blueprints';
 import {
   setAutomationEnabledInFiles,
   deleteAutomationFromFiles,
-} from '@centraid/conversation-engine';
+} from '@centraid/automation-engine';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 

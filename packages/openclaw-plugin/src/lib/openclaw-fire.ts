@@ -44,7 +44,7 @@ import {
   type AutomationHandlerOutcome,
   type OpenAutomationDispatch,
   type OpenAutomationDispatchArgs,
-} from '@centraid/conversation-engine';
+} from '@centraid/automation-engine';
 import {
   type AnalyticsStore,
   type AutomationTriggerKind,

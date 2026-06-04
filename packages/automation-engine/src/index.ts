@@ -1,13 +1,11 @@
 /**
- * `@centraid/conversation-engine` — the backend-agnostic run engine.
+ * `@centraid/automation-engine` — the backend-agnostic automation engine.
  *
- * Home for the two runners over the shared run ledger — both "a run over
- * runs/run_nodes," differing only in driver and fan-out:
- *
- *   - the **chat-runner core** (`makeConversationRunnerCore`) — one model-driven turn;
- *   - the **automation fire spine** (`runAutomationFire` + the
- *     `OpenAutomationDispatch` seam) — a script-driven fan-out of many turns,
- *     run from a worker-thread `handler.js`.
+ * Built around the **automation fire spine** (`runAutomationFire` + the
+ * `OpenAutomationDispatch` seam) — a script-driven fan-out of many model turns
+ * over the shared run ledger, run from a worker-thread `handler.js`. (Its
+ * single-turn sibling, the chat-runner core `makeConversationRunnerCore`,
+ * lives in `@centraid/app-engine` next to the `ConversationRunner` interface.)
  *
  * Plus the automation domain that surrounds the fire spine: the manifest
  * format, the on-disk automation-app model, the `<appId>/<id>` handle, webhook
@@ -157,17 +155,6 @@ export {
   type PersistentMockSession,
   type PersistentMockSessionOptions,
 } from './automation/persistent-mock-session.js';
-// Chat-runner core — the per-turn chat spine, sibling to the automation fire
-// spine in this backend-agnostic engine. The model turn is injected as a
-// `RunTurnFn`; agent-runtime passes its codex/claude `runTurn`, the
-// gateway's `makeUnifiedConversationRunner` configures it for builder chat.
-export {
-  makeConversationRunnerCore,
-  type ConversationRunnerCoreOptions,
-  type TurnContext,
-  type RunTurnFn,
-} from './conversation/conversation-runner-core.js';
-
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
 // handler — effects that bypass the audited `ctx.*` rails or make a re-run

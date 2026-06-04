@@ -10,7 +10,7 @@ import {
   AUTOMATION_HANDLER_FILE,
   formatHandlerLintError,
   lintAutomationHandlerSource,
-} from '@centraid/conversation-engine';
+} from '@centraid/automation-engine';
 import { fileExists } from './route-helpers.js';
 
 /**

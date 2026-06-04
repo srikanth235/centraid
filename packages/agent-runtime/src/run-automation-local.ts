@@ -22,7 +22,7 @@ import {
   type AutomationHandlerOutcome,
   type AutomationRunRecord,
   type OpenAutomationDispatch,
-} from '@centraid/conversation-engine';
+} from '@centraid/automation-engine';
 import {
   defaultSpawnCli,
   type LocalRunnerKind,

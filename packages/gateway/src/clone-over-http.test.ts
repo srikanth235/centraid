@@ -17,7 +17,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { cloneTemplateFiles } from '@centraid/app-blueprints';
-import { provisionPendingWebhooksInFiles } from '@centraid/conversation-engine';
+import { provisionPendingWebhooksInFiles } from '@centraid/automation-engine';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 

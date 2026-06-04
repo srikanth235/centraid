@@ -13,7 +13,7 @@
  */
 
 import { loadSettings } from './settings.js';
-import type { ListAutomationAppsResult } from '@centraid/conversation-engine';
+import type { ListAutomationAppsResult } from '@centraid/automation-engine';
 
 interface AuthCache {
   baseUrl: string;

@@ -35,7 +35,7 @@ import {
   type AgentDriver,
   type AutomationAgentDispatcher,
   type AutomationToolDispatcher,
-} from '@centraid/conversation-engine';
+} from '@centraid/automation-engine';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 import {
   defaultSpawnCli,

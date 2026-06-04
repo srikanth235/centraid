@@ -1,21 +1,18 @@
 /*
  * Chat-runner core — the one place the per-turn chat loop lives.
  *
- * This is the chat counterpart to the automation fire spine, and it lives in
- * the same backend-agnostic engine package: both are "runners over the run
- * ledger" that differ only in driver and fan-out (a chat run is one
- * model-driven turn; an automation fire is a script-driven fan-out of many).
- *
- * `makeConversationRunnerCore` is backend-agnostic. The actual model turn is injected
- * as a `RunTurnFn` (`runTurn`) — agent-runtime passes its codex/claude
- * `runTurn`; tests pass a stub. Every `ConversationRunner` the gateway's `/_turn`
- * route can inject does the same thing around that turn: load prefs, resolve a
- * cwd, build the system prompt, thread the `centraid_*` dispatcher into a
- * `ToolContext`, resume when the prior turn used the same runner kind, drive
- * the turn, and (optionally) run a post-turn side effect. That spine used to
- * be copied into both `makeConversationRunner` (data-only chat) and the gateway's
- * `makeUnifiedConversationRunner` (code+data builder chat); they now differ only by
- * the four injected seams below (issue #147, Concern 1):
+ * It sits next to the `ConversationRunner` interface and the agent-turn
+ * contract it wires together, both of which live here in app-engine. The
+ * actual model turn is injected as a `RunTurnFn` (`runTurn`) — agent-runtime
+ * passes its codex/claude `runTurn`; tests pass a stub. Every
+ * `ConversationRunner` the gateway's `/_turn` route can inject does the same
+ * thing around that turn: load prefs, resolve a cwd, build the system prompt,
+ * thread the `centraid_*` dispatcher into a `ToolContext`, resume when the
+ * prior turn used the same runner kind, drive the turn, and (optionally) run a
+ * post-turn side effect. That spine used to be copied into both
+ * `makeConversationRunner` (agent-runtime, data-only chat) and the gateway's
+ * `makeUnifiedConversationRunner` (code+data builder chat); they now differ
+ * only by the four injected seams below (issue #147, Concern 1):
  *
  *   - `resolveCwd`            — data chat returns `input.dataDir`; builder
  *                              chat opens the app's draft worktree.
@@ -26,25 +23,19 @@
  *   - `extraPath`             — builder chat puts the bundled `centraid` CLI
  *                              on the agent's PATH; data chat doesn't.
  *
- * The interface (`ConversationRunner`, `ConversationTurnInput`, `ConversationTurnResult`) and the
- * turn contract (`RunTurnFn`, `TurnInput`, `ToolContext`) both live in
- * app-engine; this is the host-agnostic spine that wires them together.
+ * Backend-agnostic by construction: the model turn (`runTurn`) is injected, so
+ * this spine never imports a concrete agent backend.
  */
 
 import { randomUUID } from 'node:crypto';
+import type { Dispatcher } from './dispatcher.js';
+import type { RunKind } from './conversation-schema.js';
 import type {
-  TurnInput,
+  ConversationRunner,
   ConversationTurnInput,
   ConversationTurnResult,
-  ConversationRunner,
-  Dispatcher,
-  RunKind,
-  RunnerPrefs,
-  RunTurnFn,
-  ToolContext,
-} from '@centraid/app-engine';
-
-export type { RunTurnFn };
+} from './conversation-runner.js';
+import type { RunnerPrefs, RunTurnFn, ToolContext, TurnInput } from './turn.js';
 
 /** Per-turn context handed to the injected `buildExtraSystemPrompt` /
  *  `onTurnComplete` seams once prefs are loaded and the cwd is resolved. */
@@ -98,7 +89,7 @@ export interface ConversationRunnerCoreOptions {
   cwdIsDraftWorktree?: boolean;
   /**
    * The model turn driver. agent-runtime injects its codex/claude
-   * `runTurn`; tests inject a stub. Required — this package is
+   * `runTurn`; tests inject a stub. Required — this spine is
    * backend-agnostic and never imports a concrete backend.
    */
   runTurn: RunTurnFn;
