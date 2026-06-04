@@ -98,7 +98,12 @@ export type { LogEntry, LogLevel } from './data/log-store.js';
 
 // Low-level helpers the openclaw plugin uses to expose SQL + schema as
 // agent tools without round-tripping through the HTTP surface.
-export { runQuery, RunQueryError, RUN_QUERY_ROW_CAP, type RunQueryOptions } from './handlers/run-query.js';
+export {
+  runQuery,
+  RunQueryError,
+  RUN_QUERY_ROW_CAP,
+  type RunQueryOptions,
+} from './handlers/run-query.js';
 
 // Shared SQL operations exposed as agent tools (`centraid_sql_*`). Used by
 // the codex / claude adapter tool registrations and by the legacy

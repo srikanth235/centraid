@@ -1141,10 +1141,7 @@ import {
   // Most tabs paint a dense 6-col grid of app tiles; the Automations tab
   // morphs the grid to a roomier 3-col card layout (emoji · trigger ·
   // integration chips) since automations carry more context per card.
-  function buildTabbedShelf(
-    templates: TemplateEntry[],
-    automations: TemplateEntry[],
-  ): HTMLElement {
+  function buildTabbedShelf(templates: TemplateEntry[], automations: TemplateEntry[]): HTMLElement {
     const section = el('section', { class: 'cd-shelf' });
 
     const all: AppMetaResolvedType[] = [...getApps(), ...drafts];

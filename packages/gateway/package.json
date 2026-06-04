@@ -21,9 +21,9 @@
   },
   "dependencies": {
     "@centraid/agent-runtime": "workspace:*",
-    "@centraid/blueprints": "workspace:*",
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*",
+    "@centraid/blueprints": "workspace:*",
     "@centraid/skills": "workspace:*"
   },
   "devDependencies": {

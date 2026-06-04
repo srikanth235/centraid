@@ -82,7 +82,11 @@ export {
 // Per-runner model catalog + default seed (issue #188). Exposed so the gateway
 // can resolve each agent's models for the per-agent picker in Settings →
 // Agents, not just the active runner's via runner-status.
-export { resolveRunnerModels, resolveRunnerTools, readRunnerTools } from './models/model-catalog.js';
+export {
+  resolveRunnerModels,
+  resolveRunnerTools,
+  readRunnerTools,
+} from './models/model-catalog.js';
 export { defaultModelsFor, DEFAULT_MODELS } from './models/model-defaults.js';
 export { enumerateRunnerModels } from './models/model-enumerators.js';
 

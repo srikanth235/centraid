@@ -341,11 +341,7 @@
       "category": "Daily rhythm",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 6:00 PM",
-      "integrations": [
-        "Google Calendar",
-        "Gmail",
-        "Slack"
-      ],
+      "integrations": ["Google Calendar", "Gmail", "Slack"],
       "files": [
         "app.json",
         "automations/briefing/automation.json",
@@ -364,10 +360,7 @@
       "category": "Daily rhythm",
       "triggerKind": "cron",
       "triggerLabel": "Daily · 9:00 PM",
-      "integrations": [
-        "Linear",
-        "Notion"
-      ],
+      "integrations": ["Linear", "Notion"],
       "files": [
         "app.json",
         "automations/evening-wrap-up/automation.json",
@@ -386,9 +379,7 @@
       "category": "Inbox & comms",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 8:30 AM",
-      "integrations": [
-        "Gmail"
-      ],
+      "integrations": ["Gmail"],
       "files": [
         "app.json",
         "automations/email-triage/automation.json",
@@ -407,10 +398,7 @@
       "category": "Inbox & comms",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 8:45 AM",
-      "integrations": [
-        "Google Calendar",
-        "Notion"
-      ],
+      "integrations": ["Google Calendar", "Notion"],
       "files": [
         "app.json",
         "automations/meeting-prep/automation.json",
@@ -429,9 +417,7 @@
       "category": "Engineering",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 11:30 PM",
-      "integrations": [
-        "GitHub"
-      ],
+      "integrations": ["GitHub"],
       "files": [
         "app.json",
         "automations/pr-review-digest/automation.json",
@@ -450,9 +436,7 @@
       "category": "Engineering",
       "triggerKind": "webhook",
       "triggerLabel": "On merge to main",
-      "integrations": [
-        "GitHub"
-      ],
+      "integrations": ["GitHub"],
       "files": [
         "app.json",
         "automations/release-notes-drafter/automation.json",
@@ -471,10 +455,7 @@
       "category": "Engineering",
       "triggerKind": "cron",
       "triggerLabel": "Tuesdays · 12:00 AM",
-      "integrations": [
-        "npm",
-        "GitHub"
-      ],
+      "integrations": ["npm", "GitHub"],
       "files": [
         "app.json",
         "automations/dependency-update-check/automation.json",
@@ -493,11 +474,7 @@
       "category": "Reliability",
       "triggerKind": "cron",
       "triggerLabel": "Daily · 5:30 PM",
-      "integrations": [
-        "PagerDuty",
-        "Datadog",
-        "Sentry"
-      ],
+      "integrations": ["PagerDuty", "Datadog", "Sentry"],
       "files": [
         "app.json",
         "automations/system-health-check/automation.json",
@@ -516,9 +493,7 @@
       "category": "Reliability",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 9:00 AM",
-      "integrations": [
-        "Linear"
-      ],
+      "integrations": ["Linear"],
       "files": [
         "app.json",
         "automations/issue-triage/automation.json",
@@ -537,9 +512,7 @@
       "category": "Reliability",
       "triggerKind": "cron",
       "triggerLabel": "Mondays · 9:30 AM",
-      "integrations": [
-        "GitHub"
-      ],
+      "integrations": ["GitHub"],
       "files": [
         "app.json",
         "automations/flaky-test-tracker/automation.json",

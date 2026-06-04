@@ -17,8 +17,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/blueprints": "workspace:*",
-    "@centraid/app-engine": "workspace:*"
+    "@centraid/app-engine": "workspace:*",
+    "@centraid/blueprints": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
