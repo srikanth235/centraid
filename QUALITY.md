@@ -2,11 +2,13 @@
 
 ## Open
 
-- #212 — Testing strategy is documented in [TESTING.md](TESTING.md) but not yet
-  implemented: the repo still runs `tsx --test` (`node:test`) across ~80 files.
-  Migration to vitest (one v8 coverage tool, worker tests against `dist`),
-  engine coverage gating, the Playwright `_electron` boot test, and Maestro
-  flows land incrementally in follow-up PRs, package by package.
+- #212 — Testing strategy ([TESTING.md](TESTING.md)) is partially landed: vitest
+  is the single runner (migrated off `node:test`/`tsx --test`, 653 tests
+  unchanged), repo-wide v8 coverage is wired (`bun run coverage`), and the engine
+  packages are gated on seeded line+branch floors enforced in CI. Still open:
+  ratcheting the floors up, converting `assert.*` to vitest `expect` matchers,
+  extracting desktop renderer logic into testable modules, and the thin e2e
+  journeys (Playwright `_electron` + Maestro). These proceed behind new work.
 
 ## Resolved
 

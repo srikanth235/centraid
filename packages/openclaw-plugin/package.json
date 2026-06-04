@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -28,7 +28,6 @@
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "openclaw": "^2026.5.7",
-    "tsx": "^4.20.3",
     "typescript": "catalog:"
   },
   "peerDependencies": {

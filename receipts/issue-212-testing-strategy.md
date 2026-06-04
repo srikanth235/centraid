@@ -1,78 +1,93 @@
-# issue-212 — Testing strategy doc
+# issue-212 — Testing strategy: vitest migration + repo-wide v8 coverage
 
 GitHub issue: [#212](https://github.com/srikanth235/centraid/issues/212)
 
-Issue #212 is explicitly a strategy outline — "it captures the decisions, not an
-implementation checklist." The faithful, contained deliverable is therefore the
-durable record of those decisions, not the migration itself (vitest swap,
-Playwright/Maestro wiring, renderer logic-extraction), which the issue defers to
-incremental follow-up PRs. This receipt covers landing that record as
-[TESTING.md](../TESTING.md) and wiring it into the doc map, plus resolving the
-four open decisions with a ratifiable default position.
+Issue #212 sets the testing strategy: maximal _meaningful_ coverage given that
+coding agents author both the code and the tests. This work lands the strategy as
+a durable doc **and** implements its keystone — adopting vitest as the single
+runner, migrating the ~80 `node:test` files off `tsx --test`, wiring repo-wide
+v8 coverage, and gating the engine packages on seeded line+branch floors enforced
+in CI (which previously ran no tests at all). The deeper per-layer work the issue
+itself scopes as incremental — expect-matcher conversion, renderer
+logic-extraction, the thin Playwright/Maestro e2e journeys — is recorded as
+follow-up.
 
 ## Checklist
 
-- [x] Author TESTING.md capturing the #212 decisions
-- [x] Codify the test convention
-- [x] Resolve the four open decisions with defaults
+- [x] Author TESTING.md capturing the #212 decisions and the test convention
+- [x] Adopt vitest as the single runner and migrate the node:test files
+- [x] Wire repo-wide v8 coverage and gate the engine packages
+- [x] Run tests + coverage in CI
 - [x] Wire TESTING.md into the doc map
 
 ## What changed
 
-### Author TESTING.md capturing the #212 decisions
+### Author TESTING.md capturing the #212 decisions and the test convention
 
-New root [TESTING.md](../TESTING.md) records the strategy verbatim from #212: the
-guiding principle (quantity is free, trust is the bottleneck), and the six
-decisions — single runner vitest (migrate off `tsx --test` / `node:test`, point
-worker-thread tests at the built `dist` worker), per-layer coverage shape (engine
-deep, renderer extract-then-test, mobile logic+Maestro, shared low-priority),
-per-surface tooling table, thin high-value e2e (Playwright `_electron` + Maestro,
-nightly/on-demand not per-PR), keeping agent tests meaningful, and the coverage
-posture / gating (track repo-wide, gate engine on a seeded line+branch floor,
-track-don't-gate renderer/mobile).
+New root [TESTING.md](../TESTING.md) records the guiding principle, the six
+decisions, the **test convention** (behaviour over implementation, real deps fake
+only at the edges, one behaviour per test, assert outcomes not mock calls,
+deterministic, clear failure output), the coverage posture with the seeded floor
+table, and resolves #212's four open decisions.
 
-### Codify the test convention
+### Adopt vitest as the single runner and migrate the node:test files
 
-TESTING.md carries a standalone "The test convention" section — behaviour over
-implementation, real deps fake only at the edges, one behaviour per test, assert
-outcomes not mock calls, deterministic, clear failure output — phrased as
-objective rules an agent can self-check and a reviewer can enforce, closing on
-the adversarial check ("could the code be wrong and this test still pass?").
+- Added `vitest`, `@vitest/coverage-v8`, and `jsdom` as root dev dependencies.
+- Migrated all 80 `*.test.ts` files off `node:test`: imports `node:test` →
+  `vitest`, and `before`/`after` → `beforeAll`/`afterAll` (imports and call
+  sites). `node:assert` is kept as-is — it runs unchanged under vitest — so the
+  swap is mechanical and verifiable: **653 tests, green-before → green-after**.
+- Each package gained a `vitest.config.ts` project; per-package `test` scripts
+  changed from `tsx --test "src/**/*.test.ts"` to `vitest run`, and the now-unused
+  `tsx` dev dependency was dropped from all eight packages (lockfile reconciled,
+  `--frozen-lockfile` clean).
+- vitest 3's default `forks` pool (real child processes) keeps `node:sqlite` and
+  the worker-thread handler-runner behaving as they did under `node:test`; the
+  worker-thread tests load the built `dist` worker.
 
-### Resolve the four open decisions with defaults
+### Wire repo-wide v8 coverage and gate the engine packages
 
-The "Resolved decisions" section settles #212's four open questions as a
-ratifiable default: engine coverage floor (seed then ratchet, 80% line / 70%
-branch band, track-only until seeded), where Playwright + Maestro run (nightly +
-on-demand, local simulators first, Maestro Cloud deferred), where the convention
-lives (this doc is canonical; a `/test-coverage` skill may later wrap but not
-fork it), and migration sequencing (package by package behind new work, engine
-first, desktop after logic extraction, mobile last).
+Root [vitest.config.ts](../vitest.config.ts) aggregates every package as a
+project so `bun run coverage` emits **one v8 report** across the repo. The engine
+packages (`app-engine`, `gateway`, `automation`, `agent-runtime`, `blueprints`)
+are gated on per-package line+branch floors seeded a conservative margin below the
+measured baseline (e.g. app-engine 76.7%→72% lines), so they catch regression
+without flaking and ratchet up over time. Renderer/mobile are tracked, not gated.
+`coverage/` is gitignored.
+
+### Run tests + coverage in CI
+
+[.github/workflows/ci.yml](../.github/workflows/ci.yml) gains `bun run build`
+then `bun run coverage` after the type-aware lint step — so the suite **and** the
+engine coverage floors are enforced on every PR. CI previously ran only
+format/lint/typecheck and no tests.
 
 ### Wire TESTING.md into the doc map
 
-[AGENTS.md](../AGENTS.md) gains a "Tests follow TESTING.md" bullet under
-Conventions and a TESTING.md entry under "Where to look", so the doc is
-discoverable from the repo's durable-doc index the same way QUALITY.md and
-ARCHITECTURE.md are. QUALITY.md tracks the strategy adoption under `## Open`.
+[AGENTS.md](../AGENTS.md) links TESTING.md from Conventions (with the `test` /
+`coverage` commands) and "Where to look"; [QUALITY.md](../QUALITY.md) tracks
+what's landed vs. the remaining follow-up under `## Open`.
 
 ## Out of scope
 
-- **The migration itself** — swapping the runner to vitest, the worker-thread
-  `dist` retarget, v8 coverage wiring, Playwright `_electron` boot test, Maestro
-  flows, and the renderer logic-extraction/god-file split. #212 explicitly defers
-  these to incremental, package-by-package follow-up PRs; folding them in would
-  contradict the issue's own framing and the repo's commit-division discipline.
-- **Mutation testing**, **jest-expo / RN component tests**, and **renderer DOM
-  unit tests** — deferred by #212 and recorded as such in TESTING.md.
-- **Creating the `/test-coverage` skill** — TESTING.md is the canonical source;
-  the skill that wraps it is a separate, later piece of work.
+- **expect-matcher conversion** — `assert.*` calls run fine under vitest and were
+  kept to make the runner swap mechanical and green-before→green-after; rewriting
+  ~1,700 assertions to vitest `expect` is follow-up polish, not a blocker.
+- **Renderer logic-extraction + desktop jsdom units** — the `apps/desktop`
+  god-file split into testable modules is its own change; the desktop project is
+  wired for vitest but stays on the `node` environment until then.
+- **Thin e2e journeys** — the Playwright `_electron` boot test and the 3–5
+  Maestro mobile flows. #212 scopes these as nightly/on-demand, not per-PR;
+  scaffolding exists under `tests/agent-e2e*`.
+- **Mutation testing**, **jest-expo / RN component tests** — deferred by #212.
 
 ## Verification
 
-- `TESTING.md` authored at repo root capturing the #212 decisions, the test
-  convention, the four resolved open decisions, and the coverage posture; under
-  the 500-line file cap.
-- `AGENTS.md` links TESTING.md from both Conventions and "Where to look"; doc map
-  renders with no broken relative links.
-- No code or build changes — doc-only PR; nothing to typecheck or run.
+- `bun run test` (turbo, per package) — 17/17 tasks pass; **653 pass / 1 skip**,
+  unchanged from the pre-migration `node:test` baseline.
+- `bun run coverage` (root vitest + v8) — 80 files, 653 pass / 1 skip, exit 0;
+  all seeded engine floors met.
+- `bun run typecheck` — 17/17 (test files import `vitest`; types resolve).
+- `oxfmt --check .` clean; `oxlint .` 0 warnings / 0 errors; `lint:types`
+  (type-aware, incl. tests) ok for all packages.
+- `bun install --frozen-lockfile` clean after the `tsx` removal.

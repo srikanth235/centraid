@@ -10,7 +10,7 @@
  * host without a real agent binary.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { startPersistentMockSession, type AgentDriver } from './persistent-mock-session.js';
 import type { DispatchContext } from '../handler/runner.js';

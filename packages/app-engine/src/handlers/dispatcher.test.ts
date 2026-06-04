@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'vitest';
 import { strict as assert } from 'node:assert';
 import { promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -76,7 +76,7 @@ describe('Dispatcher', () => {
   let registry: Registry;
   let dispatcher: Dispatcher;
 
-  before(async () => {
+  beforeAll(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-'));
     codeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-code-'));
     await makeTodoApp(codeRoot, 'todos');
@@ -89,7 +89,7 @@ describe('Dispatcher', () => {
     });
   });
 
-  after(async () => {
+  afterAll(async () => {
     await fs.rm(workDir, { recursive: true, force: true });
     await fs.rm(codeRoot, { recursive: true, force: true });
   });
@@ -288,7 +288,7 @@ describe('manifest validation surfaces as INVALID_MANIFEST', () => {
 
   let codeRoot: string;
 
-  before(async () => {
+  beforeAll(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-bad-'));
     codeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatcher-bad-code-'));
     const codeDir = path.join(codeRoot, 'broken');
@@ -308,7 +308,7 @@ describe('manifest validation surfaces as INVALID_MANIFEST', () => {
     });
   });
 
-  after(async () => {
+  afterAll(async () => {
     await fs.rm(workDir, { recursive: true, force: true });
     await fs.rm(codeRoot, { recursive: true, force: true });
   });
@@ -358,7 +358,7 @@ describe('Dispatcher draft data dir = code dir (#144)', () => {
   let dispatcher: Dispatcher;
   let draftDir: string;
 
-  before(async () => {
+  beforeAll(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatch-draft-'));
     codeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-dispatch-draft-code-'));
     await makeTodoApp(codeRoot, 'todos');
@@ -390,7 +390,7 @@ describe('Dispatcher draft data dir = code dir (#144)', () => {
     ddb.close();
   });
 
-  after(async () => {
+  afterAll(async () => {
     await fs.rm(workDir, { recursive: true, force: true });
     await fs.rm(codeRoot, { recursive: true, force: true });
   });

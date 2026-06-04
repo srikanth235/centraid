@@ -707,3 +707,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-b72e775d-901-1780596741 | claude-code | b72e775d-901b-43cb-bb28-2707f7e1ba5f | #210 | claude-opus-4-8 | 8334 | 49529 | 693392 | 7396 | 65259 | 0.8828 |  |
 | claude-code-a312fd27-2c4-1780596878 | claude-code | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | claude-opus-4-8 | 22242 | 1159128 | 56319044 | 247518 | 1428888 | 41.7032 |  |
 | claude-code-ed31e5ae-22b-1780597284 | claude-code | ed31e5ae-22b8-499c-9e9e-23131aa4be06 | #212 | claude-opus-4-8 | 26170 | 92365 | 1884335 | 29831 | 148366 | 2.3961 | docs(testing): codify the testing strategy as TESTING.md (#212)Land issue #212's |
+| claude-code-72207456-a71-1780598338 | claude-code | 72207456-a719-4c80-9c24-570ae5da746b | #212 | claude-opus-4-8 | 5752 | 12872 | 32008 | 786 | 19410 | 0.1449 | test: migrate to vitest with repo-wide v8 coverage and engine floors (#212)Imple |

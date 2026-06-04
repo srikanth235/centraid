@@ -4,8 +4,10 @@ The goal is **maximal _meaningful_ coverage** — confidence that the engine wor
 and the critical user journeys work — given that **coding agents author both the
 code and the tests**. This document is the durable record of those decisions and
 the conventions every agent (or human) must follow when writing tests here. It
-captures [#212](https://github.com/srikanth235/centraid/issues/212); the
-migration it describes lands incrementally in follow-up PRs.
+captures [#212](https://github.com/srikanth235/centraid/issues/212). The runner
+migration and repo-wide v8 coverage described below are **in place**; the deeper
+per-package work (richer coverage, renderer logic-extraction, the mobile/desktop
+e2e journeys) proceeds behind new work.
 
 ## Guiding principle: quantity is free, trust is the bottleneck
 
@@ -30,22 +32,32 @@ guardrails over good intentions.
 
 ### 1. Single runner: vitest
 
-Adopt [vitest](https://vitest.dev) as _the_ test runner across the repo and
-migrate the existing `node:test` files (`tsx --test`) off it.
+[vitest](https://vitest.dev) is _the_ test runner across the repo; the
+`node:test` / `tsx --test` setup has been migrated off. Each package has a
+`vitest.config.ts` project; the root `vitest.config.ts` aggregates them and owns
+the coverage config, so `bun run coverage` emits **one v8 report** for the whole
+repo. Per-package `bun run test` (via turbo) runs that package's project alone.
 
 - **Why one runner:** you cannot target "maximal meaningful coverage" if backend
   and frontend report coverage differently. vitest gives **one coverage tool
   (v8) across the whole repo**, one mental model, watch mode, real matchers, and
   `jsdom` for the desktop renderer. It matches the openclaw lineage (vitest +
   jsdom + coverage-v8).
-- **Worker-thread tests:** the handler-runner spawns Worker threads. Point those
-  tests at the **built `dist` worker**, not the `tsx`/`.ts` loader fallback —
-  this exercises the real production artifact and removes the fragile
-  loader-propagation dependency. `turbo run test` already builds first (the
-  `test` task `dependsOn` `build`; see #210), so the artifact is fresh.
-- **Migrate as a contained, verifiable task:** green-before → green-after,
-  **package by package**. No behaviour change in the same commit as a runner
-  swap.
+- **Pool:** vitest 3's default pool is `forks` (real child processes), so
+  `node:sqlite` and the worker-thread handler-runner behave exactly as they did
+  under `node:test`.
+- **Worker-thread tests:** the handler-runner spawns Worker threads at the
+  **built `dist` worker**, not the `.ts` source — this exercises the real
+  production artifact and removes the fragile loader-propagation dependency.
+  `turbo run test` builds first (the `test` task `dependsOn` `build`; see #210)
+  and CI runs `bun run build` before `bun run coverage`, so the artifact is
+  fresh.
+- **How the migration landed:** the swap was mechanical — `node:test` imports →
+  `vitest`, `before`/`after` → `beforeAll`/`afterAll`, and `node:assert` kept
+  as-is (it runs unchanged under vitest). So it landed atomically with
+  green-before → green-after: **653 tests passing, unchanged**. Converting the
+  remaining `assert.*` calls to vitest `expect` matchers is follow-up polish, not
+  a blocker.
 
 ### 2. Coverage shape — saturate what matters, smoke the rest
 
@@ -127,12 +139,27 @@ test still pass?_ If yes, the test is not yet meaningful.
 
 ## Coverage posture / gating
 
-- Track coverage **repo-wide** via vitest v8 from day one.
-- **Gate** the engine packages (`app-engine`, `gateway`, `automation`,
-  `agent-runtime`, `blueprints`) on a **line + branch floor once seeded** — start
-  by _tracking_, then _ratchet_. The floor only ever moves up.
-- **Renderer / mobile:** track, do **not** gate line coverage. Their meaningful
-  coverage is logic-units plus e2e journeys, not a renderer line percentage.
+- Coverage is tracked **repo-wide** via vitest v8 — `bun run coverage` (and CI's
+  `bun run build && bun run coverage`).
+- The engine packages are **gated** on per-package line + branch floors in the
+  root `vitest.config.ts`. The floors are seeded a conservative margin below the
+  measured baseline so they catch regression without flaking, and **ratchet
+  up**, never down. Seeded baseline at migration (measured → floor):
+
+  | Package         | Lines (measured → floor) | Branches (measured → floor) |
+  | --------------- | ------------------------ | --------------------------- |
+  | `app-engine`    | 76.7% → 72%              | 74.8% → 70%                 |
+  | `automation`    | 69.4% → 65%              | 75.2% → 71%                 |
+  | `blueprints`    | 84.7% → 80%              | 75.8% → 71%                 |
+  | `gateway`       | 76.4% → 72%              | 72.3% → 68%                 |
+  | `agent-runtime` | 20.8% → 18%              | 83.5% → 78%                 |
+
+  `agent-runtime` lines are low because much of it is untested CLI/backend glue —
+  the floor is anti-regression, and the target band (below) is what to ratchet
+  toward.
+- **Renderer / mobile:** tracked, **not** gated on line coverage (no per-glob
+  threshold). Their meaningful coverage is logic-units plus e2e journeys, not a
+  renderer line percentage.
 - Never gate coverage on trivial getters or chase 100%.
 
 ## Resolved decisions
@@ -140,10 +167,10 @@ test still pass?_ If yes, the test is not yet meaningful.
 These were open in #212 and are resolved here as the default position. They are
 ratifiable in review — adjust the numbers, not the shape.
 
-1. **Engine coverage floor.** Seed first (one migration pass per engine package),
-   then gate at the seeded floor and **ratchet up**, never down. Target band
-   once seeded: **80% line / 70% branch** on engine packages. Track-only until
-   the floor is seeded so the gate reflects reality, not aspiration.
+1. **Engine coverage floor.** Seeded at migration (table above) and **enforced**
+   in CI now — the gate reflects reality, not aspiration. Ratchet the floors
+   upward toward the target band of **80% line / 70% branch** as coverage grows;
+   never lower them.
 2. **Where Playwright + Maestro run.** **Nightly + on-demand** (scheduled
    workflow plus manual dispatch / label), never per-PR. Maestro runs on **local
    simulators** in the nightly job to start; **Maestro Cloud is deferred** until
@@ -152,10 +179,12 @@ ratifiable in review — adjust the numbers, not the shape.
    — single source of truth, linked from [AGENTS.md](AGENTS.md). A `/test-coverage`
    skill may later _wrap_ this doc (so agents can invoke it), but the doc stays
    authoritative; the skill must never fork the rules.
-4. **Migration sequencing.** **Package by package, behind new work**, not all at
-   once. Order by value: **engine packages first**, desktop after the renderer
-   logic is extracted, mobile last. Each migration is green-before → green-after
-   for that package only.
+4. **Migration sequencing.** The runner swap was mechanical (imports only,
+   `node:assert` kept), so it landed **atomically** with green-before →
+   green-after rather than package-by-package — 653 tests, unchanged. The deeper
+   per-package work that _does_ change tests (expect-matcher migration, coverage
+   ratcheting, renderer logic-extraction, e2e journeys) proceeds **behind new
+   work**, engine packages first.
 
 ## Deliberately out of scope / deferred
 
