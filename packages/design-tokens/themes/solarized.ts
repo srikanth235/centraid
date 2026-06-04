@@ -4,7 +4,7 @@
 // accent we re-use for `accentMidnight` slots.
 
 import { palette } from '../palette';
-import { BEZEL, BEZEL_INNER, type Theme } from './_shared';
+import { BEZEL, BEZEL_INNER, type Theme } from './shared';
 
 export const solarizedDarkTheme: Theme = {
   kind: 'dark',

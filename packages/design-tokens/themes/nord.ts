@@ -1,7 +1,7 @@
 // Nord — frost (#88c0d0) as accent, polar night as bg, snow storm as ink.
 
 import { palette } from '../palette';
-import { BEZEL, BEZEL_INNER, type Theme } from './_shared';
+import { BEZEL, BEZEL_INNER, type Theme } from './shared';
 
 export const nordTheme: Theme = {
   kind: 'dark',

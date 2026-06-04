@@ -15,7 +15,7 @@ import {
   DANGER,
   SUCCESS,
   type Theme,
-} from './_shared';
+} from './shared';
 
 export const lightTheme: Theme = {
   kind: 'light',
