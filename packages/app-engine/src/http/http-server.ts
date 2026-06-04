@@ -3,8 +3,8 @@ import crypto from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { timingSafeEqual } from './security.js';
 import { makeConversationRouteHandler } from './conversation-routes.js';
-import { makeUserStoreRouteHandler } from './user-store.js';
-import type { Runtime } from './runtime.js';
+import { makeUserStoreRouteHandler } from '../stores/user-store.js';
+import type { Runtime } from '../runtime.js';
 
 export interface RuntimeHttpServerOptions {
   runtime: Runtime;

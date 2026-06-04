@@ -29,7 +29,7 @@
  * the matching CSS — no runtime change required.
  */
 
-import type { SettingsInject } from './static-server.js';
+import type { SettingsInject } from '../http/static-server.js';
 
 /**
  * The settings keys this build understands, plus where each one lands in

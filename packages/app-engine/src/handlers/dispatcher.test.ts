@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
-import { Registry } from './registry.js';
+import { Registry } from '../registry/registry.js';
 import { Dispatcher, isToolName, statusForToolError } from './dispatcher.js';
 import { runQuery } from './run-query.js';
 

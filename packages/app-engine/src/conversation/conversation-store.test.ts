@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
-import { makeRuntimeDbProvider, type DatabaseProvider } from './gateway-db.js';
+import { makeRuntimeDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from './conversation-store.js';
 
 function newProvider(): DatabaseProvider {

@@ -19,7 +19,7 @@
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { DatabaseProvider } from '../gateway-db.js';
+import type { DatabaseProvider } from '../stores/gateway-db.js';
 
 /** Placeholder per-user monthly token allowance — no billing model exists
  *  yet (issue #90, open question 5). */

@@ -12,7 +12,7 @@
  */
 
 import type { TurnStreamEvent } from './conversation-runner.js';
-import type { Dispatcher } from './dispatcher.js';
+import type { Dispatcher } from '../handlers/dispatcher.js';
 
 export type RunnerKind = 'codex' | 'claude-code';
 

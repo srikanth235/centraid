@@ -16,8 +16,8 @@
  * fits the user's ask.
  */
 
-import type { AppSchema } from './schema.js';
-import type { Manifest, ManifestActionEntry, ManifestQueryEntry } from './manifest.js';
+import type { AppSchema } from '../data/schema.js';
+import type { Manifest, ManifestActionEntry, ManifestQueryEntry } from '../registry/manifest.js';
 
 export interface BuildExtraPromptInput {
   appId: string;

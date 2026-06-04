@@ -12,9 +12,9 @@ import {
   deriveTitle,
   type RecordTurnInput,
 } from './conversation-history.js';
-import { makeConversationRouteHandler } from './conversation-routes.js';
+import { makeConversationRouteHandler } from '../http/conversation-routes.js';
 import { ConversationStore } from './conversation-store.js';
-import { makeRuntimeDbProvider } from './gateway-db.js';
+import { makeRuntimeDbProvider } from '../stores/gateway-db.js';
 
 // Tests that don't care about cross-user isolation share this stub UUID.
 const TEST_USER_ID = 'test-user-uuid-0000';

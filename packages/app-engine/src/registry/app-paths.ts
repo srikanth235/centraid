@@ -1,4 +1,4 @@
-import type { RegistryEntry } from './types.js';
+import type { RegistryEntry } from '../types.js';
 
 /**
  * Validate an app folder id. A filesystem-safe slug — alnum / `-` / `_`,

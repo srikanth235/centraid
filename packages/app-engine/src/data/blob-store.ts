@@ -19,7 +19,7 @@
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { isValidAppId } from './app-paths.js';
+import { isValidAppId } from '../registry/app-paths.js';
 
 /** A sha256 hex digest — the CAS key + blob filename. */
 const HASH_RE = /^[a-f0-9]{64}$/;

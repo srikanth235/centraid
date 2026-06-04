@@ -16,7 +16,7 @@
  * centraid SQLite file.
  */
 
-import { openMigratedDb, makeMigratedDbProvider, type DatabaseProvider } from '../gateway-db.js';
+import { openMigratedDb, makeMigratedDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import type { DatabaseSync } from 'node:sqlite';
 
 export const ANALYTICS_MIGRATIONS: readonly string[] = [

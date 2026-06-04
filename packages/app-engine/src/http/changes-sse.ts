@@ -24,7 +24,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ChangeBus } from './change-bus.js';
+import type { ChangeBus } from '../changes/change-bus.js';
 
 const HEARTBEAT_MS = 30_000;
 

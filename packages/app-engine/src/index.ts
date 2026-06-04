@@ -29,8 +29,8 @@ export type {
   ConversationTurnInput,
   ConversationTurnResult,
   TurnStreamEvent,
-} from './conversation-runner.js';
-export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prompt.js';
+} from './conversation/conversation-runner.js';
+export { buildExtraPrompt, type BuildExtraPromptInput } from './handlers/build-extra-prompt.js';
 
 // Agent-turn contract — the host-agnostic interface between a run spine
 // (chat-runner core, automation fire) and the backend that drives one model
@@ -45,13 +45,13 @@ export type {
   TurnResult,
   TurnAttachment,
   RunTurnFn,
-} from './turn.js';
+} from './conversation/turn.js';
 
 export {
   startRuntimeHttpServer,
   type RuntimeHttpServerOptions,
   type RuntimeHttpServerHandle,
-} from './http-server.js';
+} from './http/http-server.js';
 
 // Public handler types — apps written in TypeScript import these to type
 // their default exports.
@@ -81,15 +81,15 @@ export type {
   AppSchemaColumn,
   AppSchemaIndex,
   AppSchemaView,
-} from './schema.js';
-export type { AppTableRows } from './table-rows.js';
-export type { RunQueryResult } from './run-query.js';
-export { appendLogs } from './log-store.js';
-export type { LogEntry, LogLevel } from './log-store.js';
+} from './data/schema.js';
+export type { AppTableRows } from './data/table-rows.js';
+export type { RunQueryResult } from './handlers/run-query.js';
+export { appendLogs } from './data/log-store.js';
+export type { LogEntry, LogLevel } from './data/log-store.js';
 
 // Low-level helpers the openclaw plugin uses to expose SQL + schema as
 // agent tools without round-tripping through the HTTP surface.
-export { runQuery, RunQueryError, RUN_QUERY_ROW_CAP, type RunQueryOptions } from './run-query.js';
+export { runQuery, RunQueryError, RUN_QUERY_ROW_CAP, type RunQueryOptions } from './handlers/run-query.js';
 
 // Shared SQL operations exposed as agent tools (`centraid_sql_*`). Used by
 // the codex / claude adapter tool registrations and by the legacy
@@ -106,10 +106,10 @@ export {
   type ReadResult,
   type WriteResult,
   type WriteOpOptions,
-} from './sql-ops.js';
-export { readAppSchema } from './schema.js';
-export { Registry } from './registry.js';
-export { appDataDir, isValidAppId } from './app-paths.js';
+} from './handlers/sql-ops.js';
+export { readAppSchema } from './data/schema.js';
+export { Registry } from './registry/registry.js';
+export { appDataDir, isValidAppId } from './registry/app-paths.js';
 
 // Wrapper-dir cleanup on app delete — removes `<appsDir>/<id>/` (data.sqlite
 // + run ledgers) after the registry entry is dropped. Hosts that delete apps
@@ -119,7 +119,7 @@ export {
   cleanupDeregisteredApp,
   type CleanupOutcome,
   type DeregisterLogger,
-} from './deregister-cleanup.js';
+} from './registry/deregister-cleanup.js';
 
 // App manifest + three-tool dispatcher (issue #107). The dispatcher
 // replaces the per-handler HTTP routes; openclaw-plugin registers MCP
@@ -144,7 +144,7 @@ export {
   type HandlerConfirmation,
   type JsonSchema,
   type ManifestValidationCode as AppManifestValidationCode,
-} from './manifest.js';
+} from './registry/manifest.js';
 export {
   Dispatcher,
   isToolName,
@@ -160,19 +160,19 @@ export {
   type ToolSuccessResult,
   type ToolResult,
   type ToolName,
-} from './dispatcher.js';
+} from './handlers/dispatcher.js';
 
 // Error classes — hosts that want to translate them to their own response
 // shapes can import these directly. (The Runtime.handle() default handler
 // already converts them to JSON error responses.)
-export { RegistryError } from './registry.js';
-export { MigrationError, runPendingMigrations, type MigrationsApplied } from './migrate.js';
+export { RegistryError } from './registry/registry.js';
+export { MigrationError, runPendingMigrations, type MigrationsApplied } from './data/migrate.js';
 
 // Per-app change notifications. Subscribed by the SSE endpoint at
 // /centraid/<appId>/_changes; emitted by any code path that writes to an
 // app's data.sqlite (HTTP query route, openclaw legacy tool, app handlers).
 // Hosts can subscribe from outside too — `runtime.changeBus.subscribe(...)`.
-export { ChangeBus, type AppChange, type ChangeListener } from './change-bus.js';
+export { ChangeBus, type AppChange, type ChangeListener } from './changes/change-bus.js';
 
 // Conversation-history store (the read/write facade backing the chat surface)
 // + its HTTP route dispatcher. Used in two places:
@@ -190,14 +190,14 @@ export {
   type ConversationTurnAttachment,
   type RecordTurnInput,
   type UserIdProvider,
-} from './conversation-history.js';
-export { makeConversationRouteHandler } from './conversation-routes.js';
+} from './conversation/conversation-history.js';
+export { makeConversationRouteHandler } from './http/conversation-routes.js';
 
 // Per-app blob content-addressed store for attachment bytes (issue #190).
 // Bytes live at `<appsDir>/<appId>/blobs/<hash>`, deduped by sha256; the
 // `attachments` rows in `runtime.sqlite` carry the metadata. GC is
 // refcount-by-hash off `ConversationStore.referencedHashes`.
-export { BlobStore, blobUrl, hashBytes, type PutResult } from './blob-store.js';
+export { BlobStore, blobUrl, hashBytes, type PutResult } from './data/blob-store.js';
 
 // SQLite state — app-engine owns two migration ladders, each its own file +
 // connection:
@@ -218,18 +218,18 @@ export {
   GATEWAY_MIGRATIONS,
   RUNTIME_MIGRATIONS,
   type DatabaseProvider,
-} from './gateway-db.js';
+} from './stores/gateway-db.js';
 
 // Run-summary seam — the ledger emits one `RunSummary` per finished run
 // through a `RunSummarySink`. The concrete sink (`AnalyticsStore`) lives in the
 // `insights/` sub-module and is injected by the host; keeping the contract here
 // (package root, not `insights/`) is what keeps the run ledger free of a
 // reporting dependency and the boundary one-way (#151).
-export type { RunSummary, RunSummarySink } from './run-summary-sink.js';
+export type { RunSummary, RunSummarySink } from './conversation/run-summary-sink.js';
 
 // User-prefs store + HTTP route dispatcher. Wraps the gateway DB; mounted
 // by both hosts at `/_centraid-user`.
-export { UserStore, makeUserStoreRouteHandler } from './user-store.js';
+export { UserStore, makeUserStoreRouteHandler } from './stores/user-store.js';
 
 // Per-app `__centraid_settings` reader and the settings-merge pipeline that
 // turns layered prefs/settings into the `SettingsInject` payload baked into
@@ -242,9 +242,9 @@ export {
   automationEnabledKey,
   APP_SETTINGS_TABLE,
   RUNTIME_KEY_PREFIX,
-} from './app-settings.js';
-export { buildSettingsInject, KNOWN_KEYS } from './settings-merge.js';
-export type { SettingsInject } from './static-server.js';
+} from './settings/app-settings.js';
+export { buildSettingsInject, KNOWN_KEYS } from './settings/settings-merge.js';
+export type { SettingsInject } from './http/static-server.js';
 
 // Conversation ledger + ctx.state store (issue #190). The five tables
 // (`conversations`, `turns`, `items`, `attachments`, `automation_state`)
@@ -262,8 +262,8 @@ export {
   type CloseItemInput,
   type InsertAttachmentInput,
   type ListTurnsOptions,
-} from './conversation-store.js';
-export type { RunStreamEvent } from './run-stream-event.js';
+} from './conversation/conversation-store.js';
+export type { RunStreamEvent } from './conversation/run-stream-event.js';
 export type {
   Conversation,
   Turn,
@@ -274,7 +274,7 @@ export type {
   AutomationTriggerOrigin,
   ItemKind,
   RunKind,
-} from './conversation-schema.js';
+} from './conversation/conversation-schema.js';
 
 // Per-model token pricing. `run_nodes.cost_usd` is frozen at write time
 // via `costForUsage`; an unknown model yields `undefined` so the ledger

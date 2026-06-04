@@ -12,7 +12,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ConversationHistoryStore } from './conversation-history.js';
+import type { ConversationHistoryStore } from '../conversation/conversation-history.js';
 
 const ROUTE_PREFIX = '/_centraid-conversations';
 

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { AppId, RegistryEntry } from './types.js';
-import { isReservedAppId } from './security.js';
+import type { AppId, RegistryEntry } from '../types.js';
+import { isReservedAppId } from '../http/security.js';
 
 /**
  * Persistent registry of registered apps stored at `<appsDir>/_registry.json`.

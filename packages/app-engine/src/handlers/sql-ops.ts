@@ -12,7 +12,7 @@
  * same process.
  */
 
-import { readAppSchema } from './schema.js';
+import { readAppSchema } from '../data/schema.js';
 import { runQuery, RunQueryError } from './run-query.js';
 
 export class SqlOpRefusalError extends Error {

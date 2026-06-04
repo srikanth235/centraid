@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { trackChanges } from './change-tracker.js';
+import { trackChanges } from '../changes/change-tracker.js';
 
 /**
  * Execute one SQL statement against an app's `data.sqlite` for the Cloud →

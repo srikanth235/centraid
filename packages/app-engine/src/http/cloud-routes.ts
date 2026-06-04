@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
-import type { Registry } from './registry.js';
-import { appDataDir } from './app-paths.js';
-import { readTableRows, TableRowsError } from './table-rows.js';
-import { runQuery, RunQueryError } from './run-query.js';
-import { readLogs, type LogLevel } from './log-store.js';
+import type { Registry } from '../registry/registry.js';
+import { appDataDir } from '../registry/app-paths.js';
+import { readTableRows, TableRowsError } from '../data/table-rows.js';
+import { runQuery, RunQueryError } from '../handlers/run-query.js';
+import { readLogs, type LogLevel } from '../data/log-store.js';
 import { readBody, sendError, sendJson } from './http-utils.js';
 
 /**

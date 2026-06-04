@@ -22,7 +22,7 @@
  * stall a write.
  */
 
-import type { RuntimeLogger } from './runtime.js';
+import type { RuntimeLogger } from '../runtime.js';
 
 export interface AppChange {
   appId: string;

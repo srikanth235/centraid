@@ -20,7 +20,7 @@
 import path from 'node:path';
 import { readOp, writeOp, SqlOpRefusalError } from './sql-ops.js';
 import { RunQueryError } from './run-query.js';
-import type { RegistryEntry } from './types.js';
+import type { RegistryEntry } from '../types.js';
 import type { ToolErrorResult, ToolResult } from './dispatcher.js';
 
 /**

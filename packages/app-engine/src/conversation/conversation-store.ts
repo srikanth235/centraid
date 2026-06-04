@@ -36,7 +36,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { type DatabaseSync } from 'node:sqlite';
-import type { DatabaseProvider } from './gateway-db.js';
+import type { DatabaseProvider } from '../stores/gateway-db.js';
 import type { RunSummarySink } from './run-summary-sink.js';
 import type {
   Conversation,

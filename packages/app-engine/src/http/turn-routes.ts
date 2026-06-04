@@ -26,18 +26,18 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { sendError, readBody, MAX_BODY_BYTES } from './http-utils.js';
-import { readAppSchema } from './schema.js';
-import { buildExtraPrompt } from './build-extra-prompt.js';
+import { readAppSchema } from '../data/schema.js';
+import { buildExtraPrompt } from '../handlers/build-extra-prompt.js';
 import type {
   ConversationTurnInput,
   ConversationRunner,
   TurnStreamEvent,
-} from './conversation-runner.js';
-import type { ConversationHistoryStore, TurnNode } from './conversation-history.js';
-import type { Registry } from './registry.js';
-import { appDataDir } from './app-paths.js';
-import type { RegistryEntry } from './types.js';
-import { APP_MANIFEST_FILE, parseManifest, type Manifest } from './manifest.js';
+} from '../conversation/conversation-runner.js';
+import type { ConversationHistoryStore, TurnNode } from '../conversation/conversation-history.js';
+import type { Registry } from '../registry/registry.js';
+import { appDataDir } from '../registry/app-paths.js';
+import type { RegistryEntry } from '../types.js';
+import { APP_MANIFEST_FILE, parseManifest, type Manifest } from '../registry/manifest.js';
 
 /**
  * Validate a chat-session id. Reject anything that could escape a

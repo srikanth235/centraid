@@ -39,5 +39,5 @@ The `ChatHistoryStore` constructor no longer inlines `CREATE TABLE IF NOT EXISTS
 
 ## Out of scope
 
-- Adopting this for the per-app data DB. That path uses [packages/app-engine/src/migrate.ts](../packages/app-engine/src/migrate.ts), which is filesystem-driven by design (app authors ship their own `NNNN_*.sql` files inside the tarball); the two cases share the same `user_version` engine but legitimately need different shells.
+- Adopting this for the per-app data DB. That path uses [packages/app-engine/src/data/migrate.ts](../packages/app-engine/src/data/migrate.ts), which is filesystem-driven by design (app authors ship their own `NNNN_*.sql` files inside the tarball); the two cases share the same `user_version` engine but legitimately need different shells.
 - An actual schema change. This issue is purely the mechanism so future schema edits have a well-defined path; the first real migration will land with whichever feature needs it.

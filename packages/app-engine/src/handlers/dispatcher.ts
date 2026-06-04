@@ -12,7 +12,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { runHandler } from './handler-runner.js';
-import type { Registry } from './registry.js';
+import type { Registry } from '../registry/registry.js';
 import {
   APP_MANIFEST_FILE,
   ManifestError,
@@ -24,11 +24,11 @@ import {
   type Manifest,
   type ManifestActionEntry,
   type ManifestQueryEntry,
-} from './manifest.js';
-import { appDataDir } from './app-paths.js';
-import type { RegistryEntry } from './types.js';
+} from '../registry/manifest.js';
+import { appDataDir } from '../registry/app-paths.js';
+import type { RegistryEntry } from '../types.js';
 import type { ValidateFunction } from 'ajv';
-import { readAppSchema, type AppSchema } from './schema.js';
+import { readAppSchema, type AppSchema } from '../data/schema.js';
 import { runBuiltinRead, runBuiltinWrite } from './dispatcher-builtins.js';
 
 // Result envelopes — MCP-shaped (see header comment).
