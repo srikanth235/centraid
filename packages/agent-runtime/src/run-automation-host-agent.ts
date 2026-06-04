@@ -1,9 +1,9 @@
 /**
  * Default agent backends for the local automation runner.
  *
- * The production `defaultSpawnCli` lives here (separately from
+ * The production `defaultRunHostAgent` lives here (separately from
  * `run-automation-local.ts` which owns the orchestration loop). Tests
- * inject their own spawn via the `spawnCli` option and never hit this
+ * inject their own backend via the `runHostAgent` option and never hit this
  * file.
  *
  * Both runners are pointed at the per-fire mock-LLM URL + bearer token so
@@ -26,7 +26,7 @@ import { codexProviderOverrideArgs } from './codex-provider-config.js';
 
 export type LocalRunnerKind = 'codex' | 'claude-code';
 
-export interface SpawnCliInput {
+export interface RunHostAgentInput {
   /** Which agent backend to drive. */
   readonly kind: LocalRunnerKind;
   /**
@@ -54,7 +54,7 @@ export interface SpawnCliInput {
   readonly abortSignal: AbortSignal;
 }
 
-export interface SpawnCliResult {
+export interface RunHostAgentResult {
   /**
    * Subprocess exit code (codex), or null on signal kill / spawn error. The
    * in-process claude SDK path has no process exit code, so it synthesizes
@@ -67,9 +67,9 @@ export interface SpawnCliResult {
   readonly stderr: string;
 }
 
-export type SpawnCli = (input: SpawnCliInput) => Promise<SpawnCliResult>;
+export type RunHostAgent = (input: RunHostAgentInput) => Promise<RunHostAgentResult>;
 
-export const defaultSpawnCli: SpawnCli = async (input) =>
+export const defaultRunHostAgent: RunHostAgent = async (input) =>
   input.kind === 'claude-code' ? runClaudeAgentSdk(input) : spawnCodexExec(input);
 
 /**
@@ -87,7 +87,7 @@ export const defaultSpawnCli: SpawnCli = async (input) =>
  * preserves the non-interactive behavior of the old spawn: a detached turn
  * must never block on an approval prompt.
  */
-async function runClaudeAgentSdk(input: SpawnCliInput): Promise<SpawnCliResult> {
+async function runClaudeAgentSdk(input: RunHostAgentInput): Promise<RunHostAgentResult> {
   let mod: typeof import('@anthropic-ai/claude-agent-sdk');
   try {
     mod = await import('@anthropic-ai/claude-agent-sdk');
@@ -156,7 +156,7 @@ async function runClaudeAgentSdk(input: SpawnCliInput): Promise<SpawnCliResult> 
  * tool dispatch. The bearer token flows via env under the provider's
  * `env_key`, never on disk.
  */
-async function spawnCodexExec(input: SpawnCliInput): Promise<SpawnCliResult> {
+async function spawnCodexExec(input: RunHostAgentInput): Promise<RunHostAgentResult> {
   const env: NodeJS.ProcessEnv = { ...process.env };
   env.CENTRAID_MOCK_KEY = input.mockBearerToken;
   // `codex exec` has no tool-allowlist flag; the mock-LLM server only ever
@@ -195,7 +195,7 @@ async function spawnCodexExec(input: SpawnCliInput): Promise<SpawnCliResult> {
   };
   input.abortSignal.addEventListener('abort', abortListener, { once: true });
 
-  return await new Promise<SpawnCliResult>((resolve) => {
+  return await new Promise<RunHostAgentResult>((resolve) => {
     proc.on('exit', (code) => {
       input.abortSignal.removeEventListener('abort', abortListener);
       resolve({

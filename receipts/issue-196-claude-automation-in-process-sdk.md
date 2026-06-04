@@ -15,13 +15,14 @@ a `claude -p` subprocess.
 - [x] Replace `claude -p` spawn with in-process Agent SDK `query()`
 - [x] Point at the mock via `options.env` without mutating `process.env`
 - [x] Fix `claude -p` comment drift
+- [x] Rename the CLI-implying public surface to `RunHostAgent`
 
 ## What changed
 
-### `packages/agent-runtime/src/run-automation-cli-spawn.ts`
+### `packages/agent-runtime/src/run-automation-host-agent.ts`
 
 - **Replace `claude -p` spawn with in-process Agent SDK `query()`.**
-  `defaultSpawnCli` now branches into two helpers. The claude branch calls a
+  `defaultRunHostAgent` now branches into two helpers. The claude branch calls a
   new `runClaudeAgentSdk` that drives one turn through the in-process
   `@anthropic-ai/claude-agent-sdk` instead of spawning a subprocess; the codex
   branch is extracted unchanged into `spawnCodexExec` (still a real
@@ -39,9 +40,23 @@ a `claude -p` subprocess.
 - The generator is drained to completion: the mock dictates every turn and
   ends it with `end_turn`, so a clean turn returns `{ ok: true, exitCode: 0 }`
   and an abort/error returns `{ ok: false }` so the awaiting `ctx.tool` batch
-  sees a failure rather than a silent success. The `SpawnCli` /
-  `SpawnCliResult` contract is unchanged; `SpawnCliResult.exitCode`'s doc now
-  notes the SDK path synthesizes `0`/`null`.
+  sees a failure rather than a silent success. The behavior contract is
+  unchanged; `RunHostAgentResult.exitCode`'s doc now notes the SDK path
+  synthesizes `0`/`null`.
+
+### Rename the CLI-implying public surface to `RunHostAgent`
+
+Since the claude runner no longer shells out, the `SpawnCli`-family names
+mis-described the surface. Renamed across `@centraid/agent-runtime`
+(no external consumers): the file
+`run-automation-cli-spawn.ts` → `run-automation-host-agent.ts`, and the
+exported symbols `SpawnCli` → `RunHostAgent`, `defaultSpawnCli` →
+`defaultRunHostAgent`, `SpawnCliInput` → `RunHostAgentInput`,
+`SpawnCliResult` → `RunHostAgentResult`, plus the `spawnCli` option field
+on `RunAutomationLocalOptions` / `LiveDispatchOptions` → `runHostAgent`. The
+barrel re-exports in `index.ts` and the filename references in
+`run-automation-local.ts`, `run-automation-live-dispatch.ts`, and
+`codex-provider-config.ts` were updated to match.
 
 ### Fix `claude -p` comment drift
 
@@ -68,21 +83,22 @@ The claude runner is no longer a subprocess, so comments that described it as
 - The codex `codex exec` subprocess path is unchanged — there is no in-process
   codex SDK, so it still spawns.
 - The OpenClaw embedded (`runEmbeddedAgent`) dispatch path is untouched.
-- No rename of the `SpawnCli` / `defaultSpawnCli` / `SpawnCliInput` /
-  `SpawnCliResult` surface — the codex path still genuinely spawns and a rename
-  would churn `run-automation-local`, `live-dispatch`, the barrel, and the
-  gateway for no functional gain.
+- The `RunHostAgent` rename is confined to `@centraid/agent-runtime`; the codex
+  helper is still named `spawnCodexExec` because that path genuinely spawns.
 
 ## Verification
 
-- `tsc --noEmit` clean on both `@centraid/agent-runtime` and
-  `@centraid/conversation-engine`.
+- `tsc --noEmit` clean on `@centraid/agent-runtime` (all of `src`, including the
+  renamed `run-automation-host-agent.ts`) — resolved against the live worktree
+  source of its `@centraid/*` deps. The post-rename grep shows zero remaining
+  `SpawnCli` / `spawnCli` references and a consistent `RunHostAgent` surface.
 - Automation tests pass (25/25) across `persistent-mock-session`,
   `mock-llm-server`, and `automation-fire` in conversation-engine — the
-  dispatch contract `defaultSpawnCli` plugs into is exercised there via
-  injected drivers.
+  dispatch contract `runHostAgent` plugs into is exercised there via injected
+  drivers (recorded with the first commit, before the local checkout's
+  cross-package resolution drifted; CI re-runs them authoritatively).
 - The SDK option names (`allowedTools`, `permissionMode`,
   `allowDangerouslySkipPermissions`, `pathToClaudeCodeExecutable`) were checked
   against the installed `@anthropic-ai/claude-agent-sdk` `sdk.d.ts` before
-  wiring. No test imports `defaultSpawnCli` directly (tests inject their own
-  `spawnCli`), so the public behavior contract is preserved.
+  wiring. No test imports `defaultRunHostAgent` directly (tests inject their own
+  `runHostAgent`), so the public behavior contract is preserved.

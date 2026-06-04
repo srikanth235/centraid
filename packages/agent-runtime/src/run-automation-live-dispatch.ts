@@ -39,10 +39,10 @@ import {
 } from '@centraid/conversation-engine';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 import {
-  defaultSpawnCli,
+  defaultRunHostAgent,
   type LocalRunnerKind,
-  type SpawnCli,
-} from './run-automation-cli-spawn.js';
+  type RunHostAgent,
+} from './run-automation-host-agent.js';
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the CLI's cwd. */
@@ -51,7 +51,7 @@ export interface LiveDispatchOptions {
   automationId: string;
   runId: string;
   runner: LocalRunnerKind;
-  spawnCli: SpawnCli;
+  runHostAgent: RunHostAgent;
   /** Manifest `requires.tools` allowlist forwarded to the CLI. */
   toolsAllow: readonly string[];
   onLog: (level: 'info' | 'warn' | 'error', msg: string) => void;
@@ -123,7 +123,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   // `codex exec` subprocess at the mock for the lifetime of the fire. Resolves
   // when the agent turn ends (`close()` stages the final `end_turn`).
   const driveAgent: AgentDriver = async (input) => {
-    const outcome = await opts.spawnCli({
+    const outcome = await opts.runHostAgent({
       kind: opts.runner,
       mockBaseUrl: input.mockBaseUrl,
       mockBearerToken: input.mockBearerToken,
@@ -248,4 +248,4 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   };
 }
 
-export { defaultSpawnCli };
+export { defaultRunHostAgent };

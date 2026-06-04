@@ -407,3 +407,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-2d64cff5a78-1780558746-4 | 2d64cff5-a78a-4b08-afe1-35eaef23a9cd | #192 | interrupt | structural |  | feat(agent-runtime): enumerate claude models via SDK supportedModels() (#192) -… |
 | steer-2d64cff5a78-1780558746-5 | 2d64cff5-a78a-4b08-afe1-35eaef23a9cd | #192 | correction | lexical | wait, this needs to be done on every gateway start not lazily and also use /frontend-design for better UI/UX | feat(agent-runtime): enumerate claude models via SDK supportedModels() (#192) -… |
 | steer-2d64cff5a78-1780559844-1 | 2d64cff5-a78a-4b08-afe1-35eaef23a9cd | #192 | correction | classifier | User flagged unresolved merge conflicts the agent missed | chore: merge origin/main into the host-tool catalog branch (#192) |
+| steer-2089b9ded90-1780579751-1 | 2089b9de-d902-441f-ad71-0dace231f3da | #196 | correction | classifier | Public API names still say CLI though it's now in-process SDK |  |

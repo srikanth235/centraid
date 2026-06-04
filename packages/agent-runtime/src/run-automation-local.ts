@@ -25,20 +25,20 @@ import {
   type OpenAutomationDispatch,
 } from '@centraid/conversation-engine';
 import {
-  defaultSpawnCli,
+  defaultRunHostAgent,
   type LocalRunnerKind,
-  type SpawnCli,
-  type SpawnCliInput,
-  type SpawnCliResult,
-} from './run-automation-cli-spawn.js';
+  type RunHostAgent,
+  type RunHostAgentInput,
+  type RunHostAgentResult,
+} from './run-automation-host-agent.js';
 import { startLiveDispatch } from './run-automation-live-dispatch.js';
 
 export {
-  defaultSpawnCli,
+  defaultRunHostAgent,
   type LocalRunnerKind,
-  type SpawnCli,
-  type SpawnCliInput,
-  type SpawnCliResult,
+  type RunHostAgent,
+  type RunHostAgentInput,
+  type RunHostAgentResult,
 };
 // The run record shape lives with the spine now; re-export so existing
 // agent-runtime consumers keep importing it from here.
@@ -73,7 +73,7 @@ export interface RunAutomationLocalOptions {
   /** Hard timeout. Defaults to 5 minutes. */
   timeoutMs?: number;
   /** Override spawn for tests. */
-  spawnCli?: SpawnCli;
+  runHostAgent?: RunHostAgent;
   /** Optional logger. */
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
   /** Live run-stream sink (issue #158); forwarded to the fire spine. */
@@ -108,7 +108,7 @@ export async function runAutomationLocal(
   opts: RunAutomationLocalOptions,
 ): Promise<{ outcome: AutomationHandlerOutcome; record: AutomationRunRecord }> {
   const runner: LocalRunnerKind = opts.runner ?? 'codex';
-  const spawnCli = opts.spawnCli ?? defaultSpawnCli;
+  const runHostAgent = opts.runHostAgent ?? defaultRunHostAgent;
 
   // The injected dispatch surface: a fresh mock-LLM server + CLI spawn per
   // fire. The runner kind + spawn fn are captured here, so onFailure cascades
@@ -120,7 +120,7 @@ export async function runAutomationLocal(
       automationId: args.automationRef,
       runId: args.runId,
       runner,
-      spawnCli,
+      runHostAgent,
       toolsAllow: args.toolsAllow,
       onLog: args.onLog,
     });

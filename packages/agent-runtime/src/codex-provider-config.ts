@@ -10,7 +10,7 @@
  * on top of the user's codex".
  *
  * The sole caller today is the in-process mock-LLM server that drives
- * automation/tool-dispatch runs (`run-automation-cli-spawn.ts`,
+ * automation/tool-dispatch runs (`run-automation-host-agent.ts`,
  * `host-tools.ts`): codex is pointed at the loopback mock endpoint. The
  * bearer token never appears in the overrides — it flows through the child
  * env under `envKey`.
