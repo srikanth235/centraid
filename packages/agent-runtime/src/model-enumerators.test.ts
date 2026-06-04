@@ -1,54 +1,53 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { parseClaudeModelList } from './model-enumerators.ts';
+import { mapClaudeModels } from './model-enumerators.ts';
 import { parseModelList } from './codex-model-list.ts';
 
-// ---- claude `-p` output parsing ----
+// ---- claude SDK `supportedModels()` mapping ----
 
-test('claude: parses a raw JSON array', () => {
-  const out = '["claude-opus-4-8","claude-sonnet-4-6","claude-haiku-4-5-20251001"]';
+test('claude: prefers description for name, falls back to displayName, flags default', () => {
+  const infos = [
+    {
+      value: 'default',
+      displayName: 'Default (recommended)',
+      description: 'Opus 4.7 with 1M context · Most capable for complex work',
+    },
+    { value: 'sonnet', displayName: 'Sonnet' }, // no description → falls back to displayName
+    { value: 'haiku' }, // neither → no name
+  ];
+  assert.deepEqual(mapClaudeModels(infos), [
+    {
+      id: 'default',
+      name: 'Opus 4.7 with 1M context · Most capable for complex work',
+      default: true,
+    },
+    { id: 'sonnet', name: 'Sonnet' },
+    { id: 'haiku' },
+  ]);
+});
+
+test('claude: drops name when it equals the id', () => {
+  assert.deepEqual(mapClaudeModels([{ value: 'sonnet', description: 'sonnet' }]), [
+    { id: 'sonnet' },
+  ]);
+});
+
+test('claude: dedupes by id and skips entries with no usable id', () => {
+  const infos = [
+    { value: 'sonnet', description: 'Sonnet 4.6' },
+    { value: 'sonnet', description: 'dupe' },
+    { value: '  ' },
+    { value: 42 },
+    {},
+  ];
   assert.deepEqual(
-    parseClaudeModelList(out).map((m) => m.id),
-    ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
+    mapClaudeModels(infos).map((m) => m.id),
+    ['sonnet'],
   );
 });
 
-test('claude: strips a ```json code fence', () => {
-  const out = '```json\n["claude-opus-4-8", "claude-sonnet-4-6"]\n```';
-  assert.deepEqual(
-    parseClaudeModelList(out).map((m) => m.id),
-    ['claude-opus-4-8', 'claude-sonnet-4-6'],
-  );
-});
-
-test('claude: extracts the array out of surrounding prose', () => {
-  const out = 'Sure! Here are the models:\n["claude-opus-4-8"]\nLet me know if you need more.';
-  assert.deepEqual(
-    parseClaudeModelList(out).map((m) => m.id),
-    ['claude-opus-4-8'],
-  );
-});
-
-test('claude: rejects non-claude ids and dedupes', () => {
-  const out = '["claude-opus-4-8","gpt-5","claude-opus-4-8","",42]';
-  assert.deepEqual(
-    parseClaudeModelList(out).map((m) => m.id),
-    ['claude-opus-4-8'],
-  );
-});
-
-test('claude: empty / array-less garbage → []', () => {
-  assert.deepEqual(parseClaudeModelList(''), []);
-  assert.deepEqual(parseClaudeModelList('not json at all'), []);
-  assert.deepEqual(parseClaudeModelList('{"foo":"bar"}'), []);
-});
-
-test('claude: leniently extracts an array embedded in an object wrapper', () => {
-  // claude -p returns a bare array, but if it ever wraps it we still recover.
-  assert.deepEqual(
-    parseClaudeModelList('{"models":["claude-opus-4-8"]}').map((m) => m.id),
-    ['claude-opus-4-8'],
-  );
+test('claude: empty input → []', () => {
+  assert.deepEqual(mapClaudeModels([]), []);
 });
 
 // ---- codex `model/list` result parsing ----

@@ -127,6 +127,10 @@ export interface CentraidAgentsStatus {
   codexModels?: CentraidRunnerModel[];
   /** Models Claude Code can serve — catalog cache or default seed. */
   claudeModels?: CentraidRunnerModel[];
+  /** Tools codex exposes (builtins + MCP), from the gateway catalog. */
+  codexTools?: CentraidHostTool[];
+  /** Tools Claude Code exposes (builtins + MCP), from the gateway catalog. */
+  claudeTools?: CentraidHostTool[];
 }
 
 // The renderer-side chat event union is the gateway's native `TurnStreamEvent`
@@ -675,6 +679,24 @@ export interface CentraidRunnerModel {
   default?: boolean;
   /** Capability tier for grouping concrete models in the picker. */
   tier?: 'smart' | 'balanced' | 'fast';
+}
+
+/**
+ * One host tool a runner exposes — a native builtin (`Read`) or an MCP tool
+ * (`github.list_pull_requests`). Enumerated gateway-side and surfaced in
+ * Settings → Agents so the user can see what the builder can reach.
+ */
+export interface CentraidHostTool {
+  /** Callable name as the agent sees it. */
+  name: string;
+  /** `native` builtin or `mcp`-backed — the panel groups by this. */
+  source: 'native' | 'mcp';
+  /** MCP server id, when `source === 'mcp'`. */
+  server?: string;
+  /** One-line description, when the runtime reports one. */
+  description?: string;
+  /** The tool's JSON args schema, when it takes caller-supplied arguments. */
+  inputSchema?: unknown;
 }
 
 /** Preflight snapshot returned by `getRunnerStatus`. */

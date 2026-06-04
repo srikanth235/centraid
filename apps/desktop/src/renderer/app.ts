@@ -5703,9 +5703,13 @@ import {
     // prefs loader). Switching writes that pref back; the badges below
     // reflect THIS selection, not a hardcoded codex-first ordering.
     type ActiveRunnerKind = 'codex' | 'claude-code';
+    type AgentTool = NonNullable<AuthStatusSnapshot['claudeTools']>[number];
     let selectedRunnerKind: ActiveRunnerKind = 'codex';
     let lastStatus: AuthStatusSnapshot | null = null;
     let switchingRunner = false;
+    // Which agents' tool lists are expanded — kept across re-renders so a
+    // Refresh doesn't collapse an open panel.
+    const toolsOpen = new Set<ActiveRunnerKind>();
 
     // Persist the picked agent and re-render. Optimistic: flip the local
     // selection first so the badges move immediately, revert on failure.
@@ -5845,6 +5849,50 @@ import {
       // Each agent is a row in the panel: accent dot + name/version on the left,
       // its OWN default-model picker on the right. Activation is the switch
       // above — the row isn't clickable, so the select never fights a tap.
+      // Group an agent's tools into a "Built-in" group then one group per MCP
+      // server (servers sorted), each a labelled list of name + optional args
+      // chip + description. Returns the group elements (empty array → caller
+      // shows the empty state).
+      const renderToolGroups = (tools: readonly AgentTool[]): HTMLElement[] => {
+        const native = tools.filter((t) => t.source === 'native');
+        const mcp = new Map<string, AgentTool[]>();
+        for (const t of tools) {
+          if (t.source !== 'mcp') continue;
+          const server = t.server ?? 'mcp';
+          const list = mcp.get(server) ?? [];
+          list.push(t);
+          mcp.set(server, list);
+        }
+        const groups: Array<{ label: string; items: AgentTool[] }> = [];
+        if (native.length) groups.push({ label: 'Built-in', items: native });
+        for (const server of [...mcp.keys()].sort((a, b) => a.localeCompare(b))) {
+          groups.push({ label: server, items: mcp.get(server) ?? [] });
+        }
+        return groups.map((g) => {
+          const items = g.items
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((t) =>
+              el('div', { class: 'tool-item' }, [
+                el('div', { class: 'tool-item-head' }, [
+                  el('span', { class: 'tool-name' }, t.name),
+                  t.inputSchema !== undefined
+                    ? el('span', { class: 'tool-args', title: 'Takes JSON arguments' }, 'args')
+                    : false,
+                ]),
+                t.description ? el('span', { class: 'tool-desc' }, t.description) : false,
+              ]),
+            );
+          return el('div', { class: 'tools-group' }, [
+            el('div', { class: 'tools-group-head' }, [
+              el('span', { class: 'tools-group-label' }, g.label),
+              el('span', { class: 'tools-group-count' }, String(g.items.length)),
+            ]),
+            el('div', { class: 'tools-list' }, items),
+          ]);
+        });
+      };
+
       const providerCard = (params: {
         kind: ActiveRunnerKind;
         title: string;
@@ -5853,6 +5901,7 @@ import {
         active: boolean;
         accent: string;
         models: AgentModelOpt[];
+        tools: AgentTool[];
       }): HTMLElement => {
         const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
 
@@ -5902,6 +5951,34 @@ import {
           void window.CentraidApi.saveSettings({ chatModelByRunner: { [params.kind]: v } });
         });
 
+        // Tools disclosure — a quiet "N tools" affordance that expands a
+        // grouped list under the row. Open state persists across re-renders.
+        const isOpen = toolsOpen.has(params.kind);
+        const toolCount = params.tools.length;
+        const toggle = el('button', {
+          class: 'agent-tools-toggle',
+          type: 'button',
+          'aria-expanded': isOpen ? 'true' : 'false',
+          title: 'Show tools this agent exposes (builtins + MCP)',
+        }) as HTMLButtonElement;
+        toggle.innerHTML =
+          Icon.Code({ size: 12 }) +
+          `<span class="agent-tools-count">${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}</span>` +
+          `<span class="agent-tools-chev">${Icon.ChevronDown({ size: 12 })}</span>`;
+
+        const groups = renderToolGroups(params.tools);
+        const panel = el('div', { class: 'agent-tools', hidden: isOpen ? null : 'true' }, [
+          groups.length
+            ? el('div', { class: 'tools-groups' }, groups)
+            : el(
+                'div',
+                { class: 'agent-tools-empty' },
+                toolCount === 0
+                  ? 'No tools scanned yet — use Refresh tools below.'
+                  : 'No tools to show.',
+              ),
+        ]) as HTMLElement;
+
         const row = el(
           'div',
           {
@@ -5918,11 +5995,28 @@ import {
               ]),
               el('span', { class: 'agent-row-sub' }, params.subtitle),
             ]),
+            el('div', { class: 'agent-row-tools' }, [toggle]),
             el('div', { class: 'agent-row-model' }, [select]),
           ],
         );
-        row.style.setProperty('--row-accent', params.accent);
-        return row;
+
+        const entry = el('div', { class: 'agent-entry', 'data-tools-open': isOpen ? 'true' : '' }, [
+          row,
+          panel,
+        ]);
+        entry.style.setProperty('--row-accent', params.accent);
+
+        toggle.addEventListener('click', () => {
+          const next = !toolsOpen.has(params.kind);
+          if (next) toolsOpen.add(params.kind);
+          else toolsOpen.delete(params.kind);
+          toggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+          if (next) panel.removeAttribute('hidden');
+          else panel.setAttribute('hidden', 'true');
+          entry.dataset.toolsOpen = next ? 'true' : '';
+        });
+
+        return entry;
       };
 
       const cards = RUNNERS.map((runner) => {
@@ -5933,6 +6027,7 @@ import {
           ? (ver ?? `${runner.bin} · detected`)
           : `${runner.bin} CLI not found on PATH`;
         const models = (runner.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
+        const tools = (runner.kind === 'codex' ? status.codexTools : status.claudeTools) ?? [];
         return providerCard({
           kind: runner.kind,
           title: runner.title,
@@ -5941,20 +6036,23 @@ import {
           active: isActive,
           accent: runner.accent,
           models,
+          tools,
         });
       });
       agentCardsHost.replaceChildren(...cards);
     };
 
-    // Refresh re-probes CLI availability AND re-enumerates each agent's models
-    // live (?refresh=1), so the per-agent pickers update without a restart.
-    const refreshBtn = el('button', {
+    // Two independent refreshes. Models (?refresh=1) is a zero-token CLI
+    // self-report — fast. Tools (?refreshTools=1) re-probes each agent's tool
+    // surface by spawning the CLI against a mock server, so it's slower and
+    // kept on its own button. Both re-render the panel in place.
+    const refreshModelsBtn = el('button', {
       class: 'btn btn-soft',
       type: 'button',
     }) as HTMLButtonElement;
-    refreshBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Refresh</span>';
-    refreshBtn.addEventListener('click', async () => {
-      refreshBtn.setAttribute('disabled', '');
+    refreshModelsBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Refresh models</span>';
+    refreshModelsBtn.addEventListener('click', async () => {
+      refreshModelsBtn.setAttribute('disabled', '');
       renderAuthStatus(null);
       try {
         renderAuthStatus(await getAgentsStatus({ refresh: true }));
@@ -5966,13 +6064,34 @@ import {
           claudeAvailable: false,
         });
       } finally {
-        refreshBtn.removeAttribute('disabled');
+        refreshModelsBtn.removeAttribute('disabled');
+      }
+    });
+
+    const refreshToolsBtn = el('button', {
+      class: 'btn btn-soft',
+      type: 'button',
+    }) as HTMLButtonElement;
+    refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Refresh tools</span>';
+    refreshToolsBtn.addEventListener('click', async () => {
+      refreshToolsBtn.setAttribute('disabled', '');
+      refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Scanning tools…</span>';
+      try {
+        // Keep the current snapshot visible (don't blank the panel) — tools can
+        // take a few seconds to probe; only the tool lists change.
+        renderAuthStatus(await getAgentsStatus({ refreshTools: true }));
+        showToast('Tools refreshed');
+      } catch (err) {
+        showToast(`Tool refresh failed: ${String(err)}`);
+      } finally {
+        refreshToolsBtn.removeAttribute('disabled');
+        refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Refresh tools</span>';
       }
     });
 
     pageHosts.providers.append(
       drawerGroup('Connected', [authStatusHost]),
-      el('div', { class: 'sheet-actions' }, [refreshBtn]),
+      el('div', { class: 'sheet-actions' }, [refreshModelsBtn, refreshToolsBtn]),
     );
 
     // Initial load — read the active-runner pref, the agents snapshot (now

@@ -64,7 +64,7 @@ test('runs the turn in the draft worktree with the union of tools + builder prom
     prefsLoader: async () => ({ kind: 'codex' }),
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    enumerateTools: async () => [],
+    resolveTools: async () => [],
     runTurn: async (input, config): Promise<TurnResult> => {
       captured = { input, config };
       input.onEvent({ type: 'assistant.delta', delta: 'ok' });
@@ -111,7 +111,7 @@ test('mints a pending webhook authored during the turn and surfaces it once', as
     prefsLoader: async () => ({ kind: 'codex' }),
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    enumerateTools: async () => [],
+    resolveTools: async () => [],
     runTurn: async (input): Promise<TurnResult> => {
       // The agent authors an automation with a PENDING webhook trigger —
       // it can't mint crypto-random credentials itself.
@@ -178,7 +178,7 @@ test('errors when no coding agent is configured', async () => {
     prefsLoader: async () => undefined,
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    enumerateTools: async () => [],
+    resolveTools: async () => [],
     runTurn: async (): Promise<TurnResult> => {
       throw new Error('should not be called');
     },

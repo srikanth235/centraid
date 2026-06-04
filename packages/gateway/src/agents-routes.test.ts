@@ -60,3 +60,41 @@ test('a throwing resolver degrades that agent to an empty list', async () => {
   assert.deepEqual(s.codexModels, []);
   assert.deepEqual(s.claudeModels, []);
 });
+
+test('omits per-agent tools when no tools resolver is supplied', async () => {
+  const s = await readAgentsStatus();
+  assert.equal('codexTools' in s, false);
+  assert.equal('claudeTools' in s, false);
+});
+
+test('attaches each agent’s tools and threads refreshTools independently', async () => {
+  const calls: Array<[string, boolean]> = [];
+  const s = await readAgentsStatus({
+    resolveModels: async () => [], // models present but NOT refreshed
+    resolveTools: async (kind, refresh) => {
+      calls.push([kind, refresh]);
+      return [{ name: kind === 'codex' ? 'exec_command' : 'Read', source: 'native' }];
+    },
+    refreshTools: true, // tools refreshed; refresh (models) defaults false
+  });
+  assert.deepEqual(s.codexTools, [{ name: 'exec_command', source: 'native' }]);
+  assert.deepEqual(s.claudeTools, [{ name: 'Read', source: 'native' }]);
+  // refreshTools (not refresh) reached the tools resolver for both agents.
+  assert.deepEqual(
+    calls.sort((a, b) => a[0].localeCompare(b[0])),
+    [
+      ['claude-code', true],
+      ['codex', true],
+    ],
+  );
+});
+
+test('a throwing tools resolver degrades that agent to an empty list', async () => {
+  const s = await readAgentsStatus({
+    resolveTools: async () => {
+      throw new Error('boom');
+    },
+  });
+  assert.deepEqual(s.codexTools, []);
+  assert.deepEqual(s.claudeTools, []);
+});
