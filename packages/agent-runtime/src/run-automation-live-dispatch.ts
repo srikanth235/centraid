@@ -2,7 +2,7 @@
  * Live `ctx.tool` / `ctx.agent` dispatch for the local automation
  * runner.
  *
- * Split out of `run-automation-local.ts` so that file can stay focused
+ * Split out of `run-automation.ts` so that file can stay focused
  * on the per-fire lifecycle (manifest load, audit store, onFailure
  * cascade). This module owns the "live" side: the persistent mock-LLM
  * session, the single long-lived agent turn that executes every

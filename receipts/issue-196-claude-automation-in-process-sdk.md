@@ -16,6 +16,7 @@ a `claude -p` subprocess.
 - [x] Point at the mock via `options.env` without mutating `process.env`
 - [x] Fix `claude -p` comment drift
 - [x] Rename the CLI-implying public surface to `RunHostAgent`
+- [x] Rename `run-automation-local.ts` to `run-automation.ts`
 
 ## What changed
 
@@ -53,10 +54,23 @@ mis-described the surface. Renamed across `@centraid/agent-runtime`
 exported symbols `SpawnCli` → `RunHostAgent`, `defaultSpawnCli` →
 `defaultRunHostAgent`, `SpawnCliInput` → `RunHostAgentInput`,
 `SpawnCliResult` → `RunHostAgentResult`, plus the `spawnCli` option field
-on `RunAutomationLocalOptions` / `LiveDispatchOptions` → `runHostAgent`. The
+on `RunAutomationOptions` / `LiveDispatchOptions` → `runHostAgent`. The
 barrel re-exports in `index.ts` and the filename references in
-`run-automation-local.ts`, `run-automation-live-dispatch.ts`, and
+`run-automation.ts`, `run-automation-live-dispatch.ts`, and
 `codex-provider-config.ts` were updated to match.
+
+### Rename `run-automation-local.ts` to `run-automation.ts`
+
+The `-local` qualifier was redundant — it's the package's automation-fire entry
+point. Renamed the file `run-automation-local.ts` → `run-automation.ts` and its
+exports `runAutomationLocal` → `runAutomation`, `RunAutomationLocalOptions` →
+`RunAutomationOptions`. Updated the consumer (`@centraid/gateway`'s
+`build-gateway.ts`) and the doc-comment references in `@centraid/agent-runtime`
+(`index.ts`, `run-automation-host-agent.ts`, `run-automation-live-dispatch.ts`),
+`@centraid/gateway` (`automations-routes.ts`), and `@centraid/automation`
+(`fire.ts`, `index.ts`, `in-process-scheduler.ts`). The gateway's existing
+`runAutomation` run-now *field* is an object property in a different scope, so
+it coexists without collision.
 
 ### Fix `claude -p` comment drift
 

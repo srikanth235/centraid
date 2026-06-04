@@ -1,6 +1,6 @@
 /**
- * Local-side automation fire (issue #98) — the agent-runtime wrapper over the
- * fire spine (issue #147, Concern 2).
+ * Local-side automation fire (issue #98) — `runAutomation`, the agent-runtime
+ * wrapper over the fire spine (issue #147, Concern 2).
  *
  * The per-fire orchestration (resolve the automation, open its ledger, run
  * `handler.js`, cascade `onFailure`) lives in `@centraid/automation`'s `runFire`
@@ -39,7 +39,7 @@ export {
 // agent-runtime's stable name so existing consumers keep importing it here.
 export type AutomationRunRecord = automation.RunRecord;
 
-export interface RunAutomationLocalOptions {
+export interface RunAutomationOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
   automationRef: string;
   /**
@@ -99,8 +99,8 @@ export interface RunAutomationLocalOptions {
  * missing automation app throws; a handler failure surfaces in
  * `outcome.ok === false`.
  */
-export async function runAutomationLocal(
-  opts: RunAutomationLocalOptions,
+export async function runAutomation(
+  opts: RunAutomationOptions,
 ): Promise<{ outcome: automation.HandlerOutcome; record: AutomationRunRecord }> {
   const runner: LocalRunnerKind = opts.runner ?? 'codex';
   const runHostAgent = opts.runHostAgent ?? defaultRunHostAgent;

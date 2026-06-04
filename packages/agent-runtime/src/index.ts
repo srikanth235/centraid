@@ -107,15 +107,15 @@ export {
 // dispatch surface, driving the host agent in-process (Claude Agent SDK) or
 // as a `codex exec` subprocess.
 export {
-  runAutomationLocal,
+  runAutomation,
   defaultRunHostAgent,
-  type RunAutomationLocalOptions,
+  type RunAutomationOptions,
   type AutomationRunRecord,
   type LocalRunnerKind,
   type RunHostAgent,
   type RunHostAgentInput,
   type RunHostAgentResult,
-} from './run-automation-local.js';
+} from './run-automation.js';
 
 // Scheduling lives in `@centraid/automation` now (issue #149): the gateway
 // owns an in-process cron `InProcessScheduler` and fires automations while it

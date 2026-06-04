@@ -16,7 +16,7 @@
  * injected, so the firing logic is unit-testable by calling `tick()` with a
  * mocked clock. The fire effect is a `(ref) => …` callback — the host wires
  * it to its execution surface (the gateway points it at
- * `runAutomationLocal`).
+ * `runAutomation`).
  *
  * Implements `Host`, keyed by each automation's globally-unique
  * `<ownerApp>/<id>` ref. Only the gateway's `reconcile(rows)` path is

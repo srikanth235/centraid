@@ -6,13 +6,13 @@
  * `handler.js`, and cascading `onFailure` only ever touch app-engine
  * primitives (`parseRef`, `AgentRunsStore`,
  * `runHandler`). That spine used to live in
- * `agent-runtime/run-automation-local.ts`; the only thing it genuinely
+ * `agent-runtime/run-automation.ts`; the only thing it genuinely
  * needed from agent-runtime was the live `ctx.tool` / `ctx.agent` dispatch
  * surface (the mock-LLM server + CLI spawn). So the spine moves down and the
  * dispatch surface is injected via `openDispatch` — the same dependency
  * inversion the `Host` / `ConversationRunner` seams already use.
  *
- * agent-runtime's `runAutomationLocal` is now a thin wrapper that builds the
+ * agent-runtime's `runAutomation` is now a thin wrapper that builds the
  * `openDispatch` closure (capturing the runner kind + CLI spawn) and calls
  * `runFire`. A second host (e.g. openclaw) can inject its own
  * dispatch surface instead of reimplementing the spine.

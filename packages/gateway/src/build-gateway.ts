@@ -55,7 +55,7 @@ import {
 import * as automation from '@centraid/automation';
 import {
   makeConversationRunner,
-  runAutomationLocal,
+  runAutomation,
   runPreflight,
   resolveRunnerModels,
   resolveRunnerTools,
@@ -85,7 +85,7 @@ export interface BuildGatewayOptions {
   /**
    * The cron scheduler `start()` runs (issue #149) is gateway-owned and
    * in-process: a single minute-boundary timer fires enabled cron
-   * automations through the same `runAutomationLocal` path as "run now".
+   * automations through the same `runAutomation` path as "run now".
    * There is no OS scheduler; missed minutes during downtime are skipped
    * (n8n semantics — no backfill). Defaults to a fresh `automation.InProcessScheduler`;
    * inject one (e.g. a spy) only for tests.
@@ -134,7 +134,7 @@ export interface BuildGatewayOptions {
   runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   /**
    * Override for how an automation is fired (Plane B). The gateway's default
-   * runs the handler through `runAutomationLocal` (codex/claude CLI puppet).
+   * runs the handler through `runAutomation` (codex/claude CLI puppet).
    * The OpenClaw plugin injects an in-process fire (`runOpenclawFire`:
    * `ctx.tool` → `callGatewayTool`, `ctx.agent` → simple-completion) here, so
    * BOTH scheduled (cron) and manual (run-now) fires execute in OpenClaw's
@@ -511,7 +511,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
           void (async () => {
             const prefs = await prefsLoader();
-            await runAutomationLocal({
+            await runAutomation({
               automationRef,
               runId,
               appsDir: paths.appsDir,

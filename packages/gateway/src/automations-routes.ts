@@ -57,7 +57,7 @@ export interface AutomationsRouteOptions {
   insights: InsightsStore;
   /**
    * Fire an automation now (fire-and-forget). Injected so `serve()` wires
-   * `runAutomationLocal` with the gateway's dirs + runner, and tests can
+   * `runAutomation` with the gateway's dirs + runner, and tests can
    * stub it. The runId is minted by the route and passed in.
    */
   runAutomation: (input: { automationRef: string; runId: string }) => void;

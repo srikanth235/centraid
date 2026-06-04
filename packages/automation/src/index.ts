@@ -162,7 +162,7 @@ export {
 } from './handler-lint.js';
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
-// dispatch surface, cascade `onFailure`. agent-runtime's `runAutomationLocal`
+// dispatch surface, cascade `onFailure`. agent-runtime's `runAutomation`
 // is a thin wrapper that injects a mock-LLM + host-agent dispatch surface.
 export {
   runFire,

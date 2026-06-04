@@ -2,7 +2,7 @@
  * Default agent backends for the local automation runner.
  *
  * The production `defaultRunHostAgent` lives here (separately from
- * `run-automation-local.ts` which owns the orchestration loop). Tests
+ * `run-automation.ts` which owns the orchestration loop). Tests
  * inject their own backend via the `runHostAgent` option and never hit this
  * file.
  *
