@@ -417,6 +417,7 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-e020b3c74a0-1780586359-3 | e020b3c7-4a0e-42b3-9a38-fbf3b6437f47 |  | interrupt | structural |  |  |
 | steer-e020b3c74a0-1780586359-4 | e020b3c7-4a0e-42b3-9a38-fbf3b6437f47 |  | interrupt | structural |  |  |
 | steer-e020b3c74a0-1780586359-5 | e020b3c7-4a0e-42b3-9a38-fbf3b6437f47 |  | correction | classifier | halt refactor; fix merge conflicts first |  |
+| steer-5aa82ba6d1c-1780591353-1 | 5aa82ba6-d1c4-403b-9e93-16e89d06c63e | #208 | correction | classifier | Only agent-runtime changed; user expected the other recommended changes too | refactor(design-tokens): rename themes/_shared.ts to shared.ts (#208) -m The on… |
 | steer-a312fd272c4-1780593634-1 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | correction | classifier | Pushed to use linter instead of authoring governance directives |  |
 | steer-a312fd272c4-1780593634-2 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | correction | classifier | Called current lint config random; asked to rethink right setup from scratch |  |
 | steer-a312fd272c4-1780593634-3 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | interrupt | structural |  |  |

@@ -14,8 +14,8 @@
  */
 
 import type { TurnConfig, TurnInput, TurnResult } from '@centraid/app-engine';
-import { runCodexAppServerTurn } from './backends/codex-app-server.js';
-import { runClaudeSdkTurn } from './backends/claude-sdk.js';
+import { runCodexTurn } from './backends/codex/backend.js';
+import { runClaudeTurn } from './backends/claude/backend.js';
 
 // The turn-driver contract (`ToolContext`, `TurnInput/Config/Result`)
 // now lives in `@centraid/app-engine` so the backend-agnostic run engine can
@@ -27,7 +27,7 @@ export async function runTurn(input: TurnInput, config: TurnConfig): Promise<Tur
   const { prefs } = config;
 
   if (prefs.kind === 'codex') {
-    const result = await runCodexAppServerTurn(
+    const result = await runCodexTurn(
       {
         cwd: input.cwd,
         message: input.message,
@@ -51,7 +51,7 @@ export async function runTurn(input: TurnInput, config: TurnConfig): Promise<Tur
     };
   }
 
-  const result = await runClaudeSdkTurn(
+  const result = await runClaudeTurn(
     {
       cwd: input.cwd,
       message: input.message,

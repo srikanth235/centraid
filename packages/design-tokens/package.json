@@ -5,20 +5,11 @@
   "description": "Shared design tokens (colors, type, spacing, app metadata, icon paths) for Centraid desktop and mobile.",
   "files": [
     "dist",
-    "index.ts",
-    "palette.ts",
-    "themes.ts",
-    "density.ts",
-    "radii.ts",
-    "typography.ts",
-    "tile.ts",
-    "css.ts",
-    "icons.ts",
-    "apps.ts"
+    "src"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "react-native": "./index.ts",
+  "react-native": "./src/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",

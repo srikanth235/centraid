@@ -56,18 +56,18 @@ export {
 } from './runtime.js';
 
 export {
-  runCodexAppServerTurn,
-  type CodexAppServerInput,
-  type CodexAppServerConfig,
-  type CodexAppServerResult,
-} from './backends/codex-app-server.js';
+  runCodexTurn,
+  type CodexTurnInput,
+  type CodexTurnConfig,
+  type CodexTurnResult,
+} from './backends/codex/backend.js';
 
 export {
-  runClaudeSdkTurn,
-  type ClaudeSdkInput,
-  type ClaudeSdkConfig,
-  type ClaudeSdkResult,
-} from './backends/claude-sdk.js';
+  runClaudeTurn,
+  type ClaudeTurnInput,
+  type ClaudeTurnConfig,
+  type ClaudeTurnResult,
+} from './backends/claude/backend.js';
 
 export {
   runPreflight,
@@ -82,13 +82,9 @@ export {
 // Per-runner model catalog + default seed (issue #188). Exposed so the gateway
 // can resolve each agent's models for the per-agent picker in Settings →
 // Agents, not just the active runner's via runner-status.
-export {
-  resolveRunnerModels,
-  resolveRunnerTools,
-  readRunnerTools,
-} from './models/model-catalog.js';
-export { defaultModelsFor, DEFAULT_MODELS } from './models/model-defaults.js';
-export { enumerateRunnerModels } from './models/model-enumerators.js';
+export { resolveRunnerModels, resolveRunnerTools, readRunnerTools } from './models/catalog.js';
+export { defaultModelsFor, DEFAULT_MODELS } from './models/defaults.js';
+export { enumerateRunnerModels } from './models/enumerators.js';
 
 // Host tool enumeration — feeds the builder's available-tools grounding
 // block so the agent declares `ctx.tool` calls + `requires` against the

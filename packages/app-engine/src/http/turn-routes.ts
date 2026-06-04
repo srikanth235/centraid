@@ -32,8 +32,8 @@ import type {
   ConversationTurnInput,
   ConversationRunner,
   TurnStreamEvent,
-} from '../conversation/conversation-runner.js';
-import type { ConversationHistoryStore, TurnNode } from '../conversation/conversation-history.js';
+} from '../conversation/runner.js';
+import type { ConversationHistoryStore, TurnNode } from '../conversation/history.js';
 import type { Registry } from '../registry/registry.js';
 import { appDataDir } from '../registry/app-paths.js';
 import type { RegistryEntry } from '../types.js';

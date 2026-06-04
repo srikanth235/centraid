@@ -32,7 +32,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import * as automation from '@centraid/automation';
 import type { RunnerKind } from '../types.js';
-import { runClaudeSdkTurn } from '../backends/claude-sdk.js';
+import { runClaudeTurn } from '../backends/claude/backend.js';
 import { defaultRunHostAgent, type RunHostAgent } from './run-automation-host-agent.js';
 
 export interface LiveDispatchOptions {
@@ -166,7 +166,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       // non-interactive behavior (a detached turn must not block on a prompt).
       let finalText = '';
       let errorMessage: string | undefined;
-      await runClaudeSdkTurn({
+      await runClaudeTurn({
         cwd: opts.workdir,
         message: call.prompt,
         extraSystemPrompt: '',

@@ -29,7 +29,7 @@ export type {
   ConversationTurnInput,
   ConversationTurnResult,
   TurnStreamEvent,
-} from './conversation/conversation-runner.js';
+} from './conversation/runner.js';
 // Chat-runner core — the per-turn chat spine, sibling to the automation fire
 // spine in `@centraid/automation`. The model turn is injected as a
 // `RunTurnFn`; agent-runtime's `makeConversationRunner` and the gateway's
@@ -38,7 +38,7 @@ export {
   makeConversationRunnerCore,
   type ConversationRunnerCoreOptions,
   type TurnContext,
-} from './conversation/conversation-runner-core.js';
+} from './conversation/runner-core.js';
 export { buildExtraPrompt, type BuildExtraPromptInput } from './handlers/build-extra-prompt.js';
 
 // Agent-turn contract — the host-agnostic interface between a run spine
@@ -204,7 +204,7 @@ export {
   type ConversationTurnAttachment,
   type RecordTurnInput,
   type UserIdProvider,
-} from './conversation/conversation-history.js';
+} from './conversation/history.js';
 export { makeConversationRouteHandler } from './http/conversation-routes.js';
 
 // Per-app blob content-addressed store for attachment bytes (issue #190).
@@ -276,7 +276,7 @@ export {
   type CloseItemInput,
   type InsertAttachmentInput,
   type ListTurnsOptions,
-} from './conversation/conversation-store.js';
+} from './conversation/store.js';
 export type { RunStreamEvent } from './conversation/run-stream-event.js';
 export type {
   Conversation,
@@ -288,7 +288,7 @@ export type {
   AutomationTriggerOrigin,
   ItemKind,
   RunKind,
-} from './conversation/conversation-schema.js';
+} from './conversation/schema.js';
 
 // Per-model token pricing. `run_nodes.cost_usd` is frozen at write time
 // via `costForUsage`; an unknown model yields `undefined` so the ledger

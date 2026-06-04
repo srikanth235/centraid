@@ -14,9 +14,9 @@
 import { spawn } from 'node:child_process';
 import type { RunnerStatus } from '@centraid/app-engine';
 import type { RunnerKind, RunnerPrefs } from './types.js';
-import { resolveRunnerModels } from './models/model-catalog.js';
-import { defaultModelsFor } from './models/model-defaults.js';
-import { enumerateRunnerModels } from './models/model-enumerators.js';
+import { resolveRunnerModels } from './models/catalog.js';
+import { defaultModelsFor } from './models/defaults.js';
+import { enumerateRunnerModels } from './models/enumerators.js';
 
 const VERSION_TIMEOUT_MS = 5_000;
 
