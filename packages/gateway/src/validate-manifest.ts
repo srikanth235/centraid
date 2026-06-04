@@ -6,11 +6,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { ManifestError, parseAppManifest } from '@centraid/app-engine';
-import {
-  AUTOMATION_HANDLER_FILE,
-  formatHandlerLintError,
-  lintAutomationHandlerSource,
-} from '@centraid/automation-engine';
+import * as automation from '@centraid/automation';
 import { fileExists } from './route-helpers.js';
 
 /**
@@ -71,15 +67,15 @@ async function lintAutomationHandlersAt(appDir: string): Promise<string | undefi
   }
   for (const ent of ids) {
     if (!ent.isDirectory()) continue;
-    const rel = `automations/${ent.name}/${AUTOMATION_HANDLER_FILE}`;
+    const rel = `automations/${ent.name}/${automation.HANDLER_FILE}`;
     let source: string;
     try {
       source = await fs.readFile(path.join(appDir, rel), 'utf8');
     } catch {
       continue; // handler absent — manifest validation handles structural gaps
     }
-    const findings = lintAutomationHandlerSource(source);
-    const error = formatHandlerLintError(findings, rel);
+    const findings = automation.lintHandlerSource(source);
+    const error = automation.formatHandlerLintError(findings, rel);
     if (error) return error;
   }
   return undefined;

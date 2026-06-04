@@ -52,11 +52,7 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
-import {
-  listAutomations,
-  InProcessScheduler,
-  type LocalScheduler,
-} from '@centraid/automation-engine';
+import * as automation from '@centraid/automation';
 import {
   makeConversationRunner,
   runAutomationLocal,
@@ -91,10 +87,10 @@ export interface BuildGatewayOptions {
    * in-process: a single minute-boundary timer fires enabled cron
    * automations through the same `runAutomationLocal` path as "run now".
    * There is no OS scheduler; missed minutes during downtime are skipped
-   * (n8n semantics — no backfill). Defaults to a fresh `InProcessScheduler`;
+   * (n8n semantics — no backfill). Defaults to a fresh `automation.InProcessScheduler`;
    * inject one (e.g. a spy) only for tests.
    */
-  scheduler?: LocalScheduler;
+  scheduler?: automation.LocalScheduler;
   /** Logger forwarded to `Runtime`. Defaults to a `console.*` wrapper. */
   logger?: RuntimeLogger;
   /**
@@ -281,7 +277,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // persistent instance, assigned once the fire surface is wired below.
   const schedulerCodeAppsDir = (): string =>
     appsStore ? path.join(appsStore.getActiveMainLink(), 'apps') : paths.appsDir;
-  let scheduler: LocalScheduler | undefined;
+  let scheduler: automation.LocalScheduler | undefined;
   let reconcileInFlight = false;
   let reconcileDirty = false;
   const reconcileScheduler = (): void => {
@@ -295,7 +291,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     void (async () => {
       do {
         reconcileDirty = false;
-        const { rows } = await listAutomations(schedulerCodeAppsDir());
+        const { rows } = await automation.list(schedulerCodeAppsDir());
         const diff = await sched.reconcile(rows);
         if (diff.added.length || diff.updated.length || diff.removed.length) {
           logger.info(
@@ -539,7 +535,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // same `fireAutomation` path as run-now. Injectable for tests.
     scheduler =
       options.scheduler ??
-      new InProcessScheduler({
+      new automation.InProcessScheduler({
         fire: (ref) => fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
         onError: (err, ref) =>
           logger.warn(

@@ -25,18 +25,13 @@ import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import {
-  APP_AUTOMATIONS_SUBDIR,
-  listAutomations,
-  readAutomationAppAt,
-  writeAutomationManifestAt,
-} from './app.js';
+import { APP_AUTOMATIONS_SUBDIR, list, readAppAt, writeManifestAt } from './app.js';
 import {
   isPendingWebhookTrigger,
   parseManifest,
   pendingWebhookTriggerOf,
   webhookTriggerOf,
-  type AutomationTrigger,
+  type Trigger,
   type WebhookTrigger,
 } from './manifest.js';
 
@@ -108,7 +103,7 @@ export async function provisionPendingWebhookAt(
   dir: string,
   ownerApp: string,
 ): Promise<ProvisionedWebhook | undefined> {
-  const row = await readAutomationAppAt(dir, ownerApp);
+  const row = await readAppAt(dir, ownerApp);
   if (!row) return undefined;
   if (!pendingWebhookTriggerOf(row.triggers)) return undefined;
 
@@ -119,10 +114,10 @@ export async function provisionPendingWebhookAt(
     id: webhookId,
     secretHash: hashWebhookSecret(secret),
   };
-  const triggers: AutomationTrigger[] = row.triggers.map((t) =>
+  const triggers: Trigger[] = row.triggers.map((t) =>
     isPendingWebhookTrigger(t) ? provisioned : t,
   );
-  await writeAutomationManifestAt(dir, { ...row.manifest, triggers });
+  await writeManifestAt(dir, { ...row.manifest, triggers });
   return { dir, automationId: row.id, ownerApp, webhookId, secret };
 }
 
@@ -213,7 +208,7 @@ export function provisionPendingWebhooksInFiles(
       id: webhookId,
       secretHash: hashWebhookSecret(secret),
     };
-    const triggers: AutomationTrigger[] = manifest.triggers.map((t) =>
+    const triggers: Trigger[] = manifest.triggers.map((t) =>
       isPendingWebhookTrigger(t) ? provisioned : t,
     );
     out.push({ path: f.path, content: JSON.stringify({ ...manifest, triggers }, null, 2) + '\n' });
@@ -335,7 +330,7 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
     try {
       // Resolve the webhook id to its automation. Webhook slugs are
       // globally unique, so the first active-version match wins.
-      const { rows } = await listAutomations(opts.appsDir);
+      const { rows } = await list(opts.appsDir);
       const target = rows.find((r) => webhookTriggerOf(r.triggers)?.id === slug);
       if (!target) {
         sendJson(res, 404, { error: 'unknown webhook' });

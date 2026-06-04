@@ -13,7 +13,7 @@
  */
 
 import { loadSettings } from './settings.js';
-import type { ListAutomationAppsResult } from '@centraid/automation-engine';
+import type * as automation from '@centraid/automation';
 
 interface AuthCache {
   baseUrl: string;
@@ -254,7 +254,7 @@ export async function listGitVersions(appId: string): Promise<GitVersion[]> {
 // AUTOMATIONS_CREATE handler reads the published row back through it.
 
 /** All automations on `main` plus per-app read errors. */
-export async function listAutomationsHttp(): Promise<ListAutomationAppsResult> {
+export async function listAutomationsHttp(): Promise<automation.ListAppsResult> {
   const { baseUrl, token } = await auth();
   const res = await fetch(`${baseUrl}/centraid/_automations`, { headers: headers(token) });
   return parse(res, 'list-automations');

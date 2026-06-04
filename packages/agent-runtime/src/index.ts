@@ -91,7 +91,7 @@ export { enumerateRunnerModels } from './model-enumerators.js';
 // tools the host runtime actually exposes (issue #80 follow-up).
 export { enumerateHostTools, type HostTool } from './host-tools.js';
 
-// Mock-LLM server (issue #70) now lives in `@centraid/automation-engine` so
+// Mock-LLM server (issue #70) now lives in `@centraid/automation` so
 // both the CLI host (here) and the in-process host (openclaw-plugin) share one
 // persistent-session runtime (issue #166). Re-exported here for back-compat.
 export {
@@ -100,7 +100,7 @@ export {
   type MockLlmServerOptions,
   type StagedTurn,
   type CapturedToolResult,
-} from '@centraid/automation-engine';
+} from '@centraid/automation';
 
 // Local-side per-fire orchestrator for automations (issue #90 model-B).
 // Looks up the user-owned automation row and runs its manifest prompt
@@ -116,7 +116,7 @@ export {
   type SpawnCliResult,
 } from './run-automation-local.js';
 
-// Scheduling lives in `@centraid/automation-engine` now (issue #149): the gateway
+// Scheduling lives in `@centraid/automation` now (issue #149): the gateway
 // owns an in-process cron `InProcessScheduler` and fires automations while it
 // runs. The OS scheduler (launchd / systemd / Task Scheduler) and its
 // `centraid run-automation` entry point are gone.

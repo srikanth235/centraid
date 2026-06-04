@@ -18,10 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/app-blueprints';
-import {
-  setAutomationEnabledInFiles,
-  deleteAutomationFromFiles,
-} from '@centraid/automation-engine';
+import * as automation from '@centraid/automation';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from './paths.ts';
 
@@ -133,7 +130,7 @@ test('toggling an app-owned automation enabled flag over HTTP republishes the ma
 
   // Toggle enabled false → true, exactly as AUTOMATIONS_SET_ENABLED does.
   const current = await readDraft('notes', 's1');
-  const changed = setAutomationEnabledInFiles(current, 'digest', true);
+  const changed = automation.setEnabledInFiles(current, 'digest', true);
   assert.equal(changed.length, 1);
   await putFiles('notes', 's1', changed);
   await publish('notes', 's1', 'toggle digest');
@@ -153,7 +150,7 @@ test('deleting an app-owned automation over HTTP removes the subdir but keeps th
   // Delete the automation subdir, exactly as AUTOMATIONS_DELETE's app-owned
   // branch does: file-map transform → DELETE each removed path → republish.
   const current = await readDraft('notes', 's2');
-  const { removed } = deleteAutomationFromFiles(current, 'digest');
+  const { removed } = automation.deleteFromFiles(current, 'digest');
   assert.deepEqual(removed.sort(), [
     'automations/digest/automation.json',
     'automations/digest/handler.js',

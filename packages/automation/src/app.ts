@@ -17,21 +17,21 @@
  * the worktree (issue #137); the per-app DATA dir is resolved separately.
  *
  * An automation's globally-unique handle is `<appId>/<id>` — see
- * `formatAutomationRef`. This module lists, reads, and mutates manifests
+ * `formatRef`. This module lists, reads, and mutates manifests
  * of apps that already exist.
  */
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
-  AUTOMATION_HANDLER_FILE,
-  AUTOMATION_MANIFEST_FILE,
-  AutomationManifestError,
+  HANDLER_FILE,
+  MANIFEST_FILE,
+  ManifestError,
   parseManifest,
-  type AutomationManifest,
-  type AutomationTrigger,
+  type Manifest,
+  type Trigger,
 } from './manifest.js';
-import { formatAutomationRef, isValidAutomationId } from './ref.js';
+import { formatRef, isValidId } from './ref.js';
 
 /** Subdirectory under an app's code dir that holds the app's automations. */
 export const APP_AUTOMATIONS_SUBDIR = 'automations';
@@ -41,7 +41,7 @@ export const APP_AUTOMATIONS_SUBDIR = 'automations';
  * and the parsed manifest, plus the few fields a scheduler host reads
  * hoisted to the top level.
  */
-export interface AutomationRow {
+export interface Row {
   /** Directory name — the automation's id, unique within its app. */
   readonly id: string;
   /** Absolute path to the automation app directory. */
@@ -49,35 +49,30 @@ export interface AutomationRow {
   /** Display name from the manifest. */
   readonly name: string;
   /** Trigger list hoisted from `manifest.triggers`. */
-  readonly triggers: readonly AutomationTrigger[];
+  readonly triggers: readonly Trigger[];
   /** User on/off toggle from the manifest. */
   readonly enabled: boolean;
   /** Id of the app folder this automation belongs to. */
   readonly ownerApp: string;
   /** Globally-unique handle — `<ownerApp>/<id>`. */
   readonly ref: string;
-  readonly manifest: AutomationManifest;
+  readonly manifest: Manifest;
 }
 
 /** One app that failed to parse during a directory scan. */
-export interface AutomationAppError {
+export interface AppError {
   /** `<appId>/<automationId>` of the app that failed to parse. */
   readonly id: string;
   readonly error: string;
   readonly code?: string;
 }
 
-export interface ListAutomationAppsResult {
-  readonly rows: AutomationRow[];
-  readonly errors: AutomationAppError[];
+export interface ListAppsResult {
+  readonly rows: Row[];
+  readonly errors: AppError[];
 }
 
-function rowFrom(
-  id: string,
-  dir: string,
-  manifest: AutomationManifest,
-  ownerApp: string,
-): AutomationRow {
+function rowFrom(id: string, dir: string, manifest: Manifest, ownerApp: string): Row {
   return {
     id,
     dir,
@@ -85,7 +80,7 @@ function rowFrom(
     triggers: manifest.triggers,
     enabled: manifest.enabled,
     ownerApp,
-    ref: formatAutomationRef(ownerApp, id),
+    ref: formatRef(ownerApp, id),
     manifest,
   };
 }
@@ -95,40 +90,37 @@ function isEnoent(err: unknown): boolean {
 }
 
 /** Absolute path to an automation app's manifest file. */
-export function automationManifestPath(automationDir: string): string {
-  return path.join(automationDir, AUTOMATION_MANIFEST_FILE);
+export function manifestPath(automationDir: string): string {
+  return path.join(automationDir, MANIFEST_FILE);
 }
 
 /** Absolute path to an automation app's generated handler. */
-export function automationHandlerPath(automationDir: string): string {
-  return path.join(automationDir, AUTOMATION_HANDLER_FILE);
+export function handlerPath(automationDir: string): string {
+  return path.join(automationDir, HANDLER_FILE);
 }
 
 /**
  * Read one automation app from an explicit app directory. The
  * id is the directory basename; `ownerApp` is the owning app's id.
  * Returns `undefined` if the directory or its `automation.json` is
- * missing; throws `AutomationManifestError` when the manifest exists but
+ * missing; throws `ManifestError` when the manifest exists but
  * is invalid.
  */
-export async function readAutomationAppAt(
-  dir: string,
-  ownerApp: string,
-): Promise<AutomationRow | undefined> {
+export async function readAppAt(dir: string, ownerApp: string): Promise<Row | undefined> {
   const id = path.basename(dir);
   let raw: string;
   try {
-    raw = await fs.readFile(path.join(dir, AUTOMATION_MANIFEST_FILE), 'utf8');
+    raw = await fs.readFile(path.join(dir, MANIFEST_FILE), 'utf8');
   } catch (err) {
     if (isEnoent(err)) return undefined;
     throw err;
   }
-  let manifest: AutomationManifest;
+  let manifest: Manifest;
   try {
     manifest = parseManifest(raw);
   } catch (err) {
-    if (err instanceof AutomationManifestError) {
-      throw new AutomationManifestError(err.code, `${ownerApp}/${id}: ${err.message}`);
+    if (err instanceof ManifestError) {
+      throw new ManifestError(err.code, `${ownerApp}/${id}: ${err.message}`);
     }
     throw err;
   }
@@ -139,16 +131,16 @@ export async function readAutomationAppAt(
  * Resolve one app-owned automation by `(appId, automationId)`, reading
  * from the app's *active version* code dir. Returns `undefined` when the
  * app, the automation directory, or its `automation.json` is missing;
- * throws `AutomationManifestError` when the manifest is invalid.
+ * throws `ManifestError` when the manifest is invalid.
  */
-export async function readAppOwnedAutomation(
+export async function readAppOwned(
   appsDir: string,
   appId: string,
   automationId: string,
-): Promise<AutomationRow | undefined> {
-  if (!isValidAutomationId(automationId)) return undefined;
+): Promise<Row | undefined> {
+  if (!isValidId(automationId)) return undefined;
   const codeDir = path.join(appsDir, appId);
-  return readAutomationAppAt(path.join(codeDir, APP_AUTOMATIONS_SUBDIR, automationId), appId);
+  return readAppAt(path.join(codeDir, APP_AUTOMATIONS_SUBDIR, automationId), appId);
 }
 
 /**
@@ -158,7 +150,7 @@ export async function readAppOwnedAutomation(
  * `automations/` subdir, contributes nothing. Apps with an invalid
  * manifest land in `errors` and don't block the rest.
  */
-export async function listAutomations(appsDir: string): Promise<ListAutomationAppsResult> {
+export async function list(appsDir: string): Promise<ListAppsResult> {
   let appEntries: import('node:fs').Dirent[];
   try {
     appEntries = await fs.readdir(appsDir, { withFileTypes: true });
@@ -166,8 +158,8 @@ export async function listAutomations(appsDir: string): Promise<ListAutomationAp
     if (isEnoent(err)) return { rows: [], errors: [] };
     throw err;
   }
-  const rows: AutomationRow[] = [];
-  const errors: AutomationAppError[] = [];
+  const rows: Row[] = [];
+  const errors: AppError[] = [];
   for (const app of appEntries) {
     if (!app.isDirectory()) continue;
     if (app.name.startsWith('.') || app.name.startsWith('_')) continue;
@@ -184,13 +176,13 @@ export async function listAutomations(appsDir: string): Promise<ListAutomationAp
       if (!e.isDirectory()) continue;
       if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
       try {
-        const row = await readAutomationAppAt(path.join(autoRoot, e.name), app.name);
+        const row = await readAppAt(path.join(autoRoot, e.name), app.name);
         if (row) rows.push(row);
       } catch (err) {
         errors.push({
           id: `${app.name}/${e.name}`,
           error: err instanceof Error ? err.message : String(err),
-          ...(err instanceof AutomationManifestError ? { code: err.code } : {}),
+          ...(err instanceof ManifestError ? { code: err.code } : {}),
         });
       }
     }
@@ -200,14 +192,8 @@ export async function listAutomations(appsDir: string): Promise<ListAutomationAp
 }
 
 /** Overwrite the `automation.json` in an explicit app directory. */
-export async function writeAutomationManifestAt(
-  dir: string,
-  manifest: AutomationManifest,
-): Promise<void> {
-  await fs.writeFile(
-    path.join(dir, AUTOMATION_MANIFEST_FILE),
-    JSON.stringify(manifest, null, 2) + '\n',
-  );
+export async function writeManifestAt(dir: string, manifest: Manifest): Promise<void> {
+  await fs.writeFile(path.join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + '\n');
 }
 
 /**
@@ -215,20 +201,20 @@ export async function writeAutomationManifestAt(
  * directory, `ownerApp` its owning app id. Returns the updated row, or
  * `undefined` when the app does not exist.
  */
-export async function setAutomationEnabledAt(
+export async function setEnabledAt(
   dir: string,
   ownerApp: string,
   enabled: boolean,
-): Promise<AutomationRow | undefined> {
-  const row = await readAutomationAppAt(dir, ownerApp);
+): Promise<Row | undefined> {
+  const row = await readAppAt(dir, ownerApp);
   if (!row) return undefined;
   if (row.manifest.enabled === enabled) return row;
-  const manifest: AutomationManifest = { ...row.manifest, enabled };
-  await writeAutomationManifestAt(dir, manifest);
+  const manifest: Manifest = { ...row.manifest, enabled };
+  await writeManifestAt(dir, manifest);
   return rowFrom(row.id, dir, manifest, ownerApp);
 }
 
 /** Recursively remove an automation app directory. Idempotent. */
-export async function deleteAutomationAt(dir: string): Promise<void> {
+export async function deleteAt(dir: string): Promise<void> {
   await fs.rm(dir, { recursive: true, force: true });
 }

@@ -16,7 +16,7 @@ import type {
   TurnStreamEvent,
   RunStreamEvent,
 } from '@centraid/app-engine';
-import type { AutomationHistoryConfig } from './manifest.js';
+import type { HistoryConfig } from './manifest.js';
 
 /**
  * Sink for live run-stream events (issue #158). The host wires this to its
@@ -97,7 +97,7 @@ export function rowToRunRef(row: Turn, automationRef: string, inputText?: string
 export function applyRetention(
   store: ConversationStore,
   automationRef: string,
-  history: AutomationHistoryConfig | undefined,
+  history: HistoryConfig | undefined,
 ): void {
   if (!history) return;
   const keep = history.keep;

@@ -267,7 +267,7 @@ function offsetToPosition(src: string, offset: number): { line: number; column: 
  * one finding per match, sorted by position. An empty array means the handler
  * is, lexically, clean. Pure — no I/O, no throw.
  */
-export function lintAutomationHandlerSource(source: string): HandlerLintFinding[] {
+export function lintHandlerSource(source: string): HandlerLintFinding[] {
   const codeOnly = maskNonCode(source, true);
   const withStrings = maskNonCode(source, false);
   const lines = source.split('\n');

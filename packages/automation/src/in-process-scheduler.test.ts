@@ -1,10 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { InProcessScheduler } from './in-process-scheduler.js';
-import type { AutomationRow } from './app.js';
-import type { AutomationManifest } from './manifest.js';
+import type { Row } from './app.js';
+import type { Manifest } from './manifest.js';
 
-const manifest = (enabled: boolean): AutomationManifest => ({
+const manifest = (enabled: boolean): Manifest => ({
   name: 'x',
   version: '0.1.0',
   enabled,
@@ -13,7 +13,7 @@ const manifest = (enabled: boolean): AutomationManifest => ({
   requires: {},
 });
 
-function row(ref: string, enabled: boolean, exprs: readonly string[]): AutomationRow {
+function row(ref: string, enabled: boolean, exprs: readonly string[]): Row {
   const [ownerApp, id] = ref.split('/') as [string, string];
   return {
     id,

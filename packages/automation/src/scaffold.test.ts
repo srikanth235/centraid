@@ -4,14 +4,10 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseManifest } from './manifest.js';
-import {
-  scaffoldAutomationApp,
-  validateAutomationId,
-  validateAutomationAppId,
-} from './scaffold.js';
+import { scaffoldApp, validateId, validateAppId } from './scaffold.js';
 import { AppScaffoldError } from '@centraid/app-blueprints';
 
-describe('scaffoldAutomationApp', () => {
+describe('scaffoldApp', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -22,7 +18,7 @@ describe('scaffoldAutomationApp', () => {
   });
 
   it('writes app.json + automations/<id>/{automation.json,handler.js}', async () => {
-    const info = await scaffoldAutomationApp(dir, 'daily-digest', {
+    const info = await scaffoldApp(dir, 'daily-digest', {
       name: 'Daily digest',
       prompt: 'Summarize my PRs',
       cronExpr: '0 8 * * *',
@@ -51,7 +47,7 @@ describe('scaffoldAutomationApp', () => {
   });
 
   it('derives the automation id from the app id, defaults a daily schedule', async () => {
-    await scaffoldAutomationApp(dir, 'autox');
+    await scaffoldApp(dir, 'autox');
     const autoDir = path.join(dir, 'autox', 'automations', 'autox');
     const manifest = parseManifest(
       await fs.readFile(path.join(autoDir, 'automation.json'), 'utf8'),
@@ -61,26 +57,26 @@ describe('scaffoldAutomationApp', () => {
   });
 
   it('honors an explicit automationId', async () => {
-    await scaffoldAutomationApp(dir, 'bot', { automationId: 'job' });
+    await scaffoldApp(dir, 'bot', { automationId: 'job' });
     const autoDir = path.join(dir, 'bot', 'automations', 'job');
     assert.ok((await fs.stat(autoDir)).isDirectory());
   });
 
   it('rejects a duplicate app folder', async () => {
-    await scaffoldAutomationApp(dir, 'dup');
-    await assert.rejects(() => scaffoldAutomationApp(dir, 'dup'), AppScaffoldError);
+    await scaffoldApp(dir, 'dup');
+    await assert.rejects(() => scaffoldApp(dir, 'dup'), AppScaffoldError);
   });
 
   it('rejects a dotted / path-unsafe app id', async () => {
-    await assert.rejects(() => scaffoldAutomationApp(dir, 'auto.x'), AppScaffoldError);
+    await assert.rejects(() => scaffoldApp(dir, 'auto.x'), AppScaffoldError);
   });
 
   it('validates ids', () => {
-    assert.throws(() => validateAutomationId('has space'), AppScaffoldError);
-    assert.throws(() => validateAutomationId('_leading'), AppScaffoldError);
+    assert.throws(() => validateId('has space'), AppScaffoldError);
+    assert.throws(() => validateId('_leading'), AppScaffoldError);
     // Automation apps use a plain slug id now (kind marks them, not a
     // dotted prefix) — a dotted id is rejected, a slug accepted.
-    assert.throws(() => validateAutomationAppId('auto.ok'), AppScaffoldError);
-    validateAutomationAppId('standup-bot');
+    assert.throws(() => validateAppId('auto.ok'), AppScaffoldError);
+    validateAppId('standup-bot');
   });
 });

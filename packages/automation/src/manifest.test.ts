@@ -1,12 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  AutomationManifestError,
+  ManifestError,
   isPendingWebhookTrigger,
   isValidCronExpression,
   parseManifest,
   validateManifest,
-  type AutomationManifest,
+  type Manifest,
 } from './manifest.js';
 
 /** A minimal valid `automation.json` object. */
@@ -83,7 +83,7 @@ describe('validateManifest', () => {
     const raw = baseManifest();
     delete raw.trigger;
     raw.triggers = [{ kind: 'webhook' }];
-    assert.throws(() => validateManifest(raw), AutomationManifestError);
+    assert.throws(() => validateManifest(raw), ManifestError);
   });
 
   it('treats an empty triggers list as legal (manual fire only)', () => {
@@ -100,7 +100,7 @@ describe('validateManifest', () => {
       { kind: 'webhook', id: 'a', secretHash: 'h1' },
       { kind: 'webhook', id: 'b', secretHash: 'h2' },
     ];
-    assert.throws(() => validateManifest(raw), AutomationManifestError);
+    assert.throws(() => validateManifest(raw), ManifestError);
   });
 
   it('defaults version to 0.1.0 and enabled to true when absent', () => {
@@ -124,48 +124,48 @@ describe('validateManifest', () => {
   it('rejects a missing name', () => {
     const raw = baseManifest();
     delete raw.name;
-    assert.throws(() => validateManifest(raw), AutomationManifestError);
+    assert.throws(() => validateManifest(raw), ManifestError);
   });
 
   it('rejects a missing prompt', () => {
     const raw = baseManifest();
     delete raw.prompt;
-    assert.throws(() => validateManifest(raw), AutomationManifestError);
+    assert.throws(() => validateManifest(raw), ManifestError);
   });
 
   it('rejects a missing generated block', () => {
     const raw = baseManifest();
     delete raw.generated;
-    assert.throws(() => validateManifest(raw), AutomationManifestError);
+    assert.throws(() => validateManifest(raw), ManifestError);
   });
 
   it('rejects an invalid trigger', () => {
     assert.throws(
       () => validateManifest(baseManifest({ trigger: { kind: 'webhook' } })),
-      AutomationManifestError,
+      ManifestError,
     );
     assert.throws(
       () => validateManifest(baseManifest({ trigger: { kind: 'cron', expr: 'nope' } })),
-      AutomationManifestError,
+      ManifestError,
     );
   });
 
   it('rejects apps that is not an array of non-empty strings', () => {
-    assert.throws(() => validateManifest(baseManifest({ apps: 'todos' })), AutomationManifestError);
-    assert.throws(() => validateManifest(baseManifest({ apps: [''] })), AutomationManifestError);
+    assert.throws(() => validateManifest(baseManifest({ apps: 'todos' })), ManifestError);
+    assert.throws(() => validateManifest(baseManifest({ apps: [''] })), ManifestError);
   });
 
   it('rejects a requires.model pointing at the mock provider', () => {
     assert.throws(
       () => validateManifest(baseManifest({ requires: { model: 'centraid-mock/run' } })),
-      AutomationManifestError,
+      ManifestError,
     );
   });
 
   it('defaults history.keep to {count:100} when history is absent', () => {
     const raw = baseManifest();
     delete raw.history;
-    const m: AutomationManifest = validateManifest(raw);
+    const m: Manifest = validateManifest(raw);
     assert.deepEqual(m.history.keep, { count: 100 });
   });
 });
@@ -177,6 +177,6 @@ describe('parseManifest', () => {
   });
 
   it('rejects invalid JSON', () => {
-    assert.throws(() => parseManifest('{not json'), AutomationManifestError);
+    assert.throws(() => parseManifest('{not json'), ManifestError);
   });
 });

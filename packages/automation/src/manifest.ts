@@ -11,7 +11,7 @@
  * table. `enabled` lives here (toggling it rewrites the file), so a
  * scheduler host can register/suppress from the manifest alone.
  *
- * Trigger shape is `triggers: AutomationTrigger[]` — a plural list of
+ * Trigger shape is `triggers: Trigger[]` — a plural list of
  * `cron` and `webhook` entries. Legacy single-`trigger` manifests are
  * dual-read by `resolveTriggers` and rewritten plural on next save, so
  * no filesystem migration is needed.
@@ -21,22 +21,19 @@
  * + validation-code union live in `manifest-errors.ts`.
  */
 
-import { AutomationManifestError } from './manifest-errors.js';
-import { validateOutputSchema, type AutomationOutputSchema } from './manifest-output.js';
-import { isValidAutomationRef } from './ref.js';
+import { ManifestError } from './manifest-errors.js';
+import { validateOutputSchema, type OutputSchema } from './manifest-output.js';
+import { isValidRef } from './ref.js';
 
-export {
-  AutomationManifestError,
-  type AutomationManifestValidationCode,
-} from './manifest-errors.js';
-export { validateOutputAgainstSchema, type AutomationOutputSchema } from './manifest-output.js';
+export { ManifestError, type ManifestValidationCode } from './manifest-errors.js';
+export { validateOutputAgainstSchema, type OutputSchema } from './manifest-output.js';
 
 /** Conventional handler filename inside an automation app directory. */
-export const AUTOMATION_HANDLER_FILE = 'handler.js';
+export const HANDLER_FILE = 'handler.js';
 /** Conventional manifest filename inside an automation app directory. */
-export const AUTOMATION_MANIFEST_FILE = 'automation.json';
+export const MANIFEST_FILE = 'automation.json';
 
-export interface AutomationManifestRequires {
+export interface ManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
   readonly mcps?: readonly string[];
   /** Fully-qualified tool names the handler calls (`["github.list_pull_requests"]`). */
@@ -50,12 +47,12 @@ export interface AutomationManifestRequires {
   readonly model?: string;
 }
 
-export interface AutomationCostEstimate {
+export interface CostEstimate {
   readonly model: string;
   readonly tokensPerFire: number;
 }
 
-export interface AutomationGeneratedMeta {
+export interface GeneratedMeta {
   readonly by: string;
   readonly at: string;
 }
@@ -89,15 +86,15 @@ export type PendingWebhookTrigger = {
   readonly kind: 'webhook';
   readonly pending: true;
 };
-export type AutomationTrigger = CronTrigger | WebhookTrigger | PendingWebhookTrigger;
+export type Trigger = CronTrigger | WebhookTrigger | PendingWebhookTrigger;
 
 /** The cron triggers from a trigger list, in declaration order. */
-export function cronTriggersOf(triggers: readonly AutomationTrigger[]): readonly CronTrigger[] {
+export function cronTriggersOf(triggers: readonly Trigger[]): readonly CronTrigger[] {
   return triggers.filter((t): t is CronTrigger => t.kind === 'cron');
 }
 
 /** True for a webhook trigger still awaiting server-side provisioning. */
-export function isPendingWebhookTrigger(t: AutomationTrigger): t is PendingWebhookTrigger {
+export function isPendingWebhookTrigger(t: Trigger): t is PendingWebhookTrigger {
   return t.kind === 'webhook' && 'pending' in t;
 }
 
@@ -106,15 +103,13 @@ export function isPendingWebhookTrigger(t: AutomationTrigger): t is PendingWebho
  * A pending (un-minted) webhook trigger is skipped — it has no `id` to
  * route on yet.
  */
-export function webhookTriggerOf(
-  triggers: readonly AutomationTrigger[],
-): WebhookTrigger | undefined {
+export function webhookTriggerOf(triggers: readonly Trigger[]): WebhookTrigger | undefined {
   return triggers.find((t): t is WebhookTrigger => t.kind === 'webhook' && 'id' in t);
 }
 
 /** The single pending (un-provisioned) webhook trigger, if any. */
 export function pendingWebhookTriggerOf(
-  triggers: readonly AutomationTrigger[],
+  triggers: readonly Trigger[],
 ): PendingWebhookTrigger | undefined {
   return triggers.find(isPendingWebhookTrigger);
 }
@@ -125,14 +120,10 @@ export function pendingWebhookTriggerOf(
  * older than N days, `"all"` keep everything (no-op), `"errors"` keep
  * only failed runs. Default at validation time is `{count: 100}`.
  */
-export type AutomationHistoryKeep =
-  | { readonly count: number }
-  | { readonly days: number }
-  | 'all'
-  | 'errors';
+export type HistoryKeep = { readonly count: number } | { readonly days: number } | 'all' | 'errors';
 
-export interface AutomationHistoryConfig {
-  readonly keep: AutomationHistoryKeep;
+export interface HistoryConfig {
+  readonly keep: HistoryKeep;
 }
 
 /**
@@ -145,7 +136,7 @@ export interface AutomationHistoryConfig {
  * automation is associated with (reverse-looked-up by the app Settings
  * screen).
  */
-export interface AutomationManifest {
+export interface Manifest {
   readonly name: string;
   readonly version: string;
   readonly description?: string;
@@ -155,19 +146,19 @@ export interface AutomationManifest {
    * Trigger list. Empty is legal — an automation with no triggers fires
    * only via an explicit "Run now". At most one entry is a webhook.
    */
-  readonly triggers: readonly AutomationTrigger[];
-  readonly requires: AutomationManifestRequires;
+  readonly triggers: readonly Trigger[];
+  readonly requires: ManifestRequires;
   /** App ids this automation is associated with. */
   readonly apps?: readonly string[];
-  readonly costEstimate?: AutomationCostEstimate;
-  readonly outputSchema?: AutomationOutputSchema;
+  readonly costEstimate?: CostEstimate;
+  readonly outputSchema?: OutputSchema;
   /**
    * Automation to fire when this one fails — a `<appId>/<id>` handle, or
    * a bare `<id>` for a sibling within the same app.
    */
   readonly onFailure?: string;
-  readonly history: AutomationHistoryConfig;
-  readonly generated: AutomationGeneratedMeta;
+  readonly history: HistoryConfig;
+  readonly generated: GeneratedMeta;
 }
 
 export function isValidCronExpression(expr: string): boolean {
@@ -182,11 +173,7 @@ export function isValidCronExpression(expr: string): boolean {
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0) {
-    throw new AutomationManifestError(
-      'missing_field',
-      `manifest.${field} must be a non-empty string`,
-      field,
-    );
+    throw new ManifestError('missing_field', `manifest.${field} must be a non-empty string`, field);
   }
   return value;
 }
@@ -194,7 +181,7 @@ function requireString(value: unknown, field: string): string {
 function optionalStringArray(value: unknown, field: string): readonly string[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_field',
       `manifest.${field} must be an array of strings`,
       field,
@@ -202,7 +189,7 @@ function optionalStringArray(value: unknown, field: string): readonly string[] |
   }
   return value.map((entry, idx) => {
     if (typeof entry !== 'string' || entry.length === 0) {
-      throw new AutomationManifestError(
+      throw new ManifestError(
         'invalid_field',
         `manifest.${field}[${idx}] must be a non-empty string`,
         `${field}[${idx}]`,
@@ -217,9 +204,9 @@ function isValidWebhookId(id: string): boolean {
   return typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id);
 }
 
-function validateOneTrigger(raw: unknown, field: string): AutomationTrigger {
+function validateOneTrigger(raw: unknown, field: string): Trigger {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_trigger',
       `manifest.${field} must be an object with a "kind"`,
       field,
@@ -229,7 +216,7 @@ function validateOneTrigger(raw: unknown, field: string): AutomationTrigger {
   if (t.kind === 'cron') {
     const expr = requireString(t.expr, `${field}.expr`);
     if (!isValidCronExpression(expr)) {
-      throw new AutomationManifestError(
+      throw new ManifestError(
         'invalid_trigger',
         `manifest.${field}.expr "${expr}" is not a valid 5-field cron expression`,
         `${field}.expr`,
@@ -243,7 +230,7 @@ function validateOneTrigger(raw: unknown, field: string): AutomationTrigger {
     // the manifest round-trips until the builder mints id + secret.
     if (t.id === undefined && t.secretHash === undefined) {
       if (t.pending !== true) {
-        throw new AutomationManifestError(
+        throw new ManifestError(
           'invalid_trigger',
           `manifest.${field} webhook trigger needs a minted "id" + "secretHash", or "pending": true`,
           field,
@@ -253,7 +240,7 @@ function validateOneTrigger(raw: unknown, field: string): AutomationTrigger {
     }
     const id = requireString(t.id, `${field}.id`);
     if (!isValidWebhookId(id)) {
-      throw new AutomationManifestError(
+      throw new ManifestError(
         'invalid_trigger',
         `manifest.${field}.id "${id}" is not a valid webhook route slug`,
         `${field}.id`,
@@ -262,7 +249,7 @@ function validateOneTrigger(raw: unknown, field: string): AutomationTrigger {
     const secretHash = requireString(t.secretHash, `${field}.secretHash`);
     return { kind: 'webhook', id, secretHash };
   }
-  throw new AutomationManifestError(
+  throw new ManifestError(
     'invalid_trigger',
     `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron" or "webhook"`,
     `${field}.kind`,
@@ -276,15 +263,11 @@ function validateOneTrigger(raw: unknown, field: string): AutomationTrigger {
  * manifest with neither is legal — an empty list means "manual fire
  * only". At most one webhook trigger is allowed.
  */
-function resolveTriggers(r: Record<string, unknown>): readonly AutomationTrigger[] {
-  let list: AutomationTrigger[];
+function resolveTriggers(r: Record<string, unknown>): readonly Trigger[] {
+  let list: Trigger[];
   if (r.triggers !== undefined) {
     if (!Array.isArray(r.triggers)) {
-      throw new AutomationManifestError(
-        'invalid_trigger',
-        'manifest.triggers must be an array',
-        'triggers',
-      );
+      throw new ManifestError('invalid_trigger', 'manifest.triggers must be an array', 'triggers');
     }
     list = r.triggers.map((t, i) => validateOneTrigger(t, `triggers[${i}]`));
   } else if (r.trigger !== undefined) {
@@ -293,7 +276,7 @@ function resolveTriggers(r: Record<string, unknown>): readonly AutomationTrigger
     list = [];
   }
   if (list.filter((t) => t.kind === 'webhook').length > 1) {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_trigger',
       'manifest.triggers may contain at most one webhook trigger',
       'triggers',
@@ -304,21 +287,17 @@ function resolveTriggers(r: Record<string, unknown>): readonly AutomationTrigger
 
 const DEFAULT_HISTORY_KEEP_COUNT = 100;
 
-function validateHistory(raw: unknown): AutomationHistoryConfig {
+function validateHistory(raw: unknown): HistoryConfig {
   if (raw === undefined) return { keep: { count: DEFAULT_HISTORY_KEEP_COUNT } };
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new AutomationManifestError(
-      'invalid_history',
-      'manifest.history must be an object',
-      'history',
-    );
+    throw new ManifestError('invalid_history', 'manifest.history must be an object', 'history');
   }
   const h = raw as Record<string, unknown>;
   if (h.keep === undefined) return { keep: { count: DEFAULT_HISTORY_KEEP_COUNT } };
   const keep = h.keep;
   if (keep === 'all' || keep === 'errors') return { keep };
   if (keep === null || typeof keep !== 'object' || Array.isArray(keep)) {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_history',
       'manifest.history.keep must be {count:N} | {days:N} | "all" | "errors"',
       'history.keep',
@@ -331,20 +310,16 @@ function validateHistory(raw: unknown): AutomationHistoryConfig {
   if (typeof k.days === 'number' && Number.isInteger(k.days) && k.days >= 0) {
     return { keep: { days: k.days } };
   }
-  throw new AutomationManifestError(
+  throw new ManifestError(
     'invalid_history',
     'manifest.history.keep must be {count:N} | {days:N} | "all" | "errors"',
     'history.keep',
   );
 }
 
-function validateRequires(raw: unknown): AutomationManifestRequires {
+function validateRequires(raw: unknown): ManifestRequires {
   if (raw !== undefined && (raw === null || typeof raw !== 'object')) {
-    throw new AutomationManifestError(
-      'invalid_field',
-      'manifest.requires must be an object',
-      'requires',
-    );
+    throw new ManifestError('invalid_field', 'manifest.requires must be an object', 'requires');
   }
   const req = (raw ?? {}) as Record<string, unknown>;
   const mcps = optionalStringArray(req.mcps, 'requires.mcps');
@@ -352,14 +327,14 @@ function validateRequires(raw: unknown): AutomationManifestRequires {
   let model: string | undefined;
   if (req.model !== undefined) {
     if (typeof req.model !== 'string' || req.model.length === 0) {
-      throw new AutomationManifestError(
+      throw new ManifestError(
         'invalid_field',
         'manifest.requires.model must be a non-empty string',
         'requires.model',
       );
     }
     if (req.model.startsWith('centraid-mock/') || req.model === 'centraid-mock') {
-      throw new AutomationManifestError(
+      throw new ManifestError(
         'mock_model_disallowed',
         `manifest.requires.model "${req.model}" points at the centraid-mock provider — that would recurse into the automation runtime itself`,
         'requires.model',
@@ -367,17 +342,17 @@ function validateRequires(raw: unknown): AutomationManifestRequires {
     }
     model = req.model;
   }
-  const requires: AutomationManifestRequires = {};
+  const requires: ManifestRequires = {};
   if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
   if (tools) (requires as { tools: readonly string[] }).tools = tools;
   if (model !== undefined) (requires as { model: string }).model = model;
   return requires;
 }
 
-function validateCostEstimate(raw: unknown): AutomationCostEstimate | undefined {
+function validateCostEstimate(raw: unknown): CostEstimate | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || typeof raw !== 'object') {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_field',
       'manifest.costEstimate must be an object',
       'costEstimate',
@@ -390,7 +365,7 @@ function validateCostEstimate(raw: unknown): AutomationCostEstimate | undefined 
     !Number.isFinite(ce.tokensPerFire) ||
     ce.tokensPerFire < 0
   ) {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_field',
       'manifest.costEstimate.tokensPerFire must be a non-negative finite number',
       'costEstimate.tokensPerFire',
@@ -402,14 +377,14 @@ function validateCostEstimate(raw: unknown): AutomationCostEstimate | undefined 
 function validateOnFailure(raw: unknown): string | undefined {
   if (raw === undefined) return undefined;
   if (typeof raw !== 'string' || raw.length === 0) {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_on_failure',
       'manifest.onFailure must be a non-empty string naming another automation',
       'onFailure',
     );
   }
-  if (!isValidAutomationRef(raw)) {
-    throw new AutomationManifestError(
+  if (!isValidRef(raw)) {
+    throw new ManifestError(
       'invalid_on_failure',
       `manifest.onFailure "${raw}" is not a valid automation handle`,
       'onFailure',
@@ -418,12 +393,12 @@ function validateOnFailure(raw: unknown): string | undefined {
   return raw;
 }
 
-export function parseManifest(json: string): AutomationManifest {
+export function parseManifest(json: string): Manifest {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
   } catch (err) {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_json',
       `manifest is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
     );
@@ -431,9 +406,9 @@ export function parseManifest(json: string): AutomationManifest {
   return validateManifest(raw);
 }
 
-export function validateManifest(raw: unknown): AutomationManifest {
+export function validateManifest(raw: unknown): Manifest {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new AutomationManifestError('invalid_field', 'manifest must be a JSON object');
+    throw new ManifestError('invalid_field', 'manifest must be a JSON object');
   }
   const r = raw as Record<string, unknown>;
 
@@ -442,7 +417,7 @@ export function validateManifest(raw: unknown): AutomationManifest {
   let description: string | undefined;
   if (r.description !== undefined) {
     if (typeof r.description !== 'string') {
-      throw new AutomationManifestError(
+      throw new ManifestError(
         'invalid_field',
         'manifest.description must be a string',
         'description',
@@ -462,14 +437,10 @@ export function validateManifest(raw: unknown): AutomationManifest {
 
   const genRaw = r.generated;
   if (!genRaw || typeof genRaw !== 'object' || Array.isArray(genRaw)) {
-    throw new AutomationManifestError(
-      'missing_field',
-      'manifest.generated must be an object',
-      'generated',
-    );
+    throw new ManifestError('missing_field', 'manifest.generated must be an object', 'generated');
   }
   const gen = genRaw as Record<string, unknown>;
-  const generated: AutomationGeneratedMeta = {
+  const generated: GeneratedMeta = {
     by: requireString(gen.by, 'generated.by'),
     at: requireString(gen.at, 'generated.at'),
   };

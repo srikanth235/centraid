@@ -19,19 +19,19 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { APP_AUTOMATIONS_SUBDIR } from './app.js';
-import { isValidAutomationId } from './ref.js';
+import { isValidId } from './ref.js';
 import {
-  AUTOMATION_HANDLER_FILE,
-  AUTOMATION_MANIFEST_FILE,
+  HANDLER_FILE,
+  MANIFEST_FILE,
   validateManifest,
-  type AutomationManifest,
-  type AutomationTrigger,
-  type AutomationHistoryKeep,
+  type Manifest,
+  type Trigger,
+  type HistoryKeep,
 } from './manifest.js';
 import { isValidAppId } from '@centraid/app-engine';
 import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/app-blueprints';
 
-export interface AutomationScaffoldOptions {
+export interface ScaffoldOptions {
   /** Display name. Defaults to the app id. */
   name?: string;
   description?: string;
@@ -47,13 +47,13 @@ export interface AutomationScaffoldOptions {
    * legal "manual fire only" automation. Webhook triggers must already
    * carry their generated `id` + `secretHash`, or be the pending form.
    */
-  triggers?: readonly AutomationTrigger[];
+  triggers?: readonly Trigger[];
   /** App ids this automation is associated with. */
   apps?: readonly string[];
   /** Model `ctx.agent` calls route through (`provider/model-id`). */
   model?: string;
   /** Run-retention policy. Defaults to keeping the last 100 runs. */
-  historyKeep?: AutomationHistoryKeep;
+  historyKeep?: HistoryKeep;
   /** Automation to fire when this one fails — a `<appId>/<id>` handle. */
   onFailure?: string;
   /**
@@ -75,7 +75,7 @@ export interface AutomationScaffoldOptions {
  * manifest's `kind: 'automation'` field (not a dotted `auto.` prefix), so
  * this is just the plain app-id slug check.
  */
-export function validateAutomationAppId(appId: string): void {
+export function validateAppId(appId: string): void {
   if (!isValidAppId(appId)) {
     throw new AppScaffoldError(
       'invalid_id',
@@ -85,8 +85,8 @@ export function validateAutomationAppId(appId: string): void {
 }
 
 /** Validate an automation id (the directory slug under `automations/`). */
-export function validateAutomationId(id: string): void {
-  if (id.startsWith('_') || !isValidAutomationId(id)) {
+export function validateId(id: string): void {
+  if (id.startsWith('_') || !isValidId(id)) {
     throw new AppScaffoldError(
       'invalid_id',
       `Invalid automation id "${id}". Use A-Z / a-z / 0-9 / "-" / "_", no leading "_".`,
@@ -96,7 +96,7 @@ export function validateAutomationId(id: string): void {
 
 /** Derive the inner automation id from the app id. */
 function defaultAutomationId(appId: string): string {
-  return isValidAutomationId(appId) ? appId : 'main';
+  return isValidId(appId) ? appId : 'main';
 }
 
 const DEFAULT_HANDLER = `/**
@@ -154,8 +154,8 @@ export default async ({ ctx, log }) => {
 };
 `;
 
-function starterManifest(name: string, opts: AutomationScaffoldOptions): AutomationManifest {
-  const triggers: readonly AutomationTrigger[] =
+function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
+  const triggers: readonly Trigger[] =
     opts.triggers !== undefined
       ? opts.triggers
       : [{ kind: 'cron', expr: opts.cronExpr?.trim() || '0 9 * * *' }];
@@ -191,13 +191,10 @@ function starterManifest(name: string, opts: AutomationScaffoldOptions): Automat
  * `automations/<autoId>/` (manifest + handler). The caller PUTs these
  * into a git-store session and publishes.
  */
-export function scaffoldAutomationAppFiles(
-  appId: string,
-  opts: AutomationScaffoldOptions = {},
-): ScaffoldFile[] {
-  validateAutomationAppId(appId);
+export function scaffoldAppFiles(appId: string, opts: ScaffoldOptions = {}): ScaffoldFile[] {
+  validateAppId(appId);
   const automationId = opts.automationId ?? defaultAutomationId(appId);
-  validateAutomationId(automationId);
+  validateId(automationId);
 
   const name = opts.name?.trim() || appId;
   // Manifest must satisfy the post-#107 schema (manifestVersion + id +
@@ -220,10 +217,10 @@ export function scaffoldAutomationAppFiles(
   return [
     { path: 'app.json', content: JSON.stringify(appJson, null, 2) + '\n' },
     {
-      path: `${base}/${AUTOMATION_MANIFEST_FILE}`,
+      path: `${base}/${MANIFEST_FILE}`,
       content: JSON.stringify(manifest, null, 2) + '\n',
     },
-    { path: `${base}/${AUTOMATION_HANDLER_FILE}`, content: DEFAULT_HANDLER },
+    { path: `${base}/${HANDLER_FILE}`, content: DEFAULT_HANDLER },
   ];
 }
 
@@ -234,12 +231,12 @@ export function scaffoldAutomationAppFiles(
  * Round-trips through `validateManifest` so we never write a manifest the
  * runtime would reject.
  */
-export function setAutomationEnabledInFiles(
+export function setEnabledInFiles(
   current: ScaffoldFile[],
   automationId: string,
   enabled: boolean,
 ): ScaffoldFile[] {
-  const target = `${APP_AUTOMATIONS_SUBDIR}/${automationId}/${AUTOMATION_MANIFEST_FILE}`;
+  const target = `${APP_AUTOMATIONS_SUBDIR}/${automationId}/${MANIFEST_FILE}`;
   const file = current.find((f) => f.path === target);
   if (!file) return [];
   let parsed: Record<string, unknown>;
@@ -259,7 +256,7 @@ export function setAutomationEnabledInFiles(
  * `automations/<automationId>/`) so the caller can DELETE them in the
  * git-store session.
  */
-export function deleteAutomationFromFiles(
+export function deleteFromFiles(
   current: ScaffoldFile[],
   automationId: string,
 ): { keep: ScaffoldFile[]; removed: string[] } {
@@ -276,15 +273,15 @@ export function deleteAutomationFromFiles(
 /**
  * Scaffold a new automation app folder under `<appsDir>/<appId>/` — an
  * `app.json` plus a single automation under `automations/<autoId>/`.
- * Thin filesystem wrapper over {@link scaffoldAutomationAppFiles}.
+ * Thin filesystem wrapper over {@link scaffoldAppFiles}.
  * Throws `AppScaffoldError` on a bad id or an app folder that already exists.
  */
-export async function scaffoldAutomationApp(
+export async function scaffoldApp(
   appsDir: string,
   appId: string,
-  opts: AutomationScaffoldOptions = {},
+  opts: ScaffoldOptions = {},
 ): Promise<AppInfo> {
-  const files = scaffoldAutomationAppFiles(appId, opts);
+  const files = scaffoldAppFiles(appId, opts);
   const appDir = path.join(appsDir, appId);
   try {
     await fs.access(appDir);

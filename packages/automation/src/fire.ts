@@ -4,17 +4,17 @@
  *
  * Resolving an automation, opening its run ledger, running the generated
  * `handler.js`, and cascading `onFailure` only ever touch app-engine
- * primitives (`parseAutomationRef`, `AgentRunsStore`,
- * `runAutomationHandler`). That spine used to live in
+ * primitives (`parseRef`, `AgentRunsStore`,
+ * `runHandler`). That spine used to live in
  * `agent-runtime/run-automation-local.ts`; the only thing it genuinely
  * needed from agent-runtime was the live `ctx.tool` / `ctx.agent` dispatch
  * surface (the mock-LLM server + CLI spawn). So the spine moves down and the
  * dispatch surface is injected via `openDispatch` — the same dependency
- * inversion the `AutomationHost` / `ConversationRunner` seams already use.
+ * inversion the `Host` / `ConversationRunner` seams already use.
  *
  * agent-runtime's `runAutomationLocal` is now a thin wrapper that builds the
  * `openDispatch` closure (capturing the runner kind + CLI spawn) and calls
- * `runAutomationFire`. A second host (e.g. openclaw) can inject its own
+ * `runFire`. A second host (e.g. openclaw) can inject its own
  * dispatch surface instead of reimplementing the spine.
  */
 
@@ -28,28 +28,24 @@ import {
   type AutomationTriggerOrigin,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import { parseAutomationRef } from './ref.js';
-import { automationHandlerPath, readAppOwnedAutomation } from './app.js';
-import { runAutomationHandler } from './handler-runner.js';
-import type {
-  AutomationAgentDispatcher,
-  AutomationHandlerOutcome,
-  AutomationToolDispatcher,
-} from './handler-runner.js';
+import { parseRef } from './ref.js';
+import { handlerPath, readAppOwned } from './app.js';
+import { runHandler } from './handler-runner.js';
+import type { AgentDispatcher, HandlerOutcome, ToolDispatcher } from './handler-runner.js';
 
 /**
  * The live dispatch surface a fire runs against. Provided by the host
  * (agent-runtime stands up a mock-LLM server + CLI spawn). `close()` tears
  * down whatever the host allocated and is always called once, even on throw.
  */
-export interface AutomationDispatchSurface {
-  toolDispatcher: AutomationToolDispatcher;
-  agentDispatcher: AutomationAgentDispatcher;
+export interface DispatchSurface {
+  toolDispatcher: ToolDispatcher;
+  agentDispatcher: AgentDispatcher;
   close(): Promise<void>;
 }
 
 /** Args app-engine hands the host when it needs a dispatch surface for a fire. */
-export interface OpenAutomationDispatchArgs {
+export interface OpenDispatchArgs {
   /** The automation app directory — the host's CLI cwd. */
   workdir: string;
   /** `<appId>/<automationId>` handle being fired. */
@@ -67,11 +63,9 @@ export interface OpenAutomationDispatchArgs {
 }
 
 /** The injected seam: open a live dispatch surface for one fire. */
-export type OpenAutomationDispatch = (
-  args: OpenAutomationDispatchArgs,
-) => Promise<AutomationDispatchSurface>;
+export type OpenDispatch = (args: OpenDispatchArgs) => Promise<DispatchSurface>;
 
-export interface RunAutomationFireOptions {
+export interface RunFireOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
   automationRef: string;
   /**
@@ -129,7 +123,7 @@ export interface RunAutomationFireOptions {
   failureDepth?: number;
 }
 
-export interface AutomationRunRecord {
+export interface RunRecord {
   /** `<appId>/<automationId>` handle of the fired automation. */
   automationRef: string;
   automationName: string;
@@ -149,10 +143,10 @@ export interface AutomationRunRecord {
  * and returns the run record + handler outcome. A missing automation app
  * throws; a handler failure surfaces in `outcome.ok === false`.
  */
-export async function runAutomationFire(
-  opts: RunAutomationFireOptions,
-  deps: { openDispatch: OpenAutomationDispatch },
-): Promise<{ outcome: AutomationHandlerOutcome; record: AutomationRunRecord }> {
+export async function runFire(
+  opts: RunFireOptions,
+  deps: { openDispatch: OpenDispatch },
+): Promise<{ outcome: HandlerOutcome; record: RunRecord }> {
   const onLog = opts.onLog ?? (() => undefined);
 
   // Code (manifest + handler) resolves from `codeAppsDir`; data
@@ -160,11 +154,11 @@ export async function runAutomationFire(
   // (issue #137) and coincide in the flat/legacy layout.
   const codeAppsDir = opts.codeAppsDir ?? opts.appsDir;
 
-  const parsed = parseAutomationRef(opts.automationRef);
+  const parsed = parseRef(opts.automationRef);
   if (!parsed) {
     throw new Error(`automation "${opts.automationRef}": not a valid <appId>/<id> handle`);
   }
-  const row = await readAppOwnedAutomation(codeAppsDir, parsed.appId, parsed.automationId);
+  const row = await readAppOwned(codeAppsDir, parsed.appId, parsed.automationId);
   if (!row) {
     throw new Error(`automation ${opts.automationRef}: not found under ${codeAppsDir}`);
   }
@@ -186,12 +180,12 @@ export async function runAutomationFire(
     onLog,
   });
 
-  let outcome: AutomationHandlerOutcome;
+  let outcome: HandlerOutcome;
   try {
-    outcome = await runAutomationHandler({
+    outcome = await runHandler({
       automationId: opts.automationRef,
       automationDir: row.dir,
-      handlerFile: automationHandlerPath(row.dir),
+      handlerFile: handlerPath(row.dir),
       runId,
       toolDispatcher: dispatch.toolDispatcher,
       agentDispatcher: dispatch.agentDispatcher,
@@ -216,15 +210,15 @@ export async function runAutomationFire(
     if (failureDepth >= 3) {
       onLog('warn', `onFailure cascade for ${row.name} aborted at depth ${failureDepth} (cap=3)`);
     } else {
-      const failTarget = parseAutomationRef(row.manifest.onFailure, parsed.appId);
+      const failTarget = parseRef(row.manifest.onFailure, parsed.appId);
       const next = failTarget
-        ? await readAppOwnedAutomation(codeAppsDir, failTarget.appId, failTarget.automationId)
+        ? await readAppOwned(codeAppsDir, failTarget.appId, failTarget.automationId)
         : undefined;
       if (!next) {
         onLog('warn', `onFailure target "${row.manifest.onFailure}" not found for ${row.name}`);
       } else {
         try {
-          await runAutomationFire(
+          await runFire(
             {
               automationRef: next.ref,
               appsDir: opts.appsDir,
@@ -251,7 +245,7 @@ export async function runAutomationFire(
   }
 
   const endedAt = Date.now();
-  const record: AutomationRunRecord = {
+  const record: RunRecord = {
     automationRef: opts.automationRef,
     automationName: row.name,
     runId,

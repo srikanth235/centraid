@@ -2,12 +2,12 @@
  * OpenClaw automation fire — mock-puppeted, on the shared spine (issue #166).
  *
  * `runOpenclawFire` delegates the per-fire orchestration (manifest load, ledger,
- * onFailure) to app-engine's `runAutomationFire`,
- * and injects an OpenClaw `OpenAutomationDispatch` — the ONLY host-specific
+ * onFailure) to app-engine's `automation.runFire`,
+ * and injects an OpenClaw `automation.OpenDispatch` — the ONLY host-specific
  * piece. Both dispatchers run one embedded-agent turn via the shared
  * `runEmbeddedTurn` helper (also used by the chat runner):
  *
- *   - `toolDispatcher` rides the shared `startPersistentMockSession`: ONE
+ *   - `toolDispatcher` rides the shared `automation.startPersistentMockSession`: ONE
  *     embedded-agent session per fire, pointed at a localhost `centraid-mock`
  *     provider (base_url → the mock). The deterministic handler stages each
  *     `ctx.tool` batch into that session; the embedded agent executes the
@@ -33,18 +33,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import {
-  coerceAgentAnswer,
-  runAutomationFire,
-  startPersistentMockSession,
-  type AgentDriver,
-  type AutomationAgentCall,
-  type AutomationDispatchContext,
-  type AutomationDispatchSurface,
-  type AutomationHandlerOutcome,
-  type OpenAutomationDispatch,
-  type OpenAutomationDispatchArgs,
-} from '@centraid/automation-engine';
+import * as automation from '@centraid/automation';
 import {
   type AnalyticsStore,
   type AutomationTriggerKind,
@@ -117,9 +106,9 @@ function withMockProvider(base: EmbeddedConfig, baseUrl: string, apiKey: string)
  * `modelRun` agent, both via `runEmbeddedAgent`. Captures `api` so no global
  * config handle is needed.
  */
-function makeOpenClawDispatch(api: OpenClawPluginApi): OpenAutomationDispatch {
+function makeOpenClawDispatch(api: OpenClawPluginApi): automation.OpenDispatch {
   const baseCfg = (api as unknown as { config?: EmbeddedConfig }).config;
-  return async (args: OpenAutomationDispatchArgs): Promise<AutomationDispatchSurface> => {
+  return async (args: automation.OpenDispatchArgs): Promise<automation.DispatchSurface> => {
     if (!baseCfg) {
       throw new Error('centraid automation fire: OpenClaw api.config is unavailable');
     }
@@ -129,7 +118,7 @@ function makeOpenClawDispatch(api: OpenClawPluginApi): OpenAutomationDispatch {
     // The OpenClaw host adapter: drive ONE embedded-agent session against the
     // localhost mock for the lifetime of the fire (the mock dictates turns; the
     // agent executes staged tools through its native loop). Resolves on exit.
-    const driveAgent: AgentDriver = async (input) => {
+    const driveAgent: automation.AgentDriver = async (input) => {
       const sessionFile = path.join(scratchDir, 'tool-session.json');
       try {
         await runEmbeddedTurn(api, {
@@ -152,7 +141,7 @@ function makeOpenClawDispatch(api: OpenClawPluginApi): OpenAutomationDispatch {
       }
     };
 
-    const session = await startPersistentMockSession({
+    const session = await automation.startPersistentMockSession({
       workdir: args.workdir,
       automationId: args.automationRef,
       driveAgent,
@@ -162,8 +151,8 @@ function makeOpenClawDispatch(api: OpenClawPluginApi): OpenAutomationDispatch {
     // ctx.agent → a bounded one-shot model probe (no tools) against the user's
     // REAL provider, at the manifest's declared tier. The only billed path.
     const agentDispatcher = async (
-      call: AutomationAgentCall,
-      ctx: AutomationDispatchContext,
+      call: automation.AgentCall,
+      ctx: automation.DispatchContext,
     ): Promise<unknown> => {
       const sessionFile = path.join(scratchDir, `agent-${randomUUID().slice(0, 8)}.json`);
       const result = await runEmbeddedTurn(api, {
@@ -180,7 +169,7 @@ function makeOpenClawDispatch(api: OpenClawPluginApi): OpenAutomationDispatch {
         runId: `${args.runId}:agent:${randomUUID().slice(0, 6)}`,
         abortSignal: ctx.abortSignal,
       });
-      return coerceAgentAnswer(payloadText(result), call.json);
+      return automation.coerceAgentAnswer(payloadText(result), call.json);
     };
 
     return {
@@ -200,8 +189,8 @@ export async function runOpenclawFire(
   opts: OpenclawFireOptions,
   log: FireLog,
   api: OpenClawPluginApi,
-): Promise<AutomationHandlerOutcome & { runId: string }> {
-  const { outcome, record } = await runAutomationFire(
+): Promise<automation.HandlerOutcome & { runId: string }> {
+  const { outcome, record } = await automation.runFire(
     {
       automationRef: opts.automationRef,
       appsDir: opts.appsDir,

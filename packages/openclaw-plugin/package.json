@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@centraid/app-engine": "workspace:*",
-    "@centraid/automation-engine": "workspace:*",
+    "@centraid/automation": "workspace:*",
     "@centraid/gateway": "workspace:*",
     "@sinclair/typebox": "^0.27.0"
   },

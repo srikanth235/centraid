@@ -3,16 +3,10 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  deleteAutomationAt,
-  listAutomations,
-  readAppOwnedAutomation,
-  readAutomationAppAt,
-  setAutomationEnabledAt,
-} from './app.js';
-import type { AutomationManifest } from './manifest.js';
+import { deleteAt, list, readAppOwned, readAppAt, setEnabledAt } from './app.js';
+import type { Manifest } from './manifest.js';
 
-function manifest(over: Partial<AutomationManifest> = {}): AutomationManifest {
+function manifest(over: Partial<Manifest> = {}): Manifest {
   return {
     name: 'Digest',
     version: '0.1.0',
@@ -31,7 +25,7 @@ async function writeAutomation(
   appsDir: string,
   appId: string,
   id: string,
-  m: AutomationManifest,
+  m: Manifest,
   handler = 'export default async () => ({});',
 ): Promise<string> {
   const dir = path.join(appsDir, appId, 'automations', id);
@@ -51,8 +45,8 @@ describe('automation-app', () => {
     await fs.rm(appsDir, { recursive: true, force: true });
   });
 
-  it('listAutomations returns an empty result for a missing directory', async () => {
-    const res = await listAutomations(path.join(appsDir, 'nope'));
+  it('list returns an empty result for a missing directory', async () => {
+    const res = await list(path.join(appsDir, 'nope'));
     assert.deepEqual(res, { rows: [], errors: [] });
   });
 
@@ -63,7 +57,7 @@ describe('automation-app', () => {
       'digest',
       manifest({ name: 'Morning digest' }),
     );
-    const row = await readAutomationAppAt(dir, 'auto.digest');
+    const row = await readAppAt(dir, 'auto.digest');
     assert.ok(row);
     assert.equal(row.id, 'digest');
     assert.equal(row.ownerApp, 'auto.digest');
@@ -73,11 +67,11 @@ describe('automation-app', () => {
     assert.equal(row.enabled, true);
   });
 
-  it('readAppOwnedAutomation resolves by (appId, automationId)', async () => {
+  it('readAppOwned resolves by (appId, automationId)', async () => {
     await writeAutomation(appsDir, 'auto.digest', 'digest', manifest());
-    const row = await readAppOwnedAutomation(appsDir, 'auto.digest', 'digest');
+    const row = await readAppOwned(appsDir, 'auto.digest', 'digest');
     assert.equal(row?.ref, 'auto.digest/digest');
-    assert.equal(await readAppOwnedAutomation(appsDir, 'auto.digest', 'ghost'), undefined);
+    assert.equal(await readAppOwned(appsDir, 'auto.digest', 'ghost'), undefined);
   });
 
   it('lists automations across app folders sorted by name, reports invalid ones', async () => {
@@ -86,7 +80,7 @@ describe('automation-app', () => {
     const badDir = path.join(appsDir, 'ui-app', 'automations', 'broken');
     await fs.mkdir(badDir, { recursive: true });
     await fs.writeFile(path.join(badDir, 'automation.json'), '{not json');
-    const res = await listAutomations(appsDir);
+    const res = await list(appsDir);
     assert.deepEqual(
       res.rows.map((r) => r.name),
       ['Alpha', 'Zebra'],
@@ -99,23 +93,23 @@ describe('automation-app', () => {
     assert.equal(res.errors[0]!.id, 'ui-app/broken');
   });
 
-  it('setAutomationEnabledAt rewrites the manifest in place', async () => {
+  it('setEnabledAt rewrites the manifest in place', async () => {
     const dir = await writeAutomation(
       appsDir,
       'auto.digest',
       'digest',
       manifest({ enabled: true }),
     );
-    const updated = await setAutomationEnabledAt(dir, 'auto.digest', false);
+    const updated = await setEnabledAt(dir, 'auto.digest', false);
     assert.equal(updated?.enabled, false);
-    const reread = await readAutomationAppAt(dir, 'auto.digest');
+    const reread = await readAppAt(dir, 'auto.digest');
     assert.equal(reread?.enabled, false);
   });
 
-  it('deleteAutomationAt removes the directory and is idempotent', async () => {
+  it('deleteAt removes the directory and is idempotent', async () => {
     const dir = await writeAutomation(appsDir, 'auto.digest', 'digest', manifest());
-    await deleteAutomationAt(dir);
-    assert.equal(await readAutomationAppAt(dir, 'auto.digest'), undefined);
-    await deleteAutomationAt(dir);
+    await deleteAt(dir);
+    assert.equal(await readAppAt(dir, 'auto.digest'), undefined);
+    await deleteAt(dir);
   });
 });

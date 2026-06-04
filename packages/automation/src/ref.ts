@@ -1,7 +1,7 @@
 /**
  * Automation identity — id grammar + the globally-unique handle.
  *
- * An automation's directory slug (`isValidAutomationId`) is unique
+ * An automation's directory slug (`isValidId`) is unique
  * within its owning app folder; its handle, `<appId>/<id>`, is unique
  * across the whole gateway and is what scheduler labels, webhook
  * routing, and `onFailure` address it by (issue #98).
@@ -13,7 +13,7 @@ import { isValidAppId } from '@centraid/app-engine';
  * Validate an automation *id* (the directory slug under `automations/`).
  * Filesystem-safe; unique within its owning app.
  */
-export function isValidAutomationId(id: string): boolean {
+export function isValidId(id: string): boolean {
   if (typeof id !== 'string' || id.length === 0) return false;
   return /^[A-Za-z0-9_-]+$/.test(id);
 }
@@ -22,13 +22,13 @@ export function isValidAutomationId(id: string): boolean {
  * A parsed automation handle — the globally-unique address of an
  * automation across scheduler labels, webhook routing, and `onFailure`.
  */
-export interface AutomationRef {
+export interface Ref {
   readonly appId: string;
   readonly automationId: string;
 }
 
 /** Format an automation handle from its owning app id and automation id. */
-export function formatAutomationRef(appId: string, automationId: string): string {
+export function formatRef(appId: string, automationId: string): string {
   return `${appId}/${automationId}`;
 }
 
@@ -38,21 +38,21 @@ export function formatAutomationRef(appId: string, automationId: string): string
  * the same app, the form `onFailure` uses. Returns `undefined` for a
  * malformed handle.
  */
-export function parseAutomationRef(ref: string, withinApp?: string): AutomationRef | undefined {
+export function parseRef(ref: string, withinApp?: string): Ref | undefined {
   const slash = ref.indexOf('/');
   if (slash === -1) {
-    if (!withinApp || !isValidAutomationId(ref)) return undefined;
+    if (!withinApp || !isValidId(ref)) return undefined;
     return { appId: withinApp, automationId: ref };
   }
   const appId = ref.slice(0, slash);
   const automationId = ref.slice(slash + 1);
-  if (!isValidAppId(appId) || !isValidAutomationId(automationId)) return undefined;
+  if (!isValidAppId(appId) || !isValidId(automationId)) return undefined;
   return { appId, automationId };
 }
 
 /** True for a syntactically valid automation handle (with or without app prefix). */
-export function isValidAutomationRef(ref: string): boolean {
+export function isValidRef(ref: string): boolean {
   const slash = ref.indexOf('/');
-  if (slash === -1) return isValidAutomationId(ref);
-  return isValidAppId(ref.slice(0, slash)) && isValidAutomationId(ref.slice(slash + 1));
+  if (slash === -1) return isValidId(ref);
+  return isValidAppId(ref.slice(0, slash)) && isValidId(ref.slice(slash + 1));
 }

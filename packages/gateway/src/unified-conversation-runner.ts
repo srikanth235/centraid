@@ -58,7 +58,7 @@ import {
   type RunnerPrefs,
   type RunTurnFn,
 } from '@centraid/app-engine';
-import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation-engine';
+import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
 import { WorktreeStore } from './worktree-store/index.js';
 import { ensureSession } from './lifecycle-shared.js';

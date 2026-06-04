@@ -39,16 +39,16 @@
  *     to settle every entry.
  */
 
-import type { AutomationRow } from './app.js';
+import type { Row } from './app.js';
 
-export interface AutomationHost {
+export interface Host {
   /**
    * Register or update one automation in the host. Idempotent.
    * Hosts decide how to represent `row.enabled === false` (suppressed
    * entry vs. no entry); callers just call this whenever the row
    * changes.
    */
-  register(row: AutomationRow): Promise<void>;
+  register(row: Row): Promise<void>;
 
   /**
    * Remove one automation from the host by its UUID. Tolerates
@@ -70,10 +70,10 @@ export interface AutomationHost {
    * register/unregister calls needed. `desired` is always the full
    * set of centraid-owned automations.
    */
-  reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult>;
+  reconcile(desired: ReadonlyArray<Row>): Promise<ReconcileResult>;
 }
 
-export interface AutomationReconcileResult {
+export interface ReconcileResult {
   /** Host-entry names newly registered. */
   added: readonly string[];
   /** Host-entry names whose definition changed. */

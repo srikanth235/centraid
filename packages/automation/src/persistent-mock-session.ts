@@ -16,18 +16,13 @@
  * server, the single dispatch id, batch staging/correlation, per-call timing,
  * and teardown — is shared here so codex, claude, and OpenClaw run the exact
  * same runtime (the issue's central goal). Lives in app-engine-adjacent
- * `automation-engine` so both the CLI host (agent-runtime) and the in-process
+ * `@centraid/automation` so both the CLI host (agent-runtime) and the in-process
  * host (openclaw-plugin) can import it without either depending on the other.
  */
 
 import { randomUUID } from 'node:crypto';
 import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
-import type {
-  AutomationDispatchContext,
-  AutomationToolCall,
-  AutomationToolDispatcher,
-  AutomationToolResult,
-} from './handler-runner.js';
+import type { DispatchContext, ToolCall, ToolDispatcher, ToolResult } from './handler-runner.js';
 
 /** What a host's `driveAgent` is handed to run the agent against the mock. */
 export interface AgentDriveInput {
@@ -65,7 +60,7 @@ export interface PersistentMockSessionOptions {
 
 export interface PersistentMockSession {
   /** Stage one `ctx.tool` batch into the live session and read its results. */
-  readonly toolDispatcher: AutomationToolDispatcher;
+  readonly toolDispatcher: ToolDispatcher;
   /** End the session (final `end_turn`), drain the agent, stop the mock. */
   close(): Promise<void>;
 }
@@ -85,7 +80,7 @@ function buildSessionPrompt(automationId: string): string {
 }
 
 /** Convert worker tool calls into the StagedTurn shape the mock returns. */
-function batchToStagedTurn(calls: readonly AutomationToolCall[]): StagedTurn {
+function batchToStagedTurn(calls: readonly ToolCall[]): StagedTurn {
   return {
     stopReason: 'tool_use',
     toolUses: calls.map((c, idx) => ({
@@ -181,7 +176,7 @@ export async function startPersistentMockSession(
   }
   let session: Session | undefined;
 
-  const ensureSession = (ctx: AutomationDispatchContext): Session => {
+  const ensureSession = (ctx: DispatchContext): Session => {
     if (session) return session;
     const { dispatchId, bearerToken } = mock.mintDispatchToken();
     const drive = opts.driveAgent({
@@ -203,10 +198,10 @@ export async function startPersistentMockSession(
     return s;
   };
 
-  const toolDispatcher: AutomationToolDispatcher = async (
-    calls: readonly AutomationToolCall[],
-    ctx: AutomationDispatchContext,
-  ): Promise<AutomationToolResult[]> => {
+  const toolDispatcher: ToolDispatcher = async (
+    calls: readonly ToolCall[],
+    ctx: DispatchContext,
+  ): Promise<ToolResult[]> => {
     const s = ensureSession(ctx);
     if (s.exited) {
       return calls.map(() => ({ ok: false, error: exitError(s.exited!) }));

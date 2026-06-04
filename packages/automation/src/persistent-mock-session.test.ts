@@ -13,7 +13,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { startPersistentMockSession, type AgentDriver } from './persistent-mock-session.js';
-import type { AutomationDispatchContext } from './handler-runner.js';
+import type { DispatchContext } from './handler-runner.js';
 
 interface ToolUseBlock {
   type: 'tool_use';
@@ -80,7 +80,7 @@ function makeFakeDriver(opts: {
   };
 }
 
-function fakeCtx(): AutomationDispatchContext {
+function fakeCtx(): DispatchContext {
   return { runId: 'run-1', automationId: 'app/auto', abortSignal: new AbortController().signal };
 }
 

@@ -1,15 +1,15 @@
 /**
- * `@centraid/automation-engine` — the backend-agnostic automation engine.
+ * `@centraid/automation` — the backend-agnostic automation engine.
  *
- * Built around the **automation fire spine** (`runAutomationFire` + the
- * `OpenAutomationDispatch` seam) — a script-driven fan-out of many model turns
+ * Built around the **automation fire spine** (`runFire` + the
+ * `OpenDispatch` seam) — a script-driven fan-out of many model turns
  * over the shared run ledger, run from a worker-thread `handler.js`. (Its
  * single-turn sibling, the chat-runner core `makeConversationRunnerCore`,
  * lives in `@centraid/app-engine` next to the `ConversationRunner` interface.)
  *
  * Plus the automation domain that surrounds the fire spine: the manifest
  * format, the on-disk automation-app model, the `<appId>/<id>` handle, webhook
- * ingress, the `AutomationHost` interface + in-process scheduler, the
+ * ingress, the `Host` interface + in-process scheduler, the
  * mock-LLM server + persistent session, and the scaffolders.
  *
  * Backend-agnostic by construction: the model turn (`runTurn`), execution
@@ -25,9 +25,9 @@
 // runner in `@centraid/agent-runtime`, the openclaw plugin's
 // reconciliation pass, and the desktop UI). See issue #91.
 export {
-  AutomationManifestError,
-  AUTOMATION_HANDLER_FILE,
-  AUTOMATION_MANIFEST_FILE,
+  ManifestError,
+  HANDLER_FILE,
+  MANIFEST_FILE,
   isValidCronExpression,
   isPendingWebhookTrigger,
   parseManifest,
@@ -36,54 +36,48 @@ export {
   cronTriggersOf,
   webhookTriggerOf,
   pendingWebhookTriggerOf,
-  type AutomationManifest,
-  type AutomationManifestRequires,
-  type AutomationCostEstimate,
-  type AutomationGeneratedMeta,
-  type AutomationManifestValidationCode,
-  type AutomationTrigger,
+  type Manifest,
+  type ManifestRequires,
+  type CostEstimate,
+  type GeneratedMeta,
+  type ManifestValidationCode,
+  type Trigger,
   type CronTrigger,
   type WebhookTrigger,
   type PendingWebhookTrigger,
-  type AutomationOutputSchema,
-  type AutomationHistoryConfig,
-  type AutomationHistoryKeep,
+  type OutputSchema,
+  type HistoryConfig,
+  type HistoryKeep,
 } from './manifest.js';
 
 // Automation identity — the directory-slug grammar and the
 // `<appId>/<id>` handle that scheduler labels, webhook routing,
 // and `onFailure` address an automation by (issue #98).
-export {
-  isValidAutomationId,
-  isValidAutomationRef,
-  formatAutomationRef,
-  parseAutomationRef,
-  type AutomationRef,
-} from './ref.js';
+export { isValidId, isValidRef, formatRef, parseRef, type Ref } from './ref.js';
 
 // Automation apps on disk (issue #98 unified model). An automation
 // always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
-// `listAutomations` scans every app's active version. The directory is
+// `list` scans every app's active version. The directory is
 // the source of truth (no SQLite definition table).
 export {
   APP_AUTOMATIONS_SUBDIR,
-  automationManifestPath,
-  automationHandlerPath,
-  readAutomationAppAt,
-  readAppOwnedAutomation,
-  listAutomations,
-  writeAutomationManifestAt,
-  setAutomationEnabledAt,
-  deleteAutomationAt,
-  type AutomationRow,
-  type AutomationAppError,
-  type ListAutomationAppsResult,
+  manifestPath,
+  handlerPath,
+  readAppAt,
+  readAppOwned,
+  list,
+  writeManifestAt,
+  setEnabledAt,
+  deleteAt,
+  type Row,
+  type AppError,
+  type ListAppsResult,
 } from './app.js';
 
 // The host interface every "thing that fires automations on a schedule"
 // implements — the local in-process scheduler (gateway) and the cloud
 // openclaw cron host both satisfy it.
-export type { AutomationHost, AutomationReconcileResult } from './host.js';
+export type { Host, ReconcileResult } from './host.js';
 
 // In-process cron scheduler (issue #149, n8n semantics): the gateway-owned
 // always-on minute timer that fires enabled cron automations while it runs.
@@ -119,18 +113,18 @@ export {
 
 // Automation handler runtime (issue #91). A fire executes the app's
 // generated `handler.js` in a worker thread; the host supplies the
-// tool / agent dispatchers. `runAutomationHandler` owns the ledger
+// tool / agent dispatchers. `runHandler` owns the ledger
 // side — opening the `runs` row and recording the trace.
 export {
-  runAutomationHandler,
-  type RunAutomationHandlerOptions,
-  type AutomationHandlerOutcome,
-  type AutomationToolCall,
-  type AutomationToolResult,
-  type AutomationToolDispatcher,
-  type AutomationAgentCall,
-  type AutomationAgentDispatcher,
-  type AutomationDispatchContext,
+  runHandler,
+  type RunHandlerOptions,
+  type HandlerOutcome,
+  type ToolCall,
+  type ToolResult,
+  type ToolDispatcher,
+  type AgentCall,
+  type AgentDispatcher,
+  type DispatchContext,
 } from './handler-runner.js';
 export { truncateForAudit } from './handler-audit.js';
 // Shared `ctx.agent` answer coercion — every host ends an agent turn with a
@@ -161,7 +155,7 @@ export {
 // diverge. The builder grounds on this so a handler is rejected at publish
 // time, not at fire time.
 export {
-  lintAutomationHandlerSource,
+  lintHandlerSource,
   formatHandlerLintError,
   type HandlerLintFinding,
 } from './handler-lint.js';
@@ -170,23 +164,23 @@ export {
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomationLocal`
 // is a thin wrapper that injects a mock-LLM + CLI-spawn dispatch surface.
 export {
-  runAutomationFire,
-  type RunAutomationFireOptions,
-  type AutomationRunRecord,
-  type AutomationDispatchSurface,
-  type OpenAutomationDispatch,
-  type OpenAutomationDispatchArgs,
+  runFire,
+  type RunFireOptions,
+  type RunRecord,
+  type DispatchSurface,
+  type OpenDispatch,
+  type OpenDispatchArgs,
 } from './fire.js';
 
 // Automation-app scaffolders. The gateway lifecycle routes use the
 // file-map (`*Files`) variants; the disk wrappers back the CLI / local
 // paths. (Core app scaffolders stay in `@centraid/app-engine`.)
 export {
-  scaffoldAutomationApp,
-  scaffoldAutomationAppFiles,
-  setAutomationEnabledInFiles,
-  deleteAutomationFromFiles,
-  validateAutomationId,
-  validateAutomationAppId,
-  type AutomationScaffoldOptions,
+  scaffoldApp,
+  scaffoldAppFiles,
+  setEnabledInFiles,
+  deleteFromFiles,
+  validateId,
+  validateAppId,
+  type ScaffoldOptions,
 } from './scaffold.js';

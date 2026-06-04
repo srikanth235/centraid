@@ -31,7 +31,7 @@ import {
   type TurnStreamEvent,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import type { AutomationHistoryConfig, AutomationOutputSchema } from './manifest.js';
+import type { HistoryConfig, OutputSchema } from './manifest.js';
 import { validateOutputAgainstSchema } from './manifest-output.js';
 import {
   applyRetention,
@@ -61,12 +61,12 @@ function resolveWorkerFile(): string {
 
 const WORKER_FILE = resolveWorkerFile();
 
-export interface AutomationToolCall {
+export interface ToolCall {
   readonly name: string;
   readonly args: unknown;
 }
 
-export interface AutomationToolResult {
+export interface ToolResult {
   ok: boolean;
   result?: unknown;
   error?: string;
@@ -80,12 +80,12 @@ export interface AutomationToolResult {
   endedAt?: number;
 }
 
-export type AutomationToolDispatcher = (
-  calls: readonly AutomationToolCall[],
-  ctx: AutomationDispatchContext,
-) => Promise<AutomationToolResult[]>;
+export type ToolDispatcher = (
+  calls: readonly ToolCall[],
+  ctx: DispatchContext,
+) => Promise<ToolResult[]>;
 
-export interface AutomationAgentCall {
+export interface AgentCall {
   readonly prompt: string;
   readonly json?: unknown;
   /**
@@ -97,18 +97,15 @@ export interface AutomationAgentCall {
   readonly onEvent?: (ev: TurnStreamEvent) => void;
 }
 
-export type AutomationAgentDispatcher = (
-  call: AutomationAgentCall,
-  ctx: AutomationDispatchContext,
-) => Promise<unknown>;
+export type AgentDispatcher = (call: AgentCall, ctx: DispatchContext) => Promise<unknown>;
 
-export interface AutomationDispatchContext {
+export interface DispatchContext {
   readonly runId: string;
   readonly automationId: string;
   readonly abortSignal: AbortSignal;
 }
 
-export interface RunAutomationHandlerOptions {
+export interface RunHandlerOptions {
   /** Id of the automation app (its directory name). */
   automationId: string;
   /** The automation app directory — handler logs are written here. */
@@ -116,8 +113,8 @@ export interface RunAutomationHandlerOptions {
   /** Absolute path to the generated `handler.js`. */
   handlerFile: string;
   runId: string;
-  toolDispatcher: AutomationToolDispatcher;
-  agentDispatcher: AutomationAgentDispatcher;
+  toolDispatcher: ToolDispatcher;
+  agentDispatcher: AgentDispatcher;
   /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
   runsStore: ConversationStore;
   /**
@@ -132,12 +129,12 @@ export interface RunAutomationHandlerOptions {
   triggerOrigin?: AutomationTriggerOrigin;
   input?: unknown;
   parentRunId?: string;
-  outputSchema?: AutomationOutputSchema;
-  history?: AutomationHistoryConfig;
+  outputSchema?: OutputSchema;
+  history?: HistoryConfig;
   timeoutMs?: number;
 }
 
-export interface AutomationHandlerOutcome {
+export interface HandlerOutcome {
   ok: boolean;
   value?: unknown;
   summary?: string;
@@ -149,7 +146,7 @@ export interface AutomationHandlerOutcome {
 }
 
 interface PendingState {
-  resolve: (outcome: AutomationHandlerOutcome) => void;
+  resolve: (outcome: HandlerOutcome) => void;
   resolved: boolean;
 }
 
@@ -168,17 +165,15 @@ type WorkerToParentMessage =
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
-export async function runAutomationHandler(
-  opts: RunAutomationHandlerOptions,
-): Promise<AutomationHandlerOutcome> {
+export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcome> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  const logs: AutomationHandlerOutcome['logs'] = [];
+  const logs: HandlerOutcome['logs'] = [];
   const persistedEntries: LogEntry[] = [];
   const handlerName = path.basename(opts.handlerFile).replace(/\.js$/, '');
 
   const abortController = new AbortController();
-  const dispatchCtx: AutomationDispatchContext = {
+  const dispatchCtx: DispatchContext = {
     runId: opts.runId,
     automationId: opts.automationId,
     abortSignal: abortController.signal,
@@ -259,10 +254,10 @@ export async function runAutomationHandler(
     worker.postMessage(msg);
   };
 
-  return await new Promise<AutomationHandlerOutcome>((resolve) => {
+  return await new Promise<HandlerOutcome>((resolve) => {
     const state: PendingState = { resolve, resolved: false };
 
-    const finish = (outcome: AutomationHandlerOutcome): void => {
+    const finish = (outcome: HandlerOutcome): void => {
       if (state.resolved) return;
       state.resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);

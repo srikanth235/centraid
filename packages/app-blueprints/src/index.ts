@@ -18,7 +18,7 @@
  *     higher semver version.
  *
  * Depends only on `@centraid/design-tokens` — no engine, no store. Consumed by
- * `@centraid/gateway` (lifecycle routes) and `@centraid/automation-engine` (the
+ * `@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the
  * `ScaffoldFile` contract for automation scaffolding).
  *
  * Gallery surface:

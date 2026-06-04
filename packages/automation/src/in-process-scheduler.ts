@@ -18,13 +18,13 @@
  * it to its execution surface (the gateway points it at
  * `runAutomationLocal`).
  *
- * Implements `AutomationHost`, keyed by each automation's globally-unique
+ * Implements `Host`, keyed by each automation's globally-unique
  * `<ownerApp>/<id>` ref. Only the gateway's `reconcile(rows)` path is
  * exercised in practice; `register`/`unregister`/`list` round it out.
  */
 
-import type { AutomationHost, AutomationReconcileResult } from './host.js';
-import type { AutomationRow } from './app.js';
+import type { Host, ReconcileResult } from './host.js';
+import type { Row } from './app.js';
 import { cronTriggersOf } from './manifest.js';
 import { cronMatches } from './cron-match.js';
 
@@ -46,8 +46,8 @@ interface SchedulerEntry {
   readonly crons: readonly string[];
 }
 
-/** `AutomationHost` + the lifecycle the owning server drives. */
-export interface LocalScheduler extends AutomationHost {
+/** `Host` + the lifecycle the owning server drives. */
+export interface LocalScheduler extends Host {
   /** Start the minute-boundary timer. Idempotent. */
   start(): void;
   /** Stop the timer. Idempotent. */
@@ -69,7 +69,7 @@ export class InProcessScheduler implements LocalScheduler {
     this.onError = opts.onError;
   }
 
-  async register(row: AutomationRow): Promise<void> {
+  async register(row: Row): Promise<void> {
     const entry = entryOf(row);
     // The host's toggle path: a disabled or non-cron automation is simply
     // not scheduled.
@@ -88,7 +88,7 @@ export class InProcessScheduler implements LocalScheduler {
     return [...this.entries.keys()].sort();
   }
 
-  async reconcile(desired: ReadonlyArray<AutomationRow>): Promise<AutomationReconcileResult> {
+  async reconcile(desired: ReadonlyArray<Row>): Promise<ReconcileResult> {
     const next = new Map<string, SchedulerEntry>();
     for (const row of desired) {
       if (!row.enabled) continue;
@@ -167,7 +167,7 @@ export class InProcessScheduler implements LocalScheduler {
   }
 }
 
-function entryOf(row: AutomationRow): SchedulerEntry {
+function entryOf(row: Row): SchedulerEntry {
   return { ref: row.ref, crons: cronTriggersOf(row.triggers).map((t) => t.expr) };
 }
 

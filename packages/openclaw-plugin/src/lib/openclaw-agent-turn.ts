@@ -10,7 +10,7 @@
  *
  * Deliberately NOT here: the chat streaming-event translation (chat-only, so
  * sharing it dedups nothing) and the `ctx.agent` JSON coercion (shared
- * cross-package — it lives in `@centraid/automation-engine` as
+ * cross-package — it lives in `@centraid/automation` as
  * `coerceAgentAnswer`).
  */
 

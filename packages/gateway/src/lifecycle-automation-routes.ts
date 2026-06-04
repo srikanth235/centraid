@@ -8,17 +8,7 @@ import { promises as fs } from 'node:fs';
 import nodePath from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError, type ScaffoldFile } from '@centraid/app-blueprints';
-import {
-  generateWebhookId,
-  generateWebhookSecret,
-  hashWebhookSecret,
-  listAutomations,
-  parseAutomationRef,
-  type AutomationTrigger,
-  deleteAutomationFromFiles,
-  scaffoldAutomationAppFiles,
-  setAutomationEnabledInFiles,
-} from '@centraid/automation-engine';
+import * as automation from '@centraid/automation';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
   defaultSessionId,
@@ -58,17 +48,17 @@ export async function handleAutomationCreate(
   const triggerInput = Array.isArray(body.triggers)
     ? (body.triggers as Array<{ kind?: string; expr?: string }>)
     : undefined;
-  const triggers: AutomationTrigger[] | undefined = triggerInput?.map((t) => {
+  const triggers: automation.Trigger[] | undefined = triggerInput?.map((t) => {
     if (t.kind === 'webhook') {
-      const wid = generateWebhookId();
-      const secret = generateWebhookSecret();
+      const wid = automation.generateWebhookId();
+      const secret = automation.generateWebhookSecret();
       webhook = { id: wid, secret, url: webhookUrl(req, wid) };
-      return { kind: 'webhook', id: wid, secretHash: hashWebhookSecret(secret) };
+      return { kind: 'webhook', id: wid, secretHash: automation.hashWebhookSecret(secret) };
     }
     return { kind: 'cron', expr: typeof t.expr === 'string' ? t.expr : '0 9 * * *' };
   });
 
-  const files = scaffoldAutomationAppFiles(id, {
+  const files = automation.scaffoldAppFiles(id, {
     ...(typeof body.name === 'string' && body.name ? { name: body.name } : {}),
     ...(typeof body.description === 'string' && body.description
       ? { description: body.description }
@@ -96,7 +86,7 @@ export async function handleAutomationCreate(
   // Read the published row back for the renderer (only on `main`).
   let row: unknown = null;
   if (publish) {
-    const { rows } = await listAutomations(opts.codeAppsDir());
+    const { rows } = await automation.list(opts.codeAppsDir());
     row = rows.find((r) => r.ownerApp === id) ?? null;
   }
   return sendJson(res, 201, { row, sessionId, staged: !publish, ...(webhook ? { webhook } : {}) });
@@ -110,7 +100,7 @@ export async function handleAutomationSetEnabled(
   res: ServerResponse,
   url: URL,
 ): Promise<boolean> {
-  const ref = parseAutomationRef(url.searchParams.get('ref') ?? '');
+  const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
   if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'set-enabled needs ?ref=' });
   const body = await readJson(req);
   if (typeof body.enabled !== 'boolean') {
@@ -125,7 +115,7 @@ export async function handleAutomationSetEnabled(
   await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   const appDir = await opts.store.snapshotSessionAppDir(sessionId, ref.appId);
   const current = await readFileMap(appDir);
-  const changed = setAutomationEnabledInFiles(
+  const changed = automation.setEnabledInFiles(
     current as ScaffoldFile[],
     ref.automationId,
     body.enabled,
@@ -155,7 +145,7 @@ export async function handleAutomationDelete(
   res: ServerResponse,
   url: URL,
 ): Promise<boolean> {
-  const ref = parseAutomationRef(url.searchParams.get('ref') ?? '');
+  const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
   if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'delete needs ?ref=' });
   const publish = url.searchParams.get('publish') === 'true';
 
@@ -179,7 +169,7 @@ export async function handleAutomationDelete(
   await prepareLifecycleSession(opts.store, sessionId, true);
   const appDir = await opts.store.snapshotSessionAppDir(sessionId, ref.appId);
   const current = await readFileMap(appDir);
-  const { removed } = deleteAutomationFromFiles(current as ScaffoldFile[], ref.automationId);
+  const { removed } = automation.deleteFromFiles(current as ScaffoldFile[], ref.automationId);
   if (removed.length === 0) {
     await opts.store.closeSession(sessionId);
     return sendJson(res, 200, { ok: true, staged: !publish });

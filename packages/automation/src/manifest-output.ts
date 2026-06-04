@@ -8,9 +8,9 @@
  * roadmap, not in scope here.
  */
 
-import { AutomationManifestError } from './manifest-errors.js';
+import { ManifestError } from './manifest-errors.js';
 
-export interface AutomationOutputSchema {
+export interface OutputSchema {
   readonly type: 'object';
   readonly properties?: Record<
     string,
@@ -21,10 +21,10 @@ export interface AutomationOutputSchema {
 
 const ALLOWED_PROP_TYPES = new Set(['string', 'number', 'boolean', 'object', 'array']);
 
-export function validateOutputSchema(raw: unknown): AutomationOutputSchema | undefined {
+export function validateOutputSchema(raw: unknown): OutputSchema | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_output_schema',
       'manifest.outputSchema must be an object',
       'outputSchema',
@@ -32,16 +32,16 @@ export function validateOutputSchema(raw: unknown): AutomationOutputSchema | und
   }
   const s = raw as Record<string, unknown>;
   if (s.type !== 'object') {
-    throw new AutomationManifestError(
+    throw new ManifestError(
       'invalid_output_schema',
       'manifest.outputSchema.type must be "object" — only object schemas are supported today',
       'outputSchema.type',
     );
   }
-  let properties: AutomationOutputSchema['properties'];
+  let properties: OutputSchema['properties'];
   if (s.properties !== undefined) {
     if (s.properties === null || typeof s.properties !== 'object' || Array.isArray(s.properties)) {
-      throw new AutomationManifestError(
+      throw new ManifestError(
         'invalid_output_schema',
         'manifest.outputSchema.properties must be an object',
         'outputSchema.properties',
@@ -50,7 +50,7 @@ export function validateOutputSchema(raw: unknown): AutomationOutputSchema | und
     const out: Record<string, { type: 'string' | 'number' | 'boolean' | 'object' | 'array' }> = {};
     for (const [key, value] of Object.entries(s.properties as Record<string, unknown>)) {
       if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-        throw new AutomationManifestError(
+        throw new ManifestError(
           'invalid_output_schema',
           `manifest.outputSchema.properties.${key} must be an object with a "type" field`,
           `outputSchema.properties.${key}`,
@@ -58,7 +58,7 @@ export function validateOutputSchema(raw: unknown): AutomationOutputSchema | und
       }
       const v = value as Record<string, unknown>;
       if (typeof v.type !== 'string' || !ALLOWED_PROP_TYPES.has(v.type)) {
-        throw new AutomationManifestError(
+        throw new ManifestError(
           'invalid_output_schema',
           `manifest.outputSchema.properties.${key}.type must be one of: string|number|boolean|object|array`,
           `outputSchema.properties.${key}.type`,
@@ -71,7 +71,7 @@ export function validateOutputSchema(raw: unknown): AutomationOutputSchema | und
   let required: readonly string[] | undefined;
   if (s.required !== undefined) {
     if (!Array.isArray(s.required)) {
-      throw new AutomationManifestError(
+      throw new ManifestError(
         'invalid_output_schema',
         'manifest.outputSchema.required must be an array of strings',
         'outputSchema.required',
@@ -79,7 +79,7 @@ export function validateOutputSchema(raw: unknown): AutomationOutputSchema | und
     }
     required = s.required.map((entry, idx) => {
       if (typeof entry !== 'string' || entry.length === 0) {
-        throw new AutomationManifestError(
+        throw new ManifestError(
           'invalid_output_schema',
           `manifest.outputSchema.required[${idx}] must be a non-empty string`,
           `outputSchema.required[${idx}]`,
@@ -101,10 +101,7 @@ export function validateOutputSchema(raw: unknown): AutomationOutputSchema | und
  * to flip `runs.ok=0` and populate `runs.error` when the handler's
  * output doesn't match the declared shape.
  */
-export function validateOutputAgainstSchema(
-  schema: AutomationOutputSchema,
-  output: unknown,
-): string | null {
+export function validateOutputAgainstSchema(schema: OutputSchema, output: unknown): string | null {
   if (output === null || typeof output !== 'object' || Array.isArray(output)) {
     const got = output === null ? 'null' : Array.isArray(output) ? 'array' : typeof output;
     return `output is not an object (got ${got})`;

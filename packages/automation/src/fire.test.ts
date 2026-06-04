@@ -2,7 +2,7 @@
  * Automation fire spine (issue #147, Concern 2). The per-fire orchestration
  * lives here in app-engine; the live `ctx.tool` / `ctx.agent` dispatch
  * surface is injected by the host via `openDispatch`. These tests run a real
- * (trivial) `handler.js` through `runAutomationFire` with a STUB dispatch
+ * (trivial) `handler.js` through `runFire` with a STUB dispatch
  * surface, proving the spine resolves the automation, opens its ledger, runs
  * the handler, and cascades `onFailure` — all without any agent-runtime
  * mock-LLM / CLI machinery.
@@ -18,14 +18,10 @@ import {
   makeRuntimeDbProvider,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import {
-  runAutomationFire,
-  type AutomationDispatchSurface,
-  type OpenAutomationDispatchArgs,
-} from './fire.js';
-import type { AutomationManifest } from './manifest.js';
+import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
+import type { Manifest } from './manifest.js';
 
-function manifest(over: Partial<AutomationManifest> = {}): AutomationManifest {
+function manifest(over: Partial<Manifest> = {}): Manifest {
   return {
     name: 'Digest',
     version: '0.1.0',
@@ -43,7 +39,7 @@ async function writeAutomation(
   appsDir: string,
   appId: string,
   id: string,
-  m: AutomationManifest,
+  m: Manifest,
   handler = 'export default async () => ({ ok: true });',
 ): Promise<void> {
   const dir = path.join(appsDir, appId, 'automations', id);
@@ -55,8 +51,8 @@ async function writeAutomation(
 /** A stub dispatch surface that records that it was opened + closed. The
  *  trivial handlers below never call `ctx.tool` / `ctx.agent`, so the
  *  dispatchers themselves are never invoked. */
-function stubDispatch(opened: OpenAutomationDispatchArgs[], closes: { n: number }) {
-  return (args: OpenAutomationDispatchArgs): Promise<AutomationDispatchSurface> => {
+function stubDispatch(opened: OpenDispatchArgs[], closes: { n: number }) {
+  return (args: OpenDispatchArgs): Promise<DispatchSurface> => {
     opened.push(args);
     return Promise.resolve({
       toolDispatcher: async () => [],
@@ -68,7 +64,7 @@ function stubDispatch(opened: OpenAutomationDispatchArgs[], closes: { n: number 
   };
 }
 
-describe('runAutomationFire', () => {
+describe('runFire', () => {
   let appsDir: string;
 
   beforeEach(async () => {
@@ -85,10 +81,10 @@ describe('runAutomationFire', () => {
       'digest',
       manifest({ requires: { tools: ['mailer'] } }),
     );
-    const opened: OpenAutomationDispatchArgs[] = [];
+    const opened: OpenDispatchArgs[] = [];
     const closes = { n: 0 };
 
-    const { outcome, record } = await runAutomationFire(
+    const { outcome, record } = await runFire(
       { automationRef: 'notes/digest', appsDir },
       { openDispatch: stubDispatch(opened, closes) },
     );
@@ -121,7 +117,7 @@ describe('runAutomationFire', () => {
        };`,
     );
     const events: RunStreamEvent[] = [];
-    const dispatch = (args: OpenAutomationDispatchArgs): Promise<AutomationDispatchSurface> => {
+    const dispatch = (args: OpenDispatchArgs): Promise<DispatchSurface> => {
       void args;
       return Promise.resolve({
         toolDispatcher: async () => [{ ok: true, result: { sent: true } }],
@@ -130,7 +126,7 @@ describe('runAutomationFire', () => {
       });
     };
 
-    const { outcome } = await runAutomationFire(
+    const { outcome } = await runFire(
       { automationRef: 'notes/flow', appsDir, onRunEvent: (ev) => events.push(ev) },
       { openDispatch: dispatch },
     );
@@ -181,7 +177,7 @@ describe('runAutomationFire', () => {
     // A stub agent dispatcher that behaves like a streaming chat adapter:
     // forward token deltas + a usage event through `call.onEvent`, then
     // return the final answer.
-    const dispatch = (): Promise<AutomationDispatchSurface> =>
+    const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
         toolDispatcher: async () => [],
         agentDispatcher: async (call) => {
@@ -200,7 +196,7 @@ describe('runAutomationFire', () => {
         async close() {},
       });
 
-    const { outcome, record } = await runAutomationFire(
+    const { outcome, record } = await runFire(
       { automationRef: 'notes/ask', appsDir, onRunEvent: (ev) => events.push(ev) },
       { openDispatch: dispatch },
     );
@@ -243,7 +239,7 @@ describe('runAutomationFire', () => {
     );
     // A dispatcher that reports a precise 250ms tool window (as the mock's
     // onToolStart/onToolResults would), distinct from the batch span.
-    const dispatch = (): Promise<AutomationDispatchSurface> =>
+    const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
         toolDispatcher: async () => [
           { ok: true, result: { sent: true }, startedAt: 1_000_000, endedAt: 1_000_250 },
@@ -252,7 +248,7 @@ describe('runAutomationFire', () => {
         async close() {},
       });
 
-    const { record } = await runAutomationFire(
+    const { record } = await runFire(
       { automationRef: 'notes/send', appsDir },
       { openDispatch: dispatch },
     );
@@ -282,7 +278,7 @@ describe('runAutomationFire', () => {
        };`,
     );
     const events: RunStreamEvent[] = [];
-    const dispatch = (): Promise<AutomationDispatchSurface> =>
+    const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
         toolDispatcher: async () => {
           throw new Error('spawn blew up');
@@ -291,7 +287,7 @@ describe('runAutomationFire', () => {
         async close() {},
       });
 
-    const { outcome, record } = await runAutomationFire(
+    const { outcome, record } = await runFire(
       { automationRef: 'notes/flaky', appsDir, onRunEvent: (ev) => events.push(ev) },
       { openDispatch: dispatch },
     );
@@ -328,10 +324,10 @@ describe('runAutomationFire', () => {
     );
     await writeAutomation(appsDir, 'notes', 'recover', manifest({ name: 'Recover' }));
 
-    const opened: OpenAutomationDispatchArgs[] = [];
+    const opened: OpenDispatchArgs[] = [];
     const closes = { n: 0 };
 
-    const { outcome } = await runAutomationFire(
+    const { outcome } = await runFire(
       { automationRef: 'notes/main', appsDir },
       { openDispatch: stubDispatch(opened, closes) },
     );

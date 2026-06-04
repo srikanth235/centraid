@@ -4,7 +4,7 @@
  * circularly depending on the main parser entrypoint.
  */
 
-export type AutomationManifestValidationCode =
+export type ManifestValidationCode =
   | 'invalid_json'
   | 'missing_field'
   | 'invalid_field'
@@ -14,12 +14,12 @@ export type AutomationManifestValidationCode =
   | 'invalid_on_failure'
   | 'mock_model_disallowed';
 
-export class AutomationManifestError extends Error {
-  readonly code: AutomationManifestValidationCode;
+export class ManifestError extends Error {
+  readonly code: ManifestValidationCode;
   readonly field?: string;
-  constructor(code: AutomationManifestValidationCode, message: string, field?: string) {
+  constructor(code: ManifestValidationCode, message: string, field?: string) {
     super(message);
-    this.name = 'AutomationManifestError';
+    this.name = 'ManifestError';
     this.code = code;
     if (field !== undefined) this.field = field;
   }

@@ -35,7 +35,7 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { RunnerKind } from './types.js';
-import { startMockLlmServer } from '@centraid/automation-engine';
+import { startMockLlmServer } from '@centraid/automation';
 import { codexProviderOverrideArgs } from './codex-provider-config.js';
 
 /** The throwaway prompt; the mock ends the turn at once, so it's never acted on. */

@@ -29,13 +29,7 @@ import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import {
-  coerceAgentAnswer,
-  startPersistentMockSession,
-  type AgentDriver,
-  type AutomationAgentDispatcher,
-  type AutomationToolDispatcher,
-} from '@centraid/automation-engine';
+import * as automation from '@centraid/automation';
 import { runClaudeSdkTurn } from './claude-sdk.js';
 import {
   defaultSpawnCli,
@@ -57,8 +51,8 @@ export interface LiveDispatchOptions {
 }
 
 export interface LiveDispatch {
-  toolDispatcher: AutomationToolDispatcher;
-  agentDispatcher: AutomationAgentDispatcher;
+  toolDispatcher: automation.ToolDispatcher;
+  agentDispatcher: automation.AgentDispatcher;
   /** Tear down the mock server + scratch dir. Safe to call once. */
   close(): Promise<void>;
 }
@@ -121,7 +115,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   // The CLI host adapter: point a `codex exec` / `claude -p` session at the
   // mock for the lifetime of the fire. Resolves when the CLI exits (`close()`
   // stages the final `end_turn`).
-  const driveAgent: AgentDriver = async (input) => {
+  const driveAgent: automation.AgentDriver = async (input) => {
     const outcome = await opts.spawnCli({
       kind: opts.runner,
       mockBaseUrl: input.mockBaseUrl,
@@ -140,19 +134,19 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
         };
   };
 
-  const session = await startPersistentMockSession({
+  const session = await automation.startPersistentMockSession({
     workdir: opts.workdir,
     automationId: opts.automationId,
     driveAgent,
     onLog: opts.onLog,
   });
-  const toolDispatcher: AutomationToolDispatcher = session.toolDispatcher;
+  const toolDispatcher: automation.ToolDispatcher = session.toolDispatcher;
 
   // ctx.agent routes to the user's REAL provider via the local CLI —
   // no mock involvement. The final answer is read from a file the CLI
   // writes (codex `--output-last-message`) rather than parsed out of
   // the event stream, and `--output-schema` enforces the JSON shape.
-  const agentDispatcher: AutomationAgentDispatcher = async (call, ctx): Promise<unknown> => {
+  const agentDispatcher: automation.AgentDispatcher = async (call, ctx): Promise<unknown> => {
     const env = { ...process.env };
     // `stdin: 'ignore'` is load-bearing: `codex exec` treats an open
     // stdin pipe as an appended `<stdin>` instruction block and blocks
@@ -189,7 +183,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       if (errorMessage && !finalText) {
         throw new Error(`ctx.agent (claude) failed: ${errorMessage}`);
       }
-      return coerceAgentAnswer(finalText, call.json);
+      return automation.coerceAgentAnswer(finalText, call.json);
     }
 
     // codex exec — non-interactive, no approval prompts, runnable
@@ -229,7 +223,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       // whatever it printed to stdout.
       answer = result.stdout;
     }
-    return coerceAgentAnswer(answer, call.json);
+    return automation.coerceAgentAnswer(answer, call.json);
   };
 
   let closed = false;

@@ -8,10 +8,10 @@
  */
 
 import type {
-  AutomationAgentDispatcher,
-  AutomationDispatchContext,
-  AutomationToolDispatcher,
-  AutomationToolResult,
+  AgentDispatcher,
+  DispatchContext,
+  ToolDispatcher,
+  ToolResult,
 } from './handler-runner.js';
 import type { ConversationStore, TurnStreamEvent } from '@centraid/app-engine';
 import {
@@ -48,8 +48,8 @@ export function nextBatchIdFor(audit: AuditState, n: number): number | undefined
 
 export interface DispatchBatchArgs {
   audit: AuditState;
-  toolDispatcher: AutomationToolDispatcher;
-  dispatchCtx: AutomationDispatchContext;
+  toolDispatcher: ToolDispatcher;
+  dispatchCtx: DispatchContext;
   calls: ToolCallWire[];
 }
 
@@ -60,7 +60,7 @@ export interface DispatchBatchArgs {
  * owns retry/backoff/error-classification via `try/catch`. See the
  * "Run audit & state" block of the builder system prompt.
  */
-export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<AutomationToolResult[]> {
+export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<ToolResult[]> {
   const { audit, calls, toolDispatcher, dispatchCtx } = args;
   const ordinals = calls.map(() => nextOrdinal(audit));
   const batchId = nextBatchIdFor(audit, calls.length);
@@ -81,7 +81,7 @@ export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<Automa
       started,
     }),
   );
-  let results: AutomationToolResult[];
+  let results: ToolResult[];
   try {
     results = await toolDispatcher(
       calls.map((c) => ({ name: c.name, args: c.args })),
@@ -145,8 +145,8 @@ export interface CtxReply {
  */
 export async function handleAgentMessage(
   audit: AuditState,
-  dispatchCtx: AutomationDispatchContext,
-  agentDispatcher: AutomationAgentDispatcher,
+  dispatchCtx: DispatchContext,
+  agentDispatcher: AgentDispatcher,
   prompt: string,
   json: unknown,
 ): Promise<CtxReply> {
