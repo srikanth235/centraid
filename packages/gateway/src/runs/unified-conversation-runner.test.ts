@@ -18,7 +18,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { WorktreeStore } from './worktree-store/index.js';
+import { WorktreeStore } from '../worktree-store/index.js';
 import type { Dispatcher, ConversationTurnInput, TurnStreamEvent } from '@centraid/app-engine';
 import type { TurnInput, TurnConfig, TurnResult } from '@centraid/agent-runtime';
 import { makeUnifiedConversationRunner } from './unified-conversation-runner.ts';

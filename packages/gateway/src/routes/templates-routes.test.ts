@@ -12,9 +12,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { serve, type GatewayServeHandle } from './serve.ts';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import { makeTemplatesRouteHandler } from './templates-routes.ts';
-import type { GatewayPaths } from './paths.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;

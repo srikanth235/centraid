@@ -6,7 +6,7 @@ import os from 'node:os';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { buildGateway, type BuiltGateway } from './build-gateway.ts';
-import type { GatewayPaths } from './paths.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 // `buildGateway()` is the host-agnostic core: it constructs the whole
 // object graph but binds no socket. These tests pin that contract — the

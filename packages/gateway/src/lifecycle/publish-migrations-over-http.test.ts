@@ -21,8 +21,8 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { serve, type GatewayServeHandle } from './serve.ts';
-import type { GatewayPaths } from './paths.ts';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;

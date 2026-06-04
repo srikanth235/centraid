@@ -19,7 +19,7 @@ import {
   stageAndMaybePublish,
   webhookUrl,
   type LifecycleRouteOptions,
-} from './lifecycle-shared.js';
+} from '../lifecycle/lifecycle-shared.js';
 
 // ---- POST /centraid/_automations (scaffold an automation app) ----
 

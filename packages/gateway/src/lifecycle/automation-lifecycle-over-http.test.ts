@@ -19,8 +19,8 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
-import { serve, type GatewayServeHandle } from './serve.ts';
-import type { GatewayPaths } from './paths.ts';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;

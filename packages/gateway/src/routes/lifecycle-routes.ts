@@ -67,9 +67,9 @@ import {
   stageAndMaybePublish,
   webhookUrl,
   type LifecycleRouteOptions,
-} from './lifecycle-shared.js';
+} from '../lifecycle/lifecycle-shared.js';
 
-export type { LifecycleRouteOptions } from './lifecycle-shared.js';
+export type { LifecycleRouteOptions } from '../lifecycle/lifecycle-shared.js';
 
 /**
  * Build the lifecycle route handler bound to a live `WorktreeStore`. Returns

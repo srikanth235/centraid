@@ -20,7 +20,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { serve } from './serve.js';
+import { serve } from '../serve/serve.js';
 import { daemonLayoutFor, type DaemonLayout } from './cli-paths.js';
 import {
   loadConfigFile,

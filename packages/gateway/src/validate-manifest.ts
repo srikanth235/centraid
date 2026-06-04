@@ -7,7 +7,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { ManifestError, parseAppManifest } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
-import { fileExists } from './route-helpers.js';
+import { fileExists } from './routes/route-helpers.js';
 
 /**
  * Validate an app dir's `app.json` and the files it declares. Returns a

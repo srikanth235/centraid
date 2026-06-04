@@ -60,9 +60,9 @@ import {
 } from '@centraid/app-engine';
 import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
-import { WorktreeStore } from './worktree-store/index.js';
-import { ensureSession } from './lifecycle-shared.js';
-import { seedDraftData } from './draft-data.js';
+import { WorktreeStore } from '../worktree-store/index.js';
+import { ensureSession } from '../lifecycle/lifecycle-shared.js';
+import { seedDraftData } from '../lifecycle/draft-data.js';
 
 export type { RunTurnFn };
 

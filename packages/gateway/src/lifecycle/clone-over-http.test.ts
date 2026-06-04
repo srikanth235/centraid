@@ -18,8 +18,8 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { cloneTemplateFiles } from '@centraid/blueprints';
 import { provisionPendingWebhooksInFiles } from '@centraid/automation';
-import { serve, type GatewayServeHandle } from './serve.ts';
-import type { GatewayPaths } from './paths.ts';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;

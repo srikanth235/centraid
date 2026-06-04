@@ -8,10 +8,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError } from '@centraid/blueprints';
 import { MigrationError } from '@centraid/app-engine';
 import type * as automation from '@centraid/automation';
-import { WorktreeStore, WorktreeStoreError } from './worktree-store/index.js';
-import { validateManifestAt } from './apps-store-routes.js';
+import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
+import { validateManifestAt } from '../routes/apps-store-routes.js';
 import { runPublishMigrations } from './publish-migrations.js';
-import { sendJson, writeFileMap, type FileMapEntry } from './route-helpers.js';
+import { sendJson, writeFileMap, type FileMapEntry } from '../routes/route-helpers.js';
 
 export interface LifecycleRouteOptions {
   /** Git store backing app code. Sessions/publishes ride through it. */

@@ -37,15 +37,15 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { MigrationError } from '@centraid/app-engine';
-import { WorktreeStore, WorktreeStoreError } from './worktree-store/index.js';
+import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
 import { readBody, readJson, sendJson } from './route-helpers.js';
-import { validateManifestAt } from './validate-manifest.js';
-import { runPublishMigrations } from './publish-migrations.js';
-import { seedDraftData } from './draft-data.js';
+import { validateManifestAt } from '../validate-manifest.js';
+import { runPublishMigrations } from '../lifecycle/publish-migrations.js';
+import { seedDraftData } from '../lifecycle/draft-data.js';
 
 // Re-exported so existing importers (lifecycle-shared) keep their path; the
 // implementation moved to validate-manifest.ts (issue #167, file-size hygiene).
-export { validateManifestAt } from './validate-manifest.js';
+export { validateManifestAt } from '../validate-manifest.js';
 
 /** Text extensions a draft file write accepts — mirrors agent-harness. */
 const EDITABLE_EXT = new Set([

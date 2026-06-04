@@ -43,7 +43,7 @@ import {
   type RunSummary,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
-import type { WorktreeStore } from './worktree-store/index.js';
+import type { WorktreeStore } from '../worktree-store/index.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 
 export interface AutomationsRouteOptions {

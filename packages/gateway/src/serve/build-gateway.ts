@@ -67,17 +67,17 @@ import {
   type RunnerKind,
   type RunnerPrefs,
 } from '@centraid/agent-runtime';
-import { WorktreeStore } from './worktree-store/index.js';
-import { makeAppsStoreRouteHandler } from './apps-store-routes.js';
-import { makeDraftCodeDirResolver } from './draft-data.js';
-import { makeAutomationsRouteHandler } from './automations-routes.js';
-import { RunEventBus } from './run-event-bus.js';
+import { WorktreeStore } from '../worktree-store/index.js';
+import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
+import { makeDraftCodeDirResolver } from '../lifecycle/draft-data.js';
+import { makeAutomationsRouteHandler } from '../routes/automations-routes.js';
+import { RunEventBus } from '../runs/run-event-bus.js';
 import { defaultLogger } from './default-logger.js';
-import { makeLifecycleRouteHandler } from './lifecycle-routes.js';
-import { makeUnifiedConversationRunner } from './unified-conversation-runner.js';
-import { makeTemplatesRouteHandler } from './templates-routes.js';
-import { makeAgentsRouteHandler } from './agents-routes.js';
-import type { GatewayPaths } from './paths.js';
+import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
+import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
+import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
+import { makeAgentsRouteHandler } from '../routes/agents-routes.js';
+import type { GatewayPaths } from '../paths.js';
 
 export interface BuildGatewayOptions {
   /** On-disk slots the runtime reads/writes. Caller-derived. */

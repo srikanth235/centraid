@@ -14,7 +14,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import type * as automation from '@centraid/automation';
 import { serve, type GatewayServeHandle } from './serve.ts';
-import type { GatewayPaths } from './paths.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;

@@ -18,7 +18,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { runPendingMigrations } from '@centraid/app-engine';
-import type { WorktreeStore } from './worktree-store/index.js';
+import type { WorktreeStore } from '../worktree-store/index.js';
 
 const DATA_FILE = 'data.sqlite';
 const SIDECARS = ['data.sqlite-wal', 'data.sqlite-shm'];
