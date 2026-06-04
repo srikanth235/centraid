@@ -14,7 +14,7 @@ control, independent of the model Refresh.
 - [x] Commit 1 — agent-runtime: enumerate claude models via SDK `supportedModels()`
 - [x] Commit 2 — agent-runtime: host-tool probe (SDK loopback + MCP gate) + catalog v2 (tools beside models)
 - [x] Commit 3 — gateway/skills: boot-probe tools, agents-status tools + `?refreshTools=1`, builder reads catalog
-- [ ] Commit 4 — desktop: per-agent tools view + separate Refresh tools control
+- [x] Commit 4 — desktop: per-agent tools view + separate Refresh tools control
 
 ## What changed
 
@@ -62,6 +62,17 @@ control, independent of the model Refresh.
   `unified-chat-runner.ts` reads cached tools from the catalog per turn via
   `readRunnerTools`. Route tests in `agents-routes.test.ts` (+3) cover the tools
   resolver, independent `refreshTools` threading, and best-effort degradation.
+
+- **Commit 4 — desktop: per-agent tools view + separate Refresh tools control.**
+  Settings → Agents gains a per-agent "N tools" disclosure that expands a panel
+  grouped **Built-in → per-MCP-server**, each tool showing its name (mono), an
+  `args` chip when it carries a JSON input schema, and its description; open state
+  persists across re-renders, with a staggered reveal. A new **Refresh tools**
+  button sits beside the renamed **Refresh models** button and hits `?refreshTools=1`
+  with its own "Scanning tools…" state. `CentraidAgentsStatus` gains
+  `codexTools`/`claudeTools` (new `CentraidHostTool` type); `getAgentsStatus`
+  takes `refreshTools`. Styles under `.agent-entry` / `.agent-tools*` / `.tools-*`,
+  consistent with the existing `agent-row` vocabulary.
 
 ## Out of scope
 
