@@ -9,7 +9,7 @@ receipt tracks the layer-1 cleanups, each landed as its own focused commit.
 ## Checklist
 - [x] A — Move design-tokens source under src/ and update package.json + tsconfig
 - [ ] B — Drop redundant folder-name prefixes in models/, cli/, handler/, conversation/
-- [ ] C — Resolve insights/ analytics-vs-insights prefix question
+- [x] C — Resolve insights/ analytics-vs-insights prefix question
 - [x] D — Rename design-tokens/themes/_shared.ts to shared.ts
 
 ## What changed
@@ -28,6 +28,19 @@ the per-file `files` list → `["dist", "src"]` (which also drops the stale
 (`dist/index.js`, `dist/themes/*`), verified by a clean `tsc` build. All
 consumers import the package via the `@centraid/design-tokens` barrel, so there
 were no subpath importers to update.
+
+### C — Resolve insights/ analytics-vs-insights prefix question
+Investigated `app-engine/src/insights/` (`analytics-db.ts`, `analytics-store.ts`
+vs `insights-store.ts`) and concluded the split is **intentional — no rename**.
+`analytics-*` is the central `centraid-analytics.sqlite` storage and the
+push-based **write** ledger (`AnalyticsStore` implements `RunSummarySink`;
+`ANALYTICS_MIGRATIONS`); `insights-store.ts` is the read-only **aggregation**
+layer (`InsightsStore`, the source for the desktop Insights screen). They are
+two distinct nouns/classes, not a redundant prefix: renaming `analytics-*`
+would collide with `insights-store.ts` and fight the `AnalyticsStore` /
+`centraid-analytics.sqlite` names. The folder is `insights/` because the
+sub-module was the former `@centraid/analytics` package (#151) renamed to its
+read-facing feature name while keeping the internal Analytics storage concept.
 
 ### D — Rename design-tokens/themes/_shared.ts to shared.ts
 `design-tokens/themes/_shared.ts` was the only underscore-prefixed source file
