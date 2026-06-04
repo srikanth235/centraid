@@ -932,7 +932,13 @@ import {
     clear();
     const seq = renderSeq;
     await hydrateDrafts();
-    const availableTemplates = await loadAvailableTemplates();
+    // App templates and automation templates both surface on Home now —
+    // each as its own tab in the discovery shelf. One IPC backs both
+    // loaders; they split the catalog on `kind`.
+    const [availableTemplates, automationTemplates] = await Promise.all([
+      loadAvailableTemplates(),
+      loadAutomationTemplates(),
+    ]);
     if (!isCurrentRender(seq)) return;
 
     // `has-wall` paints the device-wall crosshatch behind everything.
@@ -944,7 +950,7 @@ import {
     // tabbed discovery shelf — regardless of how many apps exist. The
     // shelf's "Browse all →" is the only path to the alternate (Discover)
     // page; the workspace never auto-switches based on app count.
-    renderDay1Home(scroll, availableTemplates);
+    renderDay1Home(scroll, availableTemplates, automationTemplates);
 
     const sidebar = buildHomeSidebar({ page: 'home' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
@@ -963,10 +969,14 @@ import {
   // §A1 — Day-1 home: centered composer hero + tabbed discovery shelf.
   // Apps live only inside the shelf's "My apps" tab — there is no
   // separate "Your apps" section above the shelf.
-  function renderDay1Home(scroll: HTMLElement, templates: TemplateEntry[]): void {
+  function renderDay1Home(
+    scroll: HTMLElement,
+    templates: TemplateEntry[],
+    automations: TemplateEntry[],
+  ): void {
     scroll.classList.add('cd-day1-scroll');
     scroll.append(buildHomeHero());
-    scroll.append(buildTabbedShelf(templates));
+    scroll.append(buildTabbedShelf(templates, automations));
   }
 
   // Shared composer behaviour — wires submit/keydown onto a textarea +
@@ -1126,9 +1136,15 @@ import {
     return wrap;
   }
 
-  // §A1 — HomeShelf: pill-tabbed shelf — My apps · Starred · Templates —
-  // each tab a count badge, "Browse all →" pushed right, a 6-col grid.
-  function buildTabbedShelf(templates: TemplateEntry[]): HTMLElement {
+  // §A1 — HomeShelf: pill-tabbed shelf — My apps · Starred · Templates ·
+  // Automations — each tab a count badge, "Browse all →" pushed right.
+  // Most tabs paint a dense 6-col grid of app tiles; the Automations tab
+  // morphs the grid to a roomier 3-col card layout (emoji · trigger ·
+  // integration chips) since automations carry more context per card.
+  function buildTabbedShelf(
+    templates: TemplateEntry[],
+    automations: TemplateEntry[],
+  ): HTMLElement {
     const section = el('section', { class: 'cd-shelf' });
 
     const all: AppMetaResolvedType[] = [...getApps(), ...drafts];
@@ -1142,6 +1158,10 @@ import {
       id: string;
       label: string;
       count: number;
+      /** Grid shape: dense app tiles ('tiles', default) or roomier cards. */
+      layout?: 'tiles' | 'cards';
+      /** Destination for "Browse all" while this tab is active. */
+      browse: () => void;
       render: () => HTMLElement[];
       empty: { icon: IconNameType; title: string; sub: string };
     }> = [
@@ -1149,6 +1169,7 @@ import {
         id: 'apps',
         label: 'My apps',
         count: all.length,
+        browse: renderDiscover,
         render: () => appTiles(all),
         empty: {
           icon: 'Sparkle',
@@ -1160,6 +1181,7 @@ import {
         id: 'starred',
         label: 'Starred',
         count: starredApps.length,
+        browse: renderDiscover,
         render: () => appTiles(starredApps),
         empty: {
           icon: 'Star',
@@ -1171,6 +1193,7 @@ import {
         id: 'templates',
         label: 'Templates',
         count: templates.length,
+        browse: renderDiscover,
         empty: {
           icon: 'Compass',
           title: 'No templates yet',
@@ -1188,6 +1211,19 @@ import {
             }),
           ),
       },
+      {
+        id: 'automations',
+        label: 'Automations',
+        count: automations.length,
+        layout: 'cards',
+        browse: renderAutomationTemplates,
+        empty: {
+          icon: 'History',
+          title: 'No automations yet',
+          sub: 'Scheduled and event-driven starters will show up here once they’re available.',
+        },
+        render: () => automations.map((t) => renderAutomationTemplateCard(t)),
+      },
     ];
 
     const inner = el('div', { class: 'cd-shelf-inner' });
@@ -1195,9 +1231,14 @@ import {
     const tabList = el('div', { class: 'cd-shelf-tabs', role: 'tablist' });
     const grid = el('div', { class: 'cd-shelf-grid' });
 
+    let activeTab = tabs[0]!;
+
     const renderTab = (tabId: string): void => {
       const t = tabs.find((x) => x.id === tabId) ?? tabs[0]!;
+      activeTab = t;
       grid.innerHTML = '';
+      // Morph the grid between dense app tiles and roomier automation cards.
+      grid.dataset.layout = t.layout ?? 'tiles';
       const tiles = t.render();
       if (tiles.length === 0) {
         grid.append(
@@ -1211,7 +1252,18 @@ import {
           ]),
         );
       } else {
-        for (const tile of tiles) grid.append(tile);
+        // Staggered rise-in on every tab switch — one orchestrated moment
+        // that also signals the layout change when flipping to Automations.
+        // The class is stripped on completion so the card's own :hover
+        // transform isn't pinned by the finished animation's fill state.
+        tiles.forEach((tile, i) => {
+          tile.classList.add('cd-shelf-reveal');
+          tile.style.setProperty('--d', `${Math.min(i, 14) * 24}ms`);
+          tile.addEventListener('animationend', () => tile.classList.remove('cd-shelf-reveal'), {
+            once: true,
+          });
+          grid.append(tile);
+        });
       }
     };
 
@@ -1241,7 +1293,7 @@ import {
 
     const browseAll = el(
       'button',
-      { class: 'cd-shelf-browse', type: 'button', onClick: renderDiscover },
+      { class: 'cd-shelf-browse', type: 'button', onClick: () => activeTab.browse() },
       [el('span', {}, 'Browse all'), el('span', { trustedHtml: arrowRight(13) })],
     );
 
