@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { RUNNER_TIERS } from './model-tiers.js';
-import { resolveClaudeModel } from '../backends/claude-sdk.js';
+import { resolveClaudeModel } from '../backends/claude/backend.js';
 
 test('claude-code offers capability tiers with exactly one default', () => {
   const tiers = RUNNER_TIERS['claude-code'];

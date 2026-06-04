@@ -1,7 +1,7 @@
 /*
  * Codex-side wiring for the three first-class centraid tools.
  *
- * Split out of `codex-app-server.ts` to keep that file focused on the
+ * Split out of `backend.ts` to keep that file focused on the
  * generic JSON-RPC drive loop. This module owns two narrow things:
  *
  *   1. The `dynamicTools` array we declare on `thread/start`.
@@ -12,7 +12,7 @@
  * Schema reference: `codex-rs/app-server-protocol/src/protocol/v2/{thread,item}.rs`.
  */
 import type { TurnStreamEvent } from '@centraid/app-engine';
-import type { ToolContext } from '../runtime.js';
+import type { ToolContext } from '../../runtime.js';
 
 /**
  * Codex `dynamicTools` spec for the three structured centraid tools.

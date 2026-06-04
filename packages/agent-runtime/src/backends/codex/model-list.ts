@@ -3,10 +3,9 @@
  *
  * Spawns `codex app-server`, performs the minimal handshake
  * (`initialize` → `initialized`), requests `model/list`, parses the result,
- * and tears the child down. Kept separate from the large
- * `codex-app-server.ts` turn driver (which is at its file-size cap) and
- * deliberately self-contained — it does not share the turn driver's RPC
- * client.
+ * and tears the child down. Kept separate from the large `backend.ts` turn
+ * driver (which is at its file-size cap) and deliberately self-contained —
+ * it does not share the turn driver's RPC client.
  *
  * The `model/list` response schema is not vendored in this repo, so the
  * parser is defensive: it accepts `{ models }`, `{ data }`, or a bare array,
@@ -38,7 +37,7 @@ interface RpcMessage {
  * Returns `[]` on any failure — never throws.
  *
  * `extraArgs` must mirror what the actual chat runner passes to
- * `codex app-server` (see runtime.ts → CodexAppServerConfig.extraArgs):
+ * `codex app-server` (see runtime.ts → CodexTurnConfig.extraArgs):
  * a configured `-c`/profile flag changes which models codex serves, so
  * enumerating without it would populate the catalog with ids the real
  * runner can't run.

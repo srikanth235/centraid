@@ -7,7 +7,7 @@
  * of a static model catalog, the picker offers capability TIERS (the same
  * indirection automations use via `requires.model`). The runner adapter
  * resolves a tier to the runtime's native model at turn time — e.g.
- * `claude-sdk` maps these to the Claude CLI's built-in aliases — so no
+ * the claude backend maps these to the Claude CLI's built-in aliases — so no
  * concrete ids live here.
  *
  * `RunnerModel.id` carries the tier token (persisted as the chat model);

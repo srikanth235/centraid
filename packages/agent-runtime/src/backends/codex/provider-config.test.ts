@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { codexProviderOverrideArgs } from './codex-provider-config.ts';
+import { codexProviderOverrideArgs } from './provider-config.ts';
 
 test('codexProviderOverrideArgs emits -c overrides for provider + endpoint', () => {
   const args = codexProviderOverrideArgs({
