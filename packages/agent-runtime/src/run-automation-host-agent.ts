@@ -22,13 +22,12 @@
  */
 
 import { spawn } from 'node:child_process';
+import type { RunnerKind } from './types.js';
 import { codexProviderOverrideArgs } from './codex-provider-config.js';
-
-export type LocalRunnerKind = 'codex' | 'claude-code';
 
 export interface RunHostAgentInput {
   /** Which agent backend to drive. */
-  readonly kind: LocalRunnerKind;
+  readonly kind: RunnerKind;
   /**
    * Override the agent binary location; defaults to a PATH lookup of `codex`,
    * or — for claude — the SDK's bundled `claude` executable.

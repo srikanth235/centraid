@@ -19,22 +19,16 @@ import {
   type RunStreamEvent,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
+import type { RunnerKind } from './types.js';
 import {
   defaultRunHostAgent,
-  type LocalRunnerKind,
   type RunHostAgent,
   type RunHostAgentInput,
   type RunHostAgentResult,
 } from './run-automation-host-agent.js';
 import { startLiveDispatch } from './run-automation-live-dispatch.js';
 
-export {
-  defaultRunHostAgent,
-  type LocalRunnerKind,
-  type RunHostAgent,
-  type RunHostAgentInput,
-  type RunHostAgentResult,
-};
+export { defaultRunHostAgent, type RunHostAgent, type RunHostAgentInput, type RunHostAgentResult };
 // The run record shape lives with the spine now; re-export under
 // agent-runtime's stable name so existing consumers keep importing it here.
 export type AutomationRunRecord = automation.RunRecord;
@@ -64,7 +58,7 @@ export interface RunAutomationOptions {
    */
   analytics?: AnalyticsStore;
   /** Which CLI to drive. Defaults to codex. */
-  runner?: LocalRunnerKind;
+  runner?: RunnerKind;
   /** Hard timeout. Defaults to 5 minutes. */
   timeoutMs?: number;
   /** Override spawn for tests. */
@@ -102,7 +96,7 @@ export interface RunAutomationOptions {
 export async function runAutomation(
   opts: RunAutomationOptions,
 ): Promise<{ outcome: automation.HandlerOutcome; record: AutomationRunRecord }> {
-  const runner: LocalRunnerKind = opts.runner ?? 'codex';
+  const runner: RunnerKind = opts.runner ?? 'codex';
   const runHostAgent = opts.runHostAgent ?? defaultRunHostAgent;
 
   // The injected dispatch surface: a fresh mock-LLM server + CLI spawn per

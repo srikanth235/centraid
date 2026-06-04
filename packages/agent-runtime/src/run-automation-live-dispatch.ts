@@ -31,12 +31,9 @@ import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import * as automation from '@centraid/automation';
+import type { RunnerKind } from './types.js';
 import { runClaudeSdkTurn } from './claude-sdk.js';
-import {
-  defaultRunHostAgent,
-  type LocalRunnerKind,
-  type RunHostAgent,
-} from './run-automation-host-agent.js';
+import { defaultRunHostAgent, type RunHostAgent } from './run-automation-host-agent.js';
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the CLI's cwd. */
@@ -44,7 +41,7 @@ export interface LiveDispatchOptions {
   /** Id of the automation being fired. */
   automationId: string;
   runId: string;
-  runner: LocalRunnerKind;
+  runner: RunnerKind;
   runHostAgent: RunHostAgent;
   /** Manifest `requires.tools` allowlist forwarded to the CLI. */
   toolsAllow: readonly string[];
