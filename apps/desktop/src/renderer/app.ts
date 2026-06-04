@@ -163,7 +163,7 @@ import {
     html.style.setProperty('--accent-deep', swatch.deep);
     // Broadcast to every mounted user-app iframe so they retune in lock-step
     // with the shell. The tiny bridge script in each template
-    // (packages/app-blueprints/*/index.html) listens for this and flips its
+    // (packages/blueprints/*/index.html) listens for this and flips its
     // own <html> data-attrs / CSS vars to match.
     broadcastSettingsToFrames();
     // §C2 — let an open Appearance settings page refresh its live-preview
@@ -179,7 +179,7 @@ import {
   // shape the runtime uses for server-side injection. The bridge inside each
   // app applies them as `<html data-…>` attrs and `--…` CSS vars — symmetric
   // with what the gateway bakes on first paint.
-  // Iframes (app-blueprints, user apps) only know how to style
+  // Iframes (blueprints, user apps) only know how to style
   // `data-theme='light'|'dark'`. Third-party shell themes (Monokai, Nord…)
   // still resolve to one of those two on the iframe side; the shell
   // itself wears the full named theme.
@@ -932,7 +932,13 @@ import {
     clear();
     const seq = renderSeq;
     await hydrateDrafts();
-    const availableTemplates = await loadAvailableTemplates();
+    // App templates and automation templates both surface on Home now —
+    // each as its own tab in the discovery shelf. One IPC backs both
+    // loaders; they split the catalog on `kind`.
+    const [availableTemplates, automationTemplates] = await Promise.all([
+      loadAvailableTemplates(),
+      loadAutomationTemplates(),
+    ]);
     if (!isCurrentRender(seq)) return;
 
     // `has-wall` paints the device-wall crosshatch behind everything.
@@ -944,7 +950,7 @@ import {
     // tabbed discovery shelf — regardless of how many apps exist. The
     // shelf's "Browse all →" is the only path to the alternate (Discover)
     // page; the workspace never auto-switches based on app count.
-    renderDay1Home(scroll, availableTemplates);
+    renderDay1Home(scroll, availableTemplates, automationTemplates);
 
     const sidebar = buildHomeSidebar({ page: 'home' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
@@ -963,10 +969,14 @@ import {
   // §A1 — Day-1 home: centered composer hero + tabbed discovery shelf.
   // Apps live only inside the shelf's "My apps" tab — there is no
   // separate "Your apps" section above the shelf.
-  function renderDay1Home(scroll: HTMLElement, templates: TemplateEntry[]): void {
+  function renderDay1Home(
+    scroll: HTMLElement,
+    templates: TemplateEntry[],
+    automations: TemplateEntry[],
+  ): void {
     scroll.classList.add('cd-day1-scroll');
     scroll.append(buildHomeHero());
-    scroll.append(buildTabbedShelf(templates));
+    scroll.append(buildTabbedShelf(templates, automations));
   }
 
   // Shared composer behaviour — wires submit/keydown onto a textarea +
@@ -1126,9 +1136,12 @@ import {
     return wrap;
   }
 
-  // §A1 — HomeShelf: pill-tabbed shelf — My apps · Starred · Templates —
-  // each tab a count badge, "Browse all →" pushed right, a 6-col grid.
-  function buildTabbedShelf(templates: TemplateEntry[]): HTMLElement {
+  // §A1 — HomeShelf: pill-tabbed shelf — My apps · Starred · Templates ·
+  // Automations — each tab a count badge, "Browse all →" pushed right.
+  // Most tabs paint a dense 6-col grid of app tiles; the Automations tab
+  // morphs the grid to a roomier 3-col card layout (emoji · trigger ·
+  // integration chips) since automations carry more context per card.
+  function buildTabbedShelf(templates: TemplateEntry[], automations: TemplateEntry[]): HTMLElement {
     const section = el('section', { class: 'cd-shelf' });
 
     const all: AppMetaResolvedType[] = [...getApps(), ...drafts];
@@ -1142,6 +1155,10 @@ import {
       id: string;
       label: string;
       count: number;
+      /** Grid shape: dense app tiles ('tiles', default) or roomier cards. */
+      layout?: 'tiles' | 'cards';
+      /** Destination for "Browse all" while this tab is active. */
+      browse: () => void;
       render: () => HTMLElement[];
       empty: { icon: IconNameType; title: string; sub: string };
     }> = [
@@ -1149,6 +1166,7 @@ import {
         id: 'apps',
         label: 'My apps',
         count: all.length,
+        browse: renderDiscover,
         render: () => appTiles(all),
         empty: {
           icon: 'Sparkle',
@@ -1160,6 +1178,7 @@ import {
         id: 'starred',
         label: 'Starred',
         count: starredApps.length,
+        browse: renderDiscover,
         render: () => appTiles(starredApps),
         empty: {
           icon: 'Star',
@@ -1171,6 +1190,7 @@ import {
         id: 'templates',
         label: 'Templates',
         count: templates.length,
+        browse: renderDiscover,
         empty: {
           icon: 'Compass',
           title: 'No templates yet',
@@ -1188,6 +1208,19 @@ import {
             }),
           ),
       },
+      {
+        id: 'automations',
+        label: 'Automations',
+        count: automations.length,
+        layout: 'cards',
+        browse: renderAutomationTemplates,
+        empty: {
+          icon: 'History',
+          title: 'No automations yet',
+          sub: 'Scheduled and event-driven starters will show up here once they’re available.',
+        },
+        render: () => automations.map((t) => renderAutomationTemplateCard(t)),
+      },
     ];
 
     const inner = el('div', { class: 'cd-shelf-inner' });
@@ -1195,9 +1228,14 @@ import {
     const tabList = el('div', { class: 'cd-shelf-tabs', role: 'tablist' });
     const grid = el('div', { class: 'cd-shelf-grid' });
 
+    let activeTab = tabs[0]!;
+
     const renderTab = (tabId: string): void => {
       const t = tabs.find((x) => x.id === tabId) ?? tabs[0]!;
+      activeTab = t;
       grid.innerHTML = '';
+      // Morph the grid between dense app tiles and roomier automation cards.
+      grid.dataset.layout = t.layout ?? 'tiles';
       const tiles = t.render();
       if (tiles.length === 0) {
         grid.append(
@@ -1211,7 +1249,18 @@ import {
           ]),
         );
       } else {
-        for (const tile of tiles) grid.append(tile);
+        // Staggered rise-in on every tab switch — one orchestrated moment
+        // that also signals the layout change when flipping to Automations.
+        // The class is stripped on completion so the card's own :hover
+        // transform isn't pinned by the finished animation's fill state.
+        tiles.forEach((tile, i) => {
+          tile.classList.add('cd-shelf-reveal');
+          tile.style.setProperty('--d', `${Math.min(i, 14) * 24}ms`);
+          tile.addEventListener('animationend', () => tile.classList.remove('cd-shelf-reveal'), {
+            once: true,
+          });
+          grid.append(tile);
+        });
       }
     };
 
@@ -1241,7 +1290,7 @@ import {
 
     const browseAll = el(
       'button',
-      { class: 'cd-shelf-browse', type: 'button', onClick: renderDiscover },
+      { class: 'cd-shelf-browse', type: 'button', onClick: () => activeTab.browse() },
       [el('span', {}, 'Browse all'), el('span', { trustedHtml: arrowRight(13) })],
     );
 
@@ -1945,7 +1994,7 @@ import {
 
   // ───────────────────────── Templates gallery ─────────────────────
   // Automation templates are real filesystem templates under
-  // `@centraid/app-blueprints/<slug>/` (marked `kind: 'automation'`),
+  // `@centraid/blueprints/<slug>/` (marked `kind: 'automation'`),
   // picked up by the shared
   // `listTemplates` IPC. Adopting one routes through `cloneTemplate` —
   // the same IPC the home Templates shelf uses for app templates —
@@ -3914,7 +3963,7 @@ import {
   }
 
   // ---------- Templates (inline tiles) ----------
-  // Renderer-side mirror of @centraid/app-blueprints' `TemplateMeta`. We don't
+  // Renderer-side mirror of @centraid/blueprints' `TemplateMeta`. We don't
   // import the package here — the IPC layer carries plain JSON. `kind`
   // splits the catalog into the home Templates shelf (kind: 'app') and the
   // Automations gallery (kind: 'automation'); the unified clone path
@@ -4386,7 +4435,7 @@ import {
   // every mini-app inherits the Centraid shell theme and the workspace
   // reads as one product. True per-app *aesthetics* (font, page width,
   // corner radius, etc.) live here. Each template declares its knobs in
-  // `app.json#knobs[]` (see `packages/app-blueprints`); the scaffolder
+  // `app.json#knobs[]` (see `packages/blueprints`); the scaffolder
   // copies that manifest into the cloned app; the gateway serves it
   // as a static file. We fetch the cloned copy at panel-open so the
   // controls match the app's CSS, not whatever the bundled template

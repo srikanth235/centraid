@@ -32,7 +32,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { writeOp } from './sql-ops.ts';
+import { writeOp } from './handlers/sql-ops.ts';
 
 let workspace: string;
 let dataFile: string;

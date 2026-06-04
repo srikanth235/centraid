@@ -14,8 +14,8 @@
  */
 
 import type { TurnConfig, TurnInput, TurnResult } from '@centraid/app-engine';
-import { runCodexAppServerTurn } from './codex-app-server.js';
-import { runClaudeSdkTurn } from './claude-sdk.js';
+import { runCodexAppServerTurn } from './backends/codex-app-server.js';
+import { runClaudeSdkTurn } from './backends/claude-sdk.js';
 
 // The turn-driver contract (`ToolContext`, `TurnInput/Config/Result`)
 // now lives in `@centraid/app-engine` so the backend-agnostic run engine can

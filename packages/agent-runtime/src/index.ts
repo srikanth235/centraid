@@ -43,7 +43,7 @@ export {
 
 // Builder agent sessions still want the `centraid` CLI on PATH for the
 // `centraid preview snapshot` flow; expose the dist-dir resolver.
-export { defaultCentraidCliDir } from './centraid-cli-dir.js';
+export { defaultCentraidCliDir } from './cli/centraid-cli-dir.js';
 
 export type { RunnerKind, RunnerPrefs } from './types.js';
 
@@ -60,14 +60,14 @@ export {
   type CodexAppServerInput,
   type CodexAppServerConfig,
   type CodexAppServerResult,
-} from './codex-app-server.js';
+} from './backends/codex-app-server.js';
 
 export {
   runClaudeSdkTurn,
   type ClaudeSdkInput,
   type ClaudeSdkConfig,
   type ClaudeSdkResult,
-} from './claude-sdk.js';
+} from './backends/claude-sdk.js';
 
 export {
   runPreflight,
@@ -82,9 +82,13 @@ export {
 // Per-runner model catalog + default seed (issue #188). Exposed so the gateway
 // can resolve each agent's models for the per-agent picker in Settings →
 // Agents, not just the active runner's via runner-status.
-export { resolveRunnerModels, resolveRunnerTools, readRunnerTools } from './model-catalog.js';
-export { defaultModelsFor, DEFAULT_MODELS } from './model-defaults.js';
-export { enumerateRunnerModels } from './model-enumerators.js';
+export {
+  resolveRunnerModels,
+  resolveRunnerTools,
+  readRunnerTools,
+} from './models/model-catalog.js';
+export { defaultModelsFor, DEFAULT_MODELS } from './models/model-defaults.js';
+export { enumerateRunnerModels } from './models/model-enumerators.js';
 
 // Host tool enumeration — feeds the builder's available-tools grounding
 // block so the agent declares `ctx.tool` calls + `requires` against the
@@ -114,7 +118,7 @@ export {
   type RunHostAgent,
   type RunHostAgentInput,
   type RunHostAgentResult,
-} from './run-automation.js';
+} from './automation/run-automation.js';
 
 // Scheduling lives in `@centraid/automation` now (issue #149): the gateway
 // owns an in-process cron `InProcessScheduler` and fires automations while it

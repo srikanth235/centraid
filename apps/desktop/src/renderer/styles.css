@@ -6614,6 +6614,44 @@ select.input option {
   grid-template-columns: repeat(6, 1fr);
   gap: 14px;
 }
+/* Automations tab: morph the dense tile grid into roomier cards so the
+   trigger + integration metadata each automation carries has space. */
+.cd-shelf-grid[data-layout='cards'] {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 13px;
+}
+@media (max-width: 1024px) {
+  .cd-shelf-grid[data-layout='cards'] {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .cd-shelf-grid[data-layout='cards'] {
+    grid-template-columns: 1fr;
+  }
+}
+/* Staggered rise-in applied per cell on each tab switch (see renderTab).
+   `both` holds the hidden `from` state through the per-cell delay; the JS
+   strips the class on animationend so hover transforms aren't pinned. */
+.cd-shelf-reveal {
+  animation: cd-shelf-rise 360ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes cd-shelf-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cd-shelf-reveal {
+    animation: none;
+  }
+}
 .cd-shelf-empty {
   grid-column: 1 / -1;
   display: flex;

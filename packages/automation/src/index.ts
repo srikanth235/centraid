@@ -48,12 +48,12 @@ export {
   type OutputSchema,
   type HistoryConfig,
   type HistoryKeep,
-} from './manifest.js';
+} from './manifest/manifest.js';
 
 // Automation identity — the directory-slug grammar and the
 // `<appId>/<id>` handle that scheduler labels, webhook routing,
 // and `onFailure` address an automation by (issue #98).
-export { isValidId, isValidRef, formatRef, parseRef, type Ref } from './ref.js';
+export { isValidId, isValidRef, formatRef, parseRef, type Ref } from './manifest/ref.js';
 
 // Automation apps on disk (issue #98 unified model). An automation
 // always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
@@ -72,12 +72,12 @@ export {
   type Row,
   type AppError,
   type ListAppsResult,
-} from './app.js';
+} from './scaffold/app.js';
 
 // The host interface every "thing that fires automations on a schedule"
 // implements — the local in-process scheduler (gateway) and the cloud
 // openclaw cron host both satisfy it.
-export type { Host, ReconcileResult } from './host.js';
+export type { Host, ReconcileResult } from './fire/host.js';
 
 // In-process cron scheduler (issue #149, n8n semantics): the gateway-owned
 // always-on minute timer that fires enabled cron automations while it runs.
@@ -86,8 +86,8 @@ export {
   InProcessScheduler,
   type InProcessSchedulerOptions,
   type LocalScheduler,
-} from './in-process-scheduler.js';
-export { cronMatches } from './cron-match.js';
+} from './fire/in-process-scheduler.js';
+export { cronMatches } from './fire/cron-match.js';
 
 // Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
 // automation on an inbound HTTP POST; the gateway mounts the route
@@ -109,7 +109,7 @@ export {
   type WebhookFireFn,
   type WebhookFireResult,
   type WebhookRouteOptions,
-} from './webhook.js';
+} from './scaffold/webhook.js';
 
 // Automation handler runtime (issue #91). A fire executes the app's
 // generated `handler.js` in a worker thread; the host supplies the
@@ -125,11 +125,11 @@ export {
   type AgentCall,
   type AgentDispatcher,
   type DispatchContext,
-} from './handler-runner.js';
-export { truncateForAudit } from './handler-audit.js';
+} from './handler/handler-runner.js';
+export { truncateForAudit } from './handler/handler-audit.js';
 // Shared `ctx.agent` answer coercion — every host ends an agent turn with a
 // blob of text and must turn it into the value the handler awaits the same way.
-export { coerceAgentAnswer } from './agent-answer.js';
+export { coerceAgentAnswer } from './handler/agent-answer.js';
 // Mock-LLM server + host-agnostic persistent session (issue #166): the
 // token-free `ctx.tool` rail. One long-lived agent session per fire, puppeted
 // by the mock, executes every tool batch; the per-host `driveAgent` is the
@@ -141,7 +141,7 @@ export {
   type MockLlmServerOptions,
   type StagedTurn,
   type CapturedToolResult,
-} from './mock-llm-server.js';
+} from './mock-llm/mock-llm-server.js';
 export {
   startPersistentMockSession,
   type AgentDriver,
@@ -149,7 +149,7 @@ export {
   type AgentDriveResult,
   type PersistentMockSession,
   type PersistentMockSessionOptions,
-} from './persistent-mock-session.js';
+} from './mock-llm/persistent-mock-session.js';
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
 // handler — effects that bypass the audited `ctx.*` rails or make a re-run
@@ -159,7 +159,7 @@ export {
   lintHandlerSource,
   formatHandlerLintError,
   type HandlerLintFinding,
-} from './handler-lint.js';
+} from './handler/handler-lint.js';
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomation`
@@ -171,7 +171,7 @@ export {
   type DispatchSurface,
   type OpenDispatch,
   type OpenDispatchArgs,
-} from './fire.js';
+} from './fire/fire.js';
 
 // Automation-app scaffolders. The gateway lifecycle routes use the
 // file-map (`*Files`) variants; the disk wrappers back the CLI / local
@@ -184,4 +184,4 @@ export {
   validateId,
   validateAppId,
   type ScaffoldOptions,
-} from './scaffold.js';
+} from './scaffold/scaffold.js';

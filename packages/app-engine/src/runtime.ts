@@ -2,29 +2,29 @@
 import path from 'node:path';
 import os from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { Registry, RegistryError } from './registry.js';
-import { parseWithDraft } from './router.js';
+import { Registry, RegistryError } from './registry/registry.js';
+import { parseWithDraft } from './http/router.js';
 import {
   Dispatcher,
   isToolName,
   statusForToolError,
   type ToolName,
   type ToolResult,
-} from './dispatcher.js';
-import { serveStatic } from './static-server.js';
-import { readBody, sendError, sendJson } from './http-utils.js';
-import { appDataDir } from './app-paths.js';
-import { cleanupDeregisteredApp } from './deregister-cleanup.js';
-import { readAppSchema } from './schema.js';
-import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './cloud-routes.js';
-import { ChangeBus } from './change-bus.js';
-import { handleAppChanges } from './changes-sse.js';
-import type { UserStore } from './user-store.js';
-import type { ConversationHistoryStore } from './conversation-history.js';
-import { readAppSettings } from './app-settings.js';
-import { buildSettingsInject } from './settings-merge.js';
-import { handleTurnRoute, parseTurnSubRoute } from './turn-routes.js';
-import type { ConversationRunner } from './conversation-runner.js';
+} from './handlers/dispatcher.js';
+import { serveStatic } from './http/static-server.js';
+import { readBody, sendError, sendJson } from './http/http-utils.js';
+import { appDataDir } from './registry/app-paths.js';
+import { cleanupDeregisteredApp } from './registry/deregister-cleanup.js';
+import { readAppSchema } from './data/schema.js';
+import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './http/cloud-routes.js';
+import { ChangeBus } from './changes/change-bus.js';
+import { handleAppChanges } from './http/changes-sse.js';
+import type { UserStore } from './stores/user-store.js';
+import type { ConversationHistoryStore } from './conversation/conversation-history.js';
+import { readAppSettings } from './settings/app-settings.js';
+import { buildSettingsInject } from './settings/settings-merge.js';
+import { handleTurnRoute, parseTurnSubRoute } from './http/turn-routes.js';
+import type { ConversationRunner } from './conversation/conversation-runner.js';
 import type { AppRef, RegistryEntry } from './types.js';
 
 export interface RuntimeLogger {

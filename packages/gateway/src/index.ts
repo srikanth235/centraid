@@ -26,7 +26,7 @@ export {
   type FireAutomation,
   type FireAutomationDeps,
   type FireAutomationFactory,
-} from './build-gateway.js';
-export { serve, type ServeOptions, type GatewayServeHandle } from './serve.js';
+} from './serve/build-gateway.js';
+export { serve, type ServeOptions, type GatewayServeHandle } from './serve/serve.js';
 export type { GatewayPaths } from './paths.js';
-export { readAgentsStatus, type AgentsStatus } from './agents-routes.js';
+export { readAgentsStatus, type AgentsStatus } from './routes/agents-routes.js';

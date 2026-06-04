@@ -412,3 +412,8 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-5d76c40b3ca-1780572847-2 | 5d76c40b-3ca7-46ee-8157-75cea189bdaa | #194 | interrupt | structural |  | refactor(automation): rename to @centraid/automation, drop Automation* API pref… |
 | steer-5d76c40b3ca-1780572847-3 | 5d76c40b-3ca7-46ee-8157-75cea189bdaa | #194 | correction | classifier | Halts work to question naming the module 'automation-engine' vs 'automation' | refactor(automation): rename to @centraid/automation, drop Automation* API pref… |
 | steer-2089b9ded90-1780579751-1 | 2089b9de-d902-441f-ad71-0dace231f3da | #196 | correction | classifier | Public API names still say CLI though it's now in-process SDK |  |
+| steer-e020b3c74a0-1780586359-1 | e020b3c7-4a0e-42b3-9a38-fbf3b6437f47 |  | interrupt | structural |  |  |
+| steer-e020b3c74a0-1780586359-2 | e020b3c7-4a0e-42b3-9a38-fbf3b6437f47 |  | correction | classifier | wanted model-pricing.ts colocated, not left at root |  |
+| steer-e020b3c74a0-1780586359-3 | e020b3c7-4a0e-42b3-9a38-fbf3b6437f47 |  | interrupt | structural |  |  |
+| steer-e020b3c74a0-1780586359-4 | e020b3c7-4a0e-42b3-9a38-fbf3b6437f47 |  | interrupt | structural |  |  |
+| steer-e020b3c74a0-1780586359-5 | e020b3c7-4a0e-42b3-9a38-fbf3b6437f47 |  | correction | classifier | halt refactor; fix merge conflicts first |  |
