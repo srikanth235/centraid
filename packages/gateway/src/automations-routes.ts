@@ -42,11 +42,7 @@ import {
   type RunStreamEvent,
   type RunSummary,
 } from '@centraid/app-engine';
-import {
-  listAutomations,
-  parseAutomationRef,
-  readAppOwnedAutomation,
-} from '@centraid/conversation-engine';
+import * as automation from '@centraid/automation';
 import type { WorktreeStore } from './worktree-store/index.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 
@@ -375,21 +371,21 @@ export function makeAutomationsRouteHandler(
       const sub = pathname.slice('/centraid/_automations'.length).replace(/^\/+/, '');
 
       if (sub === '' && method === 'GET') {
-        return sendJson(res, 200, await listAutomations(codeAppsDir()));
+        return sendJson(res, 200, await automation.list(codeAppsDir()));
       }
 
       if (sub === 'read' && method === 'GET') {
-        const ref = parseAutomationRef(url.searchParams.get('ref') ?? '');
+        const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
         if (!ref) return sendJson(res, 200, { row: null });
-        const row = await readAppOwnedAutomation(codeAppsDir(), ref.appId, ref.automationId).catch(
-          () => undefined,
-        );
+        const row = await automation
+          .readAppOwned(codeAppsDir(), ref.appId, ref.automationId)
+          .catch(() => undefined);
         return sendJson(res, 200, { row: row ?? null });
       }
 
       if (sub === 'run-now' && method === 'POST') {
         const ref = url.searchParams.get('ref') ?? '';
-        if (!parseAutomationRef(ref)) {
+        if (!automation.parseRef(ref)) {
           return sendJson(res, 400, { error: 'bad_request', message: 'run-now needs ?ref=' });
         }
         const runId = `${ref}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;

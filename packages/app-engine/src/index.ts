@@ -30,6 +30,15 @@ export type {
   ConversationTurnResult,
   TurnStreamEvent,
 } from './conversation-runner.js';
+// Chat-runner core — the per-turn chat spine, sibling to the automation fire
+// spine in `@centraid/automation`. The model turn is injected as a
+// `RunTurnFn`; agent-runtime's `makeConversationRunner` and the gateway's
+// `makeUnifiedConversationRunner` are thin configs over it (issue #147).
+export {
+  makeConversationRunnerCore,
+  type ConversationRunnerCoreOptions,
+  type TurnContext,
+} from './conversation-runner-core.js';
 export { buildExtraPrompt, type BuildExtraPromptInput } from './build-extra-prompt.js';
 
 // Agent-turn contract — the host-agnostic interface between a run spine

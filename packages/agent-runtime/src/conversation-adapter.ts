@@ -20,8 +20,11 @@
  * in-process openclaw agent.
  */
 
-import type { ConversationRunner, Dispatcher } from '@centraid/app-engine';
-import { makeConversationRunnerCore } from '@centraid/conversation-engine';
+import {
+  makeConversationRunnerCore,
+  type ConversationRunner,
+  type Dispatcher,
+} from '@centraid/app-engine';
 import { runTurn } from './runtime.js';
 import type { RunnerPrefs } from './types.js';
 

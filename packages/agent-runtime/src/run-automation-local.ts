@@ -1,9 +1,9 @@
 /**
  * Local-side automation fire (issue #98) — the agent-runtime wrapper over the
- * app-engine fire spine (issue #147, Concern 2).
+ * fire spine (issue #147, Concern 2).
  *
  * The per-fire orchestration (resolve the automation, open its ledger, run
- * `handler.js`, cascade `onFailure`) lives in app-engine's `runAutomationFire`
+ * `handler.js`, cascade `onFailure`) lives in `@centraid/automation`'s `runFire`
  * — it only touches app-engine primitives. The one thing it needs from
  * agent-runtime is the live `ctx.tool` / `ctx.agent` dispatch surface: an
  * ephemeral mock-LLM server plus a per-fire host agent session (an in-process
@@ -18,12 +18,7 @@ import {
   type AutomationTriggerOrigin,
   type RunStreamEvent,
 } from '@centraid/app-engine';
-import {
-  runAutomationFire,
-  type AutomationHandlerOutcome,
-  type AutomationRunRecord,
-  type OpenAutomationDispatch,
-} from '@centraid/conversation-engine';
+import * as automation from '@centraid/automation';
 import {
   defaultRunHostAgent,
   type LocalRunnerKind,
@@ -40,9 +35,9 @@ export {
   type RunHostAgentInput,
   type RunHostAgentResult,
 };
-// The run record shape lives with the spine now; re-export so existing
-// agent-runtime consumers keep importing it from here.
-export type { AutomationRunRecord };
+// The run record shape lives with the spine now; re-export under
+// agent-runtime's stable name so existing consumers keep importing it here.
+export type AutomationRunRecord = automation.RunRecord;
 
 export interface RunAutomationLocalOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
@@ -106,7 +101,7 @@ export interface RunAutomationLocalOptions {
  */
 export async function runAutomationLocal(
   opts: RunAutomationLocalOptions,
-): Promise<{ outcome: AutomationHandlerOutcome; record: AutomationRunRecord }> {
+): Promise<{ outcome: automation.HandlerOutcome; record: AutomationRunRecord }> {
   const runner: LocalRunnerKind = opts.runner ?? 'codex';
   const runHostAgent = opts.runHostAgent ?? defaultRunHostAgent;
 
@@ -114,7 +109,7 @@ export async function runAutomationLocal(
   // fire. The runner kind + spawn fn are captured here, so onFailure cascades
   // (which app-engine drives by recursing with the same `openDispatch`) reuse
   // the same runner without re-threading config.
-  const openDispatch: OpenAutomationDispatch = (args) =>
+  const openDispatch: automation.OpenDispatch = (args) =>
     startLiveDispatch({
       workdir: args.workdir,
       automationId: args.automationRef,
@@ -125,7 +120,7 @@ export async function runAutomationLocal(
       onLog: args.onLog,
     });
 
-  return runAutomationFire(
+  return automation.runFire(
     {
       automationRef: opts.automationRef,
       ...(opts.runId ? { runId: opts.runId } : {}),
