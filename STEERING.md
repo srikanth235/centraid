@@ -420,3 +420,7 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-a312fd272c4-1780593634-1 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | correction | classifier | Pushed to use linter instead of authoring governance directives |  |
 | steer-a312fd272c4-1780593634-2 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | correction | classifier | Called current lint config random; asked to rethink right setup from scratch |  |
 | steer-a312fd272c4-1780593634-3 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | interrupt | structural |  |  |
+| steer-a312fd272c4-1780594850-1 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | correction | classifier | Challenges curated-profile choice; suggests enabling all lint rules instead |  |
+| steer-a312fd272c4-1780594850-2 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | correction | classifier | Pushes back on disabling rules; wants all categories at error with suppressions |  |
+| steer-a312fd272c4-1780594850-3 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | interrupt | structural |  |  |
+| steer-a312fd272c4-1780594850-4 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | correction | classifier | Pushes back on disabling rules; wants all categories at error with suppressions |  |

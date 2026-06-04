@@ -11,15 +11,6 @@
     "packages/blueprints/apps/**",
     "packages/blueprints/automations/**"
   ],
-  "categories": {
-    "correctness": "error",
-    "suspicious": "error",
-    "perf": "error",
-    "pedantic": "off",
-    "restriction": "off",
-    "style": "off",
-    "nursery": "off"
-  },
   "rules": {
     "arrow-body-style": "off",
     "class-methods-use-this": "off",

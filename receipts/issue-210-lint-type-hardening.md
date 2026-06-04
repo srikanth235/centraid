@@ -22,17 +22,19 @@ relocations) that CI had been masking via cached test results.
 
 ### Intentional oxlint profile
 
-`.oxlintrc.json` now sets `categories` explicitly — `correctness`, `suspicious`,
-`perf` at error; `restriction`, `pedantic`, `style`, `nursery` off — instead of
-inheriting ultracite's "all categories at error" and then suppressing ~80 rules
-(active rule count 364 → 193). This makes the config a legible record of what we
-chose and stops oxlint version bumps from silently introducing new errors.
+Keep ultracite's deny-by-default baseline — all six categories
+(`correctness`, `suspicious`, `pedantic`, `perf`, `restriction`, `style`) at
+error, ~364 active rules — where the suppression list *is* the curation: a
+documented record of the rules we opted out of. Disabling whole categories was
+considered and rejected because it dropped ~170 rules the codebase already
+passed (free guardrails against agent-written regressions) for thin benefit.
 
-Added as explicit rules: `no-restricted-imports` (ban deep imports into a
-package's `src`/`dist`; plus per-package `overrides` enforcing that `app-engine`
-imports no other `@centraid/*` and `automation` never imports an agent backend),
-and `typescript/ban-ts-comment`. `no-non-null-assertion` is intentionally left
-off (see Out of scope).
+Layered on top: `no-restricted-imports` (ban deep imports into a package's
+`src`/`dist`; plus per-package `overrides` enforcing that `app-engine` imports
+no other `@centraid/*` and `automation` never imports an agent backend) and
+`typescript/ban-ts-comment`. `no-non-null-assertion` is intentionally left off
+(see Out of scope) — not on category grounds, but because its violations lack a
+safe mechanical fix.
 
 ### Type-aware linting
 
