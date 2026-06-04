@@ -1,7 +1,7 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { promises as fs } from 'node:fs';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
@@ -108,7 +108,7 @@ test('serve subcommand boots, accepts the printed bearer, and exits cleanly on S
     t.skip(`tsx not found at ${TSX_BIN} — run "bun install" at the monorepo root`);
     return;
   }
-  const child: ChildProcessWithoutNullStreams = spawn(
+  const child = spawn(
     TSX_BIN,
     [CLI_TS, 'serve', '--data-dir', dataDir, '--host', '127.0.0.1', '--port', '0'],
     { stdio: ['ignore', 'pipe', 'pipe'] },

@@ -24,7 +24,7 @@ export default function SettingsScreen({
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    Promise.all([hydrateGatewayUrl(), hydrateGatewayToken()]).then(([url, token]) => {
+    void Promise.all([hydrateGatewayUrl(), hydrateGatewayToken()]).then(([url, token]) => {
       setUrlValue(url);
       setTokenValue(token);
       setHydrated(true);

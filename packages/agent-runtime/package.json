@@ -4,7 +4,7 @@
   "private": true,
   "description": "Unified local agent runtime for centraid: drives one turn through either codex app-server (JSON-RPC subprocess) or @anthropic-ai/claude-agent-sdk (in-process). Used by both the per-app data chat and the builder. Ships a tiny `centraid` CLI bin agents shell out to.",
   "bin": {
-    "centraid": "./dist/centraid-cli.js"
+    "centraid": "./dist/cli/centraid-cli.js"
   },
   "files": [
     "dist",
@@ -15,7 +15,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "clean": "rm -rf dist"
   },

@@ -58,7 +58,7 @@ function createWindow(): void {
   });
 }
 
-app.whenReady().then(() => {
+void app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
   }

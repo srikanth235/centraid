@@ -17,5 +17,10 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
-      - run: bun run check
+      - run: bun run format:check
+      # `--format github` emits inline PR annotations on the offending lines.
+      - run: bunx oxlint --format github .
       - run: bun run typecheck
+      # Type-aware pass (oxlint --type-aware); deps' dist is built by the
+      # typecheck step's upstream `^build`.
+      - run: bun run lint:types

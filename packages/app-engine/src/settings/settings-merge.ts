@@ -120,7 +120,7 @@ function appKnobTarget(
  */
 export function buildSettingsInject(
   layers: Array<Record<string, unknown> | undefined>,
-): SettingsInject {
+): Required<SettingsInject> {
   const merged: Record<string, unknown> = {};
   for (const layer of layers) {
     if (!layer) continue;

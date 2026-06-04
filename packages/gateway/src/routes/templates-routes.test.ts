@@ -69,7 +69,7 @@ test('GET /centraid/_templates returns stripped bundled metadata behind auth', a
 // stays quiet.
 test('handler refreshes the cache from the remote URL on construction', async () => {
   const calls: string[] = [];
-  const fetchImpl = (async (input: RequestInfo | URL) => {
+  const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
     calls.push(String(input));
     return new Response(null, { status: 404 }); // manifest miss → fetch bails, never throws
   }) as typeof fetch;
@@ -89,7 +89,7 @@ test('handler refreshes the cache from the remote URL on construction', async ()
 
 test('handler does not fetch when no remote URL is configured', async () => {
   const calls: string[] = [];
-  const fetchImpl = (async (input: RequestInfo | URL) => {
+  const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
     calls.push(String(input));
     return new Response(null, { status: 404 });
   }) as typeof fetch;

@@ -11,6 +11,8 @@ const manifest = (enabled: boolean): Manifest => ({
   prompt: 'do it',
   triggers: [],
   requires: {},
+  history: { keep: 'all' },
+  generated: { by: 'test', at: '2026-01-01T00:00:00.000Z' },
 });
 
 function row(ref: string, enabled: boolean, exprs: readonly string[]): Row {

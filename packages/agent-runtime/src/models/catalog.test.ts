@@ -145,8 +145,8 @@ test('writeCatalogEntry preserves other runners', async () => {
     enumeratedAt: '2026-01-01T00:00:00.000Z',
   });
   const file = await readCatalog(catalogPath);
-  assert.equal(file?.runners['claude-code']?.models?.[0].id, 'claude-opus-4-8');
-  assert.equal(file?.runners['codex']?.models?.[0].id, 'gpt-5-codex');
+  assert.equal(file?.runners['claude-code']?.models?.[0]?.id, 'claude-opus-4-8');
+  assert.equal(file?.runners['codex']?.models?.[0]?.id, 'gpt-5-codex');
 });
 
 // ---- tools (resolveRunnerTools) — mirrors models, no seed ----

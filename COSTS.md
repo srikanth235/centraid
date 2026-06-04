@@ -698,3 +698,11 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-5aa82ba6-d1c-1780591689 | claude-code | 5aa82ba6-d1c4-403b-9e93-16e89d06c63e | #208 | claude-opus-4-8 | 131 | 237 | 207179 | 188 | 556 | 0.1104 | docs(app-engine): record insights/ split is intentional (#208) |
 | claude-code-5aa82ba6-d1c-1780591719 | claude-code | 5aa82ba6-d1c4-403b-9e93-16e89d06c63e | #208 | claude-opus-4-8 | 8 | 1966 | 830101 | 1999 | 3973 | 0.4774 | docs(app-engine): record insights/ analytics-vs-insights split is intentional (# |
 | claude-code-5aa82ba6-d1c-1780592393 | claude-code | 5aa82ba6-d1c4-403b-9e93-16e89d06c63e | #208 | claude-opus-4-8 | 3979 | 166468 | 27393243 | 120386 | 290833 | 17.7666 | refactor: drop redundant folder-name prefixes in models/, cli/, handler/, conver |
+| claude-code-75c0bcfc-d98-1780593634 | claude-code | 75c0bcfc-d989-4a56-9d33-fc59d8a6844e | #210 | claude-opus-4-8 | 5752 | 22400 | 32008 | 4420 | 32572 | 0.2953 |  |
+| claude-code-a312fd27-2c4-1780593716 | claude-code | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | claude-opus-4-8 | 39131 | 2242703 | 101478411 | 638067 | 2919901 | 80.9034 |  |
+| claude-code-a312fd27-2c4-1780593753 | claude-code | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | claude-opus-4-8 | 10 | 5344 | 1780401 | 2446 | 7800 | 0.9848 |  |
+| claude-code-a312fd27-2c4-1780593794 | claude-code | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | claude-opus-4-8 | 393 | 3780 | 1073484 | 5727 | 9900 | 0.7055 |  |
+| claude-code-458d4c57-e9e-1780594850 | claude-code | 458d4c57-e9e2-4fb7-bbb1-3a83cc8875e0 | #210 | claude-opus-4-8 | 5752 | 14338 | 32008 | 1848 | 21938 | 0.1806 |  |
+| claude-code-a32d3715-763-1780595141 | claude-code | a32d3715-763e-4ae6-b1ec-3a522e856d12 | #210 | claude-opus-4-8 | 2876 | 5170 | 16004 | 22 | 8068 | 0.0552 |  |
+| claude-code-b72e775d-901-1780596741 | claude-code | b72e775d-901b-43cb-bb28-2707f7e1ba5f | #210 | claude-opus-4-8 | 8334 | 49529 | 693392 | 7396 | 65259 | 0.8828 |  |
+| claude-code-a312fd27-2c4-1780596878 | claude-code | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | claude-opus-4-8 | 22242 | 1159128 | 56319044 | 247518 | 1428888 | 41.7032 |  |

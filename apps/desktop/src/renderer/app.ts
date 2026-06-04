@@ -6100,21 +6100,23 @@ import {
       type: 'button',
     }) as HTMLButtonElement;
     refreshModelsBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Refresh models</span>';
-    refreshModelsBtn.addEventListener('click', async () => {
-      refreshModelsBtn.setAttribute('disabled', '');
-      renderAuthStatus(null);
-      try {
-        renderAuthStatus(await getAgentsStatus({ refresh: true }));
-        showToast('Agents and models refreshed');
-      } catch (err) {
-        showToast(`Refresh failed: ${String(err)}`);
-        renderAuthStatus({
-          codexAvailable: false,
-          claudeAvailable: false,
-        });
-      } finally {
-        refreshModelsBtn.removeAttribute('disabled');
-      }
+    refreshModelsBtn.addEventListener('click', () => {
+      void (async () => {
+        refreshModelsBtn.setAttribute('disabled', '');
+        renderAuthStatus(null);
+        try {
+          renderAuthStatus(await getAgentsStatus({ refresh: true }));
+          showToast('Agents and models refreshed');
+        } catch (err) {
+          showToast(`Refresh failed: ${String(err)}`);
+          renderAuthStatus({
+            codexAvailable: false,
+            claudeAvailable: false,
+          });
+        } finally {
+          refreshModelsBtn.removeAttribute('disabled');
+        }
+      })();
     });
 
     const refreshToolsBtn = el('button', {
@@ -6122,20 +6124,22 @@ import {
       type: 'button',
     }) as HTMLButtonElement;
     refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Refresh tools</span>';
-    refreshToolsBtn.addEventListener('click', async () => {
-      refreshToolsBtn.setAttribute('disabled', '');
-      refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Scanning tools…</span>';
-      try {
-        // Keep the current snapshot visible (don't blank the panel) — tools can
-        // take a few seconds to probe; only the tool lists change.
-        renderAuthStatus(await getAgentsStatus({ refreshTools: true }));
-        showToast('Tools refreshed');
-      } catch (err) {
-        showToast(`Tool refresh failed: ${String(err)}`);
-      } finally {
-        refreshToolsBtn.removeAttribute('disabled');
-        refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Refresh tools</span>';
-      }
+    refreshToolsBtn.addEventListener('click', () => {
+      void (async () => {
+        refreshToolsBtn.setAttribute('disabled', '');
+        refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Scanning tools…</span>';
+        try {
+          // Keep the current snapshot visible (don't blank the panel) — tools can
+          // take a few seconds to probe; only the tool lists change.
+          renderAuthStatus(await getAgentsStatus({ refreshTools: true }));
+          showToast('Tools refreshed');
+        } catch (err) {
+          showToast(`Tool refresh failed: ${String(err)}`);
+        } finally {
+          refreshToolsBtn.removeAttribute('disabled');
+          refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Refresh tools</span>';
+        }
+      })();
     });
 
     pageHosts.providers.append(

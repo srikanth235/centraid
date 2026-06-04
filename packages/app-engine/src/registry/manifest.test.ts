@@ -17,6 +17,9 @@ const baseManifest = () => ({
   name: 'Todos',
   version: '0.1.0',
   description: 'tests',
+  // Loosely typed: these tests deliberately mutate/push partial and malformed
+  // actions/queries and feed the result to validateManifest(raw: unknown), so
+  // the fixture must not pin the arrays to the first element's narrow shape.
   actions: [
     {
       name: 'add',
@@ -28,13 +31,13 @@ const baseManifest = () => ({
         additionalProperties: false,
       },
     },
-  ],
+  ] as Array<Record<string, unknown>>,
   queries: [
     {
       name: 'list',
       input: { type: 'object', properties: {}, additionalProperties: false },
     },
-  ],
+  ] as Array<Record<string, unknown>>,
 });
 
 describe('manifest constants', () => {

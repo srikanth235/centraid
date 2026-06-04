@@ -141,7 +141,11 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink3} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.ink3}
+          />
         }
       >
         {renderBody(state, matches, query, () => navigation.navigate('Settings'), navigation)}
