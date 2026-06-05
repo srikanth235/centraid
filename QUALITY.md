@@ -2,15 +2,25 @@
 
 ## Open
 
-- #212 — Testing strategy ([TESTING.md](TESTING.md)) is partially landed: vitest
-  is the single runner (migrated off `node:test`/`tsx --test`, 653 tests
-  unchanged), repo-wide v8 coverage is wired (`bun run coverage`), and the engine
-  packages are gated on seeded line+branch floors enforced in CI. Still open:
-  ratcheting the floors up, converting `assert.*` to vitest `expect` matchers,
-  extracting desktop renderer logic into testable modules, and the thin e2e
-  journeys (Playwright `_electron` + Maestro). These proceed behind new work.
+- #212 — Testing strategy ([TESTING.md](TESTING.md)) follow-up: the three
+  per-layer workstreams (`assert.*` → `expect`, coverage-floor ratchet, desktop
+  renderer logic-extraction) landed under #214. **Still open:** the thin e2e
+  journeys (Playwright `_electron` + Maestro, deferred to nightly/on-demand by
+  #212), and the remaining renderer extraction — `app.ts` (6,803 lines) still
+  holds pure logic (appearance-prefs bridge, profile view-models, insights
+  formatters) plus a near-duplicate `relativeTime` to consolidate.
 
 ## Resolved
+
+- #214 — Carried out #212's three deferred per-layer workstreams: converted all
+  1,740 `assert.*` calls across the 80 test files to vitest `expect` matchers
+  (AST codemod + by-hand conversion of the validator-function forms); extracted
+  the first tranche of pure logic out of the `builder.ts` renderer god-file into
+  tested `format.ts`/`cron.ts`/`diff.ts` modules and moved the desktop vitest
+  project to `jsdom` (12 → 71 desktop tests); grew `agent-runtime` line coverage
+  20.8% → 28.6% with real-dependency tests for the codex tool dispatch, tool
+  normalization, and model enumeration, then ratcheted every engine floor up
+  toward the 80% line / 70% branch target band.
 
 - #210 — Made the oxlint profile intentional (correctness + suspicious + perf, explicit rules) instead of ultracite's maximal-then-suppressed set, added per-package type-aware linting (`oxlint --type-aware`) and brought all `*.test.ts` into both `tsc` typecheck and lint via per-package `tsconfig.test.json`. Fixed every surfaced finding (type-aware + 14 latent test type errors) and three file-relocation regressions the new coverage unmasked: the automation and app-engine handler-runners resolved the relocated worker at the wrong path (handlers couldn't execute), and agent-runtime's CLI smoke-test path + package `bin` pointed at the pre-move location.
 - #180 — Removed dead `gatewayUrl` / `gatewayToken` / `appsDir` / `runtimeMode` / `remoteGateway*` fields from the settings `getSettings()` fallback object (leftovers from the retired local/remote form); only `chatModel` is read.

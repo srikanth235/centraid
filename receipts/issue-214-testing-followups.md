@@ -9,7 +9,7 @@ three deferred workstreams, each as its own focused commit.
 ## Checklist
 
 - [x] Convert assertions to expect matchers
-- [ ] Ratchet engine coverage floors up
+- [x] Ratchet engine coverage floors up
 - [x] Desktop renderer: extract logic, then test it
 
 ## What changed
@@ -43,6 +43,45 @@ narrowed a `possibly-undefined` value for TypeScript, the equivalent
 `expect(x).toBeTruthy()` does not narrow, so deref sites use the repo's existing
 non-null (`x!`) idiom.
 
+### Ratchet engine coverage floors up
+
+Grew `agent-runtime` line coverage and ratcheted every engine package's floor up
+toward the **80% line / 70% branch** target band (TESTING.md). The floors moved
+from their seeded ~4–5-point margins to a tight ~1.5-point margin below the
+measured baseline (coverage is deterministic, so the headroom is anti-noise, not
+anti-flake-from-randomness):
+
+| Package         | Lines (floor → floor) | Branches (floor → floor) |
+| --------------- | --------------------- | ------------------------ |
+| `app-engine`    | 72% → 75%             | 70% → 73%                |
+| `automation`    | 65% → 68%             | 71% → 74%                |
+| `blueprints`    | 80% → 83%             | 71% → 74%                |
+| `gateway`       | 72% → 75%             | 68% → 71%                |
+| `agent-runtime` | 18% → 27%             | 78% → 84%                |
+
+The global repo-wide line floor went **28% → 30%** (measured ~32%).
+
+`agent-runtime` was the real gap (20.8% lines — mostly untested CLI/backend
+glue). Rather than chase the line number with vacuous over-mocked tests, the
+growth targets its genuinely-pure surface with real-dependency tests:
+
+- **codex tool dispatch** ([backends/codex/host-tools.ts](../packages/agent-runtime/src/backends/codex/host-tools.ts))
+  — a new test drives `handleCentraidToolCall` end-to-end through a **real**
+  app-engine `Dispatcher` (real manifest on disk, real sqlite): describe / read /
+  write / ad-hoc `_sql`, plus the guard + error-mapping paths (unknown tool,
+  missing query/action, dispatcher error → `success:false`). Also covers the pure
+  `centraidDynamicToolSpecs`.
+- **tool normalization** ([host-tools.ts](../packages/agent-runtime/src/host-tools.ts))
+  — extended the `normalizeCodexTools` / `normalizeClaudeTools` /
+  `claudeToolToHostTool` edge cases (custom tools, non-object entries, nameless
+  entries, an `mcp__` name with no separator).
+- **model enumeration** ([models/enumerators.ts](../packages/agent-runtime/src/models/enumerators.ts))
+  — the no-enumerator fallback branch.
+
+That lifted `agent-runtime` from **20.8% → 28.6%** lines (458 → 630 covered) and
+85.2% branches. The remaining gap is the process-spawning drive loops, scoped to
+the deferred e2e layer (recorded under _Out of scope_ + QUALITY.md).
+
 ### Desktop renderer: extract logic, then test it
 
 Pulled the first tranche of pure logic out of the `builder.ts` renderer god-file
@@ -75,8 +114,10 @@ behaviour quirk surfaced during extraction: `relativeWhen` returns the platform
 
 ## Out of scope
 
-- **Coverage ratcheting** — the remaining deferred workstream from #212; lands as
-  its own commit on this issue.
+- **agent-runtime process-spawning glue** — the codex/claude drive loops
+  (`backend.ts`), the automation host, and the `enumerate*` spawners are best
+  covered by the deferred Playwright/Maestro e2e layer (#212), not over-mocked
+  unit tests; the line floor stays honest (anti-regression) rather than inflated.
 - **Further renderer extraction** — `app.ts` (6,803 lines) still holds pure logic
   (appearance-prefs bridge, profile view-models, insights formatters) and a
   near-duplicate `relativeTime`; this commit extracts the `builder.ts` tranche and
@@ -97,6 +138,12 @@ behaviour quirk surfaced during extraction: `relativeWhen` returns the platform
   @centraid/desktop` — **71 pass** (was 12), the 59 new format/cron/diff units
   plus the pre-existing main-process test, all green under the new `jsdom`
   environment. `apps/desktop` builds clean (`tsc -p tsconfig.json`; format.js,
-  cron.js, diff.js emitted to `dist/renderer/`). Repo-wide: `vitest run` **717
-  pass / 1 skip**, `turbo run typecheck` 15/15, `oxlint .` + `lint:types` (incl.
-  apps/desktop) clean, `oxfmt --check` clean.
+  cron.js, diff.js emitted to `dist/renderer/`).
+- **Ratchet engine coverage floors up:** `bun run coverage` (root vitest + v8)
+  exits 0 with every ratcheted floor met — measured app-engine 76.7/74.8,
+  automation 69.4/75.2, blueprints 84.7/75.8, gateway 76.4/72.3, agent-runtime
+  **28.6**/85.2 (up from 20.8/83.5), repo total ~32% ≥ the 30 global floor. The
+  TESTING.md floor table + QUALITY.md are updated to match.
+- **Repo-wide:** `bun run coverage` **733 pass / 1 skip** (85 files), `turbo run
+  typecheck` 17/17, `oxlint .` 0/0 + `lint:types` (all packages incl.
+  apps/desktop) clean, `oxfmt --check .` clean.

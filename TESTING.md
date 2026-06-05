@@ -142,21 +142,27 @@ test still pass?_ If yes, the test is not yet meaningful.
 - Coverage is tracked **repo-wide** via vitest v8 — `bun run coverage` (and CI's
   `bun run build && bun run coverage`).
 - The engine packages are **gated** on per-package line + branch floors in the
-  root `vitest.config.ts`. The floors are seeded a conservative margin below the
-  measured baseline so they catch regression without flaking, and **ratchet
-  up**, never down. Seeded baseline at migration (measured → floor):
+  root `vitest.config.ts`. The floors sit a tight margin below the measured
+  baseline so they catch regression without flaking, and **ratchet up**, never
+  down. Current floors (measured → floor), ratcheted as coverage grows:
 
   | Package         | Lines (measured → floor) | Branches (measured → floor) |
   | --------------- | ------------------------ | --------------------------- |
-  | `app-engine`    | 76.7% → 72%              | 74.8% → 70%                 |
-  | `automation`    | 69.4% → 65%              | 75.2% → 71%                 |
-  | `blueprints`    | 84.7% → 80%              | 75.8% → 71%                 |
-  | `gateway`       | 76.4% → 72%              | 72.3% → 68%                 |
-  | `agent-runtime` | 20.8% → 18%              | 83.5% → 78%                 |
+  | `app-engine`    | 76.7% → 75%              | 74.8% → 73%                 |
+  | `automation`    | 69.4% → 68%              | 75.2% → 74%                 |
+  | `blueprints`    | 84.7% → 83%              | 75.8% → 74%                 |
+  | `gateway`       | 76.4% → 75%              | 72.3% → 71%                 |
+  | `agent-runtime` | 28.6% → 27%              | 85.2% → 84%                 |
 
-  `agent-runtime` lines are low because much of it is untested CLI/backend glue —
-  the floor is anti-regression, and the target band (below) is what to ratchet
-  toward.
+  The global repo-wide line floor is **30%** (measured ~32%), an anti-regression
+  guard across every included file (renderer/mobile included).
+
+  `agent-runtime` lines are still the low outlier because most of it is
+  process-spawning CLI/backend glue (the codex/claude drive loops, the automation
+  host) whose meaningful coverage is the deferred e2e layer, not vacuous unit
+  mocks; its pure surface (tool normalization, model-list parsing, the codex tool
+  dispatch) is now covered. The floor is anti-regression; the 80% line / 70%
+  branch target band (below) is what to keep ratcheting toward.
 - **Renderer / mobile:** tracked, **not** gated on line coverage (no per-glob
   threshold). Their meaningful coverage is logic-units plus e2e journeys, not a
   renderer line percentage.

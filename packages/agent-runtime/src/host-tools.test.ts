@@ -13,6 +13,11 @@ describe('claudeToolToHostTool', () => {
   it('treats a bare tool name as native', () => {
     expect(claudeToolToHostTool('Bash')).toEqual({ name: 'Bash', source: 'native' });
   });
+
+  it('treats an `mcp__`-prefixed name with no server/tool separator as native', () => {
+    // No `__` after the prefix → cannot split server from tool → stays native.
+    expect(claudeToolToHostTool('mcp__weird')).toEqual({ name: 'mcp__weird', source: 'native' });
+  });
 });
 
 describe('normalizeCodexTools', () => {
@@ -40,6 +45,20 @@ describe('normalizeCodexTools', () => {
     const tools = normalizeCodexTools([{ type: 'web_search', external_web_access: true }]);
     expect(tools).toEqual([{ name: 'web_search', source: 'native' }]);
   });
+
+  it('keeps a named custom tool but carries no input schema', () => {
+    const tools = normalizeCodexTools([
+      { type: 'custom', name: 'apply_patch', description: 'Apply a patch.', format: 'freeform' },
+    ]);
+    expect(tools).toEqual([
+      { name: 'apply_patch', source: 'native', description: 'Apply a patch.' },
+    ]);
+  });
+
+  it('skips non-object entries and entries with neither name nor type', () => {
+    const tools = normalizeCodexTools([null, 42, 'str', ['x'], {}, { description: 'no id' }]);
+    expect(tools).toEqual([]);
+  });
 });
 
 describe('normalizeClaudeTools', () => {
@@ -65,5 +84,13 @@ describe('normalizeClaudeTools', () => {
       type: 'object',
       properties: { repo: { type: 'string' } },
     });
+  });
+
+  it('skips entries that are not objects or have no name', () => {
+    expect(normalizeClaudeTools([null, 'x', 7, {}, { description: 'nameless' }])).toEqual([]);
+  });
+
+  it('omits an absent description and input schema rather than emitting undefined keys', () => {
+    expect(normalizeClaudeTools([{ name: 'Glob' }])).toEqual([{ name: 'Glob', source: 'native' }]);
   });
 });

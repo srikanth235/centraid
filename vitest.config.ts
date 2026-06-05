@@ -37,15 +37,20 @@ export default defineConfig({
       // gate matching files; everything else is tracked, not gated.
       thresholds: {
         // Repo-wide line floor: a global anti-regression guard across every
-        // included file (renderer/mobile included), seeded below the measured
-        // ~31% total so it catches a broad backslide without flaking. Ratchet
-        // up as renderer logic-extraction and e2e land.
-        lines: 28,
-        'packages/app-engine/src/**': { lines: 72, branches: 70 },
-        'packages/automation/src/**': { lines: 65, branches: 71 },
-        'packages/blueprints/src/**': { lines: 80, branches: 71 },
-        'packages/gateway/src/**': { lines: 72, branches: 68 },
-        'packages/agent-runtime/src/**': { lines: 18, branches: 78 },
+        // included file (renderer/mobile included). Ratcheted to 30 as the
+        // measured total reached ~32% (renderer logic-extraction added the
+        // first tranche of desktop unit coverage). Never lowered.
+        lines: 30,
+        // Per-package floors ratchet toward the 80% line / 70% branch target
+        // band (TESTING.md) as coverage grows — set a tight margin below the
+        // measured baseline, enough to absorb noise without flaking, never down.
+        // Measured at this commit: app-engine 76.7/74.8, automation 69.4/75.2,
+        // blueprints 84.7/75.8, gateway 76.4/72.3, agent-runtime 28.6/85.2.
+        'packages/app-engine/src/**': { lines: 75, branches: 73 },
+        'packages/automation/src/**': { lines: 68, branches: 74 },
+        'packages/blueprints/src/**': { lines: 83, branches: 74 },
+        'packages/gateway/src/**': { lines: 75, branches: 71 },
+        'packages/agent-runtime/src/**': { lines: 27, branches: 84 },
       },
     },
   },

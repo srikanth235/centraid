@@ -712,3 +712,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-ed31e5ae-22b-1780626293 | claude-code | ed31e5ae-22b8-499c-9e9e-23131aa4be06 | #212 | claude-opus-4-8 | 13394 | 1005957 | 20540576 | 184416 | 1203767 | 21.2349 | test(coverage): add repo-wide line floor; correct lint-types vitest comments (#2 |
 | claude-code-a89e49fc-a74-1780628069 | claude-code | a89e49fc-a741-4cc6-8640-7db44ad13710 | #214 | claude-opus-4-8 | 70005 | 431547 | 27123338 | 216594 | 718146 | 22.0237 |  |
 | claude-code-a89e49fc-a74-1780628798 | claude-code | a89e49fc-a741-4cc6-8640-7db44ad13710 | #214 | claude-opus-4-8 | 19987 | 176444 | 25436433 | 113429 | 309860 | 16.7567 |  |
+| claude-code-a89e49fc-a74-1780629334 | claude-code | a89e49fc-a741-4cc6-8640-7db44ad13710 | #214 | claude-opus-4-8 | 13211 | 132851 | 21545186 | 81972 | 228034 | 13.7183 |  |
