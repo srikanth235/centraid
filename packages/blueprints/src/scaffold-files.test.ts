@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { scaffoldAppFiles, updateAppMetaFiles, type ScaffoldFile } from './scaffold-files.js';
 import { cloneTemplateFiles } from './clone.js';

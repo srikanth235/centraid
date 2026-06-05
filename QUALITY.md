@@ -2,7 +2,13 @@
 
 ## Open
 
-- Nothing tracked yet.
+- #212 — Testing strategy ([TESTING.md](TESTING.md)) is partially landed: vitest
+  is the single runner (migrated off `node:test`/`tsx --test`, 653 tests
+  unchanged), repo-wide v8 coverage is wired (`bun run coverage`), and the engine
+  packages are gated on seeded line+branch floors enforced in CI. Still open:
+  ratcheting the floors up, converting `assert.*` to vitest `expect` matchers,
+  extracting desktop renderer logic into testable modules, and the thin e2e
+  journeys (Playwright `_electron` + Maestro). These proceed behind new work.
 
 ## Resolved
 

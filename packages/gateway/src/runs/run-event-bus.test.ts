@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RunStreamEvent } from '@centraid/app-engine';
 import { RunEventBus } from './run-event-bus.js';

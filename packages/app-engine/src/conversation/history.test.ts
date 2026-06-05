@@ -1,7 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit #181 — cohesive
 // conversation-history suite; the build-kind coverage tips it just over 500
 // lines, not worth a split.
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';

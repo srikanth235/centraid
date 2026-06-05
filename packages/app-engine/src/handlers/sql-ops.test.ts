@@ -1,4 +1,4 @@
-import { test, before, after } from 'node:test';
+import { test, beforeAll, afterAll } from 'vitest';
 import { strict as assert } from 'node:assert';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -17,7 +17,7 @@ import {
 let workspace: string;
 let dbFile: string;
 
-before(async () => {
+beforeAll(async () => {
   workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'sql-ops-test-'));
   dbFile = path.join(workspace, 'data.sqlite');
   const db = new DatabaseSync(dbFile);
@@ -28,7 +28,7 @@ before(async () => {
   db.close();
 });
 
-after(async () => {
+afterAll(async () => {
   if (workspace) await fs.rm(workspace, { recursive: true, force: true });
 });
 

@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit unit tests for one module — splitting by topic would scatter the shared helpers
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';

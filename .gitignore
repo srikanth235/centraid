@@ -9,6 +9,7 @@ out
 .env
 test-results
 playwright-report
+coverage
 .wrangler
 .claude
 # Python bytecode created by .governance/ hook scripts (not source).

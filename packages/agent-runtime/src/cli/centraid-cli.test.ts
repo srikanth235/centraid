@@ -8,7 +8,7 @@
  * configures `test` to run after `build` so the dist file exists.
  */
 
-import { test, before, after } from 'node:test';
+import { test, beforeAll, afterAll } from 'vitest';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -30,7 +30,7 @@ const CLI_PATH = path.join(
 
 let workspace: string;
 
-before(async () => {
+beforeAll(async () => {
   workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-cli-test-'));
   const dbFile = path.join(workspace, 'data.sqlite');
   const db = new DatabaseSync(dbFile);
@@ -41,7 +41,7 @@ before(async () => {
   db.close();
 });
 
-after(async () => {
+afterAll(async () => {
   if (workspace) await fs.rm(workspace, { recursive: true, force: true });
 });
 

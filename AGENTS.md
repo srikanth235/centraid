@@ -25,6 +25,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager + runtime, pinned in
 - **One receipt per issue.** Substantive work touches `receipts/issue-<N>-<slug>.md`, with `## Checklist`, `## What changed`, `## Out of scope`, and `## Verification` sections. See [CONSTITUTION.md](CONSTITUTION.md#receipt-per-issue) for the contract.
 - **Audit trailers on every commit.** The `.githooks/` dispatchers stamp `Agent` / `Token-*` / `Cost-*` / `Steer-*` trailers automatically and write rows to [COSTS.md](COSTS.md) and [STEERING.md](STEERING.md). Skipping with `SKIP_GOVERNANCE=1` is allowed for true emergencies; CI still enforces.
 - **Quality observations live in [QUALITY.md](QUALITY.md).** Bugs and rough edges between releases go in `## Open`; resolved items roll to `## Resolved`.
+- **Tests follow [TESTING.md](TESTING.md).** One runner (vitest), behaviour-over-implementation convention, per-layer coverage intent. `bun run test` (per-package via turbo) and `bun run coverage` (repo-wide v8, enforces the seeded engine floors). Read it before writing or migrating a test.
 - **Issue intake.** New work starts from a GitHub issue using the [proposal](.github/ISSUE_TEMPLATE/proposal.yml) or [bug](.github/ISSUE_TEMPLATE/bug.yml) template. Blank issues are disabled by design.
 
 ## Where to look
@@ -32,5 +33,6 @@ The runtime stack is [Bun](https://bun.sh) (package manager + runtime, pinned in
 - [CONSTITUTION.md](CONSTITUTION.md) — the mechanical and judgmental rules.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — full layout and design-token sharing model.
 - [README.md](README.md) — develop, build, and check commands.
+- [TESTING.md](TESTING.md) — the testing strategy, runner, and test convention.
 - [SECURITY.md](SECURITY.md) — vulnerability disclosure path.
 - [scripts/enable-governance.sh](scripts/enable-governance.sh) — run once per fresh clone to activate the governance hooks.

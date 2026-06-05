@@ -12,10 +12,9 @@
 #
 # Each package is linted through its `tsconfig.test.json` (which includes test
 # files) when present, so tests are type-aware-linted too. The one exception:
-# `no-floating-promises` is NOT applied to *.test.ts, because node:test's
-# `it()`/`test()` return promises that the runner intentionally does not await
-# — flagging those is noise, not bugs. Every other type-aware rule applies to
-# tests as well.
+# `no-floating-promises` is NOT applied to *.test.ts, because vitest's
+# `it()`/`test()` calls are written as unawaited statements by design — flagging
+# those is noise, not bugs. Every other type-aware rule applies to tests as well.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -27,7 +26,7 @@ RULES_ALL=(
   -D typescript/await-thenable
   -D typescript/switch-exhaustiveness-check
 )
-# Applied to source only (excluded from *.test.ts — node:test idiom).
+# Applied to source only (excluded from *.test.ts — vitest idiom).
 RULES_SRC_ONLY=(-D typescript/no-floating-promises)
 
 # Workspaces with real TS source. A missing entry means that package is

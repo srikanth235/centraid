@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
 import { RUNNER_TIERS } from './tiers.js';
 import { resolveClaudeModel } from '../backends/claude/backend.js';

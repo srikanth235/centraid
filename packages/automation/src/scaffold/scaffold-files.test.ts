@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import type { ScaffoldFile } from '@centraid/blueprints';
 import { scaffoldAppFiles, setEnabledInFiles, deleteFromFiles } from './scaffold.js';

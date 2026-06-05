@@ -6,7 +6,7 @@
  * probe itself runs for real and is not asserted on (its result varies by host).
  */
 
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
 import { readAgentsStatus } from './agents-routes.ts';
 

@@ -24,3 +24,9 @@ jobs:
       # Type-aware pass (oxlint --type-aware); deps' dist is built by the
       # typecheck step's upstream `^build`.
       - run: bun run lint:types
+      # Build every package's dist (the worker-thread handler tests load the
+      # built worker, not the .ts source), then run the whole suite under
+      # vitest with v8 coverage. `coverage` enforces the seeded engine floors
+      # in vitest.config.ts; a test failure or a floor breach fails CI.
+      - run: bun run build
+      - run: bun run coverage

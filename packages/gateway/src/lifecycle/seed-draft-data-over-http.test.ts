@@ -9,7 +9,7 @@
  * stays at the published schema and a draft write never touches live rows.
  */
 
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import { strict as assert } from 'node:assert';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
