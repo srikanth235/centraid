@@ -75,7 +75,7 @@ import { lineDiff } from './diff.js';
     // across re-renders.
     | { kind: 'toolGroup'; id: string; calls: ToolCall[]; open: boolean };
 
-  type Tab = 'preview' | 'code' | 'cloud' | 'config' | 'runs';
+  type Tab = 'preview' | 'code' | 'cloud' | 'config' | 'runs' | 'flow';
   type ChatView = 'chat' | 'history';
   type DeviceKey = 'mobile' | 'tablet' | 'desktop';
 
@@ -155,6 +155,10 @@ import { lineDiff } from './diff.js';
     // Latest `automation.json` snapshot, re-read after each agent turn so
     // the config pane reflects what the agent wrote. Automation mode only.
     let automationRow: CentraidAutomationRow | undefined;
+    // Config sections the latest agent turn changed — the Config pane flashes
+    // a diff ribbon on each, then clears the set (one-shot). Keys match the
+    // four read-only sections: 'what' / 'when' / 'behavior' / 'apps'.
+    const flashConfigSections = new Set<string>();
     // True while a run-now / enable IPC is in flight (disables the controls).
     let automationBusy = false;
     let chatView = 'chat' as ChatView;
@@ -378,7 +382,9 @@ import { lineDiff } from './diff.js';
     const tabDefs: [Tab, string, () => string][] = isAutomation
       ? [
           ['config', 'Config', () => Icon.Settings({ size: 13 })],
+          ['flow', 'Flow', () => Icon.Activity({ size: 13 })],
           ['runs', 'Runs', () => Icon.History({ size: 13 })],
+          ['code', 'Code', () => Icon.Code({ size: 13 })],
         ]
       : [
           ['preview', 'Preview', () => Icon.Eye({ size: 13 })],
@@ -842,15 +848,92 @@ import { lineDiff } from './diff.js';
       return el('div', { class: 'msg-ai' }, [avatar, para]);
     }
 
+    // Derive the live state of the current turn for the progress strip:
+    // the active verb + file (from the running tool call, or the streaming
+    // reply), a one-line sub-status, and a determinate 1–4 dot count that
+    // advances as tool calls in this turn complete.
+    function turnProgress(): { verb: string; file: string; sub: string; filled: number } {
+      let userIdx = -1;
+      for (let i = chat.length - 1; i >= 0; i -= 1) {
+        if (chat[i]!.kind === 'user') {
+          userIdx = i;
+          break;
+        }
+      }
+      let completed = 0;
+      let running: ToolCall | null = null;
+      let group: Extract<ConversationMsg, { kind: 'toolGroup' }> | null = null;
+      for (let i = userIdx + 1; i < chat.length; i += 1) {
+        const m = chat[i]!;
+        if (m.kind !== 'toolGroup') continue;
+        group = m;
+        for (const c of m.calls) {
+          if (c.state === 'running') running = c;
+          else completed += 1;
+        }
+      }
+      if (running) {
+        return {
+          verb: toolVerb(running.tool),
+          file: running.summary ?? '',
+          sub: group ? summarizeGroup(group.calls) : 'Working through your request',
+          filled: Math.max(1, Math.min(4, completed + 1)),
+        };
+      }
+      if (currentAiMsgIndex >= 0) {
+        return { verb: 'Writing', file: '', sub: 'Composing the reply', filled: 4 };
+      }
+      if (group) {
+        return {
+          verb: 'Working',
+          file: '',
+          sub: summarizeGroup(group.calls),
+          filled: Math.max(1, Math.min(4, completed)),
+        };
+      }
+      return { verb: 'Thinking', file: '', sub: 'Reading your request', filled: 1 };
+    }
+
+    // The single determinate agent-progress strip shown for the whole turn:
+    // 4 dots + a live verb + a mono filename + a sub-line + cancel.
+    function buildAgentProgress(): HTMLElement {
+      const p = turnProgress();
+      const dots = el('span', { class: 'ab-progress-dots', 'aria-hidden': 'true' });
+      for (let i = 0; i < 4; i += 1) {
+        dots.append(el('i', { 'data-on': i < p.filled ? 'true' : undefined }));
+      }
+      const line = el('div', { class: 'ab-progress-line' }, [
+        el('span', { class: 'ab-progress-verb' }, p.verb),
+      ]);
+      if (p.file) line.append(el('code', { class: 'ab-progress-file' }, p.file));
+      const cancel = el(
+        'button',
+        {
+          class: 'ab-progress-cancel',
+          type: 'button',
+          onClick: () => agentAbort?.abort(),
+        },
+        'Cancel',
+      );
+      return el(
+        'div',
+        { class: 'ab-progress', role: 'status', 'aria-label': `${p.verb} — running` },
+        [
+          dots,
+          el('div', { class: 'ab-progress-main' }, [
+            line,
+            el('div', { class: 'ab-progress-sub' }, p.sub),
+          ]),
+          cancel,
+        ],
+      );
+    }
+
     function renderChat(): void {
       chatScroll.innerHTML = '';
       for (const m of chat) chatScroll.append(renderMessage(m));
-      if (generating && currentAiMsgIndex < 0) {
-        chatScroll.append(
-          el('div', { class: 'gen-row' }, [
-            el('span', { class: 'msg-status' }, [el('span', { class: 'pulse' }), ' Thinking…']),
-          ]),
-        );
+      if (generating) {
+        chatScroll.append(buildAgentProgress());
       }
       chatScroll.scrollTop = chatScroll.scrollHeight;
       // The header sync indicator mirrors `generating` — refreshing it
@@ -1006,6 +1089,8 @@ import { lineDiff } from './diff.js';
         main.dataset.chat = builderChatOpen ? 'open' : 'closed';
         setShellChatPaneOpen(builderChatOpen);
         if (tab === 'runs') renderRuns();
+        else if (tab === 'code') renderAutomationCode();
+        else if (tab === 'flow') renderAutomationFlow();
         else renderConfig();
         return;
       }
@@ -3497,8 +3582,29 @@ import { lineDiff } from './diff.js';
 
     // Re-read `automation.json` and repaint the header + config pane.
     // Called on bootstrap and after every agent turn that touched files.
+    // Per-section fingerprints of the manifest — comparing before/after an
+    // agent turn tells us which Config sections to flash a diff ribbon on.
+    function configSectionSignatures(
+      m: CentraidAutomationManifest,
+    ): Record<'what' | 'when' | 'behavior' | 'apps', string> {
+      return {
+        what: m.prompt ?? '',
+        when: JSON.stringify(m.triggers ?? []),
+        behavior: JSON.stringify({
+          model: m.requires.model ?? null,
+          keep: m.history.keep,
+          onFailure: m.onFailure ?? null,
+          tools: m.requires.tools ?? [],
+        }),
+        apps: JSON.stringify(m.apps ?? []),
+      };
+    }
+
     async function refreshAutomationRow(): Promise<void> {
       if (!appId) return;
+      // Snapshot the section fingerprints before re-reading so we can flash a
+      // diff ribbon on whatever the agent just changed.
+      const before = automationRow ? configSectionSignatures(automationRow.manifest) : undefined;
       try {
         // The builder opens an automation app by its folder id; resolve
         // the single automation it owns to get the `<appId>/<id>` handle.
@@ -3511,6 +3617,13 @@ import { lineDiff } from './diff.js';
       if (automationRow) {
         projName = automationRow.manifest.name || automationRow.id;
         projNameEl.textContent = projName;
+        if (before) {
+          const after = configSectionSignatures(automationRow.manifest);
+          flashConfigSections.clear();
+          for (const k of ['what', 'when', 'behavior', 'apps'] as const) {
+            if (before[k] !== after[k]) flashConfigSections.add(k);
+          }
+        }
       }
       paintAutomationPrimary();
       refreshSyncStatus();
@@ -3526,7 +3639,9 @@ import { lineDiff } from './diff.js';
       refreshSyncStatus();
       try {
         await setAutomationEnabled({ automationId: ref, enabled: next });
-        showToast(next ? 'Automation enabled — schedule is live' : 'Automation disabled');
+        const t0 = automationRow.manifest.triggers[0];
+        const sched = !t0 ? 'manual' : t0.kind === 'cron' ? describeCron(t0.expr) : 'Webhook';
+        showToast(next ? `Enabled · ${sched}` : 'Disabled — schedule stopped');
         await refreshAutomationRow();
       } catch (err) {
         showToast(`Could not ${next ? 'enable' : 'disable'}: ${String(err)}`);
@@ -3614,6 +3729,32 @@ import { lineDiff } from './diff.js';
       const m = automationRow.manifest;
       const enabled = automationRow.enabled === true;
 
+      // Section wrapper that flashes a diff ribbon when the latest chat turn
+      // changed this section (one-shot — the set is cleared once painted).
+      const cfgSection = (
+        key: 'what' | 'when' | 'behavior' | 'apps',
+        label: string,
+        body: HTMLElement,
+      ): HTMLElement => {
+        const flash = flashConfigSections.has(key);
+        return el(
+          'div',
+          { class: flash ? 'ab-section ab-section-flash' : 'ab-section', 'data-section': key },
+          [
+            el('div', { class: 'ab-section-label' }, [
+              el('span', {}, label),
+              flash
+                ? el('span', { class: 'ab-diff-ribbon' }, [
+                    el('span', { 'aria-hidden': 'true', trustedHtml: Icon.Check({ size: 11 }) }),
+                    'Updated',
+                  ])
+                : null,
+            ]),
+            body,
+          ],
+        );
+      };
+
       wrap.append(
         el('div', { class: 'ab-config-head' }, [
           el('div', { class: 'ab-config-title' }, m.name || automationRow.id),
@@ -3626,10 +3767,11 @@ import { lineDiff } from './diff.js';
       );
 
       wrap.append(
-        el('div', { class: 'ab-section' }, [
-          el('div', { class: 'ab-section-label' }, 'What it does'),
+        cfgSection(
+          'what',
+          'What it does',
           el('p', { class: 'ab-prompt' }, m.prompt || 'Not described yet.'),
-        ]),
+        ),
       );
 
       const triggersBody = el('div', { class: 'ab-triggers' });
@@ -3693,12 +3835,7 @@ import { lineDiff } from './diff.js';
           }
         }
       }
-      wrap.append(
-        el('div', { class: 'ab-section' }, [
-          el('div', { class: 'ab-section-label' }, 'When it runs'),
-          triggersBody,
-        ]),
-      );
+      wrap.append(cfgSection('when', 'When it runs', triggersBody));
 
       const behavior = el('div', { class: 'ab-rows' });
       behavior.append(cfgRow('Model', m.requires.model || 'Workspace default'));
@@ -3706,17 +3843,13 @@ import { lineDiff } from './diff.js';
       if (m.onFailure) behavior.append(cfgRow('On failure', `Run "${m.onFailure}"`));
       const tools = m.requires.tools ?? [];
       if (tools.length > 0) behavior.append(cfgRow('Tools', tools.join(', ')));
-      wrap.append(
-        el('div', { class: 'ab-section' }, [
-          el('div', { class: 'ab-section-label' }, 'Behavior'),
-          behavior,
-        ]),
-      );
+      wrap.append(cfgSection('behavior', 'Behavior', behavior));
 
       const apps = m.apps ?? [];
       wrap.append(
-        el('div', { class: 'ab-section' }, [
-          el('div', { class: 'ab-section-label' }, 'Connected apps'),
+        cfgSection(
+          'apps',
+          'Connected apps',
           apps.length > 0
             ? el(
                 'div',
@@ -3724,7 +3857,7 @@ import { lineDiff } from './diff.js';
                 apps.map((a) => el('span', { class: 'ab-tag' }, a)),
               )
             : el('p', { class: 'ab-muted' }, 'Not linked to any app.'),
-        ]),
+        ),
       );
 
       wrap.append(
@@ -3732,6 +3865,129 @@ import { lineDiff } from './diff.js';
           'div',
           { class: 'ab-hint' },
           'This view is filled in by the chat. Describe any change in the conversation.',
+        ),
+      );
+      rightPaneContent.append(wrap);
+      // Diff ribbons are one-shot — clear so a later non-agent re-render
+      // (e.g. tab switch) doesn't re-flash the same sections.
+      flashConfigSections.clear();
+    }
+
+    // Read-only Code tab — a rendered view of `automation.json` (the manifest
+    // the chat agent authors). Like Config, it's changed via the conversation,
+    // never edited as JSON here.
+    function renderAutomationCode(): void {
+      rightPaneContent.innerHTML = '';
+      const wrap = el('div', { class: 'ab-code' });
+      if (!automationRow) {
+        wrap.append(el('p', { class: 'ab-muted ab-config-loading' }, 'Loading automation…'));
+        rightPaneContent.append(wrap);
+        return;
+      }
+      wrap.append(
+        el('div', { class: 'ab-code-head' }, [
+          el('span', { class: 'ab-code-file' }, 'automation.json'),
+          el('span', { class: 'ab-code-tag' }, 'read-only'),
+        ]),
+        el('pre', { class: 'ab-code-pre' }, JSON.stringify(automationRow.manifest, null, 2)),
+      );
+      rightPaneContent.append(wrap);
+    }
+
+    // Direction B — the automation as a vertical flow/pipeline: Trigger →
+    // Agent → Connected apps → Outcome, derived from the manifest. The
+    // alternate read-only visualisation to the Config view (A).
+    function renderAutomationFlow(): void {
+      rightPaneContent.innerHTML = '';
+      const wrap = el('div', { class: 'ab-flow' });
+      if (!automationRow) {
+        wrap.append(el('p', { class: 'ab-muted ab-config-loading' }, 'Loading automation…'));
+        rightPaneContent.append(wrap);
+        return;
+      }
+      const m = automationRow.manifest;
+
+      const flowNode = (
+        icon: string,
+        kind: string,
+        title: string,
+        sub?: string | null,
+      ): HTMLElement =>
+        el('div', { class: 'ab-flow-node' }, [
+          el('span', { class: 'ab-flow-ic', 'aria-hidden': 'true', trustedHtml: icon }),
+          el('div', { class: 'ab-flow-body' }, [
+            el('div', { class: 'ab-flow-kind' }, kind),
+            el('div', { class: 'ab-flow-title' }, title),
+            sub ? el('div', { class: 'ab-flow-sub' }, sub) : null,
+          ]),
+        ]);
+      const connector = (): HTMLElement =>
+        el('div', { class: 'ab-flow-conn', 'aria-hidden': 'true' }, [
+          el('span', { class: 'ab-flow-conn-line' }),
+          el('span', { class: 'ab-flow-conn-chev', trustedHtml: Icon.ChevronDown({ size: 14 }) }),
+        ]);
+
+      const stages: HTMLElement[] = [];
+
+      // Trigger.
+      const triggers = m.triggers ?? [];
+      const t0 = triggers[0];
+      let trigIc = Icon.Play({ size: 16 });
+      let trigTitle = 'Manual only';
+      let trigSub: string | null = 'Runs only when you fire it.';
+      if (t0) {
+        if (t0.kind === 'cron') {
+          trigIc = Icon.Clock({ size: 16 });
+          trigTitle = describeCron(t0.expr);
+          const next = cronNextRuns(t0.expr, 1)[0];
+          trigSub = next
+            ? `Next: ${next.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+            : t0.expr;
+        } else {
+          trigIc = Icon.Webhook({ size: 16 });
+          trigTitle = t0.id ? 'Webhook' : 'Webhook — provisioning…';
+          trigSub = t0.id ? `/${t0.id}` : 'A URL + secret are minted server-side.';
+        }
+      }
+      stages.push(flowNode(trigIc, 'Trigger', trigTitle, trigSub));
+
+      // Agent.
+      stages.push(
+        flowNode(
+          Icon.Sparkle({ size: 16 }),
+          'Agent',
+          m.requires.model || 'Workspace default',
+          m.prompt || 'Not described yet.',
+        ),
+      );
+
+      // Connected apps / tools (optional).
+      const mcps = m.requires.mcps ?? [];
+      const apps = m.apps ?? [];
+      const connected = [...mcps, ...apps];
+      if (connected.length > 0) {
+        stages.push(flowNode(Icon.Plug({ size: 16 }), 'Connected', connected.join(', ')));
+      }
+
+      // Outcome.
+      stages.push(
+        flowNode(
+          Icon.Check({ size: 16 }),
+          'Outcome',
+          'Run recorded',
+          m.onFailure ? `On failure: run "${m.onFailure}"` : fmtRetention(m.history.keep),
+        ),
+      );
+
+      stages.forEach((node, i) => {
+        if (i > 0) wrap.append(connector());
+        wrap.append(node);
+      });
+      wrap.append(
+        el(
+          'div',
+          { class: 'ab-hint' },
+          'The flow is derived from automation.json — describe changes in the chat.',
         ),
       );
       rightPaneContent.append(wrap);

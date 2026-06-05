@@ -152,6 +152,60 @@ const ICON_DATA = {
     { d: 'M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z' },
     { d: 'M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
   ],
+
+  // Automation glyphs (Automations redesign). Lucide-style, expressed as
+  // <path> arcs/lines so the renderer's path-only wrapper can paint them at
+  // the same stroke weight as the rest of the set.
+  Clock: [{ d: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' }, { d: 'M12 7v5l3 2' }],
+  Webhook: [
+    { d: 'M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2' },
+    { d: 'M6 17l3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06' },
+    { d: 'M12 6l3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 1 1-3.92 4.74' },
+  ],
+  Power: [{ d: 'M12 2v10' }, { d: 'M18.36 6.64a9 9 0 1 1-12.73 0' }],
+  Stop: [
+    {
+      d: 'M8 6h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z',
+      fill: 'currentColor',
+    },
+  ],
+  AlertTriangle: [
+    { d: 'M21.73 18l-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z' },
+    { d: 'M12 9v4M12 17h.01' },
+  ],
+  AlertCircle: [{ d: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' }, { d: 'M12 8v4M12 16h.01' }],
+  CheckCircle: [{ d: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' }, { d: 'M8.5 12.5l2.5 2.5 4.5-5' }],
+  // Three-quarter arc so a CSS rotate animation reads as a spinner.
+  Loader: [{ d: 'M21 12a9 9 0 1 1-6.219-8.56' }],
+  Filter: [{ d: 'M22 3H2l8 9.46V19l4 2v-8.54z' }],
+  Braces: [
+    { d: 'M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1' },
+    { d: 'M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1' },
+  ],
+  Gauge: [{ d: 'M12 14l4-4' }, { d: 'M3.34 19a10 10 0 1 1 17.32 0' }],
+  Bell: [
+    { d: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9z' },
+    { d: 'M10.3 21a1.94 1.94 0 0 0 3.4 0' },
+  ],
+  Key: [
+    { d: 'M12 15a4 4 0 1 1-8 0 4 4 0 0 1 8 0z' },
+    { d: 'M11 12l9-9' },
+    { d: 'M17 6l3 3M14 9l3 3' },
+  ],
+  Cpu: [
+    { d: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
+    { d: 'M9 9h6v6H9z' },
+    { d: 'M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2' },
+  ],
+  Plug: [{ d: 'M9 7V4M15 7V4M7 7h10v6a4 4 0 1 1-10 0z' }, { d: 'M12 17v3' }],
+  Sliders: [{ d: 'M21 4H14M10 4H3M21 12H12M8 12H3M21 20H16M12 20H3M14 2v4M8 10v4M16 18v4' }],
+  Beaker: [
+    {
+      d: 'M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2z',
+    },
+    { d: 'M8.5 2h7M7 16h10' },
+  ],
+  ChevronRight: [{ d: 'M9 6l6 6-6 6' }],
 } as const;
 
 export type IconName = keyof typeof ICON_DATA;
