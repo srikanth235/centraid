@@ -12,6 +12,12 @@
 
 ## Resolved
 
+- #218 — Fixed the blank-frame flicker on sidebar navigation. The Home,
+  Discover, and Settings renders cleared the DOM up front and then awaited IPC
+  before painting, so the window sat empty for the round-trips. Split `clear()`
+  into a `teardownCurrent()` (cleanup + stale-render-guard bump, no DOM wipe)
+  plus the wipe; the three async renders now keep the prior view on screen and
+  swap the freshly-built shell in atomically with `root.replaceChildren`.
 - #214 — Carried out #212's three deferred per-layer workstreams: converted all
   1,740 `assert.*` calls across the 80 test files to vitest `expect` matchers
   (AST codemod + by-hand conversion of the validator-function forms); extracted
