@@ -1,149 +1,107 @@
 ---
-summary: 'What lives on disk under the apps directory — registry, per-app data, version dirs, chat transcripts.'
+summary: 'What lives on disk — the per-app data + conversation-ledger pair, the gateway identity + analytics DBs, and the content-addressed attachment blobs.'
 title: 'SQLite layout on disk'
 ---
 
 # SQLite layout on disk
 
-The gateway's state is files. Each app has its own SQLite pair (`data.sqlite` for handler-owned data, `runtime.sqlite` for chat + agent run history). Two small gateway-level SQLites sit _next to_ the apps directory: `centraid-gateway.sqlite` (users + prefs) and `centraid-analytics.sqlite` (cross-app run rollup). The rest of the gateway-level metadata is plain JSON.
+The gateway's state is files. There are **three** kinds of SQLite, each with its own migration ladder and connection (`packages/app-engine/src/stores/gateway-db.ts`, `packages/app-engine/src/insights/analytics-db.ts`):
 
-## Top-level layout
+- **Per-app `data.sqlite`** — handler-owned app data. One per app.
+- **Per-app `runtime.sqlite`** — the conversation ledger + automation state. One per app.
+- **Gateway identity DB** — `users` + `user_prefs`. One per gateway.
+- **Gateway analytics DB** — one `run_summary` row per run. One per gateway.
+
+App **code** is not on this list — it lives in the gateway's git store (issue #137), separate from all the state above.
+
+> `@centraid/app-engine` is filename-agnostic: the host passes absolute paths for the identity and analytics DBs. The desktop names them `identity.sqlite` / `analytics.sqlite`; app-engine's own source comments use illustrative `centraid-gateway.sqlite` / `centraid-analytics.sqlite` labels, but the real filenames are whatever the host supplies.
+
+## Desktop layout (per-gateway)
+
+The desktop hosts one local gateway (fixed id `local`) plus 0..N remote gateways. Every file belonging to a gateway lives under one subtree (`apps/desktop/src/main/gateway-paths.ts`):
 
 ```
-<gatewayRoot>/
-├── centraid-gateway.sqlite         ← users, user_prefs
-├── centraid-analytics.sqlite       ← cross-app run_summary rollup
-└── <appsDir>/
+<userData>/gateways/<gatewayId>/
+├── profile.json                  ← { id, kind, label, url?, createdAt }
+├── token.bin                     ← encrypted bearer
+├── identity.sqlite               ← users, user_prefs
+├── analytics.sqlite              ← run_summary rollup
+├── code-store/                   ← git store owning all app CODE (#137)
+├── chat-runner-sessions/         ← codex/agent per-conversation scratch
+├── templates-cache/, model-catalog.json, …
+└── apps/                         ← per-app DATA storage
     ├── _registry.json
-    └── <id>/                       ← one per registered app
-        ├── data.sqlite             ← app-owned data (persistent across versions)
-        ├── runtime.sqlite          ← chat sessions, agent run ledger, automation state (persistent across versions)
-        ├── current.json            ← { activeVersion, history }
-        ├── versions/
-        │   ├── v_<UTC ts>_<sha[:6]>/
-        │   └── v_…/
-        └── _chat/
-            ├── w<windowId>.jsonl   ← per-window chat transcript
-            └── index.json          ← chat mode + adapter session ids
+    └── <appId>/                  ← one per registered app
+        ├── data.sqlite           ← app-owned (handler) data
+        ├── runtime.sqlite        ← conversation ledger + automation state
+        └── blobs/<sha256>        ← content-addressed attachment bytes
 ```
 
-Where `<gatewayRoot>` is `path.dirname(appsDir)`, and `<appsDir>` is:
+`rm -rf gateways/<gatewayId>/` removes everything about a gateway — no orphan files elsewhere. The standalone `centraid-gateway` daemon derives the same slots from its own root (`appsDir`, `identityDb`, `analyticsDb` are caller-supplied absolute paths — see `GatewayPaths`).
 
-- **Local desktop**: `~/.centraid/apps/` (default) — gateway-level dbs at `~/.centraid/`.
-- **Remote (OpenClaw plugin)**: `$OPENCLAW_STATE_DIR/centraid/apps/` — typically `~/.openclaw/centraid/apps/`; gateway-level dbs at `~/.openclaw/centraid/`.
+## `<appId>/data.sqlite` — handler data
 
-> **TODO(#120)** — confirm the local desktop's default. README of openclaw-plugin documents the remote default; the local desktop's is in `apps/desktop/src/main/`.
+The app's handler-owned database, at the app root (not in any code dir; code is versioned in git, data isn't).
 
-## `_registry.json`
+- Persists across code changes and version swaps.
+- Reachable only through query/action handlers (and the cloud-panel SQL routes). Never served as a static file, never uploadable, never opened by another app's worker.
+- Reset by deleting the file and letting migrations re-run on next boot.
 
-The registry of currently-registered app ids. Schema:
+## `<appId>/runtime.sqlite` — the conversation ledger
 
-```json
-{
-  "apps": [
-    { "id": "hydrate", "registeredAt": "2026-05-08T14:30:00.000Z" },
-    { "id": "todos", "registeredAt": "2026-05-09T09:12:44.000Z" }
-  ]
-}
-```
+The per-app conversation ledger + automation KV (`RUNTIME_MIGRATIONS` in `gateway-db.ts`). Runtime-owned; never reachable from handler `db` or the `centraid_*` agent tools. Five tables:
 
-> **TODO(#120)** — confirm the exact schema. The README documents the _existence_ of `_registry.json` but not its full shape.
+| Table              | What it holds                                                                                                                                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `conversations`    | The first-class durable thread. `kind ∈ {chat, build, automation}` lives **here**, not per-turn. Also carries `app_id`, `automation_id`, the `adapter_kind`/`adapter_session_id` resume handle, `turn_count`, `pinned`. |
+| `turns`            | One execution under a conversation (a chat turn, an automation fire, a builder iteration). `conversation_id` is a NOT NULL, FK-backed, CASCADE spine. Carries the denormalized token/cost rollup written at finish.     |
+| `items`            | The ordered trace, including the inbound message. `kind='message_in'` (ordinal 0) is the user/trigger input; `kind='step'` is one model-inference call (the token/cost grain); `tool`/`agent` are per-call audit rows.  |
+| `attachments`      | Files riding an inbound message (chat upload OR webhook/email file), FK'd CASCADE to the `message_in` item. **Bytes are not here** — only metadata + the `hash`.                                                        |
+| `automation_state` | Per-automation KV keyed by `(automation_id, key)`.                                                                                                                                                                      |
 
-The gateway writes this atomically on register/deregister.
+The data model is **conversation ⊃ turn ⊃ item**. There is no `run` / `run_nodes` layer — that was renamed and reshaped (issue #190). For `kind='automation'`, **each fire is its own conversation** (a fresh id tagged with `automation_id=<ref>`); an automation's run history is the set of conversations sharing that ref, and `automation_state` is the only thing that persists across them.
 
-## `<id>/data.sqlite`
+A turn's token/cost rollup (`total_*_tokens`, `total_cost_usd`, `step_count`, `tool_count`) is `Σ` over that turn's `kind IN ('step','agent')` items, computed at `finishTurn`. Per-call cost on each `step`/`agent` item is frozen at write time from the model price table (NULL when the model is unknown — distinct from a genuine $0).
 
-The app's handler-owned database. Lives at the app root — **not** inside a version directory. Code is versioned; data isn't.
+`turns.conversation_id`, `items.turn_id`, and `attachments.item_id` are real same-file FKs (CASCADE) — deleting a conversation drops its turns, items, and attachment rows. `turns.parent_turn_id` stays a plain column: a cross-app sub-run (e.g. an `onFailure` cascade) has its parent in another app's file, and a SQLite FK can't span files.
 
-- Persists across `activate` flips.
-- Persists across version pruning.
-- The only way to "reset" an app's data is to delete this file (and let migrations re-run on next boot).
+## `<appId>/blobs/<hash>` — attachment bytes
 
-The reserved-name guards mean `data.sqlite` is never served as a static file, never uploadable in a tarball, never readable from any HTTP path except through query/action handlers.
+Attachment bytes live content-addressed on the filesystem, keyed by the sha256 of their content (`data/blob-store.ts`) — never base64'd into a JSON column. Content addressing gives free dedup. The `attachments` rows carry the metadata + `hash`; GC is refcount-by-hash off `ConversationStore.referencedHashes`, run after a delete-conversation cascade.
 
-## `<id>/runtime.sqlite`
+## Gateway identity DB (`identity.sqlite`)
 
-The app's history-of-use database. Also lives at the app root, also persists across version flips. Separate from `data.sqlite` so handler-owned data and runtime-owned history can evolve independently. Holds:
+Two tables (`GATEWAY_MIGRATIONS`):
 
-- `chat_sessions` — conversation containers (user, title, mode, adapter session id, turn count, timestamps).
-- `runs` / `run_nodes` — unified agent run ledger across kinds (chat turns, automation fires, sub-runs). `parent_run_id` links sub-runs across apps.
-- `automation_state` — per-automation KV (`(automation_id, key) → JSON`).
+- `users` — the user identity row(s). Single-user today; the schema is multi-user-ready so a future shift doesn't need a column-add migration.
+- `user_prefs` — global prefs keyed by `(user_id, key)`, JSON-encoded values, FK-cascaded from `users`.
 
-Centraid never serves this file; only the runtime reads/writes it.
+## Gateway analytics DB (`analytics.sqlite`)
 
-## Gateway-level SQLites (`<gatewayRoot>/centraid-*.sqlite`)
+A denormalized `run_summary` table — one row per run (every kind, every app), the source the Insights screen reads (`ANALYTICS_MIGRATIONS`). At `finishTurn` the per-app ledger write-throughs a summary row here (sourcing `kind`/`app_id`/`automation_ref` from the owning conversation), so cross-app activity queries don't fan out across every app's `runtime.sqlite`. The write is best-effort — a failure never fails the run, and the per-app ledger stays authoritative.
 
-Two small files sit beside `<appsDir>/`, owned by the runtime, never per-app:
+## Pragmas + migrations
 
-- **`centraid-gateway.sqlite`** — `users` and `user_prefs` tables. Schema is multi-user-ready; on the desktop it's single-user today. On the OpenClaw plugin, identity comes from OpenClaw — see below.
-- **`centraid-analytics.sqlite`** — a denormalized `run_summary` table with one row per run (every kind, every app). Each insert into a per-app `runtime.sqlite#runs` mirrors a summary row here so cross-app audit / activity queries don't have to fan out across every app's runtime db.
-
-## `<id>/current.json`
-
-The atomic pointer to the active version.
-
-```json
-{
-  "activeVersion": "v_2026-05-09T09-12-44-000Z_d4e5f6",
-  "history": [
-    { "versionId": "v_2026-05-08T14-30-00-000Z_a1b2c3", "activatedAt": "2026-05-08T14:30:01.000Z" },
-    { "versionId": "v_2026-05-09T09-12-44-000Z_d4e5f6", "activatedAt": "2026-05-09T09:12:45.000Z" }
-  ]
-}
-```
-
-> **TODO(#120)** — confirm whether `history[]` is a flat list of activations (an audit log) or a different shape. The README mentions `{ activeVersion, history }`; the inner shape needs verification.
-
-A `POST /centraid/_apps/<id>/activate` call rewrites this file. The gateway uses temp-file + rename for atomicity.
-
-## `<id>/versions/v_<ts>_<sha>/`
-
-Each upload extracts to a new directory under `versions/`. The directory name is `v_` + UTC ISO timestamp + first 6 chars of the content sha256.
-
-- **Immutable.** The gateway never modifies a version directory after extraction.
-- **Code-only.** No `data.sqlite`, no `runtime.sqlite`, no `_chat`, nothing app-state. Just what was in the uploaded tarball.
-- **Pruned.** Old versions above `versionRetention` (default 5; min 2) are deleted. The active version is always retained.
-
-Identical re-uploads collapse: if the sha matches an existing version, no new directory is created — `history[]` records the latest timestamp.
-
-## `<id>/_chat/`
-
-Per-window chat state.
-
-```
-_chat/
-├── w<windowId>.jsonl
-├── w<otherWindow>.jsonl
-└── index.json
-```
-
-- `w<windowId>.jsonl` — append-only transcript, one event per line.
-- `index.json` — per-window metadata: chat mode (`openclaw` / `codex` / `claude`), adapter session id, so the next turn can resume the conversation.
-
-> **TODO(#120)** — document the .jsonl event shape. From the README: "SSE stream of normalized events" describes the wire format; the .jsonl transcript almost certainly stores the same events. Confirm against `app-engine/src/chat/`.
+Every centraid SQLite file opens through the shared `openMigratedDb` with the same pragmas: `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=30000`. Each file tracks its schema with `PRAGMA user_version`; the migrate runner applies the pending tail in one `BEGIN IMMEDIATE` and throws if the file is newer than the build understands. Pre-1.0, the baseline migration slot absorbs shape changes (no production rows to migrate); post-1.0 flips to strict append-only.
 
 ## What's NOT here
 
-- **No per-app user table.** Identity lives in the gateway-level `centraid-gateway.sqlite#users`. On the OpenClaw plugin, the gateway can also import identity from OpenClaw.
-- **No cross-app handler database.** Each app's `data.sqlite` and `runtime.sqlite` are isolated; no handler ever opens another app's files. The gateway-level `centraid-analytics.sqlite` is a _rollup_ (one summary row per run) — handlers can't write to it.
-- **No log files.** Handler logs go through the gateway's logger; persistence is the gateway host's concern.
+- **No `_chat/` directory, no per-window `.jsonl` transcript.** The transcript is the conversation's `items` rows, folded back on read — there is no separate transcript table or file.
+- **No `run` / `run_nodes` tables.** Renamed to the conversation/turn/item model (issue #190).
+- **No per-app user table.** Identity is the gateway-level `identity.sqlite`.
+- **No cross-app handler database.** Each app's `data.sqlite` / `runtime.sqlite` are isolated; `analytics.sqlite` is a rollup handlers can't write to.
 
 ## Backing up
 
-The whole `<gatewayRoot>/` directory is the backup surface — both gateway-level SQLites plus the apps directory. `versions/` can be re-uploaded and `_chat/` can be cleared, but the SQLite files and `current.json` are the only state you can't reconstruct.
-
-```sh
-tar czf centraid-backup.tar.gz ~/.centraid
-```
-
-> **TODO(#120)** — capture official backup guidance once the runtime stabilizes. For now this is the obvious move.
+The whole `gateways/<gatewayId>/` subtree is the backup surface — the identity + analytics DBs, the git code store, and the per-app `apps/` data dirs (each with its `data.sqlite`, `runtime.sqlite`, and `blobs/`). Blobs are reconstructable only from re-uploads; the SQLite files are the state you can't reconstruct.
 
 ## Resetting an app
 
 ```sh
-# Stop the gateway (close desktop, or stop the OpenClaw process)
-rm <appsDir>/<id>/data.sqlite     # clear handler-owned data
-rm <appsDir>/<id>/runtime.sqlite  # clear chat history + run ledger
+# Stop the gateway (close desktop, or stop the daemon)
+rm <appsDir>/<appId>/data.sqlite     # clear handler-owned data
+rm <appsDir>/<appId>/runtime.sqlite  # clear conversations + run ledger
+rm -r <appsDir>/<appId>/blobs        # clear attachment bytes
 # Start the gateway — migrations re-run on next boot
 ```
 

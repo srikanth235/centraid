@@ -64,8 +64,8 @@ export interface CodexTurnInput {
   extraPath?: string;
   /**
    * When provided, codex receives `dynamicTools: [...]` on `thread/start`
-   * declaring three first-class tools — `centraid_sql_describe`,
-   * `centraid_sql_read`, `centraid_sql_write` — and we dispatch the
+   * declaring three first-class tools — `centraid_describe`,
+   * `centraid_read`, `centraid_write` — and we dispatch the
    * resulting `item/tool/call` server requests in-process against the
    * supplied `dataFile`. Writes fire `emitChange` precisely.
    */

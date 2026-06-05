@@ -1,89 +1,91 @@
 ---
-summary: 'The default mode — gateway embedded in the Electron desktop main process. No second process, no server.'
-title: 'Local deploy (desktop)'
+summary: 'Running the gateway locally — embedded in the Electron desktop, or as the standalone centraid-gateway daemon.'
+title: 'Local deploy'
 ---
 
-# Local deploy (desktop)
+# Local deploy
 
-The default. When you launch the desktop app with `bun run dev:desktop`, the Centraid gateway runs **inside the Electron main process**. The renderer talks to it directly over HTTP with a Bearer token (the desktop is a [thin client](/concepts/ipc-vs-http)); app iframes load from the in-process gateway as if it were a remote URL.
+There are two ways to run Centraid locally, both serving the same gateway code over HTTP:
 
-Nothing else to install. Nothing else to start.
+- **Embedded in the desktop** (the default) — the gateway runs inside the Electron main process. Launch with `bun run dev:desktop`; nothing else to install or start.
+- **As the `centraid-gateway` daemon** — a standalone process with its own `dataDir`, for headless or always-on use.
 
-## What's running
+In both, the gateway speaks HTTP behind a Bearer token. The desktop renderer is a [thin client](/concepts/ipc-vs-http): it issues authenticated `fetch`es to the embedded gateway exactly as it would to a remote one, and app iframes load from `/centraid/<id>/`.
+
+## What's running (desktop embed)
 
 ```mermaid
 flowchart LR
   Renderer["Renderer (vanilla TS)"]
   Main["Electron main"]
-  Gateway["Centraid gateway (in-process)"]
-  Sqlite[("~/.centraid/apps/&lt;id&gt;/data.sqlite")]
+  Gateway["Centraid gateway (in-process, HTTP + Bearer)"]
+  Sqlite[("&lt;userData&gt;/gateways/local/apps/&lt;id&gt;/data.sqlite")]
   Agent["@centraid/agent-runtime"]
 
-  Renderer -- "IPC" --> Main
+  Renderer -- "HTTP (Bearer) + iframe" --> Gateway
+  Renderer -. "IPC: token, keychain, reveal-in-Finder" .-> Main
   Main --- Gateway
   Gateway --- Sqlite
   Gateway --- Agent
 ```
 
-The gateway code is the same code that runs as the OpenClaw plugin remotely. The local-vs-remote difference shows up only in:
+The renderer reaches the gateway over **HTTP**, not IPC — IPC is reserved for genuinely native operations (token bridge, keychain, reveal-in-Finder, gateway lifecycle). See [IPC vs HTTP](/concepts/ipc-vs-http).
 
-- The chat backend (local: `@centraid/agent-runtime` → codex or Claude SDK; remote: OpenClaw embedded agent).
-- The `appsDir` default.
+The gateway code is the same that runs as the OpenClaw plugin remotely. The local-vs-remote difference shows up only in the chat backend (local: `@centraid/agent-runtime` → codex or Claude SDK; remote: OpenClaw embedded agent) and the host-derived paths. See [Architecture → what runs where](/concepts/architecture#what-runs-where).
 
-See [Architecture → what runs where](/concepts/architecture#what-runs-where) for the side-by-side table.
+## On-disk layout (desktop embed)
 
-## Apps directory
-
-Default: `~/.centraid/apps/<id>/`.
-
-> **TODO(#120)** — confirm the default `appsDir` for the local gateway. The plugin's documented default is `centraid` under `$OPENCLAW_STATE_DIR`; the local desktop almost certainly uses something different. Trace `apps/desktop/src/main/` to find the resolved path.
-
-The layout matches the gateway concept:
+The desktop hosts one local gateway (fixed id `local`) plus 0..N remote gateways. Every file belonging to a gateway lives under `<userData>/gateways/<id>/` (`packages/gateway/.../apps/desktop/src/main/gateway-paths.ts`):
 
 ```
-~/.centraid/apps/
-├── _registry.json
-└── <id>/
-    ├── data.sqlite
-    ├── current.json
-    ├── versions/
-    │   └── v_…/
-    └── _chat/
-        ├── w<windowId>.jsonl
-        └── index.json
+<userData>/gateways/local/
+├── profile.json            # id, kind, label, url, createdAt
+├── token.bin               # encrypted bearer
+├── code-store/             # git store owning app CODE (apps.git + worktrees)
+├── apps/                   # app DATA, outside any worktree
+│   └── <appId>/
+│       ├── data.sqlite     # app-owned data (migrations apply here)
+│       ├── runtime.sqlite  # per-app conversation ledger + automation state
+│       └── blobs/<hash>    # content-addressed attachments
+├── identity.sqlite         # users + prefs
+├── analytics.sqlite        # one run summary per run
+├── chat-runner-sessions/   # codex thread state
+├── templates-cache/        # downloaded remote-template tarballs
+└── model-catalog.json
 ```
 
-## Why this isn't a separate server
+App **code** is versioned in `code-store/` (a git store: a draft is a session branch, Publish fast-forward-merges onto `main`). App **data** stays under `apps/<appId>/` so a version swap never touches it. The app registry is `<appsDir>/_registry.json`.
+
+## The standalone daemon
+
+```sh
+centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --port 8765
+```
+
+The daemon lays out a flatter tree under `<dataDir>` — `apps/`, `identity.sqlite`, `analytics.sqlite`, `conversation-runner-sessions/`, `model-catalog.json`, and a persistent `token.bin` (mode 0600). It binds loopback by default; pass `--host 0.0.0.0` for LAN. There is no TLS in v0 — front it with Caddy / Tailscale Funnel / Cloudflare Tunnel if exposing beyond a trusted LAN. See [CLIs → centraid-gateway](/reference/cli).
+
+## Why embed the gateway in the desktop
 
 Centraid's local-first design choice. Folding the gateway into Electron's main process gives you:
 
-- **No port to expose.** No "did you remember to firewall localhost".
+- **No port to expose** for the common case. No "did you remember to firewall localhost".
 - **No second process to supervise.** Restart the desktop, restart everything.
-- **IPC instead of HTTP for the renderer.** Lower latency, easier auth (the renderer is trusted code in the same process tree).
-- **Same code as remote.** The legacy "register an external folder live" mode was retired specifically to keep local and remote behaving identically.
+- **Same code as remote.** The renderer issues the same authenticated `fetch` whether the gateway is the embedded local one or a remote OpenClaw plugin — no "production differs from dev" class of bugs.
 
 ## When to switch to remote
 
-The local gateway is right for:
-
-- Personal use, one user, one machine.
-- Building and testing apps before publishing them.
-- "I want my data to stay on this laptop."
-
-You want remote ([OpenClaw plugin](/deploy/openclaw-plugin)) when:
+The local gateway is right for personal use on one machine, and for building/testing apps. You want a remote gateway ([OpenClaw plugin](/deploy/openclaw-plugin)) — or the always-on daemon — when:
 
 - Apps need to be reachable from a phone or a different machine.
 - A team or family wants to share apps.
-- You need scheduled work to run when the laptop is closed. The desktop's scheduler runs in the Electron main process; cron triggers fire only while the desktop app is running. Webhook triggers don't fire on the desktop at all (the desktop is a gateway client, not an HTTP host) — they exist on remote gateways only.
+- You need scheduled work to run when the laptop is closed. The desktop's scheduler runs in the Electron main process; cron triggers fire only while the desktop app is running. Webhook triggers don't fire on the desktop at all — they exist on remote/daemon gateways that are reachable HTTP hosts.
 
 ## Mobile companion
 
-The Expo mobile app does not embed a gateway. It connects over HTTP to either a paired local gateway (LAN) or a remote one.
-
-> **TODO(#120)** — document the pairing flow. The mobile app needs to know either the local gateway's LAN URL or the remote OpenClaw URL; the desktop must expose its local gateway over LAN to make this work. The receipts mention mobile-related issues but not the pairing UX.
+The Expo mobile app embeds no gateway. It connects over HTTP to either a paired local gateway (LAN) or a remote one.
 
 ## Where to go next
 
 - [Remote deploy (OpenClaw plugin)](/deploy/openclaw-plugin) — same gateway, remote host.
-- [SQLite layout](/deploy/sqlite-layout) — what's on disk and what survives a restart.
-- [Gateway](/concepts/gateway) — the underlying concept.
+- [IPC vs HTTP](/concepts/ipc-vs-http) — the thin-client split.
+- [CLIs](/reference/cli) — the `centraid` and `centraid-gateway` bins.

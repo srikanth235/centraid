@@ -53,17 +53,16 @@ This invokes `turbo run dev --filter=@centraid/desktop`. The Electron shell laun
 bun run dev:mobile
 ```
 
-Starts the Expo dev server. The mobile app talks to a Centraid gateway over HTTP — it does not embed one of its own.
-
-> **TODO(#120)** — confirm whether mobile defaults to a paired desktop's gateway or requires a remote gateway URL, and document the pairing flow. The steering ledger references mobile work but I haven't read the pairing code.
+Starts the Expo dev server. The mobile app talks to a Centraid gateway over HTTP — it does not embed one of its own. Point it at a paired local gateway over LAN, or at a remote OpenClaw/daemon gateway URL.
 
 ## Build and check
 
 ```sh
 bun run build        # turbo run build (all apps + packages)
+bun run test         # turbo run test (per-package vitest)
 bun run typecheck    # TypeScript across the workspace
 bun run check        # oxfmt --check + oxlint
-bun run ci           # what CI runs: check + typecheck
+bun run ci           # what CI runs: check + typecheck + lint:types
 ```
 
 ## What's running where
@@ -73,9 +72,10 @@ flowchart LR
   subgraph Desktop["Electron desktop"]
     Renderer["Renderer (vanilla TS)"]
     Main["Main process"]
-    Local["Embedded local gateway"]
+    Local["Embedded local gateway (HTTP + Bearer)"]
     Main --- Local
-    Renderer -- "IPC" --> Main
+    Renderer -- "HTTP (Bearer)" --> Local
+    Renderer -. "IPC: native ops only" .-> Main
   end
   subgraph Remote["OpenClaw host (optional)"]
     OC["OpenClaw gateway"]

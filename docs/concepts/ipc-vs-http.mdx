@@ -26,11 +26,11 @@ For a **local** gateway all of this still runs inside the Electron main process 
 
 ## Unified chat
 
-"Builder chat" (edit my app's code) and "app chat" (operate my app's data) used to be two surfaces. They are now **one**: a single `POST /centraid/<id>/_chat`.
+"Builder chat" (edit my app's code) and "app chat" (operate my app's data) used to be two surfaces. They are now **one**: a single `POST /centraid/<id>/_turn`.
 
 The gateway runs the turn in the app's **draft session worktree** with the **union of tools** — the agent backend's native file/shell tools (workspace-write against the worktree) _plus_ the `centraid_*` data dispatcher. So one turn can rewrite a handler and answer a data question. Code edits **stage** in the draft (the [preview](#draft-preview) reflects the draft); an explicit **Publish** is the only thing that flips the live version.
 
-The renderer consumes the chat stream by `fetch`-ing the endpoint and reading the `ReadableStream` (not `EventSource`, which can't set a POST body or an `Authorization` header), parsing the SSE frames into the gateway's native `ChatStreamEvent` union.
+The renderer consumes the chat stream by `fetch`-ing the endpoint and reading the `ReadableStream` (not `EventSource`, which can't set a POST body or an `Authorization` header), parsing the SSE frames into the gateway's native `TurnStreamEvent` union.
 
 ## Draft preview
 
@@ -46,7 +46,7 @@ IPC is now a short list, all genuinely Electron-native or secret-holding:
 - **`APPS_OPEN`** — reveal the app's worktree in Finder. Bound to the on-disk worktree only the local gateway materializes; a remote gateway has no folder to open. Guarded by `assertActiveGatewayLocal(...)`, which throws a clear `requires the local gateway` error, and the renderer hides the affordance for a remote gateway.
 - **Push events** to the renderer (gateway-switched, publish status).
 
-This is the _only_ deliberately local-only operation left. The in-process `AGENT_*` builder that used to edit the worktree directly was **retired** with the unified chat — remote and local now both build through `/centraid/<id>/_chat`.
+This is the _only_ deliberately local-only operation left. The in-process `AGENT_*` builder that used to edit the worktree directly was **retired** with the unified chat — remote and local now both build through `/centraid/<id>/_turn`.
 
 ## Token posture in the renderer
 

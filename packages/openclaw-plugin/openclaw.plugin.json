@@ -3,7 +3,7 @@
   "name": "Centraid",
   "description": "Mounts /centraid on the gateway. Each registered app is a folder with static assets, a sqlite database, and JS handlers for queries / actions.",
   "contracts": {
-    "tools": ["centraid_sql_describe", "centraid_sql_read", "centraid_sql_write"]
+    "tools": ["centraid_describe", "centraid_read", "centraid_write"]
   },
   "activation": {
     "onStartup": true
@@ -16,12 +16,6 @@
         "type": "string",
         "description": "Where app folders live. Absolute paths are used as-is; relative paths resolve under OpenClaw's state dir ($OPENCLAW_STATE_DIR, default ~/.openclaw). Default: '~/.openclaw/centraid'.",
         "default": "centraid"
-      },
-      "versionRetention": {
-        "type": "integer",
-        "description": "Maximum number of versions to retain per uploaded app (active version always kept). Minimum 2.",
-        "default": 5,
-        "minimum": 2
       }
     }
   }
