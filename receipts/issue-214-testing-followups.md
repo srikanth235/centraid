@@ -10,7 +10,7 @@ three deferred workstreams, each as its own focused commit.
 
 - [x] Convert assertions to expect matchers
 - [ ] Ratchet engine coverage floors up
-- [ ] Desktop renderer: extract logic, then test it
+- [x] Desktop renderer: extract logic, then test it
 
 ## What changed
 
@@ -43,10 +43,45 @@ narrowed a `possibly-undefined` value for TypeScript, the equivalent
 `expect(x).toBeTruthy()` does not narrow, so deref sites use the repo's existing
 non-null (`x!`) idiom.
 
+### Desktop renderer: extract logic, then test it
+
+Pulled the first tranche of pure logic out of the `builder.ts` renderer god-file
+(4,381 lines) into three standalone, dependency-free modules and unit-tested them
+richly — the god-file split TESTING.md §2 calls for, started on the file with the
+densest pure logic:
+
+- **[format.ts](../apps/desktop/src/renderer/format.ts)** — `escapeHtml`,
+  `tokenize` (the Code-view syntax highlighter), `languageHint` + `LANG_DISPLAY`,
+  `slugify`, `generateAppId`, `relativeWhen`, `formatBytes`, `shortVersionTitle`.
+- **[cron.ts](../apps/desktop/src/renderer/cron.ts)** — the self-contained 5-field
+  cron evaluator (`cronFieldMatch`, `cronNextRuns`, `describeCron`) behind the
+  automation builder's next-run preview.
+- **[diff.ts](../apps/desktop/src/renderer/diff.ts)** — the LCS `lineDiff` driving
+  the Code view's Diff toggle.
+
+`builder.ts` now imports these instead of defining them inline (≈280 lines moved
+out); the IIFE body is unchanged otherwise. The renderer is bundled per-module
+(`<script type="module">` + ESM imports), so the new files compile to `dist` and
+resolve transitively with no `index.html` change. The **desktop vitest project
+moved from `environment: 'node'` to `jsdom`** now that renderer logic exists to
+test; the existing main-process logic test (`settings-merge`) still passes under
+jsdom since node builtins remain available.
+
+Tests added: **59** across the three modules (`format.test.ts`, `cron.test.ts`,
+`diff.test.ts`) — desktop went from 12 to 71 tests. One test documents a real
+behaviour quirk surfaced during extraction: `relativeWhen` returns the platform
+`"Invalid Date"` string (not the raw input) for an unparseable date, because
+`new Date(str)` yields `NaN` rather than throwing, so the `try/catch` never fires.
+
 ## Out of scope
 
-- **Coverage ratcheting** and **desktop renderer logic-extraction** — the other
-  two deferred workstreams from #212; each lands as its own commit on this issue.
+- **Coverage ratcheting** — the remaining deferred workstream from #212; lands as
+  its own commit on this issue.
+- **Further renderer extraction** — `app.ts` (6,803 lines) still holds pure logic
+  (appearance-prefs bridge, profile view-models, insights formatters) and a
+  near-duplicate `relativeTime`; this commit extracts the `builder.ts` tranche and
+  establishes the jsdom-capable project, leaving the `app.ts` split + dedup as
+  follow-up.
 - **e2e journeys** (Playwright `_electron` + Maestro), **mutation testing**, **RN
   component tests** — deferred by #212, not part of this issue.
 
@@ -58,3 +93,10 @@ non-null (`x!`) idiom.
   calls remain repo-wide. `bun run typecheck` 17/17 (the `expect`-narrowing `!`
   fixes resolve every surfaced `possibly-undefined`). `oxlint .` 0/0; `oxfmt
   --check .` clean.
+- **Desktop renderer: extract logic, then test it:** `vitest run --project
+  @centraid/desktop` — **71 pass** (was 12), the 59 new format/cron/diff units
+  plus the pre-existing main-process test, all green under the new `jsdom`
+  environment. `apps/desktop` builds clean (`tsc -p tsconfig.json`; format.js,
+  cron.js, diff.js emitted to `dist/renderer/`). Repo-wide: `vitest run` **717
+  pass / 1 skip**, `turbo run typecheck` 15/15, `oxlint .` + `lint:types` (incl.
+  apps/desktop) clean, `oxfmt --check` clean.
