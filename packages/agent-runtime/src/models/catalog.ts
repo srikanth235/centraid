@@ -8,15 +8,12 @@
  * INDEPENDENT triggers, so each is read-modify-write merged into the shared
  * per-runner entry; one never clobbers the other.
  *
- * The lifecycle mirrors for both:
- *
- *  - **Default load** (no refresh) → return the cached field if present, else
- *    the caller's fallback (the model seed for models; `[]` for tools — tools
- *    are MCP-config-specific, so they have no hardcoded seed). NEVER enumerate
- *    on a normal load, so reads are instant (no CLI spawn, no SDK call).
- *  - **Refresh** → run `enumerate()`; on a non-empty result overwrite that
- *    field and return it; on failure keep the prior field if present, else fall
- *    back (never clobber a good entry on a transient failure).
+ * This module is pure storage: read + merge-write. It NEVER enumerates, so
+ * reads are instant (no CLI spawn, no SDK call) — the `readRunner*` helpers
+ * just return the cached field or `[]`. Enumeration (and the write-back) is
+ * owned by the `CatalogWarmer` (./catalog-warmer.ts), which boot and Refresh
+ * both drive; there is no hardcoded seed (a cold catalog yields `[]`, and the
+ * UI shows a loading/empty state until the warmer fills it in).
  *
  * Everything is best-effort: read/write failures degrade silently so callers
  * never throw.
@@ -91,41 +88,16 @@ export async function writeCatalogEntry(
 }
 
 /**
- * Resolve the models to surface for a runner.
- *
- * @param enumerate  Live self-report; only invoked on `refresh`.
- * @param defaults   Hardcoded seed shown until the catalog is populated.
+ * Read a runner's cached models straight from the catalog — no enumeration, no
+ * seed. `[]` until the `CatalogWarmer` has populated the entry (boot or
+ * Refresh). The chat picker reads this and pairs it with `deriveStatus` to show
+ * a loading vs empty state.
  */
-export async function resolveRunnerModels(opts: {
-  kind: RunnerKind;
-  catalogPath: string;
-  enumerate: () => Promise<RunnerModel[]>;
-  defaults: RunnerModel[];
-  refresh?: boolean;
-}): Promise<RunnerModel[]> {
-  const { kind, catalogPath, enumerate, defaults, refresh } = opts;
-  const cached = (await readCatalog(catalogPath))?.runners[kind];
-
-  if (refresh) {
-    let enumerated: RunnerModel[] = [];
-    try {
-      enumerated = await enumerate();
-    } catch {
-      enumerated = [];
-    }
-    if (enumerated.length) {
-      await writeCatalogEntry(catalogPath, kind, {
-        hash: hashModelIds(enumerated),
-        models: enumerated,
-        enumeratedAt: new Date().toISOString(),
-      });
-      return enumerated;
-    }
-    // Enumeration failed — never clobber a good catalog.
-    return cached?.models ?? defaults;
-  }
-
-  return cached?.models ?? defaults;
+export async function readRunnerModels(
+  catalogPath: string,
+  kind: RunnerKind,
+): Promise<RunnerModel[]> {
+  return (await readCatalog(catalogPath))?.runners[kind]?.models ?? [];
 }
 
 /**
@@ -135,44 +107,4 @@ export async function resolveRunnerModels(opts: {
  */
 export async function readRunnerTools(catalogPath: string, kind: RunnerKind): Promise<HostTool[]> {
   return (await readCatalog(catalogPath))?.runners[kind]?.tools ?? [];
-}
-
-/**
- * Resolve the host tools to surface for a runner (builtins + MCP).
- *
- * Mirrors `resolveRunnerModels` but tools have NO hardcoded seed — they depend
- * on the host's MCP configuration, so a seed would lie. Until the first
- * successful enumeration the result is `[]` (the builder simply omits the
- * grounding block and the UI shows an empty state).
- *
- * @param enumerate  Live tool probe; only invoked on `refresh`.
- */
-export async function resolveRunnerTools(opts: {
-  kind: RunnerKind;
-  catalogPath: string;
-  enumerate: () => Promise<HostTool[]>;
-  refresh?: boolean;
-}): Promise<HostTool[]> {
-  const { kind, catalogPath, enumerate, refresh } = opts;
-  const cached = (await readCatalog(catalogPath))?.runners[kind];
-
-  if (refresh) {
-    let enumerated: HostTool[] = [];
-    try {
-      enumerated = await enumerate();
-    } catch {
-      enumerated = [];
-    }
-    if (enumerated.length) {
-      await writeCatalogEntry(catalogPath, kind, {
-        tools: enumerated,
-        toolsEnumeratedAt: new Date().toISOString(),
-      });
-      return enumerated;
-    }
-    // Probe failed — never clobber a good tool list.
-    return cached?.tools ?? [];
-  }
-
-  return cached?.tools ?? [];
 }

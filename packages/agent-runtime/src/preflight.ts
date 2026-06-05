@@ -14,9 +14,7 @@
 import { spawn } from 'node:child_process';
 import type { RunnerStatus } from '@centraid/app-engine';
 import type { RunnerKind, RunnerPrefs } from './types.js';
-import { resolveRunnerModels } from './models/catalog.js';
-import { defaultModelsFor } from './models/defaults.js';
-import { enumerateRunnerModels } from './models/enumerators.js';
+import { readRunnerModels } from './models/catalog.js';
 
 const VERSION_TIMEOUT_MS = 5_000;
 
@@ -94,11 +92,12 @@ export async function probeCliAvailability(
 /**
  * Run the CLI preflight and attach the chat picker's model list.
  *
- * The `--version` probe is cached (cheap, stable). Model resolution lives
- * OUTSIDE that cache so a Refresh (`opts.refresh`) re-enumerates without
- * re-probing. When `opts.catalogPath` is set the list comes from the
- * gateway-owned catalog (default seed until the user refreshes); otherwise
- * it's the hardcoded default seed with no persistence.
+ * The `--version` probe is cached (cheap, stable). The model list is a pure
+ * read from the gateway-owned catalog — enumeration and warming are owned by
+ * the `CatalogWarmer`, driven on boot and Refresh. Without a `catalogPath`
+ * there's no list (the picker shows a loading/empty state). The caller (the
+ * gateway's `runnerStatus` override) attaches `modelsStatus` and kicks a warm,
+ * since this module has no warmer handle.
  */
 export async function runPreflight(
   prefs: RunnerPrefs,
@@ -109,15 +108,7 @@ export async function runPreflight(
   cached = { status, cacheKey: key };
 
   if (status.ok) {
-    status.models = opts.catalogPath
-      ? await resolveRunnerModels({
-          kind: prefs.kind,
-          catalogPath: opts.catalogPath,
-          enumerate: () => enumerateRunnerModels(prefs),
-          defaults: defaultModelsFor(prefs.kind),
-          ...(opts.refresh ? { refresh: true } : {}),
-        })
-      : defaultModelsFor(prefs.kind);
+    status.models = opts.catalogPath ? await readRunnerModels(opts.catalogPath, prefs.kind) : [];
   }
   return status;
 }

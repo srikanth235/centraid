@@ -79,11 +79,19 @@ export {
   compareSemver,
 } from './preflight.js';
 
-// Per-runner model catalog + default seed (issue #188). Exposed so the gateway
-// can resolve each agent's models for the per-agent picker in Settings →
-// Agents, not just the active runner's via runner-status.
-export { resolveRunnerModels, resolveRunnerTools, readRunnerTools } from './models/catalog.js';
-export { defaultModelsFor, DEFAULT_MODELS } from './models/defaults.js';
+// Per-runner model/tool catalog (issue #188). Pure reads (`readRunner*`) are
+// exposed so the gateway can surface each agent's models/tools for the
+// per-agent picker in Settings → Agents and the active runner via runner-status;
+// the `CatalogWarmer` owns enumeration (boot + Refresh) and `deriveStatus` turns
+// the cache into the picker's loading/ready/empty tri-state.
+export { readRunnerModels, readRunnerTools } from './models/catalog.js';
+export {
+  CatalogWarmer,
+  deriveStatus,
+  type CatalogSurface,
+  type CatalogWarmerOptions,
+  type SurfaceStatus,
+} from './models/catalog-warmer.js';
 export { enumerateRunnerModels } from './models/enumerators.js';
 
 // Host tool enumeration — feeds the builder's available-tools grounding

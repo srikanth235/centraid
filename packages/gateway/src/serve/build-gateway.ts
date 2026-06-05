@@ -57,15 +57,17 @@ import {
   makeConversationRunner,
   runAutomation,
   runPreflight,
-  resolveRunnerModels,
-  resolveRunnerTools,
-  defaultModelsFor,
+  CatalogWarmer,
+  deriveStatus,
+  readRunnerModels,
+  readRunnerTools,
   enumerateRunnerModels,
   enumerateHostTools,
   probeCliAvailability,
-  type HostTool,
+  type CatalogSurface,
   type RunnerKind,
   type RunnerPrefs,
+  type SurfaceStatus,
 } from '@centraid/agent-runtime';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
@@ -350,27 +352,62 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     };
   };
 
-  // Host-tool catalog resolver — shared by the agents route (read/refresh) and
-  // the boot probe below. Tools are captured by spawning the CLI against a
-  // mock-LLM server (`enumerateHostTools`), so we probe from a stable cwd (the
-  // gateway's own working dir, NOT a draft worktree — a worktree cwd makes the
-  // claude SDK report 0 tools) and honor the active runner's binPath.
+  // One warmer owns ALL host-capability enumeration — models + tools, both
+  // runners — shared by the boot probe and the status routes so concurrent
+  // warms dedupe (a client Refresh mid-boot joins the boot warm). Enumerators
+  // honor the active runner's binPath/extraArgs; inactive runners enumerate
+  // with defaults. Tools are captured by spawning the CLI against a mock-LLM
+  // server (`enumerateHostTools`) from a stable cwd (the gateway's own working
+  // dir, NOT a draft worktree — a worktree cwd makes the claude SDK report 0
+  // tools).
   const toolProbeCwd = process.cwd();
-  const resolveCatalogTools = paths.modelCatalogFile
-    ? async (kind: RunnerKind, refresh: boolean): Promise<HostTool[]> => {
-        const prefs = await prefsLoader();
-        const isActive = prefs?.kind === kind;
-        return resolveRunnerTools({
-          kind,
-          catalogPath: paths.modelCatalogFile as string,
-          enumerate: () =>
-            enumerateHostTools(kind, {
-              cwd: toolProbeCwd,
-              ...(isActive && prefs?.binPath ? { binPath: prefs.binPath } : {}),
-            }),
-          ...(refresh ? { refresh: true } : {}),
-        });
-      }
+  const catalogPath = paths.modelCatalogFile;
+  const warmer = catalogPath
+    ? new CatalogWarmer({
+        catalogPath,
+        enumerateModels: async (kind) => {
+          const prefs = await prefsLoader();
+          const isActive = prefs?.kind === kind;
+          return enumerateRunnerModels({
+            kind,
+            ...(isActive && prefs?.binPath ? { binPath: prefs.binPath } : {}),
+            ...(isActive && prefs?.extraArgs ? { extraArgs: prefs.extraArgs } : {}),
+          });
+        },
+        enumerateTools: async (kind) => {
+          const prefs = await prefsLoader();
+          const isActive = prefs?.kind === kind;
+          return enumerateHostTools(kind, {
+            cwd: toolProbeCwd,
+            ...(isActive && prefs?.binPath ? { binPath: prefs.binPath } : {}),
+          });
+        },
+      })
+    : undefined;
+
+  // Read + refresh contract for a catalog surface: a Refresh (or a cold cache)
+  // kicks the warmer fire-and-forget; the response carries whatever's cached
+  // now plus the tri-state so the client knows whether to poll. `ready` wins
+  // over `loading`, so a Refresh over an existing list keeps showing it.
+  const resolveCatalogSurface = async <T>(
+    surface: CatalogSurface,
+    kind: RunnerKind,
+    refresh: boolean,
+    read: (cp: string, k: RunnerKind) => Promise<T[]>,
+  ): Promise<{ list: T[]; status: SurfaceStatus }> => {
+    if (!catalogPath || !warmer) return { list: [], status: 'empty' };
+    const list = await read(catalogPath, kind);
+    if (refresh || list.length === 0) void warmer.warm(kind, surface);
+    return { list, status: deriveStatus(list.length, warmer.isWarming(kind, surface)) };
+  };
+
+  const resolveCatalogModels = catalogPath
+    ? (kind: RunnerKind, refresh: boolean) =>
+        resolveCatalogSurface('models', kind, refresh, readRunnerModels)
+    : undefined;
+  const resolveCatalogTools = catalogPath
+    ? (kind: RunnerKind, refresh: boolean) =>
+        resolveCatalogSurface('tools', kind, refresh, readRunnerTools)
     : undefined;
 
   // Cycle break: the chat runner needs the Runtime's dispatcher, but
@@ -429,10 +466,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             hint: 'Open Settings → Agents and pick Codex or Claude Code.',
           };
         }
-        return runPreflight(prefs, {
-          ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
-          ...(statusOpts?.refresh ? { refresh: true } : {}),
-        });
+        // The model list is a pure catalog read; enumeration is owned by the
+        // warmer. A Refresh (or a cold cache) kicks a warm fire-and-forget and
+        // the client polls `modelsStatus` until it leaves `loading`.
+        const status = await runPreflight(prefs, catalogPath ? { catalogPath } : {});
+        if (catalogPath && warmer && status.ok) {
+          const count = status.models?.length ?? 0;
+          if ((statusOpts?.refresh ?? false) || count === 0) void warmer.warm(prefs.kind, 'models');
+          status.modelsStatus = deriveStatus(count, warmer.isWarming(prefs.kind, 'models'));
+        }
+        return status;
       }),
     logger,
     ...(codeDirOverride ? { codeDirOverride } : {}),
@@ -458,24 +501,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // per-agent default-model picker; the active runner's configured
     // binPath/extraArgs are honored when enumerating it, defaults otherwise.
     makeAgentsRouteHandler(
-      paths.modelCatalogFile
+      catalogPath
         ? {
-            resolveModels: async (kind, refresh) => {
-              const prefs = await prefsLoader();
-              const isActive = prefs?.kind === kind;
-              return resolveRunnerModels({
-                kind,
-                catalogPath: paths.modelCatalogFile as string,
-                defaults: defaultModelsFor(kind),
-                enumerate: () =>
-                  enumerateRunnerModels({
-                    kind,
-                    ...(isActive && prefs?.binPath ? { binPath: prefs.binPath } : {}),
-                    ...(isActive && prefs?.extraArgs ? { extraArgs: prefs.extraArgs } : {}),
-                  }),
-                refresh,
-              });
-            },
+            ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
             // Tools refresh on their own `?refreshTools=1` flag — slower (spawns
             // a CLI) than the zero-token model refresh, so it's a separate
             // trigger and a separate button in Settings → Agents.
@@ -643,14 +671,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     scheduler?.start();
     reconcileScheduler();
 
-    // Warm the host-tool catalog (builtins + MCP) for each detected runner on
-    // EVERY gateway start, in the background so it never delays readiness. The
-    // builder grounding and Settings → Agents read this cache; this boot probe
-    // keeps it fresh without a per-turn CLI spawn. Best-effort.
-    if (resolveCatalogTools) {
-      const warm = resolveCatalogTools;
+    // Warm the host-capability catalog — BOTH models and tools — for each
+    // detected runner on EVERY gateway start, in the background so it never
+    // delays readiness. The chat picker, builder grounding, and Settings →
+    // Agents read this cache; this boot probe front-loads enumeration so the
+    // pickers are fresh before anyone opens them (the seed is gone — a cold
+    // catalog shows a loading state until this fills it in). Best-effort; the
+    // warmer dedupes, so a client Refresh mid-boot joins this run.
+    if (warmer) {
+      const activeWarmer = warmer;
       void (async () => {
         const kinds: RunnerKind[] = ['codex', 'claude-code'];
+        const surfaces: CatalogSurface[] = ['models', 'tools'];
         const checks = await Promise.all(
           kinds.map(async (kind) => ({
             kind,
@@ -660,12 +692,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         await Promise.all(
           checks
             .filter((c) => c.present)
-            .map((c) =>
-              warm(c.kind, true).catch((err) =>
-                logger.warn(
-                  `tool catalog warm (${c.kind}) failed: ` +
-                    (err instanceof Error ? err.message : String(err)),
-                ),
+            .flatMap((c) =>
+              surfaces.map((surface) =>
+                activeWarmer
+                  .warm(c.kind, surface)
+                  .catch((err) =>
+                    logger.warn(
+                      `catalog warm (${c.kind}/${surface}) failed: ` +
+                        (err instanceof Error ? err.message : String(err)),
+                    ),
+                  ),
               ),
             ),
         );

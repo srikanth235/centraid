@@ -89,13 +89,20 @@ import {
       k === 'codex' || k === 'claude-code';
     type AmAgents = Awaited<ReturnType<typeof getAgentsStatus>>;
     type AmModel = NonNullable<Awaited<ReturnType<typeof getRunnerStatus>>['models']>[number];
+    type AmModelsStatus = Awaited<ReturnType<typeof getRunnerStatus>>['modelsStatus'];
     let amOpen = false;
     let amLoaded = false;
     let amActiveRunner: RunnerKey = 'codex';
     let amAgents: AmAgents | null = null;
     let amModels: AmModel[] = [];
+    // Load state of `amModels`: `loading` while the gateway enumerates (the
+    // seed is gone), `ready`/`empty` once it settles. Drives the picker's
+    // loading dots / empty state and the poll loop below.
+    let amModelsStatus: AmModelsStatus;
     let amSelByRunner: Record<string, string> = {};
     let amSwitching = false;
+    let amPollTimer: ReturnType<typeof setTimeout> | undefined;
+    let amPollDeadline = 0;
     // Per-turn streaming state. `streamed` accumulates assistant deltas;
     // `hadContent` flips once we've shown any AI text or tool group, which
     // hides the centered "Thinking…" status row.
@@ -510,9 +517,15 @@ import {
       amTrigger.style.setProperty('--am-accent', accent);
       amPop.style.setProperty('--am-accent', accent);
       const sel = amSelection();
+      // While the model list is still being discovered and nothing is pinned,
+      // say so rather than implying a concrete default. Send stays enabled —
+      // a turn with no pinned model runs on the runner's built-in default.
+      const discovering = amModelsStatus === 'loading' && amModels.length === 0;
       const modelNode =
         sel.mode === 'default'
-          ? el('span', {}, 'Gateway default')
+          ? discovering
+            ? el('span', { class: 'app-chat-am-discovering' }, 'Discovering…')
+            : el('span', {}, 'Gateway default')
           : sel.mode === 'pinned'
             ? el('span', {}, amModelName(sel.model as AmModel))
             : el('span', { class: 'app-chat-am-warn', title: `${sel.id} is no longer available` }, [
@@ -628,7 +641,10 @@ import {
           el(
             'button',
             {
-              class: 'app-chat-am-refresh',
+              class:
+                amModelsStatus === 'loading'
+                  ? 'app-chat-am-refresh app-chat-am-busy'
+                  : 'app-chat-am-refresh',
               type: 'button',
               title: 'Re-enumerate from the runner',
               onClick: () => void amRefresh(),
@@ -688,13 +704,45 @@ import {
           onChoose: () => void amSelectModel(''),
         }),
       );
-      const tiered = amModels.some((m) => m.tier);
-      if (tiered) {
-        for (const [tier, label] of AM_TIERS) {
-          const inTier = amModels.filter((m) => m.tier === tier);
-          if (!inTier.length) continue;
-          list.append(el('div', { class: 'app-chat-am-tierlabel' }, label));
-          for (const m of inTier) {
+      if (amModels.length === 0 && amModelsStatus === 'loading') {
+        // Discovering and nothing cached yet — pulsing dots. Gateway default
+        // above stays selectable so the user is never blocked.
+        list.append(
+          el('div', { class: 'app-chat-am-loadrow' }, [
+            el('div', { class: 'app-chat-am-loaddots' }, [el('i'), el('i'), el('i')]),
+            el('span', {}, `Discovering ${AM_TITLE[amActiveRunner]} models…`),
+          ]),
+        );
+      } else if (amModels.length === 0) {
+        // Enumerated empty / CLI unavailable — not an error, just nothing to pin.
+        list.append(
+          el(
+            'div',
+            { class: 'app-chat-am-empty' },
+            `No models reported by ${AM_TITLE[amActiveRunner]}.`,
+          ),
+        );
+      } else {
+        const tiered = amModels.some((m) => m.tier);
+        if (tiered) {
+          for (const [tier, label] of AM_TIERS) {
+            const inTier = amModels.filter((m) => m.tier === tier);
+            if (!inTier.length) continue;
+            list.append(el('div', { class: 'app-chat-am-tierlabel' }, label));
+            for (const m of inTier) {
+              list.append(
+                amOptionRow({
+                  label: amModelName(m),
+                  id: m.id,
+                  isDefault: m.default,
+                  selected: sel.mode === 'pinned' && sel.id === m.id,
+                  onChoose: () => void amSelectModel(m.id),
+                }),
+              );
+            }
+          }
+        } else {
+          for (const m of amModels) {
             list.append(
               amOptionRow({
                 label: amModelName(m),
@@ -706,28 +754,32 @@ import {
             );
           }
         }
-      } else {
-        for (const m of amModels) {
-          list.append(
-            amOptionRow({
-              label: amModelName(m),
-              id: m.id,
-              isDefault: m.default,
-              selected: sel.mode === 'pinned' && sel.id === m.id,
-              onChoose: () => void amSelectModel(m.id),
-            }),
-          );
-        }
       }
       children.push(list);
       amPop.replaceChildren(...children.filter((c): c is HTMLElement => c !== false));
     }
 
-    async function amLoad(opts: { refresh?: boolean } = {}): Promise<void> {
+    function amClearPoll(): void {
+      if (amPollTimer) {
+        clearTimeout(amPollTimer);
+        amPollTimer = undefined;
+      }
+    }
+    // Poll runner-status while the gateway is still enumerating models so the
+    // picker fills in (or a Refresh swaps in the new list) without the user
+    // doing anything. Bounded by `amPollDeadline` so a dead warm can't spin.
+    function amSchedulePoll(): void {
+      amClearPoll();
+      if (amModelsStatus === 'loading' && Date.now() < amPollDeadline) {
+        amPollTimer = setTimeout(() => void amLoad({ poll: true }), 800);
+      }
+    }
+
+    async function amLoad(opts: { refresh?: boolean; poll?: boolean } = {}): Promise<void> {
       const [prefs, agents, status, settings] = await Promise.all([
         getUserPrefs().catch(() => ({}) as Record<string, unknown>),
         getAgentsStatus().catch(() => null),
-        getRunnerStatus(opts).catch(() => null),
+        getRunnerStatus(opts.refresh ? { refresh: true } : {}).catch(() => null),
         window.CentraidApi.getSettings().catch(() => null),
       ]);
       // Trust the gateway's reported runner kind (incl. `openclaw`) so a remote
@@ -743,10 +795,14 @@ import {
             : 'codex';
       amAgents = agents;
       amModels = status?.models ?? [];
+      amModelsStatus = status?.modelsStatus;
       amSelByRunner = settings?.chatModelByRunner ?? {};
       amLoaded = true;
+      // A fresh (non-poll) load opens a new polling window; polls reuse it.
+      if (!opts.poll) amPollDeadline = Date.now() + 30_000;
       renderAmTrigger();
       renderAmPop();
+      amSchedulePoll();
     }
 
     async function amSwitchAgent(kind: SwitchableKind): Promise<void> {

@@ -123,14 +123,22 @@ export interface CentraidAgentsStatus {
   codexVersion?: string;
   /** `claude --version` output when available. */
   claudeVersion?: string;
-  /** Models codex can serve — catalog cache or default seed (issue #188). */
+  /** Models codex can serve, from the gateway catalog (issue #188). */
   codexModels?: CentraidRunnerModel[];
-  /** Models Claude Code can serve — catalog cache or default seed. */
+  /** Load state of `codexModels` — loading vs ready vs empty. */
+  codexModelsStatus?: CentraidSurfaceStatus;
+  /** Models Claude Code can serve, from the gateway catalog. */
   claudeModels?: CentraidRunnerModel[];
+  /** Load state of `claudeModels`. */
+  claudeModelsStatus?: CentraidSurfaceStatus;
   /** Tools codex exposes (builtins + MCP), from the gateway catalog. */
   codexTools?: CentraidHostTool[];
+  /** Load state of `codexTools`. */
+  codexToolsStatus?: CentraidSurfaceStatus;
   /** Tools Claude Code exposes (builtins + MCP), from the gateway catalog. */
   claudeTools?: CentraidHostTool[];
+  /** Load state of `claudeTools`. */
+  claudeToolsStatus?: CentraidSurfaceStatus;
 }
 
 // The renderer-side chat event union is the gateway's native `TurnStreamEvent`
@@ -682,6 +690,13 @@ export interface CentraidRunnerModel {
 }
 
 /**
+ * Load state of a catalog surface (models / tools): `loading` while the gateway
+ * enumerates, `ready` once cached, `empty` when nothing was found / the CLI is
+ * unavailable. The picker shows a loading placeholder and polls while `loading`.
+ */
+export type CentraidSurfaceStatus = 'loading' | 'ready' | 'empty';
+
+/**
  * One host tool a runner exposes — a native builtin (`Read`) or an MCP tool
  * (`github.list_pull_requests`). Enumerated gateway-side and surfaced in
  * Settings → Agents so the user can see what the builder can reach.
@@ -708,8 +723,10 @@ export interface CentraidRunnerStatus {
   versionAtLeast?: boolean;
   reason?: string;
   hint?: string;
-  /** Models the runtime can serve, when enumerable (OpenClaw). */
+  /** Models the active runner can serve, from the gateway catalog. */
   models?: CentraidRunnerModel[];
+  /** Load state of `models` — lets the composer picker show loading vs empty. */
+  modelsStatus?: CentraidSurfaceStatus;
 }
 
 declare global {

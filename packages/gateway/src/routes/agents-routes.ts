@@ -9,12 +9,16 @@
 //
 //   GET /centraid/_agents/status → { codexAvailable, claudeAvailable,
 //                                    codexVersion?, claudeVersion?,
-//                                    codexModels?, claudeModels?,
-//                                    codexTools?, claudeTools? }
+//                                    codexModels?, codexModelsStatus?,
+//                                    claudeModels?, claudeModelsStatus?,
+//                                    codexTools?, codexToolsStatus?,
+//                                    claudeTools?, claudeToolsStatus? }
 //
 // Models and tools refresh on INDEPENDENT triggers: `?refresh=1` re-enumerates
 // each agent's models; `?refreshTools=1` re-probes each agent's tool surface
-// (builtins + MCP). A plain read returns both from the catalog cache.
+// (builtins + MCP). A plain read returns both from the catalog cache (and, when
+// a surface is cold, kicks a background warm). The `*Status` fields carry the
+// load tri-state so the client shows a loading placeholder and polls.
 //
 // Mounted via `startRuntimeHttpServer`'s `extraHandlers` seam, after the
 // bearer check. A remote gateway reports its own host's CLIs, not the
@@ -22,25 +26,42 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { probeCliAvailability, type HostTool } from '@centraid/agent-runtime';
-import type { RunnerModel } from '@centraid/app-engine';
+import type { RunnerModel, SurfaceStatus } from '@centraid/app-engine';
 import { sendJson } from './route-helpers.js';
 
 /** Runner kinds the desktop Agents panel configures. */
 export type AgentKind = 'codex' | 'claude-code';
 
 /**
- * Resolve the models for a single runner kind (catalog cache or default seed;
- * `refresh` enumerates live). Supplied by the gateway so this route can report
- * EACH agent's models — not just the active runner's, which is all
- * `runner-status` knows. Returns `[]` when unavailable.
+ * A resolved catalog surface: the cached list plus its load tri-state
+ * (`loading` while the warmer enumerates, `ready` once cached, `empty` when
+ * enumeration found nothing / the CLI is unavailable). The client polls while
+ * `loading`.
  */
-export type ResolveAgentModels = (kind: AgentKind, refresh: boolean) => Promise<RunnerModel[]>;
+export interface ResolvedSurface<T> {
+  list: T[];
+  status: SurfaceStatus;
+}
 
 /**
- * Resolve the host tools for a single runner kind (catalog cache; `refresh`
- * re-probes the CLI live). Tools have no seed, so a cold catalog yields `[]`.
+ * Resolve the models for a single runner kind from the catalog (a `refresh` —
+ * or a cold cache — kicks the warmer fire-and-forget). Supplied by the gateway
+ * so this route can report EACH agent's models, not just the active runner's
+ * (all `runner-status` knows). Degrades to `{ list: [], status: 'empty' }`.
  */
-export type ResolveAgentTools = (kind: AgentKind, refresh: boolean) => Promise<HostTool[]>;
+export type ResolveAgentModels = (
+  kind: AgentKind,
+  refresh: boolean,
+) => Promise<ResolvedSurface<RunnerModel>>;
+
+/**
+ * Resolve the host tools for a single runner kind from the catalog (`refresh`
+ * re-probes the CLI live). Mirrors `ResolveAgentModels`.
+ */
+export type ResolveAgentTools = (
+  kind: AgentKind,
+  refresh: boolean,
+) => Promise<ResolvedSurface<HostTool>>;
 
 export interface AgentsStatus {
   /** The `codex` CLI is runnable on the gateway host. */
@@ -51,14 +72,22 @@ export interface AgentsStatus {
   codexVersion?: string;
   /** `claude --version` output when available. */
   claudeVersion?: string;
-  /** Models codex can serve (default seed or refreshed catalog). Issue #188. */
+  /** Models codex can serve, from the catalog (issue #188). */
   codexModels?: RunnerModel[];
-  /** Models Claude Code can serve (default seed or refreshed catalog). */
+  /** Load state of `codexModels` — lets the picker show loading vs empty. */
+  codexModelsStatus?: SurfaceStatus;
+  /** Models Claude Code can serve, from the catalog. */
   claudeModels?: RunnerModel[];
+  /** Load state of `claudeModels`. */
+  claudeModelsStatus?: SurfaceStatus;
   /** Tools codex exposes (builtins + MCP), from the catalog. */
   codexTools?: HostTool[];
+  /** Load state of `codexTools`. */
+  codexToolsStatus?: SurfaceStatus;
   /** Tools Claude Code exposes (builtins + MCP), from the catalog. */
   claudeTools?: HostTool[];
+  /** Load state of `claudeTools`. */
+  claudeToolsStatus?: SurfaceStatus;
 }
 
 /**
@@ -77,16 +106,22 @@ export async function readAgentsStatus(opts?: {
   const resolveTools = opts?.resolveTools;
   const refresh = opts?.refresh ?? false;
   const refreshTools = opts?.refreshTools ?? false;
+  const emptyModels: ResolvedSurface<RunnerModel> = { list: [], status: 'empty' };
+  const emptyTools: ResolvedSurface<HostTool> = { list: [], status: 'empty' };
   const [codex, claude, codexModels, claudeModels, codexTools, claudeTools] = await Promise.all([
     probeCliAvailability('codex'),
     probeCliAvailability('claude-code'),
-    resolveModels ? resolveModels('codex', refresh).catch(() => []) : Promise.resolve(undefined),
     resolveModels
-      ? resolveModels('claude-code', refresh).catch(() => [])
+      ? resolveModels('codex', refresh).catch(() => emptyModels)
       : Promise.resolve(undefined),
-    resolveTools ? resolveTools('codex', refreshTools).catch(() => []) : Promise.resolve(undefined),
+    resolveModels
+      ? resolveModels('claude-code', refresh).catch(() => emptyModels)
+      : Promise.resolve(undefined),
     resolveTools
-      ? resolveTools('claude-code', refreshTools).catch(() => [])
+      ? resolveTools('codex', refreshTools).catch(() => emptyTools)
+      : Promise.resolve(undefined),
+    resolveTools
+      ? resolveTools('claude-code', refreshTools).catch(() => emptyTools)
       : Promise.resolve(undefined),
   ]);
   return {
@@ -94,10 +129,16 @@ export async function readAgentsStatus(opts?: {
     claudeAvailable: claude.available,
     ...(codex.version ? { codexVersion: codex.version } : {}),
     ...(claude.version ? { claudeVersion: claude.version } : {}),
-    ...(codexModels ? { codexModels } : {}),
-    ...(claudeModels ? { claudeModels } : {}),
-    ...(codexTools ? { codexTools } : {}),
-    ...(claudeTools ? { claudeTools } : {}),
+    ...(codexModels
+      ? { codexModels: codexModels.list, codexModelsStatus: codexModels.status }
+      : {}),
+    ...(claudeModels
+      ? { claudeModels: claudeModels.list, claudeModelsStatus: claudeModels.status }
+      : {}),
+    ...(codexTools ? { codexTools: codexTools.list, codexToolsStatus: codexTools.status } : {}),
+    ...(claudeTools
+      ? { claudeTools: claudeTools.list, claudeToolsStatus: claudeTools.status }
+      : {}),
   };
 }
 
@@ -105,8 +146,8 @@ export async function readAgentsStatus(opts?: {
  * Build the agents route handler. Returns a function suitable for
  * `startRuntimeHttpServer`'s `extraHandlers`: resolves `true` when it owned the
  * request, `false` otherwise. `?refresh=1` re-enumerates each agent's models;
- * `?refreshTools=1` re-probes each agent's tools (otherwise the catalog cache /
- * default seed is returned).
+ * `?refreshTools=1` re-probes each agent's tools (otherwise the catalog cache
+ * is returned, with a background warm kicked when a surface is cold).
  */
 export function makeAgentsRouteHandler(opts?: {
   resolveModels?: ResolveAgentModels;

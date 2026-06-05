@@ -713,3 +713,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-a89e49fc-a74-1780628069 | claude-code | a89e49fc-a741-4cc6-8640-7db44ad13710 | #214 | claude-opus-4-8 | 70005 | 431547 | 27123338 | 216594 | 718146 | 22.0237 |  |
 | claude-code-a89e49fc-a74-1780628798 | claude-code | a89e49fc-a741-4cc6-8640-7db44ad13710 | #214 | claude-opus-4-8 | 19987 | 176444 | 25436433 | 113429 | 309860 | 16.7567 |  |
 | claude-code-a89e49fc-a74-1780629334 | claude-code | a89e49fc-a741-4cc6-8640-7db44ad13710 | #214 | claude-opus-4-8 | 13211 | 132851 | 21545186 | 81972 | 228034 | 13.7183 |  |
+| claude-code-1b64beca-379-1780634880 | claude-code | 1b64beca-3790-4a16-9b15-0502da7a48f3 | #216 | claude-opus-4-8 | 107451 | 1492679 | 75742929 | 438410 | 2038540 | 58.6982 | feat(agent-runtime): boot-warm catalog, drop the model seed, add a loading state |
