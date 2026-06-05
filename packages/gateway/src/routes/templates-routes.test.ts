@@ -59,6 +59,17 @@ test('GET /centraid/_templates returns stripped bundled metadata behind auth', a
     expect(!('files' in t)).toBeTruthy();
     expect(!('source' in t)).toBeTruthy();
   }
+
+  // `kind` must cross the wire — the renderer's automation gallery filters on
+  // it, so dropping it left that surface permanently empty (regression guard).
+  const automations = templates.filter((t) => t.kind === 'automation');
+  expect(automations.length).toBeGreaterThan(0);
+  for (const t of automations) {
+    // The automation card renders from these display fields.
+    for (const key of ['emoji', 'category', 'triggerKind', 'triggerLabel', 'integrations']) {
+      expect(key in t).toBeTruthy();
+    }
+  }
 });
 
 // Issue #141, Phase 5: the gateway owns the remote template *refresh* too —

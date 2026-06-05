@@ -776,3 +776,18 @@ Deferred to the agreed follow-up sequence:
   retired `createCentraidAgentSession` + tarball `publishProject`) and the `docs/templates/cloning`
   flow + `gateway.mdx` on-disk-layout section, which describe the legacy `current.json`/`versions`
   VersionStore model — folded into the #137 legacy-layout doc pass.
+
+## Follow-up — automation display fields cross the templates wire
+
+The `GET /centraid/_templates` route originally stripped everything but the
+app-template display metadata. The renderer's automation gallery filters on
+`kind` and renders cards from `emoji` / `category` / `triggerKind` /
+`triggerLabel` / `integrations`, so dropping those left that surface
+permanently empty. `makeTemplatesRouteHandler` now passes `kind` plus the
+automation-only display fields through (each conditional, so app templates stay
+lean), with a regression test asserting `kind === 'automation'` rows carry the
+card fields. No resolver-internal fields (`files` / `source`) cross the wire.
+
+Verification: `bun run typecheck` + `bun run lint` green; gateway
+`templates-routes.test.ts` passes (auth gate, stripped internals, automation
+display-field presence).

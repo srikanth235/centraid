@@ -10,11 +10,14 @@
 // after the bearer check.
 //
 //   GET /centraid/_templates → [{ id, name, desc, colorKey, iconKey,
-//                                 version }]
+//                                 version, kind?, emoji?, category?,
+//                                 triggerKind?, triggerLabel?, integrations? }]
 //
 // Only display metadata crosses the wire — `files` + `source` are stripped
 // (the lists can be sizable and the renderer never needs them; the clone
-// path reads files gateway-side).
+// path reads files gateway-side). `kind` plus the automation-only display
+// fields ARE sent: the renderer's automation gallery filters on `kind` and
+// renders the card from emoji/category/trigger*/integrations.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { fetchRemoteTemplates, resolveTemplates } from '@centraid/blueprints';
@@ -80,6 +83,17 @@ export function makeTemplatesRouteHandler(
         colorKey: t.colorKey,
         iconKey: t.iconKey,
         version: t.version,
+        // `kind` classifies the template (app vs automation) and the
+        // renderer's automation gallery filters on it — omitting it left
+        // that surface permanently empty. Pass it through, plus the
+        // automation-only display fields the gallery card renders. All are
+        // conditional so app templates stay lean.
+        ...(t.kind !== undefined ? { kind: t.kind } : {}),
+        ...(t.emoji !== undefined ? { emoji: t.emoji } : {}),
+        ...(t.category !== undefined ? { category: t.category } : {}),
+        ...(t.triggerKind !== undefined ? { triggerKind: t.triggerKind } : {}),
+        ...(t.triggerLabel !== undefined ? { triggerLabel: t.triggerLabel } : {}),
+        ...(t.integrations !== undefined ? { integrations: t.integrations } : {}),
       })),
     );
     return true;

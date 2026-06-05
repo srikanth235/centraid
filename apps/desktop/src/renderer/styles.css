@@ -6460,6 +6460,158 @@ select.input option {
   color: var(--ink);
 }
 
+/* Hero date eyebrow stacked tight above the heading. */
+.cd-hero-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.cd-hero-date {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+/* Composer + suggestion chips share a column so the chips ride just under
+   the box (the hero's own 28px gap is for the larger heading→composer step). */
+.cd-hero-composer-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.cd-hero-composer-wrap .cd-hero-suggestions {
+  margin-top: 0;
+}
+
+/* ── Home sections (Apps · Automations) ──────────────────────────────────
+   Two always-visible sections below the hero — each a labelled header +
+   body — replacing the old tabbed discovery shelf. */
+.cd-hsec {
+  width: 100%;
+  max-width: 1180px;
+  margin: 40px auto 0;
+  padding: 0 56px;
+  box-sizing: border-box;
+}
+.cd-hsec:last-child {
+  padding-bottom: 56px;
+}
+.cd-hsec-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.cd-hsec-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--t-h2);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.cd-hsec-ic {
+  display: inline-flex;
+  color: var(--ink-3);
+}
+.cd-hsec-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--ink-4);
+}
+.cd-hsec-spacer {
+  flex: 1;
+}
+.cd-hsec-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12.5px;
+}
+.cd-hsec-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-3);
+}
+.cd-hsec-stat[data-tone='active'] {
+  color: var(--ink-2);
+}
+.cd-hsec-stat[data-tone='attention'] {
+  color: var(--danger);
+}
+.cd-hsec-stat svg {
+  display: block;
+}
+.cd-hsec-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--success);
+}
+.cd-hsec-browse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font: var(--t-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.cd-hsec-browse:hover {
+  color: var(--ink);
+}
+.cd-hsec-browse svg {
+  display: block;
+}
+
+/* Automations section body — rows on the left, a recent-runs rail right. */
+.cd-au-home-cols {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 22px;
+  align-items: start;
+}
+.cd-au-home-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-au-home-runs {
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
+  padding: 8px 0;
+}
+.cd-au-home-runs-h {
+  padding: 6px 15px 10px;
+}
+.cd-au-home-runs-list {
+  display: flex;
+  flex-direction: column;
+}
+.cd-au-home-runs-empty {
+  font-size: 12.5px;
+  color: var(--ink-4);
+  padding: 6px 15px 10px;
+}
+@media (max-width: 980px) {
+  .cd-au-home-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Loaded-home greeting header — eyebrow + "Your apps." + build pill. */
 .cd-home-header {
   max-width: 1080px;
@@ -6529,8 +6681,8 @@ select.input option {
   gap: 14px;
 }
 .cd-apps-grid--small {
-  grid-template-columns: repeat(6, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
 }
 
 /* §A2 — ambient build pill. Collapsed it's a slim ~360px bar floated to
@@ -6844,7 +6996,9 @@ select.input option {
     transform 120ms;
 }
 .cd-app-card--small {
-  min-height: 80px;
+  min-height: 132px;
+  padding: 18px 20px;
+  gap: 0;
 }
 .cd-app-card:hover {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
@@ -6852,10 +7006,17 @@ select.input option {
 .cd-app-card:active {
   transform: scale(0.99);
 }
-.cd-app-card-top {
+/* Horizontal header — glyph plate + a name/blurb column beside it. */
+.cd-app-card-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 14px;
+}
+.cd-app-card-head-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .cd-app-card-icon {
   position: relative;
@@ -6868,10 +7029,12 @@ select.input option {
   justify-content: center;
   color: #fff;
 }
+/* Home tiles read as prominent, app-store-style glyph plates — big rounded
+   squares with a generous glyph, matching the apps-gallery spec. */
 .cd-app-card--small .cd-app-card-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
 }
 .cd-app-card-icon svg {
   display: block;
@@ -6879,16 +7042,16 @@ select.input option {
   height: 18px;
 }
 .cd-app-card--small .cd-app-card-icon svg {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
 }
 /* Status dot riding the icon's top-right corner. */
 .cd-app-card-icon-dot {
   position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 10px;
-  height: 10px;
+  top: -3px;
+  right: -3px;
+  width: 11px;
+  height: 11px;
   border-radius: 999px;
   box-shadow: 0 0 0 2.5px var(--bg);
 }
@@ -6904,7 +7067,7 @@ select.input option {
 .cd-app-card-name {
   font: var(--t-title);
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: 16px;
   letter-spacing: -0.01em;
   color: var(--ink);
   white-space: nowrap;
@@ -6912,28 +7075,33 @@ select.input option {
   text-overflow: ellipsis;
 }
 .cd-app-card-desc {
-  margin-top: -7px;
   font: var(--t-small);
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--ink-3);
-  line-height: 1.35;
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  /* Reserve two lines so the name→blurb→foot rhythm is identical across
-     a row even when one blurb wraps to a single line. */
-  min-height: calc(2 * 1.35 * 11.5px);
 }
-/* State-aware bottom strip — status label · timestamp, all mono 9.5px. */
+/* State strip — a top-divided row: status label · timestamp on the left,
+   the hover-revealed star pinned right. */
 .cd-app-card-foot {
   margin-top: auto;
+  padding-top: 13px;
+  border-top: 0.5px solid var(--line);
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cd-app-card-foot-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--ink-4);
 }
 .cd-app-card-foot .cd-status {
   font-size: 9.5px;
@@ -6987,6 +7155,212 @@ select.input option {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 14px;
+}
+
+/* ── Discover / Templates page ───────────────────────────────────────────
+   Eyebrow + title + blurb on the left, a kind segmented filter on the
+   right; below, category-grouped sections of unified template cards. */
+.cd-disc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+.cd-disc-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.cd-disc-head-text h1 {
+  margin: 8px 0 0;
+  font: var(--t-display-1);
+  font-size: 34px;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.cd-disc-head-text p {
+  margin: 10px 0 0;
+  max-width: 540px;
+  font: var(--t-body);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.cd-disc-seg {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+}
+.cd-disc-seg-b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+  font: var(--t-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.cd-disc-seg-b:hover {
+  color: var(--ink-2);
+}
+.cd-disc-seg-b[data-active='true'] {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--line);
+  color: var(--ink);
+  font-weight: 600;
+}
+.cd-disc-seg-ic {
+  display: inline-flex;
+}
+.cd-disc-seg-n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--ink-4);
+}
+.cd-disc-seg-b[data-active='true'] .cd-disc-seg-n {
+  color: var(--ink-3);
+}
+
+.cd-disc-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  margin-top: 28px;
+}
+.cd-disc-cat-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-bottom: 13px;
+}
+.cd-disc-cat-label {
+  font: var(--t-h2);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.cd-disc-cat-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.cd-disc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+/* Unified template card — apps and automations share the shape; the kind
+   badge + trigger metadata distinguish them. */
+.cd-disc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+  padding: 16px;
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  cursor: pointer;
+  font: inherit;
+  transition:
+    border-color 0.16s ease,
+    transform 0.16s ease;
+}
+.cd-disc-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+.cd-disc-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.cd-disc-card-icon {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+}
+.cd-disc-card-icon svg {
+  display: block;
+}
+.cd-disc-card-head {
+  min-width: 0;
+}
+.cd-disc-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cd-disc-card-desc {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.cd-disc-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 13px;
+  border-top: 0.5px solid var(--line);
+}
+.cd-disc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cd-disc-badge svg {
+  display: block;
+}
+.cd-disc-badge[data-kind='automation'] {
+  color: var(--accent);
+}
+.cd-disc-trig {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.cd-disc-trig svg {
+  display: block;
+}
+.cd-disc-card-foot .cd-au-ov-dots {
+  margin-left: auto;
+}
+@media (max-width: 920px) {
+  .cd-disc-head {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .cd-disc-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Hover-revealed `•••` action trigger. Lives as a sibling of the card so
@@ -10884,7 +11258,10 @@ select.input option {
 .cd-au-vtitle {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+}
+.cd-au-vtitle-text {
+  min-width: 0;
 }
 .cd-au-vtitle h1 {
   margin: 0;
@@ -10893,6 +11270,12 @@ select.input option {
   font-weight: 600;
   letter-spacing: -0.025em;
   color: var(--ink);
+}
+.cd-au-vsub {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
 }
 /* Per-automation identity hue → --au-hue. Identity is DECORATIVE ONLY:
    it tints the glyph tile, the trigger-hero rail, and status dots. CTAs,
@@ -11051,6 +11434,20 @@ select.input option {
 .cd-au-btn-ghost:hover {
   background: var(--bg-sunken);
 }
+/* Destructive action — quiet by default (reads as a neutral ghost icon), but
+   declares its intent the moment the pointer lands: the glyph, fill, and
+   border all shift toward --danger. Keeps a low-frequency, irreversible action
+   from competing with the primary CTA while staying unmistakable on approach. */
+.cd-au-btn-danger {
+  background: var(--bg-elev);
+  color: var(--ink-3);
+  border: 0.5px solid var(--line-strong);
+}
+.cd-au-btn-danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line-strong));
+  color: var(--danger);
+}
 .cd-au-btn-icon {
   width: 36px;
   height: 36px;
@@ -11122,6 +11519,11 @@ select.input option {
   color: var(--ink-3);
   margin-bottom: 5px;
 }
+/* The schedule/trigger-kind eyebrow reads in the accent (identity stays
+   decorative; this label is a meaningful classifier). */
+.cd-au-hero-kind {
+  color: var(--accent);
+}
 .cd-au-hero-when {
   font-family: var(--font-display);
   font-size: 21px;
@@ -11136,64 +11538,92 @@ select.input option {
   flex-wrap: wrap;
   margin-top: 8px;
 }
-.cd-au-hero-tag {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+/* Cron-expression chip — a braces glyph + the raw expr, mono. */
+.cd-au-hero-cron {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-sunken);
+}
+.cd-au-hero-cron-ic {
+  display: inline-flex;
   color: var(--ink-4);
 }
-.cd-au-hero-detail code {
+.cd-au-hero-cron code {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--ink-2);
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  padding: 2px 7px;
-  border-radius: 5px;
 }
 .cd-au-hero-status {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
   padding-left: 22px;
-  border-left: 0.5px solid var(--line);
-  text-align: right;
 }
 .cd-au-hero-toggle {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 9px;
-  margin-top: 7px;
+  gap: 10px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--ink-2);
 }
-.cd-au-hero-toggle-state {
-  min-width: 56px;
+.cd-au-hero-toggle-lbl {
+  color: var(--ink-2);
 }
 
-/* next-3-runs pills (cron) */
+/* next-3-runs (cron) — a label over a row of pills; the first is active. */
 .cd-au-hero-next {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 11px;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
 }
 .cd-au-hero-next-lbl {
   font-family: var(--font-mono);
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-4);
 }
+.cd-au-hero-next-pills {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .cd-au-hero-next-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-2);
-  padding: 3px 9px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  padding: 5px 11px;
   border-radius: 999px;
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
+}
+.cd-au-hero-next-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--ink-4);
+}
+/* The next (imminent) run is highlighted with the accent. */
+.cd-au-hero-next-pill[data-active='true'] {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.cd-au-hero-next-pill[data-active='true'] .cd-au-hero-next-dot {
+  background: var(--accent);
 }
 
 /* webhook endpoint row */
@@ -11298,7 +11728,7 @@ select.input option {
 /* viewer columns */
 .cd-au-cols {
   display: grid;
-  grid-template-columns: 1fr 290px;
+  grid-template-columns: 1fr 320px;
   gap: 22px;
   align-items: start;
   padding-bottom: 48px;
@@ -11351,19 +11781,17 @@ select.input option {
   white-space: pre-wrap;
 }
 
-/* run filters + rows */
+/* run filters — segmented pills living in the Run history header. */
 .cd-au-filters {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  padding: 13px 18px;
-  border-bottom: 0.5px solid var(--line);
 }
 .cd-au-filter {
   font-family: var(--font-mono);
   font-size: 11px;
   text-transform: capitalize;
-  padding: 5px 11px;
+  padding: 5px 12px;
   border-radius: 20px;
   border: 0.5px solid var(--line);
   background: none;
@@ -11381,6 +11809,29 @@ select.input option {
   color: var(--bg);
   border-color: var(--ink);
 }
+
+/* Run history — section header (title + filters) above a card of rows. */
+.cd-au-runhist {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cd-au-runhist-h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cd-au-runhist-h h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.cd-au-runhist-h .cd-au-filters {
+  margin-left: auto;
+}
 .cd-au-runs-empty {
   padding: 26px 18px;
   text-align: center;
@@ -11390,109 +11841,159 @@ select.input option {
 .cd-au-run {
   display: flex;
   align-items: center;
-  gap: 13px;
-  padding: 13px 18px;
+  gap: 14px;
+  padding: 14px 18px;
   border-bottom: 0.5px solid var(--line);
 }
 .cd-au-run:last-child {
   border-bottom: none;
 }
-.cd-au-run-dot {
-  width: 9px;
-  height: 9px;
+.cd-au-run-ic {
   flex: none;
-  border-radius: 50%;
-  background: var(--success);
+  display: inline-flex;
+  color: var(--success);
 }
-.cd-au-run[data-ok='false'] .cd-au-run-dot {
-  background: var(--danger);
-}
-.cd-au-run-mid {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.cd-au-run-ic[data-ok='false'] {
+  color: var(--danger);
 }
 .cd-au-run-sum {
-  font-size: 13px;
-  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cd-au-run-meta {
+.cd-au-run[data-ok='false'] .cd-au-run-sum {
+  color: var(--danger);
+}
+.cd-au-run-trig {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-3);
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 0.5px solid var(--line);
+}
+.cd-au-run-trig svg {
+  display: block;
 }
 .cd-au-run-when {
   flex: none;
+  min-width: 80px;
+  text-align: right;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-3);
 }
+.cd-au-run-when b {
+  display: block;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.cd-au-run-when-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--ink-4);
+}
 
-/* side rail */
-.cd-au-about-row {
+/* ── Side rail: Last 30 days · Behavior + Tools ── */
+.cd-au-rail-card {
+  padding: 16px 18px;
+}
+.cd-au-rail-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 14px;
+}
+.cd-au-rail-eyebrow-sub {
+  margin-top: 18px;
+}
+.cd-au-kpis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 14px;
+}
+.cd-au-kpi-l {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cd-au-kpi-ic {
+  display: inline-flex;
+  color: var(--ink-4);
+}
+.cd-au-kpi-v {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.cd-au-kpi-v[data-ok='true'] {
+  color: var(--success);
+}
+.cd-au-beh-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 16px;
+  padding: 11px 0;
+  font-size: 13px;
+}
+.cd-au-beh-row:not(:last-child) {
   border-bottom: 0.5px solid var(--line);
-  font-size: 12.5px;
 }
-.cd-au-about-row:last-child {
-  border-bottom: none;
-}
-.cd-au-about-row-wrap {
-  align-items: flex-start;
-}
-.cd-au-about-k {
+.cd-au-beh-ic {
   flex: none;
-  width: 72px;
-  font-family: var(--font-mono);
-  font-size: 11px;
+  display: inline-flex;
+  color: var(--ink-4);
+}
+.cd-au-beh-k {
   color: var(--ink-3);
 }
-.cd-au-about-v {
+.cd-au-beh-v {
   margin-left: auto;
   text-align: right;
   font-weight: 500;
   color: var(--ink);
 }
-.cd-au-about-row-wrap .cd-au-chips {
-  margin-left: auto;
-  justify-content: flex-end;
+.cd-au-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
-.cd-au-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5px;
-  background: var(--line);
+.cd-au-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-sunken);
 }
-.cd-au-stat {
-  background: var(--bg-elev);
-  padding: 15px 16px;
+.cd-au-tool-ic {
+  display: inline-flex;
+  color: var(--ink-4);
 }
-.cd-au-stat-v {
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-.cd-au-stat-v[data-ok='true'] {
-  color: var(--success);
-}
-.cd-au-stat-k {
+.cd-au-tool-chip code {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  margin-top: 3px;
+  font-size: 11px;
+  color: var(--ink-2);
 }
 
 /* standing-order name becomes a link to the viewer */
@@ -11636,25 +12137,62 @@ button.cd-au-run:hover .cd-au-run-go {
 
 /* ── Run viewer Direction B — single-column transcript log ── */
 .cd-au-log {
-  max-width: 760px;
+  max-width: 880px;
 }
-.cd-au-log-kpi {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  padding: 9px 12px;
-  margin-bottom: 8px;
+/* KPI strip — Trigger · Tokens · Cost · Duration · Outcome: one bordered row
+   of labelled cells split by hairline dividers (mirrors the run-detail spec). */
+.cd-au-log-stats {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
   border: 0.5px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg-sunken);
-  overflow-x: auto;
-  white-space: nowrap;
+  border-radius: 12px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.cd-au-log-stat {
+  flex: 1 1 0;
+  min-width: 104px;
+  padding: 13px 18px;
+  border-left: 0.5px solid var(--line);
+}
+.cd-au-log-stat:first-child {
+  border-left: none;
+}
+.cd-au-log-stat-l {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 8px;
+}
+.cd-au-log-stat-v {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cd-au-log-stat-trig {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cd-au-log-stat-ic {
+  display: inline-flex;
+  color: var(--ink-3);
+}
+/* Transcript panel — the rows live inside one elevated card. */
+.cd-au-log-panel {
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  padding: 4px 20px;
 }
 .cd-au-log-row {
   display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 12px;
-  padding: 10px 0;
+  grid-template-columns: 60px 1fr;
+  gap: 14px;
+  padding: 12px 0;
   border-top: 0.5px solid var(--line);
 }
 .cd-au-log-row:first-of-type {
@@ -11696,15 +12234,17 @@ button.cd-au-run:hover .cd-au-run-go {
     animation: none;
   }
 }
+.cd-au-log-glyph[data-status='trigger'] {
+  color: var(--ink-3);
+}
+/* Kind reads as a quiet inline prefix (STEP / TOOL / AGENT) — no chip box, so
+   the eye lands on the node name, not the label. */
 .cd-au-log-kind {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--ink-4);
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
 .cd-au-log-name {
   font-size: 12.5px;
@@ -11722,14 +12262,102 @@ button.cd-au-run:hover .cd-au-run-go {
   color: var(--ink-3);
 }
 .cd-au-log-body {
-  margin-top: 7px;
+  margin-top: 6px;
 }
-.cd-au-log-instr {
-  margin-top: 7px;
-  font-size: 12.5px;
+/* Agent reply — flows inline as prose (streams live, then settles). */
+.cd-au-log-reply {
+  margin-top: 8px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--ink-2);
   white-space: pre-wrap;
+}
+/* Collapsible payload chips — "{ } args ⌄" / "{ } out ⌄". */
+.cd-au-log-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.cd-au-log-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease;
+}
+.cd-au-log-chip:hover,
+.cd-au-log-chip--open {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.cd-au-log-chip-chev {
+  display: inline-flex;
+  color: var(--ink-4);
+  transition: transform 0.16s ease;
+}
+.cd-au-log-chip--open .cd-au-log-chip-chev {
+  transform: rotate(180deg);
+}
+.cd-au-log-pres {
+  display: flex;
+  flex-direction: column;
+}
+.cd-au-log-pre {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+/* Footer — the settled "✓ Run finished · <summary>" line. */
+.cd-au-log-foot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 0 8px;
+  margin-top: 2px;
+  border-top: 0.5px solid var(--line);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.cd-au-log-foot[data-status='ok'] .cd-au-log-foot-ic {
+  color: var(--success);
+}
+.cd-au-log-foot[data-status='fail'] .cd-au-log-foot-ic,
+.cd-au-log-foot[data-status='fail'] .cd-au-log-foot-tx {
+  color: var(--danger);
+}
+.cd-au-log-foot-ic {
+  display: inline-flex;
+  flex: none;
+}
+.cd-au-log-foot-tx {
+  flex: 1;
+  min-width: 0;
+}
+.cd-au-log-foot .cd-au-log-chip {
+  flex: none;
+}
+.cd-au-log-foot-pre {
+  padding-bottom: 8px;
 }
 
 /* ── Run timeline (Direction A) — vertical rail + node cards ── */
@@ -12200,11 +12828,32 @@ button.cd-au-run:hover .cd-au-run-go {
   font-size: 11px;
   color: var(--ink-3);
 }
-.cd-au-ov-cols {
-  display: grid;
-  grid-template-columns: 1.55fr 1fr;
-  gap: 26px;
-  align-items: start;
+/* Recent-runs section sits full-width below the automations list. */
+.cd-au-ov-runs {
+  margin-top: 26px;
+}
+.cd-au-ov-viewall {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.cd-au-ov-viewall:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.cd-au-ov-viewall svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* automation rows */
@@ -12539,9 +13188,6 @@ button.cd-au-run:hover .cd-au-run-go {
 }
 
 @media (max-width: 860px) {
-  .cd-au-ov-cols {
-    grid-template-columns: 1fr;
-  }
   .cd-au-health {
     grid-template-columns: repeat(2, 1fr);
   }
