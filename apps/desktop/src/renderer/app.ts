@@ -26,6 +26,7 @@ import {
   createAutomation,
   cloneTemplate as gwCloneTemplate,
   setAutomationEnabled,
+  deleteAutomation,
   updateAppMeta,
   deleteApp,
   type RunStreamEvent,
@@ -947,12 +948,15 @@ import { cronNextRuns } from './cron.js';
     teardownCurrent();
     const seq = renderSeq;
     await hydrateDrafts();
-    // App templates and automation templates both surface on Home now —
-    // each as its own tab in the discovery shelf. One IPC backs both
-    // loaders; they split the catalog on `kind`.
-    const [availableTemplates, automationTemplates] = await Promise.all([
-      loadAvailableTemplates(),
-      loadAutomationTemplates(),
+    // Home now shows the user's real apps and automations directly (not the
+    // template catalog — that moved behind each section's "Browse templates"
+    // link). Load the installed automations + their recent run feed so the
+    // Automations section can paint live status + a recent-runs rail. Both
+    // are best-effort: a cold/standalone gateway with no automations should
+    // still render the rest of Home, so we swallow load errors to [].
+    const [automationRows, runEntries] = await Promise.all([
+      listAutomations().catch(() => [] as CentraidAutomationRow[]),
+      collectAutomationRuns().catch(() => [] as AutomationFeedEntry[]),
     ]);
     if (!isCurrentRender(seq)) return;
 
@@ -965,7 +969,7 @@ import { cronNextRuns } from './cron.js';
     // tabbed discovery shelf — regardless of how many apps exist. The
     // shelf's "Browse all →" is the only path to the alternate (Discover)
     // page; the workspace never auto-switches based on app count.
-    renderDay1Home(scroll, availableTemplates, automationTemplates);
+    renderDay1Home(scroll, automationRows, runEntries);
 
     const sidebar = buildHomeSidebar({ page: 'home' });
     const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
@@ -983,17 +987,19 @@ import { cronNextRuns } from './cron.js';
     root.replaceChildren(shell);
   }
 
-  // §A1 — Day-1 home: centered composer hero + tabbed discovery shelf.
-  // Apps live only inside the shelf's "My apps" tab — there is no
-  // separate "Your apps" section above the shelf.
+  // Home: centered composer hero, then two always-visible sections —
+  // Apps (the user's real apps + drafts) and Automations (live status +
+  // a recent-runs rail). Each section header carries a "Browse templates"
+  // link to its catalog; the old tabbed discovery shelf is gone.
   function renderDay1Home(
     scroll: HTMLElement,
-    templates: TemplateEntry[],
-    automations: TemplateEntry[],
+    automationRows: CentraidAutomationRow[],
+    runEntries: AutomationFeedEntry[],
   ): void {
     scroll.classList.add('cd-day1-scroll');
     scroll.append(buildHomeHero());
-    scroll.append(buildTabbedShelf(templates, automations));
+    scroll.append(buildHomeApps());
+    scroll.append(buildHomeAutomations(automationRows, runEntries));
   }
 
   // Shared composer behaviour — wires submit/keydown onto a textarea +
@@ -1017,11 +1023,6 @@ import { cronNextRuns } from './cron.js';
     buildBtn.addEventListener('click', submit);
   }
 
-  // Right-pointing arrow — the shared icon set ships only ArrowLeft, so
-  // the design's right-arrows are ArrowLeft rotated 180°.
-  function arrowRight(size: number): string {
-    return `<span style="display:inline-flex;transform:rotate(180deg)">${Icon.ArrowLeft({ size })}</span>`;
-  }
   // Small chevron-down — ArrowLeft rotated -90°, matching Day1Composer.
   function chevronDown(size: number): string {
     return `<span style="display:inline-flex;transform:rotate(-90deg);opacity:0.6">${Icon.ArrowLeft(
@@ -1036,12 +1037,31 @@ import { cronNextRuns } from './cron.js';
     '<rect x="9" y="2" width="6" height="11" rx="3"/>' +
     '<path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>';
 
+  // Today's date as the hero eyebrow, e.g. "TUESDAY · 19 MAY". Renderer
+  // code, so `new Date()` is fine here (the workflow-script ban doesn't apply).
+  function heroDateLabel(): string {
+    const d = new Date();
+    const weekday = d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+    const month = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+    return `${weekday} · ${d.getDate()} ${month}`;
+  }
+
+  // Example prompts under the composer — clicking one seeds the box and
+  // focuses it (a starting point, not an auto-submit).
+  const HERO_SUGGESTIONS = ['Habit tracker', 'Weekly review', 'Inbox digest', 'Invoice filer'];
+
   function buildHomeHero(): HTMLElement {
     const wrap = el('div', { class: 'cd-hero' });
 
-    // Personalized heading — no user-profile source exists in the
-    // renderer, so we fall back to the un-named form rather than fake one.
-    wrap.append(el('h1', {}, 'What should we build?'));
+    // Date eyebrow + heading, kept tight together above the composer.
+    wrap.append(
+      el('div', { class: 'cd-hero-head' }, [
+        el('div', { class: 'cd-hero-date' }, heroDateLabel()),
+        // Personalized heading — no user-profile source exists in the
+        // renderer, so we fall back to the un-named form rather than fake one.
+        el('h1', {}, 'What should we build?'),
+      ]),
+    );
 
     // Day1Composer — bg-elev card with descriptive placeholder + toolbar.
     const composer = el('div', { class: 'cd-composer' });
@@ -1079,242 +1099,197 @@ import { cronNextRuns } from './cron.js';
     ]);
 
     composer.append(ta, toolbar);
-    wrap.append(composer);
-    return wrap;
-  }
 
-  // A shelf tile — the same RefinedAppTile shape as renderAppCard but
-  // driven by a plain spec, so templates (which aren't AppMetaResolved)
-  // can share the exact card vocabulary.
-  function buildShelfTile(spec: {
-    name: string;
-    desc: string;
-    iconKey: string;
-    color: string;
-    status?: 'new' | 'draft' | 'template' | null;
-    timestamp?: string;
-    starred?: boolean;
-    onClick: () => void;
-    /** Optional right-click handler — wires the card's context menu. */
-    onContextMenu?: (e: MouseEvent) => void;
-    /** Optional hover-revealed `•••` action in the tile's bottom-right. */
-    more?: { label: string; onOpen: (rect: DOMRect) => void };
-  }): HTMLElement {
-    const card = el('button', {
-      class: 'cd-app-card cd-app-card--small',
-      type: 'button',
-      onClick: spec.onClick,
-    });
-    if (spec.onContextMenu) {
-      card.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        spec.onContextMenu?.(e as MouseEvent);
-      });
-    }
-
-    const iconEl = el('div', {
-      class: 'cd-app-card-icon',
-      trustedHtml: Icon[spec.iconKey as IconNameType]
-        ? Icon[spec.iconKey as IconNameType]({ size: 18, strokeWidth: 1.85 })
-        : '',
-    });
-    const finish = window.CentraidTokens.tileFinish(spec.color as ColorHexType, prefs.tileVariant);
-    iconEl.style.background = finish.background;
-    iconEl.style.color = finish.glyphColor;
-    if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
-
-    const top = el('div', { class: 'cd-app-card-top' }, [iconEl]);
-    if (spec.status) {
-      const dot = el('span', { class: 'cd-app-card-icon-dot', 'data-tone': spec.status });
-      iconEl.style.position = 'relative';
-      iconEl.append(dot);
-    }
-    card.append(top);
-
-    card.append(el('div', { class: 'cd-app-card-name' }, spec.name));
-    card.append(el('div', { class: 'cd-app-card-desc' }, spec.desc));
-
-    const foot = el('div', { class: 'cd-app-card-foot' });
-    if (spec.status === 'new') foot.append(statusPillEl('new', 'new'));
-    else if (spec.status === 'draft') foot.append(statusPillEl('draft', 'draft'));
-    else if (spec.status === 'template') foot.append(statusPillEl('live', 'template'));
-    if (spec.status && spec.timestamp) {
-      foot.append(el('span', { class: 'cd-app-card-foot-sep' }, '·'));
-    }
-    if (spec.timestamp) {
-      foot.append(el('span', { class: 'cd-app-card-foot-time' }, spec.timestamp));
-    }
-    card.append(foot);
-
-    const wrap = el('div', { class: 'cd-app-card-wrap' }, [card]);
-    if (spec.more) {
-      wrap.append(buildMoreButton(spec.more.label, spec.more.onOpen));
-    }
-    return wrap;
-  }
-
-  // §A1 — HomeShelf: pill-tabbed shelf — My apps · Starred · Templates ·
-  // Automations — each tab a count badge, "Browse all →" pushed right.
-  // Most tabs paint a dense 6-col grid of app tiles; the Automations tab
-  // morphs the grid to a roomier 3-col card layout (emoji · trigger ·
-  // integration chips) since automations carry more context per card.
-  function buildTabbedShelf(templates: TemplateEntry[], automations: TemplateEntry[]): HTMLElement {
-    const section = el('section', { class: 'cd-shelf' });
-
-    const all: AppMetaResolvedType[] = [...getApps(), ...drafts];
-    const starredApps = all.filter((a) => isStarred(a.id));
-    const palette = window.ICON_PALETTE as Record<string, string>;
-
-    const appTiles = (list: AppMetaResolvedType[]): HTMLElement[] =>
-      list.map((a) => renderAppCard(a, true));
-
-    const tabs: ReadonlyArray<{
-      id: string;
-      label: string;
-      count: number;
-      /** Grid shape: dense app tiles ('tiles', default) or roomier cards. */
-      layout?: 'tiles' | 'cards';
-      /** Destination for "Browse all" while this tab is active. */
-      browse: () => void;
-      render: () => HTMLElement[];
-      empty: { icon: IconNameType; title: string; sub: string };
-    }> = [
-      {
-        id: 'apps',
-        label: 'My apps',
-        count: all.length,
-        browse: renderDiscover,
-        render: () => appTiles(all),
-        empty: {
-          icon: 'Sparkle',
-          title: 'No apps yet',
-          sub: 'Describe an app in the box above — Centraid will build it for you.',
-        },
-      },
-      {
-        id: 'starred',
-        label: 'Starred',
-        count: starredApps.length,
-        browse: renderDiscover,
-        render: () => appTiles(starredApps),
-        empty: {
-          icon: 'Star',
-          title: 'Nothing starred yet',
-          sub: 'Hover an app tile and tap the star to pin it here.',
-        },
-      },
-      {
-        id: 'templates',
-        label: 'Templates',
-        count: templates.length,
-        browse: renderDiscover,
-        empty: {
-          icon: 'Compass',
-          title: 'No templates yet',
-          sub: 'Starter templates will show up here once they’re available.',
-        },
-        render: () =>
-          templates.map((t) =>
-            buildShelfTile({
-              name: t.name,
-              desc: t.desc,
-              iconKey: t.iconKey,
-              color: palette[t.colorKey] ?? '#7C5BD9',
-              status: 'template',
-              onClick: () => openTemplatePreview(t),
-            }),
-          ),
-      },
-      {
-        id: 'automations',
-        label: 'Automations',
-        count: automations.length,
-        layout: 'cards',
-        browse: renderAutomationTemplates,
-        empty: {
-          icon: 'History',
-          title: 'No automations yet',
-          sub: 'Scheduled and event-driven starters will show up here once they’re available.',
-        },
-        render: () => automations.map((t) => renderAutomationTemplateCard(t)),
-      },
-    ];
-
-    const inner = el('div', { class: 'cd-shelf-inner' });
-    const tabRow = el('div', { class: 'cd-shelf-tabrow' });
-    const tabList = el('div', { class: 'cd-shelf-tabs', role: 'tablist' });
-    const grid = el('div', { class: 'cd-shelf-grid' });
-
-    let activeTab = tabs[0]!;
-
-    const renderTab = (tabId: string): void => {
-      const t = tabs.find((x) => x.id === tabId) ?? tabs[0]!;
-      activeTab = t;
-      grid.innerHTML = '';
-      // Morph the grid between dense app tiles and roomier automation cards.
-      grid.dataset.layout = t.layout ?? 'tiles';
-      const tiles = t.render();
-      if (tiles.length === 0) {
-        grid.append(
-          el('div', { class: 'cd-shelf-empty' }, [
-            el('div', {
-              class: 'cd-shelf-empty-icon',
-              trustedHtml: (Icon[t.empty.icon] ?? Icon.Sparkle)({ size: 20 }),
-            }),
-            el('div', { class: 'cd-shelf-empty-title' }, t.empty.title),
-            el('div', { class: 'cd-shelf-empty-sub' }, t.empty.sub),
-          ]),
-        );
-      } else {
-        // Staggered rise-in on every tab switch — one orchestrated moment
-        // that also signals the layout change when flipping to Automations.
-        // The class is stripped on completion so the card's own :hover
-        // transform isn't pinned by the finished animation's fill state.
-        tiles.forEach((tile, i) => {
-          tile.classList.add('cd-shelf-reveal');
-          tile.style.setProperty('--d', `${Math.min(i, 14) * 24}ms`);
-          tile.addEventListener('animationend', () => tile.classList.remove('cd-shelf-reveal'), {
-            once: true,
-          });
-          grid.append(tile);
-        });
-      }
-    };
-
-    for (const t of tabs) {
-      const btn = el(
-        'button',
-        {
-          class: 'cd-shelf-tab',
-          type: 'button',
-          role: 'tab',
-          'data-active': t.id === 'apps' ? 'true' : undefined,
-          onClick: () => {
-            for (const b of tabList.querySelectorAll<HTMLElement>('.cd-shelf-tab')) {
-              delete b.dataset.active;
-            }
-            btn.dataset.active = 'true';
-            renderTab(t.id);
+    // Suggestion chips sit just under the composer; clicking one fills the
+    // textarea (firing `input` so the build button enables) and focuses it.
+    const chips = el('div', { class: 'cd-hero-suggestions' });
+    for (const s of HERO_SUGGESTIONS) {
+      chips.append(
+        el(
+          'button',
+          {
+            class: 'cd-chip',
+            type: 'button',
+            onClick: () => {
+              ta.value = s;
+              ta.dispatchEvent(new Event('input'));
+              ta.focus();
+            },
           },
-        },
-        [
-          el('span', {}, t.label),
-          el('span', { class: 'cd-shelf-tab-count' }, String(t.count).padStart(2, '0')),
-        ],
+          s,
+        ),
       );
-      tabList.append(btn);
     }
 
-    const browseAll = el(
-      'button',
-      { class: 'cd-shelf-browse', type: 'button', onClick: () => activeTab.browse() },
-      [el('span', {}, 'Browse all'), el('span', { trustedHtml: arrowRight(13) })],
+    wrap.append(el('div', { class: 'cd-hero-composer-wrap' }, [composer, chips]));
+    return wrap;
+  }
+
+  // A section header: icon + title + zero-padded count, with an optional
+  // right-aligned "Browse <thing> templates →" link. Shared by both home
+  // sections so Apps and Automations read identically.
+  function homeSectionHead(opts: {
+    icon: IconNameType;
+    title: string;
+    count: number;
+    browseLabel: string;
+    onBrowse: () => void;
+    /** Optional extra node (e.g. the automation status summary) before the link. */
+    aside?: HTMLElement;
+  }): HTMLElement {
+    const head = el('div', { class: 'cd-hsec-head' }, [
+      el('span', { class: 'cd-hsec-title' }, [
+        el('span', {
+          class: 'cd-hsec-ic',
+          'aria-hidden': 'true',
+          trustedHtml: Icon[opts.icon]({ size: 15 }),
+        }),
+        el('span', {}, opts.title),
+      ]),
+      el('span', { class: 'cd-hsec-count' }, String(opts.count).padStart(2, '0')),
+      el('span', { class: 'cd-hsec-spacer' }),
+    ]);
+    if (opts.aside) head.append(opts.aside);
+    head.append(
+      el('button', { class: 'cd-hsec-browse', type: 'button', onClick: opts.onBrowse }, [
+        el('span', {}, opts.browseLabel),
+        el('span', { 'aria-hidden': 'true', trustedHtml: Icon.ChevronRight({ size: 14 }) }),
+      ]),
+    );
+    return head;
+  }
+
+  function homeSectionEmpty(icon: IconNameType, title: string, sub: string): HTMLElement {
+    return el('div', { class: 'cd-shelf-empty' }, [
+      el('div', {
+        class: 'cd-shelf-empty-icon',
+        trustedHtml: (Icon[icon] ?? Icon.Sparkle)({ size: 20 }),
+      }),
+      el('div', { class: 'cd-shelf-empty-title' }, title),
+      el('div', { class: 'cd-shelf-empty-sub' }, sub),
+    ]);
+  }
+
+  // Home → Apps section: the user's real apps + drafts in a dense tile grid.
+  // "Browse app templates →" opens Discover (the full catalog).
+  function buildHomeApps(): HTMLElement {
+    const apps: AppMetaResolvedType[] = [...getApps(), ...drafts];
+    const section = el('section', { class: 'cd-hsec' });
+    section.append(
+      homeSectionHead({
+        icon: 'Home',
+        title: 'Apps',
+        count: apps.length,
+        browseLabel: 'Browse app templates',
+        onBrowse: renderDiscover,
+      }),
+    );
+    if (apps.length === 0) {
+      section.append(
+        homeSectionEmpty(
+          'Sparkle',
+          'No apps yet',
+          'Describe an app in the box above — Centraid will build it for you.',
+        ),
+      );
+      return section;
+    }
+    section.append(
+      el(
+        'div',
+        { class: 'cd-apps-grid cd-apps-grid--small' },
+        apps.map((a) => renderAppCard(a, true)),
+      ),
+    );
+    return section;
+  }
+
+  // Home → Automations section: live status with a recent-runs rail. Mirrors
+  // the overview's row/run renderers, but compact — rows on the left, a
+  // "Recent runs" panel on the right. "Browse automation templates →" opens
+  // the automation template gallery.
+  function buildHomeAutomations(
+    rows: readonly CentraidAutomationRow[],
+    entries: readonly AutomationFeedEntry[],
+  ): HTMLElement {
+    const section = el('section', { class: 'cd-hsec' });
+
+    // Recent runs, newest first; most-recent run per automation for status.
+    const runs = entries
+      .filter((e) => e.automationId)
+      .slice()
+      .sort((a, b) => b.run.startedAt - a.run.startedAt);
+    const lastByRef = new Map<string, AutomationFeedEntry>();
+    for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
+
+    const active = rows.filter((r) => r.enabled).length;
+    let attention = 0;
+    for (const r of rows) {
+      const last = lastByRef.get(r.ref);
+      if (last && !last.run.ok) attention += 1;
+    }
+
+    // Status summary — "● N active   ⚠ N needs attention" (attention hidden at 0).
+    const status = el('div', { class: 'cd-hsec-status' }, [
+      el('span', { class: 'cd-hsec-stat', 'data-tone': 'active' }, [
+        el('i', { class: 'cd-hsec-dot', 'aria-hidden': 'true' }),
+        el('span', {}, `${active} active`),
+      ]),
+    ]);
+    if (attention > 0) {
+      status.append(
+        el('span', { class: 'cd-hsec-stat', 'data-tone': 'attention' }, [
+          el('span', { 'aria-hidden': 'true', trustedHtml: Icon.AlertTriangle({ size: 13 }) }),
+          el('span', {}, `${attention} needs attention`),
+        ]),
+      );
+    }
+
+    section.append(
+      homeSectionHead({
+        icon: 'Bolt',
+        title: 'Automations',
+        count: rows.length,
+        browseLabel: 'Browse automation templates',
+        onBrowse: renderAutomationTemplates,
+        aside: rows.length > 0 ? status : undefined,
+      }),
     );
 
-    tabRow.append(tabList, el('span', { class: 'cd-shelf-spacer' }), browseAll);
-    inner.append(tabRow, grid);
-    section.append(inner);
-    renderTab('apps');
+    if (rows.length === 0) {
+      section.append(
+        homeSectionEmpty(
+          'Bolt',
+          'No automations yet',
+          'A saved conversation that fires on a trigger. Start from a template, or describe one from scratch.',
+        ),
+      );
+      return section;
+    }
+
+    // Recent-runs rail — capped; opens each run's thread.
+    const RUN_CAP = 6;
+    const runsPanel = el('aside', { class: 'cd-au-home-runs' }, [
+      el('div', { class: 'cd-au-home-runs-h cd-eyebrow' }, 'Recent runs'),
+      runs.length
+        ? el(
+            'div',
+            { class: 'cd-au-home-runs-list' },
+            runs.slice(0, RUN_CAP).map(renderOverviewRunRow),
+          )
+        : el('div', { class: 'cd-au-home-runs-empty' }, 'No runs recorded yet.'),
+    ]);
+
+    section.append(
+      el('div', { class: 'cd-au-home-cols' }, [
+        el(
+          'div',
+          { class: 'cd-au-home-list' },
+          rows.map((r) => renderOverviewAutomationRow(r, lastByRef.get(r.ref))),
+        ),
+        runsPanel,
+      ]),
+    );
     return section;
   }
 
@@ -1734,19 +1709,190 @@ import { cronNextRuns } from './cron.js';
     // built shell is swapped in atomically by mountShellPage below.
     teardownCurrent();
     const seq = renderSeq;
-    const availableTemplates = await loadAvailableTemplates();
-    const { main, scroll } = pageScroll(
-      'Discover',
-      'Start from a template — clone it and make it yours.',
-    );
-    if (availableTemplates.length > 0) {
-      const grid = el('div', { class: 'cd-tmpl-grid' });
-      for (const tmpl of availableTemplates) grid.append(renderTemplateCard(tmpl));
-      scroll.append(grid);
-    } else {
-      scroll.append(renderSimpleEmpty('No templates available yet.'));
+    // Discover now lists BOTH app and automation templates so the kind
+    // segmented filter (All / Apps / Automations) is meaningful. The two
+    // loaders split the one catalog on `kind`; concatenating keeps apps
+    // first so the "All" view leads with them.
+    const [appTemplates, automationTemplates] = await Promise.all([
+      loadAvailableTemplates(),
+      loadAutomationTemplates(),
+    ]);
+    const all = [...appTemplates, ...automationTemplates];
+
+    const main = el('div', { class: 'has-wall' });
+    const scroll = el('div', { class: 'cd-main-scroll' });
+    main.append(scroll);
+
+    // Kind filter state — drives which slice paints below.
+    let kind: 'all' | 'app' | 'automation' = 'all';
+
+    const results = el('div', { class: 'cd-disc-cats' });
+    const paint = (): void => {
+      const shown = kind === 'all' ? all : kind === 'app' ? appTemplates : automationTemplates;
+      if (shown.length === 0) {
+        results.replaceChildren(renderSimpleEmpty('No templates available yet.'));
+        return;
+      }
+      // Group by category. Automations carry one; apps don't, so they bucket
+      // under a single "Apps" heading (first-seen order preserves apps-first).
+      const order: string[] = [];
+      const groups = new Map<string, TemplateEntry[]>();
+      for (const t of shown) {
+        const cat = t.category ?? (isAutomationTemplate(t) ? 'Automations' : 'Apps');
+        let bucket = groups.get(cat);
+        if (!bucket) {
+          bucket = [];
+          groups.set(cat, bucket);
+          order.push(cat);
+        }
+        bucket.push(t);
+      }
+      results.replaceChildren(
+        ...order.map((cat) => {
+          const bucket = groups.get(cat) ?? [];
+          return el('section', { class: 'cd-disc-cat' }, [
+            el('div', { class: 'cd-disc-cat-head' }, [
+              el('span', { class: 'cd-disc-cat-label' }, cat),
+              el('span', { class: 'cd-disc-cat-count' }, String(bucket.length).padStart(2, '0')),
+            ]),
+            el('div', { class: 'cd-disc-grid' }, bucket.map(renderDiscoverTemplateCard)),
+          ]);
+        }),
+      );
+    };
+
+    // Segmented kind filter — pill control, top-right of the header.
+    const seg = el('div', {
+      class: 'cd-disc-seg',
+      role: 'tablist',
+      'aria-label': 'Filter templates by kind',
+    });
+    const sync = (): void => {
+      for (const b of seg.querySelectorAll<HTMLElement>('.cd-disc-seg-b'))
+        b.dataset.active = String(b.dataset.k === kind);
+    };
+    const segDefs = [
+      { k: 'all', label: 'All', count: all.length, icon: null },
+      { k: 'app', label: 'Apps', count: appTemplates.length, icon: 'Home' },
+      { k: 'automation', label: 'Automations', count: automationTemplates.length, icon: 'Bolt' },
+    ] as const;
+    for (const d of segDefs) {
+      seg.append(
+        el(
+          'button',
+          {
+            class: 'cd-disc-seg-b',
+            type: 'button',
+            role: 'tab',
+            'data-k': d.k,
+            onClick: () => {
+              kind = d.k;
+              sync();
+              paint();
+            },
+          },
+          [
+            ...(d.icon
+              ? [
+                  el('span', {
+                    class: 'cd-disc-seg-ic',
+                    'aria-hidden': 'true',
+                    trustedHtml: Icon[d.icon]({ size: 13 }),
+                  }),
+                ]
+              : []),
+            el('span', {}, d.label),
+            el('span', { class: 'cd-disc-seg-n' }, `· ${d.count}`),
+          ],
+        ),
+      );
     }
+
+    scroll.append(
+      el('div', { class: 'cd-disc-head' }, [
+        el('div', { class: 'cd-disc-head-text' }, [
+          el('div', { class: 'cd-eyebrow' }, 'Discover'),
+          el('h1', {}, 'Templates'),
+          el(
+            'p',
+            {},
+            'Start from a blueprint — an app you open or an automation that runs for you. Clone it, then describe your tweaks in the builder.',
+          ),
+        ]),
+        seg,
+      ]),
+      results,
+    );
+    sync();
+    paint();
     mountShellPage('discover', main, seq);
+  }
+
+  // Unified Discover template card — one wide card for both apps and
+  // automations (the kind badge + trigger metadata distinguish them).
+  // Click opens the matching preview; right-click opens the template menu.
+  function renderDiscoverTemplateCard(t: TemplateEntry): HTMLElement {
+    const isAuto = isAutomationTemplate(t);
+    const card = el('button', {
+      class: 'cd-disc-card',
+      type: 'button',
+      'data-kind': isAuto ? 'automation' : 'app',
+      onClick: () => (isAuto ? openAutomationTemplatePreview(t) : openTemplatePreview(t)),
+      onContextmenu: (e: Event) => {
+        e.preventDefault();
+        const me = e as MouseEvent;
+        openTemplateContextMenu(t, { kind: 'point', x: me.clientX, y: me.clientY });
+      },
+    });
+
+    const color = (window.ICON_PALETTE as Record<string, string>)[t.colorKey] || '#7C5BD9';
+    const iconEl = el('div', {
+      class: 'cd-disc-card-icon',
+      trustedHtml: Icon[t.iconKey as IconNameType]
+        ? Icon[t.iconKey as IconNameType]({ size: 18, strokeWidth: 1.85 })
+        : '',
+    });
+    const finish = window.CentraidTokens.tileFinish(color as ColorHexType, prefs.tileVariant);
+    iconEl.style.background = finish.background;
+    iconEl.style.color = finish.glyphColor;
+    if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
+
+    card.append(
+      el('div', { class: 'cd-disc-card-top' }, [
+        iconEl,
+        el('div', { class: 'cd-disc-card-head' }, [
+          el('div', { class: 'cd-disc-card-name' }, t.name),
+          el('div', { class: 'cd-disc-card-desc' }, t.desc),
+        ]),
+      ]),
+    );
+
+    // Foot: kind badge, then (automations only) trigger badge + integration
+    // dots pushed to the right.
+    const foot = el('div', { class: 'cd-disc-card-foot' }, [
+      el('span', { class: 'cd-disc-badge', 'data-kind': isAuto ? 'automation' : 'app' }, [
+        el('span', {
+          'aria-hidden': 'true',
+          trustedHtml: (isAuto ? Icon.Bolt : Icon.Home)({ size: 12 }),
+        }),
+        el('span', {}, isAuto ? 'Automation' : 'App'),
+      ]),
+    ]);
+    if (isAuto) {
+      foot.append(
+        el('span', { class: 'cd-disc-trig' }, [
+          el('span', {
+            'aria-hidden': 'true',
+            trustedHtml: (t.triggerKind === 'webhook' ? Icon.Webhook : Icon.Clock)({ size: 12 }),
+          }),
+          el('span', {}, t.triggerKind === 'webhook' ? 'Webhook' : 'Cron'),
+        ]),
+      );
+      if ((t.integrations?.length ?? 0) > 0)
+        foot.append(integrationDots([...(t.integrations ?? [])]));
+    }
+    card.append(foot);
+    return card;
   }
 
   function renderStarred(): void {
@@ -2110,8 +2256,8 @@ import { cronNextRuns } from './cron.js';
       return wrap;
     }
 
-    // Left — your automations.
-    const listCol = el('div', {}, [
+    // Your automations — full-width list.
+    wrap.append(
       el('div', { class: 'cd-au-ov-sec' }, [
         el('span', { class: 'cd-au-ov-sec-t' }, 'Your automations'),
         el('span', { class: 'cd-au-ov-sec-m' }, String(rows.length)),
@@ -2121,20 +2267,37 @@ import { cronNextRuns } from './cron.js';
         { class: 'cd-au-ov-list' },
         rows.map((r) => renderOverviewAutomationRow(r, lastByRef.get(r.ref))),
       ),
-    ]);
+    );
 
-    // Right — recent run stream.
-    const runStream = runs.length
-      ? el('div', { class: 'cd-au-ov-stream' }, runs.slice(0, 24).map(renderOverviewRunRow))
-      : el('div', { class: 'cd-au-ov-stream cd-au-ov-stream-empty' }, 'No runs recorded yet.');
-    const runCol = el('div', {}, [
-      el('div', { class: 'cd-au-ov-sec' }, [
+    // Recent runs — a full-width section BELOW the automations list (not a
+    // right-hand pane). "View all" expands the capped feed to full history.
+    const RUN_CAP = 6;
+    const runsSection = el('div', { class: 'cd-au-ov-runs' });
+    const paintRuns = (expanded: boolean): void => {
+      const header = el('div', { class: 'cd-au-ov-sec' }, [
         el('span', { class: 'cd-au-ov-sec-t' }, 'Recent runs'),
-      ]),
-      runStream,
-    ]);
-
-    wrap.append(el('div', { class: 'cd-au-ov-cols' }, [listCol, runCol]));
+        ...(runs.length > 0 ? [el('span', { class: 'cd-au-ov-sec-m' }, String(runs.length))] : []),
+      ]);
+      if (runs.length > RUN_CAP) {
+        header.append(
+          el('button', {
+            class: 'cd-au-ov-viewall',
+            type: 'button',
+            trustedHtml: expanded
+              ? '<span>Show less</span>'
+              : `<span>View all</span>${Icon.ChevronRight({ size: 13 })}`,
+            onClick: () => paintRuns(!expanded),
+          }),
+        );
+      }
+      const shown = expanded ? runs : runs.slice(0, RUN_CAP);
+      const stream = runs.length
+        ? el('div', { class: 'cd-au-ov-stream' }, shown.map(renderOverviewRunRow))
+        : el('div', { class: 'cd-au-ov-stream cd-au-ov-stream-empty' }, 'No runs recorded yet.');
+      runsSection.replaceChildren(header, stream);
+    };
+    paintRuns(false);
+    wrap.append(runsSection);
     return wrap;
   }
 
@@ -2603,13 +2766,18 @@ import { cronNextRuns } from './cron.js';
     };
   }
 
-  // One run in the viewer's history list — opens as a chat thread.
+  // One run in the viewer's history list — opens as a chat thread. Layout:
+  // status icon · summary (red on failure) · trigger badge · time over
+  // duration·tokens.
   function renderAuRunRow(run: CentraidAutomationRunRecord): HTMLElement {
     const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
-    const duration =
-      run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
-    const meta = [run.triggerOrigin ?? run.triggerKind, duration, `${fmtTokens(tokens)} tokens`];
-    if (run.totalCostUsd) meta.push(`$${run.totalCostUsd.toFixed(2)}`);
+    const dur = run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
+    const trig: { icon: IconNameType; label: string } =
+      run.triggerOrigin === 'webhook'
+        ? { icon: 'Webhook', label: 'Webhook' }
+        : run.triggerKind === 'manual'
+          ? { icon: 'Play', label: 'Manual' }
+          : { icon: 'Clock', label: 'Cron' };
     return el(
       'button',
       {
@@ -2621,17 +2789,25 @@ import { cronNextRuns } from './cron.js';
         },
       },
       [
-        el('span', { class: 'cd-au-run-dot', 'aria-hidden': 'true' }),
-        el('span', { class: 'cd-au-run-mid' }, [
-          el(
-            'span',
-            { class: 'cd-au-run-sum' },
-            run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
-          ),
-          el('span', { class: 'cd-au-run-meta' }, meta.join('  ·  ')),
+        el('span', {
+          class: 'cd-au-run-ic',
+          'data-ok': String(run.ok),
+          'aria-hidden': 'true',
+          trustedHtml: run.ok ? Icon.CheckCircle({ size: 15 }) : Icon.AlertCircle({ size: 15 }),
+        }),
+        el(
+          'span',
+          { class: 'cd-au-run-sum' },
+          run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
+        ),
+        el('span', { class: 'cd-au-run-trig' }, [
+          el('span', { 'aria-hidden': 'true', trustedHtml: Icon[trig.icon]({ size: 12 }) }),
+          el('span', {}, trig.label),
         ]),
-        el('span', { class: 'cd-au-run-when' }, new Date(run.startedAt).toLocaleString()),
-        el('span', { class: 'cd-au-run-go', trustedHtml: Icon.ArrowRight({ size: 15 }) }),
+        el('span', { class: 'cd-au-run-when' }, [
+          el('b', {}, relativeTime(new Date(run.startedAt).toISOString())),
+          el('span', { class: 'cd-au-run-when-meta' }, `${dur} · ${fmtTokens(tokens)}`),
+        ]),
       ],
     );
   }
@@ -2689,19 +2865,58 @@ import { cronNextRuns } from './cron.js';
     ]);
 
     const hasRun = runs.length > 0;
+    // Title: glyph tile + name; the one-line description rides beneath it.
+    // The status pill is NOT here — it lives in the trigger hero (top-right).
     const title = el('div', { class: 'cd-au-vtitle' }, [
-      autoGlyphTile(row.id, { size: 42, glyphSize: 19 }),
-      el('h1', {}, row.name),
-      auStatusPill(auStatusForRow(row.enabled, hasRun)),
+      autoGlyphTile(row.id, { size: 46, glyphSize: 21 }),
+      el('div', { class: 'cd-au-vtitle-text' }, [
+        el('h1', {}, row.name),
+        ...(row.manifest.description
+          ? [el('p', { class: 'cd-au-vsub' }, row.manifest.description)]
+          : []),
+      ]),
     ]);
 
+    const deleteBtn = el('button', {
+      class: 'cd-au-btn cd-au-btn-danger cd-au-btn-icon',
+      type: 'button',
+      title: 'Delete automation',
+      'aria-label': `Delete ${row.name}`,
+      trustedHtml: Icon.Trash({ size: 15 }),
+    }) as HTMLButtonElement;
+    deleteBtn.addEventListener('click', () => {
+      void (async () => {
+        const ok = await openConfirm({
+          title: 'Delete automation?',
+          message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
+          confirmLabel: 'Delete',
+          danger: true,
+        });
+        if (!ok) return;
+        deleteBtn.disabled = true;
+        editBtn.disabled = true;
+        runBtn.disabled = true;
+        try {
+          await deleteAutomation({ automationId: row.ref });
+          showToast(`Deleted "${row.name}"`);
+          renderAutomations();
+        } catch (err) {
+          deleteBtn.disabled = false;
+          editBtn.disabled = false;
+          runBtn.disabled = false;
+          showToast(
+            `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      })();
+    });
     const editBtn = el('button', {
       class: 'cd-au-btn cd-au-btn-ghost cd-au-btn-icon',
       type: 'button',
       title: 'Edit in builder',
       trustedHtml: Icon.Pencil({ size: 15 }),
       onClick: () => enterAutomationBuilder({ automationId: row.id }),
-    });
+    }) as HTMLButtonElement;
     const runBtn = el('button', {
       class: 'cd-au-btn cd-au-btn-primary',
       type: 'button',
@@ -2724,7 +2939,7 @@ import { cronNextRuns } from './cron.js';
     });
     const header = el('div', { class: 'cd-au-vhead' }, [
       el('div', {}, [crumb, title]),
-      el('div', { class: 'cd-au-actions' }, [editBtn, runBtn]),
+      el('div', { class: 'cd-au-actions' }, [deleteBtn, editBtn, runBtn]),
     ]);
     view.append(header);
 
@@ -2738,30 +2953,39 @@ import { cronNextRuns } from './cron.js';
     const triggerDetail = el('div', { class: 'cd-au-hero-detail' });
     if (hasCron) {
       for (const expr of cronExprs) {
-        triggerDetail.append(el('span', { class: 'cd-au-hero-tag' }, 'cron'), el('code', {}, expr));
+        triggerDetail.append(
+          el('span', { class: 'cd-au-hero-cron' }, [
+            el('span', {
+              class: 'cd-au-hero-cron-ic',
+              'aria-hidden': 'true',
+              trustedHtml: Icon.Braces({ size: 12 }),
+            }),
+            el('code', {}, expr),
+          ]),
+        );
       }
     }
 
-    // Next-3-runs pills (cron only).
+    // Next-3-runs pills (cron only) — relative day labels, first one active.
     const nextRuns = el('div', { class: 'cd-au-hero-next' });
     if (hasCron && cronExprs[0]) {
       const upcoming = cronNextRuns(cronExprs[0], 3);
       if (upcoming.length > 0) {
-        nextRuns.append(el('span', { class: 'cd-au-hero-next-lbl' }, 'Next'));
-        for (const d of upcoming) {
-          nextRuns.append(
+        nextRuns.append(el('div', { class: 'cd-au-hero-next-lbl' }, 'Next 3 runs'));
+        const pills = el('div', { class: 'cd-au-hero-next-pills' });
+        upcoming.forEach((d, i) => {
+          pills.append(
             el(
               'span',
-              { class: 'cd-au-hero-next-pill' },
-              d.toLocaleString(undefined, {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
+              { class: 'cd-au-hero-next-pill', 'data-active': i === 0 ? 'true' : undefined },
+              [
+                el('i', { class: 'cd-au-hero-next-dot', 'aria-hidden': 'true' }),
+                el('span', {}, relativeRunLabel(d)),
+              ],
             ),
           );
-        }
+        });
+        nextRuns.append(pills);
       }
     }
 
@@ -2824,15 +3048,9 @@ import { cronNextRuns } from './cron.js';
     toggleInput.checked = row.enabled;
     toggleInput.setAttribute('aria-checked', String(row.enabled));
     toggleInput.setAttribute('aria-label', `${row.enabled ? 'Disable' : 'Enable'} ${row.name}`);
-    const toggleState = el(
-      'span',
-      { class: 'cd-au-hero-toggle-state' },
-      row.enabled ? 'Active' : 'Paused',
-    );
     toggleInput.addEventListener('change', () => {
       const next = toggleInput.checked;
       toggleInput.disabled = true;
-      toggleState.textContent = next ? 'Enabling…' : 'Disabling…';
       void (async () => {
         try {
           await setAutomationEnabled({ automationId: row.ref, enabled: next });
@@ -2845,7 +3063,6 @@ import { cronNextRuns } from './cron.js';
           toggleInput.checked = row.enabled;
           toggleInput.setAttribute('aria-checked', String(row.enabled));
           toggleInput.disabled = false;
-          toggleState.textContent = row.enabled ? 'Active' : 'Paused';
           showToast(
             `Could not ${next ? 'enable' : 'disable'} ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
           );
@@ -2858,7 +3075,11 @@ import { cronNextRuns } from './cron.js';
     );
 
     const heroMain = el('div', { class: 'cd-au-hero-main' }, [
-      el('div', { class: 'cd-au-hero-eyebrow' }, hasWebhook && !hasCron ? 'Trigger' : 'Schedule'),
+      el(
+        'div',
+        { class: 'cd-au-hero-eyebrow cd-au-hero-kind' },
+        hasWebhook && !hasCron ? 'Webhook' : 'Cron schedule',
+      ),
       el('div', { class: 'cd-au-hero-when' }, triggersSummary(row.triggers)),
       triggerDetail,
     ]);
@@ -2873,35 +3094,37 @@ import { cronNextRuns } from './cron.js';
       }),
       heroMain,
       el('div', { class: 'cd-au-hero-status' }, [
-        el('div', { class: 'cd-au-hero-eyebrow' }, 'Status'),
-        el('div', { class: 'cd-au-hero-toggle' }, [statusToggle, toggleState]),
+        auStatusPill(auStatusForRow(row.enabled, hasRun)),
+        el('div', { class: 'cd-au-hero-toggle' }, [
+          el('span', { class: 'cd-au-hero-toggle-lbl' }, 'Enabled'),
+          statusToggle,
+        ]),
       ]),
     ]);
     view.append(hero);
 
-    // ── Two columns: instructions + runs / side rail ──
+    // ── Two columns: run history / side rail ──
     const cols = el('div', { class: 'cd-au-cols' });
 
-    const instrCard = el('div', { class: 'cd-au-card' }, [
-      el('div', { class: 'cd-au-card-h' }, [el('h3', {}, 'Instructions')]),
-      el('div', { class: 'cd-au-instr' }, row.manifest.prompt || 'No instructions yet.'),
-    ]);
-
-    // Runs card — filter chips repaint just the list container.
+    // Run history — a header (title + segmented filter) then the rows. The
+    // filter chips repaint just the list container. Labels read All / Cron /
+    // Webhook / Manual; "cron" maps to scheduled fires.
     const runsBody = el('div', { class: 'cd-au-runs' });
     const filters = el('div', { class: 'cd-au-filters' });
     let runFilter = 'all';
     const matchesFilter = (run: CentraidAutomationRunRecord): boolean => {
       if (runFilter === 'all') return true;
       if (runFilter === 'webhook') return run.triggerOrigin === 'webhook';
-      return run.triggerKind === runFilter;
+      if (runFilter === 'cron') return run.triggerKind === 'scheduled';
+      if (runFilter === 'manual') return run.triggerKind === 'manual';
+      return true;
     };
     const paintRuns = (): void => {
       const shown = runs.filter(matchesFilter);
       runsBody.replaceChildren(
         ...(shown.length
           ? shown.map(renderAuRunRow)
-          : [el('div', { class: 'cd-au-runs-empty' }, `No ${runFilter} runs yet.`)]),
+          : [el('div', { class: 'cd-au-runs-empty' }, 'No runs in this view yet.')]),
       );
       for (const chip of filters.children) {
         const c = chip as HTMLElement;
@@ -2909,81 +3132,136 @@ import { cronNextRuns } from './cron.js';
         else delete c.dataset.active;
       }
     };
-    for (const f of ['all', 'scheduled', 'manual', 'webhook']) {
+    for (const [key, label] of [
+      ['all', 'All'],
+      ['cron', 'Cron'],
+      ['webhook', 'Webhook'],
+      ['manual', 'Manual'],
+    ] as const) {
       filters.append(
         el(
           'button',
           {
             class: 'cd-au-filter',
             type: 'button',
-            'data-filter': f,
+            'data-filter': key,
             onClick: () => {
-              runFilter = f;
+              runFilter = key;
               paintRuns();
             },
           },
-          f,
+          label,
         ),
       );
     }
     paintRuns();
-    const runsCard = el('div', { class: 'cd-au-card' }, [
-      el('div', { class: 'cd-au-card-h' }, [
-        el('h3', {}, 'Runs'),
-        el('span', { class: 'cd-au-card-count' }, String(runs.length)),
-      ]),
-      filters,
-      runsBody,
+    const runsCard = el('div', { class: 'cd-au-runhist' }, [
+      el('div', { class: 'cd-au-runhist-h' }, [el('h2', {}, 'Run history'), filters]),
+      el('div', { class: 'cd-au-card' }, [runsBody]),
     ]);
+    cols.append(el('div', { class: 'cd-au-col-main' }, [runsCard]));
 
-    cols.append(el('div', { class: 'cd-au-col-main' }, [instrCard, runsCard]));
-
-    // ── Side rail ──
-    const aboutRow = (k: string, v: HTMLElement | string): HTMLElement =>
-      el('div', { class: 'cd-au-about-row' }, [
-        el('span', { class: 'cd-au-about-k' }, k),
-        typeof v === 'string' ? el('span', { class: 'cd-au-about-v' }, v) : v,
+    // ── Side rail: Last 30 days · Behavior + Tools ──
+    const now = Date.now();
+    const recentRuns = runs.filter((r) => now - r.startedAt <= 30 * 86_400_000);
+    const life = automationLifetime(recentRuns);
+    const kpi = (icon: IconNameType, label: string, value: string, ok?: boolean): HTMLElement =>
+      el('div', { class: 'cd-au-kpi' }, [
+        el('div', { class: 'cd-au-kpi-l' }, [
+          el('span', {
+            class: 'cd-au-kpi-ic',
+            'aria-hidden': 'true',
+            trustedHtml: Icon[icon]({ size: 13 }),
+          }),
+          el('span', {}, label),
+        ]),
+        el('div', { class: 'cd-au-kpi-v', ...(ok ? { 'data-ok': 'true' } : {}) }, value),
       ]);
-    const aboutCard = el('div', { class: 'cd-au-card' }, [
-      el('div', { class: 'cd-au-card-h' }, [el('h3', {}, 'About')]),
-      aboutRow('Owner', row.ownerApp),
-      aboutRow('Model', row.manifest.requires.model ?? 'Default'),
-      aboutRow(
-        'Apps',
-        row.manifest.apps && row.manifest.apps.length > 0
-          ? row.manifest.apps.join(', ')
-          : 'None linked',
-      ),
+    const statsCard = el('div', { class: 'cd-au-card cd-au-rail-card' }, [
+      el('div', { class: 'cd-au-rail-eyebrow' }, 'Last 30 days'),
+      el('div', { class: 'cd-au-kpis' }, [
+        kpi('Activity', 'Runs · 30d', String(life.total)),
+        kpi('CheckCircle', 'Success', life.successPct === null ? '—' : `${life.successPct}%`, true),
+        kpi('Clock', 'Avg duration', life.avg),
+        kpi('Coin', 'Cost · 30d', life.cost),
+      ]),
     ]);
-    const mcps = row.manifest.requires.mcps ?? [];
-    if (mcps.length > 0) {
-      aboutCard.append(
-        el('div', { class: 'cd-au-about-row cd-au-about-row-wrap' }, [
-          el('span', { class: 'cd-au-about-k' }, 'Uses'),
-          renderIntegrationChips([...mcps]),
+
+    const behaviorRow = (icon: IconNameType, label: string, value: string): HTMLElement =>
+      el('div', { class: 'cd-au-beh-row' }, [
+        el('span', {
+          class: 'cd-au-beh-ic',
+          'aria-hidden': 'true',
+          trustedHtml: Icon[icon]({ size: 14 }),
+        }),
+        el('span', { class: 'cd-au-beh-k' }, label),
+        el('span', { class: 'cd-au-beh-v' }, value),
+      ]);
+    const model = row.manifest.requires.model ?? row.manifest.costEstimate?.model ?? 'Default';
+    const onFailure = row.manifest.onFailure ? `Run "${row.manifest.onFailure}"` : 'Stop';
+    const behaviorCard = el('div', { class: 'cd-au-card cd-au-rail-card' }, [
+      el('div', { class: 'cd-au-rail-eyebrow' }, 'Behavior'),
+      behaviorRow('Settings', 'Model', model),
+      behaviorRow('History', 'Run history', fmtRetention(row.manifest.history.keep)),
+      behaviorRow('AlertTriangle', 'On failure', onFailure),
+    ]);
+    // Tools — method-level names (gmail.search, …) when the manifest carries
+    // them, else the coarser MCP server list. Sits inside the Behavior card.
+    const tools = row.manifest.requires.tools ?? [];
+    const toolList = tools.length > 0 ? tools : (row.manifest.requires.mcps ?? []);
+    if (toolList.length > 0) {
+      behaviorCard.append(
+        el('div', { class: 'cd-au-tools-sec' }, [
+          el('div', { class: 'cd-au-rail-eyebrow cd-au-rail-eyebrow-sub' }, 'Tools'),
+          el(
+            'div',
+            { class: 'cd-au-tools' },
+            toolList.map((t) =>
+              el('span', { class: 'cd-au-tool-chip' }, [
+                el('span', {
+                  class: 'cd-au-tool-ic',
+                  'aria-hidden': 'true',
+                  trustedHtml: Icon.Plug({ size: 11 }),
+                }),
+                el('code', {}, t),
+              ]),
+            ),
+          ),
         ]),
       );
     }
 
-    const life = automationLifetime(runs);
-    const statTile = (value: string, label: string, ok?: boolean): HTMLElement =>
-      el('div', { class: 'cd-au-stat' }, [
-        el('div', { class: 'cd-au-stat-v', ...(ok ? { 'data-ok': 'true' } : {}) }, value),
-        el('div', { class: 'cd-au-stat-k' }, label),
-      ]);
-    const statsCard = el('div', { class: 'cd-au-card' }, [
-      el('div', { class: 'cd-au-card-h' }, [el('h3', {}, 'Lifetime')]),
-      el('div', { class: 'cd-au-stats' }, [
-        statTile(String(life.total), 'Runs'),
-        statTile(life.successPct === null ? '—' : `${life.successPct}%`, 'Success', true),
-        statTile(life.avg, 'Avg time'),
-        statTile(life.cost, 'Total cost'),
-      ]),
-    ]);
-
-    cols.append(el('div', { class: 'cd-au-side' }, [aboutCard, statsCard]));
+    cols.append(el('div', { class: 'cd-au-side' }, [statsCard, behaviorCard]));
     view.append(cols);
     return view;
+  }
+
+  // Retention label for the Behavior panel — mirrors the builder's config
+  // pane wording ("Keep …") over the manifest's `history.keep` shape.
+  function fmtRetention(keep: CentraidAutomationManifest['history']['keep']): string {
+    if (keep === 'all') return 'Keep all runs';
+    if (keep === 'errors') return 'Keep failed only';
+    if (typeof keep === 'object' && 'count' in keep) return `Keep ${keep.count} runs`;
+    if (typeof keep === 'object' && 'days' in keep) return `Keep ${keep.days} days`;
+    return '—';
+  }
+
+  // A cron next-run pill label: "Today, 6:00 PM" / "Tomorrow, 6:00 PM" /
+  // "Thu, 6:00 PM" (weekday within the week, else "Mon 9").
+  function relativeRunLabel(d: Date): string {
+    const startOfDay = (x: Date): number =>
+      new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const dayDiff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86_400_000);
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const day =
+      dayDiff === 0
+        ? 'Today'
+        : dayDiff === 1
+          ? 'Tomorrow'
+          : dayDiff > 1 && dayDiff < 7
+            ? d.toLocaleDateString(undefined, { weekday: 'short' })
+            : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return `${day}, ${time}`;
   }
 
   // ───────────────────── Run viewer (chat thread) ──────────────────
@@ -3380,16 +3658,32 @@ import { cronNextRuns } from './cron.js';
     const headStatus = inFlight
       ? auStatusPill('running')
       : auStatusPill(run.ok ? 'success' : 'failed', run.ok ? 'Completed' : 'Failed');
+    // Subtitle reads like the spec: "Today, 6:00:02 PM · <model>". Trigger,
+    // tokens, duration and outcome live in the KPI strip (log mode) or the
+    // right rail (timeline), so the header stays a clean when + model line.
+    const startedLabel = ((): string => {
+      const d = new Date(run.startedAt);
+      const nowMs = Date.now();
+      const ds = d.toDateString();
+      const day =
+        ds === new Date(nowMs).toDateString()
+          ? 'Today'
+          : ds === new Date(nowMs - 86_400_000).toDateString()
+            ? 'Yesterday'
+            : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+      const time = d.toLocaleTimeString(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      return `${day}, ${time}`;
+    })();
     wrap.append(
       el('div', { class: 'cd-au-rv-head' }, [
         autoGlyphTile(row.id, { size: 42, glyphSize: 19 }),
         el('div', { class: 'cd-au-rv-head-main' }, [
           el('div', { class: 'cd-au-rv-head-name' }, [row.name, headStatus]),
-          el(
-            'div',
-            { class: 'cd-au-rv-head-meta' },
-            `${triggerLabel}  ·  ${new Date(run.startedAt).toLocaleString()}  ·  ${duration}  ·  ${fmtTokens(tokens)} tokens`,
-          ),
+          el('div', { class: 'cd-au-rv-head-meta' }, `${startedLabel}  ·  ${model}`),
         ]),
         el('div', { class: 'cd-au-actions' }, [
           modeSeg,
@@ -3579,18 +3873,67 @@ import { cronNextRuns } from './cron.js';
     liveText?: Map<number, string>,
   ): HTMLElement {
     const wrap = el('div', { class: 'cd-au-log' });
-    const fmtT = (ms: number): string =>
-      new Date(ms).toLocaleTimeString(undefined, { hour12: false });
+    const start = run.startedAt;
+    const inFlight = run.endedAt === undefined;
     const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
-    const model = row.manifest.requires.model ?? 'Centraid';
+    const fmtClock = (ms: number): string =>
+      new Date(ms).toLocaleTimeString(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+    // The gutter reads elapsed time since the run began (mm:ss.t), so the
+    // column tells the run's internal cadence rather than wall-clock noise.
+    const fmtElapsed = (ms: number): string => {
+      const d = Math.max(0, ms - start);
+      const pad = (n: number): string => String(n).padStart(2, '0');
+      return `${pad(Math.floor(d / 60_000))}:${pad(Math.floor((d % 60_000) / 1000))}.${Math.floor((d % 1000) / 100)}`;
+    };
 
+    // ── KPI strip: Trigger · Tokens · Cost · Duration · Outcome ──
+    const origin = run.triggerOrigin ?? (run.triggerKind === 'manual' ? 'manual' : 'cron');
+    const trig =
+      origin === 'webhook'
+        ? { icon: 'Webhook' as const, label: 'Webhook' }
+        : origin === 'manual'
+          ? { icon: 'Play' as const, label: 'Manual' }
+          : { icon: 'Clock' as const, label: 'Cron' };
+    const durTxt =
+      run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
+    const costTxt = run.totalCostUsd !== undefined ? `$${run.totalCostUsd.toFixed(3)}` : '—';
+    const stat = (label: string, value: string | HTMLElement): HTMLElement =>
+      el('div', { class: 'cd-au-log-stat' }, [
+        el('div', { class: 'cd-au-log-stat-l' }, label),
+        el('div', { class: 'cd-au-log-stat-v' }, [value]),
+      ]);
     wrap.append(
-      el(
-        'div',
-        { class: 'cd-au-log-kpi' },
-        `${run.triggerOrigin ?? run.triggerKind}  ·  ${model}  ·  ${fmtTokens(tokens)} tok  ·  ${run.totalCostUsd ? `$${run.totalCostUsd.toFixed(2)}` : '—'}  ·  ${run.runId}`,
-      ),
+      el('div', { class: 'cd-au-log-stats' }, [
+        stat(
+          'Trigger',
+          el('span', { class: 'cd-au-log-stat-trig' }, [
+            el('span', {
+              class: 'cd-au-log-stat-ic',
+              'aria-hidden': 'true',
+              trustedHtml: Icon[trig.icon]({ size: 13 }),
+            }),
+            el('span', {}, trig.label),
+          ]),
+        ),
+        stat('Tokens', fmtTokens(tokens)),
+        stat('Cost', costTxt),
+        stat('Duration', durTxt),
+        stat(
+          'Outcome',
+          inFlight
+            ? auStatusPill('running')
+            : auStatusPill(run.ok ? 'success' : 'failed', run.ok ? 'Success' : 'Failed'),
+        ),
+      ]),
     );
+
+    // ── Transcript panel ──
+    const panel = el('div', { class: 'cd-au-log-panel' });
+    wrap.append(panel);
 
     const logRow = (
       time: string,
@@ -3606,29 +3949,66 @@ import { cronNextRuns } from './cron.js';
       ]);
     };
 
-    // Trigger.
-    wrap.append(
+    // Collapsible payload chip — "{ } args ⌄" toggles a JSON block below it,
+    // keeping the transcript scannable until a payload is actually wanted.
+    const payloadChip = (label: string, json: string): { chip: HTMLElement; pre: HTMLElement } => {
+      const pre = el('pre', { class: 'cd-au-log-pre' }, prettyJson(json)) as HTMLElement;
+      pre.hidden = true;
+      const chip = el('button', {
+        class: 'cd-au-log-chip',
+        type: 'button',
+        'aria-expanded': 'false',
+        trustedHtml: `${Icon.Braces({ size: 11 })}<span>${label}</span>`,
+      }) as HTMLButtonElement;
+      chip.append(
+        el('span', {
+          class: 'cd-au-log-chip-chev',
+          'aria-hidden': 'true',
+          trustedHtml: Icon.ChevronDown({ size: 12 }),
+        }),
+      );
+      chip.addEventListener('click', () => {
+        const open = pre.hidden;
+        pre.hidden = !open;
+        chip.setAttribute('aria-expanded', String(open));
+        chip.classList.toggle('cd-au-log-chip--open', open);
+      });
+      return { chip, pre };
+    };
+
+    // Trigger row — "▶ Run started by cron   <expr> · <time>".
+    const cronExpr =
+      run.triggerOrigin === 'webhook'
+        ? undefined
+        : row.triggers.find((t): t is { kind: 'cron'; expr: string } => t.kind === 'cron')?.expr;
+    const startedBy =
+      origin === 'webhook'
+        ? 'Run started by webhook'
+        : origin === 'manual'
+          ? 'Run started manually'
+          : 'Run started by cron';
+    panel.append(
       logRow(
-        fmtT(run.startedAt),
+        fmtElapsed(run.startedAt),
         'trigger',
         el('div', { class: 'cd-au-log-head' }, [
           el('span', {
             class: 'cd-au-log-glyph',
+            'data-status': 'trigger',
             'aria-hidden': 'true',
-            trustedHtml:
-              run.triggerOrigin === 'webhook'
-                ? Icon.Webhook({ size: 12 })
-                : Icon.Clock({ size: 12 }),
+            trustedHtml: Icon.Play({ size: 12 }),
           }),
-          el('span', { class: 'cd-au-log-kind' }, 'trigger'),
-          el('span', { class: 'cd-au-log-name' }, runTriggerLabel(run)),
-          el('span', { class: 'cd-au-log-meta' }, triggersSummary(row.triggers)),
+          el('span', { class: 'cd-au-log-name' }, startedBy),
+          el(
+            'span',
+            { class: 'cd-au-log-meta' },
+            `${cronExpr ?? trig.label.toLowerCase()}  ·  ${fmtClock(run.startedAt)}`,
+          ),
         ]),
-        el('div', { class: 'cd-au-log-instr' }, row.manifest.prompt || 'No instructions.'),
       ),
     );
 
-    // Nodes.
+    // Node rows.
     for (const node of nodes) {
       const status = nodeRunStatus(node);
       const tk = (node.inputTokens ?? 0) + (node.outputTokens ?? 0);
@@ -3653,41 +4033,40 @@ import { cronNextRuns } from './cron.js';
         el('span', { class: 'cd-au-log-name' }, node.name ?? node.model ?? node.kind),
         el('span', { class: 'cd-au-log-meta' }, meta.join('  ·  ')),
       ]);
+
       const body = el('div', { class: 'cd-au-log-body' });
       const live = liveText?.get(node.ordinal);
       if (node.error) body.append(el('div', { class: 'cd-au-tl-error' }, node.error));
       if (node.kind === 'agent') {
+        // The agent's reply streams live, then settles to its recorded output.
         const text = live ?? (node.outputJson ? prettyJson(node.outputJson) : '');
-        if (text) body.append(el('div', { class: 'cd-au-tl-response' }, text));
+        if (text) body.append(el('div', { class: 'cd-au-log-reply' }, text));
       } else {
-        if (node.argsJson) {
-          body.append(
-            el('div', { class: 'cd-au-step-label' }, 'Input'),
-            el('pre', { class: 'cd-au-step-pre' }, prettyJson(node.argsJson)),
-          );
-        }
-        if (node.outputJson) {
-          body.append(
-            el('div', { class: 'cd-au-step-label' }, 'Output'),
-            el('pre', { class: 'cd-au-step-pre' }, prettyJson(node.outputJson)),
-          );
+        const payloads: Array<[string, string]> = [];
+        if (node.argsJson) payloads.push(['args', node.argsJson]);
+        if (node.outputJson) payloads.push(['out', node.outputJson]);
+        if (payloads.length > 0) {
+          const chips = el('div', { class: 'cd-au-log-chips' });
+          const pres = el('div', { class: 'cd-au-log-pres' });
+          for (const [label, json] of payloads) {
+            const { chip, pre } = payloadChip(label, json);
+            chips.append(chip);
+            pres.append(pre);
+          }
+          body.append(chips, pres);
         }
       }
-      wrap.append(
-        logRow(
-          node.startedAt !== undefined ? fmtT(node.startedAt) : '—',
-          status,
-          head,
-          body.hasChildNodes() ? body : undefined,
-        ),
+      panel.append(
+        logRow(fmtElapsed(node.startedAt), status, head, body.hasChildNodes() ? body : undefined),
       );
     }
 
-    // Final outcome.
-    if (run.endedAt === undefined) {
-      wrap.append(
+    // Footer — live spinner while running, else one settled summary line that
+    // mirrors the spec's "✓ Run finished · <summary>".
+    if (inFlight) {
+      panel.append(
         logRow(
-          '…',
+          '··',
           'running',
           el('div', { class: 'cd-au-log-head' }, [
             el('span', {
@@ -3697,46 +4076,34 @@ import { cronNextRuns } from './cron.js';
               'aria-hidden': 'true',
               trustedHtml: Icon.Loader({ size: 12 }),
             }),
-            el('span', { class: 'cd-au-log-kind' }, 'running'),
             el('span', { class: 'cd-au-log-name' }, 'Working — updates live'),
           ]),
         ),
       );
     } else {
-      const tone = run.ok ? 'ok' : 'fail';
-      const body = el('div', { class: 'cd-au-log-body' });
-      if (run.ok) {
-        body.append(el('p', { class: 'cd-au-reply-lead' }, run.summary ?? 'The run completed.'));
-        if (run.outputJson) {
-          body.append(
-            el('div', { class: 'cd-au-step-label' }, 'Output'),
-            el('pre', { class: 'cd-au-step-pre' }, prettyJson(run.outputJson)),
-          );
-        }
-      } else {
-        body.append(
-          el('div', { class: 'cd-au-tl-error' }, run.error ?? 'No error detail was recorded.'),
-        );
-      }
-      wrap.append(
-        logRow(
-          run.endedAt !== undefined ? fmtT(run.endedAt) : '—',
-          tone,
-          el('div', { class: 'cd-au-log-head' }, [
-            el('span', {
-              class: 'cd-au-log-glyph',
-              'data-status': tone,
-              'aria-hidden': 'true',
-              trustedHtml: run.ok
-                ? Icon.CheckCircle({ size: 12 })
-                : Icon.AlertTriangle({ size: 12 }),
-            }),
-            el('span', { class: 'cd-au-log-kind' }, 'result'),
-            el('span', { class: 'cd-au-log-name' }, run.ok ? 'Completed' : 'Failed'),
-          ]),
-          body,
+      const foot = el('div', { class: 'cd-au-log-foot', 'data-status': run.ok ? 'ok' : 'fail' });
+      foot.append(
+        el('span', {
+          class: 'cd-au-log-foot-ic',
+          'aria-hidden': 'true',
+          trustedHtml: run.ok ? Icon.CheckCircle({ size: 14 }) : Icon.AlertTriangle({ size: 14 }),
+        }),
+        el(
+          'span',
+          { class: 'cd-au-log-foot-tx' },
+          run.ok
+            ? `Run finished${run.summary ? ` · ${run.summary}` : ''}`
+            : (run.error ?? 'Run failed — no error detail recorded.'),
         ),
       );
+      if (run.ok && run.outputJson) {
+        // Keep the raw output reachable without cluttering the summary line.
+        const { chip, pre } = payloadChip('out', run.outputJson);
+        foot.append(chip);
+        panel.append(foot, el('div', { class: 'cd-au-log-foot-pre' }, [pre]));
+      } else {
+        panel.append(foot);
+      }
     }
     return wrap;
   }
@@ -4106,7 +4473,9 @@ import { cronNextRuns } from './cron.js';
 
     const iconEl = el('div', {
       class: 'cd-app-card-icon',
-      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 18, strokeWidth: 1.85 }) : '',
+      // Home tiles render the glyph large + prominent (24px in a ~52px tile)
+      // to match the app-gallery spec; CSS pins the final svg box per variant.
+      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 24, strokeWidth: 1.9 }) : '',
     });
     const finish = window.CentraidTokens.tileFinish(app.color, prefs.tileVariant);
     iconEl.style.background = finish.background;
@@ -4131,16 +4500,27 @@ import { cronNextRuns } from './cron.js';
       },
     });
 
-    card.append(el('div', { class: 'cd-app-card-top' }, [iconEl, star]));
-    card.append(el('div', { class: 'cd-app-card-name' }, app.name));
-    card.append(el('div', { class: 'cd-app-card-desc' }, app.desc || 'No description yet.'));
+    // Horizontal header — large glyph plate on the left, name over blurb
+    // on the right (matches the apps-gallery spec).
+    card.append(
+      el('div', { class: 'cd-app-card-head' }, [
+        iconEl,
+        el('div', { class: 'cd-app-card-head-text' }, [
+          el('div', { class: 'cd-app-card-name' }, app.name),
+          el('div', { class: 'cd-app-card-desc' }, app.desc || 'No description yet.'),
+        ]),
+      ]),
+    );
 
-    // State-aware bottom strip — status label + "·" + timestamp.
+    // Divider + state strip: status label · timestamp on the left, the
+    // hover-revealed star on the right.
     const foot = el('div', { class: 'cd-app-card-foot' });
-    if (tone) foot.append(statusPillEl(tone, tone));
+    const meta = el('div', { class: 'cd-app-card-foot-meta' });
+    if (tone) meta.append(statusPillEl(tone, tone));
     const stamp = draft ? 'saved' : relativeTime(ua?.updatedAt);
-    if (tone) foot.append(el('span', { class: 'cd-app-card-foot-sep' }, '·'));
-    foot.append(el('span', { class: 'cd-app-card-foot-time' }, stamp));
+    if (tone) meta.append(el('span', { class: 'cd-app-card-foot-sep' }, '·'));
+    meta.append(el('span', { class: 'cd-app-card-foot-time' }, stamp));
+    foot.append(meta, star);
     card.append(foot);
     wrap.append(card);
 
@@ -4148,30 +4528,6 @@ import { cronNextRuns } from './cron.js';
       buildMoreButton('App actions', (rect) => openContextMenu(app, { kind: 'rect', rect })),
     );
     return wrap;
-  }
-
-  // Discover-page template card. Shares the exact RefinedAppTile vocabulary
-  // and uniform-height grid as the Home shelf — `buildShelfTile` is the one
-  // card builder, so Discover and the shelf's Templates tab stay in lockstep.
-  // Click opens a preview rather than cloning straight away — keeps a
-  // single-tap from becoming a surprise side effect on disk; the "Use this
-  // template" button in the preview commits the clone.
-  function renderTemplateCard(tmpl: TemplateEntry): HTMLElement {
-    const color = (window.ICON_PALETTE as Record<string, string>)[tmpl.colorKey] || '#7C5BD9';
-    return buildShelfTile({
-      name: tmpl.name,
-      desc: tmpl.desc,
-      iconKey: tmpl.iconKey,
-      color,
-      status: 'template',
-      onClick: () => openTemplatePreview(tmpl),
-      onContextMenu: (me) =>
-        openTemplateContextMenu(tmpl, { kind: 'point', x: me.clientX, y: me.clientY }),
-      more: {
-        label: 'Template actions',
-        onOpen: (rect) => openTemplateContextMenu(tmpl, { kind: 'rect', rect }),
-      },
-    });
   }
 
   // Hover-revealed `•••` action trigger. Sits as a sibling to the card so we
