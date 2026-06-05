@@ -52,8 +52,10 @@ project so `bun run coverage` emits **one v8 report** across the repo. The engin
 packages (`app-engine`, `gateway`, `automation`, `agent-runtime`, `blueprints`)
 are gated on per-package line+branch floors seeded a conservative margin below the
 measured baseline (e.g. app-engine 76.7%→72% lines), so they catch regression
-without flaking and ratchet up over time. Renderer/mobile are tracked, not gated.
-`coverage/` is gitignored.
+without flaking and ratchet up over time. A global `lines: 28` threshold adds a
+repo-wide anti-regression floor across every included file (seeded below the
+measured ~31% total). Renderer/mobile are tracked, not gated. `coverage/` is
+gitignored.
 
 ### Run tests + coverage in CI
 
@@ -91,3 +93,9 @@ what's landed vs. the remaining follow-up under `## Open`.
 - `oxfmt --check .` clean; `oxlint .` 0 warnings / 0 errors; `lint:types`
   (type-aware, incl. tests) ok for all packages.
 - `bun install --frozen-lockfile` clean after the `tsx` removal.
+- Test files are analyzed, not skipped: oxfmt and standard `oxlint .` both
+  process all 80 `*.test.ts` (verified by a planted `no-explicit-any` that
+  repo-wide oxlint caught, then reverted), and the type-aware pass fires rules on
+  them via each package's `tsconfig.test.json` (verified by a planted
+  `await-thenable`, then reverted). `scripts/lint-types.sh` comments corrected
+  from `node:test` to vitest.

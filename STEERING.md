@@ -427,3 +427,5 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-a312fd272c4-1780594850-4 | a312fd27-2c44-4b2f-ba5f-4c3befa82546 | #210 | correction | classifier | Pushes back on disabling rules; wants all categories at error with suppressions |  |
 | steer-ed31e5ae22b-1780598338-1 | ed31e5ae-22b8-499c-9e9e-23131aa4be06 | #212 | correction | classifier | Wanted actual test-coverage implementation + PR, not a strategy doc | test: migrate to vitest with repo-wide v8 coverage and engine floors (#212)Impl… |
 | steer-ed31e5ae22b-1780598338-2 | ed31e5ae-22b8-499c-9e9e-23131aa4be06 | #212 | interrupt | structural |  | test: migrate to vitest with repo-wide v8 coverage and engine floors (#212)Impl… |
+| steer-ed31e5ae22b-1780626254-1 | ed31e5ae-22b8-499c-9e9e-23131aa4be06 | #212 | interrupt | structural |  | test(coverage): add repo-wide line floor; correct lint-types vitest comments (#… |
+| steer-ed31e5ae22b-1780626254-2 | ed31e5ae-22b8-499c-9e9e-23131aa4be06 | #212 | correction | classifier | Told agent to drop current Bash work and pivot to linting test files | test(coverage): add repo-wide line floor; correct lint-types vitest comments (#… |

@@ -36,6 +36,11 @@ export default defineConfig({
       // logic-units + e2e journeys, not a line percentage. Per-glob keys only
       // gate matching files; everything else is tracked, not gated.
       thresholds: {
+        // Repo-wide line floor: a global anti-regression guard across every
+        // included file (renderer/mobile included), seeded below the measured
+        // ~31% total so it catches a broad backslide without flaking. Ratchet
+        // up as renderer logic-extraction and e2e land.
+        lines: 28,
         'packages/app-engine/src/**': { lines: 72, branches: 70 },
         'packages/automation/src/**': { lines: 65, branches: 71 },
         'packages/blueprints/src/**': { lines: 80, branches: 71 },
