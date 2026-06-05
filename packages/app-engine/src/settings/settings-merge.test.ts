@@ -1,33 +1,32 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { buildSettingsInject } from './settings-merge.js';
 
 describe('buildSettingsInject', () => {
   it('routes known keys to the right bucket', () => {
     const out = buildSettingsInject([{ theme: 'dark', bgL: 5, density: 'comfy' }]);
-    assert.deepEqual(out.dataAttrs, { theme: 'dark', density: 'comfy' });
-    assert.deepEqual(out.cssVars, { 'bg-l': '5%' });
+    expect(out.dataAttrs).toEqual({ theme: 'dark', density: 'comfy' });
+    expect(out.cssVars).toEqual({ 'bg-l': '5%' });
   });
 
   it('drops unknown keys silently', () => {
     const out = buildSettingsInject([{ theme: 'dark', somethingElse: 'value' }]);
-    assert.deepEqual(out.dataAttrs, { theme: 'dark' });
-    assert.deepEqual(out.cssVars, {});
+    expect(out.dataAttrs).toEqual({ theme: 'dark' });
+    expect(out.cssVars).toEqual({});
   });
 
   it('coerces booleans for coolCast', () => {
-    assert.deepEqual(buildSettingsInject([{ coolCast: true }]).dataAttrs, { 'cool-cast': 'on' });
-    assert.deepEqual(buildSettingsInject([{ coolCast: false }]).dataAttrs, { 'cool-cast': 'off' });
+    expect(buildSettingsInject([{ coolCast: true }]).dataAttrs).toEqual({ 'cool-cast': 'on' });
+    expect(buildSettingsInject([{ coolCast: false }]).dataAttrs).toEqual({ 'cool-cast': 'off' });
   });
 
   it('coerces numeric bgL into a percentage string', () => {
-    assert.deepEqual(buildSettingsInject([{ bgL: 12 }]).cssVars, { 'bg-l': '12%' });
-    assert.deepEqual(buildSettingsInject([{ bgL: '7' }]).cssVars, { 'bg-l': '7%' });
+    expect(buildSettingsInject([{ bgL: 12 }]).cssVars).toEqual({ 'bg-l': '12%' });
+    expect(buildSettingsInject([{ bgL: '7' }]).cssVars).toEqual({ 'bg-l': '7%' });
   });
 
   it('drops invalid bgL values', () => {
-    assert.deepEqual(buildSettingsInject([{ bgL: 'abc' }]).cssVars, {});
-    assert.deepEqual(buildSettingsInject([{ bgL: NaN }]).cssVars, {});
+    expect(buildSettingsInject([{ bgL: 'abc' }]).cssVars).toEqual({});
+    expect(buildSettingsInject([{ bgL: NaN }]).cssVars).toEqual({});
   });
 
   it('layers later wins, undefined/null falls through', () => {
@@ -36,8 +35,8 @@ describe('buildSettingsInject', () => {
       { theme: 'light' },
       { density: undefined },
     ]);
-    assert.equal(out.dataAttrs.theme, 'light');
-    assert.equal(out.dataAttrs.density, 'compact');
+    expect(out.dataAttrs.theme).toBe('light');
+    expect(out.dataAttrs.density).toBe('compact');
   });
 
   it('null in a later layer also falls through', () => {
@@ -45,40 +44,40 @@ describe('buildSettingsInject', () => {
     // null is intentionally treated as "no value" so the previous layer wins.
     // (Removal at the source is the UserStore's setPrefs({k: null}) deletion,
     //  not a layer-merge concern.)
-    assert.equal(out.dataAttrs.theme, 'dark');
+    expect(out.dataAttrs.theme).toBe('dark');
   });
 
   it('empty layers produce empty result', () => {
     const out = buildSettingsInject([]);
-    assert.deepEqual(out.dataAttrs, {});
-    assert.deepEqual(out.cssVars, {});
+    expect(out.dataAttrs).toEqual({});
+    expect(out.cssVars).toEqual({});
   });
 
   it('skips undefined layer entries', () => {
     const out = buildSettingsInject([undefined, { theme: 'dark' }, undefined]);
-    assert.equal(out.dataAttrs.theme, 'dark');
+    expect(out.dataAttrs.theme).toBe('dark');
   });
 
   it('routes dynamic app-namespace keys to data attrs by default', () => {
     const out = buildSettingsInject([
       { appFont: 'serif', appWidth: 'wide', appCornerRadius: 'pill' },
     ]);
-    assert.deepEqual(out.dataAttrs, {
+    expect(out.dataAttrs).toEqual({
       'app-font': 'serif',
       'app-width': 'wide',
       'app-corner-radius': 'pill',
     });
-    assert.deepEqual(out.cssVars, {});
+    expect(out.cssVars).toEqual({});
   });
 
   it('routes Color/Accent-suffixed app keys to CSS vars', () => {
     const out = buildSettingsInject([{ appColor: '#5847e0', appAccent: '#2EA098' }]);
-    assert.deepEqual(out.cssVars, { 'app-color': '#5847e0', 'app-accent': '#2EA098' });
-    assert.deepEqual(out.dataAttrs, {});
+    expect(out.cssVars).toEqual({ 'app-color': '#5847e0', 'app-accent': '#2EA098' });
+    expect(out.dataAttrs).toEqual({});
   });
 
   it('ignores bare `app` and `apps` (not the namespace prefix)', () => {
     const out = buildSettingsInject([{ app: 'x', apps: 'y', appFoo: 'z' }]);
-    assert.deepEqual(out.dataAttrs, { 'app-foo': 'z' });
+    expect(out.dataAttrs).toEqual({ 'app-foo': 'z' });
   });
 });

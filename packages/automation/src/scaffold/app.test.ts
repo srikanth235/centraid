@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'vitest';
-import assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -47,7 +46,7 @@ describe('automation-app', () => {
 
   it('list returns an empty result for a missing directory', async () => {
     const res = await list(path.join(appsDir, 'nope'));
-    assert.deepEqual(res, { rows: [], errors: [] });
+    expect(res).toEqual({ rows: [], errors: [] });
   });
 
   it('reads an app and hoists the scheduler fields + handle', async () => {
@@ -58,20 +57,20 @@ describe('automation-app', () => {
       manifest({ name: 'Morning digest' }),
     );
     const row = await readAppAt(dir, 'auto.digest');
-    assert.ok(row);
-    assert.equal(row.id, 'digest');
-    assert.equal(row.ownerApp, 'auto.digest');
-    assert.equal(row.ref, 'auto.digest/digest');
-    assert.equal(row.name, 'Morning digest');
-    assert.deepEqual(row.triggers, [{ kind: 'cron', expr: '0 9 * * *' }]);
-    assert.equal(row.enabled, true);
+    expect(row).toBeTruthy();
+    expect(row!.id).toBe('digest');
+    expect(row!.ownerApp).toBe('auto.digest');
+    expect(row!.ref).toBe('auto.digest/digest');
+    expect(row!.name).toBe('Morning digest');
+    expect(row!.triggers).toEqual([{ kind: 'cron', expr: '0 9 * * *' }]);
+    expect(row!.enabled).toBe(true);
   });
 
   it('readAppOwned resolves by (appId, automationId)', async () => {
     await writeAutomation(appsDir, 'auto.digest', 'digest', manifest());
     const row = await readAppOwned(appsDir, 'auto.digest', 'digest');
-    assert.equal(row?.ref, 'auto.digest/digest');
-    assert.equal(await readAppOwned(appsDir, 'auto.digest', 'ghost'), undefined);
+    expect(row?.ref).toBe('auto.digest/digest');
+    expect(await readAppOwned(appsDir, 'auto.digest', 'ghost')).toBe(undefined);
   });
 
   it('lists automations across app folders sorted by name, reports invalid ones', async () => {
@@ -81,16 +80,10 @@ describe('automation-app', () => {
     await fs.mkdir(badDir, { recursive: true });
     await fs.writeFile(path.join(badDir, 'automation.json'), '{not json');
     const res = await list(appsDir);
-    assert.deepEqual(
-      res.rows.map((r) => r.name),
-      ['Alpha', 'Zebra'],
-    );
-    assert.deepEqual(
-      res.rows.map((r) => r.ref),
-      ['ui-app/a', 'auto.zebra/z'],
-    );
-    assert.equal(res.errors.length, 1);
-    assert.equal(res.errors[0]!.id, 'ui-app/broken');
+    expect(res.rows.map((r) => r.name)).toEqual(['Alpha', 'Zebra']);
+    expect(res.rows.map((r) => r.ref)).toEqual(['ui-app/a', 'auto.zebra/z']);
+    expect(res.errors.length).toBe(1);
+    expect(res.errors[0]!.id).toBe('ui-app/broken');
   });
 
   it('setEnabledAt rewrites the manifest in place', async () => {
@@ -101,15 +94,15 @@ describe('automation-app', () => {
       manifest({ enabled: true }),
     );
     const updated = await setEnabledAt(dir, 'auto.digest', false);
-    assert.equal(updated?.enabled, false);
+    expect(updated?.enabled).toBe(false);
     const reread = await readAppAt(dir, 'auto.digest');
-    assert.equal(reread?.enabled, false);
+    expect(reread?.enabled).toBe(false);
   });
 
   it('deleteAt removes the directory and is idempotent', async () => {
     const dir = await writeAutomation(appsDir, 'auto.digest', 'digest', manifest());
     await deleteAt(dir);
-    assert.equal(await readAppAt(dir, 'auto.digest'), undefined);
+    expect(await readAppAt(dir, 'auto.digest')).toBe(undefined);
     await deleteAt(dir);
   });
 });

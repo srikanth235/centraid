@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { ChangeBus, type AppChange } from './change-bus.js';
 
 describe('ChangeBus', () => {
@@ -9,7 +8,7 @@ describe('ChangeBus', () => {
     bus.subscribe('app1', (c) => seen.push(`a:${c.tables.join(',')}`));
     bus.subscribe('app1', (c) => seen.push(`b:${c.tables.join(',')}`));
     bus.emit({ appId: 'app1', tables: ['todos'], ts: 1, source: 'handler' });
-    assert.deepEqual(seen, ['a:todos', 'b:todos']);
+    expect(seen).toEqual(['a:todos', 'b:todos']);
   });
 
   it('does not deliver to subscribers of other apps', () => {
@@ -21,8 +20,8 @@ describe('ChangeBus', () => {
     bus.emit({ appId: 'app1', tables: ['todos'], ts: 1, source: 'handler' });
     bus.emit({ appId: 'app1', tables: ['users'], ts: 2, source: 'handler' });
     bus.emit({ appId: 'app2', tables: ['notes'], ts: 3, source: 'handler' });
-    assert.equal(app1Count, 2);
-    assert.equal(app2Count, 1);
+    expect(app1Count).toBe(2);
+    expect(app2Count).toBe(1);
   });
 
   it('suppresses emits with empty table lists (no point waking subscribers)', () => {
@@ -30,7 +29,7 @@ describe('ChangeBus', () => {
     let count = 0;
     bus.subscribe('app1', () => count++);
     bus.emit({ appId: 'app1', tables: [], ts: 1, source: 'handler' });
-    assert.equal(count, 0);
+    expect(count).toBe(0);
   });
 
   it('unsubscribe stops delivery and removes the listener', () => {
@@ -38,11 +37,11 @@ describe('ChangeBus', () => {
     let count = 0;
     const unsub = bus.subscribe('app1', () => count++);
     bus.emit({ appId: 'app1', tables: ['t'], ts: 1, source: 'handler' });
-    assert.equal(count, 1);
+    expect(count).toBe(1);
     unsub();
     bus.emit({ appId: 'app1', tables: ['t'], ts: 2, source: 'handler' });
-    assert.equal(count, 1, 'unsubscribed listener should not fire again');
-    assert.equal(bus.listenerCount('app1'), 0);
+    expect(count).toBe(1);
+    expect(bus.listenerCount('app1')).toBe(0);
   });
 
   it('isolates a listener that throws from other listeners and from the emitter', () => {
@@ -62,9 +61,11 @@ describe('ChangeBus', () => {
       goodAfter = true;
     });
     // Emit must not propagate the throw.
-    assert.doesNotThrow(() => bus.emit({ appId: 'app1', tables: ['t'], ts: 1, source: 'handler' }));
-    assert.equal(goodAfter, true);
-    assert.ok(warnings.some((w) => w.includes('boom')));
+    expect(() =>
+      bus.emit({ appId: 'app1', tables: ['t'], ts: 1, source: 'handler' }),
+    ).not.toThrow();
+    expect(goodAfter).toBe(true);
+    expect(warnings.some((w) => w.includes('boom'))).toBeTruthy();
   });
 
   it('listener that unsubscribes itself during dispatch does not break iteration', () => {
@@ -79,19 +80,19 @@ describe('ChangeBus', () => {
     bus.emit({ appId: 'app1', tables: ['t'], ts: 1, source: 'handler' });
     bus.emit({ appId: 'app1', tables: ['t'], ts: 2, source: 'handler' });
     // First emit: a, b. Second emit: only b (a unsubscribed itself).
-    assert.deepEqual(order, ['a', 'b', 'b']);
+    expect(order).toEqual(['a', 'b', 'b']);
   });
 
   it('exposes listenerCount for diagnostics', () => {
     const bus = new ChangeBus();
-    assert.equal(bus.listenerCount('app1'), 0);
+    expect(bus.listenerCount('app1')).toBe(0);
     const u1 = bus.subscribe('app1', () => {});
     const u2 = bus.subscribe('app1', () => {});
-    assert.equal(bus.listenerCount('app1'), 2);
+    expect(bus.listenerCount('app1')).toBe(2);
     u1();
-    assert.equal(bus.listenerCount('app1'), 1);
+    expect(bus.listenerCount('app1')).toBe(1);
     u2();
-    assert.equal(bus.listenerCount('app1'), 0);
+    expect(bus.listenerCount('app1')).toBe(0);
   });
 
   it('emit passes through the full AppChange shape including ts', () => {
@@ -99,8 +100,8 @@ describe('ChangeBus', () => {
     const captured: AppChange[] = [];
     bus.subscribe('app1', (c) => captured.push(c));
     bus.emit({ appId: 'app1', tables: ['a', 'b'], ts: 12345, source: 'handler' });
-    assert.equal(captured.length, 1);
-    assert.deepEqual(captured[0], {
+    expect(captured.length).toBe(1);
+    expect(captured[0]).toEqual({
       appId: 'app1',
       tables: ['a', 'b'],
       ts: 12345,

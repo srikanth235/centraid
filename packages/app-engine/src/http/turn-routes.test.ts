@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -44,9 +43,9 @@ test('POST /_turn returns 503 when no runner is configured', async () => {
     },
     body: JSON.stringify({ conversationId: 'w1', message: 'hi' }),
   });
-  assert.equal(res.status, 503);
+  expect(res.status).toBe(503);
   const body = (await res.json()) as { error: string };
-  assert.equal(body.error, 'no_conversation_runner');
+  expect(body.error).toBe('no_conversation_runner');
 });
 
 test('GET /_turn/windows is no longer a route (404)', async () => {
@@ -55,7 +54,7 @@ test('GET /_turn/windows is no longer a route (404)', async () => {
   const res = await fetch(`${server.url}/centraid/demo/_turn/windows`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 404);
+  expect(res.status).toBe(404);
 });
 
 test('POST /_turn drives the runner and streams events', async () => {
@@ -78,15 +77,15 @@ test('POST /_turn drives the runner and streams events', async () => {
     },
     body: JSON.stringify({ conversationId: 'w1', message: 'hello' }),
   });
-  assert.equal(res.status, 200);
-  assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/);
+  expect(res.status).toBe(200);
+  expect(res.headers.get('content-type') ?? '').toMatch(/text\/event-stream/);
   const text = await res.text();
   // SSE frames: each event line + data line + blank.
-  assert.match(text, /event: assistant.start/);
-  assert.match(text, /event: assistant.delta/);
-  assert.match(text, /"delta":"Hi "/);
-  assert.match(text, /event: final/);
-  assert.match(text, /event: end/);
+  expect(text).toMatch(/event: assistant.start/);
+  expect(text).toMatch(/event: assistant.delta/);
+  expect(text).toMatch(/"delta":"Hi "/);
+  expect(text).toMatch(/event: final/);
+  expect(text).toMatch(/event: end/);
 });
 
 test('POST /_turn passes the runner-owned session file under the scratch dir', async () => {
@@ -104,8 +103,8 @@ test('POST /_turn passes the runner-owned session file under the scratch dir', a
     headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ conversationId: 'w1', message: 'hello' }),
   }).then((r) => r.text());
-  assert.equal(path.basename(seenSessionFile), 'w1.jsonl');
-  assert.equal(path.dirname(seenSessionFile), runtime.conversationRunnerSessionDir);
+  expect(path.basename(seenSessionFile)).toBe('w1.jsonl');
+  expect(path.dirname(seenSessionFile)).toBe(runtime.conversationRunnerSessionDir);
 });
 
 test('POST /_turn with invalid conversationId returns 400', async () => {
@@ -120,7 +119,7 @@ test('POST /_turn with invalid conversationId returns 400', async () => {
     },
     body: JSON.stringify({ conversationId: '../escape', message: 'hello' }),
   });
-  assert.equal(res.status, 400);
+  expect(res.status).toBe(400);
 });
 
 test('GET /centraid/_turn/runner-status returns "none" when no runner configured', async () => {
@@ -128,10 +127,10 @@ test('GET /centraid/_turn/runner-status returns "none" when no runner configured
   const res = await fetch(`${server.url}/centraid/_turn/runner-status`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   const body = (await res.json()) as { kind: string; ok: boolean };
-  assert.equal(body.kind, 'none');
-  assert.equal(body.ok, false);
+  expect(body.kind).toBe('none');
+  expect(body.ok).toBe(false);
 });
 
 test('runner error becomes an SSE error frame', async () => {
@@ -148,8 +147,8 @@ test('runner error becomes an SSE error frame', async () => {
     body: JSON.stringify({ conversationId: 'w1', message: 'hello' }),
   });
   const text = await res.text();
-  assert.match(text, /event: error/);
-  assert.match(text, /"message":"model went poof"/);
+  expect(text).toMatch(/event: error/);
+  expect(text).toMatch(/"message":"model went poof"/);
 });
 
 test('conversationLocks are per-runtime — two runtimes sharing appId+conversationId do not cross-block (#113)', async () => {
@@ -231,13 +230,13 @@ test('conversationLocks are per-runtime — two runtimes sharing appId+conversat
       ),
     ]);
 
-    assert.match(bText, /event: final/);
-    assert.match(bText, /"text":"b-final"/);
+    expect(bText).toMatch(/event: final/);
+    expect(bText).toMatch(/"text":"b-final"/);
 
     // Now release A and confirm it completes too.
     releaseA();
     const aText = await aResponsePromise;
-    assert.match(aText, /"text":"a-final"/);
+    expect(aText).toMatch(/"text":"a-final"/);
   } finally {
     releaseA();
     await Promise.all([
@@ -314,13 +313,9 @@ test('chat prompt resolves the manifest via the git-store code-dir override (#13
   }).then((r) => r.text());
 
   await fs.rm(codeDir, { recursive: true, force: true });
-  assert.match(seenPrompt, /addNote/, 'the declared action should appear in the catalog');
-  assert.match(seenPrompt, /listNotes/, 'the declared query should appear in the catalog');
-  assert.doesNotMatch(
-    seenPrompt,
-    /manifest unavailable/,
-    'the override-resolved manifest must populate the catalog (regression: #137 git-store)',
-  );
+  expect(seenPrompt).toMatch(/addNote/);
+  expect(seenPrompt).toMatch(/listNotes/);
+  expect(seenPrompt).not.toMatch(/manifest unavailable/);
 });
 
 beforeEach(() => {

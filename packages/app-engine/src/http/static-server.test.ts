@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -58,14 +57,13 @@ describe('serveStatic — CSP + nonce', () => {
     const html = data.body.toString('utf8');
     // Inline script gets a nonce; external src=… script does NOT.
     const inlineMatch = html.match(/<script\s+nonce="([^"]+)">alert/);
-    assert.ok(inlineMatch, `expected nonce on inline script, got: ${html}`);
-    assert.match(html, /<script\s+src="app\.js"><\/script>/);
+    expect(inlineMatch).toBeTruthy();
+    expect(html).toMatch(/<script\s+src="app\.js"><\/script>/);
     // CSP header carries the same nonce — the inline script is now whitelisted.
     const csp = data.headers['Content-Security-Policy'];
-    assert.ok(csp, 'expected CSP header');
-    assert.match(
-      csp,
-      new RegExp(`script-src 'self' 'nonce-${inlineMatch[1]!.replace(/[/+=]/g, '\\$&')}'`),
+    expect(csp).toBeTruthy();
+    expect(csp).toMatch(
+      new RegExp(`script-src 'self' 'nonce-${inlineMatch![1]!.replace(/[/+=]/g, '\\$&')}'`),
     );
   });
 
@@ -79,12 +77,8 @@ describe('serveStatic — CSP + nonce', () => {
     // Original `nonce="abc"` is preserved (no double-stamping). A second
     // nonce IS expected on the auto-injected change-bus bridge, which the
     // runtime adds to every served HTML — see `injectChangeBridge`.
-    assert.match(html, /<script nonce="abc">/);
-    assert.equal(
-      html.match(/<script nonce="abc">/g)?.length,
-      1,
-      'original nonced script should appear exactly once',
-    );
+    expect(html).toMatch(/<script nonce="abc">/);
+    expect(html.match(/<script nonce="abc">/g)?.length).toBe(1);
   });
 
   it('mints a fresh nonce per response', async () => {
@@ -95,16 +89,16 @@ describe('serveStatic — CSP + nonce', () => {
     await serveStatic(res2, dir, 'index.html', { settingsInject: {} });
     const n1 = d1.body.toString('utf8').match(/nonce="([^"]+)"/)?.[1];
     const n2 = d2.body.toString('utf8').match(/nonce="([^"]+)"/)?.[1];
-    assert.ok(n1 && n2);
-    assert.notEqual(n1, n2);
+    expect(n1 && n2).toBeTruthy();
+    expect(n1).not.toBe(n2);
   });
 
   it("falls back to script-src 'self' for non-HTML responses", async () => {
     const dir = newAppDir({ 'app.js': 'console.log("hi")' });
     const { res, data } = mockRes();
     await serveStatic(res, dir, 'app.js');
-    assert.equal(data.headers['Content-Security-Policy']?.includes('nonce-'), false);
-    assert.match(data.headers['Content-Security-Policy']!, /script-src 'self'/);
+    expect(data.headers['Content-Security-Policy']?.includes('nonce-')).toBe(false);
+    expect(data.headers['Content-Security-Policy']!).toMatch(/script-src 'self'/);
   });
 
   it('auto-injects the change-bus bridge into every served HTML', async () => {
@@ -115,13 +109,13 @@ describe('serveStatic — CSP + nonce', () => {
     await serveStatic(res, dir, 'index.html', { settingsInject: {} });
     const html = data.body.toString('utf8');
     // Bridge inlines the SSE wiring and the `centraid.onChange` sugar.
-    assert.match(html, /centraid\.onChange/);
-    assert.match(html, /EventSource\('_changes'\)/);
-    assert.match(html, /centraid:datachange/);
+    expect(html).toMatch(/centraid\.onChange/);
+    expect(html).toMatch(/EventSource\('_changes'\)/);
+    expect(html).toMatch(/centraid:datachange/);
     // It sits right after the opening <head>, before any user content.
-    assert.match(html, /<head>\s*<script\b[^>]*>\(function\(\)\{/);
+    expect(html).toMatch(/<head>\s*<script\b[^>]*>\(function\(\)\{/);
     // The CSP nonce stamper has tagged it so script-src 'self' lets it run.
-    assert.match(html, /<script nonce="[^"]+">\(function\(\)\{var w=window;w\.centraid/);
+    expect(html).toMatch(/<script nonce="[^"]+">\(function\(\)\{var w=window;w\.centraid/);
   });
 
   it('skips the bridge inject for HTML without a <head> tag', async () => {
@@ -129,7 +123,7 @@ describe('serveStatic — CSP + nonce', () => {
     const { res, data } = mockRes();
     await serveStatic(res, dir, 'index.html', { settingsInject: {} });
     const html = data.body.toString('utf8');
-    assert.doesNotMatch(html, /centraid:datachange/);
+    expect(html).not.toMatch(/centraid:datachange/);
   });
 
   it('does not inject the bridge into non-HTML responses', async () => {
@@ -137,8 +131,8 @@ describe('serveStatic — CSP + nonce', () => {
     const { res, data } = mockRes();
     await serveStatic(res, dir, 'app.js');
     const body = data.body.toString('utf8');
-    assert.doesNotMatch(body, /centraid:datachange/);
-    assert.doesNotMatch(body, /centraid\.onChange/);
+    expect(body).not.toMatch(/centraid:datachange/);
+    expect(body).not.toMatch(/centraid\.onChange/);
   });
 
   it('bakes data attrs onto <html> via settingsInject', async () => {
@@ -148,6 +142,6 @@ describe('serveStatic — CSP + nonce', () => {
       settingsInject: { dataAttrs: { theme: 'dark' }, cssVars: { 'bg-l': '5%' } },
     });
     const html = data.body.toString('utf8');
-    assert.match(html, /<html data-theme="dark" style="--bg-l:5%">/);
+    expect(html).toMatch(/<html data-theme="dark" style="--bg-l:5%">/);
   });
 });

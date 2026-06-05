@@ -5,8 +5,7 @@
  * per-app run ledger over a tempdir, and a `RunEventBus` for the live path.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -140,18 +139,15 @@ test('replays a finished run from the ledger then closes', async () => {
   const c = sseClient(`/centraid/_automations/run/events?runId=${encodeURIComponent(runId)}`);
   const owned = await handler(c.req, c.res);
 
-  assert.equal(owned, true);
-  assert.equal(c.res.statusCode, 200);
-  assert.equal(c.ended(), true, 'a finished run closes after replay');
+  expect(owned).toBe(true);
+  expect(c.res.statusCode).toBe(200);
+  expect(c.ended()).toBe(true);
   const evs = c.events();
-  assert.deepEqual(
-    evs.map((e) => e.type),
-    ['run.start', 'node.start', 'node.end', 'run.end'],
-  );
+  expect(evs.map((e) => e.type)).toEqual(['run.start', 'node.start', 'node.end', 'run.end']);
   const end = evs[3] as Extract<RunStreamEvent, { type: 'run.end' }>;
-  assert.equal(end.ok, true);
+  expect(end.ok).toBe(true);
   // No live subscriber should linger for a closed run.
-  assert.equal(bus.subscriberCount(runId), 0);
+  expect(bus.subscriberCount(runId)).toBe(0);
 });
 
 test('joins an in-flight run: replays the open node, then streams live to run.end', async () => {
@@ -172,23 +168,17 @@ test('joins an in-flight run: replays the open node, then streams live to run.en
   await handler(c.req, c.res);
 
   // Replay: run.start + the open node's start (no end yet). Still live.
-  assert.deepEqual(
-    c.events().map((e) => e.type),
-    ['run.start', 'node.start'],
-  );
-  assert.equal(c.ended(), false);
-  assert.equal(bus.subscriberCount(runId), 1, 'subscribed to live events');
+  expect(c.events().map((e) => e.type)).toEqual(['run.start', 'node.start']);
+  expect(c.ended()).toBe(false);
+  expect(bus.subscriberCount(runId)).toBe(1);
 
   // The fire finishes the node and the run — delivered live off the bus.
   bus.publish(runId, { type: 'node.end', ordinal: 0, ok: true, result: 'hi', durationMs: 40 });
   bus.publish(runId, { type: 'run.end', ok: true });
 
-  assert.deepEqual(
-    c.events().map((e) => e.type),
-    ['run.start', 'node.start', 'node.end', 'run.end'],
-  );
-  assert.equal(c.ended(), true, 'run.end closes the stream');
-  assert.equal(bus.subscriberCount(runId), 0, 'unsubscribed on close');
+  expect(c.events().map((e) => e.type)).toEqual(['run.start', 'node.start', 'node.end', 'run.end']);
+  expect(c.ended()).toBe(true);
+  expect(bus.subscriberCount(runId)).toBe(0);
 });
 
 test('a fire that fails before the ledger opens still closes via a bus run.end', async () => {
@@ -202,29 +192,23 @@ test('a fire that fails before the ledger opens still closes via a bus run.end',
   await handler(c.req, c.res);
 
   // Synthetic run.start written, no ledger nodes, still live on the bus.
-  assert.deepEqual(
-    c.events().map((e) => e.type),
-    ['run.start'],
-  );
-  assert.equal(c.ended(), false);
-  assert.equal(bus.subscriberCount(runId), 1);
+  expect(c.events().map((e) => e.type)).toEqual(['run.start']);
+  expect(c.ended()).toBe(false);
+  expect(bus.subscriberCount(runId)).toBe(1);
 
   bus.publish(runId, { type: 'run.end', ok: false, error: 'automation not found' });
 
   const evs = c.events();
-  assert.deepEqual(
-    evs.map((e) => e.type),
-    ['run.start', 'run.end'],
-  );
+  expect(evs.map((e) => e.type)).toEqual(['run.start', 'run.end']);
   const end = evs[1] as Extract<RunStreamEvent, { type: 'run.end' }>;
-  assert.equal(end.ok, false);
-  assert.equal(end.error, 'automation not found');
-  assert.equal(c.ended(), true, 'the stream closes instead of hanging');
-  assert.equal(bus.subscriberCount(runId), 0);
+  expect(end.ok).toBe(false);
+  expect(end.error).toBe('automation not found');
+  expect(c.ended()).toBe(true);
+  expect(bus.subscriberCount(runId)).toBe(0);
 });
 
 test('run/events without ?runId= is a 400', async () => {
   const c = sseClient('/centraid/_automations/run/events');
   await handler(c.req, c.res);
-  assert.equal(c.res.statusCode, 400);
+  expect(c.res.statusCode).toBe(400);
 });

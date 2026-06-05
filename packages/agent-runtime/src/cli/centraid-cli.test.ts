@@ -8,8 +8,7 @@
  * configures `test` to run after `build` so the dist file exists.
  */
 
-import { test, beforeAll, afterAll } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterAll, beforeAll, expect, test } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -59,66 +58,66 @@ function runCli(...args: string[]): { stdout: string; stderr: string; code: numb
 
 test('sql describe emits the table schema as JSON on stdout', () => {
   const r = runCli('sql', 'describe');
-  assert.equal(r.code, 0, r.stderr);
+  expect(r.code).toBe(0);
   const parsed = JSON.parse(r.stdout) as {
     tables: Array<{ name: string; columns: Array<{ name: string; pk: boolean }> }>;
   };
-  assert.equal(parsed.tables.length, 1);
-  assert.equal(parsed.tables[0]?.name, 'todos');
+  expect(parsed.tables.length).toBe(1);
+  expect(parsed.tables[0]?.name).toBe('todos');
   const pk = parsed.tables[0]?.columns.find((c) => c.pk);
-  assert.equal(pk?.name, 'id');
+  expect(pk?.name).toBe('id');
 });
 
 test('sql read returns rows JSON', () => {
   const r = runCli('sql', 'read', 'SELECT id, title FROM todos ORDER BY id');
-  assert.equal(r.code, 0, r.stderr);
+  expect(r.code).toBe(0);
   const parsed = JSON.parse(r.stdout) as {
     columns: string[];
     rows: Array<Record<string, unknown>>;
     totalRows: number;
   };
-  assert.deepEqual(parsed.columns, ['id', 'title']);
-  assert.equal(parsed.totalRows, 2);
-  assert.equal(parsed.rows[0]?.title, 'one');
+  expect(parsed.columns).toEqual(['id', 'title']);
+  expect(parsed.totalRows).toBe(2);
+  expect(parsed.rows[0]?.title).toBe('one');
 });
 
 test('sql read refuses a non-SELECT statement with exit 64', () => {
   const r = runCli('sql', 'read', 'UPDATE todos SET done = 1');
-  assert.equal(r.code, 64);
-  assert.match(r.stderr, /only SELECT/);
+  expect(r.code).toBe(64);
+  expect(r.stderr).toMatch(/only SELECT/);
 });
 
 test('sql write applies a DML and reports rowsAffected', () => {
   const r = runCli('sql', 'write', 'UPDATE todos SET done = 1 WHERE id = 1');
-  assert.equal(r.code, 0, r.stderr);
+  expect(r.code).toBe(0);
   const parsed = JSON.parse(r.stdout) as { rowsAffected: number };
-  assert.equal(parsed.rowsAffected, 1);
+  expect(parsed.rowsAffected).toBe(1);
 });
 
 test('sql write refuses DDL with exit 64', () => {
   const r = runCli('sql', 'write', 'DROP TABLE todos');
-  assert.equal(r.code, 64);
-  assert.match(r.stderr, /DDL/);
+  expect(r.code).toBe(64);
+  expect(r.stderr).toMatch(/DDL/);
 });
 
 test('sql write refuses a SELECT with exit 64', () => {
   const r = runCli('sql', 'write', 'SELECT 1');
-  assert.equal(r.code, 64);
-  assert.match(r.stderr, /INSERT\/UPDATE\/DELETE\/REPLACE/);
+  expect(r.code).toBe(64);
+  expect(r.stderr).toMatch(/INSERT\/UPDATE\/DELETE\/REPLACE/);
 });
 
 test('unknown subcommand exits with usage error', () => {
   const r = runCli('sql', 'gibberish');
-  assert.equal(r.code, 2);
-  assert.match(r.stderr, /unknown subcommand/);
+  expect(r.code).toBe(2);
+  expect(r.stderr).toMatch(/unknown subcommand/);
 });
 
 test('preview snapshot reports exists:false when the file is missing', () => {
   const r = runCli('preview', 'snapshot');
-  assert.equal(r.code, 0, r.stderr);
+  expect(r.code).toBe(0);
   const parsed = JSON.parse(r.stdout) as { path: string; exists: boolean };
-  assert.equal(parsed.exists, false);
-  assert.match(parsed.path, /\.preview\/snapshot\.png$/);
+  expect(parsed.exists).toBe(false);
+  expect(parsed.path).toMatch(/\.preview\/snapshot\.png$/);
 });
 
 test('preview snapshot returns size + age when the file exists', async () => {
@@ -127,7 +126,7 @@ test('preview snapshot returns size + age when the file exists', async () => {
   const png = path.join(dir, 'snapshot.png');
   await fs.writeFile(png, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   const r = runCli('preview', 'snapshot');
-  assert.equal(r.code, 0, r.stderr);
+  expect(r.code).toBe(0);
   const parsed = JSON.parse(r.stdout) as {
     path: string;
     exists: boolean;
@@ -135,23 +134,23 @@ test('preview snapshot returns size + age when the file exists', async () => {
     mtimeMs: number;
     ageMs: number;
   };
-  assert.equal(parsed.exists, true);
-  assert.equal(parsed.sizeBytes, 4);
-  assert.ok(parsed.mtimeMs > 0);
-  assert.ok(parsed.ageMs >= 0);
+  expect(parsed.exists).toBe(true);
+  expect(parsed.sizeBytes).toBe(4);
+  expect(parsed.mtimeMs > 0).toBeTruthy();
+  expect(parsed.ageMs >= 0).toBeTruthy();
   await fs.rm(dir, { recursive: true, force: true });
 });
 
 test('preview with no subcommand exits with usage error', () => {
   const r = runCli('preview');
-  assert.equal(r.code, 2);
-  assert.match(r.stderr, /unknown preview subcommand/);
+  expect(r.code).toBe(2);
+  expect(r.stderr).toMatch(/unknown preview subcommand/);
 });
 
 test('preview snapshot rejects extra args', () => {
   const r = runCli('preview', 'snapshot', 'extra');
-  assert.equal(r.code, 2);
-  assert.match(r.stderr, /takes no arguments/);
+  expect(r.code).toBe(2);
+  expect(r.stderr).toMatch(/takes no arguments/);
 });
 
 test('CENTRAID_DATA_FILE overrides the default ./data.sqlite path', async () => {
@@ -165,7 +164,7 @@ test('CENTRAID_DATA_FILE overrides the default ./data.sqlite path', async () => 
     env: { ...process.env, CENTRAID_DATA_FILE: alt },
     encoding: 'utf8',
   });
-  assert.equal(result.status, 0, result.stderr);
+  expect(result.status).toBe(0);
   const parsed = JSON.parse(result.stdout) as { tables: Array<{ name: string }> };
-  assert.equal(parsed.tables[0]?.name, 'notes');
+  expect(parsed.tables[0]?.name).toBe('notes');
 });

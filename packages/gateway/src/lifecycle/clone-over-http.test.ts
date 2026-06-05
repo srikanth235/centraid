@@ -10,8 +10,7 @@
  * provisioned webhook (hashed secret, no plaintext, no `pending` flag).
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -112,18 +111,18 @@ test('cloning a template over HTTP publishes a plain-slug automation app with a 
     version: string;
     kind: string;
   };
-  assert.equal(appJson.id, 'inbound-2');
-  assert.equal(appJson.name, 'Inbound 2');
-  assert.equal(appJson.version, '0.1.0');
-  assert.equal(appJson.kind, 'automation');
+  expect(appJson.id).toBe('inbound-2');
+  expect(appJson.name).toBe('Inbound 2');
+  expect(appJson.version).toBe('0.1.0');
+  expect(appJson.kind).toBe('automation');
 
   // 2. Provision the pending webhook (secret minted here; only its hash is
   //    written into the manifest).
   const { files, minted } = provisionPendingWebhooksInFiles(cloned, 'inbound-2');
-  assert.equal(minted.length, 1);
-  assert.equal(minted[0]!.ownerApp, 'inbound-2');
-  assert.equal(minted[0]!.automationId, 'inbound');
-  assert.ok(minted[0]!.secret.length > 0);
+  expect(minted.length).toBe(1);
+  expect(minted[0]!.ownerApp).toBe('inbound-2');
+  expect(minted[0]!.automationId).toBe('inbound');
+  expect(minted[0]!.secret.length > 0).toBeTruthy();
 
   // 3. Open a session, PUT every file, publish — the HTTP path that works
   //    against a remote gateway.
@@ -140,21 +139,21 @@ test('cloning a template over HTTP publishes a plain-slug automation app with a 
         .join('/')}?sessionId=s1`,
       { method: 'PUT', headers: auth(), body: f.content },
     );
-    assert.equal(res.status, 200, `put ${f.path}: ${await res.text()}`);
+    expect(res.status).toBe(200);
   }
   const pub = await fetch(`${handle.url}/centraid/_apps/inbound-2/publish`, {
     method: 'POST',
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: 's1', message: 'clone inbound' }),
   });
-  assert.equal(pub.status, 201, await pub.text());
+  expect(pub.status).toBe(201);
 
   // 4. The cloned app is on `main` with its kind surfaced in the list.
   const listRes = await fetch(`${handle.url}/centraid/_apps`, { headers: auth() });
   const list = (await listRes.json()) as Array<{ id: string; kind?: string }>;
   const row = list.find((a) => a.id === 'inbound-2');
-  assert.ok(row, 'cloned app missing from list');
-  assert.equal(row!.kind, 'automation');
+  expect(row).toBeTruthy();
+  expect(row!.kind).toBe('automation');
 
   // 5. The published manifest carries a provisioned webhook — hashed
   //    secret, no plaintext, no lingering `pending` flag.
@@ -163,12 +162,12 @@ test('cloning a template over HTTP publishes a plain-slug automation app with a 
   });
   const draft = (await filesRes.json()) as { files: { path: string; content: string }[] };
   const manifestFile = draft.files.find((f) => f.path === 'automations/inbound/automation.json');
-  assert.ok(manifestFile, 'automation manifest missing');
+  expect(manifestFile).toBeTruthy();
   const manifest = JSON.parse(manifestFile!.content) as {
     triggers: { kind: string; id?: string; secretHash?: string; pending?: boolean }[];
   };
   const hook = manifest.triggers.find((t) => t.kind === 'webhook')!;
-  assert.ok(hook.id && hook.secretHash, 'webhook not provisioned');
-  assert.equal(hook.pending, undefined);
-  assert.ok(!JSON.stringify(manifest).includes(minted[0]!.secret), 'plaintext secret leaked');
+  expect(hook.id && hook.secretHash).toBeTruthy();
+  expect(hook.pending).toBe(undefined);
+  expect(!JSON.stringify(manifest).includes(minted[0]!.secret)).toBeTruthy();
 });

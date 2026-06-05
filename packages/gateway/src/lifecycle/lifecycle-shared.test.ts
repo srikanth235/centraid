@@ -8,8 +8,7 @@
  * `reconcile()` call (the easy bug) fails here.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -80,7 +79,7 @@ test('publishAndReconcile validates, publishes, registers, reconciles, then clos
     ephemeralSession: true,
   });
 
-  assert.deepEqual(calls, ['publish', 'ensureRegistered', 'reconcile', 'closeSession']);
+  expect(calls).toEqual(['publish', 'ensureRegistered', 'reconcile', 'closeSession']);
 });
 
 test('publishAndReconcile keeps a non-ephemeral session open', async () => {
@@ -93,25 +92,26 @@ test('publishAndReconcile keeps a non-ephemeral session open', async () => {
     message: 'publish notes',
   });
 
-  assert.deepEqual(calls, ['publish', 'ensureRegistered', 'reconcile']);
+  expect(calls).toEqual(['publish', 'ensureRegistered', 'reconcile']);
 });
 
 test('publishAndReconcile rejects an invalid manifest before publishing', async () => {
   await fs.writeFile(path.join(appDir, 'app.json'), '{ not valid json', 'utf8');
 
-  await assert.rejects(() =>
-    publishAndReconcile(makeOpts(), {
-      appId: 'notes',
-      sessionId: 's1',
-      appDir,
-      message: 'publish notes',
-    }),
-  );
+  await expect(
+    (() =>
+      publishAndReconcile(makeOpts(), {
+        appId: 'notes',
+        sessionId: 's1',
+        appDir,
+        message: 'publish notes',
+      }))(),
+  ).rejects.toThrow();
   // Validation gates the whole sequence — nothing ran.
-  assert.deepEqual(calls, []);
+  expect(calls).toEqual([]);
 });
 
 test('deleteAppAndReconcile deletes, deregisters, then reconciles — in order', async () => {
   await deleteAppAndReconcile(makeOpts(), 'notes');
-  assert.deepEqual(calls, ['deleteApp', 'deregister', 'reconcile']);
+  expect(calls).toEqual(['deleteApp', 'deregister', 'reconcile']);
 });

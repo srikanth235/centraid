@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -23,29 +22,29 @@ afterEach(async () => {
 });
 
 test('binds to loopback and rejects requests without the bearer token', async () => {
-  assert.match(server.url, /^http:\/\/127\.0\.0\.1:\d+$/);
-  assert.equal(server.token.length, 64);
+  expect(server.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  expect(server.token.length).toBe(64);
 
   const res = await fetch(`${server.url}/centraid/_apps`);
-  assert.equal(res.status, 401);
+  expect(res.status).toBe(401);
   const body = (await res.json()) as { error: string };
-  assert.equal(body.error, 'unauthorized');
+  expect(body.error).toBe('unauthorized');
 });
 
 test('serves the registry list when the bearer token matches', async () => {
   const res = await fetch(`${server.url}/centraid/_apps`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   const body = (await res.json()) as unknown[];
-  assert.deepEqual(body, []);
+  expect(body).toEqual([]);
 });
 
 test('returns 404 for unknown /centraid paths (with valid bearer)', async () => {
   const res = await fetch(`${server.url}/centraid/nope/whatever`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 404);
+  expect(res.status).toBe(404);
 });
 
 test('answers a CORS preflight (OPTIONS) with 204 and no auth required', async () => {
@@ -57,22 +56,22 @@ test('answers a CORS preflight (OPTIONS) with 204 and no auth required', async (
       'Access-Control-Request-Headers': 'authorization, content-type',
     },
   });
-  assert.equal(res.status, 204);
-  assert.equal(res.headers.get('access-control-allow-origin'), '*');
-  assert.match(res.headers.get('access-control-allow-methods') ?? '', /POST/);
-  assert.match(res.headers.get('access-control-allow-headers') ?? '', /authorization/i);
+  expect(res.status).toBe(204);
+  expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  expect(res.headers.get('access-control-allow-methods') ?? '').toMatch(/POST/);
+  expect(res.headers.get('access-control-allow-headers') ?? '').toMatch(/authorization/i);
 });
 
 test('sets CORS headers on the 401 so the renderer can read the rejection', async () => {
   const res = await fetch(`${server.url}/centraid/_apps`);
-  assert.equal(res.status, 401);
-  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+  expect(res.status).toBe(401);
+  expect(res.headers.get('access-control-allow-origin')).toBe('*');
 });
 
 test('sets CORS headers on a successful authed response', async () => {
   const res = await fetch(`${server.url}/centraid/_apps`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+  expect(res.status).toBe(200);
+  expect(res.headers.get('access-control-allow-origin')).toBe('*');
 });

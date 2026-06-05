@@ -12,8 +12,7 @@
  * empty to stay hermetic (no CLI on the box).
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -77,30 +76,27 @@ test('runs the turn in the draft worktree with the union of tools + builder prom
 
   // cwd is the app's draft worktree app dir under the host-neutral `chat-<appId>` default session.
   const expectedCwd = await store.snapshotSessionAppDir('chat-notes', 'notes');
-  assert.equal(captured?.input.cwd, expectedCwd);
+  expect(captured?.input.cwd).toBe(expectedCwd);
 
   // Union of tools: the `centraid_*` dispatcher is threaded for this app.
-  assert.equal(captured?.input.toolContext?.appId, 'notes');
-  assert.equal(captured?.input.toolContext?.dispatcher, dispatcher);
+  expect(captured?.input.toolContext?.appId).toBe('notes');
+  expect(captured?.input.toolContext?.dispatcher).toBe(dispatcher);
 
   // Unified prompt: the data preamble is kept AND the builder authoring
   // block is folded in (app kind → CENTRAID_APPEND_PROMPT).
-  assert.match(captured!.input.extraSystemPrompt, /BASE_DATA_PREAMBLE/);
-  assert.ok(
-    captured!.input.extraSystemPrompt.length > 'BASE_DATA_PREAMBLE'.length + 100,
-    'builder authoring blocks were folded into the prompt',
-  );
+  expect(captured!.input.extraSystemPrompt).toMatch(/BASE_DATA_PREAMBLE/);
+  expect(captured!.input.extraSystemPrompt.length > 'BASE_DATA_PREAMBLE'.length + 100).toBeTruthy();
 
   // This IS the builder surface — the route reads `runKind` to persist its
   // turns as `kind: 'build'` in the ledger (#181).
-  assert.equal(runner.runKind, 'build');
+  expect(runner.runKind).toBe('build');
 
   // Resume handle round-trips back to the route.
-  assert.equal(result?.adapterKind, 'codex');
-  assert.equal(result?.adapterSessionId, 'thread-1');
+  expect(result?.adapterKind).toBe('codex');
+  expect(result?.adapterSessionId).toBe('thread-1');
 
   // Stream events flowed through.
-  assert.ok(events.some((e) => e.type === 'final'));
+  expect(events.some((e) => e.type === 'final')).toBeTruthy();
 });
 
 test('mints a pending webhook authored during the turn and surfaces it once', async () => {
@@ -147,14 +143,14 @@ test('mints a pending webhook authored during the turn and surfaces it once', as
   await runner.run(baseInput({ appId: 'notes' }, (e) => events.push(e)));
 
   const webhookEvents = events.filter((e) => e.type === 'webhooks');
-  assert.equal(webhookEvents.length, 1, 'exactly one webhooks event');
+  expect(webhookEvents.length).toBe(1);
   const evt = webhookEvents[0] as Extract<TurnStreamEvent, { type: 'webhooks' }>;
-  assert.equal(evt.minted.length, 1);
+  expect(evt.minted.length).toBe(1);
   const minted = evt.minted[0]!;
-  assert.equal(minted.automationId, 'notify');
-  assert.equal(minted.ownerApp, 'notes');
-  assert.ok(minted.secret.length > 0, 'a plaintext secret is surfaced once');
-  assert.match(minted.url, /^http:\/\/127\.0\.0\.1:9999\/_centraid-hook\//);
+  expect(minted.automationId).toBe('notify');
+  expect(minted.ownerApp).toBe('notes');
+  expect(minted.secret.length > 0).toBeTruthy();
+  expect(minted.url).toMatch(/^http:\/\/127\.0\.0\.1:9999\/_centraid-hook\//);
 
   // The staged manifest no longer carries the plaintext secret — only a hash.
   const appDir = await store.snapshotSessionAppDir('chat-notes', 'notes');
@@ -166,9 +162,9 @@ test('mints a pending webhook authored during the turn and surfaces it once', as
     triggers: Array<{ kind: string; secretHash?: string; pending?: boolean }>;
   };
   const trig = parsed.triggers[0]!;
-  assert.equal(trig.kind, 'webhook');
-  assert.ok(trig.secretHash, 'trigger rewritten with a secret hash');
-  assert.ok(!trig.pending, 'pending flag cleared after minting');
+  expect(trig.kind).toBe('webhook');
+  expect(trig.secretHash).toBeTruthy();
+  expect(!trig.pending).toBeTruthy();
 });
 
 test('errors when no coding agent is configured', async () => {
@@ -184,6 +180,6 @@ test('errors when no coding agent is configured', async () => {
     },
   });
 
-  await assert.rejects(() => runner.run(baseInput({}, (e) => events.push(e))));
-  assert.ok(events.some((e) => e.type === 'error'));
+  await expect((() => runner.run(baseInput({}, (e) => events.push(e))))()).rejects.toThrow();
+  expect(events.some((e) => e.type === 'error')).toBeTruthy();
 });

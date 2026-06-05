@@ -1,5 +1,4 @@
-import { describe, it, beforeAll, afterAll } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import os from 'node:os';
@@ -96,48 +95,48 @@ describe('Dispatcher', () => {
 
   it('describe with no filter returns a list of apps', async () => {
     const out = await dispatcher.describe({});
-    assert.equal(out.isError, false);
+    expect(out.isError).toBe(false);
     const body = out.structuredContent as { apps: Array<{ id: string }> };
-    assert.equal(body.apps.length, 1);
-    assert.equal(body.apps[0]!.id, 'todos');
+    expect(body.apps.length).toBe(1);
+    expect(body.apps[0]!.id).toBe('todos');
   });
 
   it('describe with {app} returns the full manifest plus live schema', async () => {
     const out = await dispatcher.describe({ app: 'todos' });
-    assert.equal(out.isError, false);
+    expect(out.isError).toBe(false);
     const body = out.structuredContent as {
       manifest: { name: string; actions: Array<{ name: string }> };
       schema: { tables: unknown[] };
     };
-    assert.equal(body.manifest.name, 'Todos');
-    assert.equal(body.manifest.actions[0]!.name, 'add');
-    assert.ok(Array.isArray(body.schema.tables));
+    expect(body.manifest.name).toBe('Todos');
+    expect(body.manifest.actions[0]!.name).toBe('add');
+    expect(Array.isArray(body.schema.tables)).toBeTruthy();
   });
 
   it('describe with {app, action} returns the handler entry wrapped', async () => {
     const out = await dispatcher.describe({ app: 'todos', action: 'add' });
-    assert.equal(out.isError, false);
+    expect(out.isError).toBe(false);
     const body = out.structuredContent as {
       app: { id: string; name: string };
       action: { name: string };
     };
-    assert.equal(body.app.id, 'todos');
-    assert.equal(body.action.name, 'add');
+    expect(body.app.id).toBe('todos');
+    expect(body.action.name).toBe('add');
   });
 
   it('describe returns UNKNOWN_APP for an unknown app', async () => {
     const out = await dispatcher.describe({ app: 'missing' });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'UNKNOWN_APP');
+      expect(out.structuredContent.code).toBe('UNKNOWN_APP');
     }
   });
 
   it('describe returns UNKNOWN_ACTION for an unknown action', async () => {
     const out = await dispatcher.describe({ app: 'todos', action: 'nope' });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'UNKNOWN_ACTION');
+      expect(out.structuredContent.code).toBe('UNKNOWN_ACTION');
     }
   });
 
@@ -149,25 +148,25 @@ describe('Dispatcher', () => {
 
   it('write rejects when input fails the schema', async () => {
     const out = await dispatcher.write({ app: 'todos', action: 'add', input: {} });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'INVALID_INPUT');
+      expect(out.structuredContent.code).toBe('INVALID_INPUT');
     }
   });
 
   it('write returns WRONG_KIND when addressing a query', async () => {
     const out = await dispatcher.write({ app: 'todos', action: 'list', input: {} });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'WRONG_KIND');
+      expect(out.structuredContent.code).toBe('WRONG_KIND');
     }
   });
 
   it('read returns WRONG_KIND when addressing an action', async () => {
     const out = await dispatcher.read({ app: 'todos', query: 'add', input: {} });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'WRONG_KIND');
+      expect(out.structuredContent.code).toBe('WRONG_KIND');
     }
   });
 
@@ -177,17 +176,17 @@ describe('Dispatcher', () => {
       action: 'phantom',
       input: { text: 'x' },
     });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'UNKNOWN_ACTION');
+      expect(out.structuredContent.code).toBe('UNKNOWN_ACTION');
     }
   });
 
   it('read returns UNKNOWN_QUERY for a missing query', async () => {
     const out = await dispatcher.read({ app: 'todos', query: 'phantom' });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'UNKNOWN_QUERY');
+      expect(out.structuredContent.code).toBe('UNKNOWN_QUERY');
     }
   });
 
@@ -197,9 +196,9 @@ describe('Dispatcher', () => {
       action: 'add',
       input: { text: 'x' },
     });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'UNKNOWN_APP');
+      expect(out.structuredContent.code).toBe('UNKNOWN_APP');
     }
   });
 
@@ -217,10 +216,10 @@ describe('Dispatcher', () => {
       query: '_sql',
       input: { sql: 'SELECT id, text FROM todos' },
     });
-    assert.equal(out.isError, false, JSON.stringify(out.structuredContent));
+    expect(out.isError).toBe(false);
     const body = out.structuredContent as { columns: string[]; rows: unknown[] };
-    assert.deepEqual(body.columns, ['id', 'text']);
-    assert.equal(body.rows.length >= 1, true);
+    expect(body.columns).toEqual(['id', 'text']);
+    expect(body.rows.length >= 1).toBe(true);
   });
 
   it('_sql query refuses INSERT', async () => {
@@ -229,9 +228,9 @@ describe('Dispatcher', () => {
       query: '_sql',
       input: { sql: "INSERT INTO todos(text) VALUES ('x')" },
     });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'INVALID_INPUT');
+      expect(out.structuredContent.code).toBe('INVALID_INPUT');
     }
   });
 
@@ -246,9 +245,9 @@ describe('Dispatcher', () => {
       action: '_sql',
       input: { sql: "INSERT INTO todos(text) VALUES ('via-sql')" },
     });
-    assert.equal(out.isError, false, JSON.stringify(out.structuredContent));
+    expect(out.isError).toBe(false);
     const body = out.structuredContent as { rowsAffected: number };
-    assert.equal(body.rowsAffected, 1);
+    expect(body.rowsAffected).toBe(1);
   });
 
   it('_sql action refuses DDL', async () => {
@@ -257,27 +256,27 @@ describe('Dispatcher', () => {
       action: '_sql',
       input: { sql: 'CREATE TABLE evil (id INTEGER)' },
     });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'INVALID_INPUT');
+      expect(out.structuredContent.code).toBe('INVALID_INPUT');
     }
   });
 
   it('_sql without { sql } returns INVALID_INPUT', async () => {
     const out = await dispatcher.read({ app: 'todos', query: '_sql', input: {} });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'INVALID_INPUT');
+      expect(out.structuredContent.code).toBe('INVALID_INPUT');
     }
   });
 
   it('_unknown built-in returns UNKNOWN_QUERY / UNKNOWN_ACTION', async () => {
     const r = await dispatcher.read({ app: 'todos', query: '_nope' });
-    assert.equal(r.isError, true);
-    if (r.isError) assert.equal(r.structuredContent.code, 'UNKNOWN_QUERY');
+    expect(r.isError).toBe(true);
+    if (r.isError) expect(r.structuredContent.code).toBe('UNKNOWN_QUERY');
     const w = await dispatcher.write({ app: 'todos', action: '_nope' });
-    assert.equal(w.isError, true);
-    if (w.isError) assert.equal(w.structuredContent.code, 'UNKNOWN_ACTION');
+    expect(w.isError).toBe(true);
+    if (w.isError) expect(w.structuredContent.code).toBe('UNKNOWN_ACTION');
   });
 });
 
@@ -319,31 +318,31 @@ describe('manifest validation surfaces as INVALID_MANIFEST', () => {
       action: 'anything',
       input: {},
     });
-    assert.equal(out.isError, true);
+    expect(out.isError).toBe(true);
     if (out.isError) {
-      assert.equal(out.structuredContent.code, 'INVALID_MANIFEST');
+      expect(out.structuredContent.code).toBe('INVALID_MANIFEST');
     }
   });
 });
 
 describe('tool naming helpers', () => {
   it('isToolName accepts only the three', () => {
-    assert.equal(isToolName('centraid_write'), true);
-    assert.equal(isToolName('centraid_read'), true);
-    assert.equal(isToolName('centraid_describe'), true);
-    assert.equal(isToolName('centraid_sql_read'), false);
-    assert.equal(isToolName('whatever'), false);
+    expect(isToolName('centraid_write')).toBe(true);
+    expect(isToolName('centraid_read')).toBe(true);
+    expect(isToolName('centraid_describe')).toBe(true);
+    expect(isToolName('centraid_sql_read')).toBe(false);
+    expect(isToolName('whatever')).toBe(false);
   });
 
   it('statusForToolError maps codes to sensible statuses', () => {
-    assert.equal(statusForToolError('UNKNOWN_APP'), 404);
-    assert.equal(statusForToolError('UNKNOWN_ACTION'), 404);
-    assert.equal(statusForToolError('UNKNOWN_QUERY'), 404);
-    assert.equal(statusForToolError('WRONG_KIND'), 400);
-    assert.equal(statusForToolError('INVALID_INPUT'), 400);
-    assert.equal(statusForToolError('INVALID_MANIFEST'), 500);
-    assert.equal(statusForToolError('NO_ACTIVE_VERSION'), 503);
-    assert.equal(statusForToolError('HANDLER_ERROR'), 500);
+    expect(statusForToolError('UNKNOWN_APP')).toBe(404);
+    expect(statusForToolError('UNKNOWN_ACTION')).toBe(404);
+    expect(statusForToolError('UNKNOWN_QUERY')).toBe(404);
+    expect(statusForToolError('WRONG_KIND')).toBe(400);
+    expect(statusForToolError('INVALID_INPUT')).toBe(400);
+    expect(statusForToolError('INVALID_MANIFEST')).toBe(500);
+    expect(statusForToolError('NO_ACTIVE_VERSION')).toBe(503);
+    expect(statusForToolError('HANDLER_ERROR')).toBe(500);
   });
 });
 
@@ -400,7 +399,7 @@ describe('Dispatcher draft data dir = code dir (#144)', () => {
       { app: 'todos', action: '_sql', input: { sql: "INSERT INTO notes(body) VALUES ('draft')" } },
       draftDir,
     );
-    assert.equal(w.isError, false, JSON.stringify(w.structuredContent));
+    expect(w.isError).toBe(false);
 
     // The draft read sees its own row… (SQLite returns null-prototype rows,
     // so compare by value rather than deep-equal against a plain literal)
@@ -409,8 +408,8 @@ describe('Dispatcher draft data dir = code dir (#144)', () => {
       draftDir,
     );
     const dRows = (draftResult.structuredContent as { rows: Array<{ body: string }> }).rows;
-    assert.equal(dRows.length, 1);
-    assert.equal(dRows[0]!.body, 'draft');
+    expect(dRows.length).toBe(1);
+    expect(dRows[0]!.body).toBe('draft');
 
     // …while live data has no rows — isolation held.
     const liveRead = await dispatcher.read({
@@ -418,7 +417,7 @@ describe('Dispatcher draft data dir = code dir (#144)', () => {
       query: '_sql',
       input: { sql: 'SELECT body FROM notes' },
     });
-    assert.equal((liveRead.structuredContent as { rows: unknown[] }).rows.length, 0);
+    expect((liveRead.structuredContent as { rows: unknown[] }).rows.length).toBe(0);
   });
 
   it('describe reads the branched schema from the worktree in draft mode', async () => {
@@ -426,12 +425,12 @@ describe('Dispatcher draft data dir = code dir (#144)', () => {
     const draftTables = (
       draftDesc.structuredContent as { schema: { tables: Array<{ name: string }> } }
     ).schema.tables.map((t) => t.name);
-    assert.ok(draftTables.includes('draft_only'), `draft schema should branch: ${draftTables}`);
+    expect(draftTables.includes('draft_only')).toBeTruthy();
 
     const liveDesc = await dispatcher.describe({ app: 'todos' });
     const liveTables = (
       liveDesc.structuredContent as { schema: { tables: Array<{ name: string }> } }
     ).schema.tables.map((t) => t.name);
-    assert.ok(!liveTables.includes('draft_only'), `live schema must not see the draft table`);
+    expect(!liveTables.includes('draft_only')).toBeTruthy();
   });
 });

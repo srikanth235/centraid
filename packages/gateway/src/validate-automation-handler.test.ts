@@ -3,8 +3,7 @@
 // nondeterministic handler is rejected at publish time rather than silently
 // mis-resumed under the #166 journal/replay runtime.
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -44,7 +43,7 @@ test('passes a replay-safe automation handler', async () => {
        return { summary: 'ok', output: { n: items.length } };
      };`,
   );
-  assert.equal(await validateManifestAt(dir), undefined);
+  expect(await validateManifestAt(dir)).toBe(undefined);
 });
 
 test('rejects a handler that reads the wall clock', async () => {
@@ -55,9 +54,9 @@ test('rejects a handler that reads the wall clock', async () => {
      };`,
   );
   const err = await validateManifestAt(dir);
-  assert.ok(err, 'expected a validation error');
-  assert.match(err!, /automations\/main\/handler\.js/);
-  assert.match(err!, /no-date-now/);
+  expect(err).toBeTruthy();
+  expect(err!).toMatch(/automations\/main\/handler\.js/);
+  expect(err!).toMatch(/no-date-now/);
 });
 
 test('rejects a handler that uses Math.random / raw fetch', async () => {
@@ -68,8 +67,8 @@ test('rejects a handler that uses Math.random / raw fetch', async () => {
      };`,
   );
   const err = await validateManifestAt(dir);
-  assert.ok(err);
-  assert.match(err!, /no-raw-fetch|no-math-random/);
+  expect(err).toBeTruthy();
+  expect(err!).toMatch(/no-raw-fetch|no-math-random/);
 });
 
 test('does not lint handlers of a non-automation app', async () => {
@@ -90,5 +89,5 @@ test('does not lint handlers of a non-automation app', async () => {
   const autoDir = path.join(dir, 'automations', 'main');
   await fs.mkdir(autoDir, { recursive: true });
   await fs.writeFile(path.join(autoDir, 'handler.js'), 'export default async () => Date.now();');
-  assert.equal(await validateManifestAt(dir), undefined);
+  expect(await validateManifestAt(dir)).toBe(undefined);
 });

@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -85,15 +84,15 @@ describe('InsightsStore', () => {
   it('returns an all-zero summary for an empty ledger', () => {
     const { insights } = setup();
     const s = insights.summary();
-    assert.equal(s.kpis.generations, 0);
-    assert.equal(s.kpis.totalTokens, 0);
-    assert.equal(s.kpis.totalCostUsd, 0);
-    assert.equal(s.kpis.appsTouched, 0);
-    assert.equal(s.kpis.quotaTokens, INSIGHTS_QUOTA_TOKENS);
-    assert.deepEqual(s.daily, []);
-    assert.deepEqual(s.byAutomation, []);
-    assert.deepEqual(s.byModel, []);
-    assert.deepEqual(s.recent, []);
+    expect(s.kpis.generations).toBe(0);
+    expect(s.kpis.totalTokens).toBe(0);
+    expect(s.kpis.totalCostUsd).toBe(0);
+    expect(s.kpis.appsTouched).toBe(0);
+    expect(s.kpis.quotaTokens).toBe(INSIGHTS_QUOTA_TOKENS);
+    expect(s.daily).toEqual([]);
+    expect(s.byAutomation).toEqual([]);
+    expect(s.byModel).toEqual([]);
+    expect(s.recent).toEqual([]);
   });
 
   it('rolls up KPIs across chat and automation runs', () => {
@@ -114,13 +113,13 @@ describe('InsightsStore', () => {
       costUsd: 0.01,
     });
     const s = insights.summary();
-    assert.equal(s.kpis.generations, 2);
-    assert.equal(s.kpis.totalTokens, 1800);
-    assert.equal(s.kpis.totalCostUsd, 0.03);
+    expect(s.kpis.generations).toBe(2);
+    expect(s.kpis.totalTokens).toBe(1800);
+    expect(s.kpis.totalCostUsd).toBe(0.03);
     // Only the automation run carries an owning app; chat has none.
-    assert.equal(s.kpis.appsTouched, 1);
-    assert.equal(s.kpis.retries, 0);
-    assert.ok(s.kpis.forecastCostUsd >= 0);
+    expect(s.kpis.appsTouched).toBe(1);
+    expect(s.kpis.retries).toBe(0);
+    expect(s.kpis.forecastCostUsd >= 0).toBeTruthy();
   });
 
   it('counts distinct owning apps across automation runs', () => {
@@ -128,7 +127,7 @@ describe('InsightsStore', () => {
     seedRun(runs, { kind: 'automation', automationRef: 'auto.todos/digest', inputTokens: 10 });
     seedRun(runs, { kind: 'automation', automationRef: 'auto.habits/nudge', inputTokens: 10 });
     seedRun(runs, { kind: 'automation', automationRef: 'auto.todos/sweep', inputTokens: 10 });
-    assert.equal(insights.summary().kpis.appsTouched, 2);
+    expect(insights.summary().kpis.appsTouched).toBe(2);
   });
 
   it('counts retries via retry_of', () => {
@@ -145,8 +144,8 @@ describe('InsightsStore', () => {
       retryOf: first,
     });
     const s = insights.summary();
-    assert.equal(s.kpis.generations, 2);
-    assert.equal(s.kpis.retries, 1);
+    expect(s.kpis.generations).toBe(2);
+    expect(s.kpis.retries).toBe(1);
   });
 
   it('groups by automation, collapsing chat into a synthetic bucket', () => {
@@ -156,13 +155,13 @@ describe('InsightsStore', () => {
     const s = insights.summary();
     const chat = s.byAutomation.find((r) => r.kind === 'chat');
     const auto = s.byAutomation.find((r) => r.kind === 'automation');
-    assert.ok(chat, 'expected a chat bucket');
-    assert.equal(chat.key, 'chat');
-    assert.equal(chat.label, 'Chat');
-    assert.equal(chat.tokens, 300);
-    assert.ok(auto, 'expected an automation row');
-    assert.equal(auto.key, 'auto.x/auto-1');
-    assert.equal(auto.tokens, 500);
+    expect(chat).toBeTruthy();
+    expect(chat!.key).toBe('chat');
+    expect(chat!.label).toBe('Chat');
+    expect(chat!.tokens).toBe(300);
+    expect(auto).toBeTruthy();
+    expect(auto!.key).toBe('auto.x/auto-1');
+    expect(auto!.tokens).toBe(500);
   });
 
   it('groups by each run’s dominant model', () => {
@@ -172,10 +171,10 @@ describe('InsightsStore', () => {
     seedRun(runs, { kind: 'chat', model: 'gpt-5-codex', inputTokens: 40 });
     const s = insights.summary();
     const sonnet = s.byModel.find((m) => m.model === 'claude-sonnet-4-5');
-    assert.ok(sonnet);
-    assert.equal(sonnet.runs, 2);
-    assert.equal(sonnet.tokens, 430);
-    assert.equal(s.byModel.length, 2);
+    expect(sonnet).toBeTruthy();
+    expect(sonnet!.runs).toBe(2);
+    expect(sonnet!.tokens).toBe(430);
+    expect(s.byModel.length).toBe(2);
   });
 
   it('returns recent activity newest-first', () => {
@@ -187,8 +186,8 @@ describe('InsightsStore', () => {
     });
     seedRun(runs, { kind: 'chat', startedAt: Date.now() });
     const s = insights.summary();
-    assert.equal(s.recent.length, 2);
-    assert.equal(s.recent[0]!.kind, 'chat');
+    expect(s.recent.length).toBe(2);
+    expect(s.recent[0]!.kind).toBe('chat');
   });
 
   it('excludes runs outside the window', () => {
@@ -197,8 +196,8 @@ describe('InsightsStore', () => {
     seedRun(runs, { kind: 'chat', inputTokens: 999, startedAt: Date.now() - 60 * 86_400_000 });
     seedRun(runs, { kind: 'chat', inputTokens: 5, startedAt: Date.now() });
     const s = insights.summary({ windowDays: 30 });
-    assert.equal(s.kpis.generations, 1);
-    assert.equal(s.kpis.totalTokens, 5);
+    expect(s.kpis.generations).toBe(1);
+    expect(s.kpis.totalTokens).toBe(5);
   });
 
   it('builds a daily series grouped by date', () => {
@@ -206,9 +205,9 @@ describe('InsightsStore', () => {
     seedRun(runs, { kind: 'chat', inputTokens: 100, outputTokens: 20 });
     seedRun(runs, { kind: 'chat', inputTokens: 30 });
     const s = insights.summary();
-    assert.equal(s.daily.length, 1);
-    assert.equal(s.daily[0]!.tokens, 150);
-    assert.equal(s.daily[0]!.runs, 2);
-    assert.match(s.daily[0]!.date, /^\d{4}-\d{2}-\d{2}$/);
+    expect(s.daily.length).toBe(1);
+    expect(s.daily[0]!.tokens).toBe(150);
+    expect(s.daily[0]!.runs).toBe(2);
+    expect(s.daily[0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

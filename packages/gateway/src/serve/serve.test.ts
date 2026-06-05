@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -30,34 +29,34 @@ afterEach(async () => {
 });
 
 test('binds to loopback by default and mints a 32-byte random token', () => {
-  assert.match(handle.url, /^http:\/\/127\.0\.0\.1:\d+$/);
-  assert.equal(handle.token.length, 64);
+  expect(handle.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  expect(handle.token.length).toBe(64);
 });
 
 test('mkdirs the appsDir on bootstrap so the registry has somewhere to live', async () => {
   const stat = await fs.stat(path.join(dataDir, 'apps'));
-  assert.ok(stat.isDirectory());
+  expect(stat.isDirectory()).toBeTruthy();
 });
 
 test('returns the constructed stores on the handle for host introspection', () => {
-  assert.ok(handle.userStore);
-  assert.ok(handle.analyticsStore);
-  assert.ok(handle.conversationHistoryStore);
-  assert.ok(handle.runtime);
+  expect(handle.userStore).toBeTruthy();
+  expect(handle.analyticsStore).toBeTruthy();
+  expect(handle.conversationHistoryStore).toBeTruthy();
+  expect(handle.runtime).toBeTruthy();
 });
 
 test('rejects /centraid/_apps without the bearer token', async () => {
   const res = await fetch(`${handle.url}/centraid/_apps`);
-  assert.equal(res.status, 401);
+  expect(res.status).toBe(401);
 });
 
 test('serves /centraid/_apps when the bearer token matches', async () => {
   const res = await fetch(`${handle.url}/centraid/_apps`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   const body = (await res.json()) as unknown[];
-  assert.deepEqual(body, []);
+  expect(body).toEqual([]);
 });
 
 test('honors a caller-supplied token instead of minting one', async () => {
@@ -67,11 +66,11 @@ test('honors a caller-supplied token instead of minting one', async () => {
     paths: pathsUnder(dataDir),
     token: fixed,
   });
-  assert.equal(handle.token, fixed);
+  expect(handle.token).toBe(fixed);
   const res = await fetch(`${handle.url}/centraid/_apps`, {
     headers: { Authorization: `Bearer ${fixed}` },
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
 });
 
 test('honors a caller-supplied host (loopback alias still resolves)', async () => {
@@ -81,7 +80,7 @@ test('honors a caller-supplied host (loopback alias still resolves)', async () =
     host: '127.0.0.1',
     port: 0,
   });
-  assert.match(handle.url, /^http:\/\/127\.0\.0\.1:\d+$/);
+  expect(handle.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
 });
 
 test('runnerStatus is reachable and returns a RunnerStatus body', async () => {
@@ -92,10 +91,10 @@ test('runnerStatus is reachable and returns a RunnerStatus body', async () => {
   // is installed on the test host. We only assert the route is mounted
   // and returns a well-shaped status (the Electron embed has the same
   // default — prefs loader falls back to codex when no pref is set).
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   const body = (await res.json()) as { kind: string; ok: boolean };
-  assert.ok(typeof body.kind === 'string' && body.kind.length > 0);
-  assert.equal(typeof body.ok, 'boolean');
+  expect(typeof body.kind === 'string' && body.kind.length > 0).toBeTruthy();
+  expect(typeof body.ok).toBe('boolean');
 });
 
 test('agents status is reachable and returns CLI availability booleans', async () => {
@@ -105,16 +104,16 @@ test('agents status is reachable and returns CLI availability booleans', async (
   // Which CLIs show available depends on whether codex / claude are on the
   // test host's PATH — we only assert the route is mounted and returns a
   // well-shaped snapshot (the gateway probes its own host).
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   const body = (await res.json()) as {
     codexAvailable: boolean;
     claudeAvailable: boolean;
   };
-  assert.equal(typeof body.codexAvailable, 'boolean');
-  assert.equal(typeof body.claudeAvailable, 'boolean');
+  expect(typeof body.codexAvailable).toBe('boolean');
+  expect(typeof body.claudeAvailable).toBe('boolean');
 });
 
 test('rejects /centraid/_agents/status without the bearer token', async () => {
   const res = await fetch(`${handle.url}/centraid/_agents/status`);
-  assert.equal(res.status, 401);
+  expect(res.status).toBe(401);
 });

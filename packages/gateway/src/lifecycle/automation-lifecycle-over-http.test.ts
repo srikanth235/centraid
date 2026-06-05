@@ -11,8 +11,7 @@
  *      while the owning UI app survives.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -89,7 +88,7 @@ async function putFiles(appId: string, sessionId: string, files: ScaffoldFile[])
         .join('/')}?sessionId=${sessionId}`,
       { method: 'PUT', headers: auth(), body: f.content },
     );
-    assert.equal(res.status, 200, `put ${f.path}: ${await res.text()}`);
+    expect(res.status).toBe(200);
   }
 }
 
@@ -99,7 +98,7 @@ async function publish(appId: string, sessionId: string, message: string): Promi
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId, message }),
   });
-  assert.equal(res.status, 201, await res.text());
+  expect(res.status).toBe(201);
 }
 
 async function readDraft(appId: string, sessionId: string): Promise<ScaffoldFile[]> {
@@ -131,7 +130,7 @@ test('toggling an app-owned automation enabled flag over HTTP republishes the ma
   // Toggle enabled false → true, exactly as AUTOMATIONS_SET_ENABLED does.
   const current = await readDraft('notes', 's1');
   const changed = automation.setEnabledInFiles(current, 'digest', true);
-  assert.equal(changed.length, 1);
+  expect(changed.length).toBe(1);
   await putFiles('notes', 's1', changed);
   await publish('notes', 's1', 'toggle digest');
 
@@ -139,7 +138,7 @@ test('toggling an app-owned automation enabled flag over HTTP republishes the ma
   const manifest = JSON.parse(
     after.find((f) => f.path === 'automations/digest/automation.json')!.content,
   ) as { enabled: boolean };
-  assert.equal(manifest.enabled, true);
+  expect(manifest.enabled).toBe(true);
 });
 
 test('deleting an app-owned automation over HTTP removes the subdir but keeps the app', async () => {
@@ -151,7 +150,7 @@ test('deleting an app-owned automation over HTTP removes the subdir but keeps th
   // branch does: file-map transform → DELETE each removed path → republish.
   const current = await readDraft('notes', 's2');
   const { removed } = automation.deleteFromFiles(current, 'digest');
-  assert.deepEqual(removed.sort(), [
+  expect(removed.sort()).toEqual([
     'automations/digest/automation.json',
     'automations/digest/handler.js',
   ]);
@@ -163,24 +162,15 @@ test('deleting an app-owned automation over HTTP removes the subdir but keeps th
         .join('/')}?sessionId=s2`,
       { method: 'DELETE', headers: auth() },
     );
-    assert.equal(res.status, 200, `delete ${rel}: ${await res.text()}`);
+    expect(res.status).toBe(200);
   }
   await publish('notes', 's2', 'delete digest');
 
   // The app survives on `main`; the automation's files are gone.
   const listRes = await fetch(`${handle.url}/centraid/_apps`, { headers: auth() });
   const list = (await listRes.json()) as Array<{ id: string }>;
-  assert.ok(
-    list.some((a) => a.id === 'notes'),
-    'owning app should survive',
-  );
+  expect(list.some((a) => a.id === 'notes')).toBeTruthy();
   const after = await readDraft('notes', 's2');
-  assert.ok(
-    after.some((f) => f.path === 'app.json'),
-    'app.json should remain',
-  );
-  assert.ok(
-    !after.some((f) => f.path.startsWith('automations/digest/')),
-    'automation subdir should be gone',
-  );
+  expect(after.some((f) => f.path === 'app.json')).toBeTruthy();
+  expect(!after.some((f) => f.path.startsWith('automations/digest/'))).toBeTruthy();
 });

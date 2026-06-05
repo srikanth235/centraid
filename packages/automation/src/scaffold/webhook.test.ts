@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import {
   provisionPendingWebhooksInFiles,
   verifyWebhookSecret,
@@ -36,21 +35,21 @@ describe('provisionPendingWebhooksInFiles', () => {
       { path: 'automations/hook/handler.js', content: 'export default async () => ({});' },
     ];
     const { files: out, minted } = provisionPendingWebhooksInFiles(files, 'auto.hook');
-    assert.equal(minted.length, 1);
-    assert.equal(minted[0]!.ownerApp, 'auto.hook');
-    assert.equal(minted[0]!.automationId, 'hook');
-    assert.match(minted[0]!.secret, /^[0-9a-f]{48}$/);
+    expect(minted.length).toBe(1);
+    expect(minted[0]!.ownerApp).toBe('auto.hook');
+    expect(minted[0]!.automationId).toBe('hook');
+    expect(minted[0]!.secret).toMatch(/^[0-9a-f]{48}$/);
 
     const mf = JSON.parse(
       out.find((f) => f.path === 'automations/hook/automation.json')!.content,
     ) as { triggers: { kind: string; id: string; secretHash: string; pending?: boolean }[] };
-    assert.equal(mf.triggers[0]!.kind, 'webhook');
-    assert.equal(mf.triggers[0]!.id, minted[0]!.webhookId);
-    assert.equal(mf.triggers[0]!.pending, undefined);
+    expect(mf.triggers[0]!.kind).toBe('webhook');
+    expect(mf.triggers[0]!.id).toBe(minted[0]!.webhookId);
+    expect(mf.triggers[0]!.pending).toBe(undefined);
     // The manifest stores only the hash; the plaintext verifies against it.
-    assert.ok(verifyWebhookSecret(minted[0]!.secret, mf.triggers[0]!.secretHash));
+    expect(verifyWebhookSecret(minted[0]!.secret, mf.triggers[0]!.secretHash)).toBeTruthy();
     // Non-manifest files pass through untouched.
-    assert.equal(out.find((f) => f.path === 'app.json')!.content, '{}');
+    expect(out.find((f) => f.path === 'app.json')!.content).toBe('{}');
   });
 
   it('is a no-op when there is no pending webhook', () => {
@@ -61,8 +60,8 @@ describe('provisionPendingWebhooksInFiles', () => {
       },
     ];
     const { files: out, minted } = provisionPendingWebhooksInFiles(files, 'a');
-    assert.deepEqual(minted, []);
-    assert.equal(out[0]!.content, files[0]!.content);
+    expect(minted).toEqual([]);
+    expect(out[0]!.content).toBe(files[0]!.content);
   });
 
   it('passes through an unparseable manifest', () => {
@@ -70,7 +69,7 @@ describe('provisionPendingWebhooksInFiles', () => {
       { path: 'automations/bad/automation.json', content: '{ not json' },
     ];
     const { minted, files: out } = provisionPendingWebhooksInFiles(files, 'a');
-    assert.deepEqual(minted, []);
-    assert.equal(out[0]!.content, '{ not json');
+    expect(minted).toEqual([]);
+    expect(out[0]!.content).toBe('{ not json');
   });
 });

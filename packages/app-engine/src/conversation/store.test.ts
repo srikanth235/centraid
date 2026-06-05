@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
@@ -43,11 +42,11 @@ describe('ConversationStore — conversations', () => {
       title: 'Hi',
     });
     const got = store.getConversation(conv.id);
-    assert.equal(got?.kind, 'chat');
-    assert.equal(got?.userId, 'u1');
-    assert.equal(got?.appId, 'app');
-    assert.equal(got?.title, 'Hi');
-    assert.equal(got?.turnCount, 0);
+    expect(got?.kind).toBe('chat');
+    expect(got?.userId).toBe('u1');
+    expect(got?.appId).toBe('app');
+    expect(got?.title).toBe('Hi');
+    expect(got?.turnCount).toBe(0);
     store.close();
   });
 
@@ -57,11 +56,11 @@ describe('ConversationStore — conversations', () => {
     store.createAutomationRun('c2', 'app/digest', 'app');
     const a = store.getConversation('c1');
     const b = store.getConversation('c2');
-    assert.equal(a?.kind, 'automation');
-    assert.equal(a?.automationId, 'app/digest');
-    assert.equal(a?.appId, 'app');
-    assert.equal(b?.automationId, 'app/digest');
-    assert.notEqual(a?.id, b?.id, 're-firing makes a new conversation, not one reused thread');
+    expect(a?.kind).toBe('automation');
+    expect(a?.automationId).toBe('app/digest');
+    expect(a?.appId).toBe('app');
+    expect(b?.automationId).toBe('app/digest');
+    expect(a?.id).not.toBe(b?.id);
     store.close();
   });
 
@@ -77,9 +76,9 @@ describe('ConversationStore — conversations', () => {
     });
     store.insertMessageIn({ turnId: 't1', role: 'user', text: 'hello', startedAt: 1 });
     const list = store.listConversationsMeta('u1');
-    assert.equal(list.length, 1);
-    assert.equal(list[0]?.id, c.id);
-    assert.equal(list[0]?.messageCount, 1);
+    expect(list.length).toBe(1);
+    expect(list[0]?.id).toBe(c.id);
+    expect(list[0]?.messageCount).toBe(1);
     store.close();
   });
 });
@@ -100,13 +99,13 @@ describe('ConversationStore — turns', () => {
       triggerKind: 'interactive',
       startedAt: 2,
     });
-    assert.equal(store.getTurn('t0')?.seq, 0);
-    assert.equal(store.getTurn('t1')?.seq, 1);
+    expect(store.getTurn('t0')?.seq).toBe(0);
+    expect(store.getTurn('t1')?.seq).toBe(1);
     store.finishTurn({ turnId: 't1', endedAt: 3, ok: false, error: 'boom', summary: 's' });
     const t = store.getTurn('t1');
-    assert.equal(t?.ok, false);
-    assert.equal(t?.error, 'boom');
-    assert.equal(t?.summary, 's');
+    expect(t?.ok).toBe(false);
+    expect(t?.error).toBe('boom');
+    expect(t?.summary).toBe('s');
     store.close();
   });
 
@@ -144,10 +143,10 @@ describe('ConversationStore — turns', () => {
     });
     store.finishTurn({ turnId: 'r', endedAt: 10, ok: true });
     const t = store.getTurn('r');
-    assert.equal(t?.totalInputTokens, 100);
-    assert.equal(t?.totalOutputTokens, 20);
-    assert.equal(t?.stepCount, 0);
-    assert.equal(t?.toolCount, 1);
+    expect(t?.totalInputTokens).toBe(100);
+    expect(t?.totalOutputTokens).toBe(20);
+    expect(t?.stepCount).toBe(0);
+    expect(t?.toolCount).toBe(1);
     store.close();
   });
 
@@ -164,14 +163,11 @@ describe('ConversationStore — turns', () => {
       });
       store.finishTurn({ turnId: id, endedAt: 200 + i, ok: i !== 1 });
     }
-    assert.equal(store.listTurnsFiltered(c.id).length, 5);
-    assert.equal(store.listTurnsFiltered(c.id, { status: 'ok' }).length, 4);
-    assert.equal(store.listTurnsFiltered(c.id, { status: 'error' }).length, 1);
-    assert.equal(store.listTurnsFiltered(c.id, { since: 103 }).length, 2);
-    assert.deepEqual(
-      store.listTurnsFiltered(c.id, { limit: 2 }).map((t) => t.turnId),
-      ['r4', 'r3'],
-    );
+    expect(store.listTurnsFiltered(c.id).length).toBe(5);
+    expect(store.listTurnsFiltered(c.id, { status: 'ok' }).length).toBe(4);
+    expect(store.listTurnsFiltered(c.id, { status: 'error' }).length).toBe(1);
+    expect(store.listTurnsFiltered(c.id, { since: 103 }).length).toBe(2);
+    expect(store.listTurnsFiltered(c.id, { limit: 2 }).map((t) => t.turnId)).toEqual(['r4', 'r3']);
     store.close();
   });
 });
@@ -199,16 +195,13 @@ describe('ConversationStore — items + message_in', () => {
       durationMs: 1,
     });
     const items = store.listItems('t');
-    assert.deepEqual(
-      items.map((i) => [i.kind, i.ordinal]),
-      [
-        ['message_in', 0],
-        ['step', 1],
-      ],
-    );
-    assert.equal(items[0]?.text, 'hi there');
-    assert.equal(items[0]?.role, 'user');
-    assert.equal(store.messageInText('t'), 'hi there');
+    expect(items.map((i) => [i.kind, i.ordinal])).toEqual([
+      ['message_in', 0],
+      ['step', 1],
+    ]);
+    expect(items[0]?.text).toBe('hi there');
+    expect(items[0]?.role).toBe('user');
+    expect(store.messageInText('t')).toBe('hi there');
     store.close();
   });
 
@@ -231,8 +224,8 @@ describe('ConversationStore — items + message_in', () => {
       startedAt: 10,
     });
     let [n] = store.listItems('t');
-    assert.equal(n?.endedAt, undefined);
-    assert.equal(n?.ok, true);
+    expect(n?.endedAt).toBe(undefined);
+    expect(n?.ok).toBe(true);
     store.closeItem({
       itemId: 'n1',
       ok: false,
@@ -241,10 +234,10 @@ describe('ConversationStore — items + message_in', () => {
       durationMs: 25,
     });
     [n] = store.listItems('t');
-    assert.equal(store.listItems('t').length, 1, 'closeItem updates, never inserts');
-    assert.equal(n?.ok, false);
-    assert.equal(n?.error, 'rate limited');
-    assert.equal(n?.argsJson, '{"q":1}');
+    expect(store.listItems('t').length).toBe(1);
+    expect(n?.ok).toBe(false);
+    expect(n?.error).toBe('rate limited');
+    expect(n?.argsJson).toBe('{"q":1}');
     store.close();
   });
 });
@@ -274,11 +267,11 @@ describe('ConversationStore — attachments', () => {
       filename: 'pic.png',
     });
     const byItem = store.listAttachmentsForItem(itemId);
-    assert.equal(byItem.length, 1);
-    assert.equal(byItem[0]?.mime, 'image/png');
-    assert.equal(byItem[0]?.filename, 'pic.png');
-    assert.equal(store.listAttachmentsForTurn('t').length, 1);
-    assert.deepEqual([...store.referencedHashes()], ['a'.repeat(64)]);
+    expect(byItem.length).toBe(1);
+    expect(byItem[0]?.mime).toBe('image/png');
+    expect(byItem[0]?.filename).toBe('pic.png');
+    expect(store.listAttachmentsForTurn('t').length).toBe(1);
+    expect([...store.referencedHashes()]).toEqual(['a'.repeat(64)]);
     store.close();
   });
 });
@@ -291,10 +284,10 @@ describe('ConversationStore — automation state', () => {
     s1.stateSet('auto-bar', 'cursor', JSON.stringify('B'), 1);
     s1.close();
     const s2 = new ConversationStore(provider);
-    assert.equal(s2.stateGet('auto-foo', 'cursor')?.valueJson, JSON.stringify({ since: 42 }));
-    assert.equal(s2.stateGet('auto-bar', 'cursor')?.valueJson, JSON.stringify('B'));
+    expect(s2.stateGet('auto-foo', 'cursor')?.valueJson).toBe(JSON.stringify({ since: 42 }));
+    expect(s2.stateGet('auto-bar', 'cursor')?.valueJson).toBe(JSON.stringify('B'));
     s2.stateDelete('auto-foo', 'cursor');
-    assert.equal(s2.stateGet('auto-foo', 'cursor'), undefined);
+    expect(s2.stateGet('auto-foo', 'cursor')).toBe(undefined);
     s2.close();
   });
 });
@@ -333,9 +326,9 @@ describe('ConversationStore — prune + delete', () => {
       .listAutomationTurns('app/foo', { limit: 100 })
       .map((t) => t.turnId)
       .sort();
-    assert.deepEqual(remaining, ['r0', 'r4', 'r5'], 'pinned r0 survives count pruning');
-    assert.equal(store.listItems('r1').length, 0, 'pruned fire items cascade away');
-    assert.equal(store.listItems('r5').length, 1);
+    expect(remaining).toEqual(['r0', 'r4', 'r5']);
+    expect(store.listItems('r1').length).toBe(0);
+    expect(store.listItems('r5').length).toBe(1);
     store.close();
   });
 
@@ -344,10 +337,10 @@ describe('ConversationStore — prune + delete', () => {
     for (let i = 0; i < 4; i++) seedFire(store, i, i % 2 === 0);
     store.pruneAutomation('app/foo', { errorsOnly: true });
     const remaining = store.listAutomationTurns('app/foo', { limit: 100 });
-    assert.equal(remaining.length, 2);
-    for (const t of remaining) assert.equal(t.ok, false);
+    expect(remaining.length).toBe(2);
+    for (const t of remaining) expect(t.ok).toBe(false);
     store.pruneAutomation('app/foo', { all: true });
-    assert.equal(store.listAutomationTurns('app/foo', { limit: 100 }).length, 2);
+    expect(store.listAutomationTurns('app/foo', { limit: 100 }).length).toBe(2);
     store.close();
   });
 
@@ -359,11 +352,11 @@ describe('ConversationStore — prune + delete', () => {
     store.stateSet('app/a', 'k', JSON.stringify('v'), 1);
     store.stateSet('app/b', 'k', JSON.stringify('v'), 1);
     store.deleteAutomationData('app/a');
-    assert.equal(store.listAutomationTurns('app/a').length, 0);
-    assert.equal(store.listItems('a1').length, 0, 'items cascade with the conversation');
-    assert.equal(store.stateGet('app/a', 'k'), undefined);
-    assert.equal(store.listAutomationTurns('app/b').length, 1);
-    assert.ok(store.stateGet('app/b', 'k'));
+    expect(store.listAutomationTurns('app/a').length).toBe(0);
+    expect(store.listItems('a1').length).toBe(0);
+    expect(store.stateGet('app/a', 'k')).toBe(undefined);
+    expect(store.listAutomationTurns('app/b').length).toBe(1);
+    expect(store.stateGet('app/b', 'k')).toBeTruthy();
     store.close();
   });
 
@@ -378,14 +371,10 @@ describe('ConversationStore — prune + delete', () => {
     });
     const itemId = store.insertMessageIn({ turnId: 't', role: 'user', text: 'hi', startedAt: 1 });
     store.insertAttachment({ itemId, hash: 'b'.repeat(64), mime: 'image/png', sizeBytes: 1 });
-    assert.equal(
-      store.deleteConversation(c.id, 'other-user'),
-      false,
-      'cross-user delete is a no-op',
-    );
-    assert.equal(store.deleteConversation(c.id, 'u1'), true);
-    assert.equal(store.listItems('t').length, 0);
-    assert.equal(store.referencedHashes().size, 0, 'attachment rows cascade away');
+    expect(store.deleteConversation(c.id, 'other-user')).toBe(false);
+    expect(store.deleteConversation(c.id, 'u1')).toBe(true);
+    expect(store.listItems('t').length).toBe(0);
+    expect(store.referencedHashes().size).toBe(0);
     store.close();
   });
 });

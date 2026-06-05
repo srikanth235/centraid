@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -27,30 +26,30 @@ afterEach(async () => {
 });
 
 test('validateConfig rejects missing dataDir', () => {
-  assert.throws(() => validateConfig({}), DaemonConfigError);
+  expect(() => validateConfig({})).toThrow(DaemonConfigError);
 });
 
 test('validateConfig rejects out-of-range port', () => {
-  assert.throws(() => validateConfig({ dataDir: '/tmp/x', port: 99999 }), /must be an integer/);
+  expect(() => validateConfig({ dataDir: '/tmp/x', port: 99999 })).toThrow(/must be an integer/);
 });
 
 test('validateConfig accepts a minimal config and a fully populated one', () => {
-  assert.deepEqual(validateConfig({ dataDir: '/tmp/x' }), { dataDir: '/tmp/x' });
+  expect(validateConfig({ dataDir: '/tmp/x' })).toEqual({ dataDir: '/tmp/x' });
   const full = validateConfig({
     dataDir: '/tmp/x',
     host: '0.0.0.0',
     port: 8765,
     runner: { kind: 'codex', binPath: '/opt/bin/codex', extraArgs: ['--foo'] },
   });
-  assert.equal(full.runner?.kind, 'codex');
-  assert.equal(full.runner?.binPath, '/opt/bin/codex');
+  expect(full.runner?.kind).toBe('codex');
+  expect(full.runner?.binPath).toBe('/opt/bin/codex');
 });
 
 test('buildPrefsPatch clears every runner key when no runner is configured', () => {
   const patch = buildPrefsPatch({ dataDir: '/x' });
   // No runner → every key must clear to null so a removed entry in the
   // config file actually wipes the DB.
-  for (const v of Object.values(patch)) assert.equal(v, null);
+  for (const v of Object.values(patch)) expect(v).toBe(null);
 });
 
 test('buildPrefsPatch sets only the keys the config carries', () => {
@@ -58,9 +57,9 @@ test('buildPrefsPatch sets only the keys the config carries', () => {
     dataDir: '/x',
     runner: { kind: 'claude-code' },
   });
-  assert.equal(patch['agent.runner.kind'], 'claude-code');
-  assert.equal(patch['agent.runner.binPath'], null);
-  assert.equal(patch['agent.runner.extraArgs'], null);
+  expect(patch['agent.runner.kind']).toBe('claude-code');
+  expect(patch['agent.runner.binPath']).toBe(null);
+  expect(patch['agent.runner.extraArgs']).toBe(null);
 });
 
 test('seedRunnerPrefs calls setPrefs even on empty config so a removed runner is cleared', () => {
@@ -75,24 +74,24 @@ test('seedRunnerPrefs calls setPrefs even on empty config so a removed runner is
     },
   } as unknown as UserStore;
   seedRunnerPrefs(fakeStore, { dataDir: '/x' });
-  assert.equal(patches.length, 1, 'setPrefs must be called even when config has no runner');
-  for (const v of Object.values(patches[0]!)) assert.equal(v, null);
+  expect(patches.length).toBe(1);
+  for (const v of Object.values(patches[0]!)) expect(v).toBe(null);
 });
 
 test('daemonLayoutFor resolves relative paths to absolute', () => {
   const layout = daemonLayoutFor('./relative');
-  assert.ok(path.isAbsolute(layout.appsDir));
-  assert.ok(layout.appsDir.endsWith(path.join('relative', 'apps')));
+  expect(path.isAbsolute(layout.appsDir)).toBeTruthy();
+  expect(layout.appsDir.endsWith(path.join('relative', 'apps'))).toBeTruthy();
 });
 
 test('readOrMintToken creates a 64-hex token on first call and re-reads it on the second', async () => {
   const tokenFile = path.join(dataDir, 'token.bin');
   const a = await readOrMintToken(tokenFile);
-  assert.match(a, /^[0-9a-f]{64}$/);
+  expect(a).toMatch(/^[0-9a-f]{64}$/);
   const b = await readOrMintToken(tokenFile);
-  assert.equal(a, b);
+  expect(a).toBe(b);
   const persisted = await readPersistedToken(tokenFile);
-  assert.equal(persisted, a);
+  expect(persisted).toBe(a);
 });
 
 // End-to-end: spawn the CLI via tsx, parse "listening on …" + "token: …"
@@ -141,16 +140,16 @@ test('serve subcommand boots, accepts the printed bearer, and exits cleanly on S
     const ok = await fetch(`${url}/centraid/_apps`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    assert.equal(ok.status, 200);
+    expect(ok.status).toBe(200);
     const body = (await ok.json()) as unknown[];
-    assert.deepEqual(body, []);
+    expect(body).toEqual([]);
 
     const unauth = await fetch(`${url}/centraid/_apps`);
-    assert.equal(unauth.status, 401);
+    expect(unauth.status).toBe(401);
   } finally {
     child.kill('SIGTERM');
     await new Promise<void>((resolve) => child.once('exit', () => resolve()));
   }
 
-  assert.match(stderr, /SIGTERM received/);
+  expect(stderr).toMatch(/SIGTERM received/);
 });

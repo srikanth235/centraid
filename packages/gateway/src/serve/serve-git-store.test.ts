@@ -10,8 +10,7 @@
  * dispatch + the registry list — all reading from the git worktree.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -86,25 +85,22 @@ test('serves an app from the git-store main worktree, not versions/', async () =
   handle = await serve({ paths: pathsUnder(dataDir), appsStoreRoot });
 
   // The handle exposes the live WorktreeStore.
-  assert.ok(handle.appsStore, 'expected appsStore on the handle');
+  expect(handle.appsStore).toBeTruthy();
 
   // Registry list reflects the app synced from main.
   const list = await fetch(`${handle.url}/centraid/_apps`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
-  assert.equal(list.status, 200);
+  expect(list.status).toBe(200);
   const apps = (await list.json()) as Array<{ id: string }>;
-  assert.ok(
-    apps.some((a) => a.id === 'gitapp'),
-    `expected gitapp in registry, got ${JSON.stringify(apps)}`,
-  );
+  expect(apps.some((a) => a.id === 'gitapp')).toBeTruthy();
 
   // Static serve reads index.html from worktrees/main/<sha>/apps/gitapp/.
   const html = await fetch(`${handle.url}/centraid/gitapp/`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
-  assert.equal(html.status, 200, `index status ${html.status}`);
-  assert.match(await html.text(), /git-store/);
+  expect(html.status).toBe(200);
+  expect(await html.text()).toMatch(/git-store/);
 
   // The three-tool dispatch resolves the query handler from the worktree.
   const read = await fetch(`${handle.url}/centraid/_tool/centraid_read`, {
@@ -112,11 +108,11 @@ test('serves an app from the git-store main worktree, not versions/', async () =
     headers: { Authorization: `Bearer ${handle.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ app: 'gitapp', query: 'ping', input: {} }),
   });
-  assert.equal(read.status, 200, `read status ${read.status}: ${await read.clone().text()}`);
-  assert.deepEqual(await read.json(), { pong: true });
+  expect(read.status).toBe(200);
+  expect(await read.json()).toEqual({ pong: true });
 });
 
 test('without appsStoreRoot the handle has no appsStore (no code backend)', async () => {
   handle = await serve({ paths: pathsUnder(dataDir) });
-  assert.equal(handle.appsStore, undefined);
+  expect(handle.appsStore).toBe(undefined);
 });

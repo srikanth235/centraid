@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import {
   ManifestError,
   isPendingWebhookTrigger,
@@ -26,29 +25,29 @@ function baseManifest(over: Record<string, unknown> = {}): Record<string, unknow
 
 describe('isValidCronExpression', () => {
   it('accepts canonical 5-field expressions', () => {
-    assert.equal(isValidCronExpression('*/30 * * * *'), true);
-    assert.equal(isValidCronExpression('0 9 * * MON-FRI'), true);
-    assert.equal(isValidCronExpression('15,45 * * * *'), true);
+    expect(isValidCronExpression('*/30 * * * *')).toBe(true);
+    expect(isValidCronExpression('0 9 * * MON-FRI')).toBe(true);
+    expect(isValidCronExpression('15,45 * * * *')).toBe(true);
   });
 
   it('rejects empty / non-5-field / illegal-char expressions', () => {
-    assert.equal(isValidCronExpression(''), false);
-    assert.equal(isValidCronExpression('* * * *'), false);
-    assert.equal(isValidCronExpression('* * * * * *'), false);
-    assert.equal(isValidCronExpression('@hourly'), false);
-    assert.equal(isValidCronExpression('rm -rf / * * * *'), false);
+    expect(isValidCronExpression('')).toBe(false);
+    expect(isValidCronExpression('* * * *')).toBe(false);
+    expect(isValidCronExpression('* * * * * *')).toBe(false);
+    expect(isValidCronExpression('@hourly')).toBe(false);
+    expect(isValidCronExpression('rm -rf / * * * *')).toBe(false);
   });
 });
 
 describe('validateManifest', () => {
   it('accepts a minimal valid manifest', () => {
     const m = validateManifest(baseManifest());
-    assert.equal(m.name, 'Daily digest');
-    assert.equal(m.version, '0.1.0');
-    assert.equal(m.enabled, true);
+    expect(m.name).toBe('Daily digest');
+    expect(m.version).toBe('0.1.0');
+    expect(m.enabled).toBe(true);
     // Legacy single `trigger` is dual-read into the plural `triggers`.
-    assert.equal(m.triggers.length, 1);
-    assert.deepEqual(m.triggers[0], { kind: 'cron', expr: '0 9 * * *' });
+    expect(m.triggers.length).toBe(1);
+    expect(m.triggers[0]).toEqual({ kind: 'cron', expr: '0 9 * * *' });
   });
 
   it('reads a plural triggers list with multiple crons', () => {
@@ -59,7 +58,7 @@ describe('validateManifest', () => {
       { kind: 'cron', expr: '0 17 * * *' },
     ];
     const m = validateManifest(raw);
-    assert.equal(m.triggers.length, 2);
+    expect(m.triggers.length).toBe(2);
   });
 
   it('accepts a webhook trigger with an id + secret hash', () => {
@@ -67,7 +66,7 @@ describe('validateManifest', () => {
     delete raw.trigger;
     raw.triggers = [{ kind: 'webhook', id: 'abc123', secretHash: 'deadbeef' }];
     const m = validateManifest(raw);
-    assert.equal(m.triggers[0]?.kind, 'webhook');
+    expect(m.triggers[0]?.kind).toBe('webhook');
   });
 
   it('accepts a pending webhook trigger (un-provisioned)', () => {
@@ -75,22 +74,22 @@ describe('validateManifest', () => {
     delete raw.trigger;
     raw.triggers = [{ kind: 'webhook', pending: true }];
     const m = validateManifest(raw);
-    assert.equal(m.triggers[0]?.kind, 'webhook');
-    assert.equal(isPendingWebhookTrigger(m.triggers[0]!), true);
+    expect(m.triggers[0]?.kind).toBe('webhook');
+    expect(isPendingWebhookTrigger(m.triggers[0]!)).toBe(true);
   });
 
   it('rejects a webhook trigger that is neither provisioned nor pending', () => {
     const raw = baseManifest();
     delete raw.trigger;
     raw.triggers = [{ kind: 'webhook' }];
-    assert.throws(() => validateManifest(raw), ManifestError);
+    expect(() => validateManifest(raw)).toThrow(ManifestError);
   });
 
   it('treats an empty triggers list as legal (manual fire only)', () => {
     const raw = baseManifest();
     delete raw.trigger;
     raw.triggers = [];
-    assert.deepEqual(validateManifest(raw).triggers, []);
+    expect(validateManifest(raw).triggers).toEqual([]);
   });
 
   it('rejects more than one webhook trigger', () => {
@@ -100,7 +99,7 @@ describe('validateManifest', () => {
       { kind: 'webhook', id: 'a', secretHash: 'h1' },
       { kind: 'webhook', id: 'b', secretHash: 'h2' },
     ];
-    assert.throws(() => validateManifest(raw), ManifestError);
+    expect(() => validateManifest(raw)).toThrow(ManifestError);
   });
 
   it('defaults version to 0.1.0 and enabled to true when absent', () => {
@@ -108,75 +107,72 @@ describe('validateManifest', () => {
     delete raw.version;
     delete raw.enabled;
     const m = validateManifest(raw);
-    assert.equal(m.version, '0.1.0');
-    assert.equal(m.enabled, true);
+    expect(m.version).toBe('0.1.0');
+    expect(m.enabled).toBe(true);
   });
 
   it('treats a non-true enabled as disabled', () => {
-    assert.equal(validateManifest(baseManifest({ enabled: false })).enabled, false);
+    expect(validateManifest(baseManifest({ enabled: false })).enabled).toBe(false);
   });
 
   it('carries the apps association list', () => {
     const m = validateManifest(baseManifest({ apps: ['todos', 'habits'] }));
-    assert.deepEqual(m.apps, ['todos', 'habits']);
+    expect(m.apps).toEqual(['todos', 'habits']);
   });
 
   it('rejects a missing name', () => {
     const raw = baseManifest();
     delete raw.name;
-    assert.throws(() => validateManifest(raw), ManifestError);
+    expect(() => validateManifest(raw)).toThrow(ManifestError);
   });
 
   it('rejects a missing prompt', () => {
     const raw = baseManifest();
     delete raw.prompt;
-    assert.throws(() => validateManifest(raw), ManifestError);
+    expect(() => validateManifest(raw)).toThrow(ManifestError);
   });
 
   it('rejects a missing generated block', () => {
     const raw = baseManifest();
     delete raw.generated;
-    assert.throws(() => validateManifest(raw), ManifestError);
+    expect(() => validateManifest(raw)).toThrow(ManifestError);
   });
 
   it('rejects an invalid trigger', () => {
-    assert.throws(
-      () => validateManifest(baseManifest({ trigger: { kind: 'webhook' } })),
+    expect(() => validateManifest(baseManifest({ trigger: { kind: 'webhook' } }))).toThrow(
       ManifestError,
     );
-    assert.throws(
-      () => validateManifest(baseManifest({ trigger: { kind: 'cron', expr: 'nope' } })),
-      ManifestError,
-    );
+    expect(() =>
+      validateManifest(baseManifest({ trigger: { kind: 'cron', expr: 'nope' } })),
+    ).toThrow(ManifestError);
   });
 
   it('rejects apps that is not an array of non-empty strings', () => {
-    assert.throws(() => validateManifest(baseManifest({ apps: 'todos' })), ManifestError);
-    assert.throws(() => validateManifest(baseManifest({ apps: [''] })), ManifestError);
+    expect(() => validateManifest(baseManifest({ apps: 'todos' }))).toThrow(ManifestError);
+    expect(() => validateManifest(baseManifest({ apps: [''] }))).toThrow(ManifestError);
   });
 
   it('rejects a requires.model pointing at the mock provider', () => {
-    assert.throws(
-      () => validateManifest(baseManifest({ requires: { model: 'centraid-mock/run' } })),
-      ManifestError,
-    );
+    expect(() =>
+      validateManifest(baseManifest({ requires: { model: 'centraid-mock/run' } })),
+    ).toThrow(ManifestError);
   });
 
   it('defaults history.keep to {count:100} when history is absent', () => {
     const raw = baseManifest();
     delete raw.history;
     const m: Manifest = validateManifest(raw);
-    assert.deepEqual(m.history.keep, { count: 100 });
+    expect(m.history.keep).toEqual({ count: 100 });
   });
 });
 
 describe('parseManifest', () => {
   it('round-trips a JSON string', () => {
     const m = parseManifest(JSON.stringify(baseManifest()));
-    assert.equal(m.name, 'Daily digest');
+    expect(m.name).toBe('Daily digest');
   });
 
   it('rejects invalid JSON', () => {
-    assert.throws(() => parseManifest('{not json'), ManifestError);
+    expect(() => parseManifest('{not json')).toThrow(ManifestError);
   });
 });

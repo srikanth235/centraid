@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -25,10 +24,10 @@ test('append + read returns entries newest-first', async () => {
   await appendLogs(workspace, [mk('info', 'a', 1), mk('info', 'b', 2), mk('info', 'c', 3)]);
 
   const out = await readLogs(workspace);
-  assert.equal(out.length, 3);
-  assert.equal(out[0]!.msg, 'c');
-  assert.equal(out[1]!.msg, 'b');
-  assert.equal(out[2]!.msg, 'a');
+  expect(out.length).toBe(3);
+  expect(out[0]!.msg).toBe('c');
+  expect(out[1]!.msg).toBe('b');
+  expect(out[2]!.msg).toBe('a');
 });
 
 test('limit caps results', async () => {
@@ -38,10 +37,10 @@ test('limit caps results', async () => {
   );
 
   const out = await readLogs(workspace, { limit: 2 });
-  assert.equal(out.length, 2);
+  expect(out.length).toBe(2);
   // Newest-first; the latest two are msg4 and msg3.
-  assert.equal(out[0]!.msg, 'msg4');
-  assert.equal(out[1]!.msg, 'msg3');
+  expect(out[0]!.msg).toBe('msg4');
+  expect(out[1]!.msg).toBe('msg3');
 });
 
 test('level filter drops other levels', async () => {
@@ -53,17 +52,17 @@ test('level filter drops other levels', async () => {
   ]);
 
   const out = await readLogs(workspace, { level: 'warn' });
-  assert.equal(out.length, 1);
-  assert.equal(out[0]!.msg, 'w');
+  expect(out.length).toBe(1);
+  expect(out[0]!.msg).toBe('w');
 });
 
 test('sinceTs drops older entries', async () => {
   await appendLogs(workspace, [mk('info', 'a', 10), mk('info', 'b', 20), mk('info', 'c', 30)]);
 
   const out = await readLogs(workspace, { sinceTs: 20 });
-  assert.equal(out.length, 2);
-  assert.equal(out[0]!.msg, 'c');
-  assert.equal(out[1]!.msg, 'b');
+  expect(out.length).toBe(2);
+  expect(out[0]!.msg).toBe('c');
+  expect(out[1]!.msg).toBe('b');
 });
 
 test('corrupted JSONL lines are skipped', async () => {
@@ -80,9 +79,9 @@ test('corrupted JSONL lines are skipped', async () => {
   );
 
   const out = await readLogs(workspace);
-  assert.equal(out.length, 2);
-  assert.equal(out[0]!.msg, 'also-good');
-  assert.equal(out[1]!.msg, 'good');
+  expect(out.length).toBe(2);
+  expect(out[0]!.msg).toBe('also-good');
+  expect(out[1]!.msg).toBe('good');
 });
 
 test('reads from both current and rotated file when both exist', async () => {
@@ -99,14 +98,14 @@ test('reads from both current and rotated file when both exist', async () => {
   );
 
   const out = await readLogs(workspace);
-  assert.equal(out.length, 2);
-  assert.equal(out[0]!.msg, 'new');
-  assert.equal(out[1]!.msg, 'old');
+  expect(out.length).toBe(2);
+  expect(out[0]!.msg).toBe('new');
+  expect(out[1]!.msg).toBe('old');
 });
 
 test('empty workspace returns []', async () => {
   const out = await readLogs(workspace);
-  assert.deepEqual(out, []);
+  expect(out).toEqual([]);
 });
 
 test('append with empty array is a no-op', async () => {
@@ -116,7 +115,7 @@ test('append with empty array is a no-op', async () => {
     .stat(path.join(workspace, 'logs.jsonl'))
     .then(() => true)
     .catch(() => false);
-  assert.equal(exists, false);
+  expect(exists).toBe(false);
 });
 
 test('readLogs hard-caps oversized limit requests', async () => {
@@ -125,7 +124,7 @@ test('readLogs hard-caps oversized limit requests', async () => {
   const out = await readLogs(workspace, { limit: 999_999 });
   // Hard cap is 500; with one entry, length is just 1 — but the call must
   // not throw. We assert the value is bounded.
-  assert.ok(out.length <= 500);
+  expect(out.length <= 500).toBeTruthy();
 });
 
 test('rejects entries with unknown source on read', async () => {
@@ -135,5 +134,5 @@ test('rejects entries with unknown source on read', async () => {
     'utf8',
   );
   const out = await readLogs(workspace);
-  assert.equal(out.length, 0);
+  expect(out.length).toBe(0);
 });

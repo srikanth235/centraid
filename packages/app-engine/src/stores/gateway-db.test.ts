@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -47,13 +46,13 @@ describe('openGatewayDb (users + user_prefs)', () => {
   it('advances PRAGMA user_version to GATEWAY_MIGRATIONS.length on a fresh DB', () => {
     const path = freshDbPath();
     openGatewayDb(path).close();
-    assert.equal(userVersion(path), GATEWAY_MIGRATIONS.length);
+    expect(userVersion(path)).toBe(GATEWAY_MIGRATIONS.length);
   });
 
   it('creates exactly the users + user_prefs tables', () => {
     const path = freshDbPath();
     openGatewayDb(path).close();
-    assert.deepEqual(tableNames(path), ['user_prefs', 'users']);
+    expect(tableNames(path)).toEqual(['user_prefs', 'users']);
   });
 
   it('re-opening an already-migrated DB is a no-op', () => {
@@ -61,7 +60,7 @@ describe('openGatewayDb (users + user_prefs)', () => {
     openGatewayDb(path).close();
     const before = userVersion(path);
     openGatewayDb(path).close();
-    assert.equal(userVersion(path), before);
+    expect(userVersion(path)).toBe(before);
   });
 
   it('throws when the DB is at a newer version than this build supports', () => {
@@ -70,7 +69,7 @@ describe('openGatewayDb (users + user_prefs)', () => {
     const db = new DatabaseSync(path);
     db.exec(`PRAGMA user_version = ${GATEWAY_MIGRATIONS.length + 1}`);
     db.close();
-    assert.throws(() => openGatewayDb(path), /newer|update centraid/i);
+    expect(() => openGatewayDb(path)).toThrow(/newer|update centraid/i);
   });
 
   it('FK cascade deletes a user’s prefs when the user is removed', () => {
@@ -88,7 +87,7 @@ describe('openGatewayDb (users + user_prefs)', () => {
       );
       db.prepare(`DELETE FROM users WHERE id = ?`).run('u1');
       const prefs = db.prepare(`SELECT COUNT(*) AS n FROM user_prefs`).get() as { n: number };
-      assert.equal(Number(prefs.n), 0);
+      expect(Number(prefs.n)).toBe(0);
     } finally {
       db.close();
     }
@@ -99,14 +98,14 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
   it('advances PRAGMA user_version to RUNTIME_MIGRATIONS.length on a fresh DB', () => {
     const path = freshDbPath();
     openRuntimeDb(path).close();
-    assert.equal(userVersion(path), RUNTIME_MIGRATIONS.length);
-    assert.equal(RUNTIME_MIGRATIONS.length, 1);
+    expect(userVersion(path)).toBe(RUNTIME_MIGRATIONS.length);
+    expect(RUNTIME_MIGRATIONS.length).toBe(1);
   });
 
   it('creates conversations/turns/items/attachments + automation_state (no legacy tables)', () => {
     const path = freshDbPath();
     openRuntimeDb(path).close();
-    assert.deepEqual(tableNames(path), [
+    expect(tableNames(path)).toEqual([
       'attachments',
       'automation_state',
       'conversations',
@@ -121,7 +120,7 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
     openRuntimeDb(path).close();
     const db = new DatabaseSync(path);
     try {
-      assert.equal(db.prepare(`PRAGMA foreign_key_list('conversations')`).all().length, 0);
+      expect(db.prepare(`PRAGMA foreign_key_list('conversations')`).all().length).toBe(0);
     } finally {
       db.close();
     }
@@ -139,14 +138,14 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
             on_delete: string;
           }>
         ).find((f) => f.table === parent);
-      assert.equal(fk('turns', 'conversations')?.on_delete, 'CASCADE');
-      assert.equal(fk('items', 'turns')?.on_delete, 'CASCADE');
-      assert.equal(fk('attachments', 'items')?.on_delete, 'CASCADE');
+      expect(fk('turns', 'conversations')?.on_delete).toBe('CASCADE');
+      expect(fk('items', 'turns')?.on_delete).toBe('CASCADE');
+      expect(fk('attachments', 'items')?.on_delete).toBe('CASCADE');
       // parent_turn_id is FK-free (cross-app sub-runs span files).
       const turnFks = db.prepare(`PRAGMA foreign_key_list('turns')`).all() as Array<{
         from: string;
       }>;
-      assert.ok(!turnFks.some((f) => f.from === 'parent_turn_id'));
+      expect(!turnFks.some((f) => f.from === 'parent_turn_id')).toBeTruthy();
     } finally {
       db.close();
     }
@@ -177,7 +176,7 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
       db.prepare(`DELETE FROM conversations WHERE id = 'c1'`).run();
       for (const table of ['turns', 'items', 'attachments']) {
         const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number };
-        assert.equal(Number(n.n), 0, `${table} should cascade-delete with the conversation`);
+        expect(Number(n.n)).toBe(0);
       }
     } finally {
       db.close();
@@ -189,39 +188,33 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
     const db = openRuntimeDb(path);
     try {
       const now = Date.now();
-      assert.throws(
-        () =>
-          db
-            .prepare(
-              `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c', 'bogus', 'u', ?, ?)`,
-            )
-            .run(now, now),
-        /CHECK/i,
-      );
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c', 'bogus', 'u', ?, ?)`,
+          )
+          .run(now, now),
+      ).toThrow(/CHECK/i);
       db.prepare(
         `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c1','chat','u',?,?)`,
       ).run(now, now);
-      assert.throws(
-        () =>
-          db
-            .prepare(
-              `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t','c1',0,'bogus',?)`,
-            )
-            .run(now),
-        /CHECK/i,
-      );
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t','c1',0,'bogus',?)`,
+          )
+          .run(now),
+      ).toThrow(/CHECK/i);
       db.prepare(
         `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t1','c1',0,'interactive',?)`,
       ).run(now);
-      assert.throws(
-        () =>
-          db
-            .prepare(
-              `INSERT INTO items (id, turn_id, ordinal, kind, started_at) VALUES ('i','t1',0,'bogus',?)`,
-            )
-            .run(now),
-        /CHECK/i,
-      );
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO items (id, turn_id, ordinal, kind, started_at) VALUES ('i','t1',0,'bogus',?)`,
+          )
+          .run(now),
+      ).toThrow(/CHECK/i);
     } finally {
       db.close();
     }
@@ -232,7 +225,7 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
     openRuntimeDb(path).close();
     const before = userVersion(path);
     openRuntimeDb(path).close();
-    assert.equal(userVersion(path), before);
+    expect(userVersion(path)).toBe(before);
   });
 
   it('throws when the DB is at a newer version than this build supports', () => {
@@ -241,7 +234,7 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
     const db = new DatabaseSync(path);
     db.exec(`PRAGMA user_version = ${RUNTIME_MIGRATIONS.length + 1}`);
     db.close();
-    assert.throws(() => openRuntimeDb(path), /newer|update centraid/i);
+    expect(() => openRuntimeDb(path)).toThrow(/newer|update centraid/i);
   });
 });
 
@@ -251,7 +244,7 @@ describe('lazy providers', () => {
       const provider = make(freshDbPath());
       const a = provider();
       const b = provider();
-      assert.equal(a, b);
+      expect(a).toBe(b);
       a.close();
     }
   });
@@ -260,7 +253,7 @@ describe('lazy providers', () => {
     for (const make of [makeGatewayDbProvider, makeRuntimeDbProvider]) {
       const path = freshDbPath();
       make(path);
-      assert.equal(existsSync(path), false);
+      expect(existsSync(path)).toBe(false);
     }
   });
 });

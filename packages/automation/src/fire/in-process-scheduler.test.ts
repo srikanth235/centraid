@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { InProcessScheduler } from './in-process-scheduler.js';
 import type { Row } from '../scaffold/app.js';
 import type { Manifest } from '../manifest/manifest.js';
@@ -40,31 +39,31 @@ describe('InProcessScheduler.reconcile', () => {
       row('a/two', false, ['0 9 * * *']), // disabled → skipped
       row('a/three', true, []), // no cron → skipped
     ]);
-    assert.deepEqual(diff.added, ['a/one']);
-    assert.deepEqual(diff.removed, []);
-    assert.deepEqual(await s.list(), ['a/one']);
+    expect(diff.added).toEqual(['a/one']);
+    expect(diff.removed).toEqual([]);
+    expect(await s.list()).toEqual(['a/one']);
 
     // Change one's schedule, add one, drop the original.
     diff = await s.reconcile([
       row('a/one', true, ['30 8 * * *']), // expr changed → updated
       row('b/four', true, ['0 10 * * *']), // new → added
     ]);
-    assert.deepEqual(diff.added, ['b/four']);
-    assert.deepEqual(diff.updated, ['a/one']);
-    assert.deepEqual(diff.removed, []);
-    assert.deepEqual(await s.list(), ['a/one', 'b/four']);
+    expect(diff.added).toEqual(['b/four']);
+    expect(diff.updated).toEqual(['a/one']);
+    expect(diff.removed).toEqual([]);
+    expect(await s.list()).toEqual(['a/one', 'b/four']);
   });
 
   it('register/unregister honour enabled + cron presence', async () => {
     const s = new InProcessScheduler({ fire: () => {} });
     await s.register(row('a/one', true, ['0 8 * * *']));
-    assert.deepEqual(await s.list(), ['a/one']);
+    expect(await s.list()).toEqual(['a/one']);
     // Disabling via register drops it from the registry.
     await s.register(row('a/one', false, ['0 8 * * *']));
-    assert.deepEqual(await s.list(), []);
+    expect(await s.list()).toEqual([]);
     await s.register(row('a/one', true, ['0 8 * * *']));
     await s.unregister('a/one');
-    assert.deepEqual(await s.list(), []);
+    expect(await s.list()).toEqual([]);
   });
 });
 
@@ -80,17 +79,17 @@ describe('InProcessScheduler.tick', () => {
 
     // 08:00 — only the morning automation matches.
     s.tick();
-    assert.deepEqual(fired, ['a/morning']);
+    expect(fired).toEqual(['a/morning']);
 
     // Same minute again — de-duped, no second fire.
     s.tick();
-    assert.deepEqual(fired, ['a/morning']);
+    expect(fired).toEqual(['a/morning']);
 
     // A later minute that matches nothing — and note 08:01..19:59 were never
     // ticked: missed minutes are not backfired.
     clock = at(20, 0);
     s.tick();
-    assert.deepEqual(fired, ['a/morning', 'a/evening']);
+    expect(fired).toEqual(['a/morning', 'a/evening']);
   });
 
   it('fires every registered automation whose cron matches the minute', async () => {
@@ -103,6 +102,6 @@ describe('InProcessScheduler.tick', () => {
       row('c/three', true, ['0 9 * * *']), // does not
     ]);
     s.tick();
-    assert.deepEqual(fired.sort(), ['a/one', 'b/two']);
+    expect(fired.sort()).toEqual(['a/one', 'b/two']);
   });
 });

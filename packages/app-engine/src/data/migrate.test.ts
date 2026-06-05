@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { test, beforeEach, afterEach, expect } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -58,22 +57,22 @@ function tableNames(): string[] {
 
 test('no migrations dir → no-op, user_version stays 0', async () => {
   const out = await runPendingMigrations(extractedDir, dbFile);
-  assert.deepEqual(out, { applied: [], finalUserVersion: 0 });
-  assert.equal(readUserVersion(), 0);
+  expect(out).toEqual({ applied: [], finalUserVersion: 0 });
+  expect(readUserVersion()).toBe(0);
 });
 
 test('empty migrations dir → no-op', async () => {
   await fs.mkdir(path.join(extractedDir, 'migrations'));
   const out = await runPendingMigrations(extractedDir, dbFile);
-  assert.deepEqual(out, { applied: [], finalUserVersion: 0 });
+  expect(out).toEqual({ applied: [], finalUserVersion: 0 });
 });
 
 test('single migration on a fresh DB applies and bumps user_version', async () => {
   await writeMigration('0001_init.sql', 'CREATE TABLE t (id INTEGER PRIMARY KEY);');
   const out = await runPendingMigrations(extractedDir, dbFile);
-  assert.deepEqual(out, { applied: [1], finalUserVersion: 1 });
-  assert.equal(readUserVersion(), 1);
-  assert.deepEqual(tableNames(), ['t']);
+  expect(out).toEqual({ applied: [1], finalUserVersion: 1 });
+  expect(readUserVersion()).toBe(1);
+  expect(tableNames()).toEqual(['t']);
 });
 
 test('idempotent re-run — already-applied migrations are skipped', async () => {
@@ -82,43 +81,49 @@ test('idempotent re-run — already-applied migrations are skipped', async () =>
 
   // Second run with the same file: should be a no-op, user_version unchanged.
   const out = await runPendingMigrations(extractedDir, dbFile);
-  assert.deepEqual(out, { applied: [], finalUserVersion: 1 });
-  assert.equal(readUserVersion(), 1);
+  expect(out).toEqual({ applied: [], finalUserVersion: 1 });
+  expect(readUserVersion()).toBe(1);
 });
 
 test('three migrations applied in order; only pending ones run on second pass', async () => {
   await writeMigration('0001_init.sql', 'CREATE TABLE a (id INTEGER PRIMARY KEY);');
   const first = await runPendingMigrations(extractedDir, dbFile);
-  assert.deepEqual(first, { applied: [1], finalUserVersion: 1 });
+  expect(first).toEqual({ applied: [1], finalUserVersion: 1 });
 
   await writeMigration('0002_b.sql', 'CREATE TABLE b (id INTEGER PRIMARY KEY);');
   await writeMigration('0003_c.sql', 'CREATE TABLE c (id INTEGER PRIMARY KEY);');
   const second = await runPendingMigrations(extractedDir, dbFile);
-  assert.deepEqual(second, { applied: [2, 3], finalUserVersion: 3 });
-  assert.deepEqual(tableNames(), ['a', 'b', 'c']);
+  expect(second).toEqual({ applied: [2, 3], finalUserVersion: 3 });
+  expect(tableNames()).toEqual(['a', 'b', 'c']);
 });
 
 test('gap rejection — missing id between two files', async () => {
   await writeMigration('0001_init.sql', 'CREATE TABLE a (id INTEGER PRIMARY KEY);');
   await writeMigration('0003_skip.sql', 'CREATE TABLE c (id INTEGER PRIMARY KEY);');
-  await assert.rejects(runPendingMigrations(extractedDir, dbFile), (err: unknown) => {
-    assert.ok(err instanceof MigrationError);
-    assert.equal(err.code, 'gap');
-    assert.match(err.message, /0002/);
-    return true;
-  });
+  let err: unknown;
+  try {
+    await runPendingMigrations(extractedDir, dbFile);
+  } catch (e) {
+    err = e;
+  }
+  expect(err instanceof MigrationError).toBeTruthy();
+  expect((err as MigrationError).code).toBe('gap');
+  expect((err as MigrationError).message).toMatch(/0002/);
   // Nothing applied because validation precedes the transaction.
-  assert.equal(readUserVersion(), 0);
-  assert.deepEqual(tableNames(), []);
+  expect(readUserVersion()).toBe(0);
+  expect(tableNames()).toEqual([]);
 });
 
 test('gap rejection — first file is not 0001', async () => {
   await writeMigration('0002_late.sql', 'CREATE TABLE x (id INTEGER PRIMARY KEY);');
-  await assert.rejects(runPendingMigrations(extractedDir, dbFile), (err: unknown) => {
-    assert.ok(err instanceof MigrationError);
-    assert.equal(err.code, 'gap');
-    return true;
-  });
+  let err: unknown;
+  try {
+    await runPendingMigrations(extractedDir, dbFile);
+  } catch (e) {
+    err = e;
+  }
+  expect(err instanceof MigrationError).toBeTruthy();
+  expect((err as MigrationError).code).toBe('gap');
 });
 
 test('bad name rejection — various malformed filenames', async () => {
@@ -132,55 +137,68 @@ test('bad name rejection — various malformed filenames', async () => {
   ]) {
     await fs.rm(path.join(extractedDir, 'migrations'), { recursive: true, force: true });
     await writeMigration(bad, 'SELECT 1;');
-    await assert.rejects(runPendingMigrations(extractedDir, dbFile), (err: unknown) => {
-      assert.ok(err instanceof MigrationError, `expected MigrationError for "${bad}"`);
-      assert.equal(err.code, 'bad_name', `bad_name expected for "${bad}"`);
-      assert.equal(err.file, bad);
-      return true;
-    });
+    let err: unknown;
+    try {
+      await runPendingMigrations(extractedDir, dbFile);
+    } catch (e) {
+      err = e;
+    }
+    expect(err instanceof MigrationError, `expected MigrationError for "${bad}"`).toBeTruthy();
+    expect((err as MigrationError).code, `bad_name expected for "${bad}"`).toBe('bad_name');
+    expect((err as MigrationError).file).toBe(bad);
   }
 });
 
 test('duplicate id rejection', async () => {
   await writeMigration('0001_a.sql', 'CREATE TABLE a (id INTEGER PRIMARY KEY);');
   await writeMigration('0001_b.sql', 'CREATE TABLE b (id INTEGER PRIMARY KEY);');
-  await assert.rejects(runPendingMigrations(extractedDir, dbFile), (err: unknown) => {
-    assert.ok(err instanceof MigrationError);
-    assert.equal(err.code, 'duplicate');
-    return true;
-  });
+  let err: unknown;
+  try {
+    await runPendingMigrations(extractedDir, dbFile);
+  } catch (e) {
+    err = e;
+  }
+  expect(err instanceof MigrationError).toBeTruthy();
+  expect((err as MigrationError).code).toBe('duplicate');
 });
 
 test('SQL failure rolls back the entire batch — earlier migrations also discarded', async () => {
   await writeMigration('0001_a.sql', 'CREATE TABLE a (id INTEGER PRIMARY KEY);');
   await writeMigration('0002_b.sql', 'CREATE TABLE b (id INTEGER PRIMARY KEY);');
   await writeMigration('0003_broken.sql', 'NOT VALID SQL;');
-  await assert.rejects(runPendingMigrations(extractedDir, dbFile), (err: unknown) => {
-    assert.ok(err instanceof MigrationError);
-    assert.equal(err.code, 'sql_failed');
-    assert.equal(err.file, '0003_broken.sql');
-    assert.ok(err.sqlError && err.sqlError.length > 0, 'sqlError should be populated');
-    return true;
-  });
-  assert.equal(readUserVersion(), 0, 'user_version must be untouched after rollback');
-  assert.deepEqual(tableNames(), [], 'table from 0001 must be rolled back too');
+  let err: unknown;
+  try {
+    await runPendingMigrations(extractedDir, dbFile);
+  } catch (e) {
+    err = e;
+  }
+  expect(err instanceof MigrationError).toBeTruthy();
+  expect((err as MigrationError).code).toBe('sql_failed');
+  expect((err as MigrationError).file).toBe('0003_broken.sql');
+  const sqlError = (err as MigrationError).sqlError;
+  expect(sqlError && sqlError.length > 0, 'sqlError should be populated').toBeTruthy();
+  expect(readUserVersion()).toBe(0);
+  expect(tableNames()).toEqual([]);
 });
 
 test('SQL failure on later migration leaves prior runs intact', async () => {
   // Apply 0001 cleanly.
   await writeMigration('0001_a.sql', 'CREATE TABLE a (id INTEGER PRIMARY KEY);');
   await runPendingMigrations(extractedDir, dbFile);
-  assert.equal(readUserVersion(), 1);
+  expect(readUserVersion()).toBe(1);
 
   // Now ship 0001 + 0002 (broken). 0002 fails → user_version stays at 1, table a stays.
   await writeMigration('0002_broken.sql', 'NOT VALID SQL;');
-  await assert.rejects(runPendingMigrations(extractedDir, dbFile), (err: unknown) => {
-    assert.ok(err instanceof MigrationError);
-    assert.equal(err.code, 'sql_failed');
-    return true;
-  });
-  assert.equal(readUserVersion(), 1);
-  assert.deepEqual(tableNames(), ['a']);
+  let err: unknown;
+  try {
+    await runPendingMigrations(extractedDir, dbFile);
+  } catch (e) {
+    err = e;
+  }
+  expect(err instanceof MigrationError).toBeTruthy();
+  expect((err as MigrationError).code).toBe('sql_failed');
+  expect(readUserVersion()).toBe(1);
+  expect(tableNames()).toEqual(['a']);
 });
 
 test('migration containing BEGIN/COMMIT is rejected as sql_failed', async () => {
@@ -189,13 +207,16 @@ test('migration containing BEGIN/COMMIT is rejected as sql_failed', async () => 
     '0001_nested.sql',
     'BEGIN; CREATE TABLE a (id INTEGER PRIMARY KEY); COMMIT;',
   );
-  await assert.rejects(runPendingMigrations(extractedDir, dbFile), (err: unknown) => {
-    assert.ok(err instanceof MigrationError);
-    assert.equal(err.code, 'sql_failed');
-    assert.equal(err.file, '0001_nested.sql');
-    return true;
-  });
-  assert.equal(readUserVersion(), 0);
+  let err: unknown;
+  try {
+    await runPendingMigrations(extractedDir, dbFile);
+  } catch (e) {
+    err = e;
+  }
+  expect(err instanceof MigrationError).toBeTruthy();
+  expect((err as MigrationError).code).toBe('sql_failed');
+  expect((err as MigrationError).file).toBe('0001_nested.sql');
+  expect(readUserVersion()).toBe(0);
 });
 
 test('multi-statement DDL within a single migration is supported', async () => {
@@ -206,6 +227,6 @@ test('multi-statement DDL within a single migration is supported', async () => {
      CREATE INDEX idx_a ON a(id);`,
   );
   const out = await runPendingMigrations(extractedDir, dbFile);
-  assert.deepEqual(out, { applied: [1], finalUserVersion: 1 });
-  assert.deepEqual(tableNames(), ['a', 'b']);
+  expect(out).toEqual({ applied: [1], finalUserVersion: 1 });
+  expect(tableNames()).toEqual(['a', 'b']);
 });

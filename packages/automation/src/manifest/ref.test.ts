@@ -1,43 +1,42 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { formatRef, isValidId, isValidRef, parseRef } from './ref.js';
 
 describe('isValidId', () => {
   it('accepts filesystem-safe slugs', () => {
-    assert.equal(isValidId('daily-digest'), true);
-    assert.equal(isValidId('summarize_prs'), true);
-    assert.equal(isValidId('Auto123'), true);
+    expect(isValidId('daily-digest')).toBe(true);
+    expect(isValidId('summarize_prs')).toBe(true);
+    expect(isValidId('Auto123')).toBe(true);
   });
 
   it('rejects empty / path-unsafe ids', () => {
-    assert.equal(isValidId(''), false);
-    assert.equal(isValidId('has space'), false);
-    assert.equal(isValidId('../escape'), false);
-    assert.equal(isValidId('dot.dot'), false);
+    expect(isValidId('')).toBe(false);
+    expect(isValidId('has space')).toBe(false);
+    expect(isValidId('../escape')).toBe(false);
+    expect(isValidId('dot.dot')).toBe(false);
   });
 });
 
 describe('automation refs', () => {
   it('formats and parses the canonical <appId>/<id> handle', () => {
-    assert.equal(formatRef('standup-bot', 'job'), 'standup-bot/job');
-    assert.deepEqual(parseRef('standup-bot/job'), {
+    expect(formatRef('standup-bot', 'job')).toBe('standup-bot/job');
+    expect(parseRef('standup-bot/job')).toEqual({
       appId: 'standup-bot',
       automationId: 'job',
     });
   });
 
   it('resolves a bare id against withinApp', () => {
-    assert.deepEqual(parseRef('sibling', 'crm'), {
+    expect(parseRef('sibling', 'crm')).toEqual({
       appId: 'crm',
       automationId: 'sibling',
     });
-    assert.equal(parseRef('sibling'), undefined);
+    expect(parseRef('sibling')).toBe(undefined);
   });
 
   it('isValidRef accepts both forms, rejects malformed', () => {
-    assert.equal(isValidRef('standup/job'), true);
-    assert.equal(isValidRef('job'), true);
-    assert.equal(isValidRef('a/b/c'), false);
-    assert.equal(isValidRef('standup/has space'), false);
+    expect(isValidRef('standup/job')).toBe(true);
+    expect(isValidRef('job')).toBe(true);
+    expect(isValidRef('a/b/c')).toBe(false);
+    expect(isValidRef('standup/has space')).toBe(false);
   });
 });

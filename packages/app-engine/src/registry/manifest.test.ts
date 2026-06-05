@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { describe, expect, it } from 'vitest';
 import {
   APP_MANIFEST_FILE,
   MANIFEST_VERSION,
@@ -42,32 +41,23 @@ const baseManifest = () => ({
 
 describe('manifest constants', () => {
   it('exposes file name and version', () => {
-    assert.equal(APP_MANIFEST_FILE, 'app.json');
-    assert.equal(MANIFEST_VERSION, 1);
+    expect(APP_MANIFEST_FILE).toBe('app.json');
+    expect(MANIFEST_VERSION).toBe(1);
   });
 });
 
 describe('validateManifest', () => {
   it('accepts a well-formed manifest', () => {
     const m = validateManifest(baseManifest());
-    assert.equal(m.id, 'todos');
-    assert.equal(m.actions.length, 1);
-    assert.equal(m.queries.length, 1);
+    expect(m.id).toBe('todos');
+    expect(m.actions.length).toBe(1);
+    expect(m.queries.length).toBe(1);
   });
 
   it('rejects non-object input', () => {
-    assert.throws(
-      () => validateManifest(null),
-      (err: Error) => err instanceof ManifestError,
-    );
-    assert.throws(
-      () => validateManifest('hi'),
-      (err: Error) => err instanceof ManifestError,
-    );
-    assert.throws(
-      () => validateManifest([]),
-      (err: Error) => err instanceof ManifestError,
-    );
+    expect(() => validateManifest(null)).toThrow(ManifestError);
+    expect(() => validateManifest('hi')).toThrow(ManifestError);
+    expect(() => validateManifest([])).toThrow(ManifestError);
   });
 
   it('rejects missing manifestVersion with a clear code', () => {
@@ -75,10 +65,10 @@ describe('validateManifest', () => {
     delete m.manifestVersion;
     try {
       validateManifest(m);
-      assert.fail('should have thrown');
+      expect.fail('should have thrown');
     } catch (err) {
-      assert.ok(err instanceof ManifestError);
-      assert.equal((err as ManifestError).code, 'unsupported_manifest_version');
+      expect(err instanceof ManifestError).toBeTruthy();
+      expect((err as ManifestError).code).toBe('unsupported_manifest_version');
     }
   });
 
@@ -87,31 +77,30 @@ describe('validateManifest', () => {
     (m as Record<string, unknown>).manifestVersion = 99;
     try {
       validateManifest(m);
-      assert.fail('should have thrown');
+      expect.fail('should have thrown');
     } catch (err) {
-      assert.ok(err instanceof ManifestError);
-      assert.equal((err as ManifestError).code, 'unsupported_manifest_version');
+      expect(err instanceof ManifestError).toBeTruthy();
+      expect((err as ManifestError).code).toBe('unsupported_manifest_version');
     }
   });
 
   it('rejects missing required top-level fields', () => {
     const m = baseManifest() as Record<string, unknown>;
     delete m.id;
-    assert.throws(
-      () => validateManifest(m),
-      (err: Error) => {
-        return err instanceof ManifestError && err.code === 'invalid_manifest';
-      },
-    );
+    let err: unknown;
+    try {
+      validateManifest(m);
+    } catch (e) {
+      err = e;
+    }
+    expect(err instanceof ManifestError).toBeTruthy();
+    expect((err as ManifestError).code).toBe('invalid_manifest');
   });
 
   it('rejects an action with invalid confirmation', () => {
     const m = baseManifest();
     (m.actions[0] as { confirmation: string }).confirmation = 'sometimes';
-    assert.throws(
-      () => validateManifest(m),
-      (err: Error) => err instanceof ManifestError,
-    );
+    expect(() => validateManifest(m)).toThrow(ManifestError);
   });
 
   it('rejects duplicate action names', () => {
@@ -119,10 +108,10 @@ describe('validateManifest', () => {
     m.actions.push({ ...m.actions[0]! });
     try {
       validateManifest(m);
-      assert.fail('should have thrown');
+      expect.fail('should have thrown');
     } catch (err) {
-      assert.ok(err instanceof ManifestError);
-      assert.equal((err as ManifestError).code, 'duplicate_handler');
+      expect(err instanceof ManifestError).toBeTruthy();
+      expect((err as ManifestError).code).toBe('duplicate_handler');
     }
   });
 
@@ -135,10 +124,10 @@ describe('validateManifest', () => {
     });
     try {
       validateManifest(m);
-      assert.fail('should have thrown');
+      expect.fail('should have thrown');
     } catch (err) {
-      assert.ok(err instanceof ManifestError);
-      assert.equal((err as ManifestError).code, 'reserved_handler_name');
+      expect(err instanceof ManifestError).toBeTruthy();
+      expect((err as ManifestError).code).toBe('reserved_handler_name');
     }
   });
 
@@ -150,10 +139,10 @@ describe('validateManifest', () => {
     });
     try {
       validateManifest(m);
-      assert.fail('should have thrown');
+      expect.fail('should have thrown');
     } catch (err) {
-      assert.ok(err instanceof ManifestError);
-      assert.equal((err as ManifestError).code, 'reserved_handler_name');
+      expect(err instanceof ManifestError).toBeTruthy();
+      expect((err as ManifestError).code).toBe('reserved_handler_name');
     }
   });
 
@@ -164,43 +153,43 @@ describe('validateManifest', () => {
       input: { type: 'object', properties: {}, additionalProperties: false },
     });
     const out = validateManifest(m);
-    assert.equal(out.queries.length, 2);
+    expect(out.queries.length).toBe(2);
   });
 
   it('treats tables as optional', () => {
     const m = baseManifest();
     const out = validateManifest(m);
-    assert.equal(out.tables, undefined);
+    expect(out.tables).toBe(undefined);
   });
 
   it('omits kind when absent and carries an automation kind through', () => {
     // No `kind` → a normal UI app; the field is simply absent.
-    assert.equal(validateManifest(baseManifest()).kind, undefined);
+    expect(validateManifest(baseManifest()).kind).toBe(undefined);
     // `kind: 'automation'` marks a UI-less automation app (replaces the
     // legacy `auto.` id prefix) and round-trips through validation.
     const auto = { ...baseManifest(), kind: 'automation' };
-    assert.equal(validateManifest(auto).kind, 'automation');
+    expect(validateManifest(auto).kind).toBe('automation');
   });
 
   it('rejects an unknown kind value', () => {
     const m = { ...baseManifest(), kind: 'widget' };
-    assert.throws(() => validateManifest(m), ManifestError);
+    expect(() => validateManifest(m)).toThrow(ManifestError);
   });
 });
 
 describe('parseManifest', () => {
   it('parses well-formed JSON', () => {
     const out = parseManifest(JSON.stringify(baseManifest()));
-    assert.equal(out.name, 'Todos');
+    expect(out.name).toBe('Todos');
   });
 
   it('rejects invalid JSON with code invalid_json', () => {
     try {
       parseManifest('not json');
-      assert.fail('should have thrown');
+      expect.fail('should have thrown');
     } catch (err) {
-      assert.ok(err instanceof ManifestError);
-      assert.equal((err as ManifestError).code, 'invalid_json');
+      expect(err instanceof ManifestError).toBeTruthy();
+      expect((err as ManifestError).code).toBe('invalid_json');
     }
   });
 });
@@ -213,18 +202,18 @@ describe('compileSchema + Ajv round-trip', () => {
       required: ['id'],
       additionalProperties: false,
     });
-    assert.equal(validate({ id: 5 }), true);
-    assert.equal(validate({}), false);
-    assert.equal(validate({ id: 'x' }), false);
+    expect(validate({ id: 5 })).toBe(true);
+    expect(validate({})).toBe(false);
+    expect(validate({ id: 'x' })).toBe(false);
   });
 });
 
 describe('findAction / findQuery', () => {
   it('looks up by name', () => {
     const m = validateManifest(baseManifest());
-    assert.equal(findAction(m, 'add')?.name, 'add');
-    assert.equal(findAction(m, 'missing'), undefined);
-    assert.equal(findQuery(m, 'list')?.name, 'list');
-    assert.equal(findQuery(m, 'missing'), undefined);
+    expect(findAction(m, 'add')?.name).toBe('add');
+    expect(findAction(m, 'missing')).toBe(undefined);
+    expect(findQuery(m, 'list')?.name).toBe('list');
+    expect(findQuery(m, 'missing')).toBe(undefined);
   });
 });

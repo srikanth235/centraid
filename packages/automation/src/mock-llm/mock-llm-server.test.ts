@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { startMockLlmServer, type StagedTurn } from './mock-llm-server.js';
 
 async function withServer<T>(
@@ -18,7 +17,7 @@ describe('mock-llm-server: bearer auth', () => {
   it('rejects requests without a bearer token (401)', async () => {
     await withServer(async (server) => {
       const res = await fetch(`${server.baseUrl}/messages`, { method: 'POST', body: '{}' });
-      assert.equal(res.status, 401);
+      expect(res.status).toBe(401);
     });
   });
 
@@ -29,16 +28,16 @@ describe('mock-llm-server: bearer auth', () => {
         headers: { authorization: 'Bearer centraid-mock-not-a-real-id' },
         body: '{}',
       });
-      assert.equal(res.status, 403);
+      expect(res.status).toBe(403);
     });
   });
 
   it('serves GET /v1/models without auth (preflight)', async () => {
     await withServer(async (server) => {
       const res = await fetch(`${server.baseUrl}/models`);
-      assert.equal(res.status, 200);
+      expect(res.status).toBe(200);
       const body = (await res.json()) as { data: Array<{ id: string }> };
-      assert.equal(body.data.length, 1);
+      expect(body.data.length).toBe(1);
     });
   });
 });
@@ -58,9 +57,9 @@ describe('mock-llm-server: stage + serve', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       server.stageTurn(dispatchId, { text: 'released', stopReason: 'end_turn' });
       const res = await resPromise;
-      assert.equal(res.status, 200);
+      expect(res.status).toBe(200);
       const text = await res.text();
-      assert.match(text, /"text":"released"/);
+      expect(text).toMatch(/"text":"released"/);
     });
   });
 
@@ -75,9 +74,9 @@ describe('mock-llm-server: stage + serve', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       server.endDispatch(dispatchId);
       const res = await resPromise;
-      assert.equal(res.status, 200);
+      expect(res.status).toBe(200);
       const text = await res.text();
-      assert.match(text, /"stop_reason":"end_turn"/);
+      expect(text).toMatch(/"stop_reason":"end_turn"/);
     });
   });
 
@@ -97,16 +96,16 @@ describe('mock-llm-server: stage + serve', () => {
         },
         body: JSON.stringify({ messages: [{ role: 'user', content: '<<<centraid:foo:bar>>>' }] }),
       });
-      assert.equal(res.status, 200);
+      expect(res.status).toBe(200);
       const text = await res.text();
       // Frame-level checks: SSE events should include message_start,
       // a tool_use content_block, and message_stop.
-      assert.match(text, /event: message_start/);
-      assert.match(text, /"type":"tool_use"/);
-      assert.match(text, /"name":"github.list_pull_requests"/);
-      assert.match(text, /"id":"toolu_abc"/);
-      assert.match(text, /"stop_reason":"tool_use"/);
-      assert.match(text, /event: message_stop/);
+      expect(text).toMatch(/event: message_start/);
+      expect(text).toMatch(/"type":"tool_use"/);
+      expect(text).toMatch(/"name":"github.list_pull_requests"/);
+      expect(text).toMatch(/"id":"toolu_abc"/);
+      expect(text).toMatch(/"stop_reason":"tool_use"/);
+      expect(text).toMatch(/event: message_stop/);
     });
   });
 
@@ -127,9 +126,9 @@ describe('mock-llm-server: stage + serve', () => {
           headers: { authorization: `Bearer ${bearerToken}`, accept: 'text/event-stream' },
           body: JSON.stringify({ messages: [{ role: 'user', content: '<<<centraid:foo:bar>>>' }] }),
         });
-        assert.equal(starts.length, 1);
-        assert.equal(starts[0]!.dispatchId, dispatchId);
-        assert.deepEqual(starts[0]!.toolUses, [
+        expect(starts.length).toBe(1);
+        expect(starts[0]!.dispatchId).toBe(dispatchId);
+        expect(starts[0]!.toolUses).toEqual([
           { id: 'toolu_a', name: 'mailer.send' },
           { id: 'toolu_b', name: 'github.list' },
         ]);
@@ -149,7 +148,7 @@ describe('mock-llm-server: stage + serve', () => {
           headers: { authorization: `Bearer ${bearerToken}`, accept: 'text/event-stream' },
           body: JSON.stringify({ messages: [{ role: 'user', content: '<<<centraid:foo:bar>>>' }] }),
         });
-        assert.equal(fired, false);
+        expect(fired).toBe(false);
       },
       { onToolStart: () => (fired = true) },
     );
@@ -174,14 +173,14 @@ describe('mock-llm-server: stage + serve', () => {
           stream: true,
         }),
       });
-      assert.equal(res.status, 200);
+      expect(res.status).toBe(200);
       const text = await res.text();
-      assert.match(text, /chat\.completion\.chunk/);
-      assert.match(text, /tool_calls/);
-      assert.match(text, /"id":"call_xyz"/);
-      assert.match(text, /github\.list_issues/);
-      assert.match(text, /"finish_reason":"tool_calls"/);
-      assert.match(text, /\[DONE\]/);
+      expect(text).toMatch(/chat\.completion\.chunk/);
+      expect(text).toMatch(/tool_calls/);
+      expect(text).toMatch(/"id":"call_xyz"/);
+      expect(text).toMatch(/github\.list_issues/);
+      expect(text).toMatch(/"finish_reason":"tool_calls"/);
+      expect(text).toMatch(/\[DONE\]/);
     });
   });
 
@@ -201,13 +200,13 @@ describe('mock-llm-server: stage + serve', () => {
           stream: true,
         }),
       });
-      assert.equal(res.status, 200);
+      expect(res.status).toBe(200);
       const text = await res.text();
-      assert.match(text, /event: response\.created/);
-      assert.match(text, /"type":"function_call"/);
-      assert.match(text, /"name":"exec_command"/);
-      assert.match(text, /"call_id":"call_resp"/);
-      assert.match(text, /event: response\.completed/);
+      expect(text).toMatch(/event: response\.created/);
+      expect(text).toMatch(/"type":"function_call"/);
+      expect(text).toMatch(/"name":"exec_command"/);
+      expect(text).toMatch(/"call_id":"call_resp"/);
+      expect(text).toMatch(/event: response\.completed/);
     });
   });
 
@@ -221,8 +220,8 @@ describe('mock-llm-server: stage + serve', () => {
         body: JSON.stringify({ messages: [{ role: 'user', content: 'ack' }] }),
       });
       const text = await res.text();
-      assert.match(text, /"text":"ok"/);
-      assert.match(text, /"stop_reason":"end_turn"/);
+      expect(text).toMatch(/"text":"ok"/);
+      expect(text).toMatch(/"stop_reason":"end_turn"/);
     });
   });
 
@@ -230,8 +229,7 @@ describe('mock-llm-server: stage + serve', () => {
     await withServer(async (server) => {
       const { dispatchId } = server.mintDispatchToken();
       server.stageTurn(dispatchId, { text: 'a', stopReason: 'end_turn' });
-      assert.throws(
-        () => server.stageTurn(dispatchId, { text: 'b', stopReason: 'end_turn' }),
+      expect(() => server.stageTurn(dispatchId, { text: 'b', stopReason: 'end_turn' })).toThrow(
         /already staged/,
       );
       server.clearStaged(dispatchId);
@@ -268,10 +266,10 @@ describe('mock-llm-server: tool_result capture', () => {
             ],
           }),
         });
-        assert.equal(captured.length, 1);
-        assert.equal(captured[0]!.id, 'toolu_abc');
-        assert.equal(captured[0]!.content, 'result text here');
-        assert.equal(captured[0]!.isError, false);
+        expect(captured.length).toBe(1);
+        expect(captured[0]!.id).toBe('toolu_abc');
+        expect(captured[0]!.content).toBe('result text here');
+        expect(captured[0]!.isError).toBe(false);
       },
       {
         onToolResults: (dispatchId, results) => {
@@ -298,9 +296,9 @@ describe('mock-llm-server: tool_result capture', () => {
             ],
           }),
         });
-        assert.equal(captured.length, 1);
-        assert.equal(captured[0]!.id, 'call_resp');
-        assert.equal(captured[0]!.content, 'resp output');
+        expect(captured.length).toBe(1);
+        expect(captured[0]!.id).toBe('call_resp');
+        expect(captured[0]!.content).toBe('resp output');
       },
       {
         onToolResults: (_dispatchId, results) => {
@@ -324,9 +322,9 @@ describe('mock-llm-server: tool_result capture', () => {
             tools: [{ type: 'function', name: 'exec_command', parameters: { type: 'object' } }],
           }),
         });
-        assert.equal(bodies.length, 1);
+        expect(bodies.length).toBe(1);
         const tools = bodies[0]!.tools as Array<{ name: string }>;
-        assert.equal(tools[0]!.name, 'exec_command');
+        expect(tools[0]!.name).toBe('exec_command');
       },
       {
         onRequest: (_dispatchId, body) => {
@@ -353,9 +351,9 @@ describe('mock-llm-server: tool_result capture', () => {
             ],
           }),
         });
-        assert.equal(captured.length, 1);
-        assert.equal(captured[0]!.id, 'call_xyz');
-        assert.equal(captured[0]!.content, 'tool output');
+        expect(captured.length).toBe(1);
+        expect(captured[0]!.id).toBe('call_xyz');
+        expect(captured[0]!.content).toBe('tool output');
       },
       {
         onToolResults: (_dispatchId, results) => {
