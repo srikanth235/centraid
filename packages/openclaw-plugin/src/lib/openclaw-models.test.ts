@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { parseModelsJson, parseClassification, hashModelIds } from './openclaw-models.js';
 
 describe('parseModelsJson', () => {
@@ -24,31 +23,31 @@ describe('parseModelsJson', () => {
         },
       ],
     });
-    assert.deepEqual(parseModelsJson(stdout), [
+    expect(parseModelsJson(stdout)).toEqual([
       { id: 'openai-codex/gpt-5.5', name: 'gpt-5.5', default: true },
       { id: 'openai-codex/gpt-5.3-codex', name: 'gpt-5.3-codex' },
     ]);
   });
 
   it('returns [] for non-JSON output', () => {
-    assert.deepEqual(parseModelsJson('not json'), []);
+    expect(parseModelsJson('not json')).toEqual([]);
   });
 
   it('returns [] when `models` is missing or not an array', () => {
-    assert.deepEqual(parseModelsJson('{}'), []);
-    assert.deepEqual(parseModelsJson(JSON.stringify({ models: 'nope' })), []);
+    expect(parseModelsJson('{}')).toEqual([]);
+    expect(parseModelsJson(JSON.stringify({ models: 'nope' }))).toEqual([]);
   });
 
   it('skips entries without a string `key`', () => {
     const stdout = JSON.stringify({
       models: [{ name: 'no key' }, { key: '' }, { key: 'a/b' }],
     });
-    assert.deepEqual(parseModelsJson(stdout), [{ id: 'a/b' }]);
+    expect(parseModelsJson(stdout)).toEqual([{ id: 'a/b' }]);
   });
 
   it('omits `name` when absent and `default` when not tagged', () => {
     const stdout = JSON.stringify({ models: [{ key: 'x/y', tags: [] }] });
-    assert.deepEqual(parseModelsJson(stdout), [{ id: 'x/y' }]);
+    expect(parseModelsJson(stdout)).toEqual([{ id: 'x/y' }]);
   });
 });
 
@@ -59,7 +58,7 @@ describe('parseClassification', () => {
     const stdout = envelope(
       '[{"id":"openai-codex/gpt-5.5","tier":"smart"},{"id":"openai/gpt-5.4-mini","tier":"fast"}]',
     );
-    assert.deepEqual(parseClassification(stdout), {
+    expect(parseClassification(stdout)).toEqual({
       'openai-codex/gpt-5.5': 'smart',
       'openai/gpt-5.4-mini': 'fast',
     });
@@ -67,20 +66,20 @@ describe('parseClassification', () => {
 
   it('strips ```json code fences', () => {
     const stdout = envelope('```json\n[{"id":"a/b","tier":"balanced"}]\n```');
-    assert.deepEqual(parseClassification(stdout), { 'a/b': 'balanced' });
+    expect(parseClassification(stdout)).toEqual({ 'a/b': 'balanced' });
   });
 
   it('drops entries with an invalid tier or missing id', () => {
     const stdout = envelope(
       '[{"id":"a/b","tier":"genius"},{"tier":"fast"},{"id":"c/d","tier":"fast"}]',
     );
-    assert.deepEqual(parseClassification(stdout), { 'c/d': 'fast' });
+    expect(parseClassification(stdout)).toEqual({ 'c/d': 'fast' });
   });
 
   it('returns {} for a malformed envelope', () => {
-    assert.deepEqual(parseClassification('not json'), {});
-    assert.deepEqual(parseClassification(JSON.stringify({ outputs: [] })), {});
-    assert.deepEqual(parseClassification(envelope('not an array')), {});
+    expect(parseClassification('not json')).toEqual({});
+    expect(parseClassification(JSON.stringify({ outputs: [] }))).toEqual({});
+    expect(parseClassification(envelope('not an array'))).toEqual({});
   });
 });
 
@@ -89,7 +88,7 @@ describe('hashModelIds', () => {
     const a = hashModelIds([{ id: 'x' }, { id: 'y' }]);
     const b = hashModelIds([{ id: 'y' }, { id: 'x' }]);
     const c = hashModelIds([{ id: 'x' }, { id: 'z' }]);
-    assert.equal(a, b);
-    assert.notEqual(a, c);
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
   });
 });

@@ -1,5 +1,4 @@
-import { test } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { expect, test } from 'vitest';
 import { mapClaudeModels } from './model-list.ts';
 
 // ---- claude SDK `supportedModels()` mapping ----
@@ -14,7 +13,7 @@ test('claude: prefers description for name, falls back to displayName, flags def
     { value: 'sonnet', displayName: 'Sonnet' }, // no description → falls back to displayName
     { value: 'haiku' }, // neither → no name
   ];
-  assert.deepEqual(mapClaudeModels(infos), [
+  expect(mapClaudeModels(infos)).toEqual([
     {
       id: 'default',
       name: 'Opus 4.7 with 1M context · Most capable for complex work',
@@ -26,9 +25,7 @@ test('claude: prefers description for name, falls back to displayName, flags def
 });
 
 test('claude: drops name when it equals the id', () => {
-  assert.deepEqual(mapClaudeModels([{ value: 'sonnet', description: 'sonnet' }]), [
-    { id: 'sonnet' },
-  ]);
+  expect(mapClaudeModels([{ value: 'sonnet', description: 'sonnet' }])).toEqual([{ id: 'sonnet' }]);
 });
 
 test('claude: dedupes by id and skips entries with no usable id', () => {
@@ -39,12 +36,9 @@ test('claude: dedupes by id and skips entries with no usable id', () => {
     { value: 42 },
     {},
   ];
-  assert.deepEqual(
-    mapClaudeModels(infos).map((m) => m.id),
-    ['sonnet'],
-  );
+  expect(mapClaudeModels(infos).map((m) => m.id)).toEqual(['sonnet']);
 });
 
 test('claude: empty input → []', () => {
-  assert.deepEqual(mapClaudeModels([]), []);
+  expect(mapClaudeModels([])).toEqual([]);
 });

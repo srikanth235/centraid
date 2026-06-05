@@ -25,8 +25,7 @@
  * busy_timeout → SQLITE_BUSY exceptions from racing connections).
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -75,18 +74,14 @@ test('50 parallel writeOps all land and every onWrite emission mentions the touc
   );
 
   // Every call returned a write result, and rowsAffected was exactly 1.
-  assert.equal(results.length, N);
-  for (const r of results) assert.equal(r.rowsAffected, 1);
+  expect(results.length).toBe(N);
+  for (const r of results) expect(r.rowsAffected).toBe(1);
 
   // The change-bus equivalent (onWrite) fired N times — same count as
   // committed inserts. With emit-after-commit, the 1:1 correspondence
   // is the contract subscribers depend on.
-  assert.equal(
-    observedTables.length,
-    N,
-    `expected ${N} onWrite emissions, got ${observedTables.length}`,
-  );
-  for (const t of observedTables) assert.deepEqual(t, ['counts']);
+  expect(observedTables.length).toBe(N);
+  for (const t of observedTables) expect(t).toEqual(['counts']);
 
   // Verify the rows are actually in the DB (not just reported as
   // affected). Independent connection — proves WAL visibility too.
@@ -97,9 +92,9 @@ test('50 parallel writeOps all land and every onWrite emission mentions the touc
     s: number;
   };
   verify.close();
-  assert.equal(row.n, N);
+  expect(row.n).toBe(N);
   // sum 0..N-1 = N*(N-1)/2
-  assert.equal(row.s, (N * (N - 1)) / 2);
+  expect(row.s).toBe((N * (N - 1)) / 2);
 });
 
 test('a reader concurrent with N writers never throws SQLITE_BUSY', async () => {
@@ -134,5 +129,5 @@ test('a reader concurrent with N writers never throws SQLITE_BUSY', async () => 
   );
   readerStop.done = true;
   await reader;
-  assert.equal(readerErr, undefined, `reader observed: ${String(readerErr)}`);
+  expect(readerErr).toBe(undefined);
 });

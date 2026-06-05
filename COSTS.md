@@ -710,3 +710,6 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-72207456-a71-1780598338 | claude-code | 72207456-a719-4c80-9c24-570ae5da746b | #212 | claude-opus-4-8 | 5752 | 12872 | 32008 | 786 | 19410 | 0.1449 | test: migrate to vitest with repo-wide v8 coverage and engine floors (#212)Imple |
 | claude-code-f4f20f20-4fc-1780626254 | claude-code | f4f20f20-4fc8-42d9-9f1e-cb16fbcdbcdf | #212 | claude-opus-4-8 | 5388 | 10580 | 32008 | 1000 | 16968 | 0.1341 | test(coverage): add repo-wide line floor; correct lint-types vitest comments (#2 |
 | claude-code-ed31e5ae-22b-1780626293 | claude-code | ed31e5ae-22b8-499c-9e9e-23131aa4be06 | #212 | claude-opus-4-8 | 13394 | 1005957 | 20540576 | 184416 | 1203767 | 21.2349 | test(coverage): add repo-wide line floor; correct lint-types vitest comments (#2 |
+| claude-code-a89e49fc-a74-1780628069 | claude-code | a89e49fc-a741-4cc6-8640-7db44ad13710 | #214 | claude-opus-4-8 | 70005 | 431547 | 27123338 | 216594 | 718146 | 22.0237 |  |
+| claude-code-a89e49fc-a74-1780628798 | claude-code | a89e49fc-a741-4cc6-8640-7db44ad13710 | #214 | claude-opus-4-8 | 19987 | 176444 | 25436433 | 113429 | 309860 | 16.7567 |  |
+| claude-code-a89e49fc-a74-1780629334 | claude-code | a89e49fc-a741-4cc6-8640-7db44ad13710 | #214 | claude-opus-4-8 | 13211 | 132851 | 21545186 | 81972 | 228034 | 13.7183 |  |

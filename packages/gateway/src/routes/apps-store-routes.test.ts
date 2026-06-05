@@ -6,8 +6,7 @@
  * roll back. Replaces the tarball-upload flow.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -66,7 +65,7 @@ async function openSession(sessionId: string): Promise<void> {
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId }),
   });
-  assert.equal(res.status, 201, `open session: ${res.status}`);
+  expect(res.status).toBe(201);
 }
 
 async function putFile(sessionId: string, rel: string, content: string): Promise<void> {
@@ -75,7 +74,7 @@ async function putFile(sessionId: string, rel: string, content: string): Promise
     headers: auth(),
     body: content,
   });
-  assert.equal(res.status, 200, `put ${rel}: ${res.status} ${await res.text()}`);
+  expect(res.status).toBe(200);
 }
 
 test('session → write → publish → serve → rollback round-trip', async () => {
@@ -91,13 +90,13 @@ test('session → write → publish → serve → rollback round-trip', async ()
     body: JSON.stringify({ sessionId: 's1', message: 'first' }),
   });
   const pub1Body = (await pub1.json()) as { versionTag: string };
-  assert.equal(pub1.status, 201, `publish v1: ${JSON.stringify(pub1Body)}`);
-  assert.equal(pub1Body.versionTag, 'todo/v1');
+  expect(pub1.status).toBe(201);
+  expect(pub1Body.versionTag).toBe('todo/v1');
 
   // The published app serves from the main worktree.
   const html1 = await fetch(`${handle.url}/centraid/todo/`, { headers: auth() });
-  assert.equal(html1.status, 200);
-  assert.match(await html1.text(), /v1/);
+  expect(html1.status).toBe(200);
+  expect(await html1.text()).toMatch(/v1/);
 
   // Second session bumps index.html and publishes v2.
   await openSession('s2');
@@ -109,9 +108,8 @@ test('session → write → publish → serve → rollback round-trip', async ()
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: 's2', message: 'second' }),
   });
-  assert.equal(((await pub2.json()) as { versionTag: string }).versionTag, 'todo/v2');
-  assert.match(
-    await (await fetch(`${handle.url}/centraid/todo/`, { headers: auth() })).text(),
+  expect(((await pub2.json()) as { versionTag: string }).versionTag).toBe('todo/v2');
+  expect(await (await fetch(`${handle.url}/centraid/todo/`, { headers: auth() })).text()).toMatch(
     /v2/,
   );
 
@@ -119,14 +117,8 @@ test('session → write → publish → serve → rollback round-trip', async ()
   const versions = (await (
     await fetch(`${handle.url}/centraid/_apps/todo/git-versions`, { headers: auth() })
   ).json()) as { versions: Array<{ tag: string; active: boolean }> };
-  assert.deepEqual(
-    versions.versions.map((v) => v.tag),
-    ['todo/v2', 'todo/v1'],
-  );
-  assert.deepEqual(
-    versions.versions.map((v) => v.active),
-    [true, false],
-  );
+  expect(versions.versions.map((v) => v.tag)).toEqual(['todo/v2', 'todo/v1']);
+  expect(versions.versions.map((v) => v.active)).toEqual([true, false]);
 
   // Rollback to v1 — index.html reverts, no new tag minted, the
   // active flag flips from v2 to v1 on the next git-versions read.
@@ -135,18 +127,14 @@ test('session → write → publish → serve → rollback round-trip', async ()
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ versionTag: 'todo/v1' }),
   });
-  assert.equal(rb.status, 200, `rollback: ${await rb.text()}`);
-  assert.match(
-    await (await fetch(`${handle.url}/centraid/todo/`, { headers: auth() })).text(),
+  expect(rb.status).toBe(200);
+  expect(await (await fetch(`${handle.url}/centraid/todo/`, { headers: auth() })).text()).toMatch(
     /v1/,
   );
   const after = (await (
     await fetch(`${handle.url}/centraid/_apps/todo/git-versions`, { headers: auth() })
   ).json()) as { versions: Array<{ tag: string; active: boolean }> };
-  assert.deepEqual(
-    after.versions.map((v) => v.active),
-    [false, true],
-  );
+  expect(after.versions.map((v) => v.active)).toEqual([false, true]);
 });
 
 test('publish rejects an invalid manifest (declared handler file missing)', async () => {
@@ -160,10 +148,10 @@ test('publish rejects an invalid manifest (declared handler file missing)', asyn
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: 's1', message: 'broken' }),
   });
-  assert.equal(pub.status, 400);
+  expect(pub.status).toBe(400);
   const body = (await pub.json()) as { error: string; message: string };
-  assert.equal(body.error, 'invalid_manifest');
-  assert.match(body.message, /queries\/ping\.js does not exist/);
+  expect(body.error).toBe('invalid_manifest');
+  expect(body.message).toMatch(/queries\/ping\.js does not exist/);
 });
 
 test('files read returns the draft files written into a session', async () => {
@@ -174,10 +162,10 @@ test('files read returns the draft files written into a session', async () => {
   const res = await fetch(`${handle.url}/centraid/_apps/todo/files?sessionId=s1`, {
     headers: auth(),
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   const { files } = (await res.json()) as { files: Array<{ path: string }> };
   const paths = files.map((f) => f.path).sort();
-  assert.deepEqual(paths, ['app.json', 'queries/ping.js']);
+  expect(paths).toEqual(['app.json', 'queries/ping.js']);
 });
 
 test('files DELETE removes a draft file from the session (#141)', async () => {
@@ -191,13 +179,13 @@ test('files DELETE removes a draft file from the session (#141)', async () => {
     { method: 'DELETE', headers: auth() },
   );
   const delBody = (await del.json()) as { path: string; deleted: boolean };
-  assert.equal(del.status, 200, JSON.stringify(delBody));
-  assert.deepEqual(delBody, { path: 'automations/wake/handler.js', deleted: true });
+  expect(del.status).toBe(200);
+  expect(delBody).toEqual({ path: 'automations/wake/handler.js', deleted: true });
 
   const after = (await (
     await fetch(`${handle.url}/centraid/_apps/todo/files?sessionId=s1`, { headers: auth() })
   ).json()) as { files: Array<{ path: string }> };
-  assert.deepEqual(after.files.map((f) => f.path).sort(), [
+  expect(after.files.map((f) => f.path).sort()).toEqual([
     'app.json',
     'automations/wake/automation.json',
   ]);
@@ -210,6 +198,6 @@ test('files DELETE rejects a path escaping the app dir (#141)', async () => {
     `${handle.url}/centraid/_apps/todo/files/..%2F..%2Fsecret.txt?sessionId=s1`,
     { method: 'DELETE', headers: auth() },
   );
-  assert.equal(del.status, 400);
-  assert.equal(((await del.json()) as { error: string }).error, 'invalid_app_id');
+  expect(del.status).toBe(400);
+  expect(((await del.json()) as { error: string }).error).toBe('invalid_app_id');
 });

@@ -1,10 +1,9 @@
-import { test } from 'vitest';
-import assert from 'node:assert/strict';
+import { expect, test } from 'vitest';
 import { buildToolsGroundingBlock } from './dynamic.js';
 import type { HostTool } from '@centraid/agent-runtime';
 
 test('buildToolsGroundingBlock returns undefined for empty list', () => {
-  assert.equal(buildToolsGroundingBlock([]), undefined);
+  expect(buildToolsGroundingBlock([])).toBe(undefined);
 });
 
 test('buildToolsGroundingBlock lists tool names + schemas', () => {
@@ -17,6 +16,6 @@ test('buildToolsGroundingBlock lists tool names + schemas', () => {
     },
   ];
   const block = buildToolsGroundingBlock(tools);
-  assert.ok(block?.includes('github.list_prs'));
-  assert.ok(block?.includes('args schema'));
+  expect(block?.includes('github.list_prs')).toBeTruthy();
+  expect(block?.includes('args schema')).toBeTruthy();
 });

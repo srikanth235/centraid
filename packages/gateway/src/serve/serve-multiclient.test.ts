@@ -16,8 +16,7 @@
  * a second client expects after the gateway holds a published app.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -71,12 +70,9 @@ test('two clients see the published app consistently in the registry + static se
   const list = await fetch(`${handle.url}/centraid/_apps`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
-  assert.equal(list.status, 200);
+  expect(list.status).toBe(200);
   const apps = (await list.json()) as Array<{ id: string }>;
-  assert.ok(
-    apps.some((a) => a.id === 'multiclient-test'),
-    `expected to find multiclient-test in registry, got ${JSON.stringify(apps)}`,
-  );
+  expect(apps.some((a) => a.id === 'multiclient-test')).toBeTruthy();
 
   // Client B: static-serve the app's index.html — proves the daemon's
   // `/centraid/<id>/` static path resolves the live `main` worktree, not
@@ -84,7 +80,7 @@ test('two clients see the published app consistently in the registry + static se
   const html = await fetch(`${handle.url}/centraid/multiclient-test/`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
-  assert.equal(html.status, 200);
+  expect(html.status).toBe(200);
   const body = await html.text();
-  assert.match(body, /<title>mc<\/title>/);
+  expect(body).toMatch(/<title>mc<\/title>/);
 });

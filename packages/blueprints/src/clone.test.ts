@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'vitest';
-import assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,23 +22,23 @@ describe('suggestCloneIdentity', () => {
 
   it('returns the bare (id, name) on a fresh apps dir', async () => {
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
-    assert.equal(picked.id, 'hydrate');
-    assert.equal(picked.name, 'Hydrate');
+    expect(picked.id).toBe('hydrate');
+    expect(picked.name).toBe('Hydrate');
   });
 
   it('returns (id-2, "Name 2") when the bare slot is taken', async () => {
     await scaffoldApp(dir, 'hydrate', { name: 'Hydrate' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
-    assert.equal(picked.id, 'hydrate-2');
-    assert.equal(picked.name, 'Hydrate 2');
+    expect(picked.id).toBe('hydrate-2');
+    expect(picked.name).toBe('Hydrate 2');
   });
 
   it('skips past existing directory ids', async () => {
     await scaffoldApp(dir, 'hydrate', { name: 'Hydrate' });
     await scaffoldApp(dir, 'hydrate-2', { name: 'Some unrelated name' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
-    assert.equal(picked.id, 'hydrate-3');
-    assert.equal(picked.name, 'Hydrate 3');
+    expect(picked.id).toBe('hydrate-3');
+    expect(picked.name).toBe('Hydrate 3');
   });
 
   it('skips past existing display-name collisions even when the id slot is free', async () => {
@@ -50,8 +49,8 @@ describe('suggestCloneIdentity', () => {
     await scaffoldApp(dir, 'hydrate', { name: 'Hydrate' });
     await scaffoldApp(dir, 'something', { name: 'Hydrate 2' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
-    assert.equal(picked.id, 'hydrate-3');
-    assert.equal(picked.name, 'Hydrate 3');
+    expect(picked.id).toBe('hydrate-3');
+    expect(picked.name).toBe('Hydrate 3');
   });
 
   it('keeps id and name advancing together when both classes of collision interleave', async () => {
@@ -61,23 +60,23 @@ describe('suggestCloneIdentity', () => {
     await scaffoldApp(dir, 'hydrate-2', { name: 'Hydrate 2' });
     await scaffoldApp(dir, 'whatever', { name: 'Hydrate 3' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
-    assert.equal(picked.id, 'hydrate-4');
-    assert.equal(picked.name, 'Hydrate 4');
+    expect(picked.id).toBe('hydrate-4');
+    expect(picked.name).toBe('Hydrate 4');
   });
 
   it('does case-insensitive display-name comparison', async () => {
     await scaffoldApp(dir, 'x', { name: 'HYDRATE' });
     const picked = await suggestCloneIdentity(dir, 'hydrate', 'Hydrate');
     // Bare name "Hydrate" collides with "HYDRATE" case-insensitively → bump.
-    assert.equal(picked.id, 'hydrate-2');
-    assert.equal(picked.name, 'Hydrate 2');
+    expect(picked.id).toBe('hydrate-2');
+    expect(picked.name).toBe('Hydrate 2');
   });
 });
 
 describe('suggestCloneIdentityFrom (git-store backend — no filesystem)', () => {
   it('returns the bare (id, name) against an empty set', () => {
     const picked = suggestCloneIdentityFrom([], 'hydrate', 'Hydrate');
-    assert.deepEqual(picked, { id: 'hydrate', name: 'Hydrate' });
+    expect(picked).toEqual({ id: 'hydrate', name: 'Hydrate' });
   });
 
   it('bumps to (id-2, "Name 2") when the bare id is taken', () => {
@@ -86,7 +85,7 @@ describe('suggestCloneIdentityFrom (git-store backend — no filesystem)', () =>
       'hydrate',
       'Hydrate',
     );
-    assert.deepEqual(picked, { id: 'hydrate-2', name: 'Hydrate 2' });
+    expect(picked).toEqual({ id: 'hydrate-2', name: 'Hydrate 2' });
   });
 
   it('skips a display-name collision even when the id slot is free', () => {
@@ -98,18 +97,18 @@ describe('suggestCloneIdentityFrom (git-store backend — no filesystem)', () =>
       'hydrate',
       'Hydrate',
     );
-    assert.deepEqual(picked, { id: 'hydrate-3', name: 'Hydrate 3' });
+    expect(picked).toEqual({ id: 'hydrate-3', name: 'Hydrate 3' });
   });
 
   it('does case-insensitive display-name comparison', () => {
     const picked = suggestCloneIdentityFrom([{ id: 'x', name: 'HYDRATE' }], 'hydrate', 'Hydrate');
-    assert.deepEqual(picked, { id: 'hydrate-2', name: 'Hydrate 2' });
+    expect(picked).toEqual({ id: 'hydrate-2', name: 'Hydrate 2' });
   });
 
   it('falls back to the id for apps with no display name', () => {
     // An app published with no `name` still blocks its own id.
     const picked = suggestCloneIdentityFrom([{ id: 'hydrate' }], 'hydrate', 'Hydrate');
-    assert.deepEqual(picked, { id: 'hydrate-2', name: 'Hydrate 2' });
+    expect(picked).toEqual({ id: 'hydrate-2', name: 'Hydrate 2' });
   });
 });
 
@@ -124,12 +123,12 @@ describe('suggestAppId (sanity — coexists with suggestCloneIdentity)', () => {
 
   it('returns the bare id when free and alwaysSuffix is omitted', async () => {
     const id = await suggestAppId(dir, 'todos');
-    assert.equal(id, 'todos');
+    expect(id).toBe('todos');
   });
 
   it('always suffixes when alwaysSuffix: true', async () => {
     const id = await suggestAppId(dir, 'todos', { alwaysSuffix: true });
-    assert.equal(id, 'todos-2');
+    expect(id).toBe('todos-2');
   });
 });
 
@@ -163,8 +162,8 @@ describe('cloneTemplate index.html <title> rewrite', () => {
       newName: 'Hydrate 2',
     });
     const html = await fs.readFile(path.join(appsDir, 'hydrate-2', 'index.html'), 'utf8');
-    assert.match(html, /<title>Hydrate 2<\/title>/);
-    assert.doesNotMatch(html, />Hydrate</);
+    expect(html).toMatch(/<title>Hydrate 2<\/title>/);
+    expect(html).not.toMatch(/>Hydrate</);
   });
 
   it('HTML-escapes special characters in the new name', async () => {
@@ -175,7 +174,7 @@ describe('cloneTemplate index.html <title> rewrite', () => {
       newName: 'Foo & <Bar>',
     });
     const html = await fs.readFile(path.join(appsDir, 'spicy-1', 'index.html'), 'utf8');
-    assert.match(html, /<title>Foo &amp; &lt;Bar&gt;<\/title>/);
+    expect(html).toMatch(/<title>Foo &amp; &lt;Bar&gt;<\/title>/);
   });
 
   it('leaves index.html untouched when no <title> tag exists', async () => {
@@ -190,7 +189,7 @@ describe('cloneTemplate index.html <title> rewrite', () => {
       newName: 'Plain',
     });
     const html = await fs.readFile(path.join(appsDir, 'plain-1', 'index.html'), 'utf8');
-    assert.equal(html, '<!doctype html><html><body>no head</body></html>');
+    expect(html).toBe('<!doctype html><html><body>no head</body></html>');
   });
 
   it('rewrites automation.json#name + stamps generated for automation templates', async () => {
@@ -236,12 +235,12 @@ describe('cloneTemplate index.html <title> rewrite', () => {
         'utf8',
       ),
     );
-    assert.equal(mf.name, 'Briefing 2');
-    assert.equal(mf.generated.by, 'centraid-builder');
-    assert.match(mf.generated.at, /^\d{4}-\d{2}-\d{2}T/);
+    expect(mf.name).toBe('Briefing 2');
+    expect(mf.generated.by).toBe('centraid-builder');
+    expect(mf.generated.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     // Other fields carry through unchanged.
-    assert.equal(mf.prompt, 'do the thing');
-    assert.deepEqual(mf.triggers, [{ kind: 'cron', expr: '0 18 * * 1-5' }]);
+    expect(mf.prompt).toBe('do the thing');
+    expect(mf.triggers).toEqual([{ kind: 'cron', expr: '0 18 * * 1-5' }]);
 
     await fs.rm(templateDir, { recursive: true, force: true });
   });
@@ -256,6 +255,6 @@ describe('cloneTemplate index.html <title> rewrite', () => {
       newName: 'Headless',
     });
     const files = await fs.readdir(path.join(appsDir, 'headless-1'));
-    assert.ok(!files.includes('index.html'));
+    expect(!files.includes('index.html')).toBeTruthy();
   });
 });

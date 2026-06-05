@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { scaffoldAppFiles, updateAppMetaFiles, type ScaffoldFile } from './scaffold-files.js';
 import { cloneTemplateFiles } from './clone.js';
 
@@ -10,36 +9,36 @@ function byPath(files: ScaffoldFile[]): Map<string, string> {
 describe('scaffoldAppFiles', () => {
   it('emits the canonical file set with the id/name baked in', () => {
     const files = byPath(scaffoldAppFiles('todos', { name: 'Todos' }));
-    assert.ok(files.has('package.json'));
-    assert.ok(files.has('app.json'));
-    assert.ok(files.has('index.html'));
-    assert.ok(files.has('tokens.css'));
-    assert.ok(files.has('app.css'));
-    assert.ok(files.has('app.js'));
-    assert.ok(files.has('automations/README.md'));
-    assert.ok(files.has('README.md'));
+    expect(files.has('package.json')).toBeTruthy();
+    expect(files.has('app.json')).toBeTruthy();
+    expect(files.has('index.html')).toBeTruthy();
+    expect(files.has('tokens.css')).toBeTruthy();
+    expect(files.has('app.css')).toBeTruthy();
+    expect(files.has('app.js')).toBeTruthy();
+    expect(files.has('automations/README.md')).toBeTruthy();
+    expect(files.has('README.md')).toBeTruthy();
     // No empty dirs in a file map.
     const appJson = JSON.parse(files.get('app.json')!) as {
       id: string;
       name: string;
       knobs: unknown[];
     };
-    assert.equal(appJson.id, 'todos');
-    assert.equal(appJson.name, 'Todos');
-    assert.ok(Array.isArray(appJson.knobs) && appJson.knobs.length === 4);
-    assert.match(files.get('index.html')!, /<title>Todos<\/title>/);
-    assert.match(files.get('package.json')!, /"centraid-app-todos"/);
+    expect(appJson.id).toBe('todos');
+    expect(appJson.name).toBe('Todos');
+    expect(Array.isArray(appJson.knobs) && appJson.knobs.length === 4).toBeTruthy();
+    expect(files.get('index.html')!).toMatch(/<title>Todos<\/title>/);
+    expect(files.get('package.json')!).toMatch(/"centraid-app-todos"/);
   });
 
   it('defaults name to the id and carries a trimmed description', () => {
     const files = byPath(scaffoldAppFiles('notes', { description: '  jot things  ' }));
     const appJson = JSON.parse(files.get('app.json')!) as { name: string; description?: string };
-    assert.equal(appJson.name, 'notes');
-    assert.equal(appJson.description, 'jot things');
+    expect(appJson.name).toBe('notes');
+    expect(appJson.description).toBe('jot things');
   });
 
   it('rejects an invalid id', () => {
-    assert.throws(() => scaffoldAppFiles('_bad'), /Invalid app id/);
+    expect(() => scaffoldAppFiles('_bad')).toThrow(/Invalid app id/);
   });
 });
 
@@ -48,34 +47,32 @@ describe('updateAppMetaFiles', () => {
 
   it('rewrites app.json#name and the index.html <title> on rename', () => {
     const changed = byPath(updateAppMetaFiles(base(), 'todos', { name: 'Tasks' }));
-    assert.deepEqual([...changed.keys()].sort(), ['app.json', 'index.html']);
-    assert.equal((JSON.parse(changed.get('app.json')!) as { name: string }).name, 'Tasks');
-    assert.match(changed.get('index.html')!, /<title>Tasks<\/title>/);
+    expect([...changed.keys()].sort()).toEqual(['app.json', 'index.html']);
+    expect((JSON.parse(changed.get('app.json')!) as { name: string }).name).toBe('Tasks');
+    expect(changed.get('index.html')!).toMatch(/<title>Tasks<\/title>/);
   });
 
   it('clears description on empty patch and only touches app.json', () => {
     const start = scaffoldAppFiles('todos', { name: 'Todos', description: 'x' });
     const changed = byPath(updateAppMetaFiles(start, 'todos', { description: '   ' }));
-    assert.deepEqual([...changed.keys()], ['app.json']);
-    assert.equal(
-      (JSON.parse(changed.get('app.json')!) as { description?: string }).description,
+    expect([...changed.keys()]).toEqual(['app.json']);
+    expect((JSON.parse(changed.get('app.json')!) as { description?: string }).description).toBe(
       undefined,
     );
   });
 
   it('rejects an empty name and a duplicate display name', () => {
-    assert.throws(() => updateAppMetaFiles(base(), 'todos', { name: '  ' }), /cannot be empty/);
-    assert.throws(
-      () => updateAppMetaFiles(base(), 'todos', { name: 'Other' }, [{ id: 'x', name: 'other' }]),
-      /already exists/,
-    );
+    expect(() => updateAppMetaFiles(base(), 'todos', { name: '  ' })).toThrow(/cannot be empty/);
+    expect(() =>
+      updateAppMetaFiles(base(), 'todos', { name: 'Other' }, [{ id: 'x', name: 'other' }]),
+    ).toThrow(/already exists/);
   });
 
   it('allows renaming to the apps own current name (self excluded)', () => {
     const changed = updateAppMetaFiles(base(), 'todos', { name: 'Todos' }, [
       { id: 'todos', name: 'Todos' },
     ]);
-    assert.ok(changed.some((f) => f.path === 'app.json'));
+    expect(changed.some((f) => f.path === 'app.json')).toBeTruthy();
   });
 });
 
@@ -106,12 +103,12 @@ describe('cloneTemplateFiles', () => {
       }),
     );
     const appJson = JSON.parse(out.get('app.json')!) as Record<string, unknown>;
-    assert.equal(appJson.id, 'hydrate-2');
-    assert.equal(appJson.name, 'Hydrate 2');
-    assert.equal(appJson.version, '0.1.0');
-    assert.equal(appJson.description, 'drink water');
-    assert.match(out.get('package.json')!, /"centraid-app-hydrate-2"/);
-    assert.match(out.get('index.html')!, /<title>Hydrate 2<\/title>/);
+    expect(appJson.id).toBe('hydrate-2');
+    expect(appJson.name).toBe('Hydrate 2');
+    expect(appJson.version).toBe('0.1.0');
+    expect(appJson.description).toBe('drink water');
+    expect(out.get('package.json')!).toMatch(/"centraid-app-hydrate-2"/);
+    expect(out.get('index.html')!).toMatch(/<title>Hydrate 2<\/title>/);
   });
 
   it('stamps generated + rewrites name on a bundled automation manifest', () => {
@@ -134,15 +131,15 @@ describe('cloneTemplateFiles', () => {
       name: string;
       generated: { by: string; at: string };
     };
-    assert.equal(mf.name, 'Hydrate 2');
-    assert.equal(mf.generated.by, 'centraid-builder');
-    assert.notEqual(mf.generated.at, '2020-01-01T00:00:00.000Z');
+    expect(mf.name).toBe('Hydrate 2');
+    expect(mf.generated.by).toBe('centraid-builder');
+    expect(mf.generated.at).not.toBe('2020-01-01T00:00:00.000Z');
     // No automations brief is seeded when a real manifest ships.
-    assert.equal(out.has('automations/README.md'), false);
+    expect(out.has('automations/README.md')).toBe(false);
   });
 
   it('seeds an automations brief when the template has none', () => {
     const out = byPath(cloneTemplateFiles({ newAppId: 'hydrate-2', templateFiles: template() }));
-    assert.ok(out.has('automations/README.md'));
+    expect(out.has('automations/README.md')).toBeTruthy();
   });
 });

@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -93,8 +92,8 @@ test('SSE: delivers a change event when the bus emits for the subscribed app', a
   const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 200);
-  assert.equal(res.headers.get('content-type'), 'text/event-stream; charset=utf-8');
+  expect(res.status).toBe(200);
+  expect(res.headers.get('content-type')).toBe('text/event-stream; charset=utf-8');
 
   // Emit after the connection is open. We use the bus directly because the
   // /_changes endpoint is the consumer side; producers are tested elsewhere.
@@ -108,15 +107,15 @@ test('SSE: delivers a change event when the bus emits for the subscribed app', a
   }, 50);
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
-  assert.equal(events.length, 1);
-  assert.deepEqual(events[0]!.tables, ['todos']);
+  expect(events.length).toBe(1);
+  expect(events[0]!.tables).toEqual(['todos']);
 });
 
 test('SSE: does not deliver events for OTHER apps to this subscriber', async () => {
   const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
 
   setTimeout(() => {
     runtime.changeBus.emit({ appId: 'otherapp', tables: ['x'], ts: 1, source: 'handler' });
@@ -124,39 +123,39 @@ test('SSE: does not deliver events for OTHER apps to this subscriber', async () 
   }, 50);
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
-  assert.equal(events.length, 1);
-  assert.deepEqual(events[0]!.tables, ['todos']);
+  expect(events.length).toBe(1);
+  expect(events[0]!.tables).toEqual(['todos']);
 });
 
 test('SSE: client disconnect unsubscribes the listener from the bus', async () => {
   const res = await fetch(`${server.url}/centraid/cleanup-app/_changes`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   // Drain a tiny bit so the connection is fully established and the
   // subscribe() has run on the server.
   const reader = res.body!.getReader();
   await Promise.race([reader.read(), new Promise((resolve) => setTimeout(resolve, 50))]);
-  assert.equal(runtime.changeBus.listenerCount('cleanup-app'), 1);
+  expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(1);
 
   // Cancel the reader → underlying socket closes → server cleanup fires.
   await reader.cancel();
   // The cleanup runs on the next tick of the close event; give it a
   // moment to propagate.
   await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.equal(runtime.changeBus.listenerCount('cleanup-app'), 0);
+  expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(0);
 });
 
 test('SSE: requires the bearer token (gated by the surrounding http-server)', async () => {
   const res = await fetch(`${server.url}/centraid/myapp/_changes`);
-  assert.equal(res.status, 401);
+  expect(res.status).toBe(401);
 });
 
 test('SSE: agent-sourced events carry source, toolCallId, and turnId', async () => {
   const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
 
   setTimeout(() => {
     runtime.changeBus.emit({
@@ -170,17 +169,17 @@ test('SSE: agent-sourced events carry source, toolCallId, and turnId', async () 
   }, 50);
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
-  assert.equal(events.length, 1);
-  assert.equal(events[0]!.source, 'agent');
-  assert.equal(events[0]!.toolCallId, 'call-abc');
-  assert.equal(events[0]!.turnId, 'turn-xyz');
+  expect(events.length).toBe(1);
+  expect(events[0]!.source).toBe('agent');
+  expect(events[0]!.toolCallId).toBe('call-abc');
+  expect(events[0]!.turnId).toBe('turn-xyz');
 });
 
 test('SSE: handler-sourced events carry source but omit toolCallId/turnId', async () => {
   const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
     headers: { Authorization: `Bearer ${server.token}` },
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
 
   setTimeout(() => {
     runtime.changeBus.emit({
@@ -192,8 +191,8 @@ test('SSE: handler-sourced events carry source but omit toolCallId/turnId', asyn
   }, 50);
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
-  assert.equal(events.length, 1);
-  assert.equal(events[0]!.source, 'handler');
-  assert.equal(events[0]!.toolCallId, undefined);
-  assert.equal(events[0]!.turnId, undefined);
+  expect(events.length).toBe(1);
+  expect(events[0]!.source).toBe('handler');
+  expect(events[0]!.toolCallId).toBe(undefined);
+  expect(events[0]!.turnId).toBe(undefined);
 });

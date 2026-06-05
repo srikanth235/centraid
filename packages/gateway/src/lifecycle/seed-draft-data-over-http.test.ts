@@ -9,8 +9,7 @@
  * stays at the published schema and a draft write never touches live rows.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -104,7 +103,7 @@ test('first draft access seeds from prod + replays the draft pending migration',
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: 'seed', message: 'v1' }),
   });
-  assert.equal(pub.status, 201, `publish: ${await pub.text()}`);
+  expect(pub.status).toBe(201);
   await store.closeSession('seed');
 
   // A draft session branches off main (inheriting app.json + 0001) and adds
@@ -118,17 +117,17 @@ test('first draft access seeds from prod + replays the draft pending migration',
   // First draft tool dispatch lazily seeds the worktree copy: the seeded row
   // is present AND the pending migration's `done` column exists on the draft.
   const draftRead = await draftSql('d1', 'SELECT body, done FROM notes');
-  assert.equal(draftRead.status, 200, `draft read: ${await draftRead.clone().text()}`);
+  expect(draftRead.status).toBe(200);
   const draftRows = (await draftRead.json()) as { rows: Array<{ body: string; done: number }> };
-  assert.deepEqual(draftRows.rows, [{ body: 'from-prod', done: 0 }]);
+  expect(draftRows.rows).toEqual([{ body: 'from-prod', done: 0 }]);
 
   // Live is untouched by the draft's pending migration — `SELECT *` returns
   // the row WITHOUT a `done` column (live schema is still at 0001).
   const liveRead = await liveSql('SELECT * FROM notes');
-  assert.equal(liveRead.status, 200);
+  expect(liveRead.status).toBe(200);
   const liveRows = (await liveRead.json()) as { rows: Array<Record<string, unknown>> };
-  assert.equal(liveRows.rows.length, 1);
-  assert.ok(!('done' in liveRows.rows[0]!), 'live schema must not gain the draft column');
+  expect(liveRows.rows.length).toBe(1);
+  expect(!('done' in liveRows.rows[0]!)).toBeTruthy();
 
   // A draft write lands only in the branched data — live row count unchanged.
   const draftWrite = await fetch(`${handle.url}/centraid/_draft/d1/_tool/centraid_write`, {
@@ -140,16 +139,16 @@ test('first draft access seeds from prod + replays the draft pending migration',
       input: { sql: "INSERT INTO notes (body, done) VALUES ('draft-only', 1)" },
     }),
   });
-  assert.equal(draftWrite.status, 200, `draft write: ${await draftWrite.clone().text()}`);
+  expect(draftWrite.status).toBe(200);
 
   const draftCount = (await (await draftSql('d1', 'SELECT COUNT(*) AS n FROM notes')).json()) as {
     rows: Array<{ n: number }>;
   };
-  assert.equal(draftCount.rows[0]!.n, 2, 'draft has both rows');
+  expect(draftCount.rows[0]!.n).toBe(2);
   const liveCount = (await (await liveSql('SELECT COUNT(*) AS n FROM notes')).json()) as {
     rows: Array<{ n: number }>;
   };
-  assert.equal(liveCount.rows[0]!.n, 1, 'live untouched by the draft write');
+  expect(liveCount.rows[0]!.n).toBe(1);
 });
 
 /** Publish a baseline `notes` app (migration 0001 → live row). */
@@ -166,7 +165,7 @@ async function publishBaseline(): Promise<void> {
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: 'seed', message: 'v1' }),
   });
-  assert.equal(pub.status, 201, `publish: ${await pub.text()}`);
+  expect(pub.status).toBe(201);
   await store.closeSession('seed');
 }
 
@@ -196,17 +195,17 @@ test('reset-data re-seeds the draft from a fresh prod snapshot', async () => {
   const before = (await (await draftSql('d1', 'SELECT COUNT(*) AS n FROM notes')).json()) as {
     rows: Array<{ n: number }>;
   };
-  assert.equal(before.rows[0]!.n, 2, 'draft mutated to 2 rows');
+  expect(before.rows[0]!.n).toBe(2);
 
   // Reset wipes the scratch row — back to the single prod-seeded row.
   const reset = await resetData('d1');
   const body = (await reset.json()) as { seeded: boolean };
-  assert.equal(reset.status, 200, `reset: ${JSON.stringify(body)}`);
-  assert.equal(body.seeded, true);
+  expect(reset.status).toBe(200);
+  expect(body.seeded).toBe(true);
   const after = (await (await draftSql('d1', 'SELECT body FROM notes')).json()) as {
     rows: Array<{ body: string }>;
   };
-  assert.deepEqual(after.rows, [{ body: 'from-prod' }]);
+  expect(after.rows).toEqual([{ body: 'from-prod' }]);
 });
 
 test('reset-data surfaces an incompatible pending migration inline (422)', async () => {
@@ -219,9 +218,9 @@ test('reset-data surfaces an incompatible pending migration inline (422)', async
 
   const reset = await resetData('d2');
   const body = (await reset.json()) as { error: string; file: string };
-  assert.equal(reset.status, 422, `expected 422, got ${reset.status}: ${JSON.stringify(body)}`);
-  assert.equal(body.error, 'sql_failed');
-  assert.equal(body.file, '0002_bad.sql');
+  expect(reset.status).toBe(422);
+  expect(body.error).toBe('sql_failed');
+  expect(body.file).toBe('0002_bad.sql');
 });
 
 test('a failed seed migration leaves no draft DB, so a later access retries', async () => {
@@ -241,22 +240,20 @@ test('a failed seed migration leaves no draft DB, so a later access retries', as
   // half-seeded copy behind — otherwise the next access would preview against
   // a copied-but-unmigrated DB.
   const failed = await draftSql('d3', 'SELECT 1');
-  assert.equal(failed.status, 500, `expected seed failure, got ${failed.status}`);
-  assert.equal(
+  expect(failed.status).toBe(500);
+  expect(
     await fs
       .stat(draftDb)
       .then(() => true)
       .catch(() => false),
-    false,
-    'a failed seed must not leave a draft data.sqlite',
-  );
+  ).toBe(false);
 
   // Fix-forward the migration; the next access re-seeds cleanly from scratch.
   await writeWorktreeFiles('d3', {
     'migrations/0002_bad.sql': 'ALTER TABLE notes ADD COLUMN title TEXT NOT NULL DEFAULT "";\n',
   });
   const ok = await draftSql('d3', 'SELECT body, title FROM notes');
-  assert.equal(ok.status, 200, `retry should succeed: ${await ok.clone().text()}`);
+  expect(ok.status).toBe(200);
   const rows = (await ok.json()) as { rows: Array<{ body: string; title: string }> };
-  assert.deepEqual(rows.rows, [{ body: 'from-prod', title: '' }]);
+  expect(rows.rows).toEqual([{ body: 'from-prod', title: '' }]);
 });

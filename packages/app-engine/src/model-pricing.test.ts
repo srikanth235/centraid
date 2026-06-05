@@ -1,38 +1,36 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { priceForModel, costForUsage } from './model-pricing.js';
 
 describe('priceForModel', () => {
   it('resolves a known model family', () => {
     const p = priceForModel('claude-opus-4-7');
-    assert.ok(p);
-    assert.equal(p.inputPerMtok, 15);
-    assert.equal(p.outputPerMtok, 75);
+    expect(p).toBeTruthy();
+    expect(p!.inputPerMtok).toBe(15);
+    expect(p!.outputPerMtok).toBe(75);
   });
 
   it('strips a provider/ prefix before matching', () => {
-    assert.deepEqual(
-      priceForModel('anthropic/claude-sonnet-4-6'),
+    expect(priceForModel('anthropic/claude-sonnet-4-6')).toEqual(
       priceForModel('claude-sonnet-4-6'),
     );
   });
 
   it('is case-insensitive', () => {
-    assert.deepEqual(priceForModel('CLAUDE-HAIKU-4-5'), priceForModel('claude-haiku-4-5'));
+    expect(priceForModel('CLAUDE-HAIKU-4-5')).toEqual(priceForModel('claude-haiku-4-5'));
   });
 
   it('longest prefix wins — gpt-5-codex beats gpt-5', () => {
     const codex = priceForModel('gpt-5-codex');
     const base = priceForModel('gpt-5');
-    assert.ok(codex);
-    assert.ok(base);
-    assert.equal(codex.outputPerMtok, 10);
+    expect(codex).toBeTruthy();
+    expect(base).toBeTruthy();
+    expect(codex!.outputPerMtok).toBe(10);
   });
 
   it('returns undefined for an unknown model', () => {
-    assert.equal(priceForModel('some-future-model-x'), undefined);
-    assert.equal(priceForModel(undefined), undefined);
-    assert.equal(priceForModel(''), undefined);
+    expect(priceForModel('some-future-model-x')).toBe(undefined);
+    expect(priceForModel(undefined)).toBe(undefined);
+    expect(priceForModel('')).toBe(undefined);
   });
 });
 
@@ -43,7 +41,7 @@ describe('costForUsage', () => {
       inputTokens: 1_000_000,
       outputTokens: 1_000_000,
     });
-    assert.equal(cost, 90);
+    expect(cost).toBe(90);
   });
 
   it('prices cache reads and writes distinctly from fresh input', () => {
@@ -52,15 +50,15 @@ describe('costForUsage', () => {
       cacheReadTokens: 1_000_000,
       cacheWriteTokens: 1_000_000,
     });
-    assert.ok(cost !== undefined);
-    assert.ok(Math.abs(cost - 4.05) < 1e-9);
+    expect(cost).toBeDefined();
+    expect(Math.abs(cost! - 4.05) < 1e-9).toBeTruthy();
   });
 
   it('treats missing token fields as zero', () => {
-    assert.equal(costForUsage('claude-haiku-4-5', {}), 0);
+    expect(costForUsage('claude-haiku-4-5', {})).toBe(0);
   });
 
   it('returns undefined (not 0) for an unknown model — NULL stays distinct from $0', () => {
-    assert.equal(costForUsage('mystery-model', { inputTokens: 5000 }), undefined);
+    expect(costForUsage('mystery-model', { inputTokens: 5000 })).toBe(undefined);
   });
 });

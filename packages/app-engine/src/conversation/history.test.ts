@@ -1,8 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit #181 — cohesive
 // conversation-history suite; the build-kind coverage tips it just over 500
 // lines, not worth a split.
-import { describe, it, beforeEach } from 'vitest';
-import assert from 'node:assert/strict';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -54,22 +53,22 @@ function turn(
 
 describe('deriveTitle', () => {
   it('returns empty for empty/whitespace input', () => {
-    assert.equal(deriveTitle(''), '');
-    assert.equal(deriveTitle('   \n  '), '');
+    expect(deriveTitle('')).toBe('');
+    expect(deriveTitle('   \n  ')).toBe('');
   });
 
   it('passes a short title through; collapses internal whitespace', () => {
-    assert.equal(deriveTitle('hello world'), 'hello world');
-    assert.equal(deriveTitle('a\n\n\nb'), 'a b');
+    expect(deriveTitle('hello world')).toBe('hello world');
+    expect(deriveTitle('a\n\n\nb')).toBe('a b');
   });
 
   it('truncates at 60 with ellipsis (collapsed first); leaves exactly-60 alone', () => {
     const long = 'word '.repeat(40); // 200 chars
     const t = deriveTitle(long);
-    assert.equal(t.length, 58); // 57 + ellipsis
-    assert.ok(t.endsWith('…'));
+    expect(t.length).toBe(58); // 57 + ellipsis
+    expect(t.endsWith('…')).toBeTruthy();
     const sixty = 'a'.repeat(60);
-    assert.equal(deriveTitle(sixty), sixty);
+    expect(deriveTitle(sixty)).toBe(sixty);
   });
 });
 
@@ -82,34 +81,31 @@ describe('ConversationHistoryStore', () => {
   it('createSession + listSessions round-trips', () => {
     const s = store.createSession(APP, '');
     const list = store.listSessions(APP);
-    assert.equal(list.length, 1);
-    assert.equal(list[0]!.id, s.id);
-    assert.equal(list[0]!.title, '');
-    assert.equal(list[0]!.messageCount, 0);
+    expect(list.length).toBe(1);
+    expect(list[0]!.id).toBe(s.id);
+    expect(list[0]!.title).toBe('');
+    expect(list[0]!.messageCount).toBe(0);
   });
 
   it('listSessions returns every session for the user in this app', () => {
     store.createSession(APP, 'one');
     store.createSession(APP, 'two');
-    assert.equal(store.listSessions(APP).length, 2);
+    expect(store.listSessions(APP).length).toBe(2);
   });
 
   it('rejects an invalid app id', () => {
-    assert.throws(() => store.createSession('../escape'), /invalid app id/i);
+    expect(() => store.createSession('../escape')).toThrow(/invalid app id/i);
   });
 
   it('recordTurn folds a turn into a run and getSession reconstructs it', () => {
     const s = store.createSession(APP);
     const r = store.recordTurn(APP, turn(s.id, 'first', 'reply'));
-    assert.ok(r?.turnId);
+    expect(r?.turnId).toBeTruthy();
     const loaded = store.getSession(APP, s.id);
-    assert.equal(loaded?.messages.length, 2);
-    assert.deepEqual(
-      loaded?.messages.map((m) => m.idx),
-      [0, 1],
-    );
-    assert.deepEqual(loaded?.messages[0]!.payload, { kind: 'user', text: 'first' });
-    assert.deepEqual(loaded?.messages[1]!.payload, { kind: 'ai', text: 'reply' });
+    expect(loaded?.messages.length).toBe(2);
+    expect(loaded?.messages.map((m) => m.idx)).toEqual([0, 1]);
+    expect(loaded?.messages[0]!.payload).toEqual({ kind: 'user', text: 'first' });
+    expect(loaded?.messages[1]!.payload).toEqual({ kind: 'ai', text: 'reply' });
   });
 
   it('recordTurn preserves order across multiple turns', () => {
@@ -118,7 +114,7 @@ describe('ConversationHistoryStore', () => {
     store.recordTurn(APP, turn(s.id, 'q2', 'a2', 2_000));
     const loaded = store.getSession(APP, s.id);
     const texts = (loaded?.messages ?? []).map((m) => (m.payload as { text?: string }).text);
-    assert.deepEqual(texts, ['q1', 'a1', 'q2', 'a2']);
+    expect(texts).toEqual(['q1', 'a1', 'q2', 'a2']);
   });
 
   it('recordTurn defaults the run kind to chat; honors an explicit build kind (#181)', () => {
@@ -133,14 +129,14 @@ describe('ConversationHistoryStore', () => {
     // sets its thread to `kind: 'build'`; a data chat stays `'chat'`. Read the
     // persisted conversations back through a fresh store on the same file.
     const conv = new ConversationStore(makeRuntimeDbProvider(join(appsDir, APP, 'runtime.sqlite')));
-    assert.equal(conv.getConversation(chat.id)?.kind, 'chat');
-    assert.equal(conv.getConversation(build.id)?.kind, 'build');
+    expect(conv.getConversation(chat.id)?.kind).toBe('chat');
+    expect(conv.getConversation(build.id)?.kind).toBe('build');
 
     // Transcript reconstruction is kind-agnostic — a build turn round-trips
     // exactly like a chat turn.
     const loaded = local.getSession(APP, build.id);
-    assert.deepEqual(loaded?.messages[0]!.payload, { kind: 'user', text: 'tweak ui' });
-    assert.deepEqual(loaded?.messages[1]!.payload, { kind: 'ai', text: 'done' });
+    expect(loaded?.messages[0]!.payload).toEqual({ kind: 'user', text: 'tweak ui' });
+    expect(loaded?.messages[1]!.payload).toEqual({ kind: 'ai', text: 'done' });
   });
 
   it('recordTurn reconstructs tool nodes interleaved before the assistant reply', () => {
@@ -168,15 +164,15 @@ describe('ConversationHistoryStore', () => {
       ],
     });
     const loaded = store.getSession(APP, s.id);
-    assert.equal(loaded?.messages.length, 3);
+    expect(loaded?.messages.length).toBe(3);
     const tool = loaded?.messages[1]!.payload as Record<string, unknown>;
-    assert.equal(tool.kind, 'tool');
-    assert.equal(tool.tool, 'centraid_sql_read');
-    assert.equal(tool.sql, 'SELECT COUNT(*) FROM x');
-    assert.equal(tool.state, 'ok');
-    assert.deepEqual(tool.result, [{ n: 1 }]);
-    assert.equal(typeof tool.id, 'string');
-    assert.deepEqual(loaded?.messages[2]!.payload, { kind: 'ai', text: 'there is 1 row' });
+    expect(tool.kind).toBe('tool');
+    expect(tool.tool).toBe('centraid_sql_read');
+    expect(tool.sql).toBe('SELECT COUNT(*) FROM x');
+    expect(tool.state).toBe('ok');
+    expect(tool.result).toEqual([{ n: 1 }]);
+    expect(typeof tool.id).toBe('string');
+    expect(loaded?.messages[2]!.payload).toEqual({ kind: 'ai', text: 'there is 1 row' });
   });
 
   it('recordTurn marks a failed tool node as state=error', () => {
@@ -200,8 +196,8 @@ describe('ConversationHistoryStore', () => {
       ],
     });
     const tool = store.getSession(APP, s.id)?.messages[1]!.payload as Record<string, unknown>;
-    assert.equal(tool.state, 'error');
-    assert.equal(tool.errorText, 'no such table');
+    expect(tool.state).toBe('error');
+    expect(tool.errorText).toBe('no such table');
   });
 
   it('recordTurn folds a turn error as an error ai message', () => {
@@ -219,48 +215,48 @@ describe('ConversationHistoryStore', () => {
       ],
     });
     const ai = store.getSession(APP, s.id)?.messages[1]!.payload as Record<string, unknown>;
-    assert.deepEqual(ai, { kind: 'ai', text: 'runner crashed', error: true });
+    expect(ai).toEqual({ kind: 'ai', text: 'runner crashed', error: true });
   });
 
   it('recordTurn derives the title from the first user message if empty', () => {
     const s = store.createSession(APP, '');
     store.recordTurn(APP, turn(s.id, 'Add a daily standup', 'ok'));
-    assert.equal(store.listSessions(APP)[0]!.title, 'Add a daily standup');
+    expect(store.listSessions(APP)[0]!.title).toBe('Add a daily standup');
   });
 
   it('recordTurn does not overwrite a non-empty title', () => {
     const s = store.createSession(APP, 'Pinned name');
     store.recordTurn(APP, turn(s.id, 'something', 'ok'));
-    assert.equal(store.getSessionMeta(APP, s.id)?.title, 'Pinned name');
+    expect(store.getSessionMeta(APP, s.id)?.title).toBe('Pinned name');
   });
 
   it('recordTurn returns undefined for an unknown session', () => {
-    assert.equal(store.recordTurn(APP, turn('not-a-real-id', 'hi', 'x')), undefined);
+    expect(store.recordTurn(APP, turn('not-a-real-id', 'hi', 'x'))).toBe(undefined);
   });
 
   it('messageCount counts the reconstructed transcript length', () => {
     const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, 'q', 'a'));
-    assert.equal(store.listSessions(APP)[0]!.messageCount, 2);
-    assert.equal(store.getSessionMeta(APP, s.id)?.messageCount, 2);
+    expect(store.listSessions(APP)[0]!.messageCount).toBe(2);
+    expect(store.getSessionMeta(APP, s.id)?.messageCount).toBe(2);
   });
 
   it('renameSession updates title and bumps updatedAt', () => {
     const s = store.createSession(APP, 'old');
     const updated = store.renameSession(APP, s.id, 'new');
-    assert.equal(updated?.title, 'new');
-    assert.ok((updated?.updatedAt ?? 0) >= s.updatedAt);
+    expect(updated?.title).toBe('new');
+    expect((updated?.updatedAt ?? 0) >= s.updatedAt).toBeTruthy();
   });
 
   it('renameSession returns undefined for unknown id', () => {
-    assert.equal(store.renameSession(APP, 'nope', 'x'), undefined);
+    expect(store.renameSession(APP, 'nope', 'x')).toBe(undefined);
   });
 
   it('deleteSession cascades to the session runs', () => {
     const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, 'doomed', 'x'));
-    assert.equal(store.deleteSession(APP, s.id), true);
-    assert.equal(store.getSession(APP, s.id), undefined);
+    expect(store.deleteSession(APP, s.id)).toBe(true);
+    expect(store.getSession(APP, s.id)).toBe(undefined);
   });
 
   it('listSessions orders by updatedAt desc', async () => {
@@ -268,49 +264,49 @@ describe('ConversationHistoryStore', () => {
     await new Promise((resolve) => setTimeout(resolve, 4));
     const b = store.createSession(APP, 'B');
     const list = store.listSessions(APP);
-    assert.equal(list[0]!.id, b.id);
-    assert.equal(list[1]!.id, a.id);
+    expect(list[0]!.id).toBe(b.id);
+    expect(list[1]!.id).toBe(a.id);
   });
 
   it('createSession persists and round-trips the row', () => {
     const s = store.createSession(APP, 'shell chat');
-    assert.equal(store.getSession(APP, s.id)?.title, 'shell chat');
+    expect(store.getSession(APP, s.id)?.title).toBe('shell chat');
   });
 
   it('noteTurn bumps turn_count and persists the adapter columns', () => {
     const s = store.createSession(APP);
-    assert.equal(s.turnCount, 0);
-    assert.equal(s.adapterKind, null);
+    expect(s.turnCount).toBe(0);
+    expect(s.adapterKind).toBe(null);
 
     const after1 = store.noteTurn(APP, s.id, { kind: 'codex', sessionId: 'cx-1' });
-    assert.equal(after1?.turnCount, 1);
-    assert.equal(after1?.adapterKind, 'codex');
-    assert.equal(after1?.adapterSessionId, 'cx-1');
+    expect(after1?.turnCount).toBe(1);
+    expect(after1?.adapterKind).toBe('codex');
+    expect(after1?.adapterSessionId).toBe('cx-1');
 
     // Adapter omitted — counters move, adapter columns stay.
     const after2 = store.noteTurn(APP, s.id);
-    assert.equal(after2?.turnCount, 2);
-    assert.equal(after2?.adapterKind, 'codex');
-    assert.equal(after2?.adapterSessionId, 'cx-1');
+    expect(after2?.turnCount).toBe(2);
+    expect(after2?.adapterKind).toBe('codex');
+    expect(after2?.adapterSessionId).toBe('cx-1');
 
     // Adapter present but no sessionId — kind updates, session id is kept.
     const after3 = store.noteTurn(APP, s.id, { kind: 'claude-code' });
-    assert.equal(after3?.turnCount, 3);
-    assert.equal(after3?.adapterKind, 'claude-code');
-    assert.equal(after3?.adapterSessionId, 'cx-1');
+    expect(after3?.turnCount).toBe(3);
+    expect(after3?.adapterKind).toBe('claude-code');
+    expect(after3?.adapterSessionId).toBe('cx-1');
   });
 
   it('noteTurn returns undefined for an unknown session', () => {
-    assert.equal(store.noteTurn(APP, 'not-a-real-id'), undefined);
+    expect(store.noteTurn(APP, 'not-a-real-id')).toBe(undefined);
   });
 
   it('getSessionMeta returns meta without the transcript', () => {
     const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, 'hi', 'yo'));
     const meta = store.getSessionMeta(APP, s.id);
-    assert.equal(meta?.id, s.id);
-    assert.equal(meta?.messageCount, 2);
-    assert.equal((meta as unknown as { messages?: unknown }).messages, undefined);
+    expect(meta?.id).toBe(s.id);
+    expect(meta?.messageCount).toBe(2);
+    expect((meta as unknown as { messages?: unknown }).messages).toBe(undefined);
   });
 });
 
@@ -320,14 +316,11 @@ describe('ConversationHistoryStore per-app scoping', () => {
     const t = store.createSession('todos', 'todos-1');
     store.createSession('habits', 'habits-1');
     store.createSession('habits', 'habits-2');
-    assert.deepEqual(
-      store.listSessions('todos').map((s) => s.title),
-      ['todos-1'],
-    );
-    assert.equal(store.listSessions('habits').length, 2);
+    expect(store.listSessions('todos').map((s) => s.title)).toEqual(['todos-1']);
+    expect(store.listSessions('habits').length).toBe(2);
     // A session id is only found under its owning app.
-    assert.ok(store.getSession('todos', t.id));
-    assert.equal(store.getSession('habits', t.id), undefined);
+    expect(store.getSession('todos', t.id)).toBeTruthy();
+    expect(store.getSession('habits', t.id)).toBe(undefined);
   });
 });
 
@@ -344,8 +337,8 @@ describe('ConversationHistoryStore per-user scoping', () => {
   it('createSession stamps the current user id on the row', () => {
     const store = newStore(() => 'alice');
     const s = store.createSession(APP);
-    assert.equal(s.userId, 'alice');
-    assert.equal(store.getSession(APP, s.id)?.userId, 'alice');
+    expect(s.userId).toBe('alice');
+    expect(store.getSession(APP, s.id)?.userId).toBe('alice');
   });
 
   it("listSessions does not return another user's sessions", () => {
@@ -355,33 +348,33 @@ describe('ConversationHistoryStore per-user scoping', () => {
     bob.createSession(APP, 'bob-1');
 
     const aliceList = alice.listSessions(APP);
-    assert.equal(aliceList.length, 2);
-    assert.ok(aliceList.every((s) => s.userId === 'alice'));
+    expect(aliceList.length).toBe(2);
+    expect(aliceList.every((s) => s.userId === 'alice')).toBeTruthy();
 
     const bobList = bob.listSessions(APP);
-    assert.equal(bobList.length, 1);
-    assert.equal(bobList[0]!.title, 'bob-1');
+    expect(bobList.length).toBe(1);
+    expect(bobList[0]!.title).toBe('bob-1');
   });
 
   it("getSession returns undefined for another user's session id", () => {
     const { alice, bob } = pair();
     const aliceSession = alice.createSession(APP);
-    assert.equal(bob.getSession(APP, aliceSession.id), undefined);
+    expect(bob.getSession(APP, aliceSession.id)).toBe(undefined);
   });
 
   it("recordTurn refuses to write into another user's session", () => {
     const { alice, bob } = pair();
     const aliceSession = alice.createSession(APP);
-    assert.equal(bob.recordTurn(APP, turn(aliceSession.id, 'hi', 'x')), undefined);
-    assert.equal(alice.getSession(APP, aliceSession.id)?.messages.length, 0);
+    expect(bob.recordTurn(APP, turn(aliceSession.id, 'hi', 'x'))).toBe(undefined);
+    expect(alice.getSession(APP, aliceSession.id)?.messages.length).toBe(0);
   });
 
   it("renameSession + deleteSession can't touch another user's session", () => {
     const { alice, bob } = pair();
     const aliceSession = alice.createSession(APP, 'mine');
-    assert.equal(bob.renameSession(APP, aliceSession.id, 'stolen'), undefined);
-    assert.equal(bob.deleteSession(APP, aliceSession.id), false);
-    assert.equal(alice.getSession(APP, aliceSession.id)?.title, 'mine');
+    expect(bob.renameSession(APP, aliceSession.id, 'stolen')).toBe(undefined);
+    expect(bob.deleteSession(APP, aliceSession.id)).toBe(false);
+    expect(alice.getSession(APP, aliceSession.id)?.title).toBe('mine');
   });
 });
 
@@ -394,8 +387,8 @@ describe('ConversationHistoryStore data persistence', () => {
 
     const second = new ConversationHistoryStore(appsDir, stubUserIdProvider);
     const loaded = second.getSession(APP, s.id);
-    assert.equal(loaded?.title, 'kept');
-    assert.equal(loaded?.messages.length, 2);
+    expect(loaded?.title).toBe('kept');
+    expect(loaded?.messages.length).toBe(2);
   });
 });
 
@@ -467,58 +460,58 @@ describe('makeConversationRouteHandler', () => {
 
   it('POST sessions creates a session', async () => {
     const res = await call(handler, 'POST', BASE, {});
-    assert.equal(res.status, 200);
-    assert.equal((res.body as { id: string }).id.length > 0, true);
+    expect(res.status).toBe(200);
+    expect((res.body as { id: string }).id.length > 0).toBe(true);
   });
 
   it('POST sessions honors the title', async () => {
     const res = await call(handler, 'POST', BASE, { title: 'named' });
-    assert.equal(res.status, 200);
-    assert.equal((res.body as { title: string }).title, 'named');
+    expect(res.status).toBe(200);
+    expect((res.body as { title: string }).title).toBe('named');
   });
 
   it('round-trips create → list → load → rename → delete', async () => {
     const created = await call(handler, 'POST', BASE, { title: 'hi' });
-    assert.equal(created.status, 200);
+    expect(created.status).toBe(200);
     const id = (created.body as { id: string }).id;
 
     const listed = await call(handler, 'GET', BASE);
-    assert.equal(listed.status, 200);
-    assert.equal((listed.body as { sessions: unknown[] }).sessions.length, 1);
+    expect(listed.status).toBe(200);
+    expect((listed.body as { sessions: unknown[] }).sessions.length).toBe(1);
 
     const loaded = await call(handler, 'GET', `${BASE}/${id}`);
-    assert.equal(loaded.status, 200);
-    assert.deepEqual((loaded.body as { messages: unknown[] }).messages, []);
+    expect(loaded.status).toBe(200);
+    expect((loaded.body as { messages: unknown[] }).messages).toEqual([]);
 
     const renamed = await call(handler, 'PATCH', `${BASE}/${id}`, { title: 'renamed' });
-    assert.equal(renamed.status, 200);
-    assert.equal((renamed.body as { title: string }).title, 'renamed');
+    expect(renamed.status).toBe(200);
+    expect((renamed.body as { title: string }).title).toBe('renamed');
 
     const deleted = await call(handler, 'DELETE', `${BASE}/${id}`);
-    assert.equal(deleted.status, 200);
-    assert.equal((deleted.body as { ok: boolean }).ok, true);
+    expect(deleted.status).toBe(200);
+    expect((deleted.body as { ok: boolean }).ok).toBe(true);
   });
 
   it('404s loading a missing session', async () => {
     const res = await call(handler, 'GET', `${BASE}/no-such-id`);
-    assert.equal(res.status, 404);
+    expect(res.status).toBe(404);
   });
 
   it('405s on unsupported method', async () => {
     const res = await call(handler, 'PUT', BASE);
-    assert.equal(res.status, 405);
+    expect(res.status).toBe(405);
   });
 
   it('404s on a malformed route (no /apps/<appId> segment)', async () => {
     const res = await call(handler, 'GET', '/_centraid-conversations/sessions');
-    assert.equal(res.status, 404);
+    expect(res.status).toBe(404);
   });
 
   it('returns false (delegates) for URLs outside the prefix', async () => {
     const req = makeReq('GET', '/something-else') as unknown as IncomingMessage;
     const res = makeRes();
     const handled = await handler(req, res as unknown as ServerResponse);
-    assert.equal(handled, false);
-    assert.equal(res.status, 0); // never wrote anything
+    expect(handled).toBe(false);
+    expect(res.status).toBe(0); // never wrote anything
   });
 });

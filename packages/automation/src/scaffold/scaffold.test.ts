@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'vitest';
-import assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,26 +23,26 @@ describe('scaffoldApp', () => {
       cronExpr: '0 8 * * *',
       apps: ['todos'],
     });
-    assert.equal(info.id, 'daily-digest');
-    assert.equal(info.name, 'Daily digest');
+    expect(info.id).toBe('daily-digest');
+    expect(info.name).toBe('Daily digest');
 
     const appJson = JSON.parse(
       await fs.readFile(path.join(dir, 'daily-digest', 'app.json'), 'utf8'),
     ) as { name: string };
-    assert.equal(appJson.name, 'Daily digest');
+    expect(appJson.name).toBe('Daily digest');
 
     const autoDir = path.join(dir, 'daily-digest', 'automations', 'daily-digest');
     const manifest = parseManifest(
       await fs.readFile(path.join(autoDir, 'automation.json'), 'utf8'),
     );
-    assert.equal(manifest.name, 'Daily digest');
-    assert.equal(manifest.prompt, 'Summarize my PRs');
-    assert.deepEqual(manifest.triggers, [{ kind: 'cron', expr: '0 8 * * *' }]);
-    assert.deepEqual(manifest.apps, ['todos']);
-    assert.equal(manifest.enabled, true);
+    expect(manifest.name).toBe('Daily digest');
+    expect(manifest.prompt).toBe('Summarize my PRs');
+    expect(manifest.triggers).toEqual([{ kind: 'cron', expr: '0 8 * * *' }]);
+    expect(manifest.apps).toEqual(['todos']);
+    expect(manifest.enabled).toBe(true);
 
     const handler = await fs.readFile(path.join(autoDir, 'handler.js'), 'utf8');
-    assert.match(handler, /export default async/);
+    expect(handler).toMatch(/export default async/);
   });
 
   it('derives the automation id from the app id, defaults a daily schedule', async () => {
@@ -52,31 +51,31 @@ describe('scaffoldApp', () => {
     const manifest = parseManifest(
       await fs.readFile(path.join(autoDir, 'automation.json'), 'utf8'),
     );
-    assert.equal(manifest.name, 'autox');
-    assert.deepEqual(manifest.triggers, [{ kind: 'cron', expr: '0 9 * * *' }]);
+    expect(manifest.name).toBe('autox');
+    expect(manifest.triggers).toEqual([{ kind: 'cron', expr: '0 9 * * *' }]);
   });
 
   it('honors an explicit automationId', async () => {
     await scaffoldApp(dir, 'bot', { automationId: 'job' });
     const autoDir = path.join(dir, 'bot', 'automations', 'job');
-    assert.ok((await fs.stat(autoDir)).isDirectory());
+    expect((await fs.stat(autoDir)).isDirectory()).toBeTruthy();
   });
 
   it('rejects a duplicate app folder', async () => {
     await scaffoldApp(dir, 'dup');
-    await assert.rejects(() => scaffoldApp(dir, 'dup'), AppScaffoldError);
+    await expect((() => scaffoldApp(dir, 'dup'))()).rejects.toThrow(AppScaffoldError);
   });
 
   it('rejects a dotted / path-unsafe app id', async () => {
-    await assert.rejects(() => scaffoldApp(dir, 'auto.x'), AppScaffoldError);
+    await expect((() => scaffoldApp(dir, 'auto.x'))()).rejects.toThrow(AppScaffoldError);
   });
 
   it('validates ids', () => {
-    assert.throws(() => validateId('has space'), AppScaffoldError);
-    assert.throws(() => validateId('_leading'), AppScaffoldError);
+    expect(() => validateId('has space')).toThrow(AppScaffoldError);
+    expect(() => validateId('_leading')).toThrow(AppScaffoldError);
     // Automation apps use a plain slug id now (kind marks them, not a
     // dotted prefix) — a dotted id is rejected, a slug accepted.
-    assert.throws(() => validateAppId('auto.ok'), AppScaffoldError);
+    expect(() => validateAppId('auto.ok')).toThrow(AppScaffoldError);
     validateAppId('standup-bot');
   });
 });

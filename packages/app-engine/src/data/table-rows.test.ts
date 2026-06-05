@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { test, beforeEach, afterEach, expect } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -39,20 +38,20 @@ test('returns columns + rows + totalCount for a populated table', () => {
   ]);
 
   const r = readTableRows(dbFile, 'todos');
-  assert.deepEqual(r.columns, ['id', 'text', 'done']);
-  assert.equal(r.totalCount, 3);
-  assert.equal(r.rows.length, 3);
-  assert.equal(r.rows[0]!.text, 'a');
-  assert.equal(r.rows[2]!.done, 0);
+  expect(r.columns).toEqual(['id', 'text', 'done']);
+  expect(r.totalCount).toBe(3);
+  expect(r.rows.length).toBe(3);
+  expect(r.rows[0]!.text).toBe('a');
+  expect(r.rows[2]!.done).toBe(0);
 });
 
 test('empty table → empty rows, totalCount 0, columns still surfaced', () => {
   seed([`CREATE TABLE empty (id INTEGER PRIMARY KEY, val TEXT)`]);
 
   const r = readTableRows(dbFile, 'empty');
-  assert.deepEqual(r.columns, ['id', 'val']);
-  assert.equal(r.totalCount, 0);
-  assert.deepEqual(r.rows, []);
+  expect(r.columns).toEqual(['id', 'val']);
+  expect(r.totalCount).toBe(0);
+  expect(r.rows).toEqual([]);
 });
 
 test('limit + offset paginate correctly', () => {
@@ -62,58 +61,66 @@ test('limit + offset paginate correctly', () => {
   ]);
 
   const page1 = readTableRows(dbFile, 'nums', { limit: 4, offset: 0 });
-  assert.equal(page1.totalCount, 10);
-  assert.equal(page1.rows.length, 4);
-  assert.equal(page1.rows[0]!.n, 1);
-  assert.equal(page1.rows[3]!.n, 4);
+  expect(page1.totalCount).toBe(10);
+  expect(page1.rows.length).toBe(4);
+  expect(page1.rows[0]!.n).toBe(1);
+  expect(page1.rows[3]!.n).toBe(4);
 
   const page2 = readTableRows(dbFile, 'nums', { limit: 4, offset: 4 });
-  assert.equal(page2.rows[0]!.n, 5);
-  assert.equal(page2.rows[3]!.n, 8);
+  expect(page2.rows[0]!.n).toBe(5);
+  expect(page2.rows[3]!.n).toBe(8);
 
   const tail = readTableRows(dbFile, 'nums', { limit: 4, offset: 8 });
-  assert.equal(tail.rows.length, 2);
-  assert.equal(tail.rows[0]!.n, 9);
+  expect(tail.rows.length).toBe(2);
+  expect(tail.rows[0]!.n).toBe(9);
 });
 
 test('limit is clamped to the server cap', () => {
   seed([`CREATE TABLE t (id INTEGER PRIMARY KEY)`]);
 
   const r = readTableRows(dbFile, 't', { limit: 100_000 });
-  assert.equal(r.limit, TABLE_ROWS_MAX_LIMIT);
+  expect(r.limit).toBe(TABLE_ROWS_MAX_LIMIT);
 });
 
 test('limit defaults to 50 when omitted', () => {
   seed([`CREATE TABLE t (id INTEGER PRIMARY KEY)`]);
 
   const r = readTableRows(dbFile, 't');
-  assert.equal(r.limit, 50);
+  expect(r.limit).toBe(50);
 });
 
 test('negative or zero offset normalises to 0', () => {
   seed([`CREATE TABLE t (id INTEGER PRIMARY KEY)`, `INSERT INTO t (id) VALUES (1), (2)`]);
 
   const r = readTableRows(dbFile, 't', { offset: -50 });
-  assert.equal(r.offset, 0);
-  assert.equal(r.rows.length, 2);
+  expect(r.offset).toBe(0);
+  expect(r.rows.length).toBe(2);
 });
 
 test('unknown table → TableRowsError("unknown_table")', () => {
   seed([`CREATE TABLE only (id INTEGER PRIMARY KEY)`]);
 
-  assert.throws(
-    () => readTableRows(dbFile, 'ghost'),
-    (err: unknown) => err instanceof TableRowsError && err.code === 'unknown_table',
-  );
+  let err: unknown;
+  try {
+    readTableRows(dbFile, 'ghost');
+  } catch (e) {
+    err = e;
+  }
+  expect(err instanceof TableRowsError).toBeTruthy();
+  expect((err as TableRowsError).code).toBe('unknown_table');
 });
 
 test('sqlite_* internal tables are not addressable', () => {
   seed([`CREATE TABLE keep (id INTEGER PRIMARY KEY)`]);
 
-  assert.throws(
-    () => readTableRows(dbFile, 'sqlite_master'),
-    (err: unknown) => err instanceof TableRowsError && err.code === 'unknown_table',
-  );
+  let err: unknown;
+  try {
+    readTableRows(dbFile, 'sqlite_master');
+  } catch (e) {
+    err = e;
+  }
+  expect(err instanceof TableRowsError).toBeTruthy();
+  expect((err as TableRowsError).code).toBe('unknown_table');
 });
 
 test('view rows are returned just like a table', () => {
@@ -124,8 +131,8 @@ test('view rows are returned just like a table', () => {
   ]);
 
   const r = readTableRows(dbFile, 'open_todos');
-  assert.equal(r.totalCount, 2);
-  assert.equal(r.columns[0], 'id');
+  expect(r.totalCount).toBe(2);
+  expect(r.columns[0]).toBe('id');
 });
 
 test('table name with quote → safely round-trips via quoted identifier', () => {
@@ -135,6 +142,6 @@ test('table name with quote → safely round-trips via quoted identifier', () =>
   ]);
 
   const r = readTableRows(dbFile, 'with"quote');
-  assert.equal(r.totalCount, 1);
-  assert.equal(r.rows[0]!.v, 'ok');
+  expect(r.totalCount).toBe(1);
+  expect(r.rows[0]!.v).toBe('ok');
 });

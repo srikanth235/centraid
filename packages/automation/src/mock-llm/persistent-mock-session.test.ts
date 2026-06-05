@@ -10,8 +10,7 @@
  * host without a real agent binary.
  */
 
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { startPersistentMockSession, type AgentDriver } from './persistent-mock-session.js';
 import type { DispatchContext } from '../handler/runner.js';
 
@@ -103,11 +102,11 @@ describe('startPersistentMockSession (issue #166)', () => {
     try {
       const ctx = fakeCtx();
       const r1 = await session.toolDispatcher([{ name: 'add', args: { a: 7, b: 8 } }], ctx);
-      assert.equal(r1[0]!.ok, true);
-      assert.equal(r1[0]!.result, 15);
+      expect(r1[0]!.ok).toBe(true);
+      expect(r1[0]!.result).toBe(15);
 
       const r2 = await session.toolDispatcher([{ name: 'double', args: { n: 15 } }], ctx);
-      assert.equal(r2[0]!.result, 30);
+      expect(r2[0]!.result).toBe(30);
 
       const r3 = await session.toolDispatcher(
         [
@@ -116,14 +115,14 @@ describe('startPersistentMockSession (issue #166)', () => {
         ],
         ctx,
       );
-      assert.equal(r3[0]!.result, 3);
-      assert.equal(r3[1]!.result, 10);
+      expect(r3[0]!.result).toBe(3);
+      expect(r3[1]!.result).toBe(10);
 
       // ONE session drove every batch.
-      assert.equal(starts, 1);
+      expect(starts).toBe(1);
       // Per-call timing carried through (issue #158).
-      assert.equal(typeof r1[0]!.startedAt, 'number');
-      assert.equal(typeof r1[0]!.endedAt, 'number');
+      expect(typeof r1[0]!.startedAt).toBe('number');
+      expect(typeof r1[0]!.endedAt).toBe('number');
     } finally {
       await session.close();
     }
@@ -137,7 +136,7 @@ describe('startPersistentMockSession (issue #166)', () => {
       driveAgent: makeFakeDriver({ onStart: () => starts++, execTool: () => ({ content: '{}' }) }),
     });
     await session.close();
-    assert.equal(starts, 0);
+    expect(starts).toBe(0);
   });
 
   it('surfaces a tool error as a failed result', async () => {
@@ -151,8 +150,8 @@ describe('startPersistentMockSession (issue #166)', () => {
     });
     try {
       const r = await session.toolDispatcher([{ name: 'boom', args: {} }], fakeCtx());
-      assert.equal(r[0]!.ok, false);
-      assert.equal(r[0]!.error, 'boom');
+      expect(r[0]!.ok).toBe(false);
+      expect(r[0]!.error).toBe('boom');
     } finally {
       await session.close();
     }

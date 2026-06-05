@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { mkdtempSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,24 +15,24 @@ describe('BlobStore', () => {
     const store = new BlobStore(freshAppsDir());
     const bytes = Buffer.from('hello world');
     const first = await store.put('app', bytes);
-    assert.equal(first.hash, hashBytes(bytes));
-    assert.equal(first.sizeBytes, bytes.byteLength);
-    assert.equal(first.deduped, false);
+    expect(first.hash).toBe(hashBytes(bytes));
+    expect(first.sizeBytes).toBe(bytes.byteLength);
+    expect(first.deduped).toBe(false);
     const second = await store.put('app', bytes);
-    assert.equal(second.hash, first.hash);
-    assert.equal(second.deduped, true, 'identical bytes write once');
+    expect(second.hash).toBe(first.hash);
+    expect(second.deduped).toBe(true);
   });
 
   it('round-trips bytes through read; missing hash → undefined', async () => {
     const store = new BlobStore(freshAppsDir());
     const { hash } = await store.put('app', Buffer.from('data'));
-    assert.deepEqual(await store.read('app', hash), Buffer.from('data'));
-    assert.equal(await store.read('app', 'f'.repeat(64)), undefined);
+    expect(await store.read('app', hash)).toEqual(Buffer.from('data'));
+    expect(await store.read('app', 'f'.repeat(64))).toBe(undefined);
   });
 
   it('rejects a non-sha256 hash (path-traversal guard)', () => {
     const store = new BlobStore(freshAppsDir());
-    assert.throws(() => store.pathFor('app', '../escape'), /invalid hash/i);
+    expect(() => store.pathFor('app', '../escape')).toThrow(/invalid hash/i);
   });
 
   it('gc removes blobs not in the referenced set, keeps referenced ones', async () => {
@@ -41,23 +40,22 @@ describe('BlobStore', () => {
     const store = new BlobStore(dir);
     const keep = await store.put('app', Buffer.from('keep'));
     const drop = await store.put('app', Buffer.from('drop'));
-    assert.equal(existsSync(store.pathFor('app', drop.hash)), true);
+    expect(existsSync(store.pathFor('app', drop.hash))).toBe(true);
 
     const { removed } = await store.gc('app', new Set([keep.hash]));
-    assert.equal(removed, 1);
-    assert.equal(existsSync(store.pathFor('app', keep.hash)), true);
-    assert.equal(existsSync(store.pathFor('app', drop.hash)), false);
-    assert.deepEqual(readdirSync(join(dir, 'app', 'blobs')), [keep.hash]);
+    expect(removed).toBe(1);
+    expect(existsSync(store.pathFor('app', keep.hash))).toBe(true);
+    expect(existsSync(store.pathFor('app', drop.hash))).toBe(false);
+    expect(readdirSync(join(dir, 'app', 'blobs'))).toEqual([keep.hash]);
   });
 
   it('gc on an app with no blobs dir is a no-op', async () => {
     const store = new BlobStore(freshAppsDir());
-    assert.deepEqual(await store.gc('app', new Set()), { removed: 0 });
+    expect(await store.gc('app', new Set())).toEqual({ removed: 0 });
   });
 
   it('blobUrl builds the chat-history download path', () => {
-    assert.equal(
-      blobUrl('app', 'a'.repeat(64)),
+    expect(blobUrl('app', 'a'.repeat(64))).toBe(
       `/_centraid-conversations/apps/app/blobs/${'a'.repeat(64)}`,
     );
   });

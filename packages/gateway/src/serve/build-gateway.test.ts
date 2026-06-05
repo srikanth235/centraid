@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -59,21 +58,21 @@ afterEach(async () => {
 });
 
 test('constructs the graph and exposes the lifecycle without binding a socket', () => {
-  assert.ok(gateway.runtime);
-  assert.ok(gateway.userStore);
-  assert.ok(gateway.analyticsStore);
-  assert.ok(gateway.conversationHistoryStore);
-  assert.equal(typeof gateway.start, 'function');
-  assert.equal(typeof gateway.stop, 'function');
-  assert.ok(Array.isArray(gateway.extraHandlers));
-  assert.equal(typeof gateway.composedHandler, 'function');
+  expect(gateway.runtime).toBeTruthy();
+  expect(gateway.userStore).toBeTruthy();
+  expect(gateway.analyticsStore).toBeTruthy();
+  expect(gateway.conversationHistoryStore).toBeTruthy();
+  expect(typeof gateway.start).toBe('function');
+  expect(typeof gateway.stop).toBe('function');
+  expect(Array.isArray(gateway.extraHandlers)).toBeTruthy();
+  expect(typeof gateway.composedHandler).toBe('function');
   // No listener bound — nothing in the handle resembles a URL/token.
-  assert.equal((gateway as unknown as Record<string, unknown>).url, undefined);
-  assert.equal((gateway as unknown as Record<string, unknown>).token, undefined);
+  expect((gateway as unknown as Record<string, unknown>).url).toBe(undefined);
+  expect((gateway as unknown as Record<string, unknown>).token).toBe(undefined);
 });
 
 test('the legacy backend reports no appsStore on the handle', () => {
-  assert.equal(gateway.appsStore, undefined);
+  expect(gateway.appsStore).toBe(undefined);
 });
 
 test('composedHandler dispatches runtime routes with NO bearer check', async () => {
@@ -83,8 +82,8 @@ test('composedHandler dispatches runtime routes with NO bearer check', async () 
     // No Authorization header — a fronting host (OpenClaw) owns auth, so
     // the composed chain must serve the request, not 401 it.
     const res = await fetch(`${srv.url}/centraid/_apps`);
-    assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), []);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
   } finally {
     await srv.close();
   }
@@ -97,7 +96,7 @@ test('composedHandler routes the chat-history + user-store prefixes', async () =
     // Both prefixes resolve to their store handlers (not the runtime
     // fall-through) — proving the chat → user → extra → runtime order.
     const chat = await fetch(`${srv.url}/_centraid-user/prefs`);
-    assert.notEqual(chat.status, 404);
+    expect(chat.status).not.toBe(404);
   } finally {
     await srv.close();
   }
@@ -108,5 +107,5 @@ test('start() bootstraps the registry so app routes resolve', async () => {
   // mkdir of appsDir happens in buildGateway; the registry is loaded in
   // start(). After start, the apps listing is queryable.
   const stat = await fs.stat(path.join(dataDir, 'apps'));
-  assert.ok(stat.isDirectory());
+  expect(stat.isDirectory()).toBeTruthy();
 });

@@ -4,10 +4,15 @@ import { defineProject } from 'vitest/config';
 // vitest.config.ts; see TESTING.md for the strategy. Default pool is 'forks'
 // (real child processes) so node:sqlite and the worker-thread handler-runner
 // behave as they did under node:test.
+//
+// Environment is `jsdom` now that extracted renderer logic (format/cron/diff,
+// and future render-data/state) lives in testable modules — it gives those
+// units the DOM globals they may reach for, while node builtins (fs, sqlite)
+// stay available so the main-process logic tests keep working (TESTING.md §2).
 export default defineProject({
   test: {
     name: '@centraid/desktop',
     include: ['src/**/*.test.ts'],
-    environment: 'node',
+    environment: 'jsdom',
   },
 });

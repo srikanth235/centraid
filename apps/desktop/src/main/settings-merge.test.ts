@@ -1,5 +1,4 @@
-import { test } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { expect, test } from 'vitest';
 import { mergePersistedSettings } from './settings-merge.ts';
 
 test('sets a runner model without disturbing other fields', () => {
@@ -7,8 +6,8 @@ test('sets a runner model without disturbing other fields', () => {
     { activeGatewayId: 'local' },
     { chatModelByRunner: { codex: 'gpt-5.5' } },
   );
-  assert.deepEqual(next.chatModelByRunner, { codex: 'gpt-5.5' });
-  assert.equal(next.activeGatewayId, 'local');
+  expect(next.chatModelByRunner).toEqual({ codex: 'gpt-5.5' });
+  expect(next.activeGatewayId).toBe('local');
 });
 
 test('per-runner patch merges key-by-key — sibling runners are preserved', () => {
@@ -19,7 +18,7 @@ test('per-runner patch merges key-by-key — sibling runners are preserved', () 
     },
     { chatModelByRunner: { codex: 'gpt-5.4-mini' } },
   );
-  assert.deepEqual(next.chatModelByRunner, {
+  expect(next.chatModelByRunner).toEqual({
     codex: 'gpt-5.4-mini',
     'claude-code': 'claude-opus-4-8',
   });
@@ -33,7 +32,7 @@ test('empty-string clears just that runner, leaving siblings intact', () => {
     },
     { chatModelByRunner: { 'claude-code': '' } },
   );
-  assert.deepEqual(next.chatModelByRunner, { codex: 'gpt-5.5' });
+  expect(next.chatModelByRunner).toEqual({ codex: 'gpt-5.5' });
 });
 
 test('clearing the last entry drops the field entirely', () => {
@@ -41,7 +40,7 @@ test('clearing the last entry drops the field entirely', () => {
     { activeGatewayId: 'local', chatModelByRunner: { codex: 'gpt-5.5' } },
     { chatModelByRunner: { codex: '' } },
   );
-  assert.equal('chatModelByRunner' in next, false);
+  expect('chatModelByRunner' in next).toBe(false);
 });
 
 test('an omitted chatModelByRunner preserves the whole map', () => {
@@ -49,8 +48,8 @@ test('an omitted chatModelByRunner preserves the whole map', () => {
     { activeGatewayId: 'local', chatModelByRunner: { codex: 'gpt-5.5' } },
     { remoteTemplatesUrl: 'https://example.test/feed.json' },
   );
-  assert.deepEqual(next.chatModelByRunner, { codex: 'gpt-5.5' });
-  assert.equal(next.remoteTemplatesUrl, 'https://example.test/feed.json');
+  expect(next.chatModelByRunner).toEqual({ codex: 'gpt-5.5' });
+  expect(next.remoteTemplatesUrl).toBe('https://example.test/feed.json');
 });
 
 test('clearing one runner leaves other top-level fields intact', () => {
@@ -63,22 +62,20 @@ test('clearing one runner leaves other top-level fields intact', () => {
     },
     { chatModelByRunner: { codex: '' } },
   );
-  assert.deepEqual(next.chatModelByRunner, { 'claude-code': 'claude-opus-4-8' });
-  assert.equal(next.remoteTemplatesUrl, 'https://example.test/feed.json');
-  assert.equal(next.onboardingCompletedAt, '2026-01-01T00:00:00.000Z');
-  assert.equal(next.activeGatewayId, 'local');
+  expect(next.chatModelByRunner).toEqual({ 'claude-code': 'claude-opus-4-8' });
+  expect(next.remoteTemplatesUrl).toBe('https://example.test/feed.json');
+  expect(next.onboardingCompletedAt).toBe('2026-01-01T00:00:00.000Z');
+  expect(next.activeGatewayId).toBe('local');
 });
 
 test('activeGatewayId falls back to current when patch omits/blanks it', () => {
-  assert.equal(mergePersistedSettings({ activeGatewayId: 'local' }, {}).activeGatewayId, 'local');
-  assert.equal(
+  expect(mergePersistedSettings({ activeGatewayId: 'local' }, {}).activeGatewayId).toBe('local');
+  expect(
     mergePersistedSettings({ activeGatewayId: 'local' }, { activeGatewayId: '   ' })
       .activeGatewayId,
-    'local',
-  );
-  assert.equal(
+  ).toBe('local');
+  expect(
     mergePersistedSettings({ activeGatewayId: 'local' }, { activeGatewayId: 'remote-1' })
       .activeGatewayId,
-    'remote-1',
-  );
+  ).toBe('remote-1');
 });

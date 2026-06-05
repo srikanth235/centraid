@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -53,13 +52,13 @@ async function seedAppDir(entry: RegistryEntry): Promise<void> {
 test('removes the wrapper dir for an uploaded app', async () => {
   const entry = makeUploadedEntry('myapp-abc123');
   await seedAppDir(entry);
-  assert.ok((await fs.stat(entry.path)).isDirectory(), 'precondition: dir exists');
+  expect((await fs.stat(entry.path)).isDirectory()).toBeTruthy();
 
   const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
-  assert.deepEqual(result, { kind: 'removed' });
-  await assert.rejects(fs.stat(entry.path), /ENOENT/, 'wrapper dir should be gone');
-  assert.equal(warnings.length, 0);
+  expect(result).toEqual({ kind: 'removed' });
+  await expect(fs.stat(entry.path)).rejects.toThrow(/ENOENT/);
+  expect(warnings.length).toBe(0);
 });
 
 test('removes data.sqlite, current.json, and all versions', async () => {
@@ -68,9 +67,9 @@ test('removes data.sqlite, current.json, and all versions', async () => {
 
   await cleanupDeregisteredApp(appsDir, entry, logger);
 
-  await assert.rejects(fs.stat(path.join(entry.path, 'data.sqlite')));
-  await assert.rejects(fs.stat(path.join(entry.path, 'current.json')));
-  await assert.rejects(fs.stat(path.join(entry.path, 'versions')));
+  await expect(fs.stat(path.join(entry.path, 'data.sqlite'))).rejects.toThrow();
+  await expect(fs.stat(path.join(entry.path, 'current.json'))).rejects.toThrow();
+  await expect(fs.stat(path.join(entry.path, 'versions'))).rejects.toThrow();
 });
 
 test('appsDir itself is preserved', async () => {
@@ -82,9 +81,9 @@ test('appsDir itself is preserved', async () => {
   await cleanupDeregisteredApp(appsDir, a, logger);
 
   // Sibling app dir + appsDir survive — only the targeted entry is touched.
-  assert.ok((await fs.stat(appsDir)).isDirectory());
-  assert.ok((await fs.stat(b.path)).isDirectory());
-  await assert.rejects(fs.stat(a.path));
+  expect((await fs.stat(appsDir)).isDirectory()).toBeTruthy();
+  expect((await fs.stat(b.path)).isDirectory()).toBeTruthy();
+  await expect(fs.stat(a.path)).rejects.toThrow();
 });
 
 test('refuses to remove a corrupt entry whose path is outside appsDir', async () => {
@@ -102,11 +101,11 @@ test('refuses to remove a corrupt entry whose path is outside appsDir', async ()
 
   const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
-  assert.deepEqual(result, { kind: 'skipped', reason: 'outside-appsdir' });
-  assert.ok((await fs.stat(externalDir)).isDirectory());
-  assert.ok((await fs.stat(path.join(externalDir, 'keep.txt'))).isFile());
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0]!, /outside appsDir/);
+  expect(result).toEqual({ kind: 'skipped', reason: 'outside-appsdir' });
+  expect((await fs.stat(externalDir)).isDirectory()).toBeTruthy();
+  expect((await fs.stat(path.join(externalDir, 'keep.txt'))).isFile()).toBeTruthy();
+  expect(warnings.length).toBe(1);
+  expect(warnings[0]!).toMatch(/outside appsDir/);
 });
 
 test('refuses when path === appsDir (would wipe the entire state dir)', async () => {
@@ -118,8 +117,8 @@ test('refuses when path === appsDir (would wipe the entire state dir)', async ()
 
   const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
-  assert.deepEqual(result, { kind: 'skipped', reason: 'outside-appsdir' });
-  assert.ok((await fs.stat(appsDir)).isDirectory(), 'appsDir survives');
+  expect(result).toEqual({ kind: 'skipped', reason: 'outside-appsdir' });
+  expect((await fs.stat(appsDir)).isDirectory()).toBeTruthy();
 });
 
 test('refuses on traversal attempts via "..", appsDir untouched', async () => {
@@ -135,8 +134,8 @@ test('refuses on traversal attempts via "..", appsDir untouched', async () => {
 
   const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
-  assert.deepEqual(result, { kind: 'skipped', reason: 'outside-appsdir' });
-  assert.ok((await fs.stat(path.join(traversal, 'keep.txt'))).isFile());
+  expect(result).toEqual({ kind: 'skipped', reason: 'outside-appsdir' });
+  expect((await fs.stat(path.join(traversal, 'keep.txt'))).isFile()).toBeTruthy();
 });
 
 test('treats a missing wrapper dir as success (idempotent)', async () => {
@@ -147,6 +146,6 @@ test('treats a missing wrapper dir as success (idempotent)', async () => {
 
   // fs.rm with force:true treats ENOENT as success — that's the intended
   // semantic: deregister stays idempotent even if disk state already drifted.
-  assert.deepEqual(result, { kind: 'removed' });
-  assert.equal(warnings.length, 0);
+  expect(result).toEqual({ kind: 'removed' });
+  expect(warnings.length).toBe(0);
 });

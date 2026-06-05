@@ -5,8 +5,7 @@
  * without spawning a CLI.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -69,52 +68,52 @@ async function call(method: string, url: string, jsonBody?: unknown): Promise<Ca
 
 test('ignores paths it does not own', async () => {
   const r = await call('GET', '/centraid/_apps');
-  assert.equal(r.owned, false);
+  expect(r.owned).toBe(false);
 });
 
 test('GET /centraid/_automations lists (empty store)', async () => {
   const r = await call('GET', '/centraid/_automations');
-  assert.equal(r.owned, true);
-  assert.equal(r.status, 200);
-  assert.deepEqual(r.body, { rows: [], errors: [] });
+  expect(r.owned).toBe(true);
+  expect(r.status).toBe(200);
+  expect(r.body).toEqual({ rows: [], errors: [] });
 });
 
 test('GET /centraid/_automations/read?ref= returns null when absent', async () => {
   const r = await call('GET', '/centraid/_automations/read?ref=appx/x');
-  assert.equal(r.status, 200);
-  assert.deepEqual(r.body, { row: null });
+  expect(r.status).toBe(200);
+  expect(r.body).toEqual({ row: null });
 });
 
 test('POST run-now mints a runId and invokes the injected runAutomation', async () => {
   const r = await call('POST', '/centraid/_automations/run-now?ref=brief/brief');
-  assert.equal(r.status, 202);
+  expect(r.status).toBe(202);
   const { runId } = r.body as { runId: string };
-  assert.match(runId, /^brief\/brief:\d+:[0-9a-f]{8}$/);
-  assert.deepEqual(fired, [{ automationRef: 'brief/brief', runId }]);
+  expect(runId).toMatch(/^brief\/brief:\d+:[0-9a-f]{8}$/);
+  expect(fired).toEqual([{ automationRef: 'brief/brief', runId }]);
 });
 
 test('POST run-now without ?ref= is a 400', async () => {
   const r = await call('POST', '/centraid/_automations/run-now');
-  assert.equal(r.status, 400);
-  assert.equal(fired.length, 0);
+  expect(r.status).toBe(400);
+  expect(fired.length).toBe(0);
 });
 
 test('GET /centraid/_automations/runs returns an empty feed', async () => {
   const r = await call('GET', '/centraid/_automations/runs?limit=10');
-  assert.equal(r.status, 200);
-  assert.deepEqual(r.body, { runs: [] });
+  expect(r.status).toBe(200);
+  expect(r.body).toEqual({ runs: [] });
 });
 
 test('GET /centraid/_automations/run?runId= returns null for an unknown run', async () => {
   const r = await call('GET', '/centraid/_automations/run?runId=appx/x:1:deadbeef');
-  assert.equal(r.status, 200);
-  assert.deepEqual(r.body, { run: null });
+  expect(r.status).toBe(200);
+  expect(r.body).toEqual({ run: null });
 });
 
 test('GET /centraid/_insights/summary returns a payload object', async () => {
   const r = await call('GET', '/centraid/_insights/summary?windowDays=30');
-  assert.equal(r.owned, true);
-  assert.equal(r.status, 200);
-  assert.equal(typeof r.body, 'object');
-  assert.notEqual(r.body, null);
+  expect(r.owned).toBe(true);
+  expect(r.status).toBe(200);
+  expect(typeof r.body).toBe('object');
+  expect(r.body).not.toBe(null);
 });

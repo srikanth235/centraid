@@ -6,8 +6,7 @@
  * stripped metadata rows (no `files`/`source`), behind the bearer check.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -42,23 +41,23 @@ test('GET /centraid/_templates returns stripped bundled metadata behind auth', a
 
   // No bearer → 401.
   const unauth = await fetch(`${handle.url}/centraid/_templates`);
-  assert.equal(unauth.status, 401);
+  expect(unauth.status).toBe(401);
 
   const res = await fetch(`${handle.url}/centraid/_templates`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   const templates = (await res.json()) as Array<Record<string, unknown>>;
-  assert.ok(Array.isArray(templates) && templates.length > 0, 'expected a non-empty catalog');
+  expect(Array.isArray(templates) && templates.length > 0).toBeTruthy();
 
   for (const t of templates) {
     // Display metadata present…
     for (const key of ['id', 'name', 'desc', 'colorKey', 'iconKey', 'version']) {
-      assert.ok(key in t, `template ${JSON.stringify(t.id)} missing ${key}`);
+      expect(key in t).toBeTruthy();
     }
     // …and the bulky resolver internals stripped.
-    assert.ok(!('files' in t), 'files should be stripped from the wire response');
-    assert.ok(!('source' in t), 'source should be stripped from the wire response');
+    expect(!('files' in t)).toBeTruthy();
+    expect(!('source' in t)).toBeTruthy();
   }
 });
 
@@ -81,10 +80,7 @@ test('handler refreshes the cache from the remote URL on construction', async ()
   });
   // Fire-and-forget — let the microtask/IO turn run.
   await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.ok(
-    calls.some((u) => u.startsWith('https://templates.example.test')),
-    `expected a remote fetch on construction; saw ${JSON.stringify(calls)}`,
-  );
+  expect(calls.some((u) => u.startsWith('https://templates.example.test'))).toBeTruthy();
 });
 
 test('handler does not fetch when no remote URL is configured', async () => {
@@ -96,5 +92,5 @@ test('handler does not fetch when no remote URL is configured', async () => {
 
   makeTemplatesRouteHandler({ cacheDir: path.join(dataDir, 'tmpl-cache'), fetchImpl });
   await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.equal(calls.length, 0, 'no remote URL → no fetch');
+  expect(calls.length).toBe(0);
 });

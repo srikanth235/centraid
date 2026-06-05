@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { trackChanges, touchedTablesFromChangeset } from './change-tracker.js';
 
@@ -19,9 +18,9 @@ describe('trackChanges', () => {
   it('returns empty when no writes happen between track() and extract()', () => {
     const db = makeDb();
     const tracker = trackChanges(db);
-    assert.ok(tracker, 'tracker should be created');
+    expect(tracker).toBeTruthy();
     // No DML at all.
-    assert.deepEqual(tracker.extract(), []);
+    expect(tracker!.extract()).toEqual([]);
     db.close();
   });
 
@@ -29,7 +28,7 @@ describe('trackChanges', () => {
     const db = makeDb();
     const tracker = trackChanges(db)!;
     db.exec("INSERT INTO todos(id, text) VALUES (1, 'hello')");
-    assert.deepEqual(tracker.extract(), ['todos']);
+    expect(tracker.extract()).toEqual(['todos']);
     db.close();
   });
 
@@ -41,7 +40,7 @@ describe('trackChanges', () => {
     db.exec("UPDATE todos SET text='c' WHERE id=1");
     db.exec('DELETE FROM users WHERE id=2');
     db.exec("INSERT INTO notes(id, body) VALUES (1, 'n')");
-    assert.deepEqual(tracker.extract(), ['notes', 'todos', 'users']);
+    expect(tracker.extract()).toEqual(['notes', 'todos', 'users']);
     db.close();
   });
 
@@ -52,7 +51,7 @@ describe('trackChanges', () => {
     // Reads only; no writes captured.
     db.prepare('SELECT * FROM todos').all();
     db.prepare('SELECT COUNT(*) FROM todos').get();
-    assert.deepEqual(tracker.extract(), []);
+    expect(tracker.extract()).toEqual([]);
     db.close();
   });
 
@@ -60,11 +59,11 @@ describe('trackChanges', () => {
     const db = makeDb();
     const tracker = trackChanges(db)!;
     db.exec("INSERT INTO todos(id, text) VALUES (1, 'x')");
-    assert.deepEqual(tracker.extract(), ['todos']);
+    expect(tracker.extract()).toEqual(['todos']);
     // Session is closed after the first extract; we don't track further
     // writes against this handle.
     db.exec("INSERT INTO todos(id, text) VALUES (2, 'y')");
-    assert.deepEqual(tracker.extract(), []);
+    expect(tracker.extract()).toEqual([]);
     db.close();
   });
 
@@ -74,7 +73,7 @@ describe('trackChanges', () => {
     db.exec("INSERT INTO todos(id, text) VALUES (1, 'x')");
     tracker.close();
     // Extract after close — defined to return empty, not throw.
-    assert.deepEqual(tracker.extract(), []);
+    expect(tracker.extract()).toEqual([]);
     db.close();
   });
 
@@ -89,14 +88,14 @@ describe('trackChanges', () => {
     db.exec("INSERT INTO no_pk(x, y) VALUES (1, 'a')");
     db.exec("INSERT INTO with_pk(id, text) VALUES (1, 'b')");
     // Only with_pk is captured.
-    assert.deepEqual(tracker.extract(), ['with_pk']);
+    expect(tracker.extract()).toEqual(['with_pk']);
     db.close();
   });
 });
 
 describe('touchedTablesFromChangeset', () => {
   it('returns empty for an empty changeset blob', () => {
-    assert.deepEqual(touchedTablesFromChangeset(new Uint8Array(0)), []);
+    expect(touchedTablesFromChangeset(new Uint8Array(0))).toEqual([]);
   });
 
   it('enumerates tables from a real changeset against an empty replica', () => {
@@ -109,6 +108,6 @@ describe('touchedTablesFromChangeset', () => {
     const cs = sess.changeset();
     sess.close();
     src.close();
-    assert.deepEqual(touchedTablesFromChangeset(cs).sort(), ['todos', 'users']);
+    expect(touchedTablesFromChangeset(cs).sort()).toEqual(['todos', 'users']);
   });
 });

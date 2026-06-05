@@ -12,8 +12,7 @@
  *     toggled/deleted automation flows through publish.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -39,13 +38,13 @@ function auth(extra: Record<string, string> = {}): Record<string, string> {
 
 async function listApps(): Promise<Array<{ id: string; name?: string; kind?: string }>> {
   const res = await fetch(`${handle.url}/centraid/_apps`, { headers: auth() });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   return (await res.json()) as Array<{ id: string; name?: string; kind?: string }>;
 }
 
 async function listSessions(): Promise<string[]> {
   const res = await fetch(`${handle.url}/centraid/_apps/_sessions`, { headers: auth() });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   return ((await res.json()) as { sessions: string[] }).sessions;
 }
 
@@ -69,20 +68,20 @@ test('POST /_apps stages a draft, and publish:true lands it on main', async () =
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id: 'notes', name: 'Notes' }),
   });
-  assert.equal(staged.status, 201);
+  expect(staged.status).toBe(201);
   const stagedBody = (await staged.json()) as { sessionId: string; staged: boolean };
-  assert.equal(stagedBody.staged, true);
-  assert.ok(stagedBody.sessionId, 'a session id is returned for the draft');
-  assert.ok(!(await listApps()).some((a) => a.id === 'notes'), 'staged app is not on main');
+  expect(stagedBody.staged).toBe(true);
+  expect(stagedBody.sessionId).toBeTruthy();
+  expect(!(await listApps()).some((a) => a.id === 'notes')).toBeTruthy();
 
   // The staged draft serves through the runtime (issue #141 draft preview).
   const draft = await fetch(
     `${handle.url}/centraid/_draft/${stagedBody.sessionId}/notes/app.json`,
     { headers: auth() },
   );
-  assert.equal(draft.status, 200, 'staged draft is previewable through the gateway');
+  expect(draft.status).toBe(200);
   const manifest = (await draft.json()) as { id: string; name: string };
-  assert.equal(manifest.id, 'notes');
+  expect(manifest.id).toBe('notes');
 
   // Publishing a second create lands it on `main` and the home list shows it.
   const published = await fetch(`${handle.url}/centraid/_apps`, {
@@ -90,13 +89,13 @@ test('POST /_apps stages a draft, and publish:true lands it on main', async () =
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id: 'tasks', name: 'Tasks', publish: true }),
   });
-  assert.equal(published.status, 201);
+  expect(published.status).toBe(201);
   const pubBody = (await published.json()) as { staged: boolean };
-  assert.equal(pubBody.staged, false);
+  expect(pubBody.staged).toBe(false);
   const apps = await listApps();
   const row = apps.find((a) => a.id === 'tasks');
-  assert.ok(row, 'published app is on main');
-  assert.equal(row?.name, 'Tasks');
+  expect(row).toBeTruthy();
+  expect(row?.name).toBe('Tasks');
 });
 
 test('POST /_apps rejects a collision with an app already on main', async () => {
@@ -105,15 +104,15 @@ test('POST /_apps rejects a collision with an app already on main', async () => 
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id: 'dup', name: 'Dup', publish: true }),
   });
-  assert.equal(first.status, 201);
+  expect(first.status).toBe(201);
   const clash = await fetch(`${handle.url}/centraid/_apps`, {
     method: 'POST',
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id: 'dup', name: 'Dup Again', publish: true }),
   });
-  assert.equal(clash.status, 409);
+  expect(clash.status).toBe(409);
   const err = (await clash.json()) as { error: string };
-  assert.equal(err.error, 'already_exists');
+  expect(err.error).toBe('already_exists');
 });
 
 test('POST /_apps/<id>/meta renames an app on main', async () => {
@@ -127,9 +126,9 @@ test('POST /_apps/<id>/meta renames an app on main', async () => {
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ name: 'Daily Journal', publish: true }),
   });
-  assert.equal(res.status, 200);
+  expect(res.status).toBe(200);
   const row = (await listApps()).find((a) => a.id === 'journal');
-  assert.equal(row?.name, 'Daily Journal');
+  expect(row?.name).toBe('Daily Journal');
 });
 
 test('POST /_automations mints a webhook secret and publishes the automation', async () => {
@@ -144,22 +143,22 @@ test('POST /_automations mints a webhook secret and publishes the automation', a
       publish: true,
     }),
   });
-  assert.equal(res.status, 201);
+  expect(res.status).toBe(201);
   const body = (await res.json()) as {
     row: { ownerApp: string } | null;
     webhook?: { id: string; secret: string; url: string };
     staged: boolean;
   };
-  assert.equal(body.staged, false);
-  assert.ok(body.row, 'a row is read back from main after publish');
-  assert.equal(body.row?.ownerApp, 'inbound');
-  assert.ok(body.webhook, 'a webhook secret is minted and returned once');
-  assert.ok(body.webhook!.secret.length > 0, 'plaintext secret present');
-  assert.match(body.webhook!.url, /\/_centraid-hook\//);
+  expect(body.staged).toBe(false);
+  expect(body.row).toBeTruthy();
+  expect(body.row?.ownerApp).toBe('inbound');
+  expect(body.webhook).toBeTruthy();
+  expect(body.webhook!.secret.length > 0).toBeTruthy();
+  expect(body.webhook!.url).toMatch(/\/_centraid-hook\//);
 
   // The app is on `main`, marked as an automation app.
   const row = (await listApps()).find((a) => a.id === 'inbound');
-  assert.equal(row?.kind, 'automation');
+  expect(row?.kind).toBe('automation');
 });
 
 test('automation set-enabled then delete flows through publish', async () => {
@@ -185,7 +184,7 @@ test('automation set-enabled then delete flows through publish', async () => {
       body: JSON.stringify({ enabled: true, publish: true }),
     },
   );
-  assert.equal(enable.status, 200);
+  expect(enable.status).toBe(200);
 
   // Seed the app's data dir so the delete has real per-app data to tear
   // down (data.sqlite + run ledgers), not just the code on `main`.
@@ -198,20 +197,16 @@ test('automation set-enabled then delete flows through publish', async () => {
     `${handle.url}/centraid/_automations?ref=${encodeURIComponent('digest/digest')}&publish=true`,
     { method: 'DELETE', headers: auth() },
   );
-  assert.equal(del.status, 200);
+  expect(del.status).toBe(200);
   const delBody = (await del.json()) as { deletedApp?: boolean };
-  assert.equal(delBody.deletedApp, true);
-  assert.ok(!(await listApps()).some((a) => a.id === 'digest'), 'deleted automation app is gone');
+  expect(delBody.deletedApp).toBe(true);
+  expect(!(await listApps()).some((a) => a.id === 'digest')).toBeTruthy();
 
   // Finding A regression: the data dir is gone too — and NOT resurrected.
   // The old code called `ensureRegistered` after `deleteApp`, re-creating
   // the registry entry + data dir for the app just deleted; the fix
   // deregisters + cleans the data dir instead.
-  await assert.rejects(
-    fs.stat(dataAppDir),
-    /ENOENT/,
-    'data dir must be removed, not resurrected by a stray re-register',
-  );
+  await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/);
 });
 
 test('DELETE /_apps/<id> tears down the app data dir, not just the code', async () => {
@@ -229,12 +224,12 @@ test('DELETE /_apps/<id> tears down the app data dir, not just the code', async 
     method: 'DELETE',
     headers: auth(),
   });
-  assert.equal(del.status, 200);
-  assert.ok(!(await listApps()).some((a) => a.id === 'shelf'), 'deleted app is off main');
+  expect(del.status).toBe(200);
+  expect(!(await listApps()).some((a) => a.id === 'shelf')).toBeTruthy();
 
   // Finding A regression: the wrapper dir under appsDir is removed, so a
   // recreated `shelf` cannot inherit stale rows/history.
-  await assert.rejects(fs.stat(dataAppDir), /ENOENT/, 'app data dir must be cleaned on delete');
+  await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/);
 });
 
 test('DELETE /_apps/<id> deletes a never-published draft without a no_changes error', async () => {
@@ -245,7 +240,7 @@ test('DELETE /_apps/<id> deletes a never-published draft without a no_changes er
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id: 'scratch', name: 'Scratch' }),
   });
-  assert.equal(staged.status, 201);
+  expect(staged.status).toBe(201);
   // Seed the draft's data dir the way ensureRegistered would.
   const dataAppDir = path.join(dataDir, 'apps', 'scratch');
   await fs.mkdir(dataAppDir, { recursive: true });
@@ -256,19 +251,19 @@ test('DELETE /_apps/<id> deletes a never-published draft without a no_changes er
     method: 'DELETE',
     headers: auth(),
   });
-  assert.equal(del.status, 200, 'deleting a draft does not 400 with no_changes');
+  expect(del.status).toBe(200);
   const body = (await del.json()) as { deleted: boolean; codeRemoved: boolean };
-  assert.equal(body.deleted, true);
-  assert.equal(body.codeRemoved, false, 'a draft had no code on main to remove');
+  expect(body.deleted).toBe(true);
+  expect(body.codeRemoved).toBe(false);
   // The teardown still ran: registry/data dir are cleaned.
-  await assert.rejects(fs.stat(dataAppDir), /ENOENT/, 'draft data dir must be cleaned on delete');
+  await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/);
 
   // A second DELETE of the same id is a clean no-op, not a failure.
   const again = await fetch(`${handle.url}/centraid/_apps/scratch`, {
     method: 'DELETE',
     headers: auth(),
   });
-  assert.equal(again.status, 200, 're-deleting an already-gone app is idempotent');
+  expect(again.status).toBe(200);
 });
 
 test('a one-shot publish (no sessionId) closes its lifecycle session — no orphan worktree', async () => {
@@ -280,15 +275,9 @@ test('a one-shot publish (no sessionId) closes its lifecycle session — no orph
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id: 'ledger', name: 'Ledger', publish: true }),
   });
-  assert.equal(res.status, 201);
-  assert.ok(
-    (await listApps()).some((a) => a.id === 'ledger'),
-    'app landed on main',
-  );
-  assert.ok(
-    !(await listSessions()).includes('lifecycle-ledger'),
-    'the one-shot lifecycle session must not linger after publish',
-  );
+  expect(res.status).toBe(201);
+  expect((await listApps()).some((a) => a.id === 'ledger')).toBeTruthy();
+  expect(!(await listSessions()).includes('lifecycle-ledger')).toBeTruthy();
 });
 
 test('an explicit (renderer) editing session is preserved across a publish', async () => {
@@ -304,11 +293,8 @@ test('an explicit (renderer) editing session is preserved across a publish', asy
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id: 'board', name: 'Board', sessionId: 'desktop-board', publish: true }),
   });
-  assert.equal(res.status, 201);
-  assert.ok(
-    (await listSessions()).includes('desktop-board'),
-    'an explicitly-supplied editing session must survive the publish',
-  );
+  expect(res.status).toBe(201);
+  expect((await listSessions()).includes('desktop-board')).toBeTruthy();
 });
 
 test('a one-shot publish opens fresh off main even when a stale lifecycle session orphan exists', async () => {
@@ -320,7 +306,7 @@ test('a one-shot publish opens fresh off main even when a stale lifecycle sessio
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ sessionId: 'lifecycle-relics' }),
   });
-  assert.ok((await listSessions()).includes('lifecycle-relics'), 'orphan seeded');
+  expect((await listSessions()).includes('lifecycle-relics')).toBeTruthy();
 
   // Now create `relics` for real via the defaulting path. Pre-fix this hit
   // `session_exists` and reused the stale worktree; post-fix it opens fresh.
@@ -329,13 +315,7 @@ test('a one-shot publish opens fresh off main even when a stale lifecycle sessio
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ id: 'relics', name: 'Relics', publish: true }),
   });
-  assert.equal(res.status, 201, await res.text());
-  assert.ok(
-    (await listApps()).some((a) => a.id === 'relics'),
-    'app published off a fresh session',
-  );
-  assert.ok(
-    !(await listSessions()).includes('lifecycle-relics'),
-    'the stale orphan is replaced and closed, not reused',
-  );
+  expect(res.status).toBe(201);
+  expect((await listApps()).some((a) => a.id === 'relics')).toBeTruthy();
+  expect(!(await listSessions()).includes('lifecycle-relics')).toBeTruthy();
 });

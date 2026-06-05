@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { lintHandlerSource, formatHandlerLintError } from './lint.js';
 
 const CLEAN_HANDLER = `
@@ -19,22 +18,22 @@ export default async ({ ctx, log }) => {
 
 describe('lintHandlerSource', () => {
   it('passes a clean handler that routes everything through ctx.*', () => {
-    assert.deepEqual(lintHandlerSource(CLEAN_HANDLER), []);
+    expect(lintHandlerSource(CLEAN_HANDLER)).toEqual([]);
   });
 
   it('flags Date.now()', () => {
     const findings = lintHandlerSource('const t = Date.now();');
-    assert.equal(findings.length, 1);
-    assert.equal(findings[0]!.rule, 'no-date-now');
-    assert.equal(findings[0]!.line, 1);
+    expect(findings.length).toBe(1);
+    expect(findings[0]!.rule).toBe('no-date-now');
+    expect(findings[0]!.line).toBe(1);
   });
 
   it('flags argless new Date() but not new Date(value)', () => {
     const bad = lintHandlerSource('const a = new Date(); const b = new Date(  );');
-    assert.equal(bad.length, 2);
-    assert.ok(bad.every((f) => f.rule === 'no-new-date'));
-    assert.deepEqual(lintHandlerSource('const a = new Date(ctx.input.ms);'), []);
-    assert.deepEqual(lintHandlerSource("const a = new Date('2026-01-01');"), []);
+    expect(bad.length).toBe(2);
+    expect(bad.every((f) => f.rule === 'no-new-date')).toBeTruthy();
+    expect(lintHandlerSource('const a = new Date(ctx.input.ms);')).toEqual([]);
+    expect(lintHandlerSource("const a = new Date('2026-01-01');")).toEqual([]);
   });
 
   it('flags Math.random, randomUUID, crypto randomness, performance.now', () => {
@@ -45,16 +44,16 @@ describe('lintHandlerSource', () => {
        const bytes = randomBytes(16);
        const t = performance.now();`,
     ).map((f) => f.rule);
-    assert.ok(rules.includes('no-math-random'));
+    expect(rules.includes('no-math-random')).toBeTruthy();
     // crypto.randomUUID() and bare randomUUID() both match the same rule.
-    assert.equal(rules.filter((r) => r === 'no-random-uuid').length, 2);
-    assert.ok(rules.includes('no-random-bytes'));
-    assert.ok(rules.includes('no-performance-now'));
+    expect(rules.filter((r) => r === 'no-random-uuid').length).toBe(2);
+    expect(rules.includes('no-random-bytes')).toBeTruthy();
+    expect(rules.includes('no-performance-now')).toBeTruthy();
   });
 
   it('flags raw fetch and node I/O imports', () => {
     const fetchFindings = lintHandlerSource("const r = await fetch('https://x');");
-    assert.equal(fetchFindings[0]!.rule, 'no-raw-fetch');
+    expect(fetchFindings[0]!.rule).toBe('no-raw-fetch');
 
     for (const imp of [
       "import { readFile } from 'fs/promises';",
@@ -63,13 +62,13 @@ describe('lintHandlerSource', () => {
       "import { connect } from 'node:net';",
     ]) {
       const f = lintHandlerSource(imp);
-      assert.equal(f[0]?.rule, 'no-node-io-import', `expected I/O flag for: ${imp}`);
+      expect(f[0]?.rule).toBe('no-node-io-import');
     }
   });
 
   it('flags ambient process reads', () => {
     const findings = lintHandlerSource('const k = process.env.TOKEN;');
-    assert.equal(findings[0]!.rule, 'no-process-ambient');
+    expect(findings[0]!.rule).toBe('no-process-ambient');
   });
 
   it('does not flag patterns that appear only in comments or strings', () => {
@@ -80,46 +79,46 @@ describe('lintHandlerSource', () => {
       const tpl = \`text with Math.random() inside\`;
       return { summary: 'ok' };
     `;
-    assert.deepEqual(lintHandlerSource(src), []);
+    expect(lintHandlerSource(src)).toEqual([]);
   });
 
   it('DOES flag unsafe calls inside template-literal interpolation', () => {
     // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test
     const findings = lintHandlerSource('const id = `req-${Math.random()}`;');
-    assert.equal(findings.length, 1);
-    assert.equal(findings[0]!.rule, 'no-math-random');
+    expect(findings.length).toBe(1);
+    expect(findings[0]!.rule).toBe('no-math-random');
   });
 
   it('handles nested braces inside interpolation without desyncing', () => {
     // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test
     const src = 'const s = `${ { a: 1 }.a + Date.now() }`; const ok = ctx.tool("x", {});';
     const findings = lintHandlerSource(src);
-    assert.equal(findings.length, 1);
-    assert.equal(findings[0]!.rule, 'no-date-now');
+    expect(findings.length).toBe(1);
+    expect(findings[0]!.rule).toBe('no-date-now');
   });
 
   it('reports accurate line/column and sorts by position', () => {
     const src = ['line one', 'const a = Math.random();', 'const b = Date.now();'].join('\n');
     const findings = lintHandlerSource(src);
-    assert.equal(findings.length, 2);
-    assert.equal(findings[0]!.line, 2);
-    assert.equal(findings[0]!.rule, 'no-math-random');
-    assert.equal(findings[1]!.line, 3);
-    assert.equal(findings[1]!.rule, 'no-date-now');
+    expect(findings.length).toBe(2);
+    expect(findings[0]!.line).toBe(2);
+    expect(findings[0]!.rule).toBe('no-math-random');
+    expect(findings[1]!.line).toBe(3);
+    expect(findings[1]!.rule).toBe('no-date-now');
   });
 });
 
 describe('formatHandlerLintError', () => {
   it('returns undefined when there are no findings', () => {
-    assert.equal(formatHandlerLintError([]), undefined);
+    expect(formatHandlerLintError([])).toBe(undefined);
   });
 
   it('formats findings into a single authoring error mentioning the file and rules', () => {
     const findings = lintHandlerSource('const t = Date.now();');
     const msg = formatHandlerLintError(findings, 'automations/main/handler.js');
-    assert.ok(msg);
-    assert.match(msg!, /automations\/main\/handler\.js/);
-    assert.match(msg!, /no-date-now/);
-    assert.match(msg!, /1 unsafe pattern/);
+    expect(msg).toBeTruthy();
+    expect(msg!).toMatch(/automations\/main\/handler\.js/);
+    expect(msg!).toMatch(/no-date-now/);
+    expect(msg!).toMatch(/1 unsafe pattern/);
   });
 });

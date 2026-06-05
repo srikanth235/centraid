@@ -11,8 +11,7 @@
  * published version; the `_draft` path serves the staged edits.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -86,7 +85,7 @@ test('serves a staged draft (static + handlers) while live keeps the published v
 
   handle = await serve({ paths: pathsUnder(dataDir), appsStoreRoot });
   const store = handle.appsStore!;
-  assert.ok(store, 'expected appsStore on the handle');
+  expect(store).toBeTruthy();
 
   // Open a session and stage a draft: new HTML + a changed query handler.
   await store.openSession('draft1');
@@ -101,40 +100,32 @@ test('serves a staged draft (static + handlers) while live keeps the published v
 
   // Live path: unchanged published static + handler.
   const liveHtml = await fetch(`${handle.url}/centraid/app/`, { headers: auth });
-  assert.equal(liveHtml.status, 200);
-  assert.match(await liveHtml.text(), /PUBLISHED/);
+  expect(liveHtml.status).toBe(200);
+  expect(await liveHtml.text()).toMatch(/PUBLISHED/);
 
   const liveRead = await fetch(`${handle.url}/centraid/_tool/centraid_read`, {
     method: 'POST',
     headers: { ...auth, 'Content-Type': 'application/json' },
     body: JSON.stringify({ app: 'app', query: 'ping', input: {} }),
   });
-  assert.deepEqual(await liveRead.json(), { marker: 'published' });
+  expect(await liveRead.json()).toEqual({ marker: 'published' });
 
   // Draft path: staged static + the staged handler, against the same data.
   const draftHtml = await fetch(`${handle.url}/centraid/_draft/draft1/app/`, { headers: auth });
-  assert.equal(draftHtml.status, 200, `draft index status ${draftHtml.status}`);
+  expect(draftHtml.status).toBe(200);
   const draftBody = await draftHtml.text();
-  assert.match(draftBody, /DRAFT/, 'draft index should serve staged HTML');
+  expect(draftBody).toMatch(/DRAFT/);
   // The injected bridge must route tool calls through the draft shim so
   // the draft's handlers run (not the live ones).
-  assert.match(
-    draftBody,
-    /\/centraid\/_draft\/draft1\/_tool\//,
-    'draft bridge should pin the draft tool URL',
-  );
+  expect(draftBody).toMatch(/\/centraid\/_draft\/draft1\/_tool\//);
 
   const draftRead = await fetch(`${handle.url}/centraid/_draft/draft1/_tool/centraid_read`, {
     method: 'POST',
     headers: { ...auth, 'Content-Type': 'application/json' },
     body: JSON.stringify({ app: 'app', query: 'ping', input: {} }),
   });
-  assert.equal(draftRead.status, 200, `draft read status ${draftRead.status}`);
-  assert.deepEqual(
-    await draftRead.json(),
-    { marker: 'draft' },
-    'draft tool dispatch should run the staged handler',
-  );
+  expect(draftRead.status).toBe(200);
+  expect(await draftRead.json()).toEqual({ marker: 'draft' });
 });
 
 test('an unknown draft session yields 503 (no live fallback)', async () => {
@@ -145,5 +136,5 @@ test('an unknown draft session yields 503 (no live fallback)', async () => {
   const res = await fetch(`${handle.url}/centraid/_draft/ghost/app/`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
-  assert.equal(res.status, 503, `expected 503 for unknown session, got ${res.status}`);
+  expect(res.status).toBe(503);
 });

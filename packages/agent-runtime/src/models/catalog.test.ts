@@ -1,5 +1,4 @@
-import { test } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,8 +34,8 @@ test('default load with no file → returns defaults, never enumerates', async (
     },
     defaults: DEFAULTS,
   });
-  assert.equal(enumerated, false);
-  assert.deepEqual(models, DEFAULTS);
+  expect(enumerated).toBe(false);
+  expect(models).toEqual(DEFAULTS);
 });
 
 test('warm load returns the cached entry, not defaults', async () => {
@@ -52,10 +51,7 @@ test('warm load returns the cached entry, not defaults', async () => {
     enumerate: async () => [{ id: 'nope' }],
     defaults: DEFAULTS,
   });
-  assert.deepEqual(
-    models.map((m) => m.id),
-    ['claude-opus-4-8'],
-  );
+  expect(models.map((m) => m.id)).toEqual(['claude-opus-4-8']);
 });
 
 test('refresh enumerates and overwrites the file', async () => {
@@ -68,15 +64,12 @@ test('refresh enumerates and overwrites the file', async () => {
     defaults: DEFAULTS,
     refresh: true,
   });
-  assert.deepEqual(
-    models.map((m) => m.id),
-    ['claude-opus-4-8', 'claude-haiku-4-5'],
-  );
+  expect(models.map((m) => m.id)).toEqual(['claude-opus-4-8', 'claude-haiku-4-5']);
   const file = await readCatalog(catalogPath);
-  assert.deepEqual(
-    file?.runners['claude-code']?.models?.map((m) => m.id),
-    ['claude-opus-4-8', 'claude-haiku-4-5'],
-  );
+  expect(file?.runners['claude-code']?.models?.map((m) => m.id)).toEqual([
+    'claude-opus-4-8',
+    'claude-haiku-4-5',
+  ]);
 });
 
 test('refresh failure preserves a prior good entry', async () => {
@@ -93,16 +86,10 @@ test('refresh failure preserves a prior good entry', async () => {
     defaults: DEFAULTS,
     refresh: true,
   });
-  assert.deepEqual(
-    models.map((m) => m.id),
-    ['claude-opus-4-8'],
-  );
+  expect(models.map((m) => m.id)).toEqual(['claude-opus-4-8']);
   // The prior entry must still be on disk.
   const file = await readCatalog(catalogPath);
-  assert.deepEqual(
-    file?.runners['claude-code']?.models?.map((m) => m.id),
-    ['claude-opus-4-8'],
-  );
+  expect(file?.runners['claude-code']?.models?.map((m) => m.id)).toEqual(['claude-opus-4-8']);
 });
 
 test('refresh failure with no prior entry falls back to defaults', async () => {
@@ -116,7 +103,7 @@ test('refresh failure with no prior entry falls back to defaults', async () => {
     defaults: DEFAULTS,
     refresh: true,
   });
-  assert.deepEqual(models, DEFAULTS);
+  expect(models).toEqual(DEFAULTS);
 });
 
 test('corrupt catalog file is treated as empty → defaults', async () => {
@@ -129,7 +116,7 @@ test('corrupt catalog file is treated as empty → defaults', async () => {
     enumerate: async () => [{ id: 'nope' }],
     defaults: DEFAULTS,
   });
-  assert.deepEqual(models, DEFAULTS);
+  expect(models).toEqual(DEFAULTS);
 });
 
 test('writeCatalogEntry preserves other runners', async () => {
@@ -145,8 +132,8 @@ test('writeCatalogEntry preserves other runners', async () => {
     enumeratedAt: '2026-01-01T00:00:00.000Z',
   });
   const file = await readCatalog(catalogPath);
-  assert.equal(file?.runners['claude-code']?.models?.[0]?.id, 'claude-opus-4-8');
-  assert.equal(file?.runners['codex']?.models?.[0]?.id, 'gpt-5-codex');
+  expect(file?.runners['claude-code']?.models?.[0]?.id).toBe('claude-opus-4-8');
+  expect(file?.runners['codex']?.models?.[0]?.id).toBe('gpt-5-codex');
 });
 
 // ---- tools (resolveRunnerTools) — mirrors models, no seed ----
@@ -167,8 +154,8 @@ test('tools default load with no file → [] and never enumerates', async () => 
       return TOOLS;
     },
   });
-  assert.equal(enumerated, false);
-  assert.deepEqual(tools, []);
+  expect(enumerated).toBe(false);
+  expect(tools).toEqual([]);
 });
 
 test('tools refresh enumerates, returns, and persists', async () => {
@@ -179,16 +166,13 @@ test('tools refresh enumerates, returns, and persists', async () => {
     enumerate: async () => TOOLS,
     refresh: true,
   });
-  assert.deepEqual(
-    tools.map((t) => t.name),
-    ['Read', 'github.list_pull_requests'],
-  );
+  expect(tools.map((t) => t.name)).toEqual(['Read', 'github.list_pull_requests']);
   const file = await readCatalog(catalogPath);
-  assert.deepEqual(
-    file?.runners['claude-code']?.tools?.map((t) => t.name),
-    ['Read', 'github.list_pull_requests'],
-  );
-  assert.ok(file?.runners['claude-code']?.toolsEnumeratedAt);
+  expect(file?.runners['claude-code']?.tools?.map((t) => t.name)).toEqual([
+    'Read',
+    'github.list_pull_requests',
+  ]);
+  expect(file?.runners['claude-code']?.toolsEnumeratedAt).toBeTruthy();
 });
 
 test('tools warm load returns cached, not a re-probe', async () => {
@@ -202,10 +186,7 @@ test('tools warm load returns cached, not a re-probe', async () => {
     catalogPath,
     enumerate: async () => TOOLS,
   });
-  assert.deepEqual(
-    tools.map((t) => t.name),
-    ['Cached'],
-  );
+  expect(tools.map((t) => t.name)).toEqual(['Cached']);
 });
 
 test('tools refresh failure preserves the prior tool list', async () => {
@@ -220,10 +201,7 @@ test('tools refresh failure preserves the prior tool list', async () => {
     enumerate: async () => [], // probe failure → empty
     refresh: true,
   });
-  assert.deepEqual(
-    tools.map((t) => t.name),
-    ['Cached'],
-  );
+  expect(tools.map((t) => t.name)).toEqual(['Cached']);
 });
 
 test('a tools write and a models write merge into one entry', async () => {
@@ -244,12 +222,6 @@ test('a tools write and a models write merge into one entry', async () => {
     refresh: true,
   });
   const entry = (await readCatalog(catalogPath))?.runners['claude-code'];
-  assert.deepEqual(
-    entry?.models?.map((m) => m.id),
-    ['sonnet'],
-  );
-  assert.deepEqual(
-    entry?.tools?.map((t) => t.name),
-    ['Read', 'github.list_pull_requests'],
-  );
+  expect(entry?.models?.map((m) => m.id)).toEqual(['sonnet']);
+  expect(entry?.tools?.map((t) => t.name)).toEqual(['Read', 'github.list_pull_requests']);
 });

@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -35,11 +34,11 @@ describe('AnalyticsStore', () => {
     const s = store();
     s.recordRunSummary(summary());
     const got = s.getSummary('r1');
-    assert.equal(got?.automationRef, 'auto.todos/digest');
-    assert.equal(got?.appId, 'auto.todos');
-    assert.equal(got?.ok, true);
-    assert.equal(got?.totalInputTokens, 100);
-    assert.equal(got?.model, 'claude-sonnet-4-5');
+    expect(got?.automationRef).toBe('auto.todos/digest');
+    expect(got?.appId).toBe('auto.todos');
+    expect(got?.ok).toBe(true);
+    expect(got?.totalInputTokens).toBe(100);
+    expect(got?.model).toBe('claude-sonnet-4-5');
   });
 
   it('upserts on a repeated run id', () => {
@@ -47,9 +46,9 @@ describe('AnalyticsStore', () => {
     s.recordRunSummary(summary({ ok: true }));
     s.recordRunSummary(summary({ ok: false, error: 'boom' }));
     const got = s.getSummary('r1');
-    assert.equal(got?.ok, false);
-    assert.equal(got?.error, 'boom');
-    assert.equal(s.listSummaries().length, 1);
+    expect(got?.ok).toBe(false);
+    expect(got?.error).toBe('boom');
+    expect(s.listSummaries().length).toBe(1);
   });
 
   it('lists summaries newest-first, optionally scoped to one automation', () => {
@@ -57,25 +56,22 @@ describe('AnalyticsStore', () => {
     s.recordRunSummary(summary({ runId: 'r1', automationRef: 'auto.a/job', startedAt: 100 }));
     s.recordRunSummary(summary({ runId: 'r2', automationRef: 'auto.b/job', startedAt: 300 }));
     s.recordRunSummary(summary({ runId: 'r3', automationRef: 'auto.a/job', startedAt: 200 }));
-    assert.deepEqual(
-      s.listSummaries().map((r) => r.runId),
-      ['r2', 'r3', 'r1'],
-    );
-    assert.deepEqual(
-      s.listSummaries({ automationRef: 'auto.a/job' }).map((r) => r.runId),
-      ['r3', 'r1'],
-    );
+    expect(s.listSummaries().map((r) => r.runId)).toEqual(['r2', 'r3', 'r1']);
+    expect(s.listSummaries({ automationRef: 'auto.a/job' }).map((r) => r.runId)).toEqual([
+      'r3',
+      'r1',
+    ]);
   });
 
   it('mirrors a pin flag and deletes by automation handle', () => {
     const s = store();
     s.recordRunSummary(summary({ runId: 'r1', automationRef: 'auto.a/job' }));
     s.recordRunSummary(summary({ runId: 'r2', automationRef: 'auto.b/job' }));
-    assert.equal(s.getSummary('r1')?.pinned, false);
+    expect(s.getSummary('r1')?.pinned).toBe(false);
     s.setPinned('r1', true);
-    assert.equal(s.getSummary('r1')?.pinned, true);
+    expect(s.getSummary('r1')?.pinned).toBe(true);
     s.deleteByRef('auto.a/job');
-    assert.equal(s.getSummary('r1'), undefined);
-    assert.ok(s.getSummary('r2'), 'unrelated automation untouched');
+    expect(s.getSummary('r1')).toBe(undefined);
+    expect(s.getSummary('r2')).toBeTruthy();
   });
 });

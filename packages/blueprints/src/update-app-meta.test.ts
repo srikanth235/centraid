@@ -1,5 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,25 +21,33 @@ describe('updateAppMeta', () => {
     const appJson = JSON.parse(await fs.readFile(path.join(dir, 'todos', 'app.json'), 'utf8')) as {
       name: string;
     };
-    assert.equal(appJson.name, 'My Todos');
+    expect(appJson.name).toBe('My Todos');
   });
 
   it("rejects a rename that collides with another app's display name", async () => {
     await scaffoldApp(dir, 'hydrate', { name: 'Hydrate' });
     await scaffoldApp(dir, 'hydrate-2', { name: 'Hydrate 2' });
-    await assert.rejects(
-      () => updateAppMeta(dir, 'hydrate-2', { name: 'Hydrate' }),
-      (err) => err instanceof AppScaffoldError && err.code === 'already_exists',
-    );
+    let err: unknown;
+    try {
+      await updateAppMeta(dir, 'hydrate-2', { name: 'Hydrate' });
+    } catch (e) {
+      err = e;
+    }
+    expect(err instanceof AppScaffoldError).toBeTruthy();
+    expect((err as AppScaffoldError).code).toBe('already_exists');
   });
 
   it('treats display-name comparison as case-insensitive and trimmed', async () => {
     await scaffoldApp(dir, 'hydrate', { name: 'Hydrate' });
     await scaffoldApp(dir, 'hydrate-2', { name: 'Hydrate 2' });
-    await assert.rejects(
-      () => updateAppMeta(dir, 'hydrate-2', { name: '  HYDRATE  ' }),
-      (err) => err instanceof AppScaffoldError && err.code === 'already_exists',
-    );
+    let err: unknown;
+    try {
+      await updateAppMeta(dir, 'hydrate-2', { name: '  HYDRATE  ' });
+    } catch (e) {
+      err = e;
+    }
+    expect(err instanceof AppScaffoldError).toBeTruthy();
+    expect((err as AppScaffoldError).code).toBe('already_exists');
   });
 
   it('allows renaming an app to the name it already has', async () => {
@@ -49,15 +56,19 @@ describe('updateAppMeta', () => {
     const appJson = JSON.parse(
       await fs.readFile(path.join(dir, 'hydrate', 'app.json'), 'utf8'),
     ) as { name: string };
-    assert.equal(appJson.name, 'Hydrate');
+    expect(appJson.name).toBe('Hydrate');
   });
 
   it('rejects an empty / whitespace-only name', async () => {
     await scaffoldApp(dir, 'todos', { name: 'Todos' });
-    await assert.rejects(
-      () => updateAppMeta(dir, 'todos', { name: '   ' }),
-      (err) => err instanceof AppScaffoldError && err.code === 'invalid_id',
-    );
+    let err: unknown;
+    try {
+      await updateAppMeta(dir, 'todos', { name: '   ' });
+    } catch (e) {
+      err = e;
+    }
+    expect(err instanceof AppScaffoldError).toBeTruthy();
+    expect((err as AppScaffoldError).code).toBe('invalid_id');
   });
 
   it('description-only updates skip the duplicate-name check', async () => {
@@ -70,8 +81,8 @@ describe('updateAppMeta', () => {
       name: string;
       description?: string;
     };
-    assert.equal(appJson.name, 'Same');
-    assert.equal(appJson.description, 'updated');
+    expect(appJson.name).toBe('Same');
+    expect(appJson.description).toBe('updated');
   });
 
   it("propagates rename to index.html's <title> tag", async () => {
@@ -79,13 +90,13 @@ describe('updateAppMeta', () => {
     // (the seeded display name). Renaming should sync the title.
     await scaffoldApp(dir, 'todos', { name: 'Todos' });
     const before = await fs.readFile(path.join(dir, 'todos', 'index.html'), 'utf8');
-    assert.match(before, /<title>Todos<\/title>/);
+    expect(before).toMatch(/<title>Todos<\/title>/);
 
     await updateAppMeta(dir, 'todos', { name: 'My Cups' });
 
     const after = await fs.readFile(path.join(dir, 'todos', 'index.html'), 'utf8');
-    assert.match(after, /<title>My Cups<\/title>/);
-    assert.doesNotMatch(after, /<title>Todos<\/title>/);
+    expect(after).toMatch(/<title>My Cups<\/title>/);
+    expect(after).not.toMatch(/<title>Todos<\/title>/);
   });
 
   it('propagates rename to automations/<sub>/automation.json#name', async () => {
@@ -109,7 +120,7 @@ describe('updateAppMeta', () => {
     const appJson = JSON.parse(await fs.readFile(path.join(dir, appId, 'app.json'), 'utf8')) as {
       name: string;
     };
-    assert.equal(appJson.name, 'Morning Briefing');
+    expect(appJson.name).toBe('Morning Briefing');
 
     const manifest = JSON.parse(
       await fs.readFile(
@@ -117,12 +128,12 @@ describe('updateAppMeta', () => {
         'utf8',
       ),
     ) as { name: string; prompt: string; generated: { by: string; at: string } };
-    assert.equal(manifest.name, 'Morning Briefing');
+    expect(manifest.name).toBe('Morning Briefing');
     // Rename must NOT re-stamp `generated`: that's clone-time metadata,
     // not "last rename time".
-    assert.deepEqual(manifest.generated, originalGenerated);
+    expect(manifest.generated).toEqual(originalGenerated);
     // Unrelated fields carry through.
-    assert.equal(manifest.prompt, 'do');
+    expect(manifest.prompt).toBe('do');
   });
 
   it("rename is a no-op on subordinate files that don't exist", async () => {
@@ -136,6 +147,6 @@ describe('updateAppMeta', () => {
     );
     await updateAppMeta(dir, appId, { name: 'Renamed' });
     const entries = await fs.readdir(path.join(dir, appId));
-    assert.deepEqual(entries.sort(), ['app.json']);
+    expect(entries.sort()).toEqual(['app.json']);
   });
 });

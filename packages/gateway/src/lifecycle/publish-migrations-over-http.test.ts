@@ -14,8 +14,7 @@
  * same via `handle.appsStore.snapshotSessionAppDir`.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
@@ -90,7 +89,7 @@ async function liveSql(sql: string): Promise<{ rows: Array<Record<string, unknow
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ app: 'notes', query: '_sql', input: { sql } }),
   });
-  assert.equal(res.status, 200, `live _sql ${sql}: ${res.status} ${await res.clone().text()}`);
+  expect(res.status).toBe(200);
   return (await res.json()) as { rows: Array<Record<string, unknown>> };
 }
 
@@ -117,14 +116,14 @@ test('publishing a session that added a migration applies it to live data', asyn
 
   const res = await publish('s1', 'init schema');
   const body = (await res.json()) as { migrationsApplied?: number[]; versionTag?: string };
-  assert.equal(res.status, 201, `publish: ${JSON.stringify(body)}`);
-  assert.deepEqual(body.migrationsApplied, [1], 'migration 0001 should apply on publish');
+  expect(res.status).toBe(201);
+  expect(body.migrationsApplied).toEqual([1]);
 
   // Live data.sqlite carries the migrated schema + row, and user_version
   // advanced to 1.
   const rows = await liveSql('SELECT body FROM notes');
-  assert.deepEqual(rows.rows, [{ body: 'seed' }]);
-  assert.equal(liveUserVersion(), 1);
+  expect(rows.rows).toEqual([{ body: 'seed' }]);
+  expect(liveUserVersion()).toBe(1);
 });
 
 test('a migration incompatible with live rows aborts the publish (422), live data untouched', async () => {
@@ -136,7 +135,7 @@ test('a migration incompatible with live rows aborts the publish (422), live dat
       'CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);\n' +
       "INSERT INTO notes (body) VALUES ('seed');\n",
   });
-  assert.equal((await publish('s1', 'v1')).status, 201);
+  expect((await publish('s1', 'v1')).status).toBe(201);
 
   // Second session adds a NOT-NULL column with no default — fails against
   // the existing row inside BEGIN IMMEDIATE.
@@ -150,15 +149,15 @@ test('a migration incompatible with live rows aborts the publish (422), live dat
   });
   const res = await publish('s2', 'v2');
   const body = (await res.json()) as { error?: string; file?: string };
-  assert.equal(res.status, 422, `expected 422, got ${res.status}: ${JSON.stringify(body)}`);
-  assert.equal(body.error, 'sql_failed');
-  assert.equal(body.file, '0002_add_title.sql');
+  expect(res.status).toBe(422);
+  expect(body.error).toBe('sql_failed');
+  expect(body.file).toBe('0002_add_title.sql');
 
   // Live data is untouched: user_version still 1, the failed code (v2
   // index.html) never went live.
-  assert.equal(liveUserVersion(), 1, 'user_version must not advance on a failed migration');
+  expect(liveUserVersion()).toBe(1);
   const html = await (await fetch(`${handle.url}/centraid/notes/`, { headers: auth() })).text();
-  assert.doesNotMatch(html, /v2/, 'v2 code must not have merged (publish aborted before ff-merge)');
+  expect(html).not.toMatch(/v2/);
 });
 
 test('migrations run against the post-rebase tree: a colliding number aborts (#144)', async () => {
@@ -169,7 +168,7 @@ test('migrations run against the post-rebase tree: a colliding number aborts (#1
     'migrations/0001_init.sql':
       'CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);\n',
   });
-  assert.equal((await publish('s1', 'v1')).status, 201);
+  expect((await publish('s1', 'v1')).status).toBe(201);
 
   // Two sessions branch off v1; each adds its own 0002. (`0001` is inherited
   // from main, so only the new migration is written.)
@@ -178,8 +177,8 @@ test('migrations run against the post-rebase tree: a colliding number aborts (#1
 
   // sb publishes first → 0002_b applies to live (user_version → 2).
   const pubB = await publish('sb', 'add b');
-  assert.equal(pubB.status, 201, `publish sb: ${await pubB.text()}`);
-  assert.equal(liveUserVersion(), 2);
+  expect(pubB.status).toBe(201);
+  expect(liveUserVersion()).toBe(2);
 
   // sa now publishes. The store rebases it onto the new main, so its worktree
   // carries BOTH 0002_a and 0002_b — a duplicate id. Because migrations run
@@ -188,17 +187,14 @@ test('migrations run against the post-rebase tree: a colliding number aborts (#1
   // aborts with the duplicate error and main never advances.
   const pubA = await publish('sa', 'add a');
   const bodyA = (await pubA.json()) as { error?: string };
-  assert.equal(pubA.status, 400, `expected 400 duplicate, got ${pubA.status}`);
-  assert.equal(bodyA.error, 'duplicate');
+  expect(pubA.status).toBe(400);
+  expect(bodyA.error).toBe('duplicate');
 
   // Live is unchanged (still user_version 2, b applied, a never reached it);
   // no v3 tag was minted.
-  assert.equal(liveUserVersion(), 2);
+  expect(liveUserVersion()).toBe(2);
   const versions = (await (
     await fetch(`${handle.url}/centraid/_apps/notes/git-versions`, { headers: auth() })
   ).json()) as { versions: Array<{ tag: string }> };
-  assert.deepEqual(
-    versions.versions.map((v) => v.tag),
-    ['notes/v2', 'notes/v1'],
-  );
+  expect(versions.versions.map((v) => v.tag)).toEqual(['notes/v2', 'notes/v1']);
 });

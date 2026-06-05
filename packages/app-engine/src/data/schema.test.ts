@@ -1,5 +1,4 @@
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -32,7 +31,7 @@ function seed(stmts: string[], userVersion = 0): void {
 
 test('fresh DB → schemaVersion 0, empty tables/indexes/views', () => {
   const schema = readAppSchema(dbFile);
-  assert.deepEqual(schema, { schemaVersion: 0, tables: [], indexes: [], views: [] });
+  expect(schema).toEqual({ schemaVersion: 0, tables: [], indexes: [], views: [] });
 });
 
 test('single table — columns + sql + user_version surfaced', () => {
@@ -49,28 +48,25 @@ test('single table — columns + sql + user_version surfaced', () => {
   );
 
   const schema = readAppSchema(dbFile);
-  assert.equal(schema.schemaVersion, 1);
-  assert.equal(schema.tables.length, 1);
+  expect(schema.schemaVersion).toBe(1);
+  expect(schema.tables.length).toBe(1);
 
   const t = schema.tables[0]!;
-  assert.equal(t.name, 'todos');
-  assert.ok(t.sql && t.sql.startsWith('CREATE TABLE todos'));
-  assert.deepEqual(
-    t.columns.map((c) => c.name),
-    ['id', 'text', 'done', 'created_at'],
-  );
+  expect(t.name).toBe('todos');
+  expect(t.sql && t.sql.startsWith('CREATE TABLE todos')).toBeTruthy();
+  expect(t.columns.map((c) => c.name)).toEqual(['id', 'text', 'done', 'created_at']);
 
   const id = t.columns.find((c) => c.name === 'id')!;
-  assert.equal(id.pk, true);
-  assert.equal(id.type, 'INTEGER');
+  expect(id.pk).toBe(true);
+  expect(id.type).toBe('INTEGER');
 
   const done = t.columns.find((c) => c.name === 'done')!;
-  assert.equal(done.notnull, true);
-  assert.equal(done.dflt_value, '0');
+  expect(done.notnull).toBe(true);
+  expect(done.dflt_value).toBe('0');
 
   const createdAt = t.columns.find((c) => c.name === 'created_at')!;
-  assert.equal(createdAt.notnull, false);
-  assert.equal(createdAt.dflt_value, null);
+  expect(createdAt.notnull).toBe(false);
+  expect(createdAt.dflt_value).toBe(null);
 });
 
 test('user index and view are surfaced; auto-indexes and sqlite_* are filtered', () => {
@@ -83,27 +79,24 @@ test('user index and view are surfaced; auto-indexes and sqlite_* are filtered',
   const schema = readAppSchema(dbFile);
 
   // The UNIQUE on `tag` produces an auto-index that should NOT appear.
-  assert.equal(schema.indexes.length, 1);
-  assert.equal(schema.indexes[0]!.name, 'idx_todos_tag');
-  assert.equal(schema.indexes[0]!.tbl_name, 'todos');
+  expect(schema.indexes.length).toBe(1);
+  expect(schema.indexes[0]!.name).toBe('idx_todos_tag');
+  expect(schema.indexes[0]!.tbl_name).toBe('todos');
 
-  assert.equal(schema.views.length, 1);
-  assert.equal(schema.views[0]!.name, 'open_todos');
-  assert.ok(schema.views[0]!.sql.startsWith('CREATE VIEW'));
+  expect(schema.views.length).toBe(1);
+  expect(schema.views[0]!.name).toBe('open_todos');
+  expect(schema.views[0]!.sql.startsWith('CREATE VIEW')).toBeTruthy();
 
   // No sqlite_* tables in the output.
-  assert.ok(schema.tables.every((t) => !t.name.startsWith('sqlite_')));
+  expect(schema.tables.every((t) => !t.name.startsWith('sqlite_'))).toBeTruthy();
 });
 
 test('table with quoted identifier (dash in name) round-trips', () => {
   seed([`CREATE TABLE "with-dash" (id INTEGER PRIMARY KEY, val TEXT)`]);
   const schema = readAppSchema(dbFile);
   const t = schema.tables.find((x) => x.name === 'with-dash');
-  assert.ok(t, 'expected to find with-dash table');
-  assert.deepEqual(
-    t!.columns.map((c) => c.name),
-    ['id', 'val'],
-  );
+  expect(t).toBeTruthy();
+  expect(t!.columns.map((c) => c.name)).toEqual(['id', 'val']);
 });
 
 test('multiple tables sorted alphabetically', () => {
@@ -113,8 +106,5 @@ test('multiple tables sorted alphabetically', () => {
     `CREATE TABLE mu (id INTEGER PRIMARY KEY)`,
   ]);
   const schema = readAppSchema(dbFile);
-  assert.deepEqual(
-    schema.tables.map((t) => t.name),
-    ['alpha', 'mu', 'zebra'],
-  );
+  expect(schema.tables.map((t) => t.name)).toEqual(['alpha', 'mu', 'zebra']);
 });

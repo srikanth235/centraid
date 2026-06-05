@@ -1,5 +1,4 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +19,7 @@ function newDbPath(): string {
 
 describe('readAppSettings', () => {
   it('returns {} when the file does not exist', () => {
-    assert.deepEqual(readAppSettings('/nonexistent/path/to/db.sqlite'), {});
+    expect(readAppSettings('/nonexistent/path/to/db.sqlite')).toEqual({});
   });
 
   it('returns {} when the table is missing', () => {
@@ -28,7 +27,7 @@ describe('readAppSettings', () => {
     const db = new DatabaseSync(file);
     db.exec(`CREATE TABLE other (id INTEGER PRIMARY KEY)`);
     db.close();
-    assert.deepEqual(readAppSettings(file), {});
+    expect(readAppSettings(file)).toEqual({});
   });
 
   it('reads and JSON-decodes rows', () => {
@@ -42,8 +41,8 @@ describe('readAppSettings', () => {
     db.prepare(`INSERT INTO ${APP_SETTINGS_TABLE} VALUES (?, ?)`).run('bgL', JSON.stringify(12));
     db.close();
     const out = readAppSettings(file);
-    assert.equal(out.theme, 'light');
-    assert.equal(out.bgL, 12);
+    expect(out.theme).toBe('light');
+    expect(out.bgL).toBe(12);
   });
 
   it('skips rows with malformed JSON', () => {
@@ -54,8 +53,8 @@ describe('readAppSettings', () => {
     db.prepare(`INSERT INTO ${APP_SETTINGS_TABLE} VALUES (?, ?)`).run('bad', 'not json{');
     db.close();
     const out = readAppSettings(file);
-    assert.equal(out.good, 1);
-    assert.equal(out.bad, undefined);
+    expect(out.good).toBe(1);
+    expect(out.bad).toBe(undefined);
   });
 });
 
@@ -63,43 +62,43 @@ describe('readAppSetting / writeAppSetting / deleteAppSetting', () => {
   it('round-trips a scalar through write → read', () => {
     const file = newDbPath();
     writeAppSetting(file, 'theme', 'dark');
-    assert.equal(readAppSetting(file, 'theme'), 'dark');
+    expect(readAppSetting(file, 'theme')).toBe('dark');
   });
 
   it('round-trips an object', () => {
     const file = newDbPath();
     writeAppSetting(file, 'pref', { a: 1, b: 'two' });
-    assert.deepEqual(readAppSetting(file, 'pref'), { a: 1, b: 'two' });
+    expect(readAppSetting(file, 'pref')).toEqual({ a: 1, b: 'two' });
   });
 
   it('write creates the table on demand', () => {
     const file = newDbPath();
     // No table beforehand — write must succeed and create it.
     writeAppSetting(file, 'first', true);
-    assert.equal(readAppSetting(file, 'first'), true);
+    expect(readAppSetting(file, 'first')).toBe(true);
   });
 
   it('overwrites on second write to the same key', () => {
     const file = newDbPath();
     writeAppSetting(file, 'k', 1);
     writeAppSetting(file, 'k', 2);
-    assert.equal(readAppSetting(file, 'k'), 2);
+    expect(readAppSetting(file, 'k')).toBe(2);
   });
 
   it('returns undefined for missing key / file / table', () => {
-    assert.equal(readAppSetting('/nonexistent/db.sqlite', 'k'), undefined);
+    expect(readAppSetting('/nonexistent/db.sqlite', 'k')).toBe(undefined);
     const file = newDbPath();
-    assert.equal(readAppSetting(file, 'k'), undefined); // no DB yet
+    expect(readAppSetting(file, 'k')).toBe(undefined); // no DB yet
     writeAppSetting(file, 'other', 1); // creates the table
-    assert.equal(readAppSetting(file, 'missing'), undefined); // table exists, key doesn't
+    expect(readAppSetting(file, 'missing')).toBe(undefined); // table exists, key doesn't
   });
 
   it('delete removes the row; subsequent read is undefined', () => {
     const file = newDbPath();
     writeAppSetting(file, 'k', 'v');
-    assert.equal(readAppSetting(file, 'k'), 'v');
+    expect(readAppSetting(file, 'k')).toBe('v');
     deleteAppSetting(file, 'k');
-    assert.equal(readAppSetting(file, 'k'), undefined);
+    expect(readAppSetting(file, 'k')).toBe(undefined);
   });
 
   it('delete is a no-op when DB / table / key is missing', () => {
@@ -112,14 +111,14 @@ describe('readAppSetting / writeAppSetting / deleteAppSetting', () => {
   });
 
   it('automationEnabledKey builds the reserved key shape', () => {
-    assert.equal(automationEnabledKey('weekly-recap'), '__automation.weekly-recap.enabled');
+    expect(automationEnabledKey('weekly-recap')).toBe('__automation.weekly-recap.enabled');
   });
 
   it('automation toggle round-trips through the helpers', () => {
     const file = newDbPath();
     writeAppSetting(file, automationEnabledKey('weekly-recap'), false);
-    assert.equal(readAppSetting(file, automationEnabledKey('weekly-recap')), false);
+    expect(readAppSetting(file, automationEnabledKey('weekly-recap'))).toBe(false);
     writeAppSetting(file, automationEnabledKey('weekly-recap'), true);
-    assert.equal(readAppSetting(file, automationEnabledKey('weekly-recap')), true);
+    expect(readAppSetting(file, automationEnabledKey('weekly-recap'))).toBe(true);
   });
 });

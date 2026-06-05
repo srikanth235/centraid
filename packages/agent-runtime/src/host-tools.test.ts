@@ -1,10 +1,9 @@
-import { describe, it } from 'vitest';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { claudeToolToHostTool, normalizeCodexTools, normalizeClaudeTools } from './host-tools.js';
 
 describe('claudeToolToHostTool', () => {
   it('maps an MCP tool name `mcp__server__tool` to `server.tool`', () => {
-    assert.deepEqual(claudeToolToHostTool('mcp__github__list_pull_requests'), {
+    expect(claudeToolToHostTool('mcp__github__list_pull_requests')).toEqual({
       name: 'github.list_pull_requests',
       source: 'mcp',
       server: 'github',
@@ -12,7 +11,12 @@ describe('claudeToolToHostTool', () => {
   });
 
   it('treats a bare tool name as native', () => {
-    assert.deepEqual(claudeToolToHostTool('Bash'), { name: 'Bash', source: 'native' });
+    expect(claudeToolToHostTool('Bash')).toEqual({ name: 'Bash', source: 'native' });
+  });
+
+  it('treats an `mcp__`-prefixed name with no server/tool separator as native', () => {
+    // No `__` after the prefix → cannot split server from tool → stays native.
+    expect(claudeToolToHostTool('mcp__weird')).toEqual({ name: 'mcp__weird', source: 'native' });
   });
 });
 
@@ -26,11 +30,11 @@ describe('normalizeCodexTools', () => {
         parameters: { type: 'object', properties: { cmd: { type: 'string' } }, required: ['cmd'] },
       },
     ]);
-    assert.equal(tools.length, 1);
-    assert.equal(tools[0]?.name, 'exec_command');
-    assert.equal(tools[0]?.source, 'native');
-    assert.equal(tools[0]?.description, 'Runs a command.');
-    assert.deepEqual(tools[0]?.inputSchema, {
+    expect(tools.length).toBe(1);
+    expect(tools[0]?.name).toBe('exec_command');
+    expect(tools[0]?.source).toBe('native');
+    expect(tools[0]?.description).toBe('Runs a command.');
+    expect(tools[0]?.inputSchema).toEqual({
       type: 'object',
       properties: { cmd: { type: 'string' } },
       required: ['cmd'],
@@ -39,7 +43,21 @@ describe('normalizeCodexTools', () => {
 
   it('maps a native provider tool (no name/schema) by its `type`', () => {
     const tools = normalizeCodexTools([{ type: 'web_search', external_web_access: true }]);
-    assert.deepEqual(tools, [{ name: 'web_search', source: 'native' }]);
+    expect(tools).toEqual([{ name: 'web_search', source: 'native' }]);
+  });
+
+  it('keeps a named custom tool but carries no input schema', () => {
+    const tools = normalizeCodexTools([
+      { type: 'custom', name: 'apply_patch', description: 'Apply a patch.', format: 'freeform' },
+    ]);
+    expect(tools).toEqual([
+      { name: 'apply_patch', source: 'native', description: 'Apply a patch.' },
+    ]);
+  });
+
+  it('skips non-object entries and entries with neither name nor type', () => {
+    const tools = normalizeCodexTools([null, 42, 'str', ['x'], {}, { description: 'no id' }]);
+    expect(tools).toEqual([]);
   });
 });
 
@@ -53,18 +71,26 @@ describe('normalizeClaudeTools', () => {
         input_schema: { type: 'object', properties: { repo: { type: 'string' } } },
       },
     ]);
-    assert.deepEqual(tools[0], {
+    expect(tools[0]).toEqual({
       name: 'Read',
       source: 'native',
       description: 'Read a file.',
       inputSchema: { type: 'object' },
     });
-    assert.equal(tools[1]?.name, 'github.list_pull_requests');
-    assert.equal(tools[1]?.source, 'mcp');
-    assert.equal(tools[1]?.server, 'github');
-    assert.deepEqual(tools[1]?.inputSchema, {
+    expect(tools[1]?.name).toBe('github.list_pull_requests');
+    expect(tools[1]?.source).toBe('mcp');
+    expect(tools[1]?.server).toBe('github');
+    expect(tools[1]?.inputSchema).toEqual({
       type: 'object',
       properties: { repo: { type: 'string' } },
     });
+  });
+
+  it('skips entries that are not objects or have no name', () => {
+    expect(normalizeClaudeTools([null, 'x', 7, {}, { description: 'nameless' }])).toEqual([]);
+  });
+
+  it('omits an absent description and input schema rather than emitting undefined keys', () => {
+    expect(normalizeClaudeTools([{ name: 'Glob' }])).toEqual([{ name: 'Glob', source: 'native' }]);
   });
 });

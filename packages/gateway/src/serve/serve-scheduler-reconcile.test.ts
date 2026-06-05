@@ -6,8 +6,7 @@
  * triggers a reconcile carrying the scanned automation rows.
  */
 
-import { test, beforeEach, afterEach } from 'vitest';
-import { strict as assert } from 'node:assert';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -120,22 +119,19 @@ test('publishing an automation triggers a scheduler reconcile with the new rows'
       headers: auth(),
       body: content,
     });
-    assert.equal(res.status, 200, `put ${rel}: ${await res.text()}`);
+    expect(res.status).toBe(200);
   }
   const pub = await fetch(`${handle.url}/centraid/_apps/brief/publish`, {
     method: 'POST',
     headers: { ...auth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: 's1', message: 'add brief' }),
   });
-  assert.equal(pub.status, 201, await pub.text());
+  expect(pub.status).toBe(201);
 
   // The publish's onAppLive reconciled the scheduler with the new row.
   await waitFor(() => reconcileCalls.length > baseline);
   const last = reconcileCalls.at(-1)!;
-  assert.deepEqual(
-    last.rows.map((r) => r.ref),
-    ['brief/brief'],
-  );
+  expect(last.rows.map((r) => r.ref)).toEqual(['brief/brief']);
   // The gateway started its scheduler exactly once, on boot.
-  assert.equal(started, 1);
+  expect(started).toBe(1);
 });
