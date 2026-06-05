@@ -777,7 +777,11 @@ import {
   // Appearance. Set by showSettingsPage; consumed by reRenderShellForRoute.
   let lastSettingsPage: string | undefined;
 
-  function clear(): void {
+  // Run the current view's teardown and invalidate any in-flight render,
+  // WITHOUT touching the DOM. Async renders call this up front to cancel
+  // stale work while keeping the old screen visible until their new shell
+  // is ready (see renderHomeAsync); synchronous renders go through clear().
+  function teardownCurrent(): void {
     if (typeof currentCleanup === 'function') {
       try {
         currentCleanup();
@@ -790,8 +794,12 @@ import {
     closeContextMenu();
     closeAppSettings();
     closeCommandPalette();
-    root.innerHTML = '';
     renderSeq += 1;
+  }
+
+  function clear(): void {
+    teardownCurrent();
+    root.innerHTML = '';
   }
 
   function el(tag: string, attrs: ElAttrs = {}, children: ElChild | ElChild[] = []): HTMLElement {
@@ -929,7 +937,12 @@ import {
 
   async function renderHomeAsync(): Promise<void> {
     recordRoute({ kind: 'home' });
-    clear();
+    // Tear down the current view and invalidate in-flight renders, but
+    // leave its DOM on screen while we load Home's data below. Calling
+    // clear() here would blank the window for the duration of the three
+    // IPC round-trips that follow, which reads as a flicker on every
+    // navigation to Home. We swap the built shell in atomically at the end.
+    teardownCurrent();
     const seq = renderSeq;
     await hydrateDrafts();
     // App templates and automation templates both surface on Home now —
@@ -963,7 +976,9 @@ import {
       sidebarOpen: prefs.sidebarOpen,
     });
     currentSetSidebarOpen = setSidebarOpen;
-    root.append(shell);
+    // Atomic swap: replace the old view with the freshly-built shell in a
+    // single mutation, so there's never a blank frame between the two.
+    root.replaceChildren(shell);
   }
 
   // §A1 — Day-1 home: centered composer hero + tabbed discovery shelf.
@@ -1330,7 +1345,11 @@ import {
       sidebarOpen: prefs.sidebarOpen,
     });
     currentSetSidebarOpen = setSidebarOpen;
-    root.append(shell);
+    // Atomic swap. After a synchronous clear() the root is already empty so
+    // this is equivalent to append; for async renders that defer the wipe
+    // (teardownCurrent + load, e.g. Discover) it replaces the old view in a
+    // single mutation, so there's never a blank frame mid-load.
+    root.replaceChildren(shell);
   }
 
   function pageScroll(title: string, subtitle: string): { main: HTMLElement; scroll: HTMLElement } {
@@ -1708,7 +1727,10 @@ import {
   }
   async function renderDiscoverAsync(): Promise<void> {
     recordRoute({ kind: 'discover' });
-    clear();
+    // Keep the current view on screen while the templates IPC is in flight;
+    // clear() here would blank the window until it resolves (flicker). The
+    // built shell is swapped in atomically by mountShellPage below.
+    teardownCurrent();
     const seq = renderSeq;
     const availableTemplates = await loadAvailableTemplates();
     const { main, scroll } = pageScroll(
@@ -5560,7 +5582,10 @@ import {
 
   async function renderSettingsAsync(initialPage?: string): Promise<void> {
     recordRoute({ kind: 'settings' });
-    clear();
+    // Keep the current view up while the gateways IPC resolves; clear() here
+    // would blank the window until it returns (flicker). The shell is swapped
+    // in atomically at the end.
+    teardownCurrent();
     const seq = renderSeq;
 
     // Profiles ("spaces") are backed by gateways — fetch the list so the
@@ -6383,7 +6408,8 @@ import {
       sidebarOpen: prefs.sidebarOpen,
     });
     currentSetSidebarOpen = setSidebarOpen;
-    root.append(shell);
+    // Atomic swap — replaces the old view in one mutation, no blank frame.
+    root.replaceChildren(shell);
   }
 
   // §C — RefinedSettingsV2 `Sec`: a titled section — a plain bold heading
