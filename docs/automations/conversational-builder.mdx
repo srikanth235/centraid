@@ -26,6 +26,7 @@ For "Every Sunday at 8pm, summarize last week's hydration log and write a kind l
   "prompt": "Every Sunday at 8pm, look at the past week's hydration log and write one short, kind line of encouragement based on how it went.",
   "triggers": [{ "kind": "cron", "expr": "0 20 * * 0" }],
   "requires": {
+    "tools": ["centraid_read", "centraid_write"],
     "model": "anthropic/claude-3-5-sonnet"
   },
   "costEstimate": {
@@ -33,36 +34,40 @@ For "Every Sunday at 8pm, summarize last week's hydration log and write a kind l
     "tokensPerFire": 800
   },
   "history": { "keep": { "count": 100 } },
-  "generated": { "by": "builder-agent", "at": "2026-05-26T17:42:11.812Z" }
+  "generated": { "by": "centraid-builder", "at": "2026-05-26T17:42:11.812Z" }
 }
 ```
 
-`handler.js`:
+`handler.js` (deterministic — the "since" watermark comes from the last successful run, never the wall clock):
 
 ```js
 export default async ({ ctx, log }) => {
+  const last = await ctx.runs.last({ status: 'ok' });
+  const since = last?.startedAt ?? 0;
+
   const week = await ctx.tool('centraid_read', {
     app: 'hydrate',
     query: 'list-since',
-    input: { since: Date.now() - 7 * 24 * 60 * 60 * 1000 },
+    input: { since },
   });
 
   if (!week.rows.length) {
     return { summary: 'no entries this week, skipped' };
   }
 
-  const text = await ctx.agent({
+  const result = await ctx.agent({
     prompt: `One short, kind line of encouragement based on this week:\n${JSON.stringify(week.rows)}`,
+    json: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
   });
 
   await ctx.tool('centraid_write', {
     app: 'hydrate',
     action: 'save-encouragement',
-    input: { text, week_of: new Date().toISOString() },
+    input: { text: result.text },
   });
 
   log.info('encouragement saved');
-  return { summary: `wrote: ${text.slice(0, 50)}…` };
+  return { summary: `wrote: ${result.text.slice(0, 50)}…` };
 };
 ```
 
@@ -99,9 +104,13 @@ The privileged server pass — `provisionPendingWebhookAt` — handles both. The
 
 The builder agent picks a real model based on the user's available providers. If no provider is configured, the builder asks before scaffolding.
 
+### Write a deterministic, replay-safe handler
+
+A crashed fire re-runs from the top — there is no resume journal — so a handler must be deterministic and route all I/O through the audited `ctx.*` rails. An authoring-time lint (`lintHandlerSource` / `formatHandlerLintError`, surfaced by the gateway publish gate) statically rejects the common offenders — `Date.now()`, `new Date()` (no-arg), `Math.random()`, `randomUUID()`, raw `fetch`, `node:fs` / `child_process` imports, ambient `process.*`. The builder grounds on these rules so a handler is rejected at publish time, not at fire time. See [Handler runtime → Determinism](/automations/handler#determinism-the-replay-safe-contract).
+
 ### Always declare `generated`
 
-The manifest validator requires `generated.by` + `generated.at`. The builder writes `"by": "builder-agent"`; template scaffolds write `"by": "centraid-template"`; hand-authored files declare `"by": "hand"`. The field is provenance, not security — but it lets the desktop's "Automations" gallery flag scaffolded vs. hand-written entries, and lets retention policies treat builder churn differently if needed.
+The manifest validator requires `generated.by` + `generated.at`. The builder scaffold writes `"by": "centraid-builder"`; the shipped templates write `"by": "centraid-template"`; hand-authored files declare `"by": "hand"`. The field is provenance, not security — but it lets the desktop's "Automations" gallery flag scaffolded vs. hand-written entries.
 
 ## How the builder handles iteration
 
@@ -110,10 +119,10 @@ The user says: "Also CC me on Slack when you write the encouragement."
 The agent:
 
 1. **Re-reads `automation.json` + `handler.js`** in the existing directory.
-2. **Plans a delta** — needs a Slack tool call after the `centraid_write`, needs `requires.mcps: ["slack"]` on the manifest.
-3. **Rewrites both files** — manifest gets the new requirement, handler gets the new `ctx.tool('slack.post_message', …)` call.
-4. **Bumps `generated.at`** to the current ISO timestamp. `version` is bumped if the change is non-additive (signature change, breaking).
-5. **Leaves `enabled` alone.** If the automation was enabled before the edit, it stays enabled; the user already approved the original. If the change introduces a new credential requirement (a new MCP), the desktop UI flags the next fire to ask for re-authorization.
+2. **Plans a delta** — needs a Slack tool call after the `centraid_write`, so `slack.post_message` is added to `requires.tools` (the enforced `ctx.tool` allowlist).
+3. **Rewrites both files** — manifest gets the new tool in `requires.tools`, handler gets the new `ctx.tool('slack.post_message', …)` call.
+4. **Bumps `generated.at`** to the current ISO timestamp.
+5. **Leaves `enabled` alone.** If the automation was enabled before the edit, it stays enabled; the user already approved the original.
 
 The agent does not run a "build then test" loop in the user's chat. The handler is scaffolded statically — invoking it for real is a separate, audited action the user takes when they're ready.
 
@@ -124,7 +133,7 @@ Anything. The builder is opinionated about its own output but doesn't lock the f
 - Re-reads the (now hand-edited) handler.
 - Plans the delta on top of the user's version.
 - Preserves the user's structure where reasonable, but may rewrite if the user's ask requires a different shape.
-- Bumps `generated.by` to `"builder-agent"` (overwriting `"hand"` if it was hand-edited) — that's a known limitation; provenance is per-write, not per-block.
+- Rewrites `generated.by` to its builder value (overwriting `"hand"` if it was hand-edited) — provenance is per-write, not per-block.
 
 The `prompt` field on the manifest can also be hand-edited — but it's documentation, not execution. Changing the prompt does not change the handler. To get the handler regenerated from a new prompt, ask the builder.
 

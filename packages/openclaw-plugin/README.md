@@ -1,33 +1,39 @@
 # @centraid/openclaw-plugin
 
-OpenClaw plugin that mounts a single `/centraid` prefix on the gateway and dispatches to **user-generated apps**. Each app is a folder of static assets + a sqlite database + JS handlers.
+OpenClaw plugin — a thin shim over `@centraid/gateway`. The whole store / runtime / route graph is built by `buildGateway()` (the same host-agnostic core the desktop embed and the standalone daemon mount); this package only adapts it to the OpenClaw host. It mounts the gateway's auth-bearing route prefixes and dispatches to **user-generated apps**. Each app is a folder of static assets + a sqlite database + JS handlers; app **code** is backed by the gateway-owned git store, app **data** by a per-app `data.sqlite`.
 
-## URL surface
+## Mounted routes
 
-### Registry & uploads
+The plugin's `register()` mounts `gw.composedHandler` (the gateway route chain **minus** the bearer check — OpenClaw owns auth, so these routes are registered at `auth: 'gateway'`) on three prefixes:
+
+| Prefix | Purpose |
+| --- | --- |
+| `/centraid` | App registry, per-app surface, the three-tool HTTP shim, the template catalog |
+| `/_centraid-conversations` | Conversation (chat/build/automation) turn + transcript surface |
+| `/_centraid-user` | Per-user store (prefs, identity) |
+
+A fourth route, `/_centraid-hook`, is mounted separately at `auth: 'plugin'` (it verifies its own shared secret, not the gateway bearer) and fronts every automation that declares a `webhook` trigger.
+
+### Registry & per-app surface (under `/centraid`)
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/centraid/_apps` | List registered apps |
 | `DELETE` | `/centraid/_apps/<id>` | Deregister |
-| `POST` | `/centraid/_apps/<id>/upload` | Upload tar.gz of an app — auto-registers + activates |
-| `GET` | `/centraid/_apps/<id>/versions` | List versions with active flag |
-| `POST` | `/centraid/_apps/<id>/activate` | Atomic version flip: `{ versionId }` |
-| `DELETE` | `/centraid/_apps/<id>/versions/<versionId>` | Prune a single non-active version |
-
-### Per-app surface
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/centraid/<id>/` | Serves `index.html` from the active code dir |
+| `GET` | `/centraid/_apps/<id>/schema` | App schema (tables/views/indexes) |
+| `GET` | `/centraid/_apps/<id>/data/<table>` | Read rows from one table |
+| `POST` | `/centraid/_apps/<id>/query` | Run a query handler over HTTP |
+| `GET` | `/centraid/_apps/<id>/logs` | Handler log tail |
+| `GET` | `/centraid/<id>/` | Serves `index.html` from the live `main` code dir |
 | `GET` | `/centraid/<id>/<file>` | Static asset (extension allowlist) |
 | `GET` | `/centraid/<id>/_changes` | SSE stream of mutations (table-level invalidations) |
-| `POST` | `/centraid/<id>/_chat` | Send a chat turn → SSE stream of normalized events |
-| `GET` | `/centraid/<id>/_chat/windows` | List per-window chat metadata |
-| `GET` | `/centraid/<id>/_chat/windows/<wid>/history` | Replay one window's transcript |
-| `DELETE` | `/centraid/<id>/_chat/windows/<wid>` | Clear one window |
+| `*` | `/centraid/<id>/_turn[/...]` | Per-app conversation surface (see below) |
+| `GET` | `/centraid/_templates` | Resolved template-gallery metadata (bundle-or-cache) |
+| `GET` | `/centraid/_turn/runner-status` | Gateway-wide runner preflight |
 
-App ids starting with `_` are reserved (so `_apps`, `_chat` etc. can't collide).
+App ids starting with `_` are reserved (so `_apps`, `_turn`, `_templates`, `_tool` etc. can't collide).
+
+App **creation, clone, and publish** do not live here — they go through the gateway's apps-store / lifecycle surface (`POST /centraid/_apps`, `POST /centraid/_apps/_clone`, plus the git-store session/files/publish routes). The tarball-upload + version-flip flow was retired with the move to the git store (issue #137); there is no `/upload`, `/versions`, or `/activate` route.
 
 ### Three-tool invocation surface (issue #107)
 
@@ -39,64 +45,35 @@ All handler invocations flow through three generic tools, available both as Open
 | `centraid_read` | `POST /centraid/_tool/centraid_read` | Invoke a query handler. Body: `{ app, query, input }` |
 | `centraid_write` | `POST /centraid/_tool/centraid_write` | Invoke an action handler. Body: `{ app, action, input }` |
 
-The dispatcher validates `input` against the JSON Schema declared in `app.json` (Ajv, draft 2020-12) before invoking the handler. Errors come back as MCP-shaped `isError: true` envelopes with a `{ code, message, path? }` payload; the HTTP shim maps `code` to a 4xx/5xx status (`UNKNOWN_APP`/`UNKNOWN_ACTION`/`UNKNOWN_QUERY` → 404, `WRONG_KIND`/`INVALID_INPUT` → 400, `NO_ACTIVE_VERSION` → 503, `INVALID_MANIFEST`/`HANDLER_ERROR` → 500).
+The dispatcher validates `input` against the JSON Schema declared in `app.json` (Ajv, draft 2020-12) before invoking the handler. Errors come back as MCP-shaped `isError: true` envelopes with a `{ code, message, path? }` payload; the HTTP shim maps `code` to a 4xx/5xx status.
 
-### Chat surface (host-agnostic)
+### Conversation surface (host-agnostic)
 
-The `_chat` routes live in `@centraid/app-engine` and are served identically on both gateway hosts. The plugin/host owns initiation but never the model loop:
+The per-app conversation routes (`/centraid/<id>/_turn[/...]`, served from `@centraid/app-engine`) carry every turn — `kind ∈ {chat, build, automation}` — and are served identically on both gateway hosts. The plugin/host owns initiation but never the model loop:
 
-- **OpenClaw** injects an in-process `ChatRunner` that calls `api.runtime.agent.runEmbeddedAgent`. Plugin-registered tools (`centraid_sql_*`) dispatch server-side.
-- **Desktop embedded local runtime** uses `@centraid/agent-runtime`'s `makeChatRunner`, which drives codex app-server (subprocess) or the Claude Agent SDK (in-process). The agent shells out to the bundled `centraid` CLI for SQL access.
+- **OpenClaw** injects `makeOpenClawConversationRunner`, an in-process runner that drives `api.runtime.agent.runEmbeddedAgent`. Plugin-registered `centraid_*` tools dispatch server-side.
+- **Desktop embedded local runtime** uses `@centraid/agent-runtime`'s conversation runner, which drives the codex app-server (subprocess) or the Claude Agent SDK (in-process). That agent reaches an app's data through the same three-tool surface.
 
 Either way, every client — the desktop renderer, the mobile companion — sees one HTTP/SSE contract.
 
-Per-window transcripts live at `<appsDir>/<id>/_chat/w<windowId>.jsonl`; a sibling `index.json` records mode + adapter session id so the next turn can resume.
-
 ## App layout on disk
 
-Every app is registered + delivered via `POST /centraid/_apps/<id>/upload`. Code is **versioned**; data is persistent across versions. The legacy "path mode" (register an external folder live for dev) was retired so the local gateway behaves identically to the remote one — every change goes through the upload + version-flip path.
+App **code** is backed by the gateway-owned git store (issue #137), not a per-app `versions/` tree. `buildGateway` is constructed with `appsStoreRoot` (`<dbDir>/centraid-code`); the store keeps `apps.git` + `worktrees/`, and the runtime serves handlers + static assets from the live `main` worktree's `apps/` dir (`gw.codeAppsDir()`, a stable symlink repointed atomically on each publish). App **data** stays under `appsDir`:
 
 ```
 <appsDir>/<id>/
-  data.sqlite                   ← persistent, never moved
-  current.json                  ← { activeVersion, history } (atomic pointer)
-  versions/
-    v_<UTC ts>_<sha[:6]>/       ← immutable, code-only
-    v_…/
+  data.sqlite        ← persistent app data, never moved on publish
+  runtime.sqlite     ← run ledgers / runtime bookkeeping
 ```
 
-## Upload flow
-
-```sh
-# In the app folder you want to publish:
-tar czf - --exclude data.sqlite --exclude current.json --exclude versions . | \
-  curl -X POST --data-binary @- \
-       -H "Content-Type: application/gzip" \
-       https://gw/centraid/_apps/my-app/upload
+```
+<dbDir>/                       (one level up from appsDir)
+  centraid-code/               ← git store: apps.git + worktrees/ (app CODE)
+  centraid-gateway.sqlite      ← identity (users + prefs)
+  centraid-analytics.sqlite    ← central analytics
 ```
 
-- First upload to a new id auto-registers it.
-- Each upload becomes an immutable version dir; `current.json#activeVersion` flips atomically once extraction succeeds.
-- Re-uploading identical content (same sha256) collapses to a single version dir; history records the latest timestamp.
-- After upload, retention pruning keeps the most recent N versions (default 5; `versionRetention` in plugin config; minimum 2).
-- The active version is always retained regardless of N.
-
-### Rolling back
-
-```sh
-curl https://gw/centraid/_apps/my-app/versions
-curl -X POST -d '{"versionId":"v_2026-05-08T14-30-00-000Z_a1b2c3"}' \
-     -H "Content-Type: application/json" \
-     https://gw/centraid/_apps/my-app/activate
-```
-
-`activate` is just a write to `current.json`; no extraction, no downtime, instant.
-
-### What's accepted in the tarball
-
-- **Allowed**: `.html .htm .css .js .mjs .ts .json .md .txt .svg .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map`
-- **Refused** (returns 400): `data.sqlite` (it's not part of versioned code — it persists alongside versions), `_registry.json`, `current.json`, anything outside the extension allowlist, symlinks, hardlinks, devices, paths that escape the archive root.
-- Caps: 50 MiB total, 5 MiB per file, 5 000 entries max.
+Publishing replaces the legacy tarball-upload + version-flip flow: a draft session stages files into the git store, and a publish commits them onto `main` and repoints the live symlink. There is no upload tarball, no `current.json`, no `versions/` dir.
 
 ## App folder layout
 
@@ -141,21 +118,17 @@ export default (async ({ body, db, log }) => {
 
 ## Authoring apps in TypeScript
 
-Recommended workflow. You author `.ts`; the plugin loads the compiled `.js` next to it. No experimental Node flags, no compiler in the gateway process.
+Optional workflow. You author `.ts`; the runtime only ever loads the compiled `.js` next to it. No experimental Node flags, no compiler in the gateway process.
 
-Two starter files ship in this package under `templates/`:
+One starter file ships in this package under `templates/`:
 
 ```sh
-cp node_modules/@centraid/openclaw-plugin/templates/app-tsconfig.json   <appsDir>/<id>/tsconfig.json
-cp node_modules/@centraid/openclaw-plugin/templates/app-package.json    <appsDir>/<id>/package.json
-cd <appsDir>/<id>
-bun install      # or npm / pnpm
-bun run build    # tsc → emits .js next to each .ts
+cp node_modules/@centraid/openclaw-plugin/templates/app-package.json <appsDir>/<id>/package.json
 ```
 
-The shipped `tsconfig.json` uses `"rootDir": "."` and `"outDir": "."`, so `queries/foo.ts` builds to `queries/foo.js` in place. The plugin then loads the `.js`. Use `bun run watch` during development.
+`app-package.json` wires the `@centraid/openclaw-plugin` dev dependency (for the exported handler types); add your own `tsconfig.json` with `"rootDir": "."` and `"outDir": "."` so `queries/foo.ts` builds to `queries/foo.js` in place, then run `tsc`. The runtime loads the emitted `.js`.
 
-If you'd rather skip TypeScript entirely, drop the `.ts` files and write `.js` directly — the loader doesn't care which authoring path you took.
+If you'd rather skip TypeScript entirely, write `.js` directly — the loader doesn't care which authoring path you took, and the bundled templates ship plain `.js`.
 
 The handler-arg types are exported from `@centraid/openclaw-plugin`:
 
@@ -170,12 +143,13 @@ The handler-arg types are exported from `@centraid/openclaw-plugin`:
 
 ## Configuration (`configSchema`)
 
+The plugin reads exactly one config key at `register()` time:
+
 | Key | Default | Notes |
 | --- | --- | --- |
-| `appsDir` | `centraid` (resolved under `$OPENCLAW_STATE_DIR`, default `~/.openclaw`) | Where app folders live. Absolute paths are used as-is. |
-| `versionRetention` | `5` | Max versions kept per uploaded app (active always retained; min 2) |
+| `appsDir` | `centraid` (resolved under `$OPENCLAW_STATE_DIR`, default `~/.openclaw`) | Where per-app DATA folders live. Absolute paths are used as-is; relative paths resolve under the OpenClaw state dir. |
 
-The registry persists at `<appsDir>/_registry.json`.
+The sibling SQLite files (`centraid-gateway.sqlite`, `centraid-analytics.sqlite`) and the app-code git store (`centraid-code/`) live one level up from `appsDir`.
 
 ## Trust & security model
 
@@ -184,45 +158,24 @@ The registry persists at `<appsDir>/_registry.json`.
 Defense-in-depth that's already in place:
 
 - Path-traversal guard on every static lookup (`path.resolve` + prefix check).
-- Static-asset extension allowlist; reserved filenames (`data.sqlite`, `_registry.json`, `app.json`) and reserved directories (`queries`, `actions`) are never served.
+- Static-asset extension allowlist; reserved filenames (e.g. `data.sqlite`, `app.json`) and reserved directories (`queries`, `actions`) are never served.
 - Per-response CSP `default-src 'self'`, `X-Content-Type-Options: nosniff`.
-- Worker `resourceLimits` cap memory; configurable `timeoutMs` per handler (default 10s query / 30s action).
-- 1 MiB body limit on every request that reads a body.
+- Worker `resourceLimits` cap memory; configurable `timeoutMs` per handler.
+- A body limit on every request that reads a body.
 
 ## Agent tools
 
-The plugin also registers three agent tools used by any OpenClaw-side agent that needs to read or mutate a centraid app's data:
+The plugin registers three structured agent tools (`registerCentraidTools`) for any OpenClaw-side agent that needs to address a centraid app's declared surface. These are the **same three tools** the agent runtime and the `/centraid/_tool/<name>` HTTP shim expose — one tool family across every host:
 
-| Tool                    | Purpose                                                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `centraid_sql_describe` | Returns `{tables, views, indexes}` for the calling app's `data.sqlite`.                                                  |
-| `centraid_sql_read`     | Runs one read-only SELECT against the calling app's `data.sqlite`. Multi-statement is rejected.                          |
-| `centraid_sql_write`    | Runs one INSERT/UPDATE/DELETE/REPLACE against the calling app's `data.sqlite`. DDL and PRAGMA are refused.               |
+| Tool                | Purpose                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------- |
+| `centraid_describe` | Return an app's manifest (or a filtered slice). With no `app`, lists every registered app.    |
+| `centraid_read`     | Invoke a declared query (read-only), or the `_sql` escape hatch for a raw SELECT.             |
+| `centraid_write`    | Invoke a declared action, or the `_sql` escape hatch for a raw write.                         |
 
-All three take `appId` as a parameter. A `before_tool_call` hook on the plugin enforces that `appId` matches the calling session's app — the chat client opens its session as `centraid-chat:<appId>:w<windowId>`, and the hook parses that key. Cross-app reads/writes (and any disallowed statement shape) are refused at the gateway before `execute` runs. Successful writes also emit through `runtime.changeBus`, so any subscriber on `/centraid/<appId>/_changes` learns about the mutation.
+`centraid_read`/`centraid_write` require an `app` parameter; `centraid_describe` may be called with no `app` to list every app. A `before_tool_call` hook enforces scope: the conversation client opens its session with `sessionKey = "centraid-conversation:<appId>"` (OpenClaw stores it as e.g. `agent:main:centraid-conversation:todos`), and the hook locates that substring to derive the calling app. A call that addresses a different `app` is blocked before `execute` runs; a call that omits `app` is back-filled with the session's app. Successful writes emit through `runtime.changeBus`, so any subscriber on `/centraid/<appId>/_changes` learns about the mutation.
 
-The desktop app's in-app chat goes through the same `_chat` HTTP/SSE contract (the renderer streams it directly via `gateway-client-chat.ts`). The openclaw-registered tools above are used by the in-gateway agent path; the desktop's local-runtime path drives codex / Claude via [@centraid/agent-runtime](../agent-runtime) and reaches the SQL surface through the bundled `centraid` CLI.
-
-### Enabling the tools in `~/.openclaw/openclaw.json`
-
-Plugin-registered tools don't belong to any built-in tool profile. The cleanest way to expose them without widening the global profile is `tools.alsoAllow`, which is additive on top of the active profile:
-
-```json
-{
-  "tools": {
-    "profile": "coding",
-    "alsoAllow": ["centraid_sql_describe", "centraid_sql_read", "centraid_sql_write"]
-  }
-}
-```
-
-A small helper script is shipped to patch the user's config idempotently:
-
-```sh
-node packages/openclaw-plugin/scripts/setup-tools.mjs
-```
-
-It reads `~/.openclaw/openclaw.json`, merges the three tool ids into `tools.alsoAllow`, and writes the file back atomically. Safe to re-run.
+The desktop's in-app conversations go through the same `/centraid/<id>/_turn` HTTP/SSE contract. The tools above back the in-gateway agent path; the desktop's local-runtime path drives codex / Claude via [@centraid/agent-runtime](../agent-runtime) and reaches the same three-tool surface.
 
 ## Building
 

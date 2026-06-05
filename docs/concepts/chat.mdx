@@ -1,5 +1,5 @@
 ---
-summary: "Every app has a per-window chat surface backed by the gateway's agent layer. Same HTTP contract whether the backend is OpenClaw or codex / Claude SDK."
+summary: 'Every app has a per-conversation chat surface backed by the gateway agent layer. One POST/SSE turn route plus a conversation store. Same contract on OpenClaw or codex / Claude.'
 title: 'Chat'
 ---
 
@@ -9,41 +9,88 @@ Every Centraid app gets an in-app chat for free. The surface is host-agnostic: t
 
 ## The surface
 
-| Method   | Path                                         | Purpose                                            |
-| -------- | -------------------------------------------- | -------------------------------------------------- |
-| `POST`   | `/centraid/<id>/_chat`                       | Send a chat turn → SSE stream of normalized events |
-| `GET`    | `/centraid/<id>/_chat/windows`               | List per-window chat metadata                      |
-| `GET`    | `/centraid/<id>/_chat/windows/<wid>/history` | Replay one window's transcript                     |
-| `DELETE` | `/centraid/<id>/_chat/windows/<wid>`         | Clear one window                                   |
+Chat is split across two route groups, both served by `@centraid/app-engine` on either host:
 
-The desktop renderer streams these routes directly — `apps/desktop/src/renderer/gateway-client-chat.ts` posts the turn and reads the SSE with a `fetch` + `ReadableStream` reader. The mobile companion talks to the same routes over HTTP. There is no shared client package.
+**Turn driver** — drives one model turn, POST-only:
 
-## Windows
+| Method | Path                   | Purpose                                 |
+| ------ | ---------------------- | --------------------------------------- |
+| `POST` | `/centraid/<id>/_turn` | Send a turn → SSE stream of turn events |
 
-A "window" is a single conversation thread within an app. An app may have multiple. Each window has:
+**Conversation store** — the durable transcript + session list (the desktop persists transcripts here, not over `_turn`):
 
-- A `windowId` (`<wid>` in the URLs above).
-- A transcript stored at `<appsDir>/<id>/_chat/w<windowId>.jsonl`.
-- An entry in `<appsDir>/<id>/_chat/index.json` recording the chat **mode** and the adapter's session id, so the next turn can resume.
+| Method   | Path                                                | Purpose                                                 |
+| -------- | --------------------------------------------------- | ------------------------------------------------------- |
+| `GET`    | `/_centraid-conversations/apps/<id>/sessions`       | List this app's conversations                           |
+| `POST`   | `/_centraid-conversations/apps/<id>/sessions`       | Create a conversation — body `{ title? }`               |
+| `GET`    | `/_centraid-conversations/apps/<id>/sessions/<sid>` | Load one conversation with its transcript               |
+| `PATCH`  | `/_centraid-conversations/apps/<id>/sessions/<sid>` | Rename — body `{ title }`                               |
+| `DELETE` | `/_centraid-conversations/apps/<id>/sessions/<sid>` | Delete (cascades turns/items/attachments)               |
+| `POST`   | `/_centraid-conversations/apps/<id>/blobs`          | Upload an attachment → `{ hash, sizeBytes, mime, url }` |
+| `GET`    | `/_centraid-conversations/apps/<id>/blobs/<hash>`   | Download attachment bytes                               |
 
-The session key the agent sees is `centraid-chat:<appId>:w<windowId>`. The gateway parses this key in a `before_tool_call` hook to enforce that any `centraid_sql_*` invocation only touches the calling app's data — cross-app access is refused before the tool's `execute` runs.
+The desktop renderer (`apps/desktop/src/renderer/app-chat.ts`) creates a conversation, then streams the turn straight from `/centraid/<id>/_turn` with a `fetch` + SSE reader. The mobile companion talks to the same routes over HTTP. There is no shared client package.
+
+## Conversations, not windows
+
+A **conversation** is a single durable thread within an app — a `conversations` row in the app's per-app `runtime.sqlite`. An app may have many. The chat surface uses `kind ∈ {chat, build}` conversations (the builder's own chat persists as `kind='build'`). Each conversation has:
+
+- An `id` (the `<sid>` / `conversationId` above) minted by the renderer per pane.
+- A `title`, a `turnCount`, and timestamps.
+- An `adapterKind` + `adapterSessionId` resume handle, persisted after the first turn so the next turn can resume the underlying CLI/agent session.
+
+The transcript is **not** a separate table or a `.jsonl` file. A turn is a `turns` row; its inbound message is an ordinal-0 `message_in` item, and the assistant text + tool calls are the remaining `items`. `getSession` folds those items back into the renderer transcript. See [Apps](/concepts/apps) and [SQLite layout](/deploy/sqlite-layout) for the ledger shape.
+
+## The turn request
+
+`POST /centraid/<id>/_turn` body:
+
+```json
+{
+  "conversationId": "<sid>",
+  "message": "user input",
+  "model": "openai-codex/gpt-5.5",
+  "thinking": "...",
+  "idempotencyKey": "...",
+  "attachments": [{ "hash": "<sha256>", "mime": "image/png", "filename": "shot.png" }]
+}
+```
+
+Only `conversationId` and `message` are required. `attachments` reference bytes already uploaded to the per-app blob CAS via the `/blobs` route — the route resolves each hash to its on-disk path and threads it into the adapter as a multimodal content block, then records `attachments` rows on the turn's `message_in` item. When no runner is configured the route 503s with `no_conversation_runner`.
+
+Concurrency: each `(appId, conversationId)` serializes — a second POST queues behind the first via a per-runtime async lock.
+
+## The turn SSE stream
+
+The response is `text/event-stream`. Each frame is `event: <type>` + `data: <json>`. The event union (`TurnStreamEvent` in [`runner.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-engine/src/conversation/runner.ts)):
+
+| Event             | Carries                                                             |
+| ----------------- | ------------------------------------------------------------------- |
+| `assistant.start` | —                                                                   |
+| `assistant.delta` | `delta` — streamed assistant text                                   |
+| `reasoning.delta` | `delta` — streamed reasoning text                                   |
+| `tool.start`      | `toolCallId`, `toolName`, `args?`, `sql?`                           |
+| `tool.result`     | `toolCallId`, `toolName`, `ok`, `result?`, `errorText?`             |
+| `phase`           | `phase`, `detail?`                                                  |
+| `final`           | `text` — the terminal reply                                         |
+| `usage`           | `model?`, `provider?`, token counts (input/output/cache read/write) |
+| `webhooks`        | `minted[]` — webhook id/url/secret, surfaced once for builder turns |
+| `error`           | `message`                                                           |
+| `aborted`         | —                                                                   |
+
+The route also emits a terminal `event: end` frame and sends a `: ping` heartbeat every 30s. Adapters may emit a subset; the harness ignores unknown types. The `usage` event is folded into the turn's `step` item so the ledger carries real token + cost accounting for chat turns.
 
 ## The two backends
 
-The `_chat` routes live in `@centraid/app-engine` and are served identically on both hosts. What differs is which agent backend the host wires in:
+The `_turn` route lives in `@centraid/app-engine` and is served identically on both hosts. What differs is which `ConversationRunner` the host injects:
 
 ### OpenClaw embedded agent (remote gateway)
 
-When the gateway runs as an OpenClaw plugin, an in-process `ChatRunner` calls `api.runtime.agent.runEmbeddedAgent`. Plugin-registered tools (`centraid_sql_describe`, `centraid_sql_read`, `centraid_sql_write`) dispatch server-side without leaving the gateway process.
+When the gateway runs as an OpenClaw plugin, the injected runner wraps `api.runtime.agent.runEmbeddedAgent`. OpenClaw owns the loop and dispatches plugin-registered SQL tools server-side. It resumes via the on-disk `sessionFile` and returns no adapter handle.
 
 ### Local agent runtime (desktop gateway)
 
-When the gateway is embedded in the desktop, the chat backend uses [`@centraid/agent-runtime`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/agent-runtime)'s `makeChatRunner`. That harness drives one of two engines:
-
-- **codex app-server** as a subprocess, or
-- **Claude Agent SDK** in-process.
-
-The agent shells out to the bundled `centraid` CLI for SQL access, so the path the agent takes to read/write data is the same shape as the agent tools on the remote side — just reached via CLI instead of in-process tool dispatch.
+When the gateway is embedded in the desktop, the chat backend uses [`@centraid/agent-runtime`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/agent-runtime)'s `makeConversationRunner`. That harness drives one of two engines — **codex app-server** as a subprocess, or the **Claude Agent SDK** in-process — with the three structured tools (`centraid_describe` / `centraid_read` / `centraid_write`) declared inline. These adapters return a `adapterSessionId` + `adapterKind`, persisted to the conversation row for resume.
 
 See [Agent runtime](/concepts/agent-runtime) for the engine-selection rationale.
 
@@ -51,23 +98,20 @@ See [Agent runtime](/concepts/agent-runtime) for the engine-selection rationale.
 
 Identical contract either way:
 
-- POST a turn, get an SSE stream of normalized events.
-- Events cover assistant tokens, tool calls, tool results, and lifecycle markers.
-- Resume support is automatic — the harness sends the window id; the gateway looks up the adapter session and feeds it back into the engine.
+- POST a turn, get an SSE stream of the events above.
+- Resume is automatic — the client sends the `conversationId`; the gateway reads the conversation's `adapterKind`/`adapterSessionId` and feeds it back into the engine. A mid-session runner switch (the adapter kind no longer matches) starts fresh.
 
-> **TODO(#120)** — list the exact normalized event types. The README references "normalized events" but I haven't read `app-engine/src/chat/events.ts` (or wherever the event schema lives) to enumerate them.
+## Why the chat surface is per-app
 
-## Why the chat surface is per-app, not per-user
+A per-app chat keeps the agent's tool surface narrow: it can describe, read, and write _this app's_ data, and nothing else. Conversations live in the owning app's `runtime.sqlite`, and the runner spawns subprocess agents with the app's data dir as the workspace, so the model can't reach another app's files.
 
-A per-app chat keeps the agent's tool surface narrow: it can describe, read, and write _this app's_ data, and nothing else. The session-key trick (`centraid-chat:<appId>:w<windowId>`) enforces it at the gateway, not in the agent's prompt — so even a misbehaving model can't cross apps.
-
-If you want a single "everything" chat that spans apps, you compose at the UI layer (open multiple windows), not by widening any individual app's tool grant.
+If you want a single "everything" chat that spans apps, you compose at the UI layer (open multiple conversations), not by widening any individual app's tool grant.
 
 ## What chat does _not_ do
 
-- **No multi-user shared transcripts.** Centraid is single-tenant in practice. Windows belong to the app, the app belongs to whoever owns the gateway.
-- **No streaming model output beyond SSE.** No WebSockets, no chunked HTTP/2 push. SSE is fine for the use case and lets the harness be `fetch`-only.
-- **No persistent agent memory beyond the transcript.** The per-window transcript is the memory. The agent re-reads it (via the resume hook) each turn.
+- **No multi-user shared transcripts.** Centraid is single-tenant in practice. Conversations are scoped to the gateway-side user UUID and belong to the app.
+- **No streaming beyond SSE.** No WebSockets, no HTTP/2 push. SSE is fine for the use case and lets the client be `fetch`-only.
+- **No persistent agent memory beyond the transcript.** The conversation's items are the memory; the resume handle re-feeds them each turn.
 
 ## Where to go next
 

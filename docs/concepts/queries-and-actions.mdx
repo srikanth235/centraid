@@ -16,15 +16,15 @@ Each one lives in two places:
 
 The two kinds — query and action — are the **two flavors of tool** Centraid recognizes. The kind determines who can call it, what timeout it has, whether it's tracked by the change bus, and whether a governance directive forbids writes inside it.
 
-|                            | Query tools                                 | Action tools                          |
-| -------------------------- | ------------------------------------------- | ------------------------------------- |
-| Declared under             | `app.json` → `queries[]`                    | `app.json` → `actions[]`              |
-| Implementation file        | `queries/<name>.js`                         | `actions/<name>.js`                   |
-| Reached via                | `centraid_read` (generic dispatcher)        | `centraid_write` (generic dispatcher) |
-| Default timeout            | 10s                                         | 30s                                   |
-| Allowed to write to SQLite | **No**                                      | **Yes**                               |
-| Tracked by the change bus  | No                                          | Yes (per-table invalidation)          |
-| Cached on the read path    | Yes (handler-runner skips session tracking) | No                                    |
+|                            | Query tools                                | Action tools                             |
+| -------------------------- | ------------------------------------------ | ---------------------------------------- |
+| Declared under             | `app.json` → `queries[]`                   | `app.json` → `actions[]`                 |
+| Implementation file        | `queries/<name>.js`                        | `actions/<name>.js`                      |
+| Reached via                | `centraid_read` (generic dispatcher)       | `centraid_write` (generic dispatcher)    |
+| Default timeout            | 10s                                        | 30s                                      |
+| Allowed to write to SQLite | **No**                                     | **Yes**                                  |
+| Tracked by the change bus  | No                                         | Yes (per-table invalidation)             |
+| Session-tracked for writes | No (handler-runner skips the session wrap) | Yes (session changeset → touched tables) |
 
 The split is not stylistic — it's load-bearing for the change stream. See [why the split is enforced](#why-the-readwrite-split-is-enforced).
 
@@ -89,13 +89,18 @@ The word "handler" still shows up where we mean _the function body specifically_
 Both kinds receive the same arguments:
 
 ```ts
-type HandlerArgs = {
+type CommonHandlerArgs = {
   db: ScopedDb; // proxied SQLite, scoped to this app's data.sqlite
   log: ScopedLog; // structured logger
-  app: AppRef; // { id, version, … }
-  ctx: { fetch: typeof fetch }; // timeout-bound fetch — no fs, no child_process, no env
+  app: AppRef; // { id, dir }
+  ctx: { fetch: ScopedFetch; abortSignal: AbortSignal }; // timeout-bound fetch — no fs, no child_process, no env
 };
+
+// A query also receives `query` (URL params) and `params`.
+// An action also receives `body` (the validated input) and `params`.
 ```
+
+The dispatcher passes the validated `input` to an **action** as `body`, and to a **query** as both `query` and `input` (the `query` arg is back-compat with the legacy URL-query handler shape).
 
 A query:
 
@@ -122,8 +127,6 @@ export default async ({ body, db }) => {
   return { status: 200, body: { date: todayKey(), cups: next, goal: 8 } };
 };
 ```
-
-The action receives a `body` argument; the query reads its parameters from the validated `input` (the dispatcher passes whichever the handler kind expects).
 
 ## All `db.*` calls are async
 

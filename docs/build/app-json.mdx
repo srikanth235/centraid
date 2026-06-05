@@ -5,7 +5,7 @@ title: 'app.json'
 
 # `app.json`
 
-The manifest. One per app. Read by the gateway at upload time and by every agent that wants to discover what your app exposes.
+The manifest. One per app. It is the single source of truth for _what handlers exist, what input each accepts, and what each returns_. The dispatcher reads it on every invocation and validates the caller's `input` against the declared schema before running a handler. Agents discover an app's surface through it via `centraid_describe`.
 
 ## Top-level shape
 
@@ -14,8 +14,9 @@ The manifest. One per app. Read by the gateway at upload time and by every agent
   "manifestVersion": 1,
   "id": "hydrate",
   "name": "Hydrate",
-  "description": "Track 8 cups a day.",
   "version": "0.1.0",
+  "description": "Track 8 cups a day.",
+  "kind": "app",
   "tables": [ ... ],
   "actions": [ ... ],
   "queries": [ ... ],
@@ -23,21 +24,24 @@ The manifest. One per app. Read by the gateway at upload time and by every agent
 }
 ```
 
-| Field             | Type    | Notes                                                                                    |
-| ----------------- | ------- | ---------------------------------------------------------------------------------------- |
-| `manifestVersion` | integer | Currently `1`. Future-proofing knob.                                                     |
-| `id`              | string  | Must match the folder name and URL slug. Letters, digits, hyphens, dots; no leading `_`. |
-| `name`            | string  | Human-readable. Shown in the desktop sidebar and gallery.                                |
-| `description`     | string  | Used by the gallery card and by agents that introspect via `centraid_describe`.          |
-| `version`         | semver  | Bump on substantive changes. Used for retention pruning logic.                           |
-| `tables`          | array   | Declared shape. Authoritative schema lives in `migrations/`.                             |
-| `actions`         | array   | Each entry describes one handler in `actions/<name>.js`.                                 |
-| `queries`         | array   | Each entry describes one handler in `queries/<name>.js`.                                 |
-| `knobs`           | array   | User-facing settings the desktop renders. Optional.                                      |
+| Field             | Type                    | Required | Notes                                                                                                     |
+| ----------------- | ----------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `manifestVersion` | integer                 | yes      | Must be exactly `1`. The dispatcher rejects any other value (`unsupported_manifest_version`).             |
+| `id`              | string                  | yes      | Matches the folder name and URL slug. Lowercase `a–z` / `0–9` / `-`, 1–63 chars, no leading `_`, no dots. |
+| `name`            | string                  | yes      | Human-readable. Shown in the desktop sidebar and gallery.                                                 |
+| `version`         | string                  | yes      | A non-empty string (semver by convention).                                                                |
+| `description`     | string                  | no       | Used by the gallery card and surfaced to agents through `centraid_describe`.                              |
+| `kind`            | `"app" \| "automation"` | no       | Defaults to `"app"`. `"automation"` marks a UI-less app that only hosts automations.                      |
+| `tables`          | array                   | no       | Documents the schema your handlers expect. The authoritative schema lives in `migrations/`.               |
+| `actions`         | array                   | no       | Each entry describes one handler in `actions/<name>.js`. Defaults to `[]`.                                |
+| `queries`         | array                   | no       | Each entry describes one handler in `queries/<name>.js`. Defaults to `[]`.                                |
+| `knobs`           | array                   | no       | User-facing settings the desktop renders.                                                                 |
+
+Only `manifestVersion`, `id`, `name`, and `version` are required. The manifest schema sets `additionalProperties: true`, so unknown top-level keys are accepted (and ignored) rather than rejected — but don't rely on that to smuggle config; keep extension data in your own files.
 
 ## `tables[]`
 
-Documents the schema your handlers expect. The gateway doesn't _create_ tables from this — that's `migrations/`. But agents reading the manifest use this to know what to ask about.
+Documents the schema your handlers expect. **The gateway never creates tables from this** — that is the job of `migrations/`. The array exists for tooling: agents reading the manifest use it to know what shape to ask about.
 
 ```json
 {
@@ -49,13 +53,13 @@ Documents the schema your handlers expect. The gateway doesn't _create_ tables f
 }
 ```
 
-> **TODO(#120)** — verify whether the dispatcher cross-checks `tables[]` against the actual schema or treats it as documentation only. From the README it looks documentary; app-engine may enforce more.
+`name` is required on each table; `columns` is optional, and each column needs a `name` (its `type` is optional, free-form text).
 
 ## `actions[]` and `queries[]`
 
-**Each entry in these arrays is a tool definition.** This is the app's _tool catalog_ — the contract by which your UI, an AI agent, the CLI, and any other caller discover what your app can do. The implementation lives in `actions/<name>.js` or `queries/<name>.js`, but the definition here is what every caller sees first. See [Queries and actions](/concepts/queries-and-actions) for the framing.
+**Each entry is a tool definition.** This is the app's _tool catalog_ — the contract by which your UI, an AI agent, the CLI, and any other caller discover what your app can do. The implementation lives in `actions/<name>.js` or `queries/<name>.js`; the entry here is what every caller sees first. See [Queries and actions](/concepts/queries-and-actions) for the framing.
 
-Same entry shape across both arrays. They differ only in semantics (read vs write) and which generic dispatcher routes calls to them (`centraid_read` for queries, `centraid_write` for actions).
+The two arrays share most fields and differ in semantics (read vs write) and which generic tool routes to them — `centraid_read` for queries, `centraid_write` for actions. One field differs: `confirmation` and `writes` are action-only; `reads` is query-only.
 
 ```json
 {
@@ -80,29 +84,32 @@ Same entry shape across both arrays. They differ only in semantics (read vs writ
 }
 ```
 
-| Field          | Type                         | Notes                                                                        |
-| -------------- | ---------------------------- | ---------------------------------------------------------------------------- |
-| `name`         | string                       | Maps to `actions/<name>.js` or `queries/<name>.js`.                          |
-| `description`  | string                       | Surfaced to agents in `centraid_describe`. Write it like a tool description. |
-| `confirmation` | `"none" \| "soft" \| "hard"` | Action only. Hints to the desktop whether to prompt the user before firing.  |
-| `input`        | JSON Schema (draft 2020-12)  | Validated by Ajv before the handler runs.                                    |
-| `output`       | JSON Schema                  | Documentation only — not validated at runtime today.                         |
-| `writes`       | string[]                     | Action only. Tables the handler mutates. Drives change-stream invalidations. |
-| `reads`        | string[]                     | Query only. Tables the handler reads. Documentation; not enforced.           |
+| Field          | Type                        | Notes                                                                                                              |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `name`         | string                      | Required. Maps to `actions/<name>.js` or `queries/<name>.js`. May not start with `_` (reserved for built-ins).     |
+| `description`  | string                      | Surfaced to agents in `centraid_describe`. Write it like a tool description.                                       |
+| `confirmation` | `"none" \| "required"`      | **Action only, required.** A chat-side policy hint — see below.                                                    |
+| `input`        | JSON Schema (draft 2020-12) | Required. Validated by Ajv before the handler runs. A mismatch returns `INVALID_INPUT` and the handler never runs. |
+| `output`       | JSON Schema                 | Documentation only — **not validated at runtime**.                                                                 |
+| `writes`       | string[]                    | Action only. Tables the handler is expected to mutate. Documentation for chat permissions — see the note below.    |
+| `reads`        | string[]                    | Query only. Tables the handler reads. Documentation; not enforced.                                                 |
+
+A name may appear in both `actions` and `queries` (different tools, different files). Two entries with the same name _within the same array_ are rejected (`duplicate_handler`).
+
+> `writes` and `reads` are **documentation**, not behavior. The change stream does **not** read `writes` to decide what to invalidate — it observes the tables your SQL actually touched via a SQLite session. Keeping `writes` honest helps chat permissions and readers, but it has no effect on which `change` events fire. See [UI and changes](/build/ui-and-changes#the-change-stream).
 
 ### About `confirmation`
 
-The desktop shell renders different confirmation UIs based on this hint:
+`confirmation` is **action-only and required**. It is exactly one of:
 
-- `"none"` — fire immediately (default for safe, undoable actions).
-- `"soft"` — toast/banner confirmation (default for mostly-safe actions).
-- `"hard"` — modal confirmation (destructive or expensive actions).
+- `"none"` — fire without prompting (safe, undoable actions).
+- `"required"` — the chat/agent surface asks the user to confirm before invoking. Use for destructive or irreversible actions (delete, send, charge).
 
-> **TODO(#120)** — confirm the exact set of confirmation tokens recognized. The Hydrate template uses `"none"`; other templates may use other values. Worth a sweep of `packages/blueprints/*/app.json`.
+The dispatcher itself is permissionless — it always runs the handler. `confirmation` is a policy the _chat/agent surface_ honors before invoking autonomously; it is not enforced when a UI button calls the action directly.
 
 ## `knobs[]`
 
-User-facing settings. Render in the desktop's per-app settings popover.
+User-facing settings. Each renders as a control in the desktop's per-app settings popover.
 
 ```json
 {
@@ -118,23 +125,26 @@ User-facing settings. Render in the desktop's per-app settings popover.
 }
 ```
 
-Knob types observed in templates:
+Each knob requires `key`, `label`, `type`, `default`, and `options` (every option needs `value` + `label`). The `key` is a camel-cased `app*` settings key. There are exactly two `type` values:
 
 | `type`      | Renders as                             | Notes                                        |
 | ----------- | -------------------------------------- | -------------------------------------------- |
-| `segmented` | A segmented control (one row of pills) | Best for 2–4 options.                        |
-| `swatch`    | A row of color swatches                | `value` is a hex color; `label` is the name. |
+| `segmented` | A segmented control (one row of pills) | Best for 2–4 discrete options.               |
+| `swatch`    | A row of color swatches                | `value` is a hex color; `label` is its name. |
 
-> **TODO(#120)** — list every supported knob type. Hydrate uses `segmented` and `swatch`. The full set may include `toggle`, `slider`, `text` etc. — worth confirming against the renderer's knob component.
+The runtime persists the chosen value, bakes it into `<html data-<key>>` / CSS vars on the served page, and live-updates the iframe via `postMessage`. Knob values arrive in your iframe through the `centraid:settings` message — see [UI and changes](/build/ui-and-changes#receiving-settings).
 
-Knob values arrive in your iframe through the `centraid:settings` postMessage. See [UI → receiving settings](/build/ui-and-changes#receiving-settings).
+## Validation, in short
 
-## Reserved keys, future-proofing
+Two passes run when the manifest is loaded:
 
-Anything not listed above is ignored by the current dispatcher but reserved for future use. Don't ship custom top-level fields in `app.json` — put extension data in your own files alongside.
+1. **Ajv** against the manifest's own meta-schema — catches missing required fields and type errors with a JSON path.
+2. **Cross-cuts** — `manifestVersion` must equal `1`; no duplicate handler names within an array; no `_`-prefixed handler names.
+
+A malformed `app.json` surfaces as `INVALID_MANIFEST` (or `unsupported_manifest_version`) and the app won't serve until it's fixed.
 
 ## Where to go next
 
 - [App anatomy](/build/app-anatomy) — the folder shape this manifest describes.
-- [Three-tool dispatcher](/reference/three-tool-dispatcher) — what consumes `input` schemas.
+- [Queries](/build/queries) and [Actions](/build/actions) — the handler implementations these entries point at.
 - [Migrations](/build/migrations) — where the actual schema lives.

@@ -5,52 +5,62 @@ title: 'Cloning a template'
 
 # Cloning a template
 
-The desktop renders the contents of `packages/blueprints/index.json` as a gallery. Picking a template + clicking _Clone_ runs `cloneTemplate()` from [`@centraid/agent-harness`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/agent-harness), which copies the template's files into the user's apps directory under a new id and hands off to the existing publish pipeline.
-
-> **TODO(#120)** — confirm the exact UI affordance and the apps directory layout. Receipts `issue-105-template-naming-and-unified-clone.md`, `issue-53-notion-style-action-menus`, and `issue-51-copilot-chat-history.md` reference the flow. The verbatim steps below are inferred; capture the real click path once verified.
+The desktop renders the resolved template catalog (`GET /centraid/_templates`) as a gallery. Picking a template and clicking _Clone_ calls the gateway's clone route; the gateway reads the template's files, rewrites them for a fresh identity, and stages the result into the git store. The whole flow is **gateway-side over HTTP** — the desktop never copies files locally, so a local embedded gateway and a remote one clone identically.
 
 ## The flow
 
-1. **User clicks a tile in the gallery.** The desktop main process reads the chosen template's folder.
-2. **`cloneTemplate()` runs.** Files copy into `<apps>/<new-id>/`. A fresh id is generated to keep the gallery template untouched.
-3. **`current.json` is initialized.** A first version dir under `versions/v_…/` holds the cloned files; `current.json#activeVersion` points at it.
-4. **The gateway registers the new app.** Same path as a manual upload: registry entry created, `data.sqlite` initialized, migrations run.
-5. **The sidebar updates.** The new app appears immediately — there's a receipt ([`issue-51`](https://github.com/srikanthsrungarapu/centraid/blob/main/receipts/issue-51-copilot-chat-history.md)) tracking a fix that ensures cloned drafts show up in the builder sidebar without a refresh.
+A clone is one request:
 
-## Versions and the template's own version
+```
+POST /centraid/_apps/_clone
+{ "templateId": "hydrate", "publish": true }
+```
 
-Each gallery entry has a semver `version` field. Bump it when the template's source changes. Centraid uses this to:
+The gateway (`handleClone` in `@centraid/gateway`) then:
 
-- Show which templates have updated since the user's last clone.
-- Drive any "update available" affordances in the gallery.
+1. **Resolves the catalog** (`resolveTemplates`) and finds the entry for `templateId`. Unknown ids return a `not_found` error.
+2. **Picks a unique `(id, name)`** against the apps already on `main` (`suggestCloneIdentityFrom`) — so two clones of `hydrate` never collide on id or display name.
+3. **Reads the template's files** (`readTemplateFiles`) and rewrites them for the new identity (`cloneTemplateFiles`, from `@centraid/blueprints`).
+4. **Mints any pending webhook secrets.** Automation templates ship webhook triggers as `{ kind: 'webhook', pending: true }`; the plaintext secret is returned once in the response, and only its hash is persisted.
+5. **Stages into a git-store session.** With `publish: true` the draft is committed onto `main` in the same call; otherwise it stays a draft you publish later.
 
-> **TODO(#120)** — confirm whether the desktop actually tracks the template's version against cloned-app instances and offers updates. It's a likely product feature but I haven't seen the path in source.
+The response carries the new `{ app: { id, name, description, kind } }`, the source `template` metadata, the minted `webhooks`, and the `sessionId`.
+
+## What the rewrite changes
+
+`cloneTemplateFiles` produces the new app's files from the template's, rewriting only what must be unique to the instance:
+
+- **`app.json`** → fresh `id` (the new folder name), `name` (the deduped display name), `version` reset to `"0.1.0"`, and the carried-forward `description` (seeded from the gallery `desc`).
+- **`package.json#name`** → `centraid-app-<new-id>`, but **only** when it followed the `centraid-app-*` convention. Foreign names are left alone.
+- **`index.html` `<title>`** → the new display name, so a clone's browser-tab title isn't stuck on the template's brand.
+- **`automations/<id>/automation.json#name`** → the new name, with `generated.{by,at}` re-stamped to the clone time.
+- When the template ships no automations, an `automations/README.md` brief is seeded.
+
+Everything else — handlers under `queries/` and `actions/`, `migrations/`, static assets, `app.json#knobs` — copies through verbatim.
 
 ## What survives a clone
 
-A clone is `cp -r` plus a fresh `data.sqlite`. The user gets:
+The cloned app gets:
 
 - All template handlers (queries / actions / automations).
 - The template's migrations, which run on first boot to create the schema.
 - All static assets (`index.html`, `app.css`, `app.js`, `wall.css`, …).
-- The template's `app.json` — including `knobs[]`, which the user can tweak through the per-app settings popover.
+- The template's `app.json` — including `knobs[]`, which the user tweaks through the per-app settings popover.
 
-The user does **not** get:
+The cloned app does **not** get:
 
-- The template's `index.json` gallery entry (that's gallery metadata, not part of the app).
-- Any data — `data.sqlite` is fresh.
+- The template's `index.json` gallery entry (gallery metadata, not part of the app).
+- Any data — the new app starts with a fresh, empty `data.sqlite`.
 
 ## Naming
 
-Cloning generates a new app id. The default pattern is `<template-id>-<suffix>`, e.g. cloning `hydrate` produces `hydrate-x7q3` or similar.
-
-> **TODO(#120)** — confirm the suffix scheme. From issue [#105](https://github.com/srikanthsrungarapu/centraid/issues/105) the naming was unified across surfaces; capture the canonical form.
+Cloning generates a non-colliding `(id, name)` pair via `suggestCloneIdentityFrom`. The very first clone of `hydrate` is just `hydrate` / "Hydrate"; subsequent clones advance to `hydrate-2` / "Hydrate 2", `hydrate-3` / "Hydrate 3", and so on — id and display name move in lockstep so the home shelf never shows two identically-titled tiles. (The template's own id is never consumed: the template lives in the gallery package, the clone in the gateway's app store, and the gateway only routes its own apps.)
 
 The user can rename via the per-app settings popover; the id is the durable handle, the name is human-visible.
 
 ## Multiple clones
 
-Nothing stops you from cloning the same template twice. Each clone gets its own id, its own `data.sqlite`, its own version history. Useful for trying variations side-by-side.
+Nothing stops you from cloning the same template twice. Each clone gets its own id, its own display name, and its own fresh `data.sqlite`. Useful for trying variations side-by-side.
 
 ## Where to go next
 

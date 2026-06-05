@@ -1,105 +1,197 @@
 ---
-summary: 'What a Centraid gateway is, the two ways it can run, and the on-disk layout it manages.'
+summary: 'What a Centraid gateway is, the three ways it runs, the host-capability catalogs it owns, and the on-disk layout it manages.'
 title: 'Gateway'
 ---
 
 # Gateway
 
-A **gateway** is the long-running process that mounts the `/centraid` URL prefix, owns the apps directory on disk, and dispatches handler calls. There is only one gateway implementation; it runs in two shapes.
+A **gateway** is the long-running process that mounts the `/centraid` URL
+prefix, owns an apps store on disk, drives chat/builder/automation runs, and
+dispatches handler calls. There is one host-agnostic implementation —
+`@centraid/gateway`'s `buildGateway()` — that three hosts mount.
 
-## Two shapes, one contract
+## Three ways to run, one core
 
-### Local gateway (embedded in desktop)
+`buildGateway()` constructs the whole object graph (stores, conversation
+runner, `Runtime`, the in-process cron scheduler, every route handler) without
+binding a socket. `serve()` wraps it with a loopback bind + bearer auth.
 
-When you launch the desktop app with `bun run dev:desktop`, the gateway runs inside the Electron main process. The renderer talks to it **directly over HTTP** with a Bearer token (the desktop is a [thin client](/concepts/ipc-vs-http)) — the same authenticated `fetch` it would issue against a remote gateway, just aimed at loopback; app iframes load from it just like they would from a remote URL. No second process, no port to expose.
+### Embedded in desktop
 
-This is the default mode for personal use. Your data never leaves the laptop.
+`apps/desktop` calls `serve()` inside the Electron main process. The renderer
+talks to it **directly over HTTP** with a Bearer token (the desktop is a
+[thin client](/concepts/ipc-vs-http)) — the same authenticated `fetch` it
+would issue against a remote gateway, aimed at loopback. This is the default
+for personal use; your data never leaves the laptop. Paths derive from
+`gateway-paths.ts`; secrets (the bearer) use Electron `safeStorage`.
 
-### Remote gateway (OpenClaw plugin)
+### Standalone daemon (`centraid-gateway`)
 
-The same gateway code is packaged as [`@centraid/openclaw-plugin`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/openclaw-plugin) and mounts on an [OpenClaw](https://docs.openclaw.ai) instance. It claims the `/centraid` prefix on that gateway and exposes the same `/centraid/_apps/*`, `/centraid/_tool/*`, and `/centraid/<id>/*` routes.
+The same `serve()` runs as a CLI daemon (`packages/gateway/src/cli/cli.ts`).
+Paths derive from a `--data-dir` / config file; the bearer token is persisted
+at `<dataDir>/token.bin`. Desktop and mobile reach it through their existing
+remote-gateway flow — no new wire protocol.
 
-This is the mode you use when you want apps reachable from elsewhere — your phone, your team, a cron host — without standing up your own server stack. OpenClaw provides the HTTP front door, auth, and process supervision; the Centraid plugin provides the app runtime.
+### OpenClaw plugin
 
-### Why one implementation
+`@centraid/openclaw-plugin` calls `buildGateway()` and mounts its
+`composedHandler` (the route chain **minus** the bearer check) on the OpenClaw
+HTTP server, which owns auth itself. It claims the `/centraid`,
+`/_centraid-conversations`, and `/_centraid-user` prefixes.
 
-The legacy "path mode" — register an external folder live for development — was retired explicitly to keep the two modes behaving identically:
+### What each host injects
 
-> Every change goes through the upload + version-flip path. The local gateway behaves identically to the remote one.
-> — [`packages/openclaw-plugin/README.md`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/openclaw-plugin/README.md#app-layout-on-disk)
+The core is the same; hosts inject only paths/secrets plus a few **Plane B**
+seams (`build-gateway.ts` options):
 
-This rules out a whole class of "works on my machine" bugs.
+| Seam                    | Default (desktop / daemon)                                           | OpenClaw override                        |
+| ----------------------- | -------------------------------------------------------------------- | ---------------------------------------- |
+| `conversationRunner`    | gateway's own codex/claude runner                                    | in-process `runEmbeddedAgent` runner     |
+| `runnerStatus`          | codex/claude CLI preflight                                           | `{ kind: 'openclaw', ok: true }`         |
+| `fireAutomationFactory` | `runAutomation` (codex/claude puppet)                                | in-process fire (`ctx.tool`/`ctx.agent`) |
+| `appsStoreRoot`         | **set** (git store) on desktop & OpenClaw; **omitted** on the daemon | set                                      |
+
+## App code: git store vs legacy tarballs
+
+When `appsStoreRoot` is supplied, the gateway owns app **code** as a git store
+(issue #137): a bare `apps.git` plus worktrees. The runtime serves handlers +
+static from the live `main` worktree, rotated atomically per publish. App
+**data** (`data.sqlite`) stays under `appsDir`, cleanly separated. The desktop
+and the OpenClaw plugin both run this backend.
+
+Omitting `appsStoreRoot` falls back to the **legacy tarball-upload** backend:
+each upload extracts into an immutable `versions/v_<ts>_<sha>/` dir and a
+`current.json` pointer flips on publish. The standalone daemon currently runs
+this legacy backend — so it has no draft worktree and uses the data-only chat
+runner rather than the unified builder chat.
+
+> The git store is the steady-state design. The legacy tarball path is what
+> remains for hosts that haven't adopted a store root.
 
 ## The gateway owns the builder
 
-The gateway is not just a runtime for published apps — it owns the whole authoring loop, so local and remote behave identically there too:
+On the git-store backend the gateway owns the whole authoring loop, so all
+hosts that run it behave identically:
 
-- **Deterministic lifecycle** — scaffolding a blank app, cloning a template, renaming, and automation CRUD are HTTP endpoints. The desktop states intent; the gateway scaffolds the file map, stages it into a git-store session worktree, mints webhook secrets, and (on explicit publish) flips the live version.
-- **Template catalog** — `GET /centraid/_templates` resolves bundle-or-cache, and the gateway refreshes the cache from a remote manifest URL itself.
-- **Unified AI chat** — one `POST /centraid/<id>/_chat` runs the turn in the app's draft worktree with the union of the agent's native file tools and the `centraid_*` data dispatcher, so a single chat both edits the app's code and operates its data. Edits **stage** in the draft (previewable at `/centraid/_draft/<sessionId>/<id>/`); Publish is the explicit flip.
+- **Deterministic lifecycle** — scaffold a blank app, clone a template,
+  rename, and automation CRUD are HTTP endpoints (`lifecycle-routes.ts`). The
+  desktop states intent; the gateway stages the change into a session worktree
+  (the draft), mints webhook secrets, and (on explicit publish) flips the live
+  version + reconciles the cron scheduler.
+- **Template catalog** — `GET /centraid/_templates` resolves bundle-or-cache;
+  the gateway refreshes the cache from a remote manifest URL on startup
+  (best-effort).
+- **Unified chat** — one `POST /centraid/<id>/_turn` runs the turn in the
+  app's draft worktree with the union of the agent's native file tools and the
+  `centraid_*` data dispatcher, so a single turn both edits the app's code and
+  operates its data. Edits **stage** in the draft (previewable at
+  `/centraid/_draft/<sessionId>/<id>/`); Publish is the explicit flip.
 
-See [IPC vs HTTP](/concepts/ipc-vs-http) for how the thin desktop client reaches all of this and what little stays on Electron IPC.
+See [IPC vs HTTP](/concepts/ipc-vs-http) for how the thin desktop client
+reaches all of this.
+
+## Host-capability catalogs
+
+The gateway owns two per-runner catalogs, persisted at the host-supplied
+`model-catalog.json` (`paths.modelCatalogFile`):
+
+- **Model catalog** — feeds the chat model picker. Filled by live enumeration
+  (claude `supportedModels()`, codex `model/list`). There is **no hardcoded
+  seed**: a cold catalog reads `[]` and the picker shows a loading state until
+  the warmer fills it in.
+- **Host-tool catalog** — each runner's builtins + MCP tools, used by the
+  builder's grounding block.
+
+A single `CatalogWarmer` owns enumeration. On **every gateway start**, a
+background probe warms both surfaces for each detected runner
+(`probeCliAvailability` decides which CLIs are present). Models and tools
+refresh on **independent** triggers; an empty result never clobbers a prior
+good entry. See [Agent runtime](/concepts/agent-runtime) for the enumeration
+mechanics.
+
+### Routes
+
+- `GET /centraid/_turn/runner-status` — the **active** runner's readiness +
+  cached models; `?refresh=1` kicks a model re-enumeration.
+- `GET /centraid/_agents/status` — detection for **every** agent the gateway
+  host can drive: `{ codexAvailable, claudeAvailable, …Version, …Models,
+…ModelsStatus, …Tools, …ToolsStatus }`. `?refresh=1` re-enumerates models;
+  `?refreshTools=1` re-probes the (slower) tool surface. Detection is
+  **auth-agnostic** — it only checks that `<bin> --version` runs, never
+  inspecting keychains or env keys.
+
+A remote gateway reports **its own** host's agents, not the client's.
 
 ## On-disk layout
 
+### Git-store backend (desktop, OpenClaw)
+
+The desktop lays each gateway out under `<userData>/gateways/<id>/` (the local
+gateway has the fixed id `local`):
+
 ```
-<appsDir>/
-  _registry.json                 ← which app ids are registered
-  <id>/
-    data.sqlite                  ← persistent, never moved across versions
-    current.json                 ← { activeVersion, history }
-    versions/
-      v_<UTC ts>_<sha[:6]>/      ← immutable, code-only
-      v_…/
-    _chat/
-      w<windowId>.jsonl          ← per-window transcript
-      index.json                 ← mode + adapter session ids
+gateways/<id>/
+  profile.json                   ← { id, kind, label, url?, createdAt }
+  token.bin                      ← bearer (safeStorage-encrypted)
+  code-store/
+    apps.git                     ← bare repo (pushable to GitHub)
+    worktrees/
+      main/<sha>/                ← read-only live materialization
+      sessions/<id>/             ← mutable per-session draft worktrees
+    active-main                  ← symlink to the live main worktree
+  apps/
+    _registry.json               ← which app ids are registered
+    <appId>/
+      data.sqlite                ← persistent app data; survives version swaps
+      runtime.sqlite             ← conversations/turns/items + automation state
+  identity.sqlite                ← users + per-user prefs
+  analytics.sqlite               ← one summary row per run
+  model-catalog.json             ← per-runner model + tool catalog
+  templates-cache/               ← downloaded remote-template tarballs
 ```
 
-- `data.sqlite` lives at the **app root**, not inside a version directory. Code is versioned; data isn't.
-- Each upload becomes a new immutable `versions/v_<ts>_<sha>/` directory. The active version is the one named in `current.json#activeVersion`.
-- Retention prunes old versions (default 5; configurable via `versionRetention` in plugin config; minimum 2). The active version is always retained.
-- Re-uploading identical content (same sha256) collapses to a single dir — history records the latest timestamp.
+App **code** lives in the git store; the runtime serves it from the live
+`main` worktree. App **data** lives under `apps/<appId>/`, outside any worktree
+so it survives version swaps. The standalone daemon uses the same files minus
+the `gateways/<id>/` segment (it hosts exactly one gateway).
 
-The default `appsDir`:
+### Legacy tarball backend
 
-- **Remote (OpenClaw plugin)**: `centraid` resolved under `$OPENCLAW_STATE_DIR` (default `~/.openclaw`), so `~/.openclaw/centraid/`.
-- **Local (desktop)**: typically `~/.centraid/apps/`.
+Without a store root, app code is versioned under `apps/<id>/versions/v_<ts>_<sha>/`
+with a `current.json` pointer; `data.sqlite` still lives at the app root.
+Re-uploading identical content (same sha256) collapses to one dir, and
+retention prunes old versions (the active version is always retained).
 
-> **TODO(#120)** — confirm the desktop local gateway's exact default `appsDir`. The OpenClaw plugin's default is documented in its README; the desktop's is in `apps/desktop/src/main/` which I haven't read.
+## Lifecycle of an app (git store)
 
-## Lifecycle of an app
-
-1. **Upload** — `POST /centraid/_apps/<id>/upload` with a tar.gz body. First upload to a new id auto-registers it.
-2. **Extract + flip** — the gateway unpacks into a new `versions/v_<ts>_<sha>/` dir, then atomically updates `current.json` to point at it.
-3. **Serve** — `GET /centraid/<id>/` resolves to `<active>/index.html`; subsequent asset requests resolve to files under the active version dir.
-4. **Roll back** — `POST /centraid/_apps/<id>/activate` with `{ versionId }` flips the pointer back. No extraction, no downtime.
-5. **Prune** — old version dirs above the retention count are deleted; the active version is exempt.
-
-See [Deploy → openclaw plugin](/deploy/openclaw-plugin) for the operational walkthrough.
-
-## What gets accepted in a tarball
-
-- **Allowed extensions**: `.html .htm .css .js .mjs .ts .json .md .txt .svg .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map`
-- **Refused** (returns 400): `data.sqlite` (it's not part of versioned code), `_registry.json`, `current.json`, anything outside the allowlist, symlinks, hardlinks, devices, paths that escape the archive root.
-- **Caps**: 50 MiB total, 5 MiB per file, 5 000 entries max.
+1. **Scaffold / clone** — a lifecycle endpoint stages a blank app or a template
+   into a session worktree (the draft).
+2. **Edit** — chat turns and file edits stage in the draft worktree; the
+   draft's branched `data.sqlite` is seeded from live so the agent can author
+   and exercise a migration without touching live rows.
+3. **Publish** — merges the session onto `main`, materializes a new
+   `worktrees/main/<sha>/`, flips the `active-main` pointer, applies any
+   migration to live data, and reconciles the cron scheduler.
+4. **Roll back** — re-flips the pointer to a prior `main` materialization.
 
 ## Security model in one paragraph
 
-App handlers are **trusted local code**, authored by the same user running the gateway. Worker-thread isolation gives crash isolation, timeouts, and a controlled API surface — **not** a sandbox against hostile code. Defense-in-depth that's already in place: path-traversal guards on every static lookup, the extension allowlist on static serving, reserved filenames and directories (`data.sqlite`, `_registry.json`, `app.json`, `queries/`, `actions/`) that are never served, per-response `Content-Security-Policy: default-src 'self'` and `X-Content-Type-Options: nosniff`, worker `resourceLimits` capping memory, per-handler `timeoutMs` (default 10s query / 30s action), 1 MiB body cap. Hardening to "hostile code" level (`isolated-vm`, child-process + permission flags) is a future swap-in.
-
-## Configuration
-
-Two keys, both in the plugin's `configSchema`:
-
-| Key                | Default                                  | Notes                                                              |
-| ------------------ | ---------------------------------------- | ------------------------------------------------------------------ |
-| `appsDir`          | `centraid` (under `$OPENCLAW_STATE_DIR`) | Absolute paths used as-is.                                         |
-| `versionRetention` | `5`                                      | Max versions kept per app. Active is always retained. Minimum `2`. |
+App handlers are **trusted local code**, authored by the same user running the
+gateway. Worker-thread isolation gives crash isolation, timeouts, and a
+controlled API surface — **not** a sandbox against hostile code. Defense in
+depth already in place: a Bearer check on every request (except where a
+fronting host owns auth), path-traversal guards and an extension allowlist on
+static serving, reserved filenames/dirs that are never served, a per-response
+`Content-Security-Policy` (`default-src 'self'`, scoped `script-src`/`img-src`/
+`object-src 'none'`/`frame-ancestors 'self'`) and `X-Content-Type-Options:
+nosniff`, worker `resourceLimits` capping memory, and per-handler timeouts
+(default 10s query / 30s action). Hardening to "hostile code" level
+(`isolated-vm`, child-process + permission flags) is a future swap-in.
 
 ## Where to go next
 
-- [Apps](/concepts/apps) — what's inside `<appsDir>/<id>/`.
+- [Apps](/concepts/apps) — what's inside an app dir.
 - [Queries and actions](/concepts/queries-and-actions) — the handler contract.
-- [IPC vs HTTP](/concepts/ipc-vs-http) — how the desktop reaches a local _or_ remote gateway, and what stays local.
+- [Agent runtime](/concepts/agent-runtime) — the runner, model catalog, and tool catalog.
+- [IPC vs HTTP](/concepts/ipc-vs-http) — how the desktop reaches a local _or_ remote gateway.
 - [Deploy](/deploy/openclaw-plugin) — how to put a gateway on an OpenClaw host.

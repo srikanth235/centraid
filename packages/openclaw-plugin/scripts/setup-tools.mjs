@@ -3,16 +3,16 @@
  * setup-tools.mjs
  *
  * Idempotently patches `~/.openclaw/openclaw.json` so the centraid plugin's
- * three agent tools (`centraid_sql_describe`, `centraid_sql_read`,
- * `centraid_sql_write`) are merged into `tools.alsoAllow`. `alsoAllow` is
+ * three agent tools (`centraid_describe`, `centraid_read`,
+ * `centraid_write`) are merged into `tools.alsoAllow`. `alsoAllow` is
  * the documented additive form — it does not replace the active profile,
  * so the user's existing tool baseline survives.
  *
- * Load-bearing for the per-app chat endpoint's data-mode path: the OpenClaw
- * ChatRunner passes a `toolsAllow` allowlist of just the centraid_sql_*
- * tools, but that allowlist is intersected with the resolved agent's
- * effective policy — so the tools must clear that gate first. Without this
- * script's patch, data-mode runs would see an empty tool set.
+ * Load-bearing for the per-app conversation endpoint: the OpenClaw
+ * conversation runner passes a `toolsAllow` allowlist of just the three
+ * centraid tools, but that allowlist is intersected with the resolved
+ * agent's effective policy — so the tools must clear that gate first.
+ * Without this script's patch, turns would see an empty tool set.
  *
  * No-op when all ids are already in the list. Atomic write via tmpfile +
  * rename.
@@ -21,7 +21,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const TOOLS = ['centraid_sql_describe', 'centraid_sql_read', 'centraid_sql_write'];
+const TOOLS = ['centraid_describe', 'centraid_read', 'centraid_write'];
 
 const stateDir = process.env.OPENCLAW_STATE_DIR ?? path.join(os.homedir(), '.openclaw');
 const configPath = path.join(stateDir, 'openclaw.json');
@@ -59,7 +59,7 @@ async function main() {
   if (added === 0) {
     process.stdout.write(
       'centraid tools already in tools.alsoAllow — nothing to do.\n' +
-        "(centraid chat data-mode uses these via runEmbeddedAgent's toolsAllow allowlist.)\n",
+        "(the centraid conversation endpoint uses these via runEmbeddedAgent's toolsAllow allowlist.)\n",
     );
     return;
   }
@@ -71,7 +71,7 @@ async function main() {
   process.stdout.write(
     `Added ${added} centraid tool id(s) to tools.alsoAllow in ${configPath}.\n` +
       "(These are intersected with the resolved agent's effective policy at run time,\n" +
-      " so the chat endpoint's data-mode allowlist actually surfaces them.)\n" +
+      " so the conversation endpoint's allowlist actually surfaces them.)\n" +
       'Restart the gateway: `openclaw gateway restart`\n',
   );
 }

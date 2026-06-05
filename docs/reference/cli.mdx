@@ -1,47 +1,100 @@
 ---
-summary: 'The bundled centraid CLI — the path local agents take to reach the dispatcher.'
-title: 'centraid CLI'
+summary: 'The two CLIs Centraid ships: the centraid SQL shim local agents shell out to, and the centraid-gateway daemon.'
+title: 'CLIs'
 ---
 
-# `centraid` CLI
+# CLIs
 
-The `centraid` CLI is a thin shim over the dispatcher. It's bundled with the desktop and used by the local agent runtime (`@centraid/agent-runtime`) to give codex / Claude-SDK loops a way to call apps without managing HTTP themselves.
+Centraid ships two binaries:
 
-You can also use it directly for scripting, debugging, and "I just want to poke an app from a shell" workflows.
+- **`centraid`** (from `@centraid/agent-runtime`) — a thin shim over an app's `data.sqlite`. The local agent runtime shells out to it; you can use it directly to poke an app from a shell.
+- **`centraid-gateway`** (from `@centraid/gateway`) — runs the gateway as a standalone daemon.
 
-## Why a CLI exists
+## `centraid`
 
-The local agent runtime drives either codex app-server (subprocess) or Claude Agent SDK (in-process). Neither is OpenClaw — neither has Centraid's three-tool dispatcher registered as native agent tools. Rather than write engine-specific MCP/plugin bindings for each, the agent runtime gives the engine a single instruction: "to read or write app data, run `centraid <subcommand>`". The CLI shells back to the gateway via the same dispatcher endpoints the HTTP path uses.
+The local agent runtime drives a turn through either the codex app-server (subprocess) or the Claude Agent SDK (in-process). Neither is OpenClaw, so neither has Centraid's tools registered natively. Rather than write engine-specific bindings, the runtime gives the engine one instruction: "to read or write app data, run `centraid sql …`". The CLI and the in-gateway agent tools share the same implementation in `@centraid/app-engine` (`sql-ops.ts`).
 
-See [Agent runtime → why a CLI for SQL access](/concepts/agent-runtime#why-a-cli-for-sql-access).
+It operates on a SQLite file **relative to the current working directory** — there is no `--workspace` flag and no gateway/HTTP/token involved. The caller `cd`s into the app's data dir, or sets `CENTRAID_DATA_FILE` to an absolute path. Source: `packages/agent-runtime/src/cli/centraid-cli.ts`.
 
-## Commands
+### Commands
 
-> **TODO(#120)** — the CLI subcommand surface is not fully documented in the package READMEs I've read. The receipt for issue [#71](https://github.com/srikanthsrungarapu/centraid/issues/71) is the introduction; later receipts (`issue-90-unified-runs-ledger`, `issue-108-workspace-storage-split`) reference operations. The list below is inferred from the dispatcher's three tools — confirm subcommand names against the CLI's `--help` output or `apps/desktop/src/main/cli/` (or wherever the CLI source lives in the repo).
+| Command                                               | Purpose                                                                |
+| ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| `centraid sql describe`                               | Print the schema of `data.sqlite`.                                     |
+| `centraid sql read "SELECT …"`                        | Run a single `SELECT` / `EXPLAIN`; print rows as JSON.                 |
+| `centraid sql write "INSERT/UPDATE/DELETE/REPLACE …"` | Run a single DML statement; print the result as JSON.                  |
+| `centraid preview snapshot`                           | Report metadata for `.preview/snapshot.png` (path, exists, size, age). |
+| `centraid --help` / `-h`                              | Usage.                                                                 |
 
-Plausible surface based on the three-tool dispatcher:
+DDL (`CREATE`/`ALTER`/`DROP`) and `PRAGMA` are **refused** in both `sql read` and `sql write`. `sql read` accepts only `SELECT`/`EXPLAIN`; `sql write` only `INSERT`/`UPDATE`/`DELETE`/`REPLACE`.
 
-| Command                                                        | Maps to                              | Purpose                             |
-| -------------------------------------------------------------- | ------------------------------------ | ----------------------------------- |
-| `centraid describe [--app <id>]`                               | `centraid_describe`                  | Print manifest or filtered slice.   |
-| `centraid read --app <id> --query <name> [--input '<json>']`   | `centraid_read`                      | Run a query and print its result.   |
-| `centraid write --app <id> --action <name> [--input '<json>']` | `centraid_write`                     | Run an action and print its result. |
-| `centraid apps list`                                           | `GET /centraid/_apps`                | List registered apps.               |
-| `centraid apps versions --app <id>`                            | `GET /centraid/_apps/<id>/versions`  | List versions.                      |
-| `centraid apps activate --app <id> --version <vid>`            | `POST /centraid/_apps/<id>/activate` | Atomic flip.                        |
+### Data file
 
-## Configuration
+The CLI reads `CENTRAID_DATA_FILE` if set; otherwise `data.sqlite` in the current working directory.
 
-The CLI needs to know which gateway to talk to. On the desktop, this is wired automatically to the embedded local gateway. Standalone use against a remote gateway needs an endpoint:
+```sh
+cd <app-data-dir>
+centraid sql read "SELECT * FROM hydrate_daily"
 
-> **TODO(#120)** — document the env var or config file the CLI reads (e.g. `CENTRAID_GATEWAY=https://gw.example.com`).
+# or
+CENTRAID_DATA_FILE=/abs/path/data.sqlite centraid sql describe
+```
 
-## Auth
+### Output and exit codes
 
-> **TODO(#120)** — when the gateway is remote (OpenClaw plugin), it sits behind OpenClaw's auth. The CLI presumably passes through an OpenClaw token. Document the token source (env var? `~/.openclaw/openclaw.json`?).
+JSON on stdout for results; a short human summary on stderr. Exit codes:
+
+| Code | Meaning                                             |
+| ---- | --------------------------------------------------- |
+| `0`  | success                                             |
+| `1`  | runtime / SQL error                                 |
+| `2`  | bad usage (missing arg, unknown subcommand)         |
+| `64` | refused (e.g. a write passed to `sql read`, or DDL) |
+
+## `centraid-gateway`
+
+Runs the same gateway the desktop embeds as a standalone daemon. v0 scope (issue [#131](https://github.com/srikanthsrungarapu/centraid/issues/131)): loopback or LAN bind, no TLS, a single shared bearer token. Source: `packages/gateway/src/cli/cli.ts`.
+
+### Subcommands
+
+```sh
+centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]
+centraid-gateway print-token --data-dir <path>
+centraid-gateway --version
+centraid-gateway --help
+```
+
+| Flag (`serve`) | Default     | Notes                                                            |
+| -------------- | ----------- | ---------------------------------------------------------------- |
+| `--config`     | —           | JSON config file. Either `--config` or `--data-dir` is required. |
+| `--data-dir`   | —           | Gateway state root. Overrides the config file's `dataDir`.       |
+| `--host`       | `127.0.0.1` | Bind host. Pass `0.0.0.0` for LAN reachability.                  |
+| `--port`       | `0`         | `0` asks the OS for an ephemeral port. Must be in `[0, 65535]`.  |
+
+`serve` flags override the config file. On boot the daemon mints (or reuses) a persistent bearer token at `<dataDir>/token.bin` (mode 0600) and prints the listening URL, the token, and the resolved `dataDir`. `SIGINT`/`SIGTERM` trigger a graceful shutdown. `print-token` reads back the persisted token (exit 1 if none exists yet).
+
+There is **no TLS terminator** in v0 — front the daemon with Caddy / Tailscale Funnel / Cloudflare Tunnel if exposing beyond a trusted LAN.
+
+### Config file
+
+JSON; every field optional except `dataDir` (`packages/gateway/src/cli/config.ts`):
+
+```json
+{
+  "dataDir": "/var/lib/centraid",
+  "host": "0.0.0.0",
+  "port": 8765,
+  "runner": {
+    "kind": "codex",
+    "binPath": "/opt/homebrew/bin/codex",
+    "extraArgs": ["--model", "<model-id>"]
+  }
+}
+```
+
+`runner.kind` is `"codex"` or `"claude-code"`. The `runner` block is seeded into the gateway's identity DB on first boot so the runtime's per-turn prefs loader picks it up.
 
 ## Where to go next
 
-- [Agent runtime](/concepts/agent-runtime) — the loop that drives the CLI.
-- [Three-tool dispatcher](/reference/three-tool-dispatcher) — the underlying contract.
-- [HTTP API](/reference/http-api) — the alternative entry point.
+- [Three-tool dispatcher](/reference/three-tool-dispatcher) — the structured tool surface agents use.
+- [Local deploy](/deploy/local) — the embedded gateway and the daemon side by side.

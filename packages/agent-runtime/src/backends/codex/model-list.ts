@@ -11,8 +11,8 @@
  * parser is defensive: it accepts `{ models }`, `{ data }`, or a bare array,
  * and entries that are either bare id strings or objects with an
  * id-ish field. Any failure (spawn error, timeout, `-32601 method not
- * found` on an older codex, unparseable output) resolves to `[]` so the
- * caller can fall back to the default seed.
+ * found` on an older codex, unparseable output) resolves to `[]` — there is
+ * no default seed, so the catalog stays empty until enumeration succeeds.
  */
 
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
