@@ -40,7 +40,7 @@ export interface RuntimeOptions {
   /**
    * Optional change bus. When omitted the runtime constructs an internal
    * one, exposed as `runtime.changeBus` for hosts that want to subscribe
-   * from outside (e.g. OpenClaw's `centraid_sql_write` agent tool).
+   * from outside (e.g. OpenClaw's `centraid_write` agent tool).
    */
   changeBus?: ChangeBus;
   /**

@@ -1,29 +1,48 @@
 ---
-summary: 'Every action records the tables it touched. The gateway pushes a table-level invalidation on /centraid/<id>/_changes. Iframes re-fetch.'
+summary: 'Every write records the tables it touched. The gateway pushes a table-level invalidation on /centraid/<id>/_changes. Iframes re-fetch.'
 title: 'Change stream'
 ---
 
 # Change stream
 
-The change stream is how a Centraid app stays live without polling. It's a single SSE endpoint per app that publishes one event for every successful write.
+The change stream is how a Centraid app stays live without polling. It's a single SSE endpoint per app that publishes one event for every successful write to the app's `data.sqlite`.
 
 ```
 GET /centraid/<id>/_changes
 ```
 
-Open a connection, get a stream of table-level invalidations whenever an action mutates the app's database. Close the connection when you're done.
+Open a connection, get a stream of table-level invalidations whenever a write commits. The connection stays open until the client closes it.
 
 ## What lands on the wire
 
-Each event names the table(s) that changed. The subscriber's job is to invalidate any local cache keyed on those tables and re-fetch.
+The handshake opens with a comment line so `EventSource.onopen` fires immediately, then every commit produces one `change` event:
 
-> **TODO(#120)** — capture the exact event payload shape (event name, JSON body, whether it's one event per table or one event with a table list). The README documents the surface but not the wire format; I'd need to read `packages/app-engine/src/` for the exact serialization.
+```
+: connected to <id>
+
+event: change
+data: {"tables":["todos"],"ts":1715812345678,"source":"handler"}
+```
+
+Fields on the JSON payload:
+
+| Field        | Always | Meaning                                                                                                              |
+| ------------ | ------ | -------------------------------------------------------------------------------------------------------------------- |
+| `tables`     | yes    | The mutated table names — sorted, deduplicated.                                                                      |
+| `ts`         | yes    | Commit wall-clock time, ms since epoch.                                                                              |
+| `source`     | yes    | `'handler'`, `'agent'`, or `'external'` — who initiated the write (see below).                                       |
+| `toolCallId` | no     | Present when `source === 'agent'` — the CLI's tool-call id, so a renderer can pin a refresh to a specific chat pill. |
+| `turnId`     | no     | Present when set by the agent path — groups all writes from one turn.                                                |
+
+A periodic heartbeat comment (`: ping\n\n`) goes out every 30s so proxies and browsers don't time the idle connection out. `X-Accel-Buffering: no` disables nginx response buffering for reverse-proxy deploys.
+
+The serialization lives in [`changes-sse.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-engine/src/http/changes-sse.ts); the payload shape is the `AppChange` interface in [`change-bus.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-engine/src/changes/change-bus.ts).
 
 ## Why table-level, not row-level
 
 Centraid's change bus deliberately publishes table invalidations rather than row diffs. The tradeoff:
 
-- **Pro**: trivial to implement, trivial to subscribe to, works for arbitrary handler logic (the dispatcher doesn't need to model your business rules).
+- **Pro**: trivial to implement, trivial to subscribe to, works for arbitrary handler logic (the bus doesn't need to model your business rules).
 - **Pro**: subscribers don't need to merge diffs into client state — they just re-run the query.
 - **Con**: noisier than row diffs. Every change to a 10k-row table wakes every subscriber on that table.
 
@@ -31,24 +50,25 @@ For the kinds of apps Centraid targets — small, single-user, single-purpose �
 
 ## Where the invalidation comes from
 
-Two paths produce change events:
+Writes are observed by wrapping the SQLite connection in a `node:sqlite` session before the write and decoding the touched table names from its changeset after commit. `node:sqlite` doesn't expose the C `update_hook`, so this session-changeset approach is how the engine learns which tables moved. Several call sites participate, each tagging the `source`:
 
-1. **Action handlers.** When `centraid_write` invokes an action, the dispatcher reads the `writes: []` declaration from the action's manifest entry and fires invalidations for each table after the handler returns success.
-2. **`centraid_sql_write` agent tool.** When an OpenClaw-side agent uses the in-gateway SQL tool to write directly, the plugin's hook emits through `runtime.changeBus`, so the stream looks the same to subscribers.
+1. **`'handler'`** — a user-authored **action** handler. The handler runner wraps each action's connection in a session and emits the touched tables after the handler returns success. ([`handler-runner.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-engine/src/handlers/handler-runner.ts))
+2. **`'agent'`** — an in-process agent SQL write: a `centraid_write` call routed to the `_sql` built-in, emitted through the runtime's `agentEmitForApp` with the originating `toolCallId` / `turnId`.
+3. **`'external'`** — the cloud-panel SQL route (`POST /centraid/_apps/<id>/query`) and any other path without handler or agent context.
 
-> Successful writes also emit through `runtime.changeBus`, so any subscriber on `/centraid/<appId>/_changes` learns about the mutation.
-> — [`packages/openclaw-plugin/README.md`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/openclaw-plugin/README.md#agent-tools)
+The bus is a synchronous, fire-and-forget, in-process pub/sub keyed by `appId` ([`ChangeBus`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-engine/src/changes/change-bus.ts)). It emits **after** the commit, so a subscriber never observes a change before it's durable. An empty table list is dropped — read-only writers can call the bus without branching.
 
 ## What you can't write through
 
-The `centraid_sql_*` tools refuse DDL (`CREATE`, `ALTER`, `DROP`) and `PRAGMA`. Schema changes go through `migrations/`, not the runtime path. The dispatcher's write path only runs action handlers, which are user code — but those handlers run against the _scoped_ DB proxy, which is a small surface (`prepare`, `run`, `get`, `all`, `exec`-with-caveats) and is what makes the invalidation tracking reliable.
+The `_sql` SQL ops (the raw-SQL escape hatch behind `centraid_read` / `centraid_write`) refuse DDL (`CREATE`, `ALTER`, `DROP`) and `PRAGMA`. Schema changes go through `migrations/`, not the runtime path. Action handlers run against a scoped DB proxy, which is the small surface that makes the invalidation tracking reliable.
 
 ## Subscribing from an app iframe
 
 The pattern is plain `EventSource`:
 
 ```js
-// inside app.js
+// inside app.js — the iframe loads from /centraid/<id>/, so the
+// relative path resolves to /centraid/<id>/_changes.
 const es = new EventSource('_changes');
 es.addEventListener('change', (e) => {
   const { tables } = JSON.parse(e.data);
@@ -56,13 +76,11 @@ es.addEventListener('change', (e) => {
 });
 ```
 
-> **TODO(#120)** — verify the event name (`change` vs `message`) and field name (`tables` vs `tableNames`) against `app-engine` source. Pattern is correct; field names are placeholder.
-
-The path is relative (`_changes`), so the subscription works whether the gateway is local or remote — the iframe loads from `/centraid/<id>/` so `_changes` resolves to `/centraid/<id>/_changes`.
+The event name is `change` and the payload field is `tables` — both verified against the source above. The relative path works whether the gateway is local or remote.
 
 ## Why this matters for the read/write split
 
-Queries are deliberately not tracked. They take a fast read path that doesn't go through SQLite's session-tracking machinery. **Writes from a query handler succeed but never show up on `_changes`** — see [Queries and actions](/concepts/queries-and-actions). The whole reason the read/write split is enforced by a governance directive is to keep the change stream honest.
+Queries are deliberately **not** tracked. The handler runner skips the session wrap for `handlerKind === 'query'` — see the guard in `handler-runner.ts`. A `.run()` inside a query handler succeeds and mutates the database, but it never shows up on `_changes`. The iframe stays stale and no error fires. That silent class of bug is exactly what the read/write split exists to prevent — see [Queries and actions](/concepts/queries-and-actions).
 
 ## Where to go next
 

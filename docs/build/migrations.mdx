@@ -1,31 +1,37 @@
 ---
-summary: "Schema migrations live in migrations/*.sql, run forward, are additive by convention. Code rolls back; data doesn't."
+summary: 'Schema migrations live in migrations/NNNN_<slug>.sql, run forward on publish, are applied once each via PRAGMA user_version. Data persists across code versions.'
 title: 'Migrations'
 ---
 
 # Migrations
 
-`migrations/<NNNN>_<name>.sql` is where your app's `data.sqlite` schema lives. Migrations run forward, are ordered by the numeric prefix, and are the authoritative source — the `tables[]` array in `app.json` is documentation only. (`runtime.sqlite` is gateway-managed; you don't write migrations for it.)
+`migrations/NNNN_<slug>.sql` is where your app's `data.sqlite` schema lives. Migrations run forward, ordered by their numeric prefix, and are the **authoritative source** of schema — the `tables[]` array in `app.json` is documentation only. (`runtime.sqlite` is gateway-managed; you never write migrations for it.)
+
+Handlers presume the schema already exists. They read and (in actions) write rows, but **never run DDL** — no `CREATE`, `ALTER`, `DROP`, or `CREATE INDEX` from a handler. All schema lives here.
 
 ## File naming
 
 ```
 migrations/
 ├── 0001_init.sql
-├── 0002_recaps.sql
+├── 0002_add_tags.sql
 └── 0003_add_streak_column.sql
 ```
 
-- Four-digit zero-padded ordinal.
-- Underscore.
-- Kebab-or-snake-case description.
-- `.sql` extension.
+The runtime enforces the name and ordering — a violation rejects the publish:
 
-> **TODO(#120)** — confirm whether the runtime enforces the strict `NNNN_*.sql` pattern, and whether the runtime also tracks which migrations have been applied (per-app migrations table?). Worth checking `app-engine` migration runner code. The convention is the standard "ordered, never edited" shape; the actual mechanism may differ.
+- Each file must match `NNNN_<slug>.sql` exactly: a **four-digit zero-padded** ordinal, an underscore, then a slug of `a–z`, `0–9`, `_`, `-` (starting with an alphanumeric), then `.sql`.
+- Ids must be **contiguous from `0001`** — no gaps, no skips, no duplicates.
+
+## The v0 convention: fold everything into `0001_init.sql`
+
+Until an app has shipped a version, **keep all schema in a single `0001_init.sql`** and edit it freely. There is no published database yet, so there is nothing to migrate _from_ — a second migration file only adds ordering ceremony with no benefit. The Hydrate template ships two tables (`hydrate_daily` and `hydrate_weekly_recaps`) in one `0001_init.sql` for exactly this reason.
+
+Once a version is published, that file is settled (see the next rule), and any further schema change becomes a new higher-numbered file.
 
 ## What goes in
 
-Idempotent DDL only. Use `IF NOT EXISTS` and `IF EXISTS` everywhere.
+Plain idempotent SQLite DDL. Use `IF NOT EXISTS` / `IF EXISTS`.
 
 ```sql
 -- migrations/0001_init.sql
@@ -33,10 +39,7 @@ CREATE TABLE IF NOT EXISTS hydrate_daily (
   date TEXT PRIMARY KEY,
   cups INTEGER NOT NULL DEFAULT 0
 );
-```
 
-```sql
--- migrations/0002_recaps.sql
 CREATE TABLE IF NOT EXISTS hydrate_weekly_recaps (
   week_ending TEXT PRIMARY KEY,
   total_cups INTEGER NOT NULL,
@@ -44,31 +47,43 @@ CREATE TABLE IF NOT EXISTS hydrate_weekly_recaps (
   encouragement TEXT NOT NULL,
   generated_at INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_hydrate_daily_date ON hydrate_daily(date);
 ```
 
-Both files lifted from the Hydrate template.
+**Do not include `BEGIN`, `COMMIT`, `ROLLBACK`, or `PRAGMA user_version`.** The runner wraps the whole pending batch in one transaction and bumps `user_version` itself; adding your own would conflict with it.
+
+## How they run
+
+Migrations are applied **at publish time**, against the app's live `data.sqlite`:
+
+1. The runner reads `PRAGMA user_version` (the highest applied migration id; `0` for a fresh database).
+2. It collects every `migrations/*.sql` whose id is greater than `user_version`.
+3. All pending migrations execute **in order, inside a single `BEGIN IMMEDIATE` / `COMMIT` transaction**.
+4. On success, `user_version` is set to the highest applied id.
+
+Each migration is therefore applied **at most once per database**. Already-applied files are skipped, which is why you re-ship every migration in every publish — they are idempotent (skipped when already applied) and required for a fresh database.
+
+If any migration's SQL **fails**, the whole batch rolls back, `user_version` is left untouched, and the publish is rejected — the previously active version keeps serving. Fix the file and re-publish.
+
+## Schema-safe editing (data branching)
+
+You don't have to publish to find out whether a new migration runs cleanly against real data. While you edit an app in a session, the gateway gives that session its **own branched `data.sqlite`** that lives inside the session's worktree, separate from the live database:
+
+- On first access, the branched copy is seeded from the app's **live** `data.sqlite` (via `VACUUM INTO`, which preserves `user_version` and copies rows).
+- Your draft's **pending** migrations are then replayed on top of that copy.
+
+This is a publish dress rehearsal: a pending migration runs against a snapshot of real production rows before it ever touches the live database. If it fails, you see the conflict in preview, and the half-seeded copy is discarded so the next access re-seeds cleanly. The branched data is gitignored and thrown away when the session closes — it never gets staged into a publish. (Issue #144.)
 
 ## Rules of thumb
 
-- **Additive only.** Add tables, add columns, add indexes. Don't drop columns; don't rename tables. If you need to restructure, write a new table, migrate data in a one-shot action, and stop reading from the old one.
-- **No data mutations in migrations.** Migrations are schema, not seed data. If your app needs initial data, do it from a query or action that runs idempotently.
-- **No `PRAGMA`.** PRAGMAs that change behavior should live in the gateway's config, not your app.
-- **Never edit a migration after it ships.** New change → new file. The whole point of the ordinal sequence is "applied = settled".
-
-## Why "additive only"
-
-Centraid keeps `data.sqlite` persistent across code versions. A user can roll back from version 5 to version 3 with `POST /centraid/_apps/<id>/activate`. If migration 4 dropped a column that version 3 reads from, the rollback breaks the older code on the same data file. Keep migrations additive and rollbacks stay free.
-
-## When migrations run
-
-> **TODO(#120)** — document the exact lifecycle: do migrations run at upload time, at first read after a version flip, or on gateway start? `current.json` records `activeVersion` and `history`; whether the runtime tracks `appliedMigrations` separately matters here. Read `app-engine/src/migrations/` (or wherever) to confirm.
-
-## Working with the schema from handlers
-
-Handlers don't run DDL. They read and (in the case of actions) DML against tables declared in the migrations. The `tables[]` array in `app.json` is for tooling — it tells `centraid_describe` what to advertise, and it tells the desktop's app builder what shape to expect — but the schema your code reaches for must exist in a migration first.
+- **Never edit a published migration.** Once a version ships, treat applied files as settled — fix-forward with the next-numbered file. Editing an applied file silently diverges live databases from your code.
+- **Additive is safest.** `data.sqlite` persists across code versions, and **rollback is code-only** — it relays older code onto `main` but does _not_ down-migrate the live schema (Centraid migrations are forward-only). So a rolled-back app runs older code against a forward schema until the next publish re-applies forward migrations. Additive changes (new tables/columns/indexes) keep that window harmless; dropping a column an older version reads would break the rollback.
+- **No seed data in migrations.** Migrations are schema, not rows. If your app needs initial data, write it idempotently from an action.
+- **Ask before destructive ops.** `DROP TABLE`, dropping a column, anything that deletes user data — confirm in chat first and surface what's lost.
 
 ## Where to go next
 
-- [App anatomy](/build/app-anatomy) — where migrations live in the folder.
+- [App anatomy](/build/app-anatomy) — where migrations sit in the folder.
 - [Actions](/build/actions) — the only place DML happens.
-- [SQLite layout](/deploy/sqlite-layout) — how `data.sqlite` is stored on disk.
+- [app.json → tables](/build/app-json#tables) — the documentary mirror of your schema.

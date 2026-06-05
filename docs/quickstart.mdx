@@ -18,9 +18,7 @@ The Electron window opens on the **Home** view, with the embedded local gateway 
 
 ## 2 — Clone a template
 
-> **TODO(#120)** — describe the exact UI affordance. From the receipts (`issue-105-template-naming-and-unified-clone.md`, `issue-53-notion-style-action-menus`) the desktop has a template gallery with a clone action; I haven't read the renderer code to capture the precise click path. Insert "From Home → Templates → click _Hydrate_ → _Clone_" once verified.
-
-Clone produces an entry under the local gateway's apps directory (default `~/.centraid/apps/hydrate-<suffix>/`) with the template's files copied in and `current.json` pointing at the first version. Both the desktop sidebar and the gallery refresh; the new app is selectable.
+From the desktop's template gallery, pick **Hydrate** and clone it. Clone copies the template's file tree into a new app, commits it to the local gateway's git store (the new app's `main`), and registers it. Its data dir is created under `<userData>/gateways/local/apps/<id>/`. The desktop sidebar and gallery refresh; the new app is selectable.
 
 ## 3 — Open the app
 
@@ -28,7 +26,7 @@ Click the cloned app in the sidebar. The renderer mounts an iframe pointing at `
 
 ## 4 — See the round-trip
 
-The app has one query and one action. Lifted from [`packages/blueprints/hydrate/queries/get-today.js`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/blueprints/hydrate/queries/get-today.js):
+The app has one query and one action. Lifted from [`packages/blueprints/apps/hydrate/queries/get-today.js`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/blueprints/apps/hydrate/queries/get-today.js):
 
 ```js
 // queries/get-today.js
@@ -39,7 +37,7 @@ export default async ({ db }) => {
 };
 ```
 
-And [`packages/blueprints/hydrate/actions/set-cups.js`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/blueprints/hydrate/actions/set-cups.js):
+And [`packages/blueprints/apps/hydrate/actions/set-cups.js`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/blueprints/apps/hydrate/actions/set-cups.js):
 
 ```js
 // actions/set-cups.js
@@ -68,13 +66,13 @@ That round-trip is the whole product in one screen. Every other app you build is
 
 ## 5 — Inspect the database
 
-The data lives at `~/.centraid/apps/<id>/data.sqlite` (or wherever your gateway's `appsDir` resolves). Open it with any SQLite tool to confirm the row:
+On the desktop the data lives at `<userData>/gateways/local/apps/<id>/data.sqlite`. Open it with any SQLite tool to confirm the row:
 
 ```sh
-sqlite3 ~/.centraid/apps/<id>/data.sqlite 'SELECT * FROM hydrate_daily;'
+sqlite3 "<userData>/gateways/local/apps/<id>/data.sqlite" 'SELECT * FROM hydrate_daily;'
 ```
 
-> **TODO(#120)** — confirm the local gateway's default `appsDir`. The OpenClaw plugin defaults to `centraid` under `$OPENCLAW_STATE_DIR` (`~/.openclaw/centraid`). The desktop's embedded local gateway likely defaults to `~/.centraid/apps/` but I haven't read `apps/desktop/src/main/` to confirm.
+(`<userData>` is Electron's per-OS user-data dir. The standalone daemon resolves this under `<dataDir>/apps/<id>/`, and the OpenClaw plugin under `centraid` in the OpenClaw state dir.) The bundled `centraid` CLI is the shortcut once you've `cd`'d into the data dir: `centraid sql read "SELECT * FROM hydrate_daily"`.
 
 ## What you just used
 

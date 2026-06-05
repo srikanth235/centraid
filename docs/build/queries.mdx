@@ -1,5 +1,5 @@
 ---
-summary: 'Writing query handlers — the read-only side of the dispatcher. Async db, scoped logger, typed exports.'
+summary: 'Writing query handlers — the read-only side of the dispatcher. Async db, scoped logger, the ctx surface.'
 title: 'Queries'
 ---
 
@@ -9,105 +9,109 @@ A query is a **read-only tool** your app exposes. The tool definition lives in `
 
 ```js
 // queries/get-today.js
-export default async ({ db, log }) => {
+export default async ({ db }) => {
   const today = todayKey();
   const row = await db.prepare('SELECT cups FROM hydrate_daily WHERE date = ?').get(today);
   return { date: today, cups: row ? row.cups : 0, goal: 8 };
 };
 ```
 
-## What `await` and why
+A handler is the **default export** of the module — a single async function taking **one argument**, an object you destructure. Whatever the function returns is the query result, sent back to the caller verbatim. There is no separate "response" wrapper for queries (unlike actions, which may use `{ status, body }`).
 
-The `db` argument is a **proxy**. Every call (`prepare`, `get`, `all`, `run`) round-trips to the host process. That's how the worker stays isolated from the raw connection — it never sees a path to another app's database.
+## The handler argument
 
-The trade-off: every `db` method is async.
+Both handler kinds receive the same base fields plus a couple kind-specific ones. A query handler's argument is:
 
-> Forgetting `await` is the #1 handler bug.
-> — [`packages/openclaw-plugin/README.md`](https://github.com/srikanthsrungarapu/openclaw-plugin)
+| Field    | Type        | What                                                                                      |
+| -------- | ----------- | ----------------------------------------------------------------------------------------- |
+| `input`  | object      | The caller's input, already validated against `queries[].input` in `app.json`. Preferred. |
+| `query`  | object      | An **alias for `input`** carrying the same validated object — kept for back-compat.       |
+| `params` | object      | Reserved (currently always `{}`).                                                         |
+| `db`     | `ScopedDb`  | The app's `data.sqlite`, via an async proxy (see below).                                  |
+| `log`    | `ScopedLog` | `log.info` / `log.warn` / `log.error`. Lines land in the app's Logs panel.                |
+| `app`    | `AppRef`    | `{ id, dir }` — the app id and the absolute dir holding its `data.sqlite`.                |
+| `ctx`    | object      | `{ fetch, abortSignal }` — see below. **No** `fs`, `child_process`, or `process.env`.     |
 
-The shape of an async statement:
-
-```js
-const stmt = await db.prepare('SELECT * FROM tasks WHERE done = 0');
-const rows = await stmt.all(); // every row
-const one = await stmt.get(); // single row or undefined
-```
-
-## You cannot write from a query
-
-A `stmt.run()` or `db.exec()` from a query handler will **succeed** — but it's invisible to the change bus. The handler runner skips session tracking on the read path for performance, so any mutation done here never fires a `/centraid/<id>/_changes` event. Subscribers go stale with no error.
-
-The `query-handlers-read-only` governance directive blocks this at commit time. If you genuinely need to materialize on first read (a rare case), use the per-line waiver:
+`input` and `query` are the same object — use `input` in new code. There is no positional second argument; everything arrives in the one destructured object.
 
 ```js
-// governance: allow-query-handlers-read-only lazy view materialization
-await db.prepare(`CREATE VIEW IF NOT EXISTS …`).run();
+export default async ({ input, db }) => {
+  const owner = input.owner;
+  return await db
+    .prepare('SELECT id, title FROM things WHERE owner = ? ORDER BY created_at DESC')
+    .all(owner);
+};
 ```
 
-See [Queries and actions](/concepts/queries-and-actions#why-the-readwrite-split-is-enforced) for the full rationale.
+## `ctx`
+
+`ctx.fetch(url, init?)` is a timeout-bound `fetch` — it carries an `AbortSignal` that fires when the handler finishes, so you can't accidentally hold the handler open on a slow upstream. `ctx.abortSignal` is that same signal, exposed for your own use (e.g. passing it to other async work). That is the entire `ctx` surface for queries and actions — no file system, no process, no environment access.
+
+(Automation handlers get a _different_, richer `ctx` with `ctx.tool` / `ctx.agent` / `ctx.state` / `ctx.runs`. That surface does not exist in queries or actions — see the [Automations](/automations/index) tab.)
+
+## The async `db` proxy
+
+The `db` argument is a **proxy**. The handler runs in a worker thread that never touches the raw SQLite connection; each call message-passes to the host process, which owns the connection. That isolation is why **every `db` operation that hits the database is async**:
+
+```js
+const stmt = db.prepare('SELECT * FROM tasks WHERE done = 0'); // sync — builds the statement
+const rows = await stmt.all(); // async — round-trips to the host
+const one = await stmt.get(); // async — single row or undefined
+await db.exec('UPDATE …'); // async (but: actions only — see below)
+```
+
+`db.prepare(sql)` is synchronous and returns a statement object; its `.run()`, `.get()`, and `.all()` methods are async and **must be awaited**. `db.exec(sql)` is async too. Forgetting `await` is the single most common handler bug.
+
+Use parameterized SQL (`?` placeholders) — never interpolate untrusted strings.
+
+## You cannot meaningfully write from a query
+
+Nothing physically stops a `stmt.run()` or `db.exec()` from a query handler, but it is the wrong place for it: the runner **does not wrap query handlers in change-tracking**, so any mutation a query makes is invisible to the change stream. Subscribed iframes never learn to re-fetch and silently go stale.
+
+Keep writes in actions. All schema (DDL) lives in [migrations](/build/migrations) — never `CREATE`/`ALTER`/`DROP` from a handler of either kind.
 
 ## Input arrives validated
 
-When the dispatcher receives a `centraid_read` call, it:
+When the dispatcher handles a `centraid_read` call it:
 
-1. Looks up the query by `app` + `query` name.
-2. Validates the call's `input` against the `input` schema in `app.json` (Ajv, draft 2020-12).
-3. Invokes the handler with the validated input as the _query_ argument (action handlers use `body` instead — both arrive pre-validated).
+1. Resolves the query by `app` + `query` name.
+2. Validates the call's `input` against that query's `input` schema (Ajv, draft 2020-12).
+3. Invokes the handler with the validated value as both `input` and `query`.
 
-A schema violation returns an `INVALID_INPUT` MCP envelope before your handler runs. You don't need to re-validate.
+A schema violation returns an `INVALID_INPUT` error envelope **before your handler runs**, so you don't re-validate. (Addressing a query through `centraid_write` returns `WRONG_KIND` — use the right tool.)
 
-## TypeScript authoring {#typescript}
+## Timeout
 
-Recommended workflow. Author `.ts`, ship the compiled `.js` next to it.
+Query handlers are terminated if they run longer than **10 seconds**. This is a fixed runtime limit, not a per-handler `app.json` setting. Keep queries fast; push slow or multi-step work into actions (which get 30s) or automations.
 
-```ts
-// queries/get-today.ts
-import type { QueryHandler } from '@centraid/openclaw-plugin';
+## Authoring in JavaScript with JSDoc types
 
-export default (async ({ db }) => {
-  const row = await db.prepare('SELECT cups FROM hydrate_daily WHERE date = ?').get(todayKey());
-  return { cups: row?.cups ?? 0, goal: 8 };
-}) satisfies QueryHandler;
+Handlers are **plain `.js` ES modules** — there is no build step, no `tsconfig.json`, no TypeScript. For editor type-checking, annotate the default export with a JSDoc `@type` pointing at the alias in `@centraid/openclaw-plugin`, and cast row shapes with `@typedef`:
+
+```js
+/**
+ * @typedef {Object} Thing
+ * @property {string} id
+ * @property {string} title
+ *
+ * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ */
+export default async ({ input, db }) => {
+  const rows = /** @type {Thing[]} */ (
+    await db.prepare('SELECT id, title FROM things WHERE owner = ?').all(input.owner)
+  );
+  return rows;
+};
 ```
 
-Two starter files ship with the plugin:
-
-```sh
-cp node_modules/@centraid/openclaw-plugin/templates/app-tsconfig.json   <appsDir>/<id>/tsconfig.json
-cp node_modules/@centraid/openclaw-plugin/templates/app-package.json    <appsDir>/<id>/package.json
-cd <appsDir>/<id>
-bun install
-bun run build       # tsc → emits .js next to each .ts
-bun run watch       # during development
-```
-
-The shipped `tsconfig.json` uses `"rootDir": "."` and `"outDir": "."`, so `queries/foo.ts` compiles to `queries/foo.js` in place. The gateway loads the `.js`.
-
-## What you have access to
-
-The `{ db, log, app, ctx }` argument:
-
-| Arg   | Type        | What                                                                                        |
-| ----- | ----------- | ------------------------------------------------------------------------------------------- |
-| `db`  | `ScopedDb`  | The app's `data.sqlite`, via async proxy.                                                   |
-| `log` | `ScopedLog` | Structured logger (`log.info`, `log.warn`, `log.error`). Output goes to the gateway's logs. |
-| `app` | `AppRef`    | `{ id, version, … }`. Useful for emitting log lines tagged with the version.                |
-| `ctx` | `{ fetch }` | A timeout-bound `fetch`. **No** `fs`, `child_process`, or `process.env`.                    |
-
-`ctx.fetch` has a built-in timeout; you can't accidentally hold the handler open indefinitely on a slow upstream.
-
-## Default timeout
-
-Query handlers default to **10s**. Configurable per-handler via `timeoutMs` in `app.json` if your query genuinely needs longer.
-
-> **TODO(#120)** — confirm the per-handler timeout knob is in `app.json` (not the plugin config). README mentions both default timeouts and a knob; I haven't traced where exactly the per-handler override lives.
+Run `bun install` (or `npm install`) once so the types package resolves locally for IntelliSense — it changes nothing at runtime. Do **not** write `.ts` handlers, `import type`, `x as Foo`, `interface`, or generic call args like `.get<Row>(id)` — those are JavaScript syntax errors that break the runtime. Use the JSDoc equivalents.
 
 ## Common patterns
 
-### Pagination
+### Reading the input
 
 ```js
-export default async ({ db, log }, input) => {
+export default async ({ input, db }) => {
   const limit = Math.min(100, Number(input?.limit ?? 20));
   const offset = Math.max(0, Number(input?.offset ?? 0));
   return await db
@@ -118,7 +122,7 @@ export default async ({ db, log }, input) => {
 
 ### Default-when-empty
 
-When the table is empty, return a sensible default rather than `undefined`. Saves the UI a branch.
+Return a sensible default rather than `undefined` so the UI doesn't need an extra branch:
 
 ```js
 const row = await db.prepare('SELECT cups FROM hydrate_daily WHERE date = ?').get(today);
@@ -127,10 +131,10 @@ return { date: today, cups: row ? row.cups : 0, goal: 8 };
 
 ### Cross-table joins
 
-You can `JOIN` freely — all tables in `data.sqlite` belong to your app. The scope check is at the app boundary, not the table boundary.
+`JOIN` freely — every table in `data.sqlite` belongs to your app. The scope boundary is the app's database, not individual tables.
 
 ## Where to go next
 
 - [Actions](/build/actions) — the write side of the same surface.
-- [UI and changes](/build/ui-and-changes) — how the iframe calls your query.
+- [UI and changes](/build/ui-and-changes) — how the iframe calls your query and reacts to writes.
 - [Three-tool dispatcher](/reference/three-tool-dispatcher) — the wire shape.

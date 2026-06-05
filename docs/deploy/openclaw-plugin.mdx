@@ -5,7 +5,7 @@ title: 'Remote deploy (OpenClaw plugin)'
 
 # Remote deploy — OpenClaw plugin
 
-[`@centraid/openclaw-plugin`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/openclaw-plugin) mounts the Centraid gateway as a plugin on an existing OpenClaw instance. Same code as the local gateway; OpenClaw provides the HTTP front door, auth, and process supervision.
+[`@centraid/openclaw-plugin`](https://github.com/srikanthsrungarapu/centraid/tree/main/packages/openclaw-plugin) mounts the Centraid gateway as a plugin on an existing OpenClaw instance. It's a thin shim over `@centraid/gateway`: the whole store / runtime / route graph is built by the same `buildGateway()` core the desktop embed and the standalone daemon use. OpenClaw provides the HTTP front door, auth, and process supervision.
 
 This is the mode for "I want my apps reachable from my phone", "I want scheduled work to keep running", or "the family shares this gateway".
 
@@ -17,82 +17,71 @@ This is the mode for "I want my apps reachable from my phone", "I want scheduled
 
 What Centraid provides:
 
-- The `/centraid` URL prefix and everything under it.
-- The apps directory at `$OPENCLAW_STATE_DIR/centraid/` (default `~/.openclaw/centraid/`).
-- The in-gateway agent tools (`centraid_sql_describe`, `centraid_sql_read`, `centraid_sql_write`) for the OpenClaw-side chat agent.
+- The `/centraid` URL prefix and everything under it (app registry, per-app static + data + conversation surface, the three-tool HTTP shim, the template catalog).
+- The sibling auth-bearing prefixes `/_centraid-conversations` (conversation turns + transcripts) and `/_centraid-user` (per-user store), plus the separately-mounted `/_centraid-hook` webhook route.
+- The per-app DATA directory at `$OPENCLAW_STATE_DIR/centraid/` (default `~/.openclaw/centraid/`), with app CODE backed by a git store alongside it.
+- The in-gateway agent tools (`centraid_describe`, `centraid_read`, `centraid_write`) for the OpenClaw-side conversation agent.
 
 ## Install
 
-> **TODO(#120)** — capture the install command. OpenClaw plugins are typically installed via the OpenClaw CLI or by adding a config entry; the exact mechanism for `@centraid/openclaw-plugin` needs to be confirmed against the openclaw-plugin package's `openclaw.plugin.json` and OpenClaw's plugin docs.
-
-From the package's `scripts/`:
-
-```sh
-node packages/openclaw-plugin/scripts/setup-tools.mjs
-```
-
-This patches `~/.openclaw/openclaw.json` to add the three agent tools to the user's `tools.alsoAllow` array.
+> **TODO(#120)** — capture the exact install command. The package declares `openclaw.extensions: ["./dist/index.js"]` and `activation.onStartup: true` in its `openclaw.plugin.json`, so OpenClaw loads it as a startup plugin, but the user-facing add command (CLI vs config entry) is not captured in this repo. Confirm against OpenClaw's plugin docs.
 
 ## Configure
 
-Two keys in the plugin's `configSchema`:
+The plugin reads exactly **one** config key at registration:
 
 ```json
 {
-  "appsDir": "centraid",
-  "versionRetention": 5
+  "appsDir": "centraid"
 }
 ```
 
-| Key                | Default                                                                  | Notes                                                                       |
-| ------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `appsDir`          | `centraid` (resolved under `$OPENCLAW_STATE_DIR`, default `~/.openclaw`) | Where app folders live. Absolute paths used as-is.                          |
-| `versionRetention` | `5`                                                                      | Max versions kept per uploaded app. Active is always retained; minimum `2`. |
+| Key       | Default                                                                  | Notes                                                                                                                |
+| --------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `appsDir` | `centraid` (resolved under `$OPENCLAW_STATE_DIR`, default `~/.openclaw`) | Where per-app DATA folders live. Absolute paths are used as-is; relative paths resolve under the OpenClaw state dir. |
 
-## Upload an app
+The schema also declares a `versionRetention` key, but it's a holdover from the retired versioned-upload backend — the current plugin never reads it, so setting it has no effect. (See the [SQLite layout](/deploy/sqlite-layout) page for what ends up on disk.)
 
-```sh
-# In the app folder you want to publish:
-tar czf - --exclude data.sqlite --exclude current.json --exclude versions . | \
-  curl -X POST --data-binary @- \
-       -H "Content-Type: application/gzip" \
-       https://gw/centraid/_apps/my-app/upload
+## State on disk
+
+App **code** is backed by the gateway-owned git store (no tarball uploads, no version dirs). App **data** stays under `appsDir`. One level up from `appsDir`:
+
+```
+<state>/
+  centraid/                     ← appsDir: per-app DATA (<id>/data.sqlite)
+  centraid-code/                ← git store: apps.git + worktrees/ (app CODE)
+  centraid-gateway.sqlite       ← identity (users + prefs)
+  centraid-analytics.sqlite     ← central analytics
 ```
 
-- First upload to a new id auto-registers it.
-- Each upload becomes an immutable version dir; `current.json#activeVersion` flips atomically once extraction succeeds.
-- Re-uploading identical content (same sha256) collapses to a single version dir; history records the latest timestamp.
-- After upload, retention pruning keeps the most recent N versions.
+The runtime serves each app's handlers and static assets from the live `main` worktree, repointed atomically on every publish.
 
-## Roll back
+## Publishing an app
 
-```sh
-curl https://gw/centraid/_apps/my-app/versions
-curl -X POST -d '{"versionId":"v_2026-05-08T14-30-00-000Z_a1b2c3"}' \
-     -H "Content-Type: application/json" \
-     https://gw/centraid/_apps/my-app/activate
-```
+There is no tarball upload or version-flip step (both were retired with the move to the git store). App creation, template clone, and publish go through the gateway's lifecycle surface:
 
-`activate` is just a write to `current.json` — no extraction, no downtime, instant.
+- `POST /centraid/_apps` — scaffold a blank app into a draft session.
+- `POST /centraid/_apps/_clone` — clone a bundled template (see [Cloning a template](/templates/cloning)).
+- The git-store session / files / publish routes commit a draft onto `main`.
+
+Pass `{ "publish": true }` to scaffold or clone straight to live in one call.
 
 ## Auth
 
-> **TODO(#120)** — document the auth model. OpenClaw provides auth at the gateway level; calls to `/centraid/*` arrive already authenticated. Confirm whether per-app authz is supported and how to wire it.
+> **TODO(#120)** — document the auth model. OpenClaw owns auth: the three gateway prefixes are registered at `auth: 'gateway'`, so calls to them arrive already authenticated and the plugin replays the gateway's route chain **minus** its own bearer check. The `/_centraid-hook` webhook route is the exception — it runs at `auth: 'plugin'` and verifies its own per-automation shared secret. Whether any per-app authz exists beyond gateway-level auth is not captured here.
 
 ## Use it from the desktop
 
 The desktop app can be pointed at a remote gateway in addition to (or instead of) its embedded local one.
 
-> **TODO(#120)** — capture the desktop's remote-gateway config UI. From the steering ledger, "runtime decoupled and remotely hostable" was an explicit design choice; the desktop almost certainly has a remote-gateway URL setting.
+> **TODO(#120)** — capture the desktop's remote-gateway config UI. "Runtime decoupled and remotely hostable" was an explicit design choice; the desktop has a remote-gateway URL setting, but the exact path isn't captured here.
 
-## What's _not_ in the remote path
+## What's the same as local
 
-A few features of the local desktop don't apply:
+Because both hosts mount the same `buildGateway()` core, the remote path is **not** a reduced one:
 
-- **No builder.** Authoring a new app on the remote uses the upload + activate path; the conversational builder lives in the desktop today.
-- **No template gallery on the gateway.** Templates ship with the desktop app; you clone a template locally, then upload the clone to a remote gateway.
-
-> **TODO(#120)** — verify these are actually local-only. The builder + gallery were originally desktop-side per the receipts, but they may eventually surface on the remote.
+- **The builder works remotely.** Conversations (`kind ∈ {chat, build, automation}`) run through the same `/centraid/<id>/_turn` surface; the OpenClaw host injects an in-process conversation runner backed by `runEmbeddedAgent`.
+- **The template gallery is gateway-owned.** `GET /centraid/_templates` resolves the bundle-or-cache catalog on the gateway, so a remote gateway serves the gallery too (and can fetch newer templates from a remote manifest URL).
 
 ## Where to go next
 

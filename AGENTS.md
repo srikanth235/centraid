@@ -15,9 +15,9 @@ See the **Compliance** section of [CONSTITUTION.md](CONSTITUTION.md) for the ful
 
 ## What this repo is
 
-Centraid is a personal app builder shipped as two surfaces — an Electron desktop app under [`apps/desktop`](apps/desktop) and an Expo mobile app under [`apps/mobile`](apps/mobile). Both surfaces share visual identity through [`packages/design-tokens`](packages/design-tokens) and per-runtime TypeScript settings through [`packages/tsconfig`](packages/tsconfig). The full layout, build orchestration, and design-token sharing model live in [ARCHITECTURE.md](ARCHITECTURE.md).
+Centraid is a personal app builder. Its backend is a host-agnostic **gateway** ([`packages/gateway`](packages/gateway)) that wires the app engine ([`packages/app-engine`](packages/app-engine)), the agent runtime ([`packages/agent-runtime`](packages/agent-runtime)), the automation engine ([`packages/automation`](packages/automation)), the SQLite stores, and the chat/automation runners together. The same gateway runs embedded in the Electron desktop ([`apps/desktop`](apps/desktop)), as the standalone `centraid-gateway` daemon, and as an OpenClaw plugin ([`packages/openclaw-plugin`](packages/openclaw-plugin)). The desktop renderer is a thin HTTP client; the Expo mobile app ([`apps/mobile`](apps/mobile)) connects to a gateway over HTTP. App scaffolding + templates live in [`packages/blueprints`](packages/blueprints) and agent grounding in [`packages/skills`](packages/skills); both apps share visual identity through [`packages/design-tokens`](packages/design-tokens) and per-runtime TypeScript settings through [`packages/tsconfig`](packages/tsconfig). The full layout, runtime model, on-disk layout, and build orchestration live in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-The runtime stack is [Bun](https://bun.sh) (package manager + runtime, pinned in `packageManager`), [Turborepo](https://turbo.build) (task graph), and TypeScript. Linting and formatting are [oxlint](https://oxc.rs) and [oxfmt](https://github.com/oxc-project/oxfmt). See [README.md](README.md) for the develop / build / check commands.
+The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageManager`), [Turborepo](https://turbo.build) (task graph), and TypeScript. Linting and formatting are [oxlint](https://oxc.rs) and [oxfmt](https://github.com/oxc-project/oxfmt); tests run on [vitest](https://vitest.dev). See [README.md](README.md) for the develop / build / test / check commands.
 
 ## Conventions agents should know
 
@@ -31,8 +31,8 @@ The runtime stack is [Bun](https://bun.sh) (package manager + runtime, pinned in
 ## Where to look
 
 - [CONSTITUTION.md](CONSTITUTION.md) — the mechanical and judgmental rules.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — full layout and design-token sharing model.
-- [README.md](README.md) — develop, build, and check commands.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — the gateway, the `conversation ⊃ turn ⊃ item` runtime model, full workspace layout, on-disk layout, and build orchestration.
+- [README.md](README.md) — develop, build, test, and check commands.
 - [TESTING.md](TESTING.md) — the testing strategy, runner, and test convention.
 - [SECURITY.md](SECURITY.md) — vulnerability disclosure path.
 - [scripts/enable-governance.sh](scripts/enable-governance.sh) — run once per fresh clone to activate the governance hooks.

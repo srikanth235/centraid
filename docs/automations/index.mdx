@@ -21,9 +21,9 @@ You'll encounter automations in two flavors. They run **identically**:
 
 **1. A UI app that also owns automations.** A regular app — `index.html`, queries, actions, the lot — with an `automations/<id>/` subdirectory carrying one or more automations that operate on the app's data. The Hydrate template's `weekly-encouragement` is this shape: a hydration tracker that _also_ writes a Sunday-evening summary into its own table.
 
-**2. A headless automation app.** An app whose folder exists _only_ to hold automations — no `index.html`, no UI, empty `actions[]` and `queries[]` in `app.json`. The convention is to prefix the app id with `auto.` (e.g. `auto.briefing`, `auto.email-triage`). The desktop gallery uses the prefix as a hint to render the app in the **Automations** section instead of among UI apps.
+**2. A headless automation app.** An app whose folder exists _only_ to hold automations — no `index.html`, no UI, empty `actions[]` and `queries[]` in `app.json`. It is marked by **`kind: "automation"` in `app.json`** (e.g. `briefing`, `email-triage`). The desktop gallery reads `kind` to render the app in the **Automations** section instead of among UI apps.
 
-There is **no `kind: "automation"` flag** in `app.json` and **no `headless: true` field**. The `auto.` prefix is a convention, not a runtime permission boundary. Whether an app has a UI is determined by whether `index.html` exists.
+The `kind: "automation"` flag is what marks a headless automation app — it replaced an older `auto.` id-prefix convention. `scaffoldAppFiles` writes a plain-slug app id plus `kind: "automation"`. (`kind` is a hint for the gallery, not a runtime permission boundary; whether an app has a UI is still determined by whether `index.html` exists.)
 
 ```
 # Per-app automation (Hydrate)
@@ -38,8 +38,8 @@ hydrate/
       handler.js
 
 # Headless automation app (Briefing)
-auto.briefing/
-  app.json                         # actions: [], queries: []
+briefing/
+  app.json                         # kind: "automation", actions: [], queries: []
   automations/
     briefing/
       automation.json
@@ -51,10 +51,10 @@ auto.briefing/
 When a trigger fires — the cron clock hits its expression, or an HTTP POST arrives at the webhook route — the runtime:
 
 1. Resolves the automation by its handle (`<appId>/<automationId>`) and reads the manifest.
-2. Spawns a worker thread, loads `handler.js`, and invokes its default export with `{ ctx, log, input }`.
+2. Opens a fresh execution **conversation** + **turn** in the per-app run ledger, then spawns a worker thread, loads `handler.js`, and invokes its default export with `{ ctx, log }` (plus `ctx.input`).
 3. The handler runs JavaScript. It can call MCP tools via `ctx.tool`, ask the model for a constrained turn via `ctx.agent({ prompt })`, read/write its KV state via `ctx.state`, and look at prior runs via `ctx.runs`. See [Handler runtime](/automations/handler).
-4. The handler returns `{ summary?, output? }`. The summary shows in the run list; the output is persisted in the run ledger and validated against `outputSchema` if declared.
-5. Tool calls, model turns, sub-invocations, and the final result are written to per-app `runtime.sqlite` as a `runs` row plus `run_nodes` children. See [Run history](/automations/run-history).
+4. The handler returns `{ summary?, output? }`. The summary shows in the run list; the output is persisted on the turn and validated against `outputSchema` if declared.
+5. The trigger input, each `ctx.tool` / `ctx.agent` call, and the final result are written to per-app `runtime.sqlite` as a `turns` row plus `items` children. See [Run history](/automations/run-history).
 
 The **manifest's `prompt`** is the human intent the builder agent originally translated into `handler.js`. At runtime it's documentation — what the handler is supposed to do. The handler itself is the executable, and you're free to edit it.
 
@@ -77,13 +77,13 @@ A few load-bearing constraints, called out so they don't surprise you:
     Cron, webhook, and pending-webhook triggers. Multi-trigger composition. Manual fire.
   </Card>
   <Card title="Handler runtime" href="/automations/handler" icon="code">
-    The `ctx` surface — tools, agent turns, KV state, prior runs, cross-automation invocation, `onFailure`.
+    The `ctx` surface — tools, a constrained agent turn, KV state, prior runs, `onFailure`, and the replay-safe authoring contract.
   </Card>
   <Card title="Webhooks" href="/automations/webhooks" icon="webhook">
     `/_centraid-hook/<slug>`, the provisioning handshake, secret hashing, rate limits.
   </Card>
   <Card title="Run history" href="/automations/run-history" icon="history">
-    Per-app `runtime.sqlite`, the `runs` ledger, retention policies, audit nodes.
+    Per-app `runtime.sqlite`, the conversation/turn/item ledger, retention policies.
   </Card>
   <Card title="Conversational builder" href="/automations/conversational-builder" icon="message-square">
     How the agent scaffolds `handler.js` from a prompt and hands pending webhooks back to the server.

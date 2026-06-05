@@ -1,5 +1,5 @@
 ---
-summary: 'Three trigger kinds — cron, webhook (provisioned), and webhook (pending). An automation can carry many cron triggers but at most one webhook. Empty array means manual-fire only.'
+summary: 'Two trigger kinds — cron and webhook — with cron firing on the local wall clock. An automation can carry many cron triggers but at most one webhook. Empty array means manual-fire only.'
 title: 'Triggers'
 ---
 
@@ -19,7 +19,7 @@ title: 'Triggers'
 
 ## Cron triggers
 
-A `cron` trigger fires on a standard **5-field UTC cron expression**:
+A `cron` trigger fires on a standard **5-field cron expression**:
 
 ```json
 { "kind": "cron", "expr": "<minute> <hour> <day-of-month> <month> <day-of-week>" }
@@ -30,11 +30,11 @@ A `cron` trigger fires on a standard **5-field UTC cron expression**:
 | `kind` | `"cron"`                                                                 |
 | `expr` | A non-empty 5-field expression. Each field matches `[0-9*,\-/?A-Za-z]+`. |
 
-The validator (`isValidCronExpression`) accepts standard cron syntax — numbers, ranges (`1-5`), lists (`1,15`), steps (`*/5`), wildcards (`*`), and named days/months for the schedulers that support them. **It does not parse semantics**; an expression like `99 * * * *` passes the field-shape check but the underlying scheduler rejects it at registration time.
+The validator (`isValidCronExpression`) only checks field **shape** — five fields, each matching `[0-9*,\-/?A-Za-z]+`. The runtime matcher (`cronMatches`) supports numbers, ranges (`1-5`), lists (`1,15`), steps (`*/5`), wildcards (`*`/`?`), and Vixie day-of-month / day-of-week OR semantics (`dow` accepts both `0` and `7` for Sunday). It does **not** parse named days or months — `MON` / `JAN` pass the shape check but never match a minute, so the automation simply never fires (fail-safe). Use numeric fields.
 
-**Time zone:** UTC. There is no time-zone field in the manifest. If you want "9am local," compute the UTC equivalent at scaffold time and bake it into the expression. The desktop and gateway both register cron in UTC.
+**Time zone:** the in-process scheduler matches against the **local wall clock** of the machine running the gateway (matching the prior launchd/systemd behavior). There is no time-zone field in the manifest. `0 9 * * *` means 9am in the gateway host's local time.
 
-**Multiple cron triggers are fine.** Each is registered independently with the scheduler host. A "weekdays at 9am AND 5pm" automation declares two entries, not one.
+**Multiple cron triggers are fine.** All of an automation's cron expressions are registered together; the scheduler fires the automation when any of them matches the current minute. A "weekdays at 9am AND 5pm" automation declares two entries, not one.
 
 ## Webhook triggers
 
@@ -90,22 +90,20 @@ Older manifests carry a single `trigger` object (singular) instead of `triggers`
 { "trigger": { "kind": "cron", "expr": "0 9 * * 1-5" } }
 ```
 
-This shape is **dual-read** by the validator: it wraps the single object into a one-element `triggers` array. The manifest is rewritten plural the next time it's saved (by the builder, by the toggle, or by a webhook provisioning pass). You do not need to migrate by hand.
-
-The Hydrate template's `weekly-encouragement.json` still ships in the legacy shape as a backward-compat test surface. New automations should use `triggers`.
+This shape is **dual-read** by `resolveTriggers`: it wraps the single object into a one-element `triggers` array. The manifest is rewritten plural the next time it's saved (by the builder, by the toggle, or by a webhook provisioning pass). You do not need to migrate by hand. New automations should use `triggers`.
 
 ## What happens when a trigger fires
 
 Regardless of trigger kind, the firing path is the same:
 
-1. The host (desktop or gateway) resolves the automation by its handle.
-2. If `enabled: false`, the fire is skipped (with a `200 OK / skipped: 'automation disabled'` response for webhooks).
-3. A worker spawns, loads `handler.js`, and invokes the default export. For webhook fires, the parsed HTTP body is passed in as `input`. For cron and manual fires, `input` is empty.
-4. The handler runs. Tool calls, agent turns, and sub-invocations are recorded in `runtime.sqlite`.
-5. The returned `{ summary, output }` is persisted in the `runs` row.
+1. The host (the gateway) resolves the automation by its handle.
+2. If `enabled: false`, the fire is skipped (with a `200 OK / skipped: 'automation disabled'` response for webhooks; the in-process scheduler simply never registers a disabled automation).
+3. The fire opens a fresh execution conversation + turn, then a worker spawns, loads `handler.js`, and invokes the default export. For webhook fires, the parsed HTTP body is passed in as `ctx.input`. For cron and manual fires, `ctx.input` is empty.
+4. The handler runs. The trigger input, each `ctx.tool` and `ctx.agent` call, and the result are recorded in `runtime.sqlite`.
+5. The returned `{ summary, output }` is persisted on the `turns` row.
 6. Retention is applied per `history.keep`.
 
-The `runs` row's `trigger_origin` column tags how the fire was triggered: `"cron"`, `"webhook"`, or `"manual"`. The desktop's run-list UI filters and groups on this.
+Two columns record how a fire was triggered. The turn's **`triggerOrigin`** is the transport — `"cron"`, `"webhook"`, or `"manual"`. The turn's **`triggerKind`** is the intent — `"scheduled"`, `"manual"`, `"replay"`, `"on_failure"`, or `"interactive"` (a chat turn). The desktop's run-list UI filters and groups on these.
 
 ## Where to go next
 

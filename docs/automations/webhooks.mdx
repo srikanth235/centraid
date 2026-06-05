@@ -10,7 +10,7 @@ A webhook trigger fires its automation on an inbound HTTP POST to `/_centraid-ho
 - **Remote-only.** The desktop is a gateway _client_, not an HTTP host. It preserves webhook entries in the manifest but never mounts a listener. Webhook fires happen only when the app is deployed to a remote gateway (`@centraid/openclaw-plugin`).
 - **Privileged provisioning.** The conversational builder agent can declare _intent_ (`{kind: "webhook", pending: true}`) but cannot mint the route slug or the shared secret — those require crypto-random generation and one-shot user surfacing. A server-side provisioning pass rewrites the pending trigger to its provisioned form.
 
-The implementation lives in [`packages/app-engine/src/automation-webhook.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/app-engine/src/automation-webhook.ts).
+The implementation lives in [`packages/automation/src/scaffold/webhook.ts`](https://github.com/srikanthsrungarapu/centraid/blob/main/packages/automation/src/scaffold/webhook.ts).
 
 ## The provisioning handshake
 
@@ -45,7 +45,7 @@ That last property — `automation.json` is user-visible (synced across versions
 | Body cap     | 64 KiB. Exceeding returns `413`.                                 |
 | Body parsing | Parsed as JSON when valid; otherwise passed through as a string. |
 
-The route resolves the slug **globally** — webhook ids are unique across the gateway, so `listAutomations(appsDir)` scans every app's automations for a matching `webhookTriggerOf(triggers)?.id === slug`. First match wins.
+The route resolves the slug **globally** — webhook ids are unique across the gateway, so `list(appsDir)` scans every app's automations for a matching `webhookTriggerOf(triggers)?.id === slug`. First match wins.
 
 ## Authentication
 
@@ -114,9 +114,9 @@ A non-JSON body comes through as a string. An empty body comes through as `undef
 
 ## Desktop behavior
 
-The desktop scheduler host (`OsSchedulerHost`) deliberately **skips webhook triggers** at registration time. The manifest is preserved verbatim — if the user uploads the app to a remote gateway later, the webhook is already provisioned and ready. But locally, the only way to fire a webhook-triggered automation is the "Run now" button, which fires with empty `input`.
+There is no webhook _listener_ on the desktop. Only the remote gateway (`@centraid/openclaw-plugin`) mounts the `/_centraid-hook` route via `makeWebhookRouteHandler`; the local in-process scheduler (`InProcessScheduler`) handles cron triggers only and ignores webhook entries entirely. The manifest is preserved verbatim — if the user uploads the app to a remote gateway later, the webhook is already provisioned and ready. Locally, the only way to fire a webhook-triggered automation is the "Run now" button, which fires with empty `input`.
 
-This means the conversational builder can still ask the user "do you want this triggered by a GitHub webhook?" on the desktop — the provisioning pass mints the slug + secret, the desktop shows the secret to the user, but actual webhook fires happen only after the app moves to a gateway.
+This means the conversational builder can still ask the user "do you want this triggered by a GitHub webhook?" on the desktop — the provisioning pass (`provisionAppPendingWebhooks` / `provisionPendingWebhooksInFiles`) mints the slug + secret, the desktop shows the secret to the user, but actual webhook fires happen only after the app moves to a gateway.
 
 ## Rotating a secret
 

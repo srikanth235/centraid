@@ -61,8 +61,8 @@ export interface GatewayPaths {
    * Optional path to the gateway-owned model catalog (`model-catalog.json`,
    * issue #188). When set, the default `runnerStatus` reporter persists the
    * chat picker's per-runner model list here and re-enumerates it on Refresh.
-   * Omit to fall back to the hardcoded default seed without persistence
-   * (e.g. the OpenClaw plugin, which supplies its own `runnerStatus`).
+   * Omit to enumerate without persistence (e.g. the OpenClaw plugin, which
+   * supplies its own `runnerStatus`); there is no hardcoded default seed.
    */
   modelCatalogFile?: string;
 }
