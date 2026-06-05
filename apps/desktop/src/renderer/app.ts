@@ -30,6 +30,8 @@ import {
   deleteApp,
   type RunStreamEvent,
 } from './gateway-client.js';
+import { auStatusForRow, glyphForId, hueForId } from './automation-identity.js';
+import { cronNextRuns } from './cron.js';
 
 (function () {
   const root = document.querySelector('#root') as HTMLElement;
@@ -1764,17 +1766,105 @@ import {
     run: CentraidAutomationRunRecord;
   }
 
+  // ── Automation identity + status DOM primitives (Automations redesign) ──
+  // Pure derivation (hueForId / glyphForId / auStatusForRow) lives in the
+  // testable ./automation-identity module; these wrap it in DOM. Identity is
+  // DECORATIVE ONLY — it tints the glyph tile, the trigger-hero rail, and
+  // status dots. Every CTA / active state keeps the single `--accent` action
+  // colour — the hue must never theme a button or toggle.
+
+  // Hue-tinted app-icon tile at the automation's identity hue + glyph.
+  function autoGlyphTile(
+    id: string,
+    opts: { size?: number; glyphSize?: number } = {},
+  ): HTMLElement {
+    const size = opts.size ?? 42;
+    const glyph = glyphForId(id) as IconNameType;
+    return el('span', {
+      class: 'cd-au-glyph',
+      'data-hue': hueForId(id),
+      style: { width: `${size}px`, height: `${size}px` },
+      trustedHtml: (Icon[glyph] ?? Icon.Bolt)({
+        size: opts.glyphSize ?? Math.round(size * 0.45),
+      }),
+    });
+  }
+
+  // Status is ALWAYS icon + label, never colour alone (WCAG + colourblind).
+  // `active`/`paused`/`draft` describe an automation; `running`/`success`/
+  // `failed` describe a single run.
+  type AuStatus = 'active' | 'paused' | 'draft' | 'running' | 'success' | 'failed';
+  const AU_STATUS_META: Record<AuStatus, { label: string; icon: IconNameType; spin?: boolean }> = {
+    active: { label: 'Active', icon: 'Power' },
+    paused: { label: 'Paused', icon: 'Pause' },
+    draft: { label: 'Draft', icon: 'Pencil' },
+    running: { label: 'Running', icon: 'Loader', spin: true },
+    success: { label: 'Success', icon: 'CheckCircle' },
+    failed: { label: 'Failed', icon: 'AlertTriangle' },
+  };
+  function auStatusPill(kind: AuStatus, label?: string): HTMLElement {
+    const m = AU_STATUS_META[kind];
+    const text = label ?? m.label;
+    return el('span', { class: 'cd-au-status', 'data-tone': kind, role: 'status' }, [
+      el('span', {
+        class: 'cd-au-status-ic',
+        'data-spin': m.spin ? 'true' : undefined,
+        'aria-hidden': 'true',
+        trustedHtml: Icon[m.icon]({ size: 12 }),
+      }),
+      el('span', { class: 'cd-au-status-tx' }, text),
+    ]);
+  }
+  // Trigger badge — cron-clock / webhook glyph + human schedule label.
+  function triggerBadge(
+    triggers: ReadonlyArray<{ kind: string; expr?: string }>,
+    opts: { mono?: boolean } = {},
+  ): HTMLElement {
+    const hasCron = triggers.some((t) => t.kind === 'cron');
+    const hasWebhook = triggers.some((t) => t.kind === 'webhook');
+    const icon: IconNameType = hasWebhook && !hasCron ? 'Webhook' : 'Clock';
+    return el(
+      'span',
+      {
+        class: 'cd-au-trigbadge',
+        'data-mono': opts.mono ? 'true' : undefined,
+      },
+      [
+        el('span', {
+          class: 'cd-au-trigbadge-ic',
+          'aria-hidden': 'true',
+          trustedHtml: Icon[icon]({ size: 12 }),
+        }),
+        el('span', { class: 'cd-au-trigbadge-tx' }, triggersSummary(triggers)),
+      ],
+    );
+  }
+
   // The Automations landing — a single overview rather than the old
   // two-tab (Executions / Standing orders) shell: your automations on
   // the left, the recent-run stream on the right. Each automation opens
   // its viewer; each run opens as a thread.
+  // Skeleton placeholder rows shown while the overview loads — keeps the
+  // page shape stable instead of a bare "Loading…" string.
+  function automationsSkeleton(): HTMLElement {
+    const wrap = el('div', { class: 'cd-au-ov' });
+    wrap.append(el('div', { class: 'cd-au-skel-strip', 'aria-hidden': 'true' }));
+    const list = el('div', { class: 'cd-au-ov-list', 'aria-hidden': 'true' });
+    for (let i = 0; i < 4; i += 1) list.append(el('div', { class: 'cd-au-skel-row' }));
+    wrap.append(
+      el('div', { class: 'cd-au-loading-label', role: 'status' }, 'Loading automations…'),
+      list,
+    );
+    return wrap;
+  }
+
   function renderAutomations(): void {
     recordRoute({ kind: 'automations' });
     clear();
     const main = el('div', { class: 'has-wall' });
     const scroll = el('div', { class: 'cd-main-scroll' });
     main.append(scroll);
-    scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading automations…'));
+    scroll.append(automationsSkeleton());
     mountShellPage('automations', main);
     void (async () => {
       let rows: CentraidAutomationRow[] = [];
@@ -1784,11 +1874,25 @@ import {
       } catch (err) {
         if (document.contains(scroll)) {
           scroll.replaceChildren(
-            el(
-              'div',
-              { class: 'cd-au-loading' },
-              `Could not load automations: ${err instanceof Error ? err.message : String(err)}`,
-            ),
+            el('div', { class: 'cd-au-error' }, [
+              el('div', {
+                class: 'cd-au-error-icon',
+                'aria-hidden': 'true',
+                trustedHtml: Icon.AlertCircle({ size: 22 }),
+              }),
+              el('div', { class: 'cd-au-error-title' }, "Couldn't load automations"),
+              el(
+                'div',
+                { class: 'cd-au-error-text' },
+                err instanceof Error ? err.message : String(err),
+              ),
+              el('button', {
+                class: 'cd-au-btn cd-au-btn-primary',
+                type: 'button',
+                trustedHtml: `${Icon.Refresh({ size: 14 })}<span>Retry</span>`,
+                onClick: () => renderAutomations(),
+              }),
+            ]),
           );
         }
         return;
@@ -1816,56 +1920,72 @@ import {
     ]);
   }
 
+  // A row of bare integration dots (no labels) — the `mini` IntegrationChip
+  // from the spec. Each dot carries the connected app's palette hue + a title
+  // so the colour is never the only signal.
+  function integrationDots(names: readonly string[]): HTMLElement {
+    const wrap = el('div', { class: 'cd-au-ov-dots', 'aria-hidden': names.length === 0 });
+    for (const name of names.slice(0, 4)) {
+      const hue = INTEGRATION_HUES[name] ?? 'slate';
+      const dot = el('i', { class: 'cd-au-ov-dot', title: name });
+      dot.style.background = `var(--c-${hue})`;
+      wrap.append(dot);
+    }
+    if (names.length > 4)
+      wrap.append(el('span', { class: 'cd-au-ov-dot-more' }, `+${names.length - 4}`));
+    return wrap;
+  }
+
   // One automation in the overview list — opens the automation viewer.
+  // Grid: glyph · name + trigger badge · integration dots · last-run · status
+  // pill + chevron. The identity hue tints the glyph tile + left rail only;
+  // the row link itself uses the standard --accent focus/hover.
   function renderOverviewAutomationRow(
     row: CentraidAutomationRow,
     last: AutomationFeedEntry | undefined,
   ): HTMLElement {
-    const hasCron = row.triggers.some((t) => t.kind === 'cron');
-    const hasWebhook = row.triggers.some((t) => t.kind === 'webhook');
-    const trigIcon = hasWebhook && !hasCron ? Icon.Globe({ size: 12 }) : Icon.History({ size: 12 });
+    const integrations = row.manifest.requires.mcps ?? [];
     return el(
       'button',
       {
         class: 'cd-au-ov-row',
         type: 'button',
-        'data-on': String(row.enabled),
+        'data-hue': hueForId(row.id),
         onClick: () => renderAutomationView(row.ref),
       },
       [
-        el('span', {
-          class: 'cd-au-ov-glyph',
-          'data-on': String(row.enabled),
-          trustedHtml: Icon.Bolt({ size: 17 }),
-        }),
+        autoGlyphTile(row.id, { size: 38, glyphSize: 17 }),
         el('span', { class: 'cd-au-ov-body' }, [
           el('span', { class: 'cd-au-ov-name' }, row.name),
-          el('span', { class: 'cd-au-ov-trig' }, [
-            el('span', { class: 'cd-au-ov-trig-ic', trustedHtml: trigIcon }),
-            triggersSummary(row.triggers),
-          ]),
+          triggerBadge(row.triggers, { mono: true }),
         ]),
+        integrationDots([...integrations]),
+        el(
+          'span',
+          { class: 'cd-au-ov-last' },
+          last
+            ? `Last run ${relativeTime(new Date(last.run.startedAt).toISOString())}`
+            : 'No runs yet',
+        ),
         el('span', { class: 'cd-au-ov-right' }, [
-          el(
-            'span',
-            { class: 'cd-au-status', 'data-on': String(row.enabled) },
-            row.enabled ? 'Active' : 'Paused',
-          ),
-          el(
-            'span',
-            { class: 'cd-au-ov-last' },
-            last
-              ? `Last run ${relativeTime(new Date(last.run.startedAt).toISOString())}`
-              : 'No runs yet',
-          ),
+          auStatusPill(auStatusForRow(row.enabled, !!last)),
+          el('span', {
+            class: 'cd-au-ov-chev',
+            'aria-hidden': 'true',
+            trustedHtml: Icon.ChevronRight({ size: 16 }),
+          }),
         ]),
       ],
     );
   }
 
   // One run in the overview's recent-activity stream — opens the thread.
+  // success/fail icon · name · summary or error · relative time · trigger ·
+  // dur·tokens (mono).
   function renderOverviewRunRow(entry: AutomationFeedEntry): HTMLElement {
     const { run, automationName, automationId } = entry;
+    const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
+    const dur = run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : '—';
     return el(
       'button',
       {
@@ -1878,7 +1998,8 @@ import {
         el('span', {
           class: 'cd-au-ov-run-ic',
           'data-ok': String(run.ok),
-          trustedHtml: run.ok ? Icon.Check({ size: 12 }) : Icon.X({ size: 12 }),
+          'aria-hidden': 'true',
+          trustedHtml: run.ok ? Icon.CheckCircle({ size: 14 }) : Icon.AlertTriangle({ size: 14 }),
         }),
         el('span', { class: 'cd-au-ov-run-body' }, [
           el('span', { class: 'cd-au-ov-run-name' }, automationName),
@@ -1890,7 +2011,11 @@ import {
         ]),
         el('span', { class: 'cd-au-ov-run-when' }, [
           el('b', {}, relativeTime(new Date(run.startedAt).toISOString())),
-          el('span', {}, run.triggerOrigin ?? run.triggerKind),
+          el(
+            'span',
+            { class: 'cd-au-ov-run-meta' },
+            `${run.triggerOrigin ?? run.triggerKind} · ${dur} · ${fmtTokens(tokens)}`,
+          ),
         ]),
       ],
     );
@@ -1911,8 +2036,21 @@ import {
     const lastByRef = new Map<string, AutomationFeedEntry>();
     for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
 
-    const active = rows.filter((r) => r.enabled).length;
-    const subParts = [`${active} active`, `${rows.length - active} paused`];
+    // Health tallies. paused vs draft splits the disabled set by whether the
+    // automation has ever run; "need attention" is anything whose last run
+    // failed (regardless of enabled state).
+    let active = 0;
+    let paused = 0;
+    let drafts = 0;
+    let attention = 0;
+    for (const r of rows) {
+      const lastEntry = lastByRef.get(r.ref);
+      if (r.enabled) active += 1;
+      else if (lastEntry) paused += 1;
+      else drafts += 1;
+      if (lastEntry && !lastEntry.run.ok) attention += 1;
+    }
+    const subParts = [`${active} active`, `${paused + drafts} paused`];
     if (runs.length > 0) subParts.push(`${runs.length} recent runs`);
 
     wrap.append(
@@ -1928,6 +2066,34 @@ import {
         automationsHeaderActions(),
       ]),
     );
+
+    if (rows.length > 0) {
+      const healthTile = (
+        icon: IconNameType,
+        value: number,
+        label: string,
+        tone: 'active' | 'paused' | 'draft' | 'attention',
+      ): HTMLElement =>
+        el('div', { class: 'cd-au-health-tile', 'data-tone': tone }, [
+          el('span', {
+            class: 'cd-au-health-ic',
+            'aria-hidden': 'true',
+            trustedHtml: Icon[icon]({ size: 16 }),
+          }),
+          el('div', { class: 'cd-au-health-meta' }, [
+            el('span', { class: 'cd-au-health-v' }, String(value)),
+            el('span', { class: 'cd-au-health-k' }, label),
+          ]),
+        ]);
+      wrap.append(
+        el('div', { class: 'cd-au-health' }, [
+          healthTile('Power', active, 'Active', 'active'),
+          healthTile('Pause', paused, 'Paused', 'paused'),
+          healthTile('Pencil', drafts, 'Drafts', 'draft'),
+          healthTile('AlertTriangle', attention, 'Need attention', 'attention'),
+        ]),
+      );
+    }
 
     if (rows.length === 0) {
       wrap.append(
@@ -2051,14 +2217,17 @@ import {
     return wrap;
   }
 
-  function renderAutomationTemplateCard(template: TemplateEntry): HTMLElement {
+  function renderAutomationTemplateCard(
+    template: TemplateEntry,
+    onOpen: (t: TemplateEntry) => void = openAutomationTemplatePreview,
+  ): HTMLElement {
     const card = el('button', {
       class: 'cd-au-tpl-card',
       type: 'button',
-      onClick: () => void adoptTemplate(template),
+      onClick: () => onOpen(template),
     });
     const trigIcon =
-      template.triggerKind === 'webhook' ? Icon.Globe({ size: 13 }) : Icon.History({ size: 13 });
+      template.triggerKind === 'webhook' ? Icon.Webhook({ size: 13 }) : Icon.Clock({ size: 13 });
     card.append(
       el('span', {
         class: 'cd-au-tpl-use',
@@ -2071,7 +2240,11 @@ import {
       el('span', { class: 'cd-au-tpl-desc' }, template.desc),
       el('span', { class: 'cd-au-tpl-foot' }, [
         el('span', { class: 'cd-au-tpl-trig' }, [
-          el('span', { class: 'cd-au-tpl-trig-icon', trustedHtml: trigIcon }),
+          el('span', {
+            class: 'cd-au-tpl-trig-icon',
+            'aria-hidden': 'true',
+            trustedHtml: trigIcon,
+          }),
           template.triggerLabel ?? '',
         ]),
         renderIntegrationChips(template.integrations ?? []),
@@ -2080,12 +2253,92 @@ import {
     return card;
   }
 
-  // Renders the Automations → "Browse templates" gallery. Loads the
-  // automation templates from the same IPC the home shelf uses, grouped
-  // by `category`. Adopting a card routes through the same `cloneTemplate`
-  // IPC as the home-shelf "Use template" — single code path for both
-  // template kinds, with `suggestCloneIdentity` providing collision-safe
-  // (id, name) pairs.
+  // Preview drawer — a right-side panel describing an automation template
+  // before adopting it. "Use template" routes into the conversational builder
+  // pre-seeded. (Distinct from the home shelf's centered app-template modal,
+  // `openTemplatePreview`.)
+  function openAutomationTemplatePreview(template: TemplateEntry): void {
+    const integrations = template.integrations ?? [];
+    const trigIcon =
+      template.triggerKind === 'webhook' ? Icon.Webhook({ size: 14 }) : Icon.Clock({ size: 14 });
+    const backdrop = el('div', { class: 'cd-au-drawer-backdrop' });
+    const panel = el('div', {
+      class: 'cd-au-drawer',
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': `${template.name} template`,
+    });
+    const close = (): void => {
+      backdrop.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') close();
+    }
+    document.addEventListener('keydown', onKey);
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) close();
+    });
+
+    const stepsList = el('ul', { class: 'cd-au-drawer-steps' });
+    for (const line of [
+      `Fires ${template.triggerLabel ?? 'on a trigger'}.`,
+      template.desc,
+      integrations.length > 0
+        ? `Works through ${integrations.join(', ')}.`
+        : 'Runs with the workspace default tools.',
+    ]) {
+      stepsList.append(el('li', {}, line));
+    }
+
+    const useBtn = el('button', {
+      class: 'cd-au-btn cd-au-btn-primary',
+      type: 'button',
+      trustedHtml: `<span>Use template</span>${Icon.ArrowRight({ size: 14 })}`,
+      onClick: () => {
+        close();
+        void adoptTemplate(template);
+      },
+    });
+
+    panel.append(
+      el('div', { class: 'cd-au-drawer-head' }, [
+        el('span', { class: 'cd-au-drawer-emoji' }, template.emoji ?? '⚙️'),
+        el('div', {}, [
+          el('div', { class: 'cd-au-drawer-name' }, template.name),
+          el('div', { class: 'cd-au-drawer-trig' }, [
+            el('span', { 'aria-hidden': 'true', trustedHtml: trigIcon }),
+            template.triggerLabel ?? 'Manual',
+          ]),
+        ]),
+        el('button', {
+          class: 'cd-au-drawer-close',
+          type: 'button',
+          'aria-label': 'Close',
+          trustedHtml: Icon.X({ size: 16 }),
+          onClick: close,
+        }),
+      ]),
+      el('div', { class: 'cd-au-drawer-body' }, [
+        el('div', { class: 'cd-au-drawer-sec-l' }, 'What it does'),
+        stepsList,
+        ...(integrations.length > 0
+          ? [
+              el('div', { class: 'cd-au-drawer-sec-l' }, 'Connects'),
+              renderIntegrationChips([...integrations]),
+            ]
+          : []),
+      ]),
+      el('div', { class: 'cd-au-drawer-foot' }, [useBtn]),
+    );
+    backdrop.append(panel);
+    document.body.append(backdrop);
+  }
+
+  // Renders the Automations → "Browse templates" gallery: a live-search +
+  // trigger segmented filter + integration filter chips over the
+  // category-grouped card grid. Cards open a preview drawer; "Use template"
+  // routes through `cloneTemplate` (the same IPC the home shelf uses).
   function renderAutomationTemplates(): void {
     recordRoute({ kind: 'templates' });
     clear();
@@ -2093,29 +2346,203 @@ import {
       'Templates',
       'Proven automations, pre-wired with triggers and integrations. Adopt one and tune it to your workflow.',
     );
-    const catsWrap = el('div', { class: 'cd-au-tpl-cats' });
     scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading templates…'));
     mountShellPage('automations', main);
     void loadAutomationTemplates().then((tmpls) => {
+      scroll.replaceChildren(buildTemplatesGallery(tmpls));
+    });
+  }
+
+  function buildTemplatesGallery(tmpls: readonly TemplateEntry[]): HTMLElement {
+    const wrap = el('div', { class: 'cd-au-tpl-wrap' });
+
+    // Filter state.
+    let query = '';
+    let trig: 'all' | 'cron' | 'webhook' = 'all';
+    const activeIntegrations = new Set<string>();
+
+    // All integrations referenced across the catalog → filter chips.
+    const allIntegrations: string[] = [];
+    for (const t of tmpls) {
+      for (const i of t.integrations ?? [])
+        if (!allIntegrations.includes(i)) allIntegrations.push(i);
+    }
+
+    const matches = (t: TemplateEntry): boolean => {
+      if (trig !== 'all' && (t.triggerKind ?? 'cron') !== trig) return false;
+      if (activeIntegrations.size > 0) {
+        const ints = t.integrations ?? [];
+        for (const want of activeIntegrations) if (!ints.includes(want)) return false;
+      }
+      if (query) {
+        const hay =
+          `${t.name} ${t.desc} ${t.category ?? ''} ${(t.integrations ?? []).join(' ')}`.toLowerCase();
+        if (!hay.includes(query)) return false;
+      }
+      return true;
+    };
+
+    const results = el('div', { class: 'cd-au-tpl-cats' });
+    const paint = (): void => {
+      const shown = tmpls.filter(matches);
+      if (shown.length === 0) {
+        results.replaceChildren(
+          el('div', { class: 'cd-au-tpl-empty' }, [
+            el('div', {
+              class: 'cd-au-tpl-empty-icon',
+              'aria-hidden': 'true',
+              trustedHtml: Icon.Filter({ size: 22 }),
+            }),
+            el('div', { class: 'cd-au-tpl-empty-title' }, 'No templates match'),
+            el(
+              'div',
+              { class: 'cd-au-tpl-empty-text' },
+              'Try a different search or clear the filters.',
+            ),
+            el('div', { class: 'cd-au-tpl-empty-actions' }, [
+              el('button', {
+                class: 'cd-au-btn cd-au-btn-ghost',
+                type: 'button',
+                trustedHtml: `${Icon.X({ size: 14 })}<span>Clear filters</span>`,
+                onClick: () => {
+                  query = '';
+                  trig = 'all';
+                  activeIntegrations.clear();
+                  searchInput.value = '';
+                  syncControls();
+                  paint();
+                },
+              }),
+              el('button', {
+                class: 'cd-au-btn cd-au-btn-primary',
+                type: 'button',
+                trustedHtml: `${Icon.Sparkle({ size: 14 })}<span>Start from scratch</span>`,
+                onClick: () => void createAndOpenAutomationBuilder(),
+              }),
+            ]),
+          ]),
+        );
+        return;
+      }
       const cats: string[] = [];
-      for (const t of tmpls) {
+      for (const t of shown) {
         const c = t.category ?? 'Other';
         if (!cats.includes(c)) cats.push(c);
       }
+      const sections: HTMLElement[] = [];
       for (const cat of cats) {
         const grid = el('div', { class: 'cd-au-tpl-grid' });
-        for (const t of tmpls) {
-          if ((t.category ?? 'Other') === cat) grid.append(renderAutomationTemplateCard(t));
+        for (const t of shown) {
+          if ((t.category ?? 'Other') === cat)
+            grid.append(renderAutomationTemplateCard(t, openAutomationTemplatePreview));
         }
-        catsWrap.append(
+        sections.push(
           el('section', { class: 'cd-au-tpl-cat' }, [
             el('div', { class: 'cd-au-tpl-cat-label' }, cat),
             grid,
           ]),
         );
       }
-      scroll.replaceChildren(catsWrap);
+      results.replaceChildren(...sections);
+    };
+
+    // Search.
+    const searchInput = el('input', {
+      class: 'cd-au-tpl-search-in',
+      type: 'search',
+      placeholder: 'Search templates…',
+      'aria-label': 'Search templates',
+    }) as HTMLInputElement;
+    searchInput.addEventListener('input', () => {
+      query = searchInput.value.trim().toLowerCase();
+      paint();
     });
+    const search = el('div', { class: 'cd-au-tpl-search' }, [
+      el('span', {
+        class: 'cd-au-tpl-search-ic',
+        'aria-hidden': 'true',
+        trustedHtml: Icon.Search({ size: 14 }),
+      }),
+      searchInput,
+    ]);
+
+    // Trigger segmented filter (All / Cron / Webhook).
+    const seg = el('div', {
+      class: 'cd-au-tpl-seg',
+      role: 'tablist',
+      'aria-label': 'Filter by trigger',
+    });
+    const segBtns: HTMLElement[] = [];
+    for (const opt of [
+      { k: 'all', label: 'All' },
+      { k: 'cron', label: 'Cron' },
+      { k: 'webhook', label: 'Webhook' },
+    ] as const) {
+      const b = el(
+        'button',
+        {
+          class: 'cd-au-tpl-seg-b',
+          type: 'button',
+          role: 'tab',
+          'data-k': opt.k,
+          onClick: () => {
+            trig = opt.k;
+            syncControls();
+            paint();
+          },
+        },
+        opt.label,
+      );
+      segBtns.push(b);
+      seg.append(b);
+    }
+
+    // Integration filter chips.
+    const chips = el('div', { class: 'cd-au-tpl-fltr-chips' });
+    const chipEls = new Map<string, HTMLElement>();
+    for (const name of allIntegrations) {
+      const hue = INTEGRATION_HUES[name] ?? 'slate';
+      const dot = el('i', { class: 'cd-au-chip-dot', 'aria-hidden': 'true' });
+      dot.style.background = `var(--c-${hue})`;
+      const chip = el(
+        'button',
+        {
+          class: 'cd-au-tpl-fltr-chip',
+          type: 'button',
+          'aria-pressed': 'false',
+          onClick: () => {
+            if (activeIntegrations.has(name)) activeIntegrations.delete(name);
+            else activeIntegrations.add(name);
+            syncControls();
+            paint();
+          },
+        },
+        [dot, name],
+      );
+      chipEls.set(name, chip);
+      chips.append(chip);
+    }
+
+    const syncControls = (): void => {
+      for (const b of segBtns) {
+        if (b.dataset.k === trig) b.dataset.active = 'true';
+        else delete b.dataset.active;
+      }
+      for (const [name, chip] of chipEls) {
+        const on = activeIntegrations.has(name);
+        chip.dataset.active = on ? 'true' : '';
+        if (!on) delete chip.dataset.active;
+        chip.setAttribute('aria-pressed', String(on));
+      }
+    };
+
+    const toolbar = el('div', { class: 'cd-au-tpl-toolbar' }, [search, seg]);
+    wrap.append(toolbar);
+    if (allIntegrations.length > 0) wrap.append(chips);
+    wrap.append(results);
+    syncControls();
+    paint();
+    return wrap;
   }
 
   // Adopting an automation template goes through the same `cloneTemplate`
@@ -2261,19 +2688,11 @@ import {
       el('span', {}, row.name),
     ]);
 
-    const statusPill = el(
-      'span',
-      { class: 'cd-au-status', 'data-on': String(row.enabled) },
-      row.enabled ? 'Active' : 'Paused',
-    );
+    const hasRun = runs.length > 0;
     const title = el('div', { class: 'cd-au-vtitle' }, [
-      el('span', {
-        class: 'cd-au-glyph',
-        'data-on': String(row.enabled),
-        trustedHtml: Icon.Bolt({ size: 19 }),
-      }),
+      autoGlyphTile(row.id, { size: 42, glyphSize: 19 }),
       el('h1', {}, row.name),
-      statusPill,
+      auStatusPill(auStatusForRow(row.enabled, hasRun)),
     ]);
 
     const editBtn = el('button', {
@@ -2309,7 +2728,10 @@ import {
     ]);
     view.append(header);
 
-    // ── Trigger hero ──
+    // ── Trigger hero ── (Direction A centrepiece). Identity hue tints the
+    // big icon + a 3px rail; the schedule reads as a display-font headline;
+    // cron shows the raw expression + next-3-runs pills; webhook shows the
+    // endpoint URL with copy + a server-side-secret note (or provisioning).
     const cronExprs = row.triggers
       .filter((t): t is { kind: 'cron'; expr: string } => t.kind === 'cron')
       .map((t) => t.expr);
@@ -2319,30 +2741,111 @@ import {
         triggerDetail.append(el('span', { class: 'cd-au-hero-tag' }, 'cron'), el('code', {}, expr));
       }
     }
+
+    // Next-3-runs pills (cron only).
+    const nextRuns = el('div', { class: 'cd-au-hero-next' });
+    if (hasCron && cronExprs[0]) {
+      const upcoming = cronNextRuns(cronExprs[0], 3);
+      if (upcoming.length > 0) {
+        nextRuns.append(el('span', { class: 'cd-au-hero-next-lbl' }, 'Next'));
+        for (const d of upcoming) {
+          nextRuns.append(
+            el(
+              'span',
+              { class: 'cd-au-hero-next-pill' },
+              d.toLocaleString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+            ),
+          );
+        }
+      }
+    }
+
+    // Webhook endpoint row — URL + copy + "secret minted server-side", or a
+    // provisioning state while the endpoint spins up. The secret itself is
+    // minted server-side and never returned in full.
+    let webhookRow: HTMLElement | null = null;
     if (hasWebhook) {
       const wh = row.triggers.find((t) => t.kind === 'webhook') as
         | { kind: 'webhook'; id?: string; pending?: true }
         | undefined;
-      triggerDetail.append(
-        el('span', { class: 'cd-au-hero-tag' }, 'webhook'),
-        el('code', {}, wh?.pending ? 'pending activation' : (wh?.id ?? 'endpoint assigned')),
-      );
+      if (wh?.pending || !wh?.id) {
+        webhookRow = el('div', { class: 'cd-au-hero-webhook', 'data-provisioning': 'true' }, [
+          el('span', {
+            class: 'cd-au-status-ic',
+            'data-spin': 'true',
+            'aria-hidden': 'true',
+            trustedHtml: Icon.Loader({ size: 13 }),
+          }),
+          el('span', {}, 'Provisioning endpoint…  ·  secret minted server-side'),
+        ]);
+      } else {
+        const hookPath = `/_centraid-hook/${wh.id}`;
+        const copyBtn = el('button', {
+          class: 'cd-au-hero-copy',
+          type: 'button',
+          'aria-label': 'Copy webhook URL',
+          title: 'Copy webhook URL',
+          trustedHtml: Icon.Copy({ size: 13 }),
+        });
+        copyBtn.addEventListener('click', () => {
+          void navigator.clipboard
+            .writeText(hookPath)
+            .then(() => showToast('Webhook URL copied'))
+            .catch(() => showToast('Could not copy to clipboard'));
+        });
+        webhookRow = el('div', { class: 'cd-au-hero-webhook' }, [
+          el('span', {
+            class: 'cd-au-hero-wh-ic',
+            'aria-hidden': 'true',
+            trustedHtml: Icon.Webhook({ size: 14 }),
+          }),
+          el('code', { class: 'cd-au-hero-wh-url' }, hookPath),
+          copyBtn,
+          el('span', { class: 'cd-au-hero-wh-note' }, [
+            el('span', { 'aria-hidden': 'true', trustedHtml: Icon.Key({ size: 12 }) }),
+            'Secret minted server-side',
+          ]),
+        ]);
+      }
     }
 
+    // Enable switch — role=switch with aria-checked, draft→Enabling…→active
+    // lifecycle, spec toasts, revert-on-error. The CTA accent stays --accent.
     const statusToggle = el('label', {
       class: 'cd-au-switch',
-      'aria-label': `${row.enabled ? 'Disable' : 'Enable'} ${row.name}`,
+      title: row.enabled ? 'Disable' : 'Enable',
     });
-    const toggleInput = el('input', { type: 'checkbox' }) as HTMLInputElement;
+    const toggleInput = el('input', { type: 'checkbox', role: 'switch' }) as HTMLInputElement;
     toggleInput.checked = row.enabled;
+    toggleInput.setAttribute('aria-checked', String(row.enabled));
+    toggleInput.setAttribute('aria-label', `${row.enabled ? 'Disable' : 'Enable'} ${row.name}`);
+    const toggleState = el(
+      'span',
+      { class: 'cd-au-hero-toggle-state' },
+      row.enabled ? 'Active' : 'Paused',
+    );
     toggleInput.addEventListener('change', () => {
       const next = toggleInput.checked;
+      toggleInput.disabled = true;
+      toggleState.textContent = next ? 'Enabling…' : 'Disabling…';
       void (async () => {
         try {
           await setAutomationEnabled({ automationId: row.ref, enabled: next });
+          showToast(
+            next ? `Enabled · ${triggersSummary(row.triggers)}` : 'Disabled — schedule stopped',
+          );
           renderAutomationView(row.ref);
         } catch (err) {
+          // Revert to the previous state + name the cause.
           toggleInput.checked = row.enabled;
+          toggleInput.setAttribute('aria-checked', String(row.enabled));
+          toggleInput.disabled = false;
+          toggleState.textContent = row.enabled ? 'Active' : 'Paused';
           showToast(
             `Could not ${next ? 'enable' : 'disable'} ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
           );
@@ -2354,22 +2857,24 @@ import {
       el('span', { class: 'cd-au-switch-track', 'aria-hidden': 'true' }),
     );
 
-    const hero = el('div', { class: 'cd-au-hero' }, [
+    const heroMain = el('div', { class: 'cd-au-hero-main' }, [
+      el('div', { class: 'cd-au-hero-eyebrow' }, hasWebhook && !hasCron ? 'Trigger' : 'Schedule'),
+      el('div', { class: 'cd-au-hero-when' }, triggersSummary(row.triggers)),
+      triggerDetail,
+    ]);
+    if (nextRuns.childElementCount > 0) heroMain.append(nextRuns);
+    if (webhookRow) heroMain.append(webhookRow);
+
+    const hero = el('div', { class: 'cd-au-hero', 'data-hue': hueForId(row.id) }, [
       el('span', {
         class: 'cd-au-hero-icon',
-        trustedHtml: hasWebhook && !hasCron ? Icon.Globe({ size: 26 }) : Icon.History({ size: 26 }),
+        'aria-hidden': 'true',
+        trustedHtml: hasWebhook && !hasCron ? Icon.Webhook({ size: 26 }) : Icon.Clock({ size: 26 }),
       }),
-      el('div', { class: 'cd-au-hero-main' }, [
-        el('div', { class: 'cd-au-hero-eyebrow' }, hasWebhook && !hasCron ? 'Trigger' : 'Schedule'),
-        el('div', { class: 'cd-au-hero-when' }, triggersSummary(row.triggers)),
-        triggerDetail,
-      ]),
+      heroMain,
       el('div', { class: 'cd-au-hero-status' }, [
         el('div', { class: 'cd-au-hero-eyebrow' }, 'Status'),
-        el('div', { class: 'cd-au-hero-toggle' }, [
-          statusToggle,
-          el('span', {}, row.enabled ? 'Active' : 'Paused'),
-        ]),
+        el('div', { class: 'cd-au-hero-toggle' }, [statusToggle, toggleState]),
       ]),
     ]);
     view.append(hero);
@@ -2486,11 +2991,10 @@ import {
   // worked through some steps, and it ended with a reply. The n8n-style
   // step timeline is folded into a collapsible group inside the thread.
 
-  // Human label + icon for what fired a run.
-  function runTriggerLabel(run: CentraidAutomationRunRecord): { label: string; icon: string } {
-    if (run.triggerOrigin === 'webhook') {
-      return { label: 'Webhook trigger', icon: Icon.Globe({ size: 12 }) };
-    }
+  // Human label for what fired a run. (The run-timeline carries its own
+  // trigger glyph on the rail, so no icon is returned here.)
+  function runTriggerLabel(run: CentraidAutomationRunRecord): string {
+    if (run.triggerOrigin === 'webhook') return 'Webhook trigger';
     const byKind: Record<string, string> = {
       scheduled: 'Scheduled run',
       manual: 'Manual run',
@@ -2498,47 +3002,86 @@ import {
       on_failure: 'Failure-triggered run',
       interactive: 'Interactive run',
     };
-    const icon =
-      run.triggerKind === 'manual'
-        ? Icon.Bolt({ size: 12 })
-        : run.triggerKind === 'scheduled'
-          ? Icon.History({ size: 12 })
-          : Icon.Reset({ size: 12 });
-    return { label: byKind[run.triggerKind] ?? 'Run', icon };
+    return byKind[run.triggerKind] ?? 'Run';
   }
 
-  // One node of a run rendered as a thread step — an expandable row
-  // carrying the tool/agent name, duration, and (on open) its payload.
-  function renderThreadStep(node: CentraidAutomationRunNode, liveText?: string): HTMLElement {
-    const step = el('div', { class: 'cd-au-step', 'data-ok': String(node.ok) });
-    const body = el('div', { class: 'cd-au-step-body', hidden: 'true' });
+  // Node-type → glyph, for the run timeline (Direction A).
+  const NODE_TYPE_ICON: Record<string, IconNameType> = {
+    trigger: 'Bolt',
+    step: 'Activity',
+    tool: 'Plug',
+    agent: 'Sparkle',
+    invoke: 'Cpu',
+  };
+  // A node is still in flight when it has started but not ended (and hasn't
+  // errored). Drives the pulsing accent spinner on its rail circle.
+  function nodeRunStatus(node: CentraidAutomationRunNode): 'ok' | 'running' | 'fail' {
+    if (node.endedAt === undefined && !node.error) return 'running';
+    return node.ok ? 'ok' : 'fail';
+  }
+
+  // One node of a run rendered as a timeline card: a rail circle (status
+  // glyph) + connector on the left, an expandable card on the right.
+  // Collapsed shows status·name·dur·tokens·chevron; expanded shows JSON
+  // args/output (tool/step), the agent response (agent), or a red error box.
+  function renderTimelineNode(node: CentraidAutomationRunNode, liveText?: string): HTMLElement {
+    const status = nodeRunStatus(node);
+    const item = el('div', { class: 'cd-au-tl-item', 'data-status': status });
+
+    const railIcon =
+      status === 'running'
+        ? Icon.Loader({ size: 12 })
+        : status === 'ok'
+          ? Icon.CheckCircle({ size: 13 })
+          : Icon.AlertTriangle({ size: 13 });
+    item.append(
+      el('span', { class: 'cd-au-tl-rail', 'aria-hidden': 'true' }, [
+        el('span', {
+          class: 'cd-au-tl-dot',
+          'data-spin': status === 'running' ? 'true' : undefined,
+          trustedHtml: railIcon,
+        }),
+        el('span', { class: 'cd-au-tl-line' }),
+      ]),
+    );
+
+    const tokens = (node.inputTokens ?? 0) + (node.outputTokens ?? 0);
+    const metaParts: string[] = [];
+    if (node.durationMs !== undefined) metaParts.push(formatDuration(node.durationMs));
+    else if (status === 'running') metaParts.push('running…');
+    if (tokens > 0) metaParts.push(`${fmtTokens(tokens)} tok`);
+
+    const card = el('div', { class: 'cd-au-tl-card', 'data-status': status });
     const head = el('button', {
-      class: 'cd-au-step-head',
+      class: 'cd-au-tl-head',
       type: 'button',
       'aria-expanded': 'false',
     }) as HTMLButtonElement;
     head.append(
       el('span', {
-        class: 'cd-au-step-ic',
-        'data-ok': String(node.ok),
-        trustedHtml: node.ok ? Icon.Check({ size: 13 }) : Icon.X({ size: 13 }),
+        class: 'cd-au-tl-type',
+        'aria-hidden': 'true',
+        trustedHtml: Icon[NODE_TYPE_ICON[node.kind] ?? 'Activity']({ size: 13 }),
       }),
-      el('span', { class: 'cd-au-step-name' }, node.name ?? node.model ?? node.kind),
-      el('span', { class: 'cd-au-step-kind' }, node.kind),
-      el(
-        'span',
-        { class: 'cd-au-step-dur' },
-        node.durationMs !== undefined ? formatDuration(node.durationMs) : '—',
-      ),
+      el('span', { class: 'cd-au-tl-name' }, node.name ?? node.model ?? node.kind),
+      el('span', { class: 'cd-au-tl-kind' }, node.kind),
+      el('span', { class: 'cd-au-tl-meta' }, metaParts.join('  ·  ') || '—'),
+      el('span', {
+        class: 'cd-au-tl-chev',
+        'aria-hidden': 'true',
+        trustedHtml: Icon.ChevronRight({ size: 14 }),
+      }),
     );
+    const body = el('div', { class: 'cd-au-tl-body', hidden: 'true' });
     let built = false;
-    head.addEventListener('click', () => {
-      const open = head.getAttribute('aria-expanded') === 'true';
-      head.setAttribute('aria-expanded', String(!open));
-      body.hidden = open;
-      if (!built) {
-        built = true;
-        if (node.error) body.append(el('div', { class: 'cd-au-step-error' }, node.error));
+    const buildBody = (): void => {
+      if (built) return;
+      built = true;
+      if (node.error) body.append(el('div', { class: 'cd-au-tl-error' }, node.error));
+      if (node.kind === 'agent') {
+        const text = liveText ?? (node.outputJson ? prettyJson(node.outputJson) : '');
+        if (text) body.append(el('div', { class: 'cd-au-tl-response' }, text));
+      } else {
         if (node.argsJson) {
           body.append(
             el('div', { class: 'cd-au-step-label' }, 'Input'),
@@ -2551,19 +3094,32 @@ import {
             el('pre', { class: 'cd-au-step-pre' }, prettyJson(node.outputJson)),
           );
         }
-        if (!node.error && !node.argsJson && !node.outputJson) {
-          body.append(el('div', { class: 'cd-au-step-empty' }, 'No payload recorded.'));
-        }
       }
+      if (!body.hasChildNodes()) {
+        body.append(el('div', { class: 'cd-au-step-empty' }, 'No payload recorded.'));
+      }
+    };
+    head.addEventListener('click', () => {
+      const open = head.getAttribute('aria-expanded') === 'true';
+      head.setAttribute('aria-expanded', String(!open));
+      body.hidden = open;
+      if (!open) buildBody();
     });
-    step.append(head, body);
-    // Phase 2 (issue #158): while an agent node is in flight, show its
-    // streaming text live (the `node.delta` token deltas accumulated by the
-    // viewer). The collapsed body shows the final output once it lands.
+    card.append(head, body);
+
+    // While an agent node is in flight, stream its assistant text live with a
+    // blinking caret (the `node.delta` deltas accumulated by the viewer).
     if (liveText && node.endedAt === undefined) {
-      step.append(el('pre', { class: 'cd-au-step-pre cd-au-step-stream' }, liveText));
+      card.append(
+        el('div', { class: 'cd-au-tl-stream' }, [
+          el('span', { class: 'cd-au-tl-stream-tx' }, liveText),
+          el('span', { class: 'cd-au-tl-caret', 'aria-hidden': 'true' }),
+        ]),
+      );
     }
-    return step;
+
+    item.append(card);
+    return item;
   }
 
   function renderRunView(automationId: string, runId: string): void {
@@ -2599,7 +3155,7 @@ import {
       if (stopped || !document.contains(scroll) || !row || !run) return;
       // Keep scroll position so a live update doesn't yank the page.
       const prevTop = scroll.scrollTop;
-      scroll.replaceChildren(buildRunView(row, run, sortedNodes(), liveTextByOrdinal));
+      scroll.replaceChildren(buildRunView(row, run, sortedNodes(), liveTextByOrdinal, rerender));
       scroll.scrollTop = prevTop;
     };
 
@@ -2732,14 +3288,22 @@ import {
     })();
   }
 
+  // Run viewer direction — A 'timeline' (rail + KPI sidebar, default) or
+  // B 'log' (single-column transcript). Persisted so the choice sticks.
+  let runViewMode: 'timeline' | 'log' = Store.get<'timeline' | 'log'>(
+    'automations.runViewMode',
+    'timeline',
+  );
+
   function buildRunView(
     row: CentraidAutomationRow,
     run: CentraidAutomationRunRecord,
     nodes: readonly CentraidAutomationRunNode[],
     liveText?: Map<number, string>,
+    rerender?: () => void,
   ): HTMLElement {
     const wrap = el('div', { class: 'cd-au-rv' });
-    const trigger = runTriggerLabel(run);
+    const triggerLabel = runTriggerLabel(run);
     const model = row.manifest.requires.model ?? 'Centraid';
     // A run with no `endedAt` is still executing — the viewer polls and
     // re-renders it until it finishes.
@@ -2789,172 +3353,171 @@ import {
       detailsBtn.querySelector('span')!.textContent = narrow ? 'Show details' : 'Hide details';
     });
 
-    wrap.append(
-      el('div', { class: 'cd-au-rv-head' }, [
-        el('span', {
-          class: 'cd-au-glyph',
-          'data-on': 'true',
-          trustedHtml: Icon.Bolt({ size: 19 }),
+    // A/B view toggle — Timeline (rail + KPI) vs Log (single-column transcript).
+    const modeSeg = el('div', { class: 'cd-au-rv-seg', role: 'tablist', 'aria-label': 'Run view' });
+    for (const opt of [
+      { k: 'timeline', label: 'Timeline', icon: 'Activity' },
+      { k: 'log', label: 'Log', icon: 'Braces' },
+    ] as const) {
+      modeSeg.append(
+        el('button', {
+          class: 'cd-au-rv-seg-b',
+          type: 'button',
+          role: 'tab',
+          'data-active': runViewMode === opt.k ? 'true' : undefined,
+          'aria-selected': String(runViewMode === opt.k),
+          trustedHtml: `${Icon[opt.icon]({ size: 12 })}<span>${opt.label}</span>`,
+          onClick: () => {
+            if (runViewMode === opt.k) return;
+            runViewMode = opt.k;
+            Store.set('automations.runViewMode', opt.k);
+            rerender?.();
+          },
         }),
-        el('div', { class: 'cd-au-rv-head-main' }, [
-          el('div', { class: 'cd-au-rv-head-name' }, [
-            row.name,
-            inFlight
-              ? el('span', { class: 'cd-au-status', 'data-running': 'true' }, 'Running')
-              : el(
-                  'span',
-                  { class: 'cd-au-status', 'data-on': String(run.ok) },
-                  run.ok ? 'Completed' : 'Failed',
-                ),
-          ]),
-          el(
-            'div',
-            { class: 'cd-au-rv-head-meta' },
-            `${trigger.label}  ·  ${new Date(run.startedAt).toLocaleString()}  ·  ${duration}  ·  ${fmtTokens(tokens)} tokens`,
-          ),
-        ]),
-        el('div', { class: 'cd-au-actions' }, [detailsBtn, runAgain]),
-      ]),
-    );
-
-    // ── Thread ──
-    const thread = el('div', { class: 'cd-au-thread' });
-
-    // Trigger message — the instruction that kicked the run off.
-    const instr = el(
-      'div',
-      { class: 'cd-au-trig-instr' },
-      row.manifest.prompt || 'No instructions.',
-    );
-    const instrMore = el('button', {
-      class: 'cd-au-trig-more',
-      type: 'button',
-    }) as HTMLButtonElement;
-    instrMore.textContent = 'Show full instructions';
-    instrMore.addEventListener('click', () => {
-      const open = instr.classList.toggle('cd-au-trig-instr--open');
-      instrMore.textContent = open ? 'Collapse instructions' : 'Show full instructions';
-    });
-    thread.append(
-      el('div', { class: 'cd-au-msg' }, [
-        el('span', {
-          class: 'cd-au-node cd-au-node-trigger',
-          trustedHtml: Icon.Bolt({ size: 11 }),
-        }),
-        el('div', { class: 'cd-au-msg-actor' }, [
-          el('span', { class: 'cd-au-msg-actor-trig', trustedHtml: trigger.icon }),
-          trigger.label,
-          el('time', {}, new Date(run.startedAt).toLocaleString()),
-        ]),
-        el('div', { class: 'cd-au-trig-card' }, [
-          el('div', { class: 'cd-au-trig-line' }, [
-            el('span', { trustedHtml: Icon.History({ size: 14 }) }),
-            triggersSummary(row.triggers),
-          ]),
-          instr,
-          instrMore,
-        ]),
-      ]),
-    );
-
-    // Work message — the steps, folded into a collapsible group.
-    if (nodes.length > 0) {
-      const okCount = nodes.filter((n) => n.ok).length;
-      const failed = okCount < nodes.length;
-      const stepsWrap = el('div', { class: 'cd-au-work-steps' });
-      for (const node of nodes)
-        stepsWrap.append(renderThreadStep(node, liveText?.get(node.ordinal)));
-      const workGroup = el('div', { class: 'cd-au-work' });
-      if (failed || inFlight) workGroup.classList.add('cd-au-work--open');
-      const workSum = el('button', {
-        class: 'cd-au-work-sum',
-        type: 'button',
-      }) as HTMLButtonElement;
-      workSum.append(
-        el('span', {
-          class: 'cd-au-work-spin',
-          ...(inFlight ? { 'data-running': 'true' } : { 'data-ok': String(!failed) }),
-          trustedHtml: inFlight
-            ? Icon.History({ size: 10 })
-            : failed
-              ? Icon.X({ size: 10 })
-              : Icon.Check({ size: 10 }),
-        }),
-        el(
-          'span',
-          { class: 'cd-au-work-sum-t' },
-          inFlight
-            ? 'Working through the run'
-            : failed
-              ? 'Worked, then hit an error'
-              : 'Worked through the run',
-        ),
-        el('span', { class: 'cd-au-work-sum-m' }, `${nodes.length} steps`),
-        el('span', { class: 'cd-au-work-chev', trustedHtml: Icon.ChevronDown({ size: 14 }) }),
-      );
-      workSum.addEventListener('click', () => {
-        workGroup.classList.toggle('cd-au-work--open');
-      });
-      workGroup.append(workSum, stepsWrap);
-      thread.append(
-        el('div', { class: 'cd-au-msg' }, [
-          el('span', {
-            class: 'cd-au-node cd-au-node-work',
-            trustedHtml: Icon.Settings({ size: 11 }),
-          }),
-          el('div', { class: 'cd-au-msg-actor' }, 'Centraid · working'),
-          workGroup,
-        ]),
       );
     }
 
-    // Reply message — the run's outcome as the closing turn. While the
-    // run is still in flight there is no reply yet, so a pending bubble
-    // stands in until the next poll resolves it.
-    if (inFlight) {
-      thread.append(
-        el('div', { class: 'cd-au-msg' }, [
+    const headStatus = inFlight
+      ? auStatusPill('running')
+      : auStatusPill(run.ok ? 'success' : 'failed', run.ok ? 'Completed' : 'Failed');
+    wrap.append(
+      el('div', { class: 'cd-au-rv-head' }, [
+        autoGlyphTile(row.id, { size: 42, glyphSize: 19 }),
+        el('div', { class: 'cd-au-rv-head-main' }, [
+          el('div', { class: 'cd-au-rv-head-name' }, [row.name, headStatus]),
+          el(
+            'div',
+            { class: 'cd-au-rv-head-meta' },
+            `${triggerLabel}  ·  ${new Date(run.startedAt).toLocaleString()}  ·  ${duration}  ·  ${fmtTokens(tokens)} tokens`,
+          ),
+        ]),
+        el('div', { class: 'cd-au-actions' }, [
+          modeSeg,
+          ...(runViewMode === 'timeline' ? [detailsBtn] : []),
+          runAgain,
+        ]),
+      ]),
+    );
+
+    // ── Direction B — single-column transcript log. ──
+    if (runViewMode === 'log') {
+      wrap.append(buildRunTranscript(row, run, nodes, liveText));
+      return wrap;
+    }
+
+    // ── Timeline (Direction A) ── vertical rail of node cards. The trigger
+    // opens it, each run node is a card, and the run settles into a final
+    // outcome node (or a pulsing pending node while still in flight).
+    const timeline = el('div', { class: 'cd-au-tl' });
+
+    // Trigger node — the instruction that kicked the run off (always open).
+    const trigInstr = el(
+      'div',
+      { class: 'cd-au-trig-instr cd-au-trig-instr--open' },
+      row.manifest.prompt || 'No instructions.',
+    );
+    timeline.append(
+      el('div', { class: 'cd-au-tl-item', 'data-status': 'trigger' }, [
+        el('span', { class: 'cd-au-tl-rail', 'aria-hidden': 'true' }, [
           el('span', {
-            class: 'cd-au-node cd-au-node-reply',
-            trustedHtml: Icon.Sparkle({ size: 11 }),
+            class: 'cd-au-tl-dot',
+            trustedHtml:
+              run.triggerOrigin === 'webhook'
+                ? Icon.Webhook({ size: 13 })
+                : Icon.Clock({ size: 13 }),
           }),
-          el('div', { class: 'cd-au-msg-actor' }, `Centraid · ${model}`),
-          el('div', { class: 'cd-au-pending' }, [
-            el('span', { class: 'cd-au-pending-dots', 'aria-hidden': 'true' }, [
-              el('i', {}),
-              el('i', {}),
-              el('i', {}),
+          el('span', { class: 'cd-au-tl-line' }),
+        ]),
+        el('div', { class: 'cd-au-tl-card cd-au-tl-card-trigger' }, [
+          el('div', { class: 'cd-au-tl-trig-head' }, [
+            el('span', { class: 'cd-au-tl-trig-label' }, triggerLabel),
+            el('time', {}, new Date(run.startedAt).toLocaleString()),
+          ]),
+          el('div', { class: 'cd-au-trig-line' }, [
+            el('span', { 'aria-hidden': 'true', trustedHtml: Icon.Clock({ size: 14 }) }),
+            triggersSummary(row.triggers),
+          ]),
+          trigInstr,
+        ]),
+      ]),
+    );
+
+    // Run nodes.
+    for (const node of nodes) {
+      timeline.append(renderTimelineNode(node, liveText?.get(node.ordinal)));
+    }
+
+    // Final outcome node — pending (in flight), success, or failure.
+    if (inFlight) {
+      timeline.append(
+        el('div', { class: 'cd-au-tl-item cd-au-tl-item-final', 'data-status': 'running' }, [
+          el('span', { class: 'cd-au-tl-rail', 'aria-hidden': 'true' }, [
+            el('span', {
+              class: 'cd-au-tl-dot',
+              'data-spin': 'true',
+              trustedHtml: Icon.Loader({ size: 12 }),
+            }),
+          ]),
+          el('div', { class: 'cd-au-tl-card', 'data-status': 'running' }, [
+            el('div', { class: 'cd-au-tl-head cd-au-tl-head-static' }, [
+              el('span', {
+                class: 'cd-au-tl-type',
+                'aria-hidden': 'true',
+                trustedHtml: Icon.Sparkle({ size: 13 }),
+              }),
+              el('span', { class: 'cd-au-tl-name' }, `Centraid · ${model}`),
             ]),
-            el('span', {}, 'Working — this updates live as the run progresses.'),
+            el('div', { class: 'cd-au-pending' }, [
+              el('span', { class: 'cd-au-pending-dots', 'aria-hidden': 'true' }, [
+                el('i', {}),
+                el('i', {}),
+                el('i', {}),
+              ]),
+              el('span', {}, 'Working — this updates live as the run progresses.'),
+            ]),
           ]),
         ]),
       );
     } else {
-      const replyCard = el('div', { class: 'cd-au-reply-card' });
+      const finalStatus = run.ok ? 'ok' : 'fail';
+      const finalBody = el('div', { class: 'cd-au-tl-final-body' });
       if (run.ok) {
-        replyCard.append(
+        finalBody.append(
           el('p', { class: 'cd-au-reply-lead' }, run.summary ?? 'The run completed.'),
         );
         if (run.outputJson) {
-          replyCard.append(
+          finalBody.append(
             el('div', { class: 'cd-au-step-label' }, 'Output'),
             el('pre', { class: 'cd-au-step-pre' }, prettyJson(run.outputJson)),
           );
         }
       } else {
-        replyCard.append(
+        finalBody.append(
           el('p', { class: 'cd-au-reply-lead' }, 'This run did not complete.'),
-          el('div', { class: 'cd-au-fail-box' }, run.error ?? 'No error detail was recorded.'),
+          el('div', { class: 'cd-au-tl-error' }, run.error ?? 'No error detail was recorded.'),
         );
       }
-      thread.append(
-        el('div', { class: 'cd-au-msg' }, [
-          el('span', {
-            class: run.ok ? 'cd-au-node cd-au-node-reply' : 'cd-au-node cd-au-node-fail',
-            trustedHtml: run.ok ? Icon.Sparkle({ size: 11 }) : Icon.X({ size: 11 }),
-          }),
-          el('div', { class: 'cd-au-msg-actor' }, run.ok ? `Centraid · ${model}` : 'Run failed'),
-          replyCard,
+      timeline.append(
+        el('div', { class: 'cd-au-tl-item cd-au-tl-item-final', 'data-status': finalStatus }, [
+          el('span', { class: 'cd-au-tl-rail', 'aria-hidden': 'true' }, [
+            el('span', {
+              class: 'cd-au-tl-dot',
+              trustedHtml: run.ok
+                ? Icon.CheckCircle({ size: 13 })
+                : Icon.AlertTriangle({ size: 13 }),
+            }),
+          ]),
+          el('div', { class: 'cd-au-tl-card', 'data-status': finalStatus }, [
+            el('div', { class: 'cd-au-tl-head cd-au-tl-head-static' }, [
+              el('span', {
+                class: 'cd-au-tl-type',
+                'aria-hidden': 'true',
+                trustedHtml: run.ok ? Icon.Sparkle({ size: 13 }) : Icon.AlertTriangle({ size: 13 }),
+              }),
+              el('span', { class: 'cd-au-tl-name' }, run.ok ? `Centraid · ${model}` : 'Run failed'),
+            ]),
+            finalBody,
+          ]),
         ]),
       );
     }
@@ -2968,7 +3531,12 @@ import {
     const side = el('div', { class: 'cd-au-rside' }, [
       el('div', { class: 'cd-au-rside-card' }, [
         el('div', { class: 'cd-au-rside-h' }, 'Run detail'),
-        railRow('Status', inFlight ? 'running' : run.ok ? 'completed' : 'failed'),
+        el('div', { class: 'cd-au-rside-row' }, [
+          el('span', { class: 'cd-au-rside-k' }, 'Outcome'),
+          inFlight
+            ? auStatusPill('running')
+            : auStatusPill(run.ok ? 'success' : 'failed', run.ok ? 'Completed' : 'Failed'),
+        ]),
         railRow('Trigger', run.triggerOrigin ?? run.triggerKind),
         railRow('Duration', duration),
         railRow('Started', new Date(run.startedAt).toLocaleString()),
@@ -2995,8 +3563,181 @@ import {
       ]),
     ]);
 
-    grid.append(el('div', { class: 'cd-au-rv-thread-col' }, [thread]), side);
+    grid.append(el('div', { class: 'cd-au-rv-thread-col' }, [timeline]), side);
     wrap.append(grid);
+    return wrap;
+  }
+
+  // ── Run viewer Direction B — single-column transcript log ──
+  // A dense, chronological log: a mono KPI line, then one row per event
+  // (trigger · each node · outcome) with a timestamp gutter and inline
+  // payloads. No rail, no KPI sidebar — the alternate to the timeline.
+  function buildRunTranscript(
+    row: CentraidAutomationRow,
+    run: CentraidAutomationRunRecord,
+    nodes: readonly CentraidAutomationRunNode[],
+    liveText?: Map<number, string>,
+  ): HTMLElement {
+    const wrap = el('div', { class: 'cd-au-log' });
+    const fmtT = (ms: number): string =>
+      new Date(ms).toLocaleTimeString(undefined, { hour12: false });
+    const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
+    const model = row.manifest.requires.model ?? 'Centraid';
+
+    wrap.append(
+      el(
+        'div',
+        { class: 'cd-au-log-kpi' },
+        `${run.triggerOrigin ?? run.triggerKind}  ·  ${model}  ·  ${fmtTokens(tokens)} tok  ·  ${run.totalCostUsd ? `$${run.totalCostUsd.toFixed(2)}` : '—'}  ·  ${run.runId}`,
+      ),
+    );
+
+    const logRow = (
+      time: string,
+      tone: string,
+      head: HTMLElement,
+      body?: HTMLElement,
+    ): HTMLElement => {
+      const main = el('div', { class: 'cd-au-log-main' }, [head]);
+      if (body) main.append(body);
+      return el('div', { class: 'cd-au-log-row', 'data-tone': tone }, [
+        el('span', { class: 'cd-au-log-time' }, time),
+        main,
+      ]);
+    };
+
+    // Trigger.
+    wrap.append(
+      logRow(
+        fmtT(run.startedAt),
+        'trigger',
+        el('div', { class: 'cd-au-log-head' }, [
+          el('span', {
+            class: 'cd-au-log-glyph',
+            'aria-hidden': 'true',
+            trustedHtml:
+              run.triggerOrigin === 'webhook'
+                ? Icon.Webhook({ size: 12 })
+                : Icon.Clock({ size: 12 }),
+          }),
+          el('span', { class: 'cd-au-log-kind' }, 'trigger'),
+          el('span', { class: 'cd-au-log-name' }, runTriggerLabel(run)),
+          el('span', { class: 'cd-au-log-meta' }, triggersSummary(row.triggers)),
+        ]),
+        el('div', { class: 'cd-au-log-instr' }, row.manifest.prompt || 'No instructions.'),
+      ),
+    );
+
+    // Nodes.
+    for (const node of nodes) {
+      const status = nodeRunStatus(node);
+      const tk = (node.inputTokens ?? 0) + (node.outputTokens ?? 0);
+      const meta: string[] = [];
+      if (node.durationMs !== undefined) meta.push(formatDuration(node.durationMs));
+      else if (status === 'running') meta.push('running…');
+      if (tk > 0) meta.push(`${fmtTokens(tk)} tok`);
+      const head = el('div', { class: 'cd-au-log-head' }, [
+        el('span', {
+          class: 'cd-au-log-glyph',
+          'data-status': status,
+          'data-spin': status === 'running' ? 'true' : undefined,
+          'aria-hidden': 'true',
+          trustedHtml:
+            status === 'running'
+              ? Icon.Loader({ size: 12 })
+              : status === 'ok'
+                ? Icon.CheckCircle({ size: 12 })
+                : Icon.AlertTriangle({ size: 12 }),
+        }),
+        el('span', { class: 'cd-au-log-kind' }, node.kind),
+        el('span', { class: 'cd-au-log-name' }, node.name ?? node.model ?? node.kind),
+        el('span', { class: 'cd-au-log-meta' }, meta.join('  ·  ')),
+      ]);
+      const body = el('div', { class: 'cd-au-log-body' });
+      const live = liveText?.get(node.ordinal);
+      if (node.error) body.append(el('div', { class: 'cd-au-tl-error' }, node.error));
+      if (node.kind === 'agent') {
+        const text = live ?? (node.outputJson ? prettyJson(node.outputJson) : '');
+        if (text) body.append(el('div', { class: 'cd-au-tl-response' }, text));
+      } else {
+        if (node.argsJson) {
+          body.append(
+            el('div', { class: 'cd-au-step-label' }, 'Input'),
+            el('pre', { class: 'cd-au-step-pre' }, prettyJson(node.argsJson)),
+          );
+        }
+        if (node.outputJson) {
+          body.append(
+            el('div', { class: 'cd-au-step-label' }, 'Output'),
+            el('pre', { class: 'cd-au-step-pre' }, prettyJson(node.outputJson)),
+          );
+        }
+      }
+      wrap.append(
+        logRow(
+          node.startedAt !== undefined ? fmtT(node.startedAt) : '—',
+          status,
+          head,
+          body.hasChildNodes() ? body : undefined,
+        ),
+      );
+    }
+
+    // Final outcome.
+    if (run.endedAt === undefined) {
+      wrap.append(
+        logRow(
+          '…',
+          'running',
+          el('div', { class: 'cd-au-log-head' }, [
+            el('span', {
+              class: 'cd-au-log-glyph',
+              'data-status': 'running',
+              'data-spin': 'true',
+              'aria-hidden': 'true',
+              trustedHtml: Icon.Loader({ size: 12 }),
+            }),
+            el('span', { class: 'cd-au-log-kind' }, 'running'),
+            el('span', { class: 'cd-au-log-name' }, 'Working — updates live'),
+          ]),
+        ),
+      );
+    } else {
+      const tone = run.ok ? 'ok' : 'fail';
+      const body = el('div', { class: 'cd-au-log-body' });
+      if (run.ok) {
+        body.append(el('p', { class: 'cd-au-reply-lead' }, run.summary ?? 'The run completed.'));
+        if (run.outputJson) {
+          body.append(
+            el('div', { class: 'cd-au-step-label' }, 'Output'),
+            el('pre', { class: 'cd-au-step-pre' }, prettyJson(run.outputJson)),
+          );
+        }
+      } else {
+        body.append(
+          el('div', { class: 'cd-au-tl-error' }, run.error ?? 'No error detail was recorded.'),
+        );
+      }
+      wrap.append(
+        logRow(
+          run.endedAt !== undefined ? fmtT(run.endedAt) : '—',
+          tone,
+          el('div', { class: 'cd-au-log-head' }, [
+            el('span', {
+              class: 'cd-au-log-glyph',
+              'data-status': tone,
+              'aria-hidden': 'true',
+              trustedHtml: run.ok
+                ? Icon.CheckCircle({ size: 12 })
+                : Icon.AlertTriangle({ size: 12 }),
+            }),
+            el('span', { class: 'cd-au-log-kind' }, 'result'),
+            el('span', { class: 'cd-au-log-name' }, run.ok ? 'Completed' : 'Failed'),
+          ]),
+          body,
+        ),
+      );
+    }
     return wrap;
   }
 
