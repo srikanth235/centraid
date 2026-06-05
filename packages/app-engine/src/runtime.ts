@@ -141,6 +141,16 @@ export interface RunnerModel {
   tier?: ModelTier;
 }
 
+/**
+ * Load state of a host-capability surface (models / tools) in the gateway-owned
+ * catalog. `loading` = enumeration in flight, nothing cached yet; `ready` = a
+ * cached list is available (even while a refresh re-enumerates); `empty` =
+ * enumeration finished or never ran and found nothing (incl. CLI unavailable).
+ * Lives here (not agent-runtime) because `RunnerStatus` carries it and
+ * app-engine is the lower layer; agent-runtime re-exports it.
+ */
+export type SurfaceStatus = 'loading' | 'ready' | 'empty';
+
 /** Options for the runner-status reporter (e.g. force a model reclassify). */
 export interface RunnerStatusOptions {
   /** Force a fresh model-tier classification rather than serving the cache. */
@@ -175,11 +185,17 @@ export interface RunnerStatus {
   /** Caller-facing hint (install link, settings path …). */
   hint?: string;
   /**
-   * Models the runtime can serve, when it can enumerate them (OpenClaw via
-   * `openclaw models list`). Absent when the runtime has no enumerable list
-   * (built-in codex / claude-code, which pick the model internally).
+   * Models the runtime can serve, read from the gateway-owned catalog. Absent
+   * until the catalog has been warmed (boot or Refresh enumerates and persists);
+   * `modelsStatus` distinguishes "still enumerating" from "enumerated empty".
    */
   models?: RunnerModel[];
+  /**
+   * Load state of the model list above — lets the chat picker show a loading
+   * placeholder before the first warm completes, vs an empty state when the
+   * runner reports no models. Absent when the host doesn't track a catalog.
+   */
+  modelsStatus?: SurfaceStatus;
 }
 
 const noopLogger: RuntimeLogger = {

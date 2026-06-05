@@ -17,6 +17,7 @@ export {
   type RunnerStatusOptions,
   type RunnerModel,
   type ModelTier,
+  type SurfaceStatus,
 } from './runtime.js';
 
 // Per-app chat surface — `ConversationRunner` is the host-injected seam, both

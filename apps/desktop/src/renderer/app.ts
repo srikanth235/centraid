@@ -5951,7 +5951,11 @@ import {
         accent: string;
         models: AgentModelOpt[];
         tools: AgentTool[];
+        modelsStatus?: AuthStatusSnapshot['codexModelsStatus'];
+        toolsStatus?: AuthStatusSnapshot['codexToolsStatus'];
       }): HTMLElement => {
+        const modelsLoading = params.modelsStatus === 'loading' && params.models.length === 0;
+        const toolsLoading = params.toolsStatus === 'loading' && params.tools.length === 0;
         const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
 
         // Default-model select for THIS agent — populated from its own catalog
@@ -5988,6 +5992,17 @@ import {
         } else {
           for (const m of params.models) select.append(mkOpt(m));
         }
+        // Still discovering the runner's catalog (the seed is gone). Show a
+        // disabled hint option; Gateway default above stays selectable.
+        if (modelsLoading) {
+          select.append(
+            el(
+              'option',
+              { value: '__loading', disabled: '' },
+              'Discovering models…',
+            ) as HTMLOptionElement,
+          );
+        }
         select.value = saved;
         if (!params.connected) select.setAttribute('disabled', '');
         select.addEventListener('change', () => {
@@ -6022,9 +6037,11 @@ import {
             : el(
                 'div',
                 { class: 'agent-tools-empty' },
-                toolCount === 0
-                  ? 'No tools scanned yet — use Refresh tools below.'
-                  : 'No tools to show.',
+                toolsLoading
+                  ? 'Scanning tools…'
+                  : toolCount === 0
+                    ? 'No tools scanned yet — use Refresh tools below.'
+                    : 'No tools to show.',
               ),
         ]) as HTMLElement;
 
@@ -6077,6 +6094,10 @@ import {
           : `${runner.bin} CLI not found on PATH`;
         const models = (runner.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
         const tools = (runner.kind === 'codex' ? status.codexTools : status.claudeTools) ?? [];
+        const modelsStatus =
+          runner.kind === 'codex' ? status.codexModelsStatus : status.claudeModelsStatus;
+        const toolsStatus =
+          runner.kind === 'codex' ? status.codexToolsStatus : status.claudeToolsStatus;
         return providerCard({
           kind: runner.kind,
           title: runner.title,
@@ -6086,9 +6107,37 @@ import {
           accent: runner.accent,
           models,
           tools,
+          modelsStatus,
+          toolsStatus,
         });
       });
       agentCardsHost.replaceChildren(...cards);
+    };
+
+    // Poll the agents snapshot while any surface is still being enumerated, so
+    // a Refresh (or a cold boot) fills the picker in / swaps in the fresh list
+    // without the user re-clicking. Bounded by `agentsPollDeadline`.
+    let agentsPollTimer: ReturnType<typeof setTimeout> | undefined;
+    let agentsPollDeadline = 0;
+    const anyAgentSurfaceLoading = (s: AuthStatusSnapshot | null): boolean =>
+      !!s &&
+      [s.codexModelsStatus, s.claudeModelsStatus, s.codexToolsStatus, s.claudeToolsStatus].some(
+        (st) => st === 'loading',
+      );
+    const pollAgentsUntilSettled = (): void => {
+      if (agentsPollTimer) {
+        clearTimeout(agentsPollTimer);
+        agentsPollTimer = undefined;
+      }
+      if (!anyAgentSurfaceLoading(lastStatus) || Date.now() >= agentsPollDeadline) return;
+      agentsPollTimer = setTimeout(() => {
+        void getAgentsStatus()
+          .then((s) => {
+            renderAuthStatus(s);
+            pollAgentsUntilSettled();
+          })
+          .catch(() => {});
+      }, 800);
     };
 
     // Two independent refreshes. Models (?refresh=1) is a zero-token CLI
@@ -6103,10 +6152,12 @@ import {
     refreshModelsBtn.addEventListener('click', () => {
       void (async () => {
         refreshModelsBtn.setAttribute('disabled', '');
-        renderAuthStatus(null);
         try {
+          // Fire-and-forget: the gateway kicks the warm and returns `loading`;
+          // we render that (keeping any current list visible) and poll it in.
+          agentsPollDeadline = Date.now() + 30_000;
           renderAuthStatus(await getAgentsStatus({ refresh: true }));
-          showToast('Agents and models refreshed');
+          pollAgentsUntilSettled();
         } catch (err) {
           showToast(`Refresh failed: ${String(err)}`);
           renderAuthStatus({
@@ -6130,9 +6181,11 @@ import {
         refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Scanning tools…</span>';
         try {
           // Keep the current snapshot visible (don't blank the panel) — tools can
-          // take a few seconds to probe; only the tool lists change.
+          // take a few seconds to probe; only the tool lists change. The gateway
+          // returns `loading`; we poll the result in.
+          agentsPollDeadline = Date.now() + 30_000;
           renderAuthStatus(await getAgentsStatus({ refreshTools: true }));
-          showToast('Tools refreshed');
+          pollAgentsUntilSettled();
         } catch (err) {
           showToast(`Tool refresh failed: ${String(err)}`);
         } finally {
@@ -6165,7 +6218,9 @@ import {
     ]).then(([status, kindRaw, modelMap]) => {
       selectedRunnerKind = kindRaw === 'claude-code' ? 'claude-code' : 'codex';
       agentModelByRunner = modelMap ?? {};
+      agentsPollDeadline = Date.now() + 30_000;
       renderAuthStatus(status);
+      pollAgentsUntilSettled();
     });
 
     // Profiles ("spaces") — full manage surface. Each profile is its own

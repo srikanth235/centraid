@@ -14,9 +14,9 @@
  * model-list.ts`; this file is just the per-runner switchboard.
  *
  * Everything is best-effort: any failure (binary missing, SDK load error,
- * timeout) resolves to `[]` so the caller falls back to the default seed.
- * Enumeration is only ever invoked on an explicit Refresh, never on a normal
- * runner-status read.
+ * timeout) resolves to `[]`, so the `CatalogWarmer` simply skips the write and
+ * the cached entry (if any) is preserved. Enumeration runs only through the
+ * warmer (boot + Refresh), never on a normal runner-status read.
  */
 
 import type { RunnerKind, RunnerModel } from '@centraid/app-engine';

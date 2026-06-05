@@ -10,7 +10,7 @@ import {
   probeCliAvailability,
   runPreflight,
 } from './preflight.ts';
-import { defaultModelsFor } from './models/defaults.ts';
+import { writeCatalogEntry } from './models/catalog.ts';
 
 test('reports binary-not-found when bin does not exist', async () => {
   invalidatePreflightCache();
@@ -72,21 +72,33 @@ test('preflight surfaces versionAtLeast when version parses', async () => {
   expect(status.minVersion).toBe(minVersionString('codex'));
 });
 
-test('attaches the default model seed when no catalog path is set', async () => {
+test('attaches an empty model list when no catalog path is set (no seed)', async () => {
   invalidatePreflightCache();
   const status = await runPreflight({ kind: 'codex', binPath: 'true' });
   expect(status.ok).toBe(true);
-  expect(status.models).toEqual(defaultModelsFor('codex'));
+  expect(status.models).toEqual([]);
 });
 
-test('serves the default seed from a catalog path without enumerating on a normal load', async () => {
+test('reads the model list from the catalog without enumerating', async () => {
   invalidatePreflightCache();
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-'));
   const catalogPath = path.join(dir, 'model-catalog.json');
-  const status = await runPreflight({ kind: 'codex', binPath: 'true' }, { catalogPath });
-  expect(status.models).toEqual(defaultModelsFor('codex'));
-  // A normal (non-refresh) load must not enumerate, so no catalog is written.
+
+  // Cold catalog → empty list (a loading/empty state, no seed). The read must
+  // not spawn anything, so no catalog file appears.
+  const cold = await runPreflight({ kind: 'codex', binPath: 'true' }, { catalogPath });
+  expect(cold.models).toEqual([]);
   await expect(fs.access(catalogPath)).rejects.toThrow();
+
+  // A populated catalog is read back verbatim.
+  await writeCatalogEntry(catalogPath, 'codex', {
+    hash: 'h',
+    models: [{ id: 'gpt-x', name: 'GPT-X', default: true }],
+    enumeratedAt: '2026-01-01T00:00:00.000Z',
+  });
+  invalidatePreflightCache();
+  const warm = await runPreflight({ kind: 'codex', binPath: 'true' }, { catalogPath });
+  expect(warm.models?.map((m) => m.id)).toEqual(['gpt-x']);
 });
 
 // ---- probeCliAvailability tests -----------------------------------------
