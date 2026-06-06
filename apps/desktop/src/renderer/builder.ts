@@ -2487,7 +2487,10 @@ import { lineDiff } from './diff.js';
         const pager = el('div', { class: 'cloud-rows-pager' });
         wrap.append(pager);
 
-        const page = tablePage.get(tableName) ?? 0;
+        // Read the current page lazily from `tablePage` on every fetch/paint —
+        // capturing it once would leave the Prev/Next handlers (and the
+        // fetch offset) pinned to page 0, so the browser would never advance.
+        const currentPage = (): number => tablePage.get(tableName) ?? 0;
 
         const fetchRows = async (): Promise<void> => {
           if (!appId) return;
@@ -2498,7 +2501,7 @@ import { lineDiff } from './diff.js';
               id: appId,
               table: tableName,
               limit: ROWS_PAGE_SIZE,
-              offset: page * ROWS_PAGE_SIZE,
+              offset: currentPage() * ROWS_PAGE_SIZE,
             });
             rowsCache.set(tableName, { kind: 'ready', rows: r });
           } catch (err) {
@@ -2557,6 +2560,7 @@ import { lineDiff } from './diff.js';
           label.textContent = `${start}–${end} of ${r.totalCount}`;
           pager.append(label);
 
+          const page = currentPage();
           const prev = el(
             'button',
             {

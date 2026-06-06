@@ -4,14 +4,22 @@
 
 - #212 — Testing strategy ([TESTING.md](TESTING.md)) follow-up: the three
   per-layer workstreams (`assert.*` → `expect`, coverage-floor ratchet, desktop
-  renderer logic-extraction) landed under #214. **Still open:** the thin e2e
-  journeys (Playwright `_electron` + Maestro, deferred to nightly/on-demand by
-  #212), and the remaining renderer extraction — `app.ts` (6,803 lines) still
-  holds pure logic (appearance-prefs bridge, profile view-models, insights
+  renderer logic-extraction) landed under #214; the **desktop Playwright e2e
+  journeys** landed under #225 (nightly/on-demand). **Still open:** the Maestro
+  mobile flows, and the remaining renderer extraction — `app.ts` (6,803 lines)
+  still holds pure logic (appearance-prefs bridge, profile view-models, insights
   formatters) plus a near-duplicate `relativeTime` to consolidate.
 
 ## Resolved
 
+- #225 — Rebuilt the desktop Playwright e2e suite for the post-#109/#137/#141
+  gateway-store architecture (the old `delete-app` suite had silently broken —
+  all 8 tests failed — when it kept seeding a `gatewayUrl` settings no longer
+  persists). Broadened from 1 journey to **all 14 surface areas, 59 passing
+  tests** with SSE streaming in the mock, and wired it into a nightly +
+  on-demand workflow (`e2e.yml`) so it can't rot unnoticed again. Adding the
+  Cloud → Database coverage surfaced + fixed a row-browser pagination bug
+  (`renderRowBrowser` captured the page once, so Next re-fetched offset 0).
 - #218 — Fixed the blank-frame flicker on sidebar navigation. The Home,
   Discover, and Settings renders cleared the DOM up front and then awaited IPC
   before painting, so the window sat empty for the round-trips. Split `clear()`

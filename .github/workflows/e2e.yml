@@ -1,0 +1,45 @@
+name: e2e
+
+# Desktop Playwright suite. It builds every package and launches the REAL
+# Electron app under a virtual framebuffer, so it's far heavier than the unit
+# `ci` job — we run it nightly and on-demand rather than on every PR.
+on:
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC nightly
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      # Electron + Playwright need host system libraries (libnss3, libgbm, …)
+      # to start a Chromium-based renderer on headless Linux. `--with-deps`
+      # apt-installs them; the chromium download itself is what carries the
+      # shared libs Electron also links against.
+      - run: bunx playwright install --with-deps chromium
+        working-directory: apps/desktop
+      # Build every package's dist. The desktop main process imports the
+      # gateway/runtime packages from their built dist at launch, so a bare
+      # `test:e2e` (which only rebuilds the desktop package) isn't enough.
+      - run: bun run build
+      # `xvfb-run` gives Electron a virtual X display. `test:e2e` rebuilds the
+      # desktop bundle and runs all specs (`workers: 1`, retries once in CI).
+      - run: xvfb-run --auto-servernum bun run test:e2e
+        working-directory: apps/desktop
+      # On failure, keep the Playwright traces/screenshots so a flake or a real
+      # regression can be inspected without re-running locally.
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: failure()
+        with:
+          name: desktop-e2e-traces
+          path: apps/desktop/test-results/
+          retention-days: 7
