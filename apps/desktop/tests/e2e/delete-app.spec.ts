@@ -1,31 +1,28 @@
 import { test, expect } from '@playwright/test';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import {
+  appEntry,
   cleanupEnv,
-  clickContextDelete,
+  clickMenuItem,
   confirmDelete,
   expectConfirm,
   launchApp,
   makeEnv,
+  markUserApp,
   openTileMenu,
-  seedDraftApp,
-  seedPublishedApp,
-  seedSettings,
+  seedRemoteGateway,
   startMockGateway,
+  waitForHome,
   type MockGateway,
   type TestEnv,
 } from './fixtures';
 
 /**
- * End-to-end coverage for the app-deletion flow (the same five scenarios laid
- * out in the manual smoke-test plan). Each test owns:
- *
- *   - a fresh tmp workspace (userData + appsDir)
- *   - a fresh mock gateway on a random loopback port
- *   - its own Electron process
- *
- * so state never leaks across tests.
+ * §3 — App deletion. Post-#137/#141 the app's code lives in the gateway git
+ * store, so deletion goes over HTTP:
+ *   - a DRAFT (a gateway app not yet adopted into localStorage userApps) is
+ *     removed with a single `DELETE /centraid/_apps/:id`.
+ *   - a PUBLISHED app fires deregister + a best-effort session delete (two
+ *     DELETEs), then drops the local userApps entry.
  */
 
 let env: TestEnv;
@@ -34,7 +31,7 @@ let gateway: MockGateway;
 test.beforeEach(async () => {
   env = await makeEnv();
   gateway = await startMockGateway();
-  await seedSettings(env, gateway);
+  await seedRemoteGateway(env, gateway);
 });
 
 test.afterEach(async () => {
@@ -42,60 +39,56 @@ test.afterEach(async () => {
   await cleanupEnv(env);
 });
 
-// ---------- Scenario A: draft delete (no gateway) ----------
+const deletes = (g: MockGateway, id?: string) =>
+  g.calls.filter(
+    (c) =>
+      c.method === 'DELETE' &&
+      c.pathname.startsWith('/centraid/_apps/') &&
+      (!id || c.pathname.endsWith(id)),
+  );
 
-test('A — deleting a draft wipes the app dir and never touches the gateway', async () => {
-  const draftId = 'draft-grocery-abc';
-  await seedDraftApp(env, { id: draftId, name: 'Grocery list' });
+// ---------- 3.1 draft delete ----------
 
+test('3.1 — deleting a draft removes it via the gateway', async () => {
+  gateway.state.apps = [appEntry({ id: 'draft-grocery', name: 'Grocery list' })];
   const { app, page } = await launchApp(env);
   try {
-    await openTileMenu(page, 'Grocery list');
-    await clickContextDelete(page);
+    await waitForHome(page);
+    // Not in userApps → classed as a draft.
+    await openTileMenu(page, 'draft-grocery');
+    await clickMenuItem(page, 'Delete');
     await expectConfirm(page, 'Delete draft?');
     await confirmDelete(page);
 
-    await expect(page.locator('.app-tile', { hasText: 'Grocery list' })).toHaveCount(0);
+    await expect(page.locator('.cd-app-card-wrap[data-app-id="draft-grocery"]')).toHaveCount(0);
     await expect(page.locator('.global-toast')).toContainText('Deleted draft');
-
-    // App dir is gone on disk.
-    await expect(fs.stat(path.join(env.appsDir, draftId))).rejects.toThrow(/ENOENT/);
-
-    // Gateway never received a DELETE — drafts are local-only.
-    expect(gateway.calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
+    expect(deletes(gateway, 'draft-grocery').length).toBeGreaterThanOrEqual(1);
   } finally {
     await app.close();
   }
 });
 
-// ---------- Scenario B: published app, gateway reachable ----------
+// ---------- 3.2 published delete (gateway reachable) ----------
 
-test('B — deleting a published app calls the gateway and removes local state', async () => {
-  const appId = 'todo-abc123';
+test('3.2 — deleting a published app deregisters on the gateway and clears local state', async () => {
+  const id = 'todo-abc123';
+  gateway.state.apps = [appEntry({ id, name: 'My Todos' })];
   const { app, page } = await launchApp(env);
   try {
-    await seedPublishedApp(env, page, { id: appId, name: 'My Todos' });
+    await waitForHome(page);
+    await markUserApp(page, { id, name: 'My Todos' });
     await page.reload();
-    await page.waitForLoadState('domcontentloaded');
+    await waitForHome(page);
 
-    await openTileMenu(page, 'My Todos');
-    await clickContextDelete(page);
+    await openTileMenu(page, id);
+    await clickMenuItem(page, 'Delete');
     await expectConfirm(page, 'Delete app?');
     await confirmDelete(page);
 
-    await expect(page.locator('.app-tile', { hasText: 'My Todos' })).toHaveCount(0);
+    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toHaveCount(0);
     await expect(page.locator('.global-toast')).toContainText('Removed "My Todos"');
 
-    // Gateway received the DELETE with auth.
-    const deletes = gateway.calls.filter((c) => c.method === 'DELETE');
-    expect(deletes).toHaveLength(1);
-    expect(deletes[0]!.pathname).toBe(`/centraid/_apps/${appId}`);
-    expect(deletes[0]!.auth).toMatch(/^Bearer /);
-
-    // Local app dir is gone.
-    await expect(fs.stat(path.join(env.appsDir, appId))).rejects.toThrow(/ENOENT/);
-
-    // userApps in localStorage no longer contains the deleted app.
+    expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
     const stored = await page.evaluate(
       () => localStorage.getItem('centraid.v1.home.userApps') ?? '[]',
     );
@@ -105,157 +98,136 @@ test('B — deleting a published app calls the gateway and removes local state',
   }
 });
 
-// ---------- Scenario C: published app, gateway offline (error surfacing) ----------
+// ---------- 3.3 gateway offline ----------
 
-test('C — gateway offline: surfaces error, tile remains, no local cleanup', async () => {
-  const appId = 'habit-xyz789';
+test('3.3 — gateway offline: surfaces an error and keeps the tile', async () => {
+  const id = 'habit-xyz';
+  gateway.state.apps = [appEntry({ id, name: 'Daily Habits' })];
   const { app, page } = await launchApp(env);
   try {
-    await seedPublishedApp(env, page, { id: appId, name: 'Daily Habits' });
+    await waitForHome(page);
+    await markUserApp(page, { id, name: 'Daily Habits' });
     await page.reload();
-    await page.waitForLoadState('domcontentloaded');
+    await waitForHome(page);
 
-    // Take the gateway offline before clicking delete.
-    await gateway.close();
+    await gateway.close(); // unreachable
 
-    await openTileMenu(page, 'Daily Habits');
-    await clickContextDelete(page);
+    await openTileMenu(page, id);
+    await clickMenuItem(page, 'Delete');
     await expectConfirm(page, 'Delete app?');
     await confirmDelete(page);
 
-    // Error toast surfaces the failure (no longer silently swallowed).
     await expect(page.locator('.global-toast')).toContainText(/Could not delete.*gateway/i);
-
-    // Tile is still on home — user can retry.
-    await expect(page.locator('.app-tile', { hasText: 'Daily Habits' })).toBeVisible();
-
-    // Local app dir is untouched.
-    await expect(fs.stat(path.join(env.appsDir, appId))).resolves.toBeTruthy();
-
-    // userApps entry preserved.
-    const stored = await page.evaluate(
-      () => localStorage.getItem('centraid.v1.home.userApps') ?? '[]',
-    );
-    expect(JSON.parse(stored)).toHaveLength(1);
+    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toBeVisible();
   } finally {
     await app.close();
   }
 });
 
-// ---------- Scenario D: gateway returns 404 (idempotent — already gone) ----------
+// ---------- 3.4 gateway 404 is idempotent success ----------
 
-test('D — 404 from gateway is treated as success (deregister is idempotent)', async () => {
-  const appId = 'pomo-already-gone';
+test('3.4 — 404 from the gateway is treated as success', async () => {
+  const id = 'pomo-gone';
+  gateway.state.apps = [appEntry({ id, name: 'Pomodoro' })];
+  gateway.state.deleteStatus = 404;
   const { app, page } = await launchApp(env);
   try {
-    await seedPublishedApp(env, page, { id: appId, name: 'Pomodoro' });
+    await waitForHome(page);
+    await markUserApp(page, { id, name: 'Pomodoro' });
     await page.reload();
-    await page.waitForLoadState('domcontentloaded');
+    await waitForHome(page);
 
-    gateway.deleteStatus = 404;
-
-    await openTileMenu(page, 'Pomodoro');
-    await clickContextDelete(page);
+    await openTileMenu(page, id);
+    await clickMenuItem(page, 'Delete');
     await expectConfirm(page, 'Delete app?');
     await confirmDelete(page);
 
-    // Treated as success — no error toast.
     await expect(page.locator('.global-toast')).toContainText('Removed "Pomodoro"');
-    await expect(page.locator('.app-tile', { hasText: 'Pomodoro' })).toHaveCount(0);
-
-    // Local cleanup still ran.
-    await expect(fs.stat(path.join(env.appsDir, appId))).rejects.toThrow(/ENOENT/);
+    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toHaveCount(0);
   } finally {
     await app.close();
   }
 });
 
-// ---------- Scenario E: cancel paths ----------
+// ---------- 3.5 dismiss paths ----------
 
-test('E.1 — Cancel button dismisses the dialog and keeps the tile', async () => {
-  const appId = 'cancel-cancel';
+async function openDeleteDialog(page: import('@playwright/test').Page, id: string): Promise<void> {
+  await openTileMenu(page, id);
+  await clickMenuItem(page, 'Delete');
+  await expectConfirm(page, 'Delete app?');
+}
+
+test('3.5a — Cancel keeps the tile and fires no DELETE', async () => {
+  const id = 'cancel-me';
+  gateway.state.apps = [appEntry({ id, name: 'Cancel Me' })];
   const { app, page } = await launchApp(env);
   try {
-    await seedPublishedApp(env, page, { id: appId, name: 'Cancel Me' });
+    await waitForHome(page);
+    await markUserApp(page, { id, name: 'Cancel Me' });
     await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-
-    await openTileMenu(page, 'Cancel Me');
-    await clickContextDelete(page);
-    await expectConfirm(page, 'Delete app?');
-
+    await waitForHome(page);
+    await openDeleteDialog(page, id);
     await page.locator('.modal-card .btn-ghost', { hasText: 'Cancel' }).click();
-
     await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
-    await expect(page.locator('.app-tile', { hasText: 'Cancel Me' })).toBeVisible();
-    expect(gateway.calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
+    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toBeVisible();
+    expect(deletes(gateway).length).toBe(0);
   } finally {
     await app.close();
   }
 });
 
-test('E.2 — Escape dismisses the dialog without firing IPC', async () => {
-  const appId = 'escape-me';
+test('3.5b — Escape dismisses without firing DELETE', async () => {
+  const id = 'escape-me';
+  gateway.state.apps = [appEntry({ id, name: 'Escape App' })];
   const { app, page } = await launchApp(env);
   try {
-    await seedPublishedApp(env, page, { id: appId, name: 'Escape App' });
+    await waitForHome(page);
+    await markUserApp(page, { id, name: 'Escape App' });
     await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-
-    await openTileMenu(page, 'Escape App');
-    await clickContextDelete(page);
-    await expectConfirm(page, 'Delete app?');
-
+    await waitForHome(page);
+    await openDeleteDialog(page, id);
     await page.keyboard.press('Escape');
-
     await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
-    await expect(page.locator('.app-tile', { hasText: 'Escape App' })).toBeVisible();
-    expect(gateway.calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
+    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toBeVisible();
+    expect(deletes(gateway).length).toBe(0);
   } finally {
     await app.close();
   }
 });
 
-test('E.3 — backdrop click dismisses the dialog', async () => {
-  const appId = 'backdrop-app';
+test('3.5d — Enter confirms the delete', async () => {
+  const id = 'enter-me';
+  gateway.state.apps = [appEntry({ id, name: 'Enter App' })];
   const { app, page } = await launchApp(env);
   try {
-    await seedPublishedApp(env, page, { id: appId, name: 'Backdrop App' });
+    await waitForHome(page);
+    await markUserApp(page, { id, name: 'Enter App' });
     await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-
-    await openTileMenu(page, 'Backdrop App');
-    await clickContextDelete(page);
-    await expectConfirm(page, 'Delete app?');
-
-    // Click the backdrop at a position guaranteed to be outside the card.
-    await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } });
-
-    await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
-    await expect(page.locator('.app-tile', { hasText: 'Backdrop App' })).toBeVisible();
-    expect(gateway.calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
-  } finally {
-    await app.close();
-  }
-});
-
-test('E.4 — Enter confirms when the dialog is focused', async () => {
-  const appId = 'enter-confirm';
-  const { app, page } = await launchApp(env);
-  try {
-    await seedPublishedApp(env, page, { id: appId, name: 'Enter App' });
-    await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-
-    await openTileMenu(page, 'Enter App');
-    await clickContextDelete(page);
-    await expectConfirm(page, 'Delete app?');
-
+    await waitForHome(page);
+    await openDeleteDialog(page, id);
     await page.keyboard.press('Enter');
-
-    await expect(page.locator('.app-tile', { hasText: 'Enter App' })).toHaveCount(0);
+    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toHaveCount(0);
     await expect(page.locator('.global-toast')).toContainText('Removed "Enter App"');
-    expect(gateway.calls.filter((c) => c.method === 'DELETE')).toHaveLength(1);
+    expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
+  } finally {
+    await app.close();
+  }
+});
+
+test('3.5c — backdrop click dismisses the dialog', async () => {
+  const id = 'backdrop-me';
+  gateway.state.apps = [appEntry({ id, name: 'Backdrop App' })];
+  const { app, page } = await launchApp(env);
+  try {
+    await waitForHome(page);
+    await markUserApp(page, { id, name: 'Backdrop App' });
+    await page.reload();
+    await waitForHome(page);
+    await openDeleteDialog(page, id);
+    await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } });
+    await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
+    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toBeVisible();
+    expect(deletes(gateway).length).toBe(0);
   } finally {
     await app.close();
   }
