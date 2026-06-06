@@ -26,7 +26,7 @@ import {
   triggersSummary,
 } from './app-format.js';
 import { createTemplatesGallery } from './app-automations-templates.js';
-import { createAutomationsUi } from './app-automations-ui.js';
+import { createAutomationsUi, type AuStatus } from './app-automations-ui.js';
 import { createRunViewModule } from './app-automations-runview.js';
 import type { ShellContext, TemplateEntry } from './app-shell-context.js';
 
@@ -49,6 +49,10 @@ export interface AutomationsModule {
   // Exposed for the home page + discover (which still live in app.ts):
   openAutomationTemplatePreview(template: TemplateEntry): void;
   integrationDots(names: readonly string[]): HTMLElement;
+  // Identity/status primitives so Home can build automation cards that match
+  // the app-card visual family (the unified "library" shelf).
+  autoGlyphTile(id: string, opts?: { size?: number; glyphSize?: number }): HTMLElement;
+  auStatusPill(kind: AuStatus, label?: string): HTMLElement;
   renderOverviewAutomationRow(
     row: CentraidAutomationRow,
     lastRun: AutomationFeedEntry | undefined,
@@ -869,6 +873,8 @@ export function createAutomationsModule(ctx: ShellContext): AutomationsModule {
     enterAutomationBuilder,
     openAutomationTemplatePreview,
     integrationDots,
+    autoGlyphTile,
+    auStatusPill,
     renderOverviewAutomationRow,
     renderOverviewRunRow,
     collectAutomationRuns,

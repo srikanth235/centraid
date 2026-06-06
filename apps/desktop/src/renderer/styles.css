@@ -6487,9 +6487,11 @@ select.input option {
   margin-top: 0;
 }
 
-/* ── Home sections (Apps · Automations) ──────────────────────────────────
-   Two always-visible sections below the hero — each a labelled header +
-   body — replacing the old tabbed discovery shelf. */
+/* ── Home library shelf ───────────────────────────────────────────────────
+   One section below the hero that clubs apps + automations together — the
+   Discover pattern applied to the user's own stuff. A segmented All / Apps /
+   Automations filter rides the header; the body paints kind-grouped sections
+   of matching cards. */
 .cd-hsec {
   width: 100%;
   max-width: 1180px;
@@ -6500,31 +6502,24 @@ select.input option {
 .cd-hsec:last-child {
   padding-bottom: 56px;
 }
-.cd-hsec-head {
+/* Header — segmented filter left, status summary + Browse link right. The
+   filter reuses Discover's pill control; its own 8px top margin is reset so
+   it sits centred against the link in this single-row header. */
+.cd-home-lib-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 14px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
 }
-.cd-hsec-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font: var(--t-h2);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--ink);
+.cd-home-lib-head .cd-disc-seg {
+  margin-top: 0;
 }
-.cd-hsec-ic {
-  display: inline-flex;
-  color: var(--ink-3);
-}
-.cd-hsec-count {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0;
-  color: var(--ink-4);
+/* Body — kind groups stacked with the same rhythm as Discover's categories. */
+.cd-home-lib-body {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
 }
 .cd-hsec-spacer {
   flex: 1;
@@ -6574,42 +6569,6 @@ select.input option {
 }
 .cd-hsec-browse svg {
   display: block;
-}
-
-/* Automations section body — rows on the left, a recent-runs rail right. */
-.cd-au-home-cols {
-  display: grid;
-  grid-template-columns: 1.55fr 1fr;
-  gap: 22px;
-  align-items: start;
-}
-.cd-au-home-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cd-au-home-runs {
-  border: 0.5px solid var(--line);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
-  padding: 8px 0;
-}
-.cd-au-home-runs-h {
-  padding: 6px 15px 10px;
-}
-.cd-au-home-runs-list {
-  display: flex;
-  flex-direction: column;
-}
-.cd-au-home-runs-empty {
-  font-size: 12.5px;
-  color: var(--ink-4);
-  padding: 6px 15px 10px;
-}
-@media (max-width: 980px) {
-  .cd-au-home-cols {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Loaded-home greeting header — eyebrow + "Your apps." + build pill. */
@@ -7115,36 +7074,75 @@ select.input option {
   white-space: nowrap;
 }
 
-/* Hover-revealed star, top-right of the tile's top row (§A3). Filled
-   amber when starred; otherwise a quiet outline that fades in on hover. */
-.cd-app-card-star {
-  border: none;
-  background: transparent;
-  padding: 4px;
-  cursor: pointer;
-  color: var(--ink-4);
+/* Inline hover action toolbar — replaces the lone ⋯ overflow on Home app +
+   automation cards. A pill of ghost icon buttons (primary action · star ·
+   overflow) that floats over the card's bottom-right and fades in on
+   hover/focus. Lives as a wrap sibling, so it never nests inside the card
+   button. Staying visible while its menu is open is handled by the overflow
+   button's `data-open` flag (see below). */
+.cd-card-actions {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  backdrop-filter: blur(10px) saturate(150%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  box-shadow:
+    0 0 0 0.5px var(--line),
+    0 8px 20px -10px rgba(0, 0, 0, 0.55);
   opacity: 0;
-  display: grid;
-  place-items: center;
+  transform: translateY(3px);
+  z-index: 3;
   transition:
-    opacity 120ms,
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+.cd-app-card-wrap:hover .cd-card-actions,
+.cd-app-card-wrap:focus-within .cd-card-actions,
+.cd-card-actions:has(.cd-card-act[data-open='true']) {
+  opacity: 1;
+  transform: none;
+}
+.cd-card-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  line-height: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    background 120ms,
     color 120ms;
 }
-.cd-app-card-star svg {
+.cd-card-act:hover {
+  background: color-mix(in oklab, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.cd-card-act:active {
+  background: color-mix(in oklab, var(--ink) 18%, transparent);
+}
+.cd-card-act[data-open='true'] {
+  background: color-mix(in oklab, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.cd-card-act svg {
   display: block;
 }
-.cd-app-card-wrap:hover .cd-app-card-star,
-.cd-app-card-wrap:focus-within .cd-app-card-star,
-.cd-app-card-star[data-on='true'] {
-  opacity: 1;
-}
-.cd-app-card-star:hover {
-  color: var(--ink-2);
-}
-.cd-app-card-star[data-on='true'] {
+.cd-card-act-star[data-on='true'] {
   color: var(--icon-amber);
 }
-.cd-app-card-star[data-on='true'] svg path {
+.cd-card-act-star[data-on='true'] svg path {
   fill: currentColor;
 }
 

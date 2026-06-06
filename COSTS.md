@@ -721,3 +721,4 @@ Append-only ledger of token consumption for agent-authored commits.
 | claude-code-3e74b09e-737-1780683057 | claude-code | 3e74b09e-737e-4c6a-bf64-65515ca161b4 | #223 | claude-opus-4-8 | 0 | 0 | 0 | 0 | 0 | 0.0000 | feat(desktop): home app gallery, run-viewer transcript log, delete action (#223) |
 | claude-code-b21dcac2-849-1780727622 | claude-code | b21dcac2-8492-4a71-bf06-6b78a11a0062 | #227 | claude-opus-4-8 | 5388 | 13880 | 32008 | 796 | 20064 | 0.1496 |  |
 | claude-code-fc03d79d-6ae-1780726307 | claude-code | fc03d79d-6ae6-4d1e-811a-19716427f19d | #225 | claude-opus-4-8 | 5388 | 22316 | 32008 | 1742 | 29446 | 0.2260 | test(desktop): rebuild + broaden e2e suite to all 14 surfaces, nightly CI (#225) |
+| claude-code-8acdf649-cd9-1780731820 | claude-code | 8acdf649-cd92-4160-9311-7bc23017b254 | #229 | claude-opus-4-8 | 33360 | 1603674 | 39199358 | 288061 | 1925095 | 36.9910 | feat(desktop): unified Home library shelf + inline card action toolbar (#229) -m |
