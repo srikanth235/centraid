@@ -11,8 +11,16 @@
 // constructs below (app-insights, app-discover, app-automations, app-palette,
 // app-cards, app-appview, app-settings), wired through ./app-shell-context.
 
-import { getUserPrefs, listApps, listAutomations, saveUserPrefs } from './gateway-client.js';
-import { chevronDown, colorForIcon } from './app-format.js';
+import {
+  deleteAutomation,
+  getUserPrefs,
+  listApps,
+  listAutomations,
+  runAutomationNow,
+  saveUserPrefs,
+} from './gateway-client.js';
+import { chevronDown, colorForIcon, relativeTime, triggersSummary } from './app-format.js';
+import { auStatusForRow } from './automation-identity.js';
 import { ACCENT_PALETTE } from './app-shell-context.js';
 import type {
   AccentKey,
@@ -890,10 +898,10 @@ import { createAppViewModule } from './app-appview.js';
     root.replaceChildren(shell);
   }
 
-  // Home: centered composer hero, then two always-visible sections —
-  // Apps (the user's real apps + drafts) and Automations (live status +
-  // a recent-runs rail). Each section header carries a "Browse templates"
-  // link to its catalog; the old tabbed discovery shelf is gone.
+  // Home: centered composer hero, then ONE unified "library" shelf that clubs
+  // the user's apps and automations together — mirroring Discover. A segmented
+  // All / Apps / Automations filter sits in the shelf header; below it the two
+  // kinds render as kind-grouped sections of matching cards.
   function renderDay1Home(
     scroll: HTMLElement,
     automationRows: CentraidAutomationRow[],
@@ -901,8 +909,7 @@ import { createAppViewModule } from './app-appview.js';
   ): void {
     scroll.classList.add('cd-day1-scroll');
     scroll.append(buildHomeHero());
-    scroll.append(buildHomeApps());
-    scroll.append(buildHomeAutomations(automationRows, runEntries));
+    scroll.append(buildHomeLibrary(automationRows, runEntries));
   }
 
   // Shared composer behaviour — wires submit/keydown onto a textarea +
@@ -1022,40 +1029,6 @@ import { createAppViewModule } from './app-appview.js';
     return wrap;
   }
 
-  // A section header: icon + title + zero-padded count, with an optional
-  // right-aligned "Browse <thing> templates →" link. Shared by both home
-  // sections so Apps and Automations read identically.
-  function homeSectionHead(opts: {
-    icon: IconNameType;
-    title: string;
-    count: number;
-    browseLabel: string;
-    onBrowse: () => void;
-    /** Optional extra node (e.g. the automation status summary) before the link. */
-    aside?: HTMLElement;
-  }): HTMLElement {
-    const head = el('div', { class: 'cd-hsec-head' }, [
-      el('span', { class: 'cd-hsec-title' }, [
-        el('span', {
-          class: 'cd-hsec-ic',
-          'aria-hidden': 'true',
-          trustedHtml: Icon[opts.icon]({ size: 15 }),
-        }),
-        el('span', {}, opts.title),
-      ]),
-      el('span', { class: 'cd-hsec-count' }, String(opts.count).padStart(2, '0')),
-      el('span', { class: 'cd-hsec-spacer' }),
-    ]);
-    if (opts.aside) head.append(opts.aside);
-    head.append(
-      el('button', { class: 'cd-hsec-browse', type: 'button', onClick: opts.onBrowse }, [
-        el('span', {}, opts.browseLabel),
-        el('span', { 'aria-hidden': 'true', trustedHtml: Icon.ChevronRight({ size: 14 }) }),
-      ]),
-    );
-    return head;
-  }
-
   function homeSectionEmpty(icon: IconNameType, title: string, sub: string): HTMLElement {
     return el('div', { class: 'cd-shelf-empty' }, [
       el('div', {
@@ -1067,51 +1040,20 @@ import { createAppViewModule } from './app-appview.js';
     ]);
   }
 
-  // Home → Apps section: the user's real apps + drafts in a dense tile grid.
-  // "Browse app templates →" opens Discover (the full catalog).
-  function buildHomeApps(): HTMLElement {
-    const apps: AppMetaResolvedType[] = [...getApps(), ...drafts];
-    const section = el('section', { class: 'cd-hsec' });
-    section.append(
-      homeSectionHead({
-        icon: 'Home',
-        title: 'Apps',
-        count: apps.length,
-        browseLabel: 'Browse app templates',
-        onBrowse: renderDiscover,
-      }),
-    );
-    if (apps.length === 0) {
-      section.append(
-        homeSectionEmpty(
-          'Sparkle',
-          'No apps yet',
-          'Describe an app in the box above — Centraid will build it for you.',
-        ),
-      );
-      return section;
-    }
-    section.append(
-      el(
-        'div',
-        { class: 'cd-apps-grid cd-apps-grid--small' },
-        apps.map((a) => renderAppCard(a, true)),
-      ),
-    );
-    return section;
-  }
-
-  // Home → Automations section: live status with a recent-runs rail. Mirrors
-  // the overview's row/run renderers, but compact — rows on the left, a
-  // "Recent runs" panel on the right. "Browse automation templates →" opens
-  // the automation template gallery.
-  function buildHomeAutomations(
-    rows: readonly CentraidAutomationRow[],
+  // Home → Library: one shelf that clubs the user's apps and automations
+  // together — the Discover pattern applied to the user's own stuff. A
+  // segmented All / Apps / Automations filter rides the header; the body
+  // paints kind-grouped sections of matching cards (apps via renderAppCard,
+  // automations via renderHomeAutomationCard). The automation status summary
+  // and a "Browse templates →" link to Discover sit opposite the filter.
+  function buildHomeLibrary(
+    automationRows: readonly CentraidAutomationRow[],
     entries: readonly AutomationFeedEntry[],
   ): HTMLElement {
-    const section = el('section', { class: 'cd-hsec' });
+    const apps: AppMetaResolvedType[] = [...getApps(), ...drafts];
 
-    // Recent runs, newest first; most-recent run per automation for status.
+    // Most-recent run per automation — drives each card's status pill + the
+    // header's "needs attention" count.
     const runs = entries
       .filter((e) => e.automationId)
       .slice()
@@ -1119,75 +1061,273 @@ import { createAppViewModule } from './app-appview.js';
     const lastByRef = new Map<string, AutomationFeedEntry>();
     for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
 
-    const active = rows.filter((r) => r.enabled).length;
     let attention = 0;
-    for (const r of rows) {
+    for (const r of automationRows) {
       const last = lastByRef.get(r.ref);
       if (last && !last.run.ok) attention += 1;
     }
 
-    // Status summary — "● N active   ⚠ N needs attention" (attention hidden at 0).
-    const status = el('div', { class: 'cd-hsec-status' }, [
-      el('span', { class: 'cd-hsec-stat', 'data-tone': 'active' }, [
-        el('i', { class: 'cd-hsec-dot', 'aria-hidden': 'true' }),
-        el('span', {}, `${active} active`),
-      ]),
+    const section = el('section', { class: 'cd-hsec cd-home-lib' });
+
+    // ── Kind filter — segmented control, reusing Discover's pill styling. ──
+    let kind: 'all' | 'app' | 'automation' = 'all';
+    const seg = el('div', {
+      class: 'cd-disc-seg',
+      role: 'tablist',
+      'aria-label': 'Filter your library by kind',
+    });
+    const sync = (): void => {
+      for (const b of seg.querySelectorAll<HTMLElement>('.cd-disc-seg-b'))
+        b.dataset.active = String(b.dataset.k === kind);
+    };
+    const segDefs = [
+      { k: 'all', label: 'All', count: apps.length + automationRows.length, icon: null },
+      { k: 'app', label: 'Apps', count: apps.length, icon: 'Home' },
+      { k: 'automation', label: 'Automations', count: automationRows.length, icon: 'Bolt' },
+    ] as const;
+    for (const d of segDefs) {
+      seg.append(
+        el(
+          'button',
+          {
+            class: 'cd-disc-seg-b',
+            type: 'button',
+            role: 'tab',
+            'data-k': d.k,
+            onClick: () => {
+              kind = d.k;
+              sync();
+              paint();
+            },
+          },
+          [
+            ...(d.icon
+              ? [
+                  el('span', {
+                    class: 'cd-disc-seg-ic',
+                    'aria-hidden': 'true',
+                    trustedHtml: Icon[d.icon]({ size: 13 }),
+                  }),
+                ]
+              : []),
+            el('span', {}, d.label),
+            el('span', { class: 'cd-disc-seg-n' }, `· ${d.count}`),
+          ],
+        ),
+      );
+    }
+
+    // Status summary — only the "⚠ N needs attention" badge (shown when a
+    // most-recent run failed); the "N active" count was dropped.
+    const head = el('div', { class: 'cd-home-lib-head' }, [
+      seg,
+      el('span', { class: 'cd-hsec-spacer' }),
     ]);
     if (attention > 0) {
-      status.append(
-        el('span', { class: 'cd-hsec-stat', 'data-tone': 'attention' }, [
-          el('span', { 'aria-hidden': 'true', trustedHtml: Icon.AlertTriangle({ size: 13 }) }),
-          el('span', {}, `${attention} needs attention`),
+      head.append(
+        el('div', { class: 'cd-hsec-status' }, [
+          el('span', { class: 'cd-hsec-stat', 'data-tone': 'attention' }, [
+            el('span', { 'aria-hidden': 'true', trustedHtml: Icon.AlertTriangle({ size: 13 }) }),
+            el('span', {}, `${attention} needs attention`),
+          ]),
         ]),
       );
     }
-
-    section.append(
-      homeSectionHead({
-        icon: 'Bolt',
-        title: 'Automations',
-        count: rows.length,
-        browseLabel: 'Browse automation templates',
-        onBrowse: renderAutomationTemplates,
-        aside: rows.length > 0 ? status : undefined,
-      }),
-    );
-
-    if (rows.length === 0) {
-      section.append(
-        homeSectionEmpty(
-          'Bolt',
-          'No automations yet',
-          'A saved conversation that fires on a trigger. Start from a template, or describe one from scratch.',
-        ),
-      );
-      return section;
-    }
-
-    // Recent-runs rail — capped; opens each run's thread.
-    const RUN_CAP = 6;
-    const runsPanel = el('aside', { class: 'cd-au-home-runs' }, [
-      el('div', { class: 'cd-au-home-runs-h cd-eyebrow' }, 'Recent runs'),
-      runs.length
-        ? el(
-            'div',
-            { class: 'cd-au-home-runs-list' },
-            runs.slice(0, RUN_CAP).map(renderOverviewRunRow),
-          )
-        : el('div', { class: 'cd-au-home-runs-empty' }, 'No runs recorded yet.'),
-    ]);
-
-    section.append(
-      el('div', { class: 'cd-au-home-cols' }, [
-        el(
-          'div',
-          { class: 'cd-au-home-list' },
-          rows.map((r) => renderOverviewAutomationRow(r, lastByRef.get(r.ref))),
-        ),
-        runsPanel,
+    head.append(
+      el('button', { class: 'cd-hsec-browse', type: 'button', onClick: renderDiscover }, [
+        el('span', {}, 'Browse templates'),
+        el('span', { 'aria-hidden': 'true', trustedHtml: Icon.ChevronRight({ size: 14 }) }),
       ]),
     );
+
+    // ── Body — kind-grouped sections, repainted in place on filter change. ──
+    const body = el('div', { class: 'cd-home-lib-body' });
+
+    const group = (label: string, count: number, content: HTMLElement): HTMLElement =>
+      el('div', { class: 'cd-home-lib-group' }, [
+        el('div', { class: 'cd-disc-cat-head' }, [
+          el('span', { class: 'cd-disc-cat-label' }, label),
+          el('span', { class: 'cd-disc-cat-count' }, String(count).padStart(2, '0')),
+        ]),
+        content,
+      ]);
+
+    const appsBlock = (): HTMLElement =>
+      group(
+        'Apps',
+        apps.length,
+        apps.length === 0
+          ? homeSectionEmpty(
+              'Sparkle',
+              'No apps yet',
+              'Describe an app in the box above — Centraid will build it for you.',
+            )
+          : el(
+              'div',
+              { class: 'cd-apps-grid cd-apps-grid--small' },
+              apps.map((a) => renderAppCard(a, true)),
+            ),
+      );
+
+    const autosBlock = (): HTMLElement =>
+      group(
+        'Automations',
+        automationRows.length,
+        automationRows.length === 0
+          ? homeSectionEmpty(
+              'Bolt',
+              'No automations yet',
+              'A saved conversation that fires on a trigger. Start from a template, or describe one from scratch.',
+            )
+          : el(
+              'div',
+              { class: 'cd-apps-grid cd-apps-grid--small' },
+              automationRows.map((r) => renderHomeAutomationCard(r, lastByRef.get(r.ref))),
+            ),
+      );
+
+    function paint(): void {
+      const blocks: HTMLElement[] = [];
+      if (kind === 'all' || kind === 'app') blocks.push(appsBlock());
+      if (kind === 'all' || kind === 'automation') blocks.push(autosBlock());
+      body.replaceChildren(...blocks);
+    }
+
+    section.append(head, body);
+    sync();
+    paint();
     return section;
+  }
+
+  // One automation as a Home library card — built in the app-card visual
+  // family (.cd-app-card--small) so apps and automations sit in one uniform
+  // grid. The identity hue glyph tile + status pill stand in for the app icon
+  // and state strip; the trigger summary fills the blurb line. Clicking opens
+  // the automation viewer.
+  function renderHomeAutomationCard(
+    row: CentraidAutomationRow,
+    last: AutomationFeedEntry | undefined,
+  ): HTMLElement {
+    const integrations = row.manifest.requires.mcps ?? [];
+    const wrap = el('div', { class: 'cd-app-card-wrap' });
+    const card = el('button', {
+      class: 'cd-app-card cd-app-card--small',
+      type: 'button',
+      onClick: () => renderAutomationView(row.ref),
+    });
+    card.append(
+      el('div', { class: 'cd-app-card-head' }, [
+        autoMod.autoGlyphTile(row.id, { size: 52, glyphSize: 24 }),
+        el('div', { class: 'cd-app-card-head-text' }, [
+          el('div', { class: 'cd-app-card-name' }, row.name),
+          el('div', { class: 'cd-app-card-desc' }, triggersSummary(row.triggers)),
+        ]),
+      ]),
+    );
+    // Status · last-run · integration dots all sit on the left so the right
+    // edge stays clear for the hover toolbar (mirrors the app card).
+    const meta = el('div', { class: 'cd-app-card-foot-meta' }, [
+      autoMod.auStatusPill(auStatusForRow(row.enabled, !!last)),
+      el('span', { class: 'cd-app-card-foot-sep' }, '·'),
+      el(
+        'span',
+        { class: 'cd-app-card-foot-time' },
+        last ? relativeTime(new Date(last.run.startedAt).toISOString()) : 'No runs yet',
+      ),
+    ]);
+    if (integrations.length > 0) meta.append(autoMod.integrationDots([...integrations]));
+    card.append(el('div', { class: 'cd-app-card-foot' }, [meta]));
+    wrap.append(card);
+
+    // Inline hover toolbar — Run now, Star, overflow ⋯ (Open / Edit / Delete).
+    // Matches the app card's toolbar so both kinds share one action pattern.
+    const runNow = (): void => {
+      void (async () => {
+        try {
+          const { runId } = await runAutomationNow({ automationId: row.ref });
+          renderRunView(row.ref, runId);
+        } catch (err) {
+          showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      })();
+    };
+    const confirmDelete = (): void => {
+      void (async () => {
+        const ok = await cardsMod.openConfirm({
+          title: 'Delete automation?',
+          message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
+          confirmLabel: 'Delete',
+          danger: true,
+        });
+        if (!ok) return;
+        try {
+          await deleteAutomation({ automationId: row.ref });
+          showToast(`Deleted "${row.name}"`);
+          renderHome();
+        } catch (err) {
+          showToast(
+            `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      })();
+    };
+    const runBtn = el('button', {
+      class: 'cd-card-act',
+      type: 'button',
+      'aria-label': 'Run now',
+      title: 'Run now',
+      trustedHtml: Icon.Play({ size: 15 }),
+      onClick: (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        runNow();
+      },
+    });
+    const star = el('button', {
+      class: 'cd-card-act cd-card-act-star',
+      type: 'button',
+      'aria-label': isStarred(row.ref) ? 'Unstar automation' : 'Star automation',
+      title: isStarred(row.ref) ? 'Unstar' : 'Star',
+      'data-on': isStarred(row.ref) ? 'true' : undefined,
+      trustedHtml: Icon.Star({ size: 15 }),
+      onClick: (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleStar(row.ref);
+        renderHome();
+      },
+    });
+    const moreBtn = el('button', {
+      class: 'cd-card-act cd-card-act-more',
+      type: 'button',
+      'aria-label': 'Automation actions',
+      'aria-haspopup': 'menu',
+      trustedHtml: Icon.MoreHoriz({ size: 16 }),
+      onClick: (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const t = e.currentTarget as HTMLElement;
+        t.dataset.open = 'true';
+        cardsMod.openMenu(
+          [
+            { icon: 'Eye', id: 'open', label: 'Open' },
+            { icon: 'Play', id: 'run', label: 'Run now' },
+            { icon: 'Pencil', id: 'edit', label: 'Edit in builder' },
+            'sep',
+            { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
+          ],
+          { kind: 'rect', rect: t.getBoundingClientRect() },
+          (id) => {
+            if (id === 'open') renderAutomationView(row.ref);
+            else if (id === 'run') runNow();
+            else if (id === 'edit') enterAutomationBuilder({ automationId: row.id });
+            else if (id === 'delete') confirmDelete();
+          },
+        );
+      },
+    });
+    wrap.append(el('div', { class: 'cd-card-actions' }, [runBtn, star, moreBtn]));
+    return wrap;
   }
 
   // ---------- Sidebar destination pages ----------
@@ -1343,10 +1483,10 @@ import { createAppViewModule } from './app-appview.js';
   const createAndOpenAutomationBuilder = autoMod.createAndOpenAutomationBuilder;
   const enterAutomationBuilder = autoMod.enterAutomationBuilder;
   // openAutomationTemplatePreview is exposed for discover via ctx.shell; the
-  // overview rows + collectAutomationRuns are consumed by the Home page below.
+  // collectAutomationRuns is consumed by the Home page below. The Home library
+  // builds its automation cards directly via autoMod (glyph tile + status pill),
+  // so the overview row/run renderers aren't re-bound here.
   const openAutomationTemplatePreview = autoMod.openAutomationTemplatePreview;
-  const renderOverviewAutomationRow = autoMod.renderOverviewAutomationRow;
-  const renderOverviewRunRow = autoMod.renderOverviewRunRow;
   const collectAutomationRuns = autoMod.collectAutomationRuns;
 
   const paletteMod = createPaletteModule(ctx);

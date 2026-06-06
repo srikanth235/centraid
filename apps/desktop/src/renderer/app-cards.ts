@@ -31,6 +31,14 @@ export interface CardsModule {
   closeContextMenu(): void;
   isContextMenuOpen(): boolean;
   openContextMenu(app: AppMetaResolvedType, anchor: MenuAnchor): void;
+  /** Generic popover menu — reused by the Home automation cards' overflow. */
+  openMenu(
+    items: ReadonlyArray<
+      { id: string; label: string; icon: IconNameType; danger?: boolean } | 'sep'
+    >,
+    anchor: MenuAnchor,
+    onPick: (id: string) => void,
+  ): void;
   openTemplateContextMenu(tmpl: TemplateEntry, anchor: MenuAnchor): void;
   openTemplatePreview(tmpl: TemplateEntry): void;
   openNewAppSheet(): void;
@@ -124,21 +132,6 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
       iconEl.append(el('span', { class: 'cd-app-card-icon-dot', 'data-tone': tone }));
     }
 
-    // Hover-revealed star — toggles starred state without opening the app.
-    const star = el('button', {
-      class: 'cd-app-card-star',
-      type: 'button',
-      'aria-label': isStarred(app.id) ? 'Unstar app' : 'Star app',
-      'data-on': isStarred(app.id) ? 'true' : undefined,
-      trustedHtml: Icon.Star ? Icon.Star({ size: 14 }) : '',
-      onClick: (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleStar(app.id);
-        ctx.shell.renderHome();
-      },
-    });
-
     // Horizontal header — large glyph plate on the left, name over blurb
     // on the right (matches the apps-gallery spec).
     card.append(
@@ -151,31 +144,66 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
       ]),
     );
 
-    // Divider + state strip: status label · timestamp on the left, the
-    // hover-revealed star on the right.
+    // Divider + state strip: status label · timestamp on the left; the
+    // hover-revealed action toolbar floats over the right (a wrap sibling so
+    // we don't nest buttons inside the card button).
     const foot = el('div', { class: 'cd-app-card-foot' });
     const meta = el('div', { class: 'cd-app-card-foot-meta' });
     if (tone) meta.append(statusPillEl(tone, tone));
     const stamp = draft ? 'saved' : relativeTime(ua?.updatedAt);
     if (tone) meta.append(el('span', { class: 'cd-app-card-foot-sep' }, '·'));
     meta.append(el('span', { class: 'cd-app-card-foot-time' }, stamp));
-    foot.append(meta, star);
+    foot.append(meta);
     card.append(foot);
     wrap.append(card);
 
+    // Inline hover toolbar — primary action (Edit with Centraid / Continue
+    // editing), Star, and an overflow ⋯ for the rest (Open/Rename/Share/
+    // Reveal/Delete). Replaces the lone ⋯ menu so the common actions are one
+    // click away rather than buried.
+    const editLabel = draft ? 'Continue editing' : 'Edit with Centraid';
+    const editBtn = el('button', {
+      class: 'cd-card-act',
+      type: 'button',
+      'aria-label': editLabel,
+      title: editLabel,
+      trustedHtml: Icon.Sparkle({ size: 15 }),
+      onClick: (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        enterBuilder({ appContext: app });
+      },
+    });
+    const star = el('button', {
+      class: 'cd-card-act cd-card-act-star',
+      type: 'button',
+      'aria-label': isStarred(app.id) ? 'Unstar app' : 'Star app',
+      title: isStarred(app.id) ? 'Unstar' : 'Star',
+      'data-on': isStarred(app.id) ? 'true' : undefined,
+      trustedHtml: Icon.Star ? Icon.Star({ size: 15 }) : '',
+      onClick: (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleStar(app.id);
+        ctx.shell.renderHome();
+      },
+    });
     wrap.append(
-      buildMoreButton('App actions', (rect) => openContextMenu(app, { kind: 'rect', rect })),
+      el('div', { class: 'cd-card-actions' }, [
+        editBtn,
+        star,
+        buildMoreButton('App actions', (rect) => openContextMenu(app, { kind: 'rect', rect })),
+      ]),
     );
     return wrap;
   }
 
-  // Hover-revealed `•••` action trigger. Sits as a sibling to the card so we
-  // don't nest a button inside a button; CSS reveals it on hover/focus of
-  // the parent wrap. Marks itself `data-open` while the menu is mounted so
-  // the button stays visible even when the cursor wanders into the menu.
+  // Overflow `⋯` trigger for the inline toolbar. Marks itself `data-open`
+  // while the menu is mounted so CSS keeps the toolbar visible even when the
+  // cursor wanders off the card into the menu (captureTrigger reads the flag).
   function buildMoreButton(label: string, onOpen: (rect: DOMRect) => void): HTMLElement {
     const btn = el('button', {
-      class: 'cd-card-more',
+      class: 'cd-card-act cd-card-act-more',
       type: 'button',
       'aria-label': label,
       'aria-haspopup': 'menu',
@@ -326,7 +354,9 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
   // trigger to capture and ctxTrigger stays null; hover CSS still handles
   // visibility for that surface.
   function captureTrigger(): void {
-    const btn = document.querySelector<HTMLElement>('.cd-card-more[data-open="true"]');
+    const btn = document.querySelector<HTMLElement>(
+      '.cd-card-more[data-open="true"], .cd-card-act[data-open="true"]',
+    );
     if (btn) ctxTrigger = btn;
   }
 
@@ -960,6 +990,7 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
     closeContextMenu,
     isContextMenuOpen: () => ctxMenu !== null,
     openContextMenu,
+    openMenu,
     openTemplateContextMenu,
     openTemplatePreview,
     openNewAppSheet,
