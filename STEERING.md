@@ -435,3 +435,4 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-aa158455fa9-1780657526-1 | aa158455-fa9a-4182-bc9d-c4e1c7d0ac3c | #120 | interrupt | structural |  | docs: re-evaluate and overhaul all module docs against current code (#120) |
 | steer-aa158455fa9-1780657526-2 | aa158455-fa9a-4182-bc9d-c4e1c7d0ac3c | #120 | correction | classifier | Rejected scoping fixes to June commits; demanded full re-evaluation/overhaul of all docs | docs: re-evaluate and overhaul all module docs against current code (#120) |
 | steer-e4e5939a0ec-1780666257-1 | e4e5939a-0ec1-4c13-8b17-e77fb8dca1f8 | #221 | correction | classifier | Rejected agent deferring features and leaving legacy run code in place | feat(desktop): high-fidelity Automations redesign — six surfaces + A/B directio… |
+| steer-c6d3b01ba90-1780727621-1 | c6d3b01b-a900-4ac3-97f3-975f8ca8dfaf | #227 | correction | classifier | flagged app-automations module still monolithic, wants finer split |  |
