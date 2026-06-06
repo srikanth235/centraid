@@ -31,9 +31,36 @@ jobs:
       # gateway/runtime packages from their built dist at launch, so a bare
       # `test:e2e` (which only rebuilds the desktop package) isn't enough.
       - run: bun run build
-      # `xvfb-run` gives Electron a virtual X display. `test:e2e` rebuilds the
-      # desktop bundle and runs all specs (`workers: 1`, retries once in CI).
-      - run: xvfb-run --auto-servernum bun run test:e2e
+      # safeStorage (gateway-token encryption) needs a real Secret Service on
+      # Linux. Install gnome-keyring + libsecret so the `gnome-libsecret`
+      # backend the app forces under test (fixtures.ts) has a keyring to talk
+      # to. dbus-x11 provides the session bus the keyring registers on.
+      - run: sudo apt-get update && sudo apt-get install -y gnome-keyring libsecret-1-0 libsecret-tools dbus-x11
+      # `xvfb-run` gives Electron a virtual X display; `dbus-run-session` gives
+      # it a private session bus. The catch on a fresh runner: D-Bus
+      # auto-activates its own gnome-keyring via the service file, and that
+      # daemon owns `org.freedesktop.secrets` but stays LOCKED — so safeStorage
+      # still reports "not available" even though the bus name exists (this is
+      # what the previous attempts hit). Fix: wipe any stale keyrings, then
+      # start our own daemon with `--replace` so it TAKES OVER the bus name, and
+      # `--unlock` it with an empty password (read from stdin) so the login
+      # keyring is created already-open. `--foreground &` avoids the
+      # daemonize-forks-before-reading-stdin trap. We then prove it end-to-end
+      # with `secret-tool` (same libsecret/D-Bus path safeStorage uses): if a
+      # probe secret round-trips, Electron will work — otherwise fail fast with
+      # a clear message instead of 6 minutes of tests. Daemon + tests share this
+      # one dbus session; `test:e2e` runs all specs (`workers: 1`, retries once).
+      - run: |
+          xvfb-run --auto-servernum dbus-run-session -- bash -c '
+            set -x
+            rm -rf ~/.local/share/keyrings
+            printf "\n" | gnome-keyring-daemon --replace --components=secrets --unlock --foreground &
+            sleep 2
+            echo -n "probe-value" | secret-tool store --label=e2e service centraid-e2e account probe
+            test "$(secret-tool lookup service centraid-e2e account probe)" = "probe-value" \
+              || { echo "::error::Secret Service not usable — safeStorage would fail"; exit 1; }
+            bun run test:e2e
+          '
         working-directory: apps/desktop
       # On failure, keep the Playwright traces/screenshots so a flake or a real
       # regression can be inspected without re-running locally.

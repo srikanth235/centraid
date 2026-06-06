@@ -6,6 +6,7 @@ import {
   launchApp,
   makeEnv,
   markUserApp,
+  openTile,
   seedRemoteGateway,
   startMockGateway,
   waitForHome,
@@ -38,7 +39,7 @@ async function openApp(
   await markUserApp(page, { id, name });
   await page.reload();
   await waitForHome(page);
-  await page.locator(`.cd-app-card-wrap[data-app-id="${id}"] .cd-app-card`).click();
+  await openTile(page, id);
   await page.locator('.app-view').waitFor({ state: 'visible' });
 }
 

@@ -596,8 +596,14 @@ export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplicatio
       `dist/main.js not found at ${main}. Run \`npm run build\` in apps/desktop first.`,
     );
   });
+  // Launch through a test-only entry that applies e2e-specific main-process
+  // setup (the Linux keyring backend switch) and then loads the real app, so
+  // production main.ts stays free of any test/CI/platform branches. Electron
+  // resolves the app root by walking up to apps/desktop/package.json, so the
+  // app behaves identically to launching `desktopRoot` directly.
+  const entry = path.join(__dirname, 'electron-entry.mjs');
   const app = await _electron.launch({
-    args: [desktopRoot, `--user-data-dir=${env.userData}`],
+    args: [entry, `--user-data-dir=${env.userData}`],
     env: { ...process.env, NODE_ENV: 'test' },
   });
   const page = await app.firstWindow();
@@ -742,9 +748,21 @@ export async function gotoNav(page: Page, label: string): Promise<void> {
   await page.locator('.cd-sb-item', { hasText: label }).first().click();
 }
 
-/** Open a tile's 3-dot context menu. */
+/** The grid item for an app, keyed by its stable data-app-id anchor. */
+export function tile(page: Page, appId: string) {
+  return page.locator(`[data-app-id="${appId}"]`);
+}
+
+/** Open an app tile (the clickable card surface). */
+export async function openTile(page: Page, appId: string): Promise<void> {
+  await tile(page, appId).getByTestId('app-tile').click();
+}
+
+/** Open a tile's overflow (⋯) action menu. Located by accessible role/name so
+ * it survives card restyles — the class churn in #230 is exactly what broke
+ * the old `.cd-card-more` selector. */
 export async function openTileMenu(page: Page, appId: string): Promise<void> {
-  await page.locator(`.cd-app-card-wrap[data-app-id="${appId}"] .cd-card-more`).click();
+  await tile(page, appId).getByRole('button', { name: 'App actions' }).click();
   await page.locator('.ctx-menu').waitFor({ state: 'visible' });
 }
 

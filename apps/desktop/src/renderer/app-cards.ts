@@ -106,6 +106,9 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
     const card = el('button', {
       class: small ? 'cd-app-card cd-app-card--small' : 'cd-app-card',
       type: 'button',
+      // Stable hook for e2e — the clickable tile surface. Decouples tests from
+      // the styling class so a card restyle can't break tile-open flows.
+      'data-testid': 'app-tile',
       onClick: () => (draft ? enterBuilder({ appContext: app }) : ctx.shell.openApp(app.id)),
       onContextmenu: (e: Event) => {
         e.preventDefault();

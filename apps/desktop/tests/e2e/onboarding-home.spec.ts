@@ -6,6 +6,7 @@ import {
   launchApp,
   makeEnv,
   markUserApp,
+  openTile,
   openTileMenu,
   seedRemoteGateway,
   startMockGateway,
@@ -99,11 +100,11 @@ test('2.1 — home renders tiles with the right badges (draft vs new)', async ()
 
     // The unadopted gateway app is a draft.
     await expect(
-      page.locator('.cd-app-card-wrap[data-app-id="a-draft"] .cd-status[data-tone="draft"]'),
+      page.locator('[data-app-id="a-draft"] .cd-status[data-tone="draft"]'),
     ).toBeVisible();
     // The adopted, freshly-created app shows the "new" badge.
     await expect(
-      page.locator('.cd-app-card-wrap[data-app-id="published-old"] .cd-status[data-tone="new"]'),
+      page.locator('[data-app-id="published-old"] .cd-status[data-tone="new"]'),
     ).toBeVisible();
   } finally {
     await app.close();
@@ -137,7 +138,7 @@ test('2.3 — renaming a tile via the context menu patches meta and shows a toas
     await openTileMenu(page, id);
     await page.locator('.ctx-item', { hasText: 'Rename' }).click();
     // Inline editable name field becomes focused; type a new name + Enter.
-    const nameEl = page.locator(`.cd-app-card-wrap[data-app-id="${id}"] .cd-app-card-name`);
+    const nameEl = page.locator(`[data-app-id="${id}"] .cd-app-card-name`);
     await nameEl.click();
     await page.keyboard.press('Meta+a');
     await page.keyboard.type('New Name');
@@ -190,7 +191,7 @@ test('2.6 — clicking a tile opens the app view iframe', async () => {
     await markUserApp(page, { id, name: 'Open Me' });
     await page.reload();
     await waitForHome(page);
-    await page.locator(`.cd-app-card-wrap[data-app-id="${id}"] .cd-app-card`).click();
+    await openTile(page, id);
     await expect(page.locator('.app-view')).toBeVisible();
     await expect(page.locator('iframe[data-centraid-app]')).toHaveCount(1);
   } finally {

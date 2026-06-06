@@ -60,7 +60,7 @@ test('3.1 — deleting a draft removes it via the gateway', async () => {
     await expectConfirm(page, 'Delete draft?');
     await confirmDelete(page);
 
-    await expect(page.locator('.cd-app-card-wrap[data-app-id="draft-grocery"]')).toHaveCount(0);
+    await expect(page.locator('[data-app-id="draft-grocery"]')).toHaveCount(0);
     await expect(page.locator('.global-toast')).toContainText('Deleted draft');
     expect(deletes(gateway, 'draft-grocery').length).toBeGreaterThanOrEqual(1);
   } finally {
@@ -85,7 +85,7 @@ test('3.2 — deleting a published app deregisters on the gateway and clears loc
     await expectConfirm(page, 'Delete app?');
     await confirmDelete(page);
 
-    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toHaveCount(0);
+    await expect(page.locator(`[data-app-id="${id}"]`)).toHaveCount(0);
     await expect(page.locator('.global-toast')).toContainText('Removed "My Todos"');
 
     expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
@@ -118,7 +118,7 @@ test('3.3 — gateway offline: surfaces an error and keeps the tile', async () =
     await confirmDelete(page);
 
     await expect(page.locator('.global-toast')).toContainText(/Could not delete.*gateway/i);
-    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toBeVisible();
+    await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
   } finally {
     await app.close();
   }
@@ -143,7 +143,7 @@ test('3.4 — 404 from the gateway is treated as success', async () => {
     await confirmDelete(page);
 
     await expect(page.locator('.global-toast')).toContainText('Removed "Pomodoro"');
-    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toHaveCount(0);
+    await expect(page.locator(`[data-app-id="${id}"]`)).toHaveCount(0);
   } finally {
     await app.close();
   }
@@ -169,7 +169,7 @@ test('3.5a — Cancel keeps the tile and fires no DELETE', async () => {
     await openDeleteDialog(page, id);
     await page.locator('.modal-card .btn-ghost', { hasText: 'Cancel' }).click();
     await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
-    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toBeVisible();
+    await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
     await app.close();
@@ -188,7 +188,7 @@ test('3.5b — Escape dismisses without firing DELETE', async () => {
     await openDeleteDialog(page, id);
     await page.keyboard.press('Escape');
     await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
-    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toBeVisible();
+    await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
     await app.close();
@@ -206,7 +206,7 @@ test('3.5d — Enter confirms the delete', async () => {
     await waitForHome(page);
     await openDeleteDialog(page, id);
     await page.keyboard.press('Enter');
-    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toHaveCount(0);
+    await expect(page.locator(`[data-app-id="${id}"]`)).toHaveCount(0);
     await expect(page.locator('.global-toast')).toContainText('Removed "Enter App"');
     expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
   } finally {
@@ -226,7 +226,7 @@ test('3.5c — backdrop click dismisses the dialog', async () => {
     await openDeleteDialog(page, id);
     await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } });
     await expect(page.locator('.modal-card[role="dialog"]')).toHaveCount(0);
-    await expect(page.locator(`.cd-app-card-wrap[data-app-id="${id}"]`)).toBeVisible();
+    await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
     await app.close();
