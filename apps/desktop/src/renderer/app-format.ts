@@ -1,0 +1,249 @@
+// Pure formatting + display helpers lifted out of the app.ts shell IIFE.
+// Every function here is stateless: it depends only on its arguments and
+// ambient globals (Icon, ICON_PALETTE) declared in types.d.ts, so it can be
+// imported by app.ts and the route modules split out of it. No closure state,
+// no imports — keep it that way so this module stays trivially testable.
+
+// Canonical icon → palette-hue mapping, lifted from the Centraid Redesign
+// bold.jsx APPS fixture. Every app type has a fixed colour identity in the
+// design (Todos is always indigo, Habits always rose, etc.). Used when minting
+// a new app and when hydrating drafts off disk. Sparkle is the default icon for
+// drafts and freshly-prompted apps before an icon is inferred — it gets the
+// violet sub-accent.
+const CANONICAL_ICON_COLOR_KEY: Record<string, ColorKeyType> = {
+  Gift: 'violet',
+  Habit: 'rose',
+  Journal: 'amber',
+  Mood: 'violet',
+  Plant: 'slate',
+  Pomodoro: 'forest',
+  Sparkle: 'violet',
+  Spend: 'ochre',
+  Todo: 'indigo',
+  Water: 'teal',
+};
+
+export function colorForIcon(iconKey: IconNameType | string): ColorHexType {
+  const key = CANONICAL_ICON_COLOR_KEY[iconKey];
+  if (key) {
+    const c = (ICON_PALETTE as unknown as Record<string, ColorHexType>)[key];
+    if (c) return c;
+  }
+  return (
+    (ICON_PALETTE as unknown as Record<string, ColorHexType>)['violet'] ??
+    ('#7C5BD9' as ColorHexType)
+  );
+}
+
+// "X ago" relative-time formatter. Mirrors builder.ts:relativeWhen, but
+// co-located here so app.ts doesn't need to reach into the builder IIFE.
+export function relativeTime(iso?: string): string {
+  if (!iso) return 'Recently';
+  try {
+    const t = new Date(iso).getTime();
+    if (Number.isNaN(t)) return 'Recently';
+    const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (s < 60) return 'just now';
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d}d ago`;
+    return new Date(iso).toLocaleDateString();
+  } catch {
+    return 'Recently';
+  }
+}
+
+// Small chevron-down — ArrowLeft rotated -90°, matching Day1Composer.
+export function chevronDown(size: number): string {
+  return `<span style="display:inline-flex;transform:rotate(-90deg);opacity:0.6">${Icon.ArrowLeft({
+    size,
+  })}</span>`;
+}
+
+// Format a raw token count as a compact k / M string.
+export function insK(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `${Math.round(v / 1_000)}k`;
+  return String(v);
+}
+
+// Format a USD figure for a KPI / table cell.
+export function insUsd(n: number): string {
+  if (n > 0 && n < 0.01) return '<$0.01';
+  return `$${n.toFixed(2)}`;
+}
+
+// Title-case a run `kind` for display ('chat' → 'Chat').
+export function insKindLabel(kind: string): string {
+  if (kind === 'chat') return 'Chat';
+  if (kind === 'build') return 'Build';
+  if (kind === 'automation') return 'Automation';
+  return kind;
+}
+
+// Compact token count for the standing-order list / run rail.
+export function fmtTokens(n: number): string {
+  if (n <= 0) return '—';
+  if (n < 1000) return String(n);
+  return `${(n / 1000).toFixed(1)}k`;
+}
+
+// Retention label for the Behavior panel — mirrors the builder's config
+// pane wording ("Keep …") over the manifest's `history.keep` shape.
+export function fmtRetention(keep: CentraidAutomationManifest['history']['keep']): string {
+  if (keep === 'all') return 'Keep all runs';
+  if (keep === 'errors') return 'Keep failed only';
+  if (typeof keep === 'object' && 'count' in keep) return `Keep ${keep.count} runs`;
+  if (typeof keep === 'object' && 'days' in keep) return `Keep ${keep.days} days`;
+  return '—';
+}
+
+// A cron next-run pill label: "Today, 6:00 PM" / "Tomorrow, 6:00 PM" /
+// "Thu, 6:00 PM" (weekday within the week, else "Mon 9").
+export function relativeRunLabel(d: Date): string {
+  const startOfDay = (x: Date): number =>
+    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dayDiff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86_400_000);
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const day =
+    dayDiff === 0
+      ? 'Today'
+      : dayDiff === 1
+        ? 'Tomorrow'
+        : dayDiff > 1 && dayDiff < 7
+          ? d.toLocaleDateString(undefined, { weekday: 'short' })
+          : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `${day}, ${time}`;
+}
+
+// Trigger-origin/kind → human label for a run row.
+export function runTriggerLabel(run: CentraidAutomationRunRecord): string {
+  if (run.triggerOrigin === 'webhook') return 'Webhook trigger';
+  const byKind: Record<string, string> = {
+    scheduled: 'Scheduled run',
+    manual: 'Manual run',
+    replay: 'Replayed run',
+    on_failure: 'Failure-triggered run',
+    interactive: 'Interactive run',
+  };
+  return byKind[run.triggerKind] ?? 'Run';
+}
+
+// A node is still in flight when it has started but not ended (and hasn't
+// errored). Drives the pulsing accent spinner on its rail circle.
+export function nodeRunStatus(node: CentraidAutomationRunNode): 'ok' | 'running' | 'fail' {
+  if (node.endedAt === undefined && !node.error) return 'running';
+  return node.ok ? 'ok' : 'fail';
+}
+
+/**
+ * Translate a 5-field cron expression into a small-caps display
+ * string. Covers the patterns the builder agent actually emits
+ * (`0 20 * * 0`, `0 17 * * 1-5`, `*[asterisk-slash]N * * * *`, …);
+ * unrecognized expressions fall back to the raw text so the
+ * end-user at least sees something stable.
+ *
+ * Time zone is the user's local — the cron expression runs in UTC
+ * server-side, but for the in-app surface we show what they'll
+ * actually feel.
+ */
+export function cronToHuman(expr: string): string {
+  const fields = expr.trim().split(/\s+/);
+  if (fields.length !== 5) return expr;
+  const [min, hour, dom, month, dow] = fields as [string, string, string, string, string];
+
+  const fmtTime = (h: number, m: number): string => {
+    const date = new Date();
+    date.setHours(h, m, 0, 0);
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  };
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  // Every N minutes
+  const stepMin = min.match(/^\*\/(\d+)$/);
+  if (stepMin && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+    const n = Number(stepMin[1]);
+    return n === 1 ? 'Every minute' : `Every ${n} minutes`;
+  }
+
+  // Hourly on the dot
+  if (min === '0' && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+    return 'Hourly';
+  }
+
+  const minNum = Number(min);
+  const hourNum = Number(hour);
+  const isExactTime = !Number.isNaN(minNum) && !Number.isNaN(hourNum);
+
+  if (isExactTime && dom === '*' && month === '*') {
+    const time = fmtTime(hourNum, minNum);
+    if (dow === '*') return `Daily at ${time}`;
+    if (dow === '1-5') return `Weekdays at ${time}`;
+    if (dow === '0,6' || dow === '6,0') return `Weekends at ${time}`;
+    const single = Number(dow);
+    if (!Number.isNaN(single) && single >= 0 && single <= 6) {
+      return `${dayNames[single]}s at ${time}`;
+    }
+  }
+
+  return expr;
+}
+
+// Human-readable summary of an automation's trigger list. One cron → its
+// `cronToHuman` form; many crons → a count; a webhook adds a "Webhook" tag;
+// an empty list reads "Manual only".
+export function triggersSummary(triggers: ReadonlyArray<{ kind: string; expr?: string }>): string {
+  const crons = triggers.filter((t) => t.kind === 'cron');
+  const hasWebhook = triggers.some((t) => t.kind === 'webhook');
+  const parts: string[] = [];
+  if (crons.length === 1 && crons[0]!.expr) parts.push(cronToHuman(crons[0]!.expr));
+  else if (crons.length > 1) parts.push(`${crons.length} schedules`);
+  if (hasWebhook) parts.push('Webhook');
+  return parts.join(' · ') || 'Manual only';
+}
+
+// SQLite single-quote escape. Values come from a closed set (knob.value
+// strings declared by the template) — we still escape defensively so a
+// template author can introduce arbitrary value strings without rethinking
+// the write path.
+export function sqlString(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
+}
+
+// Settings key (camelCase, e.g. `appFont`) → kebab name shared by the
+// data-attr and CSS-var paths. Mirrors `camelTailToKebab` in
+// `app-engine/src/settings-merge.ts` so the live update lands on the same
+// target the runtime will bake on next reload.
+export function appKnobKebab(key: string): string {
+  // Strip the `app` prefix, lowercase first letter, kebab the rest.
+  const tail = key.startsWith('app') ? key.slice(3) : key;
+  return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+}
+
+// Duration in ms → "950ms" / "1.4s" / "2m 5s".
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const mins = Math.floor(ms / 60_000);
+  const secs = Math.round((ms % 60_000) / 1000);
+  return secs ? `${mins}m ${secs}s` : `${mins}m`;
+}
+
+// Pretty-print a JSON string, passing it through unchanged when it doesn't
+// parse (e.g. an already-formatted blob or a non-JSON value).
+export function prettyJson(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
+/** True when the template is an automation app (`kind: 'automation'`). */
+export function isAutomationTemplate(t: { kind?: 'app' | 'automation' }): boolean {
+  return t.kind === 'automation';
+}
