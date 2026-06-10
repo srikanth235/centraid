@@ -1,7 +1,7 @@
 version: '2'
 packs:
 - id: governance-kit/core
-  version: 0.3.2
+  version: 0.4.0
   source: gh
   directives:
   - agent-steering-accounting
@@ -9,6 +9,7 @@ packs:
   - commit-issue-receipt-match
   - commit-message-format
   - doc-freshness
+  - doc-integrity
   - issue-templates
   - issues-tracked
   - no-broken-internal-doc-links
@@ -17,12 +18,13 @@ packs:
   - repo-hygiene
   - required-docs
   - secrets-hygiene
+  - version-consistency
   - workflows-hardened
   ref: gh:Duaility/governance-kit/packs/core@main
-  sha: ff76a2827e8653f4998817d7b654f4735c2cdfa5
+  sha: 138eaf5b142f362b73728aa9df2d363e184e2999
   subpath: packs/core
   min_governance_kit: '0.3'
-  installed_at: '2026-05-28T14:09:56Z'
+  installed_at: '2026-06-10T04:27:30Z'
 - id: srikanth235/centraid
   version: '0.1'
   source: local

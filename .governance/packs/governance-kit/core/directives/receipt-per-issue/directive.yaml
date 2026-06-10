@@ -1,6 +1,6 @@
-# receipt-per-issue — receipts bind 1:1 to a GitHub issue, carry four required sections, and the Checklist crosswalks to evidence.
+# receipt-per-issue — receipts bind 1:1 to a GitHub issue, carry four required sections (plus ## Decisions on newly added receipts), and the Checklist crosswalks to evidence.
 category: AgentDiscipline
 recommended: true
-summary: Every tracked receipts/*.md has a unique issue-<N> filename token, includes ## Checklist, ## What changed, ## Out of scope, ## Verification, and each `- [x]` item appears (case-insensitive substring) in What changed or Verification.
+summary: Every tracked receipts/*.md has a unique issue-<N> filename token, includes ## Checklist, ## What changed, ## Out of scope, ## Verification, and each `- [x]` item appears (case-insensitive substring) in What changed or Verification. Receipts added in the change set must also include ## Decisions; pre-existing receipts are grandfathered.
 surface: repo-state
 hook: pre-commit

@@ -82,9 +82,15 @@ for candidate in origin/main origin/master main master; do
 done
 
 if [[ -z "$base" ]]; then
-    # Validate just the tip commit.
-    subject=$(git log -1 --format=%s HEAD 2>/dev/null || echo "")
-    [[ -n "$subject" ]] && validate_subject "$subject" "HEAD"
+    # Validate just the tip commit — honoring an in-body waiver, exactly like
+    # the base..HEAD loop below. Without this, a waived commit (e.g. a
+    # `chore(release)` bump) passes the commit-msg hook but fails the suite's
+    # HEAD-fallback on the default branch after it lands.
+    body=$(git log -1 --format=%B HEAD 2>/dev/null || echo "")
+    if ! msg_has_waiver "$body"; then
+        subject=$(git log -1 --format=%s HEAD 2>/dev/null || echo "")
+        [[ -n "$subject" ]] && validate_subject "$subject" "HEAD"
+    fi
     directive_end
 fi
 
