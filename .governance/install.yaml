@@ -2,7 +2,7 @@ version: '3'
 generated_at: 2026-05-14T23:15:00Z
 owner: srikanth235
 repo: centraid
-kit_version: "0.3.5"
+kit_version: "0.4.0"
 hook_strategy: githooks
 constitution: true
 ci_workflow: .github/workflows/governance.yml
