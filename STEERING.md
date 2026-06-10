@@ -438,3 +438,6 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-c6d3b01ba90-1780727621-1 | c6d3b01b-a900-4ac3-97f3-975f8ca8dfaf | #227 | correction | classifier | flagged app-automations module still monolithic, wants finer split |  |
 | steer-8acdf649cd9-1780731749-1 | 8acdf649-cd92-4160-9311-7bc23017b254 | #229 | interrupt | structural |  | feat(desktop): unified Home library shelf + inline card action toolbar (#229) -… |
 | steer-b19fdfdd725-1781066012-1 | b19fdfdd-725b-49c5-af84-b0a07dc0a69d |  | correction | classifier | Disputes agent's up-to-date verdict; says a newer kit version was published |  |
+| steer-b19fdfdd725-1781068049-1 | b19fdfdd-725b-49c5-af84-b0a07dc0a69d | #235 | correction | classifier | declined push; wanted kit/pack-update improvement ideas, not the next action |  |
+| steer-b19fdfdd725-1781068049-2 | b19fdfdd-725b-49c5-af84-b0a07dc0a69d | #235 | interrupt | structural |  |  |
+| steer-b19fdfdd725-1781068049-3 | b19fdfdd-725b-49c5-af84-b0a07dc0a69d | #235 | correction | classifier | questioned why oxfmt's scope reaches into the .governance dir |  |
