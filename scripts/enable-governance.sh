@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# governance-kit:managed kit-version=0.3.5
+# governance-kit:managed kit-version=0.5.0
 # Enable governance-kit for this clone.
 #
 # Points git at the tracked .githooks/ directory. Safe to re-run — git
