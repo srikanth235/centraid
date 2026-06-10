@@ -20,11 +20,11 @@ packs:
   - secrets-hygiene
   - version-consistency
   - workflows-hardened
-  ref: gh:Duaility/governance-kit/packs/core@main
-  sha: 138eaf5b142f362b73728aa9df2d363e184e2999
+  ref: gh:Duaility/governance-kit/packs/core@core/v0.4.0
+  sha: e9d339cf0ffbc2ff627e5db61ef49fe09943b712
   subpath: packs/core
   min_governance_kit: '0.3'
-  installed_at: '2026-06-10T04:27:30Z'
+  installed_at: '2026-06-10T04:43:15Z'
 - id: srikanth235/centraid
   version: '0.1'
   source: local
