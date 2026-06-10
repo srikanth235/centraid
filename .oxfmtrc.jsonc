@@ -14,6 +14,13 @@
     // diverges from upstream and guarantees the next `pack update` /
     // `kit update` re-introduces the diff and re-breaks CI.
     ".governance/**",
+    // Same ownership rule for the kit-managed CI workflow: it carries a
+    // `# governance-kit:managed kit-version=` marker and is re-stamped from
+    // the kit's assets/governance.yml on every `kit update`. The kit source
+    // is not oxfmt-clean (e.g. a double space before an inline comment), so
+    // reformatting it just diverges from upstream and re-breaks CI on the
+    // next update (see the #53 reformat after the 0.2→0.3 update).
+    ".github/workflows/governance.yml",
   ],
   "arrowParens": "always",
   "bracketSameLine": false,

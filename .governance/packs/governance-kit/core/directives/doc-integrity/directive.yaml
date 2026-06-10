@@ -1,0 +1,7 @@
+# doc-integrity — system-of-record documents are append-only; content present at the default-branch baseline may not be rewritten or erased, only added to.
+category: AgentDiscipline
+recommended: true
+always_install: true
+summary: "Documents opted into .governance/integrity.conf are append-only: receipts are immutable once on the trunk (frozen-files), ledgers may only grow (append-only), and frozen sections (e.g. resolved issues, the evolution log) keep their baseline lines verbatim."
+surface: change-set
+hook: commit-msg
