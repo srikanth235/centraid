@@ -16,6 +16,7 @@ import {
   updateAppMeta,
 } from './gateway-client.js';
 import { colorForIcon, isAutomationTemplate, relativeTime } from './app-format.js';
+import { APP_BADGE_SVG } from './app-glyphs.js';
 import type { ShellContext, TemplateEntry } from './app-shell-context.js';
 
 // True when an app was created within the last 24h (drives the "new" pill).
@@ -28,6 +29,8 @@ function isRecentlyCreated(iso?: string): boolean {
 export interface CardsModule {
   renderAppCard(app: AppMetaResolvedType, small?: boolean): HTMLElement;
   statusPillEl(tone: 'new' | 'draft' | 'live', label: string): HTMLElement;
+  /** Footer kind badge (APP / AUTOMATION) — shared with the Home automation card. */
+  kindBadgeEl(kind: 'app' | 'automation'): HTMLElement;
   closeContextMenu(): void;
   isContextMenuOpen(): boolean;
   openContextMenu(app: AppMetaResolvedType, anchor: MenuAnchor): void;
@@ -94,6 +97,19 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
     ]);
   }
 
+  // Card footer kind badge (APP / AUTOMATION) — reuses the Discover badge
+  // styling so apps and automations read consistently across both surfaces.
+  // Exposed on the module so the Home automation card (in app.ts) reuses it.
+  function kindBadgeEl(kind: 'app' | 'automation'): HTMLElement {
+    return el('span', { class: 'cd-disc-badge', 'data-kind': kind }, [
+      el('span', {
+        'aria-hidden': 'true',
+        trustedHtml: kind === 'app' ? APP_BADGE_SVG : Icon.Bolt({ size: 12 }),
+      }),
+      el('span', {}, kind === 'app' ? 'App' : 'Automation'),
+    ]);
+  }
+
   // §A3 — RefinedAppTile: gradient icon tile with a status dot, a
   // hover-revealed star, a 2-line blurb, and a state-aware bottom strip
   // (NEW for <24h, DRAFT, else last-opened).
@@ -135,69 +151,51 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
       iconEl.append(el('span', { class: 'cd-app-card-icon-dot', 'data-tone': tone }));
     }
 
-    // Horizontal header — large glyph plate on the left, name over blurb
-    // on the right (matches the apps-gallery spec).
+    // Horizontal header — large glyph plate on the left, name (+ inline NEW/
+    // DRAFT pill) over blurb on the right (matches the apps-gallery spec).
+    card.dataset.kind = 'app';
     card.append(
       el('div', { class: 'cd-app-card-head' }, [
         iconEl,
         el('div', { class: 'cd-app-card-head-text' }, [
-          el('div', { class: 'cd-app-card-name' }, app.name),
+          el('div', { class: 'cd-app-card-name-row' }, [
+            el('div', { class: 'cd-app-card-name' }, app.name),
+            ...(tone ? [statusPillEl(tone, tone)] : []),
+          ]),
           el('div', { class: 'cd-app-card-desc' }, app.desc || 'No description yet.'),
         ]),
       ]),
     );
 
-    // Divider + state strip: status label · timestamp on the left; the
-    // hover-revealed action toolbar floats over the right (a wrap sibling so
-    // we don't nest buttons inside the card button).
+    // Divider + state strip: APP kind badge on the left, timestamp on the
+    // right. The hover-revealed action toolbar floats over the top-right (a
+    // wrap sibling so we don't nest buttons inside the card button).
     const foot = el('div', { class: 'cd-app-card-foot' });
-    const meta = el('div', { class: 'cd-app-card-foot-meta' });
-    if (tone) meta.append(statusPillEl(tone, tone));
+    foot.append(kindBadgeEl('app'));
     const stamp = draft ? 'saved' : relativeTime(ua?.updatedAt);
-    if (tone) meta.append(el('span', { class: 'cd-app-card-foot-sep' }, '·'));
-    meta.append(el('span', { class: 'cd-app-card-foot-time' }, stamp));
-    foot.append(meta);
+    foot.append(el('span', { class: 'cd-app-card-foot-time' }, stamp));
     card.append(foot);
+    const starred = isStarred(app.id);
+    wrap.dataset.starred = String(starred);
     wrap.append(card);
 
-    // Inline hover toolbar — primary action (Edit with Centraid / Continue
-    // editing), Star, and an overflow ⋯ for the rest (Open/Rename/Share/
-    // Reveal/Delete). Replaces the lone ⋯ menu so the common actions are one
-    // click away rather than buried.
-    const editLabel = draft ? 'Continue editing' : 'Edit with Centraid';
-    const editBtn = el('button', {
-      class: 'cd-card-act',
-      type: 'button',
-      'aria-label': editLabel,
-      title: editLabel,
-      trustedHtml: Icon.Sparkle({ size: 15 }),
-      onClick: (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        enterBuilder({ appContext: app });
-      },
-    });
-    const star = el('button', {
-      class: 'cd-card-act cd-card-act-star',
-      type: 'button',
-      'aria-label': isStarred(app.id) ? 'Unstar app' : 'Star app',
-      title: isStarred(app.id) ? 'Unstar' : 'Star',
-      'data-on': isStarred(app.id) ? 'true' : undefined,
-      trustedHtml: Icon.Star ? Icon.Star({ size: 15 }) : '',
-      onClick: (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleStar(app.id);
-        ctx.shell.renderHome();
-      },
-    });
+    // Single overflow ⋯ affordance — Edit / Star / Open / Rename / … all live in
+    // the menu (openContextMenu) so the card stays clean (no multi-button hover
+    // toolbar). A persistent gold star flag marks starred apps when idle;
+    // hovering swaps in the ⋯.
     wrap.append(
       el('div', { class: 'cd-card-actions' }, [
-        editBtn,
-        star,
         buildMoreButton('App actions', (rect) => openContextMenu(app, { kind: 'rect', rect })),
       ]),
     );
+    if (starred)
+      wrap.append(
+        el('span', {
+          class: 'cd-card-star-flag',
+          'aria-hidden': 'true',
+          trustedHtml: Icon.Star ? Icon.Star({ size: 14 }) : '',
+        }),
+      );
     return wrap;
   }
 
@@ -319,11 +317,17 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
     // Drafts have no published runtime, so "Open" and "Share" are hidden
     // — only Edit (back to builder) and Delete (rm the app dir) make
     // sense. Published apps additionally get Share.
+    const starItem: CtxItem = {
+      icon: 'Star',
+      id: 'star',
+      label: isStarred(app.id) ? 'Unstar' : 'Star',
+    };
     const items: (CtxItem | 'sep')[] = isDraft(app)
       ? [
           { icon: 'Sparkle', id: 'update', label: 'Continue editing' },
           { icon: 'Pencil', id: 'rename', label: 'Rename' },
           { icon: 'Folder', id: 'reveal', label: 'Reveal in Finder' },
+          starItem,
           'sep',
           { danger: true, icon: 'Trash', id: 'delete', label: 'Delete draft' },
         ]
@@ -333,6 +337,7 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
           { icon: 'Pencil', id: 'rename', label: 'Rename' },
           { icon: 'Share', id: 'share', label: 'Share' },
           { icon: 'Folder', id: 'reveal', label: 'Reveal in Finder' },
+          starItem,
           'sep',
           { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
         ];
@@ -376,6 +381,9 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
       startInlineRename(app);
     } else if (id === 'reveal') {
       void revealApp(app);
+    } else if (id === 'star') {
+      toggleStar(app.id);
+      ctx.shell.renderHome();
     }
   }
 
@@ -990,6 +998,7 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
   return {
     renderAppCard,
     statusPillEl,
+    kindBadgeEl,
     closeContextMenu,
     isContextMenuOpen: () => ctxMenu !== null,
     openContextMenu,

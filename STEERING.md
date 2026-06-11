@@ -441,3 +441,10 @@ silent fallback for when the runtime CLI is unreachable).
 | steer-b19fdfdd725-1781068049-1 | b19fdfdd-725b-49c5-af84-b0a07dc0a69d | #235 | correction | classifier | declined push; wanted kit/pack-update improvement ideas, not the next action |  |
 | steer-b19fdfdd725-1781068049-2 | b19fdfdd-725b-49c5-af84-b0a07dc0a69d | #235 | interrupt | structural |  |  |
 | steer-b19fdfdd725-1781068049-3 | b19fdfdd-725b-49c5-af84-b0a07dc0a69d | #235 | correction | classifier | questioned why oxfmt's scope reaches into the .governance dir |  |
+| steer-3d3c9245840-1781170286-1 | 3d3c9245-8404-4e45-adf3-9bb20d314217 | #238 | interrupt | structural |  |  |
+| steer-3d3c9245840-1781170286-2 | 3d3c9245-8404-4e45-adf3-9bb20d314217 | #238 | interrupt | structural |  |  |
+| steer-3d3c9245840-1781170286-3 | 3d3c9245-8404-4e45-adf3-9bb20d314217 | #238 | interrupt | structural |  |  |
+| steer-3d3c9245840-1781170286-4 | 3d3c9245-8404-4e45-adf3-9bb20d314217 | #238 | interrupt | structural |  |  |
+| steer-3d3c9245840-1781170286-5 | 3d3c9245-8404-4e45-adf3-9bb20d314217 | #238 | interrupt | structural |  |  |
+| steer-3d3c9245840-1781170286-6 | 3d3c9245-8404-4e45-adf3-9bb20d314217 | #238 | interrupt | structural |  |  |
+| steer-3d3c9245840-1781170286-7 | 3d3c9245-8404-4e45-adf3-9bb20d314217 | #238 | interrupt | structural |  |  |
