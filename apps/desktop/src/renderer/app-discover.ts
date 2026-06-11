@@ -3,6 +3,7 @@
 // from app.ts. Template previews / context menus live in app-cards.ts and
 // app-automations.ts; discover reaches them lazily through `ctx.shell.*`.
 import { isAutomationTemplate } from './app-format.js';
+import { APP_BADGE_SVG, buildLayoutToggle } from './app-glyphs.js';
 import type { ShellContext, TemplateEntry } from './app-shell-context.js';
 
 export interface DiscoverModule {
@@ -47,11 +48,17 @@ export function createDiscoverModule(ctx: ShellContext): DiscoverModule {
     const all = [...appTemplates, ...automationTemplates];
 
     const main = el('div', { class: 'has-wall' });
-    const scroll = el('div', { class: 'cd-main-scroll' });
+    // cd-disc-scroll drops the cd-main-scroll padding so the width envelope is
+    // owned entirely by .cd-disc-wrap below — mirroring Home, whose day1 scroll
+    // is padding-free and lets .cd-hsec own the envelope. Without this Discover
+    // double-pads (scroll + wrap) and its grid ends up 112px narrower than Home.
+    const scroll = el('div', { class: 'cd-main-scroll cd-disc-scroll' });
     main.append(scroll);
 
     // Kind filter state — drives which slice paints below.
     let kind: 'all' | 'app' | 'automation' = 'all';
+    // Tiles (grid) vs Rows (full-width strips). Session-only, mirrors Home.
+    let layout: 'tiles' | 'rows' = 'tiles';
 
     const results = el('div', { class: 'cd-disc-cats' });
     const paint = (): void => {
@@ -82,7 +89,11 @@ export function createDiscoverModule(ctx: ShellContext): DiscoverModule {
               el('span', { class: 'cd-disc-cat-label' }, cat),
               el('span', { class: 'cd-disc-cat-count' }, String(bucket.length).padStart(2, '0')),
             ]),
-            el('div', { class: 'cd-disc-grid' }, bucket.map(renderDiscoverTemplateCard)),
+            el(
+              'div',
+              { class: 'cd-disc-grid', 'data-layout': layout },
+              bucket.map(renderDiscoverTemplateCard),
+            ),
           ]);
         }),
       );
@@ -135,20 +146,40 @@ export function createDiscoverModule(ctx: ShellContext): DiscoverModule {
       );
     }
 
+    // Layout toggle — Tiles | Rows, far right of the filter toolbar. Flips the
+    // grids' data-layout (read by paint); session-only. Shared with Home.
+    const layoutToggle = buildLayoutToggle(
+      el,
+      () => layout,
+      (mode) => {
+        layout = mode;
+        paint();
+      },
+    );
+
+    // Width envelope matches the Home library shelf (.cd-hsec): capped + padded
+    // so the tile grid resolves to the same column width as Home rather than
+    // spanning the full main pane.
     scroll.append(
-      el('div', { class: 'cd-disc-head' }, [
-        el('div', { class: 'cd-disc-head-text' }, [
-          el('div', { class: 'cd-eyebrow' }, 'Discover'),
-          el('h1', {}, 'Templates'),
-          el(
-            'p',
-            {},
-            'Start from a blueprint — an app you open or an automation that runs for you. Clone it, then describe your tweaks in the builder.',
-          ),
+      el('div', { class: 'cd-disc-wrap' }, [
+        el('div', { class: 'cd-disc-head' }, [
+          el('div', { class: 'cd-disc-head-text' }, [
+            el('div', { class: 'cd-eyebrow' }, 'Discover'),
+            el('h1', {}, 'Templates'),
+            el(
+              'p',
+              {},
+              'Start from a blueprint — an app you open or an automation that runs for you. Clone it, then describe your tweaks in the builder.',
+            ),
+          ]),
         ]),
-        seg,
+        el('div', { class: 'cd-disc-toolbar' }, [
+          seg,
+          el('span', { class: 'cd-hsec-spacer' }),
+          layoutToggle,
+        ]),
+        results,
       ]),
-      results,
     );
     sync();
     paint();
@@ -177,7 +208,7 @@ export function createDiscoverModule(ctx: ShellContext): DiscoverModule {
     const iconEl = el('div', {
       class: 'cd-disc-card-icon',
       trustedHtml: Icon[t.iconKey as IconNameType]
-        ? Icon[t.iconKey as IconNameType]({ size: 18, strokeWidth: 1.85 })
+        ? Icon[t.iconKey as IconNameType]({ size: 21, strokeWidth: 1.85 })
         : '',
     });
     const finish = window.CentraidTokens.tileFinish(color as ColorHexType, getPrefs().tileVariant);
@@ -201,7 +232,7 @@ export function createDiscoverModule(ctx: ShellContext): DiscoverModule {
       el('span', { class: 'cd-disc-badge', 'data-kind': isAuto ? 'automation' : 'app' }, [
         el('span', {
           'aria-hidden': 'true',
-          trustedHtml: (isAuto ? Icon.Bolt : Icon.Home)({ size: 12 }),
+          trustedHtml: isAuto ? Icon.Bolt({ size: 12 }) : APP_BADGE_SVG,
         }),
         el('span', {}, isAuto ? 'Automation' : 'App'),
       ]),
@@ -216,8 +247,10 @@ export function createDiscoverModule(ctx: ShellContext): DiscoverModule {
           el('span', {}, t.triggerKind === 'webhook' ? 'Webhook' : 'Cron'),
         ]),
       );
-      if ((t.integrations?.length ?? 0) > 0)
-        foot.append(integrationDots([...(t.integrations ?? [])]));
+      // Always append the dots container (empty for no integrations) so the
+      // rows-layout tail reserves the slot and the trigger/badge columns stay
+      // aligned whether or not a row carries integrations.
+      foot.append(integrationDots([...(t.integrations ?? [])]));
     }
     card.append(foot);
     return card;

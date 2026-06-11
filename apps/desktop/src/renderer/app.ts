@@ -20,6 +20,7 @@ import {
   saveUserPrefs,
 } from './gateway-client.js';
 import { chevronDown, colorForIcon, relativeTime, triggersSummary } from './app-format.js';
+import { buildLayoutToggle } from './app-glyphs.js';
 import { auStatusForRow } from './automation-identity.js';
 import { ACCENT_PALETTE } from './app-shell-context.js';
 import type {
@@ -1071,6 +1072,9 @@ import { createAppViewModule } from './app-appview.js';
 
     // ── Kind filter — segmented control, reusing Discover's pill styling. ──
     let kind: 'all' | 'app' | 'automation' = 'all';
+    // Tiles (the repeat()-grid default) vs. Rows (full-width compact strips).
+    // Session-only: defaults to tiles on every Home render, no pref write.
+    let layout: 'tiles' | 'rows' = 'tiles';
     const seg = el('div', {
       class: 'cd-disc-seg',
       role: 'tablist',
@@ -1140,57 +1144,59 @@ import { createAppViewModule } from './app-appview.js';
       ]),
     );
 
-    // ── Body — kind-grouped sections, repainted in place on filter change. ──
+    // ── Layout toggle — Tiles | Rows, far right of the header. Flips the
+    // grid's data-layout (read by paint on repaint); the chosen layout lives
+    // only for this Home session. Shared with Discover. ──
+    head.append(
+      buildLayoutToggle(
+        el,
+        () => layout,
+        (mode) => {
+          layout = mode;
+          paint();
+        },
+      ),
+    );
+
+    // ── Body — ONE unified grid (apps + automations in a single tile/row
+    // grid, no per-kind sub-headers), matching the gallery spec. The kind
+    // filter narrows what the grid holds; the grid repaints in place. ──
     const body = el('div', { class: 'cd-home-lib-body' });
 
-    const group = (label: string, count: number, content: HTMLElement): HTMLElement =>
-      el('div', { class: 'cd-home-lib-group' }, [
-        el('div', { class: 'cd-disc-cat-head' }, [
-          el('span', { class: 'cd-disc-cat-label' }, label),
-          el('span', { class: 'cd-disc-cat-count' }, String(count).padStart(2, '0')),
-        ]),
-        content,
-      ]);
-
-    const appsBlock = (): HTMLElement =>
-      group(
-        'Apps',
-        apps.length,
-        apps.length === 0
-          ? homeSectionEmpty(
-              'Sparkle',
-              'No apps yet',
-              'Describe an app in the box above — Centraid will build it for you.',
-            )
-          : el(
-              'div',
-              { class: 'cd-apps-grid cd-apps-grid--small' },
-              apps.map((a) => renderAppCard(a, true)),
-            ),
-      );
-
-    const autosBlock = (): HTMLElement =>
-      group(
-        'Automations',
-        automationRows.length,
-        automationRows.length === 0
-          ? homeSectionEmpty(
-              'Bolt',
-              'No automations yet',
-              'A saved conversation that fires on a trigger. Start from a template, or describe one from scratch.',
-            )
-          : el(
-              'div',
-              { class: 'cd-apps-grid cd-apps-grid--small' },
-              automationRows.map((r) => renderHomeAutomationCard(r, lastByRef.get(r.ref))),
-            ),
-      );
-
     function paint(): void {
-      const blocks: HTMLElement[] = [];
-      if (kind === 'all' || kind === 'app') blocks.push(appsBlock());
-      if (kind === 'all' || kind === 'automation') blocks.push(autosBlock());
-      body.replaceChildren(...blocks);
+      // Apps lead, automations follow — one mixed grid (the segmented filter
+      // above is the only kind divider, per the design).
+      const cards: HTMLElement[] = [];
+      if (kind === 'all' || kind === 'app') cards.push(...apps.map((a) => renderAppCard(a, true)));
+      if (kind === 'all' || kind === 'automation')
+        cards.push(...automationRows.map((r) => renderHomeAutomationCard(r, lastByRef.get(r.ref))));
+
+      if (cards.length === 0) {
+        const empty =
+          kind === 'automation'
+            ? homeSectionEmpty(
+                'Bolt',
+                'No automations yet',
+                'A saved conversation that fires on a trigger. Start from a template, or describe one from scratch.',
+              )
+            : kind === 'app'
+              ? homeSectionEmpty(
+                  'Sparkle',
+                  'No apps yet',
+                  'Describe an app in the box above — Centraid will build it for you.',
+                )
+              : homeSectionEmpty(
+                  'Sparkle',
+                  'Nothing here yet',
+                  'Describe an app or automation in the box above to get started.',
+                );
+        body.replaceChildren(empty);
+        return;
+      }
+
+      body.replaceChildren(
+        el('div', { class: 'cd-apps-grid cd-apps-grid--small', 'data-layout': layout }, cards),
+      );
     }
 
     section.append(head, body);
@@ -1209,34 +1215,63 @@ import { createAppViewModule } from './app-appview.js';
     last: AutomationFeedEntry | undefined,
   ): HTMLElement {
     const integrations = row.manifest.requires.mcps ?? [];
+    const isStar = isStarred(row.ref);
     const wrap = el('div', { class: 'cd-app-card-wrap' });
+    wrap.dataset.starred = String(isStar);
     const card = el('button', {
       class: 'cd-app-card cd-app-card--small',
       type: 'button',
       onClick: () => renderAutomationView(row.ref),
     });
+    card.dataset.kind = 'automation';
+    // Blurb is the automation's own description; the schedule moves into the
+    // trigger chip below so the two read as distinct facts (matches the spec).
+    const blurb = row.manifest.description || triggersSummary(row.triggers);
     card.append(
       el('div', { class: 'cd-app-card-head' }, [
         autoMod.autoGlyphTile(row.id, { size: 52, glyphSize: 24 }),
         el('div', { class: 'cd-app-card-head-text' }, [
-          el('div', { class: 'cd-app-card-name' }, row.name),
-          el('div', { class: 'cd-app-card-desc' }, triggersSummary(row.triggers)),
+          el('div', { class: 'cd-app-card-name-row' }, [
+            el('div', { class: 'cd-app-card-name' }, row.name),
+          ]),
+          el('div', { class: 'cd-app-card-desc' }, blurb),
         ]),
       ]),
     );
-    // Status · last-run · integration dots all sit on the left so the right
-    // edge stays clear for the hover toolbar (mirrors the app card).
-    const meta = el('div', { class: 'cd-app-card-foot-meta' }, [
+    // Meta strip — status pill · trigger chip · integration dots. Sits in the
+    // card body (tiles) / inline (rows); the footer below carries the kind
+    // badge + last-run time.
+    const isWebhook = row.triggers.some((t) => t.kind === 'webhook') && !row.triggers.some((t) => t.kind === 'cron');
+    const metaStrip = el('div', { class: 'cd-app-card-meta' }, [
       autoMod.auStatusPill(auStatusForRow(row.enabled, !!last)),
-      el('span', { class: 'cd-app-card-foot-sep' }, '·'),
+      el('span', { class: 'cd-app-card-trig' }, [
+        el('span', {
+          'aria-hidden': 'true',
+          trustedHtml: (isWebhook ? Icon.Webhook : Icon.Clock)({ size: 12 }),
+        }),
+        el('span', {}, triggersSummary(row.triggers)),
+      ]),
+    ]);
+    if (integrations.length > 0) metaStrip.append(autoMod.integrationDots([...integrations]));
+    card.append(metaStrip);
+    // Footer — AUTOMATION kind badge (left) + last-run time (right), the time
+    // led by a success tick when the most recent run succeeded.
+    const foot = el('div', { class: 'cd-app-card-foot' });
+    foot.append(cardsMod.kindBadgeEl('automation'));
+    const okTone = last?.run.ok ? 'true' : undefined;
+    const timeEl = el('span', { class: 'cd-app-card-foot-time', 'data-ok': okTone });
+    if (last?.run.ok) {
+      timeEl.append(el('span', { 'aria-hidden': 'true', trustedHtml: Icon.CheckCircle({ size: 13 }) }));
+    }
+    timeEl.append(
       el(
         'span',
-        { class: 'cd-app-card-foot-time' },
+        {},
         last ? relativeTime(new Date(last.run.startedAt).toISOString()) : 'No runs yet',
       ),
-    ]);
-    if (integrations.length > 0) meta.append(autoMod.integrationDots([...integrations]));
-    card.append(el('div', { class: 'cd-app-card-foot' }, [meta]));
+    );
+    foot.append(timeEl);
+    card.append(foot);
     wrap.append(card);
 
     // Inline hover toolbar — Run now, Star, overflow ⋯ (Open / Edit / Delete).
@@ -1271,32 +1306,9 @@ import { createAppViewModule } from './app-appview.js';
         }
       })();
     };
-    const runBtn = el('button', {
-      class: 'cd-card-act',
-      type: 'button',
-      'aria-label': 'Run now',
-      title: 'Run now',
-      trustedHtml: Icon.Play({ size: 15 }),
-      onClick: (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        runNow();
-      },
-    });
-    const star = el('button', {
-      class: 'cd-card-act cd-card-act-star',
-      type: 'button',
-      'aria-label': isStarred(row.ref) ? 'Unstar automation' : 'Star automation',
-      title: isStarred(row.ref) ? 'Unstar' : 'Star',
-      'data-on': isStarred(row.ref) ? 'true' : undefined,
-      trustedHtml: Icon.Star({ size: 15 }),
-      onClick: (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleStar(row.ref);
-        renderHome();
-      },
-    });
+    // Single overflow ⋯ affordance — Run / Edit / Star / Delete all live in the
+    // menu so the card stays clean (no multi-button hover toolbar). A persistent
+    // gold star flag marks starred rows when idle; hovering swaps in the ⋯.
     const moreBtn = el('button', {
       class: 'cd-card-act cd-card-act-more',
       type: 'button',
@@ -1313,6 +1325,7 @@ import { createAppViewModule } from './app-appview.js';
             { icon: 'Eye', id: 'open', label: 'Open' },
             { icon: 'Play', id: 'run', label: 'Run now' },
             { icon: 'Pencil', id: 'edit', label: 'Edit in builder' },
+            { icon: 'Star', id: 'star', label: isStar ? 'Unstar' : 'Star' },
             'sep',
             { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
           ],
@@ -1321,12 +1334,23 @@ import { createAppViewModule } from './app-appview.js';
             if (id === 'open') renderAutomationView(row.ref);
             else if (id === 'run') runNow();
             else if (id === 'edit') enterAutomationBuilder({ automationId: row.id });
-            else if (id === 'delete') confirmDelete();
+            else if (id === 'star') {
+              toggleStar(row.ref);
+              renderHome();
+            } else if (id === 'delete') confirmDelete();
           },
         );
       },
     });
-    wrap.append(el('div', { class: 'cd-card-actions' }, [runBtn, star, moreBtn]));
+    wrap.append(el('div', { class: 'cd-card-actions' }, [moreBtn]));
+    if (isStar)
+      wrap.append(
+        el('span', {
+          class: 'cd-card-star-flag',
+          'aria-hidden': 'true',
+          trustedHtml: Icon.Star({ size: 14 }),
+        }),
+      );
     return wrap;
   }
 

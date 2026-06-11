@@ -36,6 +36,30 @@
   --tracking-h: -0.015em;
   --tracking-body: 0.01em;
   --tracking-eyebrow: 0.08em;
+
+  /* Shared library-tile tokens — Home (.cd-app-card--small) and Discover
+     (.cd-disc-card) are the same tile on two pages, so every value they share
+     lives here ONCE. Tweak a tile dimension/tone in one place and both pages
+     move together; nothing drifts.
+     --lib-tile-h is sized to fit the richest tile (a Home automation: glyph +
+     blurb + status/trigger meta strip + foot); sparser tiles pin their foot
+     to the bottom and leave the slack above, exactly as Home already does for
+     its app tiles in the mixed grid. */
+  --lib-tile-h: 248px;
+  --lib-tile-pad: 15px 16px;
+  --lib-tile-gap: 11px;
+  --lib-tile-radius: 12px;
+  --lib-tile-bg: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  --lib-tile-bg-hover: color-mix(in srgb, var(--ink) 5%, transparent);
+  --lib-tile-icon: 44px;
+  --lib-tile-icon-radius: 12px;
+  /* Rows-layout kind-badge column width — keeps APP/AUTOMATION aligned across
+     Home and Discover; both rows footers reference it. */
+  --lib-row-badge-w: 116px;
+  /* Library shelf envelope — Home (.cd-hsec) and Discover (.cd-disc-wrap) share
+     the same max width + horizontal padding so their grids resolve identically. */
+  --lib-shelf-max: 1560px;
+  --lib-shelf-pad-x: 56px;
 }
 
 *,
@@ -6494,9 +6518,12 @@ select.input option {
    of matching cards. */
 .cd-hsec {
   width: 100%;
-  max-width: 1180px;
+  /* The library shelf runs wider than the centered hero so the tile grid sits
+     4-up on a roomy window (matching the gallery spec); it reflows to 3/2 as
+     the pane narrows. Shares its envelope with Discover's .cd-disc-wrap. */
+  max-width: var(--lib-shelf-max);
   margin: 40px auto 0;
-  padding: 0 56px;
+  padding: 0 var(--lib-shelf-pad-x);
   box-sizing: border-box;
 }
 .cd-hsec:last-child {
@@ -6640,8 +6667,154 @@ select.input option {
   gap: 14px;
 }
 .cd-apps-grid--small {
-  grid-template-columns: repeat(3, 1fr);
+  /* App-store-style tiles. A ~200px floor packs 4–5 across in the widened
+     shelf and reflows to 3/2 as the pane narrows — compact cards, not big
+     posters. (Gap inherited from .cd-apps-grid.) */
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+/* Home library layout toggle (Tiles | Rows) — a small segmented icon pair on
+   the right of the shelf header. The pressed segment reads as an elevated
+   chip; the other dims back. Session-only, mirrors the design's spec. */
+.cd-lib-layout {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  border: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+.cd-lib-layout-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-4);
+  cursor: pointer;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.cd-lib-layout-btn svg {
+  display: block;
+}
+.cd-lib-layout-btn:hover {
+  color: var(--ink-2);
+}
+.cd-lib-layout-btn[aria-pressed='true'] {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--line);
+  color: var(--ink);
+}
+
+/* Rows layout — restack the tile grid as one full-width card per line and
+   flatten each card into a horizontal strip: glyph plate · name/blurb (grows)
+   · status meta. The hover toolbar re-pins to the vertically-centred right
+   edge; the card reserves right padding so the meta never sits under it.
+   Applies to both app cards (renderAppCard) and the automation cards, which
+   share the .cd-app-card--small family. */
+.cd-apps-grid[data-layout='rows'] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card-wrap {
+  height: auto;
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card--small {
+  min-height: 0;
+  flex-direction: row;
+  align-items: center;
   gap: 16px;
+  padding: 10px 108px 10px 14px;
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card-head {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Back to a horizontal head for the row strip — icon beside the title. */
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card--small .cd-app-card-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card--small .cd-app-card-icon svg {
+  width: 19px;
+  height: 19px;
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card-desc {
+  -webkit-line-clamp: 1;
+}
+/* Meta strip + footer collapse from stacked blocks into inline, no-wrap
+   clusters that ride the right edge of the row. Reading order, left → right:
+   title (grows) · status + trigger · kind badge · timestamp. The kind badge +
+   timestamp share a fixed-width tail so they line up into clean columns across
+   rows regardless of whether a row carries the status/trigger meta. */
+.cd-apps-grid[data-layout='rows'] .cd-app-card-meta {
+  /* Fixed-width slot so the status pill (its leftmost child) lands at the same
+     x down the column — otherwise a longer trigger ("Weekdays at 11:30 PM" vs
+     "Daily at 9:00 AM") shifts the whole cluster and the pills drift. The
+     trigger fills the remainder and truncates if a row runs long. */
+  flex: 0 0 auto;
+  width: 256px;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow: hidden;
+  order: 1;
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card-meta .cd-au-status {
+  flex: 0 0 auto;
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card-meta .cd-app-card-trig {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card-foot {
+  flex: 0 0 auto;
+  order: 2;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  justify-content: flex-end;
+  gap: 12px;
+}
+/* Kind badge: fixed slot so APP / AUTOMATION align down the column. */
+.cd-apps-grid[data-layout='rows'] .cd-app-card-foot .cd-disc-badge {
+  width: var(--lib-row-badge-w);
+}
+/* Timestamp: right-aligned in a fixed slot wide enough for the longest stamp
+   ("Weekdays at 11:30 PM") so the times right-align into a column. */
+.cd-apps-grid[data-layout='rows'] .cd-app-card-foot-time {
+  min-width: 132px;
+  justify-content: flex-end;
+  text-align: right;
+}
+.cd-apps-grid[data-layout='rows'] .cd-card-actions {
+  top: 50%;
+  right: 14px;
+  bottom: auto;
+  transform: translateY(-50%) translateY(3px);
+}
+.cd-apps-grid[data-layout='rows'] .cd-app-card-wrap:hover .cd-card-actions,
+.cd-apps-grid[data-layout='rows'] .cd-app-card-wrap:has(:focus-visible) .cd-card-actions,
+.cd-apps-grid[data-layout='rows'] .cd-card-actions:has(.cd-card-act[data-open='true']) {
+  transform: translateY(-50%);
+}
+/* Star flag rides the same vertically-centred right edge as the ⋯ in rows. */
+.cd-apps-grid[data-layout='rows'] .cd-card-star-flag {
+  top: 50%;
+  right: 17px;
+  transform: translateY(-50%);
 }
 
 /* §A2 — ambient build pill. Collapsed it's a slim ~360px bar floated to
@@ -6940,9 +7113,9 @@ select.input option {
   height: 100%;
   min-height: 92px;
   padding: 12px;
-  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  background: var(--lib-tile-bg);
   border: 0.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--lib-tile-radius);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -6955,21 +7128,26 @@ select.input option {
     transform 120ms;
 }
 .cd-app-card--small {
-  min-height: 132px;
-  padding: 18px 20px;
-  gap: 0;
+  min-height: var(--lib-tile-h);
+  padding: var(--lib-tile-pad);
+  /* Vertical rhythm between the head, the (automation) meta strip, and the
+     footer so nothing collides; the footer still floats to the bottom via its
+     margin-top:auto. */
+  gap: var(--lib-tile-gap);
 }
 .cd-app-card:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  background: var(--lib-tile-bg-hover);
 }
 .cd-app-card:active {
   transform: scale(0.99);
 }
-/* Horizontal header — glyph plate + a name/blurb column beside it. */
+/* Tile header — gallery layout: glyph plate on its own row, name/blurb
+   stacked beneath it. (Rows layout flips this back to a horizontal head.) */
 .cd-app-card-head {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 11px;
 }
 .cd-app-card-head-text {
   min-width: 0;
@@ -6991,9 +7169,9 @@ select.input option {
 /* Home tiles read as prominent, app-store-style glyph plates — big rounded
    squares with a generous glyph, matching the apps-gallery spec. */
 .cd-app-card--small .cd-app-card-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: var(--lib-tile-icon);
+  height: var(--lib-tile-icon);
+  border-radius: var(--lib-tile-icon-radius);
 }
 .cd-app-card-icon svg {
   display: block;
@@ -7001,8 +7179,8 @@ select.input option {
   height: 18px;
 }
 .cd-app-card--small .cd-app-card-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 21px;
+  height: 21px;
 }
 /* Status dot riding the icon's top-right corner. */
 .cd-app-card-icon-dot {
@@ -7023,15 +7201,26 @@ select.input option {
 .cd-app-card-icon-dot[data-tone='template'] {
   background: var(--success);
 }
+/* Name + an optional inline pill (NEW / DRAFT) riding to its right. The
+   name truncates; the pill never shrinks. */
+.cd-app-card-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .cd-app-card-name {
   font: var(--t-title);
   font-weight: 600;
-  font-size: 16px;
+  font-size: 15px;
   letter-spacing: -0.01em;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.cd-app-card-name-row .cd-status {
+  flex: 0 0 auto;
 }
 .cd-app-card-desc {
   font: var(--t-small);
@@ -7047,7 +7236,7 @@ select.input option {
    the hover-revealed star pinned right. */
 .cd-app-card-foot {
   margin-top: auto;
-  padding-top: 13px;
+  padding-top: 11px;
   border-top: 0.5px solid var(--line);
   display: flex;
   align-items: center;
@@ -7074,16 +7263,58 @@ select.input option {
   white-space: nowrap;
 }
 
-/* Inline hover action toolbar — replaces the lone ⋯ overflow on Home app +
-   automation cards. A pill of ghost icon buttons (primary action · star ·
-   overflow) that floats over the card's bottom-right and fades in on
-   hover/focus. Lives as a wrap sibling, so it never nests inside the card
-   button. Staying visible while its menu is open is handled by the overflow
-   button's `data-open` flag (see below). */
+/* Automation meta strip — status pill · trigger chip · integration dots,
+   sitting in the card body between the blurb and the footer (apps omit it).
+   In tiles it wraps; in rows it flows inline (see the rows block). */
+.cd-app-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.cd-app-card-trig {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.cd-app-card-trig svg {
+  display: block;
+}
+/* Footer kind badge (APP / AUTOMATION) reuses the Discover badge styling;
+   it sits left, timestamp right (the foot is already space-between). */
+.cd-app-card-foot .cd-disc-badge {
+  flex: 0 0 auto;
+}
+/* A success tick can lead the timestamp for automations whose last run
+   was OK; the tick inherits the success hue. */
+.cd-app-card-foot-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* Without this it inherits the body's default 16px and dwarfs the badges /
+     meta text (most visible in the rows layout). Match the foot-meta size. */
+  font-size: 11.5px;
+  color: var(--ink-4);
+}
+.cd-app-card-foot-time svg {
+  display: block;
+}
+.cd-app-card-foot-time[data-ok='true'] svg {
+  color: var(--success);
+}
+
+/* Inline hover affordance — a single overflow ⋯ button pinned to the card's
+   top-right that fades in on hover/focus and opens a menu holding every action
+   (Run/Edit · Star · Open · …). Lives as a wrap sibling so it never nests
+   inside the card button; `data-open` keeps it up while its menu is mounted. */
 .cd-card-actions {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: 10px;
+  top: 10px;
   display: inline-flex;
   align-items: center;
   gap: 1px;
@@ -7103,10 +7334,42 @@ select.input option {
     transform 150ms ease;
 }
 .cd-app-card-wrap:hover .cd-card-actions,
-.cd-app-card-wrap:focus-within .cd-card-actions,
+.cd-app-card-wrap:has(:focus-visible) .cd-card-actions,
 .cd-card-actions:has(.cd-card-act[data-open='true']) {
   opacity: 1;
   transform: none;
+}
+/* Starred-but-idle: a persistent gold star flag marks the card. It sits in the
+   same top-right slot the ⋯ button rests in and yields to the hover toolbar on
+   hover/focus, so a card never shows both at once. Purely an indicator —
+   pointer-events:none keeps the ⋯ underneath fully clickable. */
+.cd-card-star-flag {
+  position: absolute;
+  right: 13px;
+  top: 13px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--icon-amber);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 150ms ease;
+}
+.cd-card-star-flag svg {
+  display: block;
+}
+.cd-card-star-flag svg path {
+  fill: currentColor;
+}
+.cd-app-card-wrap[data-starred='true'] .cd-card-star-flag {
+  opacity: 1;
+}
+.cd-app-card-wrap:hover .cd-card-star-flag,
+.cd-app-card-wrap:has(:focus-visible) .cd-card-star-flag {
+  opacity: 0;
 }
 .cd-card-act {
   display: inline-flex;
@@ -7139,12 +7402,6 @@ select.input option {
 .cd-card-act svg {
   display: block;
 }
-.cd-card-act-star[data-on='true'] {
-  color: var(--icon-amber);
-}
-.cd-card-act-star[data-on='true'] svg path {
-  fill: currentColor;
-}
 
 /* Discover-page template grid — same 6-column uniform-height layout as
    the Home shelf (`.cd-shelf-grid`); the cards themselves are the shared
@@ -7158,6 +7415,21 @@ select.input option {
 /* ── Discover / Templates page ───────────────────────────────────────────
    Eyebrow + title + blurb on the left, a kind segmented filter on the
    right; below, category-grouped sections of unified template cards. */
+/* Width envelope — identical to the Home library shelf (.cd-hsec) so the tile
+   grid resolves to the same column width on Discover as on Home. Both share the
+   --lib-shelf-* tokens; the scroll drops its padding so the wrap owns the
+   envelope, mirroring Home's padding-free day1 scroll + .cd-hsec. */
+.cd-disc-scroll {
+  padding: 0;
+}
+.cd-disc-wrap {
+  width: 100%;
+  max-width: var(--lib-shelf-max);
+  margin: 0 auto;
+  /* Same side padding as .cd-hsec; top/bottom replace what cd-disc-scroll drops. */
+  padding: 48px var(--lib-shelf-pad-x) 56px;
+  box-sizing: border-box;
+}
 .cd-disc-head {
   display: flex;
   align-items: flex-start;
@@ -7233,6 +7505,18 @@ select.input option {
   color: var(--ink-3);
 }
 
+/* Filter toolbar — kind segmented control on the left, layout toggle on the
+   right; sits below the Discover title block. */
+.cd-disc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+}
+.cd-disc-toolbar .cd-disc-seg {
+  margin-top: 0;
+}
+
 .cd-disc-cats {
   display: flex;
   flex-direction: column;
@@ -7258,67 +7542,164 @@ select.input option {
   color: var(--ink-4);
 }
 .cd-disc-grid {
+  /* Compact template tiles, sized to match the Home shelf exactly — the same
+     ~200px floor (.cd-apps-grid--small) packs 4–5 across in the wide pane and
+     reflows to 3/2 as the pane narrows. Not big posters. */
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 14px;
+}
+/* Rows layout — flatten template cards into full-width strips, mirroring the
+   Home library's rows mode. */
+.cd-disc-grid[data-layout='rows'] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-disc-grid[data-layout='rows'] .cd-disc-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+  padding: 12px 16px;
+}
+.cd-disc-grid[data-layout='rows'] .cd-disc-card-top {
+  flex: 1 1 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+/* Slimmer glyph plate in the strip — the row's height is set by the text, not
+   a poster icon. Matches the Home rows glyph (38px / 19px). */
+.cd-disc-grid[data-layout='rows'] .cd-disc-card-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+.cd-disc-grid[data-layout='rows'] .cd-disc-card-icon svg {
+  width: 19px;
+  height: 19px;
+}
+.cd-disc-grid[data-layout='rows'] .cd-disc-card-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Footer flattens into a fixed-width tail riding the right edge. The kind badge
+   and trigger chip each take a fixed slot so APP/AUTOMATION and Cron/Webhook
+   line up into clean columns down the list; integration dots pin to the far
+   right. (Discover groups cards by category, so each grid is homogeneous and
+   the columns stay true within a section.) */
+.cd-disc-grid[data-layout='rows'] .cd-disc-card-foot {
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  gap: 14px;
+  justify-content: flex-end;
+}
+.cd-disc-grid[data-layout='rows'] .cd-disc-card-foot .cd-disc-badge {
+  flex: 0 0 auto;
+  width: var(--lib-row-badge-w);
+}
+.cd-disc-grid[data-layout='rows'] .cd-disc-card-foot .cd-disc-trig {
+  flex: 0 0 auto;
+  width: 96px;
+}
+/* Integration dots: a fixed slot, dots right-aligned within it, so the column
+   to its left (the trigger chip) lands at the same x regardless of how many
+   dots a row carries — and an integration-less row still reserves the space. */
+.cd-disc-grid[data-layout='rows'] .cd-disc-card-foot .cd-au-ov-dots {
+  flex: 0 0 auto;
+  width: 58px;
+  margin-left: 0;
+  justify-content: flex-end;
 }
 
 /* Unified template card — apps and automations share the shape; the kind
-   badge + trigger metadata distinguish them. */
+   badge + trigger metadata distinguish them. The tile mirrors the Home library
+   tile (.cd-app-card--small): a vertical head (glyph plate on its own row, name
+   + 2-line blurb beneath), a shared min-height, and a foot pinned to the
+   bottom so every tile in a row shares one height. */
 .cd-disc-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--lib-tile-gap);
+  min-height: var(--lib-tile-h);
   text-align: left;
-  padding: 16px;
+  padding: var(--lib-tile-pad);
   border: 0.5px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg-elev);
+  border-radius: var(--lib-tile-radius);
+  background: var(--lib-tile-bg);
   cursor: pointer;
+  color: inherit;
   font: inherit;
   transition:
-    border-color 0.16s ease,
-    transform 0.16s ease;
+    background 140ms,
+    transform 120ms;
 }
 .cd-disc-card:hover {
-  border-color: var(--line-strong);
-  transform: translateY(-1px);
+  background: var(--lib-tile-bg-hover);
+}
+.cd-disc-card:active {
+  transform: scale(0.99);
 }
 .cd-disc-card-top {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--lib-tile-gap);
 }
 .cd-disc-card-icon {
-  width: 38px;
-  height: 38px;
+  width: var(--lib-tile-icon);
+  height: var(--lib-tile-icon);
   flex: none;
-  border-radius: 10px;
+  border-radius: var(--lib-tile-icon-radius);
   display: grid;
   place-items: center;
 }
 .cd-disc-card-icon svg {
   display: block;
 }
+/* Stretch the head to the card width so the name ellipsis and the blurb clamp
+   are both bounded by the tile, not by the text's natural width. */
 .cd-disc-card-head {
+  align-self: stretch;
   min-width: 0;
 }
+/* Match the Home tile name exactly — the display font (via --t-title), 15px,
+   so "Hydrate" reads identically on both pages (Discover previously inherited
+   the sans body font). */
 .cd-disc-card-name {
-  font-size: 14px;
+  font: var(--t-title);
   font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
   color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cd-disc-card-desc {
-  margin-top: 3px;
+  margin-top: 4px;
+  font: var(--t-small);
   font-size: 12.5px;
-  line-height: 1.45;
+  line-height: 1.4;
   color: var(--ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .cd-disc-card-foot {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-top: 13px;
+  margin-top: auto;
+  padding-top: 11px;
   border-top: 0.5px solid var(--line);
 }
 .cd-disc-badge {
