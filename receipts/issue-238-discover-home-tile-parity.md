@@ -100,3 +100,6 @@ duplicated tile chrome.
   module, and single-source the shared tile values as design tokens: `bun run
   build` (tsc) compiles clean with no dangling references, and `oxfmt --check` /
   `oxlint` pass on the changed files.
+- CI `format:check` (oxfmt 0.43.0, the repo-pinned version) wraps two
+  pre-existing long lines in `renderHomeAutomationCard`; reformatted `app.ts`
+  with the repo binary so `bun run format:check` passes on all 509 files.

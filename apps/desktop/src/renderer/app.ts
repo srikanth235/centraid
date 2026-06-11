@@ -1241,7 +1241,9 @@ import { createAppViewModule } from './app-appview.js';
     // Meta strip — status pill · trigger chip · integration dots. Sits in the
     // card body (tiles) / inline (rows); the footer below carries the kind
     // badge + last-run time.
-    const isWebhook = row.triggers.some((t) => t.kind === 'webhook') && !row.triggers.some((t) => t.kind === 'cron');
+    const isWebhook =
+      row.triggers.some((t) => t.kind === 'webhook') &&
+      !row.triggers.some((t) => t.kind === 'cron');
     const metaStrip = el('div', { class: 'cd-app-card-meta' }, [
       autoMod.auStatusPill(auStatusForRow(row.enabled, !!last)),
       el('span', { class: 'cd-app-card-trig' }, [
@@ -1261,7 +1263,9 @@ import { createAppViewModule } from './app-appview.js';
     const okTone = last?.run.ok ? 'true' : undefined;
     const timeEl = el('span', { class: 'cd-app-card-foot-time', 'data-ok': okTone });
     if (last?.run.ok) {
-      timeEl.append(el('span', { 'aria-hidden': 'true', trustedHtml: Icon.CheckCircle({ size: 13 }) }));
+      timeEl.append(
+        el('span', { 'aria-hidden': 'true', trustedHtml: Icon.CheckCircle({ size: 13 }) }),
+      );
     }
     timeEl.append(
       el(
