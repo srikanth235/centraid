@@ -22,7 +22,7 @@ Two AI helpers come built in:
 
 Under the hood, both helpers use the same buttons you do — so anything you can do in the UI, the AI can do too, and the other way around. The rest of this page is the developer setup; if you just want to try it, [start at the Quickstart](/quickstart).
 
-Centraid ships as a monorepo. The desktop app embeds a local gateway out of the box — no separate server to run. The same gateway code can also be mounted on an OpenClaw instance to host apps remotely; the two modes share one upload-and-version-flip contract.
+Centraid ships as a monorepo. The desktop app embeds a local gateway out of the box — no separate server to run. The same gateway code also runs as the standalone `centraid-gateway` daemon for headless or always-on use, and can be mounted on an OpenClaw instance to host apps remotely; all three modes share one upload-and-version-flip contract.
 
 ## Prerequisites
 
