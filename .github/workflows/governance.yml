@@ -1,4 +1,4 @@
-# governance-kit:managed kit-version=0.5.0
+# governance-kit:managed kit-version=0.6.0
 name: Governance
 
 on:
@@ -23,7 +23,7 @@ jobs:
         run: bash .governance/run.sh
 
       # Native test runners (pytest / jest / go test) are an opt-in users add
-      # post-init by following governance/references/NATIVE_TESTS.md. They are
+      # post-init by following kit/references/NATIVE_TESTS.md. They are
       # not scaffolded by `governance init` — governance is a meta-layer over
       # the project's code and the directive suite must not depend on the
       # project's own toolchain.

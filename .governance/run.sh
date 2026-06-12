@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# governance-kit:managed kit-version=0.5.0
+# governance-kit:managed kit-version=0.6.0
 # Governance test runner. Discovers every directive under ./packs/<owner>/<name>/.
 # Directives are folder-shaped — each directive is `directives/<id>/check.sh`.
 # Anything the directive needs (lib/, hooks/, runtimes/) lives in the same folder.
@@ -34,16 +34,27 @@ if [[ ${#check_files[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Single-directive filter: `run.sh required-docs` only runs that directive's check.sh.
+# Single-directive filter. A bare id (`run.sh required-docs`) runs every
+# directive with that id — across packs, all homonyms run. A pack-qualified id
+# (`run.sh governance-kit/security/secrets-hygiene`) runs exactly one. Identity
+# is `<owner>/<pack>/<id>`; the short id is a given name, not a global claim.
 if [[ $# -gt 0 ]]; then
     filter="$1"
     filtered=()
     for f in "${check_files[@]}"; do
-        id=$(basename "$(dirname "$f")")
-        [[ "$id" == "$filter" ]] && filtered+=("$f")
+        # $f = $PACKS_DIR/<owner>/<pack>/directives/<id>/check.sh
+        dir="$(dirname "$f")"                       # .../directives/<id>
+        id="$(basename "$dir")"
+        pack="$(basename "$(dirname "$(dirname "$dir")")")"
+        owner="$(basename "$(dirname "$(dirname "$(dirname "$dir")")")")"
+        qualified="$owner/$pack/$id"
+        case "$filter" in
+            */*/*) [[ "$qualified" == "$filter" ]] && filtered+=("$f") ;;
+            *)     [[ "$id" == "$filter" ]] && filtered+=("$f") ;;
+        esac
     done
     if [[ ${#filtered[@]} -eq 0 ]]; then
-        echo "✗ no directive named '$filter' under $HERE"
+        echo "✗ no directive matching '$filter' under $HERE"
         exit 1
     fi
     check_files=("${filtered[@]}")

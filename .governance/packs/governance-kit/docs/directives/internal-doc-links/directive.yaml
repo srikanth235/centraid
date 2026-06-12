@@ -1,0 +1,6 @@
+# internal-doc-links — the internal markdown link graph is healthy: links resolve and docs are reachable.
+category: SystemOfRecord
+recommended: true
+summary: "Rolled-up doc-link health. resolve: every relative-path markdown link resolves to a real file (always on). reachable: every tracked doc is reachable by following internal links from a root declared in .governance/reachability.conf (no-op without the config)."
+surface: repo-state
+hook: pre-commit

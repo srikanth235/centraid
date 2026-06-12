@@ -1,0 +1,8 @@
+# token-permissions — GitHub Actions workflows declare a least-privilege permissions block.
+category: Security
+recommended: true
+summary: Every GitHub Actions workflow declares a least-privilege permissions block.
+surface: repo-state
+hook: pre-commit
+standards:
+  - "OpenSSF Scorecard: Token-Permissions"
