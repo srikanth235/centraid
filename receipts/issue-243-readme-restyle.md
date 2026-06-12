@@ -11,6 +11,7 @@ predate the standalone daemon or the dropped `auto.*` template-id prefix.
 - [x] Restyled README.md into a scannable quick-start shape
 - [x] Re-audited the docs site after the post-#220 commits
 - [x] Fixed the remaining two-modes and auto-prefix stragglers
+- [x] Amended the gateway/handler directives' rationale to "three hosts"
 - [x] Verified the docs build and smoke pass
 
 ## What changed
@@ -47,14 +48,35 @@ surfaced:
 All four spots now name the three hosts: desktop embed, `centraid-gateway`
 daemon, OpenClaw plugin.
 
+**Amended the gateway/handler directives' rationale to "three hosts"**
+(second commit). Both `gateway-engine-mode-agnostic` and
+`handler-uses-ctx-primitives` carried a "same code, two modes" rationale that
+predates the standalone daemon. Reworded to "same code, three hosts" through
+the governance skill's `directive modify` flow (the `srikanth235/centraid`
+pack is `source: local`, so `directive *` owns it directly). Touched the
+directive folders (`constitution.md`, `directive.yaml`, and the gateway
+`check.sh` comment), the mirrored subsections in `CONSTITUTION.md`, and the
+doc quote at `docs/reference/governance-directives.mdx` line 58. The rules
+themselves (detection regexes, forbidden-identifier and SDK-import lists,
+entrypoints, waivers) are unchanged — rationale text only. Appended an
+Evolution Log entry dated 2026-06-13. The gateway directive's scope
+enumeration was widened from "embedded vs OpenClaw plugin" to name the daemon
+as the third host so it reads coherently with "three hosts."
+
 ## Decisions
 
-- **Left `docs/reference/governance-directives.mdx` line ~58 alone** even
-  though it also says "same code, two modes": it quotes the
-  `gateway-engine-mode-agnostic` directive's constitution text verbatim, and
-  fixing the doc alone would make it diverge from its kit-managed source.
-  The directive wording itself should be amended through the governance
-  flow (flagged as a separate task).
+- **`docs/reference/governance-directives.mdx` line 58 was fixed in the
+  second commit, not the first.** It quotes the `gateway-engine-mode-agnostic`
+  directive's constitution text verbatim, so fixing the doc alone would have
+  diverged it from its kit-managed source. The directive itself was amended
+  first (via `directive modify`), and the doc updated to match in the same
+  commit — keeping quote and source in lockstep.
+- **Used `directive modify`, not a hand-edit, for the pack files.** The
+  directive folders under `.governance/packs/srikanth235/centraid/` are
+  kit-managed; the governance skill routes `local`-pack edits through the
+  pinned kit's amend flow, which keeps the directive triple + `CONSTITUTION.md`
+  + Evolution Log atomic. No lockfile mutation (a modify keeps the directive
+  ids unchanged).
 - **First attempt extended the frozen `issue-120` receipt** — blocked by
   `doc-integrity` (receipts are immutable once on the default branch) and by
   `receipt-per-issue` rule 1 (no two receipts share an issue number), so this
@@ -65,8 +87,10 @@ daemon, OpenClaw plugin.
 
 ## Out of scope
 
-- The governance-directive "two modes" wording (see Decisions) — separate
-  governance amendment.
+- The historical Evolution Log entry (2026-05-26) and the README/architecture
+  prose still contain the phrase "two modes" only where it is a frozen
+  audit-trail line — left intact by design; the new log entry records the
+  reword.
 - The desktop UI surfaces themselves are still deliberately undocumented in
   the docs site; nothing added for #222/#230/#239 beyond confirming no doc
   contradicts them.
@@ -90,3 +114,14 @@ E2e counts (59 tests, 14 scenario sections) sourced from
 `apps/desktop/tests/e2e/README.md`. Template-id claim verified against
 `packages/blueprints/manifest.json` (ids `briefing`, `email-triage`, … — no
 `auto.` prefix).
+
+Directive amendment (second commit) — both modified directives still pass
+their own checks after the reword, and no stale phrasing remains in the
+directive/constitution/doc bodies:
+
+```sh
+bash .governance/run.sh gateway-engine-mode-agnostic   # ✓ passed
+bash .governance/run.sh handler-uses-ctx-primitives    # ✓ passed
+grep -rn -i 'two modes' .governance/packs/srikanth235 docs/reference/governance-directives.mdx
+# (only the frozen Evolution Log audit line remains, by design)
+```

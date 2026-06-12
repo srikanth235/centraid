@@ -55,7 +55,7 @@ These six live in `.governance/packs/srikanth235/centraid/directives/`. Each `co
 
 **Rule.** Code under `packages/app-engine/` may not branch on which gateway mode it runs under. Mode-discrimination identifiers (`gatewayMode`, `gatewayKind`, `isEmbeddedGateway`, `isOpenClawGateway`, `isLocalGateway`, `isRemoteGateway`, `deploymentMode`, `hostingMode`, …) are forbidden in tracked source. Mode-specific behavior belongs at the entrypoints: `apps/desktop/src/main/` (embedded) and `packages/openclaw-plugin/src/` (OpenClaw).
 
-**Why.** The "same code, two modes" property is what makes local-first-with-optional-remote cheap. Once `app-engine` checks which host it lives inside, dev and prod paths diverge.
+**Why.** The "same code, three hosts" property is what makes local-first-with-optional-remote cheap. Once `app-engine` checks which host it lives inside, dev and prod paths diverge.
 
 **Waiver.** Per-line `// governance: allow-gateway-engine-mode-agnostic <reason>` (none today).
 

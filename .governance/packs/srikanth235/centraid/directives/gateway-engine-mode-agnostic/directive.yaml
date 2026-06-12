@@ -2,11 +2,12 @@
 category: Architecture
 recommended: true
 summary: |
-  Code under packages/app-engine/ may not branch on which gateway mode
-  it is running under (embedded inside the desktop app's main process vs
-  OpenClaw plugin). Mode-specific behavior belongs at entrypoints:
-  apps/desktop/src/main/ for embedded, packages/openclaw-plugin/src/ for
-  OpenClaw. The architecture's "same code, two modes" property depends
-  on app-engine staying mode-agnostic.
+  Code under packages/app-engine/ may not branch on which gateway host
+  it is running under (embedded in the desktop app's main process, the
+  standalone centraid-gateway daemon, or the OpenClaw plugin).
+  Mode-specific behavior belongs at entrypoints: apps/desktop/src/main/
+  for embedded, packages/openclaw-plugin/src/ for OpenClaw. The
+  architecture's "same code, three hosts" property depends on app-engine
+  staying mode-agnostic.
 surface: repo-state
 hook: pre-commit

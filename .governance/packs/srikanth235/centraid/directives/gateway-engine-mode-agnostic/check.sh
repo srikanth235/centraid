@@ -3,7 +3,7 @@
 # never branch on gateway mode. Mode-specific code belongs at the
 # entrypoints (apps/desktop/src/main/ for the embedded gateway,
 # packages/openclaw-plugin/src/ for the OpenClaw gateway). The "same
-# code, two modes" architecture property breaks the moment app-engine
+# code, three hosts" architecture property breaks the moment app-engine
 # starts checking which host it's living in.
 #
 # Detection: gateway-mode-discriminator identifiers (gatewayMode,
