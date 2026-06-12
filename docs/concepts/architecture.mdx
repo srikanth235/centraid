@@ -5,7 +5,7 @@ title: 'Architecture'
 
 # Architecture
 
-Centraid is one product wearing two shapes: a desktop shell with the gateway embedded in-process, and the same gateway code running remotely as an OpenClaw plugin. The desktop is a **thin client** — its renderer talks to the gateway directly over HTTP with a Bearer token, and the gateway owns the whole builder (lifecycle, templates, webhook minting, and the AI chat), so local and remote behave identically. Apps are folders. Data is SQLite. AI access goes through three generic tools.
+Centraid is one product wearing three shapes: a desktop shell with the gateway embedded in-process, the same gateway code running as the standalone `centraid-gateway` daemon, and the same code again running remotely as an OpenClaw plugin. The desktop is a **thin client** — its renderer talks to the gateway directly over HTTP with a Bearer token, and the gateway owns the whole builder (lifecycle, templates, webhook minting, and the AI chat), so local and remote behave identically. Apps are folders. Data is SQLite. AI access goes through three generic tools.
 
 ## The big picture
 

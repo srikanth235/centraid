@@ -59,8 +59,8 @@ For builders and tinkerers — the technical structure that makes the rest possi
 - **Read/write split enforced.** Query tools can only read; action tools are the only place writes happen. A governance directive blocks the foot-gun at commit time.
 - **Live data, no plumbing.** Every action invalidates the tables it touched and pushes an event on `/centraid/<id>/_changes`. Subscribed iframes re-fetch automatically.
 - **One calling convention.** Three generic dispatcher tools (`centraid_describe`, `centraid_read`, `centraid_write`) fan out to every app's tool catalog — exposed both as OpenClaw agent tools and as HTTP endpoints. AI agents and your UI use the same surface.
-- **Automations are first-class apps.** Apps can carry `automations/<id>/` directories — each one a manifest plus a generated handler — that fire on a cron schedule or an inbound webhook. Standalone automations are headless apps: same structure, same lifecycle, no `index.html`. The bundled `auto.*` templates ship that way.
-- **Run anywhere.** Local: embedded in the Electron desktop. Remote: as the `@centraid/openclaw-plugin` on an OpenClaw gateway. Identical contract.
+- **Automations are first-class apps.** Apps can carry `automations/<id>/` directories — each one a manifest plus a generated handler — that fire on a cron schedule or an inbound webhook. Standalone automations are headless apps: same structure, same lifecycle, no `index.html`. The bundled automation templates ship that way.
+- **Run anywhere.** Local: embedded in the Electron desktop, or as the standalone `centraid-gateway` daemon. Remote: as the `@centraid/openclaw-plugin` on an OpenClaw gateway. Identical contract on all three.
 
 ### How a request flows
 
