@@ -1,0 +1,9 @@
+# kit-version-sync — every kit-version stamp in an installed repo agrees
+# (install.yaml kit_version == each managed file's kit-version= marker).
+category: Foundation
+recommended: true
+summary: install.yaml kit_version agrees with every managed-file kit-version marker.
+surface: repo-state
+hook: pre-commit
+reads:
+  - .governance/install.yaml

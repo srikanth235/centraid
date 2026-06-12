@@ -1,6 +1,0 @@
-# workflows-hardened — GitHub Actions workflows declare permissions and pin third-party actions to a SHA.
-category: Security
-recommended: true
-summary: GitHub Actions workflows declare permissions and pin third-party actions to a SHA.
-surface: repo-state
-hook: pre-commit

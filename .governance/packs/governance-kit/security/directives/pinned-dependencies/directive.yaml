@@ -1,0 +1,8 @@
+# pinned-dependencies — third-party GitHub Actions are pinned to a full commit SHA.
+category: Security
+recommended: true
+summary: Third-party GitHub Actions are pinned to a full 40-char commit SHA, not a moving tag.
+surface: repo-state
+hook: pre-commit
+standards:
+  - "OpenSSF Scorecard: Pinned-Dependencies"

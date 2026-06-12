@@ -1,30 +1,65 @@
 version: '2'
 packs:
-- id: governance-kit/core
-  version: 0.4.0
+- id: governance-kit/audit
+  version: 0.3.0
   source: gh
+  ref: gh:duaility/governance-kit/packs/audit@audit/v0.3.0
+  sha: e686117c093fc56d920b2f60aefb10dd6ee2c5c5
+  subpath: packs/audit
+  min_governance_kit: '0.3'
+  installed_at: '2026-06-12T13:44:56Z'
   directives:
-  - agent-steering-accounting
-  - agent-token-accounting
   - commit-issue-receipt-match
-  - commit-message-format
-  - doc-freshness
   - doc-integrity
   - issue-templates
   - issues-tracked
-  - no-broken-internal-doc-links
-  - no-orphan-todos
   - receipt-per-issue
+- id: governance-kit/commits
+  version: 0.2.1
+  source: gh
+  ref: gh:duaility/governance-kit/packs/commits@commits/v0.2.1
+  sha: f921f8b4c61c7c80e2263bf3c054429d44d40cb2
+  subpath: packs/commits
+  min_governance_kit: '0.3'
+  installed_at: '2026-06-12T13:45:51Z'
+  directives:
+  - commit-message-format
+  - no-orphan-todos
+- id: governance-kit/docs
+  version: 0.2.1
+  source: gh
+  ref: gh:duaility/governance-kit/packs/docs@docs/v0.2.1
+  sha: a71d160a2049db862639808cb0ef54f5b0cad522
+  subpath: packs/docs
+  min_governance_kit: '0.3'
+  installed_at: '2026-06-12T13:36:21Z'
+  directives:
+  - doc-freshness
+  - internal-doc-links
+- id: governance-kit/foundation
+  version: 0.2.1
+  source: gh
+  ref: gh:duaility/governance-kit/packs/foundation@foundation/v0.2.1
+  sha: 40088f347b4578241a0e913886283de53afb93a5
+  subpath: packs/foundation
+  min_governance_kit: '0.3'
+  installed_at: '2026-06-12T13:36:03Z'
+  directives:
+  - kit-version-sync
   - repo-hygiene
   - required-docs
-  - secrets-hygiene
-  - version-consistency
-  - workflows-hardened
-  ref: gh:Duaility/governance-kit/packs/core@core/v0.4.0
-  sha: e9d339cf0ffbc2ff627e5db61ef49fe09943b712
-  subpath: packs/core
+- id: governance-kit/security
+  version: 0.2.0
+  source: gh
+  ref: gh:duaility/governance-kit/packs/security@security/v0.2.0
+  sha: 7a52dec8af9b384c23e769d67f17e20a6b14f317
+  subpath: packs/security
   min_governance_kit: '0.3'
-  installed_at: '2026-06-10T04:43:15Z'
+  installed_at: '2026-06-12T13:36:12Z'
+  directives:
+  - pinned-dependencies
+  - secrets-hygiene
+  - token-permissions
 - id: srikanth235/centraid
   version: '0.1'
   source: local

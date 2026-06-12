@@ -74,6 +74,14 @@ changed; `packs.lock` and `CONSTITUTION.md` are untouched.
 
 ## Verification
 
+```sh
+# Resolve + fetch the 0.6.0 engine via the installer shim, confirm the move.
+python3 ~/.claude/skills/governance/bootstrap.py resolve --to 0.6.0
+# Apply + pin, then run the suite (kit-apply's smoke test).
+bash .governance/run.sh
+grep -E 'kit_version|kit_ref|kit_sha' .governance/install.yaml
+```
+
 - Refresh the local governance skill: `npx skills update governance --global
   --yes` reported all global skills already up to date; the installed shim is
   byte-identical to upstream v0.6.0's `skill/`.

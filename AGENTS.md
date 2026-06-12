@@ -21,7 +21,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 
 ## Conventions agents should know
 
-- **Conventional Commits + issue suffix.** Commit messages match `<type>(scope)?!?: subject (#123)` — a trailing GitHub issue reference is now mandatory. Enforced by [.governance/packs/governance-kit/core/directives/commit-message-format/check.sh](.governance/packs/governance-kit/core/directives/commit-message-format/check.sh). Merges and reverts are exempt.
+- **Conventional Commits + issue suffix.** Commit messages match `<type>(scope)?!?: subject (#123)` — a trailing GitHub issue reference is now mandatory. Enforced by [.governance/packs/governance-kit/commits/directives/commit-message-format/check.sh](.governance/packs/governance-kit/commits/directives/commit-message-format/check.sh). Merges and reverts are exempt.
 - **One receipt per issue.** Substantive work touches `receipts/issue-<N>-<slug>.md`, with `## Checklist`, `## What changed`, `## Out of scope`, and `## Verification` sections. See [CONSTITUTION.md](CONSTITUTION.md#receipt-per-issue) for the contract.
 - **Audit trailers on every commit.** The `.githooks/` dispatchers stamp `Agent` / `Token-*` / `Cost-*` / `Steer-*` trailers automatically and write rows to [COSTS.md](COSTS.md) and [STEERING.md](STEERING.md). Skipping with `SKIP_GOVERNANCE=1` is allowed for true emergencies; CI still enforces.
 - **Quality observations live in [QUALITY.md](QUALITY.md).** Bugs and rough edges between releases go in `## Open`; resolved items roll to `## Resolved`.
