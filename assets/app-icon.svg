@@ -1,24 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <title>Centraid · App Icon</title>
+  <defs>
+    <!-- Brand teal tile, subtle top→bottom deepening for depth. -->
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3EC8B4"/>
+      <stop offset="1" stop-color="#2AA593"/>
+    </linearGradient>
+  </defs>
 
-  <!-- Bezel — same dark used by the phone-frame in the desktop app. -->
-  <rect width="1024" height="1024" fill="#14181F"/>
+  <!-- Teal tile — white mark on brand teal (WhatsApp-style flat icon). -->
+  <rect width="1024" height="1024" fill="url(#tile)"/>
 
   <!--
-    C-mark, scaled & centered. Source viewBox 240×240 — the visible mark
-    (arc envelope) spans roughly 25..215 (= 190px = 79% of source).
-    translate(112,112) + scale(3.5) puts the mark across ~200..865 of the
-    1024 canvas — ~65% optical fill, matching the visual weight of stock
-    macOS / iOS icons (Notes, Chrome, WhatsApp).
+    Centraid mark (orbit ring + 3 satellites + hub), white.
+    Source viewBox 240×240, mark centered at (120,120). translate(112,112)
+    + scale(3.5) puts the mark center at 532,532 (~canvas center) and the
+    ~176px envelope across ~205..820 of the 1024 canvas — ~63% optical fill.
   -->
   <g transform="translate(112 112) scale(3.5)">
-    <!-- Top    Violet #8B5CF6 -->
-    <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/>
-    <!-- Left   Amber  #F59E0B -->
-    <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/>
-    <!-- Bottom Cyan   #06B6D4 -->
-    <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/>
-    <!-- Centroid · Rose #E11D48 -->
-    <circle cx="120" cy="120" r="12" fill="#E11D48"/>
+    <circle cx="120" cy="120" r="80" fill="none" stroke="#ffffff" stroke-width="4.5"/>
+    <circle cx="120" cy="40" r="14" fill="#ffffff"/>
+    <circle cx="189.28" cy="160" r="14" fill="#ffffff"/>
+    <circle cx="50.72" cy="160" r="14" fill="#ffffff"/>
+    <circle cx="120" cy="120" r="21" fill="#ffffff"/>
   </g>
 </svg>

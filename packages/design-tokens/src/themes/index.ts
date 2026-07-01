@@ -12,6 +12,7 @@ import { notionDarkTheme, notionLightTheme } from './notion';
 import { solarizedDarkTheme, solarizedLightTheme } from './solarized';
 
 export type { Theme } from './shared';
+export { BRAND } from './shared';
 export { airtableDarkTheme, airtableLightTheme } from './airtable';
 export { darkTheme, lightTheme } from './centraid';
 export { githubDarkTheme, githubLightTheme } from './github';

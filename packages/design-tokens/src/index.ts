@@ -10,6 +10,10 @@ export type { Palette, ColorKey, ColorHex } from './palette';
 export { themes, lightTheme, darkTheme, THEME_PRESETS } from './themes';
 export type { Theme, ThemeName, ThemePreset } from './themes';
 
+// Brand teal — theme-independent identity color shared by the logo /
+// app-icon SVGs and emitted as `--brand`. Also aliased as `brand`.
+export { BRAND, BRAND as brand } from './themes';
+
 export { densities, spacing } from './density';
 export type { DensityScale, DensityName } from './density';
 

@@ -22,11 +22,14 @@ export type CardVariant = 'flat' | 'outlined' | 'elevated';
 
 // Accent key → resolved hex swatches (Centraid Redesign Tweaks panel). Shared
 // between the appearance core in app.ts and the settings page in app-settings.
+// `teal` is the brand accent — its ramp matches @centraid/design-tokens'
+// ACCENT / ACCENT_LIGHT / ACCENT_DEEP (and the `--brand` logo hue), so the
+// default swatch and the token default paint identically.
 export const ACCENT_PALETTE: Record<AccentKey, { accent: string; light: string; deep: string }> = {
   blue: { accent: '#4950F6', light: '#6B72FF', deep: '#2D34D9' },
   ochre: { accent: '#B47B3F', light: '#CB9359', deep: '#92622F' },
   rose: { accent: '#E55772', light: '#EE7D92', deep: '#BF3E57' },
-  teal: { accent: '#2EA098', light: '#4CBBB1', deep: '#218079' },
+  teal: { accent: '#3EC8B4', light: '#62D6C6', deep: '#2AA593' },
   violet: { accent: '#7C5BD9', light: '#9D80E6', deep: '#5D3EB3' },
 };
 

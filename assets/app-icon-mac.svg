@@ -1,22 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <title>Centraid · macOS App Icon</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3EC8B4"/>
+      <stop offset="1" stop-color="#2AA593"/>
+    </linearGradient>
+  </defs>
 
   <!--
     Apple "Big Sur" icon template:
       • Canvas 1024×1024 with a 100px transparent margin all around
         (lets macOS render its own shadow without clipping).
       • Inner 824×824 tile, corner radius 185.4 (= 22.5% of 824).
-      • Mark sized to ~57% of the tile so it has Apple-style breathing room.
     macOS does NOT auto-mask, so the squircle has to be baked in.
+    White mark on a brand-teal squircle (WhatsApp-style flat icon).
   -->
-  <rect x="100" y="100" width="824" height="824" rx="185.4" ry="185.4" fill="#14181F"/>
+  <rect x="100" y="100" width="824" height="824" rx="185.4" ry="185.4" fill="url(#tile)"/>
 
-  <!-- translate(160,160) + scale(3.0) puts the mark across ~235..885 of the
-       canvas — ~63% canvas, ~78% of the inner tile. -->
+  <!-- Centraid mark (white), source viewBox 240×240 centered at (120,120).
+       translate(160,160) + scale(3.0) centers it at 520,520, spanning
+       ~238..767 — ~52% of the canvas, ~64% of the inner tile. -->
   <g transform="translate(160 160) scale(3.0)">
-    <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/>
-    <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/>
-    <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/>
-    <circle cx="120" cy="120" r="12" fill="#E11D48"/>
+    <circle cx="120" cy="120" r="80" fill="none" stroke="#ffffff" stroke-width="4.5"/>
+    <circle cx="120" cy="40" r="14" fill="#ffffff"/>
+    <circle cx="189.28" cy="160" r="14" fill="#ffffff"/>
+    <circle cx="50.72" cy="160" r="14" fill="#ffffff"/>
+    <circle cx="120" cy="120" r="21" fill="#ffffff"/>
   </g>
 </svg>

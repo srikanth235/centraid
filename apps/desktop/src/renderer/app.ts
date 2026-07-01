@@ -60,15 +60,15 @@ import { createAppViewModule } from './app-appview.js';
   // settings module shares the exact same types.
   // ACCENT_PALETTE lives in app-shell-context.ts (shared with app-settings).
   const DEFAULT_PREFS: AppearancePrefs = {
-    accent: 'blue',
+    accent: 'teal',
     bgL: 5,
     cardVariant: 'outlined',
     coolBlueCast: true,
     density: 'regular',
     sidebarOpen: true,
-    // Bold · Atmospheric is built around the dark blue-tinted ramp + Electric
-    // Blue accent (see Centraid Redesign brief). Light theme still works but
-    // won't carry the atmospheric glow — dark is the design's home turf.
+    // Bold · Atmospheric is built around the dark blue-tinted ramp + the
+    // brand teal accent (the logo hue). Light theme still works but won't
+    // carry the atmospheric glow — dark is the design's home turf.
     theme: 'dark',
     // Design uses the vertical-darkening gradient for app icons (155deg,
     // top→bottom hue, -25 shade). Matches the Bold home screenshot.

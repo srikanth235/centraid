@@ -4,13 +4,16 @@
   <!--
     Android adaptive icons: total canvas 108dp, mask shows inner 72dp (~66.6%),
     safe-zone is inner 66dp (~61%). On 1024px source the safe-zone is ~625px.
-    We size the mark at 480px (47%) so it sits comfortably inside any launcher
-    mask (circle, squircle, teardrop) without clipping.
+    We size the mark at ~470px (46%) so it sits comfortably inside any launcher
+    mask (circle, squircle, teardrop) without clipping. White mark on a
+    transparent foreground — the teal background layer is supplied by
+    `adaptiveIcon.backgroundColor` in apps/mobile/app.json.
   -->
   <g transform="translate(272 272) scale(2)">
-    <path d="M 52.82 52.82 A 95 95 0 0 1 187.18 52.82 L 161.01 78.99 A 58 58 0 0 0 78.99 78.99 Z" fill="#8B5CF6"/>
-    <path d="M 52.82 187.18 A 95 95 0 0 1 52.82 52.82 L 78.99 78.99 A 58 58 0 0 0 78.99 161.01 Z" fill="#F59E0B"/>
-    <path d="M 187.18 187.18 A 95 95 0 0 1 52.82 187.18 L 78.99 161.01 A 58 58 0 0 0 161.01 161.01 Z" fill="#06B6D4"/>
-    <circle cx="120" cy="120" r="12" fill="#E11D48"/>
+    <circle cx="120" cy="120" r="80" fill="none" stroke="#ffffff" stroke-width="4.5"/>
+    <circle cx="120" cy="40" r="14" fill="#ffffff"/>
+    <circle cx="189.28" cy="160" r="14" fill="#ffffff"/>
+    <circle cx="50.72" cy="160" r="14" fill="#ffffff"/>
+    <circle cx="120" cy="120" r="21" fill="#ffffff"/>
   </g>
 </svg>

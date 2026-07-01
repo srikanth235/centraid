@@ -937,9 +937,9 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
   // border. Names match the proposal copy (Electric / Violet / …).
   function makeSwatches(selected: AccentKey, onSelect: (value: AccentKey) => void): HTMLElement {
     const order: ReadonlyArray<{ key: AccentKey; name: string }> = [
+      { key: 'teal', name: 'Teal' },
       { key: 'blue', name: 'Electric' },
       { key: 'violet', name: 'Violet' },
-      { key: 'teal', name: 'Teal' },
       { key: 'ochre', name: 'Ochre' },
       { key: 'rose', name: 'Rose' },
     ];

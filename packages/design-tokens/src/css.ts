@@ -4,7 +4,7 @@
 // blocks as a single CSS string. Desktop injects this into a <style> tag
 // at preload time — the only token-related CSS it ships.
 
-import { themes, type Theme, type ThemeName } from './themes';
+import { BRAND, themes, type Theme, type ThemeName } from './themes';
 import { densities, type DensityScale } from './density';
 import { palette } from './palette';
 import { radii } from './radii';
@@ -81,6 +81,8 @@ export function toCss(): string {
     staticProps[`--icon-${k}`] = v;
   }
   for (const [k, v] of Object.entries(radii)) staticProps[`--r-${k}`] = `${v}px`;
+  // Brand teal — theme-independent, matches the logo / app-icon SVGs.
+  staticProps['--brand'] = BRAND;
   Object.assign(staticProps, densityProps(densities.regular));
 
   const blocks = [

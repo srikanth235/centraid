@@ -4,13 +4,20 @@
 
 import type { Palette } from '../palette';
 
-// Electric Blue per the Centraid Redesign brief (chat3). Used for the
-// FAB, sparkle button, primary CTAs, brand mark, focus rings, and active
-// state in version history.
-export const ACCENT = '#4950F6';
-export const ACCENT_LIGHT = '#6B72FF';
-export const ACCENT_DEEP = '#2D34D9';
-export const ACCENT_MIDNIGHT = '#1A1F8A';
+// Brand teal — the single source of truth for the Centraid identity.
+// This is the exact hue used by the logo + app-icon marks; the SVG
+// assets under `assets/` and `docs/assets/` hardcode this same hex, and
+// `toCss()` emits it as a theme-independent `--brand` var.
+export const BRAND = '#3EC8B4';
+
+// Teal accent ramp derived from BRAND. Used for the FAB, sparkle button,
+// primary CTAs, brand mark, focus rings, and active state in version
+// history. Only Centraid's own light/dark themes read these — the
+// emulation presets (Notion, GitHub, …) define their own accents inline.
+export const ACCENT = BRAND;
+export const ACCENT_LIGHT = '#62D6C6';
+export const ACCENT_DEEP = '#2AA593';
+export const ACCENT_MIDNIGHT = '#12645A';
 export const ACCENT_VIOLET = '#7C5BD9';
 
 export const SUCCESS = '#5C8A4E';

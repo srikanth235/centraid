@@ -1,32 +1,23 @@
-<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Centraid">
+<svg width="340" height="280" viewBox="0 0 340 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="centraidTitle">
+  <title id="centraidTitle">Centraid logo</title>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#111318"/>
-      <stop offset="100%" stop-color="#090b0e"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3EC8B4"/>
+      <stop offset="1" stop-color="#2AA593"/>
     </linearGradient>
-    <radialGradient id="hub" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#6b70f9"/>
-      <stop offset="100%" stop-color="#4950F6"/>
-    </radialGradient>
   </defs>
 
-  <!-- Container -->
-  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <!-- Brand mark: white orbit mark on a brand-teal tile (#3EC8B4 = the
+       brand design token), matching the app icon. -->
+  <rect x="110" y="30" width="120" height="120" rx="26" ry="26" fill="url(#tile)"/>
+  <g transform="translate(170 90) scale(0.41) translate(-120 -120)">
+    <circle cx="120" cy="120" r="80" fill="none" stroke="#ffffff" stroke-width="4.5"/>
+    <circle cx="120" cy="40" r="14" fill="#ffffff"/>
+    <circle cx="189.28" cy="160" r="14" fill="#ffffff"/>
+    <circle cx="50.72" cy="160" r="14" fill="#ffffff"/>
+    <circle cx="120" cy="120" r="21" fill="#ffffff"/>
+  </g>
 
-  <!-- Spokes: center → each satellite -->
-  <line x1="128" y1="128" x2="54"  y2="128" stroke="#7C5BD9" stroke-width="1.5" opacity="0.35"/>
-  <line x1="128" y1="128" x2="182" y2="74"  stroke="#E55772" stroke-width="1.5" opacity="0.35"/>
-  <line x1="128" y1="128" x2="182" y2="182" stroke="#2EA098" stroke-width="1.5" opacity="0.35"/>
-
-  <!-- Satellites -->
-  <!-- Left (180°) -->
-  <circle cx="54"  cy="128" r="15" fill="#7C5BD9"/>
-  <!-- Upper-right (45°) -->
-  <circle cx="182" cy="74"  r="15" fill="#E55772"/>
-  <!-- Lower-right (315°) -->
-  <circle cx="182" cy="182" r="15" fill="#2EA098"/>
-
-  <!-- Center hub — larger, brand indigo -->
-  <circle cx="128" cy="128" r="10" fill="#4950F6" opacity="0.18"/>
-  <circle cx="128" cy="128" r="28" fill="url(#hub)"/>
+  <text x="170" y="205" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="600" fill="#1F2430" letter-spacing="1">centraid</text>
+  <text x="170" y="230" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5B6472" letter-spacing="2">YOUR APPS  YOUR DATA  YOUR DEVICES</text>
 </svg>

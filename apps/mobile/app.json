@@ -8,7 +8,7 @@
     "icon": "../../assets/icon.png",
     "splash": {
       "image": "../../assets/splash.png",
-      "backgroundColor": "#14181F",
+      "backgroundColor": "#3EC8B4",
       "resizeMode": "contain"
     },
     "ios": { "supportsTablet": true, "bundleIdentifier": "com.centraid.mobile" },
@@ -16,7 +16,7 @@
       "package": "com.centraid.mobile",
       "adaptiveIcon": {
         "foregroundImage": "../../assets/adaptive-icon.png",
-        "backgroundColor": "#14181F"
+        "backgroundColor": "#3EC8B4"
       }
     },
     "assetBundlePatterns": ["**/*"],
