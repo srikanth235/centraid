@@ -35,4 +35,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 - [README.md](README.md) — develop, build, test, and check commands.
 - [TESTING.md](TESTING.md) — the testing strategy, runner, and test convention.
 - [SECURITY.md](SECURITY.md) — vulnerability disclosure path.
-- [scripts/enable-governance.sh](scripts/enable-governance.sh) — run once per fresh clone to activate the governance hooks.
+
+Governance hooks activate through git's `core.hooksPath` (pointed at `.githooks/`).
+`governance install`/`update` set this; on a fresh clone run
+`git config core.hooksPath .githooks` once.

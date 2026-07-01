@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# governance-kit:managed kit-version=0.6.0
+# governance-kit:managed kit-version=0.12.0
 # Governance test runner. Discovers every directive under ./packs/<owner>/<name>/.
 # Directives are folder-shaped — each directive is `directives/<id>/check.sh`.
 # Anything the directive needs (lib/, hooks/, runtimes/) lives in the same folder.
@@ -22,6 +22,23 @@ fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PACKS_DIR="$HERE/packs"
 
+# Sub-agent attestation orchestration (issue #325). A directive that declares a
+# `subagent:` block registers any pending attestation into a shared ledger when
+# its check.sh runs; after the whole run we emit ONE grouped remediation
+# instruction (shared-batched + isolated). Sourcing lib.sh provides
+# attestation_remediation; exporting the ledger path makes it visible to each
+# `bash "$check"` subprocess. Guarded so an older lib.sh (no helper) is a no-op.
+ATTEST_LEDGER=""
+if [[ -f "$HERE/lib.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$HERE/lib.sh"
+    if declare -F attestation_remediation >/dev/null 2>&1; then
+        ATTEST_LEDGER="$(mktemp)"
+        export GOVERNANCE_ATTEST_LEDGER="$ATTEST_LEDGER"
+        trap 'rm -f "$ATTEST_LEDGER"' EXIT
+    fi
+fi
+
 check_files=()
 while IFS= read -r f; do
     [[ -n "$f" ]] && check_files+=("$f")
@@ -36,7 +53,7 @@ fi
 
 # Single-directive filter. A bare id (`run.sh required-docs`) runs every
 # directive with that id — across packs, all homonyms run. A pack-qualified id
-# (`run.sh governance-kit/security/secrets-hygiene`) runs exactly one. Identity
+# (`run.sh governance-kit/foundation/repo-hygiene`) runs exactly one. Identity
 # is `<owner>/<pack>/<id>`; the short id is a given name, not a global claim.
 if [[ $# -gt 0 ]]; then
     filter="$1"
@@ -69,6 +86,10 @@ for check in "${check_files[@]}"; do
         fail_count=$((fail_count + 1))
     fi
 done
+
+# Emit the single grouped sub-agent remediation instruction for whatever the
+# directive checks registered as pending (no-op when nothing did).
+[[ -n "$ATTEST_LEDGER" ]] && attestation_remediation "$ATTEST_LEDGER"
 
 echo
 echo "────────────────────────────────────────"
