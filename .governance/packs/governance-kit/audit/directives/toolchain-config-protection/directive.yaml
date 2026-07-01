@@ -1,0 +1,6 @@
+# toolchain-config-protection — touching lint / format / type-check / CI / hook config requires an auditable waiver.
+category: AgentDiscipline
+recommended: true
+summary: "Commits that change toolchain config (lint, format, type-check, CI, git hooks) must carry a `governance: allow-toolchain-config <reason>` body line."
+surface: change-set
+hook: commit-msg

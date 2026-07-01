@@ -11,7 +11,7 @@ import { isReservedAppId } from '../http/security.js';
  * rows carrying a `mode` field are loaded transparently and the field
  * is dropped on next persist.
  */
-/* eslint-disable max-classes-per-file -- error class is colocated with its module */
+/* eslint-disable max-classes-per-file -- error class is colocated with its module (#247) */
 export class Registry {
   private cache = new Map<AppId, RegistryEntry>();
   private loaded = false;

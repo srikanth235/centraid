@@ -243,7 +243,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   if (timeoutMs > 0) {
     timeoutHandle = setTimeout(() => {
       abortController.abort('timeout');
-      // eslint-disable-next-line unicorn/require-post-message-target-origin
+      // eslint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
       worker.postMessage({ type: 'abort', reason: 'timeout' });
       setTimeout(() => {
         worker.terminate().catch(() => {});
@@ -252,7 +252,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   }
 
   const send = (msg: unknown): void => {
-    // eslint-disable-next-line unicorn/require-post-message-target-origin
+    // eslint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
     worker.postMessage(msg);
   };
 
@@ -287,7 +287,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       worker.removeAllListeners();
       worker.terminate().catch(() => {});
       if (persistedEntries.length > 0) void appendLogs(opts.automationDir, persistedEntries);
-      // eslint-disable-next-line promise/no-multiple-resolved
+      // eslint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
       resolve(outcome);
     };
 

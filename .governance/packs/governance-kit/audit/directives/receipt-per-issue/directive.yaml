@@ -1,6 +1,19 @@
 # receipt-per-issue — receipts bind 1:1 to a GitHub issue, carry four required sections (plus ## Decisions and a runnable ## Verification command on newly added receipts), and the Checklist crosswalks to evidence.
 category: AgentDiscipline
 recommended: true
-summary: Every tracked receipts/*.md has a unique issue-<N> filename token, includes ## Checklist, ## What changed, ## Out of scope, ## Verification, and each `- [x]` item appears (case-insensitive substring) in What changed or Verification. Receipts added in the change set must also include ## Decisions and at least one fenced code block in ## Verification; pre-existing receipts are grandfathered.
+summary: Every tracked receipts/*.md has a unique issue-<N> filename token, includes ## Checklist, ## What changed, ## Out of scope, ## Verification, and each `- [x]` item appears (case-insensitive substring) in What changed or Verification. Receipts added in the change set must also include ## Decisions, ## Audit (a fresh-context sub-agent's PASS/REFUTED verdict against the diff and the issue), and at least one fenced code block in ## Verification; every file changed in that change set must be named in some added receipt (scope-creep guard); pre-existing receipts are grandfathered.
 surface: repo-state
 hook: pre-commit
+# Sub-agent judgment (issue #325): the `## Audit` section is a fresh-context
+# sub-agent attestation. Declared once here; check.sh gates it via subagent_attest
+# and the shared orchestrator batches it with any other `isolation: shared`
+# attestation pending on the same commit.
+subagent:
+  inputs:  [diff, receipt, issue]
+  checks:
+    - "'## What changed' faithfully describes the diff (no misrepresentation, no omission)"
+    - "each '- [x]' item is realized in the diff"
+    - "the '## Checklist' mirrors the issue's checklist"
+  isolation: shared
+  section: Audit
+  tiers: { attest: low, sweep: high }

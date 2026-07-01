@@ -1,0 +1,8 @@
+# managed-tree-integrity — the .governance/ managed tree matches the content
+# digests recorded at apply time; it changes only via the install/update verbs,
+# never by hand. Works offline in any consumer repo (no upstream git objects).
+category: Foundation
+recommended: true
+summary: Vendored pack folders and kit-runtime files match the digests recorded at apply time.
+surface: repo-state
+hook: pre-commit

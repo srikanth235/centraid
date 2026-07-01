@@ -1,65 +1,65 @@
 version: '2'
 packs:
 - id: governance-kit/audit
-  version: 0.3.0
+  version: 0.8.0
   source: gh
-  ref: gh:duaility/governance-kit/packs/audit@audit/v0.3.0
-  sha: e686117c093fc56d920b2f60aefb10dd6ee2c5c5
+  ref: gh:duaility/governance-kit/packs/audit@audit/v0.8.0
+  sha: d4b822cfef70ad4b134ca2236c4c3cdb5e46491d
   subpath: packs/audit
-  min_governance_kit: '0.3'
-  installed_at: '2026-06-12T13:44:56Z'
+  min_governance_kit: 0.12.0
+  installed_at: '2026-07-01T13:28:30Z'
   directives:
+  - agent-steering-accounting
+  - agent-token-accounting
   - commit-issue-receipt-match
   - doc-integrity
   - issue-templates
   - issues-tracked
   - receipt-per-issue
+  - toolchain-config-protection
+  digest:
+    agent-steering-accounting: d662120195d1ae246fb797f31ab11b734dbba43449c5459152a250dfd4e27903
+    agent-token-accounting: 6fb49775946703991f121cd222ec2f765bca51bf9421f5ed1a771cdb71427309
+    commit-issue-receipt-match: e7206c5289e7b970b043e1d93c97c7b503a1aac286a40780b7219ac4f4e52f69
+    doc-integrity: 692497a5555f1c6ce07172cda164c24f1157ff1c386cd45d748a42939108fad1
+    issue-templates: ba3e7c6de380ff2f12a922be349dda4d04014f0da6f349e4d26037a2fc576abe
+    issues-tracked: 70d7fb36352cfe69bd5a932862cd4c98ec3697a01981e18c96bb9236b476e72c
+    receipt-per-issue: 1e8fcad6bb7a7df614c89061a58b877f02a14d9bb6bb4f24095c901514755691
+    toolchain-config-protection: b0ed3d7f5d4bd2358de40f124c428e343df34a98864d8a15a9c56489943a862c
 - id: governance-kit/commits
-  version: 0.2.1
+  version: 0.2.2
   source: gh
-  ref: gh:duaility/governance-kit/packs/commits@commits/v0.2.1
-  sha: f921f8b4c61c7c80e2263bf3c054429d44d40cb2
+  ref: gh:duaility/governance-kit/packs/commits@commits/v0.2.2
+  sha: 6b9212de78389e2448c48308093e4ba2cf13bc0b
   subpath: packs/commits
-  min_governance_kit: '0.3'
-  installed_at: '2026-06-12T13:45:51Z'
+  min_governance_kit: 0.6.0
+  installed_at: '2026-07-01T13:27:50Z'
   directives:
   - commit-message-format
   - no-orphan-todos
-- id: governance-kit/docs
-  version: 0.2.1
-  source: gh
-  ref: gh:duaility/governance-kit/packs/docs@docs/v0.2.1
-  sha: a71d160a2049db862639808cb0ef54f5b0cad522
-  subpath: packs/docs
-  min_governance_kit: '0.3'
-  installed_at: '2026-06-12T13:36:21Z'
-  directives:
-  - doc-freshness
-  - internal-doc-links
+  - no-unjustified-suppressions
+  digest:
+    commit-message-format: 0a65219182af1886ce5cada20b74d144e7a7adb8deb482a4c456a7370b765cd7
+    no-orphan-todos: 98811a21272439261011fc294d83d777a4c8f2e95d98fe631eca258141722f61
+    no-unjustified-suppressions: 7bb0a021e4ade6bf51ef409a117e86bd1325bc525d10f2b31a1667cb186736c1
 - id: governance-kit/foundation
-  version: 0.2.1
+  version: 0.5.1
   source: gh
-  ref: gh:duaility/governance-kit/packs/foundation@foundation/v0.2.1
-  sha: 40088f347b4578241a0e913886283de53afb93a5
+  ref: gh:duaility/governance-kit/packs/foundation@foundation/v0.5.1
+  sha: 7ac06ef861e6ac5ddf580fca35e1c32f9780a2fb
   subpath: packs/foundation
-  min_governance_kit: '0.3'
-  installed_at: '2026-06-12T13:36:03Z'
+  min_governance_kit: 0.6.0
+  installed_at: '2026-07-01T13:27:00Z'
   directives:
-  - kit-version-sync
+  - internal-doc-links
+  - managed-tree-integrity
   - repo-hygiene
   - required-docs
-- id: governance-kit/security
-  version: 0.2.0
-  source: gh
-  ref: gh:duaility/governance-kit/packs/security@security/v0.2.0
-  sha: 7a52dec8af9b384c23e769d67f17e20a6b14f317
-  subpath: packs/security
-  min_governance_kit: '0.3'
-  installed_at: '2026-06-12T13:36:12Z'
-  directives:
-  - pinned-dependencies
-  - secrets-hygiene
-  - token-permissions
+  digest:
+    internal-doc-links: 1c8cc0ba358eea3190664ceb05c96c4f608c4171029a4ed374480541750be1f5
+    managed-tree-integrity: 9f516add12805fea75f4b1f8ee83b42eb38f66f65522d6b7d5fd663bef1b9dd5
+    repo-hygiene: bcc6d10bef0a216d1698d6406ef87559268639132632cbd68ca544a0bd843a44
+    required-docs: 97d5963e146c39cae9243e4c63cf9cee092497800b81abd3e2c071fc74052833
 - id: srikanth235/centraid
   version: '0.1'
   source: local

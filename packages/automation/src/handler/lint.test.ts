@@ -83,14 +83,14 @@ describe('lintHandlerSource', () => {
   });
 
   it('DOES flag unsafe calls inside template-literal interpolation', () => {
-    // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test
+    // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test (#247)
     const findings = lintHandlerSource('const id = `req-${Math.random()}`;');
     expect(findings.length).toBe(1);
     expect(findings[0]!.rule).toBe('no-math-random');
   });
 
   it('handles nested braces inside interpolation without desyncing', () => {
-    // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test
+    // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test (#247)
     const src = 'const s = `${ { a: 1 }.a + Date.now() }`; const ok = ctx.tool("x", {});';
     const findings = lintHandlerSource(src);
     expect(findings.length).toBe(1);

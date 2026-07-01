@@ -17,7 +17,7 @@ export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScr
 
 declare global {
   // Makes `useNavigation()` infer the right list everywhere.
-  // eslint-disable-next-line @typescript-eslint/no-namespace
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- grandfathered pre-existing suppression (#247)
   namespace ReactNavigation {
     interface RootParamList extends RootStackParamList {}
   }

@@ -173,7 +173,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         void appendLogs(opts.app.dir, persistedEntries);
       }
       // The `resolved` guard above makes this safe across multiple finish() callers
-      // eslint-disable-next-line promise/no-multiple-resolved
+      // eslint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
       resolve(outcome);
     };
 
@@ -182,7 +182,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         const call = msg as unknown as DbCall;
         const reply = handleDb(call);
         // node:worker_threads postMessage signature has no targetOrigin
-        // eslint-disable-next-line unicorn/require-post-message-target-origin
+        // eslint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
         worker.postMessage({ type: 'db-reply', id: call.id, ...reply });
       } else if (msg.type === 'log') {
         const m = msg as unknown as { level: 'info' | 'warn' | 'error'; msg: string };

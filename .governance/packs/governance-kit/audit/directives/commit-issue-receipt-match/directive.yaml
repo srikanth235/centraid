@@ -1,6 +1,6 @@
-# commit-issue-receipt-match — Each commit's trailing issue reference matches a touched receipt file.
+# commit-issue-receipt-match — Every non-merge, non-revert commit adds or updates a receipts/issue-<N>.md; the touched receipt path is the commit's issue anchor.
 category: AgentDiscipline
 recommended: true
-summary: "Each commit's trailing issue reference matches a touched receipt file."
+summary: "Every non-merge, non-revert commit adds or updates a receipts/issue-<N>.md — the touched receipt path is the commit's issue anchor."
 surface: change-set
 hook: commit-msg

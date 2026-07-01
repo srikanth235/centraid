@@ -382,7 +382,7 @@ export function createTemplatesGallery(ctx: ShellContext): TemplatesGalleryModul
       // a follow-up can show a proper "copy this URL + secret" sheet.
       for (const w of result.webhooks ?? []) {
         showToast(`Webhook URL: ${w.url} (secret shown once in console)`);
-        // eslint-disable-next-line no-console
+        // eslint-disable-next-line no-console -- grandfathered pre-existing suppression (#247)
         console.info(`[clone] webhook secret for ${w.ownerApp}/${w.automationId}:`, w.secret);
       }
       ctx.shell.enterAutomationBuilder({ automationId: result.app.id });

@@ -1,0 +1,6 @@
+# no-unjustified-suppressions — Every lint / type-checker suppression references an issue.
+category: CommitHygiene
+recommended: false
+summary: "Every lint / type-checker suppression references an issue."
+surface: repo-state
+hook: pre-commit
