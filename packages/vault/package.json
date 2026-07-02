@@ -1,0 +1,30 @@
+{
+  "name": "@centraid/vault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Duaility personal ontology vault — the canonical, person-owned data model (core spine + consent plane + agent plane + 8 life domains) over local-first SQLite, and the gateway: the sole holder of connections, where every read and typed command passes one pipeline (identity → consent → contract → execution → evidence) and leaves receipts. Implements the logical model in duaility-ontology.html.",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@centraid/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

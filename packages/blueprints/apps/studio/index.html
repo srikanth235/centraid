@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Studio</title>
+    <script>
+      // Centraid live settings bridge — see the todos blueprint for the
+      // full story: runtime bakes theme server-side; this handles the
+      // no-bake preview path and live pref flips over postMessage.
+      (function () {
+        var h = document.documentElement;
+        function applyTheme(t, b) {
+          if (t === 'dark' || t === 'light') h.dataset.theme = t;
+          if (b != null && b !== '') h.style.setProperty('--bg-l', b + '%');
+        }
+        function applySettings(s) {
+          if (s.dataAttrs) {
+            for (var k in s.dataAttrs) h.setAttribute('data-' + k, s.dataAttrs[k]);
+          }
+          if (s.cssVars) {
+            for (var k in s.cssVars) h.style.setProperty('--' + k, s.cssVars[k]);
+          }
+        }
+        try {
+          var p = new URLSearchParams((location.hash || '').slice(1));
+          applyTheme(p.get('theme'), p.get('bgL'));
+        } catch (_) {}
+        addEventListener('message', function (e) {
+          var d = e && e.data;
+          if (!d) return;
+          if (d.type === 'centraid:settings') applySettings(d);
+          else if (d.type === 'centraid:theme') applyTheme(d.theme, d.bgL);
+        });
+      })();
+    </script>
+    <link rel="stylesheet" href="wall.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main>
+      <header class="head">
+        <div>
+          <h1>Studio</h1>
+          <p id="subtitle" class="muted">A read-only projection of your vault.</p>
+        </div>
+      </header>
+
+      <div id="consentBanner" class="banner" hidden>
+        <strong>No vault access yet.</strong>
+        <span id="consentDetail"
+          >Ask the owner to approve this app's requested scopes in vault settings.</span
+        >
+      </div>
+
+      <p class="day-label muted small">Invoices</p>
+      <section id="invoiceList" aria-label="Invoices"></section>
+
+      <p class="day-label muted small">Projects</p>
+      <section id="projectList" aria-label="Projects"></section>
+
+      <p class="day-label muted small">Clients</p>
+      <section id="clientList" aria-label="Clients"></section>
+
+      <p id="empty" class="empty" hidden>
+        Nothing here yet — the studio fills in as clients, projects, and invoices are recorded in
+        the vault.
+      </p>
+
+      <p class="muted small footnote">
+        Billing actions arrive with the business domain's command pack — until then this page only
+        reads.
+      </p>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

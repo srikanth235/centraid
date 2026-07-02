@@ -30,3 +30,10 @@ export {
 export { serve, type ServeOptions, type GatewayServeHandle } from './serve/serve.js';
 export type { GatewayPaths } from './paths.js';
 export { readAgentsStatus, type AgentsStatus } from './routes/agents-routes.js';
+export {
+  openVaultPlane,
+  VaultPlane,
+  type VaultPlaneOptions,
+  type GrantRequest,
+} from './serve/vault-plane.js';
+export { makeVaultRouteHandler } from './routes/vault-routes.js';

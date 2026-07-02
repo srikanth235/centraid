@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Vitals</title>
+    <script>
+      // Centraid live settings bridge — see the todos blueprint for the
+      // full story: runtime bakes theme server-side; this handles the
+      // no-bake preview path and live pref flips over postMessage.
+      (function () {
+        var h = document.documentElement;
+        function applyTheme(t, b) {
+          if (t === 'dark' || t === 'light') h.dataset.theme = t;
+          if (b != null && b !== '') h.style.setProperty('--bg-l', b + '%');
+        }
+        function applySettings(s) {
+          if (s.dataAttrs) {
+            for (var k in s.dataAttrs) h.setAttribute('data-' + k, s.dataAttrs[k]);
+          }
+          if (s.cssVars) {
+            for (var k in s.cssVars) h.style.setProperty('--' + k, s.cssVars[k]);
+          }
+        }
+        try {
+          var p = new URLSearchParams((location.hash || '').slice(1));
+          applyTheme(p.get('theme'), p.get('bgL'));
+        } catch (_) {}
+        addEventListener('message', function (e) {
+          var d = e && e.data;
+          if (!d) return;
+          if (d.type === 'centraid:settings') applySettings(d);
+          else if (d.type === 'centraid:theme') applyTheme(d.theme, d.bgL);
+        });
+      })();
+    </script>
+    <link rel="stylesheet" href="wall.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main>
+      <header class="head">
+        <div>
+          <h1>Vitals</h1>
+          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+        </div>
+      </header>
+
+      <div id="consentBanner" class="banner" hidden>
+        <strong>No vault access yet.</strong>
+        <span id="consentDetail"
+          >Ask the owner to approve this app's requested scopes in vault settings.</span
+        >
+      </div>
+      <div id="noticeBanner" class="banner notice" hidden></div>
+
+      <form id="logForm" class="log" autocomplete="off">
+        <select id="typeSelect" aria-label="Vital type">
+          <option value="heart_rate">Heart rate</option>
+          <option value="bp_systolic">BP systolic</option>
+          <option value="bp_diastolic">BP diastolic</option>
+          <option value="spo2">SpO₂</option>
+          <option value="body_weight">Body weight</option>
+          <option value="glucose">Glucose</option>
+          <option value="temp">Temperature</option>
+        </select>
+        <input id="valueInput" type="number" step="any" placeholder="Value" aria-label="Value" />
+        <button type="submit" class="primary">Log</button>
+        <button id="trendsButton" type="button">Trends</button>
+      </form>
+
+      <section id="readingList" aria-label="Vital readings"></section>
+      <p id="empty" class="empty" hidden>
+        No readings yet. Log a vital above — it lands in the vault, not in this app.
+      </p>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

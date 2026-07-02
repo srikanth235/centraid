@@ -1,0 +1,220 @@
+{
+  "manifestVersion": 1,
+  "id": "threads",
+  "name": "Threads",
+  "description": "Your message history as a projection of the personal vault: threads and messages are canonical social rows, bodies are content items. Sending is the consent model's showcase — a send parks until the owner explicitly confirms it. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.1.0",
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads your message threads and drafts replies; every send waits for your confirmation.",
+    "scopes": [
+      {
+        "schema": "social",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "core",
+        "table": "party",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_item",
+        "verbs": "read"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "draft",
+      "description": "Compose a draft message in an existing thread, or open a new thread with a recipient (the draft never sends by itself).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "body_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "thread_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recipient_party_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["sms", "email", "dm", "group"]
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": ["body_text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "send",
+      "description": "Release a draft for delivery. Highest-risk command in the model: for an app this parks for the owner's explicit confirmation.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["message_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    }
+  ],
+  "queries": [
+    {
+      "name": "inbox",
+      "description": "Every thread, most recent activity first, with its participants' display names.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "threads": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "thread",
+      "description": "One thread's messages in sent order, bodies decoded from their content items, senders named.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["thread_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        {
+          "value": "sans",
+          "label": "Sans"
+        },
+        {
+          "value": "serif",
+          "label": "Serif"
+        },
+        {
+          "value": "mono",
+          "label": "Mono"
+        }
+      ]
+    },
+    {
+      "key": "appWidth",
+      "label": "Width",
+      "type": "segmented",
+      "default": "narrow",
+      "options": [
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
+      ]
+    },
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#4E68DD",
+      "options": [
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#E55772",
+          "label": "Rose"
+        },
+        {
+          "value": "#B47B3F",
+          "label": "Ochre"
+        }
+      ]
+    }
+  ]
+}

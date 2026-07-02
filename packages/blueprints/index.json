@@ -26,6 +26,86 @@
       "version": "0.1.0"
     },
     {
+      "id": "agenda",
+      "name": "Agenda",
+      "desc": "Your calendar, projected from the vault.",
+      "colorKey": "indigo",
+      "iconKey": "Calendar",
+      "version": "0.1.0"
+    },
+    {
+      "id": "vitals",
+      "name": "Vitals",
+      "desc": "Log and follow your vital signs.",
+      "colorKey": "rose",
+      "iconKey": "Activity",
+      "version": "0.1.0"
+    },
+    {
+      "id": "budgets",
+      "name": "Budgets",
+      "desc": "Categorize spending, keep budgets honest.",
+      "colorKey": "amber",
+      "iconKey": "Coin",
+      "version": "0.1.0"
+    },
+    {
+      "id": "tasks",
+      "name": "Tasks",
+      "desc": "Your canonical task list, read-only for now.",
+      "colorKey": "teal",
+      "iconKey": "Check",
+      "version": "0.1.0"
+    },
+    {
+      "id": "people",
+      "name": "People",
+      "desc": "Everyone in your life, one identity each.",
+      "colorKey": "violet",
+      "iconKey": "Users",
+      "version": "0.1.0"
+    },
+    {
+      "id": "threads",
+      "name": "Threads",
+      "desc": "Messages that wait for your say-so to send.",
+      "colorKey": "indigo",
+      "iconKey": "Send",
+      "version": "0.1.0"
+    },
+    {
+      "id": "notes",
+      "name": "Notes",
+      "desc": "Your notebooks, projected from the vault.",
+      "colorKey": "forest",
+      "iconKey": "Book",
+      "version": "0.1.0"
+    },
+    {
+      "id": "photos",
+      "name": "Photos",
+      "desc": "The library you own, wherever the bytes live.",
+      "colorKey": "ochre",
+      "iconKey": "Camera",
+      "version": "0.1.0"
+    },
+    {
+      "id": "home-inventory",
+      "name": "Home inventory",
+      "desc": "What you own, where it lives, what covers it.",
+      "colorKey": "slate",
+      "iconKey": "Home",
+      "version": "0.1.0"
+    },
+    {
+      "id": "studio",
+      "name": "Studio",
+      "desc": "Clients, projects, time, and invoices.",
+      "colorKey": "teal",
+      "iconKey": "Clock",
+      "version": "0.1.0"
+    },
+    {
       "id": "briefing",
       "name": "Briefing",
       "desc": "A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.",

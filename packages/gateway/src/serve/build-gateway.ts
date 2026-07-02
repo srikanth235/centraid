@@ -70,6 +70,8 @@ import {
   type SurfaceStatus,
 } from '@centraid/agent-runtime';
 import { WorktreeStore } from '../worktree-store/index.js';
+import { openVaultPlane, type VaultPlane } from './vault-plane.js';
+import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
 import { makeDraftCodeDirResolver } from '../lifecycle/draft-data.js';
 import { makeAutomationsRouteHandler } from '../routes/automations-routes.js';
@@ -201,6 +203,12 @@ export interface BuiltGateway {
   analyticsStore: AnalyticsStore;
   conversationHistoryStore: ConversationHistoryStore;
   /**
+   * The personal-vault plane (duaility §12), when `paths.vaultDir` was
+   * supplied. Hosts drive owner acts (grants, confirmations, backups)
+   * through this; apps only ever reach the vault via `ctx.vault`.
+   */
+  vault?: VaultPlane;
+  /**
    * The git-store backend, when `appsStoreRoot` was supplied. Callers
    * (the publish endpoint, export/import, the desktop's file IPC) drive
    * sessions + publishes through this. `undefined` on the legacy backend.
@@ -245,6 +253,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const logger = options.logger ?? defaultLogger(options.logTag);
 
   await fs.mkdir(paths.appsDir, { recursive: true });
+
+  // Vault plane (duaility §12): when a vaultDir is given, the gateway is
+  // the sole holder of the owner's canonical vault. Opened before the
+  // Runtime so the `ctx.vault` bridge factory exists at construction.
+  const vaultPlane: VaultPlane | undefined = paths.vaultDir
+    ? openVaultPlane({ dir: paths.vaultDir, logger })
+    : undefined;
 
   // Git-store backend (issue #137). When a root is given, the gateway
   // owns app code as a bare git repo + worktrees; the runtime serves
@@ -480,6 +495,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     logger,
     ...(codeDirOverride ? { codeDirOverride } : {}),
     ...(draftCodeDir ? { draftCodeDir } : {}),
+    ...(vaultPlane ? { vaultFor: (appId: string) => vaultPlane.bridgeFor(appId) } : {}),
   });
 
   runtimeRef = runtime;
@@ -490,6 +506,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // git store. The git-store publish/session/files surface (issue #137) is
   // appended below when a store backend is active.
   const extraHandlers: RouteHandler[] = [
+    // Owner consent surface for the vault plane (grants, parked
+    // confirmations). Mounted first — its `_vault` prefix is disjoint from
+    // every other route family.
+    ...(vaultPlane ? [makeVaultRouteHandler(vaultPlane)] : []),
     makeTemplatesRouteHandler({
       ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
       ...(paths.remoteTemplatesUrl ? { remoteTemplatesUrl: paths.remoteTemplatesUrl } : {}),
@@ -578,11 +598,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const deregisterAndCleanup = async (appId: string): Promise<void> => {
       const removed = await runtime.registry.deregister(appId);
       if (removed) await cleanupDeregisteredApp(paths.appsDir, removed, logger);
+      // Uninstall = revoke + delete (§11): every active vault grant is
+      // revoked (cascade runs) and the enrollment row retired.
+      vaultPlane?.revokeApp(appId);
     };
     extraHandlers.push(
       makeAppsStoreRouteHandler(store, {
         onAppLive: async (appId) => {
           await runtime.registry.ensureUploaded(appId);
+          vaultPlane?.enrollApp(appId);
           // A publish/rollback may have added/removed/toggled an
           // automation — resync the cron scheduler off the new `main`.
           reconcileScheduler();
@@ -603,6 +627,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         ...(paths.templatesCacheDir ? { templatesCacheDir: paths.templatesCacheDir } : {}),
         ensureRegistered: async (appId) => {
           await runtime.registry.ensureUploaded(appId);
+          vaultPlane?.enrollApp(appId);
         },
         deregister: deregisterAndCleanup,
         reconcile: reconcileScheduler,
@@ -662,6 +687,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (appsStore) {
       for (const appId of await appsStore.listApps()) {
         await runtime.registry.ensureUploaded(appId);
+        vaultPlane?.enrollApp(appId);
       }
     }
 
@@ -670,6 +696,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // backfilled (issue #149).
     scheduler?.start();
     reconcileScheduler();
+
+    // Vault standing duties on the gateway clock: a sweep now, then hourly.
+    vaultPlane?.start();
 
     // Warm the host-capability catalog — BOTH models and tools — for each
     // detected runner on EVERY gateway start, in the background so it never
@@ -711,6 +740,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   const stop = async (): Promise<void> => {
     await scheduler?.stop();
+    // Sweep clock down, WAL checkpoint, files closed. Idempotent.
+    vaultPlane?.stop();
   };
 
   return {
@@ -718,6 +749,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     userStore,
     analyticsStore,
     conversationHistoryStore,
+    ...(vaultPlane ? { vault: vaultPlane } : {}),
     ...(appsStore ? { appsStore } : {}),
     ...(builtCodeAppsDir ? { codeAppsDir: builtCodeAppsDir } : {}),
     extraHandlers,

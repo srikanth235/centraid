@@ -1,0 +1,206 @@
+{
+  "manifestVersion": 1,
+  "id": "vitals",
+  "name": "Vitals",
+  "description": "Apple Health–style vitals as a projection of the personal vault: every reading IS a core.observation row with a health.vital extension, logged and summarized through consent-checked typed commands. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.1.0",
+  "vault": {
+    "purpose": "dpv:HealthMonitoring",
+    "why": "Logs and charts your vital readings through the vault's typed commands.",
+    "scopes": [
+      {
+        "schema": "health",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "core",
+        "table": "observation",
+        "verbs": "read"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "log",
+      "description": "Log a vital reading through health.log_vital (the vault mints the observation and its health.vital extension; non-positive values are refused by preconditions).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "vital_type": {
+            "type": "string",
+            "enum": [
+              "heart_rate",
+              "bp_systolic",
+              "bp_diastolic",
+              "spo2",
+              "body_weight",
+              "glucose",
+              "temp"
+            ]
+          },
+          "value_num": {
+            "type": "number"
+          },
+          "context": {
+            "type": "string",
+            "enum": ["rest", "exercise", "sleep", "post_meal"]
+          },
+          "modality": {
+            "type": "string",
+            "enum": ["sensed", "self_reported", "derived"]
+          }
+        },
+        "required": ["vital_type", "value_num"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "trends",
+      "description": "Summarize a vital's readings over a window through health.summarize_trends (count, min, max, avg — persisted as owned content, cited to its window).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "vital_type": {
+            "type": "string",
+            "enum": [
+              "heart_rate",
+              "bp_systolic",
+              "bp_diastolic",
+              "spo2",
+              "body_weight",
+              "glucose",
+              "temp"
+            ]
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3650
+          }
+        },
+        "required": ["vital_type", "days"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    }
+  ],
+  "queries": [
+    {
+      "name": "readings",
+      "description": "Vital readings — health.vital rows joined to their core.observation rows — newest first.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "readings": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        {
+          "value": "sans",
+          "label": "Sans"
+        },
+        {
+          "value": "serif",
+          "label": "Serif"
+        },
+        {
+          "value": "mono",
+          "label": "Mono"
+        }
+      ]
+    },
+    {
+      "key": "appWidth",
+      "label": "Width",
+      "type": "segmented",
+      "default": "narrow",
+      "options": [
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
+      ]
+    },
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#E55772",
+      "options": [
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#E55772",
+          "label": "Rose"
+        },
+        {
+          "value": "#B47B3F",
+          "label": "Ochre"
+        }
+      ]
+    }
+  ]
+}

@@ -65,4 +65,14 @@ export interface GatewayPaths {
    * supplies its own `runnerStatus`); there is no hardcoded default seed.
    */
   modelCatalogFile?: string;
+
+  /**
+   * Optional personal-vault directory (duaility §12). When set, the gateway
+   * mounts the vault plane: `vault.db` + `journal.db` live here, live apps
+   * are enrolled as `consent.app` rows, handlers get the consent-checked
+   * `ctx.vault` primitive, and the owner consent surface is served under
+   * `/centraid/_vault/*`. Omit to run without a vault — `ctx.vault` calls
+   * then fail closed with VAULT_UNAVAILABLE.
+   */
+  vaultDir?: string;
 }

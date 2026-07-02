@@ -25,6 +25,7 @@ import { readAppSettings } from './settings/app-settings.js';
 import { buildSettingsInject } from './settings/settings-merge.js';
 import { handleTurnRoute, parseTurnSubRoute } from './http/turn-routes.js';
 import type { ConversationRunner } from './conversation/runner.js';
+import type { VaultBridge } from './handlers/vault-bridge.js';
 import type { AppRef, RegistryEntry } from './types.js';
 
 export interface RuntimeLogger {
@@ -116,6 +117,13 @@ export interface RuntimeOptions {
    * unaffected when no draft resolver is configured.
    */
   draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
+  /**
+   * Optional per-app `ctx.vault` bridge factory (duaility §12). The gateway
+   * injects one when a vault plane is mounted; handlers then reach the
+   * owner's canonical vault through a consent-checked host-side executor.
+   * Without it, `ctx.vault.*` calls fail closed with VAULT_UNAVAILABLE.
+   */
+  vaultFor?: (appId: string) => VaultBridge;
 }
 
 /** Provider-agnostic capability tier a model is classified into. */
@@ -276,6 +284,7 @@ export class Runtime {
       registry: this.registry,
       onWriteFor: (appId) => this.emitForApp(appId, 'handler'),
       ...(this.codeDirOverride ? { codeDirOverride: this.codeDirOverride } : {}),
+      ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
     });
   }
 

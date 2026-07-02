@@ -1,0 +1,216 @@
+{
+  "manifestVersion": 1,
+  "id": "agenda",
+  "name": "Agenda",
+  "description": "Your calendar as a projection of the personal vault: upcoming events from core.event, proposals and RSVPs through consent-checked typed commands. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.1.0",
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Shows your upcoming schedule and lets you propose, move, and respond to events.",
+    "scopes": [
+      {
+        "schema": "schedule",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "core",
+        "table": "event",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "party",
+        "verbs": "read"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "propose",
+      "description": "Propose a new event on a calendar (lands tentative; conflicts are refused by the vault's preconditions).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "dtstart": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dtend": {
+            "type": "string",
+            "minLength": 1
+          },
+          "calendar_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["summary", "dtstart", "dtend", "calendar_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "reschedule",
+      "description": "Move an event to a new time (same identity, SEQUENCE bumped).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dtstart": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dtend": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["event_id", "dtstart", "dtend"],
+        "additionalProperties": false
+      },
+      "writes": []
+    },
+    {
+      "name": "rsvp",
+      "description": "Record an attendee's response (RFC 5545 PARTSTAT).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "partstat": {
+            "type": "string",
+            "enum": ["accepted", "declined", "tentative"]
+          }
+        },
+        "required": ["event_id", "party_id", "partstat"],
+        "additionalProperties": false
+      },
+      "writes": []
+    }
+  ],
+  "queries": [
+    {
+      "name": "upcoming",
+      "description": "Non-cancelled events from today forward, soonest first, with the calendars they could land on.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array"
+          },
+          "calendars": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        {
+          "value": "sans",
+          "label": "Sans"
+        },
+        {
+          "value": "serif",
+          "label": "Serif"
+        },
+        {
+          "value": "mono",
+          "label": "Mono"
+        }
+      ]
+    },
+    {
+      "key": "appWidth",
+      "label": "Width",
+      "type": "segmented",
+      "default": "narrow",
+      "options": [
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
+      ]
+    },
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#4E68DD",
+      "options": [
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#E55772",
+          "label": "Rose"
+        },
+        {
+          "value": "#B47B3F",
+          "label": "Ochre"
+        }
+      ]
+    }
+  ]
+}

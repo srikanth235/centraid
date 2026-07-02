@@ -1,0 +1,225 @@
+{
+  "manifestVersion": 1,
+  "id": "budgets",
+  "name": "Budgets",
+  "description": "YNAB-style money view as a pure projection of the personal vault: transactions and accounts from core, budget caps from finance. Budgets and progress are projections, never stored here, and amounts are unreachable by construction — every command is classification only. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.1.0",
+  "vault": {
+    "purpose": "dpv:Billing",
+    "why": "Categorizes spending and tracks budgets over the vault's canonical transactions.",
+    "scopes": [
+      {
+        "schema": "finance",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "core",
+        "table": "transaction",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "account",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept",
+        "verbs": "read"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "categorize",
+      "description": "Reclassify a transaction into a spend category (classification change with provenance; the amount is untouchable by construction).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "category_concept_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["txn_id", "category_concept_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "set-budget",
+      "description": "Set or update a spending cap for a category and period (progress against it stays a projection, never a row).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "category_concept_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "period": {
+            "type": "string",
+            "enum": ["month", "quarter", "year"]
+          },
+          "limit_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3
+          },
+          "starts_on": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["category_concept_id", "period", "limit_minor", "currency", "starts_on"],
+        "additionalProperties": false
+      },
+      "writes": []
+    },
+    {
+      "name": "flag",
+      "description": "Flag a transaction as anomalous (a tag with a cited reason; refused if already flagged).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": ["txn_id", "reason"],
+        "additionalProperties": false
+      },
+      "writes": []
+    }
+  ],
+  "queries": [
+    {
+      "name": "overview",
+      "description": "Recent transactions (newest first), accounts, budget caps, and the concept vocabulary for categories.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "transactions": {
+            "type": "array"
+          },
+          "accounts": {
+            "type": "array"
+          },
+          "budgets": {
+            "type": "array"
+          },
+          "concepts": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        {
+          "value": "sans",
+          "label": "Sans"
+        },
+        {
+          "value": "serif",
+          "label": "Serif"
+        },
+        {
+          "value": "mono",
+          "label": "Mono"
+        }
+      ]
+    },
+    {
+      "key": "appWidth",
+      "label": "Width",
+      "type": "segmented",
+      "default": "narrow",
+      "options": [
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
+      ]
+    },
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#E89A3C",
+      "options": [
+        {
+          "value": "#E89A3C",
+          "label": "Amber"
+        },
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#E55772",
+          "label": "Rose"
+        },
+        {
+          "value": "#B47B3F",
+          "label": "Ochre"
+        }
+      ]
+    }
+  ]
+}

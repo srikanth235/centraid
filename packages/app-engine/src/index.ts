@@ -156,6 +156,8 @@ export {
   type ManifestQueryEntry,
   type ManifestTable,
   type ManifestColumn,
+  type ManifestVaultBlock,
+  type ManifestVaultScope,
   type HandlerConfirmation,
   type JsonSchema,
   type ManifestValidationCode as AppManifestValidationCode,
@@ -176,6 +178,11 @@ export {
   type ToolResult,
   type ToolName,
 } from './handlers/dispatcher.js';
+
+// ctx.vault bridge contract (duaility §12). app-engine defines only the
+// shape; the gateway package implements it against @centraid/vault and
+// injects it via `RuntimeOptions.vaultFor`.
+export type { VaultBridge, VaultCall, VaultCallResult, VaultOp } from './handlers/vault-bridge.js';
 
 // Error classes — hosts that want to translate them to their own response
 // shapes can import these directly. (The Runtime.handle() default handler

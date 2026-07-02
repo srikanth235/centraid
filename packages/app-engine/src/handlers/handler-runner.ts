@@ -6,6 +6,7 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import type { AppRef } from '../types.js';
 import { appendLogs, type LogEntry } from '../data/log-store.js';
 import { trackChanges } from '../changes/change-tracker.js';
+import type { VaultBridge, VaultOp } from './vault-bridge.js';
 
 function resolveWorkerFile(): string {
   // `here` is this module's dir (`src/handlers` → `dist/handlers` once built);
@@ -35,6 +36,13 @@ export interface RunHandlerOptions {
    * Empty list = no writes; the call is suppressed.
    */
   onWrite?: (tables: string[]) => void;
+  /**
+   * Host-injected `ctx.vault` executor, already bound to this app's vault
+   * identity. When absent, every `ctx.vault.*` call fails closed with
+   * `VAULT_UNAVAILABLE` — the worker-side surface always exists, the
+   * capability behind it is the host's to mount.
+   */
+  vault?: VaultBridge;
 }
 
 export interface HandlerOutcome {
@@ -184,6 +192,28 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         // node:worker_threads postMessage signature has no targetOrigin
         // eslint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
         worker.postMessage({ type: 'db-reply', id: call.id, ...reply });
+      } else if (msg.type === 'vault') {
+        const call = msg as unknown as {
+          id: number;
+          op: VaultOp;
+          payload: Record<string, unknown>;
+        };
+        const bridge = opts.vault;
+        void (async () => {
+          const reply = bridge
+            ? await bridge({ op: call.op, payload: call.payload ?? {} }).catch((err: unknown) => ({
+                ok: false,
+                code: 'VAULT_ERROR',
+                error: err instanceof Error ? err.message : String(err),
+              }))
+            : {
+                ok: false,
+                code: 'VAULT_UNAVAILABLE',
+                error: 'no vault plane is mounted on this gateway',
+              };
+          // eslint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)
+          worker.postMessage({ type: 'vault-reply', id: call.id, ...reply });
+        })();
       } else if (msg.type === 'log') {
         const m = msg as unknown as { level: 'info' | 'warn' | 'error'; msg: string };
         logs.push({ level: m.level, msg: m.msg });
