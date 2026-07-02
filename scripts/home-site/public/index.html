@@ -1,389 +1,850 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Centraid — tiny apps that run your life</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-<style>
-  :root {
-    --brand:      #3EC8B4;
-    --brand-lt:   #62D6C6;
-    --brand-dp:   #2AA593;
-    --mint:       #9EEFE2;
-    --ink:        #EAFBF7;
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Centraid — tiny apps that run your life</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --brand: #3ec8b4;
+        --brand-lt: #62d6c6;
+        --brand-dp: #2aa593;
+        --mint: #9eefe2;
+        --ink: #eafbf7;
 
-    --bg:         #060c0b;
-    --bg-2:       #0a1413;
-    --panel:      #0d1a18;
-    --panel-2:    #10201d;
-    --line:       rgba(126, 224, 208, 0.12);
-    --line-2:     rgba(126, 224, 208, 0.22);
-    --text:       #d7e6e2;
-    --text-dim:   #8fa8a2;
-    --text-faint: #5f7a74;
+        --bg: #060c0b;
+        --bg-2: #0a1413;
+        --panel: #0d1a18;
+        --panel-2: #10201d;
+        --line: rgba(126, 224, 208, 0.12);
+        --line-2: rgba(126, 224, 208, 0.22);
+        --text: #d7e6e2;
+        --text-dim: #8fa8a2;
+        --text-faint: #5f7a74;
 
-    --glow:       rgba(62, 200, 180, 0.30);
-    --star:       rgba(150, 220, 208, 0.55);
-    --radius:     16px;
-    --display: "Bricolage Grotesque", sans-serif;
-    --body: "Hanken Grotesk", sans-serif;
-    --mono: "JetBrains Mono", monospace;
-  }
-  [data-theme="light"] {
-    --bg:         #eef5f3;
-    --bg-2:       #e4efec;
-    --panel:      #ffffff;
-    --panel-2:    #f4faf8;
-    --line:       rgba(20, 90, 80, 0.12);
-    --line-2:     rgba(20, 90, 80, 0.22);
-    --text:       #0f2723;
-    --text-dim:   #3c5a54;
-    --text-faint: #6f8a83;
-    --glow:       rgba(62, 200, 180, 0.28);
-    --star:       rgba(30, 120, 105, 0.35);
-    --ink:        #0c2b26;
-  }
+        --glow: rgba(62, 200, 180, 0.3);
+        --star: rgba(150, 220, 208, 0.55);
+        --radius: 16px;
+        --display: 'Bricolage Grotesque', sans-serif;
+        --body: 'Hanken Grotesk', sans-serif;
+        --mono: 'JetBrains Mono', monospace;
+      }
+      [data-theme='light'] {
+        --bg: #eef5f3;
+        --bg-2: #e4efec;
+        --panel: #ffffff;
+        --panel-2: #f4faf8;
+        --line: rgba(20, 90, 80, 0.12);
+        --line-2: rgba(20, 90, 80, 0.22);
+        --text: #0f2723;
+        --text-dim: #3c5a54;
+        --text-faint: #6f8a83;
+        --glow: rgba(62, 200, 180, 0.28);
+        --star: rgba(30, 120, 105, 0.35);
+        --ink: #0c2b26;
+      }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    font-family: var(--body);
-    background: var(--bg);
-    color: var(--text);
-    -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
-  }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        font-family: var(--body);
+        background: var(--bg);
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
 
-  /* ---------- atmosphere ---------- */
-  .stage { position: relative; min-height: 100%; isolation: isolate; }
-  .bg-layer { position: fixed; inset: 0; z-index: -2; pointer-events: none; transition: background .6s ease; }
-  .bg-base {
-    background:
-      radial-gradient(120% 80% at 50% -10%, var(--bg-2) 0%, var(--bg) 55%),
-      var(--bg);
-  }
-  .bg-glow {
-    background:
-      radial-gradient(48% 38% at 50% 26%, var(--glow) 0%, transparent 70%),
-      radial-gradient(30% 24% at 82% 8%, rgba(62,200,180,.10) 0%, transparent 70%);
-    z-index: -1;
-    animation: breathe 9s ease-in-out infinite;
-  }
-  .bg-grid {
-    background-image:
-      linear-gradient(var(--line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--line) 1px, transparent 1px);
-    background-size: 64px 64px;
-    -webkit-mask-image: radial-gradient(80% 55% at 50% 20%, #000 0%, transparent 72%);
-            mask-image: radial-gradient(80% 55% at 50% 20%, #000 0%, transparent 72%);
-    opacity: .5;
-  }
-  .stars { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
-  .stars i {
-    position: absolute; width: 2px; height: 2px; border-radius: 50%;
-    background: var(--star); opacity: .6;
-    animation: twinkle var(--tw, 4s) ease-in-out infinite;
-  }
-  @keyframes breathe { 0%,100%{ opacity:.85 } 50%{ opacity:1 } }
-  @keyframes twinkle { 0%,100%{ opacity:.15 } 50%{ opacity:.8 } }
+      /* ---------- atmosphere ---------- */
+      .stage {
+        position: relative;
+        min-height: 100%;
+        isolation: isolate;
+      }
+      .bg-layer {
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        pointer-events: none;
+        transition: background 0.6s ease;
+      }
+      .bg-base {
+        background: radial-gradient(120% 80% at 50% -10%, var(--bg-2) 0%, var(--bg) 55%), var(--bg);
+      }
+      .bg-glow {
+        background:
+          radial-gradient(48% 38% at 50% 26%, var(--glow) 0%, transparent 70%),
+          radial-gradient(30% 24% at 82% 8%, rgba(62, 200, 180, 0.1) 0%, transparent 70%);
+        z-index: -1;
+        animation: breathe 9s ease-in-out infinite;
+      }
+      .bg-grid {
+        background-image:
+          linear-gradient(var(--line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line) 1px, transparent 1px);
+        background-size: 64px 64px;
+        -webkit-mask-image: radial-gradient(80% 55% at 50% 20%, #000 0%, transparent 72%);
+        mask-image: radial-gradient(80% 55% at 50% 20%, #000 0%, transparent 72%);
+        opacity: 0.5;
+      }
+      .stars {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+      }
+      .stars i {
+        position: absolute;
+        width: 2px;
+        height: 2px;
+        border-radius: 50%;
+        background: var(--star);
+        opacity: 0.6;
+        animation: twinkle var(--tw, 4s) ease-in-out infinite;
+      }
+      @keyframes breathe {
+        0%,
+        100% {
+          opacity: 0.85;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      @keyframes twinkle {
+        0%,
+        100% {
+          opacity: 0.15;
+        }
+        50% {
+          opacity: 0.8;
+        }
+      }
 
-  /* ---------- header ---------- */
-  header {
-    position: sticky; top: 0; z-index: 50;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px clamp(18px, 4vw, 44px);
-    background: color-mix(in oklab, var(--bg) 72%, transparent);
-    backdrop-filter: blur(14px) saturate(1.2);
-    border-bottom: 1px solid var(--line);
-  }
-  .brand { display: flex; align-items: center; gap: 11px; font-family: var(--display); font-weight: 700; letter-spacing: -.02em; font-size: 19px; color: var(--ink); }
-  .mark { width: 34px; height: 34px; border-radius: 10px; overflow: hidden;
-    box-shadow: 0 6px 20px -6px var(--glow); }
-  .mark img { width: 100%; height: 100%; display: block; }
+      /* ---------- header ---------- */
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px clamp(18px, 4vw, 44px);
+        background: color-mix(in oklab, var(--bg) 72%, transparent);
+        backdrop-filter: blur(14px) saturate(1.2);
+        border-bottom: 1px solid var(--line);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-family: var(--display);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        font-size: 19px;
+        color: var(--ink);
+      }
+      .mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 6px 20px -6px var(--glow);
+      }
+      .mark img {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
 
-  nav { display: flex; align-items: center; gap: 4px; }
-  nav a {
-    font-size: 14.5px; font-weight: 500; color: var(--text-dim);
-    text-decoration: none; padding: 8px 13px; border-radius: 9px;
-    display: inline-flex; align-items: center; gap: 7px;
-    transition: color .18s ease, background .18s ease;
-  }
-  nav a:hover { color: var(--ink); background: color-mix(in oklab, var(--brand) 10%, transparent); }
-  nav a.active { color: var(--brand-lt); }
-  nav a.active::after { content:""; }
-  nav a svg { width: 15px; height: 15px; opacity: .85; }
-  .docs-link {
-    color: var(--ink) !important;
-    background: color-mix(in oklab, var(--brand) 14%, transparent);
-    box-shadow: inset 0 0 0 1px var(--line-2);
-  }
-  .docs-link:hover { background: color-mix(in oklab, var(--brand) 24%, transparent) !important; }
-  .toggle {
-    width: 38px; height: 38px; margin-left: 8px; border-radius: 50%;
-    border: 1px solid var(--line-2); background: transparent; color: var(--text-dim);
-    display: grid; place-items: center; cursor: pointer;
-    transition: transform .3s ease, color .2s ease, border-color .2s ease;
-  }
-  .toggle:hover { color: var(--brand-lt); border-color: var(--brand); transform: rotate(35deg); }
-  .toggle svg { width: 18px; height: 18px; }
-  .nav-collapse { display: contents; }
+      nav {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      nav a {
+        font-size: 14.5px;
+        font-weight: 500;
+        color: var(--text-dim);
+        text-decoration: none;
+        padding: 8px 13px;
+        border-radius: 9px;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        transition:
+          color 0.18s ease,
+          background 0.18s ease;
+      }
+      nav a:hover {
+        color: var(--ink);
+        background: color-mix(in oklab, var(--brand) 10%, transparent);
+      }
+      nav a.active {
+        color: var(--brand-lt);
+      }
+      nav a.active::after {
+        content: '';
+      }
+      nav a svg {
+        width: 15px;
+        height: 15px;
+        opacity: 0.85;
+      }
+      .docs-link {
+        color: var(--ink) !important;
+        background: color-mix(in oklab, var(--brand) 14%, transparent);
+        box-shadow: inset 0 0 0 1px var(--line-2);
+      }
+      .docs-link:hover {
+        background: color-mix(in oklab, var(--brand) 24%, transparent) !important;
+      }
+      .toggle {
+        width: 38px;
+        height: 38px;
+        margin-left: 8px;
+        border-radius: 50%;
+        border: 1px solid var(--line-2);
+        background: transparent;
+        color: var(--text-dim);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition:
+          transform 0.3s ease,
+          color 0.2s ease,
+          border-color 0.2s ease;
+      }
+      .toggle:hover {
+        color: var(--brand-lt);
+        border-color: var(--brand);
+        transform: rotate(35deg);
+      }
+      .toggle svg {
+        width: 18px;
+        height: 18px;
+      }
+      .nav-collapse {
+        display: contents;
+      }
 
-  /* ---------- hero ---------- */
-  .hero { text-align: center; padding: clamp(56px, 11vh, 130px) 20px 40px; position: relative; }
-  .hero-mark {
-    width: 116px; height: 116px; margin: 0 auto 30px; border-radius: 28px; overflow: hidden;
-    box-shadow: 0 30px 70px -24px var(--glow), 0 0 0 1px rgba(255,255,255,.06);
-    animation: float 6s ease-in-out infinite;
-  }
-  .hero-mark img { width: 100%; height: 100%; display: block; }
-  @keyframes float { 0%,100%{ transform: translateY(0) } 50%{ transform: translateY(-12px) } }
+      /* ---------- hero ---------- */
+      .hero {
+        text-align: center;
+        padding: clamp(56px, 11vh, 130px) 20px 40px;
+        position: relative;
+      }
+      .hero-mark {
+        width: 116px;
+        height: 116px;
+        margin: 0 auto 30px;
+        border-radius: 28px;
+        overflow: hidden;
+        box-shadow:
+          0 30px 70px -24px var(--glow),
+          0 0 0 1px rgba(255, 255, 255, 0.06);
+        animation: float 6s ease-in-out infinite;
+      }
+      .hero-mark img {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-12px);
+        }
+      }
 
-  .wordmark {
-    font-family: var(--display);
-    font-weight: 800;
-    font-size: clamp(64px, 15vw, 184px);
-    line-height: .92; letter-spacing: -.045em;
-    background: linear-gradient(100deg, var(--brand-dp) 4%, var(--brand) 34%, var(--mint) 66%, var(--ink) 100%);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    padding: 0 .05em;
-  }
-  .tagline {
-    margin-top: 22px; font-weight: 700; font-size: clamp(14px, 2.1vw, 20px);
-    letter-spacing: .34em; text-transform: uppercase; color: var(--brand);
-  }
-  .sub {
-    max-width: 620px; margin: 24px auto 0; font-size: clamp(16px, 2.3vw, 19px);
-    line-height: 1.6; color: var(--text-dim);
-  }
-  .sub b { color: var(--ink); font-weight: 600; }
-  .cta { margin-top: 38px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-  .btn {
-    font-family: var(--body); font-weight: 600; font-size: 15px;
-    padding: 13px 24px; border-radius: 12px; cursor: pointer; text-decoration: none;
-    display: inline-flex; align-items: center; gap: 9px; border: 1px solid transparent;
-    transition: transform .16s ease, box-shadow .2s ease, background .2s ease;
-  }
-  .btn-primary { background: linear-gradient(135deg, var(--brand-lt), var(--brand-dp)); color: #04120f;
-    box-shadow: 0 14px 34px -12px var(--glow); }
-  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 20px 44px -12px var(--glow); }
-  .btn-ghost { color: var(--text); border-color: var(--line-2); background: color-mix(in oklab, var(--panel) 60%, transparent); }
-  .btn-ghost:hover { border-color: var(--brand); color: var(--ink); transform: translateY(-2px); }
+      .wordmark {
+        font-family: var(--display);
+        font-weight: 800;
+        font-size: clamp(64px, 15vw, 184px);
+        line-height: 0.92;
+        letter-spacing: -0.045em;
+        background: linear-gradient(
+          100deg,
+          var(--brand-dp) 4%,
+          var(--brand) 34%,
+          var(--mint) 66%,
+          var(--ink) 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        padding: 0 0.05em;
+      }
+      .tagline {
+        margin-top: 22px;
+        font-weight: 700;
+        font-size: clamp(14px, 2.1vw, 20px);
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: var(--brand);
+      }
+      .sub {
+        max-width: 620px;
+        margin: 24px auto 0;
+        font-size: clamp(16px, 2.3vw, 19px);
+        line-height: 1.6;
+        color: var(--text-dim);
+      }
+      .sub b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .cta {
+        margin-top: 38px;
+        display: flex;
+        gap: 14px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .btn {
+        font-family: var(--body);
+        font-weight: 600;
+        font-size: 15px;
+        padding: 13px 24px;
+        border-radius: 12px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        border: 1px solid transparent;
+        transition:
+          transform 0.16s ease,
+          box-shadow 0.2s ease,
+          background 0.2s ease;
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, var(--brand-lt), var(--brand-dp));
+        color: #04120f;
+        box-shadow: 0 14px 34px -12px var(--glow);
+      }
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 20px 44px -12px var(--glow);
+      }
+      .btn-ghost {
+        color: var(--text);
+        border-color: var(--line-2);
+        background: color-mix(in oklab, var(--panel) 60%, transparent);
+      }
+      .btn-ghost:hover {
+        border-color: var(--brand);
+        color: var(--ink);
+        transform: translateY(-2px);
+      }
 
-  /* ---------- quick start ---------- */
-  .section { max-width: 940px; margin: 0 auto; padding: 30px 20px 100px; }
-  .kicker { display: flex; align-items: center; gap: 12px; font-family: var(--display);
-    font-weight: 700; font-size: 26px; letter-spacing: -.02em; color: var(--ink); margin-bottom: 22px; }
-  .kicker::before { content: "›"; color: var(--brand); font-size: 30px; line-height: 0; }
+      /* ---------- quick start ---------- */
+      .section {
+        max-width: 940px;
+        margin: 0 auto;
+        padding: 30px 20px 100px;
+      }
+      .kicker {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 26px;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+        margin-bottom: 22px;
+      }
+      .kicker::before {
+        content: '›';
+        color: var(--brand);
+        font-size: 30px;
+        line-height: 0;
+      }
 
-  .term {
-    border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line-2);
-    background: linear-gradient(180deg, var(--panel-2), var(--panel));
-    box-shadow: 0 40px 90px -40px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.04);
-  }
-  .term-bar { display: flex; align-items: center; gap: 14px; padding: 13px 16px;
-    border-bottom: 1px solid var(--line); background: color-mix(in oklab, var(--panel) 70%, #000 6%); flex-wrap: wrap; }
-  .dots { display: flex; gap: 8px; }
-  .dots i { width: 12px; height: 12px; border-radius: 50%; }
-  .dots i:nth-child(1){ background:#ff5f57 } .dots i:nth-child(2){ background:#febc2e } .dots i:nth-child(3){ background:#28c840 }
-  .tabs { display: flex; gap: 4px; align-items: center; }
-  .tab { font-family: var(--mono); font-size: 12.5px; padding: 5px 11px; border-radius: 7px;
-    color: var(--text-faint); cursor: pointer; border: 1px solid transparent; transition: all .16s; }
-  .tab:hover { color: var(--text-dim); }
-  .tab.on { color: #04120f; background: linear-gradient(135deg, var(--brand-lt), var(--brand-dp)); font-weight: 700; }
-  .bar-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
-  .os { font-family: var(--mono); font-size: 12px; padding: 5px 10px; border-radius: 7px; cursor: pointer;
-    color: var(--text-faint); border: 1px solid var(--line); transition: all .16s; }
-  .os.on { color: var(--ink); border-color: var(--line-2); background: color-mix(in oklab, var(--brand) 12%, transparent); }
-  .beta { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .06em;
-    color: var(--brand-lt); border: 1px solid var(--line-2); padding: 5px 9px; border-radius: 7px; }
+      .term {
+        border-radius: var(--radius);
+        overflow: hidden;
+        border: 1px solid var(--line-2);
+        background: linear-gradient(180deg, var(--panel-2), var(--panel));
+        box-shadow:
+          0 40px 90px -40px rgba(0, 0, 0, 0.7),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+      .term-bar {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in oklab, var(--panel) 70%, #000 6%);
+        flex-wrap: wrap;
+      }
+      .dots {
+        display: flex;
+        gap: 8px;
+      }
+      .dots i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .dots i:nth-child(1) {
+        background: #ff5f57;
+      }
+      .dots i:nth-child(2) {
+        background: #febc2e;
+      }
+      .dots i:nth-child(3) {
+        background: #28c840;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .tab {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        padding: 5px 11px;
+        border-radius: 7px;
+        color: var(--text-faint);
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: all 0.16s;
+      }
+      .tab:hover {
+        color: var(--text-dim);
+      }
+      .tab.on {
+        color: #04120f;
+        background: linear-gradient(135deg, var(--brand-lt), var(--brand-dp));
+        font-weight: 700;
+      }
+      .bar-right {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .os {
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 5px 10px;
+        border-radius: 7px;
+        cursor: pointer;
+        color: var(--text-faint);
+        border: 1px solid var(--line);
+        transition: all 0.16s;
+      }
+      .os.on {
+        color: var(--ink);
+        border-color: var(--line-2);
+        background: color-mix(in oklab, var(--brand) 12%, transparent);
+      }
+      .beta {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: var(--brand-lt);
+        border: 1px solid var(--line-2);
+        padding: 5px 9px;
+        border-radius: 7px;
+      }
 
-  .term-body { padding: 26px 24px 28px; font-family: var(--mono); font-size: 15px; position: relative; }
-  .term-body .cm { color: var(--text-faint); font-style: italic; margin-bottom: 14px; }
-  .cmdline { display: flex; align-items: flex-start; gap: 10px; }
-  .cmdline .p { color: var(--brand); font-weight: 700; }
-  .cmdline code { color: var(--ink); word-break: break-all; }
-  .cmdline code .fn { color: var(--brand-lt); }
-  .copy { position: absolute; top: 20px; right: 18px; width: 34px; height: 34px; border-radius: 8px;
-    border: 1px solid var(--line); background: color-mix(in oklab, var(--panel) 60%, transparent); color: var(--text-dim);
-    display: grid; place-items: center; cursor: pointer; transition: all .16s; }
-  .copy:hover { color: var(--brand-lt); border-color: var(--brand); }
-  .copy.done { color: #28c840; border-color: #28c840; }
-  .copy svg { width: 15px; height: 15px; }
-  .term-note { margin-top: 18px; font-size: 14.5px; line-height: 1.65; color: var(--text-dim); }
-  .term-note code { font-family: var(--mono); font-size: 13px; color: var(--brand-lt);
-    background: color-mix(in oklab, var(--brand) 10%, transparent); padding: 2px 6px; border-radius: 5px; }
+      .term-body {
+        padding: 26px 24px 28px;
+        font-family: var(--mono);
+        font-size: 15px;
+        position: relative;
+      }
+      .term-body .cm {
+        color: var(--text-faint);
+        font-style: italic;
+        margin-bottom: 14px;
+      }
+      .cmdline {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .cmdline .p {
+        color: var(--brand);
+        font-weight: 700;
+      }
+      .cmdline code {
+        color: var(--ink);
+        word-break: break-all;
+      }
+      .cmdline code .fn {
+        color: var(--brand-lt);
+      }
+      .copy {
+        position: absolute;
+        top: 20px;
+        right: 18px;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: color-mix(in oklab, var(--panel) 60%, transparent);
+        color: var(--text-dim);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: all 0.16s;
+      }
+      .copy:hover {
+        color: var(--brand-lt);
+        border-color: var(--brand);
+      }
+      .copy.done {
+        color: #28c840;
+        border-color: #28c840;
+      }
+      .copy svg {
+        width: 15px;
+        height: 15px;
+      }
+      .term-note {
+        margin-top: 18px;
+        font-size: 14.5px;
+        line-height: 1.65;
+        color: var(--text-dim);
+      }
+      .term-note code {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--brand-lt);
+        background: color-mix(in oklab, var(--brand) 10%, transparent);
+        padding: 2px 6px;
+        border-radius: 5px;
+      }
 
-  /* feature strip */
-  .feats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 42px; }
-  .feat { border: 1px solid var(--line); border-radius: 14px; padding: 22px; background: color-mix(in oklab, var(--panel) 50%, transparent);
-    transition: border-color .2s, transform .2s; }
-  .feat:hover { border-color: var(--line-2); transform: translateY(-3px); }
-  .feat .ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 14px;
-    background: color-mix(in oklab, var(--brand) 14%, transparent); color: var(--brand-lt); }
-  .feat .ic svg { width: 20px; height: 20px; }
-  .feat h3 { font-family: var(--display); font-weight: 700; font-size: 17px; color: var(--ink); margin-bottom: 6px; letter-spacing: -.01em; }
-  .feat p { font-size: 14px; line-height: 1.55; color: var(--text-dim); }
+      /* feature strip */
+      .feats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-top: 42px;
+      }
+      .feat {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 22px;
+        background: color-mix(in oklab, var(--panel) 50%, transparent);
+        transition:
+          border-color 0.2s,
+          transform 0.2s;
+      }
+      .feat:hover {
+        border-color: var(--line-2);
+        transform: translateY(-3px);
+      }
+      .feat .ic {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 14px;
+        background: color-mix(in oklab, var(--brand) 14%, transparent);
+        color: var(--brand-lt);
+      }
+      .feat .ic svg {
+        width: 20px;
+        height: 20px;
+      }
+      .feat h3 {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 17px;
+        color: var(--ink);
+        margin-bottom: 6px;
+        letter-spacing: -0.01em;
+      }
+      .feat p {
+        font-size: 14px;
+        line-height: 1.55;
+        color: var(--text-dim);
+      }
 
-  footer { border-top: 1px solid var(--line); padding: 26px 20px; text-align: center; color: var(--text-faint); font-size: 13.5px; }
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 26px 20px;
+        text-align: center;
+        color: var(--text-faint);
+        font-size: 13.5px;
+      }
 
-  /* reveal */
-  .rise { opacity: 0; transform: translateY(20px); animation: rise .8s cubic-bezier(.2,.7,.2,1) forwards; }
-  @keyframes rise { to { opacity: 1; transform: none; } }
+      /* reveal */
+      .rise {
+        opacity: 0;
+        transform: translateY(20px);
+        animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+      }
+      @keyframes rise {
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
 
-  @media (max-width: 760px) {
-    nav .hide-sm { display: none; }
-    .feats { grid-template-columns: 1fr; }
-  }
-  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } .rise { opacity: 1; transform: none; } }
-</style>
-</head>
-<body>
-<div class="stage">
-  <div class="bg-layer bg-base"></div>
-  <div class="bg-layer bg-grid"></div>
-  <div class="bg-layer bg-glow"></div>
-  <div class="stars" id="stars"></div>
+      @media (max-width: 760px) {
+        nav .hide-sm {
+          display: none;
+        }
+        .feats {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+        }
+        .rise {
+          opacity: 1;
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="bg-layer bg-base"></div>
+      <div class="bg-layer bg-grid"></div>
+      <div class="bg-layer bg-glow"></div>
+      <div class="stars" id="stars"></div>
 
-  <!-- HEADER -->
-  <header>
-    <div class="brand">
-      <span class="mark" aria-hidden="true">
-        <img src="assets/centraid-mark.svg" alt="" />
-      </span>
-      Centraid
-    </div>
-    <nav>
-      <span class="nav-collapse">
-        <a href="#" class="active hide-sm">Product</a>
-        <a href="#concepts" class="hide-sm">Concepts</a>
-        <a href="#build" class="hide-sm">Build</a>
-        <a href="#automations" class="hide-sm">Automations</a>
-      </span>
-      <a href="/docs" class="docs-link">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H14l6 6v11.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20.5z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>
-        Docs
-      </a>
-      <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.54 2.87 8.38 6.84 9.74.5.1.68-.22.68-.49v-1.7c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.35 1.12 2.92.85.09-.66.35-1.12.63-1.37-2.22-.26-4.55-1.14-4.55-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9v2.82c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"/></svg>
-        <span class="hide-sm">GitHub</span>
-      </a>
-      <button class="toggle" id="toggle" aria-label="Toggle theme">
-        <svg id="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>
-      </button>
-    </nav>
-  </header>
-
-  <!-- HERO -->
-  <section class="hero">
-    <div class="hero-mark rise" style="animation-delay:.05s" aria-hidden="true">
-      <img src="assets/centraid-mark.svg" alt="Centraid" />
-    </div>
-    <h1 class="wordmark rise" style="animation-delay:.12s">Centraid</h1>
-    <p class="tagline rise" style="animation-delay:.22s">Tiny apps that run your life.</p>
-    <p class="sub rise" style="animation-delay:.3s">
-      Build, share, and run <b>tiny SQLite-backed apps</b> — from a desktop shell,
-      a mobile companion, or a remote gateway. Chat is the runtime; every app is one file.
-    </p>
-    <div class="cta rise" style="animation-delay:.38s">
-      <a href="/docs" class="btn btn-primary">Read the docs
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
-      <a href="#quickstart" class="btn btn-ghost">Quick start</a>
-    </div>
-  </section>
-
-  <!-- QUICK START -->
-  <section class="section" id="quickstart">
-    <div class="kicker rise">Quick Start</div>
-    <div class="term rise" style="animation-delay:.05s">
-      <div class="term-bar">
-        <div class="dots"><i></i><i></i><i></i></div>
-        <div class="tabs">
-          <span class="tab on">One-liner</span>
-          <span class="tab">npm</span>
-          <span class="tab">Docker</span>
-          <span class="tab">Source</span>
+      <!-- HEADER -->
+      <header>
+        <div class="brand">
+          <span class="mark" aria-hidden="true">
+            <img src="assets/centraid-mark.svg" alt="" />
+          </span>
+          Centraid
         </div>
-        <div class="bar-right">
-          <span class="os on">macOS &amp; Linux</span>
-          <span class="os">Windows</span>
-          <span class="beta">β BETA</span>
+        <nav>
+          <span class="nav-collapse">
+            <a href="#" class="active hide-sm">Product</a>
+            <a href="#concepts" class="hide-sm">Concepts</a>
+            <a href="#build" class="hide-sm">Build</a>
+            <a href="#automations" class="hide-sm">Automations</a>
+          </span>
+          <a href="/docs" class="docs-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path
+                d="M4 4.5A1.5 1.5 0 0 1 5.5 3H14l6 6v11.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20.5z"
+              />
+              <path d="M14 3v6h6M8 13h8M8 17h5" />
+            </svg>
+            Docs
+          </a>
+          <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M12 2C6.48 2 2 6.58 2 12.25c0 4.54 2.87 8.38 6.84 9.74.5.1.68-.22.68-.49v-1.7c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.35 1.12 2.92.85.09-.66.35-1.12.63-1.37-2.22-.26-4.55-1.14-4.55-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9v2.82c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"
+              />
+            </svg>
+            <span class="hide-sm">GitHub</span>
+          </a>
+          <button class="toggle" id="toggle" aria-label="Toggle theme">
+            <svg
+              id="ic-sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
+              <circle cx="12" cy="12" r="4.2" />
+              <path
+                d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"
+              />
+            </svg>
+          </button>
+        </nav>
+      </header>
+
+      <!-- HERO -->
+      <section class="hero">
+        <div class="hero-mark rise" style="animation-delay: 0.05s" aria-hidden="true">
+          <img src="assets/centraid-mark.svg" alt="Centraid" />
         </div>
-      </div>
-      <div class="term-body">
-        <div class="cm"># One command. Desktop shell, gateway, and CLI — all wired up.</div>
-        <div class="cmdline">
-          <span class="p">$</span>
-          <code><span class="fn">curl</span> -fsSL https://centraid.dev/install.sh | bash</code>
+        <h1 class="wordmark rise" style="animation-delay: 0.12s">Centraid</h1>
+        <p class="tagline rise" style="animation-delay: 0.22s">Tiny apps that run your life.</p>
+        <p class="sub rise" style="animation-delay: 0.3s">
+          Build, share, and run <b>tiny SQLite-backed apps</b> — from a desktop shell, a mobile
+          companion, or a remote gateway. Chat is the runtime; every app is one file.
+        </p>
+        <div class="cta rise" style="animation-delay: 0.38s">
+          <a href="/docs" class="btn btn-primary"
+            >Read the docs
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M5 12h14M13 6l6 6-6 6" /></svg
+          ></a>
+          <a href="#quickstart" class="btn btn-ghost">Quick start</a>
         </div>
-        <button class="copy" id="copy" aria-label="Copy command">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-        </button>
-      </div>
+      </section>
+
+      <!-- QUICK START -->
+      <section class="section" id="quickstart">
+        <div class="kicker rise">Quick Start</div>
+        <div class="term rise" style="animation-delay: 0.05s">
+          <div class="term-bar">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <div class="tabs">
+              <span class="tab on">One-liner</span>
+              <span class="tab">npm</span>
+              <span class="tab">Docker</span>
+              <span class="tab">Source</span>
+            </div>
+            <div class="bar-right">
+              <span class="os on">macOS &amp; Linux</span>
+              <span class="os">Windows</span>
+              <span class="beta">β BETA</span>
+            </div>
+          </div>
+          <div class="term-body">
+            <div class="cm"># One command. Desktop shell, gateway, and CLI — all wired up.</div>
+            <div class="cmdline">
+              <span class="p">$</span>
+              <code><span class="fn">curl</span> -fsSL https://centraid.dev/install.sh | bash</code>
+            </div>
+            <button class="copy" id="copy" aria-label="Copy command">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="9" y="9" width="11" height="11" rx="2" />
+                <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p class="term-note">
+          Works on macOS, Linux, and Windows. Then open an app with <code>centraid open</code>, or
+          spin up a shareable gateway with <code>centraid serve</code>.
+        </p>
+
+        <div class="feats">
+          <div class="feat rise" style="animation-delay: 0.1s">
+            <div class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <ellipse cx="12" cy="6" rx="8" ry="3" />
+                <path
+                  d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"
+                />
+              </svg>
+            </div>
+            <h3>One file, one app</h3>
+            <p>
+              Each app is a single SQLite-backed manifest — queries, actions, and UI in one place.
+            </p>
+          </div>
+          <div class="feat rise" style="animation-delay: 0.18s">
+            <div class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </div>
+            <h3>Chat is the runtime</h3>
+            <p>
+              Drive every app conversationally. Automations are just chat with a durable transcript.
+            </p>
+          </div>
+          <div class="feat rise" style="animation-delay: 0.26s">
+            <div class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path
+                  d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2M4 7h16v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM8 12h8M8 16h5"
+                />
+              </svg>
+            </div>
+            <h3>Runs anywhere</h3>
+            <p>
+              Desktop shell, mobile companion, or a remote gateway — same app, your choice of
+              surface.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        © 2026 Centraid ·
+        <a href="https://centraid.dev" style="color: var(--brand-lt); text-decoration: none"
+          >centraid.dev</a
+        >
+        · Personal app builder
+      </footer>
     </div>
-    <p class="term-note">
-      Works on macOS, Linux, and Windows. Then open an app with <code>centraid open</code>,
-      or spin up a shareable gateway with <code>centraid serve</code>.
-    </p>
 
-    <div class="feats">
-      <div class="feat rise" style="animation-delay:.1s">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg></div>
-        <h3>One file, one app</h3>
-        <p>Each app is a single SQLite-backed manifest — queries, actions, and UI in one place.</p>
-      </div>
-      <div class="feat rise" style="animation-delay:.18s">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-        <h3>Chat is the runtime</h3>
-        <p>Drive every app conversationally. Automations are just chat with a durable transcript.</p>
-      </div>
-      <div class="feat rise" style="animation-delay:.26s">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2M4 7h16v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM8 12h8M8 16h5"/></svg></div>
-        <h3>Runs anywhere</h3>
-        <p>Desktop shell, mobile companion, or a remote gateway — same app, your choice of surface.</p>
-      </div>
-    </div>
-  </section>
+    <script>
+      // starfield
+      const stars = document.getElementById('stars');
+      let sh = '';
+      for (let i = 0; i < 70; i++) {
+        const x = (((Math.sin(i * 12.9898) * 43758.5453) % 1) + 1) % 1;
+        const y = (((Math.sin(i * 78.233) * 12543.123) % 1) + 1) % 1;
+        const d = 2 + (i % 5);
+        sh += `<i style="left:${(x * 100).toFixed(2)}%;top:${(y * 60).toFixed(2)}%;--tw:${d}s;animation-delay:${(i % 7) * 0.4}s"></i>`;
+      }
+      stars.innerHTML = sh;
 
-  <footer>© 2026 Centraid · <a href="https://centraid.dev" style="color:var(--brand-lt);text-decoration:none">centraid.dev</a> · Personal app builder</footer>
-</div>
+      // theme toggle
+      const root = document.documentElement,
+        tg = document.getElementById('toggle');
+      tg.addEventListener('click', () => {
+        root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      });
 
-<script>
-  // starfield
-  const stars = document.getElementById('stars');
-  let sh = '';
-  for (let i = 0; i < 70; i++) {
-    const x = (Math.sin(i * 12.9898) * 43758.5453 % 1 + 1) % 1;
-    const y = (Math.sin(i * 78.233) * 12543.123 % 1 + 1) % 1;
-    const d = 2 + (i % 5);
-    sh += `<i style="left:${(x*100).toFixed(2)}%;top:${(y*60).toFixed(2)}%;--tw:${d}s;animation-delay:${(i%7)*0.4}s"></i>`;
-  }
-  stars.innerHTML = sh;
+      // copy
+      const copy = document.getElementById('copy');
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText('curl -fsSL https://centraid.dev/install.sh | bash');
+        } catch (e) {}
+        copy.classList.add('done');
+        copy.innerHTML =
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7"/></svg>';
+        setTimeout(() => {
+          copy.classList.remove('done');
+          copy.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+        }, 1600);
+      });
 
-  // theme toggle
-  const root = document.documentElement, tg = document.getElementById('toggle');
-  tg.addEventListener('click', () => {
-    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
-  });
-
-  // copy
-  const copy = document.getElementById('copy');
-  copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText('curl -fsSL https://centraid.dev/install.sh | bash'); } catch (e) {}
-    copy.classList.add('done');
-    copy.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7"/></svg>';
-    setTimeout(() => { copy.classList.remove('done'); copy.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>'; }, 1600);
-  });
-
-  // tabs / os (cosmetic)
-  document.querySelectorAll('.tabs .tab').forEach(t => t.addEventListener('click', () => {
-    document.querySelectorAll('.tabs .tab').forEach(x => x.classList.remove('on')); t.classList.add('on');
-  }));
-  document.querySelectorAll('.os').forEach(t => t.addEventListener('click', () => {
-    document.querySelectorAll('.os').forEach(x => x.classList.remove('on')); t.classList.add('on');
-  }));
-</script>
-</body>
+      // tabs / os (cosmetic)
+      document.querySelectorAll('.tabs .tab').forEach((t) =>
+        t.addEventListener('click', () => {
+          document.querySelectorAll('.tabs .tab').forEach((x) => x.classList.remove('on'));
+          t.classList.add('on');
+        }),
+      );
+      document.querySelectorAll('.os').forEach((t) =>
+        t.addEventListener('click', () => {
+          document.querySelectorAll('.os').forEach((x) => x.classList.remove('on'));
+          t.classList.add('on');
+        }),
+      );
+    </script>
+  </body>
 </html>
