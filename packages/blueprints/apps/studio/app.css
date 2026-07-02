@@ -1,0 +1,201 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --accent: #2ea098;
+  --ink: #0f172a;
+  --ink-soft: #475569;
+  --ink-faint: #94a3b8;
+  --bg: #fcfcfc;
+  --surface: #ffffff;
+  --line: rgba(31, 31, 35, 0.07);
+  --danger: #dc2626;
+}
+
+:root[data-theme='dark'] {
+  --bg-l: 10%;
+  --ink: hsl(220 12% 95%);
+  --ink-soft: hsl(220 8% 62%);
+  --ink-faint: hsl(220 6% 42%);
+  --bg: var(--bg-wall);
+  --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
+  --line: hsla(220 25% 70% / 0.07);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg-l: 10%;
+    --ink: hsl(220 12% 95%);
+    --ink-soft: hsl(220 8% 62%);
+    --ink-faint: hsl(220 6% 42%);
+    --bg: var(--bg-wall);
+    --surface: hsl(225 11% 14.5%);
+    --line: hsla(220 25% 70% / 0.07);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+main {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 0.5rem 0 2rem;
+}
+
+@media (min-width: 720px) {
+  body {
+    padding: 1.5rem 2rem;
+  }
+  main {
+    max-width: 56rem;
+  }
+}
+
+.head {
+  margin-bottom: 1rem;
+}
+
+.head h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.1rem;
+}
+
+.muted {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+/* Consent + outcome banners — the vault's decisions are part of the UI. */
+.banner {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--app-color, var(--accent));
+  background: var(--surface);
+  border-radius: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  line-height: 1.45;
+}
+
+.banner strong {
+  display: block;
+}
+
+.day-label {
+  margin: 1rem 0 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.row-sub {
+  flex-shrink: 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.row-date {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.amount {
+  flex-shrink: 0;
+  margin-left: auto;
+  text-align: right;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+/* Outstanding money is loud; settled money recedes. */
+.badge.accent {
+  color: var(--app-color, var(--accent));
+  border-color: currentColor;
+}
+
+.badge.faint {
+  color: var(--ink-faint);
+  border-color: var(--line);
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.footnote {
+  color: var(--ink-faint);
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+/* ---------- App-level knobs ---------- */
+
+:root[data-app-font='sans'] {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+:root[data-app-font='serif'] {
+  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+}
+:root[data-app-font='mono'] {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+:root[data-app-width='narrow'] main {
+  max-width: 36rem;
+}
+@media (min-width: 720px) {
+  :root[data-app-width='narrow'] main {
+    max-width: 42rem;
+  }
+}

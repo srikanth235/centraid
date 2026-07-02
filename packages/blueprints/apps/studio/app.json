@@ -1,0 +1,70 @@
+{
+  "manifestVersion": 1,
+  "id": "studio",
+  "name": "Studio",
+  "description": "Your client work as a projection of the personal vault: clients are core parties, invoices reference canonical transactions. Read-only until the business domain's command pack ships — no data of its own, revoke the grant and the app goes dark.",
+  "version": "0.1.0",
+  "vault": {
+    "purpose": "dpv:Billing",
+    "why": "Shows your clients, projects, tracked time, and invoice status.",
+    "scopes": [
+      { "schema": "business", "verbs": "read" },
+      { "schema": "core", "table": "party", "verbs": "read" },
+      { "schema": "core", "table": "activity", "verbs": "read" },
+      { "schema": "core", "table": "transaction", "verbs": "read" }
+    ]
+  },
+  "actions": [],
+  "queries": [
+    {
+      "name": "studio",
+      "description": "Clients, projects with tracked hours, and invoices with line totals — joined across the business schema and core parties.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "clients": { "type": "array" },
+          "projects": { "type": "array" },
+          "invoices": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        { "value": "sans", "label": "Sans" },
+        { "value": "serif", "label": "Serif" },
+        { "value": "mono", "label": "Mono" }
+      ]
+    },
+    {
+      "key": "appWidth",
+      "label": "Width",
+      "type": "segmented",
+      "default": "narrow",
+      "options": [
+        { "value": "narrow", "label": "Narrow" },
+        { "value": "wide", "label": "Wide" }
+      ]
+    },
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#2EA098",
+      "options": [
+        { "value": "#4E68DD", "label": "Indigo" },
+        { "value": "#2EA098", "label": "Teal" },
+        { "value": "#7C5BD9", "label": "Violet" },
+        { "value": "#E55772", "label": "Rose" },
+        { "value": "#B47B3F", "label": "Ochre" }
+      ]
+    }
+  ]
+}

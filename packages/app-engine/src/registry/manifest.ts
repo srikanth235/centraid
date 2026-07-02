@@ -125,6 +125,26 @@ export interface ManifestKnob {
   readonly options: readonly ManifestKnobOption[];
 }
 
+/** One vault scope an app requests: schema-wide or a single table. */
+export interface ManifestVaultScope {
+  readonly schema: string;
+  readonly table?: string;
+  readonly verbs: 'read' | 'read+act' | 'act';
+}
+
+/**
+ * Declared personal-vault access (duaility §12). The block is a *request*,
+ * not a grant: the owner approves it explicitly (deny-by-default until
+ * then) and the host records the consent in the vault's own model.
+ * `purpose` is a DPV notation, e.g. `dpv:ServiceProvision`.
+ */
+export interface ManifestVaultBlock {
+  readonly purpose: string;
+  /** Owner-facing rationale shown in the approval UI. */
+  readonly why?: string;
+  readonly scopes: readonly ManifestVaultScope[];
+}
+
 export interface Manifest {
   readonly manifestVersion: number;
   readonly id: string;
@@ -145,6 +165,8 @@ export interface Manifest {
   readonly queries: readonly ManifestQueryEntry[];
   /** Per-app aesthetic knobs (font, width, radius, colour…). Optional. */
   readonly knobs?: readonly ManifestKnob[];
+  /** Requested personal-vault access (duaility §12). Optional. */
+  readonly vault?: ManifestVaultBlock;
 }
 
 // ----------------------------------------------------------------------------
@@ -212,6 +234,27 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
           input: { type: 'object' },
           output: { type: 'object' },
           reads: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    vault: {
+      type: 'object',
+      required: ['purpose', 'scopes'],
+      properties: {
+        purpose: { type: 'string', minLength: 1 },
+        why: { type: 'string' },
+        scopes: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            required: ['schema', 'verbs'],
+            properties: {
+              schema: { type: 'string', minLength: 1 },
+              table: { type: 'string', minLength: 1 },
+              verbs: { type: 'string', enum: ['read', 'read+act', 'act'] },
+            },
+          },
         },
       },
     },
@@ -421,6 +464,7 @@ export function validateManifest(raw: unknown): Manifest {
     actions,
     queries,
     ...(Array.isArray(r.knobs) ? { knobs: r.knobs as ManifestKnob[] } : {}),
+    ...(r.vault && typeof r.vault === 'object' ? { vault: r.vault as ManifestVaultBlock } : {}),
   };
 }
 

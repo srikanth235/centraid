@@ -66,7 +66,36 @@ export function buildExtraPrompt(input: BuildExtraPromptInput): string {
     ``,
     renderSchemaBlock(input.schema),
   );
+  const vaultBlock = renderVaultBlock(input.manifest);
+  if (vaultBlock) lines.push('', vaultBlock);
   return lines.join('\n');
+}
+
+/**
+ * Personal-vault section (duaility §12) — rendered only when the manifest
+ * declares a `vault` block. Documents the `ctx.vault` primitive every
+ * handler receives, so generated handler code reaches the canon through
+ * typed, consent-checked calls instead of inventing its own storage.
+ */
+function renderVaultBlock(manifest: Manifest | undefined): string {
+  const vault = manifest?.vault;
+  if (!vault) return '';
+  const scopes = vault.scopes
+    .map((s) => `\`${s.schema}${s.table ? `.${s.table}` : '.*'}\` (${s.verbs})`)
+    .join(', ');
+  return [
+    `### Personal vault`,
+    ``,
+    `This app declares access to the owner's personal vault — purpose \`${vault.purpose}\`, requested scopes: ${scopes}.${vault.why ? ` Rationale: ${vault.why}` : ''}`,
+    ``,
+    `Handlers reach the vault through \`ctx.vault\` (available in every action/query handler beside \`db\`):`,
+    ``,
+    `- \`await ctx.vault.read({ entity, where?, limit?, purpose })\` — consent-checked read of a canonical entity (e.g. \`core.event\`, \`social.contact_card\`). Returns \`{ rows, receiptId }\`.`,
+    `- \`await ctx.vault.invoke({ command, input, purpose })\` — typed command (e.g. \`schedule.propose_event\`). Returns an outcome: \`{ status: 'executed' | 'denied' | 'parked' | 'failed', output?, … }\` — check \`status\` before assuming the write landed; \`parked\` means the owner must confirm.`,
+    `- \`await ctx.vault.describe()\` — the commands this app can discover (name, schema, risk).`,
+    ``,
+    `Every call is consent-checked host-side and receipted. A denial throws with the receipt id in the message — do not retry in a loop; surface the denial. Until the owner approves the requested scopes, calls fail closed. Keep the app's own \`data.sqlite\` for private state; the vault is only for the owner's canonical data.`,
+  ].join('\n');
 }
 
 function renderCatalogBlock(manifest: Manifest | undefined): string {

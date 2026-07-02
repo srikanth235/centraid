@@ -1,0 +1,243 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --accent: #5c8a4e;
+  --ink: #0f172a;
+  --ink-soft: #475569;
+  --ink-faint: #94a3b8;
+  --bg: #fcfcfc;
+  --surface: #ffffff;
+  --line: rgba(31, 31, 35, 0.07);
+  --danger: #dc2626;
+}
+
+:root[data-theme='dark'] {
+  --bg-l: 10%;
+  --ink: hsl(220 12% 95%);
+  --ink-soft: hsl(220 8% 62%);
+  --ink-faint: hsl(220 6% 42%);
+  --bg: var(--bg-wall);
+  --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
+  --line: hsla(220 25% 70% / 0.07);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg-l: 10%;
+    --ink: hsl(220 12% 95%);
+    --ink-soft: hsl(220 8% 62%);
+    --ink-faint: hsl(220 6% 42%);
+    --bg: var(--bg-wall);
+    --surface: hsl(225 11% 14.5%);
+    --line: hsla(220 25% 70% / 0.07);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+main {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 0.5rem 0 2rem;
+}
+
+@media (min-width: 720px) {
+  body {
+    padding: 1.5rem 2rem;
+  }
+  main {
+    max-width: 56rem;
+  }
+}
+
+.head {
+  margin-bottom: 1rem;
+}
+
+.head h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.1rem;
+}
+
+.muted {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+/* Consent banner — the vault's decisions are part of the UI. */
+.banner {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--app-color, var(--accent));
+  background: var(--surface);
+  border-radius: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  line-height: 1.45;
+}
+
+.banner strong {
+  display: block;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Notebook filter chips — client-side, "All" plus one per notebook. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.chips:empty {
+  display: none;
+}
+
+.chip {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--app-color, var(--accent));
+  border-color: var(--app-color, var(--accent));
+  color: #fff;
+}
+
+/* Note rows */
+.note {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.7rem 0.125rem;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.note:last-child {
+  border-bottom: none;
+}
+
+.note-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.note-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.note-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+/* Reading pane */
+.back {
+  border: none;
+  background: none;
+  padding: 0.25rem 0;
+  margin-bottom: 0.75rem;
+  color: var(--app-color, var(--accent));
+  font-size: 0.85rem;
+  font-weight: 500;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.note-view-title {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.25rem;
+  word-break: break-word;
+}
+
+.note-body {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 0.95rem;
+  margin-top: 1rem;
+  word-break: break-word;
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.footnote {
+  margin-top: 2rem;
+  text-align: center;
+  color: var(--ink-faint);
+}
+
+/* ---------- App-level knobs ---------- */
+
+:root[data-app-font='sans'] {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+:root[data-app-font='serif'] {
+  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+}
+:root[data-app-font='mono'] {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+:root[data-app-width='narrow'] main {
+  max-width: 36rem;
+}
+@media (min-width: 720px) {
+  :root[data-app-width='narrow'] main {
+    max-width: 42rem;
+  }
+}

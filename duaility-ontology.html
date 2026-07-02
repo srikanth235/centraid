@@ -1,0 +1,1842 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duaility — Personal Ontology Map</title>
+<meta name="description" content="A person-owned, self-hostable canonical data model of a whole life. Apps become projections; agents act through consent-checked typed commands.">
+<style>
+/* ============ fonts (self-hosted; graceful degradation) ============ */
+@font-face{font-family:'Duaility Display';src:url('fonts/duaility-display.woff2') format('woff2');font-weight:300 800;font-display:swap;}
+@font-face{font-family:'Duaility Grotesk';src:url('fonts/duaility-grotesk.woff2') format('woff2');font-weight:300 700;font-display:swap;}
+@font-face{font-family:'Duaility Mono';src:url('fonts/duaility-mono.woff2') format('woff2');font-weight:400 600;font-display:swap;}
+
+/* ============ tokens ============ */
+:root{
+  --paper:#f2f0e9; --paper-2:#eae7dd; --ink:#15171a; --ink-soft:#3d4046; --ink-faint:#6b6e75;
+  --night:#111217; --night-2:#17181f; --night-3:#1d1f28; --bone:#e9e7de; --bone-soft:#b9b7ae; --bone-faint:#83828074;
+  --indigo:#4F46E5; --indigo-soft:#6d66ef; --indigo-wash:rgba(79,70,229,.10);
+  --gold:#E8A830; --gold-wash:rgba(232,168,48,.12);
+  --line:rgba(21,23,26,.16); --line-strong:rgba(21,23,26,.34);
+  --nline:rgba(233,231,222,.14); --nline-strong:rgba(233,231,222,.32);
+  --serif:'Duaility Display','Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+  --sans:'Duaility Grotesk','Helvetica Neue',Helvetica,Arial,'Segoe UI',system-ui,sans-serif;
+  --mono:'Duaility Mono',ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  --rail-w:220px; --max:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16.5px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+img,svg{max-width:100%}
+a{color:inherit}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:2px}
+::selection{background:var(--indigo);color:#fff}
+
+/* ============ topbar ============ */
+.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:baseline;gap:14px;padding:12px 22px;
+  background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
+.topbar .brand{font-family:var(--serif);font-weight:700;font-size:1.15rem;letter-spacing:.01em;text-decoration:none}
+.topbar .brand b{color:var(--indigo)}
+.topbar .doc{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+.topbar .spacer{flex:1}
+.topbar .ver{font-family:var(--mono);font-size:.72rem;color:var(--ink-faint)}
+
+/* ============ left rail ============ */
+.rail{position:fixed;left:0;top:0;bottom:0;width:var(--rail-w);padding:86px 0 24px 18px;z-index:50;display:flex;flex-direction:column;gap:2px;}
+.rail::before{content:"";position:absolute;left:12px;top:86px;bottom:24px;width:2px;background:linear-gradient(var(--indigo),var(--gold));opacity:.25;border-radius:2px}
+.rail a{position:relative;display:block;padding:6px 10px 6px 16px;font-size:.78rem;color:var(--ink-faint);text-decoration:none;border-radius:6px;line-height:1.3}
+.rail a .n{font-family:var(--mono);font-size:.62rem;display:block;letter-spacing:.12em;color:var(--ink-faint);opacity:.8}
+.rail a:hover{color:var(--ink)}
+.rail a.on{color:var(--ink);background:var(--indigo-wash)}
+.rail a.on::before{content:"";position:absolute;left:-6px;top:8px;bottom:8px;width:3px;background:var(--indigo);border-radius:3px}
+main{margin-left:var(--rail-w)}
+@media (max-width:1099px){.rail{display:none}main{margin-left:0}}
+
+/* ============ sections ============ */
+section{padding:88px 26px}
+.wrap{max-width:var(--max);margin:0 auto}
+section.dark{background:var(--night);color:var(--bone)}
+section.dark ::selection{background:var(--gold);color:var(--night)}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--indigo);display:flex;align-items:center;gap:10px;margin:0 0 14px}
+.dark .eyebrow{color:var(--gold)}
+.eyebrow::after{content:"";height:1px;width:56px;background:currentColor;opacity:.5}
+h1,h2,h3{font-family:var(--serif);line-height:1.08;margin:0}
+h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;margin-bottom:16px;max-width:22ch}
+.lede{font-size:1.06rem;color:var(--ink-soft);max-width:66ch;margin:0 0 34px}
+.dark .lede{color:var(--bone-soft)}
+.note{font-size:.85rem;color:var(--ink-faint);max-width:70ch}
+.dark .note{color:var(--bone-soft)}
+.mono{font-family:var(--mono)}
+.k{font-family:var(--mono);font-size:.8em;background:var(--indigo-wash);border:1px solid rgba(79,70,229,.25);border-radius:4px;padding:.06em .34em;white-space:nowrap}
+.dark .k{background:rgba(79,70,229,.18);border-color:rgba(109,102,239,.4)}
+
+/* reveal */
+.rv{opacity:0;transform:translateY(16px);transition:opacity .6s ease,transform .6s ease}
+.rv.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.rv{opacity:1;transform:none;transition:none}}
+
+/* chips & controls */
+.chiprow{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
+.chip{border:1px solid var(--line-strong);background:transparent;border-radius:999px;padding:7px 14px;font-size:.82rem;font-family:var(--mono);letter-spacing:.02em}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.dark .chip{border-color:var(--nline-strong)}
+.dark .chip[aria-pressed="true"]{background:var(--gold);color:var(--night);border-color:var(--gold)}
+.ctlbtn{border:1px solid var(--line-strong);background:transparent;border-radius:8px;padding:6px 12px;font-family:var(--mono);font-size:.8rem}
+.dark .ctlbtn{border-color:var(--nline-strong)}
+.ctlbtn[aria-pressed="true"]{background:var(--indigo);border-color:var(--indigo);color:#fff}
+
+/* ============ hero ============ */
+.hero{padding-top:70px;background:
+  radial-gradient(900px 420px at 78% -10%, var(--indigo-wash), transparent 65%),
+  radial-gradient(700px 380px at 8% 108%, var(--gold-wash), transparent 60%), var(--paper);}
+.hero h1{font-size:clamp(2.5rem,5.4vw,4.4rem);font-weight:680;letter-spacing:-.02em;max-width:19ch}
+.hero h1 em{font-style:italic;color:var(--indigo)}
+.hero .lede{margin-top:20px;font-size:1.12rem}
+.hero-kv{display:flex;gap:26px;flex-wrap:wrap;margin:26px 0 44px;font-family:var(--mono);font-size:.74rem;letter-spacing:.05em;color:var(--ink-faint)}
+.hero-kv b{display:block;font-size:1.3rem;color:var(--ink);font-family:var(--serif);letter-spacing:0}
+
+/* stacked system map */
+.stackscroll{overflow-x:auto;padding-bottom:8px}
+.stack{min-width:900px;position:relative;border:1px solid var(--line-strong);border-radius:14px;background:#fbfaf5;padding:22px 22px 22px 26px;display:grid;gap:12px}
+.stack::before{content:"";position:absolute;left:50%;top:14px;bottom:14px;width:4px;transform:translateX(-50%);
+  background:linear-gradient(var(--indigo) ,var(--indigo) 62%,var(--gold));border-radius:4px;opacity:.85;z-index:0;
+  box-shadow:0 0 22px rgba(79,70,229,.35)}
+.band{position:relative;z-index:1;border-radius:10px;padding:12px 16px;border:1px solid var(--line)}
+.band .bt{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}
+.band .bt h3{font-size:.95rem;font-weight:650}
+.band .bt .tag{font-family:var(--mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint)}
+.band .row{display:flex;flex-wrap:wrap;gap:7px}
+.pill{font-family:var(--mono);font-size:.72rem;border-radius:6px;padding:4px 9px;border:1px solid var(--line);background:#fff}
+.band.surface{background:#fff}
+.band.ext{background:var(--gold-wash);border-color:rgba(232,168,48,.45)}
+.band.ext .pill{background:#fff8ea;border-color:rgba(232,168,48,.5)}
+.band.core{background:var(--indigo);border-color:var(--indigo);color:#fff}
+.band.core .bt .tag{color:rgba(255,255,255,.75)}
+.band.core .pill{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.35);color:#fff}
+.band.plane{background:#15171a;color:var(--bone);border-color:#15171a}
+.band.plane .bt .tag{color:var(--bone-soft)}
+.band.plane .pill{background:rgba(233,231,222,.08);border-color:rgba(233,231,222,.3);color:var(--bone)}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;font-family:var(--mono);font-size:.72rem;color:var(--ink-faint)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid var(--line)}
+.legend .l-core i{background:var(--indigo);border-color:var(--indigo)}
+.legend .l-ext i{background:var(--gold-wash);border-color:rgba(232,168,48,.6)}
+.legend .l-ui i{background:#fff}
+.legend .l-pol i{background:#15171a;border-color:#15171a}
+
+/* ============ entity map ============ */
+.maptools{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.mapstatus{font-family:var(--mono);font-size:.76rem;color:var(--gold);min-height:1.4em;margin:10px 0 0}
+.mapscroll{overflow:auto;border:1px solid var(--nline);border-radius:14px;background:var(--night-2)}
+.mapcanvas{min-width:1060px;padding:26px;display:grid;gap:14px;transform-origin:0 0;
+  grid-template-columns:repeat(4,1fr);
+  grid-template-areas:"health money calendar tasks" "contacts corez corez photos" "messages corez corez home" "notes notes studio studio";}
+.zone{border:1px solid var(--nline);border-radius:12px;background:var(--night-3);padding:14px;text-align:left;transition:opacity .25s,border-color .25s,box-shadow .25s}
+.zone h3{font-size:1rem;font-weight:650;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.zone .zk{font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--bone-soft)}
+.zone ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.zone li{font-size:.8rem;display:flex;justify-content:space-between;gap:10px;border-top:1px dashed var(--nline);padding-top:6px}
+.zone li .cn{font-family:var(--mono);font-size:.68rem;color:var(--gold);white-space:nowrap}
+.zone li.rel-ref .cn{color:var(--indigo-soft)}
+.zone li.rel-own .cn{color:var(--bone-soft)}
+.zone.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 10px 34px rgba(0,0,0,.4)}
+.mapcanvas.hasSel .zone:not(.sel){opacity:.28}
+.corezone{grid-area:corez;border:1px solid rgba(109,102,239,.55);border-radius:12px;background:linear-gradient(180deg,rgba(79,70,229,.22),rgba(79,70,229,.08));padding:16px;display:flex;flex-direction:column;gap:10px}
+.corezone h3{font-family:var(--serif);font-size:1.25rem}
+.coregrid{display:flex;flex-wrap:wrap;gap:8px}
+.corechip{font-family:var(--mono);font-size:.72rem;padding:6px 10px;border-radius:8px;border:1px solid rgba(233,231,222,.3);background:rgba(17,18,23,.5);transition:all .25s}
+.corechip.lit{background:var(--gold);border-color:var(--gold);color:var(--night);box-shadow:0 0 18px rgba(232,168,48,.5)}
+.mapcanvas.hasSel .corechip:not(.lit){opacity:.35}
+.zone-health{grid-area:health}.zone-money{grid-area:money}.zone-calendar{grid-area:calendar}.zone-tasks{grid-area:tasks}
+.zone-contacts{grid-area:contacts}.zone-photos{grid-area:photos}.zone-messages{grid-area:messages}.zone-home{grid-area:home}
+.zone-notes{grid-area:notes}.zone-studio{grid-area:studio}
+
+/* ============ ERD ============ */
+.erdtools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:6px}
+.counts{display:flex;gap:22px;flex-wrap:wrap;margin:8px 0 22px;font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;color:var(--ink-faint)}
+.counts b{display:block;font-family:var(--serif);font-size:1.7rem;color:var(--ink);letter-spacing:0}
+.counts b i{font-style:normal;color:var(--indigo)}
+.schemahdr{margin:34px 0 12px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.schemahdr h3{font-size:1.35rem;font-weight:650}
+.schemahdr .sid{font-family:var(--mono);font-size:.72rem;color:#fff;background:var(--indigo);border-radius:5px;padding:2px 8px}
+.schemahdr .sdesc{font-size:.85rem;color:var(--ink-faint);flex-basis:100%;max-width:78ch}
+.tbl{border:1px solid var(--line-strong);border-radius:12px;background:#fbfaf5;margin:0 0 16px;overflow:hidden}
+.tbl>header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line-strong);background:var(--paper-2)}
+.tbl>header h4{margin:0;font-family:var(--mono);font-size:.95rem;font-weight:600}
+.tbl>header h4 .sch{color:var(--ink-faint);font-weight:400}
+.tbl>header .std{font-size:.72rem;color:var(--indigo);font-family:var(--mono)}
+.tbl>header .tp{flex-basis:100%;font-size:.8rem;color:var(--ink-soft);margin:0}
+.colscroll{overflow-x:auto}
+.colhead,.colrow{display:grid;grid-template-columns:190px 170px 168px 172px minmax(260px,1fr);gap:0 14px;padding:7px 16px;min-width:920px;align-items:baseline}
+.colhead{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);border-bottom:1px solid var(--line)}
+.colrow{border-bottom:1px dashed var(--line);font-size:.8rem}
+.colrow:last-child{border-bottom:0}
+.colrow .cn{font-family:var(--mono);font-weight:600}
+.colrow .ct{font-family:var(--mono);color:var(--ink-soft);font-size:.74rem}
+.colrow .cref{font-family:var(--mono);font-size:.72rem;color:var(--indigo)}
+.colrow .cnote{color:var(--ink-faint);font-size:.76rem}
+.badge{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.05em;border-radius:4px;padding:1px 5px;margin-right:4px;border:1px solid}
+.b-PK{background:var(--indigo);border-color:var(--indigo);color:#fff}
+.b-FK{background:var(--indigo-wash);border-color:rgba(79,70,229,.4);color:var(--indigo)}
+.b-UQ{background:var(--gold-wash);border-color:rgba(232,168,48,.55);color:#8a6210}
+.b-NN{background:transparent;border-color:var(--line-strong);color:var(--ink-soft)}
+.b-CK{background:rgba(21,23,26,.06);border-color:var(--line-strong);color:var(--ink-soft)}
+.erd.compact .colhead,.erd.compact .colrow{grid-template-columns:190px 170px 168px 1fr;min-width:760px;padding-top:4px;padding-bottom:4px}
+.erd.compact .cnote{display:none}
+.erd.compact .tbl>header .tp{display:none}
+.physcard{border:1px solid var(--line-strong);border-left:5px solid var(--gold);border-radius:12px;background:#fff;padding:18px 22px;margin:30px 0 0}
+.physcard h3{font-size:1.05rem;margin-bottom:8px}
+.physcard p{margin:0;font-size:.88rem;color:var(--ink-soft)}
+
+/* ============ principles ============ */
+.cards4{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.pcard{border:1px solid var(--nline);border-radius:14px;background:var(--night-2);padding:22px}
+.pcard .pn{font-family:var(--mono);font-size:.68rem;color:var(--gold);letter-spacing:.14em}
+.pcard h3{font-family:var(--serif);font-size:1.3rem;margin:10px 0 10px;line-height:1.15}
+.pcard p{margin:0;font-size:.86rem;color:var(--bone-soft)}
+
+/* ============ layer stack ============ */
+.layers{display:grid;gap:10px;counter-reset:ly}
+.layer{display:grid;grid-template-columns:64px 240px 1fr auto;gap:16px;align-items:baseline;border:1px solid var(--line-strong);border-radius:10px;background:#fbfaf5;padding:14px 18px;transition:opacity .25s}
+.layer .ln{font-family:var(--mono);font-size:.8rem;color:var(--indigo)}
+.layer h3{font-size:1rem;font-weight:650}
+.layer p{margin:4px 0 0;font-size:.82rem;color:var(--ink-faint)}
+.layer .lt{font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--line-strong);border-radius:999px;padding:3px 9px;white-space:nowrap}
+.layer[data-kind="shared"] .lt{color:var(--indigo);border-color:rgba(79,70,229,.45);background:var(--indigo-wash)}
+.layer[data-kind="domain"] .lt{color:#8a6210;border-color:rgba(232,168,48,.55);background:var(--gold-wash)}
+.layer[data-kind="agent"] .lt{color:var(--paper);border-color:var(--ink);background:var(--ink)}
+.layers.f-shared .layer:not([data-kind="shared"]),
+.layers.f-domain .layer:not([data-kind="domain"]),
+.layers.f-agent .layer:not([data-kind="agent"]){opacity:.22}
+@media (max-width:760px){.layer{grid-template-columns:44px 1fr;grid-auto-rows:auto}.layer .lt{grid-column:2}}
+
+/* ============ explorers ============ */
+.explore{display:grid;grid-template-columns:280px 1fr;gap:22px;align-items:start}
+@media (max-width:860px){.explore{grid-template-columns:1fr}}
+.pick{display:grid;gap:8px}
+.pickbtn{text-align:left;border:1px solid var(--nline);background:var(--night-2);border-radius:10px;padding:11px 14px;font-size:.86rem;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.pickbtn .pm{font-family:var(--mono);font-size:.64rem;color:var(--bone-soft)}
+.pickbtn[aria-pressed="true"]{border-color:var(--gold);background:linear-gradient(90deg,rgba(232,168,48,.16),transparent);color:var(--bone)}
+.panel{border:1px solid var(--nline);border-radius:14px;background:var(--night-2);padding:24px;min-height:300px}
+.panel h3{font-family:var(--serif);font-size:1.5rem;margin-bottom:4px}
+.panel .sub{font-family:var(--mono);font-size:.72rem;color:var(--gold);margin-bottom:16px}
+.panel h4{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--bone-soft);margin:18px 0 8px;border-top:1px solid var(--nline);padding-top:14px}
+.panel h4:first-of-type{border-top:0;padding-top:0;margin-top:12px}
+.panel p{margin:0 0 6px;font-size:.86rem;color:var(--bone)}
+.panel ul{margin:0;padding-left:18px;font-size:.84rem;color:var(--bone-soft)}
+.panel li{margin:3px 0}
+.panel .aff{font-family:var(--mono);font-size:.74rem;color:var(--bone);background:rgba(79,70,229,.16);border:1px solid rgba(109,102,239,.4);border-radius:6px;padding:4px 8px;display:inline-block;margin:0 6px 6px 0}
+.panel .warn{border-left:3px solid var(--gold);padding-left:12px;color:var(--bone-soft);font-size:.84rem}
+/* light variants for core explorer */
+.light .pickbtn{background:#fbfaf5;border-color:var(--line-strong)}
+.light .pickbtn .pm{color:var(--ink-faint)}
+.light .pickbtn[aria-pressed="true"]{border-color:var(--indigo);background:linear-gradient(90deg,var(--indigo-wash),transparent)}
+.light .panel{background:#fbfaf5;border-color:var(--line-strong)}
+.light .panel .sub{color:var(--indigo)}
+.light .panel h4{color:var(--ink-faint);border-color:var(--line)}
+.light .panel p{color:var(--ink)}
+.light .panel ul{color:var(--ink-soft)}
+.light .panel .aff{background:var(--indigo-wash);border-color:rgba(79,70,229,.35);color:var(--ink)}
+.light .panel .warn{color:var(--ink-soft)}
+
+/* ============ matrix ============ */
+.mxscroll{overflow-x:auto;border:1px solid var(--line-strong);border-radius:12px;background:#fbfaf5}
+table.mx{border-collapse:collapse;width:100%;min-width:960px;font-size:.8rem}
+.mx th,.mx td{border-bottom:1px solid var(--line);padding:9px 12px;text-align:center}
+.mx thead th{font-family:var(--mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);border-bottom:1px solid var(--line-strong);background:var(--paper-2)}
+.mx tbody th{text-align:left;font-weight:600;position:sticky;left:0;background:#fbfaf5;border-right:1px solid var(--line);min-width:170px}
+.mx td span{display:inline-block;font-family:var(--mono);font-size:.66rem;border-radius:4px;padding:2px 7px}
+.mx .mC span{background:var(--indigo);color:#fff}
+.mx .mE span{background:var(--gold-wash);color:#8a6210;border:1px solid rgba(232,168,48,.5)}
+.mx .mR span{border:1px solid rgba(79,70,229,.4);color:var(--indigo)}
+.mx .mN span{color:var(--ink-faint);opacity:.5}
+.mxlegend{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:.76rem;color:var(--ink-faint);font-family:var(--mono)}
+.dark .mx th,.dark .mx td{border-bottom-color:var(--nline)}
+.dark .mx thead th{background:var(--night-2);border-bottom-color:var(--nline-strong);color:var(--bone-soft)}
+.dark .mx tbody th{background:var(--night-3);border-right-color:var(--nline);color:var(--bone)}
+.dark .mx .mE span{color:var(--gold)}
+.dark .mx .mR span{color:var(--indigo-soft)}
+.dark .mx .mN span{color:var(--bone-soft)}
+.dark .mxlegend{color:var(--bone-soft)}
+
+/* ============ agent flow ============ */
+.flowsteps{display:grid;gap:0;margin-top:22px;position:relative}
+.flowsteps::before{content:"";position:absolute;left:19px;top:12px;bottom:12px;width:2px;background:linear-gradient(var(--indigo),var(--gold));opacity:.5}
+.step{position:relative;display:grid;grid-template-columns:52px 150px 1fr;gap:14px;padding:16px 0;border-bottom:1px dashed var(--nline)}
+.step:last-child{border-bottom:0}
+.step .dot{position:relative;z-index:1;width:40px;height:40px;border-radius:50%;border:1px solid var(--nline-strong);background:var(--night-3);display:grid;place-items:center;font-family:var(--mono);font-size:.72rem;color:var(--gold)}
+.step .sys{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--bone-soft);padding-top:10px}
+.step .body p{margin:0 0 4px;font-size:.9rem}
+.step .obj{font-family:var(--mono);font-size:.72rem;color:var(--indigo-soft)}
+.step .consent{font-family:var(--mono);font-size:.7rem;color:var(--gold);display:block;margin-top:6px}
+.step .receipt{font-family:var(--mono);font-size:.66rem;color:var(--bone-soft);display:block;margin-top:2px}
+@media (max-width:700px){.step{grid-template-columns:52px 1fr}.step .sys{grid-column:2}}
+
+/* ============ rules ============ */
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;counter-reset:rl}
+.rule{border:1px solid var(--line-strong);border-radius:12px;background:#fbfaf5;padding:18px 20px}
+.rule::before{counter-increment:rl;content:"R" counter(rl,decimal-leading-zero);font-family:var(--mono);font-size:.7rem;color:var(--indigo);letter-spacing:.12em}
+.rule h3{font-size:1.02rem;margin:8px 0 8px}
+.rule p{margin:0;font-size:.83rem;color:var(--ink-soft)}
+.rules.phases .rule::before{content:"P" counter(rl,decimal-leading-zero)}
+.cta{margin-top:34px;border:1px solid var(--indigo);border-radius:14px;background:linear-gradient(120deg,var(--indigo-wash),transparent 60%),#fff;padding:26px 28px}
+.cta h3{font-family:var(--serif);font-size:1.5rem;margin-bottom:10px}
+.cta p{margin:0 0 8px;font-size:.92rem;color:var(--ink-soft);max-width:78ch}
+
+footer{padding:40px 26px 60px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:.78rem}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-family:var(--mono)}
+@media (max-width:700px){section{padding:64px 18px}}
+
+/* §10 gateway */
+.gwpipescroll{overflow-x:auto;padding-bottom:8px;margin-top:30px}
+.gwpipe{display:flex;align-items:stretch;gap:0;min-width:860px}
+.gwstage{position:relative;flex:1;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px 12px;cursor:pointer;transition:border-color .18s,transform .18s,box-shadow .18s}
+.gwstage+.gwarrow{flex:0 0 34px;display:flex;align-items:center;justify-content:center;color:var(--ink-faint);font-family:var(--mono);font-size:.9rem}
+.gwstage .gn{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;color:var(--indigo);display:block;margin-bottom:6px}
+.gwstage h3{font-family:var(--serif);font-size:1.06rem;margin:0 0 4px}
+.gwstage p{margin:0;font-size:.76rem;color:var(--ink-soft);line-height:1.45}
+.gwstage[aria-pressed="true"]{border-color:var(--indigo);box-shadow:0 6px 22px rgba(79,70,229,.14);transform:translateY(-2px)}
+.gwstage[aria-pressed="true"] .gn{color:var(--gold-deep,#b07d17)}
+.gwpanel{margin-top:18px;border:1px solid var(--line-strong);border-left:5px solid var(--indigo);border-radius:12px;background:#fff;padding:20px 24px}
+.gwpanel h3{font-family:var(--serif);font-size:1.25rem;margin-bottom:4px}
+.gwpanel .sub{font-family:var(--mono);font-size:.72rem;color:var(--ink-faint);margin-bottom:14px}
+.gwpanel h4{font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;color:var(--indigo);margin:14px 0 6px}
+.gwpanel ul{margin:0;padding-left:18px;font-size:.86rem;color:var(--ink-soft)}
+.gwpanel ul li{margin-bottom:5px;line-height:1.5}
+.gwpanel .deny{border:1px dashed rgba(232,168,48,.7);background:#fff8ea;border-radius:8px;padding:10px 14px;font-size:.84rem;color:var(--ink-soft);margin-top:12px}
+.gwpanel .deny b{color:var(--ink)}
+.gwduties{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+@media(max-width:1000px){.gwduties{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.gwduties{grid-template-columns:1fr}}
+.gwduty{border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px 16px}
+.gwduty h3{font-size:.92rem;margin:0 0 6px;font-family:var(--serif)}
+.gwduty p{margin:0;font-size:.78rem;color:var(--ink-soft);line-height:1.5}
+.gwduty .k{font-size:.68rem}
+.gwnot{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+.gwnot > span{border:1px dashed var(--line-strong);border-radius:999px;padding:7px 16px;font-size:.8rem;color:var(--ink-soft);background:transparent}
+.gwnot > span b{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="#hero">Duai<b>lity</b>.</a>
+  <span class="doc">Personal Ontology Map</span>
+  <span class="spacer"></span>
+  <span class="ver">ontology v1.1 · logical model · 02 Jul 2026</span>
+</header>
+
+<nav class="rail" aria-label="Section index">
+  <a href="#hero" class="on"><span class="n">§01</span>System map</a>
+  <a href="#map"><span class="n">§02</span>Unified entity map</a>
+  <a href="#schema"><span class="n">§03</span>Detailed schema</a>
+  <a href="#principles"><span class="n">§04</span>Modeling principles</a>
+  <a href="#layers"><span class="n">§05</span>Ontology layer stack</a>
+  <a href="#core"><span class="n">§06</span>Canonical core</a>
+  <a href="#domains"><span class="n">§07</span>Domain explorer</a>
+  <a href="#matrix"><span class="n">§08</span>Ownership matrix</a>
+  <a href="#flow"><span class="n">§09</span>Cross-app agent flow</a>
+  <a href="#gateway"><span class="n">§10</span>The gateway</a>
+  <a href="#rules"><span class="n">§11</span>Implementation rules</a>
+  <a href="#centraid"><span class="n">§12</span>Centraid integration</a>
+</nav>
+
+<main>
+
+<!-- ================= §01 HERO / SYSTEM MAP ================= -->
+<section id="hero" class="hero">
+  <div class="wrap">
+    <p class="eyebrow">§01 · Thesis &amp; system map</p>
+    <h1>One life. One model. <em>Apps become projections.</em></h1>
+    <p class="lede">Your life is currently modeled by whoever shipped the app: your heart rate belongs to a watch vendor, your invoices to an accounting SaaS, your relationships to a contacts silo. Duaility inverts the ownership. A single, person-owned, self-hostable ontology holds the canonical record — <strong>identity, place, time, money, content, activity, observation, relationship, classification</strong> — and every familiar app becomes a thin projection over it. A personal agent operates across the whole model through one typed, consent-governed surface.</p>
+    <div class="hero-kv">
+      <div><b>1</b>canonical spine</div>
+      <div><b>11</b>schemas modeled</div>
+      <div><b id="kv-tables">—</b>relations</div>
+      <div><b id="kv-cols">—</b>typed columns</div>
+      <div><b>0</b>silos</div>
+    </div>
+
+    <div class="stackscroll rv">
+      <div class="stack" role="img" aria-label="Stacked system map: product surfaces project over domain extensions, which extend a canonical core spine; a consent plane and an agent plane govern every read and action.">
+        <div class="band surface">
+          <div class="bt"><h3>Product surfaces</h3><span class="tag">UI projections — rebuildable, replaceable</span></div>
+          <div class="row">
+            <span class="pill">Apple Health–style vitals</span><span class="pill">YNAB-style budgets</span>
+            <span class="pill">Google Calendar–style agenda</span><span class="pill">Things-style tasks</span>
+            <span class="pill">Contacts</span><span class="pill">iMessage / Mail threads</span>
+            <span class="pill">Obsidian-style notes</span><span class="pill">Photos library</span>
+            <span class="pill">Home inventory</span><span class="pill">FreshBooks-style studio</span>
+          </div>
+        </div>
+        <div class="band ext">
+          <div class="bt"><h3>Domain ontology extensions</h3><span class="tag">thin typed extensions — behavior lives here</span></div>
+          <div class="row">
+            <span class="pill">Workout ⊂ Activity</span><span class="pill">Vital ⊂ Observation</span>
+            <span class="pill">Holding → Account</span><span class="pill">Attendee → Event×Party</span>
+            <span class="pill">Message → Content</span><span class="pill">Note → Content</span>
+            <span class="pill">MediaAsset ⊂ Content</span><span class="pill">TimeEntry ⊂ Activity</span>
+            <span class="pill">MeterReading ⊂ Observation</span><span class="pill">Invoice → Transaction</span>
+          </div>
+        </div>
+        <div class="band core">
+          <div class="bt"><h3>Canonical core spine</h3><span class="tag">identity + history — the owned asset</span></div>
+          <div class="row">
+            <span class="pill">party</span><span class="pill">place</span><span class="pill">event</span>
+            <span class="pill">account · transaction</span><span class="pill">content_item</span>
+            <span class="pill">activity</span><span class="pill">observation</span>
+            <span class="pill">link</span><span class="pill">concept (SKOS)</span>
+          </div>
+        </div>
+        <div class="band plane">
+          <div class="bt"><h3>Consent &amp; sovereignty plane</h3><span class="tag">checked on every read and action</span></div>
+          <div class="row">
+            <span class="pill">apps</span><span class="pill">scoped, expiring grants</span><span class="pill">shares</span>
+            <span class="pill">policy: retention · residency · purpose</span><span class="pill">provenance (W3C PROV)</span>
+            <span class="pill">receipts (Kantara)</span><span class="pill">devices</span><span class="pill">export</span>
+          </div>
+        </div>
+        <div class="band plane">
+          <div class="bt"><h3>Agent plane</h3><span class="tag">discover · query · reason · act · verify · explain · learn</span></div>
+          <div class="row">
+            <span class="pill">capability registry (MCP tools)</span><span class="pill">typed commands</span>
+            <span class="pill">pre/postcondition checks</span><span class="pill">evidence &amp; explanation</span>
+            <span class="pill">corrections → durable judgment</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span class="l-core"><i></i>canonical core</span>
+      <span class="l-ext"><i></i>domain extension</span>
+      <span class="l-ui"><i></i>UI projection</span>
+      <span class="l-pol"><i></i>policy / agent plane</span>
+    </div>
+    <p class="note" style="margin-top:18px"><strong>The product is the substrate, not the apps.</strong> Familiar interfaces lower adoption cost; one shared model removes the silos; the consent and agent planes make it sovereign and agent-ready. Read it top-down as a user, bottom-up as an architect: surfaces render projections; projections read extensions; extensions never fork identity — they hold a foreign key into the spine. Nothing crosses a layer without passing the consent plane, and agents only touch the model through the command surface.</p>
+  </div>
+</section>
+
+<!-- ================= §02 UNIFIED ENTITY MAP ================= -->
+<section id="map" class="dark">
+  <div class="wrap">
+    <p class="eyebrow">§02 · Unified entity map</p>
+    <h2>Ten app domains, one shared spine</h2>
+    <p class="lede">Every entity a consumer app thinks it owns either <strong>extends</strong> a canonical type (it <em>is</em> one, plus columns) or <strong>references</strong> one (it points at shared identity). Select a domain to see exactly which parts of the spine it touches — and notice how much of “the app” was never the app’s to own.</p>
+    <div class="maptools">
+      <button class="ctlbtn" id="zoomOut" aria-label="Zoom out">−</button>
+      <button class="ctlbtn" id="zoomReset" aria-label="Reset zoom">100%</button>
+      <button class="ctlbtn" id="zoomIn" aria-label="Zoom in">+</button>
+      <button class="ctlbtn" id="mapClear">Clear selection</button>
+    </div>
+    <div class="mapscroll">
+      <div class="mapcanvas" id="mapcanvas"></div>
+    </div>
+    <p class="mapstatus" id="mapstatus" aria-live="polite">Select a domain to trace its canonical dependencies.</p>
+    <p class="note" style="margin-top:14px"><span style="color:var(--gold)">Gold</span> mappings extend a core type (same identity, extra columns); <span style="color:var(--indigo-soft)">indigo</span> mappings reference one (foreign key into shared identity). Own entities carry no mapping — they exist only inside the domain.</p>
+  </div>
+</section>
+
+<!-- ================= §03 DETAILED SCHEMA ================= -->
+<section id="schema">
+  <div class="wrap">
+    <p class="eyebrow">§03 · Detailed schema</p>
+    <h2>The logical model, generated from data</h2>
+    <p class="lede">Eleven schemas — the canonical core, the consent plane, the agent plane, and eight life domains — rendered from a single JavaScript array of table definitions. Every column shows its logical type, constraints, foreign-key target, and the standard it conforms to. This is the artifact a team would implement.</p>
+    <div class="counts" aria-live="polite">
+      <div><b id="c-schemas">0</b>schemas</div>
+      <div><b id="c-tables">0</b>relations</div>
+      <div><b id="c-cols">0</b>columns</div>
+      <div><b id="c-fks"><i>0</i></b>foreign keys</div>
+      <div><b id="c-cks">0</b>check constraints</div>
+    </div>
+    <div class="erdtools">
+      <div class="chiprow" id="schemaChips" role="group" aria-label="Filter tables by schema" style="margin:0"></div>
+      <button class="ctlbtn" id="densityBtn" aria-pressed="false">Compact density</button>
+    </div>
+    <div class="erd" id="erd" aria-live="polite"></div>
+    <div class="physcard rv">
+      <h3>Physical target — local-first SQLite</h3>
+      <p><span class="k">STRICT</span> tables throughout; primary keys are <span class="k">TEXT</span> UUIDv7 (time-ordered, offline-mintable); money is never floating point — fixed-scale integers (<span class="k">amount_minor INTEGER</span> + ISO 4217 currency); all timestamps are <span class="k">TEXT</span> ISO-8601 UTC with named IANA zones stored separately; structured columns use <span class="k">json1</span> with <span class="k">CHECK(json_valid(…))</span>. Convention (elided per-table for brevity): every table additionally carries <span class="k">tenant_id TEXT NOT NULL REFERENCES core.vault</span> when hosted multi-tenant — locally, the file itself is the vault. Append-only by contract: <span class="k">consent.receipt</span>, <span class="k">consent.provenance</span>, <span class="k">agent.invocation_check</span>, <span class="k">agent.evidence</span> and <span class="k">core.observation</span> amendments never update in place; mutable projections keep ordinary <span class="k">created_at / updated_at</span>. SQLite has no row-level security, so consent is enforced in the gateway: every query and every typed command is evaluated against <span class="k">consent.grant_scope</span> before it touches a connection, and every allow/deny emits a <span class="k">consent.receipt</span>. Bytes behind <span class="k">content_uri</span> replicate via ordinary blob tooling — they are rented; the rows here are owned.</p>
+      <p style="margin-top:10px"><strong>Physical layout — two files, split deferred.</strong> All eleven schemas live in one <span class="k">vault.db</span>: every command commits provenance, core rows and domain rows in a single ACID transaction, and all 133 foreign keys stay engine-enforced. The append-only audit stream — <span class="k">consent.receipt</span>, <span class="k">consent.provenance</span>, <span class="k">agent.command_invocation / invocation_check / evidence / explanation</span> — lives in a separate <span class="k">journal.db</span>: it grows orders of magnitude faster than the model, never rolls back domain writes, and keeping it out of the vault keeps the sovereign asset permanently small. Export = copy two files and verify hashes. Because every table is schema-qualified and only the gateway holds connections, a later per-domain split (one file per schema via <span class="k">ATTACH</span>) is a mechanical migration held in reserve — justified only by a concrete trigger such as a separate encryption key for <span class="k">health</span>, media metadata dominating backup time, or multi-device sync conflict reduction. Generated apps that need real tables get a per-app <span class="k">appext_&lt;app_id&gt;.db</span> attached alongside: its tables may hold FKs into the vault, the vault never references them, and uninstalling deletes the file with zero residue.</p>
+    </div>
+
+    <div class="physcard rv" style="border-left-color:var(--indigo)">
+      <h3>The gateway contract — everything SQLite cannot enforce, in one auditable choke point (elaborated in §10)</h3>
+      <p>SQLite has no row-level security, no stored procedures and no server, so the gateway is the sole holder of connections — locally <em>and</em> hosted — and every request passes one pipeline: <strong>identity → consent → contract → execution → evidence</strong>. Identity: every caller authenticates as a row (<span class="k">consent.app.signing_key</span>, <span class="k">agent.agent</span>, <span class="k">consent.device</span>); no credential, no path to data. Consent: an active <span class="k">access_grant</span> must exist, its <span class="k">grant_scope</span> rows must cover the schema and verb, row filters and field masks are applied, declared purpose is checked against <span class="k">policy</span>, and command risk against the app’s <span class="k">risk_ceiling</span> — any step may deny, and a deny is a receipted outcome, not an exception. Contract: writes are never rows, only typed commands — payloads validated against JSON-Schema, preconditions evaluated as real queries and recorded as <span class="k">agent.invocation_check</span> rows <em>before</em> anything mutates, postconditions verified after. Execution: the gateway owns write ordering (journal invocation → vault rows → domain rows), the ACID boundary, idempotent replay off UUIDv7 keys and <span class="k">external_id</span> uniqueness, and everything declarative constraints cannot express — polymorphic refs (<span class="k">link</span>, <span class="k">attachment</span>), cross-file FKs, Σ-invariants. Evidence: every read and every command, allowed or denied, emits a <span class="k">consent.receipt</span>; every write stamps <span class="k">consent.provenance</span>; outcomes hang <span class="k">agent.evidence</span> and <span class="k">agent.explanation</span> — unskippable because there is no other door.</p>
+      <p style="margin-top:10px"><strong>Standing duties</strong> (not request-shaped): compiling and clamping <span class="k">consent.app_view</span> definitions and refreshing materializations marked <span class="k">wasDerivedFrom</span>; parking high-risk invocations and routing owner confirmations (the pause between draft and send is gateway state); the revocation cascade — sessions killed, views invalidated, extension files detached, instantly; lifecycle sweeps (<span class="k">purge_at</span> deletions, retention policy, share and grant expiry, <span class="k">export_job</span> runs); ingest discipline at the vault border (dedupe on <span class="k">external_id</span>, per-row provenance, handle→identity resolution); ontology version brokering per app (R07 compatibility windows); and file custody — attachments, WAL checkpoints, backups, <span class="k">appext</span> creation and deletion.</p>
+      <p style="margin-top:10px"><strong>What the gateway must not do:</strong> no domain logic (state machines and command implementations are domain-owned; the gateway hosts and checks them), no reasoning (planning and judgment belong to the agent; <span class="k">agent.judgment</span> rules are consulted as constraints, never authored), no rendering (projections are app-side), no byte custody (<span class="k">content_uri</span> targets are brokered, not stored). The trade is explicit: engine enforcement is exchanged for a single testable choke point — so a gateway bug is a sovereignty bug, which is exactly why it stays a thin, mostly declarative interpreter over the consent and capability tables, with the model, not the code, as the source of truth about what is allowed.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §04 MODELING PRINCIPLES ================= -->
+<section id="principles" class="dark">
+  <div class="wrap">
+    <p class="eyebrow">§04 · Modeling principles</p>
+    <h2>Four commitments the model never breaks</h2>
+    <p class="lede">Everything in §03 is a consequence of these four decisions.</p>
+    <div class="cards4">
+      <article class="pcard rv"><span class="pn">P1</span><h3>Shared where meaning is stable, local where behavior differs</h3><p>“A person,” “a place,” “money moved,” “something was measured” — these mean the same thing in every app, so they live once, in the core, carrying identity and history. What differs per domain is behavior: a workout’s training load, an invoice’s dunning rules. Domains add thin typed extensions — a <span class="k">workout</span> holds a FK to the <span class="k">activity</span> it <em>is</em> — and never fork identity into a parallel copy.</p></article>
+      <article class="pcard rv"><span class="pn">P2</span><h3>Own the meaning, rent the bytes</h3><p>The durable asset is the graph: rows, relationships, provenance, classifications. Pixels, PDFs and audio sit behind <span class="k">content_uri</span> with a <span class="k">sha256</span> integrity hash — storable on any disk, NAS or object store, and re-homeable without touching a single relationship. Losing a blob store loses bytes you can re-fetch; losing the model would lose the meaning. So the model is what you own.</p></article>
+      <article class="pcard rv"><span class="pn">P3</span><h3>Consent travels with the data</h3><p>Sovereignty is a plane, not a settings page. Apps hold scoped, expiring grants (purpose-bound per W3C DPV, expressed as ODRL-style rules); shares, retention and residency are policy rows; every access decision leaves a Kantara-style receipt chained to W3C PROV provenance. A grant is evaluated on <em>every</em> read and action — consent is data the data carries.</p></article>
+      <article class="pcard rv"><span class="pn">P4</span><h3>Agents act through commands, never tables</h3><p>The agent plane exposes one uniform surface — discover, query, reason, act, verify, explain, learn — where every action is a typed command (an MCP tool) with declared pre- and postconditions. Agents never hold a write handle to a table: they invoke <span class="k">agent.command</span>s that are consent-checked, executed transactionally, provenance-stamped and receipted. Corrections feed back as durable judgment rows, not vibes.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §05 ONTOLOGY LAYER STACK ================= -->
+<section id="layers">
+  <div class="wrap">
+    <p class="eyebrow">§05 · Ontology layer stack</p>
+    <h2>Eight layers, from primitives to projections</h2>
+    <p class="lede">Lower layers change rarely and are shared by everything above; upper layers are cheap, rebuildable and allowed to churn. Filter to see where each kind of meaning lives.</p>
+    <div class="chiprow" role="group" aria-label="Filter layers">
+      <button class="chip" data-lf="all" aria-pressed="true">All layers</button>
+      <button class="chip" data-lf="shared" aria-pressed="false">Shared</button>
+      <button class="chip" data-lf="domain" aria-pressed="false">Domain-specific</button>
+      <button class="chip" data-lf="agent" aria-pressed="false">Agent-facing</button>
+    </div>
+    <div class="layers" id="layerStack"></div>
+  </div>
+</section>
+
+<!-- ================= §06 CANONICAL CORE EXPLORER ================= -->
+<section id="core" class="dark">
+  <div class="wrap">
+    <p class="eyebrow">§06 · Canonical core explorer</p>
+    <h2>The nine load-bearing types</h2>
+    <p class="lede">Each core entity carries an identity contract — what makes a row the <em>same thing</em> across a decade of apps — a provenance obligation, and a list of the app concepts that extend it. Click one to inspect it.</p>
+    <p class="note"><strong>Owned does not mean wide open.</strong> Canonical identity lives in one vault the person owns, but every app still reads through a scoped grant. Owning the model establishes meaning and references — not unrestricted access for every surface that renders it.</p>
+    <div class="explore">
+      <div class="pick" id="corePick" role="group" aria-label="Choose a core entity"></div>
+      <div class="panel" id="corePanel" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §07 DOMAIN EXPLORER ================= -->
+<section id="domains" class="light">
+  <div class="wrap">
+    <p class="eyebrow">§07 · Domain explorer</p>
+    <h2>Eight domains, one contract each</h2>
+    <p class="lede">A domain owns behavior, state and vocabulary — never identity. For each: what it borrows from the core, what it genuinely owns, its primary state machine, the typed commands it exposes to the agent, and the boundary it must not cross.</p>
+    <div class="explore">
+      <div class="pick" id="domPick" role="group" aria-label="Choose a domain"></div>
+      <div class="panel" id="domPanel" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §08 OWNERSHIP MATRIX ================= -->
+<section id="matrix" class="dark" style="background:var(--night-2)">
+  <div class="wrap">
+    <p class="eyebrow">§08 · Ownership matrix</p>
+    <h2>Who owns which concept</h2>
+    <p class="lede">The whole argument in one grid. Read a row: a concept is <strong>Canonical</strong> exactly once; domains may <strong>Extend</strong> it or <strong>Reference</strong> it, never re-declare it. If a cell tempts you to write “C” twice in a row, the model has forked and you are rebuilding silos.</p>
+    <div class="mxscroll" style="background:var(--night-3);border-color:var(--nline)">
+      <table class="mx" id="mxtable" style="color:var(--bone)"></table>
+    </div>
+    <div class="mxlegend">
+      <span><span class="mx mC" style="display:inline-block"><span>C</span></span> canonical — declared here</span>
+      <span><span class="mx mE" style="display:inline-block"><span>E</span></span> extension — is-a + columns</span>
+      <span><span class="mx mR" style="display:inline-block"><span>R</span></span> reference — FK into core</span>
+      <span><span class="mx mN" style="display:inline-block"><span>—</span></span> not present</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §09 CROSS-APP AGENT FLOW ================= -->
+<section id="flow" class="dark">
+  <div class="wrap">
+    <p class="eyebrow">§09 · Cross-app agent flow</p>
+    <h2>Watch one agent cross five silos that no longer exist</h2>
+    <p class="lede">In the silo world each of these scenarios is a human copy-pasting between apps. Here the agent simply follows canonical references — and every hop shows the object in play, the grant that authorized it, and the receipt it left behind.</p>
+    <div class="chiprow" id="scenarioChips" role="group" aria-label="Choose a scenario"></div>
+    <p class="note" id="scenarioIntro" style="color:var(--bone-soft)"></p>
+    <div class="flowsteps" id="flowsteps" aria-live="polite"></div>
+  </div>
+</section>
+
+<!-- ================= §10 THE GATEWAY ================= -->
+<section id="gateway">
+  <div class="wrap">
+    <p class="eyebrow">§10 · The gateway</p>
+    <h2>One door. Every request. No exceptions.</h2>
+    <p class="lede">SQLite has no row-level security, no stored procedures and no server — so everything an enterprise database would enforce about <em>who may do what</em> lives in exactly one place. The gateway is the sole holder of connections, locally and hosted: apps, agents, workflows and generated views never see a file handle. Every request — human tap, agent plan, cron trigger — walks the same five-stage pipeline. Click a stage to inspect what it checks, which tables it consults, and what a denial looks like.</p>
+
+    <div class="gwpipescroll rv">
+      <div class="gwpipe" id="gwPipe" role="group" aria-label="Gateway request pipeline"></div>
+    </div>
+    <div class="gwpanel rv" id="gwPanel" aria-live="polite"></div>
+
+    <h2 style="margin-top:56px;font-size:1.6rem">Standing duties — the work between requests</h2>
+    <p class="lede" style="font-size:.95rem">Not everything the gateway does is request-shaped. Eight duties run on schedules, triggers, or lifecycle events — each one still writes receipts and provenance like any caller would.</p>
+    <div class="gwduties rv">
+      <div class="gwduty"><h3>View service</h3><p>Compiles <span class="k">consent.app_view</span> definitions, proves every join follows a declared FK, clamps results to the owning app's scopes, refreshes materializations, and marks cached rows <span class="k">wasDerivedFrom</span> so they stay purgeable.</p></div>
+      <div class="gwduty"><h3>Confirmation routing</h3><p>Parks any invocation above the caller's <span class="k">risk_ceiling</span>, surfaces the confirmation to the owner, then resumes or expires it. The pause between draft and send is gateway state.</p></div>
+      <div class="gwduty"><h3>Revocation cascade</h3><p>Revoking a grant is instant and total: sessions killed, materialized views invalidated, <span class="k">appext</span> files detached. The §11 success test — projections go dark, model and receipts remain — is this cascade.</p></div>
+      <div class="gwduty"><h3>Lifecycle sweeps</h3><p>Executes <span class="k">purge_at</span> deletions, enforces retention and residency policy, lapses shares and grants at <span class="k">expires_at</span>, and runs <span class="k">export_job</span>s — assemble files, verify hashes, mark the vault exported.</p></div>
+      <div class="gwduty"><h3>Ingest customs</h3><p>The border post: import batches dedupe on <span class="k">external_id</span>, stamp per-row provenance, and resolve raw handles to identities via <span class="k">party_identifier</span> — OFX, ICS, vCard and IMAP all enter the same way.</p></div>
+      <div class="gwduty"><h3>Export &amp; portability</h3><p>Owns the lossless round-trip: any scope of the model and its bytes out as verifiable files, and back in with identities intact — the test that gates every new domain.</p></div>
+      <div class="gwduty"><h3>Version brokering</h3><p>The ontology versions explicitly (R07); the gateway negotiates which contract version each app speaks and serves compatibility windows during migrations, so old projections keep rendering.</p></div>
+      <div class="gwduty"><h3>File custody</h3><p>Which SQLite files exist, what is attached when, WAL checkpointing, backup coordination, and per-app <span class="k">appext_&lt;app_id&gt;.db</span> creation and deletion.</p></div>
+    </div>
+
+    <h2 style="margin-top:56px;font-size:1.6rem">The negative space — what the gateway must never become</h2>
+    <p class="lede" style="font-size:.95rem">The trade is explicit: engine enforcement exchanged for a single testable choke point. A gateway bug is a sovereignty bug — which is exactly why it stays a thin, mostly declarative interpreter over the consent and capability tables. Four things are permanently out of scope:</p>
+    <div class="gwnot rv">
+      <span><b>No domain logic</b> — state machines and command implementations are domain-owned; the gateway hosts and checks them</span>
+      <span><b>No reasoning</b> — planning belongs to the agent; <span class="k">agent.judgment</span> rules are consulted as constraints, never authored</span>
+      <span><b>No rendering</b> — projections are app-side; the gateway serves rows and outcomes, never pixels</span>
+      <span><b>No byte custody</b> — <span class="k">content_uri</span> targets are brokered, not stored; meaning is owned here, bytes are rented elsewhere</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §11 IMPLEMENTATION RULES ================= -->
+<section id="rules">
+  <div class="wrap">
+    <p class="eyebrow">§11 · Implementation rules</p>
+    <h2>Nine hard rules, then a first boundary</h2>
+    <p class="lede">The stance in §01 survives contact with engineering only if these are enforced in code review, not aspiration.</p>
+    <div class="rules">
+      <article class="rule rv"><h3>IDs are immutable and meaningless</h3><p>UUIDv7 <span class="k">TEXT</span> keys, minted once, never recycled, carrying no semantics. Merges keep both rows and record a <span class="k">core.link</span> of relation <em>same-as</em> with provenance — history is never rewritten.</p></article>
+      <article class="rule rv"><h3>Extend, don’t fork</h3><p>A domain adds columns by holding a <span class="k">UNIQUE NOT NULL</span> FK to the core row it specializes (<span class="k">health.workout.activity_id</span>). Creating a second “person”, “event” or “transaction” table is a rejected review.</p></article>
+      <article class="rule rv"><h3>Relationships are typed and temporal</h3><p>All cross-entity meaning goes through <span class="k">core.link</span>: a SKOS-governed relation concept, <span class="k">valid_from/valid_to</span>, who asserted it, and provenance. No boolean junction tables that forget when and why.</p></article>
+      <article class="rule rv"><h3>Writes are typed commands</h3><p>Apps and agents mutate state only via registered <span class="k">agent.command</span>s with JSON-Schema inputs, declared pre/postconditions and idempotency class. Raw <span class="k">UPDATE</span> is for migrations, run by the owner, and it too leaves provenance.</p></article>
+      <article class="rule rv"><h3>Durable facts vs rebuildable projections</h3><p>Observations, transactions, messages, provenance: durable, append-mostly, exported. Feeds, dashboards, search indexes, “smart albums”: projections that can be deleted and regenerated. Never let a projection become the only home of a fact.</p></article>
+      <article class="rule rv"><h3>Consent travels with the data</h3><p>Every read path and every command execution evaluates <span class="k">consent.grant_scope</span> (purpose, verbs, row filter, field mask, expiry) in the gateway and emits a <span class="k">consent.receipt</span>. A share or export carries its policy with it.</p></article>
+      <article class="rule rv"><h3>Version the ontology explicitly</h3><p>Every row stamps <span class="k">ontology_version</span>; migrations are forward-only scripts registered per version. An agent must refuse a command whose schema version it doesn’t recognize rather than guess.</p></article>
+      <article class="rule rv"><h3>Corrections become durable judgment</h3><p>When the owner fixes the agent — recategorizes a transaction, un-tags a face — the diff is stored as <span class="k">agent.correction</span> and distilled into a scoped <span class="k">agent.judgment</span> rule the agent consults before acting again. Learning is rows, auditable and revocable.</p></article>
+      <article class="rule rv"><h3>Generated apps ride the paved road</h3><p>Vibecoded apps are untrusted code by construction, so they get no special path: a manifest becomes a grant (<span class="k">origin=generated</span>, explicit <span class="k">risk_ceiling</span>), reads go through registered <span class="k">consent.app_view</span> definitions the gateway clamps to scope, writes go through existing typed commands, and custom data lives in <span class="k">core.attribute</span>/<span class="k">concept</span>/<span class="k">link</span> or a per-app extension file that may point <em>into</em> the canonical model but is never referenced <em>by</em> it. Uninstall = revoke grant + delete file; when apps are cheap to generate, projections become disposable and the model becomes everything.</p></article>
+    </div>
+    <div class="cta rv">
+      <h3>Recommended first boundary</h3>
+      <p><strong>Ship the spine where the pain is cheapest and the loop is fastest: <span class="k">core.party</span> + <span class="k">core.event</span> + the schedule domain, wrapped in the full consent plane.</strong> Contacts and calendar exercise identity, time, typed links (attendee), one real state machine (RSVP), imports with provenance (vCard, RFC 5545 ICS), and two honest agent commands — <span class="k">schedule.propose_event</span> and <span class="k">schedule.reschedule_event</span> — each consent-checked and receipted end to end.</p>
+      <p>Success test: revoke the calendar app’s grant and watch every projection go dark while the model, history and receipts remain yours. Then add the second domain — and do not add a third until export→reimport round-trips losslessly. Once the round-trip holds, expand to the <strong>foundation release</strong>: schedule, social, finance and health together, because those four generate the densest cross-app context an agent can act on.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= §12 CENTRAID INTEGRATION ================= -->
+<section id="centraid">
+  <div class="wrap">
+    <p class="eyebrow">§12 · Centraid integration</p>
+    <h2>A second plane, not a second silo</h2>
+    <p class="lede">Centraid’s app host (<span class="k">@centraid/gateway</span> + <span class="k">@centraid/app-engine</span>) already gives every app a private <span class="k">data.sqlite</span> — full SQL, zero sharing. The vault is the opposite premise: one person-owned canonical store that many apps reach through consent-scoped grants. Integration does not replace the silo; it adds a consent-gated <em>shared</em> plane beside it. A handler keeps <span class="k">db</span> for private state and gains <span class="k">ctx.vault</span> for canonical entities — events, contacts, transactions, vitals — and every one of those calls walks §10’s five-stage pipeline on the host side of the process boundary.</p>
+
+    <h2 style="margin-top:24px;font-size:1.6rem">The seam — a second RPC channel beside <span class="mono">db</span></h2>
+    <p class="lede" style="font-size:.95rem">Centraid handlers run in a worker thread that holds no file handle: every <span class="k">db</span> call round-trips as a message to the host, which owns the SQLite connection (<span class="k">app-engine/src/handlers/handler-runner.ts</span> host-side, <span class="k">app-engine/src/worker/runner.ts</span> worker-side). <span class="k">ctx.vault</span> is the same move aimed at the canon: the worker posts <span class="k">{type:'vault'}</span> messages with <span class="k">read / invoke / query / describe</span> payloads; the host resolves the running app to its <span class="k">Credential</span>, calls the process-held vault gateway (<span class="k">vault/src/gateway/gateway.ts</span>), and replies with allowed rows or a receipted denial. Consent is enforced on the host side of the boundary — the correct side, because the worker gives crash isolation and a controlled surface, not a security sandbox.</p>
+    <div class="gwnot rv">
+      <span><b>No keys in the worker</b> — credentials resolve host-side; the handler surface carries capability, never secret</span>
+      <span><b>No second wire</b> — <span class="k">ctx.vault</span> rides the existing worker RPC; no new protocol, no new port</span>
+      <span><b>No FK across planes</b> — <span class="k">data.sqlite</span> may point into the canon; the canon never points back (R09)</span>
+      <span><b>No unreceipted path</b> — every <span class="k">ctx.vault</span> call ends in a <span class="k">consent.receipt</span>, allow or deny</span>
+      <span><b>No consent shortcut</b> — a generated app’s call is a §10 pipeline walk like any other caller’s</span>
+    </div>
+
+    <h2 style="margin-top:56px;font-size:1.6rem">Who is who — the concept mapping</h2>
+    <p class="lede" style="font-size:.95rem">Each vault-plane concept lands on a Centraid structure that already exists. Nothing here invents a parallel mechanism; the integration is mostly wiring.</p>
+    <div class="gwduties rv">
+      <div class="gwduty"><h3>consent.app ← registry entry</h3><p>An app that goes live (<span class="k">registry.ensureUploaded</span>) is enrolled via <span class="k">enrollApp</span> as a <span class="k">consent.app</span> row (<span class="k">origin=generated</span> for vibecoded apps). App deletion runs the revocation cascade: views dark, parked invocations dropped, extension file deleted.</p></div>
+      <div class="gwduty"><h3>signing key ← identityDb</h3><p>The minted <span class="k">signingKey</span> persists host-side in the gateway’s identity store, keyed by app id. It never crosses into the worker; the host attaches it when proxying a <span class="k">ctx.vault</span> call.</p></div>
+      <div class="gwduty"><h3>agent.agent ← chat &amp; automation runners</h3><p>The conversation runner and automation fires act as an enrolled <span class="k">agent.agent</span> riding an owner device (session binding). Risk ceiling <span class="k">medium</span>; <span class="k">high</span> parks for owner confirmation — the send-message pause, verbatim.</p></div>
+      <div class="gwduty"><h3>owner device ← the host itself</h3><p><span class="k">bootstrapVault</span> mints the first device on first boot, idempotently. The desktop user’s direct actions — confirmations, grants, revocations — ride it with <span class="k">riskCeiling='owner'</span>.</p></div>
+      <div class="gwduty"><h3>vault.db + journal.db ← GatewayPaths.vaultDir</h3><p>A new caller-derived path slot beside <span class="k">appsDir</span>, <span class="k">identityDb</span> and <span class="k">analyticsDb</span>. Opened by <span class="k">buildGateway()</span>, WAL mode, closed on <span class="k">stop()</span>. The vault stays a file the owner can copy out.</p></div>
+      <div class="gwduty"><h3>agent.command ← app.json action</h3><p>Both are JSON-Schema-validated typed writes. A declared action may delegate to a vault command; the vault then adds consent, pre/postconditions, provenance and receipts on top of Ajv input validation.</p></div>
+      <div class="gwduty"><h3>appext_&lt;app_id&gt;.db ← data.sqlite</h3><p>R09’s per-app extension file already exists in Centraid — it is the app’s <span class="k">data.sqlite</span>. The private silo keeps its job; uninstall = revoke grant + delete file, exactly as §11 demands.</p></div>
+      <div class="gwduty"><h3>standing duties ← in-process scheduler</h3><p>Centraid’s gateway already runs a minute-boundary cron scheduler. <span class="k">sweep()</span> joins its tick; <span class="k">checkpoint()</span>/<span class="k">backup()</span> join the lifecycle; revocation is wired to app deletion.</p></div>
+    </div>
+
+    <h2 style="margin-top:56px;font-size:1.6rem">Six phases, each independently shippable</h2>
+    <p class="lede" style="font-size:.95rem">Sequenced so the risky parts — the handler primitive and the consent UX — land only after the vault is simply <em>present</em> and app identities exist. Every phase carries its own tests.</p>
+    <div class="rules phases">
+      <article class="rule rv"><h3>Host holds one vault</h3><p>Add <span class="k">vaultDir</span> to <span class="k">GatewayPaths</span>; <span class="k">buildGateway()</span> opens the pair, bootstraps the owner idempotently, registers the four foundation domains, exposes the vault gateway on <span class="k">BuiltGateway</span>, closes it on <span class="k">stop()</span>. Tests: builds with a vault, bootstraps once, survives restart.</p></article>
+      <article class="rule rv"><h3>Apps become consent.app rows</h3><p>App-live enrolls the app and persists its signing key host-side; deregistration calls <span class="k">revokeGrant</span> and the cascade follows. Tests: registration mints a credential; deletion goes dark.</p></article>
+      <article class="rule rv"><h3>ctx.vault in the handler surface</h3><p>Worker proxy mirroring <span class="k">db</span>: <span class="k">read / invoke / query / describe</span>. The host resolves app → <span class="k">Credential</span> and calls <span class="k">Gateway.read/invoke</span>; a deny returns a shaped handler error carrying the receipt id. Tests: a handler proposes an event into the canon; an ungranted read is a receipted deny.</p></article>
+      <article class="rule rv"><h3>Grants, owner-approved</h3><p><span class="k">app.json</span> declares requested scopes; the owner approves and the host calls <span class="k">createGrant</span>. Deny-by-default until then — installation is not consent. Tests: pre-grant denied, post-grant allowed, owner reads unaffected.</p></article>
+      <article class="rule rv"><h3>Manifest &amp; builder surface</h3><p>A <span class="k">vault</span> block in <span class="k">app.json</span> (requested scopes + command delegation) and handler codegen that emits <span class="k">ctx.vault.*</span> — declared handlers stay the agent’s primary surface; the builder generates the shape.</p></article>
+      <article class="rule rv"><h3>Duties on the gateway clock</h3><p><span class="k">sweep()</span> joins the scheduler tick; <span class="k">checkpoint</span>/<span class="k">backup</span> join start/stop lifecycle; parked confirmations surface through the existing confirmation UI instead of a bespoke one.</p></article>
+    </div>
+
+    <div class="cta rv">
+      <h3>Decided and built</h3>
+      <p><strong>Consent model: manifest-declared scopes with explicit owner approval.</strong> An app's <span class="k">app.json</span> <span class="k">vault</span> block is a request, never a grant; the owner approves it over <span class="k">POST /centraid/_vault/apps/&lt;id&gt;/grants</span>, and until then every call is a receipted deny.</p>
+      <p><strong>Data planes: both.</strong> <span class="k">data.sqlite</span> stays the app's private silo; the vault is the consent-gated canon — R09 verbatim, no migration of existing apps.</p>
+      <p>All six phases are implemented and tested: the vault plane mounts off <span class="k">GatewayPaths.vaultDir</span> (<span class="k">gateway/src/serve/vault-plane.ts</span>), live apps enroll and uninstalls cascade, <span class="k">ctx.vault</span> rides the worker RPC (<span class="k">app-engine/src/worker/runner.ts</span>), owner routes serve grants and parked confirmations, the builder prompt teaches generated handlers the surface, and the sweep clock runs on the gateway lifecycle.</p>
+      <p><strong>And the §01 projection band ships as blueprints.</strong> All ten product surfaces exist as first-class templates in <span class="k">packages/blueprints/apps</span> — <span class="k">agenda</span>, <span class="k">vitals</span>, <span class="k">budgets</span>, <span class="k">tasks</span>, <span class="k">people</span>, <span class="k">threads</span>, <span class="k">notes</span>, <span class="k">photos</span>, <span class="k">home-inventory</span>, <span class="k">studio</span> — each a pure projection: zero private tables, zero migrations, every row from <span class="k">ctx.vault</span>, every mutation a typed command, consent denial and the parked-send pause rendered as first-class UI states. The four foundation domains read <em>and act</em>; the other four are read-only windows until their command packs ship — a window today, a pen later. Revoke a grant and the projection goes dark; the model, history and receipts remain.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Duaility — Personal Ontology Map · logical model v1.1 · 02 July 2026</span>
+    <span>standards: vCard · schema.org · RFC 5545 / JSCalendar · ISO 20022 / OFX · FHIR / Open mHealth · W3C PROV · ODRL / DPV · SKOS · MCP</span>
+  </div>
+</footer>
+
+<script>
+/* =====================================================================
+   DATA — the report renders from these structures. Column tuple:
+   [name, logical type, flags "PK FK UQ NN CK", fk target, purpose+standard]
+   ===================================================================== */
+const SCHEMAS = [
+{ id:'core', label:'canonical core', desc:'The spine. Identity, place, time, money, content, activity/observation, relationships, classification. Rows here are the person’s durable asset; every domain either extends or references them.',
+tables:[
+{ n:'vault', std:'Solid Pod boundary · GDPR art.20 portability', p:'The sovereignty boundary as a row. Locally the SQLite file is the vault; hosted, every other table carries this id. One owner, one export unit, one kill switch.',
+cols:[
+['vault_id','TEXT (uuidv7)','PK NN','', 'Immutable vault identity — the tenant_id every other table carries by convention.'],
+['owner_party_id','TEXT','FK','core.party','The single self (kind=self); explicit owner of this vault.'],
+['display_name','TEXT','NN','', 'Owner-facing vault name.'],
+['status','TEXT','NN CK','', "CHECK in ('active','locked','exported') — exported marks a completed portability handoff."],
+['base_currency','TEXT (char 3)','NN CK','', 'ISO 4217 reporting currency; CHECK(length(base_currency)=3).'],
+['settings_json','TEXT (json1)','NN','', 'Owner preferences as validated json1; never behavioral state.'],
+['created_at','TEXT (iso8601)','NN','', 'Vault creation instant.'],
+]},
+{ n:'party', std:'vCard 4.0 · FOAF · schema.org/Person+Organization', p:'Any actor: a person, organization, group, or enrolled agent. The single identity anchor for the whole model.',
+cols:[
+['party_id','TEXT (uuidv7)','PK NN','', 'Immutable, meaningless identifier; minted once, never recycled.'],
+['kind','TEXT','NN CK','', "CHECK in ('person','org','group','agent') — schema.org Person/Organization split."],
+['display_name','TEXT','NN','', 'vCard FN — the formatted name shown by projections.'],
+['sort_name','TEXT','','', 'Collation form (vCard N reordering) for lists.'],
+['birth_date','TEXT (date)','','', 'vCard BDAY; ISO-8601 date, may be partial (YYYY or YYYY-MM).'],
+['avatar_content_id','TEXT','FK','core.content_item','Profile image lives as owned content, not an app upload.'],
+['created_at','TEXT (iso8601)','NN','', 'UTC creation instant.'],
+['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
+['ontology_version','TEXT','NN','', 'Schema version stamped per row (rule R7).'],
+]},
+{ n:'party_identifier', std:'vCard EMAIL/TEL/URL · W3C DID', p:'External handles of a party over time — the merge-safe home for emails, phones, DIDs, usernames.',
+cols:[
+['identifier_id','TEXT (uuidv7)','PK NN','', 'Row identity.'],
+['party_id','TEXT','FK NN','core.party','Owning party.'],
+['scheme','TEXT','NN CK','', "CHECK in ('email','tel','url','did','handle','iban','other') — vCard property names."],
+['value','TEXT','NN UQ','', 'Normalized value; UNIQUE(scheme,value) prevents identity forks.'],
+['label','TEXT','','', 'vCard TYPE, e.g. home/work/cell.'],
+['is_primary','INTEGER (bool)','NN CK','', 'CHECK in (0,1); at most one primary per scheme (partial index).'],
+['verified_at','TEXT (iso8601)','','', 'When proven controlled (magic link, OTP).'],
+['valid_from','TEXT (iso8601)','NN','', 'Handles are temporal — people change numbers.'],
+['valid_to','TEXT (iso8601)','','', 'NULL = current.'],
+]},
+{ n:'place', std:'schema.org/Place · ISO 6709 · IANA tz', p:'Somewhere things happen: home, gym, client office, “Grandma’s”. Referenced by events, activities, media, home inventory.',
+cols:[
+['place_id','TEXT (uuidv7)','PK NN','', 'Immutable place identity.'],
+['name','TEXT','NN','', 'Human label; schema.org name.'],
+['kind','TEXT','CK','', "CHECK in ('home','work','venue','city','region','virtual','other')."],
+['geo_lat','REAL','CK','', 'WGS-84 latitude; CHECK between −90 and 90 (ISO 6709).'],
+['geo_lng','REAL','CK','', 'WGS-84 longitude; CHECK between −180 and 180.'],
+['geohash','TEXT','','', 'Precomputed proximity key for offline radius queries.'],
+['address_json','TEXT (json1)','CK','', 'schema.org PostalAddress; CHECK(json_valid(address_json)).'],
+['tz','TEXT','','', 'IANA zone (e.g. Asia/Kolkata) — local time is derived, never stored alone.'],
+['parent_place_id','TEXT','FK','core.place','Containment (room ⊂ home ⊂ city).'],
+['created_at','TEXT (iso8601)','NN','', 'UTC creation instant.'],
+]},
+{ n:'event', std:'iCalendar RFC 5545 · JSCalendar RFC 8984', p:'A scheduled block of time. Domains attach meaning (appointment, gig, maintenance window) via extension or link — never a second calendar table.',
+cols:[
+['event_id','TEXT (uuidv7)','PK NN','', 'Immutable event identity.'],
+['ical_uid','TEXT','UQ','', 'RFC 5545 UID for round-trip with external calendars.'],
+['summary','TEXT','NN','', 'RFC 5545 SUMMARY.'],
+['description','TEXT','','', 'RFC 5545 DESCRIPTION.'],
+['dtstart','TEXT (iso8601)','NN','', 'Start instant, UTC; RFC 5545 DTSTART.'],
+['dtend','TEXT (iso8601)','CK','', 'CHECK(dtend IS NULL OR dtend >= dtstart).'],
+['start_tz','TEXT','','', 'IANA zone of the wall-clock start (JSCalendar timeZone).'],
+['rrule','TEXT','','', 'RFC 5545 RRULE for recurrence; occurrences are projections.'],
+['status','TEXT','NN CK','', "CHECK in ('confirmed','tentative','cancelled') — RFC 5545 STATUS."],
+['location_place_id','TEXT','FK','core.place','Where — canonical place, not a free-text copy.'],
+['organizer_party_id','TEXT','FK','core.party','RFC 5545 ORGANIZER as identity, not an email string.'],
+['sequence','INTEGER','NN','', 'RFC 5545 SEQUENCE revision counter for reschedules.'],
+['created_at','TEXT (iso8601)','NN','', 'UTC creation instant.'],
+['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation.'],
+]},
+{ n:'account', std:'ISO 20022 CashAccount · Plaid /accounts · OFX', p:'A pool where value sits: bank, card, wallet, brokerage, cash jar. Money is core because every domain eventually touches it.',
+cols:[
+['account_id','TEXT (uuidv7)','PK NN','', 'Immutable account identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Whose money this is.'],
+['name','TEXT','NN','', 'Owner-facing label.'],
+['kind','TEXT','NN CK','', "CHECK in ('depository','credit','investment','loan','cash','wallet') — Plaid account types."],
+['currency','TEXT (char 3)','NN CK','', "ISO 4217; CHECK(length(currency)=3)."],
+['institution_party_id','TEXT','FK','core.party','The bank as a party — institutions are people too (kind=org).'],
+['external_ref','TEXT','','', 'Masked account number / IBAN tail for reconciliation.'],
+['is_asset','INTEGER (bool)','NN CK','', 'CHECK in (0,1); sign convention for net-worth projections.'],
+['opened_at','TEXT (iso8601)','','', 'Account lifecycle start.'],
+['closed_at','TEXT (iso8601)','','', 'NULL = open.'],
+]},
+{ n:'transaction', std:'ISO 20022 pain/camt · OFX STMTTRN · Plaid /transactions', p:'Value moved. Append-mostly; corrections are new rows linked by provenance, never edits to history.',
+cols:[
+['txn_id','TEXT (uuidv7)','PK NN','', 'Immutable transaction identity.'],
+['account_id','TEXT','FK NN','core.account','Ledger the movement posted to.'],
+['posted_at','TEXT (iso8601)','NN','', 'Posting instant (camt BookingDate).'],
+['amount_minor','INTEGER','NN','', 'Fixed-scale minor units (paise/cents); floats never touch money.'],
+['currency','TEXT (char 3)','NN CK','', 'ISO 4217; CHECK(length(currency)=3).'],
+['direction','TEXT','NN CK','', "CHECK in ('debit','credit') — ISO 20022 CdtDbtInd."],
+['status','TEXT','NN CK','', "CHECK in ('pending','posted','void') — Plaid pending semantics."],
+['transfer_group_id','TEXT (uuidv7)','','', 'Pairs the two legs of an internal transfer so it never reads as spend (Firefly-III journal / Actual transferred_id pattern).'],
+['counterparty_party_id','TEXT','FK','core.party','Merchant/payee as identity; enables cross-domain joins (warranty→purchase).'],
+['description','TEXT','','', 'Raw statement narrative, preserved for audit.'],
+['category_concept_id','TEXT','FK','core.concept','Classification via SKOS concept, not a hardcoded enum.'],
+['external_id','TEXT','UQ','', 'OFX FITID / provider id; UNIQUE per source for idempotent import.'],
+]},
+{ n:'content_item', std:'RFC 6838 media types · schema.org/CreativeWork', p:'The “rent the bytes” seam: one row of owned meaning pointing at replaceable storage. Notes, photos, message bodies, invoice PDFs all resolve here.',
+cols:[
+['content_id','TEXT (uuidv7)','PK NN','', 'Immutable content identity.'],
+['media_type','TEXT','NN','', 'RFC 6838, e.g. image/heic, text/markdown, application/pdf.'],
+['content_uri','TEXT','NN','', 'Where the bytes currently live (file://, s3://, ipfs://) — swappable.'],
+['sha256','TEXT (hex64)','NN UQ','', 'Integrity + dedup: identity of the bytes, independent of location.'],
+['byte_size','INTEGER','NN CK','', 'CHECK(byte_size >= 0).'],
+['title','TEXT','','', 'Owner-facing caption/name.'],
+['language','TEXT','','', 'BCP-47 tag for text content.'],
+['creator_party_id','TEXT','FK','core.party','schema.org creator as identity.'],
+['origin_device_id','TEXT','FK','consent.device','Which enrolled device produced the bytes.'],
+['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live. Trash is a state, not a row loss.'],
+['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion (GDPR storage limitation); CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
+['created_at','TEXT (iso8601)','NN','', 'Capture/creation instant.'],
+]},
+{ n:'attachment', std:'Homebox attachments · Joplin note_resources · Firefly-III attachments', p:'Files-on-anything, once: the receipt on a transaction, the manual on an appliance, the photo on a place, the contract on a client — one polymorphic pattern instead of a per-domain junction each time.',
+cols:[
+['attachment_id','TEXT (uuidv7)','PK NN','', 'Immutable attachment identity.'],
+['subject_type','TEXT','NN','', 'Logical table of the annotated row (e.g. core.transaction, home.asset_item).'],
+['subject_id','TEXT','NN','', 'Annotated row id; (subject_type,subject_id) polymorphic ref enforced in gateway.'],
+['content_id','TEXT','FK NN','core.content_item','The attached bytes, as owned content identity.'],
+['role','TEXT','NN CK','', "CHECK in ('photo','manual','receipt','warranty','contract','embed','other')."],
+['is_primary','INTEGER (bool)','NN CK','', 'CHECK in (0,1) — the representative attachment for projections.'],
+['created_at','TEXT (iso8601)','NN','', 'Attachment instant.'],
+]},
+{ n:'activity', std:'W3C Activity Streams 2.0 · schema.org/Action', p:'Something an actor did over a span: a run, a work session, a drive, sleep. Domains subtype it; the core keeps who/what-kind/when/where.',
+cols:[
+['activity_id','TEXT (uuidv7)','PK NN','', 'Immutable activity identity.'],
+['actor_party_id','TEXT','FK NN','core.party','Who did it (AS2 actor).'],
+['kind_concept_id','TEXT','FK NN','core.concept','What kind, from the activity SKOS scheme (run, meeting, sleep…).'],
+['started_at','TEXT (iso8601)','NN','', 'Span start, UTC.'],
+['ended_at','TEXT (iso8601)','CK','', 'CHECK(ended_at IS NULL OR ended_at >= started_at).'],
+['location_place_id','TEXT','FK','core.place','Where it happened.'],
+['source_app_id','TEXT','FK','consent.app','Which grant-holding app recorded it.'],
+['note','TEXT','','', 'Free-text annotation by the owner.'],
+['created_at','TEXT (iso8601)','NN','', 'Record creation instant.'],
+]},
+{ n:'observation', std:'HL7 FHIR Observation · Open mHealth · UCUM', p:'A measured or asserted data point about a subject at a moment: heart rate, weight, meter reading, mood. One shape for every sensor in a life.',
+cols:[
+['observation_id','TEXT (uuidv7)','PK NN','', 'Immutable observation identity.'],
+['subject_party_id','TEXT','FK NN','core.party','Whom/what the measurement is about (FHIR subject).'],
+['code','TEXT','NN','', 'What was measured — LOINC / Open mHealth schema id (e.g. omh:heart-rate).'],
+['value_num','REAL','','', 'Numeric value (FHIR valueQuantity.value).'],
+['value_text','TEXT','','', 'Coded/string value when not numeric; CHECK(value_num IS NOT NULL OR value_text IS NOT NULL).'],
+['unit','TEXT','','', 'UCUM unit (kg, /min, mm[Hg]).'],
+['observed_at','TEXT (iso8601)','NN','', 'Effective instant (FHIR effectiveDateTime).'],
+['effective_start','TEXT (iso8601)','','', 'Interval start when the reading spans time (Open mHealth time-frame); NULL ⇒ point reading.'],
+['effective_end','TEXT (iso8601)','CK','', 'CHECK(effective_end IS NULL OR effective_end >= effective_start).'],
+['statistic','TEXT','CK','', "CHECK in ('average','median','minimum','maximum','sum') — Open mHealth descriptive-statistic for interval readings."],
+['modality','TEXT','CK','', "CHECK in ('sensed','self_reported','derived') — Open mHealth modality; feeds trust weighting."],
+['status','TEXT','NN CK','', "CHECK in ('final','amended','entered-in-error') — FHIR status."],
+['device_id','TEXT','FK','consent.device','Measuring device (FHIR Observation.device).'],
+['activity_id','TEXT','FK','core.activity','Optional span context (readings during a workout).'],
+]},
+{ n:'observation_component', std:'HL7 FHIR Observation.component · Open mHealth blood-pressure', p:'Sub-measurements of one observation: systolic + diastolic of a single blood-pressure reading stay one clinical fact, not two drifting rows.',
+cols:[
+['component_id','TEXT (uuidv7)','PK NN','', 'Immutable component identity.'],
+['observation_id','TEXT','FK NN','core.observation','Parent reading; components share its instant, subject and provenance.'],
+['code','TEXT','NN','', 'What this component measures — LOINC / Open mHealth (e.g. systolic-blood-pressure).'],
+['value_num','REAL','NN','', 'Component numeric value (FHIR component.valueQuantity).'],
+['unit','TEXT','NN','', 'UCUM unit (mm[Hg]).'],
+]},
+{ n:'link', std:'W3C PROV relations · SKOS semantic relations', p:'The typed, temporal relationship fabric. Any entity↔entity meaning — spouse-of, attachment-of, duplicate-of, about — is a link row, never an ad-hoc junction.',
+cols:[
+['link_id','TEXT (uuidv7)','PK NN','', 'Immutable link identity.'],
+['from_type','TEXT','NN','', 'Logical table of the source (e.g. core.party).'],
+['from_id','TEXT','NN','', 'Source row id; (from_type,from_id) is a polymorphic ref enforced in gateway.'],
+['to_type','TEXT','NN','', 'Logical table of the target.'],
+['to_id','TEXT','NN','', 'Target row id.'],
+['relation_concept_id','TEXT','FK NN','core.concept','Relation type from the SKOS relations scheme (spouse-of, same-as, about…).'],
+['valid_from','TEXT (iso8601)','NN','', 'Relationships are temporal (rule R3).'],
+['valid_to','TEXT (iso8601)','','', 'NULL = still true.'],
+['asserted_by','TEXT','NN CK','', "CHECK in ('owner','app','agent','import') — who claims this."],
+['provenance_id','TEXT','FK','consent.provenance','Every assertion carries its origin.'],
+]},
+{ n:'concept_scheme', std:'W3C SKOS ConceptScheme', p:'A controlled vocabulary: spend categories, activity kinds, relation types, purposes. Schemes are versioned and importable.',
+cols:[
+['scheme_id','TEXT (uuidv7)','PK NN','', 'Immutable scheme identity.'],
+['uri','TEXT','NN UQ','', 'skos:ConceptScheme URI; stable across installs.'],
+['title','TEXT','NN','', 'Human name of the vocabulary.'],
+['publisher','TEXT','','', 'Who maintains it (Duaility, DPV, owner-custom).'],
+['version','TEXT','NN','', 'Vocabulary version, independent of ontology_version.'],
+]},
+{ n:'concept', std:'W3C SKOS Concept', p:'One term in a scheme, with hierarchy. Classification lives here so “Groceries” means the same thing to the budget app, the agent, and the export.',
+cols:[
+['concept_id','TEXT (uuidv7)','PK NN','', 'Immutable concept identity.'],
+['scheme_id','TEXT','FK NN','core.concept_scheme','Owning vocabulary.'],
+['notation','TEXT','NN','', 'skos:notation; UNIQUE(scheme_id,notation).'],
+['pref_label','TEXT','NN','', 'skos:prefLabel — display term.'],
+['alt_labels_json','TEXT (json1)','CK','', 'skos:altLabel array; CHECK(json_valid(alt_labels_json)).'],
+['broader_concept_id','TEXT','FK','core.concept','skos:broader — hierarchy without a second taxonomy system.'],
+['definition','TEXT','','', 'skos:definition for agents and humans alike.'],
+]},
+{ n:'tag', std:'SKOS + schema.org about', p:'Applies a concept to any entity — the universal classification join.',
+cols:[
+['tag_id','TEXT (uuidv7)','PK NN','', 'Immutable tag identity.'],
+['target_type','TEXT','NN','', 'Logical table of the tagged row.'],
+['target_id','TEXT','NN','', 'Tagged row id; UNIQUE(target_type,target_id,concept_id).'],
+['concept_id','TEXT','FK NN','core.concept','Which concept applies.'],
+['tagged_by_party_id','TEXT','FK','core.party','Owner or agent identity that applied it.'],
+['confidence','REAL','CK','', 'CHECK(confidence BETWEEN 0 AND 1); 1.0 for human assertions.'],
+['tagged_at','TEXT (iso8601)','NN','', 'When applied.'],
+]},
+]},
+
+{ id:'consent', label:'consent plane', desc:'Sovereignty as first-class tables: apps, scoped expiring grants, shares, policy, provenance, receipts, devices, export. The gateway evaluates these on every read and every command.',
+tables:[
+{ n:'app', std:'OAuth 2.0 client metadata · Solid app registration', p:'A projection that has been granted access. Apps are guests holding keys, never landlords.',
+cols:[
+['app_id','TEXT (uuidv7)','PK NN','', 'Immutable app identity.'],
+['name','TEXT','NN','', 'Owner-facing name.'],
+['publisher','TEXT','','', 'Who ships it.'],
+['manifest_uri','TEXT','','', 'Declared scopes + commands manifest, à la Solid app profile.'],
+['signing_key','TEXT','UQ','', 'Public key that must sign the app’s requests.'],
+['status','TEXT','NN CK','', "CHECK in ('active','suspended','revoked')."],
+['origin','TEXT','NN CK','', "CHECK in ('installed','generated') — vibecoded apps are first-class but marked; same grants, same receipts."],
+['risk_ceiling','TEXT','NN CK','', "CHECK in ('low','medium','high') — the highest command risk this app may ever invoke without per-action owner confirmation."],
+['installed_at','TEXT (iso8601)','NN','', 'Trust lifecycle start.'],
+]},
+{ n:'app_view', std:'SQL/Schemata views · W3C PROV derivation', p:'The paved road for generated apps: a declarative, registered derivative view. The gateway compiles it, clamps it to the app’s grant scopes, and applies row filters and field masks on every execution — the view cannot over-read even if the generated code is wrong.',
+cols:[
+['view_id','TEXT (uuidv7)','PK NN','', 'Immutable view identity.'],
+['app_id','TEXT','FK NN','consent.app','Owning app; revoking the app revokes its views.'],
+['name','TEXT','NN','', 'Owner-facing view name; UNIQUE(app_id, name).'],
+['base_entity','TEXT','NN','', 'Root canonical or domain table the view projects (e.g. core.event).'],
+['definition_json','TEXT (json1)','NN CK','', 'Declarative spec — joins along declared FKs, filters, field selection; CHECK(json_valid(definition_json)). Inspectable: the owner can read exactly what any generated app looks at, in ontology terms.'],
+['materialized','INTEGER (bool)','NN CK','', 'CHECK in (0,1) — cached rows carry prov:wasDerivedFrom and are rebuildable/purgeable (R05 applied to generated code).'],
+['refreshed_at','TEXT (iso8601)','','', 'Last materialization instant; NULL for live views.'],
+['created_at','TEXT (iso8601)','NN','', 'Registration instant.'],
+['revoked_at','TEXT (iso8601)','','', 'Kill switch independent of the app grant.'],
+]},
+{ n:'access_grant', std:'W3C ODRL · W3C DPV purposes · Solid access grants', p:'One consent decision: this grantee, for this purpose, until this expiry. Purpose-bound and revocable; scope rows below carry the reach.',
+cols:[
+['grant_id','TEXT (uuidv7)','PK NN','', 'Immutable grant identity.'],
+['app_id','TEXT','FK','consent.app','Grantee app (NULL when the grantee is a person/agent).'],
+['grantee_party_id','TEXT','FK','core.party','Grantee identity (doctor, accountant, agent).'],
+['purpose_concept_id','TEXT','FK NN','core.concept','DPV purpose (dpv:HealthMonitoring, dpv:Billing…).'],
+['granted_by_party_id','TEXT','FK NN','core.party','The owner who consented.'],
+['granted_at','TEXT (iso8601)','NN','', 'Consent instant.'],
+['expires_at','TEXT (iso8601)','','', 'Grants default to expiring; NULL requires explicit choice.'],
+['revoked_at','TEXT (iso8601)','','', 'Revocation instant; evaluated before every access.'],
+['status','TEXT','NN CK','', "CHECK in ('active','expired','revoked')."],
+]},
+{ n:'grant_scope', std:'ODRL permission constraints', p:'The reach of a grant: which schema/table, which rows, which fields, which verbs. This row is what the gateway actually evaluates.',
+cols:[
+['scope_id','TEXT (uuidv7)','PK NN','', 'Immutable scope identity.'],
+['grant_id','TEXT','FK NN','consent.access_grant','Owning grant.'],
+['schema_name','TEXT','NN','', 'e.g. health, core.'],
+['table_name','TEXT','','', 'NULL = whole schema.'],
+['verbs','TEXT','NN CK','', "CHECK(verbs IN ('read','read+act','act')) — write only via typed commands."],
+['row_filter_json','TEXT (json1)','CK','', 'ODRL constraint, e.g. observed_at within last 90d; CHECK(json_valid(…)).'],
+['field_mask_json','TEXT (json1)','CK','', 'Column allow-list — minimization by default.'],
+]},
+{ n:'share', std:'Solid WAC/ACP sharing · ODRL', p:'Owner-to-person sharing of specific objects (a doctor sees a vitals range; a client sees an invoice). Expiring, revocable, receipted.',
+cols:[
+['share_id','TEXT (uuidv7)','PK NN','', 'Immutable share identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Who is sharing.'],
+['audience','TEXT','NN CK','', "CHECK in ('party','circle','public_link') — who the share addresses."],
+['recipient_party_id','TEXT','FK','core.party','Receiving person when audience=party.'],
+['recipient_circle_id','TEXT','FK','social.circle','Receiving circle when audience=circle — one grant to “Family”, not five copies.'],
+['target_type','TEXT','NN','', 'Logical table of the shared object.'],
+['target_id','TEXT','NN','', 'Shared row id (or saved-view id).'],
+['mode','TEXT','NN CK','', "CHECK in ('view','comment','edit')."],
+['created_at','TEXT (iso8601)','NN','', 'Share start.'],
+['expires_at','TEXT (iso8601)','','', 'Auto-lapse; shares should die on their own.'],
+['revoked_at','TEXT (iso8601)','','', 'Manual kill switch.'],
+]},
+{ n:'policy', std:'W3C ODRL policies · GDPR art.5 storage limitation', p:'Standing rules the gateway enforces regardless of grants: retention, residency, purpose limitation, minimization.',
+cols:[
+['policy_id','TEXT (uuidv7)','PK NN','', 'Immutable policy identity.'],
+['kind','TEXT','NN CK','', "CHECK in ('retention','residency','purpose','minimization')."],
+['applies_schema','TEXT','NN','', 'Scope of the rule (e.g. social).'],
+['applies_table','TEXT','','', 'NULL = whole schema (e.g. message retention).'],
+['rule_json','TEXT (json1)','NN CK','', 'ODRL-shaped rule body; CHECK(json_valid(rule_json)).'],
+['retention_days','INTEGER','CK','', 'CHECK(retention_days > 0); sugar for the common case.'],
+['residency_region','TEXT','','', 'Where bytes/replicas may live (e.g. IN, EU).'],
+['effective_from','TEXT (iso8601)','NN','', 'Policies are temporal too.'],
+['priority','INTEGER','NN','', 'Conflict resolution order; lower wins.'],
+]},
+{ n:'provenance', std:'W3C PROV-DM (Entity/Activity/Agent)', p:'Where every row came from: generated by which activity, attributed to which agent, derived from what. Chained per entity for tamper-evidence.',
+cols:[
+['prov_id','TEXT (uuidv7)','PK NN','', 'Immutable provenance identity.'],
+['entity_type','TEXT','NN','', 'Logical table of the described row (prov:Entity).'],
+['entity_id','TEXT','NN','', 'Described row id.'],
+['prov_activity','TEXT','NN','', 'prov:Activity, e.g. import.ofx, command.exec, owner.edit.'],
+['agent_kind','TEXT','NN CK','', "CHECK in ('owner','app','ai_agent','import') — prov:Agent class."],
+['agent_id','TEXT','NN','', 'Id of the acting app/agent/party.'],
+['used_json','TEXT (json1)','CK','', 'prov:used — inputs consumed; CHECK(json_valid(used_json)).'],
+['occurred_at','TEXT (iso8601)','NN','', 'prov:endedAtTime.'],
+['prev_prov_id','TEXT','FK','consent.provenance','Hash-chain to prior record for this entity.'],
+['signature','TEXT','','', 'Device/gateway signature over the record.'],
+]},
+{ n:'receipt', std:'Kantara Consent Receipt · RFC 9162-style transparency', p:'The audit unit: every allow/deny decision and every executed command leaves one. Receipts are what make “consent-governed” checkable rather than claimed.',
+cols:[
+['receipt_id','TEXT (uuidv7)','PK NN','', 'Immutable receipt identity.'],
+['grant_id','TEXT','FK','consent.access_grant','Grant evaluated (NULL for owner-direct action).'],
+['invocation_id','TEXT','FK','agent.command_invocation','Command run under this receipt, if any.'],
+['action','TEXT','NN','', 'read / act verb + command name.'],
+['object_type','TEXT','NN','', 'Logical table touched.'],
+['object_id','TEXT','','', 'Row touched (NULL for set-level reads; filter recorded in detail_json).'],
+['purpose_concept_id','TEXT','FK','core.concept','DPV purpose the access claimed.'],
+['decision','TEXT','NN CK','', "CHECK in ('allow','deny')."],
+['occurred_at','TEXT (iso8601)','NN','', 'Decision instant.'],
+['hash','TEXT (hex64)','NN UQ','', 'Content hash chained into the transparency log.'],
+]},
+{ n:'device', std:'FIDO2/WebAuthn attestation · Solid pod devices', p:'Enrolled hardware: phones, laptops, the NAS replica. Devices sign what they write and carry sync state.',
+cols:[
+['device_id','TEXT (uuidv7)','PK NN','', 'Immutable device identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Whose device.'],
+['name','TEXT','NN','', 'Owner-facing label.'],
+['platform','TEXT','','', 'OS/build for capability decisions.'],
+['public_key','TEXT','NN UQ','', 'WebAuthn-style attestation key; signs provenance.'],
+['trust','TEXT','NN CK','', "CHECK in ('full','readonly','revoked')."],
+['enrolled_at','TEXT (iso8601)','NN','', 'Enrollment instant.'],
+['last_seen_at','TEXT (iso8601)','','', 'Liveness for sync health.'],
+['sync_cursor','TEXT','','', 'Replication position (CRDT/oplog cursor).'],
+]},
+{ n:'export_job', std:'GDPR art.20 portability · DTP (Data Transfer Project)', p:'Exit is a feature: a whole-model or scoped export to open formats, verifiable by hash. If export→reimport isn’t lossless, ownership is theater.',
+cols:[
+['export_id','TEXT (uuidv7)','PK NN','', 'Immutable job identity.'],
+['requested_by_party_id','TEXT','FK NN','core.party','Owner who asked.'],
+['scope_json','TEXT (json1)','NN CK','', 'Schemas/tables/date-range included; CHECK(json_valid(scope_json)).'],
+['format','TEXT','NN CK','', "CHECK in ('sqlite','jsonld','tar') — model + bytes manifests."],
+['requested_at','TEXT (iso8601)','NN','', 'Job start.'],
+['completed_at','TEXT (iso8601)','','', 'Job end; NULL = running/failed.'],
+['artifact_content_id','TEXT','FK','core.content_item','The export itself is owned content.'],
+['verify_hash','TEXT (hex64)','','', 'Hash the owner can check after download.'],
+]},
+]},
+
+{ id:'agent', label:'agent plane', desc:'The uniform capability surface. Agents discover capabilities, query under grants, act via typed commands with pre/postconditions, explain with evidence, and learn from corrections as durable judgment.',
+tables:[
+{ n:'agent', std:'MCP client identity · W3C PROV SoftwareAgent', p:'An enrolled AI agent. Agents are parties (kind=agent) so links, grants and receipts treat them like any other actor.',
+cols:[
+['agent_id','TEXT (uuidv7)','PK NN','', 'Immutable agent identity.'],
+['party_id','TEXT','FK UQ NN','core.party','Its identity row (kind=agent) — one party per agent.'],
+['model_ref','TEXT','NN','', 'Model/provider fingerprint for audit.'],
+['version','TEXT','NN','', 'Agent software version.'],
+['enrolled_at','TEXT (iso8601)','NN','', 'Trust lifecycle start.'],
+['status','TEXT','NN CK','', "CHECK in ('active','paused','revoked')."],
+]},
+{ n:'command', std:'MCP tool schema · JSON Schema 2020-12 · design-by-contract', p:'A typed verb a domain exposes: name, input/output schemas, declared pre/postconditions. The only legal write path (rule R4).',
+cols:[
+['command_id','TEXT (uuidv7)','PK NN','', 'Immutable command identity.'],
+['name','TEXT','NN UQ','', 'Namespaced verb, e.g. schedule.reschedule_event, finance.categorize_txn.'],
+['owner_schema','TEXT','NN','', 'Domain that implements it.'],
+['input_schema_json','TEXT (json1)','NN CK','', 'JSON Schema of arguments (MCP tool inputSchema); CHECK(json_valid(…)).'],
+['output_schema_json','TEXT (json1)','NN CK','', 'JSON Schema of result.'],
+['preconditions_json','TEXT (json1)','NN CK','', 'Predicates verified before execution (e.g. event.status != cancelled).'],
+['postconditions_json','TEXT (json1)','NN CK','', 'Predicates verified after; failure triggers rollback.'],
+['idempotency','TEXT','NN CK','', "CHECK in ('idempotent','once','retry-safe') — replay semantics."],
+['risk','TEXT','NN CK','', "CHECK in ('low','medium','high'); high requires owner confirmation."],
+['ontology_version','TEXT','NN','', 'Schema version the contract was written against (rule R7).'],
+]},
+{ n:'capability', std:'MCP tools/list discovery', p:'The discover surface: which verbs of the uniform interface an agent may use, on which schema, via which command.',
+cols:[
+['capability_id','TEXT (uuidv7)','PK NN','', 'Immutable capability identity.'],
+['schema_name','TEXT','NN','', 'Domain exposed.'],
+['verb','TEXT','NN CK','', "CHECK in ('discover','query','reason','act','verify','explain','learn')."],
+['command_id','TEXT','FK','agent.command','Bound command for act verbs; NULL for read verbs.'],
+['description','TEXT','NN','', 'What the agent is told this does (MCP tool description).'],
+['requires_confirmation','INTEGER (bool)','NN CK','', 'CHECK in (0,1); surfaced to the owner before high-risk acts.'],
+]},
+{ n:'command_invocation', std:'MCP tools/call · saga/outbox pattern', p:'One attempted action: who, with what input, under which grant, with what outcome. The receipt and provenance hang off this row.',
+cols:[
+['invocation_id','TEXT (uuidv7)','PK NN','', 'Immutable invocation identity.'],
+['command_id','TEXT','FK NN','agent.command','Which typed verb.'],
+['agent_id','TEXT','FK NN','agent.agent','Acting agent.'],
+['grant_id','TEXT','FK NN','consent.access_grant','Authority it acted under — no grant, no call.'],
+['input_json','TEXT (json1)','NN CK','', 'Arguments as validated against input_schema_json.'],
+['status','TEXT','NN CK','', "CHECK in ('proposed','checked','executed','failed','rolled_back')."],
+['requested_at','TEXT (iso8601)','NN','', 'Proposal instant.'],
+['executed_at','TEXT (iso8601)','','', 'Commit instant; NULL until executed.'],
+['receipt_id','TEXT','FK','consent.receipt','Receipt emitted for this action.'],
+]},
+{ n:'invocation_check', std:'design-by-contract pre/post verification', p:'The verify surface, materialized: each predicate evaluated before and after execution, with what was observed.',
+cols:[
+['check_id','TEXT (uuidv7)','PK NN','', 'Immutable check identity.'],
+['invocation_id','TEXT','FK NN','agent.command_invocation','Invocation under test.'],
+['phase','TEXT','NN CK','', "CHECK in ('pre','post')."],
+['predicate','TEXT','NN','', 'The condition, e.g. attendee.partstat = needs-action.'],
+['passed','INTEGER (bool)','NN CK','', 'CHECK in (0,1); any pre=0 blocks, any post=0 rolls back.'],
+['observed_json','TEXT (json1)','CK','', 'Values seen at evaluation time — evidence for the explanation.'],
+['checked_at','TEXT (iso8601)','NN','', 'Evaluation instant.'],
+]},
+{ n:'evidence', std:'W3C PROV wasDerivedFrom', p:'The rows an agent read to justify a claim or action — explanation is citation, not narrative.',
+cols:[
+['evidence_id','TEXT (uuidv7)','PK NN','', 'Immutable evidence identity.'],
+['invocation_id','TEXT','FK NN','agent.command_invocation','Action/claim being supported.'],
+['claim','TEXT','NN','', 'The assertion, e.g. “this txn matches invoice 2026-014”.'],
+['entity_type','TEXT','NN','', 'Logical table of the cited row.'],
+['entity_id','TEXT','NN','', 'Cited row id.'],
+['prov_id','TEXT','FK','consent.provenance','Provenance of the cited row — evidence has lineage too.'],
+['weight','REAL','CK','', 'CHECK(weight BETWEEN 0 AND 1).'],
+]},
+{ n:'explanation', std:'GDPR art.22 meaningful information · PROV', p:'The explain surface: an owner-readable account of what was done and why, assembled from checks + evidence.',
+cols:[
+['explanation_id','TEXT (uuidv7)','PK NN','', 'Immutable explanation identity.'],
+['invocation_id','TEXT','FK NN UQ','agent.command_invocation','One explanation per action.'],
+['audience','TEXT','NN CK','', "CHECK in ('owner','auditor')."],
+['summary','TEXT','NN','', 'Plain-language account, citing evidence ids.'],
+['generated_at','TEXT (iso8601)','NN','', 'When produced.'],
+]},
+{ n:'correction', std:'event-sourced compensations', p:'The owner overruled the agent. Stored as a diff against the invocation so learning has ground truth.',
+cols:[
+['correction_id','TEXT (uuidv7)','PK NN','', 'Immutable correction identity.'],
+['invocation_id','TEXT','FK','agent.command_invocation','Action being corrected (NULL for spontaneous edits).'],
+['corrected_by_party_id','TEXT','FK NN','core.party','The human who fixed it.'],
+['target_type','TEXT','NN','', 'Logical table of the corrected row.'],
+['target_id','TEXT','NN','', 'Corrected row id.'],
+['before_json','TEXT (json1)','CK','', 'State the agent produced.'],
+['after_json','TEXT (json1)','NN CK','', 'State the owner wants.'],
+['reason','TEXT','','', 'Optional stated why — gold for judgment distillation.'],
+['created_at','TEXT (iso8601)','NN','', 'Correction instant.'],
+]},
+{ n:'judgment', std:'learned policy-as-data (rule R8)', p:'The learn surface, durable: a scoped rule distilled from corrections that the agent must consult before acting. Auditable, expiring, revocable.',
+cols:[
+['judgment_id','TEXT (uuidv7)','PK NN','', 'Immutable judgment identity.'],
+['derived_from_correction_id','TEXT','FK','agent.correction','Lineage back to the correction(s).'],
+['subject_scope','TEXT','NN','', 'Where it applies, e.g. finance.transaction WHERE counterparty=BigBasket.'],
+['rule_json','TEXT (json1)','NN CK','', 'The learned preference as data, e.g. {category:"groceries"}.'],
+['confidence','REAL','NN CK','', 'CHECK(confidence BETWEEN 0 AND 1); decays without reinforcement.'],
+['active','INTEGER (bool)','NN CK','', 'CHECK in (0,1); the owner can switch a learning off.'],
+['learned_at','TEXT (iso8601)','NN','', 'Distillation instant.'],
+['expires_at','TEXT (iso8601)','','', 'Learnings should sunset unless re-confirmed.'],
+]},
+]},
+
+{ id:'health', label:'health', desc:'Vitals, workouts, sleep, medication, conditions. Everything measured is a core observation; everything done is a core activity — this schema only adds clinical/fitness meaning.',
+tables:[
+{ n:'vital', std:'FHIR vital-signs profile · Open mHealth · LOINC', p:'A vital-sign reading. Extends core.observation — same identity, clinical columns added.',
+cols:[
+['vital_id','TEXT (uuidv7)','PK NN','', 'Extension row identity.'],
+['observation_id','TEXT','FK UQ NN','core.observation','The observation this IS (extend-don’t-fork).'],
+['vital_type','TEXT','NN CK','', "CHECK in ('heart_rate','bp_systolic','bp_diastolic','spo2','body_weight','glucose','temp') — FHIR vital-signs codes."],
+['context','TEXT','CK','', "CHECK in ('rest','exercise','sleep','post_meal') — Open mHealth temporal relationship."],
+['loinc_code','TEXT','','', 'LOINC mapping for clinical export (e.g. 8867-4 heart rate).'],
+]},
+{ n:'workout', std:'Open mHealth physical-activity · Garmin/FIT vocabulary', p:'A training session. Extends core.activity; route and laps are content, load metrics are columns.',
+cols:[
+['workout_id','TEXT (uuidv7)','PK NN','', 'Extension row identity.'],
+['activity_id','TEXT','FK UQ NN','core.activity','The activity this IS.'],
+['sport_concept_id','TEXT','FK NN','core.concept','Sport from the activity SKOS scheme (run, ride, swim…).'],
+['distance_m','REAL','CK','', 'CHECK(distance_m >= 0); meters (UCUM m).'],
+['energy_kcal','REAL','CK','', 'CHECK(energy_kcal >= 0).'],
+['avg_hr','REAL','CK','', 'CHECK(avg_hr > 0); summary of linked observations.'],
+['training_load','REAL','','', 'Vendor-neutral load score for the coach agent.'],
+['route_content_id','TEXT','FK','core.content_item','GPX/FIT file — bytes rented, reference owned.'],
+]},
+{ n:'sleep_session', std:'Open mHealth sleep-episode', p:'A night (or nap). Extends core.activity; stages are structured JSON, quality metrics are columns.',
+cols:[
+['sleep_id','TEXT (uuidv7)','PK NN','', 'Extension row identity.'],
+['activity_id','TEXT','FK UQ NN','core.activity','The activity this IS.'],
+['stages_json','TEXT (json1)','CK','', 'Array of {stage,start,end} (deep/rem/light/awake); CHECK(json_valid(…)).'],
+['efficiency_pct','REAL','CK','', 'CHECK(efficiency_pct BETWEEN 0 AND 100).'],
+['interruptions','INTEGER','CK','', 'CHECK(interruptions >= 0).'],
+['hrv_ms','REAL','','', 'Overnight HRV summary (rMSSD, ms).'],
+]},
+{ n:'medication_course', std:'FHIR MedicationRequest · RxNorm', p:'A course of medication: what, dose, schedule, who prescribed. Reminders project into schedule via core.event — no second calendar.',
+cols:[
+['course_id','TEXT (uuidv7)','PK NN','', 'Course identity.'],
+['subject_party_id','TEXT','FK NN','core.party','Patient (usually the owner).'],
+['rxnorm_code','TEXT','','', 'RxNorm CUI for interoperable naming.'],
+['name','TEXT','NN','', 'Display name (brand or generic).'],
+['dose_text','TEXT','NN','', 'FHIR dosage text, e.g. “500 mg twice daily”.'],
+['schedule_rrule','TEXT','','', 'RFC 5545 RRULE driving reminder events.'],
+['prescriber_party_id','TEXT','FK','core.party','The doctor as a party, linkable to shares.'],
+['started_at','TEXT (iso8601)','NN','', 'Course start.'],
+['ended_at','TEXT (iso8601)','','', 'NULL = ongoing.'],
+]},
+{ n:'condition', std:'FHIR Condition · SNOMED CT · ICD-10', p:'A diagnosis or health concern with onset/abatement. Highest-sensitivity table: default grant scopes exclude it.',
+cols:[
+['condition_id','TEXT (uuidv7)','PK NN','', 'Condition identity.'],
+['subject_party_id','TEXT','FK NN','core.party','Patient.'],
+['snomed_code','TEXT','','', 'SNOMED CT concept for clinical exchange.'],
+['icd10_code','TEXT','','', 'ICD-10 for paperwork reality.'],
+['label','TEXT','NN','', 'Owner-facing name.'],
+['status','TEXT','NN CK','', "CHECK in ('active','remission','resolved') — FHIR clinicalStatus."],
+['severity','TEXT','CK','', "CHECK in ('mild','moderate','severe')."],
+['onset_date','TEXT (date)','','', 'FHIR onsetDateTime (date precision).'],
+['abatement_date','TEXT (date)','','', 'FHIR abatementDateTime.'],
+]},
+]},
+
+{ id:'finance', label:'finance', desc:'Budgets, holdings, splits, recurring detection, FX. Accounts and transactions live in the core (money is shared meaning); this schema owns financial behavior.',
+tables:[
+{ n:'txn_split', std:'double-entry sub-ledger practice', p:'Splits one core.transaction across categories (the ₹4,200 order that was groceries + a gift). Gateway asserts splits sum to the parent amount.',
+cols:[
+['split_id','TEXT (uuidv7)','PK NN','', 'Split identity.'],
+['txn_id','TEXT','FK NN','core.transaction','Parent movement being decomposed.'],
+['amount_minor','INTEGER','NN','', 'Minor units; SUM(splits) = txn.amount_minor (command postcondition).'],
+['category_concept_id','TEXT','FK NN','core.concept','Spend category (SKOS scheme shared with budgets).'],
+['memo','TEXT','','', 'Owner note for this slice.'],
+]},
+{ n:'budget', std:'envelope budgeting (YNAB-style) on SKOS categories', p:'A per-period cap on a category. Progress is a projection over core.transaction — never a stored balance.',
+cols:[
+['budget_id','TEXT (uuidv7)','PK NN','', 'Budget identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Whose budget.'],
+['category_concept_id','TEXT','FK NN','core.concept','Category capped; UNIQUE(owner,category,period,starts_on).'],
+['period','TEXT','NN CK','', "CHECK in ('month','quarter','year')."],
+['limit_minor','INTEGER','NN CK','', 'CHECK(limit_minor >= 0); minor units.'],
+['currency','TEXT (char 3)','NN CK','', 'ISO 4217; CHECK(length(currency)=3).'],
+['starts_on','TEXT (date)','NN','', 'First period anchor.'],
+]},
+{ n:'holding', std:'ISO 6166 ISIN · OFX INVPOS', p:'A position snapshot in an investment account: instrument, quantity, basis, as-of. Append-only time series.',
+cols:[
+['holding_id','TEXT (uuidv7)','PK NN','', 'Snapshot identity.'],
+['account_id','TEXT','FK NN','core.account','Brokerage account (kind=investment).'],
+['instrument','TEXT','NN','', 'ISIN or exchange:ticker.'],
+['qty_scaled','INTEGER','NN','', 'Quantity at fixed scale — fractional units without floats.'],
+['qty_scale','INTEGER','NN CK','', 'CHECK(qty_scale BETWEEN 0 AND 9); decimal places of qty_scaled.'],
+['cost_basis_minor','INTEGER','','', 'Total basis in account currency, minor units.'],
+['as_of','TEXT (iso8601)','NN','', 'Snapshot instant; UNIQUE(account_id,instrument,as_of).'],
+]},
+{ n:'recurring_series', std:'Plaid recurring-transactions semantics', p:'A detected or declared repeating movement (rent, salary, subscription). The agent’s anchor for “did the landlord charge twice?”',
+cols:[
+['series_id','TEXT (uuidv7)','PK NN','', 'Series identity.'],
+['account_id','TEXT','FK NN','core.account','Where it recurs.'],
+['counterparty_party_id','TEXT','FK','core.party','Merchant/payer identity.'],
+['rrule','TEXT','NN','', 'RFC 5545 RRULE reused for money cadence.'],
+['expected_minor','INTEGER','NN','', 'Expected amount, minor units.'],
+['tolerance_pct','REAL','NN CK','', 'CHECK(tolerance_pct BETWEEN 0 AND 100); deviation before alerting.'],
+['last_txn_id','TEXT','FK','core.transaction','Most recent matched movement.'],
+['status','TEXT','NN CK','', "CHECK in ('active','paused','ended')."],
+]},
+{ n:'fx_rate', std:'ISO 4217 pairs · ECB reference-rate practice', p:'Point-in-time exchange rates so multi-currency projections are reproducible instead of “whatever the API said today”.',
+cols:[
+['rate_id','TEXT (uuidv7)','PK NN','', 'Rate identity.'],
+['base_ccy','TEXT (char 3)','NN CK','', 'ISO 4217; CHECK(length(base_ccy)=3).'],
+['quote_ccy','TEXT (char 3)','NN CK','', 'ISO 4217; CHECK(length(quote_ccy)=3).'],
+['rate_scaled','INTEGER','NN CK','', 'CHECK(rate_scaled > 0); fixed-scale integer rate.'],
+['rate_scale','INTEGER','NN CK','', 'CHECK(rate_scale BETWEEN 0 AND 12).'],
+['as_of','TEXT (iso8601)','NN','', 'Quote instant; UNIQUE(base_ccy,quote_ccy,as_of).'],
+]},
+]},
+
+{ id:'schedule', label:'schedule', desc:'Calendars, event behavior, attendance, tasks, availability. Time itself (core.event) is shared; this schema owns how time is negotiated.',
+tables:[
+{ n:'calendar', std:'RFC 5545 VCALENDAR · CalDAV collections', p:'A named collection events project into: Personal, Studio, Family. Purely organizational — deleting a calendar never deletes events.',
+cols:[
+['calendar_id','TEXT (uuidv7)','PK NN','', 'Calendar identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Whose collection.'],
+['name','TEXT','NN','', 'Display name.'],
+['color','TEXT','','', 'Projection hint (hex).'],
+['default_tz','TEXT','NN','', 'IANA zone for wall-clock entry.'],
+['visibility','TEXT','NN CK','', "CHECK in ('private','shared','public')."],
+['external_uri','TEXT','','', 'CalDAV/ICS subscription source, if mirrored.'],
+]},
+{ n:'event_ext', std:'JSCalendar (RFC 8984) properties', p:'Schedule-domain behavior for a core.event: which calendar, busy/free, conferencing, reminders, travel buffer.',
+cols:[
+['event_ext_id','TEXT (uuidv7)','PK NN','', 'Extension row identity.'],
+['event_id','TEXT','FK UQ NN','core.event','The event this decorates (1:1).'],
+['calendar_id','TEXT','FK NN','schedule.calendar','Collection it projects into.'],
+['busy','TEXT','NN CK','', "CHECK in ('busy','free') — JSCalendar freeBusyStatus."],
+['conferencing_uri','TEXT','','', 'Video-call link (JSCalendar virtualLocation).'],
+['reminders_json','TEXT (json1)','CK','', 'RFC 5545 VALARM offsets; CHECK(json_valid(…)).'],
+['travel_buffer_min','INTEGER','CK','', 'CHECK(travel_buffer_min >= 0); agent uses place distance to fill it.'],
+]},
+{ n:'attendee', std:'RFC 5545 ATTENDEE (ROLE, PARTSTAT)', p:'Who is expected at an event and their RSVP state — a typed party×event relationship carrying the schedule state machine.',
+cols:[
+['attendee_id','TEXT (uuidv7)','PK NN','', 'Attendance identity.'],
+['event_id','TEXT','FK NN','core.event','Event attended; UNIQUE(event_id,party_id).'],
+['party_id','TEXT','FK NN','core.party','Attendee as identity — the same person everywhere.'],
+['role','TEXT','NN CK','', "CHECK in ('chair','required','optional') — RFC 5545 ROLE."],
+['partstat','TEXT','NN CK','', "CHECK in ('needs-action','accepted','declined','tentative') — RFC 5545 PARTSTAT."],
+['responded_at','TEXT (iso8601)','','', 'RSVP instant.'],
+]},
+{ n:'task', std:'RFC 5545 VTODO · JSCalendar Task', p:'A to-do with VTODO status semantics. Tasks link to projects, events, or home items via core.link — one task system for the whole life.',
+cols:[
+['task_id','TEXT (uuidv7)','PK NN','', 'Task identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Whose task.'],
+['title','TEXT','NN','', 'VTODO SUMMARY.'],
+['status','TEXT','NN CK','', "CHECK in ('needs-action','in-process','completed','cancelled') — VTODO STATUS."],
+['priority','INTEGER','NN CK','', 'CHECK(priority BETWEEN 0 AND 9) — RFC 5545 PRIORITY.'],
+['due_at','TEXT (iso8601)','','', 'VTODO DUE.'],
+['completed_at','TEXT (iso8601)','','', 'VTODO COMPLETED; set by command postcondition.'],
+['effort_min','INTEGER','CK','', 'CHECK(effort_min > 0); agent scheduling input.'],
+['parent_task_id','TEXT','FK','schedule.task','Subtask hierarchy.'],
+['rrule','TEXT','','', 'Recurrence for repeating chores.'],
+]},
+{ n:'availability_rule', std:'JSCalendar availability · CalDAV free-busy', p:'Standing windows (work hours, focus blocks, family evenings) the agent must respect when proposing time.',
+cols:[
+['rule_id','TEXT (uuidv7)','PK NN','', 'Rule identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Whose time.'],
+['weekday_mask','INTEGER','NN CK','', 'CHECK(weekday_mask BETWEEN 1 AND 127); Mon=1…Sun=64 bitmask.'],
+['window_start','TEXT (time)','NN','', 'Local wall-clock start (HH:MM).'],
+['window_end','TEXT (time)','NN','', 'Local wall-clock end; CHECK(window_end > window_start).'],
+['kind','TEXT','NN CK','', "CHECK in ('work','focus','personal','blocked')."],
+['tz','TEXT','NN','', 'IANA zone the wall-clock refers to.'],
+]},
+]},
+
+{ id:'social', label:'social', desc:'Contact cards, circles, threads, messages. People are core parties; relationships are core links. This schema owns address-book decoration and conversation.',
+tables:[
+{ n:'contact_card', std:'vCard 4.0 (NICKNAME, ORG, TITLE, NOTE, REV)', p:'The owner’s view of a party: nickname, org/title, notes, favorite. Decoration over identity — deleting a card never deletes the person.',
+cols:[
+['card_id','TEXT (uuidv7)','PK NN','', 'Card identity.'],
+['party_id','TEXT','FK UQ NN','core.party','The party this card decorates (1:1).'],
+['nickname','TEXT','','', 'vCard NICKNAME.'],
+['org_title','TEXT','','', 'vCard ORG + TITLE, denormalized for display.'],
+['related_org_party_id','TEXT','FK','core.party','Employer as a party (schema.org worksFor).'],
+['note','TEXT','','', 'vCard NOTE — the “met at Ravi’s wedding” field.'],
+['favorite','INTEGER (bool)','NN CK','', 'CHECK in (0,1).'],
+['vcard_rev','TEXT (iso8601)','','', 'vCard REV for sync round-trips.'],
+]},
+{ n:'circle', std:'FOAF Group · vCard MEMBER', p:'A named grouping (Family, Clients, Book club). Circles are also the natural grain for shares and grants.',
+cols:[
+['circle_id','TEXT (uuidv7)','PK NN','', 'Circle identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Whose grouping.'],
+['name','TEXT','NN','', 'Display name; UNIQUE(owner_party_id,name).'],
+['kind','TEXT','NN CK','', "CHECK in ('family','friends','work','custom')."],
+]},
+{ n:'circle_member', std:'vCard MEMBER', p:'Membership join with history-friendly timestamps.',
+cols:[
+['member_id','TEXT (uuidv7)','PK NN','', 'Membership identity.'],
+['circle_id','TEXT','FK NN','social.circle','Circle; UNIQUE(circle_id,party_id).'],
+['party_id','TEXT','FK NN','core.party','Member as identity.'],
+['added_at','TEXT (iso8601)','NN','', 'Join instant.'],
+]},
+{ n:'thread', std:'RFC 5322 threading · JMAP mailbox/thread · Nextcloud Talk rooms', p:'A conversation container across channels — the same thread shape for SMS, email, DM, group chat.',
+cols:[
+['thread_id','TEXT (uuidv7)','PK NN','', 'Thread identity.'],
+['channel','TEXT','NN CK','', "CHECK in ('sms','email','dm','group')."],
+['subject','TEXT','','', 'RFC 5322 Subject where the channel has one.'],
+['external_ref','TEXT','UQ','', 'Provider thread id for idempotent sync.'],
+['created_at','TEXT (iso8601)','NN','', 'First message instant.'],
+['last_message_at','TEXT (iso8601)','','', 'Denormalized for inbox projections (rebuildable).'],
+]},
+{ n:'thread_participant', std:'JMAP participants', p:'Who is in a conversation — parties, not raw addresses, so “everything with Priya” is one query.',
+cols:[
+['tp_id','TEXT (uuidv7)','PK NN','', 'Participation identity.'],
+['thread_id','TEXT','FK NN','social.thread','Thread; UNIQUE(thread_id,party_id).'],
+['party_id','TEXT','FK','core.party','Participant identity when resolved via party_identifier; NULL for still-unresolved senders.'],
+['handle','TEXT','CK','', 'Raw address (RFC 5322 mailbox, tel) when unresolved; CHECK(party_id IS NOT NULL OR handle IS NOT NULL).'],
+['joined_at','TEXT (iso8601)','','', 'When they entered the thread.'],
+['muted','INTEGER (bool)','NN CK','', 'CHECK in (0,1); projection hint.'],
+]},
+{ n:'message', std:'RFC 5322 · JMAP Email', p:'One message. The body is core content (rented bytes, owned reference); sender is identity; replies are typed self-references.',
+cols:[
+['message_id','TEXT (uuidv7)','PK NN','', 'Message identity.'],
+['thread_id','TEXT','FK NN','social.thread','Conversation it belongs to.'],
+['sender_party_id','TEXT','FK','core.party','From, as identity, once resolved.'],
+['sender_handle','TEXT','CK','', 'Raw From address when the sender is not yet a party; CHECK(sender_party_id IS NOT NULL OR sender_handle IS NOT NULL). Resolution later backfills identity without rewriting the message.'],
+['sent_at','TEXT (iso8601)','NN','', 'RFC 5322 Date, normalized UTC.'],
+['body_content_id','TEXT','FK NN','core.content_item','Body/attachment root in owned content.'],
+['in_reply_to_id','TEXT','FK','social.message','RFC 5322 In-Reply-To as a real FK.'],
+['delivery','TEXT','NN CK','', "CHECK in ('draft','sent','delivered','read','failed')."],
+['external_id','TEXT','UQ','', 'Provider Message-ID for idempotent import.'],
+]},
+]},
+
+{ id:'knowledge', label:'knowledge', desc:'Notes, notebooks, annotations. A note’s body is core content; its links to people, events and things are core links — so notes join the graph instead of floating beside it.',
+tables:[
+{ n:'note', std:'schema.org/Article · CommonMark · Joplin/Obsidian conventions', p:'A knowledge item. Text lives in content_item (markdown bytes); this row owns note behavior: pinning, format, revision.',
+cols:[
+['note_id','TEXT (uuidv7)','PK NN','', 'Note identity.'],
+['author_party_id','TEXT','FK NN','core.party','Author (owner, usually).'],
+['title','TEXT','NN','', 'Display title.'],
+['body_content_id','TEXT','FK NN','core.content_item','Markdown/HTML bytes behind content_uri.'],
+['format','TEXT','NN CK','', "CHECK in ('markdown','html','plain')."],
+['pinned','INTEGER (bool)','NN CK','', 'CHECK in (0,1).'],
+['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
+['updated_at','TEXT (iso8601)','NN','', 'Last edit; every edit also writes provenance.'],
+]},
+{ n:'notebook', std:'hierarchical collections (Dublin Core relation)', p:'Organizational containers — projections of order, cheap to restructure.',
+cols:[
+['notebook_id','TEXT (uuidv7)','PK NN','', 'Notebook identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Whose shelf.'],
+['name','TEXT','NN','', 'Display name.'],
+['parent_notebook_id','TEXT','FK','knowledge.notebook','Nesting.'],
+['sort_order','INTEGER','NN','', 'Manual ordering.'],
+]},
+{ n:'note_placement', std:'—', p:'A note may sit in several notebooks without copies.',
+cols:[
+['placement_id','TEXT (uuidv7)','PK NN','', 'Placement identity.'],
+['note_id','TEXT','FK NN','knowledge.note','Placed note; UNIQUE(note_id,notebook_id).'],
+['notebook_id','TEXT','FK NN','knowledge.notebook','Container.'],
+['position','INTEGER','NN','', 'Order within the notebook.'],
+]},
+{ n:'annotation', std:'W3C Web Annotation Data Model', p:'A highlight or comment anchored to any entity — a note about a transaction, a comment on a photo — with a standards-shaped selector.',
+cols:[
+['annotation_id','TEXT (uuidv7)','PK NN','', 'Annotation identity.'],
+['author_party_id','TEXT','FK NN','core.party','Annotator.'],
+['target_type','TEXT','NN','', 'Logical table of the annotated row.'],
+['target_id','TEXT','NN','', 'Annotated row id.'],
+['selector_json','TEXT (json1)','CK','', 'W3C anno TextQuoteSelector / FragmentSelector; CHECK(json_valid(…)).'],
+['body_text','TEXT','NN','', 'The annotation itself.'],
+['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
+]},
+]},
+
+{ id:'media', label:'media', desc:'Photos, video, audio, scans. An asset extends core content with capture context; albums are projections; face regions link pixels back to identity.',
+tables:[
+{ n:'media_asset', std:'EXIF/XMP · IPTC Photo Metadata · Immich asset model', p:'Capture context for a content item: when, where, with what. Extends core.content_item.',
+cols:[
+['asset_id','TEXT (uuidv7)','PK NN','', 'Extension row identity.'],
+['content_id','TEXT','FK UQ NN','core.content_item','The content this IS (bytes rented, meaning owned).'],
+['kind','TEXT','NN CK','', "CHECK in ('photo','video','audio','scan')."],
+['captured_at','TEXT (iso8601)','','', 'EXIF DateTimeOriginal, normalized UTC.'],
+['place_id','TEXT','FK','core.place','GPS resolved to a canonical place.'],
+['camera_device_id','TEXT','FK','consent.device','Capturing device.'],
+['width','INTEGER','CK','', 'CHECK(width > 0); pixels.'],
+['height','INTEGER','CK','', 'CHECK(height > 0); pixels.'],
+['duration_s','REAL','CK','', 'CHECK(duration_s >= 0); AV only.'],
+['exif_json','TEXT (json1)','CK','', 'Full EXIF/XMP bag; CHECK(json_valid(exif_json)).'],
+]},
+{ n:'album', std:'IPTC collection practice', p:'A curated set. Smart albums are saved queries (projections); this table is only for human curation.',
+cols:[
+['album_id','TEXT (uuidv7)','PK NN','', 'Album identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Curator.'],
+['title','TEXT','NN','', 'Display title.'],
+['cover_asset_id','TEXT','FK','media.media_asset','Cover image.'],
+['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
+]},
+{ n:'album_entry', std:'—', p:'Ordered membership of assets in albums.',
+cols:[
+['entry_id','TEXT (uuidv7)','PK NN','', 'Entry identity.'],
+['album_id','TEXT','FK NN','media.album','Album; UNIQUE(album_id,asset_id).'],
+['asset_id','TEXT','FK NN','media.media_asset','Member asset.'],
+['position','INTEGER','NN','', 'Sort order.'],
+['added_at','TEXT (iso8601)','NN','', 'Curation instant.'],
+]},
+{ n:'face_region', std:'IPTC Image Region · MWG Regions', p:'A detected face box, optionally resolved to a party. Agent suggestions stay unconfirmed until the owner confirms — confirmations flow through corrections.',
+cols:[
+['region_id','TEXT (uuidv7)','PK NN','', 'Region identity.'],
+['asset_id','TEXT','FK NN','media.media_asset','Image containing the face.'],
+['bbox_json','TEXT (json1)','NN CK','', 'Normalized {x,y,w,h} per MWG; CHECK(json_valid(bbox_json)).'],
+['party_id','TEXT','FK','core.party','Proposed/confirmed identity; NULL = unknown.'],
+['confidence','REAL','CK','', 'CHECK(confidence BETWEEN 0 AND 1); detector score.'],
+['confirmed_by_party_id','TEXT','FK','core.party','Owner confirmation; NULL = still a suggestion.'],
+]},
+]},
+
+{ id:'home', label:'home', desc:'Things, warranties, maintenance, meters. An item’s purchase is a core transaction; a meter reading is a core observation; maintenance is a schedule task — this schema just holds the house together.',
+tables:[
+{ n:'asset_item', std:'schema.org/Product+OwnershipInfo · Homebox item model', p:'A possession worth tracking: the dishwasher, the bike, the camera. Joins commerce (purchase txn), media (photos) and place (where it lives).',
+cols:[
+['item_id','TEXT (uuidv7)','PK NN','', 'Item identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Owner.'],
+['name','TEXT','NN','', 'Display name.'],
+['category_concept_id','TEXT','FK','core.concept','Item category (SKOS: appliance, electronics…).'],
+['place_id','TEXT','FK','core.place','Where it lives (room-level place).'],
+['acquired_txn_id','TEXT','FK','core.transaction','Purchase — the receipt is a join, not a photo in a drawer.'],
+['acquired_on','TEXT (date)','','', 'Purchase date (also derivable from txn).'],
+['serial_no','TEXT','','', 'Manufacturer serial for claims.'],
+['photo_asset_id','TEXT','FK','media.media_asset','Reference photo.'],
+['disposed_on','TEXT (date)','','', 'Sold/donated/scrapped — NULL = still owned.'],
+]},
+{ n:'warranty', std:'schema.org/WarrantyPromise', p:'Coverage window and terms for an item. The agent watches ends_on against maintenance and failures.',
+cols:[
+['warranty_id','TEXT (uuidv7)','PK NN','', 'Warranty identity.'],
+['item_id','TEXT','FK NN','home.asset_item','Covered item.'],
+['provider_party_id','TEXT','FK','core.party','Manufacturer/retailer as a party.'],
+['starts_on','TEXT (date)','NN','', 'Coverage start.'],
+['ends_on','TEXT (date)','NN CK','', 'CHECK(ends_on >= starts_on).'],
+['terms_content_id','TEXT','FK','core.content_item','The warranty PDF — owned reference, rented bytes.'],
+['claim_uri','TEXT','','', 'Where claims are filed.'],
+]},
+{ n:'maintenance_plan', std:'RFC 5545 RRULE for cadence', p:'A recurring upkeep obligation (descale, service, filter change) that projects tasks into the schedule domain.',
+cols:[
+['plan_id','TEXT (uuidv7)','PK NN','', 'Plan identity.'],
+['item_id','TEXT','FK NN','home.asset_item','Maintained item.'],
+['name','TEXT','NN','', 'e.g. “Descale coffee machine”.'],
+['rrule','TEXT','NN','', 'Cadence (RFC 5545).'],
+['last_done_on','TEXT (date)','','', 'Latest completion (postcondition of task completion).'],
+['instructions_content_id','TEXT','FK','core.content_item','Manual page / how-to.'],
+['current_task_id','TEXT','FK','schedule.task','The live projected task, if one is open.'],
+]},
+{ n:'utility_meter', std:'UCUM units · utility billing practice', p:'A metered service at a place, joined to the account that pays for it.',
+cols:[
+['meter_id','TEXT (uuidv7)','PK NN','', 'Meter identity.'],
+['place_id','TEXT','FK NN','core.place','Metered location.'],
+['kind','TEXT','NN CK','', "CHECK in ('electricity','gas','water','internet')."],
+['unit','TEXT','NN','', 'UCUM unit (kW·h, m3, GB).'],
+['billing_account_id','TEXT','FK','core.account','Account the bills hit — links usage to spend.'],
+['provider_party_id','TEXT','FK','core.party','Utility as a party.'],
+]},
+{ n:'meter_reading', std:'extends core.observation', p:'A reading IS an observation (subject = household), so trends, anomaly detection and export reuse the one observation pipeline.',
+cols:[
+['reading_id','TEXT (uuidv7)','PK NN','', 'Extension row identity.'],
+['meter_id','TEXT','FK NN','home.utility_meter','Which meter.'],
+['observation_id','TEXT','FK UQ NN','core.observation','The observation this IS (code=utility kind, unit=UCUM).'],
+['source','TEXT','NN CK','', "CHECK in ('manual','photo_ocr','provider_api') — feeds provenance."],
+]},
+]},
+
+{ id:'business', label:'business', desc:'Solo-business: clients, projects, time, invoices. A client is a party; billable time is an activity; getting paid is a transaction. The studio is a lens on the same life.',
+tables:[
+{ n:'client', std:'schema.org/Organization + engagement terms', p:'A party in a commercial relationship with the owner: rates, terms, status. Delete the studio app and the human relationship remains in core.',
+cols:[
+['client_id','TEXT (uuidv7)','PK NN','', 'Engagement identity.'],
+['party_id','TEXT','FK UQ NN','core.party','The party this engagement decorates (1:1).'],
+['status','TEXT','NN CK','', "CHECK in ('lead','active','past')."],
+['default_rate_minor','INTEGER','CK','', 'CHECK(default_rate_minor >= 0); hourly rate, minor units.'],
+['currency','TEXT (char 3)','NN CK','', 'ISO 4217; CHECK(length(currency)=3).'],
+['payment_terms_days','INTEGER','NN CK','', 'CHECK(payment_terms_days >= 0); net-N.'],
+]},
+{ n:'project', std:'schema.org/Project', p:'A scoped engagement for a client with budget and lifecycle.',
+cols:[
+['project_id','TEXT (uuidv7)','PK NN','', 'Project identity.'],
+['client_id','TEXT','FK NN','business.client','Commissioning client.'],
+['name','TEXT','NN','', 'Display name; UNIQUE(client_id,name).'],
+['status','TEXT','NN CK','', "CHECK in ('proposed','active','done','cancelled')."],
+['starts_on','TEXT (date)','','', 'Engagement start.'],
+['ends_on','TEXT (date)','','', 'Engagement end.'],
+['budget_minor','INTEGER','CK','', 'CHECK(budget_minor >= 0); agreed budget, minor units.'],
+]},
+{ n:'time_entry', std:'extends core.activity · harvest-style timekeeping', p:'Billable time IS an activity — the same span the health domain sees as sitting too long, the studio sees as revenue.',
+cols:[
+['entry_id','TEXT (uuidv7)','PK NN','', 'Extension row identity.'],
+['activity_id','TEXT','FK UQ NN','core.activity','The activity this IS (kind=work).'],
+['project_id','TEXT','FK NN','business.project','Billed project.'],
+['billable','INTEGER (bool)','NN CK','', 'CHECK in (0,1).'],
+['rate_minor','INTEGER','CK','', 'CHECK(rate_minor >= 0); rate at time of work (rates change).'],
+['invoice_line_id','TEXT','FK','business.invoice_line','Set once billed — the lock against double-billing.'],
+]},
+{ n:'invoice', std:'EN 16931 / UBL invoice · ISO 20022 remittance · Invoice Ninja paymentables', p:'A demand for payment with a real state machine, whose settlement is a link to a core transaction — “paid” is provable, not a checkbox.',
+cols:[
+['invoice_id','TEXT (uuidv7)','PK NN','', 'Invoice identity.'],
+['client_id','TEXT','FK NN','business.client','Billed client.'],
+['number','TEXT','NN UQ','', 'Sequential display number (jurisdictional requirement).'],
+['issued_on','TEXT (date)','NN','', 'Issue date (UBL IssueDate).'],
+['due_on','TEXT (date)','NN CK','', 'CHECK(due_on >= issued_on).'],
+['currency','TEXT (char 3)','NN CK','', 'ISO 4217; CHECK(length(currency)=3).'],
+['status','TEXT','NN CK','', "CHECK in ('draft','sent','paid','overdue','void')."],
+['total_minor','INTEGER','NN CK','', 'CHECK(total_minor >= 0); postcondition: equals SUM(lines).'],
+['paid_txn_id','TEXT','FK','core.transaction','The settling movement — reconciliation as a foreign key.'],
+['pdf_content_id','TEXT','FK','core.content_item','Rendered artifact (projection, regenerable).'],
+]},
+{ n:'invoice_line', std:'UBL InvoiceLine', p:'One billed line; time entries point here once invoiced.',
+cols:[
+['line_id','TEXT (uuidv7)','PK NN','', 'Line identity.'],
+['invoice_id','TEXT','FK NN','business.invoice','Parent invoice.'],
+['description','TEXT','NN','', 'What was billed.'],
+['qty_scaled','INTEGER','NN CK','', 'CHECK(qty_scaled > 0); fixed-scale quantity (hours ×100).'],
+['unit_price_minor','INTEGER','NN CK','', 'CHECK(unit_price_minor >= 0); minor units.'],
+['amount_minor','INTEGER','NN','', 'Line total; postcondition: qty × unit price at scale.'],
+]},
+]},
+];
+
+/* ---------- §02 entity map data ---------- */
+const CORE_CHIPS = ['party','place','event','account','transaction','content_item','activity','observation','link','concept'];
+const MAP_ZONES = [
+{id:'health',prod:'Apple Health · Fitbit',label:'Health',schema:'health',entities:[['Vital','observation','ext'],['Workout','activity','ext'],['Sleep session','activity','ext'],['Medication course','party','ref'],['Condition','party','ref']],core:['observation','activity','party','concept','event']},
+{id:'money',prod:'YNAB · Firefly-III',label:'Money',schema:'finance',entities:[['Account','account','ext'],['Transaction','transaction','ext'],['Split','transaction','ref'],['Budget','concept','ref'],['Holding','account','ref']],core:['account','transaction','party','concept']},
+{id:'calendar',prod:'Google Calendar · Fastmail',label:'Calendar',schema:'schedule',entities:[['Calendar','party','ref'],['Event behavior','event','ext'],['Attendee','party','ref'],['Availability','party','ref']],core:['event','party','place','concept']},
+{id:'tasks',prod:'Things · Todoist',label:'Tasks',schema:'schedule',entities:[['Task (VTODO)','event','own'],['Subtask','event','own'],['Project link','link','ref'],['Recurrence','event','ref']],core:['event','party','link']},
+{id:'contacts',prod:'Contacts · Monica',label:'Contacts',schema:'social',entities:[['Contact card','party','ext'],['Identifier (email/tel)','party','ref'],['Circle','party','ref'],['Relationship','link','ref']],core:['party','link','content_item']},
+{id:'messages',prod:'Mail · Nextcloud Talk',label:'Messages',schema:'social',entities:[['Thread','party','ref'],['Message','content_item','ref'],['Participant','party','ref'],['Attachment','content_item','ref']],core:['party','content_item','link']},
+{id:'notes',prod:'Obsidian · Joplin',label:'Notes',schema:'knowledge',entities:[['Note','content_item','ref'],['Notebook','party','ref'],['Annotation','link','ref'],['Backlink','link','ref']],core:['content_item','party','link','concept']},
+{id:'photos',prod:'Photos · Immich',label:'Photos',schema:'media',entities:[['Media asset','content_item','ext'],['Album','party','ref'],['Face region','party','ref'],['Capture place','place','ref']],core:['content_item','place','party','link']},
+{id:'home',prod:'Homebox · Grocy',label:'Home',schema:'home',entities:[['Asset item','transaction','ref'],['Warranty','content_item','ref'],['Maintenance plan','event','ref'],['Meter reading','observation','ext']],core:['place','transaction','observation','content_item','party']},
+{id:'studio',prod:'Invoice Ninja · Kimai',label:'Studio (solo business)',schema:'business',entities:[['Client','party','ext'],['Project','party','ref'],['Time entry','activity','ext'],['Invoice','transaction','ref']],core:['party','activity','transaction','event','content_item']},
+];
+
+/* ---------- §05 layers ---------- */
+const LAYERS = [
+{n:'L7',t:'App projections',k:'domain',d:'Screens, feeds, smart albums, dashboards, rendered PDFs. Deletable and regenerable from below; nothing durable is allowed to live only here.'},
+{n:'L6',t:'Capability & command surface',k:'agent',d:'Typed commands (MCP tools) with JSON-Schema contracts, discovery, pre/postconditions. The only interface agents and apps may write through.'},
+{n:'L5',t:'Consent & policy plane',k:'shared',d:'Grants, scopes, shares, retention/residency/purpose policy, provenance, receipts. Evaluated in the gateway on every read and every command.'},
+{n:'L4',t:'Domain state machines & rules',k:'domain',d:'RSVP transitions, invoice lifecycles, medication schedules, budget periods — behavior local to a domain, expressed over shared identity.'},
+{n:'L3',t:'Domain extensions',k:'domain',d:'Workout ⊂ Activity, Vital ⊂ Observation, MediaAsset ⊂ Content, TimeEntry ⊂ Activity: thin typed rows holding a UNIQUE FK to the core row they specialize.'},
+{n:'L2',t:'Relationship & classification fabric',k:'shared',d:'core.link (typed, temporal, provenance-carrying edges) and SKOS concept schemes. All cross-entity meaning and every taxonomy flows through here.'},
+{n:'L1',t:'Canonical entities',k:'shared',d:'party, place, event, account/transaction, content_item, activity, observation — identity plus history for the nine stable meanings of a life.'},
+{n:'L0',t:'Semantic primitives',k:'shared',d:'UUIDv7 identifiers, ISO-8601 instants + IANA zones, UCUM quantities, ISO-4217 fixed-scale money, URIs and hashes. The words every layer above speaks.'},
+];
+
+/* ---------- §06 core explorer ---------- */
+const CORE_INFO = [
+{id:'party',t:'party',std:'vCard · FOAF · schema.org',contract:'A party is the same party across every rename, new phone number, employer change and app. Identity = the uuidv7 key, never a handle; handles live in party_identifier with validity windows. Merging duplicates keeps both rows joined by a same-as link — history is never rewritten.',prov:'Every party row records how it entered the model (owner-created, vCard import, message-header resolution) and every identifier records verification.',ext:['social.contact_card (decoration)','business.client (engagement)','agent.agent (enrolled AI)','health prescriber / finance counterparty / media face — by reference']},
+{id:'place',t:'place',std:'schema.org/Place · ISO 6709 · IANA tz',contract:'A place is a named location with optional geometry and containment (room ⊂ home ⊂ city). The same “home” is referenced by events, photos, meters and items — coordinates may be refined, identity never changes.',prov:'Geocoding results record the resolver and input; owner corrections supersede imports via provenance chains.',ext:['schedule (event location)','media (capture place)','home (item location, meters)','health (workout venue) — all by reference']},
+{id:'event',t:'event',std:'RFC 5545 · JSCalendar RFC 8984',contract:'An event is a scheduled span with an RFC 5545 UID surviving round-trips to external calendars. Reschedules increment sequence on the same identity; recurrence is a rule, and occurrences are projections.',prov:'ICS imports, agent proposals and owner edits each stamp provenance; a reschedule chains to the proposal that caused it.',ext:['schedule.event_ext (calendar, busy, reminders)','schedule.attendee (party×event RSVP)','health medication reminders / home maintenance windows — by reference']},
+{id:'account',t:'account · transaction',std:'ISO 20022 · OFX · Plaid',contract:'An account is a durable pool of value; a transaction is an immutable movement. Corrections and recategorizations are new rows or tags with provenance — the ledger is append-mostly, amounts are fixed-scale integers, and external_id makes imports idempotent.',prov:'Every movement records its import batch (OFX FITID / provider id) or the command that created it; category changes trace to owner or judgment.',ext:['finance.txn_split / budget / holding / recurring_series','business.invoice.paid_txn_id (settlement)','home.asset_item.acquired_txn_id (purchase)']},
+{id:'content_item',t:'content_item',std:'RFC 6838 · schema.org/CreativeWork',contract:'Content identity is the sha256 of the bytes plus an owned row; content_uri is a replaceable pointer. Re-homing storage rewrites URIs, never identity — every note, photo, message and PDF keeps its relationships.',prov:'Capture device, creating app or generating command is recorded; derived renditions link wasDerivedFrom the original.',ext:['media.media_asset (capture context)','knowledge.note body','social.message body','business invoice PDFs / home warranty docs — by reference']},
+{id:'activity',t:'activity',std:'W3C Activity Streams 2.0',contract:'An activity is an actor doing a kind of thing over a span. One span, many lenses: the run the health domain scores is the same row the calendar shows as busy. Kind comes from a SKOS scheme, so “what people do” is a vocabulary, not an enum per app.',prov:'Recording app/device is stamped; agent-inferred activities (e.g. “commute” from location) are marked asserted_by=agent until confirmed.',ext:['health.workout · health.sleep_session','business.time_entry','home maintenance acts — by reference']},
+{id:'observation',t:'observation',std:'HL7 FHIR · Open mHealth · UCUM',contract:'An observation is one coded measurement about a subject at an instant, with UCUM units. Amendments are new rows with status=amended pointing back — a reading, once made, is history. The same shape serves heart rates and water meters.',prov:'Measuring device and source app are mandatory in practice; entered-in-error rows stay, flagged, for audit.',ext:['health.vital (clinical codes)','home.meter_reading (utility codes)','mood / journal metrics — by code, no new table']},
+{id:'link',t:'link',std:'W3C PROV · SKOS relations',contract:'A link is a typed, temporal, provenance-carrying edge between any two rows. Relation types are SKOS concepts (spouse-of, works-for, about, same-as, duplicate-of), and validity windows make relationships honest about time.',prov:'asserted_by distinguishes owner claims from agent inferences and imports; provenance_id is required for non-owner assertions.',ext:['Every domain: attendance context, note backlinks, task↔project, photo↔event — links are how domains touch without coupling.']},
+{id:'concept',t:'concept · concept_scheme',std:'W3C SKOS',contract:'A concept is one term in a versioned scheme with hierarchy (broader/narrower) and labels. Classification is centralized so “Groceries” is a single node the budget, the agent and the export all cite — renames touch labels, never identity.',prov:'Imported vocabularies (DPV purposes, activity kinds) record publisher and version; owner-custom concepts record their creation.',ext:['finance categories · activity kinds · relation types · consent purposes · home item categories — all schemes, one mechanism.']},
+];
+
+/* ---------- §07 domain explorer ---------- */
+const DOM_INFO = [
+{id:'health',prod:'Apple Health · Open mHealth · Fitbit',t:'Health',refs:['core.observation (every reading)','core.activity (every session)','core.party (patient, prescriber)','core.concept (sports, contexts)'],owns:['vital','workout','sleep_session','medication_course','condition'],state:'medication_course: planned → active → completed | stopped — transitions only via health.adjust_course, which re-projects reminder events.',aff:['health.log_vital','health.import_workout','health.adjust_course','health.summarize_trends'],boundary:'Health never mints people, places or time. It may read schedule availability to place reminders, but it may not write events directly — it invokes schedule.propose_event. Condition rows are excluded from default grant scopes.'},
+{id:'finance',prod:'YNAB · Firefly-III · Actual',t:'Finance',refs:['core.account · core.transaction (the ledger)','core.party (merchants, institutions)','core.concept (category scheme)'],owns:['txn_split','budget','holding','recurring_series','fx_rate'],state:'core.transaction: pending → posted → (void) — append-mostly; recategorization is a tag change with provenance, never an amount edit.',aff:['finance.categorize_txn','finance.split_txn','finance.set_budget','finance.flag_anomaly'],boundary:'Finance owns no identity: a merchant is a core party shared with contacts and home. Balances and budget progress are projections — storing them as facts is a rejected review.'},
+{id:'schedule',prod:'Google Calendar · Fastmail · Things',t:'Schedule',refs:['core.event (all time blocks)','core.party (attendees, owners)','core.place (locations → travel buffers)'],owns:['calendar','event_ext','attendee','task','availability_rule'],state:'attendee.partstat: needs-action → accepted | declined | tentative (RFC 5545); task: needs-action → in-process → completed | cancelled (VTODO).',aff:['schedule.propose_event','schedule.reschedule_event','schedule.respond_rsvp','schedule.complete_task'],boundary:'Schedule decorates time; it does not define what events mean. A medication reminder belongs to health, a maintenance window to home — schedule renders them and negotiates conflicts, nothing more. Habits need no new tables: a completion is a core activity or observation, and a streak is a projection over them.'},
+{id:'social',prod:'Contacts · Monica · Nextcloud Talk',t:'Social',refs:['core.party (everyone)','core.content_item (message bodies)','core.link (relationships)'],owns:['contact_card','circle','circle_member','thread','thread_participant','message'],state:'message.delivery: draft → sent → delivered → read | failed — outbound transitions only via social.send_message (risk=high, confirmation required).',aff:['social.resolve_identity','social.draft_message','social.send_message','social.update_card'],boundary:'Social resolves raw addresses to parties; it never creates duplicate people per channel. Kinship and employment claims are core links with provenance, not card fields. The personal-CRM “interaction history” is a projection over messages and activities — never a parallel store. Sending is the highest-risk command in the model.'},
+{id:'knowledge',prod:'Obsidian · Joplin · Notion',t:'Knowledge',refs:['core.content_item (note bodies)','core.link (backlinks, mentions)','core.concept (topic tags)'],owns:['note','notebook','note_placement','annotation'],state:'note lifecycle is intentionally flat (edit history = provenance chain + content versions); annotation: open → resolved for actionable comments.',aff:['knowledge.create_note','knowledge.annotate','knowledge.link_mentions','knowledge.summarize'],boundary:'Notes join the graph — “note about Tuesday’s appointment” is a link to the core event, not a text coincidence. Knowledge never stores facts other domains own; it cites them.'},
+{id:'media',prod:'Immich · Apple Photos · Google Photos',t:'Media',refs:['core.content_item (the bytes contract)','core.place (capture location)','core.party (faces)','consent.device (camera)'],owns:['media_asset','album','album_entry','face_region'],state:'face_region: detected → suggested → confirmed | rejected — confirmation flows through agent.correction so recognition learns as judgment.',aff:['media.import_assets','media.suggest_faces','media.curate_album','media.find_by_context'],boundary:'Media may not confirm identity on its own: a suggested face becomes a party link only after owner confirmation. Albums are curation; “smart albums” are saved queries and live in projections.'},
+{id:'home',prod:'Homebox · Grocy · vehicle logs',t:'Home',refs:['core.place (rooms, buildings)','core.transaction (purchases)','core.observation (meter readings)','schedule.task (upkeep)'],owns:['asset_item','warranty','maintenance_plan','utility_meter','meter_reading'],state:'asset_item: owned → (disposed_on set) — with warranty windows and maintenance cadences hanging off the owned span.',aff:['home.register_item','home.log_reading','home.schedule_maintenance','home.prepare_claim'],boundary:'Home joins, it does not copy: the purchase is the finance transaction, the manual is a content item, the chore is a schedule task. Its power is being the join table of the household.'},
+{id:'business',prod:'Invoice Ninja · Kimai · Akaunting',t:'Business',refs:['core.party (clients)','core.activity (billable time)','core.transaction (settlement)','core.event (sessions, deadlines)'],owns:['client','project','time_entry','invoice','invoice_line'],state:'invoice: draft → sent → paid | overdue → void — “paid” requires paid_txn_id (a settling core transaction); overdue is derived from due_on, never stored.',aff:['business.track_time','business.draft_invoice','business.send_invoice','business.reconcile_payment'],boundary:'The studio is a lens: it may bill an activity, never own the actor. Settlement is an allocation — paid_txn_id binds the invoice to a canonical transaction (the Invoice Ninja paymentables pattern), so the studio never keeps its own shadow ledger. Rates and terms are business columns; the client’s birthday, address and threads remain core/social property visible under its grant only if scoped.'},
+];
+
+/* ---------- §08 ownership matrix ---------- */
+const MX_DOMAINS = ['Core','Health','Finance','Schedule','Social','Knowledge','Media','Home','Business'];
+const MX_ROWS = [
+['Person / organization',        ['C','R','R','R','E','R','R','R','E']],
+['Place',                        ['C','R','—','R','—','—','R','R','—']],
+['Event (scheduled time)',       ['C','R','—','E','—','R','R','R','R']],
+['Money movement',               ['C','—','E','—','—','—','—','R','R']],
+['Content (bytes ref)',          ['C','R','—','—','R','R','E','R','R']],
+['Activity (span of doing)',     ['C','E','—','—','—','—','—','R','E']],
+['Observation (measurement)',    ['C','E','—','—','—','—','—','E','—']],
+['Relationship (typed link)',    ['C','R','R','R','R','R','R','R','R']],
+['Classification (SKOS)',        ['C','R','R','R','R','R','R','R','—']],
+['Consent / grant / receipt',    ['—','R','R','R','R','R','R','R','R']],
+['Typed command',                ['—','E','E','E','E','E','E','E','E']],
+];
+
+/* ---------- §09 scenarios ---------- */
+const SCENARIOS = [
+{id:'briefing',t:'Morning briefing',intro:'7:05 am. The most ordinary agent task — and the one silos make impossible: today’s plan lives in four apps that have never met. Here it is one graph walk, each hop consent-checked and receipted.',
+steps:[
+{sys:'Schedule',act:'Read today’s events and open tasks; expand recurrences into occurrences and pull each event’s place for travel buffers.',obj:'core.event ×4 · schedule.task ×6 (needs-action) · core.place ×2',consent:'grant g_agent_ops · scope schedule:read · purpose dpv:ServiceProvision',receipt:'receipt r_a101 · allow · read event (set)'},
+{sys:'Money',act:'Surface bills due within 7 days from recurring series and check the paying account’s posted balance — a projection computed now, never stored.',obj:'finance.recurring_series ×2 (due ≤ 7d) · core.account acct_hdfc',consent:'grant g_agent_ops · scope finance:read · row_filter due window',receipt:'receipt r_a102 · allow · read recurring_series'},
+{sys:'Health',act:'Summarize last night: the sleep session is a core activity; resting heart rate is an observation with modality=sensed. Condition rows stay invisible — excluded by default scope.',obj:'health.sleep_session ⊂ core.activity · core.observation (omh:heart-rate, statistic=minimum)',consent:'grant g_agent_ops · scope health:read · field mask + row filter applied',receipt:'receipt r_a103 · allow · read observation (set)'},
+{sys:'Studio',act:'Check for anything billable aging out: uninvoiced time entries older than 14 days against active clients.',obj:'business.time_entry ×3 (uninvoiced) · business.client c_meridian (active)',consent:'grant g_agent_ops · scope business:read',receipt:'receipt r_a104 · allow · read time_entry'},
+{sys:'Agent plane',act:'Compose one briefing as an owned content item; the explanation row cites every receipt above, so “why is this in my briefing” is answerable line by line.',obj:'core.content_item c_brief_0702 · agent.explanation x_4410 (evidence ×4)',consent:'grant g_agent_ops · verbs read+act · risk low',receipt:'receipt r_a105 · allow · act agent.compose_briefing'},
+]},
+{id:'invoice',t:'Bill the workshop',intro:'Friday, 6 pm. This afternoon’s client workshop should become money. In the silo world: open the calendar, re-type into the time tracker, re-type into the invoicing tool, watch the bank app for payment. Here the agent walks four references.',
+steps:[
+{sys:'Schedule',act:'Query today’s events where an attendee’s party is linked works-for → Meridian Design (a core link, not a string match).',obj:'core.event e_01HX…F2 · schedule.attendee (partstat=accepted)',consent:'grant g_agent_ops · scope schedule:read · purpose dpv:ServiceProvision',receipt:'receipt r_8c41 · allow · read event'},
+{sys:'Studio',act:'Verify the 3h span was captured as billable time — the time entry IS the same core activity the event blocked.',obj:'core.activity a_01HX…9K ⊂ business.time_entry (billable=1, uninvoiced)',consent:'grant g_agent_ops · scope business:read',receipt:'receipt r_8c42 · allow · read time_entry'},
+{sys:'Studio',act:'Invoke business.draft_invoice — a typed command. Preconditions checked: entries uninvoiced, client active, rate present. Postcondition: total_minor = Σ lines.',obj:'agent.command_invocation i_5510 → business.invoice INV-2026-014 (draft)',consent:'grant g_agent_ops · verbs read+act · risk medium — no confirmation needed',receipt:'receipt r_8c43 · allow · act business.draft_invoice'},
+{sys:'Messages',act:'Invoke social.send_message with the invoice PDF (a core content_item). Risk=high → owner confirmation surfaced; on approval the send executes and delivery tracks.',obj:'social.message m_2291 → body core.content_item c_77aa (application/pdf)',consent:'grant g_agent_ops + owner confirmation 18:04 IST · purpose dpv:Billing',receipt:'receipt r_8c44 · allow · act social.send_message'},
+{sys:'Money',act:'Twelve days later a credit posts. finance.reconcile_payment matches amount+counterparty to the invoice; postcondition sets paid_txn_id and status=paid. Evidence rows cite the transaction.',obj:'core.transaction t_01HZ…Q7 (+₹96,000) ↔ business.invoice INV-2026-014',consent:'grant g_agent_ops · scope finance:read+act',receipt:'receipt r_9a02 · allow · act finance.reconcile_payment'},
+]},
+{id:'doctor',t:'Prep the cardiology visit',intro:'An appointment next Thursday. The agent assembles a clinical picture from three former silos and shares it — with an expiry — instead of the patient screenshotting a watch app in the waiting room.',
+steps:[
+{sys:'Schedule',act:'Find the appointment: an event whose organizer party carries a doctor relationship link. Pull the place for travel buffering.',obj:'core.event e_02AB…33 · organizer core.party p_drmehta · core.place clinic',consent:'grant g_agent_ops · scope schedule:read',receipt:'receipt r_c101 · allow · read event'},
+{sys:'Health',act:'Invoke health.summarize_trends over 90 days of vitals — observations with FHIR codes, filtered by the grant’s row filter (no condition rows; those are excluded by default scope).',obj:'core.observation ×214 ⊂ health.vital (bp, hr, weight) → trend content_item',consent:'grant g_agent_ops · scope health:read · row_filter observed_at ≥ −90d · field mask applied',receipt:'receipt r_c102 · allow · read observation (set)'},
+{sys:'Health',act:'Read the active medication course to include dosing; the prescriber is the same party organizing Thursday’s event — one identity, two former apps.',obj:'health.medication_course mc_118 (active) · prescriber = p_drmehta',consent:'grant g_agent_ops · scope health:read',receipt:'receipt r_c103 · allow · read medication_course'},
+{sys:'Consent plane',act:'Create a share of the summary to Dr Mehta’s party: mode=view, expires in 14 days, purpose dpv:HealthMonitoring. Risk=high → owner confirms recipient and expiry.',obj:'consent.share s_4470 → target content_item c_90ff · recipient p_drmehta',consent:'owner confirmation 09:12 IST · policy check: residency IN ✓ · retention n/a',receipt:'receipt r_c104 · allow · act consent.create_share'},
+{sys:'Schedule',act:'Postcondition sweep: attach the summary link to the event, add a travel-buffered reminder. Explanation row cites all evidence — the owner can audit every hop above.',obj:'core.link event↔content (relation: about) · agent.explanation x_3321',consent:'grant g_agent_ops · scope schedule:read+act',receipt:'receipt r_c105 · allow · act schedule.attach_reference'},
+]},
+{id:'warranty',t:'The dishwasher dies',intro:'A breakdown on a Tuesday night. Warranty claims die in silos because the receipt is in a bank app, the serial number in a photo, and the deadline in nobody’s head. Here the item row already joins all three.',
+steps:[
+{sys:'Home',act:'Owner tells the agent “the dishwasher is broken.” It resolves the item and reads its joins: purchase transaction, serial, reference photo, warranty window (ends in 41 days — claim is viable).',obj:'home.asset_item it_204 · home.warranty w_88 (ends_on +41d)',consent:'grant g_agent_ops · scope home:read',receipt:'receipt r_d201 · allow · read asset_item'},
+{sys:'Money',act:'Follow acquired_txn_id to the purchase: date, amount, retailer party — proof-of-purchase without hunting a paper receipt.',obj:'core.transaction t_01HJ…4D (−₹42,990 · counterparty p_croma)',consent:'grant g_agent_ops · scope finance:read · row_filter txn_id = acquired_txn_id',receipt:'receipt r_d202 · allow · read transaction'},
+{sys:'Photos',act:'Fetch the serial-plate photo and the warranty PDF — both core content items; bytes stream from wherever they are currently rented.',obj:'media.media_asset ma_5541 · core.content_item c_31bb (warranty terms PDF)',consent:'grant g_agent_ops · scope media:read',receipt:'receipt r_d203 · allow · read content_item'},
+{sys:'Messages',act:'Invoke social.draft_message to the provider party with evidence attached. Draft only — sending stays behind owner confirmation; the draft cites its evidence rows.',obj:'social.message m_7710 (delivery=draft) → recipient p_croma_support',consent:'grant g_agent_ops · risk high deferred: draft ≠ send',receipt:'receipt r_d204 · allow · act social.draft_message'},
+{sys:'Schedule',act:'schedule.propose_event for the technician window against availability rules, plus a follow-up task with due_at = warranty end − 7d. Pre: no conflict; post: event confirmed + task open.',obj:'core.event e_03CC…81 (tentative) · schedule.task tk_990',consent:'grant g_agent_ops · scope schedule:read+act',receipt:'receipt r_d205 · allow · act schedule.propose_event'},
+]},
+];
+
+/* =====================================================================
+   RENDERERS
+   ===================================================================== */
+const $ = (s,el=document)=>el.querySelector(s);
+const esc = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* ---- §03 ERD ---- */
+(function renderERD(){
+  const erd = $('#erd'), chips = $('#schemaChips');
+  let cols=0,fks=0,cks=0,tables=0;
+  SCHEMAS.forEach(s=>{tables+=s.tables.length;s.tables.forEach(t=>{cols+=t.cols.length;t.cols.forEach(c=>{if(c[2].includes('FK'))fks++;if(c[2].includes('CK'))cks++;});});});
+  $('#c-schemas').textContent=SCHEMAS.length; $('#c-tables').textContent=tables;
+  $('#c-cols').textContent=cols; $('#c-fks').innerHTML='<i>'+fks+'</i>'; $('#c-cks').textContent=cks;
+  const kt=$('#kv-tables'),kc=$('#kv-cols'); if(kt)kt.textContent=tables; if(kc)kc.textContent=cols;
+
+  const badges = f=>f?f.trim().split(/\s+/).map(x=>`<span class="badge b-${x}">${x}</span>`).join(''):'';
+  function schemaBlock(s){
+    let h=`<div class="schemahdr" data-schema="${s.id}"><span class="sid">${s.id}</span><h3>${esc(s.label)}</h3><p class="sdesc">${esc(s.desc)}</p></div>`;
+    s.tables.forEach(t=>{
+      h+=`<div class="tbl rv in" data-schema="${s.id}"><header><h4><span class="sch">${s.id}.</span>${t.n}</h4><span class="std">${esc(t.std)}</span><p class="tp">${esc(t.p)}</p></header>
+      <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">purpose · standard</span></div>`;
+      t.cols.forEach(c=>{
+        h+=`<div class="colrow"><span class="cn">${c[0]}</span><span class="ct">${esc(c[1])}</span><span>${badges(c[2])}</span><span class="cref">${c[3]?'→ '+c[3]:''}</span><span class="cnote">${esc(c[4])}</span></div>`;
+      });
+      h+=`</div></div>`;
+    });
+    return h;
+  }
+  erd.innerHTML = SCHEMAS.map(schemaBlock).join('');
+
+  const mk=(id,label,pressed)=>{const b=document.createElement('button');b.className='chip';b.dataset.f=id;b.textContent=label;b.setAttribute('aria-pressed',pressed?'true':'false');return b;};
+  chips.appendChild(mk('all','all schemas',true));
+  SCHEMAS.forEach(s=>chips.appendChild(mk(s.id,s.id,false)));
+  chips.addEventListener('click',e=>{
+    const b=e.target.closest('.chip'); if(!b)return;
+    chips.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed', x===b?'true':'false'));
+    const f=b.dataset.f;
+    erd.querySelectorAll('[data-schema]').forEach(el=>{el.style.display=(f==='all'||el.dataset.schema===f)?'':'none';});
+  });
+  $('#densityBtn').addEventListener('click',function(){
+    const on=this.getAttribute('aria-pressed')!=='true';
+    this.setAttribute('aria-pressed',on?'true':'false');
+    this.textContent=on?'Comfortable density':'Compact density';
+    erd.classList.toggle('compact',on);
+  });
+})();
+
+/* ---- §02 map ---- */
+(function renderMap(){
+  const canvas=$('#mapcanvas'), status=$('#mapstatus');
+  let h='';
+  MAP_ZONES.forEach(z=>{
+    h+=`<button class="zone zone-${z.id}" data-zone="${z.id}" aria-pressed="false"><h3>${esc(z.label)}<span class="zk">${z.schema} · ${esc(z.prod)}</span></h3><ul>`;
+    z.entities.forEach(e=>{
+      const rel=e[2], cn = rel==='own' ? 'domain-owned' : (rel==='ext'?'⊂ core.'+e[1]:'→ core.'+e[1]);
+      h+=`<li class="rel-${rel}"><span>${esc(e[0])}</span><span class="cn">${cn}</span></li>`;
+    });
+    h+=`</ul></button>`;
+  });
+  h+=`<div class="corezone"><h3>Canonical core</h3><p class="zk" style="margin:0">identity + history · one declaration each</p><div class="coregrid">${CORE_CHIPS.map(c=>`<span class="corechip" data-core="${c}">${c}</span>`).join('')}</div></div>`;
+  canvas.innerHTML=h;
+
+  let sel=null;
+  function select(id){
+    sel = (sel===id)?null:id;
+    canvas.classList.toggle('hasSel',!!sel);
+    const z=MAP_ZONES.find(x=>x.id===sel);
+    canvas.querySelectorAll('.zone').forEach(el=>{const on=el.dataset.zone===sel;el.classList.toggle('sel',on);el.setAttribute('aria-pressed',on?'true':'false');});
+    canvas.querySelectorAll('.corechip').forEach(ch=>ch.classList.toggle('lit', !!z && z.core.includes(ch.dataset.core)));
+    status.textContent = z ? `${z.label} → schema “${z.schema}” · touches core: ${z.core.join(', ')}. Extensions (⊂) share identity with the core row; references (→) point into it.` : 'Select a domain to trace its canonical dependencies.';
+  }
+  canvas.addEventListener('click',e=>{const b=e.target.closest('.zone'); if(b) select(b.dataset.zone);});
+  $('#mapClear').addEventListener('click',()=>{sel='__';select('__');});
+
+  let zoom=1;
+  const apply=()=>{canvas.style.transform=`scale(${zoom})`;$('#zoomReset').textContent=Math.round(zoom*100)+'%';};
+  $('#zoomIn').addEventListener('click',()=>{zoom=Math.min(1.4,+(zoom+0.1).toFixed(2));apply();});
+  $('#zoomOut').addEventListener('click',()=>{zoom=Math.max(0.6,+(zoom-0.1).toFixed(2));apply();});
+  $('#zoomReset').addEventListener('click',()=>{zoom=1;apply();});
+})();
+
+/* ---- §05 layers ---- */
+(function renderLayers(){
+  const el=$('#layerStack');
+  el.innerHTML=LAYERS.map(l=>`<div class="layer rv in" data-kind="${l.k}"><span class="ln">${l.n}</span><div><h3>${esc(l.t)}</h3></div><p>${esc(l.d)}</p><span class="lt">${l.k==='shared'?'shared':l.k==='domain'?'domain-specific':'agent-facing'}</span></div>`).join('');
+  document.querySelectorAll('[data-lf]').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('[data-lf]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+    el.className='layers'+(b.dataset.lf==='all'?'':' f-'+b.dataset.lf);
+  }));
+})();
+
+/* ---- §06 core explorer ---- */
+(function renderCore(){
+  const pick=$('#corePick'), panel=$('#corePanel');
+  pick.innerHTML=CORE_INFO.map((c,i)=>`<button class="pickbtn" data-i="${i}" aria-pressed="${i===0}"><span>core.${c.id}</span><span class="pm">${esc(c.std)}</span></button>`).join('');
+  function show(i){
+    const c=CORE_INFO[i];
+    pick.querySelectorAll('.pickbtn').forEach((b,j)=>b.setAttribute('aria-pressed', j===i?'true':'false'));
+    panel.innerHTML=`<h3>core.${c.t}</h3><p class="sub">${esc(c.std)}</p>
+      <h4>Identity contract</h4><p>${esc(c.contract)}</p>
+      <h4>Provenance obligation</h4><p>${esc(c.prov)}</p>
+      <h4>Extended / referenced by</h4><ul>${c.ext.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+  }
+  pick.addEventListener('click',e=>{const b=e.target.closest('.pickbtn');if(b)show(+b.dataset.i);});
+  show(0);
+})();
+
+/* ---- §07 domain explorer ---- */
+(function renderDomains(){
+  const pick=$('#domPick'), panel=$('#domPanel');
+  pick.innerHTML=DOM_INFO.map((d,i)=>`<button class="pickbtn" data-i="${i}" aria-pressed="${i===0}"><span>${esc(d.t)}</span><span class="pm">schema: ${d.id}</span></button>`).join('');
+  function show(i){
+    const d=DOM_INFO[i];
+    pick.querySelectorAll('.pickbtn').forEach((b,j)=>b.setAttribute('aria-pressed', j===i?'true':'false'));
+    panel.innerHTML=`<h3>${esc(d.t)}</h3><p class="sub">schema “${d.id}” · owns behavior, never identity · comparable products: ${esc(d.prod)}</p>
+      <h4>Canonical references</h4><ul>${d.refs.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+      <h4>Domain-owned entities</h4><p>${d.owns.map(x=>`<span class="k">${d.id}.${x}</span>`).join(' ')}</p>
+      <h4>Primary state model</h4><p>${esc(d.state)}</p>
+      <h4>Agent affordances (typed commands)</h4><p>${d.aff.map(x=>`<span class="aff">${x}</span>`).join('')}</p>
+      <h4>Boundary</h4><p class="warn">${esc(d.boundary)}</p>`;
+  }
+  pick.addEventListener('click',e=>{const b=e.target.closest('.pickbtn');if(b)show(+b.dataset.i);});
+  show(0);
+})();
+
+/* ---- §08 matrix ---- */
+(function renderMatrix(){
+  const cls={C:'mC',E:'mE',R:'mR','—':'mN'};
+  const lbl={C:'C',E:'E',R:'R','—':'—'};
+  let h='<thead><tr><th>concept ↓ · domain →</th>'+MX_DOMAINS.map(d=>`<th>${d}</th>`).join('')+'</tr></thead><tbody>';
+  MX_ROWS.forEach(r=>{
+    h+=`<tr><th scope="row">${esc(r[0])}</th>`+r[1].map(v=>`<td class="${cls[v]}"><span>${lbl[v]}</span></td>`).join('')+'</tr>';
+  });
+  $('#mxtable').innerHTML=h+'</tbody>';
+})();
+
+/* ---- §09 scenarios ---- */
+(function renderFlow(){
+  const chips=$('#scenarioChips'), steps=$('#flowsteps'), intro=$('#scenarioIntro');
+  chips.innerHTML=SCENARIOS.map((s,i)=>`<button class="chip" data-i="${i}" aria-pressed="${i===0}">${esc(s.t)}</button>`).join('');
+  function show(i){
+    const s=SCENARIOS[i];
+    chips.querySelectorAll('.chip').forEach((b,j)=>b.setAttribute('aria-pressed', j===i?'true':'false'));
+    intro.textContent=s.intro;
+    steps.innerHTML=s.steps.map((st,j)=>`<div class="step"><span class="dot">${String(j+1).padStart(2,'0')}</span><span class="sys">${esc(st.sys)}</span><div class="body"><p>${esc(st.act)}</p><span class="obj">${esc(st.obj)}</span><span class="consent">consent · ${esc(st.consent)}</span><span class="receipt">${esc(st.receipt)}</span></div></div>`).join('');
+  }
+  chips.addEventListener('click',e=>{const b=e.target.closest('.chip');if(b)show(+b.dataset.i);});
+  show(0);
+})();
+
+
+/* ---- §10 gateway pipeline ---- */
+const GW_STAGES = [
+{n:'S1',t:'Identity',tag:'who is calling?',brief:'Every caller authenticates as a row. No credential, no path to data.',
+checks:['Request signature verified against consent.app.signing_key — apps prove who they are cryptographically, per request.','Agents resolve to an enrolled agent.agent row; devices to consent.device with a live last_seen lifecycle.','Generated apps (origin=generated) authenticate identically — vibecoded code gets no softer door.','Session binding: one caller identity per connection lease; the gateway never pools identities.'],
+tables:['consent.app','agent.agent','consent.device'],
+deny:'An unknown caller is dropped at transport — there is no grantee to receipt against, so nothing enters the model, not even a denial row.'},
+{n:'S2',t:'Consent',tag:'may this caller see or do this?',brief:'The RLS replacement: a chain of six checks, any of which can independently deny.',
+checks:['An access_grant exists, is active, unexpired and unrevoked for this caller.','Its grant_scope rows cover the requested schema and verb (read vs act).','Row filters applied — the −90-day vitals window, the exclusion of health.condition from default scopes.','Field masks applied — columns the grant never surfaces, masked before the query runs.','Declared purpose (DPV term) checked against standing consent.policy: retention, residency, purpose limitation.','Command risk compared to the app\u2019s risk_ceiling — above it, the request parks for owner confirmation instead of executing.'],
+tables:['consent.access_grant','consent.grant_scope','consent.policy','consent.app.risk_ceiling'],
+deny:'A deny is an outcome, not an exception: consent.receipt records result=deny with the failing check, visible to the owner. Deny patterns are how over-reaching apps get caught.'},
+{n:'S3',t:'Contract',tag:'is this a valid typed command?',brief:'Writes are never rows — only commands with declared pre- and postconditions.',
+checks:['Payload validated against the command\u2019s JSON-Schema (agent.capability contract, MCP-exposed).','Contract version negotiated — an app speaking ontology v1.0 gets its compatibility window (R07).','Preconditions evaluated as real queries — entries uninvoiced, client active, no calendar conflict — each recorded as an agent.invocation_check row BEFORE anything mutates.','agent.judgment rules consulted as constraints: the owner\u2019s distilled corrections can veto an otherwise-valid call.'],
+tables:['agent.capability','agent.command','agent.command_invocation','agent.invocation_check','agent.judgment'],
+deny:'The invocation is recorded as failed with the violated precondition; agent.explanation cites the exact check, so \u201cwhy didn\u2019t this run\u201d is answerable from rows.'},
+{n:'S4',t:'Execution',tag:'the only writer in the system',brief:'Owns ordering, atomicity, replay, and every invariant SQLite cannot declare.',
+checks:['Write order: journal invocation \u2192 vault rows \u2192 domain rows; in the single-file layout this is one ACID transaction.','Idempotent replay: UUIDv7 keys and external_id uniqueness make crash recovery a safe re-run, never a double-write.','Polymorphic references validated — link.from_type/from_id and attachment.subject_type/subject_id resolve to live rows.','Rich invariants enforced — \u03a3 invoice lines = total_minor, transfer legs balance, append-only tables never UPDATE.','Postconditions verified after commit and recorded as invocation_check rows, mirroring the preconditions.'],
+tables:['core.* / domain tables','agent.invocation_check','journal.db ordering'],
+deny:'A failed postcondition rolls the transaction back and records the failure — the model never holds a state a command contract does not permit.'},
+{n:'S5',t:'Evidence',tag:'unskippable, because there is no other door',brief:'Every read and every command leaves rows — allowed or denied.',
+checks:['consent.receipt per read and per command: actor, action, result, grant cited.','consent.provenance per write: source app, device, method — how every fact entered the model.','agent.evidence rows bind command outcomes to the rows they read; agent.explanation makes the reasoning auditable.','High-risk confirmations recorded with the owner\u2019s decision and timestamp — consent that travels with the action.'],
+tables:['consent.receipt','consent.provenance','agent.evidence','agent.explanation'],
+deny:'Denials are first-class evidence: the receipt trail of what was refused is as valuable to the owner as the trail of what ran.'},
+];
+(function renderGateway(){
+  const pipe=document.getElementById('gwPipe'), panel=document.getElementById('gwPanel');
+  if(!pipe||!panel) return;
+  pipe.innerHTML=GW_STAGES.map((g,i)=>
+    `<button class="gwstage" data-i="${i}" aria-pressed="${i===0}"><span class="gn">${g.n} \u00b7 ${g.tag}</span><h3>${g.t}</h3><p>${g.brief}</p></button>`+
+    (i<GW_STAGES.length-1?'<span class="gwarrow" aria-hidden="true">\u2192</span>':'')
+  ).join('');
+  function show(i){
+    const g=GW_STAGES[i];
+    pipe.querySelectorAll('.gwstage').forEach((b,j)=>b.setAttribute('aria-pressed', j===i?'true':'false'));
+    panel.innerHTML=`<h3>${g.n} \u2014 ${g.t}</h3><p class="sub">${g.tag}</p>
+      <h4>What it checks</h4><ul>${g.checks.map(c=>`<li>${c}</li>`).join('')}</ul>
+      <h4>Tables consulted</h4><p style="margin:0">${g.tables.map(t=>`<span class="k">${t}</span>`).join(' ')}</p>
+      <div class="deny"><b>On deny \u00b7</b> ${g.deny}</div>`;
+  }
+  pipe.addEventListener('click',e=>{const b=e.target.closest('.gwstage');if(b)show(+b.dataset.i);});
+  show(0);
+})();
+
+/* ---- reveal + scroll-spy ---- */
+(function(){
+  const reduce=(typeof matchMedia==='function')?matchMedia('(prefers-reduced-motion: reduce)').matches:false;
+  document.querySelectorAll('section .wrap > *:not(.rv)').forEach(el=>{if(!el.closest('.erd'))el.classList.add('rv');});
+  if(reduce||!('IntersectionObserver' in window)){document.querySelectorAll('.rv').forEach(el=>el.classList.add('in'));}
+  else{
+    const io=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target);}}),{rootMargin:'0px 0px -8% 0px',threshold:.05});
+    document.querySelectorAll('.rv').forEach(el=>io.observe(el));
+  }
+  const links=[...document.querySelectorAll('.rail a')];
+  const secs=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  if('IntersectionObserver' in window){
+    const spy=new IntersectionObserver(es=>{
+      es.forEach(en=>{ if(en.isIntersecting){
+        links.forEach(a=>a.classList.toggle('on', a.getAttribute('href')==='#'+en.target.id));
+      }});
+    },{rootMargin:'-30% 0px -55% 0px'});
+    secs.forEach(s=>spy.observe(s));
+  }
+})();
+</script>
+</body>
+</html>

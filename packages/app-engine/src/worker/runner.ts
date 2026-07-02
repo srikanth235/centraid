@@ -39,6 +39,22 @@ interface DbReplyMessage {
   error?: string;
 }
 
+interface VaultCallMessage {
+  type: 'vault';
+  id: number;
+  op: 'read' | 'invoke' | 'query' | 'describe';
+  payload: unknown;
+}
+
+interface VaultReplyMessage {
+  type: 'vault-reply';
+  id: number;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+  code?: string;
+}
+
 interface LogMessage {
   type: 'log';
   level: 'info' | 'warn' | 'error';
@@ -65,14 +81,68 @@ const pendingDbCalls = new Map<
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
 >();
 
-port.on('message', (msg: DbReplyMessage) => {
-  if (msg.type !== 'db-reply') return;
-  const pending = pendingDbCalls.get(msg.id);
-  if (!pending) return;
-  pendingDbCalls.delete(msg.id);
-  if (msg.ok) pending.resolve(msg.result);
-  else pending.reject(new Error(msg.error ?? 'db call failed'));
+port.on('message', (msg: DbReplyMessage | VaultReplyMessage) => {
+  if (msg.type === 'db-reply') {
+    const pending = pendingDbCalls.get(msg.id);
+    if (!pending) return;
+    pendingDbCalls.delete(msg.id);
+    if (msg.ok) pending.resolve(msg.result);
+    else pending.reject(new Error(msg.error ?? 'db call failed'));
+    return;
+  }
+  if (msg.type === 'vault-reply') {
+    const pending = pendingVaultCalls.get(msg.id);
+    if (!pending) return;
+    pendingVaultCalls.delete(msg.id);
+    if (msg.ok) pending.resolve(msg.result);
+    else {
+      const err = new Error(msg.error ?? 'vault call failed') as Error & { code?: string };
+      if (msg.code) err.code = msg.code;
+      pending.reject(err);
+    }
+  }
 });
+
+// ---- ctx.vault — a second RPC channel beside `db`, aimed at the owner's
+// personal vault. Same round-trip mechanism, separate id space and message
+// type. The parent resolves the running app to its vault credential and
+// enforces consent before touching anything; a refusal rejects with the
+// receipt id in the message and a machine `code` ('VAULT_CONSENT',
+// 'VAULT_UNAVAILABLE', …). No key or file handle ever enters this thread.
+
+let nextVaultCallId = 1;
+const pendingVaultCalls = new Map<
+  number,
+  { resolve: (v: unknown) => void; reject: (e: Error) => void }
+>();
+
+function vaultCall(op: VaultCallMessage['op'], payload: unknown): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const id = nextVaultCallId++;
+    pendingVaultCalls.set(id, { resolve, reject });
+    const m: VaultCallMessage = { type: 'vault', id, op, payload };
+    port.postMessage(m);
+  });
+}
+
+const vault = {
+  /** Consent-checked read of a canonical entity: `{entity, where?, limit?, purpose}`. */
+  read(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('read', request);
+  },
+  /** Typed-command invocation: `{command, input, purpose}` → outcome `{status, output, …}`. */
+  invoke(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('invoke', request);
+  },
+  /** Query a registered app view, clamped to this app's grants. */
+  query(view: string, purpose: string): Promise<unknown> {
+    return vaultCall('query', { view, purpose });
+  },
+  /** Commands discoverable by this app (name, schema, risk, confirmation). */
+  describe(): Promise<unknown> {
+    return vaultCall('describe', {});
+  },
+};
 
 function dbCall(method: DbCallMessage['method'], payload: unknown): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -134,6 +204,7 @@ const ctx = {
   fetch: (input: string, init?: RequestInit) =>
     fetch(input, { ...init, signal: abortController.signal }),
   abortSignal: abortController.signal,
+  vault,
 };
 
 void (async () => {

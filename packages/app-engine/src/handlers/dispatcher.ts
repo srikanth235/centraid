@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit dispatcher gained the ctx.vault bridge threading (duaility §12); the follow-up split of validation + envelope helpers into a sibling module is tracked separately
 /**
  * Three-tool invocation dispatcher (issue #107). `centraid_{write,read,
  * describe}` replace the per-handler HTTP routes; every non-chat caller
@@ -30,6 +31,7 @@ import type { RegistryEntry } from '../types.js';
 import type { ValidateFunction } from 'ajv';
 import { readAppSchema, type AppSchema } from '../data/schema.js';
 import { runBuiltinRead, runBuiltinWrite } from './dispatcher-builtins.js';
+import type { VaultBridge } from './vault-bridge.js';
 
 // Result envelopes — MCP-shaped (see header comment).
 export type ToolErrorCode =
@@ -117,6 +119,12 @@ export interface DispatcherOptions {
    * has servable code.
    */
   readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
+  /**
+   * Per-app `ctx.vault` bridge factory (duaility §12). Resolves the app id
+   * to a host-held executor bound to that app's vault credential. When
+   * absent, handler `ctx.vault.*` calls fail closed with VAULT_UNAVAILABLE.
+   */
+  readonly vaultFor?: (appId: string) => VaultBridge;
 }
 
 /**
@@ -135,12 +143,14 @@ export class Dispatcher {
   private readonly registry: Registry;
   private readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
   private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
+  private readonly vaultFor?: (appId: string) => VaultBridge;
   private readonly manifestCache = new Map<string, ManifestCacheEntry>();
 
   constructor(opts: DispatcherOptions) {
     this.registry = opts.registry;
     if (opts.onWriteFor) this.onWriteFor = opts.onWriteFor;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
+    if (opts.vaultFor) this.vaultFor = opts.vaultFor;
   }
 
   // --------- resolution helpers ---------
@@ -317,6 +327,7 @@ export class Dispatcher {
       args: { params: {}, body: handlerInput },
       timeoutMs: 30_000,
       ...(this.onWriteFor ? { onWrite: this.onWriteFor(appId) } : {}),
+      ...(this.vaultFor ? { vault: this.vaultFor(appId) } : {}),
     });
     if (!outcome.ok) {
       return errorResult('HANDLER_ERROR', outcome.error ?? 'action handler failed');
@@ -393,6 +404,7 @@ export class Dispatcher {
         input: handlerInput,
       },
       timeoutMs: 10_000,
+      ...(this.vaultFor ? { vault: this.vaultFor(appId) } : {}),
     });
     if (!outcome.ok) {
       return errorResult('HANDLER_ERROR', outcome.error ?? 'query handler failed');

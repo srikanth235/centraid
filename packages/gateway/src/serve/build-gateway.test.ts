@@ -75,6 +75,37 @@ test('the legacy backend reports no appsStore on the handle', () => {
   expect(gateway.appsStore).toBe(undefined);
 });
 
+test('mounts the vault plane when vaultDir is set, recovers it across rebuilds', async () => {
+  // The default gateway (no vaultDir) has no plane.
+  expect(gateway.vault).toBeUndefined();
+
+  const paths = { ...pathsUnder(dataDir), vaultDir: path.join(dataDir, 'vault') };
+  const withVault = await buildGateway({ paths });
+  try {
+    expect(withVault.vault).toBeDefined();
+    expect(withVault.vault?.boot.fresh).toBe(true);
+    // The owner consent surface answers through the composed chain.
+    const mounted = await mountUnauthed(withVault.composedHandler);
+    try {
+      const status = await (await fetch(`${mounted.url}/centraid/_vault/status`)).json();
+      expect(status).toMatchObject({ active: true, vaultId: withVault.vault?.boot.vaultId });
+    } finally {
+      await mounted.close();
+    }
+  } finally {
+    await withVault.stop();
+  }
+
+  // A rebuild over the same paths recovers the same vault, not a new one.
+  const again = await buildGateway({ paths });
+  try {
+    expect(again.vault?.boot.fresh).toBe(false);
+    expect(again.vault?.boot.vaultId).toBe(withVault.vault?.boot.vaultId);
+  } finally {
+    await again.stop();
+  }
+});
+
 test('composedHandler dispatches runtime routes with NO bearer check', async () => {
   await gateway.start('http://127.0.0.1:0');
   const srv = await mountUnauthed(gateway.composedHandler);

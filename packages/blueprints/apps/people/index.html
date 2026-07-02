@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>People</title>
+    <script>
+      // Centraid live settings bridge — see the todos blueprint for the
+      // full story: runtime bakes theme server-side; this handles the
+      // no-bake preview path and live pref flips over postMessage.
+      (function () {
+        var h = document.documentElement;
+        function applyTheme(t, b) {
+          if (t === 'dark' || t === 'light') h.dataset.theme = t;
+          if (b != null && b !== '') h.style.setProperty('--bg-l', b + '%');
+        }
+        function applySettings(s) {
+          if (s.dataAttrs) {
+            for (var k in s.dataAttrs) h.setAttribute('data-' + k, s.dataAttrs[k]);
+          }
+          if (s.cssVars) {
+            for (var k in s.cssVars) h.style.setProperty('--' + k, s.cssVars[k]);
+          }
+        }
+        try {
+          var p = new URLSearchParams((location.hash || '').slice(1));
+          applyTheme(p.get('theme'), p.get('bgL'));
+        } catch (_) {}
+        addEventListener('message', function (e) {
+          var d = e && e.data;
+          if (!d) return;
+          if (d.type === 'centraid:settings') applySettings(d);
+          else if (d.type === 'centraid:theme') applyTheme(d.theme, d.bgL);
+        });
+      })();
+    </script>
+    <link rel="stylesheet" href="wall.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main>
+      <header class="head">
+        <div>
+          <h1>People</h1>
+          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+        </div>
+      </header>
+
+      <div id="consentBanner" class="banner" hidden>
+        <strong>No vault access yet.</strong>
+        <span id="consentDetail"
+          >Ask the owner to approve this app's requested scopes in vault settings.</span
+        >
+      </div>
+      <div id="noticeBanner" class="banner notice" hidden></div>
+
+      <input id="searchInput" type="text" placeholder="Search people…" aria-label="Search people" />
+
+      <form id="cardForm" class="card-form" autocomplete="off" hidden>
+        <p id="cardFormTitle" class="muted small"></p>
+        <input id="nicknameInput" type="text" placeholder="Nickname" aria-label="Nickname" />
+        <input id="noteInput" type="text" placeholder="Note" aria-label="Note" />
+        <div class="card-form-actions">
+          <label class="favorite-label"
+            ><input id="favoriteInput" type="checkbox" /> Favorite</label
+          >
+          <button type="button" id="cancelCard" class="ghost">Cancel</button>
+          <button type="submit" class="primary">Save card</button>
+        </div>
+      </form>
+
+      <section id="peopleList" aria-label="People"></section>
+      <p id="empty" class="empty" hidden>
+        No people yet. Parties arrive through the vault — resolve a handle or import contacts
+        through the vault's ingest.
+      </p>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

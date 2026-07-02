@@ -1,0 +1,63 @@
+{
+  "manifestVersion": 1,
+  "id": "tasks",
+  "name": "Tasks",
+  "description": "A Things-style task list as a read-only projection of the personal vault: canonical tasks from schedule.task, nothing stored here. Typed task commands are a future command pack, so this blueprint deliberately ships no actions — it is a window, not a pen.",
+  "version": "0.1.0",
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Shows your canonical task list.",
+    "scopes": [{ "schema": "schedule", "table": "task", "verbs": "read" }]
+  },
+  "actions": [],
+  "queries": [
+    {
+      "name": "list",
+      "description": "All tasks from schedule.task: open ones first, then by due date ascending with undated tasks last.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tasks": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        { "value": "sans", "label": "Sans" },
+        { "value": "serif", "label": "Serif" },
+        { "value": "mono", "label": "Mono" }
+      ]
+    },
+    {
+      "key": "appWidth",
+      "label": "Width",
+      "type": "segmented",
+      "default": "narrow",
+      "options": [
+        { "value": "narrow", "label": "Narrow" },
+        { "value": "wide", "label": "Wide" }
+      ]
+    },
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#2EA098",
+      "options": [
+        { "value": "#4E68DD", "label": "Indigo" },
+        { "value": "#2EA098", "label": "Teal" },
+        { "value": "#7C5BD9", "label": "Violet" },
+        { "value": "#E55772", "label": "Rose" },
+        { "value": "#B47B3F", "label": "Ochre" }
+      ]
+    }
+  ]
+}

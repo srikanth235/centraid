@@ -127,6 +127,7 @@
         "@centraid/design-tokens": "workspace:*",
       },
       "devDependencies": {
+        "@centraid/app-engine": "workspace:*",
         "@centraid/tsconfig": "workspace:*",
         "@types/node": "^22.0.0",
         "typescript": "catalog:",
@@ -152,6 +153,7 @@
         "@centraid/automation": "workspace:*",
         "@centraid/blueprints": "workspace:*",
         "@centraid/skills": "workspace:*",
+        "@centraid/vault": "workspace:*",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
@@ -194,6 +196,18 @@
     "packages/tsconfig": {
       "name": "@centraid/tsconfig",
       "version": "0.0.0",
+    },
+    "packages/vault": {
+      "name": "@centraid/vault",
+      "version": "0.1.0",
+      "dependencies": {
+        "uuid": "^14.0.0",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "typescript": "catalog:",
+      },
     },
   },
   "catalog": {
@@ -527,6 +541,8 @@
     "@centraid/skills": ["@centraid/skills@workspace:packages/skills"],
 
     "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
+
+    "@centraid/vault": ["@centraid/vault@workspace:packages/vault"],
 
     "@chevrotain/types": ["@chevrotain/types@11.1.2", "", {}, "sha512-U+HFai5+zmJCkK86QsaJtoITlboZHBqrVketcO2ROv865xfCMSFpELQoz1GkX5GzME8pTa+3kbKrZHQtI0gdbw=="],
 
