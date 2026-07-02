@@ -31,12 +31,12 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # don't litter the consumer repo with __pycache__
 
 try:
-    import receipt_io as rio  # type: ignore
-    from ledger import parse_costs  # type: ignore
+    import receipt_io as rio
+    from ledger import parse_costs
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import receipt_io as rio  # type: ignore
-    from ledger import parse_costs  # type: ignore
+    import receipt_io as rio
+    from ledger import parse_costs
 
 _RECEIPT_RE = re.compile(r"^issue-([1-9][0-9]*)(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?\.md$")
 

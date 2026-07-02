@@ -158,7 +158,7 @@ def _parse_rate_rows(path: str) -> dict[str, tuple[float, float, float, float]]:
                 raise ValueError(
                     f"{path}:{lineno}: rate row for {model!r} has a non-numeric price"
                 ) from None
-            out[model] = nums  # type: ignore[assignment]
+            out[model] = nums
     return out
 
 
