@@ -17,10 +17,10 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 
 try:
-    from ledger import parse_costs  # type: ignore
+    from ledger import parse_costs
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from ledger import parse_costs  # type: ignore
+    from ledger import parse_costs
 
 
 INT_FIELDS = ("input", "cache_create", "cache_read", "output")

@@ -20,20 +20,20 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 
 try:
-    import receipt_io as rio  # type: ignore
-    from ledger import (  # type: ignore
+    import receipt_io as rio
+    from ledger import (
         V3_COLS, V4_COLS, _ISSUE_RE, _INT_RE, _FLOAT_RE,
         _issue_from_name, parse_costs, parse_all_costs,
     )
-    from reconcile import reconcile_sessions  # type: ignore
+    from reconcile import reconcile_sessions
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import receipt_io as rio  # type: ignore
-    from ledger import (  # type: ignore
+    import receipt_io as rio
+    from ledger import (
         V3_COLS, V4_COLS, _ISSUE_RE, _INT_RE, _FLOAT_RE,
         _issue_from_name, parse_costs, parse_all_costs,
     )
-    from reconcile import reconcile_sessions  # type: ignore
+    from reconcile import reconcile_sessions
 
 
 def _validate_row_cells(

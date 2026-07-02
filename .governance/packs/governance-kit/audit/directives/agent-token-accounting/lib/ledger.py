@@ -67,14 +67,14 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 
 try:
-    from rates import compute_cost_usd  # type: ignore
-    import receipt_io as rio  # type: ignore
-    from reconcile import checkpoint_get, checkpoint_set  # type: ignore
+    from rates import compute_cost_usd
+    import receipt_io as rio
+    from reconcile import checkpoint_get, checkpoint_set
 except ModuleNotFoundError:  # pragma: no cover — import fallback when run as a module
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from rates import compute_cost_usd  # type: ignore
-    import receipt_io as rio  # type: ignore
-    from reconcile import checkpoint_get, checkpoint_set  # type: ignore
+    from rates import compute_cost_usd
+    import receipt_io as rio
+    from reconcile import checkpoint_get, checkpoint_set
 
 
 COLUMNS = (
@@ -286,7 +286,7 @@ def session_cum(rows: list[LedgerRow], session: str) -> tuple[int, int, int, int
     for r in rows:
         if r.session != session or not r.has_cum:
             continue
-        if best is None or r.cum_total > best.cum_total:  # type: ignore[operator]
+        if best is None or r.cum_total > best.cum_total:
             best = r
     if best is None:
         return (0, 0, 0, 0)
