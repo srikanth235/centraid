@@ -78,6 +78,16 @@
         </div>
       </form>
 
+      <!-- One shared file input for the whole ledger; a row's receipt button
+           sets the target transaction, then triggers this. -->
+      <input
+        id="attachInput"
+        type="file"
+        multiple
+        hidden
+        aria-label="Snap a receipt onto a transaction"
+      />
+
       <section id="txnSection" aria-label="Transactions">
         <p class="day-label muted small">Transactions</p>
         <div id="txnList"></div>

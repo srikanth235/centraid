@@ -202,23 +202,29 @@ button {
   white-space: nowrap;
 }
 
-/* Message bubbles. Every bubble is left-aligned with its sender named —
-   the vault rows carry no owner flag, and we don't invent one. `.msg.mine`
-   stays defined for a future owner-aware projection. */
+/* Message bubbles. Alignment comes from the query's `mine` flag — the
+   owner party read from core.vault — so "my side" is a vault fact. Runs of
+   the same sender group: the name shows once per run, on their side. */
 .msg {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.6rem;
 }
 
-.msg.mine {
+.msg[data-mine='true'] {
   align-items: flex-end;
 }
 
-.msg-meta {
+.msg-sender {
   margin: 0 0 0.2rem;
   font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.msg-meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.68rem;
   color: var(--ink-faint);
 }
 
@@ -236,7 +242,7 @@ button {
   white-space: pre-wrap;
 }
 
-.msg.mine .msg-body {
+.msg[data-mine='true'] .msg-body {
   border-bottom-left-radius: 1rem;
   border-bottom-right-radius: 0.25rem;
   background: var(--app-color, var(--accent));
@@ -247,6 +253,13 @@ button {
 .msg[data-delivery='draft'] .msg-body {
   border-style: dashed;
   color: var(--ink-soft);
+}
+
+.msg[data-mine='true'][data-delivery='draft'] .msg-body {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 18%, transparent);
+  border-style: dashed;
+  border-color: var(--app-color, var(--accent));
+  color: var(--ink);
 }
 
 /* ---------- Compose ---------- */
@@ -288,6 +301,119 @@ button {
   font-size: 0.9rem;
   text-align: center;
   padding: 2rem 0;
+}
+
+/* ---------- Attachments (shared pattern across apps) ---------- */
+
+.ghost {
+  border-radius: 0.625rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.75rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ghost:hover {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+.small-btn {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+}
+
+.attach-block {
+  margin-top: 1rem;
+}
+
+.attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.attach-strip:empty {
+  display: none;
+}
+
+.attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--app-color, var(--accent));
+  word-break: break-word;
+  text-decoration: none;
+}
+
+.attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 0.6rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 0.05rem 0;
+}
+
+.attach-remove {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-add {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.attach-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.attach-add .ghost {
+  display: inline-block;
 }
 
 /* ---------- App-level knobs ---------- */

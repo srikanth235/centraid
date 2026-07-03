@@ -9726,6 +9726,176 @@ select.input option {
   background: color-mix(in srgb, var(--danger, #e25555) 10%, transparent);
 }
 
+/* Vault tab (duaility §12) — the per-app owner consent surface: the
+ * manifest-requested scopes, the grant/revoke act, and invocations
+ * parked for the owner's say-so. */
+.cd-vault-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-4);
+}
+.cd-vault-why {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.cd-vault-scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cd-vault-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+.cd-vault-scope-verbs {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-4);
+}
+.cd-vault-scope[data-verbs='read+act'] .cd-vault-scope-verbs,
+.cd-vault-scope[data-verbs='act'] .cd-vault-scope-verbs {
+  color: var(--accent);
+}
+.cd-vault-purpose {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
+.cd-vault-grants {
+  border-top: 0.5px solid var(--line);
+  padding-top: 12px;
+  margin-top: 2px;
+}
+.cd-vault-grant-btn {
+  align-self: flex-start;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink, #fff);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cd-vault-grant-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.cd-vault-grant-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.cd-vault-grant-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cd-vault-grant-text {
+  min-width: 0;
+  flex: 1;
+}
+.cd-vault-grant-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-1, var(--ink));
+}
+.cd-vault-grant-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  margin-top: 2px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.cd-vault-revoke-btn,
+.cd-vault-deny-btn {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cd-vault-revoke-btn:disabled,
+.cd-vault-deny-btn:disabled,
+.cd-vault-approve-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.cd-vault-parked {
+  border-top: 0.5px solid var(--line);
+  padding-top: 12px;
+}
+.cd-vault-parked-card {
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cd-vault-parked-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cd-vault-parked-command {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-1, var(--ink));
+}
+.cd-vault-parked-when {
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.cd-vault-parked-input {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cd-vault-parked-actions {
+  display: flex;
+  gap: 8px;
+}
+.cd-vault-approve-btn {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink, #fff);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* Run audit (issue #80). The "Runs" link in the foot expands a
  * per-automation history panel below the card. Newest run first;
  * clicking a run expands its node timeline. */

@@ -2,8 +2,8 @@
   "manifestVersion": 1,
   "id": "people",
   "name": "People",
-  "description": "The vault's single identity anchor rendered as a contacts app: every person, org, and agent is a core.party, their handles live in core.party_identifier, and enrichment (nickname, note, favorite) sits in social.contact_card. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.0",
+  "description": "The vault's single identity anchor rendered as a contacts app: every person, org, and agent is a core.party, their handles live in core.party_identifier, and enrichment (nickname, note, favorite) sits in social.contact_card. Handles bind through resolve_identity, and composing runs the full draft-then-send lifecycle — sending is risk-high, so it parks for the owner's confirmation. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.3.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows the people in your life and keeps their cards current.",
@@ -21,6 +21,26 @@
         "schema": "core",
         "table": "party_identifier",
         "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_item",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "attachment",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "attach",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "detach",
+        "verbs": "act"
       }
     ]
   },
@@ -49,6 +69,205 @@
           }
         },
         "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "resolve-identity",
+      "description": "Bind an email, tel, or handle to a party through social.resolve_identity — one identity per handle, with retroactive backfill of unresolved thread participants and messages.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scheme": {
+            "type": "string",
+            "enum": ["email", "tel", "handle"]
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": ["party_id", "scheme", "value"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "draft-message",
+      "description": "Compose a draft to a party through social.draft_message — opens (or reuses) a thread and stores the body as a deduped content item; delivery stays 'draft' until send-message releases it. Risk medium: under the app's default low risk ceiling this parks for owner confirmation too.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "recipient_party_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["sms", "email", "dm", "group"]
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": ["recipient_party_id", "body_text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "send-message",
+      "description": "Release a draft for delivery through social.send_message. Risk-high: invoked by an app it parks for the owner's confirmation, so the returned status is 'parked' with the invocation id, not 'executed'.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["message_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "invocationId": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "attach",
+      "description": "Pin a file (image, PDF, any media) to a person through core.attach; bytes are stored as a deduped canonical content item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "data_uri": {
+            "type": "string",
+            "minLength": 6
+          },
+          "title": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "photo",
+              "manual",
+              "receipt",
+              "warranty",
+              "contract",
+              "embed",
+              "other"
+            ]
+          }
+        },
+        "required": ["subject_id", "data_uri"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "detach",
+      "description": "Remove a file from a person through core.detach; the canonical content item is kept.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "attachment_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["attachment_id"],
         "additionalProperties": false
       },
       "output": {

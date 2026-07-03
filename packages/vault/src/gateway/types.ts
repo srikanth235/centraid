@@ -77,6 +77,24 @@ export type InvokeOutcome =
     }
   | { status: 'replayed'; invocationId: string; output: unknown };
 
+/**
+ * One invocation awaiting owner confirmation, as the consent surface lists
+ * it. `caller` is the display name — consent.app.name for apps, the
+ * agent's core.party display name for agents — so an approval UI can say
+ * WHO wants the act; `input` is the command input so it can say WHAT.
+ * The pause between draft and send is only meaningful when the owner can
+ * read what they're confirming.
+ */
+export interface ParkedSummary {
+  invocationId: string;
+  command: string;
+  parkedAt: string;
+  callerKind: Identity['kind'];
+  /** Display name of the caller (consent.app.name for apps), or null. */
+  caller: string | null;
+  input: Record<string, unknown>;
+}
+
 /** Declarative pre/postcondition stored in agent.command *_json (§03). */
 export interface ConditionSpec {
   name: string;

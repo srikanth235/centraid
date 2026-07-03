@@ -98,9 +98,143 @@ main {
   display: block;
 }
 
+.banner.notice {
+  border-left-color: var(--ink-faint);
+  color: var(--ink-soft);
+}
+
 button {
   font: inherit;
   cursor: pointer;
+}
+
+/* ---------- Inputs & write affordances ---------- */
+
+input[type='text'],
+textarea,
+select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  -webkit-appearance: none;
+}
+
+input[type='text']:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+select {
+  width: auto;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  padding: 0.3rem 0.5rem;
+}
+
+.primary {
+  border-radius: 0.625rem;
+  border: none;
+  background: var(--app-color, var(--accent));
+  color: #fff;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.small-btn {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+}
+
+.ghost {
+  border-radius: 0.625rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.75rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ghost:hover {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+#quickAdd {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+#quickAddMore {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+#quickAddMore[hidden] {
+  display: none;
+}
+
+.quick-add-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.quick-add-actions span {
+  margin-right: auto;
+}
+
+.inline-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.inline-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chip-add {
+  border-style: dashed;
+  color: var(--ink-faint);
+}
+
+.note-view-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.note-view-actions {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+#editForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
 
 /* Notebook filter chips — client-side, "All" plus one per notebook. */
@@ -219,6 +353,100 @@ button {
   margin-top: 2rem;
   text-align: center;
   color: var(--ink-faint);
+}
+
+
+/* ---------- Attachments (shared pattern across apps) ---------- */
+
+.attach-block {
+  margin-top: 1rem;
+}
+
+.attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.attach-strip:empty {
+  display: none;
+}
+
+.attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--app-color, var(--accent));
+  word-break: break-word;
+  text-decoration: none;
+}
+
+.attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 0.6rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 0.05rem 0;
+}
+
+.attach-remove {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-add {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.attach-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.attach-add .ghost {
+  display: inline-block;
 }
 
 /* ---------- App-level knobs ---------- */

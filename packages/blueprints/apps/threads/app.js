@@ -54,6 +54,112 @@ function notice(text) {
   el.hidden = !text;
 }
 
+// One narration for every action outcome; returns true when it executed.
+function narrate(outcome, onDenied) {
+  if (outcome?.status === 'executed') {
+    notice('');
+    return true;
+  }
+  if (outcome?.status === 'parked') {
+    notice('Sent to the owner for confirmation — it lands once approved.');
+  } else if (outcome?.status === 'failed') {
+    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
+  } else if (outcome?.status === 'denied') {
+    notice(`Denied by consent: ${outcome.reason ?? ''}`);
+    if (onDenied) onDenied();
+  }
+  return false;
+}
+
+async function act(action, input) {
+  try {
+    return await window.centraid.write({ action, input });
+  } catch (err) {
+    notice(String(err?.message ?? err));
+    return undefined;
+  }
+}
+
+// ---------- Attachments (shared pattern across apps) ----------
+// Read a File as a base64 data: URI — the vault stores bytes inline, so the
+// browser does the encoding before the data ever leaves the app.
+function fileToDataUri(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+function fmtBytes(n) {
+  if (!n) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Render an attachment strip: images as thumbnails, everything else as a
+// download tile, each with a remove control wired to the detach action.
+function renderAttachments(stripEl, list, onRemove) {
+  stripEl.innerHTML = '';
+  for (const a of list ?? []) {
+    const tile = document.createElement('div');
+    tile.className = 'attach-tile';
+    if (String(a.media_type).startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = a.content_uri;
+      img.alt = a.title ?? 'attachment';
+      tile.appendChild(img);
+    } else {
+      const link = document.createElement('a');
+      link.className = 'attach-file';
+      link.href = a.content_uri;
+      link.download = a.title ?? 'file';
+      link.textContent = (a.title ?? a.media_type ?? 'file').slice(0, 24);
+      tile.appendChild(link);
+    }
+    const meta = document.createElement('span');
+    meta.className = 'attach-meta';
+    meta.textContent = fmtBytes(a.byte_size);
+    tile.appendChild(meta);
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'attach-remove';
+    rm.textContent = '×';
+    rm.title = 'Remove';
+    rm.addEventListener('click', () => onRemove(a.attachment_id));
+    tile.appendChild(rm);
+    stripEl.appendChild(tile);
+  }
+}
+
+// Wire a file <input> so each chosen file is attached to the current subject.
+function wireAttachInput(inputEl, getSubjectId) {
+  inputEl.addEventListener('change', async () => {
+    const subjectId = getSubjectId();
+    if (!subjectId) return;
+    for (const file of [...inputEl.files]) {
+      let dataUri;
+      try {
+        dataUri = await fileToDataUri(file);
+      } catch {
+        notice('Could not read that file.');
+        continue;
+      }
+      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      if (!narrate(outcome, refresh)) break;
+    }
+    inputEl.value = '';
+    await refresh();
+  });
+}
+
+async function removeAttachment(attachmentId) {
+  const outcome = await act('detach', { attachment_id: attachmentId });
+  if (narrate(outcome, refresh)) await refresh();
+}
+
 function showInbox() {
   currentThread = null;
   draftMessageId = null;
@@ -143,36 +249,48 @@ async function loadThread() {
     $('consentDetail').textContent = denied.message ?? '';
     $('messageList').innerHTML = '';
     $('emptyThread').hidden = true;
+    renderAttachments($('attachStrip'), [], removeAttachment);
     return;
   }
   renderMessages(data?.messages ?? []);
+  renderAttachments($('attachStrip'), data?.attachments ?? [], removeAttachment);
 }
 
 function renderMessages(messages) {
   const list = $('messageList');
   list.innerHTML = '';
   $('emptyThread').hidden = messages.length > 0;
+  let prev = null;
   for (const m of messages) {
-    // No owner flag on the row, so every bubble renders left-aligned with
-    // its sender named — we never invent an "is mine" the vault didn't say.
+    // `mine` comes from the query comparing the sender against the vault's
+    // owner party — alignment is a fact read from the vault, not a guess.
     const msg = document.createElement('div');
     msg.className = 'msg';
     msg.dataset.delivery = m.delivery;
-    const meta = document.createElement('p');
-    meta.className = 'msg-meta muted small';
-    meta.textContent = `${m.sender} · ${fmtTime(m.sent_at)}${
-      m.delivery === 'draft' ? ' · draft' : ''
-    }`;
+    msg.dataset.mine = String(Boolean(m.mine));
+    const grouped = prev && prev.sender_party_id === m.sender_party_id;
+    if (!grouped && !m.mine) {
+      const who = document.createElement('p');
+      who.className = 'msg-sender muted small';
+      who.textContent = m.sender;
+      msg.appendChild(who);
+    }
     const bubble = document.createElement('p');
     bubble.className = 'msg-body';
     bubble.textContent = m.body;
-    msg.append(meta, bubble);
+    const meta = document.createElement('p');
+    meta.className = 'msg-meta muted small';
+    meta.textContent = `${fmtTime(m.sent_at)}${m.delivery === 'draft' ? ' · draft' : ''}`;
+    msg.append(bubble, meta);
     list.appendChild(msg);
+    prev = m;
   }
   list.scrollTop = list.scrollHeight;
 }
 
 $('backBtn').addEventListener('click', showInbox);
+
+wireAttachInput($('attachInput'), () => currentThread?.thread_id);
 
 $('composeForm').addEventListener('submit', async (e) => {
   e.preventDefault();

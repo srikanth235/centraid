@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Leads</title>
+    <script>
+      // Centraid live settings bridge — see the todos blueprint for the
+      // full story: runtime bakes theme server-side; this handles the
+      // no-bake preview path and live pref flips over postMessage.
+      (function () {
+        var h = document.documentElement;
+        function applyTheme(t, b) {
+          if (t === 'dark' || t === 'light') h.dataset.theme = t;
+          if (b != null && b !== '') h.style.setProperty('--bg-l', b + '%');
+        }
+        function applySettings(s) {
+          if (s.dataAttrs) {
+            for (var k in s.dataAttrs) h.setAttribute('data-' + k, s.dataAttrs[k]);
+          }
+          if (s.cssVars) {
+            for (var k in s.cssVars) h.style.setProperty('--' + k, s.cssVars[k]);
+          }
+        }
+        try {
+          var p = new URLSearchParams((location.hash || '').slice(1));
+          applyTheme(p.get('theme'), p.get('bgL'));
+        } catch (_) {}
+        addEventListener('message', function (e) {
+          var d = e && e.data;
+          if (!d) return;
+          if (d.type === 'centraid:settings') applySettings(d);
+          else if (d.type === 'centraid:theme') applyTheme(d.theme, d.bgL);
+        });
+      })();
+    </script>
+    <link rel="stylesheet" href="wall.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main>
+      <header class="head">
+        <div>
+          <h1>Leads</h1>
+          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+        </div>
+      </header>
+
+      <div id="consentBanner" class="banner" hidden>
+        <strong>No vault access yet.</strong>
+        <span id="consentDetail"
+          >Ask the owner to approve this app's requested scopes in vault settings.</span
+        >
+      </div>
+      <div id="noticeBanner" class="banner notice" hidden></div>
+
+      <div id="live">
+        <form id="addForm" class="panel" autocomplete="off">
+          <div class="field-row">
+            <select id="candidateSelect" aria-label="Party"></select>
+            <input id="currencyInput" type="text" value="EUR" maxlength="3" aria-label="Currency" class="currency" />
+            <button type="submit" class="primary small-btn">Add lead</button>
+          </div>
+          <p class="muted small">
+            Leads are people from your vault — add them in People first if they aren't listed.
+          </p>
+        </form>
+
+        <div id="board" class="board"></div>
+        <p id="empty" class="empty" hidden>
+          No leads yet. Add your first prospect above.
+        </p>
+      </div>
+
+      <input id="attachInput" type="file" multiple hidden aria-hidden="true" />
+
+      <p class="muted small footnote">
+        Every write is a typed vault command — consent-checked and receipted.
+      </p>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

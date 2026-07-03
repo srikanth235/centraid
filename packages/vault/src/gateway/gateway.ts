@@ -36,6 +36,7 @@ import type {
   Identity,
   InvokeOutcome,
   InvokeRequest,
+  ParkedSummary,
   ReadRequest,
   ReadResult,
   Risk,
@@ -452,12 +453,30 @@ export class Gateway {
     return exportVault(this.db, owner);
   }
 
-  listParked(): { invocationId: string; command: string; parkedAt: string }[] {
+  listParked(): ParkedSummary[] {
     return [...this.parked.entries()].map(([invocationId, p]) => ({
       invocationId,
       command: p.command.name,
       parkedAt: p.parkedAt,
+      callerKind: p.identity.kind,
+      caller: this.callerName(p.identity),
+      input: p.request.input,
     }));
+  }
+
+  /** Display name for a parked caller — WHO wants the act, for the owner. */
+  private callerName(identity: Identity): string | null {
+    if (identity.kind === 'owner-device') return 'owner';
+    const byApp = identity.kind === 'app';
+    const row = this.db.vault
+      .prepare(
+        byApp
+          ? 'SELECT name FROM consent_app WHERE app_id = ?'
+          : `SELECT p.display_name AS name FROM agent_agent a
+               JOIN core_party p ON p.party_id = a.party_id WHERE a.agent_id = ?`,
+      )
+      .get(identity.callerId) as { name: string } | undefined;
+    return row?.name ?? null;
   }
 }
 

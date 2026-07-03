@@ -7,6 +7,7 @@ import {
   gatewayCodeStoreDir,
   gatewayIdentityDb,
   gatewayModelCatalogFile,
+  gatewayVaultDir,
 } from './gateway-paths.js';
 import { setLocalGatewayInfoProvider } from './gateway-store.js';
 import { desktopSessionIdFor } from './app-sessions.js';
@@ -111,6 +112,11 @@ export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServ
         // `GET /centraid/_templates` route resolves bundle-or-cache from
         // this per-gateway cache dir, matching the old desktop IPC.
         templatesCacheDir: templatesCacheDir(gatewayId),
+        // Personal vault (duaility §12): mounting the vault plane is what
+        // makes the projection blueprints live — live apps enroll on
+        // publish, handlers reach the canon through `ctx.vault`, and the
+        // owner consent surface serves under `/centraid/_vault/*`.
+        vaultDir: gatewayVaultDir(gatewayId),
         ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
       },
       // Issue #137: the local gateway owns app code as a git store too,

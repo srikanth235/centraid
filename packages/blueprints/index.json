@@ -2,36 +2,12 @@
   "manifestVersion": 1,
   "templates": [
     {
-      "id": "hydrate",
-      "name": "Hydrate",
-      "desc": "Track 8 cups a day.",
-      "colorKey": "indigo",
-      "iconKey": "Water",
-      "version": "0.1.0"
-    },
-    {
-      "id": "todos",
-      "name": "Todos",
-      "desc": "Capture and clear small things.",
-      "colorKey": "violet",
-      "iconKey": "Todo",
-      "version": "0.1.0"
-    },
-    {
-      "id": "journal",
-      "name": "Journal",
-      "desc": "A clean place to write each day.",
-      "colorKey": "amber",
-      "iconKey": "Journal",
-      "version": "0.1.0"
-    },
-    {
       "id": "agenda",
       "name": "Agenda",
       "desc": "Your calendar, projected from the vault.",
       "colorKey": "indigo",
       "iconKey": "Calendar",
-      "version": "0.1.0"
+      "version": "0.3.0"
     },
     {
       "id": "vitals",
@@ -39,7 +15,7 @@
       "desc": "Log and follow your vital signs.",
       "colorKey": "rose",
       "iconKey": "Activity",
-      "version": "0.1.0"
+      "version": "0.3.0"
     },
     {
       "id": "budgets",
@@ -47,23 +23,23 @@
       "desc": "Categorize spending, keep budgets honest.",
       "colorKey": "amber",
       "iconKey": "Coin",
-      "version": "0.1.0"
+      "version": "0.3.0"
     },
     {
       "id": "tasks",
       "name": "Tasks",
-      "desc": "Your canonical task list, read-only for now.",
+      "desc": "A Things-style task manager over your vault's canonical tasks.",
       "colorKey": "teal",
       "iconKey": "Check",
-      "version": "0.1.0"
+      "version": "0.3.0"
     },
     {
       "id": "people",
       "name": "People",
-      "desc": "Everyone in your life, one identity each.",
+      "desc": "Everyone in your life, one identity each — link handles, compose, send with consent.",
       "colorKey": "violet",
       "iconKey": "Users",
-      "version": "0.1.0"
+      "version": "0.3.0"
     },
     {
       "id": "threads",
@@ -71,15 +47,15 @@
       "desc": "Messages that wait for your say-so to send.",
       "colorKey": "indigo",
       "iconKey": "Send",
-      "version": "0.1.0"
+      "version": "0.3.0"
     },
     {
       "id": "notes",
       "name": "Notes",
-      "desc": "Your notebooks, projected from the vault.",
+      "desc": "Write, file and pin notes over your vault's canonical content.",
       "colorKey": "forest",
       "iconKey": "Book",
-      "version": "0.1.0"
+      "version": "0.3.0"
     },
     {
       "id": "photos",
@@ -95,14 +71,38 @@
       "desc": "What you own, where it lives, what covers it.",
       "colorKey": "slate",
       "iconKey": "Home",
-      "version": "0.1.0"
+      "version": "0.2.0"
     },
     {
       "id": "studio",
       "name": "Studio",
-      "desc": "Clients, projects, time, and invoices.",
+      "desc": "Run the whole freelance loop: clients, time, invoices, payment.",
       "colorKey": "teal",
       "iconKey": "Clock",
+      "version": "0.3.0"
+    },
+    {
+      "id": "bookings",
+      "name": "Bookings",
+      "desc": "Take and confirm client bookings against your availability.",
+      "colorKey": "indigo",
+      "iconKey": "Calendar",
+      "version": "0.1.0"
+    },
+    {
+      "id": "subscriptions",
+      "name": "Subscriptions",
+      "desc": "Every recurring charge and what it costs you per month.",
+      "colorKey": "ochre",
+      "iconKey": "Coin",
+      "version": "0.1.0"
+    },
+    {
+      "id": "leads",
+      "name": "Leads",
+      "desc": "A pipeline for your prospects — enrol, advance, note.",
+      "colorKey": "rose",
+      "iconKey": "Users",
       "version": "0.1.0"
     },
     {

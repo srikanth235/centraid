@@ -42,7 +42,7 @@
       <header class="head">
         <div>
           <h1>Studio</h1>
-          <p id="subtitle" class="muted">A read-only projection of your vault.</p>
+          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
         </div>
       </header>
 
@@ -52,24 +52,95 @@
           >Ask the owner to approve this app's requested scopes in vault settings.</span
         >
       </div>
+      <div id="noticeBanner" class="banner notice" hidden></div>
 
-      <p class="day-label muted small">Invoices</p>
+      <div class="section-head">
+        <p class="day-label muted small">Log time</p>
+      </div>
+      <form id="timeForm" class="panel" autocomplete="off">
+        <div class="field-row">
+          <select id="timeProject" aria-label="Project"></select>
+          <input id="timeDate" type="date" aria-label="Date" />
+          <input id="timeStart" type="time" value="09:00" aria-label="Start" />
+          <span class="muted small">→</span>
+          <input id="timeEnd" type="time" value="10:00" aria-label="End" />
+        </div>
+        <div class="field-row">
+          <input id="timeNote" type="text" placeholder="What did you work on?" aria-label="Note" />
+          <button type="submit" class="primary small-btn">Log</button>
+        </div>
+      </form>
+
+      <div class="section-head">
+        <p class="day-label muted small">Unbilled time</p>
+      </div>
+      <section id="unbilledList" aria-label="Unbilled time"></section>
+      <form id="invoiceForm" class="panel" autocomplete="off" hidden>
+        <div class="field-row">
+          <span id="invoiceSummary" class="muted small"></span>
+          <label class="muted small" for="invoiceDue">Due</label>
+          <input id="invoiceDue" type="date" aria-label="Due date" />
+          <button type="submit" class="primary small-btn">Draft invoice</button>
+        </div>
+      </form>
+
+      <div class="section-head">
+        <p class="day-label muted small">Invoices</p>
+      </div>
       <section id="invoiceList" aria-label="Invoices"></section>
+      <input id="attachInput" type="file" multiple hidden aria-hidden="true" />
+      <div id="payPanel" class="panel" hidden>
+        <p id="payTitle" class="muted small"></p>
+        <div class="field-row">
+          <select id="paySelect" aria-label="Incoming payment"></select>
+          <button type="button" id="payButton" class="primary small-btn">Mark paid</button>
+          <button type="button" id="payCancel" class="ghost">Cancel</button>
+        </div>
+        <p class="muted small">
+          Settles against a posted incoming transaction already in your vault — Studio links the
+          ledger, it never invents money. No matching deposit yet? It arrives with your bank
+          activity.
+        </p>
+      </div>
 
-      <p class="day-label muted small">Projects</p>
+      <div class="section-head">
+        <p class="day-label muted small">Projects</p>
+        <button type="button" id="addProjectButton" class="ghost">+ Project</button>
+      </div>
+      <form id="projectForm" class="panel" autocomplete="off" hidden>
+        <div class="field-row">
+          <select id="projectClient" aria-label="Client"></select>
+          <input id="projectName" type="text" placeholder="Project name…" aria-label="Project name" />
+          <button type="submit" class="primary small-btn">Add</button>
+        </div>
+      </form>
       <section id="projectList" aria-label="Projects"></section>
 
-      <p class="day-label muted small">Clients</p>
+      <div class="section-head">
+        <p class="day-label muted small">Clients</p>
+        <button type="button" id="addClientButton" class="ghost">+ Client</button>
+      </div>
+      <form id="clientForm" class="panel" autocomplete="off" hidden>
+        <div class="field-row">
+          <select id="clientParty" aria-label="Party"></select>
+          <input id="clientCurrency" type="text" value="EUR" maxlength="3" aria-label="Currency" class="currency" />
+          <input id="clientRate" type="number" min="0" step="0.01" placeholder="Rate/h" aria-label="Hourly rate" class="rate" />
+          <button type="submit" class="primary small-btn">Enroll</button>
+        </div>
+        <p class="muted small">
+          Clients are parties from your vault — add the person or company in People first if they
+          aren't listed.
+        </p>
+      </form>
       <section id="clientList" aria-label="Clients"></section>
 
       <p id="empty" class="empty" hidden>
-        Nothing here yet — the studio fills in as clients, projects, and invoices are recorded in
-        the vault.
+        Nothing here yet — enroll a client, open a project, and log your first hours.
       </p>
 
       <p class="muted small footnote">
-        Billing actions arrive with the business domain's command pack — until then this page only
-        reads.
+        Every write is a typed vault command — drafting an invoice awaits the owner's confirmation,
+        and sending one always does.
       </p>
     </main>
     <script type="module" src="app.js"></script>

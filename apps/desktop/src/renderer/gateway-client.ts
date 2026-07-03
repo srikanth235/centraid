@@ -492,3 +492,8 @@ export * from './gateway-client-editing.js';
 // lives in `gateway-client-conversation.ts` (issue #141, Phase 3). Re-exported here
 // so the chat panel imports it from the same barrel.
 export * from './gateway-client-conversation.js';
+
+// The owner consent surface over the mounted vault plane (duaility §12)
+// lives in `gateway-client-vault.ts`. Re-exported here so the per-app
+// Vault tab imports it from the same barrel.
+export * from './gateway-client-vault.js';

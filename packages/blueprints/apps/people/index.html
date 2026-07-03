@@ -67,6 +67,46 @@
           <button type="button" id="cancelCard" class="ghost">Cancel</button>
           <button type="submit" class="primary">Save card</button>
         </div>
+        <div class="handle-row">
+          <select id="schemeInput" aria-label="Handle kind">
+            <option value="email">Email</option>
+            <option value="tel">Phone</option>
+            <option value="handle">Handle</option>
+          </select>
+          <input id="handleValueInput" type="text" placeholder="Link a handle…" aria-label="Handle value" />
+          <button type="button" id="linkHandleBtn" class="ghost">Link</button>
+        </div>
+        <div id="attachBlock" class="attach-block">
+          <div id="attachStrip" class="attach-strip"></div>
+          <label class="attach-add">
+            <input id="attachInput" type="file" multiple hidden />
+            <span class="ghost small-btn">＋ Attach file</span>
+          </label>
+        </div>
+      </form>
+
+      <form id="composeForm" class="card-form" autocomplete="off" hidden>
+        <p id="composeTitle" class="muted small"></p>
+        <textarea
+          id="composeBody"
+          rows="3"
+          placeholder="Write a message…"
+          aria-label="Message body"
+        ></textarea>
+        <div class="card-form-actions">
+          <select id="channelInput" aria-label="Channel">
+            <option value="dm">DM</option>
+            <option value="sms">SMS</option>
+            <option value="email">Email</option>
+          </select>
+          <button type="button" id="cancelCompose" class="ghost">Cancel</button>
+          <button type="button" id="saveDraftBtn" class="ghost">Save draft</button>
+          <button type="submit" class="primary">Send</button>
+        </div>
+        <p class="muted small compose-hint">
+          Sending is high-risk in the vault: it waits for the owner's confirmation before the
+          draft is released.
+        </p>
       </form>
 
       <section id="peopleList" aria-label="People"></section>

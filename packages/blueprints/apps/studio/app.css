@@ -98,11 +98,144 @@ main {
   display: block;
 }
 
+.banner.notice {
+  border-left-color: var(--ink-faint);
+  color: var(--ink-soft);
+}
+
 .day-label {
   margin: 1rem 0 0.25rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.72rem;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* ---------- Write affordances ---------- */
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  -webkit-appearance: none;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+select {
+  color: var(--ink-soft);
+}
+
+.primary {
+  border-radius: 0.5rem;
+  border: none;
+  background: var(--app-color, var(--accent));
+  color: #fff;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.primary:disabled {
+  opacity: 0.4;
+}
+
+.small-btn {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+}
+
+.ghost {
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  padding: 0.25rem 0.6rem;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ghost:hover {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.field-row select {
+  flex: 1;
+  min-width: 8rem;
+}
+
+.field-row input[type='text'] {
+  flex: 1;
+  min-width: 8rem;
+}
+
+.field-row .currency {
+  width: 4.5rem;
+  flex: none;
+  text-transform: uppercase;
+}
+
+.field-row .rate {
+  width: 6rem;
+  flex: none;
+}
+
+#invoiceSummary {
+  margin-right: auto;
+}
+
+.row.selectable {
+  cursor: pointer;
+}
+
+.row.selectable input[type='checkbox'] {
+  accent-color: var(--app-color, var(--accent));
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.quiet {
+  padding: 0.5rem 0;
 }
 
 .row {
@@ -177,6 +310,117 @@ main {
   color: var(--ink-faint);
   margin-top: 1.5rem;
   text-align: center;
+}
+
+/* ---------- Attachments (shared pattern across apps) ---------- */
+
+.attach-block {
+  margin-top: 1rem;
+}
+
+.attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.attach-strip:empty {
+  display: none;
+}
+
+.attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--app-color, var(--accent));
+  word-break: break-word;
+  text-decoration: none;
+}
+
+.attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 0.6rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 0.05rem 0;
+}
+
+.attach-remove {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-add {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.attach-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.attach-add .ghost {
+  display: inline-block;
+}
+
+/* Per-row attach affordance: the strip sits on its own line beneath the
+   invoice it belongs to. */
+.row-with-attachments {
+  border-bottom: 1px solid var(--line);
+}
+
+.row-with-attachments:last-child {
+  border-bottom: none;
+}
+
+.row-with-attachments .row {
+  border-bottom: none;
+}
+
+.row-attachments {
+  padding: 0 0 0.625rem;
 }
 
 /* ---------- App-level knobs ---------- */

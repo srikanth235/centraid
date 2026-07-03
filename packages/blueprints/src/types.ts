@@ -42,8 +42,8 @@ export interface AppKnobsManifest {
  * a `files` list (so the remote fetcher knows what to download).
  *
  * Two kinds share this shape:
- *   - `kind: 'app'` (default) — a full UI app like `hydrate` / `todos` /
- *     `journal`. Carries `index.html`, `app.css`, and an `app.json`
+ *   - `kind: 'app'` (default) — a full UI app like `agenda` / `notes` /
+ *     `vitals`. Carries `index.html`, `app.css`, and an `app.json`
  *     manifest with optional `knobs[]`.
  *   - `kind: 'automation'` — an app folder (`app.json#kind = "automation"`)
  *     with no UI assets; just `app.json` + `automations/<id>/{automation.json,handler.js}`.

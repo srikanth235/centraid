@@ -17,7 +17,11 @@
     {
       "name": "library",
       "description": "Every media asset with its content item's content_uri and media_type, plus the albums it belongs to, newest first.",
-      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "output": {
         "type": "object",
         "properties": {
