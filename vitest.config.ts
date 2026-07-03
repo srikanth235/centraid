@@ -14,6 +14,7 @@ export default defineConfig({
       'packages/gateway',
       'packages/openclaw-plugin',
       'packages/skills',
+      'packages/vault',
       'apps/desktop',
     ],
     coverage: {

@@ -336,6 +336,11 @@ export class VaultPlane {
             return this.gateway
               .listParked()
               .filter((p) => p.callerKind === 'app' && p.caller === appId);
+          case 'changes':
+            throw new GatewayError(
+              'consent',
+              'the provenance feed is agent-plane — automations ride vault changes, apps do not',
+            );
           default:
             throw new Error(`unsupported vault op ${call.op}`);
         }
