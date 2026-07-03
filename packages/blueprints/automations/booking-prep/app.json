@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "booking-prep",
+  "name": "Booking prep",
+  "kind": "automation",
+  "description": "When a confirmed booking is less than a day away, a prep task appears on your list — due when the meeting starts.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

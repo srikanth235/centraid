@@ -1525,6 +1525,116 @@
         "automations/flaky-test-tracker/automation.json",
         "automations/flaky-test-tracker/handler.js"
       ]
+    },
+    {
+      "id": "booking-prep",
+      "name": "Booking prep",
+      "desc": "When a confirmed booking is less than a day away, a prep task appears on your list — due when the meeting starts.",
+      "colorKey": "teal",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📆",
+      "category": "Life admin",
+      "triggerKind": "condition",
+      "triggerLabel": "When a booking nears",
+      "integrations": [
+        "Bookings",
+        "Tasks"
+      ],
+      "files": [
+        "app.json",
+        "automations/booking-prep/automation.json",
+        "automations/booking-prep/handler.js"
+      ]
+    },
+    {
+      "id": "lead-follow-up",
+      "name": "Lead follow-up",
+      "desc": "Every new lead gets a follow-up task on your list the moment it lands — no lead goes cold in the pipeline.",
+      "colorKey": "amber",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🤝",
+      "category": "Life admin",
+      "triggerKind": "data",
+      "triggerLabel": "When a lead lands",
+      "integrations": [
+        "Leads",
+        "Tasks"
+      ],
+      "files": [
+        "app.json",
+        "automations/lead-follow-up/automation.json",
+        "automations/lead-follow-up/handler.js"
+      ]
+    },
+    {
+      "id": "invoice-chaser",
+      "name": "Invoice chaser",
+      "desc": "Sent invoices coming due within three days get a polite reminder drafted to the client — you review and send.",
+      "colorKey": "indigo",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🧾",
+      "category": "Life admin",
+      "triggerKind": "condition",
+      "triggerLabel": "When an invoice nears due",
+      "integrations": [
+        "Studio",
+        "Threads"
+      ],
+      "files": [
+        "app.json",
+        "automations/invoice-chaser/automation.json",
+        "automations/invoice-chaser/handler.js"
+      ]
+    },
+    {
+      "id": "renewals-digest",
+      "name": "Renewals digest",
+      "desc": "A Monday-morning note listing every active subscription and what it's expected to charge — surprises stay off your statement.",
+      "colorKey": "rose",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔁",
+      "category": "Life admin",
+      "triggerKind": "cron",
+      "triggerLabel": "Mondays · 9:00 AM",
+      "integrations": [
+        "Subscriptions",
+        "Notes"
+      ],
+      "files": [
+        "app.json",
+        "automations/renewals-digest/automation.json",
+        "automations/renewals-digest/handler.js"
+      ]
+    },
+    {
+      "id": "vitals-nudge",
+      "name": "Vitals nudge",
+      "desc": "If no reading was logged all day, an evening task nudges you to log your vitals — streaks survive busy days.",
+      "colorKey": "emerald",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🩺",
+      "category": "Life admin",
+      "triggerKind": "cron",
+      "triggerLabel": "Daily · 8:00 PM",
+      "integrations": [
+        "Vitals",
+        "Tasks"
+      ],
+      "files": [
+        "app.json",
+        "automations/vitals-nudge/automation.json",
+        "automations/vitals-nudge/handler.js"
+      ]
     }
   ]
 }

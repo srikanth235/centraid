@@ -11,6 +11,30 @@
     }
   ],
   "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads your calendar, tasks and message threads to compose the evening briefing.",
+    "scopes": [
+      {
+        "schema": "schedule",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "event",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "party",
+        "verbs": "read"
+      },
+      {
+        "schema": "social",
+        "verbs": "read"
+      }
+    ]
+  },
   "history": {
     "keep": {
       "count": 100

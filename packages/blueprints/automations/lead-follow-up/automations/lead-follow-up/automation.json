@@ -1,0 +1,32 @@
+{
+  "name": "Lead follow-up",
+  "version": "0.1.0",
+  "description": "Every new lead gets a follow-up task on your list the moment it lands — no lead goes cold in the pipeline.",
+  "enabled": false,
+  "prompt": "Whenever a new client or lead is added to my pipeline, look up who they are and add a task \"Follow up with <name>\" so the first touch never slips.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["business.client"]
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reacts to new leads in your pipeline and files a follow-up task naming the person.",
+    "scopes": [
+      { "schema": "business", "verbs": "read" },
+      { "schema": "core", "table": "party", "verbs": "read" },
+      { "schema": "schedule", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-03T00:00:00.000Z"
+  }
+}

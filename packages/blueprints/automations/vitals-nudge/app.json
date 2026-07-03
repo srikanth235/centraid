@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "vitals-nudge",
+  "name": "Vitals nudge",
+  "kind": "automation",
+  "description": "If no reading was logged all day, an evening task nudges you to log your vitals — streaks survive busy days.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

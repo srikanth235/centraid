@@ -1,0 +1,36 @@
+{
+  "name": "Booking prep",
+  "version": "0.1.0",
+  "description": "When a confirmed booking is less than a day away, a prep task appears on your list — due when the meeting starts.",
+  "enabled": false,
+  "prompt": "Watch my calendar for confirmed bookings starting within the next 24 hours. For each one, add a task titled \"Prepare: <event summary>\" due at the event's start time, so I never walk into a booking cold.",
+  "triggers": [
+    {
+      "kind": "condition",
+      "entity": "core.event",
+      "where": [
+        { "column": "status", "op": "eq", "value": "confirmed" },
+        { "column": "dtstart", "op": "within-next-days", "value": 1 }
+      ],
+      "every": "*/15 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Watches confirmed bookings on your calendar and files a prep task for each one.",
+    "scopes": [
+      { "schema": "core", "table": "event", "verbs": "read" },
+      { "schema": "schedule", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-03T00:00:00.000Z"
+  }
+}

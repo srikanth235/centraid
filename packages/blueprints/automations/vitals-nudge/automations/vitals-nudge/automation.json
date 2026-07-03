@@ -1,0 +1,31 @@
+{
+  "name": "Vitals nudge",
+  "version": "0.1.0",
+  "description": "If no reading was logged all day, an evening task nudges you to log your vitals — streaks survive busy days.",
+  "enabled": false,
+  "prompt": "Each evening, check whether I logged any vitals today. If the day is empty, add a task reminding me to log a reading before bed; if I already logged something, stay quiet.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "0 20 * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:HealthMonitoring",
+    "why": "Checks whether any reading was logged today and files an evening reminder task when the day is empty.",
+    "scopes": [
+      { "schema": "core", "table": "observation", "verbs": "read" },
+      { "schema": "schedule", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-03T00:00:00.000Z"
+  }
+}

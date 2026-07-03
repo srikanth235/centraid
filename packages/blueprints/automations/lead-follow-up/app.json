@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "lead-follow-up",
+  "name": "Lead follow-up",
+  "kind": "automation",
+  "description": "Every new lead gets a follow-up task on your list the moment it lands — no lead goes cold in the pipeline.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

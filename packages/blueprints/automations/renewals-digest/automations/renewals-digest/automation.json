@@ -1,0 +1,32 @@
+{
+  "name": "Renewals digest",
+  "version": "0.1.0",
+  "description": "A Monday-morning note listing every active subscription and what it's expected to charge — surprises stay off your statement.",
+  "enabled": false,
+  "prompt": "Every Monday morning, list my active recurring charges (subscriptions, rent, salaries) with who charges them and the expected amount, and file the digest as a note I can skim.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "0 9 * * 1"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:Billing",
+    "why": "Reads your active recurring charges each week and files the digest as a note.",
+    "scopes": [
+      { "schema": "finance", "verbs": "read" },
+      { "schema": "core", "table": "party", "verbs": "read" },
+      { "schema": "knowledge", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-03T00:00:00.000Z"
+  }
+}

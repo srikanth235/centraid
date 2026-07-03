@@ -11,6 +11,30 @@
     }
   ],
   "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads today's meetings, their attendees and recent threads to brief you before each one.",
+    "scopes": [
+      {
+        "schema": "schedule",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "event",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "party",
+        "verbs": "read"
+      },
+      {
+        "schema": "social",
+        "verbs": "read"
+      }
+    ]
+  },
   "history": {
     "keep": {
       "count": 100

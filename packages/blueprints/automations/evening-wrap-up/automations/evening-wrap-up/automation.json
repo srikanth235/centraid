@@ -11,6 +11,21 @@
     }
   ],
   "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads today's tasks and stages tomorrow's top three on your list.",
+    "scopes": [
+      {
+        "schema": "schedule",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "core",
+        "table": "event",
+        "verbs": "read"
+      }
+    ]
+  },
   "history": {
     "keep": {
       "count": 100
