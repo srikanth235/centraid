@@ -4083,8 +4083,17 @@ import { lineDiff } from './diff.js';
       primaryBtn.setAttribute('disabled', '');
       try {
         const result = await publish({ id: appId });
+        // Past this point the publish has committed on the gateway — the app
+        // is live. Everything below is post-success bookkeeping and must not
+        // be able to divert to the catch branch, or a successful publish would
+        // leave the app stuck as a "draft" (never promoted to Home). The
+        // live-URL fetch only feeds the preview iframe, so it's best-effort.
         lastPublishedVersionId = result.versionId;
-        liveUrl = (await appLiveUrl({ id: appId })).url;
+        try {
+          liveUrl = (await appLiveUrl({ id: appId })).url;
+        } catch {
+          /* preview URL is non-essential; publish already succeeded */
+        }
         // Bump the header status: every publish increments the version
         // count and resets the relative edit time to "just now".
         appVersionCount += 1;
@@ -4147,15 +4156,23 @@ import { lineDiff } from './diff.js';
           updateMessage(statusIdx, { kind: 'status', text: detail });
           showToast(file ? `Migration ${file} failed` : 'Migration failed');
         } else if (/no_changes|no staged changes/i.test(msg)) {
-          // The draft is byte-identical to the live version — nothing to
-          // publish. Common right after a clone/scaffold (which already
-          // landed a baseline on `main`) when the user hits Publish before
-          // making any edits. This isn't a failure; surface it calmly.
+          // The draft is byte-identical to the live version — nothing new to
+          // publish. Common right after a clone/scaffold (which already landed
+          // a baseline on `main`) when the user hits Publish before making any
+          // edits. This isn't a failure: the app IS already live on the
+          // gateway, so promote it to Home exactly as a successful publish
+          // would. A tile only reads as a "draft" because it isn't in
+          // `userApps` yet; without this, a scaffolded app can never leave
+          // draft and its Home tile keeps opening the builder instead of the
+          // running app.
           updateMessage(statusIdx, {
             kind: 'status',
-            text: 'Already up to date — no changes to publish since the last version.',
+            text: 'Already up to date — added to Home.',
           });
-          showToast('No changes to publish.');
+          showToast('Already published — added to Home.');
+          if (onAddToHome && appId) {
+            onAddToHome({ prompt: initialPrompt, appId, name: projName });
+          }
         } else {
           updateMessage(statusIdx, { kind: 'status', text: `Publish failed: ${msg}` });
         }
