@@ -11,12 +11,22 @@
 
 import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
 
-/** Plane presence + owner identity, from `GET /_vault/status`. */
+/** Plane presence + the ACTIVE vault's identity, from `GET /_vault/status`. */
 export interface VaultStatus {
   active: boolean;
   vaultId: string;
+  name: string;
   ownerPartyId: string;
   fresh: boolean;
+}
+
+/** One vault of the registry, from `GET /_vault/vaults`. */
+export interface VaultListEntry {
+  vaultId: string;
+  name: string;
+  /** Whether this vault is the gateway's active one (`ctx.vault` target). */
+  active: boolean;
+  ownerPartyId: string;
 }
 
 /** One scope of a grant or a manifest request: schema-wide or one table. */
@@ -72,6 +82,66 @@ export async function vaultStatus(): Promise<VaultStatus | undefined> {
     return undefined;
   }
   return readJson<VaultStatus>(res, 'fetch vault status');
+}
+
+/**
+ * Every vault of the registry, active flagged. `undefined` when the gateway
+ * mounts no vault registry (route 404s) — a valid deployment, not an error.
+ */
+export async function listVaults(): Promise<VaultListEntry[] | undefined> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/vaults', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  if (res.status === 404) {
+    await res.body?.cancel().catch(() => {});
+    return undefined;
+  }
+  const body = await readJson<{ vaults: VaultListEntry[] }>(res, 'list vaults');
+  return body.vaults;
+}
+
+/** Create a fresh vault. It does NOT become active implicitly. */
+export async function createVault(input: { name?: string }): Promise<VaultListEntry> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/vaults', {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify(input.name ? { name: input.name } : {}),
+  });
+  return readJson<VaultListEntry>(res, 'create vault');
+}
+
+/** Rename a vault and/or make it the active one. */
+export async function updateVault(input: {
+  vaultId: string;
+  name?: string;
+  active?: true;
+}): Promise<VaultListEntry> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/vaults/${enc(input.vaultId)}`, {
+    method: 'PATCH',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.active ? { active: true } : {}),
+    }),
+  });
+  return readJson<VaultListEntry>(res, 'update vault');
+}
+
+/**
+ * Delete a vault — its two SQLite files are removed for good. The gateway
+ * refuses to delete the ACTIVE vault (409): switch to another vault first.
+ */
+export async function deleteVault(input: { vaultId: string }): Promise<{ deleted: boolean }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/vaults/${enc(input.vaultId)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  return readJson<{ deleted: boolean }>(res, 'delete vault');
 }
 
 /** Enrolled apps with their active grants. */

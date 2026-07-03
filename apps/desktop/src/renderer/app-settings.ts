@@ -5,6 +5,7 @@
 // drives shell-owned state (prefs, profiles, the live sidebar setter) through
 // the ShellContext accessors.
 import { getAgentsStatus, getUserPrefs, saveUserPrefs } from './gateway-client.js';
+import { renderVaultsPage } from './app-vaults.js';
 import { ACCENT_PALETTE } from './app-shell-context.js';
 import type {
   AccentKey,
@@ -69,12 +70,19 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
     // pages. Each `drawerGroup` appends into its page host instead of
     // one continuous scroll; an inner sidebar (built at the end) swaps
     // which host is visible.
-    type SettingsPageId = 'appearance' | 'layout' | 'workspace' | 'profiles' | 'providers';
+    type SettingsPageId =
+      | 'appearance'
+      | 'layout'
+      | 'workspace'
+      | 'profiles'
+      | 'vaults'
+      | 'providers';
     const pageHosts: Record<SettingsPageId, HTMLElement> = {
       appearance: el('div', { class: 'cd-settings-page' }),
       layout: el('div', { class: 'cd-settings-page' }),
       workspace: el('div', { class: 'cd-settings-page' }),
       profiles: el('div', { class: 'cd-settings-page' }),
+      vaults: el('div', { class: 'cd-settings-page' }),
       providers: el('div', { class: 'cd-settings-page' }),
     };
 
@@ -743,6 +751,14 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       ]),
     );
 
+    // Vaults (duaility §12) — the owner's vault registry: create / rename /
+    // switch / delete, with exactly one active vault backing `ctx.vault`.
+    // Async and self-re-rendering; lives under the Account group beside
+    // Profiles because both scope what the gateway acts on.
+    const vaultsHost = el('div', { class: 'cd-vaults-page' });
+    pageHosts.vaults.append(drawerGroup('Vaults', [vaultsHost]));
+    void renderVaultsPage({ el, host: vaultsHost, showToast });
+
     // §C1 — inner-sidebar shell modelled on RefinedSettingsV2. A grouped
     // category nav (Workspace / Models / Runtime) — each entry an icon +
     // label + optional mono hint — sits beside a scrolling content pane
@@ -784,6 +800,14 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
         icon: 'Users',
         subtitle:
           'Separate spaces — each with its own apps and chats. Switch, add, rename, recolor, or remove profiles.',
+      },
+      {
+        id: 'vaults',
+        label: 'Vaults',
+        section: 'Account',
+        icon: 'Key',
+        subtitle:
+          'Your personal vaults on this gateway. Apps and automations act on the active vault — access stays deny-by-default per vault until you grant it.',
       },
       {
         id: 'providers',

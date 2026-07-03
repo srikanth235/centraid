@@ -126,13 +126,14 @@ export function gatewayTemplatesCacheDir(id: string): string {
 }
 
 /**
- * Personal-vault directory (duaility §12) — `vault.db` + `journal.db`.
- * Passing this as `GatewayPaths.vaultDir` is what mounts the vault plane:
- * live apps enroll as `consent.app` rows, handlers reach the vault through
- * `ctx.vault`, and the owner consent surface serves under
- * `/centraid/_vault/*`. Per-gateway like everything else — the vault is
- * the gateway's canon, so `todos` on the local gateway and on a Cloud
- * account see different vaults.
+ * Personal-vault root (duaility §12) — one subdirectory per vault
+ * (`<root>/<vaultId>/vault.db` + `journal.db`), exactly one active at a
+ * time. Passing this as `GatewayPaths.vaultDir` is what mounts the vault
+ * registry: live apps enroll as `consent.app` rows, handlers reach the
+ * ACTIVE vault through `ctx.vault`, and the owner surface (vault
+ * create/rename/switch/delete + consent) serves under `/centraid/_vault/*`.
+ * Per-gateway like everything else — vaults are the gateway's canon, so
+ * `todos` on the local gateway and on a Cloud account see different vaults.
  */
 export function gatewayVaultDir(id: string): string {
   return path.join(gatewayDir(id), 'vault');

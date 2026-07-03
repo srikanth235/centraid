@@ -9896,6 +9896,127 @@ select.input option {
   cursor: pointer;
 }
 
+/* Settings → Vaults (duaility §12): the vault registry manage surface —
+ * one row per vault (rename inline, switch, arm-to-delete) + a create row. */
+.cd-vaults-list {
+  display: flex;
+  flex-direction: column;
+}
+.cd-vaults-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+}
+.cd-vaults-row + .cd-vaults-row {
+  border-top: 0.5px solid var(--line);
+}
+.cd-vaults-name {
+  min-width: 0;
+  flex: 1;
+}
+.cd-vaults-name-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-1, var(--ink));
+  cursor: text;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.cd-vaults-name-input,
+.cd-vaults-create-input {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-1, var(--ink));
+  min-width: 0;
+}
+.cd-vaults-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.cd-vaults-active-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.cd-vaults-switch-btn {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 0.5px solid var(--line);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cd-vaults-switch-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+.cd-vaults-delete-btn {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cd-vaults-delete-btn[data-armed='true'] {
+  background: var(--danger);
+  color: #fff;
+}
+.cd-vaults-switch-btn:disabled,
+.cd-vaults-delete-btn:disabled,
+.cd-vaults-create-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.cd-vaults-create {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--line);
+}
+.cd-vaults-create-input {
+  flex: 1;
+}
+.cd-vaults-create-btn {
+  flex: none;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink, #fff);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cd-vaults-create-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
 /* Run audit (issue #80). The "Runs" link in the foot expands a
  * per-automation history panel below the card. Newest run first;
  * clicking a run expands its node timeline. */

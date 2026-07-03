@@ -95,7 +95,7 @@ export async function renderVaultPane(input: VaultPaneInput): Promise<void> {
 
   const rerender = (): void => void renderVaultPane(input);
   const sections: HTMLElement[] = [renderRequestSection(el, block)];
-  sections.push(renderGrantSection(input, grants, rerender));
+  sections.push(renderGrantSection(input, grants, rerender, status.name));
   if (parked.length > 0) sections.push(renderParkedSection(input, parked, rerender));
   host.replaceChildren(...sections);
 }
@@ -123,10 +123,13 @@ function renderGrantSection(
   input: VaultPaneInput,
   grants: VaultGrant[],
   rerender: () => void,
+  vaultName: string,
 ): HTMLElement {
   const { el, appId, block } = input;
   const section = el('div', { class: 'cd-app-settings-section cd-vault-grants' });
-  section.append(el('div', { class: 'cd-vault-label' }, 'Access'));
+  // Grants are per vault (the registry can hold several) — name the active
+  // one so the owner knows exactly which vault this act covers.
+  section.append(el('div', { class: 'cd-vault-label' }, `Access · ${vaultName}`));
 
   if (grants.length === 0) {
     section.append(
