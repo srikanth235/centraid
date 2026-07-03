@@ -1,53 +1,56 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="paper">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Centraid — tiny apps that run your life</title>
+    <title>Centraid — software for a market of one</title>
+    <meta
+      name="description"
+      content="Centraid is a personal app builder. Describe the app your life needs — an agent writes it, a gateway on your own machine runs it, and it appears on your desktop and phone."
+    />
+    <link rel="icon" href="assets/centraid-mark.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
       rel="stylesheet"
     />
     <style>
       :root {
-        --brand: #3ec8b4;
-        --brand-lt: #62d6c6;
-        --brand-dp: #2aa593;
-        --mint: #9eefe2;
-        --ink: #eafbf7;
+        --paper: #f6f0e3;
+        --paper-2: #efe7d4;
+        --card: #fbf7ec;
+        --ink: #20261f;
+        --ink-2: #55604f;
+        --ink-3: #83907c;
+        --line: rgba(32, 38, 31, 0.16);
+        --line-soft: rgba(32, 38, 31, 0.09);
+        --accent: #0d7263;
+        --accent-bright: #3ec8b4;
+        --amber: #b3690e;
+        --shadow: rgba(32, 38, 31, 0.14);
+        --grain-opacity: 0.5;
+        --sel: rgba(62, 200, 180, 0.35);
 
-        --bg: #060c0b;
-        --bg-2: #0a1413;
-        --panel: #0d1a18;
-        --panel-2: #10201d;
-        --line: rgba(126, 224, 208, 0.12);
-        --line-2: rgba(126, 224, 208, 0.22);
-        --text: #d7e6e2;
-        --text-dim: #8fa8a2;
-        --text-faint: #5f7a74;
-
-        --glow: rgba(62, 200, 180, 0.3);
-        --star: rgba(150, 220, 208, 0.55);
-        --radius: 16px;
-        --display: 'Bricolage Grotesque', sans-serif;
-        --body: 'Hanken Grotesk', sans-serif;
-        --mono: 'JetBrains Mono', monospace;
+        --display: 'Fraunces', georgia, serif;
+        --body: 'Newsreader', georgia, serif;
+        --mono: 'IBM Plex Mono', ui-monospace, monospace;
       }
-      [data-theme='light'] {
-        --bg: #eef5f3;
-        --bg-2: #e4efec;
-        --panel: #ffffff;
-        --panel-2: #f4faf8;
-        --line: rgba(20, 90, 80, 0.12);
-        --line-2: rgba(20, 90, 80, 0.22);
-        --text: #0f2723;
-        --text-dim: #3c5a54;
-        --text-faint: #6f8a83;
-        --glow: rgba(62, 200, 180, 0.28);
-        --star: rgba(30, 120, 105, 0.35);
-        --ink: #0c2b26;
+      [data-theme='night'] {
+        --paper: #111612;
+        --paper-2: #0c110d;
+        --card: #171d17;
+        --ink: #ece5d2;
+        --ink-2: #a8ab97;
+        --ink-3: #6f7565;
+        --line: rgba(236, 229, 210, 0.2);
+        --line-soft: rgba(236, 229, 210, 0.1);
+        --accent: #4ed0bc;
+        --accent-bright: #4ed0bc;
+        --amber: #dfa044;
+        --shadow: rgba(0, 0, 0, 0.5);
+        --grain-opacity: 0.28;
+        --sel: rgba(78, 208, 188, 0.3);
       }
 
       * {
@@ -58,78 +61,51 @@
       html {
         scroll-behavior: smooth;
       }
+      ::selection {
+        background: var(--sel);
+      }
       body {
         font-family: var(--body);
-        background: var(--bg);
-        color: var(--text);
+        font-size: 19px;
+        line-height: 1.6;
+        background: var(--paper);
+        color: var(--ink);
         -webkit-font-smoothing: antialiased;
         overflow-x: hidden;
+        transition:
+          background 0.4s ease,
+          color 0.4s ease;
+      }
+      /* paper grain */
+      body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        pointer-events: none;
+        opacity: var(--grain-opacity);
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.06'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
       }
 
-      /* ---------- atmosphere ---------- */
-      .stage {
-        position: relative;
-        min-height: 100%;
-        isolation: isolate;
+      a {
+        color: inherit;
       }
-      .bg-layer {
-        position: fixed;
-        inset: 0;
-        z-index: -2;
-        pointer-events: none;
-        transition: background 0.6s ease;
+      .u {
+        color: var(--accent);
+        text-decoration: underline;
+        text-decoration-thickness: 2px;
+        text-underline-offset: 4px;
+        text-decoration-color: color-mix(in oklab, var(--accent) 45%, transparent);
+        transition: text-decoration-color 0.18s ease;
       }
-      .bg-base {
-        background: radial-gradient(120% 80% at 50% -10%, var(--bg-2) 0%, var(--bg) 55%), var(--bg);
+      .u:hover {
+        text-decoration-color: var(--accent);
       }
-      .bg-glow {
-        background:
-          radial-gradient(48% 38% at 50% 26%, var(--glow) 0%, transparent 70%),
-          radial-gradient(30% 24% at 82% 8%, rgba(62, 200, 180, 0.1) 0%, transparent 70%);
-        z-index: -1;
-        animation: breathe 9s ease-in-out infinite;
-      }
-      .bg-grid {
-        background-image:
-          linear-gradient(var(--line) 1px, transparent 1px),
-          linear-gradient(90deg, var(--line) 1px, transparent 1px);
-        background-size: 64px 64px;
-        -webkit-mask-image: radial-gradient(80% 55% at 50% 20%, #000 0%, transparent 72%);
-        mask-image: radial-gradient(80% 55% at 50% 20%, #000 0%, transparent 72%);
-        opacity: 0.5;
-      }
-      .stars {
-        position: fixed;
-        inset: 0;
-        z-index: -1;
-        pointer-events: none;
-      }
-      .stars i {
-        position: absolute;
-        width: 2px;
-        height: 2px;
-        border-radius: 50%;
-        background: var(--star);
-        opacity: 0.6;
-        animation: twinkle var(--tw, 4s) ease-in-out infinite;
-      }
-      @keyframes breathe {
-        0%,
-        100% {
-          opacity: 0.85;
-        }
-        50% {
-          opacity: 1;
-        }
-      }
-      @keyframes twinkle {
-        0%,
-        100% {
-          opacity: 0.15;
-        }
-        50% {
-          opacity: 0.8;
-        }
+
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0 clamp(20px, 4.5vw, 56px);
       }
 
       /* ---------- header ---------- */
@@ -137,600 +113,1189 @@
         position: sticky;
         top: 0;
         z-index: 50;
+        background: color-mix(in oklab, var(--paper) 88%, transparent);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .head-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 16px clamp(18px, 4vw, 44px);
-        background: color-mix(in oklab, var(--bg) 72%, transparent);
-        backdrop-filter: blur(14px) saturate(1.2);
-        border-bottom: 1px solid var(--line);
+        padding: 14px clamp(20px, 4.5vw, 56px);
+        max-width: 1240px;
+        margin: 0 auto;
       }
       .brand {
         display: flex;
         align-items: center;
         gap: 11px;
         font-family: var(--display);
-        font-weight: 700;
-        letter-spacing: -0.02em;
-        font-size: 19px;
-        color: var(--ink);
+        font-weight: 640;
+        font-size: 21px;
+        letter-spacing: -0.01em;
+        text-decoration: none;
       }
-      .mark {
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
+      .brand .mark {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
         overflow: hidden;
-        box-shadow: 0 6px 20px -6px var(--glow);
+        box-shadow: 2px 2px 0 var(--shadow);
       }
-      .mark img {
+      .brand .mark img {
         width: 100%;
         height: 100%;
         display: block;
       }
-
       nav {
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 2px;
       }
       nav a {
-        font-size: 14.5px;
-        font-weight: 500;
-        color: var(--text-dim);
+        font-family: var(--mono);
+        font-size: 12.5px;
+        letter-spacing: 0.05em;
+        text-transform: lowercase;
+        color: var(--ink-2);
         text-decoration: none;
-        padding: 8px 13px;
-        border-radius: 9px;
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        transition:
-          color 0.18s ease,
-          background 0.18s ease;
+        padding: 8px 11px;
+        border-radius: 6px;
+        transition: color 0.15s ease;
       }
       nav a:hover {
-        color: var(--ink);
-        background: color-mix(in oklab, var(--brand) 10%, transparent);
+        color: var(--accent);
       }
-      nav a.active {
-        color: var(--brand-lt);
+      nav .docs-link {
+        color: var(--paper);
+        background: var(--ink);
+        margin-left: 6px;
+        box-shadow: 3px 3px 0 var(--shadow);
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.15s ease;
       }
-      nav a.active::after {
-        content: '';
-      }
-      nav a svg {
-        width: 15px;
-        height: 15px;
-        opacity: 0.85;
-      }
-      .docs-link {
-        color: var(--ink) !important;
-        background: color-mix(in oklab, var(--brand) 14%, transparent);
-        box-shadow: inset 0 0 0 1px var(--line-2);
-      }
-      .docs-link:hover {
-        background: color-mix(in oklab, var(--brand) 24%, transparent) !important;
+      nav .docs-link:hover {
+        color: var(--paper);
+        transform: translate(-1px, -1px);
+        box-shadow: 4px 4px 0 var(--shadow);
       }
       .toggle {
-        width: 38px;
-        height: 38px;
+        width: 34px;
+        height: 34px;
         margin-left: 8px;
         border-radius: 50%;
-        border: 1px solid var(--line-2);
+        border: 1px solid var(--line);
         background: transparent;
-        color: var(--text-dim);
+        color: var(--ink-2);
         display: grid;
         place-items: center;
         cursor: pointer;
         transition:
-          transform 0.3s ease,
           color 0.2s ease,
-          border-color 0.2s ease;
+          border-color 0.2s ease,
+          transform 0.3s ease;
       }
       .toggle:hover {
-        color: var(--brand-lt);
-        border-color: var(--brand);
-        transform: rotate(35deg);
+        color: var(--accent);
+        border-color: var(--accent);
+        transform: rotate(30deg);
       }
       .toggle svg {
-        width: 18px;
-        height: 18px;
-      }
-      .nav-collapse {
-        display: contents;
+        width: 16px;
+        height: 16px;
       }
 
       /* ---------- hero ---------- */
       .hero {
-        text-align: center;
-        padding: clamp(56px, 11vh, 130px) 20px 40px;
         position: relative;
+        padding-block: clamp(64px, 12vh, 140px) clamp(56px, 8vh, 96px);
       }
-      .hero-mark {
-        width: 116px;
-        height: 116px;
-        margin: 0 auto 30px;
-        border-radius: 28px;
-        overflow: hidden;
-        box-shadow:
-          0 30px 70px -24px var(--glow),
-          0 0 0 1px rgba(255, 255, 255, 0.06);
-        animation: float 6s ease-in-out infinite;
-      }
-      .hero-mark img {
-        width: 100%;
-        height: 100%;
-        display: block;
-      }
-      @keyframes float {
-        0%,
-        100% {
-          transform: translateY(0);
-        }
-        50% {
-          transform: translateY(-12px);
-        }
-      }
-
-      .wordmark {
-        font-family: var(--display);
-        font-weight: 800;
-        font-size: clamp(64px, 15vw, 184px);
-        line-height: 0.92;
-        letter-spacing: -0.045em;
-        background: linear-gradient(
-          100deg,
-          var(--brand-dp) 4%,
-          var(--brand) 34%,
-          var(--mint) 66%,
-          var(--ink) 100%
-        );
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        padding: 0 0.05em;
-      }
-      .tagline {
-        margin-top: 22px;
-        font-weight: 700;
-        font-size: clamp(14px, 2.1vw, 20px);
-        letter-spacing: 0.34em;
+      .kicker {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        letter-spacing: 0.22em;
         text-transform: uppercase;
-        color: var(--brand);
-      }
-      .sub {
-        max-width: 620px;
-        margin: 24px auto 0;
-        font-size: clamp(16px, 2.3vw, 19px);
-        line-height: 1.6;
-        color: var(--text-dim);
-      }
-      .sub b {
-        color: var(--ink);
-        font-weight: 600;
-      }
-      .cta {
-        margin-top: 38px;
+        color: var(--accent);
         display: flex;
+        align-items: center;
         gap: 14px;
-        justify-content: center;
+      }
+      .kicker::after {
+        content: '';
+        flex: 0 0 64px;
+        height: 1px;
+        background: var(--accent);
+        opacity: 0.5;
+      }
+      .hero h1 {
+        margin-top: 26px;
+        font-family: var(--display);
+        font-weight: 480;
+        font-optical-sizing: auto;
+        font-size: clamp(46px, 8.4vw, 118px);
+        line-height: 1.02;
+        letter-spacing: -0.025em;
+        max-width: 11em;
+      }
+      .hero h1 em {
+        font-style: italic;
+        font-weight: 560;
+        color: var(--accent);
+      }
+      .hero .lede {
+        margin-top: 34px;
+        max-width: 34em;
+        font-size: clamp(19px, 2.2vw, 23px);
+        line-height: 1.55;
+        color: var(--ink-2);
+      }
+      .hero .lede b {
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .cta-row {
+        margin-top: 40px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
         flex-wrap: wrap;
       }
       .btn {
-        font-family: var(--body);
-        font-weight: 600;
-        font-size: 15px;
-        padding: 13px 24px;
-        border-radius: 12px;
-        cursor: pointer;
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
         text-decoration: none;
+        padding: 14px 26px;
+        border: 1.5px solid var(--ink);
         display: inline-flex;
         align-items: center;
-        gap: 9px;
-        border: 1px solid transparent;
+        gap: 10px;
         transition:
-          transform 0.16s ease,
-          box-shadow 0.2s ease,
-          background 0.2s ease;
+          transform 0.15s ease,
+          box-shadow 0.15s ease,
+          background 0.15s ease;
       }
       .btn-primary {
-        background: linear-gradient(135deg, var(--brand-lt), var(--brand-dp));
-        color: #04120f;
-        box-shadow: 0 14px 34px -12px var(--glow);
+        background: var(--ink);
+        color: var(--paper);
+        box-shadow: 5px 5px 0 var(--shadow);
       }
       .btn-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 20px 44px -12px var(--glow);
+        transform: translate(-2px, -2px);
+        box-shadow: 7px 7px 0 var(--shadow);
       }
       .btn-ghost {
-        color: var(--text);
-        border-color: var(--line-2);
-        background: color-mix(in oklab, var(--panel) 60%, transparent);
+        color: var(--ink);
+        background: transparent;
+        box-shadow: 5px 5px 0 transparent;
       }
       .btn-ghost:hover {
-        border-color: var(--brand);
-        color: var(--ink);
-        transform: translateY(-2px);
+        box-shadow: 5px 5px 0 var(--shadow);
+        transform: translate(-2px, -2px);
+        background: var(--card);
+      }
+      .hero-notes {
+        margin-top: 34px;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        letter-spacing: 0.04em;
+        color: var(--ink-3);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .hero-notes .dot {
+        color: var(--accent);
+      }
+      .beta-pill {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--amber);
+        border: 1px solid color-mix(in oklab, var(--amber) 55%, transparent);
+        padding: 3px 9px;
+        border-radius: 999px;
+      }
+      /* big ghost numeral behind hero */
+      .hero .ghost {
+        position: absolute;
+        right: -0.05em;
+        top: clamp(20px, 6vh, 70px);
+        font-family: var(--display);
+        font-weight: 300;
+        font-style: italic;
+        font-size: clamp(160px, 26vw, 380px);
+        line-height: 1;
+        color: transparent;
+        -webkit-text-stroke: 1.5px color-mix(in oklab, var(--accent) 32%, transparent);
+        pointer-events: none;
+        user-select: none;
       }
 
-      /* ---------- quick start ---------- */
-      .section {
-        max-width: 940px;
-        margin: 0 auto;
-        padding: 30px 20px 100px;
+      /* ---------- manifesto rule ---------- */
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 0;
       }
-      .kicker {
+      .rule-label {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        padding: 10px 0 0;
+      }
+
+      /* ---------- chapters ---------- */
+      .chapter {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+        gap: clamp(32px, 5vw, 72px);
+        align-items: center;
+        padding-block: clamp(64px, 10vh, 120px);
+      }
+      .chapter.flip .prose {
+        order: 2;
+      }
+      .chapter.flip .artifact-col {
+        order: 1;
+      }
+      .ch-no {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--amber);
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .ch-no .n {
+        font-family: var(--display);
+        font-style: italic;
+        font-size: 30px;
+        font-weight: 400;
+        color: var(--accent);
+        letter-spacing: 0;
+      }
+      .chapter h2 {
+        font-family: var(--display);
+        font-weight: 520;
+        font-size: clamp(30px, 3.9vw, 46px);
+        line-height: 1.08;
+        letter-spacing: -0.02em;
+        max-width: 12em;
+      }
+      .chapter h2 em {
+        font-style: italic;
+        color: var(--accent);
+        font-weight: 560;
+      }
+      .chapter .prose p {
+        margin-top: 20px;
+        color: var(--ink-2);
+        max-width: 32em;
+      }
+      .chapter .prose p b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .chapter .prose .aside {
+        margin-top: 22px;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.7;
+        color: var(--ink-3);
+        border-left: 2px solid var(--accent);
+        padding-left: 14px;
+        max-width: 30em;
+      }
+      .chapter .prose .aside a {
+        color: var(--accent);
+        text-decoration: none;
+        border-bottom: 1px solid color-mix(in oklab, var(--accent) 45%, transparent);
+      }
+      .chapter .prose .aside a:hover {
+        border-bottom-color: var(--accent);
+      }
+
+      /* ---------- artifacts ---------- */
+      .artifact {
+        position: relative;
+        background: var(--card);
+        border: 1px solid var(--ink);
+        box-shadow: 9px 9px 0 var(--shadow);
+        font-family: var(--mono);
+        font-size: 13px;
+        line-height: 1.75;
+        transition:
+          transform 0.25s ease,
+          box-shadow 0.25s ease,
+          rotate 0.25s ease;
+      }
+      .tilt-l {
+        rotate: -0.7deg;
+      }
+      .tilt-r {
+        rotate: 0.7deg;
+      }
+      .artifact:hover {
+        rotate: 0deg;
+        transform: translate(-2px, -2px);
+        box-shadow: 12px 12px 0 var(--shadow);
+      }
+      .artifact-head {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 12px;
-        font-family: var(--display);
-        font-weight: 700;
-        font-size: 26px;
-        letter-spacing: -0.02em;
-        color: var(--ink);
-        margin-bottom: 22px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--line);
+        font-size: 11.5px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-3);
       }
-      .kicker::before {
-        content: '›';
-        color: var(--brand);
-        font-size: 30px;
-        line-height: 0;
+      .artifact-head .tag {
+        color: var(--accent);
+      }
+      .artifact-body {
+        padding: 18px 20px 22px;
+        overflow-x: auto;
       }
 
+      /* transcript artifacts */
+      .t-line {
+        display: grid;
+        grid-template-columns: 74px 1fr;
+        gap: 14px;
+        padding: 5px 0;
+      }
+      .t-who {
+        color: var(--ink-3);
+        text-align: right;
+        user-select: none;
+      }
+      .t-who.you {
+        color: var(--amber);
+      }
+      .t-who.agent {
+        color: var(--accent);
+      }
+      .t-msg {
+        color: var(--ink);
+      }
+      .t-msg .dim {
+        color: var(--ink-3);
+      }
+      .t-msg .nl {
+        display: block;
+      }
+      .tool-chip {
+        display: table;
+        font-size: 11.5px;
+        color: var(--accent);
+        border: 1px solid color-mix(in oklab, var(--accent) 45%, transparent);
+        border-radius: 4px;
+        padding: 1px 8px;
+        margin: 3px 0;
+        background: color-mix(in oklab, var(--accent) 7%, transparent);
+      }
+      .t-stamp {
+        color: var(--ink-3);
+        font-size: 11.5px;
+      }
+
+      /* file-tree artifact */
+      .ft {
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .ft-row {
+        display: flex;
+        gap: 20px;
+      }
+      .ft-row .ft-l {
+        flex: 0 0 200px;
+      }
+      .ft .d {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .ft .c {
+        color: var(--ink-3);
+        font-style: italic;
+      }
+      .ft .hl {
+        color: var(--amber);
+      }
+
+      /* consent artifact */
+      .consent-rows {
+        margin: 6px 0 14px;
+      }
+      .consent-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 7px 2px;
+        border-bottom: 1px dashed var(--line);
+      }
+      .consent-row .scope {
+        color: var(--ink);
+      }
+      .consent-row .verb {
+        color: var(--accent);
+      }
+      .consent-actions {
+        display: flex;
+        gap: 12px;
+        margin: 16px 0 12px;
+      }
+      .consent-btn {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        padding: 8px 18px;
+        border: 1.5px solid var(--ink);
+        background: var(--ink);
+        color: var(--paper);
+        cursor: default;
+      }
+      .consent-btn.ghost {
+        background: transparent;
+        color: var(--ink-2);
+        border-color: var(--line);
+      }
+      .consent-fine {
+        font-size: 11.5px;
+        color: var(--ink-3);
+        font-style: italic;
+      }
+
+      /* ---------- where it runs strip ---------- */
+      .strip {
+        padding-block: clamp(56px, 9vh, 100px);
+      }
+      .strip-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-bottom: 40px;
+      }
+      .strip h2 {
+        font-family: var(--display);
+        font-weight: 520;
+        font-size: clamp(30px, 3.9vw, 46px);
+        letter-spacing: -0.02em;
+        line-height: 1.08;
+      }
+      .strip h2 em {
+        font-style: italic;
+        color: var(--accent);
+      }
+      .strip .strip-note {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--ink-3);
+        max-width: 26em;
+        line-height: 1.7;
+      }
+      .homes {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+        border: 1px solid var(--ink);
+        background: var(--card);
+        box-shadow: 9px 9px 0 var(--shadow);
+      }
+      .home {
+        padding: 28px 26px 30px;
+        border-right: 1px solid var(--line);
+        position: relative;
+      }
+      .home:last-child {
+        border-right: 0;
+      }
+      .home .h-no {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        color: var(--amber);
+        text-transform: uppercase;
+      }
+      .home h3 {
+        font-family: var(--display);
+        font-weight: 560;
+        font-size: 23px;
+        letter-spacing: -0.01em;
+        margin-top: 10px;
+      }
+      .home p {
+        margin-top: 10px;
+        font-size: 16px;
+        line-height: 1.55;
+        color: var(--ink-2);
+      }
+      .home code {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--accent);
+      }
+
+      /* ---------- install ---------- */
+      .install {
+        padding-block: clamp(56px, 9vh, 110px) clamp(72px, 10vh, 130px);
+      }
+      .install .ch-no {
+        margin-bottom: 14px;
+      }
+      .install h2 {
+        font-family: var(--display);
+        font-weight: 520;
+        font-size: clamp(30px, 3.9vw, 46px);
+        letter-spacing: -0.02em;
+        line-height: 1.08;
+      }
+      .install h2 em {
+        font-style: italic;
+        color: var(--accent);
+      }
+      .install-grid {
+        margin-top: 40px;
+        display: grid;
+        grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
+        gap: clamp(28px, 4vw, 56px);
+        align-items: start;
+      }
       .term {
-        border-radius: var(--radius);
-        overflow: hidden;
-        border: 1px solid var(--line-2);
-        background: linear-gradient(180deg, var(--panel-2), var(--panel));
-        box-shadow:
-          0 40px 90px -40px rgba(0, 0, 0, 0.7),
-          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        background: var(--card);
+        border: 1px solid var(--ink);
+        box-shadow: 9px 9px 0 var(--shadow);
       }
       .term-bar {
         display: flex;
         align-items: center;
-        gap: 14px;
-        padding: 13px 16px;
+        gap: 6px;
+        padding: 10px 14px;
         border-bottom: 1px solid var(--line);
-        background: color-mix(in oklab, var(--panel) 70%, #000 6%);
         flex-wrap: wrap;
-      }
-      .dots {
-        display: flex;
-        gap: 8px;
-      }
-      .dots i {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-      }
-      .dots i:nth-child(1) {
-        background: #ff5f57;
-      }
-      .dots i:nth-child(2) {
-        background: #febc2e;
-      }
-      .dots i:nth-child(3) {
-        background: #28c840;
-      }
-      .tabs {
-        display: flex;
-        gap: 4px;
-        align-items: center;
       }
       .tab {
         font-family: var(--mono);
-        font-size: 12.5px;
-        padding: 5px 11px;
-        border-radius: 7px;
-        color: var(--text-faint);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        padding: 6px 13px;
         cursor: pointer;
+        color: var(--ink-3);
         border: 1px solid transparent;
-        transition: all 0.16s;
-      }
-      .tab:hover {
-        color: var(--text-dim);
+        background: none;
+        transition: all 0.15s ease;
       }
       .tab.on {
-        color: #04120f;
-        background: linear-gradient(135deg, var(--brand-lt), var(--brand-dp));
-        font-weight: 700;
+        color: var(--paper);
+        background: var(--ink);
       }
-      .bar-right {
-        margin-left: auto;
-        display: flex;
-        gap: 6px;
-        align-items: center;
+      .tab:not(.on):hover {
+        color: var(--accent);
       }
-      .os {
-        font-family: var(--mono);
-        font-size: 12px;
-        padding: 5px 10px;
-        border-radius: 7px;
-        cursor: pointer;
-        color: var(--text-faint);
-        border: 1px solid var(--line);
-        transition: all 0.16s;
-      }
-      .os.on {
-        color: var(--ink);
-        border-color: var(--line-2);
-        background: color-mix(in oklab, var(--brand) 12%, transparent);
-      }
-      .beta {
-        font-family: var(--mono);
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        color: var(--brand-lt);
-        border: 1px solid var(--line-2);
-        padding: 5px 9px;
-        border-radius: 7px;
-      }
-
       .term-body {
-        padding: 26px 24px 28px;
-        font-family: var(--mono);
-        font-size: 15px;
         position: relative;
+        padding: 22px 22px 24px;
+        font-family: var(--mono);
+        font-size: 13.5px;
+        line-height: 1.8;
       }
-      .term-body .cm {
-        color: var(--text-faint);
+      .cmd {
+        display: none;
+      }
+      .cmd.on {
+        display: block;
+      }
+      .cmd .cm {
+        color: var(--ink-3);
         font-style: italic;
-        margin-bottom: 14px;
       }
-      .cmdline {
+      .cmd .ln {
         display: flex;
-        align-items: flex-start;
         gap: 10px;
+        align-items: flex-start;
       }
-      .cmdline .p {
-        color: var(--brand);
-        font-weight: 700;
+      .cmd .p {
+        color: var(--accent);
+        font-weight: 600;
+        user-select: none;
       }
-      .cmdline code {
+      .cmd code {
         color: var(--ink);
         word-break: break-all;
-      }
-      .cmdline code .fn {
-        color: var(--brand-lt);
+        font-family: var(--mono);
       }
       .copy {
         position: absolute;
-        top: 20px;
-        right: 18px;
-        width: 34px;
-        height: 34px;
-        border-radius: 8px;
+        top: 14px;
+        right: 14px;
+        width: 32px;
+        height: 32px;
         border: 1px solid var(--line);
-        background: color-mix(in oklab, var(--panel) 60%, transparent);
-        color: var(--text-dim);
+        background: var(--paper);
+        color: var(--ink-2);
         display: grid;
         place-items: center;
         cursor: pointer;
-        transition: all 0.16s;
+        transition: all 0.15s ease;
       }
       .copy:hover {
-        color: var(--brand-lt);
-        border-color: var(--brand);
+        color: var(--accent);
+        border-color: var(--accent);
       }
       .copy.done {
-        color: #28c840;
-        border-color: #28c840;
+        color: var(--accent);
+        border-color: var(--accent);
       }
       .copy svg {
-        width: 15px;
-        height: 15px;
+        width: 14px;
+        height: 14px;
       }
-      .term-note {
-        margin-top: 18px;
-        font-size: 14.5px;
+      .install-notes {
+        font-size: 16.5px;
         line-height: 1.65;
-        color: var(--text-dim);
+        color: var(--ink-2);
       }
-      .term-note code {
+      .install-notes p + p {
+        margin-top: 14px;
+      }
+      .install-notes code {
         font-family: var(--mono);
         font-size: 13px;
-        color: var(--brand-lt);
-        background: color-mix(in oklab, var(--brand) 10%, transparent);
-        padding: 2px 6px;
-        border-radius: 5px;
+        color: var(--accent);
+        background: color-mix(in oklab, var(--accent) 8%, transparent);
+        padding: 1px 6px;
+        border-radius: 4px;
       }
 
-      /* feature strip */
-      .feats {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 16px;
-        margin-top: 42px;
-      }
-      .feat {
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 22px;
-        background: color-mix(in oklab, var(--panel) 50%, transparent);
-        transition:
-          border-color 0.2s,
-          transform 0.2s;
-      }
-      .feat:hover {
-        border-color: var(--line-2);
-        transform: translateY(-3px);
-      }
-      .feat .ic {
-        width: 38px;
-        height: 38px;
-        border-radius: 10px;
-        display: grid;
-        place-items: center;
-        margin-bottom: 14px;
-        background: color-mix(in oklab, var(--brand) 14%, transparent);
-        color: var(--brand-lt);
-      }
-      .feat .ic svg {
-        width: 20px;
-        height: 20px;
-      }
-      .feat h3 {
-        font-family: var(--display);
-        font-weight: 700;
-        font-size: 17px;
-        color: var(--ink);
-        margin-bottom: 6px;
-        letter-spacing: -0.01em;
-      }
-      .feat p {
-        font-size: 14px;
-        line-height: 1.55;
-        color: var(--text-dim);
-      }
-
+      /* ---------- footer ---------- */
       footer {
         border-top: 1px solid var(--line);
-        padding: 26px 20px;
-        text-align: center;
-        color: var(--text-faint);
-        font-size: 13.5px;
+        padding: clamp(48px, 8vh, 90px) 0 44px;
+        background: var(--paper-2);
+      }
+      .foot-manifesto {
+        font-family: var(--display);
+        font-weight: 460;
+        font-size: clamp(24px, 3.4vw, 40px);
+        line-height: 1.2;
+        letter-spacing: -0.015em;
+        max-width: 22em;
+      }
+      .foot-manifesto em {
+        font-style: italic;
+        color: var(--accent);
+      }
+      .foot-row {
+        margin-top: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--ink-3);
+      }
+      .foot-row a {
+        color: var(--ink-2);
+        text-decoration: none;
+        border-bottom: 1px solid var(--line);
+        transition: color 0.15s ease;
+      }
+      .foot-row a:hover {
+        color: var(--accent);
+      }
+      .foot-links {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
       }
 
-      /* reveal */
-      .rise {
+      /* ---------- reveals ---------- */
+      .r {
         opacity: 0;
-        transform: translateY(20px);
-        animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+        transform: translateY(22px);
+        transition:
+          opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
+          transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+        transition-delay: var(--d, 0s);
       }
-      @keyframes rise {
-        to {
-          opacity: 1;
-          transform: none;
-        }
+      .r.in {
+        opacity: 1;
+        transform: none;
+      }
+      .hero .r {
+        transform: translateY(16px);
       }
 
-      @media (max-width: 760px) {
-        nav .hide-sm {
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+
+      @media (max-width: 900px) {
+        body {
+          font-size: 17.5px;
+        }
+        .chapter {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 36px;
+          padding-block: 56px;
+        }
+        .chapter.flip .prose {
+          order: 1;
+        }
+        .chapter.flip .artifact-col {
+          order: 2;
+        }
+        .install-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .homes {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .home {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+        .home:last-child {
+          border-bottom: 0;
+        }
+        .hero .ghost {
           display: none;
         }
-        .feats {
-          grid-template-columns: 1fr;
+        nav .hide-sm {
+          display: none;
         }
       }
       @media (prefers-reduced-motion: reduce) {
         * {
           animation: none !important;
+          transition-duration: 0.01ms !important;
         }
-        .rise {
+        .r {
           opacity: 1;
           transform: none;
+        }
+        html {
+          scroll-behavior: auto;
         }
       }
     </style>
   </head>
   <body>
-    <div class="stage">
-      <div class="bg-layer bg-base"></div>
-      <div class="bg-layer bg-grid"></div>
-      <div class="bg-layer bg-glow"></div>
-      <div class="stars" id="stars"></div>
-
-      <!-- HEADER -->
-      <header>
-        <div class="brand">
-          <span class="mark" aria-hidden="true">
-            <img src="assets/centraid-mark.svg" alt="" />
-          </span>
+    <!-- HEADER -->
+    <header>
+      <div class="head-row">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt="" /></span>
           Centraid
-        </div>
+        </a>
         <nav>
-          <span class="nav-collapse">
-            <a href="#" class="active hide-sm">Product</a>
-            <a href="#concepts" class="hide-sm">Concepts</a>
-            <a href="#build" class="hide-sm">Build</a>
-            <a href="#automations" class="hide-sm">Automations</a>
-          </span>
-          <a href="/docs" class="docs-link">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path
-                d="M4 4.5A1.5 1.5 0 0 1 5.5 3H14l6 6v11.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20.5z"
-              />
-              <path d="M14 3v6h6M8 13h8M8 17h5" />
-            </svg>
-            Docs
-          </a>
-          <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path
-                d="M12 2C6.48 2 2 6.58 2 12.25c0 4.54 2.87 8.38 6.84 9.74.5.1.68-.22.68-.49v-1.7c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.35 1.12 2.92.85.09-.66.35-1.12.63-1.37-2.22-.26-4.55-1.14-4.55-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.05.36.32.68.94.68 1.9v2.82c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"
-              />
-            </svg>
-            <span class="hide-sm">GitHub</span>
-          </a>
+          <a href="/docs/concepts/architecture" class="hide-sm">concepts</a>
+          <a href="/docs/build/app-anatomy" class="hide-sm">build</a>
+          <a href="/docs/automations" class="hide-sm">automations</a>
+          <a href="/docs/templates" class="hide-sm">templates</a>
+          <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
+            >github</a
+          >
+          <a href="/docs" class="docs-link">docs&nbsp;→</a>
           <button class="toggle" id="toggle" aria-label="Toggle theme">
             <svg
-              id="ic-sun"
+              id="toggle-icon"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               stroke-width="1.8"
             >
-              <circle cx="12" cy="12" r="4.2" />
-              <path
-                d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"
-              />
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
             </svg>
           </button>
         </nav>
-      </header>
+      </div>
+    </header>
 
-      <!-- HERO -->
-      <section class="hero">
-        <div class="hero-mark rise" style="animation-delay: 0.05s" aria-hidden="true">
-          <img src="assets/centraid-mark.svg" alt="Centraid" />
-        </div>
-        <h1 class="wordmark rise" style="animation-delay: 0.12s">Centraid</h1>
-        <p class="tagline rise" style="animation-delay: 0.22s">Tiny apps that run your life.</p>
-        <p class="sub rise" style="animation-delay: 0.3s">
-          Build, share, and run <b>tiny SQLite-backed apps</b> — from a desktop shell, a mobile
-          companion, or a remote gateway. Chat is the runtime; every app is one file.
+    <!-- HERO -->
+    <section class="hero wrap">
+      <div class="ghost" aria-hidden="true">1</div>
+      <p class="kicker r" style="--d: 0.05s">Centraid · personal software</p>
+      <h1 class="r" style="--d: 0.14s">Software for a <em>market of one.</em></h1>
+      <p class="lede r" style="--d: 0.26s">
+        Most software is built for everyone, which is why none of it quite fits you. Centraid is a
+        <b>personal app builder</b>: describe the app your life needs, an agent writes it, a gateway
+        on <b>your own machine</b> runs it, and it appears on your desktop and phone — a folder of
+        plain files and one SQLite database.
+      </p>
+      <div class="cta-row r" style="--d: 0.38s">
+        <a href="#install" class="btn btn-primary">install in 60 seconds</a>
+        <a href="/docs" class="btn btn-ghost">read the docs</a>
+      </div>
+      <p class="hero-notes r" style="--d: 0.48s">
+        <span>no accounts</span><span class="dot">·</span><span>no cloud</span
+        ><span class="dot">·</span><span>no build step</span><span class="dot">·</span>
+        <span class="beta-pill">β beta</span>
+      </p>
+    </section>
+
+    <div class="wrap">
+      <hr class="rule" />
+      <div class="rule-label"><span>How it works</span><span>in five chapters</span></div>
+    </div>
+
+    <!-- 01 · THE ASK -->
+    <section class="chapter wrap" id="ask">
+      <div class="prose">
+        <p class="ch-no r"><span class="n">01</span> the ask</p>
+        <h2 class="r" style="--d: 0.08s">You describe it. <em>An agent builds it.</em></h2>
+        <p class="r" style="--d: 0.16s">
+          There is no project to scaffold and nothing to configure. You say what you want in a
+          sentence. The builder agent writes the app on a <b>draft branch</b>, you poke at a live
+          preview, and <b>Publish</b> flips it onto every device you own.
         </p>
-        <div class="cta rise" style="animation-delay: 0.38s">
-          <a href="/docs" class="btn btn-primary"
-            >Read the docs
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M5 12h14M13 6l6 6-6 6" /></svg
-          ></a>
-          <a href="#quickstart" class="btn btn-ghost">Quick start</a>
-        </div>
-      </section>
-
-      <!-- QUICK START -->
-      <section class="section" id="quickstart">
-        <div class="kicker rise">Quick Start</div>
-        <div class="term rise" style="animation-delay: 0.05s">
-          <div class="term-bar">
-            <div class="dots"><i></i><i></i><i></i></div>
-            <div class="tabs">
-              <span class="tab on">One-liner</span>
-              <span class="tab">npm</span>
-              <span class="tab">Docker</span>
-              <span class="tab">Source</span>
+        <p class="r" style="--d: 0.22s">
+          Changed your mind next month? Say that too. The same conversation that built the app can
+          rewrite it.
+        </p>
+        <p class="aside r" style="--d: 0.28s">
+          Drafts are git branches in a local store — publish is a fast-forward, and every version
+          stays. <a href="/docs/build/app-anatomy">How apps are put together →</a>
+        </p>
+      </div>
+      <div class="artifact-col">
+        <div class="artifact tilt-r r" style="--d: 0.12s">
+          <div class="artifact-head">
+            <span>builder · new app</span><span class="tag">draft</span>
+          </div>
+          <div class="artifact-body">
+            <div class="t-line">
+              <span class="t-who you">you</span>
+              <span class="t-msg"
+                >Make me an app for the veggie patch — what I planted, when to water, what actually
+                came up.</span
+              >
             </div>
-            <div class="bar-right">
-              <span class="os on">macOS &amp; Linux</span>
-              <span class="os">Windows</span>
-              <span class="beta">β BETA</span>
+            <div class="t-line">
+              <span class="t-who agent">builder</span>
+              <span class="t-msg"
+                >Drafting <b>patch</b> on a branch —
+                <span class="nl">tables&nbsp;&nbsp;&nbsp;plantings, waterings</span>
+                <span class="nl">actions&nbsp;&nbsp;plant · water · harvest</span>
+                <span class="nl">queries&nbsp;&nbsp;due-today · season-review</span>
+                <span class="dim nl">Preview is live on your desktop. Publish?</span></span
+              >
+            </div>
+            <div class="t-line">
+              <span class="t-who you">you</span>
+              <span class="t-msg">Publish.</span>
+            </div>
+            <div class="t-line">
+              <span class="t-who agent">builder</span>
+              <span class="t-msg">Done — <b>patch</b> is on all your devices.</span>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 · THE ARTIFACT -->
+    <section class="chapter flip wrap" id="artifact">
+      <div class="prose">
+        <p class="ch-no r"><span class="n">02</span> the artifact</p>
+        <h2 class="r" style="--d: 0.08s">Small enough to <em>read in an evening.</em></h2>
+        <p class="r" style="--d: 0.16s">
+          An app is a folder: an HTML page, plain JavaScript handlers, SQL migrations, one manifest.
+          Its entire life's data is <b>one SQLite file on your disk</b>. No
+          <span style="font-style: italic">node_modules</span>, no bundler, no deploy pipeline — the
+          runtime loads the files as they are.
+        </p>
+        <p class="r" style="--d: 0.22s">
+          When something feels off, you don't file a ticket. You open the folder and read it.
+          <b>All of it.</b>
+        </p>
+        <p class="aside r" style="--d: 0.28s">
+          Handlers are pure functions over the app's own database. Type hints come from JSDoc, not a
+          compile step. <a href="/docs/build/queries">Queries and actions →</a>
+        </p>
+      </div>
+      <div class="artifact-col">
+        <div class="artifact tilt-l r" style="--d: 0.12s">
+          <div class="artifact-head"><span>~/apps/patch</span><span class="tag">9 files</span></div>
+          <div class="artifact-body">
+            <div class="ft">
+              <div class="ft-row"><span class="ft-l d">patch/</span></div>
+              <div class="ft-row">
+                <span class="ft-l">├── app.json</span>
+                <span class="c">the manifest — what it can be asked</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">├── index.html</span>
+                <span class="c">the whole UI</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">├── <span class="d">queries/</span></span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">│&nbsp;&nbsp;&nbsp;└── due-today.js</span>
+                <span class="c">12 lines</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">├── <span class="d">actions/</span></span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">│&nbsp;&nbsp;&nbsp;├── plant.js</span>
+                <span class="c">18 lines</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">│&nbsp;&nbsp;&nbsp;├── water.js</span>
+                <span class="c">9 lines</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">│&nbsp;&nbsp;&nbsp;└── harvest.js</span>
+                <span class="c">14 lines</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">├── <span class="d">migrations/</span></span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">│&nbsp;&nbsp;&nbsp;└── 0001_init.sql</span>
+                <span class="c">two tables</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">└── <span class="hl">data.sqlite</span></span>
+                <span class="c">every record it will ever hold</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 · THE RUNTIME -->
+    <section class="chapter wrap" id="runtime">
+      <div class="prose">
+        <p class="ch-no r"><span class="n">03</span> the runtime</p>
+        <h2 class="r" style="--d: 0.08s">Chat isn't a feature. <em>It's the runtime.</em></h2>
+        <p class="r" style="--d: 0.16s">
+          Every app declares what it can be <b>asked</b> (queries) and what it can be
+          <b>told</b> (actions). The buttons in the UI call that catalog — and so does the agent.
+          Saying it and tapping it are the <b>same code path</b>, so talking to an app is
+          full-fidelity use, not a gimmick bolted on top.
+        </p>
+        <p class="aside r" style="--d: 0.24s">
+          Three generic tools fan out to every app's declared handlers — agents, automations, and
+          the UI share one calling convention.
+          <a href="/docs/concepts/queries-and-actions">The dispatcher →</a>
+        </p>
+      </div>
+      <div class="artifact-col">
+        <div class="artifact tilt-r r" style="--d: 0.12s">
+          <div class="artifact-head"><span>chat · patch</span><span class="tag">live</span></div>
+          <div class="artifact-body">
+            <div class="t-line">
+              <span class="t-who you">you</span>
+              <span class="t-msg"
+                >watered the tomatoes and the chillies — and I spotted aphids on the chillies
+                again</span
+              >
+            </div>
+            <div class="t-line">
+              <span class="t-who agent">patch</span>
+              <span class="t-msg"
+                ><span class="tool-chip">⚙ write → water { bed: "tomatoes" }</span>
+                <span class="tool-chip">⚙ write → water { bed: "chillies", note: "aphids" }</span>
+                Both logged for today, chillies flagged.
+                <span class="dim nl"
+                  >You last saw aphids there twelve days ago — that's twice this month.</span
+                ></span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 · THE LONG GAME -->
+    <section class="chapter flip wrap" id="automations">
+      <div class="prose">
+        <p class="ch-no r"><span class="n">04</span> the long game</p>
+        <h2 class="r" style="--d: 0.08s">Automations are conversations <em>that don't end.</em></h2>
+        <p class="r" style="--d: 0.16s">
+          A morning briefing, an email triage, a nag to water the chillies — each one is an agent on
+          a schedule or a data trigger, working over your apps while you're away. Every run keeps a
+          <b>durable transcript</b>.
+        </p>
+        <p class="r" style="--d: 0.22s">
+          So when you wonder why it did what it did, you don't dig through logs. You
+          <b>read the conversation back.</b>
+        </p>
+        <p class="aside r" style="--d: 0.28s">
+          Cron, webhook, or a change in your data — ten templates to start from.
+          <a href="/docs/automations">Automations →</a>
+        </p>
+      </div>
+      <div class="artifact-col">
+        <div class="artifact tilt-l r" style="--d: 0.12s">
+          <div class="artifact-head">
+            <span>automation · briefing</span><span class="tag">run #214</span>
+          </div>
+          <div class="artifact-body">
+            <div class="t-line">
+              <span class="t-stamp">06:30</span>
+              <span class="t-msg dim">trigger · cron 30 6 * * *</span>
+            </div>
+            <div class="t-line">
+              <span class="t-who agent">briefing</span>
+              <span class="t-msg"
+                ><span class="tool-chip">⚙ read → agenda.today</span>
+                <span class="tool-chip">⚙ read → patch.due-today</span></span
+              >
+            </div>
+            <div class="t-line">
+              <span class="t-who agent">briefing</span>
+              <span class="t-msg"
+                >Two meetings, both after lunch. The chillies are due for water. Rain from four —
+                bring the washing in.</span
+              >
+            </div>
+            <div class="t-line">
+              <span class="t-stamp">06:31</span>
+              <span class="t-msg dim">transcript saved · readable any time</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 · THE VAULT -->
+    <section class="chapter wrap" id="vault">
+      <div class="prose">
+        <p class="ch-no r"><span class="n">05</span> the vault</p>
+        <h2 class="r" style="--d: 0.08s">Your data can <em>say no.</em></h2>
+        <p class="r" style="--d: 0.16s">
+          Apps don't own your records — they <b>borrow</b> them. Your health readings, your people,
+          your notes live in one vault on your machine. Each app asks for exactly the scopes it
+          needs, and you sign the grant.
+        </p>
+        <p class="r" style="--d: 0.22s">
+          Revoke it, and the app goes dark — <b>your data stays.</b> Try asking that of a SaaS
+          account.
+        </p>
+      </div>
+      <div class="artifact-col">
+        <div class="artifact tilt-r r" style="--d: 0.12s">
+          <div class="artifact-head">
+            <span>consent · vitals</span><span class="tag">grant requested</span>
+          </div>
+          <div class="artifact-body">
+            <div class="t-msg" style="margin-bottom: 4px"><b>vitals</b> asks the vault:</div>
+            <div class="consent-rows">
+              <div class="consent-row">
+                <span class="scope">health</span><span class="verb">read + act</span>
+              </div>
+              <div class="consent-row">
+                <span class="scope">core.observation</span><span class="verb">read</span>
+              </div>
+              <div class="consent-row">
+                <span class="scope">core.attachment</span><span class="verb">read</span>
+              </div>
+            </div>
+            <div class="t-msg dim" style="font-size: 12px">
+              purpose: logs and charts your vital readings
+            </div>
+            <div class="consent-actions" aria-hidden="true">
+              <span class="consent-btn">grant</span>
+              <span class="consent-btn ghost">decline</span>
+            </div>
+            <div class="consent-fine">revoke any time — the app goes dark, your data stays.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="wrap">
+      <hr class="rule" />
+      <div class="rule-label"><span>Where it runs</span><span>one gateway · three homes</span></div>
+    </div>
+
+    <!-- WHERE IT RUNS -->
+    <section class="strip wrap" id="homes">
+      <div class="strip-head">
+        <h2 class="r">It runs where <em>your life runs.</em></h2>
+        <p class="strip-note r" style="--d: 0.1s">
+          local-first: per-app SQLite on your machine, a single bearer token, and nothing leaves
+          your devices unless you point it somewhere.
+        </p>
+      </div>
+      <div class="homes r" style="--d: 0.15s">
+        <div class="home">
+          <p class="h-no">home 1</p>
+          <h3>Desktop shell</h3>
+          <p>
+            The gateway embedded in an app on your Mac, Linux, or Windows machine. Open it like
+            anything else.
+          </p>
+        </div>
+        <div class="home">
+          <p class="h-no">home 2</p>
+          <h3>Always-on daemon</h3>
+          <p>
+            <code>centraid serve</code> on a spare machine or home server — your apps and
+            automations keep working with the laptop closed.
+          </p>
+        </div>
+        <div class="home">
+          <p class="h-no">home 3</p>
+          <h3>Phone in your pocket</h3>
+          <p>
+            The mobile companion is a thin client onto any gateway you run. Same apps, same data, no
+            sync service.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSTALL -->
+    <section class="install wrap" id="install">
+      <p class="ch-no r"><span class="n">→</span> get started</p>
+      <h2 class="r" style="--d: 0.08s">Sixty seconds to <em>your first app.</em></h2>
+      <div class="install-grid">
+        <div class="term r" style="--d: 0.14s">
+          <div class="term-bar" role="tablist">
+            <button class="tab on" data-cmd="oneliner" role="tab">one-liner</button>
+            <button class="tab" data-cmd="source" role="tab">from source</button>
+          </div>
           <div class="term-body">
-            <div class="cm"># One command. Desktop shell, gateway, and CLI — all wired up.</div>
-            <div class="cmdline">
-              <span class="p">$</span>
-              <code><span class="fn">curl</span> -fsSL https://centraid.dev/install.sh | bash</code>
+            <div class="cmd on" id="cmd-oneliner">
+              <div class="cm"># macOS · Linux · Windows — shell, gateway, and CLI, wired up</div>
+              <div class="ln">
+                <span class="p">$</span>
+                <code>curl -fsSL https://centraid.dev/install.sh | bash</code>
+              </div>
+            </div>
+            <div class="cmd" id="cmd-source">
+              <div class="cm"># needs Bun ≥ 1.3 and Node ≥ 24</div>
+              <div class="ln">
+                <span class="p">$</span>
+                <code>git clone https://github.com/srikanth235/centraid</code>
+              </div>
+              <div class="ln"><span class="p">$</span> <code>cd centraid && bun install</code></div>
+              <div class="ln"><span class="p">$</span> <code>bun run dev:desktop</code></div>
             </div>
             <button class="copy" id="copy" aria-label="Copy command">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -740,111 +1305,113 @@
             </button>
           </div>
         </div>
-        <p class="term-note">
-          Works on macOS, Linux, and Windows. Then open an app with <code>centraid open</code>, or
-          spin up a shareable gateway with <code>centraid serve</code>.
-        </p>
-
-        <div class="feats">
-          <div class="feat rise" style="animation-delay: 0.1s">
-            <div class="ic">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <ellipse cx="12" cy="6" rx="8" ry="3" />
-                <path
-                  d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"
-                />
-              </svg>
-            </div>
-            <h3>One file, one app</h3>
-            <p>
-              Each app is a single SQLite-backed manifest — queries, actions, and UI in one place.
-            </p>
-          </div>
-          <div class="feat rise" style="animation-delay: 0.18s">
-            <div class="ic">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </div>
-            <h3>Chat is the runtime</h3>
-            <p>
-              Drive every app conversationally. Automations are just chat with a durable transcript.
-            </p>
-          </div>
-          <div class="feat rise" style="animation-delay: 0.26s">
-            <div class="ic">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path
-                  d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2M4 7h16v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM8 12h8M8 16h5"
-                />
-              </svg>
-            </div>
-            <h3>Runs anywhere</h3>
-            <p>
-              Desktop shell, mobile companion, or a remote gateway — same app, your choice of
-              surface.
-            </p>
-          </div>
+        <div class="install-notes r" style="--d: 0.2s">
+          <p>
+            Then open the shell with <code>centraid open</code>, or run a shareable gateway with
+            <code>centraid serve</code>.
+          </p>
+          <p>
+            Five minutes in, you can clone a template, watch a write round-trip through the
+            dispatcher, and ask your new app a question.
+            <a class="u" href="/docs/quickstart">The quickstart</a> walks the whole loop.
+          </p>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <footer>
-        © 2026 Centraid ·
-        <a href="https://centraid.dev" style="color: var(--brand-lt); text-decoration: none"
-          >centraid.dev</a
-        >
-        · Personal app builder
-      </footer>
-    </div>
+    <!-- FOOTER -->
+    <footer>
+      <div class="wrap">
+        <p class="foot-manifesto r">
+          Most software is built for everyone, so none of it fits anyone.
+          <em>Yours can just fit you.</em>
+        </p>
+        <div class="foot-row">
+          <span>© 2026 Centraid — personal app builder</span>
+          <span class="foot-links">
+            <a href="/docs">docs</a>
+            <a href="/docs/quickstart">quickstart</a>
+            <a href="/docs/templates">templates</a>
+            <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
+              >github</a
+            >
+          </span>
+        </div>
+      </div>
+    </footer>
 
     <script>
-      // starfield
-      const stars = document.getElementById('stars');
-      let sh = '';
-      for (let i = 0; i < 70; i++) {
-        const x = (((Math.sin(i * 12.9898) * 43758.5453) % 1) + 1) % 1;
-        const y = (((Math.sin(i * 78.233) * 12543.123) % 1) + 1) % 1;
-        const d = 2 + (i % 5);
-        sh += `<i style="left:${(x * 100).toFixed(2)}%;top:${(y * 60).toFixed(2)}%;--tw:${d}s;animation-delay:${(i % 7) * 0.4}s"></i>`;
+      // theme: persisted, defaults to system preference (paper for light)
+      const root = document.documentElement;
+      const saved = localStorage.getItem('centraid-theme');
+      if (saved) {
+        root.dataset.theme = saved;
+      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        root.dataset.theme = 'night';
       }
-      stars.innerHTML = sh;
-
-      // theme toggle
-      const root = document.documentElement,
-        tg = document.getElementById('toggle');
-      tg.addEventListener('click', () => {
-        root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      const icons = {
+        paper:
+          '<svg id="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+        night:
+          '<svg id="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>',
+      };
+      const toggle = document.getElementById('toggle');
+      const syncIcon = () => {
+        toggle.innerHTML = icons[root.dataset.theme === 'night' ? 'night' : 'paper'];
+      };
+      syncIcon();
+      toggle.addEventListener('click', () => {
+        root.dataset.theme = root.dataset.theme === 'night' ? 'paper' : 'night';
+        localStorage.setItem('centraid-theme', root.dataset.theme);
+        syncIcon();
       });
+
+      // scroll reveals
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) {
+              e.target.classList.add('in');
+              io.unobserve(e.target);
+            }
+          }
+        },
+        { threshold: 0.12, rootMargin: '0px 0px -40px 0px' },
+      );
+      document.querySelectorAll('.r').forEach((el) => io.observe(el));
+
+      // install tabs
+      const commands = {
+        oneliner: 'curl -fsSL https://centraid.dev/install.sh | bash',
+        source:
+          'git clone https://github.com/srikanth235/centraid && cd centraid && bun install && bun run dev:desktop',
+      };
+      let active = 'oneliner';
+      document.querySelectorAll('.tab').forEach((t) =>
+        t.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach((x) => x.classList.remove('on'));
+          document.querySelectorAll('.cmd').forEach((x) => x.classList.remove('on'));
+          t.classList.add('on');
+          active = t.dataset.cmd;
+          document.getElementById('cmd-' + active).classList.add('on');
+        }),
+      );
 
       // copy
       const copy = document.getElementById('copy');
+      const copyIcon = copy.innerHTML;
       copy.addEventListener('click', async () => {
         try {
-          await navigator.clipboard.writeText('curl -fsSL https://centraid.dev/install.sh | bash');
+          await navigator.clipboard.writeText(commands[active]);
         } catch (e) {}
         copy.classList.add('done');
         copy.innerHTML =
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7"/></svg>';
         setTimeout(() => {
           copy.classList.remove('done');
-          copy.innerHTML =
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+          copy.innerHTML = copyIcon;
         }, 1600);
       });
-
-      // tabs / os (cosmetic)
-      document.querySelectorAll('.tabs .tab').forEach((t) =>
-        t.addEventListener('click', () => {
-          document.querySelectorAll('.tabs .tab').forEach((x) => x.classList.remove('on'));
-          t.classList.add('on');
-        }),
-      );
-      document.querySelectorAll('.os').forEach((t) =>
-        t.addEventListener('click', () => {
-          document.querySelectorAll('.os').forEach((x) => x.classList.remove('on'));
-          t.classList.add('on');
-        }),
-      );
     </script>
   </body>
 </html>
