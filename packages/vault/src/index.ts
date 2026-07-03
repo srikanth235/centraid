@@ -76,6 +76,10 @@ export { registerBusinessCommands } from './commands/business.js';
 export { registerAttachmentCommands, ATTACHABLE_SUBJECTS } from './commands/attachments.js';
 export { registerBookingCommands } from './commands/bookings.js';
 export { registerSubscriptionCommands } from './commands/subscriptions.js';
+export { registerPartyCommands } from './commands/parties.js';
+export { registerMediaCommands } from './commands/media.js';
+export { registerDocumentCommands, FOLDER_SCHEME_URI } from './commands/documents.js';
+export { registerHomeCommands } from './commands/home.js';
 
 export { parseIcs, type IcsEvent } from './ingest/ics.js';
 export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from './ingest/vcard.js';

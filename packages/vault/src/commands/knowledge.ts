@@ -11,6 +11,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { sha256Hex } from '../ids.js';
+import { releaseContentIfUnreferenced } from './media.js';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -369,10 +370,84 @@ function createNotebook(ctx: HandlerCtx): Record<string, unknown> {
   return { notebook_id: notebookId };
 }
 
+const DELETE_NOTE: CommandDefinition = {
+  name: 'knowledge.delete_note',
+  ownerSchema: 'knowledge',
+  inputSchema: {
+    type: 'object',
+    required: ['note_id'],
+    additionalProperties: false,
+    properties: { note_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['note_id'],
+    properties: {
+      note_id: { type: 'string' },
+      body_released: { type: 'integer' },
+    },
+  },
+  preconditions: [
+    {
+      name: 'note_exists',
+      sql: 'SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      // The note and every edge onto it are gone together.
+      name: 'note_and_edges_removed',
+      sql: `SELECT (
+              (SELECT count(*) FROM knowledge_note WHERE note_id = :note_id)
+              + (SELECT count(*) FROM knowledge_note_placement WHERE note_id = :note_id)
+              + (SELECT count(*) FROM core_attachment WHERE subject_type = 'knowledge.note' AND subject_id = :note_id)
+            ) AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: deleteNote,
+};
+
+function deleteNote(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { note_id: string };
+  const note = ctx.db
+    .prepare('SELECT body_content_id FROM knowledge_note WHERE note_id = ?')
+    .get(input.note_id) as { body_content_id: string } | undefined;
+  if (!note) throw new Error('note vanished between check and execute');
+  ctx.db.prepare('DELETE FROM knowledge_note_placement WHERE note_id = ?').run(input.note_id);
+  ctx.db
+    .prepare(
+      `DELETE FROM knowledge_annotation WHERE target_type = 'knowledge.note' AND target_id = ?`,
+    )
+    .run(input.note_id);
+  ctx.db
+    .prepare(`DELETE FROM core_attachment WHERE subject_type = 'knowledge.note' AND subject_id = ?`)
+    .run(input.note_id);
+  ctx.db.prepare('DELETE FROM knowledge_note WHERE note_id = ?').run(input.note_id);
+  ctx.wrote('knowledge.note', input.note_id);
+  // Bodies are sha256-deduped and canonical — another note or message may
+  // still rent the same bytes, so only an unreferenced body soft-deletes.
+  const released = releaseContentIfUnreferenced(ctx, note.body_content_id);
+  ctx.cite({
+    claim: `note ${input.note_id} deleted; body ${released ? 'soft-deleted' : 'still rented elsewhere'}`,
+    entityType: 'knowledge.note',
+    entityId: input.note_id,
+  });
+  return { note_id: input.note_id, body_released: released ? 1 : 0 };
+}
+
 /** Register the knowledge domain's commands on a gateway. */
 export function registerKnowledgeCommands(gateway: Gateway): void {
   gateway.registerCommand(CREATE_NOTE);
   gateway.registerCommand(EDIT_NOTE);
   gateway.registerCommand(MOVE_NOTE);
   gateway.registerCommand(CREATE_NOTEBOOK);
+  gateway.registerCommand(DELETE_NOTE);
 }

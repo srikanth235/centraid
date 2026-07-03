@@ -279,9 +279,73 @@ function respondRsvp(ctx: HandlerCtx): Record<string, unknown> {
   return { attendee_id: attendee.attendee_id, partstat: input.partstat };
 }
 
+const CANCEL_EVENT: CommandDefinition = {
+  name: 'schedule.cancel_event',
+  ownerSchema: 'schedule',
+  inputSchema: {
+    type: 'object',
+    required: ['event_id'],
+    additionalProperties: false,
+    properties: { event_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['event_id', 'sequence'],
+    properties: { event_id: { type: 'string' }, sequence: { type: 'integer' } },
+  },
+  preconditions: [
+    {
+      name: 'event_exists_not_cancelled',
+      sql: `SELECT count(*) AS n FROM core_event WHERE event_id = :event_id AND status != 'cancelled'`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      // RFC 5545: cancellation is a revision of the same identity, so
+      // attendees' clients see a SEQUENCE bump, never a silent vanish.
+      name: 'cancelled_at_new_sequence',
+      sql: `SELECT count(*) AS n FROM core_event
+             WHERE event_id = :event_id AND status = 'cancelled' AND sequence = :sequence`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'retry-safe',
+  // Like reschedule_event: restates a commitment others may hold — above
+  // routine upkeep, so apps (ceiling low) park it for the owner.
+  risk: 'medium',
+  handler: cancelEvent,
+};
+
+function cancelEvent(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { event_id: string };
+  const current = ctx.db
+    .prepare('SELECT sequence FROM core_event WHERE event_id = ?')
+    .get(input.event_id) as { sequence: number } | undefined;
+  if (!current) throw new Error(`event ${input.event_id} vanished between check and execute`);
+  const sequence = current.sequence + 1;
+  ctx.db
+    .prepare(
+      `UPDATE core_event SET status = 'cancelled', sequence = ?, updated_at = ? WHERE event_id = ?`,
+    )
+    .run(sequence, ctx.now, input.event_id);
+  ctx.wrote('core.event', input.event_id);
+  ctx.cite({
+    claim: `event ${input.event_id} cancelled as revision ${sequence}`,
+    entityType: 'core.event',
+    entityId: input.event_id,
+  });
+  return { event_id: input.event_id, sequence };
+}
+
 /** Register the schedule domain's first-boundary commands on a gateway. */
 export function registerScheduleCommands(gateway: Gateway): void {
   gateway.registerCommand(PROPOSE_EVENT);
   gateway.registerCommand(RESCHEDULE_EVENT);
   gateway.registerCommand(RESPOND_RSVP);
+  gateway.registerCommand(CANCEL_EVENT);
 }

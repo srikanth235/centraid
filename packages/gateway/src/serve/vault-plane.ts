@@ -32,9 +32,13 @@ import {
   registerAttachmentCommands,
   registerBookingCommands,
   registerBusinessCommands,
+  registerDocumentCommands,
   registerFinanceCommands,
   registerHealthCommands,
+  registerHomeCommands,
   registerKnowledgeCommands,
+  registerMediaCommands,
+  registerPartyCommands,
   registerScheduleCommands,
   registerSocialCommands,
   registerSubscriptionCommands,
@@ -97,6 +101,10 @@ export class VaultPlane {
     registerAttachmentCommands(this.gateway);
     registerBookingCommands(this.gateway);
     registerSubscriptionCommands(this.gateway);
+    registerPartyCommands(this.gateway);
+    registerMediaCommands(this.gateway);
+    registerDocumentCommands(this.gateway);
+    registerHomeCommands(this.gateway);
     this.logger.info(
       this.boot.fresh
         ? `vault plane: bootstrapped a fresh vault at ${options.dir}`

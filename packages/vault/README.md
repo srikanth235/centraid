@@ -41,6 +41,8 @@ S4 additionally validates **polymorphic refs** inside the transaction: any `core
 
 This is the §11 **foundation release** — schedule, social, finance and health — complete.
 
+Later packs extend the same contract to the rest of the projection band: **tasks** (`schedule.add_task`/`edit_task`/`set_task_status`) and `schedule.cancel_event` (a SEQUENCE-bumping revision, risk medium like reschedule), **knowledge** (`create_note`/`edit_note`/`move_note`/`create_notebook`/`delete_note`), **business** (the client → project → time → invoice loop), **attachments** (`core.attach`/`detach`), **bookings**, **subscriptions**, **parties** (`core.add_party`/`update_party` — apps mint and revise contacts; identifier forks are refused), **media** (the photo-library loop: `add_asset` through `remove_from_album`, bytes soft-deleting only when the last canonical reference lets go), **documents** (a drive with no new tables: content items filed by `core_tag` into folder concepts under the `https://centraid.dev/schemes/folders` scheme, trash = the content item's own `deleted_at`/`purge_at` lifecycle), and **home** (`add_item`/`update_item`/`dispose_item`/`add_warranty`).
+
 ## Usage
 
 ```ts

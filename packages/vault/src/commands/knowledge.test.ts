@@ -61,9 +61,7 @@ test('create_note dedupes identical bodies on sha256', () => {
   const first = createNote({ title: 'One', body_text: 'same words' });
   const second = createNote({ title: 'Two', body_text: 'same words' });
   expect(second.body_content_id).toBe(first.body_content_id);
-  const n = db.vault
-    .prepare('SELECT count(*) AS n FROM core_content_item')
-    .get() as { n: number };
+  const n = db.vault.prepare('SELECT count(*) AS n FROM core_content_item').get() as { n: number };
   expect(n.n).toBe(1);
 });
 
@@ -167,4 +165,43 @@ test('create_note writes provenance for the note', () => {
     )
     .get(note_id) as { n: number };
   expect(prov.n).toBe(1);
+});
+
+test('delete_note removes the note, its placements and edges', () => {
+  const notebook = createNotebook('Journal');
+  const { note_id, body_content_id } = createNote({
+    title: 'Ephemeral',
+    body_text: 'gone tomorrow',
+    notebook_id: notebook,
+  });
+  const outcome = invoke('knowledge.delete_note', { note_id });
+  expect(outcome.status).toBe('executed');
+  const note = db.vault
+    .prepare('SELECT count(*) AS n FROM knowledge_note WHERE note_id = ?')
+    .get(note_id) as { n: number };
+  expect(note.n).toBe(0);
+  const placements = db.vault
+    .prepare('SELECT count(*) AS n FROM knowledge_note_placement WHERE note_id = ?')
+    .get(note_id) as { n: number };
+  expect(placements.n).toBe(0);
+  // The body was rented by this note alone, so its bytes soft-delete.
+  const body = db.vault
+    .prepare('SELECT deleted_at FROM core_content_item WHERE content_id = ?')
+    .get(body_content_id) as { deleted_at: string | null };
+  expect(body.deleted_at).not.toBeNull();
+  const again = invoke('knowledge.delete_note', { note_id });
+  expect(again.status).toBe('failed');
+});
+
+test('delete_note keeps a body another note still rents (sha256 dedup)', () => {
+  const first = createNote({ title: 'One', body_text: 'shared words' });
+  const second = createNote({ title: 'Two', body_text: 'shared words' });
+  expect(second.body_content_id).toBe(first.body_content_id);
+  const outcome = invoke('knowledge.delete_note', { note_id: first.note_id });
+  expect(outcome.status).toBe('executed');
+  expect((outcome as { output: { body_released: number } }).output.body_released).toBe(0);
+  const body = db.vault
+    .prepare('SELECT deleted_at FROM core_content_item WHERE content_id = ?')
+    .get(first.body_content_id) as { deleted_at: string | null };
+  expect(body.deleted_at).toBeNull();
 });
