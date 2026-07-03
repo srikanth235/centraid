@@ -118,7 +118,6 @@ export {
   runAutomation,
   defaultRunHostAgent,
   type RunAutomationOptions,
-  type AutomationRunRecord,
   type RunHostAgent,
   type RunHostAgentInput,
   type RunHostAgentResult,

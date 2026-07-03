@@ -28,25 +28,12 @@ export {
   ManifestError,
   HANDLER_FILE,
   MANIFEST_FILE,
-  isValidCronExpression,
-  isPendingWebhookTrigger,
   parseManifest,
   validateManifest,
-  validateOutputAgainstSchema,
-  cronTriggersOf,
-  webhookTriggerOf,
-  pendingWebhookTriggerOf,
-  conditionTriggersOf,
-  watchTriggersOf,
-  CONDITION_DEFAULT_EVERY,
-  CONDITION_OPS,
-  DATA_DEFAULT_EVERY,
   type Manifest,
   type ManifestRequires,
   type ManifestVault,
   type ManifestVaultScope,
-  type CostEstimate,
-  type GeneratedMeta,
   type ManifestValidationCode,
   type Trigger,
   type CronTrigger,
@@ -66,32 +53,24 @@ export {
 export {
   evaluateConditionTrigger,
   evaluateDataTrigger,
-  TRIGGER_STATE_PREFIX,
   type ConditionEvaluation,
   type EvaluateConditionOptions,
   type DataEvaluation,
   type EvaluateDataOptions,
 } from './fire/condition.js';
 
-// Automation identity — the directory-slug grammar and the
-// `<appId>/<id>` handle that scheduler labels, webhook routing,
-// and `onFailure` address an automation by (issue #98).
-export { isValidId, isValidRef, formatRef, parseRef, type Ref } from './manifest/ref.js';
+// Automation identity — the `<appId>/<id>` handle that scheduler labels,
+// webhook routing, and `onFailure` address an automation by (issue #98).
+export { parseRef, type Ref } from './manifest/ref.js';
 
 // Automation apps on disk (issue #98 unified model). An automation
 // always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
 // `list` scans every app's active version. The directory is
 // the source of truth (no SQLite definition table).
 export {
-  APP_AUTOMATIONS_SUBDIR,
   manifestPath,
-  handlerPath,
-  readAppAt,
   readAppOwned,
   list,
-  writeManifestAt,
-  setEnabledAt,
-  deleteAt,
   type Row,
   type AppError,
   type ListAppsResult,
@@ -110,7 +89,6 @@ export {
   type InProcessSchedulerOptions,
   type LocalScheduler,
 } from './fire/in-process-scheduler.js';
-export { cronMatches } from './fire/cron-match.js';
 
 // Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
 // automation on an inbound HTTP POST; the gateway mounts the route
@@ -121,9 +99,7 @@ export {
   generateWebhookId,
   generateWebhookSecret,
   hashWebhookSecret,
-  verifyWebhookSecret,
   makeWebhookRouteHandler,
-  provisionPendingWebhookAt,
   provisionAppPendingWebhooks,
   provisionPendingWebhooksInFiles,
   type ProvisionedWebhook,
@@ -149,7 +125,6 @@ export {
   type AgentDispatcher,
   type DispatchContext,
 } from './handler/runner.js';
-export { truncateForAudit } from './handler/audit.js';
 // Shared `ctx.agent` answer coercion — every host ends an agent turn with a
 // blob of text and must turn it into the value the handler awaits the same way.
 export { coerceAgentAnswer } from './handler/agent-answer.js';
@@ -204,7 +179,6 @@ export {
   scaffoldAppFiles,
   setEnabledInFiles,
   deleteFromFiles,
-  validateId,
   validateAppId,
   type ScaffoldOptions,
 } from './scaffold/scaffold.js';

@@ -113,16 +113,20 @@ export interface GrantSummary {
   scopes: { schema: string; table: string | null; verbs: string }[];
 }
 
-/** Active grants held by an app, with their scopes — the consent surface a host lists. */
-export function listActiveGrants(db: VaultDb, appId: string): GrantSummary[] {
+/** One query, two grantee planes: apps match on app_id, agents on their party. */
+function grantSummariesBy(
+  db: VaultDb,
+  granteeColumn: 'app_id' | 'grantee_party_id',
+  granteeId: string,
+): GrantSummary[] {
   const grants = db.vault
     .prepare(
       `SELECT g.grant_id, g.purpose_concept_id, g.expires_at, c.notation
          FROM consent_access_grant g
          LEFT JOIN core_concept c ON c.concept_id = g.purpose_concept_id
-        WHERE g.app_id = ? AND g.status = 'active' ORDER BY g.granted_at`,
+        WHERE g.${granteeColumn} = ? AND g.status = 'active' ORDER BY g.granted_at`,
     )
-    .all(appId) as {
+    .all(granteeId) as {
     grant_id: string;
     purpose_concept_id: string;
     expires_at: string | null;
@@ -146,40 +150,17 @@ export function listActiveGrants(db: VaultDb, appId: string): GrantSummary[] {
   }));
 }
 
+/** Active grants held by an app, with their scopes — the consent surface a host lists. */
+export function listActiveGrants(db: VaultDb, appId: string): GrantSummary[] {
+  return grantSummariesBy(db, 'app_id', appId);
+}
+
 /**
  * Active grants held by a party (an enrolled agent's grantee side). Same
  * summary shape as `listActiveGrants` — the owner surface lists both.
  */
 export function listActiveAgentGrants(db: VaultDb, partyId: string): GrantSummary[] {
-  const grants = db.vault
-    .prepare(
-      `SELECT g.grant_id, g.purpose_concept_id, g.expires_at, c.notation
-         FROM consent_access_grant g
-         LEFT JOIN core_concept c ON c.concept_id = g.purpose_concept_id
-        WHERE g.grantee_party_id = ? AND g.status = 'active' ORDER BY g.granted_at`,
-    )
-    .all(partyId) as {
-    grant_id: string;
-    purpose_concept_id: string;
-    expires_at: string | null;
-    notation: string | null;
-  }[];
-  const scopeStmt = db.vault.prepare(
-    `SELECT schema_name, table_name, verbs FROM consent_grant_scope WHERE grant_id = ?`,
-  );
-  return grants.map((g) => ({
-    grantId: g.grant_id,
-    purposeConceptId: g.purpose_concept_id,
-    purpose: g.notation,
-    expiresAt: g.expires_at,
-    scopes: (
-      scopeStmt.all(g.grant_id) as {
-        schema_name: string;
-        table_name: string | null;
-        verbs: string;
-      }[]
-    ).map((s) => ({ schema: s.schema_name, table: s.table_name, verbs: s.verbs })),
-  }));
+  return grantSummariesBy(db, 'grantee_party_id', partyId);
 }
 
 export interface EnrolledAgent {

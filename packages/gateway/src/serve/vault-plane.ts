@@ -83,6 +83,26 @@ export interface GrantRequest {
   expiresAt?: string;
 }
 
+/**
+ * The shared bridge error contract: a GatewayError maps to its pipeline
+ * stage (`VAULT_CONSENT`, `VAULT_CONTRACT`, …), anything else to
+ * `VAULT_ERROR`. Both bridge planes (app and agent) speak it.
+ */
+function asVaultCallResult(fn: () => unknown): VaultCallResult {
+  try {
+    return { ok: true, result: fn() };
+  } catch (err) {
+    if (err instanceof GatewayError) {
+      return { ok: false, code: `VAULT_${err.stage.toUpperCase()}`, error: err.message };
+    }
+    return {
+      ok: false,
+      code: 'VAULT_ERROR',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export class VaultPlane {
   readonly db: VaultDb;
   readonly gateway: VaultGateway;
@@ -268,52 +288,31 @@ export class VaultPlane {
         };
       }
       const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
-      try {
+      return asVaultCallResult(() => {
         switch (call.op) {
           case 'read':
-            return {
-              ok: true,
-              result: this.gateway.read(cred, call.payload as unknown as ReadRequest),
-            };
+            return this.gateway.read(cred, call.payload as unknown as ReadRequest);
           case 'invoke':
-            return {
-              ok: true,
-              result: this.gateway.invoke(cred, call.payload as unknown as InvokeRequest),
-            };
+            return this.gateway.invoke(cred, call.payload as unknown as InvokeRequest);
           case 'query':
-            return {
-              ok: true,
-              result: this.gateway.queryView(
-                cred,
-                String(call.payload.view ?? ''),
-                String(call.payload.purpose ?? ''),
-                app.appId,
-              ),
-            };
+            return this.gateway.queryView(
+              cred,
+              String(call.payload.view ?? ''),
+              String(call.payload.purpose ?? ''),
+              app.appId,
+            );
           case 'describe':
-            return { ok: true, result: this.gateway.discover(cred) };
+            return this.gateway.discover(cred);
           case 'parked':
             // The app's own parked invocations — the "my pending approvals"
             // surface blueprints used to fake session-locally (issue #260).
-            return {
-              ok: true,
-              result: this.gateway
-                .listParked()
-                .filter((p) => p.callerKind === 'app' && p.caller === appId),
-            };
+            return this.gateway
+              .listParked()
+              .filter((p) => p.callerKind === 'app' && p.caller === appId);
           default:
-            return { ok: false, code: 'VAULT_ERROR', error: `unknown vault op` };
+            throw new Error(`unsupported vault op ${call.op}`);
         }
-      } catch (err) {
-        if (err instanceof GatewayError) {
-          return { ok: false, code: `VAULT_${err.stage.toUpperCase()}`, error: err.message };
-        }
-        return {
-          ok: false,
-          code: 'VAULT_ERROR',
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
+      });
     };
   }
 
@@ -341,55 +340,33 @@ export class VaultPlane {
         deviceId: this.boot.deviceId,
         deviceKey: this.boot.deviceKey,
       };
-      try {
+      return asVaultCallResult(() => {
         switch (call.op) {
           case 'read':
-            return {
-              ok: true,
-              result: this.gateway.read(cred, call.payload as unknown as ReadRequest),
-            };
+            return this.gateway.read(cred, call.payload as unknown as ReadRequest);
           case 'invoke':
-            return {
-              ok: true,
-              result: this.gateway.invoke(cred, call.payload as unknown as InvokeRequest),
-            };
+            return this.gateway.invoke(cred, call.payload as unknown as InvokeRequest);
           case 'describe':
-            return { ok: true, result: this.gateway.discover(cred) };
+            return this.gateway.discover(cred);
           case 'parked':
             // This agent's own invocations awaiting the owner — the handler
             // sees WHAT is pending, never another caller's business.
-            return {
-              ok: true,
-              result: this.gateway
-                .listParked()
-                .filter((p) => p.callerKind === 'agent' && p.caller === appId),
-            };
+            return this.gateway
+              .listParked()
+              .filter((p) => p.callerKind === 'agent' && p.caller === appId);
           case 'changes':
             // The consented provenance feed data triggers ride; also callable
             // from handlers that want to catch up since a stored cursor.
-            return {
-              ok: true,
-              result: this.gateway.changes(cred, call.payload as unknown as ChangesRequest),
-            };
+            return this.gateway.changes(cred, call.payload as unknown as ChangesRequest);
           case 'query':
-            return {
-              ok: false,
-              code: 'VAULT_CONSENT',
-              error: 'registered views belong to apps — automations read entities directly',
-            };
+            throw new GatewayError(
+              'consent',
+              'registered views belong to apps — automations read entities directly',
+            );
           default:
-            return { ok: false, code: 'VAULT_ERROR', error: `unsupported vault op ${call.op}` };
+            throw new Error(`unsupported vault op ${call.op}`);
         }
-      } catch (err) {
-        if (err instanceof GatewayError) {
-          return { ok: false, code: `VAULT_${err.stage.toUpperCase()}`, error: err.message };
-        }
-        return {
-          ok: false,
-          code: 'VAULT_ERROR',
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
+      });
     };
   }
 

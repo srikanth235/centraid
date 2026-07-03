@@ -11,10 +11,8 @@
  * table. `enabled` lives here (toggling it rewrites the file), so a
  * scheduler host can register/suppress from the manifest alone.
  *
- * Trigger shape is `triggers: Trigger[]` — a plural list of
- * `cron` and `webhook` entries. Legacy single-`trigger` manifests are
- * dual-read by `resolveTriggers` and rewritten plural on next save, so
- * no filesystem migration is needed.
+ * Trigger shape is `triggers: Trigger[]` — a plural list of `cron`,
+ * `webhook`, `condition` and `data` entries.
  *
  * Output-schema validation + `validateOutputAgainstSchema` live in
  * `manifest-output.ts` to keep this file focused. Error class
@@ -213,22 +211,10 @@ export function pendingWebhookTriggerOf(
 }
 
 /**
- * The condition triggers from a trigger list with their positions in the
- * ORIGINAL list — the index is the trigger's stable identity for evaluation
- * cursors, so it must survive cron/webhook entries sitting between them.
- */
-export function conditionTriggersOf(
-  triggers: readonly Trigger[],
-): readonly { trigger: ConditionTrigger; index: number }[] {
-  return triggers.flatMap((t, index) =>
-    t.kind === 'condition' ? [{ trigger: t, index }] : [],
-  );
-}
-
-/**
  * The host-evaluated "watch" triggers (condition + data) with their gate
- * cadence and original index — what a scheduler registers evaluation
- * callbacks for.
+ * cadence and their positions in the ORIGINAL trigger list — the index is
+ * a trigger's stable identity for evaluation cursors, so it must survive
+ * cron/webhook entries sitting between them.
  */
 export function watchTriggersOf(
   triggers: readonly Trigger[],
@@ -479,11 +465,9 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
 }
 
 /**
- * Dual-read trigger resolution. A plural `triggers` array is the
- * canonical shape; a legacy single `trigger` object is wrapped into a
- * one-element list (the manifest is rewritten plural on next save). A
- * manifest with neither is legal — an empty list means "manual fire
- * only". At most one webhook trigger is allowed.
+ * Trigger resolution. `triggers` is a plural array; a manifest without one
+ * is legal — an empty list means "manual fire only". At most one webhook
+ * trigger is allowed.
  */
 function resolveTriggers(r: Record<string, unknown>): readonly Trigger[] {
   let list: Trigger[];
@@ -492,8 +476,6 @@ function resolveTriggers(r: Record<string, unknown>): readonly Trigger[] {
       throw new ManifestError('invalid_trigger', 'manifest.triggers must be an array', 'triggers');
     }
     list = r.triggers.map((t, i) => validateOneTrigger(t, `triggers[${i}]`));
-  } else if (r.trigger !== undefined) {
-    list = [validateOneTrigger(r.trigger, 'trigger')];
   } else {
     list = [];
   }

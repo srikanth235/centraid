@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { deleteAt, list, readAppOwned, readAppAt, setEnabledAt } from './app.js';
+import { list, readAppOwned, readAppAt } from './app.js';
 import type { Manifest } from '../manifest/manifest.js';
 
 function manifest(over: Partial<Manifest> = {}): Manifest {
@@ -86,23 +86,5 @@ describe('automation-app', () => {
     expect(res.errors[0]!.id).toBe('ui-app/broken');
   });
 
-  it('setEnabledAt rewrites the manifest in place', async () => {
-    const dir = await writeAutomation(
-      appsDir,
-      'auto.digest',
-      'digest',
-      manifest({ enabled: true }),
-    );
-    const updated = await setEnabledAt(dir, 'auto.digest', false);
-    expect(updated?.enabled).toBe(false);
-    const reread = await readAppAt(dir, 'auto.digest');
-    expect(reread?.enabled).toBe(false);
-  });
 
-  it('deleteAt removes the directory and is idempotent', async () => {
-    const dir = await writeAutomation(appsDir, 'auto.digest', 'digest', manifest());
-    await deleteAt(dir);
-    expect(await readAppAt(dir, 'auto.digest')).toBe(undefined);
-    await deleteAt(dir);
-  });
 });

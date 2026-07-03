@@ -84,22 +84,31 @@ const port = parentPort;
 const req = workerData as WorkerRequest;
 
 let nextCallId = 1;
-const pendingAgent = new Map<
+// One id space, one pending map for every request/reply lane except tool
+// batches (which settle per-call, below). The reply type discriminates on
+// the wire; the promise doesn't care which lane it rode.
+const pendingCalls = new Map<
   number,
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
 >();
-const pendingState = new Map<
-  number,
-  { resolve: (v: unknown) => void; reject: (e: Error) => void }
->();
-const pendingRuns = new Map<
-  number,
-  { resolve: (v: unknown) => void; reject: (e: Error) => void }
->();
-const pendingVault = new Map<
-  number,
-  { resolve: (v: unknown) => void; reject: (e: Error) => void }
->();
+
+/** Omit that distributes over a union instead of collapsing it to common keys. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+type RpcRequest = DistributiveOmit<
+  Exclude<WorkerMessage, { type: 'tool-batch' } | { type: 'log' } | { type: 'result' }>,
+  'id'
+>;
+
+/** Post one request message and await its `*-reply`. Flushes tools first —
+ *  agent/state/runs/vault calls are ordering barriers for the tool batch. */
+function rpcCall(msg: RpcRequest): Promise<unknown> {
+  flushPendingToolBatchIfAny();
+  return new Promise((resolve, reject) => {
+    const id = nextCallId++;
+    pendingCalls.set(id, { resolve, reject });
+    port.postMessage({ ...msg, id } as WorkerMessage);
+  });
+}
 
 interface PendingToolCall {
   name: string;
@@ -133,14 +142,8 @@ const abortController = new AbortController();
 
 function rejectAllPending(reason: string): void {
   const err = new Error(reason);
-  for (const [, p] of pendingAgent) p.reject(err);
-  pendingAgent.clear();
-  for (const [, p] of pendingState) p.reject(err);
-  pendingState.clear();
-  for (const [, p] of pendingRuns) p.reject(err);
-  pendingRuns.clear();
-  for (const [, p] of pendingVault) p.reject(err);
-  pendingVault.clear();
+  for (const [, p] of pendingCalls) p.reject(err);
+  pendingCalls.clear();
   for (const call of pendingToolBatch) call.reject(err);
   pendingToolBatch = [];
   for (const [, batch] of pendingToolBatchById) {
@@ -166,38 +169,21 @@ port.on('message', (msg: ParentMessage) => {
     }
     return;
   }
-  if (msg.type === 'agent-reply') {
-    const p = pendingAgent.get(msg.id);
+  if (
+    msg.type === 'agent-reply' ||
+    msg.type === 'state-reply' ||
+    msg.type === 'runs-reply' ||
+    msg.type === 'vault-reply'
+  ) {
+    const p = pendingCalls.get(msg.id);
     if (!p) return;
-    pendingAgent.delete(msg.id);
-    if (msg.ok) p.resolve(msg.result);
-    else p.reject(new Error(msg.error ?? 'agent call failed'));
-    return;
-  }
-  if (msg.type === 'state-reply') {
-    const p = pendingState.get(msg.id);
-    if (!p) return;
-    pendingState.delete(msg.id);
-    if (msg.ok) p.resolve(msg.result);
-    else p.reject(new Error(msg.error ?? 'state call failed'));
-    return;
-  }
-  if (msg.type === 'runs-reply') {
-    const p = pendingRuns.get(msg.id);
-    if (!p) return;
-    pendingRuns.delete(msg.id);
-    if (msg.ok) p.resolve(msg.result);
-    else p.reject(new Error(msg.error ?? 'runs query failed'));
-    return;
-  }
-  if (msg.type === 'vault-reply') {
-    const p = pendingVault.get(msg.id);
-    if (!p) return;
-    pendingVault.delete(msg.id);
+    pendingCalls.delete(msg.id);
     if (msg.ok) p.resolve(msg.result);
     else {
-      const err = new Error(msg.error ?? 'vault call failed') as Error & { code?: string };
-      if (msg.code) err.code = msg.code;
+      const err = new Error(msg.error ?? `${msg.type.replace('-reply', '')} call failed`) as Error & {
+        code?: string;
+      };
+      if ('code' in msg && msg.code) err.code = msg.code;
       p.reject(err);
     }
     return;
@@ -223,39 +209,19 @@ function flushPendingToolBatchIfAny(): void {
 
 const state = {
   get<T = unknown>(key: string): Promise<T | undefined> {
-    flushPendingToolBatchIfAny();
-    return new Promise<unknown>((resolve, reject) => {
-      const id = nextCallId++;
-      pendingState.set(id, { resolve, reject });
-      port.postMessage({ type: 'state', id, method: 'get', key } satisfies WorkerMessage);
-    }) as Promise<T | undefined>;
+    return rpcCall({ type: 'state', method: 'get', key }) as Promise<T | undefined>;
   },
-  set(key: string, value: unknown): Promise<void> {
-    flushPendingToolBatchIfAny();
-    return new Promise((resolve, reject) => {
-      const id = nextCallId++;
-      pendingState.set(id, { resolve: () => resolve(), reject });
-      port.postMessage({ type: 'state', id, method: 'set', key, value } satisfies WorkerMessage);
-    });
+  async set(key: string, value: unknown): Promise<void> {
+    await rpcCall({ type: 'state', method: 'set', key, value });
   },
-  delete(key: string): Promise<void> {
-    flushPendingToolBatchIfAny();
-    return new Promise((resolve, reject) => {
-      const id = nextCallId++;
-      pendingState.set(id, { resolve: () => resolve(), reject });
-      port.postMessage({ type: 'state', id, method: 'delete', key } satisfies WorkerMessage);
-    });
+  async delete(key: string): Promise<void> {
+    await rpcCall({ type: 'state', method: 'delete', key });
   },
 };
 
 const runs = {
   last(filter: { automationId?: string; status?: 'ok' | 'error' } = {}): Promise<unknown> {
-    flushPendingToolBatchIfAny();
-    return new Promise((resolve, reject) => {
-      const id = nextCallId++;
-      pendingRuns.set(id, { resolve, reject });
-      port.postMessage({ type: 'runs', id, method: 'last', filter } satisfies WorkerMessage);
-    });
+    return rpcCall({ type: 'runs', method: 'last', filter });
   },
   list(
     filter: {
@@ -265,12 +231,7 @@ const runs = {
       limit?: number;
     } = {},
   ): Promise<unknown> {
-    flushPendingToolBatchIfAny();
-    return new Promise((resolve, reject) => {
-      const id = nextCallId++;
-      pendingRuns.set(id, { resolve, reject });
-      port.postMessage({ type: 'runs', id, method: 'list', filter } satisfies WorkerMessage);
-    });
+    return rpcCall({ type: 'runs', method: 'list', filter });
   },
 };
 
@@ -284,12 +245,7 @@ function vaultCall(
   op: 'read' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes',
   payload: Record<string, unknown>,
 ): Promise<unknown> {
-  flushPendingToolBatchIfAny();
-  return new Promise((resolve, reject) => {
-    const id = nextCallId++;
-    pendingVault.set(id, { resolve, reject });
-    port.postMessage({ type: 'vault', id, op, payload } satisfies WorkerMessage);
-  });
+  return rpcCall({ type: 'vault', op, payload });
 }
 
 const vault = {
@@ -321,17 +277,10 @@ const ctx = {
     });
   },
   agent(args: { prompt: string; json?: unknown }): Promise<unknown> {
-    flushPendingToolBatchIfAny();
-    return new Promise((resolve, reject) => {
-      const id = nextCallId++;
-      pendingAgent.set(id, { resolve, reject });
-      const msg: WorkerMessage = {
-        type: 'agent',
-        id,
-        prompt: args.prompt,
-        ...(args.json !== undefined ? { json: args.json } : {}),
-      };
-      port.postMessage(msg);
+    return rpcCall({
+      type: 'agent',
+      prompt: args.prompt,
+      ...(args.json !== undefined ? { json: args.json } : {}),
     });
   },
   state,

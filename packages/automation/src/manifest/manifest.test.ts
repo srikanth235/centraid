@@ -15,7 +15,7 @@ function baseManifest(over: Record<string, unknown> = {}): Record<string, unknow
     version: '0.1.0',
     enabled: true,
     prompt: 'Summarize my open PRs every morning',
-    trigger: { kind: 'cron', expr: '0 9 * * *' },
+    triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
     requires: {},
     history: { keep: { count: 50 } },
     generated: { by: 'centraid-builder', at: '2026-05-22T00:00:00Z' },
@@ -45,14 +45,12 @@ describe('validateManifest', () => {
     expect(m.name).toBe('Daily digest');
     expect(m.version).toBe('0.1.0');
     expect(m.enabled).toBe(true);
-    // Legacy single `trigger` is dual-read into the plural `triggers`.
     expect(m.triggers.length).toBe(1);
     expect(m.triggers[0]).toEqual({ kind: 'cron', expr: '0 9 * * *' });
   });
 
   it('reads a plural triggers list with multiple crons', () => {
     const raw = baseManifest();
-    delete raw.trigger;
     raw.triggers = [
       { kind: 'cron', expr: '0 9 * * *' },
       { kind: 'cron', expr: '0 17 * * *' },
@@ -63,7 +61,6 @@ describe('validateManifest', () => {
 
   it('accepts a webhook trigger with an id + secret hash', () => {
     const raw = baseManifest();
-    delete raw.trigger;
     raw.triggers = [{ kind: 'webhook', id: 'abc123', secretHash: 'deadbeef' }];
     const m = validateManifest(raw);
     expect(m.triggers[0]?.kind).toBe('webhook');
@@ -71,7 +68,6 @@ describe('validateManifest', () => {
 
   it('accepts a pending webhook trigger (un-provisioned)', () => {
     const raw = baseManifest();
-    delete raw.trigger;
     raw.triggers = [{ kind: 'webhook', pending: true }];
     const m = validateManifest(raw);
     expect(m.triggers[0]?.kind).toBe('webhook');
@@ -80,21 +76,18 @@ describe('validateManifest', () => {
 
   it('rejects a webhook trigger that is neither provisioned nor pending', () => {
     const raw = baseManifest();
-    delete raw.trigger;
     raw.triggers = [{ kind: 'webhook' }];
     expect(() => validateManifest(raw)).toThrow(ManifestError);
   });
 
   it('treats an empty triggers list as legal (manual fire only)', () => {
     const raw = baseManifest();
-    delete raw.trigger;
     raw.triggers = [];
     expect(validateManifest(raw).triggers).toEqual([]);
   });
 
   it('rejects more than one webhook trigger', () => {
     const raw = baseManifest();
-    delete raw.trigger;
     raw.triggers = [
       { kind: 'webhook', id: 'a', secretHash: 'h1' },
       { kind: 'webhook', id: 'b', secretHash: 'h2' },
@@ -139,11 +132,11 @@ describe('validateManifest', () => {
   });
 
   it('rejects an invalid trigger', () => {
-    expect(() => validateManifest(baseManifest({ trigger: { kind: 'webhook' } }))).toThrow(
+    expect(() => validateManifest(baseManifest({ triggers: [{ kind: 'webhook' }] }))).toThrow(
       ManifestError,
     );
     expect(() =>
-      validateManifest(baseManifest({ trigger: { kind: 'cron', expr: 'nope' } })),
+      validateManifest(baseManifest({ triggers: [{ kind: 'cron', expr: 'nope' }] })),
     ).toThrow(ManifestError);
   });
 

@@ -30,9 +30,6 @@ import {
 import { startLiveDispatch } from './run-automation-live-dispatch.js';
 
 export { defaultRunHostAgent, type RunHostAgent, type RunHostAgentInput, type RunHostAgentResult };
-// The run record shape lives with the spine now; re-export under
-// agent-runtime's stable name so existing consumers keep importing it here.
-export type AutomationRunRecord = automation.RunRecord;
 
 export interface RunAutomationOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
@@ -101,7 +98,7 @@ export interface RunAutomationOptions {
  */
 export async function runAutomation(
   opts: RunAutomationOptions,
-): Promise<{ outcome: automation.HandlerOutcome; record: AutomationRunRecord }> {
+): Promise<{ outcome: automation.HandlerOutcome; record: automation.RunRecord }> {
   const runner: RunnerKind = opts.runner ?? 'codex';
   const runHostAgent = opts.runHostAgent ?? defaultRunHostAgent;
 

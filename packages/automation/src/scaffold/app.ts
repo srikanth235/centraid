@@ -195,26 +195,3 @@ export async function list(appsDir: string): Promise<ListAppsResult> {
 export async function writeManifestAt(dir: string, manifest: Manifest): Promise<void> {
   await fs.writeFile(path.join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + '\n');
 }
-
-/**
- * Flip an automation's `enabled` toggle in place. `dir` is the app
- * directory, `ownerApp` its owning app id. Returns the updated row, or
- * `undefined` when the app does not exist.
- */
-export async function setEnabledAt(
-  dir: string,
-  ownerApp: string,
-  enabled: boolean,
-): Promise<Row | undefined> {
-  const row = await readAppAt(dir, ownerApp);
-  if (!row) return undefined;
-  if (row.manifest.enabled === enabled) return row;
-  const manifest: Manifest = { ...row.manifest, enabled };
-  await writeManifestAt(dir, manifest);
-  return rowFrom(row.id, dir, manifest, ownerApp);
-}
-
-/** Recursively remove an automation app directory. Idempotent. */
-export async function deleteAt(dir: string): Promise<void> {
-  await fs.rm(dir, { recursive: true, force: true });
-}

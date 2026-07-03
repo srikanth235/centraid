@@ -82,6 +82,22 @@ function storeFor(runtimeDbPath: string): ConversationStore {
   return store;
 }
 
+/** Parse one persisted trigger-cursor value; malformed state reads as absent. */
+function readJsonState<T>(
+  store: ConversationStore,
+  automationRef: string,
+  key: string,
+  pick: (parsed: unknown) => T | undefined,
+): T | undefined {
+  const entry = store.stateGet(automationRef, key);
+  if (!entry) return undefined;
+  try {
+    return pick(JSON.parse(entry.valueJson) as unknown);
+  } catch {
+    return undefined;
+  }
+}
+
 function rowHash(row: Record<string, unknown>): string {
   const keys = Object.keys(row).sort();
   const canonical = JSON.stringify(keys.map((k) => [k, row[k]]));
@@ -123,16 +139,10 @@ export async function evaluateConditionTrigger(
 
   const store = storeFor(path.join(opts.appsDir, parsed.appId, 'runtime.sqlite'));
   const stateKey = `${TRIGGER_STATE_PREFIX}${opts.triggerIndex}:seen`;
-  let seen: string[] = [];
-  const entry = store.stateGet(opts.automationRef, stateKey);
-  if (entry) {
-    try {
-      const parsedSeen = JSON.parse(entry.valueJson) as unknown;
-      if (Array.isArray(parsedSeen)) seen = parsedSeen.filter((h) => typeof h === 'string');
-    } catch {
-      seen = [];
-    }
-  }
+  const seen =
+    readJsonState(store, opts.automationRef, stateKey, (v) =>
+      Array.isArray(v) ? v.filter((h): h is string => typeof h === 'string') : undefined,
+    ) ?? [];
   const seenSet = new Set(seen);
   const fresh: Record<string, unknown>[] = [];
   const current: string[] = [];
@@ -190,16 +200,10 @@ export async function evaluateDataTrigger(opts: EvaluateDataOptions): Promise<Da
   }
   const store = storeFor(path.join(opts.appsDir, parsed.appId, 'runtime.sqlite'));
   const stateKey = `${TRIGGER_STATE_PREFIX}${opts.triggerIndex}:cursor`;
-  let cursor: string | null = null;
-  const entry = store.stateGet(opts.automationRef, stateKey);
-  if (entry) {
-    try {
-      const parsedCursor = JSON.parse(entry.valueJson) as unknown;
-      if (typeof parsedCursor === 'string') cursor = parsedCursor;
-    } catch {
-      cursor = null;
-    }
-  }
+  const cursor =
+    readJsonState(store, opts.automationRef, stateKey, (v) =>
+      typeof v === 'string' ? v : undefined,
+    ) ?? null;
   const result = await opts.vault({
     op: 'changes',
     payload: {
